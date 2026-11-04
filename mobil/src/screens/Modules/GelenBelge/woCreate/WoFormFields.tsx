@@ -1,5 +1,7 @@
 // S16b tek form — panel klasik formunun üretim/plan inputları (Rota, Sipariş bağı, Hedef kumaş, En, Hedef metraj/kg, Hedef renk, Kat tipi,
 // Planlı başlangıç/bitiş, Not). Belgeden dolan alanda "belgeden" rozeti; desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
+// K30-D: `show` ile yalnız seçilen alanlar çizilir; gizlenenler aynı bileşenle altta "Diğer alanlar"da (zone="other").
+// Rota adımları / makine / tür / hedef özellikler `plan` ile WoPlanFields'tan.
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip, Text, TextInput } from 'react-native-paper';
@@ -21,6 +23,8 @@ import { SCAN_ROUTE_HINT, withScanRouteOption } from '../../HizliIsEmri/scanRout
 import type { AvailableOrderLine } from '../../../../services/order.service';
 import { SCAN_ROUTE, isScanRoute } from './woFromDoc';
 import { plannedDayOptions, type DocFilledKey, type WoFormExtras, type WoFormState } from './woForm';
+import type { WoFieldKey } from './woFieldCatalog';
+import { RouteStepsBlock, TargetPropsBlock, WoTypeBlock, type WoPlanCtx } from './WoPlanFields';
 
 interface Props {
   state: WoFormState;
@@ -39,89 +43,133 @@ interface Props {
   locked: boolean;
   /** Sipariş kalemi işaretlendi: boş hedef kumaş/renk/en kalemden dolar. */
   onOrderLinePicked: (line: AvailableOrderLine) => void;
+  /** K30-D: bu bölümde çizilecek alanlar (⚙ Alanlar); yoksa hepsi. */
+  show?: (k: WoFieldKey) => boolean;
+  /** 'other' = altta "Diğer alanlar" bölümü (bölüm başlığı "Üretim" çizilmez). */
+  zone?: 'top' | 'other';
+  /** K30-D: rota adımları + makine, iş emri türü, hedef özellikler; yoksa çizilmez. */
+  plan?: WoPlanCtx;
 }
 
 type Picker = 'route' | 'item' | 'start' | 'end' | null;
+type Shown = Props & { show: (k: WoFieldKey) => boolean };
+const ALL = () => true;
 
-export default function WoFormFields(p: Props) {
-  const { state, edit, locked } = p;
+export default function WoFormFields(props: Props) {
+  const p: Shown = { ...props, show: props.show ?? ALL };
+  const { state, edit, locked, show } = p;
   const e = state.extras;
   const [picker, setPicker] = useState<Picker>(null);
   const days = useMemo(() => plannedDayOptions(), []);
   const stepPath = [...(p.route?.steps ?? [])].sort((a, b) => a.sequence - b.sequence).map((s) => s.station?.name ?? '—');
-  const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
-  const itemSug = state.suggestions.targetItem;
-  const colorSug = state.suggestions.targetColor;
+  const top = p.zone !== 'other';
 
   return (
-    <View style={styles.root} testID="ie-form-alanlari">
-      <Text style={styles.section}>Üretim</Text>
-      <SheetField
-        label="Rota"
-        value={p.route ? p.route.name : ''}
-        placeholder="Rota seçin"
-        onPress={() => setPicker('route')}
-        disabled={locked || p.routeLocked}
-        hint={p.route && isScanRoute(p.route) ? SCAN_ROUTE_HINT : stepPath.length ? stepPath.join(' → ') : undefined}
-      />
+    <View style={styles.root} testID={top ? 'ie-form-alanlari' : 'ie-form-alanlari-diger'}>
+      {top && <Text style={styles.section}>Üretim</Text>}
+      {show('rota') && (
+        <SheetField
+          label="Rota"
+          value={p.route ? p.route.name : ''}
+          placeholder="Rota seçin"
+          onPress={() => setPicker('route')}
+          disabled={locked || p.routeLocked}
+          hint={p.route && isScanRoute(p.route) ? SCAN_ROUTE_HINT : stepPath.length ? stepPath.join(' → ') : undefined}
+        />
+      )}
+      {p.plan && <RouteStepsBlock plan={p.plan} show={show} locked={locked} />}
+      {p.plan && <WoTypeBlock plan={p.plan} show={show} locked={locked} />}
 
-      <Badged label="Sipariş (isteğe bağlı)" />
-      <View pointerEvents={locked ? 'none' : 'auto'} testID="ie-form-siparis">
-        <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} />
-      </View>
-
-      <Badged label="Hedef kumaş" />
-      <SheetField label="" value={e.targetItemLabel ?? ''} placeholder="Hedef kumaş seçin (isteğe bağlı)" onPress={() => setPicker('item')} disabled={locked} />
-      <Suggest
-        kind="desen"
-        docText={state.docText.desen}
-        name={itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null}
-        accepted={!!itemSug && e.targetItemId === itemSug.id}
-        locked={locked}
-        onAccept={() => itemSug && edit({ targetItemId: itemSug.id, targetItemLabel: itemSug.name })}
-      />
-
-      <View style={styles.row}>
-        <View style={styles.col}>
-          <Badged label="En (cm)" k="width" state={state} />
-          <NumpadInput value={e.width} onChangeText={(t) => edit({ width: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="örn. 150" disabled={locked} style={styles.input} testID="ie-form-en" />
-        </View>
-        {qtyVisible && (
-          <View style={styles.col}>
-            <Badged label="Hedef metraj (m)" k="targetQuantity" state={state} />
-            <NumpadInput value={e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
+      {show('siparis') && (
+        <>
+          <Badged label="Sipariş (isteğe bağlı)" />
+          <View pointerEvents={locked ? 'none' : 'auto'} testID="ie-form-siparis">
+            <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} />
           </View>
-        )}
-        {qtyVisible && (
-          <View style={styles.col}>
-            <Badged label="Hedef kg" k="targetWeight" state={state} />
-            <NumpadInput value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-kg" />
-          </View>
-        )}
-      </View>
+        </>
+      )}
 
-      <Badged label="Hedef renk" />
-      <ColorSelectField value={e.targetColorId} onChange={(id) => edit({ targetColorId: id })} disabled={locked} />
-      <Suggest
-        kind="renk"
-        docText={state.docText.renk}
-        name={colorSug?.name ?? null}
-        accepted={!!colorSug && e.targetColorId === colorSug.id}
-        locked={locked}
-        onAccept={() => colorSug && edit({ targetColorId: colorSug.id })}
-      />
-
+      <TargetFields {...p} onPick={setPicker} />
+      {p.plan && <TargetPropsBlock plan={p.plan} show={show} locked={locked} />}
       <FoldAndPlan {...p} onPick={setPicker} />
       <FieldPickers {...p} picker={picker} setPicker={setPicker} days={days} />
     </View>
   );
 }
 
-/** Kat tipi (yalnız tamburlu rota) + plan tarihleri + not. */
-function FoldAndPlan(p: Props & { onPick: (x: Picker) => void }) {
+/** Hedef kumaş + en / hedef metraj / hedef kg + hedef renk (belgeden önerili). */
+function TargetFields(p: Shown & { onPick: (x: Picker) => void }) {
+  const { state, edit, locked, show } = p;
+  const e = state.extras;
+  const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
+  const itemSug = state.suggestions.targetItem;
+  const colorSug = state.suggestions.targetColor;
+  const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg') };
   return (
     <>
-      {p.hasTambur && (
+      {show('hedefKumas') && (
+        <>
+          <Badged label="Hedef kumaş" />
+          <SheetField label="" value={e.targetItemLabel ?? ''} placeholder="Hedef kumaş seçin (isteğe bağlı)" onPress={() => p.onPick('item')} disabled={locked} />
+          <Suggest
+            kind="desen"
+            docText={state.docText.desen}
+            name={itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null}
+            accepted={!!itemSug && e.targetItemId === itemSug.id}
+            locked={locked}
+            onAccept={() => itemSug && edit({ targetItemId: itemSug.id, targetItemLabel: itemSug.name })}
+          />
+        </>
+      )}
+
+      {(cols.en || cols.metraj || cols.kg) && (
+        <View style={styles.row}>
+          {cols.en && (
+            <View style={styles.col}>
+              <Badged label="En (cm)" k="width" state={state} />
+              <NumpadInput value={e.width} onChangeText={(t) => edit({ width: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="örn. 150" disabled={locked} style={styles.input} testID="ie-form-en" />
+            </View>
+          )}
+          {cols.metraj && (
+            <View style={styles.col}>
+              <Badged label="Hedef metraj (m)" k="targetQuantity" state={state} />
+              <NumpadInput value={e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
+            </View>
+          )}
+          {cols.kg && (
+            <View style={styles.col}>
+              <Badged label="Hedef kg" k="targetWeight" state={state} />
+              <NumpadInput value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-kg" />
+            </View>
+          )}
+        </View>
+      )}
+
+      {show('hedefRenk') && (
+        <>
+          <Badged label="Hedef renk" />
+          <ColorSelectField value={e.targetColorId} onChange={(id) => edit({ targetColorId: id })} disabled={locked} />
+          <Suggest
+            kind="renk"
+            docText={state.docText.renk}
+            name={colorSug?.name ?? null}
+            accepted={!!colorSug && e.targetColorId === colorSug.id}
+            locked={locked}
+            onAccept={() => colorSug && edit({ targetColorId: colorSug.id })}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+/** Kat tipi (yalnız tamburlu rota) + plan tarihleri + not. */
+function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
+  const { show } = p;
+  const plan = { start: show('planBaslangic'), end: show('planBitis'), note: show('not') };
+  return (
+    <>
+      {p.hasTambur && show('katTipi') && (
         <>
           <Badged label="Kat tipi" />
           <View style={styles.chips}>
@@ -135,17 +183,27 @@ function FoldAndPlan(p: Props & { onPick: (x: Picker) => void }) {
         </>
       )}
 
-      <Text style={styles.section}>Plan</Text>
-      <View style={styles.row}>
-        <View style={styles.col}>
-          <SheetField label="Planlı başlangıç" value={p.state.extras.plannedStart ? fmtDayKey(p.state.extras.plannedStart) : ''} placeholder="Seçilmedi" onPress={() => p.onPick('start')} disabled={p.locked} />
+      {(plan.start || plan.end || plan.note) && <Text style={styles.section}>Plan</Text>}
+      {(plan.start || plan.end) && (
+        <View style={styles.row}>
+          {plan.start && (
+            <View style={styles.col}>
+              <SheetField label="Planlı başlangıç" value={p.state.extras.plannedStart ? fmtDayKey(p.state.extras.plannedStart) : ''} placeholder="Seçilmedi" onPress={() => p.onPick('start')} disabled={p.locked} />
+            </View>
+          )}
+          {plan.end && (
+            <View style={styles.col}>
+              <SheetField label="Planlı bitiş" value={p.state.extras.plannedEnd ? fmtDayKey(p.state.extras.plannedEnd) : ''} placeholder="Seçilmedi" onPress={() => p.onPick('end')} disabled={p.locked} />
+            </View>
+          )}
         </View>
-        <View style={styles.col}>
-          <SheetField label="Planlı bitiş" value={p.state.extras.plannedEnd ? fmtDayKey(p.state.extras.plannedEnd) : ''} placeholder="Seçilmedi" onPress={() => p.onPick('end')} disabled={p.locked} />
-        </View>
-      </View>
-      <Badged label="Not" k="note" state={p.state} />
-      <TextInput value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
+      )}
+      {plan.note && (
+        <>
+          <Badged label="Not" k="note" state={p.state} />
+          <TextInput value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
+        </>
+      )}
     </>
   );
 }

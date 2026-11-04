@@ -91,7 +91,7 @@ const SuggestBody = z.strictObject({
  *     summary: Belge tipi tanıtma — kutu→alan atamaları + kimlik yazılarından anchor stratejili şablon önerisi ve aynı taramada önizleme (yazmaz)
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{ template, explain[], errors[], preview { matched, score, fields, blocks, lineCount, warnings } | null }" }
+ *       200: { description: "{ template, explain[], errors[], preview { matched, score, fields, blocks, lineCount, warnings } | null, benzerSablonlar: [{ kod, ad, skor }] (kimlik eşiğini geçen mevcut kullanıcı şablonları, güncellenen hariç, skor azalan) }" }
  *       404: { description: "DOCUMENT_SCAN_NOT_FOUND" }
  *       409: { description: "DOCUMENT_SCAN_NOT_READ" }
  * /api/gelen-belge/taramalar/{id}/kelimeler:

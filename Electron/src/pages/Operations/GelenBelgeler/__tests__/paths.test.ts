@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CUSTOMER_DEFAULTS_PATH, TEACH_ROUTE } from "../paths";
+import { CUSTOMER_DEFAULTS_PATH, TEACH_ROUTE, TEACH_START_PATH } from "../paths";
 import { warehouseTiles } from "@/pages/Operations/tiles/warehouse";
 
 const ROUTES_SRC = readFileSync(resolve(__dirname, "../../../../routes/content-routes.tsx"), "utf8");
@@ -20,6 +20,10 @@ describe("gelen belge alt ekran adresleri tek kaynak", () => {
     expect(tile?.to).toBe(CUSTOMER_DEFAULTS_PATH);
   });
   it("tanıtma (S1b) yolu route tablosunda TEACH_ROUTE ile aynı", () => {
-    expect(routePaths.filter((p) => p.endsWith("/tanit"))).toEqual([TEACH_ROUTE]);
+    expect(routePaths.filter((p) => p.endsWith("/tanit"))).toEqual([TEACH_START_PATH, TEACH_ROUTE]);
+  });
+  it("Belge Tanıt karosu (K30-T) başlangıç yoluna gider; route statik segmenti `:id`den önce", () => {
+    expect(warehouseTiles.find((t) => t.key === "gelen-belge-tanit")?.to).toBe(TEACH_START_PATH);
+    expect(routePaths.indexOf(TEACH_START_PATH)).toBeLessThan(routePaths.indexOf("/operations/gelen-belgeler/:id"));
   });
 });

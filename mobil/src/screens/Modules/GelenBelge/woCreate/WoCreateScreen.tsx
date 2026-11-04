@@ -9,6 +9,7 @@ import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-na
 import { useQuery } from '@tanstack/react-query';
 import ScreenChrome from '../../../../components/ScreenChrome';
 import { useVisibleScreens } from '../../../../hooks/useVisibleScreens';
+import { usePermissions } from '../../../../hooks/usePermission';
 import { TERIM } from '../../../../lib/terim';
 import { routeService, type ProductionRoute } from '../../../../services/route.service';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
@@ -32,7 +33,9 @@ type Stage =
   /** K23 belge masası: kamera ↔ tek inceleme (hazır İE kısayolları gerekir). */
   | { kind: 'desk' }
   /** S16b tek form (BELGE kipi); `n` "Yeni iş emri"nde formu sıfırdan kurar. */
-  | { kind: 'unified'; route: ProductionRoute | null; locked: boolean; n: number };
+  | { kind: 'unified'; route: ProductionRoute | null; locked: boolean; n: number }
+  /** K30-A1 "Belge tanıt": çek → oku → Tanıt (iş emri açılmaz). */
+  | { kind: 'teach' };
 
 export const WO_SHORTCUTS_KEY = ['routes', 'wo-shortcuts'] as const;
 const title_ = (): string => `${TERIM.terbiyeIsEmri.tekil} oluştur`;
@@ -67,6 +70,9 @@ export default function WoCreateScreen() {
   useDeskAutoOpen(ready && entry === 'IKISI' && realShortcuts.length > 0, () => setStage({ kind: 'desk' }));
   const tiles = hubTiles(entry, { canManual, shortcuts: shortcuts.length, loading: q.isLoading });
   const belge = entry === 'BELGE';
+  const perms = usePermissions();
+  // Tanıtma girişi menüde bulunabilir olmalı; belge okutmanın olmadığı TOP kipinde yok. hubTiles'a dokunulmaz (sözleşme testi).
+  const canTeach = entry !== 'TOP' && perms.has('gelen-belge:template') && perms.has('gelen-belge:read') && perms.has('gelen-belge:write');
 
   const openUnified = (route: ProductionRoute | null) => setStage({ kind: 'unified', route, locked: route !== null, n: Date.now() });
   const openForm = (route: ProductionRoute | null) => {
@@ -83,7 +89,7 @@ export default function WoCreateScreen() {
   };
 
   const route = stage.kind === 'form' || stage.kind === 'scan' || stage.kind === 'unified' ? stage.route : null;
-  const title = stage.kind === 'legacy' ? 'Belge Tara' : stage.kind === 'desk' ? DESK : route ? shortcutTitle(route) : stage.kind === 'form' ? quick_() : title_();
+  const title = stage.kind === 'teach' ? 'Belge tanıt' : stage.kind === 'legacy' ? 'Belge Tara' : stage.kind === 'desk' ? DESK : route ? shortcutTitle(route) : stage.kind === 'form' ? quick_() : title_();
 
   return (
     <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back}>
@@ -98,6 +104,7 @@ export default function WoCreateScreen() {
           onDesk={() => setStage({ kind: 'desk' })}
           onLegacy={() => setStage({ kind: 'legacy' })}
           onShortcut={openForm}
+          onTeach={canTeach ? () => setStage({ kind: 'teach' }) : undefined}
         />
       )}
       {stage.kind === 'form' && (
@@ -123,6 +130,7 @@ export default function WoCreateScreen() {
       )}
       {stage.kind === 'scan' && <DocBatchView route={stage.route} multi={stage.multi} autoStart />}
       {stage.kind === 'legacy' && <DocScanBody />}
+      {stage.kind === 'teach' && <DocScanBody teachOnly />}
       {stage.kind === 'desk' && <DeskView shortcuts={shortcuts} />}
       {stage.kind === 'unified' && (
         <UnifiedWoForm key={stage.n} initialRoute={stage.route} routeLocked={stage.locked} onNew={() => setStage({ ...stage, n: stage.n + 1 })} />
@@ -140,6 +148,8 @@ interface HubProps {
   onDesk: () => void;
   onLegacy: () => void;
   onShortcut: (r: ProductionRoute) => void;
+  /** Yoksa (izin / TOP kipi) "Belge tanıt" kutusu çizilmez. */
+  onTeach?: () => void;
 }
 
 /** Seçici: 1. satır sabit türler (giriş kipine göre), 2. satır "Özel iş emirleri" kısayolları. */
@@ -155,6 +165,7 @@ function Hub(p: HubProps) {
         {p.tiles.legacy && (
           <Tile icon="file-document-outline" title="Belge Tara" sub="Müşteri irsaliyesi → taslak" onPress={p.onLegacy} testID="ie-tur-belge-tara" />
         )}
+        {p.onTeach && <Tile icon="creation" title="Belge tanıt" sub="Belgeyi okut → alanlarını bir kez göster" onPress={p.onTeach} testID="ie-tur-belge-tanit" />}
       </View>
       {p.loading ? (
         <ActivityIndicator style={styles.loading} />

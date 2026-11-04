@@ -7,10 +7,10 @@
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
-import { extractDocument, mergeTemplateForUpdate, suggestTemplate, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
+import { extractDocument, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
 import { rectToPhotoFrame } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { draftFromExtraction } from "../lib/gelen-belge/taslak";
-import { getUserTemplate, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
+import { getUserTemplate, loadUserTemplates, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
 import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 
 export interface ScanWord {
@@ -52,6 +52,15 @@ export async function getScanWords(scanId: string) {
 
 export type SuggestFromScanInput = Omit<TemplateSuggestInput, "ocr" | "code"> & { scanId: string; base?: { code: string; keep: UpdateKeepPart[] } };
 
+/**
+ * K30-B tel sözleşmesi madde 3: bu taramada kimlik eşiğini (motorun `templateMinScore`u) geçen MEVCUT aktif kullanıcı
+ * şablonları, güncellenen şablon hariç, skor azalan — çalışan aynı belgeyi ikinci kez tanıtmasın diye uyarı kaynağı.
+ */
+export async function similarUserTemplates(ocr: OcrResult, excludeCode: string | null): Promise<Array<{ kod: string; ad: string; skor: number }>> {
+  const user = (await loadUserTemplates()).filter((t) => t.id !== excludeCode);
+  return templatesOverThreshold(ocr, user).map(({ template, score }) => ({ kod: template.id, ad: template.name || template.id, skor: score }));
+}
+
 /** Atamalardan şablon önerisi + aynı taramada önizleme (yalnız bu şablonla sınıflandırma; eşik altı → tanınmadı). */
 export async function suggestFromScan(input: SuggestFromScanInput) {
   const ocr = await scanOcr(input.scanId);
@@ -60,13 +69,14 @@ export async function suggestFromScan(input: SuggestFromScanInput) {
   const code = old ? old.code : userTemplateCode(input.name);
   const { base, ...rest } = input;
   const s = suggestTemplate({ ...rest, code, ocr });
-  if (s.errors.length) return { template: s.template, explain: s.explain, errors: s.errors, preview: null };
+  const benzerSablonlar = await similarUserTemplates(ocr, input.base?.code ?? null);
+  if (s.errors.length) return { template: s.template, explain: s.explain, errors: s.errors, preview: null, benzerSablonlar };
   let template = s.template;
   if (old && base) {
     template = mergeTemplateForUpdate({ ...(old.template as unknown as DocumentTemplate), id: old.code, version: old.version }, s.template, base.keep);
     template = { ...template, id: code, name: input.name, version: old.version };
     const v = validateTemplate(template);
-    if (!v.ok) return { template, explain: s.explain, errors: v.errors, preview: null };
+    if (!v.ok) return { template, explain: s.explain, errors: v.errors, preview: null, benzerSablonlar };
   }
   const doc = extractDocument(ocr, [template], null);
   const draft = draftFromExtraction(doc, { templates: [template] });
@@ -83,5 +93,6 @@ export async function suggestFromScan(input: SuggestFromScanInput) {
       lineCount: draft.lines.length,
       warnings: draft.header.warnings,
     },
+    benzerSablonlar,
   };
 }

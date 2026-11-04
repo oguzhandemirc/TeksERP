@@ -5,6 +5,8 @@
 // sunucu EŞLEME OKUMASI yapar — DocumentScan, taslak, şablon satırı DOĞMAZ (okuma işi `buildDraft` değil, saf
 // `extractDraft`). Gönderen belge no (+ sahip/gönderen metni) → canlı gelen belge → topları → iş emri(leri).
 // Aynı fotoğraf (sha256) zaten taranmışsa OCR koşmaz: o taramanın belgesi ya da saklı okuması kullanılır.
+// K30-E: belge no tutmazsa / okunamazsa (kullanıcı şablonunda Evrak No atanmamış) okunan PARTİ NO açık iş emirlerinde
+// aranır; iki yol da OCR'a toleranslı karşılaştırmayı `helpers/doc-code-match.helper.ts`ten alır.
 // Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
 // =============================================================================
 import { type Prisma, WorkOrderStatus } from "@prisma/client";
@@ -22,9 +24,19 @@ import { readIncomingDocStationLookup, readProductionEnabled, SETTING_KEYS } fro
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { latestScanBySha, NOTE_WORK_ONGOING_WHERE } from "./helpers/gelen-belge-mukerrer.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { type CodeMatchTier, matchCodes } from "./helpers/doc-code-match.helper";
+import { uyari } from "../lib/logger";
+import type { DraftHeader } from "../lib/gelen-belge/taslak";
 
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
 const MAX_WORK_ORDERS = 20;
+/** Parti no yedeği ve toleranslı belge no yalnız AÇIK iş emrine bakar (bitmiş / devredilmiş / iptal eşleşmez). */
+const OPEN_WORK_ORDER_STATUSES: WorkOrderStatus[] = [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS];
+/**
+ * Toleranslı karşılaştırmanın bellekteki aday evreni tavanı (işi süren belge kodları / açık parti no'ları). Tam eşleşme
+ * evrenden ÖNCE DB'de aranır (tavana bağlı değil); tavan dolarsa uyarı loglanır — kesilen evren sessiz kalmaz.
+ */
+const TOLERANT_UNIVERSE_CAP = 2000;
 
 export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE";
 export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "OCR" | "SEARCH";
@@ -111,13 +123,58 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
     ocr = r.result;
     source = "OCR";
   }
+  // Sınıflandırma gelen belge okumasıyla aynı: dosya + aktif kullanıcı (`u-…`) şablonları (`engineTemplates` her okumada yükler).
   const { header } = await extractDraft(ocr);
   const read = { senderDocNo: header.senderDocNo, ownerText: header.ownerText, senderText: header.senderText };
-  const docNo = header.senderDocNo?.trim();
-  if (!docNo) return finish({ source, read, notes: [], workOrders: [], noteCount: null, noDocNo: true });
-  const templateCode = header.regions[0]?.templateId ?? null;
-  const notes = narrowNotes(await loadDocNoNotes(docNo), read, await templateSenderId(templateCode));
-  return finish({ source, read, notes, ...(await workOrdersOfNotes(notes)), noteCount: notes.length });
+  const docNo = header.senderDocNo?.trim() || null;
+  const batchNos = readBatchNos(header);
+  const readValues = { docNo, batchNos };
+  if (!docNo && batchNos.length === 0) return finish({ source, read, notes: [], workOrders: [], noteCount: null, noDocNo: true });
+  // (a) belge no — önce (bugünkü yol); TAM eşleşme açık İE verirse biter.
+  let byDoc: { notes: NoteRow[]; loaded: LoadedWorkOrders } | null = null;
+  if (docNo) {
+    const templateCode = header.regions[0]?.templateId ?? null;
+    const found = await loadDocNoNotesTolerant(docNo);
+    const notes = narrowNotes(found.notes, read, await templateSenderId(templateCode));
+    const loaded = await workOrdersOfNotes(notes);
+    if (loaded.workOrders.length > 0 && found.tier !== "TOLERANT") return finish({ source, read, notes, ...loaded, noteCount: notes.length });
+    byDoc = { notes, loaded };
+  }
+  // (b) parti no yedeği — açık iş emirleri. Belge no yalnız TOLERANSLA tuttuysa parti no da denenir (OCR tahmini
+  // doğru parti eşleşmesini gölgelemesin): kesişim varsa o, çelişirse birleşim (seçtirir).
+  const byBatch = batchNos.length > 0 ? await workOrdersOfBatchNos(batchNos) : null;
+  if (byDoc && byDoc.loaded.workOrders.length > 0) {
+    const merged = mergeTolerantDoc(byDoc.loaded.workOrders, byBatch);
+    return finish({ source, read, notes: byDoc.notes, workOrders: merged, noteCount: byDoc.notes.length });
+  }
+  if (byBatch && byBatch.loaded.workOrders.length > 0) return finish({ source, read, notes: [], ...byBatch.loaded, noteCount: null });
+  // Belge bulundu ama açık İE yok → bugünkü cümle (kapanmış İE no'su / "bu belgeye ait İE yok").
+  if (byDoc && byDoc.notes.length > 0) return finish({ source, read, notes: byDoc.notes, ...byDoc.loaded, noteCount: byDoc.notes.length });
+  return finish({ source, read, notes: [], workOrders: [], noteCount: 0, readValues });
+}
+
+/**
+ * Toleranslı belge no İE'leri ↔ parti no İE'leri: parti eşleşmesi yoksa belge no'nunkiler; kesişim boş değilse kesişim
+ * (iki okuma aynı işi gösteriyor); kesişim boşsa ve parti TAM eşleştiyse birleşim (çelişki → tablet seçtirir).
+ */
+export function mergeTolerantDoc(
+  byDoc: StationLookupWorkOrder[],
+  byBatch: { tier: CodeMatchTier; loaded: LoadedWorkOrders } | null,
+): StationLookupWorkOrder[] {
+  const batchWos = byBatch?.loaded.workOrders ?? [];
+  if (batchWos.length === 0) return byDoc;
+  const batchIds = new Set(batchWos.map((w) => w.id));
+  const both = byDoc.filter((w) => batchIds.has(w.id));
+  if (both.length > 0) return both;
+  if (byBatch!.tier !== "EXACT") return byDoc;
+  const docIds = new Set(byDoc.map((w) => w.id));
+  return [...byDoc, ...batchWos.filter((w) => !docIds.has(w.id))].slice(0, MAX_WORK_ORDERS);
+}
+
+/** Okunan parti no'ları: başlığın parti no'su + şablonun parti adayları (tekil, boşsuz). */
+function readBatchNos(header: Pick<DraftHeader, "customerBatchNo" | "batchNoCandidates">): string[] {
+  const all = [header.customerBatchNo, ...header.batchNoCandidates.map((c) => c.value)].map((v) => v?.trim() ?? "").filter((v) => v.length > 0);
+  return [...new Set(all)];
 }
 
 const NOTE_SELECT = {
@@ -143,6 +200,60 @@ export async function loadDocNoNotes(docNo: string): Promise<NoteRow[]> {
   const byNo: Prisma.CustomerDeliveryNoteWhereInput = { senderDocNo: { equals: docNo, mode: "insensitive" } };
   const ongoing = await loadNotes({ AND: [byNo, NOTE_WORK_ONGOING_WHERE] });
   return ongoing.length > 0 ? ongoing : loadNotes(byNo);
+}
+
+/** İşi süren, topu doğmuş belge filtresi — toleranslı evrenlerin ortak tabanı. */
+const ONGOING_LOOKUP_NOTE: Prisma.CustomerDeliveryNoteWhereInput = { AND: [{ status: { in: [...LOOKUP_NOTE_STATUSES] } }, NOTE_WORK_ONGOING_WHERE] };
+
+/** Belge no: tam (harf duyarsız) eşleşme yoksa işi süren belgelerin no'larında OCR-toleranslı eşleşme. */
+async function loadDocNoNotesTolerant(docNo: string): Promise<{ tier: CodeMatchTier | null; notes: NoteRow[] }> {
+  const exact = await loadDocNoNotes(docNo);
+  if (exact.length > 0) return { tier: "EXACT", notes: exact };
+  const universe = await prisma.customerDeliveryNote.findMany({
+    where: { AND: [ONGOING_LOOKUP_NOTE, { senderDocNo: { not: null } }] },
+    select: { senderDocNo: true }, distinct: ["senderDocNo"], orderBy: [{ senderDocNo: "asc" }], take: TOLERANT_UNIVERSE_CAP,
+  });
+  warnIfCapped("belge no", universe.length);
+  const m = matchCodes([docNo], universe.map((n) => n.senderDocNo));
+  return m ? { tier: m.tier, notes: await loadNotes({ AND: [{ senderDocNo: { in: m.values } }, NOTE_WORK_ONGOING_WHERE] }) } : { tier: null, notes: [] };
+}
+
+function warnIfCapped(what: string, size: number): void {
+  if (size >= TOLERANT_UNIVERSE_CAP) uyari("istasyon-okutma", `Toleranslı ${what} evreni tavanda (${TOLERANT_UNIVERSE_CAP}); evrenin dışındaki kod yalnız tam eşleşir`);
+}
+
+/**
+ * Parti no yedeği: açık İE'lerin parti no'ları + işi süren belgelerin parti no'ları (bizim / müşterinin) evreninde
+ * toleranslı eşleşme → eşleşen KAYITLI değerlerle açık İE'ler. Arama sorusudur (elle aramanın parti dalı gibi);
+ * partinin kimliği yine `id`dir.
+ */
+async function workOrdersOfBatchNos(reads: string[]): Promise<{ tier: CodeMatchTier; loaded: LoadedWorkOrders } | null> {
+  const open: Prisma.WorkOrderWhereInput = { status: { in: OPEN_WORK_ORDER_STATUSES }, isActive: true };
+  const noteHasBatch: Prisma.CustomerDeliveryNoteWhereInput = { OR: [{ ourBatchNo: { not: null } }, { customerBatchNo: { not: null } }] };
+  const fetch = async (batchWhere: Prisma.BatchWhereInput, noteWhere: Prisma.CustomerDeliveryNoteWhereInput, cap: number | undefined) => {
+    const batches = await prisma.batch.findMany({ where: { AND: [{ workOrder: open }, batchWhere] }, select: { batchNumber: true }, distinct: ["batchNumber"], orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: cap });
+    const notes = await prisma.customerDeliveryNote.findMany({
+      where: { AND: [ONGOING_LOOKUP_NOTE, noteHasBatch, noteWhere] },
+      select: { ourBatchNo: true, customerBatchNo: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: cap,
+    });
+    return { size: Math.max(batches.length, notes.length), values: [...batches.map((b) => b.batchNumber), ...notes.flatMap((n) => [n.ourBatchNo, n.customerBatchNo])] };
+  };
+  // Tam eşleşme önce DB'de (tavansız); kayıttaki yazım `matchCodes`la süzülür (ölçü TEK helper'da).
+  const eq = (v: string) => ({ equals: v, mode: "insensitive" as const });
+  const exact = await fetch(
+    { OR: reads.map((r) => ({ batchNumber: eq(r) })) },
+    { OR: reads.flatMap((r) => [{ ourBatchNo: eq(r) }, { customerBatchNo: eq(r) }]) },
+    undefined,
+  );
+  let m = matchCodes(reads, exact.values);
+  if (!m) {
+    const universe = await fetch({}, {}, TOLERANT_UNIVERSE_CAP);
+    warnIfCapped("parti no", universe.size);
+    m = matchCodes(reads, universe.values);
+  }
+  if (!m) return null;
+  const byNote = whereWorkOrdersOfRolls({ deliveryNoteLine: { note: { status: { in: [...LOOKUP_NOTE_STATUSES] }, OR: [{ ourBatchNo: { in: m.values } }, { customerBatchNo: { in: m.values } }] } } });
+  return { tier: m.tier, loaded: await loadWorkOrders({ AND: [open, { OR: [{ batches: { some: { batchNumber: { in: m.values } } } }, byNote] }] }, null) };
 }
 
 async function templateSenderId(code: string | null): Promise<string | null> {
@@ -231,12 +342,18 @@ function finish(p: {
   noteCount: number | null;
   unreadable?: boolean;
   noDocNo?: boolean;
+  /** Hiçbir yol açık İE bulmadı: cümle okunan değerleri söyler. */
+  readValues?: { docNo: string | null; batchNos: string[] };
 }): StationLookupResult {
   const notes = p.notes.map((n) => ({ id: n.id, noteNo: n.noteNo, senderDocNo: n.senderDocNo, ownerName: n.ownerCustomer?.name ?? null, senderName: n.senderCustomer?.name ?? null }));
   const base = { source: p.source, read: p.read, notes, workOrders: p.workOrders };
   if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: "Belge okunamadı; fiş no ile elle arayın." };
-  if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: "Belgede fiş/evrak numarası okunamadı; fiş no ile elle arayın." };
-  if (p.noteCount === 0) return { ...base, outcome: "NO_DOCUMENT", message: `Bu numarayla kayıtlı gelen belge yok (${p.read?.senderDocNo ?? ""}); fiş no ile elle arayın.` };
+  if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: `Belgede evrak no da parti no da okunamadı; evrak no, parti no ya da ${TERIM.terbiyeIsEmri.tekilKucuk} no ile elle arayın.` };
+  if (p.readValues) {
+    const v = p.readValues;
+    const said = `Okunan evrak no: ${v.docNo ?? "okunamadı"} · parti no: ${v.batchNos.length > 0 ? v.batchNos.join(", ") : "okunamadı"}`;
+    return { ...base, outcome: v.docNo ? "NO_DOCUMENT" : "NO_DOC_NO", message: `${said} — eşleşen açık ${TERIM.terbiyeIsEmri.tekilKucuk} yok; elle arayın.` };
+  }
   if (p.workOrders.length === 0 && p.closed && p.closed.length > 0) {
     return { ...base, closedWorkOrderNumbers: p.closed, outcome: "NO_WORK_ORDER", message: `${TERIM.terbiyeIsEmri.tekil} kapanmış, açık kartı yok: ${p.closed.join(", ")}.` };
   }

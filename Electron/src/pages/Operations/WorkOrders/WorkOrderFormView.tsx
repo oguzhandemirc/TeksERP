@@ -49,6 +49,8 @@ import { KURSUN_SETTINGS_TITLE, KursunStepFields, KursunStepSummary, isKursunSte
 import { defaultsSettled, useStepDefaultsBinding } from "./stepDefaultTargets";
 import { useDesignerSteps } from "./useDesignerSteps";
 import { BelgeOkutButton } from "./BelgeOkutButton";
+import { useFormDocScan, type FormDocScan } from "./oie/useFormDocScan";
+import { FormDocCard } from "./oie/FormDocCard";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
 import { useLinkedLinesAutoFill } from "./useLinkedLinesAutoFill";
@@ -105,7 +107,7 @@ interface Props {
   };
   onSubmit: (
     values: WorkOrderFormValues,
-    meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[]; kursunTargetPropertyId?: string | null },
+    meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[]; kursunTargetPropertyId?: string | null; doc?: FormDocScan },
   ) => Promise<void>;
   isSubmitting?: boolean;
   /** İptal / vazgeç — sayfayı kapatıp listeye (veya detaya) döner. */
@@ -211,6 +213,8 @@ export function WorkOrderFormView({
   const [seedRouteId, setSeedRouteId] = useState<string | null>(null);
   // "Belge okut" (P3) rotası: en son seçilen rota şablonu (Rota Seç ya da iş emri şablonunun rotası).
   const [okutRouteId, setOkutRouteId] = useState<string | null>(null);
+  // S16d: okutulan belge bu formu yerinde doldurur; kayıt belge okutulduysa form ucuna gider.
+  const docScan = useFormDocScan(form, { routeTemplateId: okutRouteId, itemLocked: pickedLines.length > 0, targetQuantityEnabled });
   const qc = useQueryClient();
 
   // Rota Tambur içeriyor mu — "Kat Tipi" seçeneği yalnız Tambur'lu rotalarda görünür
@@ -521,7 +525,7 @@ export function WorkOrderFormView({
             await onSubmit(
               // Tambur yoksa kat tipi anlamsız — payload'a sızmasın.
               { ...v, foldType: hasTambur ? v.foldType : "" },
-              { fasonPlans: [], customSteps: stepsToCustom(routeSteps), kursunTargetPropertyId: kursunCatalog.propertyId },
+              { fasonPlans: [], customSteps: stepsToCustom(routeSteps), kursunTargetPropertyId: kursunCatalog.propertyId, ...(docScan.noteId ? { doc: docScan } : {}) },
             );
           },
           (errors) => {
@@ -547,6 +551,7 @@ export function WorkOrderFormView({
             yalnızca ilgili istasyon adımı tamamlanmadıysa değiştirilebilir.
           </Callout>
         )}
+        <FormDocCard scan={docScan} disabled={isSubmitting} />
 
         {/* Şablon seç — sayfa başlık satırının en sağına portal'lanır (yalnız yeni
             kayıt). Kompakt buton "İş Emri Şablonu Seç" modalını açar; seçilince hedef
@@ -588,6 +593,7 @@ export function WorkOrderFormView({
               </Button>
               {belgeOkut && <BelgeOkutButton
                 routeTemplateId={okutRouteId}
+                onScanned={docScan.start}
                 className="h-9 min-w-[190px] shrink-0 justify-start gap-2 border-0 bg-teal-600 px-4 text-sm font-semibold text-white shadow-sm shadow-teal-600/30 hover:bg-teal-700 dark:bg-teal-600 dark:hover:bg-teal-500"
               />}
             </div>,
@@ -680,7 +686,7 @@ export function WorkOrderFormView({
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
-                  label="Hedef Kumaş"
+                  label={docScan.label("Hedef Kumaş", "targetItemId")}
                   required={!isOrderProduction}
                   error={form.formState.errors.targetItemId}
                 >
@@ -700,7 +706,7 @@ export function WorkOrderFormView({
                   </div>
                 </FormField>
                 <FormField
-                  label="En (cm)"
+                  label={docScan.label("En (cm)", "width")}
                   htmlFor="width"
                   error={form.formState.errors.width}
                   hintTone="warning"
@@ -732,7 +738,7 @@ export function WorkOrderFormView({
                 </FormField>
                 {targetQuantityEnabled && (
                   <FormField
-                    label="Hedef Metraj"
+                    label={docScan.label("Hedef Metraj", "targetQuantity")}
                     htmlFor="targetQuantity"
                     error={form.formState.errors.targetQuantity}
                     hintTone="info"
@@ -765,7 +771,7 @@ export function WorkOrderFormView({
                 )}
                 {targetQuantityEnabled && (
                   <FormField
-                    label="Hedef Kg"
+                    label={docScan.label("Hedef Kg", "targetWeight")}
                     htmlFor="targetWeight"
                     error={form.formState.errors.targetWeight}
                     hint="Opsiyonel — tekstilde mt + kg planlanır."

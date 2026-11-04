@@ -22,6 +22,20 @@ export const targetValueItemSchema = z.object({
   valueId: z.string().uuid("Geçersiz değer ID"),
 }).strict();
 
+/** Özel rota adımı alanları — klasik create/quick-start ve gelen belge formu (K30-D) aynı şekli kullanır. */
+const workOrderStepFields = {
+  stationId:              z.string().uuid("Geçersiz istasyon ID"),
+  notes:                  z.string().max(500).optional().nullable(),
+  requiredCategoryId:     z.string().uuid().optional().nullable(),
+  plannedSubcontractorId: z.string().uuid().optional().nullable(),
+  // Gülkesim 2026-11-02: önerilen makine (yalnız öneri; null = temizle).
+  plannedMachineId:       z.string().uuid().optional().nullable(),
+  // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
+  // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
+  //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
+  dispatchWithoutColor:   z.boolean().optional(),
+};
+
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
 // (quickStartSchema) yeniden kullanılabilsin — refine ZodEffects'e çevirir, spread'i bozar.
 const workOrderCoreShape = {
@@ -43,18 +57,7 @@ const workOrderCoreShape = {
   // Tambur planlama bilgisi — operatör override edebilir.
   foldType:          foldTypeSchema,
   steps: z
-    .array(z.object({
-      stationId:              z.string().uuid("Geçersiz istasyon ID"),
-      notes:                  z.string().max(500).optional().nullable(),
-      requiredCategoryId:     z.string().uuid().optional().nullable(),
-      plannedSubcontractorId: z.string().uuid().optional().nullable(),
-      // Gülkesim 2026-11-02: önerilen makine (yalnız öneri; null = temizle).
-      plannedMachineId:       z.string().uuid().optional().nullable(),
-      // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
-      // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
-      //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
-      dispatchWithoutColor:   z.boolean().optional(),
-    }))
+    .array(z.object(workOrderStepFields))
     .optional(),
   /**
    * routeTemplateId ile birlikte verilir: şablondan klonlanan adımların fason
@@ -101,6 +104,18 @@ export const workOrderFormFieldShape = {
   plannedEndDate: formIsoDate("Planlı bitiş"),
   foldType: workOrderCoreShape.foldType,
   orderLineIds: workOrderCoreShape.orderLineIds,
+  // K30-D: panel klasik formunun eksik üç alanı; verilmezse bugünkü davranış (eski istemci).
+  targetPropertyIds: workOrderCoreShape.targetPropertyIds,
+  type: z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
+  steps: z
+    .array(z.strictObject({
+      ...workOrderStepFields,
+      // Sıra dizideki sıradır; verilirse index+1 olmalı (servis denetler).
+      sequence: z.number().int().min(1).max(200).optional(),
+    }))
+    .min(1, "En az bir rota adımı gerekli")
+    .max(200, "Rota adımı en fazla 200 olabilir")
+    .optional(),
 };
 
 const hasRoute = (d: { routeTemplateId?: string | null; steps?: unknown[] | null }) =>

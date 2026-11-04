@@ -16,6 +16,7 @@ import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
 import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
+import TeachBanner from '../tanit/TeachBanner';
 
 interface Props {
   row: DocRow;
@@ -56,11 +57,10 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
         )}
       </View>
       {view?.reason ? <Text style={styles.note}>{view.reason}</Text> : null}
+      {readDone && read.watch?.phase === 'done' && <TeachBanner row={row} wo={wo} tanitim={read.watch.summary.tanitim} customers={customers} />}
       {detailFailed && <Text style={styles.note} testID={`belge-satir-detay-hata-${row.noteNo}`}>Belge detayı okunamadı; form okuma özetinden dolduruldu.</Text>}
       {read.watch && read.watch.phase !== 'polling' && !readDone && (
-        <Button mode="outlined" icon="refresh" onPress={read.recheck} contentStyle={styles.btn}>
-          Yeniden kontrol et
-        </Button>
+        <Button mode="outlined" icon="refresh" onPress={read.recheck} contentStyle={styles.btn}>Yeniden kontrol et</Button>
       )}
       {f && (
         <>
@@ -153,7 +153,7 @@ function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: W
 }
 
 /** Gramaj yalnız rotada kurşun adımı ve katalogda değer varsa çizilir; varsayılan ön seçili gelir (sözleşme 5). */
-function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
+export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
   const f = row.form!;
   if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
   return (

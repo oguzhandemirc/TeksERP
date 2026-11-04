@@ -57,6 +57,7 @@ import { ReadyWorksPage } from "@/pages/Operations/ReadyWorks/ReadyWorksPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
 import { TeachTemplatePage } from "@/pages/Operations/GelenBelgeler/tanit/TanitPage";
+import { TeachStartPage } from "@/pages/Operations/GelenBelgeler/tanit/TanitStartPage";
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
@@ -589,6 +590,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="gelen-belge:template">
         <CustomerDefaultsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // K30-T: "Belge Tanıt" girişi (yükle → okununca tanıtma) — statik segment `:id`den önce; karo ile AYNI izin; yol TEACH_START_PATH.
+  {
+    path: "operations/gelen-belgeler/tanit",
+    element: (
+      <ProtectedRoute requirePermission="gelen-belge:template">
+        <TeachStartPage />
       </ProtectedRoute>
     ),
   },

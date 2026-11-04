@@ -7,3 +7,5 @@ export function teachPath(noteId: string, templateCode?: string | null): string 
   const base = TEACH_ROUTE.replace(":id", noteId);
   return templateCode ? `${base}?sablon=${encodeURIComponent(templateCode)}` : base;
 }
+/** K30-T: menüden "Belge Tanıt" — belge yükle → okununca tanıtma sayfası (statik segment `:id`den önce eşleşir). */
+export const TEACH_START_PATH = "/operations/gelen-belgeler/tanit";

@@ -5,15 +5,16 @@ import { onlineManager, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
-import { fabricPropertyService, type KursunGramajCatalog } from '../../../../services/fabricProperty.service';
-import { fetchDefaultTargets, passThroughTargets, useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
 import { INBOUND_DOC_SETTINGS_KEY, inboundDocService, type CreateWorkOrderFromNoteBody, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
 import { kursunStepOf } from '../desk/deskPlan';
 import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../DuplicateDocNoDialog';
-import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
+import type { MultiPartyDraft } from './partyDraft';
+import { mergeExtra } from './woSteps';
+import { applyMulti, applyParties, isDone, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
+import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
 import {
   buildCreateBody,
   buildDraftPatch,
@@ -24,7 +25,6 @@ import {
   isScanRoute,
   openedResult,
   resolveFormApproval,
-  routeHasKursunStep,
   rowIssues,
   type FormApproval,
   type RowForm,
@@ -33,29 +33,9 @@ import {
 
 // Eski içe aktarımlar (`./useWoRows`) için yeniden dışa aktarım; tanım servis katmanında.
 export { INBOUND_DOC_SETTINGS_KEY };
+// Satır tipi + saf dönüşümler `docRow.ts`te, gramaj kancaları `useWoGramaj.ts`te; eski içe aktarımlar için yeniden dışa aktarım.
+export { taughtRow, type DocRow, type SavedRow } from './docRow';
 
-export interface DocRow {
-  noteId: string;
-  noteNo: string;
-  runKey: number;
-  detail: InboundNoteDetail | null;
-  form: RowForm | null;
-  /** Kullanıcı gramajı elle seçti/kaldırdı: geç gelen katalog varsayılanı onu ezmez. */
-  gramajTouched: boolean;
-  result: RowResult | null;
-  /** S1 parti özeti (çok partili belgede liste + uyarılar); yok = tek partili form. */
-  parties?: NotePartiesView | null;
-}
-
-const EMPTY_CATALOG: KursunGramajCatalog = { propertyId: null, options: [] };
-
-export interface SavedRow {
-  noteId: string;
-  noteNo: string;
-  result: RowResult;
-}
-
-const isDone = (r: DocRow): boolean => r.result?.kind === 'OPENED' || r.result?.kind === 'DRAFT';
 
 interface SaveCtx {
   mode: FormApproval;
@@ -108,7 +88,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
     });
-    const full = ctx.extra ? { ...body, ...ctx.extra } : body;
+    const full = mergeExtra(body, ctx.extra);
     return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...full, confirmDuplicateDocNo: true } : full)) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
@@ -140,74 +120,6 @@ function rowCounts(rows: DocRow[], ready: number) {
     drafts: rows.filter((r) => r.result?.kind === 'DRAFT').length,
     failed: rows.filter((r) => r.result?.kind === 'FAILED').length,
   };
-}
-
-type GramajFor = (customerId: string | null) => string | null | undefined;
-type PassThrough = readonly { propertyId: string; valueId: string }[];
-/** Cevap hazırsa eşzamanlı (kayıt akışı mikro-görev kaybetmez), değilse doğrudan okunur. */
-type PassThroughFor = (customerId: string | null) => PassThrough | Promise<PassThrough>;
-
-/** Parti özeti form kurulduktan sonra gelir: çok partideyse satır listesi bir kez kurulur (kullanıcı düzenlemesi ezilmez). */
-function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesView | null): DocRow[] {
-  return rs.map((r) => (r.noteId === noteId && r.form && r.parties === undefined ? { ...r, parties, form: { ...r.form, multi: initialMultiParty(parties) } } : r));
-}
-
-function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRow[] {
-  return rs.map((r) => (r.noteId === noteId && r.form && !isDone(r) ? { ...r, form: { ...r.form, multi }, result: null } : r));
-}
-
-/** Gramaj alanı yalnız rotada kurşun adımı varsa; katalog okunamazsa boş (alan çizilmez, uydurma yok). */
-function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { showGramaj: boolean; catalog: KursunGramajCatalog; gramajFor: GramajFor; passThroughFor: PassThroughFor } {
-  // Rotasız: hangi istasyona gideceği bilinmez → gramaj kutusu bugünkü gibi görünür (seçmek isteğe bağlı).
-  const showGramaj = isScanRoute(route) || routeHasKursunStep(route);
-  const q = useQuery({
-    queryKey: ['fabric-properties', 'kursun-gramaj-catalog'],
-    queryFn: fabricPropertyService.getKursunGramajCatalog,
-    enabled: showGramaj,
-    retry: false,
-    staleTime: 60_000,
-  });
-  const catalog = showGramaj ? q.data ?? EMPTY_CATALOG : EMPTY_CATALOG;
-  // K22: ön seçim sunucu çözücüsünden (müşteri > istasyon yeteneği > değer varsayılanı); tablet kural yazmaz.
-  // Kurşunsuz rotada da okunur: formda alanı olmayan seçim değerleri gövdeye aynen gider.
-  const defaults = useRouteDefaultTargets(route, rows.map((r) => r.form?.ownerCustomerId ?? r.detail?.ownerCustomerId ?? null));
-  const { valueFor } = defaults;
-  const propertyId = catalog.propertyId;
-  const gramajFor = useCallback<GramajFor>(
-    (customerId) => {
-      if (!showGramaj || !propertyId) return null;
-      const id = valueFor(customerId, propertyId);
-      // Katalogda olmayan (pasif) değer önerilmez.
-      return id && !catalog.options.some((o) => o.id === id) ? null : id;
-    },
-    [showGramaj, propertyId, valueFor, catalog],
-  );
-  const gramajPropertyId = showGramaj ? propertyId : null;
-  // Kayıt anında cevap henüz yoksa doğrudan okunur (kayıt beklemez); okunamazsa iletilecek değer yok.
-  const passThroughFor = useCallback<PassThroughFor>(
-    (customerId) =>
-      defaults.passThroughFor(customerId, gramajPropertyId) ??
-      (defaults.stationIds.length === 0 ? [] : fetchDefaultTargets(defaults.stationIds, customerId).then((l) => passThroughTargets(l, gramajPropertyId), () => [])),
-    [defaults, gramajPropertyId],
-  );
-  return { showGramaj, catalog, gramajFor, passThroughFor };
-}
-
-/** Çözücü cevabı satırdan sonra gelirse (ya da müşteri değişince) dokunulmamış satırlara ön seçim düşer. */
-function useGramajReseed(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor): void {
-  useEffect(() => {
-    setRows((rs) => {
-      let changed = false;
-      const next = rs.map((r) => {
-        if (!r.form || r.gramajTouched || isDone(r)) return r;
-        const id = gramajFor(r.form.ownerCustomerId);
-        if (id === undefined || id === r.form.gramajValueId) return r;
-        changed = true;
-        return { ...r, form: { ...r.form, gramajValueId: id } };
-      });
-      return changed ? next : rs;
-    });
-  }, [setRows, gramajFor]);
 }
 
 /** Satır düzenleyicileri (okuma → form, kullanıcı düzenlemesi, parti listesi); kayıt döngüsünden ayrı. */
@@ -248,7 +160,18 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
   const setMulti = useCallback((noteId: string, multi: MultiPartyDraft) => setRows((rs) => applyMulti(rs, noteId, multi)), [setRows]);
 
   const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), [setRows]);
-  return { addNote, setDetail, updateForm, setParties, setMulti, removeRow };
+  // K30-A: belge yeni şablonla yeniden okutuldu → okuma baştan izlenir, form yeni okumadan kurulur.
+  const rereadRow = useCallback(
+    (noteId: string) => setRows((rs) => rs.map((r) => (r.noteId === noteId && !isDone(r) ? { ...r, runKey: r.runKey + 1, detail: null, form: null, parties: null, gramajTouched: false, result: null, taught: undefined } : r))),
+    [setRows],
+  );
+  // K30-A: yeniden okutulamayan (satırlı) belgede tanıtma önizlemesinin değerleri forma dolar (sunucu yeniden okumaz).
+  const applyTaught = useCallback(
+    (noteId: string, fields: Record<string, string | null>, ownerCustomerId: string | null, tpl: { code: string; name: string }) =>
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? taughtRow(r, fields, ownerCustomerId, tpl) : r))),
+    [setRows],
+  );
+  return { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught };
 }
 
 /** `extraBody`: S16b tek formun satır başına ek alanları (çok parti kipine göre değişir); verilmezse bugünkü gövde. */
@@ -268,7 +191,7 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   useGramajReseed(setRows, gramajFor);
 
-  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow } = useRowMutators(setRows, gramajFor);
+  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught } = useRowMutators(setRows, gramajFor);
   const setResult = (noteId: string, result: RowResult) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, result } : r)));
 
   const printFor = async (noteId: string, workOrderId: string) => {
@@ -326,7 +249,7 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   return {
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
-    addNote, setDetail, setParties, setMulti, updateForm, removeRow, saveAll,
+    addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll,
     duplicate,
     dismissDuplicate: () => setDuplicate(null),
     /** Diyalogdaki "Yine de onayla": yalnız o satır, `confirmDuplicateDocNo: true` ile. */

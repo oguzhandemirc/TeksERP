@@ -58,6 +58,11 @@ export function resolveKursunMeters(input: KursunMeterInput): KursunMeterResult 
   if (!hit) return { meters: null, source: null, review: false, candidates };
   const [source, meters] = hit as [KursunMeterResult["source"], string];
   const handwritten = !!input.template?.grid;
-  const contradicts = source !== "LINE_SUM" && lineSum !== null && !near(meters, lineSum);
-  return { meters, source, review: handwritten || contradicts, candidates };
+  return { meters, source, review: handwritten || contradictsLineSum({ meters, source, candidates }), candidates };
+}
+
+/** Çıkış/toplam metresi Σ satırla hoşgörü dışında çelişiyor mu — `review`in el yazısından bağımsız bileşeni (K30-B TRUSTED korur). */
+export function contradictsLineSum(r: Pick<KursunMeterResult, "meters" | "source" | "candidates">): boolean {
+  const lineSum = r.candidates.lineSum;
+  return r.meters !== null && r.source !== null && r.source !== "LINE_SUM" && lineSum !== null && !near(r.meters, lineSum);
 }

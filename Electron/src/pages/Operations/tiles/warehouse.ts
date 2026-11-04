@@ -1,12 +1,12 @@
 // Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Inbox, PackageCheck, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Inbox, PackageCheck, Package, PackageOpen, PackagePlus, ScanLine, ScanText, ShoppingBasket, Tags } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
 import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
 import { isIncomingDocumentVisible } from "../GelenBelgeler/gelenBelge-regime";
 import { isConsignedWorkVisible } from "../ConsignedWork/consignedWork-regime";
-import { CUSTOMER_DEFAULTS_PATH } from "../GelenBelgeler/paths";
+import { CUSTOMER_DEFAULTS_PATH, TEACH_START_PATH } from "../GelenBelgeler/paths";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -97,6 +97,17 @@ export const warehouseTiles: OperationsTile[] = [
     description: "Okunan belge yerleşimini gönderen cariye ve varsayılan sahibe bağla; parti no alanını seç",
     icon: FileCog,
     to: "/operations/gelen-belgeler/sablonlar",
+    group: "warehouse",
+    permission: "gelen-belge:template",
+    visibleWhen: isIncomingDocumentVisible,
+  },
+  {
+    // K30-T: yeni belge tipini öğretme girişi (yükle → okununca adım adım tanıt). Şablon izni + aynı modül kapısı.
+    key: "gelen-belge-tanit",
+    title: "Belge Tanıt",
+    description: "Yeni belge tipini öğret — fotoğrafı yükle, başlığa ve değerlere sırayla dokun",
+    icon: ScanLine,
+    to: TEACH_START_PATH,
     group: "warehouse",
     permission: "gelen-belge:template",
     visibleWhen: isIncomingDocumentVisible,

@@ -192,6 +192,8 @@ export function WorkOrderFormPage() {
         initialTarget={isEdit ? undefined : seed?.seedTarget ?? undefined}
         onSubmit={async (v, meta) => {
           const payload = buildPayload(v, meta, targetQuantityEnabled);
+          // S16d: belge okutulduysa belge + iş emri form ucuyla tek seferde (sonuç/hata gösterimi kancada).
+          if (!isEdit && meta.doc) return meta.doc.submit(payload);
           if (isEdit) await replaceMut.mutateAsync(payload);
           else {
             shortcutCreate.current = opts?.shortcut === true;

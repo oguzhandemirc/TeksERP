@@ -11,6 +11,7 @@ import { formFieldsFromRegion, type FormFields } from "../lib/gelen-belge/form-a
 import { readFirstRegion } from "./gelen-belge-parti-metre.service";
 import { itemProblem, ROLL_BEARING_ITEM_TYPES } from "./gelen-belge-ayar.service";
 import { readDesenRenkEslesme } from "./system-setting.service";
+import type { TrustMode } from "./gelen-belge-parti-metre.service";
 
 export interface FormSuggestions {
   targetItem?: { id: string; name: string; code: string };
@@ -41,7 +42,9 @@ async function matchColor(raw: string): Promise<FormSuggestions["targetColor"]> 
 }
 
 /** Okuma özetine eklenen form alanları + (ONER kipinde) kayıt önerileri. Eski tablet alanları yok sayar. */
-export async function noteFormFields(noteId: string): Promise<{ formFields: FormFields; suggestions: FormSuggestions }> {
+export async function noteFormFields(noteId: string, trust: TrustMode = "NORMAL"): Promise<{ formFields: FormFields; suggestions: FormSuggestions }> {
+  // K30-B BLIND (SORMA + tanıtılmamış): GENEL sözlük tahmini forma dolmaz.
+  if (trust === "BLIND") return { formFields: {}, suggestions: {} };
   const mode = await readDesenRenkEslesme();
   const region = await readFirstRegion(prisma, noteId);
   const formFields = formFieldsFromRegion(region?.fields, mode);

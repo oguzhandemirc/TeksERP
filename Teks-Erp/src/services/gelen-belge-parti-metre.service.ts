@@ -8,8 +8,10 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { batchNoCandidates, pickBatchNo, type BatchNoCandidate } from "../lib/gelen-belge/parti-no";
-import { resolveKursunMeters, type KursunMeterResult } from "../lib/gelen-belge/kursun-metre";
+import { contradictsLineSum, resolveKursunMeters, type KursunMeterResult } from "../lib/gelen-belge/kursun-metre";
+import { USER_TEMPLATE_PREFIX } from "./gelen-belge-sablon.service";
 import { templateByCode } from "../lib/gelen-belge/sablon-bul";
+import type { DocumentTemplate } from "../lib/gelen-belge/motor";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -43,16 +45,40 @@ export interface BatchAndMeters {
   kursun: KursunMeterResult;
 }
 
-/** Tek türetme noktası: bölge + beyan + canlı satır metreleri → adaylar + kurşun metresi. */
-export function deriveBatchAndMeters(region: StoredRegion | null, totalsDeclared: unknown, lineMeters: ReadonlyArray<{ toString(): string }>): BatchAndMeters {
+/** `gelenBelge.tanitimGuveni` kipi (`gelen-belge-tanitim-guveni.service`): NORMAL bugünkü · TRUSTED sorusuz · BLIND tahmin yok. */
+export type TrustMode = "NORMAL" | "TRUSTED" | "BLIND";
+
+const BLIND_KURSUN: KursunMeterResult = { meters: null, source: null, review: false, candidates: { output: null, total: null, input: null, lineSum: null } };
+
+/**
+ * Saf: güven kipini adaylara uygular — okuma anı (kolon) ve okuma özeti (canlı) AYNI fonksiyondan geçer. TRUSTED yalnız
+ * türetimin dayandığı şablon KULLANICI şablonuysa (`u-`) etkilidir (çok bölgede ilk bölge sistem/GENEL ise NORMAL): şablonda
+ * parti no alanı atandıysa yalnız o alan aday (evrak/sipariş no ikincil aday düşer); metre şablonun çıkış/toplam alanından
+ * geldiyse el yazısı (ızgara) doğrulaması beklemez, Σ satırla ÇELİŞKİ doğrulaması korunur. BLIND: GENEL sözlük tahmini
+ * forma dolmaz (aday yok, metre yok). NORMAL: değişmez.
+ */
+export function applyTrust(d: BatchAndMeters, template: DocumentTemplate | undefined, trust: TrustMode): BatchAndMeters {
+  if (trust === "NORMAL") return d;
+  if (trust === "BLIND") return { batchNoCandidates: [], kursun: BLIND_KURSUN };
+  if (!template?.id.startsWith(USER_TEMPLATE_PREFIX)) return d;
+  const hasBatchField = (template.batchNoCandidates ?? []).some((c) => c.kind === "BATCH");
+  const fromTemplate = d.kursun.source === "OUTPUT" || d.kursun.source === "TOTAL";
+  return {
+    batchNoCandidates: hasBatchField ? d.batchNoCandidates.filter((c) => c.kind === "BATCH") : d.batchNoCandidates,
+    kursun: fromTemplate ? { ...d.kursun, review: contradictsLineSum(d.kursun) } : d.kursun,
+  };
+}
+
+/** Tek türetme noktası: bölge + beyan + canlı satır metreleri → adaylar + kurşun metresi (güven kipi uygulanmış). */
+export function deriveBatchAndMeters(region: StoredRegion | null, totalsDeclared: unknown, lineMeters: ReadonlyArray<{ toString(): string }>, trust: TrustMode = "NORMAL"): BatchAndMeters {
   const template = templateByCode(region?.templateId);
   const fields = region?.fields ?? {};
-  return { batchNoCandidates: batchNoCandidates(template, fields), kursun: resolveKursunMeters({ template, fields, totalsDeclared, lineMeters }) };
+  return applyTrust({ batchNoCandidates: batchNoCandidates(template, fields), kursun: resolveKursunMeters({ template, fields, totalsDeclared, lineMeters }) }, template, trust);
 }
 
 /** Detay/okuma özeti yanıt parçası (eski istemci yok sayar). */
-export async function noteBatchAndMeters(noteId: string, totalsDeclared: unknown, lineMeters: ReadonlyArray<{ toString(): string }>) {
-  const d = deriveBatchAndMeters(await readFirstRegion(prisma, noteId), totalsDeclared, lineMeters);
+export async function noteBatchAndMeters(noteId: string, totalsDeclared: unknown, lineMeters: ReadonlyArray<{ toString(): string }>, trust: TrustMode = "NORMAL") {
+  const d = deriveBatchAndMeters(await readFirstRegion(prisma, noteId), totalsDeclared, lineMeters, trust);
   return { batchNoCandidates: d.batchNoCandidates, kursunMeterCandidates: d.kursun.candidates };
 }
 

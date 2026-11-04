@@ -179,7 +179,7 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const [picking, setPicking] = useState(false);
   const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); ed.reset(); dd.reset(); fd.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue, fd.serverDesen, fd.serverGiris]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue, fd.serverDesen, fd.serverGiris, fd.serverGuven]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");

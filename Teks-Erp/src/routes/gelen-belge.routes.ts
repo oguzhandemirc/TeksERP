@@ -362,7 +362,7 @@ router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper)" }
+ *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper), tanitim? ({ durum: TANITILDI, sablonKodu, sablonAdi } | { durum: TANITILMAMIS }; sistem şablonunda yok)" }
  *       404: { description: DELIVERY_NOTE_NOT_FOUND }
  */
 // Tarayan `gelen-belge:read` taşımaz (D7): taslağın kendi okuma sonucunu yalnız bu özetten görür; ayrıntı panelde.
@@ -407,7 +407,7 @@ const SettingsBody = z.strictObject({
   stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
   desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
-  tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(),
+  tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(), tanitimGuveni: z.enum(["SOR", "SORMA"], "Seçenek SOR ya da SORMA olmalı").optional(),
 });
 /**
  * @openapi
@@ -448,6 +448,7 @@ const SettingsBody = z.strictObject({
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
  *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz (varsayılan) · adı/kodu tutan kayıt önerilir · iş emri notuna eklenir" }
  *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
+ *               tanitimGuveni: { type: string, enum: [SOR, SORMA], description: "Tanıtılan belgeye güven: okunanları onaylat (varsayılan) · tanıtılan belgeyi sormadan doldur (tanınmayanın tahmini dolmaz)" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -722,9 +723,12 @@ const FormWorkOrderBody = z.strictObject({
  *               plannedEndDate: { type: string, description: "ISO tarih/zaman" }
  *               foldType: { type: string, description: "Kat tipi; verilirse istasyon varsayılanını ezer" }
  *               orderLineIds: { type: array, items: { type: string, format: uuid }, description: "Sipariş kalemleri (quick-start kuralı)" }
+ *               targetPropertyIds: { type: array, items: { type: string, format: uuid }, description: "K30-D hedef özellikler; anahtar varsa istemcinin kümesi (+ hedef değerlerin üst özelliği), yoksa istasyon bayrakları (bugünkü)" }
+ *               type: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION], description: "K30-D iş emri türü; yoksa sipariş bağından türetilir (bugünkü)" }
+ *               steps: { type: array, minItems: 1, maxItems: 200, description: "K30-D düzenlenmiş rota adımları (klasik ucun adım şekli; sıra = dizi sırası, sequence verilirse index+1). routeTemplateId ile birlikte zorunlu (seçilen şablonun yerine geçer); stepPlanning ile birlikte verilemez; klasik doğrulama onaydan ÖNCE", items: { type: object, required: [stationId], properties: { stationId: { type: string, format: uuid }, sequence: { type: integer }, notes: { type: string, maxLength: 500, nullable: true }, requiredCategoryId: { type: string, format: uuid, nullable: true }, plannedSubcontractorId: { type: string, format: uuid, nullable: true }, plannedMachineId: { type: string, format: uuid, nullable: true }, dispatchWithoutColor: { type: boolean } } } }
  *     responses:
  *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
- *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID · GELEN_BELGE_TARGET_ITEM_INVALID · GELEN_BELGE_FORM_TARGET_PER_PARTY" }
+ *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID · GELEN_BELGE_TARGET_ITEM_INVALID · GELEN_BELGE_FORM_TARGET_PER_PARTY · GELEN_BELGE_FORM_STEPS_NEED_ROUTE · GELEN_BELGE_FORM_STEPS_WITH_PLANNING · GELEN_BELGE_FORM_STEPS_ORDER · GELEN_BELGE_FORM_TYPE_NEEDS_ORDER · pasif/olmayan istasyon (belge onaylanmaz)" }
  *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
  *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
  */

@@ -39,6 +39,24 @@ jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: () => mockAd
 jest.mock('../PageCameraModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../PagePreviewModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../../../services/inboundDoc.service', () => ({ inboundDocService: { tabletContext: async () => ({ data: { customers: [] } }) } }));
+// Kart iskeleti (kendi bekçisi ModuleSheet.test): görünürken içerik + alt düğmeler düz çizilir.
+jest.mock('../../../../components/ModuleSheet', () => {
+  const actual = jest.requireActual('../../../../components/ModuleSheet');
+  return {
+    ...actual,
+    __esModule: true,
+    default: (p: { visible: boolean; children: React.ReactNode; footer: React.ReactNode }) => (p.visible ? <>{p.children}{p.footer}</> : null),
+  };
+});
+// K30-D kişisel tercih blob'u: bellek içi; panelin anahtarı (`theme`) her yazımda korunmalı.
+let mockBlob: Record<string, unknown> = {};
+const mockPrefSave = jest.fn(async (b: Record<string, unknown>) => {
+  mockBlob = b;
+  return b;
+});
+jest.mock('../../../../services/preferences.service', () => ({
+  preferencesService: { get: async () => mockBlob, save: (b: Record<string, unknown>) => mockPrefSave(b) },
+}));
 jest.mock('../../../../services/route.service', () => ({ routeService: { getAll: async () => ({ data: [] }) } }));
 jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
 jest.mock('../../../../hooks/useFeatureFlags', () => ({
@@ -75,6 +93,7 @@ const row = (x: Partial<DocRow> = {}): DocRow =>
 const ui = (r: ProductionRoute | null = route) => <UnifiedWoForm initialRoute={r} routeLocked={r !== null} onNew={jest.fn()} />;
 
 beforeEach(() => {
+  mockBlob = { theme: 'dark' };
   mockRows = [];
   mockOpts = undefined;
   jest.clearAllMocks();
@@ -138,5 +157,83 @@ describe('UnifiedWoForm', () => {
     const s = renderWithPaper(ui(null));
     await waitFor(() => expect(s.getByTestId('ie-form-ipucu').props.children).toBe('Rotayı seçin.'));
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
+  });
+});
+
+describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
+  const openSheet = async (s: ReturnType<typeof renderWithPaper>) => {
+    fireEvent.press(s.getByTestId('ie-alanlar'));
+    return s.findByTestId('ie-alan-en');
+  };
+
+  it('⭐ kapat → alan "Diğer alanlar (n)"e iner → dokununca açılır → geri aç → üste döner; blob diğer anahtarları korur', async () => {
+    const s = renderWithPaper(ui());
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+    fireEvent.press(await openSheet(s));
+    fireEvent.press(s.getByTestId('ie-alanlar-tamam'));
+    await waitFor(() => expect(mockPrefSave).toHaveBeenCalledTimes(1));
+    expect(mockPrefSave.mock.calls[0][0]).toEqual({ theme: 'dark', tabletIeForm: { gizli: ['en'] } });
+    expect(s.queryByTestId('ie-form-en')).toBeNull();
+    expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (1)');
+    fireEvent.press(s.getByTestId('ie-diger-alanlar'));
+    expect(s.getByTestId('ie-form-alanlari-diger')).toContainElement(s.getByTestId('ie-form-en'));
+    fireEvent.press(await openSheet(s));
+    await waitFor(() => expect(mockPrefSave).toHaveBeenCalledTimes(2));
+    expect(mockBlob).toEqual({ theme: 'dark', tabletIeForm: { gizli: [] } });
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+    expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-en'));
+  });
+
+  it('⭐ zorunlular kapatılamaz ("zorunlu" etiketi, anahtar pasif); Varsayılana dön hepsini açar', async () => {
+    mockBlob = { theme: 'dark', tabletIeForm: { gizli: ['not', 'planBaslangic', 'rota', 'bilinmeyen'] } };
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (2)'));
+    expect(s.getByText('Rota')).toBeTruthy();
+    await openSheet(s);
+    for (const k of ['musteri', 'partiNo', 'kursunMetresi', 'rota']) {
+      expect(s.getByTestId(`ie-alan-zorunlu-${k}`)).toBeTruthy();
+      expect(s.getByTestId(`ie-alan-anahtar-${k}`)).toBeDisabled();
+    }
+    expect(s.getByTestId('ie-alan-hedefOzellik')).toBeTruthy();
+    fireEvent.press(s.getByTestId('ie-alan-rota'));
+    expect(mockPrefSave).not.toHaveBeenCalled();
+    fireEvent.press(s.getByTestId('ie-alanlar-varsayilan'));
+    await waitFor(() => expect(mockBlob).toEqual({ theme: 'dark', tabletIeForm: { gizli: [] } }));
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+    expect(s.getByTestId('ie-form-not')).toBeTruthy();
+  });
+
+  it('⭐ gizli alanı belge doldurursa bu okumada üstte "belgeden" rozetiyle görünür (sessiz gönderim yok)', async () => {
+    mockBlob = { tabletIeForm: { gizli: ['en', 'hedefKumas', 'planBitis'] } };
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    // Tercih yüklendi: yalnız belgenin doldurmadığı gizli alan (Planlı bitiş) altta kalır.
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (1)'));
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-en'));
+    expect(s.getByTestId('belgeden-width')).toBeTruthy();
+    expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-desen-oneri'));
+  });
+
+  it('⭐ belgeden üste çıkan gizli alan düzeltilince yerinde kalır (rozet düşer, değer gövdeye gider)', async () => {
+    mockBlob = { tabletIeForm: { gizli: ['en'] } };
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '170');
+    expect(s.queryByTestId('belgeden-width')).toBeNull();
+    expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-en'));
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+    expect(mockOpts?.extraBody?.(mockRows[0])).toMatchObject({ width: 170 });
+  });
+
+  it('tercih okunamazsa hepsi açık; yazılamayan seçim yerelde kalır ve "kaydedilecek" ipucu görünür', async () => {
+    mockBlob = null as unknown as Record<string, unknown>;
+    mockPrefSave.mockRejectedValueOnce(new Error('ağ yok'));
+    const s = renderWithPaper(ui());
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+    fireEvent.press(await openSheet(s));
+    await waitFor(() => expect(s.getByTestId('ie-alanlar-bekliyor')).toBeTruthy());
+    expect(s.queryByTestId('ie-form-en')).toBeNull();
   });
 });

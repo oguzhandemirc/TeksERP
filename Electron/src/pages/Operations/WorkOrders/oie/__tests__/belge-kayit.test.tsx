@@ -10,6 +10,7 @@ import { applyPatch, docDraftReasons, gramajOffer, initialDocDraft, noteWorkOrde
 import type { DefaultTarget } from "@/lib/station-default-targets";
 import { routeHasKursunStep } from "../service";
 import { saveLabel, saveDoc } from "../saveDoc";
+import { formEndpointExtras, type ClassicPayloadPart } from "../docFormFill";
 import { batchFailure } from "../batchToken";
 import { TopluBelgeForm } from "../TopluBelgeForm";
 
@@ -154,6 +155,30 @@ describe("saveDoc", () => {
   it("review'lı metre → hiçbir uç çağrılmaz", async () => {
     await expect(saveDoc({ ...base(note({ kursunMetersReview: true })), formApproval: "WITH_WORK_ORDER" })).rejects.toThrow(/doğrulayın/);
     expect(createWO).not.toHaveBeenCalled();
+  });
+
+  // S16d: klasik formdan gelen `extra` gövdeye biner; formun hedefleri (targetValues) taslağın gramaj/geçiş değerlerini EZER.
+  const FORM: ClassicPayloadPart = { targetItemId: "item-1", targetColorId: "color-1", width: 280, targetQuantity: 4500, targetWeight: 1200, plannedStartDate: null, plannedEndDate: null, foldType: "2-KAT" };
+  it("⭐ extra (klasik form) gövdeye karışır; targetValues=[] gramaj teklifini ezer", async () => {
+    createWO.mockResolvedValue({ workOrderId: "w1", workOrderNo: "IE-1", batchNumber: "214279", rollId: "r1" });
+    await saveDoc({ ...base(note()), formApproval: "WITH_WORK_ORDER", extra: { ...formEndpointExtras(FORM, false), targetValues: [] } });
+    const body = createWO.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body).toMatchObject({ routeTemplateId: "rt-k", kursunMeters: "4521.5", targetItemId: "item-1", targetColorId: "color-1", width: 280, targetQuantity: 4500, targetWeight: 1200, foldType: "2-KAT" });
+    expect(body.targetValues).toEqual([]);
+  });
+  it("⭐ PER_PARTY çok parti: gövdede hedef metraj/kg YOK (sunucu 400), parti gövdesi var", async () => {
+    createWO.mockResolvedValue({ workOrderId: "w1", workOrderNo: "IE-1", batchNumber: "P1", rollId: "r1", workOrders: [] });
+    const multi = { mode: "PER_PARTY" as const, rows: [{ blockNo: 1, batchNo: "P1", meters: 586 }, { blockNo: 2, batchNo: "P2", meters: 3935 }] };
+    await saveDoc({ ...base(note()), formApproval: "WITH_WORK_ORDER", multi, extra: { ...formEndpointExtras(FORM, true), targetValues: [] } });
+    const body = createWO.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty("targetQuantity");
+    expect(body).not.toHaveProperty("targetWeight");
+    expect(body).toMatchObject({ mode: "PER_PARTY", targetItemId: "item-1", width: 280 });
+  });
+  it("SEPARATE: extra hiçbir uca gitmez, yalnız belge başlığı taslağa yazılır (kart bunu uyarır)", async () => {
+    await saveDoc({ ...base(note()), formApproval: "SEPARATE", extra: { ...formEndpointExtras(FORM, false), targetValues: [] } });
+    expect(createWO).not.toHaveBeenCalled();
+    expect(patchHeader).toHaveBeenCalledWith("n1", { ownerCustomerId: "c-gul" });
   });
 });
 

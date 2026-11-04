@@ -255,6 +255,11 @@ export function keptOldFields(t: TemplateJson | null | undefined, s: TeachState)
     .map((f) => (typeof f.label === "string" ? f.label : String(f.key)));
 }
 
+/** Eski şablondaki alan anahtarları: güncelle kipinde atlanan/işaretlenmeyen alan sunucu birleştirmesinde (`base`) korunur. */
+export function oldTemplateFieldKeys(t: TemplateJson | null | undefined): string[] {
+  return arr(t?.fields).map((f) => (f as { key?: unknown }).key).filter((k): k is string => typeof k === "string");
+}
+
 /** Eski şablonun kimlik yazıları (güncelle kipinde hazır seçili gelir). */
 export function templateKeywords(t: TemplateJson | null | undefined): string[] {
   return arr((t?.identifiers as TemplateJson | undefined)?.keywords).filter((k): k is string => typeof k === "string");
@@ -268,4 +273,11 @@ export function teachMarks(s: TeachState, words: readonly ScanWord[]): ScanMark[
   for (const i of s.totalsLabel ?? []) tone.set(i, { tone: "column", label: "Toplam satırı" });
   for (const i of s.selected) tone.set(i, { tone: "selected", label: "Seçili" });
   return words.map((w, i) => ({ key: String(i), box: w.photoRect, tone: tone.get(i)?.tone ?? "word", label: tone.get(i)?.label ?? w.text }));
+}
+
+/** "Aynı tip (güncelle)" seçilince: işaretleme korunur, benzer şablonun adı/kimlik yazıları/eski yapıları eklenir (tablet aynası). */
+export function adoptTemplate(s: TeachState, t: { name: string; template: TemplateJson }): TeachState {
+  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template) };
+  for (const k of templateKeywords(t.template)) out = addIdentifier(out, k);
+  return out;
 }

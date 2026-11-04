@@ -1,5 +1,5 @@
-// Yeni iş emri ekranında "Belge okut" (P3 → K6): seçilen rota şablonuyla belge fotoğrafı yükle → aynı sayfa belgeden
-// dolan iş emri formuna geçer (kısayol formuyla tek yol). Gelen belge modülü kapalıysa ya da yazma izni yoksa çizilmez.
+// Yeni iş emri ekranında "Belge okut" (P3 → K6 → S16d): belge fotoğrafı yükle → `onScanned` verilmişse klasik form yerinde
+// dolar; verilmemişse belgeden dolan iş emri formuna geçer (kısayol formuyla tek yol). Gelen belge modülü kapalıysa ya da yazma izni yoksa çizilmez.
 import { useState } from "react";
 import { ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,13 @@ interface Props {
   /** Formda seçili rota şablonu (Rota Seç ya da iş emri şablonunun rotası); yoksa düğme pasif. */
   routeTemplateId: string | null;
   className?: string;
+  /** S16d: verilirse okutulan belge bu formda YERİNDE dolar (ayrı forma geçilmez). */
+  onScanned?: (noteId: string) => void;
 }
 
 export const BELGE_OKUT_NO_ROUTE = "Önce Üretim Rotası'ndan kayıtlı bir rota şablonu seçin.";
 
-export function BelgeOkutButton({ routeTemplateId, className }: Props) {
+export function BelgeOkutButton({ routeTemplateId, className, onScanned }: Props) {
   const enabled = useGelenBelgeEnabled();
   const { hasPermission } = useRoleAccess();
   const navigateActive = useTabsStore((s) => s.navigateActive);
@@ -31,6 +33,10 @@ export function BelgeOkutButton({ routeTemplateId, className }: Props) {
   if (!enabled || !hasPermission("gelen-belge:write")) return null;
   const canScan = !!routeTemplateId || scanRoute;
   const onDone = async (noteId: string, routeId: string) => {
+    if (onScanned) {
+      onScanned(noteId);
+      return;
+    }
     if (!routeId) {
       navigateActive(WORK_ORDER_NEW_PATH, { state: { oie: { kind: "shortcut", route: SCAN_ROUTE_REF, noteId } satisfies OieStart } });
       return;

@@ -12,7 +12,7 @@ import type {
 import type { WorkOrderSourceNote } from "./photoRetentionTypes";
 import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
 import type { DuplicateDocNoMode } from "./mukerrerTypes";
-import type { DesenRenkEslesmeMode, TabletIeGirisiMode } from "./ieFormTypes";
+import type { DesenRenkEslesmeMode, TabletIeGirisiMode, TanitimGuveniMode } from "./ieFormTypes";
 
 const BASE = "/api/gelen-belge";
 
@@ -131,7 +131,7 @@ export async function getIncomingDocumentSettings(): Promise<IncomingDocumentSet
 }
 
 /** Yazım `admin:settings` + ayar şifresi (tanımlıysa diyalog `withSettingsPassword`ten). */
-export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode; desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode }): Promise<IncomingDocumentSettings> {
+export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode; desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode }): Promise<IncomingDocumentSettings> {
   return withSettingsPassword((headers) =>
     apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
   );
