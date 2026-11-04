@@ -60,8 +60,9 @@ jest.mock('../../../../services/preferences.service', () => ({
 }));
 jest.mock('../../../../services/route.service', () => ({ routeService: { getAll: async () => ({ data: [] }) } }));
 jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
+let mockQty = false;
 jest.mock('../../../../hooks/useFeatureFlags', () => ({
-  useFeatureFlags: () => ({ data: { targetQuantityEnabled: false } }),
+  useFeatureFlags: () => ({ data: { targetQuantityEnabled: mockQty } }),
   useScanRouteMode: () => false,
   usePickableLifecycle: () => ['ACTIVE'],
 }));
@@ -97,6 +98,7 @@ beforeEach(() => {
   mockBlob = { theme: 'dark' };
   mockRows = [];
   mockOpts = undefined;
+  mockQty = false;
   jest.clearAllMocks();
 });
 
@@ -151,6 +153,29 @@ describe('UnifiedWoForm', () => {
     expect(b).not.toHaveProperty('targetQuantity');
     expect(b).not.toHaveProperty('targetWeight');
     expect(b).toMatchObject({ width: 160 });
+  });
+
+  it('⭐ hedef metraj ayarı açık + belgede hedef yok → gelen metre "gelen metreden" rozetiyle; yazınca rozet kalkar, değer gövdeye gider', async () => {
+    mockQty = true;
+    const base = row();
+    mockRows = [row({ detail: { ...base.detail, formFields: { en: '150' } } } as unknown as Partial<DocRow>)];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-hedef-metraj').props.value).toBe('100'));
+    expect(s.getByTestId('gelen-metreden-targetQuantity')).toBeTruthy();
+    expect(mockOpts?.extraBody?.(mockRows[0])).not.toHaveProperty('targetQuantity');
+    fireEvent.changeText(s.getByTestId('ie-form-hedef-metraj'), '90');
+    expect(s.queryByTestId('gelen-metreden-targetQuantity')).toBeNull();
+    expect(mockOpts?.extraBody?.(mockRows[0])).toMatchObject({ targetQuantity: 90 });
+  });
+
+  it('⭐ toplar ayrı geldi: hedef metraj gelen metresi top toplamı', async () => {
+    mockQty = true;
+    const base = row();
+    const rolls = [{ key: 'a', meters: 40, weightKg: null, senderRollNo: '' }, { key: 'b', meters: 60.5, weightKg: null, senderRollNo: '' }];
+    mockRows = [row({ form: { ...form, rolls }, detail: { ...base.detail, formFields: {} } } as unknown as Partial<DocRow>)];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-hedef-metraj').props.value).toBe('100.5'));
+    expect(s.getByTestId('gelen-metreden-targetQuantity')).toBeTruthy();
   });
 
   it('düz karo (rota seçilmedi): belge okunsa da "Rotayı seçin." ile kapalı', async () => {

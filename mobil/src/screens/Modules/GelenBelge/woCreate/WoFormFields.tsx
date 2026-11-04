@@ -40,6 +40,8 @@ interface Props {
   foldValues: readonly FabricPropertyValue[];
   /** Hedef metraj/kg (`workorder.targetQuantityEnabled`); kapalıyken yalnız belgeden değer geldiyse görünür. */
   showQuantity: boolean;
+  /** Hedef metraj boşken gösterilen gelen metre (`derivedTargetQuantity`); yoksa alanın kendi değeri. */
+  targetDerived?: { value: string; derived: boolean };
   locked: boolean;
   /** Sipariş kalemi işaretlendi: boş hedef kumaş/renk/en kalemden dolar. */
   onOrderLinePicked: (line: AvailableOrderLine) => void;
@@ -132,8 +134,8 @@ function TargetFields(p: Shown & { onPick: (x: Picker) => void }) {
           )}
           {cols.metraj && (
             <View style={styles.col}>
-              <Badged label="Hedef metraj (m)" k="targetQuantity" state={state} />
-              <NumpadInput value={e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
+              <Badged label="Hedef metraj (m)" k="targetQuantity" state={state} derived={p.targetDerived?.derived} />
+              <NumpadInput value={p.targetDerived?.derived ? p.targetDerived.value : e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
             </View>
           )}
           {cols.kg && (
@@ -222,7 +224,7 @@ function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: stri
 }
 
 /** Alan etiketi; değer belgeden geldiyse yanında "belgeden" rozeti. */
-function Badged({ label, k, state }: { label: string; k?: DocFilledKey; state?: WoFormState }) {
+function Badged({ label, k, state, derived }: { label: string; k?: DocFilledKey; state?: WoFormState; derived?: boolean }) {
   const fromDoc = !!k && !!state?.fromDoc.includes(k);
   return (
     <View style={styles.labelRow}>
@@ -230,6 +232,11 @@ function Badged({ label, k, state }: { label: string; k?: DocFilledKey; state?: 
       {fromDoc && (
         <Text style={styles.badge} testID={`belgeden-${k}`}>
           belgeden
+        </Text>
+      )}
+      {derived && !fromDoc && (
+        <Text style={styles.badge} testID={`gelen-metreden-${k}`}>
+          gelen metreden
         </Text>
       )}
     </View>
