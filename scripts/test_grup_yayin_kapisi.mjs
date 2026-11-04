@@ -7,6 +7,8 @@
 //   §1 hüküm (saf): özet eşitliği · K-6 ikinci onay · kaçış · ölçülemedi
 //   §2 hedef/grup: eski kanal kodu RED · bilinmeyen grup RED · hedef kayıttan türer · ezme ortamı RED
 //   §3 test grubu: terfi etiketi İSTEMEZ; gerçek yayın (sahte uzak): paket ÖNCE latest.yml EN SON, künye kanalı = GRUP
+//   §3i dosya izni: sahte scp yerel kipi taşır, sahte kenar "others" okuma biti yoksa 403 verir — yerel 0600 paket
+//      sunucuda 0644 olur · dış 403'te latest.yml YÜKLENMEZ (chmod / ön doğrulama sökülünce KIRMIZI, sondalı)
 //   §4 oncu/genel: etiketsiz RED · kaynak gruptan farklı özet RED · profil matrisi kapısı yoksa RED · K-6
 //   §5 terfi: paket baytı bayt-eşit (ortak paket DEĞİŞMEZ), künye hedef grupla yeniden imzalı
 //   §6 betik kaynağı: kapı çağrıları ve sırası (negatif sondalı)
@@ -106,7 +108,9 @@ if (arac === 'ssh') {
     const argv = i >= 0 ? k.slice(i + 1) : [];
     if (/ls -1t TeksERP-/.test(betik)) { yaz({ host, komut, tur: 'budama' }); process.exit(0); }
     yaz({ host, komut, betik, argv });
-    const r = spawnSync('bash', ['-s', '--', ...argv.map((x) => x.replaceAll('/opt/stack', UZAK + '/opt/stack'))], { input: betik });
+    // SAHTE_CHMOD_ETKISIZ: sunucuda chmod tutmuyor (sahip/ACL) — dış doğrulama tek sed kalır.
+    const girdi = process.env.SAHTE_CHMOD_ETKISIZ === '1' ? 'chmod() { :; }\n' + betik : betik;
+    const r = spawnSync('bash', ['-s', '--', ...argv.map((x) => x.replaceAll('/opt/stack', UZAK + '/opt/stack'))], { input: girdi });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
     process.exit(r.status ?? 1);
@@ -124,7 +128,9 @@ if (arac === 'scp') {
   for (const kaynak of k) {
     const hedefDosya = uzak.endsWith('/') ? path.join(uzakYol(uzak), path.basename(kaynak)) : uzakYol(uzak);
     if (!fs.existsSync(path.dirname(hedefDosya))) { process.stderr.write('scp: hedef dizin yok: ' + uzak + '\n'); process.exit(1); }
-    fs.cpSync(kaynak, hedefDosya, { recursive: true });
+    fs.cpSync(kaynak, hedefDosya, { recursive: true, dereference: true });
+    // scp yeni dosyaya KAYNAĞIN kipini taşır (0600 yerel → 0600 uzak; 2026-11-04 403 olayı).
+    if (fs.statSync(hedefDosya).isFile()) fs.chmodSync(hedefDosya, fs.statSync(kaynak).mode & 0o777);
   }
   process.exit(0);
 }
@@ -143,10 +149,13 @@ if (arac === 'curl') {
   yaz({ url: tem, bas, belirtec });
   if (!tem.startsWith(HOST)) { yaz({ YABANCI_AG: tem }); process.exit(6); }
   const dosya = uzakYol('/opt/stack/apps/tekserp-indir/html/' + tem.slice(HOST.length));
-  const var_ = fs.existsSync(dosya) && fs.statSync(dosya).isFile();
+  const bulundu = fs.existsSync(dosya) && fs.statSync(dosya).isFile();
+  // nginx (www-data) başkasının dosyasını yalnız "others" okuma biti varsa sunar; yoksa 403.
+  const yasak = bulundu && (fs.statSync(dosya).mode & 0o004) === 0;
+  const var_ = bulundu && !yasak;
   if (bicim) {
     if (var_ && !bas && !a.includes('/dev/null')) process.stdout.write(fs.readFileSync(dosya));
-    process.stdout.write(bicim.replace('%{http_code}', var_ ? '200' : '404').replace('%{size_download}', var_ && !bas ? String(fs.statSync(dosya).size) : '0'));
+    process.stdout.write(bicim.replace('%{http_code}', var_ ? '200' : yasak ? '403' : '404').replace('%{size_download}', var_ && !bas ? String(fs.statSync(dosya).size) : '0'));
     process.exit(0);
   }
   if (!var_) process.exit(f ? 22 : 0);
@@ -491,6 +500,42 @@ const kunyeKanali = (yolu) => {
 }
 
 /* ------------------------------------------------------------------ *
+ * §3i dosya izni (2026-11-04: 0600 paket → nginx 403, latest.yml zaten yeni sürümü gösteriyordu)
+ * ------------------------------------------------------------------ */
+const GERCEK_BETIK = fs.readFileSync(path.join(KOK, 'deploy/electron-grup-yayinla.sh'), 'utf8');
+const kipi = (f) => (fs.existsSync(f) ? fs.statSync(f).mode & 0o777 : null);
+/** Kısıtlı (0600) yerel paketle gerçek (sahte uzak) yayın; `chmodEtkisiz` sunucuda chmod'un tutmadığı 403 hâli. */
+function izinSenaryosu(betik, { chmodEtkisiz = false } = {}) {
+  const o = ortam({ betik });
+  for (const f of [o.ad, `${o.ad}.blockmap`, 'latest.yml']) fs.chmodSync(path.join(o.paket, f), 0o600);
+  const r = kos(o, ['--grup=test'], { ortamEk: chmodEtkisiz ? { SAHTE_CHMOD_ETKISIZ: '1' } : {} });
+  const latestScp = yazanAg(o).some((c) => c.kaynaklar.includes('latest.yml'));
+  return { o, r, latestScp, kipler: [o.ad, `${o.ad}.blockmap`, 'latest.yml'].map((f) => kipi(o.uzakDosya('test', f))) };
+}
+const izinYesil = (z) => z.r.kod === 0 && z.kipler.every((k) => k === 0o644);
+const dis403Yesil = (z) => z.r.kod !== 0 && !z.latestScp && !fs.existsSync(z.o.uzakDosya('test', 'latest.yml')) && /HTTP 403/.test(z.r.cikti) && /latest\.yml YÜKLENMEDİ/.test(z.r.cikti);
+const chmodsuz = (m) => m.replace(/^chmod 0644 "\$1" "\$2"$/m, ':').replace(/^chmod 0644 "\$1"$/m, ':').replace(/^  chmod 0644 "\$latest".*$/m, '  :');
+const ondogrulamasiz = (m) => m.replace(/^  on_dogrula "[^\n]*$/gm, '  :');
+{
+  const z = izinSenaryosu();
+  ol('§3i ⭐ yerel 0600 paket + blockmap + latest.yml → yayın çıkış 0, sunucuda üçü de 0644', izinYesil(z), `${z.kipler.map((k) => k?.toString(8)).join(',')} ${z.r.cikti.slice(-500)}`);
+  ol('§3i ön doğrulama manifestten ÖNCE: paket + blockmap HEAD (önbellek-atlayan), sonra latest.yml scp', (() => {
+    const c = z.o.cagrilar();
+    const on = c.findIndex((x) => x.arac === 'curl' && x.bas && x.url.endsWith(z.o.ad));
+    const lt = c.findIndex((x) => x.arac === 'scp' && x.kaynaklar.includes('latest.yml'));
+    return on >= 0 && lt > on;
+  })());
+  const d = izinSenaryosu(undefined, { chmodEtkisiz: true });
+  ol('§3i ⭐ dış 403 (sunucuda chmod tutmadı) → betik DURUR, latest.yml YÜKLENMEZ', dis403Yesil(d), d.r.cikti.slice(-500));
+  // Negatif sondalar: düzeltme sökülünce aynı yüklem KIRMIZI olmalı.
+  const s1 = izinSenaryosu(chmodsuz(GERCEK_BETIK));
+  ol('§3i sonda: chmod söküldü → 0600 kalır, 0644 yüklemi KIRMIZI', chmodsuz(GERCEK_BETIK) !== GERCEK_BETIK && !izinYesil(s1), s1.kipler.map((k) => k?.toString(8)).join(','));
+  ol('§3i sonda: chmod söküldü → ön doğrulama 403\'te yine DURDURUR (ikinci sed)', dis403Yesil(s1), s1.r.cikti.slice(-300));
+  const s2 = izinSenaryosu(ondogrulamasiz(GERCEK_BETIK), { chmodEtkisiz: true });
+  ol('§3i sonda: ön doğrulama söküldü → latest.yml 403 pakete rağmen yüklenir, yüklem KIRMIZI', ondogrulamasiz(GERCEK_BETIK) !== GERCEK_BETIK && !dis403Yesil(s2) && s2.latestScp, s2.r.cikti.slice(-300));
+}
+
+/* ------------------------------------------------------------------ *
  * §6 betik kaynağı — kapı çağrıları ve sırası (negatif sondalı)
  * ------------------------------------------------------------------ */
 function betikIhlalleri(metin) {
@@ -510,6 +555,10 @@ function betikIhlalleri(metin) {
   const paketScp = kod.search(/^\s*scp -s "\$setup"/m);
   const latestScp = kod.search(/^\s*scp -s "\$latest"/m);
   if (paketScp < 0 || latestScp < 0 || paketScp > latestScp) f.push('latest.yml paketten ÖNCE yükleniyor (EN SON olmalı)');
+  const uzakChmod = kod.search(/^chmod 0644 "\$1" "\$2"$/m);
+  const onDogrula = kod.search(/^\s*on_dogrula "TeksERP-\$surum-Setup\.exe"/m);
+  if (uzakChmod < 0 || uzakChmod > latestScp) f.push('paket dosyaları uzakta 0644 yapılmıyor (latest.yml\'den önce)');
+  if (onDogrula < 0 || onDogrula > latestScp) f.push('paket dışarıdan 200 doğrulanmadan latest.yml yükleniyor');
   if (/\$\{(SSH_HEDEF|UZAK_DIZIN|YAYIN_KOK|YAYIN_URL|BASE_URL):?[-=]/.test(kod)) f.push('yayın hedefi ezme deseni');
   if (/yayin-hedefi/.test(kod)) f.push('hedef ESKİ kanal kaydından çözülüyor');
   if (/etikiliyazilim\.com|\/opt\/stack/.test(kod)) f.push('yayın/VDS kökü LİTERAL');
@@ -531,6 +580,8 @@ function betikIhlalleri(metin) {
   mut('derleme bağı söküldü', (m) => m.replace('grup-yayin-kapisi.mjs" derleme-bagi ', 'grup-yayin-kapisi.mjs" x '), /derleme bağı çağrısı YOK/);
   mut('rotasyon kilidi söküldü', (m) => m.replace('grup-yayin-kapisi.mjs" rotasyon ', 'grup-yayin-kapisi.mjs" x '), /rotasyon kilidi çağrısı YOK/);
   mut('latest.yml paketten önce yükleniyor', (m) => m.replace('scp -s "$setup" "$blockmap"', 'scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"\n  scp -s "$setup" "$blockmap"'), /EN SON/);
+  mut('uzak chmod söküldü', (m) => m.replace(/^chmod 0644 "\$1" "\$2"$/m, ':'), /0644/);
+  mut('ön doğrulama latest.yml\'den sonraya taşındı', (m) => m.replace(/^  on_dogrula "TeksERP-\$surum-Setup\.exe" .*$/m, '').replace('echo "Doğrulanıyor..."', 'on_dogrula "TeksERP-$surum-Setup.exe"\necho "Doğrulanıyor..."'), /200 doğrulanmadan/);
   mut('UZAK_DIZIN ezmesi geri geldi', (m) => `${m}\nUZAK_DIZIN="\${UZAK_DIZIN:-/x}"\n`, /ezme deseni/);
   mut('hedef eski kanal kaydından çözülüyor', (m) => `${m}\nnode x/kanal-kapisi.mjs yayin-hedefi a panel\n`, /ESKİ kanal kaydından/);
   mut('VDS kökü literal gömüldü', (m) => `${m}\nVDS=/opt/stack/apps/x\n`, /LİTERAL/);

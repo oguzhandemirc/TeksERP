@@ -26,7 +26,7 @@
 - [ÇEKİRDEK] PRODUCTION canlı ve tekil değil: migrate reset / reseed / toplu DELETE YASAK; rollback = restore; düzeltme script'i dry-run varsayılan, `--apply` öncesi her kaydı listeler.
 - [ÇEKİRDEK] Konteyner seed'i yalnız `users` boş VE `SEED_ON_EMPTY=1`; çalışma imajı kaynak taşımaz; demo ağacı yalnız `deploy-demo-izin-listesi.txt`ten.
 - [ÇEKİRDEK] Paket ve demo `main`'den; müşteri dalı YOK; `if (musteri === 'X')` yasak.
-- [PROFİL] adnansahin DONDURULMUŞ, güncelleme almaz; yeniden kurulum setup.exe + "yedekten kur", önce thinkpad-1'de prova. [ÇEKİRDEK] Ortak paket ona geriye uyum taşımaz.
+- [PROFİL] adnansahin DONDURULMUŞ kalır; bakım sürümünü yalnız kullanıcının açık cümlesiyle, yalnız `bakim/adnansahin-*` dalından, backend ve migration İÇERMEDEN çıkar; yeniden kurulum setup.exe + "yedekten kur", önce thinkpad-1'de prova. [ÇEKİRDEK] Ortak paket ona geriye uyum taşımaz. <sub>(arşiv:2026-11-04)</sub>
 - [ÇEKİRDEK] `minVersion` sahadaki sürümden BÜYÜK olamaz, yalnız gerçek kırılmada; ÖNCE yeni istemci, SONRA minVersion'lı backend.
 
 ### Tuzaklar
@@ -187,6 +187,7 @@
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
 - adnansahin'e yerinde pm2 → hizmet geçişi YOK.
+- "adnansahin hiçbir güncelleme almaz" → bakım sürümü istisnası: kullanıcı cümlesiyle, `bakim/adnansahin-*` dalından, backend/migration'sız panel/tablet bakım sürümü çıkabilir (2026-11-04).
 - "`items`/`customers` partial yok" geçersiz (`nameFold_key` var).
 - "`npm run seed` = test verisi" geçersiz.
 - Fabrika `git pull` ile değil paketle güncellenir.
