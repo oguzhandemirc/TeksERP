@@ -26,7 +26,7 @@ import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder } from "./gelen-belge-cok-parti.service";
-import { readIncomingDocFormApproval, readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { readIncomingDocFormApproval, readMultiPartyWorkOrder, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
 
 const workOrders = new WorkOrderService();
@@ -234,7 +234,9 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     });
     warnings.push(...approved.warnings);
   }
-  if (parties) return finishParties({ note, parties, mode: mode!, input, route, steps, userId: actor.userId, warnings });
+  // Hedef metraj alanı açık fabrikada boş hedef = gelen metre (kapalıysa bugünkü gibi türetilmez).
+  const deriveTarget = input.targetQuantity == null && (await readTargetQuantityEnabled());
+  if (parties) return finishParties({ note, parties, mode: mode!, input, route, steps, userId: actor.userId, warnings, deriveTarget });
 
   const line = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: summaryLineId(noteId) }, select: { rollId: true, failReason: true, roll: { select: { barcode: true } } } });
   if (!line?.rollId || !line.roll?.barcode) {
@@ -253,6 +255,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     ...(stepPlanning?.length ? { stepPlanning } : {}),
     ...(input.notes ? { notes: input.notes } : {}),
     ...formWorkOrderFields(input),
+    ...(deriveTarget ? { targetQuantity: round3(kursunMeters) } : {}),
     sourceNoteId: noteId,
   }, actor.userId);
   const wo = res.data?.workOrder;
@@ -262,7 +265,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
 }
 
 /** Çok partili kayıt: parti topları → mod (gövde > fabrika ayarı) → iş emirleri. Yanıtın üst alanları ilk iş emridir. */
-async function finishParties({ note, parties, mode, input, route, steps, userId, warnings }: { note: { id: string; noteNo: string }; parties: PartyInput[]; mode: MultiPartyWorkOrderMode; input: FormWorkOrderInput; route: FormWorkOrderRoute; steps: WorkOrderCreateInput["steps"] | undefined; userId: string; warnings: string[] }): Promise<FormWorkOrderResult> {
+async function finishParties({ note, parties, mode, input, route, steps, userId, warnings, deriveTarget }: { note: { id: string; noteNo: string }; parties: PartyInput[]; mode: MultiPartyWorkOrderMode; input: FormWorkOrderInput; route: FormWorkOrderRoute; steps: WorkOrderCreateInput["steps"] | undefined; userId: string; warnings: string[]; deriveTarget: boolean }): Promise<FormWorkOrderResult> {
   const rolls = await partyRolls(note.id, note.noteNo, parties);
   // K22: değerler gövdeden; çözücünün bayrakları ve KAT'ı her iş emrine (tek parti yoluyla aynı).
   const defaults = await resolveFormWorkOrderTargets(targetRoute(route, steps), input.ownerCustomerId, input.targetValues, input.targetPropertyIds);
@@ -270,9 +273,13 @@ async function finishParties({ note, parties, mode, input, route, steps, userId,
   const res = await openPartyWorkOrders({
     noteId: note.id, clientToken: input.clientToken, route, mode, parties, rolls,
     targetValues: defaults.targetValues, foldType: input.foldType ?? defaults.foldType, stepPlanning: input.stepPlanning, notes: input.notes, flagPropertyIds: withDefaultFlags,
-    fields: formWorkOrderFields(input), steps,
+    fields: formWorkOrderFields(input), steps, deriveTargetQuantity: deriveTarget,
   }, userId);
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;
   return { workOrderId: first.workOrderId, workOrderNo: first.workOrderNo, batchNumber: first.batchNumber, rollId: first.rollIds[0]!, warnings, workOrders: res.workOrders, mode };
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
 }

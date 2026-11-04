@@ -6,6 +6,7 @@ import {
   buildExtraBody,
   clearDocRead,
   createBlockReason,
+  derivedTargetQuantity,
   editExtras,
   extrasIssues,
   hubTiles,
@@ -205,5 +206,23 @@ describe('plannedDayOptions', () => {
     expect(o.map((x) => x.value)).toEqual(['2026-11-04', '2026-11-05', '2026-11-06']);
     expect(o[0].label).toMatch(/^Bugün · /);
     expect(o[1].label).toMatch(/^Yarın · /);
+  });
+});
+
+describe('derivedTargetQuantity (hedef metraj gelen metreyi izler)', () => {
+  const on = { enabled: true };
+  it('boş hedef + ayar açık → gelen metre, türetilmiş', () => {
+    expect(derivedTargetQuantity(extras(), 740.5, on)).toEqual({ value: '740.5', derived: true });
+  });
+  it('okunan ya da elle girilen hedef kalır', () => {
+    expect(derivedTargetQuantity(extras({ targetQuantity: '480' }), 740.5, on)).toEqual({ value: '480', derived: false });
+  });
+  it('ayar kapalı, PER_PARTY ya da gelen metre yok → türetme yok', () => {
+    expect(derivedTargetQuantity(extras(), 740.5, { enabled: false }).derived).toBe(false);
+    expect(derivedTargetQuantity(extras(), 740.5, { enabled: true, perParty: true }).derived).toBe(false);
+    expect(derivedTargetQuantity(extras(), null, on)).toEqual({ value: '', derived: false });
+  });
+  it('türetilmiş değer gövdeye konmaz (sunucu türetir)', () => {
+    expect(buildExtraBody(extras(), { hasTambur: false }).targetQuantity).toBeUndefined();
   });
 });

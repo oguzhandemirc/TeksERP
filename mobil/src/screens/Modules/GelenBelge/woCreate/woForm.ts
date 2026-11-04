@@ -239,6 +239,15 @@ export type ExtraBody = Pick<
   | 'stepPlanning'
 >;
 
+/**
+ * Hedef metraj boşsa gelen metre gösterilir (`workorder.targetQuantityEnabled` açıkken sunucu aynısını türetir;
+ * gövdeye konmaz). PER_PARTY'de her İE kendi parti metresini alır → tek değer gösterilmez.
+ */
+export function derivedTargetQuantity(e: WoFormExtras, incomingMeters: number | null, c: { enabled: boolean; perParty?: boolean }): { value: string; derived: boolean } {
+  if (e.targetQuantity.trim() !== '' || !c.enabled || c.perParty || incomingMeters == null || !(incomingMeters > 0)) return { value: e.targetQuantity, derived: false };
+  return { value: String(Math.round(incomingMeters * 1000) / 1000), derived: true };
+}
+
 /** Form ucunun ek alanları: yalnız dolu olanlar gider (anahtarsız = sunucuda bugünkü türetme). */
 export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null }): ExtraBody {
   const out: ExtraBody = {};

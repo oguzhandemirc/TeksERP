@@ -37,6 +37,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
     hasTambur: u.hasTambur,
     foldValues: u.foldValues,
     showQuantity: u.showQuantity,
+    targetDerived: u.targetDerived,
     locked: done || wo.saving,
     onOrderLinePicked: u.onOrderLine,
     plan: u.plan,

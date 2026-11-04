@@ -24,6 +24,7 @@ import {
   buildExtraBody,
   clearDocRead,
   createBlockReason,
+  derivedTargetQuantity,
   editExtras,
   extrasIssues,
   initialFormState,
@@ -32,6 +33,7 @@ import {
   type WoFormState,
 } from './woForm';
 import { SCAN_ROUTE, isScanRoute, rowIssues } from './woFromDoc';
+import { multiPartyTotal } from './partyDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
 
@@ -102,6 +104,9 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
     valuedFields(extras, { stepsEdited: plan.stepsEdited }),
   );
 
+  // Gelen metre: çok partide parti toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
+  const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.meters) : null;
+  const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
   const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
   const issues = [
     ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty, inOther: fields.isOther }),
@@ -117,7 +122,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
     scan.source.add();
   };
   return {
-    route, setRoute, form, fields, plan, scanMode, showQuantity, hasTambur, foldValues: fold.values, wo, row, scan, done, block, okut, customers, edit,
+    route, setRoute, form, fields, plan, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, okut, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [],
     routesLoading: routesQ.isLoading,

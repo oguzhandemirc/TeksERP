@@ -108,6 +108,8 @@ interface OpenInput {
   flagPropertyIds: (targets: ReadonlyArray<{ propertyId: string }>) => Promise<string[]>;
   /** K30 S16a form alanları (verilenler) — her iş emrine aynen geçer; PER_PARTY'de hedef metraj/kg çağıranda reddedilir. */
   fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type">;
+  /** Hedef metraj verilmedi + fabrika ayarı açık: her İE'nin hedefi kendi toplarının parti metresi (SINGLE = toplam). */
+  deriveTargetQuantity?: boolean;
   /** K30-D düzenlenmiş adımlar (çağıran onaydan önce doğruladı): varsa şablonun yerine geçer. */
   steps?: WorkOrderCreateInput["steps"];
 }
@@ -128,6 +130,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
       ...(stepPlanning?.length ? { stepPlanning } : {}),
       ...(i.notes ? { notes: i.notes } : {}),
       ...i.fields,
+      ...(i.deriveTargetQuantity ? { targetQuantity: partyMeters(i.parties, rolls) } : {}),
       sourceNoteId: i.noteId,
       ...(batchNo ? { sourceBatchNo: batchNo } : {}),
     }, userId);
@@ -145,4 +148,10 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
     await run({ token: i.clientToken, rolls: i.rolls, targets: i.targetValues, plan: i.stepPlanning });
   }
   return { workOrders: out, warnings };
+}
+
+/** Toplarının parti metreleri toplamı (3 hane). */
+function partyMeters(parties: ReadonlyArray<PartyInput>, rolls: OpenInput["rolls"]): number {
+  const sum = rolls.reduce((s, r) => s + (parties.find((p) => p.blockNo === r.blockNo)?.meters ?? 0), 0);
+  return Math.round(sum * 1000) / 1000;
 }
