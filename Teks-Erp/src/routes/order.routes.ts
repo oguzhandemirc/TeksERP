@@ -584,6 +584,38 @@ router.get(
 
 /**
  * @openapi
+ * /api/orders/{id}/nerede:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Sipariş "Nerede?" yan paneli — bağlı iş emirlerinin aşama, fason ve sevke hazır dağılımı
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ orderId, nerede, sevk, workOrders[] }" }
+ *       400: { description: Geçersiz id }
+ *       404: { description: Sipariş bulunamadı }
+ */
+// İzin liste ucuyla aynı: satırdaki cümleyi gören, ayrıntısını da görür.
+router.get(
+  "/:id/nerede",
+  verifyToken,
+  requireAnyPermission("order:read", "mobile:siparis"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await orderService.getNerede(assertValidUuid(req.params.id, "id")));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
  * /api/orders/{id}:
  *   get:
  *     tags: [Orders]

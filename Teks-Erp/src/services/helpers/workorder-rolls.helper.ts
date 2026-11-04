@@ -21,3 +21,26 @@ export function whereRollsOfWorkOrder(workOrderId: string): Prisma.RollWhereInpu
     ],
   };
 }
+
+/** Çok iş emrinin topları — aynı üç yol, `in` listesiyle (sayfa başına tek sorgu için). */
+export function whereRollsOfWorkOrders(workOrderIds: string[]): Prisma.RollWhereInput {
+  const workOrderId = { in: workOrderIds };
+  return {
+    OR: [
+      { producedInStep: { workOrderId } },
+      { currentStep: { workOrderId } },
+      { batch: { workOrderId } },
+    ],
+  };
+}
+
+/** İş emri tarafından bakış: "bu İE'nin `rollWhere`e uyan en az bir topu var" — aynı üç yol. */
+export function workOrderHasRollWhere(rollWhere: Prisma.RollWhereInput): Prisma.WorkOrderWhereInput {
+  return {
+    OR: [
+      { steps: { some: { producedRolls: { some: rollWhere } } } },
+      { steps: { some: { currentRolls: { some: rollWhere } } } },
+      { batches: { some: { rolls: { some: rollWhere } } } },
+    ],
+  };
+}

@@ -80,6 +80,9 @@ import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helpe
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
+import { buildNeredeWhere } from "./helpers/order-nerede.helper";
+import { attachNerede } from "./helpers/order-nerede-load.helper";
+import { loadOrderNeredeDetail } from "./helpers/order-nerede-detail.helper";
 import { CustomerAliasService } from "./customer-alias.service";
 import { colorScopeOf, loadCustomerColorIndex, resolveName } from "./helpers/customer-name.helper";
 import {
@@ -382,6 +385,17 @@ export class OrderService extends BaseService {
     return withActiveOrderLinks(super.buildListWhere(params, req));
   }
 
+  /** Liste satırına "Nerede?" + "Sevk" cümlesi eklenir (offset + cursor; sayfa başına sabit sorgu). */
+  override async findAll(req: Request): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
+    const res = await super.findAll(req);
+    return { ...res, data: await attachNerede(res.data as unknown[]) } as typeof res;
+  }
+
+  /** Yan panel: bağlı her iş emrinin aşama/fason/hazır dağılımı. */
+  async getNerede(orderId: string): Promise<ApiResponse<unknown>> {
+    return { success: true, data: await loadOrderNeredeDetail(orderId) };
+  }
+
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
     const { filters } = parseQueryParams(req);
     const conds: Record<string, unknown>[] = [];
@@ -400,6 +414,9 @@ export class OrderService extends BaseService {
     // anahtarı skaler süzgeçte düşürür — burada ham filters'tan okunur.
     const hideCancelled = buildHideCancelledWhere(filters, [OrderStatus.CANCELLED]);
     if (hideCancelled) conds.push(hideCancelled);
+
+    // "Nerede?" hızlı sekmeleri + fason firma/gün (tanınmayan değer 400).
+    conds.push(...(buildNeredeWhere(filters) as Record<string, unknown>[]));
 
     if (conds.length === 0) return undefined;
     return conds.length === 1 ? conds[0] : { AND: conds };
