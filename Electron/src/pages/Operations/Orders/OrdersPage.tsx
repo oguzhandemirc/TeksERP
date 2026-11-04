@@ -18,6 +18,7 @@ import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { type FilterDef } from "@/components/data-table/FilterBar";
 import { OrdersFilterRow } from "./OrdersFilterRow";
+import { OrderLinesExportButton } from "./OrderLinesExportButton";
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
@@ -324,12 +325,19 @@ export function OrdersPage() {
         table={table}
         exportName="Siparişler"
         actions={
-          <ToolbarToggle
-            checked={showCancelled}
-            onCheckedChange={setShowCancelled}
-            label="İptalleri göster"
-            title="İptal edilmiş siparişler varsayılan olarak gizlidir."
-          />
+          <>
+            <ToolbarToggle
+              checked={showCancelled}
+              onCheckedChange={setShowCancelled}
+              label="İptalleri göster"
+              title="İptal edilmiş siparişler varsayılan olarak gizlidir."
+            />
+            <OrderLinesExportButton
+              fetchAll={fetchAll}
+              pricingEnabled={pricingEnabled}
+              productionEnabled={productionEnabled}
+            />
+          </>
         }
       />
       {/* ⚠️ SIRA SÖZLEŞMESİ (2026-09-04): özet şerit FİLTRELERİN ÜSTÜNDE.

@@ -150,6 +150,10 @@ function qualityColumn(grades: readonly QualityGrade[]): ColumnDef<Roll> {
   );
 }
 
+/** SEÇİM tipli özellikte DEĞER de yazılır (RollDetailSheet ile aynı kural) — hücre + dışa aktarım. */
+const rollPropertyText = (p: NonNullable<Roll["properties"]>[number]): string =>
+  p.value ? `${p.property.name}: ${p.value.name}` : p.property.name;
+
 const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
   {
     accessorKey: "barcode",
@@ -167,6 +171,7 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
   {
     id: "item",
     header: "Kumaş",
+    meta: { label: "Kumaş", exportValue: (r) => r.item?.name ?? "" },
     cell: ({ row }) => (
       <span className="text-xs font-medium">
         {row.original.item?.name ?? "—"}
@@ -176,6 +181,7 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
   {
     id: "color",
     header: "Renk",
+    meta: { label: "Renk", exportValue: (r) => r.color?.name ?? "" },
     cell: ({ row }) =>
       row.original.color ? (
         <span className="inline-flex items-center gap-1 text-xs">
@@ -194,6 +200,8 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
   {
     id: "properties",
     header: "Özellikler",
+    // Ekran ilk 2 + "+N"; dosyada hepsi.
+    meta: { label: "Özellikler", exportValue: (r) => (r.properties ?? []).map(rollPropertyText).join("; ") },
     cell: ({ row }) => {
       const props = row.original.properties ?? [];
       if (props.length === 0) {
@@ -205,7 +213,7 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
             <Badge key={p.propertyId} variant="muted" className="text-[10px]">
               {/* SEÇİM tipli özellikte DEĞER de basılır — liste ile detay panelinin
                   aynı topu farklı anlatmaması için (RollDetailSheet ile aynı kural). */}
-              {p.value ? `${p.property.name}: ${p.value.name}` : p.property.name}
+              {rollPropertyText(p)}
             </Badge>
           ))}
           {props.length > 2 && (
@@ -339,7 +347,11 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     // aynı hata Kat kolonunda yapılmıştı (bkz. ROLL_SORTABLE_FIELDS notu).
     id: "currentStation",
     header: "İstasyon",
-    meta: { label: "İstasyon" },
+    meta: {
+      label: "İstasyon",
+      exportValue: (r) =>
+        [r.currentStep?.station?.name, r.currentStep?.workOrder?.workOrderNumber].filter(Boolean).join(" · "),
+    },
     cell: ({ row }) => {
       const step = row.original.currentStep;
       if (!step?.station) return <span className="text-muted-foreground">—</span>;
@@ -381,7 +393,11 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     // Makine atfı ikinci satırda: "kim" ile "nerede" tek okumada görünsün.
     id: "createdBy",
     header: "Ekleyen",
-    meta: { label: "Ekleyen" },
+    meta: {
+      label: "Ekleyen",
+      exportValue: (r) =>
+        [r.createdBy?.fullName ?? r.createdBy?.username, r.createdMachine?.name].filter(Boolean).join(" · "),
+    },
     cell: ({ row }) => {
       const u = row.original.createdBy;
       const m = row.original.createdMachine;
@@ -403,7 +419,7 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     // 2026-08-05 öncesi toplar geriye doldurulmadı (bilinçli) → "—" meşrudur.
     id: "entryStation",
     header: "Giriş İstasyonu",
-    meta: { label: "Giriş İstasyonu" },
+    meta: { label: "Giriş İstasyonu", exportValue: (r) => r.entryStation?.name ?? "" },
     cell: ({ row }) => {
       const st = row.original.entryStation;
       if (!st) return <span className="text-muted-foreground">—</span>;
@@ -418,7 +434,7 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     // Kolon tek depolu kurulumda gizlenir (RollsPage `initialVisibility`).
     id: "warehouse",
     header: "Depo",
-    meta: { label: "Depo" },
+    meta: { label: "Depo", exportValue: (r) => r.warehouse?.name ?? "" },
     cell: ({ row }) => {
       const w = row.original.warehouse;
       if (!w) return <span className="text-muted-foreground">—</span>;

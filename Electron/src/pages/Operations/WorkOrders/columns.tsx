@@ -5,6 +5,7 @@ import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { safeFormat } from "@/lib/format";
+import { formatCalendarDay } from "@/lib/factory-time";
 import type { WorkOrder } from "./types";
 import { customerCellView } from "./customer-cell";
 import { LocationCell } from "./LocationCell";
@@ -25,6 +26,16 @@ function progressOf(wo: WorkOrder): { input: number; output: number; pct: number
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 
+// Dışa aktarım metinleri — hücreyle aynı kaynaktan (`progressOf`, `fmtM`).
+const progressText = (wo: WorkOrder): string => {
+  const p = progressOf(wo);
+  return p.hasFlow ? `%${p.pct} (${fmtM(p.output)} / ${fmtM(p.input)} m)` : "";
+};
+const orderedText = (wo: WorkOrder): string => {
+  const m = wo.orderedMeters ?? 0;
+  return m > 0 ? `${fmtM(m)} m` : "";
+};
+
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "workOrderNumber",
@@ -34,6 +45,15 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     id: "batches",
     header: "Parti",
+    meta: {
+      label: "Parti",
+      // Ekran ilk partileri + "+N" gösterir; dosyada yüklenen numaralar + toplam sayaç.
+      exportValue: (wo: WorkOrder) => {
+        const shown = wo.batches ?? [];
+        const extra = (wo._count?.batches ?? shown.length) - shown.length;
+        return shown.map((b) => b.batchNumber).join(", ") + (extra > 0 ? ` +${extra}` : "");
+      },
+    },
     cell: ({ row }) => {
       const shown = row.original.batches ?? [];
       if (shown.length === 0) return <span className="text-muted-foreground">—</span>;
@@ -64,6 +84,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "type",
     header: "Tip",
+    meta: { label: "Tip", exportValue: (wo: WorkOrder) => workOrderTypeLabels[wo.type] ?? wo.type },
     cell: ({ row }) => (
       <Badge variant="muted" className="text-[10px]">
         {workOrderTypeLabels[row.original.type] ?? row.original.type}
@@ -73,6 +94,10 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     id: "product",
     header: "Kumaş / Renk",
+    meta: {
+      label: "Kumaş / Renk",
+      exportValue: (wo: WorkOrder) => [wo.targetItem?.name, wo.targetColor?.name].filter(Boolean).join(" / "),
+    },
     cell: ({ row }) => {
       const wo = row.original;
       if (!wo.targetItem && !wo.targetColor)
@@ -131,6 +156,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     id: "fasonFirms",
     header: "Fason",
+    meta: { label: "Fason", exportValue: (wo: WorkOrder) => (wo.fasonFirms ?? []).map((f) => f.name).join(", ") },
     cell: ({ row }) => {
       const firms = row.original.fasonFirms ?? [];
       if (firms.length === 0) return <span className="text-muted-foreground">—</span>;
@@ -155,6 +181,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     id: "progress",
     header: "İlerleme",
+    meta: { label: "İlerleme", exportValue: progressText },
     cell: ({ row }) => {
       const p = progressOf(row.original);
       return (
@@ -181,13 +208,10 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     header: "Sipariş",
     // Bağlı sipariş satırlarının toplam talep metrajı — çıkan/giren ile kıyas.
     // Stok üretiminde (siparişe bağlı değil) değer yok → "—".
+    meta: { label: "Sipariş", exportValue: orderedText },
     cell: ({ row }) => {
-      const m = row.original.orderedMeters ?? 0;
-      return m > 0 ? (
-        <span className="tabular-nums text-xs">{fmtM(m)} m</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      );
+      const text = orderedText(row.original);
+      return text ? <span className="tabular-nums text-xs">{text}</span> : <span className="text-muted-foreground">—</span>;
     },
   },
   {
@@ -206,18 +230,22 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "plannedEndDate",
     header: () => <SortableHeader field="plannedEndDate" label="Termin" />,
-    meta: { label: "Termin" },
+    meta: {
+      label: "Termin",
+      exportValue: (wo: WorkOrder) => (wo.plannedEndDate ? formatCalendarDay(wo.plannedEndDate, "dd.MM.yyyy") : ""),
+    },
     cell: ({ row }) => <DeadlineBadge deadline={row.original.plannedEndDate} />,
   },
   {
     accessorKey: "createdAt",
     header: () => <SortableHeader field="createdAt" label="Oluşturma" />,
-    meta: { label: "Oluşturma" },
+    meta: { label: "Oluşturma", exportValue: (wo: WorkOrder) => safeFormat(wo.createdAt, "dd.MM.yyyy", "") },
     cell: ({ row }) => <span className="text-xs">{safeFormat(row.original.createdAt, "dd.MM.yyyy")}</span>,
   },
   {
     accessorKey: "status",
     header: "Durum",
+    meta: { label: "Durum", exportValue: (wo: WorkOrder) => workOrderStatusLabels[wo.status] ?? wo.status },
     // "Şu an fasonda" rozeti buradan "Şu an nerede" sütununa taşındı (2026-10-24) — aynı bilgi
     // iki sütunda durmasın; eski backend `konum` göndermezse yalnız rozet görünmez.
     cell: ({ row }) => (
