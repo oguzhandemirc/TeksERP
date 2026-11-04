@@ -71,6 +71,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. K
 
 - [ÇEKİRDEK] `docs/surumler/backend-<sürüm>.md` yoksa `paketle.ps1` ağır işten ÖNCE DURUR; yedi başlık (özet · ne değişti · sözleşme · migration · kurulum notu · geri alma · doğrulama); ad/SHA256/commit'i MAKİNE yazar; belge kurana, backend `surum-notlari.json`a girmez.
 - [ÇEKİRDEK] Korumalı backend yalnız `deploy/korumali-thinkpad.sh` (varsayılan PROVA); gerçek `--kip gercek --surum x.y.z`: temiz ağaç, HEAD = `origin/main`, belge o commit'te, `backend-vX` başka commit'te değil; etiket Mac'te YEREL; künye kipi ↔ PAKET.json `prova` İKİ YÖNLÜ.
+- [ÇEKİRDEK] Windows paketlerini (panel ve backend) YALNIZ thinkpad-1'de derle; Mac'te `electron-paketle.sh` DURUR (arm64'te Rosetta/wine yok, rcedit düşer). thinkpad GitHub'a çıkamaz: ref `git bundle` ile taşınır, etiket Mac'ten https ile itilir; uzun derleme ayrık başlatılır (ssh kopması).
 - [ÇEKİRDEK] Korumalı Linux imajını Mac'te derleme: `gh workflow run korumali-paket.yml --ref main`, `korumali-imaj-linux-x64` `docker load` + `imaj-imzala.mjs --ci-kosu=<koşu>`; `--ci-atla` yalnız kullanıcı cümlesiyle.
 - [ÇEKİRDEK] Güncelleyici/hizmet konağı kaynağı son `backend-v*`ten beri değiştiyse Cargo sürümünü etikettekinden BÜYÜK yap.
 - [ÇEKİRDEK] Yeni projeksiyon/tel şeması taşıyan backend'den ÖNCE patron bulutunu yükselt, nota "bulut önce" yaz (`PROJEKSIYON_BILINMIYOR`).

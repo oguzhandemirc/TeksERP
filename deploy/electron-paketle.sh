@@ -20,6 +20,8 @@ kok="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 electron_dir="$kok/Electron"
 
 hata() { echo "HATA: $*" >&2; exit 1; }
+# Windows paneli YALNIZ thinkpad-1'de (yerel Windows) derlenir: arm64 Mac'te Rosetta/wine yok, rcedit düşer (2026-11-04).
+[ "$(uname)" = "Darwin" ] && hata "Windows paneli Mac'te derlenmez — thinkpad-1'de derle (docs/kurallar/surum-yayin.md)."
 
 istenen_surum=""
 for a in "$@"; do
@@ -129,11 +131,7 @@ node "$kok/scripts/check-surum-notlari.mjs" --panel="$surum" \
 # --- 3) Derle -------------------------------------------------------------
 echo "Derleniyor (bu birkaç dakika sürer)…"
 rm -rf "$rel"
-if [ "$(uname)" = "Darwin" ]; then
-  npm run build:win:cross -- "${derleme_argumanlari[@]}"
-else
-  npm run build:win -- "${derleme_argumanlari[@]}"
-fi
+npm run build:win -- "${derleme_argumanlari[@]}"
 
 # --- 4) GÖMÜLÜ ADRES KAPISI (asıl koruma) ---------------------------------
 # Paketin içine gerçekten ne yazıldığını okur. Buraya kadarki her kontrol
