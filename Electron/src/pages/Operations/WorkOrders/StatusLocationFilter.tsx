@@ -13,13 +13,13 @@ import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { LOCATION_CLASS_FILTER_OPTIONS, needsFasonTag, stationsForLocationFilter } from "./location";
 
 // "Durum" süzgeci üç grup taşır, her grup AYRI sunucu anahtarına yazar (CSV):
-//   Durum → filter[status] · Şu an nerede → filter[konumIstasyon] · Özel → filter[konumSinifi].
+//   Durum → filter[status] · Şu an hangi aşamada → filter[konumIstasyon] · Özel → filter[konumSinifi].
 // Gruplar arası VE, grup içi VEYA (backend `workorder-location.helper`). Süzme sunucuda.
 
 const STATUS_KEYS: WorkOrderStatus[] = ["PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 type GroupKey = "status" | "konumIstasyon" | "konumSinifi";
 const GROUP_KEYS: GroupKey[] = ["status", "konumIstasyon", "konumSinifi"];
-const GROUP_PREFIX: Record<GroupKey, string> = { status: "Durum", konumIstasyon: "Nerede", konumSinifi: "Konum" };
+const GROUP_PREFIX: Record<GroupKey, string> = { status: "Durum", konumIstasyon: "Aşama", konumSinifi: "Konum" };
 // Ortak CommandGroup başlığı stilsiz (gövde boyutunda) çizer; üç grup ayrımı küçük başlıkla okunur.
 const GROUP_CLASS =
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground";
@@ -97,7 +97,7 @@ export function StatusLocationFilter() {
                 </Item>
               ))}
             </CommandGroup>
-            <CommandGroup heading="Şu an nerede" className={cn(GROUP_CLASS, "border-t")}>
+            <CommandGroup heading="Şu an hangi aşamada" className={cn(GROUP_CLASS, "border-t")}>
               {s.stationsError && <div className="px-2 py-1.5 text-xs text-destructive">İstasyonlar yüklenemedi.</div>}
               {s.stations.map((st) => (
                 <Item

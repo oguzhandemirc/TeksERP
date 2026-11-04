@@ -25,10 +25,10 @@ function Search() {
 const search = () => screen.getByTestId("search").textContent ?? "";
 
 describe("StatusLocationFilter", () => {
-  it("üç grup: Durum + Şu an nerede (aktif, rota adımı olabilen istasyonlar) + Özel", async () => {
+  it("üç grup: Durum + Şu an hangi aşamada (aktif, rota adımı olabilen istasyonlar) + Özel", async () => {
     renderWithProviders(<StatusLocationFilter />);
     await userEvent.click(screen.getByRole("button", { name: /Durum/ }));
-    expect(await screen.findByText("Şu an nerede")).toBeInTheDocument();
+    expect(await screen.findByText("Şu an hangi aşamada")).toBeInTheDocument();
     expect(screen.getByText("Özel")).toBeInTheDocument();
     expect(screen.getByText("Planlandı")).toBeInTheDocument();
     expect(await screen.findByText("Boyahane")).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("StatusLocationFilter", () => {
 
     await userEvent.keyboard("{Escape}");
     const chips = screen.getByTestId("status-location-chips");
-    expect(chips).toHaveTextContent("Nerede:Boyahane");
+    expect(chips).toHaveTextContent("Aşama:Boyahane");
     await userEvent.click(within(chips).getByText("Boyahane").closest("button") as HTMLElement);
     expect(search()).not.toContain("st-boya");
     expect(search()).toContain("filter[konumIstasyon]=st-kursun");
