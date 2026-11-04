@@ -206,7 +206,7 @@ describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
     await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
     await openNew(r);
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
-    expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/sürüm 2 → 3/);
+    expect(r.getByTestId('tanit-surum')).toHaveTextContent('v2 → 3');
     expect(r.getByTestId('tanit-kimlik-0')).toHaveTextContent(/ESKİ KİMLİK/);
 
     await press(r.getByTestId('tanit-kutu-6'));

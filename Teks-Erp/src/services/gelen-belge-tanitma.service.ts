@@ -7,7 +7,7 @@
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
-import { extractDocument, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
+import { extractDocument, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type RegionExtraction, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
 import { rectToPhotoFrame } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { draftFromExtraction } from "../lib/gelen-belge/taslak";
 import { getUserTemplate, loadUserTemplates, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
@@ -61,6 +61,18 @@ export async function similarUserTemplates(ocr: OcrResult, excludeCode: string |
   return templatesOverThreshold(ocr, user).map(({ template, score }) => ({ kod: template.id, ad: template.name || template.id, skor: score }));
 }
 
+/** Okunan değerlerin kutuları sayfa (OCR) çerçevesinde — tanıtma ekranı eski şablonun alanlarını belge üstünde işaretler. */
+function fieldRectsOf(region: RegionExtraction | undefined): Record<string, OcrRect> {
+  const out: Record<string, OcrRect> = {};
+  if (!region?.fields) return out;
+  const dy = region.region.rect.y;
+  for (const [k, f] of Object.entries(region.fields.fields)) {
+    const r = f.value != null ? f.source.rect : undefined;
+    if (r) out[k] = { x: r.x, y: r.y + dy, width: r.width, height: r.height };
+  }
+  return out;
+}
+
 /** Atamalardan şablon önerisi + aynı taramada önizleme (yalnız bu şablonla sınıflandırma; eşik altı → tanınmadı). */
 export async function suggestFromScan(input: SuggestFromScanInput) {
   const ocr = await scanOcr(input.scanId);
@@ -70,7 +82,8 @@ export async function suggestFromScan(input: SuggestFromScanInput) {
   const { base, ...rest } = input;
   const s = suggestTemplate({ ...rest, code, ocr });
   const benzerSablonlar = await similarUserTemplates(ocr, input.base?.code ?? null);
-  if (s.errors.length) return { template: s.template, explain: s.explain, errors: s.errors, preview: null, benzerSablonlar };
+  // Güncellemede doğrulanan KAYDEDİLECEK birleşik şablondur (yalnız yeni parçası boş/eksik olabilir: atanmayan eski alan korunur).
+  if (s.errors.length && !(old && base)) return { template: s.template, explain: s.explain, errors: s.errors, preview: null, benzerSablonlar };
   let template = s.template;
   if (old && base) {
     template = mergeTemplateForUpdate({ ...(old.template as unknown as DocumentTemplate), id: old.code, version: old.version }, s.template, base.keep);
@@ -89,6 +102,7 @@ export async function suggestFromScan(input: SuggestFromScanInput) {
       matched: region?.templateId === code,
       score: region ? Math.round(region.classificationScore * 10000) / 10000 : 0,
       fields: draft.header.regions[0]?.fields ?? {},
+      fieldRects: fieldRectsOf(region),
       blocks: draft.header.totalsDeclared.blocks,
       lineCount: draft.lines.length,
       warnings: draft.header.warnings,

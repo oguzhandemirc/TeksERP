@@ -1,7 +1,7 @@
 // Rehberli (adım adım) tanıtma — saf çekirdek. Adım 0 başlık (kimlik yazısı), sonra alanlar sırayla, son adım ad + kaydet.
 // Sunucu etiketi DEĞER kutusundan bulur (suggest.ts findLabelFor) → kullanıcı yalnız değere dokunur.
 import type { ScanWord, ScanWords, SuggestResult } from '../../../../types/inboundDocTeach';
-import { addIdentifier, assignField, clearField, FIELD_OPTIONS, lineTexts, suggestIdentifiers, teachMarks, type FieldKey, type ScanMark, type TeachState } from './teachDraft';
+import { addIdentifier, assignField, clearField, FIELD_OPTIONS, isKept, lineTexts, suggestIdentifiers, teachMarks, type FieldKey, type ScanMark, type TeachState } from './teachDraft';
 import { lowerTr } from '../../../../utils/trCase';
 
 export type { FieldKey } from './teachDraft';
@@ -51,11 +51,11 @@ export function toggleFieldWord(s: TeachState, words: readonly ScanWord[], key: 
 }
 
 /** Fotoğraf kutuları: başlık adımında kimlik satırları, alan adımında o alanın değeri "seçili" görünür. */
-export function guidedMarks(s: TeachState, words: readonly ScanWord[], step: number): ScanMark[] {
-  const base = teachMarks({ ...s, selected: [] }, words);
+export function guidedMarks(s: TeachState, words: readonly ScanWord[], step: number, located: Partial<Record<FieldKey, number[]>> = {}): ScanMark[] {
+  const base = teachMarks({ ...s, selected: [] }, words, located);
   const key = stepField(step);
   if (key) {
-    const mine = new Set(s.fields[key] ?? []);
+    const mine = new Set(s.fields[key] ?? located[key] ?? []);
     return base.map((m, i) => (mine.has(i) ? { ...m, tone: 'selected' as const, label: fieldLabel(key) } : m));
   }
   if (step !== 0) return base;
@@ -67,7 +67,7 @@ export function guidedMarks(s: TeachState, words: readonly ScanWord[], step: num
 export type Readout =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'ok'; value: string; label: string | null }
+  | { kind: 'ok'; value: string; label: string | null; kept?: boolean }
   | { kind: 'empty' }
   | { kind: 'error'; text: string };
 
@@ -77,6 +77,12 @@ export function fieldReadout(
   key: FieldKey,
   p: { result: SuggestResult | null; fresh: boolean; error: string | null; blocked?: string | null },
 ): Readout {
+  // Kayıtlı (eski şablondan korunan) alan: okuma kuralı değişmez → son önizleme bayat olsa da değeri geçerlidir.
+  if (isKept(s, key)) {
+    const v = p.result?.preview?.fields[key];
+    if (v != null && String(v).trim() !== '') return { kind: 'ok', value: String(v), label: null, kept: true };
+    return p.result?.preview ? { kind: 'empty' } : p.blocked || p.error ? { kind: 'error', text: p.blocked ?? p.error! } : { kind: 'loading' };
+  }
   if (!(s.fields[key]?.length)) return { kind: 'idle' };
   // Önizleme eksik varken hiç istenmez; "okunuyor" demek sonsuz bekletir (2026-11-04 cihaz denemesi: başlık atlanmıştı).
   if (p.blocked && !p.fresh) return { kind: 'error', text: `Değer, şu eksik tamamlanınca okunur: ${p.blocked}` };
@@ -91,6 +97,6 @@ export function fieldReadout(
 
 export type ChipStatus = 'done' | 'skipped' | 'todo';
 export function chipStatus(s: TeachState, key: FieldKey, skipped: readonly FieldKey[]): ChipStatus {
-  if (s.fields[key]?.length) return 'done';
+  if (s.fields[key]?.length || isKept(s, key)) return 'done';
   return skipped.includes(key) ? 'skipped' : 'todo';
 }
