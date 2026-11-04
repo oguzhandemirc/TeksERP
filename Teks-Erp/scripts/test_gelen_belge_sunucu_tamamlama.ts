@@ -177,7 +177,7 @@ async function main(): Promise<void> {
     await prisma.documentScan.updateMany({ where: { noteId: { in: made.notes } }, data: { noteId: null } }).catch(() => undefined);
     await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } }).catch((e) => check("temizlik", false, String(e)));
     await prisma.documentScan.deleteMany({ where: { sha256: { in: made.shas } } }).catch((e) => check("temizlik", false, String(e)));
-    await prisma.senderTemplateVersion.deleteMany({ where: { template: { code: CODE } } }).catch(() => undefined);
+    await prisma.senderTemplateVersion.deleteMany({ where: { senderTemplate: { code: CODE } } }).catch((e) => check("temizlik", false, String(e)));
     await prisma.senderTemplate.deleteMany({ where: { code: CODE } }).catch((e) => check("temizlik", false, String(e)));
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
