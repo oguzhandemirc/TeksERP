@@ -134,28 +134,30 @@ describe('docShown (belgeden dolan alanın yeri) / applyOrderLine özellik kural
     const e = extras({ woType: 'ORDER_PRODUCTION', steps: [] });
     const c = { routeChosen: true, hasTambur: false, inOther: (k: string) => k === 'isEmriTuru' };
     const out = extrasIssues(e, c);
-    expect(out[0]).toMatch(/Siparişe üretim.*"Diğer alanlar" bölümünde/);
-    expect(out[1]).toBe('Rotada en az bir adım kalmalı.');
+    expect(out[0]).toEqual({ key: 'isEmriTuru', text: expect.stringMatching(/Siparişe üretim.*"Diğer alanlar" bölümünde/) });
+    expect(out[1]).toEqual({ key: 'rotaAdimlari', text: 'Rotada en az bir adım kalmalı.' });
   });
 });
 
 describe('extrasIssues / createBlockReason', () => {
   it('rota, sayı, kat ve tarih engelleri', () => {
-    expect(extrasIssues(extras(), { routeChosen: false, hasTambur: false })).toEqual(['Rotayı seçin.']);
+    expect(extrasIssues(extras(), { routeChosen: false, hasTambur: false })).toEqual([{ key: 'rota', text: 'Rotayı seçin.' }]);
     expect(extrasIssues(extras({ width: 'x', targetQuantity: '0' }), { routeChosen: true, hasTambur: false })).toEqual([
-      'En sıfırdan büyük bir sayı olmalı.',
-      'Hedef metraj sıfırdan büyük bir sayı olmalı.',
+      { key: 'en', text: "En 0'dan büyük olmalı." },
+      { key: 'hedefMetraj', text: "Hedef metraj 0'dan büyük olmalı." },
     ]);
-    expect(extrasIssues(extras(), { routeChosen: true, hasTambur: true })).toEqual(['Kat tipini seçin.']);
-    expect(extrasIssues(extras({ plannedStart: '2026-11-10', plannedEnd: '2026-11-09' }), { routeChosen: true, hasTambur: false })).toEqual(['Planlı bitiş başlangıçtan önce olamaz.']);
+    expect(extrasIssues(extras(), { routeChosen: true, hasTambur: true })).toEqual([{ key: 'katTipi', text: 'Kat tipini seçin.' }]);
+    expect(extrasIssues(extras({ plannedStart: '2026-11-10', plannedEnd: '2026-11-09' }), { routeChosen: true, hasTambur: false })).toEqual([
+      { key: 'planBitis', text: 'Planlı bitiş başlangıçtan önce olamaz.' },
+    ]);
   });
   it('PER_PARTY: hedef metraj/kg denetlenmez (gönderilmez)', () => {
     expect(extrasIssues(extras({ targetQuantity: 'x', targetWeight: 'y' }), { routeChosen: true, hasTambur: false, perParty: true })).toEqual([]);
   });
   it('⭐ belge okutulmadan oluştur kapalı; okunurken kapalı; sonra ilk engel', () => {
-    expect(createBlockReason({ hasDoc: false, reading: false, issues: [] })).toMatch(/Belge okut/);
+    expect(createBlockReason({ hasDoc: false, reading: false, issues: [] })).toBe('Önce belgeyi okutun');
     expect(createBlockReason({ hasDoc: true, reading: true, issues: [] })).toBe('Belge okunuyor…');
-    expect(createBlockReason({ hasDoc: true, reading: false, issues: ['Müşteriyi seçin.'] })).toBe('Müşteriyi seçin.');
+    expect(createBlockReason({ hasDoc: true, reading: false, issues: [{ key: 'musteri', text: 'Müşteriyi seçin.' }] })).toBe('Müşteriyi seçin.');
     expect(createBlockReason({ hasDoc: true, reading: false, issues: [] })).toBeNull();
   });
 });

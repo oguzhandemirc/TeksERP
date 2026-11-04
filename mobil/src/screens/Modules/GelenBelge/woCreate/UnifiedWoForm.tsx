@@ -21,6 +21,7 @@ import WoFormFields from './WoFormFields';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
 import { woFormLayout } from './woLayout';
+import { bandTone, TARGET_ISSUE_KEYS, TARGET_WARN_KEYS } from './woIssues';
 
 const DOC_PLACEHOLDER = 'Belge okutulunca dolar';
 
@@ -43,6 +44,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
     locked: done || wo.saving,
     onOrderLinePicked: u.onOrderLine,
     plan: u.plan,
+    targetTone: bandTone(u.issues, { keys: TARGET_ISSUE_KEYS, warnKeys: TARGET_WARN_KEYS }),
   };
   const win = useWindowDimensions();
   const layout = woFormLayout(win.width, win.height);

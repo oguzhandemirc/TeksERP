@@ -7,6 +7,7 @@ import { Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { SheetField } from '../../../../components/ModuleSheet';
 import { SectionBand } from '../../../../components/form/SectionBand';
+import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import { usePickableLifecycle } from '../../../../hooks/useFeatureFlags';
@@ -51,6 +52,8 @@ interface Props {
   zone?: 'top' | 'other';
   /** K30-D: rota adımları + makine, iş emri türü, hedef özellikler; yoksa çizilmez. */
   plan?: WoPlanCtx;
+  /** Hedef şeridinin tonu (engellerden). */
+  targetTone?: BandTone;
 }
 
 type Picker = 'route' | 'item' | 'start' | 'end' | null;

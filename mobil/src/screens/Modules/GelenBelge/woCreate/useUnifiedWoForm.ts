@@ -32,7 +32,8 @@ import {
   type WoFormExtras,
   type WoFormState,
 } from './woForm';
-import { SCAN_ROUTE, isScanRoute, rowIssues } from './woFromDoc';
+import { SCAN_ROUTE, isScanRoute, rowIssueList } from './woFromDoc';
+import { missingChips, type FormIssue } from './woIssues';
 import { multiPartyTotal } from './partyDraft';
 import { rollsTotal } from './rollDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
@@ -113,11 +114,15 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.rolls ? rollsTotal(row.form.rolls) : row.form.meters) : null;
   const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
   const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
-  const issues = [
+  // Sıra = göz akışı: sol sütun (belgeden gelenler) önce, sonra sağ sütun (üretim kararı).
+  const issues: FormIssue[] = [
+    ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssueList(row.form) : []),
     ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty, inOther: fields.isOther }),
-    ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssues(row.form) : []),
   ];
-  const block = done ? null : createBlockReason({ hasDoc: !!row, reading: !!row && (!row.form || !row.detail), issues });
+  const reading = !!row && (!row.form || !row.detail);
+  const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues });
+  // Alt çubuk hapları: belge yokken / okunurken hap yok (çubuk tek cümle söyler).
+  const missing = done || !row || reading ? [] : missingChips(issues);
   const okut = () => {
     if (row) {
       wo.removeRow(row.noteId);
@@ -127,7 +132,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     scan.source.add();
   };
   return {
-    route, setRoute, form, fields, plan, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, okut, customers, edit,
+    route, setRoute, form, fields, plan, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [],
     routesLoading: routesQ.isLoading,

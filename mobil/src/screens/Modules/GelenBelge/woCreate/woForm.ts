@@ -6,6 +6,7 @@ import type { CreateWorkOrderFromNoteBody, DocFormFields, DocFormSuggestions, Ta
 import type { ProductionRoute } from '../../../../services/route.service';
 import { kursunStepOf } from '../desk/deskPlan';
 import type { WoFieldKey } from './woFieldCatalog';
+import type { FormIssue } from './woIssues';
 import { buildStepsBody, sameAsRoute, type EditStep } from './woSteps';
 
 export type { TabletWoEntry };
@@ -198,15 +199,15 @@ export interface ExtrasCtx {
   inOther?: (k: WoFieldKey) => boolean;
 }
 
-/** Ek alanların engelleri (sunucu yine doğrular). */
-export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): string[] {
-  const out: string[] = [];
-  const push = (k: WoFieldKey, msg: string) => out.push(c.inOther?.(k) ? `${msg} (alan altta "Diğer alanlar" bölümünde)` : msg);
-  if (!c.routeChosen) out.push('Rotayı seçin.');
+/** Ek alanların engelleri (sunucu yine doğrular); her engel alanına bağlı (alt çubuk hapı + şerit tonu). */
+export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): FormIssue[] {
+  const out: FormIssue[] = [];
+  const push = (key: WoFieldKey, msg: string) => out.push({ key, text: c.inOther?.(key) ? `${msg} (alan altta "Diğer alanlar" bölümünde)` : msg });
+  if (!c.routeChosen) out.push({ key: 'rota', text: 'Rotayı seçin.' });
   const bad = (t: string) => t.trim() !== '' && parseFormNumber(t) === null;
-  if (bad(e.width)) push('en', 'En sıfırdan büyük bir sayı olmalı.');
-  if (!c.perParty && bad(e.targetQuantity)) push('hedefMetraj', 'Hedef metraj sıfırdan büyük bir sayı olmalı.');
-  if (!c.perParty && bad(e.targetWeight)) push('hedefKg', 'Hedef kg sıfırdan büyük bir sayı olmalı.');
+  if (bad(e.width)) push('en', "En 0'dan büyük olmalı.");
+  if (!c.perParty && bad(e.targetQuantity)) push('hedefMetraj', "Hedef metraj 0'dan büyük olmalı.");
+  if (!c.perParty && bad(e.targetWeight)) push('hedefKg', "Hedef kg 0'dan büyük olmalı.");
   if (c.hasTambur && !e.foldType) push('katTipi', 'Kat tipini seçin.');
   if (e.plannedStart && e.plannedEnd && e.plannedEnd < e.plannedStart) push('planBitis', 'Planlı bitiş başlangıçtan önce olamaz.');
   if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) push('isEmriTuru', 'Siparişe üretim için sipariş kalemi seçin ya da "Stoğa üretim" seçin.');
@@ -215,10 +216,10 @@ export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): string[] {
 }
 
 /** "İş emri oluştur" kapalıysa ilk neden (ipucu); null = açık. */
-export function createBlockReason(a: { hasDoc: boolean; reading: boolean; issues: readonly string[] }): string | null {
-  if (!a.hasDoc) return 'Önce "Belge okut" ile belgeyi okutun; bilgiler forma dolar.';
+export function createBlockReason(a: { hasDoc: boolean; reading: boolean; issues: readonly FormIssue[] }): string | null {
+  if (!a.hasDoc) return 'Önce belgeyi okutun';
   if (a.reading) return 'Belge okunuyor…';
-  return a.issues[0] ?? null;
+  return a.issues[0]?.text ?? null;
 }
 
 export type ExtraBody = Pick<

@@ -122,7 +122,7 @@ describe('UnifiedWoForm', () => {
   it('⭐ belge okutulmadan "oluştur" KAPALI + ipucu; belge alanları yer tutucu; Belge okut tarayıcıyı açar', () => {
     const s = renderWithPaper(ui());
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
-    expect(s.getByTestId('ie-form-ipucu').props.children).toMatch(/Belge okut/);
+    expect(s.getByTestId('ie-form-ipucu').props.children).toMatch(/Önce belgeyi okutun/);
     expect(s.getByTestId('ie-form-belge-yer-tutucu')).toBeTruthy();
     expect(s.getByTestId('ie-form-en').props.value).toBe('');
     fireEvent.press(s.getByTestId('ie-belge-okut'));
