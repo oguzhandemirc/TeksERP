@@ -187,11 +187,27 @@ function sigKlon(): boolean {
  * göreceği tarihte var mı"***dır ⇒ ölçüt `origin/main`den ERİŞİLEBİLİRLİK.
  * Böylece yerel ile CI aynı cevabı verir.
  */
+/**
+ * Bakım dalı (`bakim/*-backend-X.Y.Z`) `main`den AYRILIR: kendi sürüm belgesi kendi
+ * paket commit'ine atıf yapar ve o sha `origin/main`de hiç olmaz. Yayın etiketi
+ * (`backend-vX.Y.Z`) origin'e itilir ⇒ okuyucu için o tarih de paylaşılandır.
+ * Yalnız SÜRÜM etiketi sayılır; keyfi etiket/dal sha'sı ölü kalır.
+ */
+export function surumEtiketiMi(ad: string): boolean {
+  return /^backend-v\d+\.\d+\.\d+$/.test(ad);
+}
+
 function paylasilanTarih(): { ad: string; shalar: Map<string, string[]> } | null {
+  let etiketler: string[] = [];
+  try {
+    etiketler = git(["tag", "-l", "backend-v*"], { cwd: KOK }).split("\n").map((t) => t.trim()).filter(surumEtiketiMi);
+  } catch {
+    /* etiket yok — yalnız ana ref */
+  }
   for (const ref of ["origin/main", "main", "HEAD"]) {
     try {
       git(["rev-parse", "--verify", `${ref}^{commit}`], { cwd: KOK, stdio: "yut" });
-      const cikti = git(["rev-list", ref], { cwd: KOK });
+      const cikti = git(["rev-list", ref, ...etiketler.map((t) => `refs/tags/${t}`)], { cwd: KOK });
       // Kısa atıfı bulmak için ilk 7 haneye göre dizinle (240 × 30k karşılaştırma yerine).
       const dizin = new Map<string, string[]>();
       for (const tam of cikti.split("\n")) {
@@ -201,7 +217,7 @@ function paylasilanTarih(): { ad: string; shalar: Map<string, string[]> } | null
         if (liste) liste.push(tam);
         else dizin.set(anahtar, [tam]);
       }
-      return { ad: ref, shalar: dizin };
+      return { ad: etiketler.length > 0 ? `${ref} + ${etiketler.length} backend-v* etiketi` : ref, shalar: dizin };
     } catch {
       /* sıradaki ref */
     }
@@ -352,6 +368,10 @@ function main(): void {
     check("§2j kısa atıf uzun sha'nın ÖNEKİ olarak eşleşir", cozulemeyenler(dizin, ["abc12340"]).size === 0);
     check("§2k önek TUTMUYORSA ölü (7 hane aynı, sekizinci farklı)", cozulemeyenler(dizin, ["abc1234f"]).size === 1);
   }
+  // Bakım dalı: yalnız SÜRÜM etiketinin tarihi paylaşılandır (2026-11-04, backend 2.11.4).
+  check("§2l ⭐ sürüm etiketi paylaşılan tarih sayılır", surumEtiketiMi("backend-v2.11.3"));
+  check("§2m ⭐ başka ürünün etiketi SAYILMAZ", !surumEtiketiMi("panel-v1.3.9") && !surumEtiketiMi("fabrika-v2.7.3"));
+  check("§2n ⭐ ekli/keyfi backend etiketi SAYILMAZ", !surumEtiketiMi("backend-v2.11.3-deneme") && !surumEtiketiMi("backend-vX"));
 
   console.log("\n=== §4 İKİNCİ KOL SONDALARI (saf yüklem) ===");
   const A = (metin: string) => ciplakAdaylari(metin);

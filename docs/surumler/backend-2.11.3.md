@@ -1,8 +1,11 @@
 # Backend `2.11.3`
 
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+> **YAYINLANMADI — 2.11.4'e katıldı (2026-11-04).** Paket üretildi ama sahaya kurulmadı; içeriği
+> `backend-2.11.4.md`de. Bu belge yalnız künye kaydıdır — 2.11.3 KURULMAZ.
+
+**Paket:** `tekserp-backend-20261104_164519-04ad84034.zip`
+**SHA256:** `4DED186937609655E538634949F8A9D7229CAB3ECEC0E2EF3A628BDF4BA6EC01`
+**Commit:** `04ad84034`
 **Önceki saha sürümü:** **2.11.2** (etiket `backend-v2.11.2` = `72889f5a`; kuran, kurulumdan önce `/health` ve `app\PAKET.json` ile 2.11.2 olduğunu ÖLÇER — farklıysa DUR).
 
 **Bakım sürümü:** `bakim/adnansahin-backend-2.11.3` dalı, taban `backend-v2.11.2`. `main`deki sonraki
