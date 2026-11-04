@@ -8,7 +8,6 @@ import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { ClientOcr } from './deviceOcr';
 import type { CreateWorkOrderRoll, DocRoll } from '../types/inboundDocRolls';
-import type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 import type {
   ScanWords,
   SuggestBody,
@@ -17,6 +16,7 @@ import type {
   UserTemplateDetail,
   UserTemplateView,
 } from '../types/inboundDocTeach';
+import type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 
 export type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 
