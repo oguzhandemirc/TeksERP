@@ -28,7 +28,7 @@ export interface WorkOrderLocation {
 /** "Özel" süzgeç grubunun etiketleri — backend `filter[konumSinifi]` değerleri. */
 export const LOCATION_CLASS_FILTER_OPTIONS: { value: WorkOrderLocationFilterClass; label: string }[] = [
   { value: "BOLUNMUS", label: "Birden çok istasyonda" },
-  { value: "FASONDA", label: "Fasonda" },
+  { value: "FASONDA", label: "Fasonda (tüm toplar)" },
   { value: "FASONDA_EN_AZ_BIR", label: "Fasonda (en az bir top)" },
   { value: "BASLAMADI", label: "Henüz başlamadı" },
   { value: "BITTI", label: "Bitti" },

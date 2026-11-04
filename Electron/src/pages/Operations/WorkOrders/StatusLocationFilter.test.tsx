@@ -36,7 +36,7 @@ describe("StatusLocationFilter", () => {
     expect(screen.queryByText("Tezgah 1")).toBeNull();
     expect(screen.queryByText("Eski Ram")).toBeNull();
     expect(screen.getByText("Birden çok istasyonda")).toBeInTheDocument();
-    expect(screen.getByText("Fasonda")).toBeInTheDocument();
+    expect(screen.getByText("Fasonda (tüm toplar)")).toBeInTheDocument();
     expect(screen.getByText("Fasonda (en az bir top)")).toBeInTheDocument();
   });
 
@@ -51,7 +51,7 @@ describe("StatusLocationFilter", () => {
     await userEvent.click(screen.getByRole("button", { name: /Durum/ }));
     await userEvent.click(await screen.findByText("Fasonda (en az bir top)"));
     expect(search()).toContain("filter[konumSinifi]=FASONDA_EN_AZ_BIR");
-    await userEvent.click(screen.getByText("Fasonda"));
+    await userEvent.click(screen.getByText("Fasonda (tüm toplar)"));
     expect(search()).toContain("filter[konumSinifi]=FASONDA_EN_AZ_BIR,FASONDA");
     await userEvent.keyboard("{Escape}");
     expect(screen.getByTestId("status-location-chips")).toHaveTextContent("Konum:Fasonda (en az bir top)");
