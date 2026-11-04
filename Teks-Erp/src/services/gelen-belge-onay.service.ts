@@ -19,7 +19,6 @@
 // =============================================================================
 import { DeliveryNoteAliasScope, DeliveryNoteLineStatus, DeliveryNoteStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
 import { createHash } from "node:crypto";
-import { sayiMetni } from "./reports/anlati/sayi-bicim";
 import { v5 as uuidv5 } from "uuid";
 import prisma from "../lib/prisma";
 import { duplicateDocNoApprovalGate } from "./helpers/gelen-belge-mukerrer.helper";
@@ -38,7 +37,7 @@ import { aliasKey } from "./gelen-belge-eslestirme.service";
 import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 import { declaredPageCount } from "../lib/gelen-belge/parti-ozet";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
-import { preparePerDocument, summaryTargets, type PartyEntry } from "./gelen-belge-onay-parti.service";
+import { perDocumentEntryWarning, preparePerDocument, summaryTargets, type PartyEntry } from "./gelen-belge-onay-parti.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -80,6 +79,8 @@ export type ApproveOptions = {
   via?: string;
   /** S1 çok partili belge (yalnız PER_DOCUMENT): parti başına bir özet satırı/top; verilmezse tek özet satırı (bugünkü). */
   parties?: ReadonlyArray<PartyEntry>;
+  /** "Toplar ayrı geldi": `parties` her biri bir top (giriş sebebi "<no> top N", uyarı "Toplar ayrı"). */
+  separateRolls?: boolean;
   /** K30 S16a (yalnız PER_DOCUMENT): iş emri formunda seçilen hedef ürün — özet satırı topları varsayılan yerine bununla doğar.
    *  Top doğurabilirliği çağıran (`itemProblem`) önceden doğrular. */
   item?: { id: string; name: string };
@@ -114,7 +115,7 @@ interface PrecheckResult {
 
 type PreNote = Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>;
 
-async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEntryMode, opts: Pick<ApproveOptions, "parties" | "item">): Promise<PrecheckResult> {
+async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEntryMode, opts: Pick<ApproveOptions, "parties" | "item" | "separateRolls">): Promise<PrecheckResult> {
   if (!note.ownerCustomerId) throw AppError.badRequest("Sahip cari seçilmeden onaylanamaz (emanet top sahipsiz doğamaz).", { code: "DELIVERY_NOTE_OWNER_REQUIRED" });
   // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
   // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
@@ -175,7 +176,7 @@ function pageAndTotalGates(note: PreNote, mismatches: string[], reason: string |
  * PER_DOCUMENT ön kontrolü (tasarım §2.5): kayıt kurşun metresinden doğar; satır kapıları (ürün/inceleme) UYGULANMAZ, satırlar
  * bilgidir. Kapı `perDocumentGate` (detayla aynı yüklem); toplam farkı yalnız kaynak Σ satır iken kapı, aksi uyarı.
  */
-async function precheckPerDocument(note: PreNote, input: ApproveInput, { parties, item }: Pick<ApproveOptions, "parties" | "item">): Promise<PrecheckResult> {
+async function precheckPerDocument(note: PreNote, input: ApproveInput, { parties, item, separateRolls }: Pick<ApproveOptions, "parties" | "item" | "separateRolls">): Promise<PrecheckResult> {
   const targets = summaryTargets(note, parties);
   // Satır kipinde top doğmuş belge tek kayda çevrilmez (ikinci kayıt doğardı): kip yarıda değiştiyse fail-closed.
   const mixed = note.lines.filter((l) => l.rollId && !isSummaryLine(note.id, l)).map((l) => l.lineNo);
@@ -196,9 +197,7 @@ async function precheckPerDocument(note: PreNote, input: ApproveInput, { parties
     warnings.push(...tc.mismatches.map((m) => `Toplam farkı (bilgi; kayıt kurşun metresinden): ${m}`));
   }
   pageAndTotalGates(note, gate.totalsBlocking ? tc.mismatches : [], reason, warnings);
-  warnings.push(targets.length > 1
-    ? `Çok partili belge: ${targets.length} parti ayrı top olarak ${defaultItem.name} ürünüyle girildi (${targets.map((t) => `${sayiMetni(Number(t.meters), 3)} m`).join(" + ")}); ${docLines.length} satır bilgi olarak kaldı.`
-    : `Belge başına tek kayıt: ${sayiMetni(Number(note.kursunMeters), 3)} m tek top olarak ${defaultItem.name} ürünüyle girildi; ${docLines.length} satır bilgi olarak kaldı.`);
+  warnings.push(perDocumentEntryWarning(targets, { separateRolls, itemName: defaultItem.name, infoLines: docLines.length, kursunMeters: note.kursunMeters }));
   return { warnings, defaultItem };
 }
 
@@ -382,7 +381,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           forcedStatus: RollStatus.STOCK,
           ownerCustomerId: note.ownerCustomerId,
           entryReasonCode: INCOMING_DOC_REASON_CODE,
-          entryReason: line.id === summaryLineId(note.id) && !opts.parties?.length ? `${note.noteNo} tek kayıt` : isSummaryLine(note.id, line) ? `${note.noteNo} parti ${line.blockNo}` : `${note.noteNo} satır ${line.lineNo}`,
+          entryReason: line.id === summaryLineId(note.id) && !opts.parties?.length ? `${note.noteNo} tek kayıt` : isSummaryLine(note.id, line) ? `${note.noteNo} ${opts.separateRolls ? "top" : "parti"} ${line.blockNo}` : `${note.noteNo} satır ${line.lineNo}`,
           // Kg belgeden gelir; KK1 istasyon politikası (`kk1.weightEntryEnabled`) burada uygulanmaz (mal kabul emsali A1).
           skipKk1WeightPolicy: true,
           cariHoldIntakeGate: true,

@@ -20,7 +20,7 @@ import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { cancelDeliveryNote } from "../services/gelen-belge-iptal.service";
 import { previewDeliveryNoteCancel } from "../services/gelen-belge-iptal-onizleme.service";
 import { AUTO_WORK_ORDER_PERMISSIONS, assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
-import { createWorkOrderFromNote } from "../services/gelen-belge-form-is-emri.service";
+import { createWorkOrderFromNote, formModeFieldShape } from "../services/gelen-belge-form-is-emri.service";
 import { workOrderFormFieldShape } from "../controllers/workorder.controller";
 import { getNoteParties } from "../services/gelen-belge-cok-parti.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
@@ -680,7 +680,7 @@ const FormWorkOrderBody = z.strictObject({
     targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
     stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
   }), "Geçersiz parti listesi").min(2, "Çok parti için en az iki parti gerekir").max(30).optional(),
-  mode: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
+  ...formModeFieldShape,
   // K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet.
   confirmDuplicateDocNo: z.boolean("Onay bayrağı evet/hayır olmalı").optional(),
   // K30 S16a: iş emri formunun alanları (quickStart ile aynı Zod; tarih yalnız ISO).
@@ -714,6 +714,8 @@ const FormWorkOrderBody = z.strictObject({
  *               notes: { type: string, maxLength: 1000, nullable: true }
  *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, targetValues: { type: array }, stepPlanning: { type: array } } } }
  *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
+ *               rollMode: { type: string, enum: [SINGLE, SEPARATE], description: "Toplar ayrı geldi: SEPARATE + rolls → tek iş emri, her top ayrı top; kurşun metresi topların toplamından türetilir (gövdedeki kursunMeters yerine). Verilmezse tek parça (bugünkü)" }
+ *               rolls: { type: array, minItems: 1, maxItems: 200, description: "Yalnız rollMode=SEPARATE ile; parties ile birlikte verilemez", items: { type: object, required: [meters], properties: { meters: { type: number, exclusiveMinimum: 0 }, weightKg: { type: number, exclusiveMinimum: 0, nullable: true }, senderRollNo: { type: string, maxLength: 64, nullable: true } } } }
  *               targetItemId: { type: string, format: uuid, description: "Hedef kumaş; belge onayında topların ürünü olur (top doğuramazsa 400 GELEN_BELGE_TARGET_ITEM_INVALID). Yoksa varsayılan ürün (bugünkü)" }
  *               targetColorId: { type: string, format: uuid }
  *               width: { type: number, exclusiveMinimum: 0, description: "En (cm)" }
@@ -728,7 +730,7 @@ const FormWorkOrderBody = z.strictObject({
  *               steps: { type: array, minItems: 1, maxItems: 200, description: "K30-D düzenlenmiş rota adımları (klasik ucun adım şekli; sıra = dizi sırası, sequence verilirse index+1). routeTemplateId ile birlikte zorunlu (seçilen şablonun yerine geçer); stepPlanning ile birlikte verilemez; klasik doğrulama onaydan ÖNCE", items: { type: object, required: [stationId], properties: { stationId: { type: string, format: uuid }, sequence: { type: integer }, notes: { type: string, maxLength: 500, nullable: true }, requiredCategoryId: { type: string, format: uuid, nullable: true }, plannedSubcontractorId: { type: string, format: uuid, nullable: true }, plannedMachineId: { type: string, format: uuid, nullable: true }, dispatchWithoutColor: { type: boolean } } } }
  *     responses:
  *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
- *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID · GELEN_BELGE_TARGET_ITEM_INVALID · GELEN_BELGE_FORM_TARGET_PER_PARTY · GELEN_BELGE_FORM_STEPS_NEED_ROUTE · GELEN_BELGE_FORM_STEPS_WITH_PLANNING · GELEN_BELGE_FORM_STEPS_ORDER · GELEN_BELGE_FORM_TYPE_NEEDS_ORDER · pasif/olmayan istasyon (belge onaylanmaz)" }
+ *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID · GELEN_BELGE_TARGET_ITEM_INVALID · GELEN_BELGE_FORM_TARGET_PER_PARTY · GELEN_BELGE_FORM_ROLLS_REQUIRED · GELEN_BELGE_FORM_ROLLS_NEED_SEPARATE · GELEN_BELGE_FORM_ROLLS_WITH_PARTIES · GELEN_BELGE_FORM_STEPS_NEED_ROUTE · GELEN_BELGE_FORM_STEPS_WITH_PLANNING · GELEN_BELGE_FORM_STEPS_ORDER · GELEN_BELGE_FORM_TYPE_NEEDS_ORDER · pasif/olmayan istasyon (belge onaylanmaz)" }
  *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
  *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
  */
