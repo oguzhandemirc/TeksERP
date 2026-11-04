@@ -35,7 +35,7 @@ const SuggestBody = z.strictObject({
     field: z.enum(ASSIGNABLE_FIELD_KEYS),
     rect: Rect,
     section: z.boolean().optional(),
-  })).min(1, "En az bir alan atayın").max(30),
+  })).max(30),
   identifiers: z.array(z.string().trim().min(2).max(60)).min(1, "En az bir kimlik yazısı seçin")
     .max(MAX_TEMPLATE_IDENTIFIERS, `En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir`),
   table: z.strictObject({
@@ -45,7 +45,8 @@ const SuggestBody = z.strictObject({
   sectionStartLabel: z.string().trim().max(40).nullable().optional(),
   // Güncelle kipi: önizleme bu kullanıcı şablonuyla birleşik koşar; `keep` = yeni öneride yoksa eskisinden taşınacak yapılar.
   base: z.strictObject({ code: UserCode, keep: z.array(z.enum(UPDATE_KEEP_PARTS)).max(UPDATE_KEEP_PARTS.length) }).optional(),
-});
+// Güncellemede atanmayan eski alan aynen korunur → yeni atama şart değil; yeni tipte en az bir alan şart.
+}).refine((b) => b.assignments.length > 0 || !!b.base, { path: ["assignments"], message: "En az bir alan atayın" });
 
 /**
  * @openapi

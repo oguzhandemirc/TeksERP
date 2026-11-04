@@ -1,8 +1,9 @@
 // Tablet tanıtma çekirdeği (panel `tanitma.test.tsx` saf bölümünün aynası) + sayfa eşleme / fotoğraf boyutu.
 import type { ScanWord, ScanWords } from '../../../../types/inboundDocTeach';
 import {
-  assignColumn, assignField, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier,
+  assignColumn, assignField, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier, isKept, locateKept, templateFieldKeys,
 } from './teachDraft';
+import { chipStatus, fieldReadout, guidedMarks, toggleFieldWord } from './guided';
 import { isUnrecognized, photoSize, teachPages } from './teachPages';
 
 // Fotoğraf dönük saklanmış gibi: photoRect ≠ rect (öneri OCR çerçevesini almalı).
@@ -55,7 +56,7 @@ describe('tanıtma çekirdeği (tablet)', () => {
     const old = { fields: [{ key: 'partiNo', label: 'Parti No' }, { key: 'tarih', label: 'Tarih' }], tables: [{ key: 'toplar' }], sections: { startLabels: ['Ham PartiNo'], fields: ['partiNo'] } };
     expect(oldParts(old)).toEqual(['tables', 'sections']);
     expect(oldParts({ fields: [] })).toEqual([]);
-    let s = { ...assignField(toggleWord(initialTeach(SCAN, 'G', [], oldParts(old)), 6), W, 'partiNo'), name: 'Güleçsoy' };
+    let s = { ...assignField(toggleWord(initialTeach(SCAN, 'G', [], { keepOld: oldParts(old) }), 6), W, 'partiNo'), name: 'Güleçsoy' };
     expect(suggestBody(s, W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: ['tables', 'sections'] });
     s = toggleKeepOld(s, 'sections');
     expect(suggestBody(s, W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: ['tables'] });
@@ -120,5 +121,47 @@ describe('tablet sayfa eşleme', () => {
       expect(teachErrText(new Error('Sunucu hatası'))).toBe('Sunucu hatası');
       expect(teachErrText('x')).toBeUndefined();
     });
+  });
+});
+
+// Gülkesim 2026-11-04: "Şablonu güncelle"de yalnız Başlık ✓ görünüyordu — eski şablonun alanları taslağa hiç girmiyordu.
+describe('güncelle kipi — kayıtlı alanlar (kept)', () => {
+  const OLD = { fields: [{ key: 'musteri' }, { key: 'partiNo', strategies: [{ kind: 'anchor', maxWords: 1, valueShape: '^\\p{L}+\\d+$' }] }, { key: 'toplamMetre' }, { key: 'bilinmez' }] };
+  const open = () => initialTeach(SCAN, 'kömürhan', [], { kept: templateFieldKeys(OLD) });
+
+  it('⭐ eski şablonun alanları kayıtlı gelir: sekmeler ✓, eksik "alan atayın" yok, gövdeye ATAMA olarak gitmez (sunucu aynen korur)', () => {
+    const s = open();
+    expect(s.kept).toEqual(['musteri', 'partiNo', 'toplamMetre']);
+    expect(chipStatus(s, 'partiNo', [])).toBe('done');
+    expect(chipStatus(s, 'toplamMetre', [])).toBe('done');
+    expect(chipStatus(s, 'en', [])).toBe('todo');
+    expect(teachProblems(s)).toEqual([]);
+    expect(suggestBody(s, W, 's1', 'u-komurhan').assignments).toEqual([]);
+    expect(suggestBody(s, W, 's1', 'u-komurhan').base).toEqual({ code: 'u-komurhan', keep: [] });
+  });
+
+  it('⭐ yalnız yeniden atanan gider; kalan kayıtlı; atama geri alınınca yine kayıtlı', () => {
+    let s = toggleFieldWord(open(), W, 'partiNo', 6);
+    expect(isKept(s, 'partiNo')).toBe(false);
+    expect(isKept(s, 'musteri')).toBe(true);
+    expect(suggestBody(s, W, 's1', 'u-komurhan').assignments).toEqual([{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }]);
+    s = toggleFieldWord(s, W, 'partiNo', 6);
+    expect(isKept(s, 'partiNo')).toBe(true);
+    expect(suggestBody(s, W, 's1', 'u-komurhan').assignments).toEqual([]);
+  });
+
+  it('kayıtlı alanın değeri önizlemeden, yeri fieldRects kutusundan (belge üstünde "kayıtlı" işaret)', () => {
+    const s = open();
+    const result = { template: {}, explain: [], errors: [], preview: { matched: true, score: 1, fields: { partiNo: 'P2618733' }, fieldRects: { partiNo: { x: 195, y: 295, width: 100, height: 30 } }, lineCount: 0, warnings: [] } };
+    expect(fieldReadout(s, 'partiNo', { result, fresh: false, error: null })).toEqual({ kind: 'ok', value: 'P2618733', label: null, kept: true });
+    const located = locateKept(s, W, result.preview.fieldRects);
+    expect(located).toEqual({ partiNo: [6] });
+    const m = guidedMarks(s, W, 0, located)[6]!;
+    expect(m.tone).toBe('field');
+    expect(m.label).toMatch(/kayıtlı/);
+  });
+
+  it('yeni tipte (kayıtlı alan yok) eksik kontrolü aynen', () => {
+    expect(teachProblems(initialTeach(SCAN, 'Yeni'))).toContain('En az bir alan atayın (ör. Parti No).');
   });
 });

@@ -188,6 +188,33 @@ async function main(): Promise<void> {
     await prisma.customerDeliveryNote.update({ where: { id: c3.noteId }, data: { status: "CANCELLED" } });
     const o3c = await okut(c3.scanId);
     check("§3 taslak değil → 409 DELIVERY_NOTE_NOT_DRAFT (satırlar durur)", o3c.status === 409 && o3c.code === "DELIVERY_NOTE_NOT_DRAFT" && (await linesOf(c3.noteId)).length > 0, `${o3c.status} ${o3c.code ?? ""}`);
+
+    console.log("§4 şablonu güncelle: dokunulmayan eski alan birebir korunur (tablet güncelle kipi, 2026-11-04 Gülkesim)");
+    type Spec = { key: string; strategies?: Array<{ maxWords?: number; valueShape?: string }> };
+    const tplOf = async () => (await call("GET", `/api/gelen-belge/sablonlar/ozel/${code}`)).data as { version: number; template: { fields: Spec[] } };
+    const before = await tplOf();
+    const specOf = (fs: Spec[] | undefined, k: string) => JSON.stringify((fs ?? []).find((f) => f.key === k) ?? null);
+    const oldKeys = before.template.fields.map((f) => f.key);
+    check("§4 ön koşul: kayıtlı şablonda parti no değer sınırı (maxWords) taşır", before.template.fields.some((f) => f.key === "partiNo" && f.strategies?.[0]?.maxWords !== undefined), specOf(before.template.fields, "partiNo"));
+    const updBody = (assignments: unknown[], base = true) => ({ scanId: a.scanId, name, identifiers: ["YENİÇAĞ TEKSTİL SAN. TİC. A.Ş.", "SEVK İRSALİYESİ"], assignments, ...(base ? { base: { code, keep: ["tables"] } } : {}) });
+    const u0 = await call("POST", "/api/gelen-belge/sablonlar/oneri", updBody([]));
+    const t0 = u0.data?.template as { fields: Spec[] } | undefined;
+    check("§4 ⭐ yeni atamasız güncelle önizlemesi 200 + hatasız + önizleme var", u0.status === 200 && (u0.data?.errors as unknown[]).length === 0 && !!u0.data?.preview, `${u0.status} ${u0.code ?? ""} ${JSON.stringify(u0.data?.errors)}`);
+    check("§4 ⭐ atamasız güncellemede HER eski alan birebir (strateji/maxWords/valueShape) korunur", oldKeys.length > 0 && oldKeys.every((k) => specOf(t0?.fields, k) === specOf(before.template.fields, k)), JSON.stringify(t0?.fields?.map((f) => f.key)));
+    const rects = ((u0.data?.preview as { fieldRects?: Record<string, { x: number; y: number; width: number; height: number }> } | undefined)?.fieldRects) ?? {};
+    const pr = rects.partiNo;
+    const want = elRect("P636249");
+    const cx = want.x + want.width / 2;
+    const cy = want.y + want.height / 2;
+    check("§4 ⭐ önizleme okunan değerin kutusunu (fieldRects, sayfa çerçevesi) döner — parti no P636249 kutusunda", !!pr && cx >= pr.x && cx <= pr.x + pr.width && cy >= pr.y && cy <= pr.y + pr.height, JSON.stringify({ pr, want }));
+    const u1 = await call("POST", "/api/gelen-belge/sablonlar/oneri", updBody([{ field: "musteri", rect: lineRect(OWNER_NAME) }]));
+    const t1 = u1.data?.template as { fields: Spec[] } | undefined;
+    check("§4 ⭐ yalnız müşteri yeniden atanınca diğer eski alanlar birebir korunur", u1.status === 200 && oldKeys.filter((k) => k !== "musteri").every((k) => specOf(t1?.fields, k) === specOf(before.template.fields, k)) && specOf(t1?.fields, "musteri") !== "null", `${u1.status} ${JSON.stringify(t1?.fields?.map((f) => f.key))}`);
+    const u2 = await call("POST", "/api/gelen-belge/sablonlar/oneri", updBody([], false));
+    check("§4 yeni belge tipinde (base'siz) atamasız öneri yine 400", u2.status === 400, `${u2.status} ${u2.code ?? ""}`);
+    const put = await call("PUT", `/api/gelen-belge/sablonlar/ozel/${code}`, { expectedVersion: before.version, template: t0, name });
+    const after = await tplOf();
+    check("§4 ⭐ atamasız güncelleme kaydedilir: sürüm +1, eski alanlar kayıpsız", put.status === 200 && after.version === before.version + 1 && oldKeys.every((k) => specOf(after.template.fields, k) === specOf(before.template.fields, k)), `${put.status} ${put.code ?? ""} v${after.version}`);
   } finally {
     setReaderUrlForTests(null);
     __resetDocumentReaderForTests();

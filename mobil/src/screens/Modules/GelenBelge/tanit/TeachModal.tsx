@@ -163,7 +163,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
   // Bölme oranla (flex 58/42) değil ölçüyle: tablette fotoğraf bölmesi tüm alanı yutup paneli 32 px'e sıkıştırıyordu (2026-11-05 cihaz ölçümü).
   const paneSize: ViewStyle = portrait ? { height: Math.round(height * 0.45) } : { width: Math.round(width * 0.58) - spacing.md };
   const words = t.words.data?.words ?? [];
-  const marks = t.state ? (advanced ? teachMarks(t.state, words) : guidedMarks(t.state, words, step)) : [];
+  const marks = t.state ? (advanced ? teachMarks(t.state, words, t.located) : guidedMarks(t.state, words, step, t.located)) : [];
   const onTap = (i: number) =>
     t.setState((s) => {
       if (advanced) return toggleWord(s, i);

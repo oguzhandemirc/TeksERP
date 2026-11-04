@@ -9,7 +9,7 @@ import { useAttemptToken } from '../../../../offline/attemptToken';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import type { SimilarTemplate, SuggestBody, SuggestResult, UserTemplateDetail } from '../../../../types/inboundDocTeach';
 import { suggestName } from './guided';
-import { adoptTemplate, initialTeach, oldParts, suggestBody, teachErrText, teachProblems, templateKeywords, type TeachState } from './teachDraft';
+import { adoptTemplate, initialTeach, locateKept, oldParts, suggestBody, teachErrText, teachProblems, templateFieldKeys, templateKeywords, type TeachState } from './teachDraft';
 
 export const teachWordsKey = (scanId: string | null) => ['gelen-belge', 'tanitma', 'kelimeler', scanId] as const;
 export const USER_TEMPLATES_PREFIX = ['gelen-belge', 'sablonlar', 'ozel'] as const;
@@ -95,7 +95,7 @@ function useTeachSource(scanId: string | null, initialCode: string | null) {
       setPendingSave(true);
       return;
     }
-    setState(words.data ? initialTeach(words.data, ex?.name ?? suggestName(words.data), templateKeywords(ex?.template), oldParts(ex?.template)) : null);
+    setState(words.data ? initialTeach(words.data, ex?.name ?? suggestName(words.data), templateKeywords(ex?.template), { keepOld: oldParts(ex?.template), kept: templateFieldKeys(ex?.template) }) : null);
   }, [words.data, ex]);
 
   return { code, setCode, existing, ex, words, state, setState, adoptRef, pendingSave, setPendingSave };
@@ -163,7 +163,8 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
   };
 
   const auto = opts.auto === true;
-  useAutoPreview(auto && !!previewBody && previewProblems.length === 0 && !previewFresh && previewError?.body !== bodyKey && !saving, previewBody, bodyKey, fetchPreview);
+  // Güncelle kipinde ilk önizleme Gelişmiş'te de kendiliğinden: kayıtlı alanların değeri + belge üstündeki yeri ondan gelir.
+  useAutoPreview((auto || (!!ex && !preview)) && !!previewBody && previewProblems.length === 0 && !previewFresh && previewError?.body !== bodyKey && !saving, previewBody, bodyKey, fetchPreview);
 
   const canSave = !!state && !!body && problems.length === 0 && !saving;
 
@@ -210,8 +211,15 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     setCode(kod);
   };
 
+  const located = useMemo(
+    () => (state && words.data ? locateKept(state, words.data.words, preview?.result.preview?.fieldRects) : {}),
+    [state, words.data, preview],
+  );
+
   return {
     existing: ex,
+    /** Kayıtlı (korunan) alanların belge üstündeki kelimeleri — son önizlemenin okuduğu kutudan. */
+    located,
     existingLoading: !!code && existing.isLoading,
     existingError: existing.isError,
     words,

@@ -96,7 +96,7 @@ function FieldResult({ state, k, preview }: { state: TeachState; k: FieldKey; pr
     return (
       <View style={[styles.result, styles.okBox]} testID="tanit-okunan">
         <Text style={styles.ok}>{`Okunan: ${r.value}`}</Text>
-        <Text style={styles.small}>{r.label ? `Etiket: “${r.label}”` : 'Etiket bulunamadı; değer sayfadaki konumundan okunur.'}</Text>
+        <Text style={styles.small}>{r.kept ? 'Kayıtlı — değiştirmek için yeni değere dokunun.' : r.label ? `Etiket: “${r.label}”` : 'Etiket bulunamadı; değer sayfadaki konumundan okunur.'}</Text>
       </View>
     );
   }
@@ -107,10 +107,12 @@ function FieldResult({ state, k, preview }: { state: TeachState; k: FieldKey; pr
   );
 }
 
+const STATUS_TEXT = { done: 'kayıtlı', skipped: 'yok', todo: 'atanmadı' } as const;
+
 function StepChip({ label, status, active, onPress, testID }: { label: string; status: 'done' | 'skipped' | 'todo'; active: boolean; onPress: () => void; testID: string }) {
   const icon = status === 'done' ? 'check' : status === 'skipped' ? 'minus' : undefined;
   return (
-    <Chip icon={icon} selected={active} showSelectedCheck={false} mode={active ? 'flat' : 'outlined'} onPress={onPress} style={styles.chip} testID={testID} accessibilityState={{ selected: active }}>
+    <Chip icon={icon} accessibilityLabel={`${label}: ${STATUS_TEXT[status]}`} selected={active} showSelectedCheck={false} mode={active ? 'flat' : 'outlined'} onPress={onPress} style={styles.chip} testID={testID} accessibilityState={{ selected: active }}>
       {label}
     </Chip>
   );
