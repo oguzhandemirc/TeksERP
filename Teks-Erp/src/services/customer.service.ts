@@ -19,6 +19,7 @@ import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
 import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
 import { AuditService } from "./audit.service";
+import { tokenReplay } from "./helpers/token-replay.helper";
 import { normalizeTamburLabelSettings } from "./helpers/customer-tambur-settings-input.helper";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
 import { bornCariAccountTx, readCustomerFinance, writeCustomerFinanceTerms, type CustomerFinanceInput } from "./helpers/customer-finance-bridge.helper";
@@ -91,6 +92,20 @@ export interface BornCard {
   readonly profile: { id: string; code: string } | null;
   readonly cariAccountId: string | null;
   readonly auditData: Record<string, unknown>;
+}
+
+/** Hızlı kaydın replay politikası: kimlik = katlanmış ad; pasife alınan/birleştirilen kart 4. durumdur (409). */
+function quickCreateReplay(name: string, load: (id: string) => Promise<ApiResponse<unknown>>) {
+  return tokenReplay<{ id: string; name: string; isActive: boolean; mergedIntoId: string | null }, ApiResponse<unknown>>({
+    find: (db, token) => db.customer.findUnique({ where: { clientToken: token }, select: { id: true, name: true, isActive: true, mergedIntoId: true } }),
+    alive: (p) => {
+      if (p.isActive && !p.mergedIntoId) return;
+      throw AppError.conflict("Bu müşteri kaydı oluşturulduktan sonra pasife alınmış ya da birleştirilmiş — müşteriyi listeden seçin.", { code: "CUSTOMER_QUICK_CREATE_GONE", customerId: p.id });
+    },
+    identity: (p) => [{ ad: "ad", mevcut: foldNameForCompare(p.name), gelen: foldNameForCompare(name) }],
+    collision: "Bu işlem kimliği başka bir müşteri kaydına ait; kaydı yeniden deneyin.",
+    respond: (p) => load(p.id),
+  });
 }
 
 export class CustomerService extends BaseService {
@@ -275,7 +290,7 @@ export class CustomerService extends BaseService {
    * Uç kendi tx'ini açar; patron bulutu gelen kutusu aynı tx'e makbuzunu yazar (atomik değilse idempotency yok).
    * Audit ve finans terimleri tx DIŞINDA, commit SONRASI `finishCardCreate`te.
    */
-  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined): Promise<BornCard> {
+  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined, opts?: { clientToken?: string }): Promise<BornCard> {
     const data = plan.data;
     data.code = await nextCustomerCode();
     this.applyStringFields(data, true);
@@ -290,6 +305,8 @@ export class CustomerService extends BaseService {
     const clean = this.normalizeNameFields(this.sanitizeWriteData(data));
     await this.assertCardNameFree(clean);
     const prismaData = withActor({ ...clean }, userId, "CREATE", "customer");
+    // Gövde süzgeci `clientToken`ı düşürür (kapalı alan); yalnız hızlı kayıt boğazı iç parametreyle yazar.
+    if (opts?.clientToken) prismaData.clientToken = opts.clientToken;
     // İç-içe doğan şubeler de künyeyi aynı aktörle alır (iki-adım yolu `CustomerBranchService.create`).
     if (Array.isArray(prismaData.branches)) {
       prismaData.branches = { create: prismaData.branches.map((b: Record<string, unknown>) => withActor(b, userId, "CREATE", "customerBranch")) };
@@ -301,6 +318,21 @@ export class CustomerService extends BaseService {
     const cariAccountId = await bornCariAccountTx(tx, c.id);
     const fresh = await tx.customer.findUnique({ where: { id: c.id }, include: { subcontractor: { select: { id: true, isActive: true } } } });
     return { card: fresh as unknown as Record<string, unknown>, profile, cariAccountId, auditData: clean };
+  }
+
+  /**
+   * Belgeden İE formunun HIZLI müşteri kaydı (Gülkesim 2026-11-04): yalnız ad, rol yalnız Müşteri. Kart yolu `create`
+   * ile AYNI (kod, ad seddi 409, cari hesap, audit); `clientToken` replay'i tek boğazdan (R kipi).
+   */
+  async quickCreate(name: string, clientToken: string, userId: string | undefined): Promise<ApiResponse<unknown>> {
+    const data: Record<string, unknown> = { name, isCustomerRole: true };
+    return quickCreateReplay(name, (id) => this.findById(id)).run(clientToken, async () => {
+      const plan = this.prepareCardCreate(data);
+      return this.withCardCreateRetry(data, async () => {
+        const born = await prisma.$transaction((tx) => this.createCardInTx(tx, plan, userId, { clientToken }));
+        return this.finishCardCreate(born, userId, { finance: null, auditExtra: { source: "GELEN_BELGE_FORM" } });
+      });
+    });
   }
 
   /** Commit SONRASI: audit (her kayda) + finans terimleri (`cariService.update` yolu) + yanıt. `auditExtra` kaynak künyesi. */

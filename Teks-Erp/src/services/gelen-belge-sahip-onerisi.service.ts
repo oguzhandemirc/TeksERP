@@ -124,29 +124,69 @@ async function readOcrPages(noteId: string): Promise<string[][]> {
   return rows.flatMap((r) => (typeof r.text === "string" ? [r.text.split(/\r?\n/)] : []));
 }
 
+/** Okunan müşteri adı kayıtlı bir cariye çözülemedi: istemci "kayıtlı değil / bunu mu demek istediniz?" diye sorar. */
+export interface OwnerUnmatched {
+  /** Belgeden okunan müşteri adı (sahip alanı; müşteri adı tavanında kesilir). */
+  text: string;
+  /** Benzer aktif cariler (eşleme sıralayıcısı, ≥ `MATCH_LIST_THRESHOLD`), puana göre azalan; en çok `UNMATCHED_MAX`. */
+  candidates: Array<{ customerId: string; name: string; score: number }>;
+}
+
+/** "Bunu mu demek istediniz?" listesinin tavanı (tablet modalı tek ekranda gösterir). */
+export const UNMATCHED_MAX = 3;
+/** Müşteri adı kolonunun tavanı (`Customer.name` VarChar(100)). */
+const CUSTOMER_NAME_MAX = 100;
+/** Katlanmış adın en kısa uzunluğu — 1-2 harfli okuma gürültüdür, kayıt teklif edilmez. */
+const UNMATCHED_MIN_CHARS = 3;
+
+export interface OwnerReading {
+  suggestion: OwnerSuggestion | null;
+  unmatched: OwnerUnmatched | null;
+}
+
 /**
  * Taslağın sahip önerisi. Yalnız sahibi seçilmemiş TASLAKTA hesaplanır (seçilmişse/onaylıysa null — öneri anlamsız,
  * detay yanıtı cari kataloğunu her açılışta taramasın).
  */
 export async function suggestOwnerForNote(note: { id: string; status: string; ownerCustomerId: string | null }, trust: TrustMode = "NORMAL"): Promise<OwnerSuggestion | null> {
+  return (await readOwnerForNote(note, trust)).suggestion;
+}
+
+/**
+ * Öneri + çözülemeyen okuma TEK geçişte (katalog bir kez yüklenir). `unmatched` yalnız öneri yokken ve sahip metni
+ * okunduysa dolar; BLIND'de ikisi de yok (sözlük tahmini forma dolmaz). Benzerlik eşleme servisinin sıralayıcısıdır.
+ */
+export async function readOwnerForNote(note: { id: string; status: string; ownerCustomerId: string | null }, trust: TrustMode = "NORMAL"): Promise<OwnerReading> {
+  const none: OwnerReading = { suggestion: null, unmatched: null };
   // K30-B BLIND (SORMA + tanıtılmamış): sözlük tahmini forma dolmaz → öneri yok.
-  if (note.status !== "DRAFT" || note.ownerCustomerId || trust === "BLIND") return null;
+  if (note.status !== "DRAFT" || note.ownerCustomerId || trust === "BLIND") return none;
   const head = await prisma.customerDeliveryNote.findUnique({ where: { id: note.id }, select: { ownerText: true, senderText: true, senderCustomerId: true, template: { select: { senderCustomerId: true } } } });
-  if (!head) return null;
+  if (!head) return none;
   const customers: Named[] = await prisma.customer.findMany({ where: { isActive: true, mergedIntoId: null }, select: { id: true, code: true, name: true } });
   const pages = await readOcrPages(note.id);
   const sent = { senderCustomerId: head.senderCustomerId, templateSenderId: head.template?.senderCustomerId ?? null, senderText: head.senderText };
   const exclude = new Set([...senderIds(sent, pages, customers), ...ownCompanyIds(await readCompanyName(), customers)]);
   const ownerText = head.ownerText?.trim();
-  if (ownerText) {
-    const s = await suggestCustomer(ownerText, head.senderCustomerId, customers);
+  const s = ownerText ? await suggestCustomer(ownerText, head.senderCustomerId, customers) : null;
+  if (ownerText && s) {
     const hit = s.suggested;
     // TRUSTED: tanıtılan müşteri alanı eşleyicinin TEK müşterisine (`suggested`) çözüldüyse kesin; gönderen/kendi firma yine dışarıda.
     if (hit && !exclude.has(hit.id) && (trust === "TRUSTED" || s.source === "ALIAS" || hit.score >= OWNER_TEXT_STRONG)) {
-      return { customerId: hit.id, name: hit.name, matchedText: ownerText.slice(0, 160), source: "OWNER_TEXT" };
+      return { suggestion: { customerId: hit.id, name: hit.name, matchedText: ownerText.slice(0, 160), source: "OWNER_TEXT" }, unmatched: null };
     }
   }
   // TRUSTED'da tam metin taraması ("… mi? Seç") yapılmaz: çözülemeyen müşteri boş kalır, seçici açık.
-  if (trust === "TRUSTED") return null;
-  return findCustomerInText([...(ownerText ? [ownerText] : []), ...pages.flat()], customers, exclude);
+  const suggestion = trust === "TRUSTED" ? null : findCustomerInText([...(ownerText ? [ownerText] : []), ...pages.flat()], customers, exclude);
+  if (suggestion || !ownerText || !s || foldNameForCompare(ownerText).length < UNMATCHED_MIN_CHARS) return { suggestion, unmatched: null };
+  return { suggestion: null, unmatched: unmatchedOf(ownerText, [...(s.suggested ? [s.suggested] : []), ...s.list]) };
+}
+
+/** Saf: çözülemeyen okumanın teklifi — adaylar tekilleşir, puana göre ilk `UNMATCHED_MAX`. */
+export function unmatchedOf(text: string, ranked: ReadonlyArray<{ id: string; name: string; score: number }>): OwnerUnmatched {
+  const seen = new Set<string>();
+  const candidates = [...ranked].sort((a, b) => b.score - a.score)
+    .filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)))
+    .slice(0, UNMATCHED_MAX)
+    .map((c) => ({ customerId: c.id, name: c.name, score: c.score }));
+  return { text: text.slice(0, CUSTOMER_NAME_MAX), candidates };
 }

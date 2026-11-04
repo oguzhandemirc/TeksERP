@@ -146,6 +146,53 @@ router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUS
 // lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
 router.get("/similar-names", verifyToken, requirePermission("customer:write"), controller.similarNames);
 
+/**
+ * @openapi
+ * /api/customers/quick-create:
+ *   post:
+ *     tags: [Customers]
+ *     summary: Belgeden iş emri formunda hızlı müşteri kaydı — yalnız ad
+ *     description: >
+ *       Tablet belgeden İE formu okunan müşteri adı kayıtlı değilse kartı yalnız adla açar (rol Müşteri; kod, ad seddi,
+ *       cari hesap ve audit genel kart yoluyla aynı). `clientToken` deneme başına; aynı token tekrarı aynı kartı döner.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, clientToken]
+ *             properties:
+ *               name: { type: string, example: "YENİ TEKSTİL" }
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       201:
+ *         description: Müşteri oluşturuldu (ya da aynı token'ın kaydı döndü)
+ *       403:
+ *         description: "'customer:write' ya da 'gelen-belge:write' yetkisi gerekli"
+ *       409:
+ *         description: Aynı adda müşteri zaten var (CUSTOMER_NAME_DUPLICATE) ya da token çakışması
+ */
+// Belgeden İE formunu açan tablet kullanıcısı `gelen-belge:write` taşır (form bağlamı o izinle okunur); yeni izin kodu yok.
+// Gövde `.strict()`: yalnız ad + token — rol/kod/finans istemciden GELMEZ.
+const QUICK_CREATE_PERMISSIONS = ["customer:write", "gelen-belge:write"] as const;
+const quickCreateBody = z
+  .object({
+    name: z.string().trim().min(1, "Müşteri adı zorunlu").max(100, "Müşteri adı en fazla 100 karakter olabilir"),
+    clientToken: z.string().uuid("Geçersiz işlem kimliği"),
+  })
+  .strict();
+router.post("/quick-create", verifyToken, requireAnyPermission(...QUICK_CREATE_PERMISSIONS), async (req, res, next) => {
+  try {
+    const { name, clientToken } = quickCreateBody.parse(req.body);
+    res.status(201).json(await customerService.quickCreate(name, clientToken, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), async (req, res, next) => {
   try {
     const result = await customerService.findByIdFor(assertValidUuid(req.params.id, "id"), { canReadFinance: matchesPermission(req.user?.permissions ?? [], "finance:read") });

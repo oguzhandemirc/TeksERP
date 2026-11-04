@@ -79,6 +79,9 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}subcontractor.service.ts::receiveInner`]: { giris: { [`${S}subcontractor.service.ts::receive`]: "R" } },
   [`${S}tambur.service.ts::cutWarehouseRollInner`]: { giris: { [`${S}tambur.service.ts::cutWarehouseRoll`]: "R" } },
   [`${S}tambur.service.ts::cutOpenFabricInner`]: { giris: { [`${S}tambur.service.ts::cutOpenFabric`]: "R" } },
+  // Gülkesim: belgeden İE formunda hızlı müşteri kaydı tabletten clientToken ile doğar; kimlik = katlanmış ad.
+  [`${S}customer.service.ts::createCardInTx`]: { giris: { [`${S}customer.service.ts::quickCreate`]: "R" } },
+  [`${S}customer.service.ts::quickCreate`]: { giris: { [`${S}customer.service.ts::quickCreate`]: "R" } },
   [`${S}cash-transaction.service.ts::createFresh`]: { giris: { [`${S}cash-transaction.service.ts::create`]: "R" } },
   [`${S}cash-transaction.service.ts::transferFresh`]: { giris: { [`${S}cash-transaction.service.ts::transfer`]: "R" } },
   // Tezgah alarmı kişi eylemleri (A1b): altı eylem tek boğazdan (`runActor` → `actionReplay(...).run`).
@@ -251,6 +254,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}cari-hold.service.ts::placeReplay`]: ["cariId", "kapsam", "reasonCode"],
   // D4-K3e: token kaydı virman bacaklarının `transferGroupId`si; kimlik = birleşmenin yönü (kaynak → hedef).
   [`${S}cari-merge.service.ts::applyReplay`]: ["sourceId", "targetId"],
+  [`${S}customer.service.ts::quickCreateReplay`]: ["ad"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
   [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "qtyPerM"],
