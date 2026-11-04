@@ -72,6 +72,12 @@ export interface UploadScanResult {
   deviceOcr?: 'READ' | 'FALLBACK' | null;
 }
 
+/** Çözülemeyen müşteri okuması: okunan ad + benzer aktif cariler (≥0,80, en çok 3, puan azalan). */
+export interface OwnerUnmatched {
+  text: string;
+  candidates: { customerId: string; name: string; score: number }[];
+}
+
 /** Okuma durumu — SUNUCU türetir (`readSummaryState`); istemci yalnız gösterir. */
 export type ReadSummaryState = 'NO_PAGES' | 'READING' | 'NO_SERVICE' | 'READ' | 'PARTIAL' | 'FAILED';
 
@@ -103,6 +109,8 @@ export interface ReadSummary {
   /** Taslağın sahibi + müşteri önerisi (OIE): satır formu detay ucu (`gelen-belge:read`) olmadan buradan dolar. Eski sunucu göndermez. */
   ownerCustomerId?: string | null;
   ownerSuggestion?: OwnerSuggestion | null;
+  /** Okunan müşteri adı kayıtlı cariye çözülemedi → "kayıtlı değil / bunu mu demek istediniz?" teklifi. Eski sunucu göndermez. */
+  ownerUnmatched?: OwnerUnmatched;
   /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
