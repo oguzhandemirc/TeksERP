@@ -1,7 +1,7 @@
 // S1 (Gülkesim, 2026-11-03): BELGE TİPİ TANITMA — şablon önerisi (saf). Kullanıcı fotoğrafta değer kutusuna dokunup alan atar;
 // sistem değerin yanındaki BASILI ETİKETİ bulur ve anchor stratejisi üretir (aynı satırda solda → "right", üstte → "below");
-// etiket yoksa göreli konum (roi). Kimlik yazıları sınıflandırma anahtarıdır. Belgeler basılıdır (fabrika cevabı 38).
-import { TABLE_TOTAL_SOURCE, type DocumentTemplate, type FieldSpec, type FieldType, type MeterSourcesSpec, type NormRect, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type Strategy, type TableColumnSpec } from "./types";
+// etiket yoksa göreli konum (roi); etiket varsa da değer kutusu konum yedeği olur (bozuk okunan etiket). Kimlik yazıları sınıflandırma anahtarıdır. Belgeler basılıdır (fabrika cevabı 38).
+import { TABLE_TOTAL_SOURCE, type DocumentTemplate, type FieldSpec, type FieldType, type MeterSourcesSpec, type NormRect, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type RoiStrategy, type Strategy, type TableColumnSpec } from "./types";
 import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches } from "./anchor";
 import { resolveRegions } from "./document";
 import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry";
@@ -141,7 +141,7 @@ export function labelWindow(ocr: OcrResult, label: string, labelRect: OcrRect): 
 }
 
 /** Etiketsiz değer: kutunun çevresi (yarım kutu pay) normalize göreli konum. */
-function roiOf(ocr: OcrResult, r: OcrRect): Strategy {
+function roiOf(ocr: OcrResult, r: OcrRect): RoiStrategy {
   const px = r.width * 0.5;
   const py = r.height * 0.5;
   const x = Math.max(0, (r.x - px) / ocr.imageWidth);
@@ -154,13 +154,17 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   const explain: TemplateSuggestion["explain"] = [];
   const fields: FieldSpec[] = [];
   const labelRects = new Map<string, OcrRect>();
+  const valueRects = new Map<string, OcrRect>();
   for (const a of input.assignments) {
     if (fields.some((f) => f.key === a.field)) continue;
     const meta = ASSIGNABLE_FIELDS[a.field];
     const found = findLabelFor(input.ocr, a.rect);
     const strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction, ...valueLimitOf(input.ocr, a.rect, meta.type) } : roiOf(input.ocr, a.rect);
-    // Bölüm alanı her bölümde ayrı okunur (bant dilimi) → pencere onu ilk bölüme çiviler; pencere yalnız başlık alanına.
-    if (found && !a.section) labelRects.set(a.field, found.rect);
+    // Bölüm alanı her bölümde ayrı okunur (bant dilimi) → pencere/konum yedeği onu ilk bölüme çiviler; yalnız başlık alanına.
+    if (found && !a.section) {
+      labelRects.set(a.field, found.rect);
+      valueRects.set(a.field, a.rect);
+    }
     fields.push({ key: a.field, label: meta.label, type: meta.type, strategies: [strategy], ...(meta.type === "text" ? { maxLength: 80, postProcess: ["collapseSpaces", "trimPunct"] } : {}), ...(meta.type === "alnum" ? { postProcess: ["upper", "stripSpaces"] } : {}) });
     explain.push({ field: a.field, strategy: found ? "anchor" : "roi", label: found?.label ?? null, direction: found?.direction ?? null });
   }
@@ -190,6 +194,7 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   if (t.tables?.[0]?.totals) t.meterSources = { output: ["$tableTotal"], ...(has("toplamMetre") ? { total: ["toplamMetre"] } : {}) };
   else if (has("toplamMetre")) t.meterSources = { total: ["toplamMetre"] };
   addLabelWindows(t, input.ocr, labelRects);
+  addPositionFallbacks(t, input.ocr, valueRects);
   const v = validateTemplate(t);
   return { template: t, explain, errors: v.errors };
 }
@@ -207,6 +212,25 @@ function addLabelWindows(t: DocumentTemplate, ocr: OcrResult, labelRects: Map<st
     if (!region) continue;
     const win = labelWindow(region.ocr, s.labels[0]!, { ...rect, y: rect.y - region.rect.y });
     if (win) s.window = win;
+  }
+}
+
+/**
+ * Etiketli alana konum yedeği: aynı belge yeniden okutulduğunda basılı etiket bozuk okunabilir ("Müşteri:" → "Mytei:");
+ * değer kutusu yerinde durur. `[anchor, roi(fallback)]` — anchor değer bulursa roi hiç koşmaz (`extract.ts`). Kutu, pencere
+ * gibi çıkarımın BÖLGE çerçevesinde kurulur.
+ */
+function addPositionFallbacks(t: DocumentTemplate, ocr: OcrResult, valueRects: Map<string, OcrRect>): void {
+  if (valueRects.size === 0) return;
+  const regions = resolveRegions(ocr, [t], null);
+  for (const f of t.fields) {
+    const rect = valueRects.get(f.key);
+    if (!rect || f.strategies[0]?.kind !== "anchor") continue;
+    const cy = rect.y + rect.height / 2;
+    const region = regions.find((r) => cy >= r.rect.y && cy < r.rect.y + r.rect.height) ?? regions[0];
+    const frame = region ? region.ocr : ocr;
+    const local = region ? { ...rect, y: rect.y - region.rect.y } : rect;
+    f.strategies.push({ ...roiOf(frame, local), fallback: true });
   }
 }
 

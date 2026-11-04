@@ -84,7 +84,8 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
             </Chip>
           )}
           {!f.ownerCustomerId && read.watch?.phase === 'done' && read.watch.summary.ownerUnmatched && (
-            <CustomerFromDocOffer noteNo={row.noteNo} unmatched={read.watch.summary.ownerUnmatched} disabled={locked} onPicked={(id) => wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null })} />
+            <CustomerFromDocOffer noteId={row.noteId} noteNo={row.noteNo} unmatched={read.watch.summary.ownerUnmatched} disabled={locked}
+              onPicked={(id) => wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null })} onPickFromList={() => setPicker('owner')} />
           )}
           {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
             <>

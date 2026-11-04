@@ -130,7 +130,8 @@ export interface OwnerUnmatched {
   /** Belgeden okunan müşteri adı (sahip alanı; müşteri adı tavanında kesilir). */
   text: string;
   /** Benzer aktif cariler (eşleme sıralayıcısı, ≥ `MATCH_LIST_THRESHOLD`), puana göre azalan; en çok `UNMATCHED_MAX`. */
-  candidates: Array<{ customerId: string; name: string; score: number }>;
+  /** `code`: modalda aynı adlı carileri ayırt eder (2026-11-05; eski istemci yok sayar). */
+  candidates: Array<{ customerId: string; code: string | null; name: string; score: number }>;
 }
 
 /** "Bunu mu demek istediniz?" listesinin tavanı (tablet modalı tek ekranda gösterir). */
@@ -190,11 +191,11 @@ export async function readOwnerForNote(note: { id: string; status: string; owner
 }
 
 /** Saf: çözülemeyen okumanın teklifi — adaylar tekilleşir, puana göre ilk `UNMATCHED_MAX`. */
-export function unmatchedOf(text: string, ranked: ReadonlyArray<{ id: string; name: string; score: number }>): OwnerUnmatched {
+export function unmatchedOf(text: string, ranked: ReadonlyArray<{ id: string; code?: string | null; name: string; score: number }>): OwnerUnmatched {
   const seen = new Set<string>();
   const candidates = [...ranked].sort((a, b) => b.score - a.score)
     .filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)))
     .slice(0, UNMATCHED_MAX)
-    .map((c) => ({ customerId: c.id, name: c.name, score: c.score }));
+    .map((c) => ({ customerId: c.id, code: c.code ?? null, name: c.name, score: c.score }));
   return { text: text.slice(0, CUSTOMER_NAME_MAX), candidates };
 }
