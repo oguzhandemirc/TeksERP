@@ -9,6 +9,7 @@ import { OrderService } from "../services/order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { requireProductionEnabled } from "../middlewares/module.middleware";
 import "../types/express-augment";
 import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
 import { LINE_RECIPE_SELECT } from "../services/helpers/line-recipe.helper";
@@ -336,9 +337,21 @@ router.post(
  *       - in: query
  *         name: filter[customerId]
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: filter[nerede]
+ *         schema: { type: string }
+ *         description: "CSV: BEKLEYEN, FASONDA, SEVKE_HAZIR, KISMEN, GECIKEN (tanınmayan → 400; FASONDA/SEVKE_HAZIR üretim kapalıyken 403)"
+ *       - in: query
+ *         name: filter[fasonFirmaId]
+ *         schema: { type: string }
+ *         description: Fason firma id CSV — firmada açık sevkle fasonda top taşıyan siparişler
+ *       - in: query
+ *         name: filter[fasondaGunden]
+ *         schema: { type: integer, minimum: 0 }
+ *         description: Fasonda X fabrika gününden uzun (en eski açık gönderim)
  *     responses:
  *       200:
- *         description: Sayfalanmış sipariş listesi
+ *         description: Sayfalanmış sipariş listesi; her satırda `nerede` (üretim kapalıyken null)
  */
 // Mobil "Sipariş" ekranının listesi de bu ucu kullanır (`?mode=cursor`).
 // `mobile:siparis` OKUMAYA açıktır: sipariş açan kişi açtığını göremezse ekran
@@ -614,6 +627,39 @@ router.get(
       next(e);
     }
   }
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}/where:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Sipariş "Nerede?" ayrıntısı (yan panel)
+ *     description: |
+ *       Bağlı her aktif iş emri için kart — rota adımları (atlananlar hariç) ve ilerleme
+ *       (GECTI · BURADA · SIRADA), aşama başına top + metre, fasondaki firma + gün, hazır/giden
+ *       toplar, son hareket. Top↔sipariş bağı yok: yer bilgisi iş emri düzeyindedir. Sabit sorgu.
+ *       Üretim modülü kapalıysa 403 MODULE_DISABLED.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ orderId, nerede, isEmirleri[] }" }
+ *       403: { description: Üretim modülü kapalı }
+ *       404: { description: Sipariş bulunamadı }
+ */
+router.get(
+  "/:id/where",
+  verifyToken,
+  requirePermission("order:read"),
+  requireProductionEnabled,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await orderService.getOrderWhereDetail(assertValidUuid(req.params.id, "id")));
+    } catch (e) {
+      next(e);
+    }
+  },
 );
 
 /**

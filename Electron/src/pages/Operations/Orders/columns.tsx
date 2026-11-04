@@ -18,9 +18,10 @@ import {
 } from "./work-order-rollup";
 import { deriveDeadlineRisk } from "./deadline-risk";
 import type { Order, OrderLine } from "./types";
-import { distinctLineLabels, lineLabelsText, shippedProgress, totalAmountText } from "./order-cell-text";
+import { distinctLineLabels, lineLabelsText, totalAmountText } from "./order-cell-text";
 import { TERIM } from "@/lib/terim";
-import { deriveOrderOverallState, orderOverallLabels, orderOverallText, orderOverallTones } from "./order-overall-status";
+import { orderShipText, orderWhereExportText } from "./order-where-text";
+import { ShipCell, WhereCell } from "./OrderWhereCells";
 
 function LineLabelsCell({
   lines,
@@ -166,8 +167,8 @@ function DeadlineCell({ order }: { order: Order }) {
  */
 export function buildOrderColumns(pricingEnabled: boolean, productionEnabled = true): ColumnDef<Order>[] {
   return [
-    // "Genel durum" üretim rollup'ından türer → üretim kapalıyken o da düşer (yalnız "Sevk durumu" kalır).
-    ...(productionEnabled ? orderColumns : orderColumns.filter((c) => c.id !== "workOrder" && c.id !== "overallStatus")),
+    // "Nerede?" üretim verisinden türer (sunucu üretim kapalıyken `nerede: null`) → o da düşer.
+    ...(productionEnabled ? orderColumns : orderColumns.filter((c) => c.id !== "workOrder" && c.id !== "where")),
     ...(pricingEnabled
       ? [
           {
@@ -239,25 +240,18 @@ export const orderColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
+    // BRÜT sevk cümlesi ("Bir kısmı gönderildi (1.200 / 2.400 m)") — ekran = Excel/PDF.
     id: "shipped",
     header: () => <SortableHeader field="shippedQty" label="Sevk" />,
-    meta: {
-      label: "Sevk",
-      exportValue: (o: Order) => {
-        const p = shippedProgress(o);
-        return p ? `${p.text} ${p.pctText}` : "";
-      },
-    },
-    cell: ({ row }) => {
-      const p = shippedProgress(row.original);
-      if (!p) return <span className="text-muted-foreground text-xs">—</span>;
-      return (
-        <span className="tabular-nums text-xs">
-          {p.text}
-          <span className="text-muted-foreground ml-1">{p.pctText}</span>
-        </span>
-      );
-    },
+    meta: { label: "Sevk", exportValue: (o: Order) => orderShipText(o) },
+    cell: ({ row }) => <ShipCell order={row.original} />,
+  },
+  {
+    // "Nerede?" — A4 "Genel durum"un yerine geçer; cümle `order-where-text.ts`te tek yerde kurulur.
+    id: "where",
+    header: "Nerede?",
+    meta: { label: "Nerede?", exportValue: (o: Order) => orderWhereExportText(o) },
+    cell: ({ row }) => <WhereCell order={row.original} />,
   },
   {
     id: "workOrder",
@@ -279,18 +273,6 @@ export const orderColumns: ColumnDef<Order>[] = [
         status={row.original.status}
         labels={orderStatusLabels}
         tones={orderStatusTones}
-      />
-    ),
-  },
-  {
-    id: "overallStatus",
-    header: "Genel durum",
-    meta: { label: "Genel durum", exportValue: (o: Order) => orderOverallText(o) },
-    cell: ({ row }) => (
-      <StatusBadge
-        status={deriveOrderOverallState(row.original)}
-        labels={orderOverallLabels()}
-        tones={orderOverallTones}
       />
     ),
   },

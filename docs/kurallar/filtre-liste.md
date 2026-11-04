@@ -53,6 +53,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Statü çoklu daraltmasını `status`a dokunmadan ayrı anahtarla yap: rolls'ta `statusIn[]` (öncelik statusIn > status > STOCK).
 - **[ÇEKİRDEK]** Kesim çocuklarına `createdMachineId` damgala (cutWarehouseRoll · finalizeWarehouseCut · cutOpenFabric · finalizeOpenFabric); yoksa "Bu makine" süzgeci kesimleri görmez.
 - **[ÇEKİRDEK]** Süzgeci ELLE okuyan liste ucu sorguyu `.strict()` Zod şemasıyla okur: tanınmayan parametre 400; istemcinin gönderdiği ad desteklenir (fatura listesi `shipmentId` CSV `readIdCondition`, `limit` = `pageSize`).
+- [ÇEKİRDEK] Sipariş "Nerede?" türetmesi YALNIZ `order-where.helper`da, sekme/firma/gün süzgeci YALNIZ `order-where-filter.helper`da (bellek `deriveOrderWhere` ↔ Prisma `orderWhereFilterParts` boğaz-ikiz); cümleyi panel tek saf fonksiyonda kurar (`order-where-text.ts`); liste satırına sayfa başına sabit sorguyla eklenir, sipariş başına sorgu yazma; üretim kapalıyken üretim-türevi süzgeç 403.
 
 ## Panel (Electron)
 

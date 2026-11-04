@@ -49,6 +49,8 @@
 //   • /api/reports · /api/dashboard
 //                             Karma rapor (sevk + üretim + stok); uç bazlı
 //                             ayrım sonraki pakette.
+//   • /api/orders             Sipariş çekirdek; yalnız `/orders/:id/where` (İE
+//                             ilerleme kartları) UÇ BAZLI kapılı.
 // Bu liste bekçinin (`test_production_regime_gate`) beklenti listesiyle
 // BİREBİR olmalı — ayrışırsa ya kapı sessizce düşer ya bekçi ölü satır sayar.
 //

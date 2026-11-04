@@ -35,6 +35,7 @@ import { OrderCancelDialog } from "./OrderCancelDialog";
 import { OrderLineCancelDialog } from "./OrderLineCancelDialog";
 import { PartyCard } from "@/components/operations/PartyCard";
 import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
+import { OrderWhereCard } from "./OrderWhereCard";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
@@ -299,6 +300,9 @@ export function OrderDetailSheet({
                 </CardContent>
               </Card>
             )}
+
+            {/* "Nerede?" — bağlı her iş emrinin ilerlemesi (tek istek; üretim kapalıyken çizilmez). */}
+            <OrderWhereCard order={order} open={open} />
 
             {/* Bağlı iş emirleri — kaleme WO açıldıysa görünür; tıkta İE detayı
                 açılır (sheet kapanır). Bağ yoksa kart null döner. */}
