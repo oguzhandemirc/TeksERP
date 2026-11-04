@@ -203,7 +203,7 @@ async function main(): Promise<void> {
     check("§4 ⭐ atamasız güncellemede HER eski alan birebir (strateji/maxWords/valueShape) korunur", oldKeys.length > 0 && oldKeys.every((k) => specOf(t0?.fields, k) === specOf(before.template.fields, k)), JSON.stringify(t0?.fields?.map((f) => f.key)));
     const rects = ((u0.data?.preview as { fieldRects?: Record<string, { x: number; y: number; width: number; height: number }> } | undefined)?.fieldRects) ?? {};
     const pr = rects.partiNo;
-    const want = elRect("P636249");
+    const want = elRect("P636249") as { x: number; y: number; width: number; height: number };
     const cx = want.x + want.width / 2;
     const cy = want.y + want.height / 2;
     check("§4 ⭐ önizleme okunan değerin kutusunu (fieldRects, sayfa çerçevesi) döner — parti no P636249 kutusunda", !!pr && cx >= pr.x && cx <= pr.x + pr.width && cy >= pr.y && cy <= pr.y + pr.height, JSON.stringify({ pr, want }));
