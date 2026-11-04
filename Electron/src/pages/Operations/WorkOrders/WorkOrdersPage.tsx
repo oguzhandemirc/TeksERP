@@ -27,6 +27,7 @@ import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
 import type { BulkWorkOrder } from "./bulkDocs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
+import { FASONDA_FILTER } from "./work-order-filters";
 
 const FILTERS: FilterDef[] = [
   {
@@ -40,6 +41,8 @@ const FILTERS: FilterDef[] = [
       { value: "CANCELLED", label: "İptal" },
     ],
   },
+  // Durumun YANINDA ayrı süzgeç (en az bir topu fasonda) — durumla VE'lenir.
+  FASONDA_FILTER,
   {
     // TEKİL KALIR (bilinçli): `type` NOT NULL + iki değerli → ikisini seçmek
     // "filtre yok" demektir. Tek seçimdeki açık "Tümü (Tip)" seçeneği daha net.
