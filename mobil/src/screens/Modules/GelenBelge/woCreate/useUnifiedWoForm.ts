@@ -137,7 +137,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
 
 // TERIM okuma anında çözülür (rejim değişebilir) → sabit değil fonksiyon.
 const perPartyMachineNote = (): string =>
-  `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} açıldığı için makine burada seçilmez; her ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} sonra seçilir.`;
+  `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine sonra seçilir.`;
 
 interface PlanInput {
   route: ProductionRoute | null;
