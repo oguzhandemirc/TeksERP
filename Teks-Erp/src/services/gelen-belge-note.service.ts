@@ -177,15 +177,13 @@ export async function getDeliveryNote(id: string) {
   // "Satır toplamı" toplam kıyasıyla AYNI küme: onayda INFO'ya dönen belge satırları sayılır, onayda doğan özet satırı
   // (kurşun metresinin kendisi) sayılmaz — aksi halde onaydan sonra sayı belgenin satırlarından kopuyordu.
   // Güven kipi okuma özetiyle AYNI (`noteTanitim`): tablet detayı tercih eder; süzgeçsiz aday listesi SORMA'yı delerdi.
-  const { trust } = await noteTanitim(note.id);
-  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && !isSummaryLine(note.id, l)).map((l) => l.meters), trust);
+  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && !isSummaryLine(note.id, l)).map((l) => l.meters), (await noteTanitim(note.id)).trust);
   // Müşteri önerisi (OIE): okunan metinde yazan cari; yalnız sahipsiz taslakta, aksi null. Eski istemci alanı yok sayar.
   const ownerSuggestion = await suggestOwnerForNote(note);
-  // Okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
-  const readerConfigured = getReaderUrl().url !== null;
+  // `readerConfigured`: okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
   // K27 (WARN kipi) `duplicateDocNo`: aynı belge no'lu İŞİ SÜREN eşler — bilgi şeridi; yoksa null. Eski istemci yok sayar.
   // K28: onay ekranı kip FULL değilse belge no'yu vurgular ("fotoğraf küçültülecek/silinecek"); eski istemci yok sayar.
-  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured, photoRetention: await readPhotoRetention() };
+  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured: getReaderUrl().url !== null, photoRetention: await readPhotoRetention() };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

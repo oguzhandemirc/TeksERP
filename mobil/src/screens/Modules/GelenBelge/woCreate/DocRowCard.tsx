@@ -2,19 +2,20 @@
 // doğrulama, varsayılan gramaj). Kayıt "Hepsini kaydet"ten; sonuç satırda kalır.
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Chip, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, Button, Chip, Text } from 'react-native-paper';
 import ModuleSheet, { SheetField } from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import { DOC_HIGHLIGHT_BG, DocHighlight } from '../../../../components/DocHighlight';
+import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
+import BatchFields from './DocRowBatchFields';
 import { TERIM } from '../../../../lib/terim';
 import { useReadResult } from '../useReadResult';
 import { useApprovalDetail } from '../useApprovalCard';
 import { usePermissions } from '../../../../hooks/usePermission';
 import { readResultView, fmtKursunMeters } from '../readResult';
 import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
-import { detailFromSummary, editCustomerBatchNo, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
+import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
@@ -42,7 +43,6 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
   const locked = done || wo.saving;
   const view = read.watch ? readResultView(read.watch, row.noteNo) : null;
   const issues = f && wo.mode !== 'SEPARATE' ? rowIssues(f) : [];
-  const candidates = row.detail?.batchNoCandidates ?? [];
   const ownerName = f?.ownerCustomerId ? customers.find((o) => o.value === f.ownerCustomerId)?.label ?? f.ownerSuggested ?? 'Seçili müşteri' : '';
   const meterText = f?.meters != null ? `${fmtKursunMeters(f.meters)} m` : null;
 
@@ -107,47 +107,6 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
         />
       )}
     </View>
-  );
-}
-
-/**
- * Müşteri parti no (belgeden okunan, elle yazılabilir düz metin; seçici yok) + bizim parti no (İE partisi). Seri kipinde
- * bizimki salt okunur "Otomatik verilir"; belgeden kipinde değer ya da aday seçici (bugünkü davranış).
- */
-function BatchFields({ row, wo, locked, onPick }: { row: DocRow; wo: WoRowsState; locked: boolean; onPick: () => void }) {
-  const f = row.form!;
-  const candidates = row.detail?.batchNoCandidates ?? [];
-  const fromDoc = wo.batchSource === 'DOCUMENT';
-  return (
-    <>
-      <DocHighlight active={!!f.customerBatchNoFromDoc} style={styles.hl}>
-        <TextInput
-          mode="outlined"
-          dense
-          label="Müşteri parti no"
-          value={f.customerBatchNo ?? ''}
-          disabled={locked}
-          maxLength={64}
-          style={f.customerBatchNoFromDoc ? styles.hlInput : undefined}
-          onChangeText={(t) => wo.updateForm(row.noteId, editCustomerBatchNo(t))}
-          testID={`belge-satir-musteri-parti-${row.noteNo}`}
-        />
-      </DocHighlight>
-      {fromDoc ? (
-        <SheetField
-          label="Bizim parti no"
-          value={f.ourBatchNo ?? ''}
-          placeholder={candidates.length > 1 ? `Seçin (${candidates.length} aday)` : 'Otomatik verilir'}
-          onPress={onPick}
-          disabled={locked || candidates.length === 0}
-        />
-      ) : (
-        <View style={styles.autoBatch} testID={`belge-satir-bizim-parti-${row.noteNo}`}>
-          <Text style={styles.label}>Bizim parti no</Text>
-          <Text style={styles.autoText}>Otomatik verilir</Text>
-        </View>
-      )}
-    </>
   );
 }
 
@@ -353,9 +312,6 @@ const styles = StyleSheet.create({
   resultTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
   btn: { minHeight: 56 },
-  hl: { padding: 2 },
   hlInput: { backgroundColor: DOC_HIGHLIGHT_BG },
   hlText: { flex: 0, backgroundColor: DOC_HIGHLIGHT_BG, borderRadius: 6, paddingHorizontal: spacing.sm },
-  autoBatch: { gap: 2 },
-  autoText: { fontSize: typography.size.base, color: colors.textMuted },
 });
