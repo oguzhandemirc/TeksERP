@@ -6,10 +6,11 @@
 //   • FASONDA – firma X: top AT_SUBCONTRACTOR ve X'e giden AÇIK bir sevkte
 //     OUTSTANDING kalemi var (kabul/kapama/doğrudan sevkle dönmemiş). Planda/rota
 //     adımında X'in yazılı olması YETMEZ.
-//   • AŞAMADA – istasyon Y: top IN_PRODUCTION ve şu an durduğu adımın istasyonu Y.
-//     (`placesOf`taki STEP dalının Prisma ikizi: canlı, hazır değil, fasonda değil.)
+//   • AŞAMADA – istasyon Y, topun şu an durduğu adımın istasyonu Y ve:
+//       Y iç (INTERNAL) → top IN_PRODUCTION (`placesOf`taki STEP dalının Prisma ikizi);
+//       Y fason (EXTERNAL) → top FASONDA (yukarıdaki tanım, firmasız).
 // =============================================================================
-import { Prisma, RollStatus } from "@prisma/client";
+import { Prisma, RollStatus, StationType } from "@prisma/client";
 import { outstandingItemOfOpenDispatch } from "./fason-open-dispatch.helper";
 
 /** Aşamada sayılan top durumu (sevke hazır ve fasondaki toplar aşama değildir). */
@@ -23,10 +24,20 @@ export function rollAtFasonWhere(dispatch?: Prisma.SubcontractorDispatchWhereInp
   };
 }
 
-/** Şu an bir aşamada (verilen istasyonlarda; verilmezse herhangi birinde) duran top. */
+/**
+ * Şu an bir aşamada (verilen istasyonlarda; verilmezse herhangi birinde) duran top.
+ * İç istasyonda üretimde, fason istasyonunda fasonda olan top sayılır; fabrikada
+ * IN_PRODUCTION olup adımı fason istasyonda olan top (dönmüş mal) aşamada değildir.
+ */
 export function rollAtStageWhere(stationIds?: string[]): Prisma.RollWhereInput {
+  const at = (type: StationType): Prisma.WorkOrderStepWhereInput => ({
+    ...(stationIds ? { stationId: { in: stationIds } } : {}),
+    station: { type },
+  });
   return {
-    status: ROLL_AT_STAGE_STATUS,
-    currentStep: stationIds ? { stationId: { in: stationIds } } : { isNot: null },
+    OR: [
+      { status: ROLL_AT_STAGE_STATUS, currentStep: { is: at(StationType.INTERNAL) } },
+      { AND: [rollAtFasonWhere(), { currentStep: { is: at(StationType.EXTERNAL) } }] },
+    ],
   };
 }

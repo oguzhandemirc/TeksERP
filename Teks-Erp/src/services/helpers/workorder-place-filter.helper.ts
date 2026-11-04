@@ -6,7 +6,7 @@
 // satır rozetiyle aynı (topun ŞU AN durduğu adım). Anahtarlar `buildWhereClause`tan
 // ÖNCE okunup silinir (bu serviste allowlist yok, sızan anahtar 500 verir).
 // =============================================================================
-import { Prisma, StationType } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { validate as isUuidString } from "uuid";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -22,8 +22,6 @@ export function workOrderHasCurrentRoll(rollWhere: Prisma.RollWhereInput): Prism
   return { steps: { some: { currentRolls: { some: rollWhere } } } };
 }
 
-/** Aşama = üretim istasyonu; fason tipi (EXTERNAL) veriden ayrılır, ad eşleşmesiyle değil. */
-export const PRODUCTION_STAGE_STATION = { type: StationType.INTERNAL } satisfies Prisma.StationWhereInput;
 
 const badFilter = (msg: string): AppError => AppError.badRequest(msg, { code: "INVALID_FILTER_VALUE" });
 
@@ -53,10 +51,9 @@ export async function takeWorkOrderPlaceFilters(
   const stationIds = takeIdList(filters, STAGE_FILTER, "aşama");
   const [firmCount, stationCount] = await Promise.all([
     firmIds.length ? prisma.subcontractor.count({ where: { id: { in: firmIds } } }) : 0,
-    stationIds.length ? prisma.station.count({ where: { id: { in: stationIds }, ...PRODUCTION_STAGE_STATION } }) : 0,
+    stationIds.length ? prisma.station.count({ where: { id: { in: stationIds } } }) : 0,
   ]);
   if (firmCount !== firmIds.length) throw badFilter("Seçilen fason firma bulunamadı.");
-  // Fason istasyonu aşama değildir (fasondaki top firma süzgecindedir) → 400.
   if (stationCount !== stationIds.length) throw badFilter("Seçilen üretim aşaması bulunamadı.");
 
   const conds: Prisma.WorkOrderWhereInput[] = [];
@@ -115,7 +112,6 @@ export async function loadWorkOrderPlaceOptions(bases: {
     }),
     prisma.subcontractor.findMany({ select: { id: true, name: true, isActive: true } }),
     prisma.station.findMany({
-      where: PRODUCTION_STAGE_STATION,
       select: { id: true, name: true, isActive: true, allowAsWorkOrderStep: true },
     }),
   ]);

@@ -1,14 +1,15 @@
 // =============================================================================
-// Test: İş emri listesi "şu an hangi fasonda / hangi aşamada" süzgeçleri (2.11.5)
+// Test: İş emri listesi "şu an hangi fasonda / hangi aşamada" süzgeçleri (2.11.5–2.11.6)
 // Çalıştır: npx tsx scripts/test_wo_place_filter.ts
 // =============================================================================
 // `filter[fasonFirma]` = topu ŞU AN o firmaya giden açık sevkte dönmemiş (planda
-// yazılı firma YETMEZ); `filter[asama]` = topu ŞU AN o istasyonda IN_PRODUCTION.
+// yazılı firma YETMEZ); `filter[asama]` = topu ŞU AN o istasyonda: iç istasyonda
+// IN_PRODUCTION, fason (EXTERNAL) istasyonda FASONDA (açık sevkte dönmemiş).
 // Yüklem tek kaynak (`roll-place.helper`), İE↔top bağı `fasonda` süzgeciyle aynı.
 // Sayım listeyle aynı where'den; UUID değil / kayıt yok → 400 INVALID_FILTER_VALUE;
 // seçenek ucu (`GET /where-options`) listenin süzgeçlerini AYNEN alır ve FACETED
 // sayar (kendi anahtarı hariç süzgeçler + o seçenek) → seçenek sayısı = seçilince
-// liste toplamı; fason (EXTERNAL) istasyonu aşama değildir.
+// liste toplamı; fason (EXTERNAL) istasyonu da aşama seçeneğidir (2.11.6).
 // Temizlik: finally bloğunda, yalnız kendi ürettiklerini siler.
 // =============================================================================
 import type { Request, Response } from "express";
@@ -197,6 +198,9 @@ async function main(): Promise<void> {
     await mkDispatch(w7, w7.step[stF]!, firmY.id, await mkRoll(w7, w7.step[stF]!, "AT_SUBCONTRACTOR"));
     await prisma.workOrder.update({ where: { id: w7.id }, data: { createdAt: new Date(Date.now() - 60 * 86_400_000) } });
     await prisma.workOrder.update({ where: { id: w5.id }, data: { status: "PLANNED" } });
+    // W8: top hâlâ AT_SUBCONTRACTOR ama X sevkinin kalanı kapatılmış (dönmüş) → fasonda değil.
+    const w8 = await mkWo("8");
+    await mkDispatch(w8, w8.step[stF]!, firmX.id, await mkRoll(w8, w8.step[stF]!, "AT_SUBCONTRACTOR"), { remainderClosed: true });
 
     const list = async (q: Record<string, string>): Promise<WoResult> =>
       (await svc.findAll({ query: { search: `${P}-IE`, pageSize: "200", ...q } } as unknown as Request)) as WoResult;
@@ -205,7 +209,7 @@ async function main(): Promise<void> {
       r.data.length === exp.length && exp.every((e) => r.data.some((w) => w.id === e.id)) && r.pagination.total === exp.length;
 
     const all = await list({});
-    check("süzgeçsiz: 7 İE listede", all.data.length === 7, ids(all));
+    check("süzgeçsiz: 8 İE listede", all.data.length === 8, ids(all));
 
     // ── fasonFirma ──────────────────────────────────────────────────────────
     const fx = await list({ "filter[fasonFirma]": firmX.id });
@@ -213,6 +217,7 @@ async function main(): Promise<void> {
     check("firma X: sevki iptal edilmiş AT_SUBCONTRACTOR top (W2) görünmez", !fx.data.some((w) => w.id === w2.id));
     check("firma X: dönmüş top (W3) görünmez", !fx.data.some((w) => w.id === w3.id));
     check("firma X: yalnız planda yazılı (W4) görünmez", !fx.data.some((w) => w.id === w4.id));
+    check("firma X: kalanı kapatılmış AT_SUBCONTRACTOR top (W8) görünmez", !fx.data.some((w) => w.id === w8.id));
     check("firma X: sayım = liste", fx.pagination.total === fx.data.length, `${fx.pagination.total}/${fx.data.length}`);
     const fy = await list({ "filter[fasonFirma]": firmY.id });
     check("firma Y: yalnız W7", only(fy, w7), ids(fy));
@@ -225,8 +230,14 @@ async function main(): Promise<void> {
     check("aşama S1: depodaki top (W6) görünmez", !s1.data.some((w) => w.id === w6.id));
     const s2 = await list({ "filter[asama]": stS2 });
     check("aşama S2 (topu yok): boş", s2.data.length === 0, ids(s2));
-    const eF = await expectError(() => list({ "filter[asama]": stF }));
-    check("aşama = fason (EXTERNAL) istasyon → 400 (fason aşama değildir)", eF?.statusCode === 400 && eF.code === "INVALID_FILTER_VALUE", errStr(eF));
+    // Hata (eski kural: fason istasyon → 400) kırmızı kontrol olarak görünsün, koşum düşmesin.
+    const failed: WoResult = { data: [], pagination: { total: -1 } };
+    const sF = await list({ "filter[asama]": stF }).catch(() => failed);
+    check("aşama = fason (EXTERNAL) istasyon: açık sevkte dönmemiş topu olan W1 + W7", only(sF, w1, w7), ids(sF));
+    check("aşama fason: sevki iptal (W2) ve kalanı kapatılmış (W8) AT_SUBCONTRACTOR top sayılmaz", !sF.data.some((w) => w.id === w2.id || w.id === w8.id), ids(sF));
+    check("aşama fason: fabrikada IN_PRODUCTION olup adımı fason istasyonda olan top (W3 dönmüş, W4 planlı) sayılmaz", !sF.data.some((w) => w.id === w3.id || w.id === w4.id), ids(sF));
+    const sFS1 = await list({ "filter[asama]": `${stF},${stS1}` }).catch(() => failed);
+    check("aşama fason + S1 (CSV, iç + fason karışık): W1 + W5 + W7", only(sFS1, w1, w5, w7), ids(sFS1));
 
     // ── AND ─────────────────────────────────────────────────────────────────
     const and1 = await list({ "filter[fasonFirma]": firmX.id, "filter[asama]": stS1 });
@@ -264,7 +275,10 @@ async function main(): Promise<void> {
     const o = opt.body.data;
     const st = (id: string): Opt | undefined => o.stages.find((s) => s.id === id);
     check("where-options: S1 sayısı 2 (W1, W5)", st(stS1)?.workOrderCount === 2, JSON.stringify(st(stS1)));
-    check("where-options: fason (EXTERNAL) istasyonu aşama seçeneğinde YOK", st(stF) === undefined, JSON.stringify(st(stF)));
+    check("where-options: fason (EXTERNAL) istasyonu aşama seçeneğinde VAR, sayısı 2 (W1, W7)", st(stF)?.workOrderCount === 2, JSON.stringify(st(stF)));
+    const sFAll = ((await svc.findAll({ query: { pageSize: "1", "filter[asama]": stF } } as unknown as Request).catch(() => failed)) as WoResult);
+    const gF = (await callWhereOptions()).body.data.stages.find((s) => s.id === stF)?.workOrderCount;
+    check("where-options (süzgeçsiz) fason istasyon sayısı = süzgeçli liste toplamı", sFAll.pagination.total === gF && gF === 2, `${sFAll.pagination.total}/${gF}`);
     check("where-options: S2 aktif + 0 sayılı listede (üretim aşaması 0'da da kalır)", st(stS2)?.workOrderCount === 0, JSON.stringify(st(stS2)));
     const fxOpt = o.firms.find((f) => f.id === firmX.id);
     check("where-options: kapsamda firma X sayısı 1 (W1)", fxOpt?.workOrderCount === 1, JSON.stringify(fxOpt));
@@ -285,6 +299,7 @@ async function main(): Promise<void> {
       ["durum IN_PROGRESS", { "filter[status]": "IN_PROGRESS" }],
       ["karşı anahtar fasonFirma=X", { "filter[fasonFirma]": firmX.id }],
       ["karşı anahtar asama=S1", { "filter[asama]": stS1 }],
+      ["karşı anahtar asama=fason", { "filter[asama]": stF }],
       ["tarih + durum + fasonda", { dateField: "createdAt", dateFrom: since30, "filter[status]": "IN_PROGRESS", "filter[fasonda]": "1" }],
       ["tarih + firma X + aşama S1", { dateField: "createdAt", dateFrom: since30, "filter[fasonFirma]": firmX.id, "filter[asama]": stS1 }],
     ];
@@ -293,7 +308,7 @@ async function main(): Promise<void> {
       const mism: string[] = [];
       for (const [key, opts, pick] of [
         ["fasonFirma", oc.firms, [firmX.id, firmY.id]],
-        ["asama", oc.stages, [stS1, stS2]],
+        ["asama", oc.stages, [stS1, stS2, stF]],
       ] as const) {
         for (const id of pick) {
           const n = opts.find((x) => x.id === id)?.workOrderCount ?? 0;
@@ -307,6 +322,10 @@ async function main(): Promise<void> {
     // karşı anahtar kendi anahtarını yok sayar.
     const oDate = (await callWhereOptions({ ...scope, dateField: "createdAt", dateFrom: since30 })).body.data;
     check("faceted tarih: firma Y 0 (W7 60 gün önce)", (oDate.firms.find((f) => f.id === firmY.id)?.workOrderCount ?? 0) === 0);
+    check("faceted tarih: fason istasyon 1 (W7 düşer, W1 kalır)", oDate.stages.find((s) => s.id === stF)?.workOrderCount === 1, JSON.stringify(oDate.stages.find((s) => s.id === stF)));
+    const oSF = (await callWhereOptions({ ...scope, "filter[asama]": stF })).body.data;
+    check("faceted kendi anahtarı hariç: asama=fason iken S1 yine 2", oSF.stages.find((s) => s.id === stS1)?.workOrderCount === 2, JSON.stringify(oSF.stages.find((s) => s.id === stS1)));
+    check("faceted karşı anahtar: asama=fason iken firma X 1 (W1), Y 1 (W7)", oSF.firms.find((f) => f.id === firmX.id)?.workOrderCount === 1 && oSF.firms.find((f) => f.id === firmY.id)?.workOrderCount === 1);
     const oSt = (await callWhereOptions({ ...scope, "filter[status]": "IN_PROGRESS" })).body.data;
     check("faceted durum: S1 1 (W5 PLANNED düşer)", oSt.stages.find((s) => s.id === stS1)?.workOrderCount === 1, JSON.stringify(oSt.stages.find((s) => s.id === stS1)));
     const oFx = (await callWhereOptions({ ...scope, "filter[fasonFirma]": firmX.id })).body.data;
@@ -319,7 +338,7 @@ async function main(): Promise<void> {
       ["asama", "abc"],
       ["fasonFirma", randomUUID()],
       ["asama", randomUUID()],
-      ["asama", stF],
+      ["asama", firmX.id],
     ] as const) {
       const q = { ...scope, [`filter[${key}]`]: bad };
       const eo = await expectError(() => callWhereOptions(q));
