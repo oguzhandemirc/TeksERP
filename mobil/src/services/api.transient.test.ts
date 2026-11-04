@@ -89,3 +89,14 @@ describe('api.ts — vekil 5xx / 429 sınıflandırması', () => {
     expect(e.details).toEqual({ code: 'X' });
   });
 });
+
+describe('api.ts — Zod 400 gövdesinin alan mesajları korunur', () => {
+  it('400 errors[] → validationErrors (message jenerik kalır); 409 errors[] taşımaz', async () => {
+    const errors = [{ field: 'identifiers', message: 'En çok 30 kimlik yazısı seçilebilir' }];
+    const e = (await post(failWith(400, { success: false, message: 'Validasyon hatası', errors }))) as Wrapped & { validationErrors?: unknown };
+    expect(e.message).toBe('Validasyon hatası');
+    expect(e.validationErrors).toEqual(errors);
+    const c = (await post(failWith(409, { success: false, message: 'Çakışma', errors }))) as Wrapped & { validationErrors?: unknown };
+    expect(c.validationErrors).toBeUndefined();
+  });
+});
