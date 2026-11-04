@@ -37,6 +37,14 @@ export default function DocScanScreen() {
   );
 }
 
+/** Gönder düğmesinin etiketi: devam eden taslak · yarım kalan gönderim · tanıt · yeni taslak. */
+function sendButtonLabel(b: ReturnType<typeof useDocScan>, teachOnly: boolean): string {
+  if (b.continuing && b.done) {
+    return b.progress.uploaded.size ? `Yeniden dene (${b.remaining} sayfa)` : `${b.done.note.noteNo} taslağına ekle`;
+  }
+  return b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : teachOnly ? 'Belgeyi oku' : 'Taslak oluştur ve gönder';
+}
+
 /** Ekran gövdesi — "Terbiye İş Emri oluştur" kısayolsuz kurulumda bugünkü Belge Tara yolu olarak gömülür. */
 /** `teachOnly` (hub "Belge tanıt"): çek → oku → Tanıt; onay kartı / iş emri yolu çizilmez (taslak irsaliye kalır, İE açılmaz). */
 export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {}) {
@@ -53,9 +61,7 @@ export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {})
     b.addToNote();
     source.add();
   };
-  const sendLabel = b.continuing && b.done
-    ? b.progress.uploaded.size ? `Yeniden dene (${b.remaining} sayfa)` : `${b.done.note.noteNo} taslağına ekle`
-    : b.headerLocked ? `Yeniden dene (${b.remaining} sayfa)` : teachOnly ? 'Belgeyi oku' : 'Taslak oluştur ve gönder';
+  const sendLabel = sendButtonLabel(b, teachOnly);
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
   // Önizlemeden silince komşu sayfada kalınır; son sayfa da gidince önizleme kapanır.
