@@ -1,7 +1,7 @@
 // S1 (Gülkesim, 2026-11-03): TEKRARLAYAN BÖLÜM — bir kağıtta birden çok parti (fabrika cevabı 17/36). Bölüm başlangıç
 // etiketi ("Sipariş No") her geçtiği yerde yeni bölüm açar; bölümün alanları kendi bandından okunur, tablo satırları
 // konumla bölüme düşer. Başlıksız başlayan sayfa (devam sayfası) satırları "devam" bölümüdür: taslak onları SON bölüme ekler.
-import type { DocumentTemplate, FieldResult, OcrBlock, OcrLine, OcrRect, OcrResult, SectionSpec, TableResult } from "./types";
+import type { DocumentTemplate, FieldResult, FieldSpec, OcrBlock, OcrLine, OcrRect, OcrResult, SectionSpec, TableResult } from "./types";
 import { collectLines } from "./geometry";
 import { labelSimilarity } from "./labels";
 import { normalizeForMatch } from "./text-normalize";
@@ -104,6 +104,17 @@ function sectionWarnings(s: SectionResult, isLast: boolean, page: SectionsResult
 
 const METER_COLS = ["m", "metre", "mt"];
 
+/** Alanın penceresiz kopyası (anchor `window` düşer; öteki stratejiler aynen). */
+function unpinned(f: FieldSpec): FieldSpec {
+  const strategies = f.strategies.map((st) => {
+    if (st.kind !== "anchor" || !st.window) return st;
+    const copy = { ...st };
+    delete copy.window;
+    return copy;
+  });
+  return { ...f, strategies };
+}
+
 /**
  * Bölümlere ayırır. Tablo blokları ve satırları KONUMLA (satır merkezi ≥ bölüm bandının üstü) en son açılan bölüme düşer;
  * bloğun beyanı (T.Adet) satırlarının çoğunun düştüğü bölüme gider. Başlangıç etiketi yoksa tek bölüm (bugünkü davranış).
@@ -123,7 +134,8 @@ export function extractSections(ocr: OcrResult, template: DocumentTemplate, spec
     return i + offset;
   };
   const count = tops.length + offset;
-  const sub: DocumentTemplate = { ...template, fields: template.fields.filter((f) => spec.fields.includes(f.key)) };
+  // Bölüm alanı her bantta ayrı okunur: etiket penceresi (tanıtmada başlık alanına konur) onu ilk bölüme çivilemesin.
+  const sub: DocumentTemplate = { ...template, fields: template.fields.filter((f) => spec.fields.includes(f.key)).map(unpinned) };
   const sections: SectionResult[] = Array.from({ length: count }, (_, i) => {
     const k = i - offset;
     const fields = k >= 0 ? extractFields(sliceBand(ocr, tops[k]!, tops[k + 1] ?? Infinity), sub).fields : {};

@@ -114,8 +114,8 @@ function extractRegion(region: PageRegion, templates: DocumentTemplate[], fallba
   return { region, templateId: template.id, classificationScore: cls.score, fields, tables, grid, totals, blockFields, headerLine: template.headerLine ?? null, headerTotals: resolveHeaderTotals(template), sections, warnings };
 }
 
-/** Fotoğrafın tamamını işler: bölgeler ayrı belge sayılır, her biri kendi şablonuyla çıkarılır. */
-export function extractDocument(ocr: OcrResult, templates: DocumentTemplate[], fallbackId: string | null = "genel"): DocumentExtraction {
+/** Çıkarımın kullandığı bölgeler (TEK kaynak; tanıtma pencereyi bölge çerçevesine göre kurar — `suggest.ts`). */
+export function resolveRegions(ocr: OcrResult, templates: DocumentTemplate[], fallbackId: string | null = "genel"): PageRegion[] {
   let regions = splitRegions(ocr);
   // Tek belgenin içindeki geniş boşluk (ürün sevk fişinde giriş ile çıkış bloğu arası) bölge sanılmasın: ikinci+ bölge
   // tanınmış bir şablona oturmuyor ama sayfanın tamamı oturuyorsa sayfa TEK belgedir.
@@ -128,6 +128,12 @@ export function extractDocument(ocr: OcrResult, templates: DocumentTemplate[], f
       regions = [{ regionNo: 1, rect: { x: 0, y: 0, width: ocr.imageWidth, height: ocr.imageHeight }, ocr, lineCount: regions.reduce((n, r) => n + r.lineCount, 0) }];
     }
   }
+  return regions;
+}
+
+/** Fotoğrafın tamamını işler: bölgeler ayrı belge sayılır, her biri kendi şablonuyla çıkarılır. */
+export function extractDocument(ocr: OcrResult, templates: DocumentTemplate[], fallbackId: string | null = "genel"): DocumentExtraction {
+  const regions = resolveRegions(ocr, templates, fallbackId);
   const out = regions.map((r) => extractRegion(r, templates, fallbackId));
   const warnings = regions.length > 1 ? [`MULTI_REGION: fotoğrafta ${regions.length} belge bölgesi ayrıldı`] : [];
   return { regions: out, warnings, foreignDocuments: foreignDocuments(ocr, out, templates, fallbackId) };

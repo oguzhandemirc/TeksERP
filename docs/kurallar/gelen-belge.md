@@ -108,6 +108,7 @@
 - **[ÇEKİRDEK]** İptalde satır, doğuş defteri, İE geçmişi kalır; iptal belge mükerrer denetiminden çıkar; iptal belgenin hiçbir topu geri alınmaz.
 - **[PROFİL]** Belge tipi okunmuş foto kutularıyla tanıtılır (`GET /taramalar/:id/kelimeler`; `rect`/`photoRect`); kayıt TAZE `POST /sablonlar/oneri` sonrası: `POST /sablonlar/ozel` + `clientToken` · `PUT /sablonlar/ozel/:code` + `expectedVersion`.
 - **[PROFİL]** Tanıtma yalnız `gelen-belge:template` izniyle; tablette yalnız tablet boyutunda.
+- **[ÇEKİRDEK]** Tanıtılan etiket sayfada birden çok kez eşleşiyorsa anchor'a `labelWindow` penceresini (çıkarımın BÖLGE çerçevesinde, `resolveRegions`) koy; tek eşleşmede ve bölüm alanında pencere koyma, bölüm okuması pencereyi yok sayar; okuyucu eşitlikte ayraçlı etiketi (`Müşteri:`) önce seçer. · bekçi: `test_gelen_belge_motor` §13 <sub>(arşiv:2026-11-04 aynı etiket birden çok kez)</sub>
 - **[PROFİL]** Belge masası (K23/K26) kaydı yalnız `useWoRows.saveAll` → `POST /irsaliyeler/:id/is-emri`; rota `GET /gelen-belge/rota-onerisi`, makineler `tablet-baglam.kursunMachines`; "Bu cihaz belge masası"/"Çekim" CİHAZ ayarı (kapalı).
 - **[PROFİL]** Masada kurşun planı: SINGLE tek makine + ortak gramaj, PER_PARTY parti başına (`withDeskPlan`); çekim durumu `DeskView`de.
 - **[PROFİL]** Fotoğraf baytı yalnız `gelenBelge.photoRetention` (FULL · SHRINK_ON_APPROVAL · DELETE_ON_APPROVAL · DELETE_ON_DISPATCH; `PUT /ayarlar`) ile commit SONRASI kuyrukta (`gelen-belge-foto-saklama.service.ts`, claim `{id, contentState}`) küçülür/silinir; satır, sha256, `ocrResult` KALIR.
