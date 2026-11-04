@@ -1,10 +1,10 @@
 # Backend `2.11.6`
 
-**Paket:** (paketleme sonrası yazılacak)
-**SHA256:** (paketleme sonrası yazılacak)
-**Commit:** (paketleme sonrası yazılacak)
-**İçerik commit'leri:** `fix(workorder): stage filter + where-options include subcontractor stations (backend 2.11.6)` (aşama seçicisinde fason istasyonları)
-**Önceki saha sürümü:** **2.11.5** (etiket `backend-v2.11.5`; kuran, kurulumdan önce `/health` ve `app\PAKET.json` ile 2.11.5 olduğunu ÖLÇER — farklıysa DUR).
+**Paket:** `tekserp-backend-20261105_002022-2b6719509.zip`
+**SHA256:** `9DCE2216D7C9EA628CCCC75063B2AA733D912F5A4A685B04DA9B4B455530576C`
+**Commit:** `2b6719509`
+**İçerik commit'leri:** `cee1443f6` (aşama seçicisi + where-options fason istasyonlarını da kapsar)
+**Önceki saha sürümü:** **2.11.5** (etiket `backend-v2.11.5` = `3e94dfcbb`; kuran, kurulumdan önce `/health` ve `app\PAKET.json` ile 2.11.5 olduğunu ÖLÇER — farklıysa DUR).
 
 **Bakım sürümü:** `bakim/adnansahin-backend-2.11.6` dalı, taban `bakim/adnansahin-backend-2.11.5` (2.11.5 künye commit'inin üstünde).
 `main`deki sonraki geliştirmeler (2.12+) bu pakette YOKTUR. Paketleme **`-Surum 2.11.6`** ile koşulur — yama
