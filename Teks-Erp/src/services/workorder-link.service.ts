@@ -33,6 +33,7 @@ import { Prisma, OrderStatus, ReasonPresetKind, RollStatus, WorkOrderStatus, Wor
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { assertOrderLinesSameItemAndColor } from "./helpers/order-line-mix.helper";
 import { ACTIVE_LINE, isMeasuredLine } from "./helpers/order-line-scope.helper";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
@@ -410,6 +411,13 @@ export class WorkOrderLinkService {
         );
       }
     }
+
+    // Hedef renk/kumaş null olsa da: yeni kalemler + mevcut AKTİF bağlar tek kumaş/tek renk olmalı.
+    const linkedLines = await prisma.workOrderToOrderLine.findMany({
+      where: { workOrderId, ...ACTIVE_ORDER_LINK },
+      select: { orderLine: { select: { itemId: true, colorId: true } } },
+    });
+    assertOrderLinesSameItemAndColor([...linkedLines.map((x) => x.orderLine), ...lines]);
 
     // ── UYARI: en farkı (engel değil) ───────────────────────────────────────
     const woWidth = num(wo.width);
@@ -1049,6 +1057,14 @@ export class WorkOrderLinkService {
         "Sipariş zaten iş emriyle uyumlu — normal 'Sipariş Bağla' kullanın.",
       );
     }
+
+    // Kalemler ARASI karışıklık override'la da aşılmaz; plan ① yazılmadan ÖNCE
+    // denetlenir (③ bağda düşseydi renk/en değişmiş, bağ kurulmamış kalırdı).
+    const activeLinks = await prisma.workOrderToOrderLine.findMany({
+      where: { workOrderId, ...ACTIVE_ORDER_LINK },
+      select: { orderLine: { select: { itemId: true, colorId: true } } },
+    });
+    assertOrderLinesSameItemAndColor([...activeLinks.map((x) => x.orderLine), line]);
 
     // Düzeltilebilir toplar PLAN yazımından ÖNCE çözülür: bekçi "bu istekle
     // düzeltilecek toplar yeni renkte sayılır" (recolorRollIds) — yoksa boya

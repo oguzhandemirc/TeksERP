@@ -53,6 +53,10 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         name: filter[customerId]
  *         schema: { type: string }
  *         description: 'Bağlı siparişin müşterisi (uuid; CSV ile çoklu) — bağsız (stok) iş emri eşleşmez'
+ *       - in: query
+ *         name: filter[fasonda]
+ *         schema: { type: string, enum: ['1', 'true'] }
+ *         description: 'En az bir topu şu an fasonda (AT_SUBCONTRACTOR) olan iş emirleri — satırdaki fason rozetiyle aynı anlam; başka değer 400 INVALID_FILTER_VALUE'
  *     responses:
  *       200:
  *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5) ve `customerCount`'

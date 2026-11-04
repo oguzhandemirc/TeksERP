@@ -30,6 +30,8 @@ import prisma from "../lib/prisma";
 import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+import { assertOrderLinesSameItemAndColor } from "./helpers/order-line-mix.helper";
+import { takeFasondaFilter } from "./helpers/workorder-fasonda-filter.helper";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import {
@@ -1013,6 +1015,8 @@ export class WorkOrderService {
         },
       });
       assertOrderLinesLinkable(allocations.map((a) => a.orderLineId), orderLineItems);
+      // Kumaş/renk karışıklığı hedef verilmiş olsa da 400 (tek kaynak helper).
+      assertOrderLinesSameItemAndColor(orderLineItems);
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
         const onlyItemId = Array.from(distinctItems)[0];
@@ -1681,6 +1685,8 @@ export class WorkOrderService {
     });
     delete params.filters[HIDE_CANCELLED_FILTER];
     delete params.filters[HIDE_COMPLETED_FILTER];
+    // "En az bir topu fasonda" (filter[fasonda]=1) — buildWhereClause'dan ÖNCE okunup silinir.
+    const fasondaCond = takeFasondaFilter(params.filters);
     // Müşteri süzgeci (liste kolonu, 2026-09-15): WO'da customerId YOK — bağ üzerinden
     // (`orderLinks.some.orderLine.order.customerId`). Filtre kümesinden ÇIKARILIR: bu
     // serviste allowlist yok, `filter[customerId]` where'e sızıp 500 verirdi. CSV `in`.
@@ -1710,6 +1716,10 @@ export class WorkOrderService {
       const byCustomer: Prisma.WorkOrderWhereInput = { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { order: { customerId: customerCond } } } } };
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
       w.AND = [...(w.AND ?? []), byCustomer];
+    }
+    if (fasondaCond) {
+      const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
+      w.AND = [...(w.AND ?? []), fasondaCond];
     }
     // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
     if (req.query.withArchived !== "true") {
@@ -5345,6 +5355,8 @@ export class WorkOrderService {
         },
       });
       assertOrderLinesLinkable(allocations.map((a) => a.orderLineId), orderLineItems);
+      // Kumaş/renk karışıklığı hedef verilmiş olsa da 400 (tek kaynak helper).
+      assertOrderLinesSameItemAndColor(orderLineItems);
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
         const onlyItemId = Array.from(distinctItems)[0];
