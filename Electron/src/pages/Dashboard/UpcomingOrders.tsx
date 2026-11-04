@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedProgress } from "@/components/motion";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
-import { orderStatusLabels } from "@/types/enums";
+import { orderShipText } from "@/pages/Operations/Orders/order-where-text";
 import type { Order } from "@/pages/Operations/Orders/types";
 import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingOrders } from "./dashboardService";
@@ -84,7 +84,7 @@ function OrderRow({ order, onClick }: { order: Order; onClick: () => void }) {
           <div className="flex items-center gap-2">
             <span className="truncate font-medium">{order.orderNumber}</span>
             <Badge variant="outline" className="shrink-0 text-[10px]">
-              {orderStatusLabels[order.status]}
+              {orderShipText(order)}
             </Badge>
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">

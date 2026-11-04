@@ -14,12 +14,19 @@ export const WORK_ORDER_TYPE_LABEL: Record<string, string> = {
   STOCK_PRODUCTION: 'Stoğa Üretim',
 };
 
+// Sipariş durumu SEVK diliyle — panelin `orderStatusLabels`ıyla aynı ("Onaylandı" jargonu yok).
 export const ORDER_STATUS_LABEL: Record<string, string> = {
-  PENDING: 'Beklemede',
-  APPROVED: 'Onaylandı',
-  PARTIAL_SHIPPED: 'Kısmen Sevk',
-  COMPLETED: 'Tamamlandı',
-  CANCELLED: 'İptal Edildi',
+  PENDING: 'Henüz onaylanmadı',
+  APPROVED: 'Henüz gönderilmedi',
+  PARTIAL_SHIPPED: 'Bir kısmı gönderildi',
+  COMPLETED: 'Hepsi gönderildi',
+  CANCELLED: 'Sipariş iptal edildi',
+};
+
+/** Süzgeç çipi: "Hepsi gönderildi" kovası elle kapatılan siparişi de içerir (panel süzgeciyle aynı). */
+export const ORDER_STATUS_FILTER_LABEL: Record<string, string> = {
+  ...ORDER_STATUS_LABEL,
+  COMPLETED: 'Hepsi gönderildi ya da elle kapatıldı',
 };
 
 export const ORDER_STATUS_COLOR: Record<string, string> = {

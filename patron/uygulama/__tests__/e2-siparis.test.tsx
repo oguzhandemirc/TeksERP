@@ -68,7 +68,7 @@ describe("§1 sipariş satırı", () => {
     await settle();
     expect(screen.getByText("—")).toBeTruthy();
     expect(screen.getByText("Deniz Tekstil")).toBeTruthy();
-    expect(screen.getByText(/SP-0002 · Onaylandı/)).toBeTruthy();
+    expect(screen.getByText(/SP-0002 · Henüz gönderilmedi/)).toBeTruthy();
   });
 
   it("açık miktar fabrikadan, birimli; tutar yalnız finans alt satırı geldiyse para birimiyle", () => {
@@ -84,16 +84,24 @@ describe("§1 sipariş satırı", () => {
 describe("§2 durum ve termin rozeti sözlükten", () => {
   it("her OrderStatus Türkçe; bilinmeyen değer ham döner", () => {
     for (const k of Object.keys(ORDER_STATUS)) expect(orderStatus(k).label).not.toBe(k);
-    expect(orderStatus("PARTIAL_SHIPPED")).toEqual({ label: "Kısmi sevk", tone: "bilgi" });
+    expect(orderStatus("PARTIAL_SHIPPED")).toEqual({ label: "Bir kısmı gönderildi", tone: "bilgi" });
+    // Sevk dili (panelle aynı): "Onaylandı"/"Kısmi sevk" jargonu hiçbir durumda yok.
+    expect(Object.values(ORDER_STATUS).map((e) => e.label)).toEqual([
+      "Henüz onaylanmadı",
+      "Henüz gönderilmedi",
+      "Bir kısmı gönderildi",
+      "Hepsi gönderildi",
+      "Sipariş iptal edildi",
+    ]);
     expect(orderStatus("YENI_DURUM").label).toBe("YENI_DURUM");
   });
 
-  it("ekranda ham enum yok: PARTIAL_SHIPPED → Kısmi sevk", async () => {
+  it("ekranda ham enum yok: PARTIAL_SHIPPED → Bir kısmı gönderildi", async () => {
     mockList.mockResolvedValue(page(rec(ID1, { siparisNo: "SP-9", durum: "PARTIAL_SHIPPED", musteriAdi: "A" })));
     render(<Orders />);
     await settle();
     expect(screen.queryByText(/PARTIAL_SHIPPED/)).toBeNull();
-    expect(screen.getByText(/Kısmi sevk/)).toBeTruthy();
+    expect(screen.getByText(/Bir kısmı gönderildi/)).toBeTruthy();
   });
 
   it("termin rozeti yalnız fabrikanın `gecikmis` alanından", () => {
@@ -144,7 +152,7 @@ describe("§4 süzgeç ve arama SUNUCUDA", () => {
     await settle();
     expect(mockList).toHaveBeenLastCalledWith("siparis", expect.objectContaining({ durum: "PARTIAL_SHIPPED" }));
     expect(screen.getByText("Sunucunun döndüğü")).toBeTruthy(); // COMPLETED satır yine görünür: süzme sunucunun işi
-    expect(screen.getByText("Durum: Kısmi sevk")).toBeTruthy();
+    expect(screen.getByText("Durum: Bir kısmı gönderildi")).toBeTruthy();
     fireEvent.press(screen.getByTestId("suzgec-durum"));
     fireEvent.press(screen.getByTestId("durum-tumu"));
     await settle();
@@ -204,7 +212,7 @@ describe("§5 sipariş ayrıntısı", () => {
     await settle();
     expect(mockRecord).toHaveBeenCalledWith("siparis", ID1);
     expect(screen.getByTestId("siparis-musteri").props.children).toBe("—");
-    expect(screen.getByText("Beklemede")).toBeTruthy();
+    expect(screen.getByText("Henüz onaylanmadı")).toBeTruthy();
     expect(screen.getByText("Gecikti")).toBeTruthy();
     expect(screen.getByText("İhracat")).toBeTruthy();
     expect(screen.getByTestId("siparis-tutar").props.children).toBe("2.500 €");

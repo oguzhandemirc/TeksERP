@@ -33,6 +33,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** `WorkOrder` yalnız üretimi yönetir; tartı/paket/sevk ayrı domain (`shipping.service.ts`), çuvala bağlanır.
 - **[ÇEKİRDEK]** SACK etiketi barkodu `Sack.sackNo` (ayrı kolon EKLEME); şablon çözülemez/uymazsa Türkçe 400, başka etikete sapmaz.
 - **[ÇEKİRDEK]** Sevk rakamı BRÜT: canlı çuval sorgusundan üretilmez; iade ayrı belgeyle (`RETURN_DISPATCH` donar, iptalde VOIDED); `returns {count, meters}` dipnottur.
+- **[ÇEKİRDEK]** Sipariş sevk durumunu kullanıcıya günlük dille göster (Henüz onaylanmadı · Henüz gönderilmedi · Bir kısmı gönderildi (x / y m) · Hepsi gönderildi · Sipariş elle kapatıldı (x / y m gönderildi) · Sipariş iptal edildi); `OrderStatus` etiketi ham ya da "Onaylandı"/"Kısmi Sevk" jargonuyla gösterilmez — panel metni tek kaynaktan (`order-where-text.ts` `orderShipView`), tablet/patron etiketleri aynı sözcüklerle.
 - **[ÇEKİRDEK]** Fatura taslağı BRÜT: `collectShipmentInvoiceDraftLines` iptalsiz `RollReturn` (`fromShipmentId`) toplarını sevk anı `qty`/`width` ile geri ekler.
 - **[ÇEKİRDEK]** Brütün TEK KAYNAĞI iptalsiz `RollReturn` (`prevSackId`): `attachTotals` · `accounting-export` · `getShipmentById` · `collectShipmentDocContent` · `_shipped.ts`; donmuş snapshot yalnız `resolveShipmentDispatchContent`, yeni yüzey içeriği oradan alır.
 - **[ÇEKİRDEK]** Donmuş sevk belgesinde yalnız ACTIVE nihai; VOIDED İPTAL işaretiyle basılır (`doc.status`).

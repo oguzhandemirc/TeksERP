@@ -112,7 +112,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // OrderStatus / WorkOrderStatus / StepStatus (ortak durumlar dahil)
   PENDING: "Bekliyor",
   APPROVED: "Onaylandı",
-  PARTIAL_SHIPPED: "Kısmi Sevk",
+  PARTIAL_SHIPPED: "Bir kısmı gönderildi", // yalnız OrderStatus; sevk durumu günlük dille (2026-11-04)
   COMPLETED: "Tamamlandı",
   CANCELLED: "İptal",
   PLANNED: "Planlandı",
@@ -395,6 +395,14 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "packing_groups.status": { OPEN: "Açık", CLOSED: "Sevk edildi" },
   // EIrsaliyeSourceType.SHIPMENT (E1-SEMA) — kaydın KAYNAK türü; global `SHIPMENT` depo olayı dilinde ("Sevk çıkışı").
   "E_IRSALIYE.sourceType": { SHIPMENT: "Sevkiyat" },
+  // OrderStatus (2026-11-04) — sipariş durumu kullanıcıya SEVK diliyle söylenir (panel `orderStatusLabels`);
+  // global PENDING/APPROVED/COMPLETED/CANCELLED cihaz/adım/iş emri ile ortak, onlar değişmez.
+  "ORDER.status": {
+    PENDING: "Henüz onaylanmadı",
+    APPROVED: "Henüz gönderilmedi",
+    COMPLETED: "Hepsi gönderildi ya da elle kapatıldı",
+    CANCELLED: "Sipariş iptal edildi",
+  },
 };
 
 /** Audit değeri bağlamı — `tableName` yoksa yalnız global harita kullanılır. */

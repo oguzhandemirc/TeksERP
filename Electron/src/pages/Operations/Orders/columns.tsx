@@ -4,11 +4,10 @@ import { safeFormat } from "@/lib/format";
 import { formatCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
+import { StatusBadge } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
-import { orderStatusLabels } from "@/types/enums";
 import {
   collectLinkedWorkOrders,
   deriveWoRollup,
@@ -240,10 +239,11 @@ export const orderColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
-    // BRÜT sevk cümlesi ("Bir kısmı gönderildi (1.200 / 2.400 m)") — ekran = Excel/PDF.
+    // TEK sevk sütunu (eski "Sevk" + durum rozeti birleşti): günlük dil, BRÜT sevk
+    // ("Bir kısmı gönderildi (1.200 / 2.400 m)"); ekran = Excel/PDF (`orderShipText`).
     id: "shipped",
-    header: () => <SortableHeader field="shippedQty" label="Sevk" />,
-    meta: { label: "Sevk", exportValue: (o: Order) => orderShipText(o) },
+    header: () => <SortableHeader field="shippedQty" label="Sevk durumu" />,
+    meta: { label: "Sevk durumu", exportValue: (o: Order) => orderShipText(o) },
     cell: ({ row }) => <ShipCell order={row.original} />,
   },
   {
@@ -263,17 +263,5 @@ export const orderColumns: ColumnDef<Order>[] = [
       exportExtras: [{ label: "İE sayısı", value: (o: Order) => deriveWoRollup(o.lines).activeCount }],
     },
     cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,
-  },
-  {
-    accessorKey: "status",
-    header: () => <SortableHeader field="status" label="Sevk durumu" />,
-    meta: { label: "Sevk durumu", exportValue: (o: Order) => orderStatusLabels[o.status] ?? o.status },
-    cell: ({ row }) => (
-      <StatusBadge
-        status={row.original.status}
-        labels={orderStatusLabels}
-        tones={orderStatusTones}
-      />
-    ),
   },
 ];
