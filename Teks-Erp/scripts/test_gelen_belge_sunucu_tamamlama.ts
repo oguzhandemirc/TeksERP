@@ -10,9 +10,11 @@
 //      uyarısı; zarf `serverComplement.filled`; saklı zarftan yeniden kurulum aynı sonucu verir
 //   §4 okuyucu hata/adres yok → cihaz sonucu kalır (tarama READ), zarfta `failed` künyesi (sessiz değil)
 //   §5 ⭐ aynı taslakta parti no farklı okunur (ikinci sayfa) → BATCH_NO_DIFFERS uyarısı, ilk değer korunur
-// ⭐ NEGATİF SONDA (PLANLI — sonuçlar ayrı commit'te işlenir): `completeExtraction` boş-alan koşulu kaldırılınca (`if (true)`) §1b/§3c
-//    düşer; `serverCompleter` eksik-alan erken dönüşü kapatılınca §2a düşer; `fillBoundDraftTx` parti farkı satırı
-//    kapatılınca §5b düşer; `processClaimedScan` `opts.complete` çağrısı kapatılınca §3a düşer.
+// ⭐ NEGATİF SONDA (2026-11-05, betikle koşuldu, her biri md5 ile geri alındı — 4/4 ısırdı):
+//    `completeExtraction` boş-alan koşulu `if (true)` → 13/18 (§1b §1c §3c §3d §3e ❌);
+//    `serverCompleter` eksik-alan erken dönüşü kapatılınca → 17/18 (§2a ❌, okuyucu 1 kez çağrıldı);
+//    `fillBoundDraftTx` `...batchDiff` çıkarılınca → 16/18 (§5b §5c ❌);
+//    `processClaimedScan` `opts.complete` çağrısı kapatılınca → 11/18 (§3a §3b §3d §3e §3f §4a §4b ❌).
 // =============================================================================
 import { createHash } from "node:crypto";
 import prisma from "../src/lib/prisma";
