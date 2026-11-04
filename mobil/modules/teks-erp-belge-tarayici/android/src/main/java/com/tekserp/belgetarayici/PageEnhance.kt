@@ -13,11 +13,16 @@ object PageEnhance {
   const val PAPER_SHARE = 0.10
   /** Bölmede alt sınır: kâğıt dışı karanlık zemin (masa) patlayıp beyaza dönmesin. */
   const val MIN_BG = 48
-  /** Düzleştirmeden sonra bu parlaklık ve üstü tam beyaz (kalan hafif gölge silinir). */
-  const val WHITE_POINT = 235
+  /**
+   * Düzleştirmeden sonra bu parlaklık ve üstü tam beyaz. 235 gri/raster baskının açık kenarını siliyordu (harf inceldi,
+   * ML Kit okuması düştü; ölçüm 2026-11-04 arşiv notu): 250 yalnız kâğıt kalıntısını beyazlatır.
+   */
+  const val WHITE_POINT = 250
   /** Siyah noktası en koyu %2'den alınır, ama bundan yukarı çıkmaz (soluk baskı griye boğulmasın). */
   const val BLACK_SHARE = 0.02
-  const val MAX_BLACK_POINT = 110
+  const val MAX_BLACK_POINT = 60
+  /** Ara tonları koyulaştırır (çıkış = girişᵞ): gri baskı ve ince harf kalınlaşır, beyaz kâğıt beyaz kalır. */
+  const val MID_GAMMA = 1.8
 
   class Grid(val cols: Int, val rows: Int, val r: IntArray, val g: IntArray, val b: IntArray)
 
@@ -212,10 +217,37 @@ object PageEnhance {
     return minOf(v, MAX_BLACK_POINT)
   }
 
-  /** Seviye tablosu: `black` → 0, `white` → 255, arası doğrusal. */
-  fun levelsLut(black: Int, white: Int = WHITE_POINT): IntArray {
-    val span = maxOf(1, white - black)
-    return IntArray(256) { v -> ((v - black) * 255 / span).coerceIn(0, 255) }
+  /** Seviye tablosu: `black` → 0, `white` → 255, arası `gamma` eğrisiyle. */
+  fun levelsLut(black: Int, white: Int = WHITE_POINT, gamma: Double = MID_GAMMA): IntArray {
+    val span = maxOf(1, white - black).toDouble()
+    return IntArray(256) { v -> Math.round(255 * Math.pow(((v - black) / span).coerceIn(0.0, 1.0), gamma)).toInt() }
+  }
+
+  /**
+   * Okuma öncesi yumuşatma (yalnız OCR girdisi, gönderilen sayfa değişmez): gri + [1,2,1]/4 ayrık bulanıklık (σ ≈ 0,7).
+   * ML Kit tarayıcısının sayfasında raster baskının renkli kumlanmasını siler; harf kenarı korunur. Yerinde.
+   */
+  fun softenForOcr(pixels: IntArray, width: Int, height: Int) {
+    if (width <= 0 || height <= 0 || pixels.size < width * height) return
+    val g = IntArray(width * height) { luma(pixels[it]) }
+    val tmp = IntArray(width * height)
+    for (y in 0 until height) {
+      val row = y * width
+      for (x in 0 until width) {
+        val l = g[row + maxOf(0, x - 1)]
+        val r = g[row + minOf(width - 1, x + 1)]
+        tmp[row + x] = l + 2 * g[row + x] + r
+      }
+    }
+    for (y in 0 until height) {
+      val up = maxOf(0, y - 1) * width
+      val dn = minOf(height - 1, y + 1) * width
+      val row = y * width
+      for (x in 0 until width) {
+        val v = (tmp[up + x] + 2 * tmp[row + x] + tmp[dn + x] + 8) shr 4
+        pixels[row + x] = argb(v, v, v)
+      }
+    }
   }
 
   /** Bütün iyileştirme: düzleştir → seviye ger. Yerinde. */

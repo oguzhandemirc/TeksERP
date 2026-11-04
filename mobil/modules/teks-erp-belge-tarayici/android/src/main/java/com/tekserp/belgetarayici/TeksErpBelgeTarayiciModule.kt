@@ -239,7 +239,7 @@ class TeksErpBelgeTarayiciModule : Module() {
     } else {
       decoded
     }
-    return writePage(context, bitmap, scan.maxBytes, scan.quality)
+    return writePage(context, bitmap, scan.maxBytes, scan.quality, TextReader.SCANNER_PAGE_PREFIX)
   }
 
   private fun enhancePage(context: Context, uri: Uri, o: EnhanceOptions): Map<String, Any> {
@@ -256,7 +256,7 @@ class TeksErpBelgeTarayiciModule : Module() {
   }
 
   /** JPEG'e yazar (tavana sığana dek kalite basamakları), bitmap'i bırakır; önizleme gönderilecek baytın kendisidir. */
-  private fun writePage(context: Context, bitmap: Bitmap, maxBytes: Int, quality: Int): Map<String, Any> {
+  private fun writePage(context: Context, bitmap: Bitmap, maxBytes: Int, quality: Int, prefix: String = ""): Map<String, Any> {
     val w = bitmap.width
     val h = bitmap.height
     var bytes = ByteArray(0)
@@ -271,7 +271,8 @@ class TeksErpBelgeTarayiciModule : Module() {
     } finally {
       bitmap.recycle()
     }
-    val file = File(cacheDir(context), "${UUID.randomUUID()}.jpg")
+    // Önek okuyucuya kaynağı söyler (tarayıcı sayfası gri okunur); JS sözleşmesi değişmez.
+    val file = File(cacheDir(context), "$prefix${UUID.randomUUID()}.jpg")
     file.writeBytes(bytes)
     return mapOf(
       "uri" to Uri.fromFile(file).toString(),

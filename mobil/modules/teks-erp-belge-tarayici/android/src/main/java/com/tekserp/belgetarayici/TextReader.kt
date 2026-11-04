@@ -31,7 +31,8 @@ internal class TextReader(private val context: Context) {
   fun read(uri: String, longEdge: Int, deadline: Long): Map<String, Any> {
     val t0 = SystemClock.elapsedRealtime()
     if (t0 >= deadline) throw TimeoutException("kuyrukta süre doldu")
-    val upright = loadUpright(context, Uri.parse(uri), longEdge)
+    val loaded = loadUpright(context, Uri.parse(uri), longEdge)
+    val upright = if (isScannerPage(uri)) softened(loaded) else loaded
     try {
       var best = Pass(recognize(upright, deadline), upright.width, upright.height, 0)
       if (sideways(best.text)) {
@@ -109,6 +110,26 @@ internal class TextReader(private val context: Context) {
   }
 
   companion object {
+    /** ML Kit tarayıcısının sayfası bu önekle yazılır (`writePage`). */
+    const val SCANNER_PAGE_PREFIX = "tarayici-"
+
+    /**
+     * Tarayıcının kendi iyileştirmesi raster/gri baskıda renkli kumlanma bırakır; ML Kit bunu harf sanıyor
+     * ("Çıkış Çeki" → "Giikıs Çelki"). Yalnız bu sayfalar yumuşatılıp okunur; kendi kameramızın sayfasına dokunulmaz.
+     */
+    fun isScannerPage(uri: String): Boolean = Uri.parse(uri).lastPathSegment?.startsWith(SCANNER_PAGE_PREFIX) == true
+
+    /** `PageEnhance.softenForOcr` uygulanmış kopya; kaynağı bırakır (koordinat çerçevesi aynı). */
+    fun softened(src: Bitmap): Bitmap {
+      val w = src.width
+      val h = src.height
+      val px = IntArray(w * h)
+      src.getPixels(px, 0, w, 0, 0, w, h)
+      src.recycle()
+      PageEnhance.softenForOcr(px, w, h)
+      return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+    }
+
     /** Sayfa iyileştirme (`enhancePageAsync`) de aynı dik çerçeveyi kullanır: EXIF bir kez, tek yerde. */
     /** Gönderilen JPEG'in sunucuda çözüldüğü çerçeve: EXIF yönü uygulanmış, uzun kenar `longEdge`i aşmaz. */
     fun loadUpright(context: Context, uri: Uri, longEdge: Int): Bitmap {
