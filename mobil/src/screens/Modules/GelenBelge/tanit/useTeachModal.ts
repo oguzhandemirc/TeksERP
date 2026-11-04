@@ -9,7 +9,7 @@ import { useAttemptToken } from '../../../../offline/attemptToken';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import type { SimilarTemplate, SuggestBody, SuggestResult, UserTemplateDetail } from '../../../../types/inboundDocTeach';
 import { suggestName } from './guided';
-import { adoptTemplate, initialTeach, oldParts, suggestBody, teachProblems, templateKeywords, type TeachState } from './teachDraft';
+import { adoptTemplate, initialTeach, oldParts, suggestBody, teachErrText, teachProblems, templateKeywords, type TeachState } from './teachDraft';
 
 export const teachWordsKey = (scanId: string | null) => ['gelen-belge', 'tanitma', 'kelimeler', scanId] as const;
 export const USER_TEMPLATES_PREFIX = ['gelen-belge', 'sablonlar', 'ozel'] as const;
@@ -19,7 +19,7 @@ export const PREVIEW_DEBOUNCE_MS = 400;
 // Öneri ucu ad ister (en az 2 karakter); ad henüz yazılmadıysa önizleme bu yer tutucuyla koşar, kayıtta gerçek ad şarttır.
 const PREVIEW_NAME = 'Yeni belge tipi';
 
-const errText = (e: unknown) => (e instanceof Error ? e.message : undefined);
+const errText = teachErrText;
 
 /** Kayıt sonucu: çağıran (satır şeridi) formu bu şablonla yeniden doldurur. */
 /** Önizlenen şablonu kaydeder (yeni POST | sürümlü PUT). Token yalnız bu GERÇEK kayıt denemesinde yapışır. */

@@ -13,7 +13,7 @@ import { validateTemplate } from "./templates";
 export const ASSIGNABLE_FIELDS = {
   musteri: { label: "Müşteri", type: "text" },
   partiNo: { label: "Parti No", type: "alnum" },
-  toplamMetre: { label: "Kurşun metresi", type: "decimal" },
+  toplamMetre: { label: "Gelen metre", type: "decimal" },
   evrakNo: { label: "Evrak No", type: "alnum" },
   tarih: { label: "Tarih", type: "date" },
   siparisNo: { label: "Sipariş No", type: "alnum" },
@@ -35,6 +35,10 @@ export type TableColumnKey = keyof typeof TABLE_COLUMN_KEYS;
 
 /** Tanıtılan şablonun kimlik eşiği (şablona yazılır; motor `templateMinScore` ile okur — tek kaynak o). */
 export const USER_TEMPLATE_MIN_SCORE = 0.6;
+
+/** Tanıtmada seçilebilecek kimlik yazısı tavanı. Puan oransal (`classify.ts` hits/keywords.length) olduğundan
+ *  tavan yalnız kötüye kullanım seddidir; tablet aynası `mobil/.../tanit` içinde aynı değeri taşır. */
+export const MAX_TEMPLATE_IDENTIFIERS = 30;
 
 export interface TemplateSuggestInput {
   code: string;
