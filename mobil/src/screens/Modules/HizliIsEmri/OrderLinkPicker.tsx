@@ -18,6 +18,7 @@ import { orderService, type AvailableOrderLine } from '../../../services/order.s
 import { openQtyText } from '../../../lib/item-unit';
 import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
+import { addPicked, orderLineMismatch, prunePicked, selectedOf, type PickedOrderLines } from './orderLinkAnchor';
 
 const PAGE_SIZE = 20;
 // Arama gecikmesi — operatör yazmayı bırakınca sorgu atılsın. 300ms yazarken
@@ -35,6 +36,12 @@ interface Props {
   /** Modal açık durumu dışarıdan kontrol edilsin. Verilmezse iç state kullanılır. */
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
+  /**
+   * Seçili kalemlerin tam objeleri dışarıda tutulsun (kontrollü). Verilirse iç state
+   * yerine bu kullanılır ve ekleme `onLinePicked` / budama `onChange` ile sahibinde
+   * yapılır — picker unmount olsa da "tek spec" çapası kaybolmaz.
+   */
+  picked?: PickedOrderLines;
 }
 
 // "İş emrini siparişe bağla" — açık kalemleri çoklu seçtirir. Seçim varsa
@@ -46,6 +53,7 @@ export default function OrderLinkPicker({
   onLinePicked,
   open: openProp,
   onOpenChange,
+  picked: pickedProp,
 }: Props) {
   const [openInternal, setOpenInternal] = useState(false);
   const open = openProp ?? openInternal;
@@ -64,22 +72,16 @@ export default function OrderLinkPicker({
   // Cursor sayfalamada / aramada seçili satır yüklü sayfaların dışına düşebilir;
   // türetilen bir liste kullanılırsa çipler kaybolur ve "tek WO = tek kumaş"
   // çapası (anchor) sessizce boşa düşerdi.
-  const [pickedById, setPickedById] = useState<Record<string, AvailableOrderLine>>({});
+  const [pickedInternal, setPickedById] = useState<PickedOrderLines>({});
+  const pickedById = pickedProp ?? pickedInternal;
 
   // Parent seçimi dışarıdan temizlerse (sipariş bağı kaldırıldı) haritayı eşitle.
   useEffect(() => {
-    setPickedById((prev) => {
-      const next: Record<string, AvailableOrderLine> = {};
-      for (const id of value) if (prev[id]) next[id] = prev[id];
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
-    });
+    setPickedById((prev) => prunePicked(prev, value));
   }, [value]);
 
   // Seçili kalemler — sorgudan ÖNCE hesaplanır (spec çapası ondan türüyor).
-  const selectedLines = useMemo(
-    () => value.map((id) => pickedById[id]).filter(Boolean) as AvailableOrderLine[],
-    [value, pickedById],
-  );
+  const selectedLines = useMemo(() => selectedOf(value, pickedById), [value, pickedById]);
 
   // TEK sorgu — itemId varsa o kumaşın kalemleri, yoksa tüm açık kalemler.
   // Arama BACKEND'de (buildTurkishSearch: sipariş no / müşteri / ürün / müşteri
@@ -143,17 +145,7 @@ export default function OrderLinkPicker({
 
   /** Bu kalem seçili çapayla aynı iş emrinde üretilebilir mi — değilse sebebi. */
   const mismatchOf = useCallback(
-    (line: AvailableOrderLine): string | null => {
-      if (anchorLine) {
-        if (line.itemId !== anchorLine.itemId) return 'farklı kumaş';
-        if ((line.colorId ?? null) !== (anchorLine.colorId ?? null)) return 'farklı renk';
-        if (normWidth(line.width) !== normWidth(anchorLine.width)) return 'farklı en';
-        return null;
-      }
-      // Henüz kalem seçilmedi: yalnız okutulan topların kumaşı kısıtlar.
-      if (itemId && line.itemId !== itemId) return 'farklı kumaş';
-      return null;
-    },
+    (line: AvailableOrderLine): string | null => orderLineMismatch(anchorLine, line, itemId),
     [anchorLine, itemId],
   );
 
@@ -193,7 +185,7 @@ export default function OrderLinkPicker({
         });
         return;
       }
-      setPickedById((p) => ({ ...p, [id]: line }));
+      setPickedById((p) => addPicked(p, line));
       onChange([...value, id]);
       // Renk/en üst forma taşınır + (sipariş-önce) ürün kilitlenir.
       onLinePicked?.(line);
@@ -402,10 +394,6 @@ export default function OrderLinkPicker({
 
 // Modül seviyesinde kararlı referans — her render'da yeni fn FlashList'i boşuna çalıştırır.
 const keyExtractor = (l: AvailableOrderLine) => l.lineId;
-
-/** En karşılaştırması: null ≠ 0 ve "330" === "330.000" olsun. */
-const normWidth = (w: number | null | undefined): number | null =>
-  w == null ? null : Number(w);
 
 const styles = StyleSheet.create({
   trigger: {

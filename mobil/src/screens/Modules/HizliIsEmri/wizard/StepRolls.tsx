@@ -165,6 +165,7 @@ export default function StepRolls({
         open={orderPickerOpen}
         onOpenChange={onOrderPickerOpenChange}
         onLinePicked={wo.applyOrderLine}
+        picked={wo.pickedOrderLines}
       />
     </View>
   );
