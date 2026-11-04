@@ -1,8 +1,10 @@
-// S16b tek form: belge okutulmadan "oluştur" kapalı; okuma sonucu inputlara dolar ("belgeden" rozeti); desen/renk önerisi
+// S16b tek form: belge okutulmadan "oluştur" kapalı; okuma sonucu inputlara dolar (belgeden sarı vurgu); desen/renk önerisi
 // çiple onaylanır; kayıt form ucuna ek alanlarla gider, PER_PARTY'de hedef metraj/kg gitmez.
 import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { renderWithPaper } from '../../../../test/render';
+import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
@@ -102,6 +104,17 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+/** testID'li öğe ya da atalarından biri belgeden vurgusunda mı (Paper girdisinin stili sarmalayıcıya iner). */
+function highlighted(s: ReturnType<typeof renderWithPaper>, testID: string): boolean {
+  type N = { props: { style?: unknown }; parent: N | null };
+  let n: N | null = s.getByTestId(testID) as unknown as N;
+  while (n) {
+    if ((StyleSheet.flatten(n.props.style as never) as { backgroundColor?: unknown } | undefined)?.backgroundColor === DOC_HIGHLIGHT_BG) return true;
+    n = n.parent;
+  }
+  return false;
+}
+
 describe('UnifiedWoForm', () => {
   it('⭐ belge okutulmadan "oluştur" KAPALI + ipucu; belge alanları yer tutucu; Belge okut tarayıcıyı açar', () => {
     const s = renderWithPaper(ui());
@@ -124,6 +137,19 @@ describe('UnifiedWoForm', () => {
     expect(s.getByTestId('satir-karti')).toBeTruthy();
     expect(s.getByText('Belgeyi değiştir')).toBeTruthy();
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
+  });
+
+  it('⭐ belgeden dolan En sarı vurgulu, rozet yazısı yok; elle değişince vurgu kalkar', async () => {
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(highlighted(s, 'ie-form-en')).toBe(true);
+    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
+    expect(s.queryByText('belgeden')).toBeNull();
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '160');
+    expect(s.queryByTestId('belgeden-width')).toBeNull();
+    expect(highlighted(s, 'ie-form-en')).toBe(false);
+    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
   });
 
   it('⭐ öneri çipi: "Evet" → hedef kumaş / renk seçili, çip kalkar; öneri alana kendiliğinden yazılmaz', async () => {

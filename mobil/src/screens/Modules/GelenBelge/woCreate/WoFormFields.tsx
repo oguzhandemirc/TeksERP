@@ -1,5 +1,5 @@
 // S16b tek form — panel klasik formunun üretim/plan inputları (Rota, Sipariş bağı, Hedef kumaş, En, Hedef metraj/kg, Hedef renk, Kat tipi,
-// Planlı başlangıç/bitiş, Not). Belgeden dolan alanda "belgeden" rozeti; desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
+// Planlı başlangıç/bitiş, Not). Belgeden dolan alan sarı vurgulu (elle değişince kalkar); desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
 // K30-D: `show` ile yalnız seçilen alanlar çizilir; gizlenenler aynı bileşenle altta "Diğer alanlar"da (zone="other").
 // Rota adımları / makine / tür / hedef özellikler `plan` ile WoPlanFields'tan.
 import React, { useMemo, useState } from 'react';
@@ -7,6 +7,7 @@ import { StyleSheet, View } from 'react-native';
 import { Chip, Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import ColorSelectField from '../../../../components/ColorSelectField';
+import { DocHighlight } from '../../../../components/DocHighlight';
 import { SheetField } from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
@@ -129,19 +130,25 @@ function TargetFields(p: Shown & { onPick: (x: Picker) => void }) {
           {cols.en && (
             <View style={styles.col}>
               <Badged label="En (cm)" k="width" state={state} />
-              <NumpadInput value={e.width} onChangeText={(t) => edit({ width: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="örn. 150" disabled={locked} style={styles.input} testID="ie-form-en" />
+              <DocFilled k="width" state={state}>
+                <NumpadInput value={e.width} onChangeText={(t) => edit({ width: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="örn. 150" disabled={locked} style={styles.input} testID="ie-form-en" />
+              </DocFilled>
             </View>
           )}
           {cols.metraj && (
             <View style={styles.col}>
               <Badged label="Hedef metraj (m)" k="targetQuantity" state={state} derived={p.targetDerived?.derived} />
-              <NumpadInput value={p.targetDerived?.derived ? p.targetDerived.value : e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
+              <DocFilled k="targetQuantity" state={state}>
+                <NumpadInput value={p.targetDerived?.derived ? p.targetDerived.value : e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
+              </DocFilled>
             </View>
           )}
           {cols.kg && (
             <View style={styles.col}>
               <Badged label="Hedef kg" k="targetWeight" state={state} />
-              <NumpadInput value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-kg" />
+              <DocFilled k="targetWeight" state={state}>
+                <NumpadInput value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-kg" />
+              </DocFilled>
             </View>
           )}
         </View>
@@ -203,7 +210,9 @@ function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
       {plan.note && (
         <>
           <Badged label="Not" k="note" state={p.state} />
-          <TextInput value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
+          <DocFilled k="note" state={p.state}>
+            <TextInput value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
+          </DocFilled>
         </>
       )}
     </>
@@ -223,22 +232,29 @@ function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: stri
   return null;
 }
 
-/** Alan etiketi; değer belgeden geldiyse yanında "belgeden" rozeti. */
+/** Alan etiketi; hedef metraj gelen metreden türediyse yanında rozet. */
 function Badged({ label, k, state, derived }: { label: string; k?: DocFilledKey; state?: WoFormState; derived?: boolean }) {
   const fromDoc = !!k && !!state?.fromDoc.includes(k);
   return (
     <View style={styles.labelRow}>
       <Text style={styles.label}>{label}</Text>
-      {fromDoc && (
-        <Text style={styles.badge} testID={`belgeden-${k}`}>
-          belgeden
-        </Text>
-      )}
       {derived && !fromDoc && (
         <Text style={styles.badge} testID={`gelen-metreden-${k}`}>
           gelen metreden
         </Text>
       )}
+    </View>
+  );
+}
+
+/** Belgeden dolan değerin sarı vurgusu; `fromDoc` edit'te düştüğü için elle değişince kalkar. */
+function DocFilled({ k, state, children }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode }) {
+  const on = state.fromDoc.includes(k);
+  return (
+    <View testID={on ? `belgeden-${k}` : undefined}>
+      <DocHighlight active={on} style={styles.hl}>
+        {children}
+      </DocHighlight>
     </View>
   );
 }
@@ -304,6 +320,7 @@ function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => voi
 const styles = StyleSheet.create({
   root: { gap: spacing.sm },
   section: { marginTop: spacing.md, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
+  hl: { padding: 2 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
   badge: { fontSize: typography.size.xs, color: colors.brand, backgroundColor: colors.brandSoft, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, overflow: 'hidden' },
