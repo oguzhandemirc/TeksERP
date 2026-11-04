@@ -123,7 +123,7 @@ export function deriveOrderNerede(
   if (order.status === OrderStatus.CANCELLED) return gray("CANCELLED", "Sipariş iptal edildi");
   if (order.status === OrderStatus.COMPLETED) {
     return order.manualClosedById
-      ? gray("CLOSED", "Sipariş kapatıldı")
+      ? gray("CLOSED", "Sipariş elle kapatıldı")
       : { kind: "ALL_SHIPPED", tone: "green", text: "Hepsi gönderildi", ...base };
   }
   if (ctx.activeWoCount === 0) return gray("NO_WORK_ORDER", "İş emri açılmadı");
@@ -171,7 +171,7 @@ export function deriveOrderSevk(order: NeredeOrderInput, lines: NeredeLineInput[
   const out = (kind: Sevk["kind"], text: string): Sevk => ({ kind, text, shipped: sh, requested: rq, unit });
 
   if (order.status === OrderStatus.COMPLETED && order.manualClosedById) {
-    return out("CLOSED", pair ? `Sipariş kapatıldı (${pair} gönderildi)` : "Sipariş kapatıldı");
+    return out("CLOSED", pair ? `Sipariş elle kapatıldı (${pair} gönderildi)` : "Sipariş elle kapatıldı");
   }
   if (order.status === OrderStatus.COMPLETED || (rq !== null && rq > 0 && sh >= rq)) return out("ALL", "Hepsi gönderildi");
   if (sh <= 0 && order.status !== OrderStatus.PARTIAL_SHIPPED) return out("NONE", "Henüz gönderilmedi");

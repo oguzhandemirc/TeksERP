@@ -71,7 +71,7 @@ function pureChecks(): void {
   check("§1 iptal", deriveOrderNerede({ ...open, status: "CANCELLED" }, one).text === "Sipariş iptal edildi");
   check("§1 otomatik kapanış → Hepsi gönderildi", deriveOrderNerede({ ...open, status: "COMPLETED" }, one).kind === "ALL_SHIPPED");
   const closed = { ...open, status: "COMPLETED" as const, manualClosedById: "u" };
-  check("§1 elle kapatılan → Sipariş kapatıldı", deriveOrderNerede(closed, one).text === "Sipariş kapatıldı");
+  check("§1 elle kapatılan → Sipariş elle kapatıldı", deriveOrderNerede(closed, one).text === "Sipariş elle kapatıldı");
   check("§1 İE yok", deriveOrderNerede(open, none).text === "İş emri açılmadı");
   check("§1 İE var top yok", deriveOrderNerede(open, one).text === "İşe başlanmadı");
   check("§1 toplar gitmiş", deriveOrderNerede(open, { ...one, anyRoll: true }).text === "Üretilen toplar gönderildi");
@@ -108,7 +108,7 @@ function pureChecks(): void {
   const mixed = deriveOrderSevk({ ...open, status: "PARTIAL_SHIPPED" }, [L(100, 50), L(10, 0, "KG")]);
   check("§1 karışık birimde sayı yok", mixed.text === "Bir kısmı gönderildi" && mixed.unit === null, mixed.text);
   const cl = deriveOrderSevk(closed, [L(2400, 1200)]);
-  check("§1 elle kapatılan sevk", cl.kind === "CLOSED" && cl.text === "Sipariş kapatıldı (1.200 / 2.400 m gönderildi)", cl.text);
+  check("§1 elle kapatılan sevk", cl.kind === "CLOSED" && cl.text === "Sipariş elle kapatıldı (1.200 / 2.400 m gönderildi)", cl.text);
 }
 
 async function main(): Promise<void> {
