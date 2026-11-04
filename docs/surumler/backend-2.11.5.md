@@ -1,9 +1,9 @@
 # Backend `2.11.5`
 
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
-**İçerik commit'leri:** _(etiket atıldıktan sonra künyeye eklenir)_
+**Paket:** `tekserp-backend-20261104_232230-3e94dfcbb.zip`
+**SHA256:** `B5C7FBB8987D13FF1997645734BDB89ABA8BCCD30FA65FB18A10345BDB6B570D`
+**Commit:** `3e94dfcbb`
+**İçerik commit'leri:** `342d8eed5` (iş emri fasoncu/aşama süzgeçleri + where-options) · `53b864de1` ("Sipariş elle kapatıldı") · `5477daeda` (faceted sayım, yalnız üretim aşamaları)
 **Önceki saha sürümü:** **2.11.4** (etiket `backend-v2.11.4` = `5bb36948d`; kuran, kurulumdan önce `/health` ve `app\PAKET.json` ile 2.11.4 olduğunu ÖLÇER — farklıysa DUR).
 
 **Bakım sürümü:** `bakim/adnansahin-backend-2.11.5` dalı, taban `backend-v2.11.4` (2.11.4 künye commit'inin üstünde).
