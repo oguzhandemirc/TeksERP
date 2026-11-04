@@ -337,8 +337,12 @@ apiClient.interceptors.response.use(
       status?: number;
       transient?: typeof transient;
       retryAfterMs?: number;
+      validationErrors?: { field?: string; message?: string }[];
     };
     if (details && transient !== 'gateway') wrapped.details = details;
+    // Zod 400 gövdesinde asıl Türkçe neden `errors[]`dedir (`message` jenerik "Validasyon hatası"); ekran isterse okur.
+    const zodErrors = error.response?.data?.errors;
+    if (status === 400 && Array.isArray(zodErrors)) wrapped.validationErrors = zodErrors;
     if (status) wrapped.status = status;
     if (transient) {
       wrapped.transient = transient;

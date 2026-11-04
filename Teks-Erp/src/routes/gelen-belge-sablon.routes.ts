@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { createUserTemplate, getUserTemplate, listUserTemplates, updateUserTemplate } from "../services/gelen-belge-ozel-sablon.service";
 import { getScanWords, suggestFromScan } from "../services/gelen-belge-tanitma.service";
-import { ASSIGNABLE_FIELD_KEYS, UPDATE_KEEP_PARTS } from "../lib/gelen-belge/motor";
+import { ASSIGNABLE_FIELD_KEYS, MAX_TEMPLATE_IDENTIFIERS, UPDATE_KEEP_PARTS } from "../lib/gelen-belge/motor";
 
 const router = Router();
 
@@ -36,7 +36,8 @@ const SuggestBody = z.strictObject({
     rect: Rect,
     section: z.boolean().optional(),
   })).min(1, "En az bir alan atayın").max(30),
-  identifiers: z.array(z.string().trim().min(2).max(60)).min(1, "En az bir kimlik yazısı seçin").max(12),
+  identifiers: z.array(z.string().trim().min(2).max(60)).min(1, "En az bir kimlik yazısı seçin")
+    .max(MAX_TEMPLATE_IDENTIFIERS, `En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir`),
   table: z.strictObject({
     columns: z.array(z.strictObject({ key: z.enum(["topNo", "kg", "m", "en"]), header: z.string().trim().min(1).max(40) })).min(1).max(8),
     totalsLabel: z.string().trim().max(40).nullable().optional(),

@@ -1,11 +1,25 @@
-// "Sayfa çek" düğmesinin durumu: önce ML Kit tarayıcısı, kullanılamaz/hata → klasik kamera; iptal ekranda bırakır.
+// "Sayfa çek" düğmesinin durumu: cihaz ayarına göre kendi çok çekimli kameramız (varsayılan) ya da ML Kit tarayıcısı;
+// tarayıcı kullanılamaz/hata → kendi kameramız; iptal ekranda bırakır. Ekran `camera`yı `MultiPageCameraModal`a verir.
 import { useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
-import type { ScanPage } from './docScan';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { scanWithDocScanner } from '../../../services/docScannerNative';
+import { scannerPageLimit, type ScanPage } from './docScan';
 import { acquirePages } from './pageSource';
 
-export function usePageSource(currentCount: number, onPages: (pages: ScanPage[]) => void, openCamera: () => void) {
+export interface MultiCameraBinding {
+  visible: boolean;
+  /** Bu çekim oturumunda alınabilecek en çok sayfa. */
+  capacity: number;
+  firstPageNo: number;
+  onDone: (pages: ScanPage[]) => void;
+  onDismiss: () => void;
+}
+
+export function usePageSource(currentCount: number, onPages: (pages: ScanPage[]) => void) {
+  const engine = useDeviceSettingsStore((s) => s.docScanEngine);
   const [busy, setBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const busyRef = useRef(false); // çift dokunuş iki tarayıcı açmasın (durum güncellemesi gecikir)
 
   const add = async () => {
@@ -13,11 +27,11 @@ export function usePageSource(currentCount: number, onPages: (pages: ScanPage[])
     busyRef.current = true;
     setBusy(true);
     try {
-      const r = await acquirePages(currentCount);
+      const r = await acquirePages(currentCount, scanWithDocScanner, engine);
       if (r.route === 'pages') onPages(r.pages);
       else if (r.route === 'camera') {
-        if (r.error) Toast.show({ type: 'info', text1: 'Belge tarayıcı açılamadı; klasik kamera açıldı', text2: r.error });
-        openCamera();
+        if (r.error) Toast.show({ type: 'info', text1: 'Belge tarayıcı açılamadı; kamera açıldı', text2: r.error });
+        setCameraOpen(true);
       }
     } finally {
       busyRef.current = false;
@@ -25,5 +39,16 @@ export function usePageSource(currentCount: number, onPages: (pages: ScanPage[])
     }
   };
 
-  return { busy, add: () => void add() };
+  const camera: MultiCameraBinding = {
+    visible: cameraOpen,
+    capacity: scannerPageLimit(currentCount),
+    firstPageNo: currentCount + 1,
+    onDismiss: () => setCameraOpen(false),
+    onDone: (pages) => {
+      setCameraOpen(false);
+      if (pages.length) onPages(pages);
+    },
+  };
+
+  return { busy, add: () => void add(), camera };
 }

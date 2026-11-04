@@ -1,7 +1,7 @@
 // Tablet tanıtma çekirdeği (panel `tanitma.test.tsx` saf bölümünün aynası) + sayfa eşleme / fotoğraf boyutu.
 import type { ScanWord, ScanWords } from '../../../../types/inboundDocTeach';
 import {
-  assignColumn, assignField, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachMarks, teachProblems, toggleWord, wordAt,
+  assignColumn, assignField, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier,
 } from './teachDraft';
 import { isUnrecognized, photoSize, teachPages } from './teachPages';
 
@@ -100,5 +100,25 @@ describe('tablet sayfa eşleme', () => {
     expect(photoSize({ imageWidth: 1000, imageHeight: 1500, rotation: 0 })).toEqual({ width: 1000, height: 1500 });
     expect(photoSize({ imageWidth: 1000, imageHeight: 1500, rotation: 90 })).toEqual({ width: 1500, height: 1000 });
     expect(photoSize({ imageWidth: 1000, imageHeight: 1500, rotation: 270 })).toEqual({ width: 1500, height: 1000 });
+  });
+
+  describe('kimlik yazısı tavanı + doğrulama hatası metni (canlı demo: 13 kimlik → yalnız "Validasyon hatası")', () => {
+    const ready = () => assignField(toggleWord(initialTeach(SCAN, 'Güleçsoy'), 6), W, 'partiNo');
+    const withIds = (n: number) => Array.from({ length: n }, (_, i) => `KIMLIK ${i + 1}`).reduce((s, t) => addIdentifier(s, t), { ...ready(), identifiers: [] } as ReturnType<typeof ready>);
+
+    it('30 kimlik yazısı sorunsuz; 31 Türkçe uyarı verir (backend aynası 30)', () => {
+      expect(MAX_TEMPLATE_IDENTIFIERS).toBe(30);
+      expect(teachProblems(withIds(13))).toEqual([]);
+      expect(teachProblems(withIds(30))).toEqual([]);
+      expect(teachProblems(withIds(31))).toEqual(['En çok 30 kimlik yazısı seçilebilir (şu an 31); fazlasının işaretini kaldırın.']);
+    });
+
+    it('400 doğrulamada ilk alan mesajı gösterilir; yoksa Error.message; Error değilse undefined', () => {
+      const zod = Object.assign(new Error('Validasyon hatası'), { status: 400, validationErrors: [{ field: 'identifiers', message: 'En çok 30 kimlik yazısı seçilebilir' }] });
+      expect(teachErrText(zod)).toBe('En çok 30 kimlik yazısı seçilebilir');
+      expect(teachErrText(Object.assign(new Error('Validasyon hatası'), { validationErrors: [] }))).toBe('Validasyon hatası');
+      expect(teachErrText(new Error('Sunucu hatası'))).toBe('Sunucu hatası');
+      expect(teachErrText('x')).toBeUndefined();
+    });
   });
 });
