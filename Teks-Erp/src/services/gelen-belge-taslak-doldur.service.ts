@@ -14,6 +14,7 @@ import { extractDocument, type OcrResult } from "../lib/gelen-belge/motor";
 import { engineTemplates } from "./gelen-belge-ozel-sablon.service";
 import { draftFromExtraction, dropOverlapDuplicates, linesToPhotoFrame, type DraftFromOcr, type DraftLine } from "../lib/gelen-belge/taslak";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
+import { batchDiffWarning, batchNosDiffer, completeExtraction } from "../lib/gelen-belge/sunucu-tamamlama";
 import { declaredPageCount, withDeclaredPages } from "../lib/gelen-belge/parti-ozet";
 import { AuditService } from "./audit.service";
 import { FALLBACK_TEMPLATE_CODE, bumpTemplateHit, ensureSenderTemplate } from "./gelen-belge-sablon.service";
@@ -45,31 +46,56 @@ export interface BuiltDraft {
   } & BatchAndMeterColumns;
   totalsDeclared: Prisma.InputJsonValue;
   warnings: Prisma.InputJsonValue;
-  /** `DocumentScan.ocrResult` zarfı: sidecar sonucu + bölge başlıkları (saklı okumadan yeniden kurulumun kaynağı). */
+  /** `DocumentScan.ocrResult` zarfı: sidecar sonucu + bölge başlıkları (+ varsa sunucu tamamlaması) — saklı okumadan yeniden kurulumun kaynağı. */
   envelope: Prisma.InputJsonValue;
+  /** Cihaz okumasında boş kalıp sunucu okumasıyla dolan alan anahtarları (künye; tamamlama yoksa boş). */
+  serverFilled: string[];
 }
 
 /**
  * OCR sonucu → motor → taslak (HİÇBİR ŞEY YAZMAZ: şablon satırı doğurmaz, isabet saymaz). Okuma işi (`buildDraft`) ve
  * istasyon eşleme okuması (K17, `gelen-belge-istasyon-okutma.service.ts`) aynı çıkarımı görür.
  */
-export async function extractDraft(result: OcrResult): Promise<DraftFromOcr> {
+export async function extractDraft(result: OcrResult, complementOcr: OcrResult | null = null): Promise<DraftFromOcr & { serverFilled: string[] }> {
   // Şüphe oranı her kurulumda o anki fabrika ayarından (saklı zarftan yeniden kurulum da güncel oranla işaretler).
   const outlierFactor = await readHandwritingOutlierFactor();
   const headerLineSource = await readHeaderLineMeterSource();
   // Dosya + aktif kullanıcı (`u-…`) şablonları birlikte sınıflandırır (S1).
   const templates = await engineTemplates();
-  const extracted = draftFromExtraction(extractDocument(result, templates, FALLBACK_TEMPLATE_CODE), { outlierFactor, headerLineSource, templates });
+  let ex = extractDocument(result, templates, FALLBACK_TEMPLATE_CODE);
+  let serverFilled: string[] = [];
+  // Sunucu tamamlaması: cihaz okumasının BOŞ başlık alanları sunucu okumasından (dolu alan ezilmez).
+  if (complementOcr) {
+    const c = completeExtraction({ ocr: result, ex }, { ocr: complementOcr, ex: extractDocument(complementOcr, templates, FALLBACK_TEMPLATE_CODE) }, { fallbackId: FALLBACK_TEMPLATE_CODE, templates });
+    ex = c.extraction;
+    serverFilled = c.filled;
+  }
+  const extracted = draftFromExtraction(ex, { outlierFactor, headerLineSource, templates });
   // Yan dönük sayfa: kutular panelin çizdiği (dönmemiş) fotoğrafın çerçevesine döner.
-  return { ...extracted, lines: linesToPhotoFrame(extracted.lines, result) };
+  return { ...extracted, lines: linesToPhotoFrame(extracted.lines, result), serverFilled };
+}
+
+/**
+ * Cihaz okumasının sunucu tamamlaması (künye): `ocr` sunucunun aynı fotoğraf okuması (başarısızsa null + `failed` kodu).
+ * Zarfa `serverComplement` olarak yazılır; saklı zarftan yeniden kurulum aynı birleşimi yeniden üretir.
+ */
+export interface ServerComplement {
+  ocr: OcrResult | null;
+  /** Cihaz okumasında boş kalan alanlar (tamamlamayı tetikleyen). */
+  missing: string[];
+  engine: string | null;
+  version: string | null;
+  durationMs: number | null;
+  failed: string | null;
 }
 
 /**
  * OCR sonucu → motor → taslak parçaları. E2: eşleşen motor şablonunun DB satırı yoksa idempotent doğar; `bumpHit`
  * yalnız GERÇEK okumada (saklı zarftan yeniden kurulum yeni bir okuma değildir, isabet sayılmaz).
  */
-export async function buildDraft(result: OcrResult, userId: string | undefined, opts: { bumpHit: boolean }): Promise<BuiltDraft> {
-  const draft = await extractDraft(result);
+export async function buildDraft(result: OcrResult, userId: string | undefined, opts: { bumpHit: boolean; complement?: ServerComplement | null }): Promise<BuiltDraft> {
+  const complement = opts.complement ?? null;
+  const { serverFilled, ...draft } = await extractDraft(result, complement?.ocr ?? null);
   const code = draft.header.regions[0]?.templateId ?? null;
   const template = code ? await ensureSenderTemplate(code, userId) : null;
   if (template && opts.bumpHit) await bumpTemplateHit(template.id);
@@ -93,7 +119,8 @@ export async function buildDraft(result: OcrResult, userId: string | undefined, 
     // "1/2" damgası `pages`a (UYARI kaynağı); `pageCount` kolonu elle beyandır ve onayda kapıdır (s1a inceleme).
     totalsDeclared: toJson(withDeclaredPages(header.totalsDeclared, header.page?.of ?? null)),
     warnings: toJson(header.warnings),
-    envelope: toJson({ ocr: result, regions: header.regions }),
+    envelope: toJson({ ocr: result, regions: header.regions, ...(complement ? { serverComplement: { ...complement, filled: serverFilled } } : {}) }),
+    serverFilled,
   };
 }
 
@@ -110,7 +137,18 @@ async function templateSender(templateId: string): Promise<string | null> {
 /** Saklı zarftan (`{ ocr, regions }`) yeniden kurulum; zarf yok ya da şema dışı → null (FAIL-CLOSED: çağıran yeniden okumaya döner). */
 export async function buildDraftFromEnvelope(envelope: Prisma.JsonValue | null, userId: string | undefined): Promise<BuiltDraft | null> {
   const ocr = ocrFromEnvelope(envelope);
-  return ocr ? buildDraft(ocr, userId, { bumpHit: false }) : null;
+  return ocr ? buildDraft(ocr, userId, { bumpHit: false, complement: complementFromEnvelope(envelope) }) : null;
+}
+
+/** Zarftaki sunucu tamamlaması; yok ya da OCR'ı şema dışı → null (yeniden kurulum cihaz okumasıyla sınırlı kalır). */
+function complementFromEnvelope(envelope: Prisma.JsonValue | null): ServerComplement | null {
+  const raw = envelope !== null && typeof envelope === "object" && !Array.isArray(envelope) ? (envelope as Record<string, unknown>).serverComplement : undefined;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const c = raw as Record<string, unknown>;
+  const parsed = OcrResultSchema.safeParse(c.ocr);
+  if (!parsed.success) return null;
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  return { ocr: parsed.data as OcrResult, missing: Array.isArray(c.missing) ? c.missing.filter((x): x is string => typeof x === "string") : [], engine: str(c.engine), version: str(c.version), durationMs: typeof c.durationMs === "number" ? c.durationMs : null, failed: null };
 }
 
 /** Saklı zarfın (`{ ocr, regions }`) OCR sonucu; zarf yok ya da şema dışı → null (FAIL-CLOSED). */
@@ -230,7 +268,9 @@ export async function fillBoundDraftTx(tx: Prisma.TransactionClient, noteId: str
   // Başlıksız başlayan sayfa (S1 devam): blok 1 satırları önceki sayfanın SON bölümüne eklenir (yeni parti doğmaz).
   const blockBase = Math.max(0, (agg._max.blockNo ?? 0) - (header.continuesPrevious && agg._max.blockNo ? 1 : 0));
   const prevWarnings = Array.isArray(note.warnings) ? note.warnings : [];
-  const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings]) };
+  // Aynı taslakta parti no farklı okunduysa (sayfa / yeniden okuma) ilk değer kalır, iki okuma uyarıda yan yana.
+  const batchDiff = note.customerBatchNo && headerCols.customerBatchNo && batchNosDiffer(note.customerBatchNo, headerCols.customerBatchNo) ? [batchDiffWarning(note.customerBatchNo, headerCols.customerBatchNo)] : [];
+  const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings: toJson([...prevWarnings, ...header.warnings, ...overlap.warnings, ...batchDiff]) };
   const autoSenderCustomerId = fillEmptyHeader(patch, note, headerCols);
   const addLines = overlap.lines.length > 0;
   const prevBlocks = (note.totalsDeclared as { blocks?: unknown[] } | null)?.blocks;

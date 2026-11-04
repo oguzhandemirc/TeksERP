@@ -13,7 +13,8 @@ import { clip } from "../lib/gelen-belge/taslak";
 import { readerOcr, type ReaderResult } from "../lib/gelen-belge/okuma-istemcisi";
 import { AuditService } from "./audit.service";
 import { nextNoteNo, translateUnique } from "./gelen-belge-note.service";
-import { buildDraft, fillBoundDraftTx, lineRows } from "./gelen-belge-taslak-doldur.service";
+import { buildDraft, fillBoundDraftTx, lineRows, type ServerComplement } from "./gelen-belge-taslak-doldur.service";
+import type { OcrResult } from "../lib/gelen-belge/motor";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 import { readDuplicateDocNoMode } from "./system-setting.service";
@@ -67,11 +68,15 @@ async function release(id: string, attempts: number, code: string, opts: { perma
   return failed ? "READ_FAILED" : "RETRY";
 }
 
+/** Okumanın tamamlayıcısı (cihaz okuması → sunucu okuması): tx DIŞINDA koşar; tamamlama gerekmiyorsa null. */
+export type CompleteFn = (result: OcrResult, content: Buffer, mimeType: string) => Promise<ServerComplement | null>;
+
 /**
  * READING'deki taramayı sidecar'a okutur, motorla çıkarır, DRAFT'a yazar. Tarama bir taslağa bağlıysa
  * yalnız BOŞ alanlar dolar ve satırsız taslağa satırlar eklenir (operatörün yazdığı ezilmez); bağlı değilse yeni taslak.
+ * `opts.complete` (yalnız cihaz okuması): boş başlık alanı için sunucu okuması — tx'lerden ÖNCE, bir kez.
  */
-export async function processClaimedScan(id: string, readerUrl: string, ocr: typeof readerOcr = readerOcr): Promise<ProcessOutcome> {
+export async function processClaimedScan(id: string, readerUrl: string, ocr: typeof readerOcr = readerOcr, opts: { complete?: CompleteFn } = {}): Promise<ProcessOutcome> {
   const scan = await prisma.documentScan.findUnique({ where: { id }, select: { id: true, status: true, attempts: true, noteId: true, pageNo: true, mimeType: true, content: true, capturedById: true, sha256: true } });
   if (!scan || scan.status !== "READING") return "LOST";
   if (!scan.content) return release(id, scan.attempts, "CONTENT_PURGED", { permanent: true, userId: scan.capturedById ?? undefined });
@@ -84,7 +89,9 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
   }
   if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
   const userId = scan.capturedById ?? undefined;
-  const built = await buildDraft(r.result, userId, { bumpHit: true });
+  const complement = opts.complete ? await opts.complete(r.result, Buffer.from(content), scan.mimeType) : null;
+  const built = await buildDraft(r.result, userId, { bumpHit: true, complement });
+  const serverKunye = complement ? { serverFilled: built.serverFilled, ...(complement.failed ? { serverFailed: complement.failed } : {}) } : {};
   const { draft, firstTemplate, headerCols, totalsDeclared, warnings } = built;
   const { header } = draft;
   const scanData = { status: "READ" as const, ocrResult: built.envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };
@@ -111,7 +118,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     }).catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : Promise.reject(err)));
     if (!res) return "LOST";
     if (res.filled) await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR", scanId: id, sha256: scan.sha256, lineCount: res.lines, engine: scanData.ocrEngine, warnings: header.warnings.length, ...(res.autoSender ? { senderCustomerId: res.autoSender, senderFrom: "TEMPLATE" } : {}) } });
-    await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId, noteFilled: res.filled, engine: scanData.ocrEngine, durationMs: r.durationMs } });
+    await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId, noteFilled: res.filled, engine: scanData.ocrEngine, durationMs: r.durationMs, ...serverKunye } });
     return "READ";
   }
 
@@ -130,7 +137,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     .catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : translateUnique(err)));
   if (!created) return "LOST";
   await AuditService.log({ userId, action: "CREATE", tableName: NOTE_TABLE, recordId: created.id, newData: { noteNo: created.noteNo, status: "DRAFT", sourceKind: "OCR", templateCode: firstTemplate, scanId: id, sha256: scan.sha256, lineCount: draft.lines.length, blockCount: header.totalsDeclared.blocks.length, engine: scanData.ocrEngine, warnings: header.warnings.length, ...(headerCols.senderCustomerId ? { senderCustomerId: headerCols.senderCustomerId, senderFrom: "TEMPLATE" } : {}) } });
-  await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId: created.id, engine: scanData.ocrEngine, durationMs: r.durationMs } });
+  await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId: created.id, engine: scanData.ocrEngine, durationMs: r.durationMs, ...serverKunye } });
   return "READ";
 }
 

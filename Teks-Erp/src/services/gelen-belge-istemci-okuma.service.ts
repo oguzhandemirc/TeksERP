@@ -9,12 +9,13 @@ import { AuditService } from "./audit.service";
 import { uyari } from "../lib/logger";
 import { ClientOcrSchema, clientOcrToResult } from "../lib/gelen-belge/istemci-ocr";
 import type { OcrResult } from "../lib/gelen-belge/motor";
-import { processClaimedScan } from "./gelen-belge-okuma.service";
+import { processClaimedScan, type CompleteFn } from "./gelen-belge-okuma.service";
+import { serverCompleter } from "./gelen-belge-sunucu-tamamlama.service";
 import { PDF_MIME, SCAN_SELECT, uploadDocumentScan, type DocumentScanInput } from "./gelen-belge-scan.service";
 
 /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · `null`: cihaz okuması yok/kullanılmadı. */
 export type DeviceReadOutcome = "READ" | "FALLBACK" | null;
-/** Bekçi düşme yolunu bu parametreyle sınar (işlemci hata atar); üretimde hep `processClaimedScan`. */
+/** Bekçi düşme yolunu bu parametreyle sınar (işlemci hata atar); üretimde hep `processClaimedScan` (+ `serverCompleter()`). */
 type ProcessFn = typeof processClaimedScan;
 const SCAN_TABLE = "DOCUMENT_SCAN";
 
@@ -41,10 +42,11 @@ async function claimPendingForDevice(id: string): Promise<number | null> {
 }
 
 /** Cihaz okumasını işler; atılan hata ya da kaybedilen sahiplik → READING'i (yalnız bu denemenin damgasıyla) PENDING'e bırakır. */
-async function readOnDevice(c: { id: string; attempts: number; result: OcrResult; userId: string }, process: ProcessFn): Promise<DeviceReadOutcome> {
+async function readOnDevice(c: { id: string; attempts: number; result: OcrResult; userId: string }, process: ProcessFn, complete: CompleteFn): Promise<DeviceReadOutcome> {
   const { id, attempts, result, userId } = c;
   const durationMs = Math.round(result.durationMs ?? 0);
-  const outcome = await process(id, "", async () => ({ ok: true, result, engine: "mlkit", version: null, durationMs }))
+  // Boş başlık alanı kalırsa aynı fotoğraf sunucuda bir kez okunur, yalnız boş alanlar dolar (`gelen-belge-sunucu-tamamlama`).
+  const outcome = await process(id, "", async () => ({ ok: true, result, engine: "mlkit", version: null, durationMs }), { complete })
     .catch((err: unknown) => {
       uyari("gelen-belge", `cihaz okuması işlenemedi (${err instanceof Error ? err.name : "?"}) — sunucu okumasına bırakıldı`);
       return "ERROR" as const;
@@ -60,14 +62,14 @@ async function readOnDevice(c: { id: string; attempts: number; result: OcrResult
  * Yükleme ucu gövdesi: `clientOcr` yoksa bugünkü yükleme. Varsa yeni fotoğraf READING doğar ve hemen cihaz okumasıyla
  * işlenir; yeniden kullanılan PENDING kayıt claim'lenip aynı yoldan okunur; okunmuş/başarısız/PDF kayıt cihaz okumasını yok sayar.
  */
-export async function uploadScanWithDeviceRead(input: DocumentScanInput & { clientOcr?: unknown }, userId: string, process: ProcessFn = processClaimedScan) {
+export async function uploadScanWithDeviceRead(input: DocumentScanInput & { clientOcr?: unknown }, userId: string, process: ProcessFn = processClaimedScan, complete: CompleteFn = serverCompleter()) {
   const { clientOcr, ...rest } = input;
   const device = clientOcr === undefined || clientOcr === null ? null : parseClientOcr(clientOcr);
   const r = await uploadDocumentScan(rest, userId, { bornReading: device !== null });
   if (!device || r.scan.mimeType === PDF_MIME) return { ...r, deviceOcr: null as DeviceReadOutcome };
   const attempts = !r.duplicate && r.scan.status === "READING" ? r.scan.attempts : r.scan.status === "PENDING" ? await claimPendingForDevice(r.scan.id) : null;
   if (attempts === null) return { ...r, deviceOcr: null as DeviceReadOutcome };
-  const deviceOcr = await readOnDevice({ id: r.scan.id, attempts, result: device, userId }, process);
+  const deviceOcr = await readOnDevice({ id: r.scan.id, attempts, result: device, userId }, process, complete);
   const scan = await prisma.documentScan.findUniqueOrThrow({ where: { id: r.scan.id }, select: SCAN_SELECT });
   return { ...r, scan, deviceOcr };
 }
