@@ -51,3 +51,14 @@ describe('taughtRow', () => {
     expect(r.detail!.formFields).toMatchObject({ renkText: 'Kırmızı' });
   });
 });
+
+describe('taughtRow — müşteri parti no (istek 2)', () => {
+  it('⭐ tanıtılan parti no aday listesinde olmasa da müşteri parti no olarak dolar (vurgulu)', () => {
+    const r = taughtRow(row(), { partiNo: ' 2008-58 ' }, null, TPL);
+    expect(r.form).toMatchObject({ customerBatchNo: '2008-58', customerBatchNoFromDoc: true, ourBatchNo: null });
+  });
+  it('kullanıcı elle düzelttiyse tanıtma ezmez', () => {
+    const r = taughtRow(row({ form: { ...FORM, customerBatchNo: 'EL', customerBatchNoEdited: true } }), { partiNo: '2008-58' }, null, TPL);
+    expect(r.form).toMatchObject({ customerBatchNo: 'EL' });
+  });
+});

@@ -7,6 +7,8 @@ import {
   buildCreateBody,
   buildDraftPatch,
   detailFromSummary,
+  docCustomerBatchNo,
+  editCustomerBatchNo,
   initialRowForm,
   isFormApprovalDisabled,
   pinRecent,
@@ -207,5 +209,45 @@ describe('toplar ayrı geldi — buildCreateBody rolls', () => {
     expect(withSummaryFields(detail(), { docRolls } as unknown as ReadSummary).docRolls).toEqual(docRolls);
     const d = detail();
     expect(withSummaryFields(d, {} as ReadSummary)).toBe(d);
+  });
+});
+
+describe('müşteri parti no (istek 2: belgeden dolar, elle yazılır, bizimkinden ayrı)', () => {
+  const D = (over: Partial<InboundNoteDetail> = {}): InboundNoteDetail => ({ id: 'n1', noteNo: 'GB-1', status: 'DRAFT', ownerCustomerId: 'c1', kursunMeters: '100', ...over });
+  const twoCands = [{ kind: 'DOC', key: 'evrakNo', value: 'E-77' }, { kind: 'BATCH', key: 'partiNo', value: '2008-58' }];
+
+  it('⭐ kaynak sırası: taslak başlığı > BATCH türlü aday > yok', () => {
+    expect(docCustomerBatchNo(D({ customerBatchNo: 'MP-1', batchNoCandidates: twoCands }))).toBe('MP-1');
+    expect(docCustomerBatchNo(D({ customerBatchNo: null, batchNoCandidates: twoCands }))).toBe('2008-58');
+    expect(docCustomerBatchNo(D({ batchNoCandidates: [{ kind: 'DOC', value: 'E-77' }] }))).toBeNull();
+  });
+  it('⭐ ≥2 aday (bizim parti no boş kalır) olsa da müşteri parti no dolu + belgeden işaretli', () => {
+    const f = initialRowForm(D({ batchNoCandidates: twoCands }));
+    expect(f.ourBatchNo).toBeNull();
+    expect(f).toMatchObject({ customerBatchNo: '2008-58', customerBatchNoFromDoc: true });
+  });
+  it('belgede yoksa boş, vurgusuz', () => {
+    expect(initialRowForm(D())).toMatchObject({ customerBatchNo: null, customerBatchNoFromDoc: false });
+  });
+  it('⭐ düzenleme vurguyu düşürür ve gövdeye girer; düzenlenmeyen değer gövdeye girmez (eski sunucu strict)', () => {
+    const f = initialRowForm(D({ batchNoCandidates: twoCands }));
+    const opts = { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: null };
+    expect('customerBatchNo' in buildCreateBody(f, opts)).toBe(false);
+    const e = { ...f, ...editCustomerBatchNo('2008-59') };
+    expect(e).toMatchObject({ customerBatchNo: '2008-59', customerBatchNoFromDoc: false, customerBatchNoEdited: true });
+    expect(buildCreateBody(e, opts).customerBatchNo).toBe('2008-59');
+    expect(buildCreateBody({ ...f, ...editCustomerBatchNo('') }, opts).customerBatchNo).toBeNull();
+  });
+  it('taslak PATCH: kolonda olmayan belge değeri ya da elle değişiklik yazılır; aynıysa yazılmaz', () => {
+    const d = D({ customerBatchNo: null, batchNoCandidates: twoCands });
+    expect(buildDraftPatch(initialRowForm(d), d).customerBatchNo).toBe('2008-58');
+    const same = D({ customerBatchNo: 'MP-1' });
+    expect('customerBatchNo' in buildDraftPatch(initialRowForm(same), same)).toBe(false);
+  });
+  it('⭐ özetteki (güven süzgeçli) değer detayın ham kolonunu ezer; özet taşır', () => {
+    expect(withSummaryFields(D({ customerBatchNo: 'HAM' }), { customerBatchNo: null } as ReadSummary).customerBatchNo).toBeNull();
+    const d = D({ customerBatchNo: 'HAM' });
+    expect(withSummaryFields(d, {} as ReadSummary)).toBe(d);
+    expect(detailFromSummary({ noteId: 'n1', noteNo: 'GB-1', noteStatus: 'DRAFT', customerBatchNo: 'MP-1' } as ReadSummary).customerBatchNo).toBe('MP-1');
   });
 });

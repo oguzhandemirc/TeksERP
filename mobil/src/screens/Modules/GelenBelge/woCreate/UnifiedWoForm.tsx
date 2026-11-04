@@ -4,7 +4,7 @@
 // inputları WoFormFields'ta (K30-D adımlar/makine/tür/özellik WoPlanFields). Durum `useUnifiedWoForm`; kayıt `useWoRows`
 // + satır başına ek gövde alanlarıyla (S16a sözleşmesi).
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { SheetField } from '../../../../components/ModuleSheet';
@@ -20,12 +20,13 @@ import type { WoRowsState } from './useWoRows';
 import WoFormFields from './WoFormFields';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
+import { woFormLayout } from './woLayout';
 
 const DOC_PLACEHOLDER = 'Belge okutulunca dolar';
 
 export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const u = useUnifiedWoForm(props);
-  const { wo, row, scan, form, done, fields } = u;
+  const { wo, scan, form, done, fields } = u;
   const fieldProps = {
     state: form,
     edit: u.edit,
@@ -43,40 +44,30 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
     onOrderLinePicked: u.onOrderLine,
     plan: u.plan,
   };
+  const win = useWindowDimensions();
+  const layout = woFormLayout(win.width, win.height);
+  const twoCol = layout.columns === 2;
   return (
     <>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
-        <FieldsButton onPress={fields.openSheet} />
-        {!done && (
-          <Button mode="contained" icon="file-document-outline" onPress={u.okut} disabled={wo.saving || scan.b.sending || scan.source.busy} contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belge-okut">
-            {row ? 'Belgeyi değiştir' : 'Belge okut'}
-          </Button>
-        )}
-        {!row && (scan.b.pages.length > 0 || scan.b.headerLocked || scan.b.sending) && (
-          <ScannerSection b={scan.b} hasRows={false} onAdd={scan.source.add} busy={scan.source.busy} onClassic={scan.openCamera} onRemove={scan.remove} onOpen={scan.setPreviewIndex} />
-        )}
-        <Text style={styles.section}>Belge</Text>
-        {row ? (
-          <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj')} />
-        ) : (
-          <View style={styles.placeholders} testID="ie-form-belge-yer-tutucu">
-            {['Müşteri', 'Parti no', 'Kurşun metresi'].map((l) => (
-              <SheetField key={l} label={l} value="" placeholder={DOC_PLACEHOLDER} onPress={u.okut} disabled />
-            ))}
+      <ScrollView contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
+        {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
+        {twoCol ? (
+          <View style={[styles.columns, { gap: layout.pad }]} testID="ie-form-iki-sutun">
+            <View style={styles.col} testID="ie-form-sol">
+              <DocColumn u={u} />
+            </View>
+            <View style={styles.col} testID="ie-form-sag">
+              <FormColumn u={u} fieldProps={fieldProps} />
+            </View>
           </View>
-        )}
-        <WoFormFields {...fieldProps} show={fields.isTop} />
-        <OtherFields count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
-          {row?.form && fields.isOther('gramaj') && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
-          <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
-        </OtherFields>
-        {wo.mode === 'SEPARATE' && (
-          <Text style={styles.hint} testID="ie-form-ayri-onay">
-            Fabrika ayarı ayrı onay: kayıt taslak kalır; üretim ve plan alanları {TERIM.terbiyeIsEmri.tekilKucuk} panelde onaylanırken girilir.
-          </Text>
+        ) : (
+          <>
+            <DocColumn u={u} />
+            <FormColumn u={u} fieldProps={fieldProps} />
+          </>
         )}
       </ScrollView>
-      <CreateBar wo={wo} done={done} block={u.block} onNew={props.onNew} />
+      <CreateBar wo={wo} done={done} block={u.block} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
       <FieldSelectorSheet
@@ -91,9 +82,57 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   );
 }
 
-function CreateBar({ wo, done, block, onNew }: { wo: WoRowsState; done: boolean; block: string | null; onNew: () => void }) {
+type FormModel = ReturnType<typeof useUnifiedWoForm>;
+
+/** Belge sütunu: Belge okut + tarayıcı + belge kartı (yer tutucu). */
+function DocColumn({ u }: { u: FormModel }) {
+  const { wo, row, scan, done, fields } = u;
   return (
-    <View style={styles.bar}>
+    <>
+      {!done && (
+        <Button mode="contained" icon="file-document-outline" onPress={u.okut} disabled={wo.saving || scan.b.sending || scan.source.busy} contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belge-okut">
+          {row ? 'Belgeyi değiştir' : 'Belge okut'}
+        </Button>
+      )}
+      {!row && (scan.b.pages.length > 0 || scan.b.headerLocked || scan.b.sending) && (
+        <ScannerSection b={scan.b} hasRows={false} onAdd={scan.source.add} busy={scan.source.busy} onClassic={scan.openCamera} onRemove={scan.remove} onOpen={scan.setPreviewIndex} />
+      )}
+      <Text style={styles.section}>Belge</Text>
+      {row ? (
+        <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj')} />
+      ) : (
+        <View style={styles.placeholders} testID="ie-form-belge-yer-tutucu">
+          {['Müşteri', 'Parti no', 'Kurşun metresi'].map((l) => (
+            <SheetField key={l} label={l} value="" placeholder={DOC_PLACEHOLDER} onPress={u.okut} disabled />
+          ))}
+        </View>
+      )}
+    </>
+  );
+}
+
+/** Üretim / Plan / Diğer alanlar sütunu. */
+function FormColumn({ u, fieldProps }: { u: FormModel; fieldProps: Omit<React.ComponentProps<typeof WoFormFields>, 'show' | 'zone'> }) {
+  const { wo, row, done, fields } = u;
+  return (
+    <>
+      <WoFormFields {...fieldProps} show={fields.isTop} />
+      <OtherFields count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
+        {row?.form && fields.isOther('gramaj') && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
+        <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
+      </OtherFields>
+      {wo.mode === 'SEPARATE' && (
+        <Text style={styles.hint} testID="ie-form-ayri-onay">
+          Fabrika ayarı ayrı onay: kayıt taslak kalır; üretim ve plan alanları {TERIM.terbiyeIsEmri.tekilKucuk} panelde onaylanırken girilir.
+        </Text>
+      )}
+    </>
+  );
+}
+
+function CreateBar({ wo, done, block, onNew, pad }: { wo: WoRowsState; done: boolean; block: string | null; onNew: () => void; pad: number }) {
+  return (
+    <View style={[styles.bar, { paddingHorizontal: pad }]}>
       <Text style={styles.barText} testID="ie-form-ipucu">
         {done ? `${TERIM.terbiyeIsEmri.tekil} kaydedildi.` : block ?? 'Kontrol edin ve oluşturun.'}
       </Text>
@@ -145,7 +184,9 @@ function ScanModals({ scan }: { scan: DocScanFlow }) {
 }
 
 const styles = StyleSheet.create({
-  body: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xl * 2 },
+  body: { gap: spacing.sm },
+  columns: { flexDirection: 'row', alignItems: 'flex-start' },
+  col: { flex: 1, gap: spacing.sm },
   section: { marginTop: spacing.md, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   placeholders: { gap: spacing.sm },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
@@ -155,7 +196,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
     borderTopWidth: 1,

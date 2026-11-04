@@ -249,6 +249,8 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   return {
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
+    /** İE partisinin numara kaynağı (ayar okunamadı/eski sunucu → null = "otomatik" gösterilir). */
+    batchSource: settings.data?.batchNumberSource ?? null,
     addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll,
     duplicate,
     dismissDuplicate: () => setDuplicate(null),

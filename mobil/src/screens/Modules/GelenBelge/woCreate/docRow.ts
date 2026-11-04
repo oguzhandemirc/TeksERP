@@ -62,6 +62,8 @@ export function taughtRow(r: DocRow, f: Record<string, string | null>, ownerCust
       ...form,
       ...(m !== null ? { meters: m, metersReview: false } : {}),
       ...(cand ? { ourBatchNo: cand.value, ourBatchNoKey: batchPatch(cand).ourBatchNoKey ?? null } : {}),
+      // Müşteri parti no adaydan bağımsız: tanıtılan metin elle yazılmış gibi dolar (kullanıcı düzelttiyse dokunulmaz).
+      ...(text(f.partiNo) && !form.customerBatchNoEdited ? { customerBatchNo: text(f.partiNo), customerBatchNoFromDoc: true } : {}),
       ...(ownerCustomerId ? { ownerCustomerId, ownerSuggested: null } : {}),
     };
   }

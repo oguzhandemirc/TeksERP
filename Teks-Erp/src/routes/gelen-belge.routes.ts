@@ -664,7 +664,8 @@ router.post("/irsaliyeler/:id/iptal", requirePermission("gelen-belge:cancel"), w
 const FormWorkOrderBody = z.strictObject({
   clientToken: z.uuid("İşlem kimliği geçersiz"),
   ownerCustomerId: Id,
-  ourBatchNo: optText(64),
+  // Bizim parti no (İE partisi) + müşterinin parti no'su (belge başlığı).
+  ourBatchNo: optText(64), customerBatchNo: optText(64),
   ourBatchNoKey: BatchNoKey.nullable().optional(),
   kursunMeters: Money("Kurşun metresi"),
   // K29 S14b: yoksa rotasız (yalnız "Rota uygulaması: Okutmayla"; SIRALI'da servis onaydan ÖNCE 400 GELEN_BELGE_ROUTE_REQUIRED).

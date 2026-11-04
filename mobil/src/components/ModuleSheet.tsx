@@ -69,11 +69,11 @@ export default function ModuleSheet({ visible, onDismiss, dismissable, title, su
 }
 
 /** Dokunmatik seçici alanı (PickerModal açar) — chip/çoklu seçim yok, seçici daima PickerModal. */
-export function SheetField({ label, value, placeholder, onPress, hint, disabled }: { label: string; value: string; placeholder: string; onPress: () => void; hint?: string; disabled?: boolean }) {
+export function SheetField({ label, value, placeholder, onPress, hint, disabled, fieldStyle }: { label: string; value: string; placeholder: string; onPress: () => void; hint?: string; disabled?: boolean; /** Ekrana özgü kutu stili (ör. belgeden dolan değerin sarı vurgusu). */ fieldStyle?: StyleProp<ViewStyle> }) {
   return (
     <View>
       <Text style={sheet.label}>{label}</Text>
-      <TouchableRipple onPress={onPress} disabled={disabled} style={[sheet.field, disabled && sheet.fieldDisabled]} accessibilityRole="button">
+      <TouchableRipple onPress={onPress} disabled={disabled} style={[sheet.field, disabled && sheet.fieldDisabled, fieldStyle]} accessibilityRole="button">
         <Text style={value ? sheet.fieldText : sheet.fieldPlaceholder}>{value || placeholder}</Text>
       </TouchableRipple>
       {hint ? <Text style={sheet.hint}>{hint}</Text> : null}

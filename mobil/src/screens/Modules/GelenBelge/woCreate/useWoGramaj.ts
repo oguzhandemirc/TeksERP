@@ -35,8 +35,10 @@ export function useGramajCatalog(route: ProductionRoute, rows: DocRow[]): { show
     (customerId) => {
       if (!showGramaj || !propertyId) return null;
       const id = valueFor(customerId, propertyId);
-      // Katalogda olmayan (pasif) değer önerilmez.
-      return id && !catalog.options.some((o) => o.id === id) ? null : id;
+      if (id === undefined) return undefined;
+      // Katalogda olmayan (pasif) değer önerilmez; çözücü boş dönerse (rotasız / istasyonsuz) katalogdaki varsayılan seçili gelir.
+      const known = id && catalog.options.some((o) => o.id === id) ? id : null;
+      return known ?? catalog.options.find((o) => o.isDefault)?.id ?? null;
     },
     [showGramaj, propertyId, valueFor, catalog],
   );

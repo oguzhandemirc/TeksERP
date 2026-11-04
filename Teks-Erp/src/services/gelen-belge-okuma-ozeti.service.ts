@@ -75,7 +75,7 @@ export async function getReadSummary(noteId: string) {
     where: { id: noteId },
     select: {
       id: true, noteNo: true, status: true, ownerCustomerId: true, declaredTopCount: true, totalsDeclared: true, warnings: true,
-      ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
+      customerBatchNo: true, ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
       lines: { select: { id: true, lineNo: true, blockNo: true, lineKind: true, senderRollNo: true, meters: true, weightKg: true, status: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
       scans: { select: { status: true, attempts: true, mimeType: true } },
     },
@@ -105,6 +105,8 @@ export async function getReadSummary(noteId: string) {
     // Okuma uyarıları — panel detayıyla AYNI helper (`noteNotices`); eski tablet alanı yok sayar.
     notices: noteNotices(note.warnings),
     // Parti no + kurşun metresi (Gülkesim): kayıtlı başlık değeri + canlı adaylar; eski tablet alanları yok sayar.
+    // Müşterinin parti no'su (belgeden okunan başlık); SORMA + tanıtılmamış (BLIND) tahmin forma dolmaz. Eski tablet yok sayar.
+    customerBatchNo: trust === "BLIND" ? null : note.customerBatchNo,
     ourBatchNo: note.ourBatchNo,
     ourBatchNoKey: note.ourBatchNoKey,
     kursunMeters: note.kursunMeters,

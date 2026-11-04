@@ -7,6 +7,8 @@ import ModuleSheet, { SheetField } from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import { colors, radius, spacing, typography } from '../../../../theme';
+import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
+import BatchFields from './DocRowBatchFields';
 import { TERIM } from '../../../../lib/terim';
 import { useReadResult } from '../useReadResult';
 import { useApprovalDetail } from '../useApprovalCard';
@@ -42,7 +44,6 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
   const locked = done || wo.saving;
   const view = read.watch ? readResultView(read.watch, row.noteNo) : null;
   const issues = f && wo.mode !== 'SEPARATE' ? rowIssues(f) : [];
-  const candidates = row.detail?.batchNoCandidates ?? [];
   const ownerName = f?.ownerCustomerId ? customers.find((o) => o.value === f.ownerCustomerId)?.label ?? f.ownerSuggested ?? 'Seçili müşteri' : '';
   const meterText = f?.meters != null ? `${fmtKursunMeters(f.meters)} m` : null;
 
@@ -66,14 +67,16 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
       )}
       {f && (
         <>
-          <SheetField
-            label="Müşteri"
-            value={ownerName}
-            placeholder="Müşteri seçin"
-            onPress={() => setPicker('owner')}
-            disabled={locked}
-            hint={f.ownerSuggested && f.ownerCustomerId ? `Belgeden önerildi: ${f.ownerSuggested}` : undefined}
-          />
+          <View testID={f.ownerSuggested && f.ownerCustomerId ? `belgeden-musteri-${row.noteNo}` : undefined}>
+            <SheetField
+              label="Müşteri"
+              value={ownerName}
+              placeholder="Müşteri seçin"
+              onPress={() => setPicker('owner')}
+              disabled={locked}
+              fieldStyle={f.ownerSuggested && f.ownerCustomerId ? styles.hlInput : undefined}
+            />
+          </View>
           {f.ownerAsk && f.ownerCustomerId !== f.ownerAsk.customerId && (
             <Chip icon="help-circle-outline" onPress={() => wo.updateForm(row.noteId, { ownerCustomerId: f.ownerAsk!.customerId, ownerSuggested: f.ownerAsk!.name })}
               disabled={locked} style={styles.chip} testID={`belge-satir-sahip-sor-${row.noteNo}`}>
@@ -85,13 +88,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
           )}
           {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
             <>
-              <SheetField
-                label="Parti no"
-                value={f.ourBatchNo ?? ''}
-                placeholder={candidates.length > 1 ? `Parti no seçin (${candidates.length} aday)` : 'Belgede parti no yok — seriden verilecek'}
-                onPress={() => setPicker('batch')}
-                disabled={locked || candidates.length === 0}
-              />
+              <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
               <RollRows row={row} wo={wo} locked={locked} />
               {!f.rolls && <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />}
             </>
@@ -136,11 +133,14 @@ function useRowRead(row: DocRow, wo: WoRowsState) {
 
 function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: WoRowsState; meterText: string | null; locked: boolean; onEdit: () => void }) {
   const f = row.form!;
+  // Okunan metre elle düzeltilmediyse sarı vurgu (belgeden geldi).
+  const read = row.detail?.kursunMeters != null && row.detail.kursunMeters !== '' ? Number(row.detail.kursunMeters) : null;
+  const fromDoc = read !== null && f.meters === read;
   return (
     <View testID={`belge-satir-metre-${row.noteNo}`}>
       <Text style={styles.label}>Kurşun metresi</Text>
       <View style={styles.row}>
-        <Text style={[styles.meters, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
+        <Text testID={fromDoc ? `belgeden-metre-${row.noteNo}` : undefined} style={[styles.meters, fromDoc && styles.hlText, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
         {f.metersReview && (
           <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-dogrula-${row.noteNo}`}>
             Doğrula
@@ -169,7 +169,9 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
             selected={f.gramajValueId === o.id}
             onPress={() => wo.updateForm(row.noteId, { gramajValueId: f.gramajValueId === o.id ? null : o.id })}
             disabled={locked}
-            style={styles.chip}
+            style={[styles.chip, f.gramajValueId === o.id && styles.chipOn]}
+            textStyle={f.gramajValueId === o.id ? styles.chipOnText : undefined}
+            selectedColor={f.gramajValueId === o.id ? colors.textOnDark : undefined}
             testID={`belge-satir-gramaj-${row.noteNo}-${o.name}`}
           >
             {o.isDefault ? `${o.name} (varsayılan)` : o.name}
@@ -304,8 +306,13 @@ const styles = StyleSheet.create({
   note: { fontSize: typography.size.sm, color: colors.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 56, justifyContent: 'center' },
+  // Seçili gramaj uzaktan belli olsun (istek 3): marka zemini, beyaz kalın yazı, biraz daha yüksek.
+  chipOn: { minHeight: 64, backgroundColor: colors.brand },
+  chipOnText: { color: colors.textOnDark, fontSize: typography.size.lg, fontWeight: typography.weight.bold },
   result: { gap: spacing.sm },
   resultTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
   btn: { minHeight: 56 },
+  hlInput: { backgroundColor: DOC_HIGHLIGHT_BG },
+  hlText: { flex: 0, backgroundColor: DOC_HIGHLIGHT_BG, borderRadius: 6, paddingHorizontal: spacing.sm },
 });

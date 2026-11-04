@@ -1,12 +1,16 @@
-// S16b tek form: belge okutulmadan "oluştur" kapalı; okuma sonucu inputlara dolar ("belgeden" rozeti); desen/renk önerisi
+// S16b tek form: belge okutulmadan "oluştur" kapalı; okuma sonucu inputlara dolar (belgeden sarı vurgu); desen/renk önerisi
 // çiple onaylanır; kayıt form ucuna ek alanlarla gider, PER_PARTY'de hedef metraj/kg gitmez.
 import React from 'react';
-import { fireEvent, waitFor } from '@testing-library/react-native';
+import { fireEvent, waitFor, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { renderWithPaper } from '../../../../test/render';
+import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
 
+let mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ __esModule: true, default: () => mockDims }));
 let mockRows: DocRow[] = [];
 let mockOpts: { extraBody?: (r: DocRow) => ExtraFormBody } | undefined;
 const mockSaveAll = jest.fn();
@@ -99,8 +103,20 @@ beforeEach(() => {
   mockRows = [];
   mockOpts = undefined;
   mockQty = false;
+  mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
   jest.clearAllMocks();
 });
+
+/** testID'li öğe ya da atalarından biri belgeden vurgusunda mı (Paper girdisinin stili sarmalayıcıya iner). */
+function highlighted(s: ReturnType<typeof renderWithPaper>, testID: string): boolean {
+  type N = { props: { style?: unknown }; parent: N | null };
+  let n: N | null = s.getByTestId(testID) as unknown as N;
+  while (n) {
+    if ((StyleSheet.flatten(n.props.style as never) as { backgroundColor?: unknown } | undefined)?.backgroundColor === DOC_HIGHLIGHT_BG) return true;
+    n = n.parent;
+  }
+  return false;
+}
 
 describe('UnifiedWoForm', () => {
   it('⭐ belge okutulmadan "oluştur" KAPALI + ipucu; belge alanları yer tutucu; Belge okut tarayıcıyı açar', () => {
@@ -183,6 +199,46 @@ describe('UnifiedWoForm', () => {
     const s = renderWithPaper(ui(null));
     await waitFor(() => expect(s.getByTestId('ie-form-ipucu').props.children).toBe('Rotayı seçin.'));
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
+  });
+});
+
+describe('UnifiedWoForm — vurgu, yerleşim ve kontrollü Alanlar', () => {
+  it('⭐ belgeden dolan En sarı vurgulu, rozet yazısı yok; elle değişince vurgu kalkar', async () => {
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(highlighted(s, 'ie-form-en')).toBe(true);
+    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
+    expect(s.queryByText('belgeden')).toBeNull();
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '160');
+    expect(s.queryByTestId('belgeden-width')).toBeNull();
+    expect(highlighted(s, 'ie-form-en')).toBe(false);
+    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
+  });
+
+  it('⭐ tablet yatay (1280×800): iki sütun — solda belge okut + belge kartı, sağda üretim alanları; dikeyde tek sütun', async () => {
+    mockRows = [row()];
+    mockDims = { width: 1280, height: 800, scale: 1, fontScale: 1 };
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    const left = within(s.getByTestId('ie-form-sol'));
+    const right = within(s.getByTestId('ie-form-sag'));
+    expect(left.getByTestId('ie-belge-okut')).toBeTruthy();
+    expect(left.getByTestId('satir-karti')).toBeTruthy();
+    expect(right.getByTestId('ie-form-en')).toBeTruthy();
+    expect(left.queryByTestId('ie-form-en')).toBeNull();
+    mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
+    const d = renderWithPaper(ui());
+    expect(d.queryByTestId('ie-form-iki-sutun')).toBeNull();
+  });
+
+  it('⭐ kontrollü Alanlar: fieldsOpen verilince gövde tuşu çizilmez, seçici prop ile açılır', () => {
+    const onChange = jest.fn();
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} fieldsOpen={false} onFieldsOpenChange={onChange} />);
+    expect(s.queryByTestId('ie-alanlar')).toBeNull();
+    expect(s.queryByText('Varsayılana dön')).toBeNull();
+    const o = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} fieldsOpen onFieldsOpenChange={onChange} />);
+    expect(o.getByText('Varsayılana dön')).toBeTruthy();
   });
 });
 

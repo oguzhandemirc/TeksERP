@@ -82,11 +82,19 @@ export function useWoFieldPrefs(): WoFieldPrefs {
 }
 
 /** Formun alan yerleşimi: üstte çizilenler, altta "Diğer alanlar"a inenler, ⚙ ve bölüm açıklığı. */
-export function useWoFieldLayout(s: Pick<WoFormState, 'docShown' | 'suggestions' | 'docText'>, c: FieldContext, valued: readonly WoFieldKey[] = []) {
+export function useWoFieldLayout(
+  s: Pick<WoFormState, 'docShown' | 'suggestions' | 'docText'>,
+  c: FieldContext,
+  valued: readonly WoFieldKey[] = [],
+  /** Kontrollü kip: ⚙ seçici açıklığı üst ekranda (header "Alanlar" tuşu). */
+  sheet?: { open: boolean; onOpenChange: (open: boolean) => void },
+) {
   const prefs = useWoFieldPrefs();
   const { docShown, suggestions, docText } = s;
   const docKeys = useMemo(() => docFilledFields({ docShown, suggestions, docText }), [docShown, suggestions, docText]);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [ownSheetOpen, setOwnSheetOpen] = useState(false);
+  const sheetOpen = sheet ? sheet.open : ownSheetOpen;
+  const setSheetOpen = sheet ? sheet.onOpenChange : setOwnSheetOpen;
   const [otherOpen, setOtherOpen] = useState(false);
   const isTop = useCallback((k: WoFieldKey) => placement(k, prefs.hidden, docKeys) === 'top', [prefs.hidden, docKeys]);
   const other = otherFields(prefs.hidden, docKeys, c);

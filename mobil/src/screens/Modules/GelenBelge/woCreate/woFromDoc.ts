@@ -82,6 +82,7 @@ export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
     noteNo: s.noteNo,
     status: s.noteStatus,
     ownerCustomerId: s.ownerCustomerId ?? null,
+    ...(s.customerBatchNo !== undefined ? { customerBatchNo: s.customerBatchNo } : {}),
     ourBatchNo: s.ourBatchNo ?? null,
     ourBatchNoKey: s.ourBatchNoKey ?? null,
     kursunMeters: s.kursunMeters ?? null,
@@ -101,9 +102,11 @@ export function withSummaryFields(d: InboundNoteDetail, s: ReadSummary | null | 
   const fields = d.formFields ?? s?.formFields ?? null;
   const suggestions = d.suggestions ?? s?.suggestions ?? null;
   const docRolls = d.docRolls ?? s?.docRolls;
+  // Müşteri parti no özetten (güven süzgeçli: SORMA'da tanıtılmamış tahmin null); detay ham kolonu taşır.
+  const cbn = s?.customerBatchNo !== undefined ? s.customerBatchNo : d.customerBatchNo;
   // Eklenecek bir şey yoksa detay AYNEN döner (eski sunucuda bugünkü nesne).
-  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls) return d;
-  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}) };
+  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls && cbn === d.customerBatchNo) return d;
+  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}), ...(cbn !== undefined ? { customerBatchNo: cbn } : {}) };
 }
 
 export interface RowForm {
@@ -114,6 +117,12 @@ export interface RowForm {
   ownerAsk: OwnerSuggestion | null;
   ourBatchNo: string | null;
   ourBatchNoKey: string | null;
+  /** Müşterinin parti no'su (düz metin; bizim parti no'dan ayrı). */
+  customerBatchNo?: string | null;
+  /** Değer belgeden kendiliğinden geldi ve elle değişmedi (sarı vurgu). */
+  customerBatchNoFromDoc?: boolean;
+  /** Kullanıcı alanı değiştirdi → gövdeye girer (eski sunucu strict gövdesi bilinmeyen anahtarı 400'ler). */
+  customerBatchNoEdited?: boolean;
   meters: number | null;
   /** Okunan metre doğrulama bekliyor: doğrula ya da düzelt. */
   metersReview: boolean;
@@ -143,16 +152,31 @@ export function initialRowForm(d: InboundNoteDetail, gramajFor?: (customerId: st
   const any = !d.ownerCustomerId && d.ownerSuggestion ? d.ownerSuggestion : null;
   const suggestion = any && any.source !== 'FULL_TEXT' ? any : null;
   const owner = d.ownerCustomerId ?? suggestion?.customerId ?? null;
+  const customerBatchNo = docCustomerBatchNo(d);
   return {
     ownerCustomerId: owner,
     ownerSuggested: suggestion ? suggestion.name : null,
     ownerAsk: any && any.source === 'FULL_TEXT' ? any : null,
     ourBatchNo: d.ourBatchNo || single?.value || null,
     ourBatchNoKey: d.ourBatchNo ? d.ourBatchNoKey ?? null : single ? single.key ?? single.field ?? null : null,
+    customerBatchNo,
+    customerBatchNoFromDoc: customerBatchNo !== null,
     meters,
     metersReview: meters !== null && !!d.kursunMetersReview,
     gramajValueId: gramajFor?.(owner) ?? null,
   };
+}
+
+/** Müşteri parti no kaynağı: taslağın başlık değeri (özet/detay) → belgenin "parti no" türlü ilk adayı; yoksa null. */
+export function docCustomerBatchNo(d: Pick<InboundNoteDetail, 'customerBatchNo' | 'batchNoCandidates'>): string | null {
+  const stored = d.customerBatchNo?.trim();
+  if (stored) return stored;
+  return d.batchNoCandidates?.find((c) => c.kind === 'BATCH' && c.value.trim())?.value.trim() ?? null;
+}
+
+/** Müşteri parti no elle yazıldı: vurgu kalkar, değer gövdeye girer. */
+export function editCustomerBatchNo(v: string): Pick<RowForm, 'customerBatchNo' | 'customerBatchNoFromDoc' | 'customerBatchNoEdited'> {
+  return { customerBatchNo: v === '' ? null : v, customerBatchNoFromDoc: false, customerBatchNoEdited: true };
 }
 
 /** İş emriyle kayıtta engeller (sunucu kapısının aynası; sunucu yine doğrular). */
@@ -180,6 +204,7 @@ export function buildCreateBody(
   // Parti no hep açık: null = formda temizlendi (sunucu okumada yazılan adayı siler).
   body.ourBatchNo = f.ourBatchNo ?? null;
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
+  if (f.customerBatchNoEdited) body.customerBatchNo = f.customerBatchNo?.trim() || null;
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.
@@ -195,6 +220,9 @@ export function buildDraftPatch(f: RowForm, d: InboundNoteDetail): InboundNotePa
     p.ourBatchNo = f.ourBatchNo;
     if (f.ourBatchNoKey) p.ourBatchNoKey = f.ourBatchNoKey;
   }
+  // Başlık PATCH'i alanı eski sunucuda da kabul eder: belgeden gelen aday (kolonda yoksa) da yazılır.
+  const cbn = f.customerBatchNo?.trim() || null;
+  if ((f.customerBatchNoEdited || cbn) && cbn !== (d.customerBatchNo?.trim() || null)) p.customerBatchNo = cbn;
   const readMeters = toNumber(d.kursunMeters);
   if (f.meters !== null && f.meters !== readMeters) p.kursunMeters = f.meters;
   else if (f.meters !== null && d.kursunMetersReview && !f.metersReview) p.kursunMetersReviewed = true;
