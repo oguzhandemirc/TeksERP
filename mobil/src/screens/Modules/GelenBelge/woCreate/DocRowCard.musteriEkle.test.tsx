@@ -1,10 +1,13 @@
 // Belge satırı — "müşteri kayıtlı değil" tetikleyicisi (Gülkesim 2026-11-04): okuma özetinde `ownerUnmatched` varken ve
 // müşteri seçili değilken görünür; kayıt sonrası müşteri formda seçili gelir. Seçiliyse ya da alan yoksa tetikleyici yok.
+// 2026-11-05: teklif okuma bitince kendiliğinden modal olarak açılır; "Listeden seç" satırın müşteri seçicisini açar.
 // Negatif sonda (2026-11-04, ölçüldü): DocRowCard'da `!f.ownerCustomerId` koşulu kaldırılınca "seçiliyse yok" kırmızı.
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import DocRowCard from './DocRowCard';
+import { resetCustomerOfferStore } from './customerOfferStore';
+import ModuleSheet from '../../../../components/ModuleSheet';
 import type { DocRow, WoRowsState } from './useWoRows';
 import type { RowForm } from './woFromDoc';
 
@@ -34,21 +37,28 @@ const wo = (updateForm: jest.Mock) =>
 const flush = () => act(async () => {});
 
 beforeEach(() => {
+  resetCustomerOfferStore();
   mockUnmatched = { text: 'YENI TEKSTIL', candidates: [] };
   mockQuickCreate.mockReset();
 });
 
 describe('DocRowCard — müşteri kayıtlı değil tetikleyicisi', () => {
-  it('⭐ müşteri boş + ownerUnmatched → teklif; kayıt sonrası müşteri formda seçili', async () => {
+  it('⭐ müşteri boş + ownerUnmatched → teklif kendiliğinden açılır; kayıt sonrası müşteri formda seçili', async () => {
     mockQuickCreate.mockResolvedValue({ success: true, data: { id: 'new1', name: 'YENI TEKSTIL' } });
     const updateForm = jest.fn();
     const ui = renderWithPaper(<DocRowCard row={row(form)} wo={wo(updateForm)} customers={[]} customersLoading={false} />);
     await flush();
-    fireEvent.press(ui.getByTestId('belge-satir-musteri-ekle-GB-1'));
-    await flush();
     fireEvent.press(ui.getByTestId('musteri-ekle-kaydet'));
     await flush();
     await waitFor(() => expect(updateForm).toHaveBeenCalledWith('n1', { ownerCustomerId: 'new1', ownerSuggested: null }));
+  });
+  it('⭐ Listeden seç → satırın müşteri seçicisi açılır', async () => {
+    const ui = renderWithPaper(<DocRowCard row={row(form)} wo={wo(jest.fn())} customers={[{ value: 'c9', label: 'KAYITLI FIRMA' }]} customersLoading={false} />);
+    await flush();
+    fireEvent.press(ui.getByTestId('musteri-ekle-listeden'));
+    await flush();
+    await waitFor(() => expect(ui.getByText('Belgenin sahibi')).toBeTruthy());
+    expect(ui.UNSAFE_getAllByType(ModuleSheet).filter((x) => x.props.visible && String(x.props.title).includes('müşteri'))).toEqual([]);
   });
   it('⭐ müşteri seçiliyse teklif yok', async () => {
     const ui = renderWithPaper(<DocRowCard row={row({ ...form, ownerCustomerId: 'c1' })} wo={wo(jest.fn())} customers={[]} customersLoading={false} />);

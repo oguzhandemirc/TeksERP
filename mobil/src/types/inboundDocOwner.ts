@@ -12,5 +12,6 @@ export interface OwnerSuggestion {
 /** Çözülemeyen müşteri okuması: okunan ad + benzer aktif cariler (≥0,80, en çok 3, puan azalan). */
 export interface OwnerUnmatched {
   text: string;
-  candidates: { customerId: string; name: string; score: number }[];
+  /** `code` modalda aynı adlı carileri ayırt eder; eski sunucu göndermez. */
+  candidates: { customerId: string; code?: string | null; name: string; score: number }[];
 }
