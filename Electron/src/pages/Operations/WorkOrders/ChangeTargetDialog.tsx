@@ -37,6 +37,8 @@ interface Props {
   currentWidth: number | null;
   /** Bağlı siparişler — renk uyumsuzluğu ÖNCEDEN gösterilir ve karar burada verilir. */
   orderLinks?: WorkOrder["orderLinks"];
+  /** Açılışta önceden seçili renk (ör. bağ koparınca kalan siparişin rengi); yoksa mevcut renk. */
+  initialColorId?: string | null;
 }
 
 const PARTIAL_CODE = "COLOR_PARTIAL_CONFIRM";
@@ -90,10 +92,11 @@ export function ChangeTargetDialog({
   currentColorName,
   currentWidth,
   orderLinks,
+  initialColorId,
 }: Props) {
   const qc = useQueryClient();
   const navigateActive = useTabsStore((s) => s.navigateActive);
-  const [colorId, setColorId] = useState<string | null>(currentColorId);
+  const [colorId, setColorId] = useState<string | null>(initialColorId ?? currentColorId);
   const [width, setWidth] = useState<string>(currentWidth != null ? String(currentWidth) : "");
   const [reason, setReason] = useState("");
   /** Seçili top id'leri — "bu değişiklik toplara da yansısın mı?" (madde 12). */
@@ -109,7 +112,7 @@ export function ChangeTargetDialog({
 
   useEffect(() => {
     if (open) {
-      setColorId(currentColorId);
+      setColorId(initialColorId ?? currentColorId);
       setWidth(currentWidth != null ? String(currentWidth) : "");
       setReason("");
       setSelectedRolls(new Set());
@@ -118,7 +121,7 @@ export function ChangeTargetDialog({
       setOrderActions({});
       setTebdilBatch(null);
     }
-  }, [open, currentColorId, currentWidth]);
+  }, [open, currentColorId, currentWidth, initialColorId]);
 
   const colorsQ = useQuery({
     queryKey: ["colors", "all-active"],

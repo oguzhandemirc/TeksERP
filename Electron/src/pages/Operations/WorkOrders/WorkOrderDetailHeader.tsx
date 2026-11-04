@@ -17,8 +17,9 @@ import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
-import { ChangeTargetDialog } from "./ChangeTargetDialog";
+import { useChangeTarget, WorkOrderChangeTargetDialog } from "./WorkOrderChangeTarget";
 import { AddBatchButton } from "./AddBatchButton";
+import { UnlinkOrdersButton } from "./UnlinkOrdersButton";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import type { WorkOrder } from "./types";
 
@@ -50,7 +51,7 @@ export function WorkOrderDetailHeader({
   // Dar kapılar (2026-08-17): yan panelle AYNI üç aksiyon — iki yüzey ayrışırsa
   // kullanıcı işi bir ekranda bulup diğerinde bulamaz.
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
-  const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
+  const changeTarget = useChangeTarget();
   // Fason Kabul (2026-08-19): ince ayarlı kabul — top bazında gelen metraj (kısmi),
   // parçalar, irsaliye no; kalan-kapama (fire) da bu diyalogdan.
   const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
@@ -141,10 +142,10 @@ export function WorkOrderDetailHeader({
                 </Button>
                 {canChangePlan && (
                   <>
-                    <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("color")}>
+                    <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => changeTarget.open("color")}>
                       <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("width")}>
+                    <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => changeTarget.open("width")}>
                       <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
                     </Button>
                   </>
@@ -153,6 +154,11 @@ export function WorkOrderDetailHeader({
                   <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
                 </Button>
               </PermissionGate>
+              <UnlinkOrdersButton
+                wo={wo}
+                look="header"
+                onSuggestColor={changeTarget.suggestColor}
+              />
               <AddBatchButton wo={wo} look="header" />
               <Button
                 type="button"
@@ -228,17 +234,7 @@ export function WorkOrderDetailHeader({
             targetColorName={wo.targetColor?.name ?? null}
             targetWidth={wo.width}
           />
-          <ChangeTargetDialog
-            open={changeMode !== null}
-            onOpenChange={(o) => !o && setChangeMode(null)}
-            mode={changeMode ?? "color"}
-            workOrderId={wo.id}
-            workOrderNumber={wo.workOrderNumber}
-            currentColorId={wo.targetColorId}
-            currentColorName={wo.targetColor?.name ?? null}
-            currentWidth={wo.width}
-            orderLinks={wo.orderLinks}
-          />
+          <WorkOrderChangeTargetDialog wo={wo} state={changeTarget} />
         </>
       )}
       <TravelerCardPrintDialog workOrder={wo ?? null} open={travelerCardOpen} onOpenChange={setTravelerCardOpen} />

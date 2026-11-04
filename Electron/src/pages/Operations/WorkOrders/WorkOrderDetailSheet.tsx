@@ -13,8 +13,9 @@ import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
-import { ChangeTargetDialog } from "./ChangeTargetDialog";
+import { useChangeTarget, WorkOrderChangeTargetDialog } from "./WorkOrderChangeTarget";
 import { AddBatchButton } from "./AddBatchButton";
+import { UnlinkOrdersButton } from "./UnlinkOrdersButton";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
@@ -57,8 +58,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
   // Fason Kabul (2026-08-19): ince ayarlı kabul (kısmi teslimat + kalan-kapama).
   const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
-  // null = kapalı; "color"/"width" hangi hedefin değiştirileceğini söyler.
-  const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
+  // Rengi/Eni Değiştir diyaloğu + bağ koparınca önerilen renk.
+  const changeTarget = useChangeTarget();
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
@@ -184,10 +185,10 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       </button>
                       {canChangePlan && (
                         <>
-                          <button type="button" className="btn" onClick={() => setChangeMode("color")}>
+                          <button type="button" className="btn" onClick={() => changeTarget.open("color")}>
                             <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
                           </button>
-                          <button type="button" className="btn" onClick={() => setChangeMode("width")}>
+                          <button type="button" className="btn" onClick={() => changeTarget.open("width")}>
                             <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
                           </button>
                         </>
@@ -196,6 +197,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
                       </button>
                     </PermissionGate>
+                    <UnlinkOrdersButton
+                      wo={wo}
+                      look="sheet"
+                      onSuggestColor={changeTarget.suggestColor}
+                    />
                     <AddBatchButton wo={wo} look="sheet" />
 
                     <button type="button" className="btn" onClick={() => setDocumentsOpen(true)}>
@@ -299,17 +305,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               targetColorName={wo.targetColor?.name ?? null}
               targetWidth={wo.width}
             />
-            <ChangeTargetDialog
-              open={changeMode !== null}
-              onOpenChange={(o) => !o && setChangeMode(null)}
-              mode={changeMode ?? "color"}
-              workOrderId={wo.id}
-              workOrderNumber={wo.workOrderNumber}
-              currentColorId={wo.targetColorId}
-              currentColorName={wo.targetColor?.name ?? null}
-              currentWidth={wo.width}
-              orderLinks={wo.orderLinks}
-            />
+            <WorkOrderChangeTargetDialog wo={wo} state={changeTarget} />
           </>
         )}
 
