@@ -142,6 +142,10 @@ function useAutoPreview(ready: boolean, body: SuggestBody | null, bodyKey: strin
   }, [ready, bodyKey, fetchPreview]);
 }
 
+function useLocated(state: TeachState | null, words: Parameters<typeof locateKept>[1] | undefined, rects: Parameters<typeof locateKept>[2]) {
+  return useMemo(() => (state && words ? locateKept(state, words, rects) : {}), [state, words, rects]);
+}
+
 export function useTeachModal(scanId: string | null, initialCode: string | null, onSaved: (r: TeachSaved) => void, opts: { auto?: boolean } = {}) {
   const attempt = useAttemptToken();
   const qc = useQueryClient();
@@ -211,15 +215,10 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     setCode(kod);
   };
 
-  const located = useMemo(
-    () => (state && words.data ? locateKept(state, words.data.words, preview?.result.preview?.fieldRects) : {}),
-    [state, words.data, preview],
-  );
-
   return {
     existing: ex,
     /** Kayıtlı (korunan) alanların belge üstündeki kelimeleri — son önizlemenin okuduğu kutudan. */
-    located,
+    located: useLocated(state, words.data?.words, preview?.result.preview?.fieldRects),
     existingLoading: !!code && existing.isLoading,
     existingError: existing.isError,
     words,
