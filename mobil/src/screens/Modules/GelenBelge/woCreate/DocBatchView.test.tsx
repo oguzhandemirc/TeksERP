@@ -4,6 +4,7 @@ import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import DocBatchView from './DocBatchView';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 
 const mockCreate = jest.fn();
 const mockUpload = jest.fn();
@@ -27,6 +28,19 @@ jest.mock('./useWoRows', () => ({
     counts: { total: 0, ready: 0, reading: 0, opened: 0, drafts: 0, failed: 0 },
   }),
 }));
+jest.mock('../MultiPageCameraModal', () => {
+  const { Pressable, Text } = jest.requireActual('react-native');
+  const { photoSha256 } = jest.requireActual('../docScan');
+  return {
+    __esModule: true,
+    default: (p: { visible: boolean; onDone: (x: unknown[]) => void }) =>
+      p.visible ? (
+        <Pressable testID="sayfa-kamera" onPress={() => p.onDone([{ base64: mockB64, sha256: photoSha256(mockB64), uri: 'file:///1.jpg', width: 2600, height: 1950 }])}>
+          <Text>kamera</Text>
+        </Pressable>
+      ) : null,
+  };
+});
 jest.mock('../PageCameraModal', () => {
   const { Pressable, Text } = jest.requireActual('react-native');
   const { photoSha256 } = jest.requireActual('../docScan');
@@ -44,6 +58,7 @@ jest.mock('../PageCameraModal', () => {
 const route = { id: 'rt1', name: 'Kurşun & Tambur', steps: [] } as unknown as Parameters<typeof DocBatchView>[0]['route'];
 
 beforeEach(() => {
+  useDeviceSettingsStore.setState({ docScanEngine: 'mlkit' }); // tarayıcı yolu (cihaz ayarı) sınanır
   mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
   mockUpload.mockReset().mockResolvedValue({ scan: { id: 's1', sha256: 'x', noteId: 'n1' }, duplicate: false, boundTo: 'n1' });
   mockAddNote.mockReset();
@@ -62,10 +77,18 @@ describe('DocBatchView — Belge okut', () => {
     expect(r.queryByTestId('belge-ie-gonder')).toBeNull();
   });
 
-  it('klasik kamera (tarayıcı yok): sayfa sayfa çekim → gönderim kullanıcıyla, düğme görünür', async () => {
+  it('⭐ tarayıcı yok → kendi çok çekimli kameramız; "Tamam" sayfaları verince gönderim kendiliğinden', async () => {
     mockScanner.mockResolvedValue({ kind: 'unavailable', reason: 'no_module' });
     const r = renderWithPaper(<DocBatchView route={route} />);
     fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    fireEvent.press(await r.findByTestId('sayfa-kamera'));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    expect(r.queryByTestId('belge-ie-gonder')).toBeNull();
+  });
+
+  it('klasik kamera: sayfa sayfa çekim → gönderim kullanıcıyla, düğme görünür', async () => {
+    const r = renderWithPaper(<DocBatchView route={route} />);
+    fireEvent.press(r.getByTestId('belge-tara-klasik-kamera'));
     fireEvent.press(await r.findByTestId('sayfa-kamera'));
     await act(async () => {});
     expect(mockCreate).not.toHaveBeenCalled();

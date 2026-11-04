@@ -31,7 +31,7 @@ internal class TextReader(private val context: Context) {
   fun read(uri: String, longEdge: Int, deadline: Long): Map<String, Any> {
     val t0 = SystemClock.elapsedRealtime()
     if (t0 >= deadline) throw TimeoutException("kuyrukta süre doldu")
-    val upright = loadUpright(Uri.parse(uri), longEdge)
+    val upright = loadUpright(context, Uri.parse(uri), longEdge)
     try {
       var best = Pass(recognize(upright, deadline), upright.width, upright.height, 0)
       if (sideways(best.text)) {
@@ -60,38 +60,6 @@ internal class TextReader(private val context: Context) {
   private fun recognize(bitmap: Bitmap, deadline: Long): Text {
     val left = (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(1)
     return Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)), left, TimeUnit.MILLISECONDS)
-  }
-
-  /** Gönderilen JPEG'in sunucuda çözüldüğü çerçeve: EXIF yönü uygulanmış, uzun kenar `longEdge`i aşmaz. */
-  private fun loadUpright(uri: Uri, longEdge: Int): Bitmap {
-    val resolver = context.contentResolver
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IllegalStateException("görüntü çözülemedi")
-    val orientation = resolver.openInputStream(uri)?.use {
-      ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    } ?: ExifInterface.ORIENTATION_NORMAL
-    val opts = BitmapFactory.Options().apply { inSampleSize = JpegFit.sampleSize(bounds.outWidth, bounds.outHeight, longEdge) }
-    val decoded = resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, opts) }
-      ?: throw IllegalStateException("görüntü çözülemedi")
-    val m = Matrix()
-    var swap = false
-    when (orientation) {
-      ExifInterface.ORIENTATION_ROTATE_90 -> { m.postRotate(90f); swap = true }
-      ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
-      ExifInterface.ORIENTATION_ROTATE_270 -> { m.postRotate(270f); swap = true }
-      ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
-      ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
-      ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f); swap = true }
-      ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f); swap = true }
-    }
-    val ow = if (swap) decoded.height else decoded.width
-    val oh = if (swap) decoded.width else decoded.height
-    val (fw, _) = JpegFit.fitSize(ow, oh, longEdge)
-    if (fw != ow) m.postScale(fw.toFloat() / ow, fw.toFloat() / ow)
-    val upright = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
-    if (upright !== decoded) decoded.recycle()
-    return upright
   }
 
   /** `yan_donuk_mu` aynası: ≥ 3 karakterli satırların yarıdan fazlası dikeyse (ya da hiç satır yoksa) yan yatmıştır. */
@@ -138,5 +106,40 @@ internal class TextReader(private val context: Context) {
       "lines" to lines,
       "words" to words,
     )
+  }
+
+  companion object {
+    /** Sayfa iyileştirme (`enhancePageAsync`) de aynı dik çerçeveyi kullanır: EXIF bir kez, tek yerde. */
+    /** Gönderilen JPEG'in sunucuda çözüldüğü çerçeve: EXIF yönü uygulanmış, uzun kenar `longEdge`i aşmaz. */
+    fun loadUpright(context: Context, uri: Uri, longEdge: Int): Bitmap {
+      val resolver = context.contentResolver
+      val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+      if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IllegalStateException("görüntü çözülemedi")
+      val orientation = resolver.openInputStream(uri)?.use {
+        ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+      } ?: ExifInterface.ORIENTATION_NORMAL
+      val opts = BitmapFactory.Options().apply { inSampleSize = JpegFit.sampleSize(bounds.outWidth, bounds.outHeight, longEdge) }
+      val decoded = resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, opts) }
+        ?: throw IllegalStateException("görüntü çözülemedi")
+      val m = Matrix()
+      var swap = false
+      when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> { m.postRotate(90f); swap = true }
+        ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+        ExifInterface.ORIENTATION_ROTATE_270 -> { m.postRotate(270f); swap = true }
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+        ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f); swap = true }
+        ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f); swap = true }
+      }
+      val ow = if (swap) decoded.height else decoded.width
+      val oh = if (swap) decoded.width else decoded.height
+      val (fw, _) = JpegFit.fitSize(ow, oh, longEdge)
+      if (fw != ow) m.postScale(fw.toFloat() / ow, fw.toFloat() / ow)
+      val upright = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
+      if (upright !== decoded) decoded.recycle()
+      return upright
+    }
   }
 }

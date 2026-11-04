@@ -16,6 +16,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import { spacing } from '../../../theme';
 import DocHeader from './DocHeader';
 import PageCameraModal from './PageCameraModal';
+import MultiPageCameraModal from './MultiPageCameraModal';
 import PageList from './PageList';
 import PagePreviewModal from './PagePreviewModal';
 import ApprovalCard from './ApprovalCard';
@@ -42,7 +43,7 @@ export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {})
   const b = useDocScan();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const source = usePageSource(b.pages.length, b.captureMany, () => setCameraOpen(true));
+  const source = usePageSource(b.pages.length, b.captureMany);
   const read = useReadResult(b.done?.note.id ?? null, b.done?.runKey ?? 0);
   // Okuma sonuçlandı → onay kartı detayı çeker (kip ve kapı sunucudan; kart yoksa bugünkü yol).
   const readDone = read.watch?.phase === 'done' && (read.watch.summary.state === 'READ' || read.watch.summary.state === 'PARTIAL');
@@ -109,6 +110,7 @@ export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {})
         onRemove={removeFromPreview}
         onDismiss={() => setPreviewIndex(null)}
       />
+      <MultiPageCameraModal {...source.camera} onError={(m) => Toast.show({ type: 'error', text1: m })} />
       <PageCameraModal
         visible={cameraOpen}
         pageNo={b.pages.length + 1}

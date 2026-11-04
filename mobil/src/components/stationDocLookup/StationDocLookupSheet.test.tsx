@@ -3,6 +3,7 @@ import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../test/render';
 import StationDocLookupSheet from './StationDocLookupSheet';
+import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
 
 const mockByPhoto = jest.fn();
 const mockBySearch = jest.fn();
@@ -12,7 +13,7 @@ jest.mock('../../services/stationDocLookup.service', () => ({
 const mockScanner = jest.fn();
 jest.mock('../../services/docScannerNative', () => ({ scanWithDocScanner: (req: unknown) => mockScanner(req) }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
-jest.mock('../../screens/Modules/GelenBelge/PageCameraModal', () => ({ __esModule: true, default: () => null }));
+jest.mock('../../screens/Modules/GelenBelge/MultiPageCameraModal', () => ({ __esModule: true, default: () => null }));
 
 const b64 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('belge'.repeat(40))]).toString('base64');
 const wo = (n: string) => ({ id: `id-${n}`, workOrderNumber: n, status: 'IN_PROGRESS', cardBarcode: `K-${n}`, batchNumbers: [`P-${n}`], documents: [{ noteNo: 'GB1', senderDocNo: '914279' }] });
@@ -26,6 +27,7 @@ function setup(readerConfigured = true) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  useDeviceSettingsStore.setState({ docScanEngine: 'mlkit' }); // tarayıcı yolu (cihaz ayarı) sınanır
   mockScanner.mockResolvedValue({ kind: 'pages', pages: [{ uri: 'file:///1.jpg', base64: b64, width: 2600, height: 1950 }] });
 });
 

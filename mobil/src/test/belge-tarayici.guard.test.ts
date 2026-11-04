@@ -34,7 +34,8 @@ it('modül hazır değilse indirme arka plana bırakılır ve "yok" denir (çevr
 it('JS ↔ native adları eşit', () => {
   expect(kt).toMatch(/Name\("TeksErpBelgeTarayici"\)/);
   expect(js).toMatch(/requireOptionalNativeModule<.*>\('TeksErpBelgeTarayici'\)/);
-  for (const fn of ['availabilityAsync', 'scanAsync']) expect(kt).toContain(`AsyncFunction("${fn}")`);
+  for (const fn of ['availabilityAsync', 'scanAsync', 'enhancePageAsync']) expect(kt).toContain(`AsyncFunction("${fn}")`);
+  expect(js).toMatch(/m\.enhancePageAsync\(uri, \{ longEdge: req\.longEdge, maxBytes: req\.maxBytes, quality \}\)/);
 });
 
 // ── Cihazda OCR (S16c) ─────────────────────────────────────────────────────────────────────────────

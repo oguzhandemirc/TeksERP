@@ -4,6 +4,7 @@ import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import Toast from 'react-native-toast-message';
 import DocScanScreen from './DocScanScreen';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 
 const mockCreate = jest.fn();
 const mockUpload = jest.fn();
@@ -34,6 +35,26 @@ jest.mock('../../../components/BarcodeScannerModal', () => {
         <Pressable testID="barkod-kamera" onPress={() => p.onScan('  IRS-77 ')}>
           <Text>barkod</Text>
         </Pressable>
+      ) : null,
+  };
+});
+// Kendi çok çekimli kameramız: "Tamam" sayfaları tek seferde verir (iyileştirme modal testinde sınanır).
+jest.mock('./MultiPageCameraModal', () => {
+  const { Pressable, Text, View } = jest.requireActual('react-native');
+  const { photoSha256 } = jest.requireActual('./docScan');
+  const shot = (b64: string, uri: string) => ({ base64: b64, sha256: photoSha256(b64), uri, width: 2600, height: 1950 });
+  return {
+    __esModule: true,
+    default: (p: { visible: boolean; onDone: (x: unknown[]) => void }) =>
+      p.visible ? (
+        <View>
+          <Pressable testID="sayfa-kamera" onPress={() => p.onDone([shot(mockB64, 'file:///1.jpg')])}>
+            <Text>kamera</Text>
+          </Pressable>
+          <Pressable testID="sayfa-kamera-2" onPress={() => p.onDone([shot(mockB64b, 'file:///2.jpg')])}>
+            <Text>kamera 2</Text>
+          </Pressable>
+        </View>
       ) : null,
   };
 });
@@ -70,8 +91,9 @@ async function pressFlush(el: Parameters<typeof fireEvent.press>[0]) {
   await act(async () => {});
 }
 
-// Varsayılan: tarayıcı yok (eski APK) → "Sayfa çek" klasik kamerayı açar.
+// Cihaz ayarı ML Kit + tarayıcı yok (eski APK) → "Sayfa çek" kendi kameramızı açar (yedek yol sınanır).
 function resetMocks() {
+  useDeviceSettingsStore.setState({ docScanEngine: 'mlkit' });
   mockScanner.mockReset().mockResolvedValue({ kind: 'unavailable', reason: 'no_module' });
   (Toast.show as jest.Mock).mockClear();
   mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
@@ -197,15 +219,15 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
     expect(r.getByText('Sayfalar (0)')).toBeTruthy();
   });
 
-  it('tarayıcı hatası → bilgi verip klasik kameraya düşer', async () => {
+  it('tarayıcı hatası → bilgi verip kendi kameramıza düşer', async () => {
     mockScanner.mockResolvedValue({ kind: 'error', message: 'Taranan sayfa işlenemedi' });
     const r = renderWithPaper(<DocScanScreen />);
     fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
-    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; klasik kamera açıldı' }));
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; kamera açıldı' }));
   });
 
-  it('tarayıcı yok (eski APK / modül inmemiş) → sessizce klasik kamera', async () => {
+  it('tarayıcı yok (eski APK / modül inmemiş) → sessizce kendi kameramız', async () => {
     const r = renderWithPaper(<DocScanScreen />);
     fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
@@ -217,6 +239,16 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
     fireEvent.press(r.getByTestId('belge-tara-klasik-kamera'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
     expect(mockScanner).not.toHaveBeenCalled();
+  });
+
+  it('⭐ varsayılan cihaz ayarı (kendi kamera): tarayıcı hiç denenmez, çok çekimli kamera açılır, sayfalar listeye', async () => {
+    useDeviceSettingsStore.setState({ docScanEngine: 'camera' });
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    fireEvent.press(await r.findByTestId('sayfa-kamera'));
+    await waitFor(() => expect(r.getByText('Sayfalar (1)')).toBeTruthy());
+    expect(mockScanner).not.toHaveBeenCalled();
+    expect(Toast.show).not.toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; kamera açıldı' }));
   });
 });
 

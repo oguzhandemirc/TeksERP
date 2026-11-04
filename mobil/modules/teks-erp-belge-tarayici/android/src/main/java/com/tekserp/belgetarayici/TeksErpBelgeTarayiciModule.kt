@@ -52,6 +52,13 @@ class TeksErpBelgeTarayiciModule : Module() {
     @Field var startTimeoutMs: Int = 8000
   }
 
+  /** JS `enhancePageAsync` seçenekleri: çıktı sayfası tarayıcı yoluyla aynı boy/kalite/tavanla yazılır. */
+  class EnhanceOptions : Record {
+    @Field var longEdge: Int = 2600
+    @Field var maxBytes: Int = 5 * 1024 * 1024
+    @Field var quality: Int = 80
+  }
+
   private class PendingScan(val promise: Promise, val longEdge: Int, val maxBytes: Int, val quality: Int, val pageLimit: Int)
 
   override fun definition() = ModuleDefinition {
@@ -136,6 +143,26 @@ class TeksErpBelgeTarayiciModule : Module() {
       }
     }
 
+    /**
+     * Kendi kameramızın çekimi → iyileştirilmiş sayfa (`PageEnhance`: gölge/ışık düzleştirme + seviye; kırpma YOK).
+     * Dönüş `scanAsync` sayfasıyla aynı: `{ uri, base64, width, height, bytes }`. Hata kodu ERR_ENHANCE_FAILED
+     * (OutOfMemoryError dahil) → JS ham fotoğrafı gönderir.
+     */
+    AsyncFunction("enhancePageAsync") { uri: String, options: EnhanceOptions, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("ERR_ENHANCE_FAILED", "Ekran etkin değil", null)
+        return@AsyncFunction
+      }
+      worker.execute {
+        try {
+          promise.resolve(enhancePage(context, Uri.parse(uri), options))
+        } catch (e: Throwable) {
+          promise.reject("ERR_ENHANCE_FAILED", "Sayfa iyileştirilemedi (${e.javaClass.simpleName})", null)
+        }
+      }
+    }
+
     OnActivityResult { activity, (requestCode, resultCode, data) ->
       if (requestCode != REQUEST_CODE) return@OnActivityResult
       val scan = takePending() ?: return@OnActivityResult
@@ -212,19 +239,38 @@ class TeksErpBelgeTarayiciModule : Module() {
     } else {
       decoded
     }
+    return writePage(context, bitmap, scan.maxBytes, scan.quality)
+  }
+
+  private fun enhancePage(context: Context, uri: Uri, o: EnhanceOptions): Map<String, Any> {
+    pruneCache(context)
+    val upright = TextReader.loadUpright(context, uri, o.longEdge.coerceIn(800, 6000))
+    val w = upright.width
+    val h = upright.height
+    val pixels = IntArray(w * h)
+    upright.getPixels(pixels, 0, w, 0, 0, w, h)
+    upright.recycle()
+    PageEnhance.enhance(pixels, w, h)
+    val out = Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
+    return writePage(context, out, o.maxBytes, o.quality.coerceIn(JpegFit.MIN_QUALITY, 100))
+  }
+
+  /** JPEG'e yazar (tavana sığana dek kalite basamakları), bitmap'i bırakır; önizleme gönderilecek baytın kendisidir. */
+  private fun writePage(context: Context, bitmap: Bitmap, maxBytes: Int, quality: Int): Map<String, Any> {
+    val w = bitmap.width
+    val h = bitmap.height
     var bytes = ByteArray(0)
     try {
-      for (q in JpegFit.qualitySteps(scan.quality)) {
+      for (q in JpegFit.qualitySteps(quality)) {
         bytes = ByteArrayOutputStream().use { out ->
           bitmap.compress(Bitmap.CompressFormat.JPEG, q, out)
           out.toByteArray()
         }
-        if (bytes.size <= scan.maxBytes) break
+        if (bytes.size <= maxBytes) break
       }
     } finally {
       bitmap.recycle()
     }
-    // Önizleme gönderilecek baytın kendisini gösterir (ML Kit'in ham dosyası değil).
     val file = File(cacheDir(context), "${UUID.randomUUID()}.jpg")
     file.writeBytes(bytes)
     return mapOf(
