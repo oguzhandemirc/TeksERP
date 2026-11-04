@@ -5,11 +5,14 @@
 // Kurulum: 3 TEST istasyonu (Kurşun iç · Tambur iç · Boyahane dış) + TEST fasoncu +
 //   altı iş emri: BAS (PLANNED, topsuz) · TEK (2 top Kurşun'da) · BOL (3 Kurşun · 2 fasonda
 //   Boyahane · 1 Tambur) · FAS (2 top fasonda) · BIT (COMPLETED; top depoda + TAMBUR_CONSUMED
-//   ölü top Tambur adımında) · OLU (1 Kurşun canlı + CANCELLED ölü top Tambur adımında).
+//   ölü top Tambur adımında) · OLU (1 Kurşun canlı + CANCELLED ölü top Tambur adımında) ·
+//   KSM (Boyahane adımında 1 top fasonda + 1 top sevk bekliyor → TEK_ISTASYON, kısmi fason).
 // Doğrulananlar:
 //   §1 özet: beş sınıf + dağılım sırası (çok top → az) + metre + fasoncu adı; ölü top sayılmaz.
 //   §2 BOĞAZ İKİZİ: her sınıf süzgecinin döndürdüğü fikstür kümesi == özette o sınıfı taşıyanlar
 //      (bellek-içi `classifyWorkOrderLocation` ↔ Prisma/SQL `workOrderLocationClassWhere`); CSV = VEYA.
+//      Örtüşen `FASONDA_EN_AZ_BIR` (2026-11-04): bellek `locationMatchesFilterClass` ↔ Prisma; §2c
+//      kısmi fason (BOL, KSM) yeni sınıfta VAR FASONDA'da YOK, tamamı fasonda (FAS) ikisinde, fasonsuz hiçbirinde.
 //   §3 `konumIstasyon`: "en az bir CANLI topu bu istasyonda" — ölü/depodaki top eşleşmez; CSV.
 //   §4 fail-closed: tanınmayan sınıf / uuid olmayan istasyon → 400 INVALID_FILTER_VALUE.
 //   §5 tek where: cursor sayfaları + `totalEstimate` + offset `total` aynı küme.
@@ -17,14 +20,18 @@
 // NEGATİF SONDA (2026-10-24, kırmızı görüldü, tek tek): `LOCATION_LIVE_STATUSES`e CANCELLED
 //   eklendi → §1h §3a §3c §3d §6a ❌ (5) · FASONDA süzgecinden `NOT: HAS_INHOUSE_LIVE` düştü →
 //   §2 FASONDA §2b ❌ (2) · SQL `>= 2` → `>= 1` → §2 TEK_ISTASYON §2 BOLUNMUS §3d ❌ (3).
+// NEGATİF SONDA (2026-11-04, FASONDA_EN_AZ_BIR): Prisma parçası FASONDA'nınkiyle değiştirildi →
+//   §2 FASONDA_EN_AZ_BIR §2c ❌ · bellek ikizi `konum.sinif === "FASONDA"` yapıldı → §2 FASONDA_EN_AZ_BIR §6f ❌ ·
+//   Prisma parçası `HAS_LIVE` yapıldı → §2 FASONDA_EN_AZ_BIR §2c ❌ (her biri 2).
 // =============================================================================
 import { Request } from "express";
 import { RollStatus, StationKind, StationType, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
 import {
-  WORK_ORDER_LOCATION_CLASSES,
+  WORK_ORDER_LOCATION_FILTER_CLASSES,
   classifyWorkOrderLocation,
+  locationMatchesFilterClass,
   type WorkOrderLocation,
   type WorkOrderLocationClass,
 } from "../src/services/helpers/workorder-location.helper";
@@ -149,6 +156,9 @@ async function main(): Promise<void> {
     const OLU = await mkWo("OLU", WorkOrderStatus.IN_PROGRESS, [sK, sT]);
     await mkRolls(1, RollStatus.IN_PRODUCTION, OLU.stepOf(sK));
     await mkRolls(1, RollStatus.CANCELLED, OLU.stepOf(sT));
+    const KSM = await mkWo("KSM", WorkOrderStatus.IN_PROGRESS, [sB, sT]);
+    await mkDispatch(KSM.id, KSM.stepOf(sB), await mkRolls(1, RollStatus.AT_SUBCONTRACTOR, KSM.stepOf(sB)));
+    await mkRolls(1, RollStatus.IN_PRODUCTION, KSM.stepOf(sB));
 
     const list = async (extra: Record<string, string> = {}): Promise<ListResult> =>
       (await svc.findAll(makeReq({ search: tag, pageSize: "200", ...extra }))) as ListResult;
@@ -180,17 +190,28 @@ async function main(): Promise<void> {
     check("§1h ⭐ OLU (CANCELLED ölü top Tambur adımında) → TEK_ISTASYON Kurşun · 1 top; Tambur görünmez",
       olu?.sinif === "TEK_ISTASYON" && olu.istasyonlar.length === 1 && olu.istasyonlar[0].istasyonId === sK.id && olu.canliTop === 1,
       JSON.stringify(olu?.istasyonlar.map((e) => e.ad)));
+    const ksm = k(KSM.no);
+    check("§1i KSM (Boyahane: 1 fasonda + 1 sevk bekliyor) → TEK_ISTASYON, fasondaTop 1 / 2 top",
+      ksm?.sinif === "TEK_ISTASYON" && ksm.istasyonlar.length === 1 && ksm.istasyonlar[0].fasondaTop === 1 && ksm.istasyonlar[0].topSayisi === 2,
+      JSON.stringify(ksm?.istasyonlar));
 
     // ── §2 boğaz ikizi: süzgeç kümesi == özet sınıfı ───────────────────────────
-    const fixtureNos = [BAS, TEK, BOL, FAS, BIT, OLU].map((w) => w.no);
-    for (const cls of WORK_ORDER_LOCATION_CLASSES) {
+    const fixtureNos = [BAS, TEK, BOL, FAS, BIT, OLU, KSM].map((w) => w.no);
+    for (const cls of WORK_ORDER_LOCATION_FILTER_CLASSES) {
       const got = nos(await list({ "filter[konumSinifi]": cls }));
-      const expected = new Set(fixtureNos.filter((no) => k(no)?.sinif === cls));
+      const expected = new Set(fixtureNos.filter((no) => { const kn = k(no); return !!kn && locationMatchesFilterClass(cls, kn); }));
       const same = got.size === expected.size && [...got].every((n) => expected.has(n));
       check(`§2 ${cls}: süzgeç ↔ özet aynı küme`, same && expected.size > 0, `süzgeç=[${[...got].map((n) => n.slice(-3))}] özet=[${[...expected].map((n) => n.slice(-3))}]`);
     }
     const csv = nos(await list({ "filter[konumSinifi]": "FASONDA,BASLAMADI" }));
     check("§2b CSV VEYA: FASONDA,BASLAMADI → FAS + BAS", csv.size === 2 && csv.has(FAS.no) && csv.has(BAS.no));
+    const anyFason = nos(await list({ "filter[konumSinifi]": "FASONDA_EN_AZ_BIR" }));
+    const allFason = nos(await list({ "filter[konumSinifi]": "FASONDA" }));
+    check("§2c ⭐ kısmi fason (BOL, KSM) FASONDA_EN_AZ_BIR'de VAR, FASONDA'da YOK; tamamı fasonda (FAS) ikisinde; fasonsuzlar hiçbirinde",
+      anyFason.size === 3 && [BOL, KSM, FAS].every((w) => anyFason.has(w.no)) &&
+      allFason.size === 1 && allFason.has(FAS.no) && !allFason.has(BOL.no) && !allFason.has(KSM.no) &&
+      [BAS, TEK, BIT, OLU].every((w) => !anyFason.has(w.no) && !allFason.has(w.no)),
+      `enAzBir=[${[...anyFason].map((n) => n.slice(-3))}] tamami=[${[...allFason].map((n) => n.slice(-3))}]`);
 
     // ── §3 konumIstasyon ───────────────────────────────────────────────────
     const atT = nos(await list({ "filter[konumIstasyon]": sT.id }));
@@ -198,7 +219,7 @@ async function main(): Promise<void> {
     const atK = nos(await list({ "filter[konumIstasyon]": sK.id }));
     check("§3b Kurşun → TEK, BOL, OLU", atK.size === 3 && [TEK, BOL, OLU].every((w) => atK.has(w.no)));
     const atBT = nos(await list({ "filter[konumIstasyon]": `${sB.id},${sT.id}` }));
-    check("§3c CSV Boyahane,Tambur → BOL, FAS", atBT.size === 2 && atBT.has(BOL.no) && atBT.has(FAS.no));
+    check("§3c CSV Boyahane,Tambur → BOL, FAS, KSM", atBT.size === 3 && [BOL, FAS, KSM].every((w) => atBT.has(w.no)));
     const both = nos(await list({ "filter[konumIstasyon]": sK.id, "filter[konumSinifi]": "BOLUNMUS" }));
     check("§3d istasyon + sınıf VE: Kurşun ∧ BOLUNMUS → yalnız BOL", both.size === 1 && both.has(BOL.no));
 
@@ -229,8 +250,8 @@ async function main(): Promise<void> {
       if (!page.pagination.nextCursor) break;
       cursor = page.pagination.nextCursor;
     }
-    check("§5 cursor sayfaları (limit 1) + totalEstimate + offset total aynı küme (4: TEK, BOL, FAS, OLU)",
-      off.pagination.total === 4 && estimate === 4 && seen.length === 4 && new Set(seen).size === 4 && seen.every((n) => nos(off).has(n)),
+    check("§5 cursor sayfaları (limit 1) + totalEstimate + offset total aynı küme (5: TEK, BOL, FAS, OLU, KSM)",
+      off.pagination.total === 5 && estimate === 5 && seen.length === 5 && new Set(seen).size === 5 && seen.every((n) => nos(off).has(n)),
       `offset=${off.pagination.total} tahmin=${estimate} cursor=${seen.length}`);
 
     // ── §6 saf sınıflayıcı ──────────────────────────────────────────────────
@@ -241,6 +262,12 @@ async function main(): Promise<void> {
     check("§6c iki fason istasyonunda tamamı dışarıda → FASONDA", c("IN_PROGRESS", [["a", "AT_SUBCONTRACTOR", 1], ["b", "AT_SUBCONTRACTOR", 1]]) === "FASONDA");
     check("§6d aynı istasyonda fasonda + sevk bekleyen → TEK", c("IN_PROGRESS", [["a", "AT_SUBCONTRACTOR", 1], ["a", "IN_PRODUCTION", 1]]) === "TEK_ISTASYON");
     check("§6e canlı yok: PLANNED → BASLAMADI, CANCELLED → BITTI", c("PLANNED", []) === "BASLAMADI" && c("CANCELLED", []) === "BITTI");
+    const st = (fasondaTop: number, topSayisi: number) =>
+      ({ istasyonId: "x", ad: "x", tur: "SUBCONTRACTOR", dis: true, topSayisi, metre: 0, fasondaTop, fasoncular: [] }) as WorkOrderLocation["istasyonlar"][number];
+    const m = (sinif: WorkOrderLocationClass, rows: WorkOrderLocation["istasyonlar"]) =>
+      locationMatchesFilterClass("FASONDA_EN_AZ_BIR", { sinif, canliTop: 0, istasyonlar: rows });
+    check("§6f FASONDA_EN_AZ_BIR bellek ikizi: kısmi fason (TEK_ISTASYON, 1/2) ✓ · tamamı ✓ · fasonda 0 (sevk bekliyor) ✗ · topsuz ✗",
+      m("TEK_ISTASYON", [st(1, 2)]) && m("FASONDA", [st(2, 2)]) && !m("TEK_ISTASYON", [st(0, 2)]) && !m("BITTI", []));
   } finally {
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: created.dispatches } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: created.dispatches } } });
