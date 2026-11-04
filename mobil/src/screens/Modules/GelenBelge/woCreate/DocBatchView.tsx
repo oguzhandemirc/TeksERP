@@ -13,6 +13,7 @@ import { TERIM } from '../../../../lib/terim';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
 import PageCameraModal from '../PageCameraModal';
+import MultiPageCameraModal from '../MultiPageCameraModal';
 import PageList from '../PageList';
 import PagePreviewModal from '../PagePreviewModal';
 import { removePage, type ScanPage } from '../docScan';
@@ -42,7 +43,7 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
     const next = b.captureMany(ps);
     if (next) void b.send(next);
   };
-  const source = usePageSource(b.pages.length, onPages, () => setCameraOpen(true));
+  const source = usePageSource(b.pages.length, onPages);
   const started = useRef(false);
   const { add } = source;
   useEffect(() => {
@@ -98,6 +99,7 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
         onRemove={removeFromPreview}
         onDismiss={() => setPreviewIndex(null)}
       />
+      <MultiPageCameraModal {...source.camera} onError={(m) => Toast.show({ type: 'error', text1: m })} />
       <PageCameraModal
         visible={cameraOpen}
         pageNo={b.pages.length + 1}

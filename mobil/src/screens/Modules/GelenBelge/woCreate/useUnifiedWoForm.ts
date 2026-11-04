@@ -196,7 +196,7 @@ function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote']) {
     const next = b.captureMany(ps);
     if (next) void b.send(next);
   };
-  const source = usePageSource(b.pages.length, onPages, () => setCameraOpen(true));
+  const source = usePageSource(b.pages.length, onPages);
   const doneNote = b.done?.note;
   const doneRun = b.done?.runKey ?? 0;
   useEffect(() => {

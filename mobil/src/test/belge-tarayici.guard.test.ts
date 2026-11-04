@@ -34,7 +34,8 @@ it('modül hazır değilse indirme arka plana bırakılır ve "yok" denir (çevr
 it('JS ↔ native adları eşit', () => {
   expect(kt).toMatch(/Name\("TeksErpBelgeTarayici"\)/);
   expect(js).toMatch(/requireOptionalNativeModule<.*>\('TeksErpBelgeTarayici'\)/);
-  for (const fn of ['availabilityAsync', 'scanAsync']) expect(kt).toContain(`AsyncFunction("${fn}")`);
+  for (const fn of ['availabilityAsync', 'scanAsync', 'enhancePageAsync']) expect(kt).toContain(`AsyncFunction("${fn}")`);
+  expect(js).toMatch(/m\.enhancePageAsync\(uri, \{ longEdge: req\.longEdge, maxBytes: req\.maxBytes, quality \}\)/);
 });
 
 // ── Cihazda OCR (S16c) ─────────────────────────────────────────────────────────────────────────────
@@ -59,4 +60,22 @@ it('JS ↔ native: recognizeTextAsync(uri, timeoutMs) aynı modülde, süre kuyr
   expect(kt).toMatch(/val deadline = SystemClock\.elapsedRealtime\(\) \+ timeoutMs/);
   expect(ocrJs).toMatch(/requireOptionalNativeModule<.*>\('TeksErpBelgeTarayici'\)/);
   expect(ocrJs).toMatch(/recognizeTextAsync\(page\.uri, timeoutMs\)/);
+});
+
+// ── Sayfa iyileştirme + tarayıcı sayfası okuma (ölçüm 2026-11-04 arşiv notu) ───────────────────────────
+const enhance = fs.readFileSync(path.join(MOD, 'android/src/main/java/com/tekserp/belgetarayici/PageEnhance.kt'), 'utf8');
+
+it('⭐ ML Kit tarayıcı sayfası `tarayici-` önekiyle yazılır ve OCR öncesi yumuşatılır; kendi kamera sayfası dokunulmaz', () => {
+  expect(reader).toMatch(/const val SCANNER_PAGE_PREFIX = "tarayici-"/);
+  expect(kt).toMatch(/writePage\(context, bitmap, scan\.maxBytes, scan\.quality, TextReader\.SCANNER_PAGE_PREFIX\)/);
+  expect(kt).toMatch(/File\(cacheDir\(context\), "\$prefix\$\{UUID\.randomUUID\(\)\}\.jpg"\)/);
+  expect(reader).toMatch(/val upright = if \(isScannerPage\(uri\)\) softened\(loaded\) else loaded/);
+  expect(reader).toMatch(/PageEnhance\.softenForOcr\(px, w, h\)/);
+});
+
+it('⭐ iyileştirme sabitleri ölçülmüş değerde: beyaz 250, siyah tavanı 60, ara ton gaması 1.8', () => {
+  expect(enhance).toMatch(/const val WHITE_POINT = 250\b/);
+  expect(enhance).toMatch(/const val MAX_BLACK_POINT = 60\b/);
+  expect(enhance).toMatch(/const val MID_GAMMA = 1\.8\b/);
+  expect(enhance).toMatch(/fun levelsLut\(black: Int, white: Int = WHITE_POINT, gamma: Double = MID_GAMMA\)/);
 });
