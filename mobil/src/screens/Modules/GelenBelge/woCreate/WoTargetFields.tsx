@@ -11,6 +11,7 @@ import { CompactNumberField } from '../../../../components/form/CompactNumberFie
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { SectionBand } from '../../../../components/form/SectionBand';
 import { SelectButton } from '../../../../components/form/SelectButton';
+import TruncatedText from '../../../../components/TruncatedText';
 import type { FabricPropertyValue } from '../../../../services/fabricProperty.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
@@ -146,7 +147,7 @@ function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: stri
         <View style={styles.suggestRow}>
           <MaterialCommunityIcons name="help-circle-outline" size={22} color={colors.brand} />
           <View style={styles.grow}>
-            <Text style={styles.suggestText}>{`${p.name} mi?`}</Text>
+            <TruncatedText style={styles.suggestText}>{`${p.name} mi?`}</TruncatedText>
             {p.docText ? <Text style={styles.hint}>{`belgede “${p.docText}”`}</Text> : null}
           </View>
           <View style={styles.yes}>
