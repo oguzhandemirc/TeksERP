@@ -5,10 +5,11 @@
 // taslağa bağlanıyor, satır üretmiyordu; "Okut" 409 — çıkışsız kapı. Panel/tablet yükleme taslağı MANUAL açtığı için "Kaynak: Elle".
 //   §1 ⭐ silinen taslağın okunmuş fotoğrafı yeni taslağa yüklenir → satırlar SAKLI ZARFTAN kurulur (sidecar isabeti 0),
 //      boş başlık dolar, satırlar o taramayı taşır, yanıt `restored` REBUILT, audit `OCR_STORED` ham OCR taşımaz
-//   §2 satırı taslakta olan okunmuş sayfa yeniden okunmaz → 409 DOCUMENT_SCAN_ALREADY_READ
+//   §2 satırları dokunulmamış okunmuş sayfa yeniden okunur (satırlar silinir, okuma 21 yazar — ikilenmez);
+//      bir satırı düzeltilmiş sayfa yeniden okunmaz → 409 DOCUMENT_SCAN_ALREADY_READ
 //   §3 ⭐ eski sürümün bıraktığı boş taslak (okunmuş sayfa bağlı, satır yok): okuma özeti yeniden okutmayı söyler; okut → 202
 //      (§3e Gülkesim A: kayıtlı parti no / kurşun metresi yeniden okumayla ezilmez)
-//      PENDING/0, okuma işi 21 satırı ekler; ikinci okut 409
+//      PENDING/0, okuma işi 21 satırı ekler; elle satır eklenince ikinci okut 409
 //   §4 ⭐ eşzamanlı iki okut → tek geçiş, satırlar İKİLENMEZ (21), sidecar tek isabet
 //   §5 serbest okunmuş tarama okut → 409 ALREADY_READ · bağlı taslak DRAFT değil → 409 DELIVERY_NOTE_NOT_DRAFT · yalnız read → 403
 //   §6 elle satırlı taslağa yeniden bağlama satır eklemez (elle iş ezilmez), kaynak MANUAL kalır
@@ -154,9 +155,17 @@ async function main(): Promise<void> {
     const stored = logs.map((l) => JSON.stringify(l.newData)).filter((t) => t.includes("OCR_STORED"));
     check("§1f audit `OCR_STORED` künye (satır sayısı) — ham OCR/blok/metin yok", stored.length === 1 && stored[0]!.includes("\"lineCount\":21") && !stored[0]!.includes("blocks") && !stored[0]!.includes("\"text\""), stored.join(" | "));
 
-    // ── §2 satırı olan sayfa yeniden okunmaz ───────────────────────────────────
+    // ── §2 dokunulmamış satırlı sayfa yeniden okunur; düzeltilmiş satırlı sayfa okunmaz ──
     const o2 = await okut(s45);
-    check("§2 satırı taslakta olan okunmuş sayfa → 409 DOCUMENT_SCAN_ALREADY_READ (satır ikilenmez)", o2.status === 409 && o2.code === "DOCUMENT_SCAN_ALREADY_READ" && (await noteRow(noteB)).lines.length === 21 && (await scanRow(s45)).status === "READ", `${o2.status} ${o2.code}`);
+    const q2 = await scanRow(s45);
+    check("§2a dokunulmamış satırlı okunmuş sayfa → 202, satırlar silinir, tarama PENDING/0", o2.status === 202 && (await noteRow(noteB)).lines.length === 0 && q2.status === "PENDING" && q2.attempts === 0 && q2.noteId === noteB, `${o2.status} ${o2.code} ${JSON.stringify(q2)}`);
+    const h2 = fake.hits;
+    await runReaderOnce();
+    check("§2b yeniden okuma 21 satır yazar (ikilenmez) + tarama READ", (await noteRow(noteB)).lines.length === 21 && (await scanRow(s45)).status === "READ" && fake.hits === h2 + 1, `${(await noteRow(noteB)).lines.length}`);
+    const l2 = await prisma.customerDeliveryNoteLine.findFirstOrThrow({ where: { noteId: noteB }, select: { id: true }, orderBy: { lineNo: "asc" } });
+    const e2 = await call("PATCH", `/api/gelen-belge/irsaliyeler/${noteB}/satirlar/${l2.id}`, { meters: 77 });
+    const o2c = await okut(s45);
+    check("§2c bir satırı düzeltilmiş sayfa → 409 DOCUMENT_SCAN_ALREADY_READ (düzeltme ezilmez, satır ikilenmez)", e2.status === 200 && o2c.status === 409 && o2c.code === "DOCUMENT_SCAN_ALREADY_READ" && (await noteRow(noteB)).lines.length === 21 && (await scanRow(s45)).status === "READ", `${e2.status} ${o2c.status} ${o2c.code}`);
 
     // ── §3 eski sürümün boş taslağı: "Yeniden oku" çıkış yolu ───────────────────
     // Eski sürüm: okunmuş tarama satırsız bağlanırdı — durum DB'den kurulur (bağlı, READ, 0 satır).
@@ -177,8 +186,9 @@ async function main(): Promise<void> {
     const k3e = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteC }, select: { ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true } });
     check("§3e ⭐ yeniden okuma kayıtlı parti no ve kurşun metresini EZMEZ (satırlar yine gelir)",
       k3e.ourBatchNo === "ESKI-P" && k3e.ourBatchNoKey === "fisNo" && Number(k3e.kursunMeters) === 111 && k3e.kursunMetersSource === "OUTPUT", JSON.stringify(k3e));
+    const a3d = await call("POST", `/api/gelen-belge/irsaliyeler/${noteC}/satirlar`, { meters: 50 });
     const o3d = await okut(s45);
-    check("§3d satırlar geldikten sonra ikinci okut → 409 ALREADY_READ", o3d.status === 409 && o3d.code === "DOCUMENT_SCAN_ALREADY_READ", `${o3d.status} ${o3d.code}`);
+    check("§3d elle satır eklenince ikinci okut → 409 ALREADY_READ (elle satır korunur)", a3d.status === 201 && o3d.status === 409 && o3d.code === "DOCUMENT_SCAN_ALREADY_READ" && (await noteRow(noteC)).lines.length === 22, `${a3d.status} ${o3d.status} ${o3d.code}`);
 
     // ── §4 eşzamanlı iki okut ─────────────────────────────────────────────────
     await del(noteC);

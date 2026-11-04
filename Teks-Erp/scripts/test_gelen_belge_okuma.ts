@@ -291,8 +291,11 @@ async function main(): Promise<void> {
     const p5 = await scan(s5);
     check("§4e servis düzelince READ + taslak", p5.status === "READ" && !!p5.noteId);
     if (p5.noteId) made.notes.push(p5.noteId);
+    // Dokunulmamış OCR satırlı sayfa yeniden okunabilir (test_gelen_belge_ayni_belge_tanit); düzeltilmiş satırlı sayfa okunmaz.
+    const l5 = p5.noteId ? await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId: p5.noteId }, select: { id: true }, orderBy: { lineNo: "asc" } }) : null;
+    const e5 = l5 ? await call("PATCH", `/api/gelen-belge/irsaliyeler/${p5.noteId}/satirlar/${l5.id}`, { meters: 77 }) : null;
     const okut2 = await call("POST", `/api/gelen-belge/taramalar/${s5}/oku`);
-    check("§4f okunmuş taramayı okut → 409 DOCUMENT_SCAN_ALREADY_READ", okut2.status === 409 && okut2.code === "DOCUMENT_SCAN_ALREADY_READ");
+    check("§4f satırı düzeltilmiş okunmuş taramayı okut → 409 DOCUMENT_SCAN_ALREADY_READ", e5?.status === 200 && okut2.status === 409 && okut2.code === "DOCUMENT_SCAN_ALREADY_READ", `${e5?.status} ${okut2.status} ${okut2.code}`);
 
     // ── §5 Zod fail-closed ──────────────────────────────────────────────────
     fake.mode = "invalid";
