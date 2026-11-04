@@ -48,6 +48,11 @@ async function noteRegionTemplateIds(noteId: string): Promise<Array<string | nul
   return rows.flatMap((r) => (Array.isArray(r.ids) ? r.ids.map((x) => (typeof x === "string" ? x : null)) : []));
 }
 
+/** Notun tanıtım durumu (okunmuş taramaların bölgelerinden; SOR/SORMA ayarından bağımsız). */
+export async function noteIntroState(noteId: string): Promise<IntroState> {
+  return introStateOf(await noteRegionTemplateIds(noteId));
+}
+
 /** Kullanıcı şablonunun adı (şablon JSON'unda); bulunamazsa kod. */
 async function userTemplateName(code: string): Promise<string> {
   const row = await prisma.senderTemplate.findUnique({ where: { code }, select: { template: true } });
@@ -57,7 +62,7 @@ async function userTemplateName(code: string): Promise<string> {
 
 /** Okuma özeti: `tanitim` (yoksa undefined — alan yanıta konmaz) + güven kipi. */
 export async function noteTanitim(noteId: string): Promise<{ tanitim: TanitimInfo | undefined; trust: TrustMode }> {
-  const st = introStateOf(await noteRegionTemplateIds(noteId));
+  const st = await noteIntroState(noteId);
   const trust = trustModeOf(await readTanitimGuveni(), st);
   if (!st) return { tanitim: undefined, trust };
   if (st.durum === "TANITILMAMIS") return { tanitim: st, trust };

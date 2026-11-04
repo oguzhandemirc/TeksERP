@@ -4,6 +4,8 @@
 // Gerçek DB + gerçek Express (ephemeral port) + gerçek login. Sınanan:
 //   §1 okuma: okunan müşteri adı kayıtlı cariye çözülemezse `ownerUnmatched` (benzerler ≥0,80, en çok 3, puan azalan);
 //      benzeri yoksa aday listesi boş; BLIND'de yok; sahip seçiliyken yok; okuma özetinde aynı alan
+//   §1b kısa ad (2026-11-05): tanıtılmış şablon alanından 2 ve 1 harf → teklif var (SOR kipinde de); yalnız boşluk → yok;
+//      tanıtılmamış okumada 2 harf → yok (eşik 3)
 //   §2 uç `POST /customers/quick-create`: yalnız adla kart (rol Müşteri, kod dolu, cari hesap, audit kaynağı)
 //   §3 izin: `gelen-belge:write` ya da `customer:write` yeter; ikisi yoksa 403
 //   §4 idempotency: aynı token 2× tek kart · aynı token farklı ad 409 · pasife alınmış kartın token'ı 409
@@ -11,8 +13,9 @@
 // Negatif sonda (2026-11-04, ölçüldü; md5 ile geri): eşik 0,80→0,95 → §1 2 ❌; aday tavanı kaldırılınca §1 ❌; BLIND dalı
 // silinince §1 ❌; kayda vergi no eklenince §2 ❌; izne `customer:read` eklenince §3 ❌; replay boğazı atlanınca §4 ❌;
 // `alive` koşulsuz → §4 ❌; write-guard `customer` satırı silinince §5 ❌.
+// Sonda 2026-11-05: tanıtılmış eşiği 1→3 → §1b 3 ❌; tanıtım koşulu `true` → §1b 1 ❌; tanıtım okuması kaldırılınca §1b 3 ❌.
 // =============================================================================
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
 import prisma from "../src/lib/prisma";
@@ -40,7 +43,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 // Benzersiz, harf-yalnız etiket (ad benzerliği rakamları gürültü saymasın diye harf).
 const TAG = Array.from({ length: 6 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
-const made = { customers: [] as string[], notes: [] as string[], users: [] as string[] };
+const made = { customers: [] as string[], notes: [] as string[], users: [] as string[], scans: [] as string[] };
 const PASSWORD = "TestHizliMus2026!";
 
 type Resp = { status: number; code?: string; data?: { id?: string; name?: string } };
@@ -55,6 +58,17 @@ async function makeNote(ownerText: string, suffix: string): Promise<string> {
   const n = await prisma.customerDeliveryNote.create({ data: { noteNo: `T-HMK-${TAG}-${suffix}`.slice(0, 32), sourceKind: "MANUAL", status: "DRAFT", ownerText }, select: { id: true } });
   made.notes.push(n.id);
   return n.id;
+}
+
+/** Notun okunmuş taraması; `templateId` `u-…` ise not tanıtılmış (kullanıcı şablonu), null ise tanıtılmamış (GENEL). */
+async function addScan(noteId: string, templateId: string | null): Promise<void> {
+  const content = Buffer.from(`${TAG}-${randomUUID()}`);
+  const s = await prisma.documentScan.create({
+    data: { noteId, sha256: createHash("sha256").update(content).digest("hex"), mimeType: "image/jpeg", sizeBytes: content.length, content, status: "READ",
+      ocrResult: { ocr: { text: "" }, regions: [{ templateId }] } },
+    select: { id: true },
+  });
+  made.scans.push(s.id);
 }
 
 async function makeUser(perms: string[]): Promise<string> {
@@ -103,6 +117,28 @@ async function run(url: string): Promise<void> {
 
   const summary = (await getReadSummary(sameNote)) as unknown as { ownerUnmatched?: { candidates: unknown[] } } | null;
   check("§1 okuma özeti ownerUnmatched taşır", (summary?.ownerUnmatched?.candidates.length ?? 0) >= 2, JSON.stringify(summary?.ownerUnmatched ?? null));
+
+  // ── §1b kısa ad: tanıtılmış alan 1 harf yeter, serbest okuma 3 ister ──────
+  const tpl = `u-hmk-${TAG.toLowerCase()}`;
+  const short2 = TAG.slice(0, 2);
+  const intro2 = await makeNote(short2, "K2");
+  await addScan(intro2, tpl);
+  const ri2 = await readOwnerForNote({ id: intro2, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
+  check("§1b ⭐ tanıtılmış alandan 2 harf → teklif var (SOR kipi, NORMAL güven)", ri2.suggestion === null && ri2.unmatched?.text === short2, JSON.stringify(ri2));
+  const sum2 = (await getReadSummary(intro2)) as unknown as { ownerUnmatched?: { text: string } } | null;
+  check("§1b okuma özeti kısa adla ownerUnmatched taşır", sum2?.ownerUnmatched?.text === short2, JSON.stringify(sum2?.ownerUnmatched ?? null));
+  const intro1 = await makeNote(TAG.slice(2, 3), "K1");
+  await addScan(intro1, tpl);
+  const ri1 = await readOwnerForNote({ id: intro1, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
+  check("§1b ⭐ tanıtılmış alandan 1 harf → teklif var", ri1.unmatched?.text === TAG.slice(2, 3), JSON.stringify(ri1));
+  const blankNote = await makeNote("   ", "KB");
+  await addScan(blankNote, tpl);
+  const rb = await readOwnerForNote({ id: blankNote, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
+  check("§1b tanıtılmış alan yalnız boşluk → teklif yok", rb.unmatched === null, JSON.stringify(rb));
+  const free2 = await makeNote(short2, "F2");
+  await addScan(free2, null);
+  const rf2 = await readOwnerForNote({ id: free2, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
+  check("§1b ⭐ tanıtılmamış okumada 2 harf → teklif yok (eşik 3)", rf2.unmatched === null, JSON.stringify(rf2));
 
   // ── §2–§4 uç ───────────────────────────────────────────────────────────────
   const gbUser = await makeUser(["gelen-belge:write"]);
@@ -159,6 +195,7 @@ async function run(url: string): Promise<void> {
 
 // Hatayı yutmaz (`test_kart_teardown_hesap` §0c): kalıntı bırakan teardown `main`deki "temizlik" kontrolüyle kırmızı verir.
 async function cleanup(): Promise<void> {
+  await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } });
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
   await cleanupTestCustomers(made.customers);
   await prisma.userPermission.deleteMany({ where: { userId: { in: made.users } } });
