@@ -50,7 +50,9 @@ it('⭐ metin tanıma GÖMÜLÜ model ve TAM SABİT (Play Hizmetleri modeli/indi
 
 it('⭐ her kelime satır sırası (`l`), 4 köşe (`c`), güven (`p`) taşır; sayfa `rotation`; EXIF yönü uygulanır', () => {
   expect(reader).toMatch(/"t" to el\.text, "c" to wc, "l" to l, "p" to conf\(el\.confidence\)/);
-  expect(reader).toMatch(/"rotation" to pass\.rotation/);
+  // Tel dönüştürücüsü ortak (`wire`, canlı kare de kullanır): sayfanın seçilen dönüşü ona geçer ve aynen yazılır.
+  expect(reader).toMatch(/wire\(pass\.text, pass\.width, pass\.height, pass\.rotation, ms\)/);
+  expect(reader).toMatch(/"rotation" to rotation/);
   expect(reader).toMatch(/ExifInterface\.TAG_ORIENTATION/);
   expect(reader).toMatch(/TextRecognizerOptions\.DEFAULT_OPTIONS/);
 });
