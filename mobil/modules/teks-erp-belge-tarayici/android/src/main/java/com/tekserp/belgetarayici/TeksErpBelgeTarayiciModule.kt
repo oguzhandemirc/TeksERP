@@ -17,6 +17,7 @@ import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import expo.modules.kotlin.Promise
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
@@ -163,6 +164,24 @@ class TeksErpBelgeTarayiciModule : Module() {
       }
     }
 
+    /** Canlı kamera var mı (eski APK'da bu işlev yoktur → JS seçeneği gizler). */
+    Function("liveCameraInfo") { mapOf("version" to LIVE_CAMERA_VERSION) }
+
+    /** Canlı okuma görünümü (L2): önizleme + kare başına metin/sabitlik olayları + tek fotoğraf. */
+    View(LiveCameraView::class) {
+      Events("onText", "onStability", "onError")
+
+      AsyncFunction("captureStill") { view: LiveCameraView, promise: Promise ->
+        view.captureStill(promise)
+      }.runOnQueue(Queues.MAIN)
+
+      AsyncFunction("setActive") { view: LiveCameraView, active: Boolean ->
+        view.setActive(active)
+      }.runOnQueue(Queues.MAIN)
+
+      OnViewDestroys { view -> view.release() }
+    }
+
     OnActivityResult { activity, (requestCode, resultCode, data) ->
       if (requestCode != REQUEST_CODE) return@OnActivityResult
       val scan = takePending() ?: return@OnActivityResult
@@ -295,5 +314,7 @@ class TeksErpBelgeTarayiciModule : Module() {
     private const val REQUEST_CODE = 0x7e5a
     /** Sunucu okuma servisinin küçültme sınırıyla aynı (`okuma/app` uzun kenar 2600). */
     private const val OCR_LONG_EDGE = 2600
+    /** Canlı kamera sözleşme sürümü (JS `isLiveCameraAvailable` en az bunu ister). */
+    private const val LIVE_CAMERA_VERSION = 1
   }
 }
