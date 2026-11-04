@@ -63,11 +63,30 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         name: filter[konumSinifi]
  *         schema: { type: string, enum: [BASLAMADI, TEK_ISTASYON, BOLUNMUS, FASONDA, BITTI, FASONDA_EN_AZ_BIR] }
  *         description: 'Konum sınıfı (CSV ile çoklu, VEYA). FASONDA = tüm canlı toplar fasoncuda; FASONDA_EN_AZ_BIR = en az bir canlı top fasoncuda (FASONDA''yı kapsar). Tanınmayan değer 400 INVALID_FILTER_VALUE'
+ *       - in: query
+ *         name: filter[fasonFirma]
+ *         schema: { type: string }
+ *         description: 'Şu an bu fason firma(lar)da topu olan iş emirleri (firma uuid; CSV ile çoklu): firmaya giden açık sevkte dönmemiş kalem, topu AT_SUBCONTRACTOR; yalnız planda yazılı firma eşleşmez. UUID değil ya da firma yok → 400 INVALID_FILTER_VALUE'
  *     responses:
  *       200:
  *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5), `customerCount` ve `konum` ({ sinif, canliTop, istasyonlar[{ istasyonId, ad, tur, dis, topSayisi, metre, fasondaTop, fasoncular }] } — canlı topların şu anki istasyon dağılımı)'
  */
 router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
+
+/**
+ * @openapi
+ * /api/work-orders/where-options:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: '"Şu an hangi fasonda" süzgeç seçenekleri'
+ *     description: 'Fason firmalar, şu an orada topu bulunan arşivlenmemiş iş emri sayısıyla (filter[fasonFirma] ile aynı yüklem). Sayı azalan, sonra ad. Pasif firma yalnız sayısı > 0 ise listelenir.'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: '`data.firms`: `[{ id, name, workOrderCount }]`'
+ */
+router.get("/where-options", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.whereOptions);
 
 // K6 (2026-06-12): GET /available-for-attach, PATCH /:id/attach-rolls ve
 // PATCH /:id/detach-rolls HTTP uçları kaldırıldı — hiçbir frontend çağırmıyordu

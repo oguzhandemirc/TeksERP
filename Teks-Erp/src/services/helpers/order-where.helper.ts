@@ -9,7 +9,7 @@
 //   · canlı top + istasyon   → `workorder-location.helper` (LOCATION_LIVE_STATUSES, currentStepId)
 //   · iş emrinin topları     → `workorder-rolls.helper` (üç yol: producedInStep · currentStep · batch)
 //   · sevke hazır / gitti    → `ship-readiness.helper` (SHIP_READY_READY / GONE kümeleri)
-//   · fasonda firma + gün    → `fason-open-dispatch.helper` (açık + outstanding kalem)
+//   · fasonda firma + gün    → `roll-place.helper` (açık + outstanding kalem, top fasoncuda)
 //   · termin                 → `order-deadline.helper`
 //
 // BOĞAZ İKİZİ: bellek-içi `deriveOrderWhere` (yer listesi) ↔ Prisma süzgeci `orderWhereFilterParts`
@@ -28,7 +28,7 @@ import { factoryDayKeyUtcMidnight, factoryDayStartOfKey } from "../../constants/
 import { LOCATION_LIVE_STATUSES } from "./workorder-location.helper";
 import { whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
 import { SHIP_READY_GONE_STATUSES, SHIP_READY_READY_STATUSES } from "./ship-readiness.helper";
-import { OPEN_OUTSTANDING, OUTSTANDING_ITEM, outstandingItemOfOpenDispatch } from "./fason-open-dispatch.helper";
+import { fasonItemNowWhere } from "./roll-place.helper";
 import { daysPastDeadline, isDeadlineOpenStatus } from "./order-deadline.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 
@@ -194,10 +194,7 @@ export async function loadWorkOrderFacts(woIds: readonly string[]): Promise<Map<
   }
 
   const items = await prisma.subcontractorDispatchItem.findMany({
-    where: {
-      ...outstandingItemOfOpenDispatch({ workOrderId: { in: ids } }),
-      AND: [{ roll: { status: RollStatus.AT_SUBCONTRACTOR } }],
-    },
+    where: fasonItemNowWhere({ workOrderId: { in: ids } }),
     select: {
       rollId: true,
       roll: { select: { currentQty: true } },

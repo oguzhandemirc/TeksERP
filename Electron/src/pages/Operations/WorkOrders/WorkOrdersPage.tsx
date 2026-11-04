@@ -1,4 +1,6 @@
-import { useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Ban, FileStack, PanelRight, Pencil, Plus, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -29,6 +31,7 @@ import type { BulkWorkOrder } from "./bulkDocs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import { buildPlaceFilters, isInvalidFilterValueError, stripPlaceFilters } from "./work-order-filters";
 
 // "Durum" süzgeci FilterBar'ın `leading` yuvasında: Durum + Şu an nerede + Özel (StatusLocationFilter).
 const FILTERS: FilterDef[] = [
@@ -91,6 +94,12 @@ export function WorkOrdersPage() {
     forceFilters,
   } = useListToggles({ scope: "work-orders", withCompleted: true });
 
+  // "Şu an hangi fasonda" bileşen içinde kurulur: TERIM okuma anında çözülür (modül düzeyinde donardı).
+  const filters = useMemo<FilterDef[]>(
+    () => [...FILTERS, ...buildPlaceFilters(() => workOrderService.whereOptions().then((r) => r.data))],
+    [],
+  );
+
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
     fetchFn: workOrderService.listCursor,
@@ -101,6 +110,16 @@ export function WorkOrdersPage() {
       targetQuantity: targetQuantityEnabled,
     },
   });
+
+  // Seçilen firma sunucuda artık yoksa (eski bağlantı, silinmiş kayıt) seçim düşer.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (!isInvalidFilterValueError(query.error)) return;
+    const next = stripPlaceFilters(searchParams);
+    if (!next) return;
+    setSearchParams(next, { replace: true });
+    toast.warning("Seçilen fason firma artık geçerli değil; seçim temizlendi.");
+  }, [query.error, searchParams, setSearchParams]);
 
   // Düzenleme artık tam sayfa (/work-orders/:id/edit) — modal değil. Detay
   // panelinden / context menüden çağrılır; paneli kapatıp forma götürür.
@@ -152,7 +171,7 @@ export function WorkOrdersPage() {
           </>
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} leading={<StatusLocationFilter />} />
+      <FilterBar filters={filters} defaultDateRangeDays={30} leading={<StatusLocationFilter />} />
       <StatusLocationChips />
       <DataTable<WorkOrder>
         table={table}

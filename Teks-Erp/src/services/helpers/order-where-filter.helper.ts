@@ -10,7 +10,7 @@ import { AppError } from "../../utils/app-error";
 import { readFilterList } from "../../utils/query-parser";
 import { whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
 import { SHIP_READY_READY_STATUSES } from "./ship-readiness.helper";
-import { OPEN_OUTSTANDING, OUTSTANDING_ITEM } from "./fason-open-dispatch.helper";
+import { workOrderAtFasonWhere } from "./roll-place.helper";
 import { DEADLINE_OPEN_ORDER_STATUSES } from "./order-deadline.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { OPEN_ORDER_EXCLUDED, WO_ROLLUP_ACTIVE, fasonDayThreshold } from "./order-where.helper";
@@ -38,24 +38,11 @@ function hasActiveWo(woCond: Prisma.WorkOrderWhereInput): Prisma.OrderWhereInput
   };
 }
 
-/** Fasonda (firmalı) top taşıyan açık sevk — `loadWorkOrderFacts` (2) sorgusunun ikizi. */
-function fasonDispatchCond(extra: Prisma.SubcontractorDispatchWhereInput): Prisma.WorkOrderWhereInput {
-  return {
-    dispatches: {
-      some: {
-        ...OPEN_OUTSTANDING,
-        ...extra,
-        AND: [{ items: { some: { ...OUTSTANDING_ITEM, AND: [{ roll: { status: RollStatus.AT_SUBCONTRACTOR } }] } } }],
-      },
-    },
-  };
-}
-
 /** FASON yeri ikizi: canlı fason topu (adımda) VEYA firmalı açık sevk kalemi (`placesOfFacts`). */
 const HAS_FASON_PLACE: Prisma.WorkOrderWhereInput = {
   OR: [
     { steps: { some: { currentRolls: { some: { status: RollStatus.AT_SUBCONTRACTOR } } } } },
-    fasonDispatchCond({}),
+    workOrderAtFasonWhere(),
   ],
 };
 /** HAZIR yeri ikizi: üç yoldan biriyle bağlı, hazır statüde top. */
@@ -128,7 +115,7 @@ export function orderWhereFilterParts(f: OrderWhereFilters, now: Date): Prisma.O
     const extra: Prisma.SubcontractorDispatchWhereInput = {};
     if (f.firmaIds.length > 0) extra.subcontractorId = { in: f.firmaIds };
     if (f.gunden !== null) extra.dispatchedAt = { lt: fasonDayThreshold(f.gunden, now) };
-    out.push({ AND: [OPEN_ORDER, hasActiveWo(fasonDispatchCond(extra))] });
+    out.push({ AND: [OPEN_ORDER, hasActiveWo(workOrderAtFasonWhere(extra))] });
   }
   return out;
 }

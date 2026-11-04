@@ -144,6 +144,7 @@ import {
 import { computeWoInput } from "./helpers/coverage.helper";
 import { routeTemplateProblem } from "./helpers/route-template-usable.helper";
 import { readWorkOrderLocationFilters, withWorkOrderLocation } from "./helpers/workorder-location.helper";
+import { takeWorkOrderPlaceFilters } from "./helpers/workorder-place-filter.helper";
 import {
   buildHiddenStatusWhere,
   HIDE_CANCELLED_FILTER,
@@ -1802,6 +1803,8 @@ export class WorkOrderService {
     // "Şu an nerede" süzgeçleri (2026-10-24): istasyon + konum sınıfı; filtre kümesinden
     // helper çıkarır, tanınmayan değer 400. Liste + cursor + sayım AYNI where'i görür.
     const locationConds = await readWorkOrderLocationFilters(params.filters);
+    // "Şu an hangi fasonda" (2026-11-04): topun ŞU ANKİ yeri, plan değil.
+    locationConds.push(...(await takeWorkOrderPlaceFilters(params.filters)));
     // Arama kapsamı liste kolonlarıyla hizalı: İE no + parti no + kumaş/renk +
     // sipariş bağı üzerinden müşteri adı VE sipariş no (nested some → EXISTS
     // subquery). Sipariş no ile de aranabilmesi siparişten üretim emrine
