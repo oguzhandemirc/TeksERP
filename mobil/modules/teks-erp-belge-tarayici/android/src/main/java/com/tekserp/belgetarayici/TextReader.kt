@@ -75,41 +75,56 @@ internal class TextReader(private val context: Context) {
   private fun score(text: Text): Double =
     text.textBlocks.flatMap { it.lines }.sumOf { conf(it.confidence) * it.text.trim().length }
 
-  private fun conf(v: Float): Double = if (v.isFinite()) v.toDouble().coerceIn(0.0, 1.0) else 0.0
-
-  private fun quad(corners: Array<Point>?, box: android.graphics.Rect?): List<List<Int>>? {
-    if (corners != null && corners.size == 4) return corners.map { listOf(it.x, it.y) }
-    val b = box ?: return null
-    return listOf(listOf(b.left, b.top), listOf(b.right, b.top), listOf(b.right, b.bottom), listOf(b.left, b.bottom))
-  }
-
-  /** Her kelime satır sırasını (`l`) taşır — sunucu tablo satırlarını cihazın satırından kurar. */
-  private fun toWire(pass: Pass, ms: Long): Map<String, Any> {
-    val lines = ArrayList<Map<String, Any>>()
-    val words = ArrayList<Map<String, Any>>()
-    for (block in pass.text.textBlocks) {
-      for (line in block.lines) {
-        val lc = quad(line.cornerPoints, line.boundingBox) ?: continue
-        val l = lines.size
-        lines.add(mapOf("c" to lc, "p" to conf(line.confidence)))
-        for (el in line.elements) {
-          val wc = quad(el.cornerPoints, el.boundingBox) ?: continue
-          if (el.text.isBlank()) continue
-          words.add(mapOf("t" to el.text, "c" to wc, "l" to l, "p" to conf(el.confidence)))
-        }
-      }
-    }
-    return mapOf(
-      "width" to pass.width,
-      "height" to pass.height,
-      "rotation" to pass.rotation,
-      "ms" to ms,
-      "lines" to lines,
-      "words" to words,
-    )
-  }
+  private fun toWire(pass: Pass, ms: Long): Map<String, Any> = wire(pass.text, pass.width, pass.height, pass.rotation, ms)
 
   companion object {
+    private fun conf(v: Float): Double = if (v.isFinite()) v.toDouble().coerceIn(0.0, 1.0) else 0.0
+
+    private fun quad(corners: Array<Point>?, box: android.graphics.Rect?): List<List<Int>>? {
+      if (corners != null && corners.size == 4) return corners.map { listOf(it.x, it.y) }
+      val b = box ?: return null
+      return listOf(listOf(b.left, b.top), listOf(b.right, b.top), listOf(b.right, b.bottom), listOf(b.left, b.bottom))
+    }
+
+    /**
+     * ML Kit sonucu → `ClientOcr` tel biçimi (tek dönüştürücü: fotoğraf okuması ve canlı kare). Her kelime satır sırasını
+     * (`l`) taşır — sunucu tablo satırlarını cihazın satırından kurar. Tavan verilirse fazlası kesilir (canlı kare).
+     */
+    fun wire(
+      text: Text,
+      width: Int,
+      height: Int,
+      rotation: Int,
+      ms: Long,
+      maxLines: Int = Int.MAX_VALUE,
+      maxWords: Int = Int.MAX_VALUE,
+    ): Map<String, Any> {
+      val lines = ArrayList<Map<String, Any>>()
+      val words = ArrayList<Map<String, Any>>()
+      outer@ for (block in text.textBlocks) {
+        for (line in block.lines) {
+          if (lines.size >= maxLines || words.size >= maxWords) break@outer
+          val lc = quad(line.cornerPoints, line.boundingBox) ?: continue
+          val l = lines.size
+          lines.add(mapOf("c" to lc, "p" to conf(line.confidence)))
+          for (el in line.elements) {
+            if (words.size >= maxWords) break
+            val wc = quad(el.cornerPoints, el.boundingBox) ?: continue
+            if (el.text.isBlank()) continue
+            words.add(mapOf("t" to el.text, "c" to wc, "l" to l, "p" to conf(el.confidence)))
+          }
+        }
+      }
+      return mapOf(
+        "width" to width,
+        "height" to height,
+        "rotation" to rotation,
+        "ms" to ms,
+        "lines" to lines,
+        "words" to words,
+      )
+    }
+
     /** ML Kit tarayıcısının sayfası bu önekle yazılır (`writePage`). */
     const val SCANNER_PAGE_PREFIX = "tarayici-"
 

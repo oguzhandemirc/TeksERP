@@ -47,6 +47,7 @@ import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
 import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
+import { konumYedegi } from "./lib/gelen-belge-motor-konum-yedegi";
 
 let pass = 0;
 let fail = 0;
@@ -370,6 +371,8 @@ gulkesimBolum(check, gercek, sablonlar);
 etiketPencere(check, gercek);
 // ── §14 tanıtmada dokunulan değer sınırı: maxWords + valueShape (`lib/gelen-belge-motor-deger-sinir.ts`) ──
 degerSiniri(check);
+// ── §15 tanıtmada konum yedeği: bozuk okunan etiket ("Mytei:") değeri kaybettirmez (`lib/gelen-belge-motor-konum-yedegi.ts`) ──
+konumYedegi(check);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

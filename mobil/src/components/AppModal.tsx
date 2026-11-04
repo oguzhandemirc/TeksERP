@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
   Pressable,
@@ -132,7 +132,11 @@ export default function AppModal({
   const startAbsY = useSharedValue(0);
   const closing = useSharedValue(false);
 
+  // Bağlanışta kapalıyken hemen açılan modalda (ör. okuma bitince kendiliğinden açılan teklif) ilk kapanış
+  // animasyonunun geri çağrısı açılıştan SONRA gelebilir; görünürken gizleme yapılmaz.
+  const visibleRef = useRef(visible);
   const finishHide = useCallback(() => {
+    if (visibleRef.current) return;
     setRendered(false);
     // Bir sonraki açılış temiz başlasın: sürükleme offset'lerini sıfırla.
     dragY.value = 0;
@@ -144,6 +148,7 @@ export default function AppModal({
   }, [onHidden]);
 
   useEffect(() => {
+    visibleRef.current = visible;
     if (visible) {
       setRendered(true);
       progress.value = withTiming(1, { duration: IN_MS, easing: Easing.out(Easing.cubic) });

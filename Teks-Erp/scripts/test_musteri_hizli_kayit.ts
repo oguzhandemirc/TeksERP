@@ -13,7 +13,10 @@
 // Negatif sonda (2026-11-04, ölçüldü; md5 ile geri): eşik 0,80→0,95 → §1 2 ❌; aday tavanı kaldırılınca §1 ❌; BLIND dalı
 // silinince §1 ❌; kayda vergi no eklenince §2 ❌; izne `customer:read` eklenince §3 ❌; replay boğazı atlanınca §4 ❌;
 // `alive` koşulsuz → §4 ❌; write-guard `customer` satırı silinince §5 ❌.
+//   §1c kısa ad KAYITLIYSA (2026-11-05): tanıtılmış alandan 2 harf tam eşleşen karta doğrudan öneri (NORMAL+TRUSTED),
+//      teklif yok; adaylar `code` taşır
 // Sonda 2026-11-05: tanıtılmış eşiği 1→3 → §1b 3 ❌; tanıtım koşulu `true` → §1b 1 ❌; tanıtım okuması kaldırılınca §1b 3 ❌.
+// Sonda 2026-11-05 (§1c): `rank` anahtar eşiği 2→3 → §1c 2 ❌; aday `code` eşlemesi null → §1c 1 ❌.
 // =============================================================================
 import { createHash, randomUUID } from "crypto";
 import type { AddressInfo } from "net";
@@ -139,6 +142,19 @@ async function run(url: string): Promise<void> {
   await addScan(free2, null);
   const rf2 = await readOwnerForNote({ id: free2, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
   check("§1b ⭐ tanıtılmamış okumada 2 harf → teklif yok (eşik 3)", rf2.unmatched === null, JSON.stringify(rf2));
+
+  // ── §1c kısa ad KAYITLI: tam eşleşen kart modal yerine doğrudan öneri olur (2026-11-05) ──
+  check("§1c adaylar kodu taşır (modal aynı adlı carileri ayırt eder)", (r1.unmatched?.candidates ?? []).length > 0
+    && (r1.unmatched?.candidates ?? []).every((x) => typeof x.code === "string" && x.code.length > 0), JSON.stringify(r1.unmatched?.candidates ?? null));
+  const known2 = TAG.slice(3, 5);
+  const kc = await makeCustomer(known2);
+  for (const trust of ["NORMAL", "TRUSTED"] as const) {
+    const kn = await makeNote(known2, `KC${trust[0]}`);
+    await addScan(kn, tpl);
+    const rk = await readOwnerForNote({ id: kn, status: "DRAFT", ownerCustomerId: null }, trust);
+    check(`§1c ⭐ tanıtılmış alandan 2 harfli kayıtlı ad → doğrudan öneri, teklif yok (${trust})`,
+      rk.suggestion?.customerId === kc && rk.suggestion.source === "OWNER_TEXT" && rk.unmatched === null, JSON.stringify(rk));
+  }
 
   // ── §2–§4 uç ───────────────────────────────────────────────────────────────
   const gbUser = await makeUser(["gelen-belge:write"]);

@@ -1,5 +1,6 @@
-// Belgeden İE formu — "müşteri kayıtlı değil" teklifi: tetikleyici düğme + tek kart (ModuleSheet).
-// Aday varsa önce "Bunu mu demek istediniz?"; "Hayır" ya da aday yoksa yeni kayıt (ad düzenlenebilir + Kaydet).
+// Belgeden İE formu — "müşteri kayıtlı değil" teklifi (Gülkesim 2026-11-04; modal 2026-11-05). Okuma bitince kendiliğinden
+// açılır (not başına bir kez): benzer kayıt yoksa "Yeni müşteri kaydedilsin mi?", benzer varsa mükerrer kart doğmasın diye
+// önce "Bunu mu demek istediniz?". Kapatılırsa satırdaki "öneriyi aç" bağlantısı yeniden açar.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text, TouchableRipple } from 'react-native-paper';
@@ -11,76 +12,77 @@ import type { OwnerUnmatched } from '../../../../services/inboundDoc.service';
 import { NO_PERMISSION_TEXT, useCustomerFromDoc } from './useCustomerFromDoc';
 
 interface Props {
+  noteId: string;
   noteNo: string;
   unmatched: OwnerUnmatched;
   disabled: boolean;
   onPicked: (customerId: string, name: string) => void;
+  /** Satırın müşteri seçicisini (`PickerModal`) açar. */
+  onPickFromList: () => void;
 }
 
 const TOUCH = { minHeight: 56 } as const;
 
-export default function CustomerFromDocOffer({ noteNo, unmatched, disabled, onPicked }: Props) {
-  const c = useCustomerFromDoc({ unmatched, onPicked });
-  const one = unmatched.candidates.length === 1 ? unmatched.candidates[0] : null;
+export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabled, onPicked, onPickFromList }: Props) {
+  const c = useCustomerFromDoc({ noteId, unmatched, disabled, onPicked });
+  const fromList = () => {
+    c.finish();
+    onPickFromList();
+  };
   return (
     <>
-      <Button mode="outlined" icon="account-plus-outline" onPress={c.open} disabled={disabled} contentStyle={TOUCH}
+      <Button mode="text" icon="account-question-outline" onPress={c.open} disabled={disabled} contentStyle={TOUCH}
         style={styles.trigger} testID={`belge-satir-musteri-ekle-${noteNo}`}>
-        {unmatched.candidates.length > 0 ? 'Müşteri kayıtlı değil — seç / ekle' : 'Müşteri kayıtlı değil — ekle'}
+        {`Belgedeki ad: ${unmatched.text} — öneriyi aç`}
       </Button>
       <ModuleSheet
         visible={c.step === 'ask'}
         onDismiss={c.close}
         size="sm"
         title="Bunu mu demek istediniz?"
-        subtitle={`Belgede: “${unmatched.text}”`}
+        subtitle={`Belgede “${unmatched.text}” yazıyor`}
         footer={
           <>
-            <Button onPress={c.close} contentStyle={TOUCH}>Vazgeç</Button>
-            <Button mode={one ? 'outlined' : 'contained'} onPress={c.decline} contentStyle={TOUCH} testID="musteri-ekle-hayir">
-              Hayır, yeni kayıt
+            <Button onPress={c.close} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
+            <Button mode="outlined" onPress={fromList} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
+            <Button mode="contained" onPress={c.decline} contentStyle={TOUCH} testID="musteri-ekle-hayir">
+              {`Hiçbiri — “${unmatched.text}” adıyla yeni kaydet`}
             </Button>
-            {one && (
-              <Button mode="contained" onPress={() => c.pick(one.customerId, one.name)} contentStyle={TOUCH} testID="musteri-ekle-evet">
-                Evet
-              </Button>
-            )}
           </>
         }
       >
-        {one ? (
-          <View style={styles.ask}>
-            <Text style={sheet.label}>Kayıtlı benzer müşteri</Text>
-            <TruncatedText style={styles.name} testID="musteri-ekle-aday">{one.name}</TruncatedText>
-          </View>
-        ) : (
-          <View style={styles.list}>
-            <Text style={sheet.label}>Kayıtlı benzer müşteriler — birine dokunun</Text>
-            {unmatched.candidates.map((x) => (
-              <TouchableRipple key={x.customerId} onPress={() => c.pick(x.customerId, x.name)} style={styles.option}
-                accessibilityRole="button" testID={`musteri-ekle-aday-${x.customerId}`}>
+        <View style={styles.list}>
+          <Text style={sheet.label}>Benzer adlı kayıtlı müşteriler — doğru olana dokunun</Text>
+          {unmatched.candidates.map((x) => (
+            <TouchableRipple key={x.customerId} onPress={() => c.pick(x.customerId, x.name)} style={styles.option}
+              accessibilityRole="button" testID={`musteri-ekle-aday-${x.customerId}`}>
+              <View>
                 <TruncatedText style={styles.name}>{x.name}</TruncatedText>
-              </TouchableRipple>
-            ))}
-          </View>
-        )}
+                {x.code ? <Text style={styles.code}>{`Kod: ${x.code}`}</Text> : null}
+              </View>
+            </TouchableRipple>
+          ))}
+        </View>
       </ModuleSheet>
       <ModuleSheet
         visible={c.step === 'create'}
         onDismiss={c.close}
         size="sm"
-        title="Yeni müşteri kaydı"
-        subtitle="Bu müşteri kayıtlı değil; yalnız adla kaydedilir"
+        title="Yeni müşteri kaydedilsin mi?"
         footer={
           <>
-            <Button onPress={c.close} disabled={c.busy} contentStyle={TOUCH}>Vazgeç</Button>
+            <Button onPress={c.close} disabled={c.busy} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
+            <Button mode="outlined" onPress={fromList} disabled={c.busy} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
             <Button mode="contained" onPress={() => void c.save()} loading={c.busy} disabled={c.busy || !c.canCreate || !c.name.trim()}
               contentStyle={TOUCH} testID="musteri-ekle-kaydet">
-              Kaydet
+              Kaydet ve seç
             </Button>
           </>
         }
       >
+        <Text style={styles.body} testID="musteri-ekle-govde">
+          {`Belgede müşteri adı “${unmatched.text}” okundu. Bu adla kayıtlı müşteri yok. Yeni müşteri olarak kaydedilsin mi?`}
+        </Text>
         <Text style={sheet.label}>Müşteri adı</Text>
         <ModalTextInput mode="outlined" value={c.name} onChangeText={c.setName} autoCapitalize="characters" maxLength={100}
           style={sheet.input} testID="musteri-ekle-ad" />
@@ -93,8 +95,9 @@ export default function CustomerFromDocOffer({ noteNo, unmatched, disabled, onPi
 
 const styles = StyleSheet.create({
   trigger: { alignSelf: 'flex-start', marginTop: spacing.xs },
-  ask: { gap: spacing.xs },
   list: { gap: spacing.sm },
+  body: { fontSize: typography.size.base, color: colors.text, marginBottom: spacing.sm },
   option: { minHeight: 56, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   name: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
+  code: { fontSize: typography.size.sm, color: colors.textSecondary },
 });
