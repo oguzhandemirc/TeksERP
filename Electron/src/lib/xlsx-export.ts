@@ -39,6 +39,9 @@ export interface SheetSpec {
   /** Ana tablonun ALTINA (boş satırdan sonra) basılan ek tablolar — başlık satırı +
    *  kolon başlıkları + satırlar. Aynı sayfada ikinci liste (ör. çuvalın kartelaları). */
   subTables?: Array<{ title: string; columns: Array<Omit<SheetColumn, "key" | "width">>; rows: unknown[][] }>;
+  /** Basılacak BELGE sayfası (irsaliye vb.): tablo hücrelerine ince kenarlık + yazdırmada
+   *  tek sayfa genişliğine sığdırma. Liste export'ları açmaz (davranışları değişmez). */
+  documentLayout?: boolean;
 }
 
 type CellLike = { value: unknown; numFmt: string; alignment: unknown };
@@ -51,9 +54,25 @@ function styleCell(cell: CellLike, col: Pick<SheetColumn, "numFmt" | "align">): 
 }
 
 const HEADER_FILL = "FFEFEFEF"; // açık gri başlık zemini
+const THIN = { style: "thin" as const };
+const THIN_BORDER = { top: THIN, left: THIN, bottom: THIN, right: THIN };
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 // Excel sayfa adı: ≤31 karakter ve : \ / ? * [ ] yasak.
 const sanitizeSheetName = (n: string) => n.replace(/[:\\/?*[\]]/g, " ").slice(0, 31);
+
+type LayoutSheet = {
+  getRow: (n: number) => { getCell: (c: number) => { border: unknown } };
+  pageSetup: object;
+};
+
+/** Başlık + veri + TOPLAM hücreleri çizgili; yazdırmada tek sayfa genişliğine sığar. */
+function applyDocumentLayout(ws: LayoutSheet, fromRow: number, toRow: number, colCount: number): void {
+  for (let r = fromRow; r <= toRow; r++) {
+    const row = ws.getRow(r);
+    for (let c = 1; c <= colCount; c++) row.getCell(c).border = THIN_BORDER;
+  }
+  ws.pageSetup = { ...ws.pageSetup, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+}
 
 /** Çok-sayfalı çalışma kitabı üretir → indirilebilir Blob. */
 export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
@@ -103,8 +122,10 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
       if (typeof c.numFmt === "string") ws.getColumn(idx + 1).numFmt = c.numFmt;
     });
 
+    let lastTableRowNo = ws.rowCount;
     if (spec.totalRow) {
       const tr = ws.addRow(spec.totalRow);
+      lastTableRowNo = tr.number;
       tr.font = { bold: true };
       alignRow(tr);
       fmtRow(tr);
@@ -113,6 +134,8 @@ export async function buildWorkbook(sheets: SheetSpec[]): Promise<Blob> {
         if (fmt) tr.getCell(idx + 1).numFmt = fmt;
       });
     }
+
+    if (spec.documentLayout) applyDocumentLayout(ws, headerRowNo, lastTableRowNo, spec.columns.length);
 
     for (const st of spec.subTables ?? []) {
       ws.addRow([]);

@@ -197,6 +197,7 @@ import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { TERIM } from "../constants/terim";
+import { assertWorkOrderLinesSingleSpec, type WorkOrderSpecLine } from "./helpers/workorder-line-spec.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -704,6 +705,14 @@ export async function assertRouteRefsActive(
   }
 }
 
+/** Sipariş satırı seçiminden tek-spec kapısının girdisi (create + replace ortak). */
+function toSpecLine(l: {
+  itemId: string; colorId: string | null;
+  item: { name: string } | null; color: { name: string } | null; order: { orderNumber: string };
+}): WorkOrderSpecLine {
+  return { itemId: l.itemId, colorId: l.colorId, itemName: l.item?.name, colorName: l.color?.name, orderNumber: l.order.orderNumber };
+}
+
 /**
  * L (düşük bulgu): WO'ya bağlanacak sipariş satırları için giriş guard'ı —
  * var olmayan satır ve İPTAL edilmiş siparişin satırı reddedilir (eskiden
@@ -1104,10 +1113,14 @@ export class WorkOrderService {
         where: { id: { in: allocations.map((a) => a.orderLineId) } },
         select: {
           id: true, itemId: true, colorId: true,
+          item: { select: { name: true } },
+          color: { select: { name: true } },
           order: { select: { status: true, orderNumber: true } },
         },
       });
       assertOrderLinesLinkable(allocations.map((a) => a.orderLineId), orderLineItems);
+      // Tek kumaş + tek renk: hedef (undefined/null/değer) ne olursa olsun karışık kalem 400.
+      assertWorkOrderLinesSingleSpec(orderLineItems.map(toSpecLine));
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
         const onlyItemId = Array.from(distinctItems)[0];
@@ -1117,10 +1130,6 @@ export class WorkOrderService {
           );
         }
         resolvedTargetItemId = onlyItemId;
-      } else if (distinctItems.size > 1 && !resolvedTargetItemId) {
-        throw AppError.badRequest(
-          "Sipariş satırları farklı ürünler içeriyor; hedef ürünü açıkça belirtin"
-        );
       }
 
       const distinctColors = new Set(orderLineItems.map((l) => l.colorId));
@@ -1136,8 +1145,9 @@ export class WorkOrderService {
         }
         resolvedTargetColorId = onlyColorId;
       } else if (distinctColors.size > 1 && data.targetColorId === undefined) {
+        // Buraya yalnız "renksiz + tek renk" karışımı düşer (iki renk yukarıda 400).
         throw AppError.badRequest(
-          "Sipariş satırları farklı renkler içeriyor; hedef rengi açıkça belirtin",
+          "Sipariş satırları renkli ve renksiz kalem içeriyor; hedef rengi açıkça belirtin",
         );
       }
     }
@@ -5488,10 +5498,14 @@ export class WorkOrderService {
         where: { id: { in: allocations.map((a) => a.orderLineId) } },
         select: {
           id: true, itemId: true, colorId: true,
+          item: { select: { name: true } },
+          color: { select: { name: true } },
           order: { select: { status: true, orderNumber: true } },
         },
       });
       assertOrderLinesLinkable(allocations.map((a) => a.orderLineId), orderLineItems);
+      // Tek kumaş + tek renk: hedef (undefined/null/değer) ne olursa olsun karışık kalem 400.
+      assertWorkOrderLinesSingleSpec(orderLineItems.map(toSpecLine));
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
         const onlyItemId = Array.from(distinctItems)[0];
@@ -5501,10 +5515,6 @@ export class WorkOrderService {
           );
         }
         resolvedTargetItemId = onlyItemId;
-      } else if (distinctItems.size > 1 && !resolvedTargetItemId) {
-        throw AppError.badRequest(
-          "Sipariş satırları farklı ürünler içeriyor; hedef ürünü açıkça belirtin",
-        );
       }
 
       const distinctColors = new Set(orderLineItems.map((l) => l.colorId));
@@ -5520,8 +5530,9 @@ export class WorkOrderService {
         }
         resolvedTargetColorId = onlyColorId;
       } else if (distinctColors.size > 1 && data.targetColorId === undefined) {
+        // Buraya yalnız "renksiz + tek renk" karışımı düşer (iki renk yukarıda 400).
         throw AppError.badRequest(
-          "Sipariş satırları farklı renkler içeriyor; hedef rengi açıkça belirtin",
+          "Sipariş satırları renkli ve renksiz kalem içeriyor; hedef rengi açıkça belirtin",
         );
       }
     }

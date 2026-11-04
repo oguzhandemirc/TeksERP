@@ -38,6 +38,8 @@ interface Props {
   currentWidth: number | null;
   /** Bağlı siparişler — renk uyumsuzluğu ÖNCEDEN gösterilir ve karar burada verilir. */
   orderLinks?: WorkOrder["orderLinks"];
+  /** Açılışta seçili gelecek renk (ör. "Sipariş Bağını Kopar" önerisi); yoksa mevcut renk. */
+  initialColorId?: string | null;
 }
 
 const PARTIAL_CODE = "COLOR_PARTIAL_CONFIRM";
@@ -91,6 +93,7 @@ export function ChangeTargetDialog({
   currentColorName,
   currentWidth,
   orderLinks,
+  initialColorId,
 }: Props) {
   const qc = useQueryClient();
   const navigateActive = useTabsStore((s) => s.navigateActive);
@@ -110,7 +113,7 @@ export function ChangeTargetDialog({
 
   useEffect(() => {
     if (open) {
-      setColorId(currentColorId);
+      setColorId(initialColorId ?? currentColorId);
       setWidth(currentWidth != null ? String(currentWidth) : "");
       setReason("");
       setSelectedRolls(new Set());
@@ -119,7 +122,7 @@ export function ChangeTargetDialog({
       setOrderActions({});
       setTebdilBatch(null);
     }
-  }, [open, currentColorId, currentWidth]);
+  }, [open, currentColorId, currentWidth, initialColorId]);
 
   const colorsQ = useQuery({
     queryKey: ["colors", "all-active"],

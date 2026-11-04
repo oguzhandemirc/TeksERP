@@ -51,7 +51,7 @@ const FILTERS: FilterDef[] = [
   {
     kind: "multi-select",
     key: "status",
-    label: "Durum",
+    label: "Sevk durumu",
     options: [
       { value: "PENDING", label: "Bekliyor" },
       { value: "APPROVED", label: "Onaylı" },
@@ -65,7 +65,7 @@ const FILTERS: FilterDef[] = [
     // filter[woState]); rozet kolonuyla aynı semantik (work-order-rollup.ts).
     kind: "multi-select",
     key: "woState",
-    get label() { return TERIM.terbiyeIsEmri.tekil; },
+    label: "Üretim",
     options: [
       { value: "NONE", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`; } },
       { value: "PLANNED", label: "Planlandı" },

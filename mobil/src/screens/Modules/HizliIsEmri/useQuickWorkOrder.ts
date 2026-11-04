@@ -34,6 +34,7 @@ import { useScanRouteMode } from '../../../hooks/useFeatureFlags';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 import { TERIM } from '../../../lib/terim';
+import { addPicked, prunePicked, type PickedOrderLines } from './orderLinkAnchor';
 
 export interface ScannedRoll {
   id: string;
@@ -198,6 +199,9 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   const [targetPropertyIds, setTargetPropertyIds] = useState<string[]>([]);
 
   const [orderLineIds, setOrderLineIds] = useState<string[]>([]);
+  // Seçili kalemlerin TAM objeleri — "tek iş emri = tek renk/kumaş" çapası. Picker'da
+  // dursaydı sihirbaz adımı değişince (unmount) kaybolur, farklı renk eklenebilirdi.
+  const [pickedOrderLines, setPickedOrderLines] = useState<PickedOrderLines>({});
   // Sipariş-önce: seçilen sipariş kaleminden kilitlenen ürün (top okutulmadan da
   // WO ürününü/anchor'ı belirler). Top-önce'de de set edilir (E4: toplar silinse de
   // sipariş bağlıyken ürün kilidi kalsın).
@@ -756,6 +760,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     if (Number.isFinite(target) && target > 0) {
       setLineTargets((cur) => ({ ...cur, [line.lineId]: target }));
     }
+    setPickedOrderLines((cur) => addPicked(cur, line));
     setOrderDerivedItemId(line.itemId);
     setTargetColorId(line.colorId);
     // Renk adını doğrudan order kaleminden al (gerçek colorId varsa).
@@ -769,6 +774,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
 
   const changeOrderLines = useCallback((ids: string[]) => {
     setOrderLineIds(ids);
+    setPickedOrderLines((cur) => prunePicked(cur, ids));
     setLineTargets((cur) => {
       const next: Record<string, number> = {};
       for (const id of ids) if (cur[id] != null) next[id] = cur[id];
@@ -998,6 +1004,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     setFoldType(null);
     setTargetPropertyIds([]);
     setOrderLineIds([]);
+    setPickedOrderLines({});
     setOrderDerivedItemId(null);
     setStepNotes({});
     setStepSubcontractors({});
@@ -1069,6 +1076,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     applyMissing,
     // sipariş
     orderLineIds,
+    pickedOrderLines,
     orderLinked,
     orderTargetQty,
     changeOrderLines,

@@ -8,7 +8,7 @@ import { IS_ELECTRON } from "@/lib/runtime-env";
 import { accountingDispatchService } from "@/pages/Operations/AccountingDispatch/service";
 import {
   buildDispatchReportSheets,
-  dispatchReportNotes,
+  dispatchStatusNotes,
 } from "@/pages/Operations/AccountingDispatch/accounting-export";
 import type { DispatchReport } from "@/pages/Operations/AccountingDispatch/types";
 
@@ -98,7 +98,7 @@ export interface TablesOpts {
 
 /**
  * Tek sevkiyatın Excel'i. Kolonlar/satırlar/değerler PDF'in çözücüsünden gelir;
- * fiş verisi (`report`) yalnız dipnotlar (brüt · iade · taslak) için okunur.
+ * fiş verisi (`report`) yalnız iptal uyarısı için okunur (brüt/iade dipnotu muhasebe fişinde).
  * Eski sunucu `/tables`ı tanımıyorsa eski fiş kurucusuna düşülür.
  */
 export async function buildDispatchWorkbook(
@@ -109,7 +109,9 @@ export async function buildDispatchWorkbook(
   const rep = report ?? (await reportOf(t)).data ?? null;
   const tables = await fetchDocTables(t, opts);
   if (tables !== "legacy") {
-    return buildWorkbook(docTablesToSheets(tables, rep ? dispatchReportNotes(rep) : []));
+    // Müşteriye giden belge: brüt/iade açıklaması iç bilgidir (muhasebe fişinde kalır);
+    // yalnız belgenin geçerliliğini değiştiren iptal uyarısı basılır.
+    return buildWorkbook(docTablesToSheets(tables, rep ? dispatchStatusNotes(rep) : []));
   }
   return rep ? buildWorkbook(buildDispatchReportSheets(rep)) : null;
 }

@@ -119,9 +119,41 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(at("Şube")).toBe("Merkez");
     expect(at("Kalem")).toBe("3");
     expect(at("Sevk")).toBe("40/300 m (13%)");
-    expect(at("Durum")).toBe("Onaylandı");
+    expect(at("Sevk durumu")).toBe("Onaylandı");
     expect(at("Sipariş Tarihi")).toMatch(/^\d{2}\.\d{2}\.2026$/);
     expect(at("Tutar")).toBe("1500,00 TRY");
+  });
+});
+
+describe("Üretim / Sevk durumu / Genel durum sütunları", () => {
+  const wol = (id: string, status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "SUPERSEDED") =>
+    ({ workOrder: { id, workOrderNumber: id, status } }) as unknown as NonNullable<OrderLine["workOrderLinks"]>[number];
+
+  it("Üretim etiketi sayısız, sayı ayrı 'İE sayısı' sütununda hemen ardından; Genel durum dolu", () => {
+    const o = order({
+      lines: [line({ id: "l1", workOrderLinks: [wol("w1", "COMPLETED"), wol("w2", "COMPLETED")] }), line({ id: "l2", workOrderLinks: [wol("w3", "SUPERSEDED")] })],
+    });
+    const [head = [], row = []] = csvOf([o]);
+    const at = (label: string) => row[head.indexOf(label)];
+    expect(head).not.toContain("Durum");
+    expect(head.indexOf("İE sayısı")).toBe(head.indexOf("Üretim") + 1);
+    expect(at("Üretim")).toBe("Üretildi");
+    expect(at("İE sayısı")).toBe("2");
+    expect(at("Sevk durumu")).toBe("Onaylandı");
+    expect(at("Genel durum")).toBe("Üretim bitti, sevk bekliyor");
+  });
+
+  it("iş emirsiz sipariş: Üretim '—', İE sayısı 0", () => {
+    const [head = [], row = []] = csvOf([order()]);
+    expect(row[head.indexOf("Üretim")]).toBe("—");
+    expect(row[head.indexOf("İE sayısı")]).toBe("0");
+  });
+
+  it("üretim kapalıyken Üretim, İE sayısı ve Genel durum düşer", () => {
+    const ids = buildOrderColumns(false, false).map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey);
+    expect(ids).not.toContain("workOrder");
+    expect(ids).not.toContain("overallStatus");
+    expect(ids).toContain("status");
   });
 });
 
