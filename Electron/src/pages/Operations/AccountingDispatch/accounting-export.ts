@@ -164,9 +164,7 @@ export function dispatchReportNotes(report: DispatchReport): string[] {
   } else {
     notes.push("* TASLAK — sevkiyat henüz sevk edilmedi; rakamlar sevke kadar değişebilir.");
   }
-  if (report.docStatus === "VOIDED") {
-    notes.push("* DİKKAT: Bu sevkiyatın irsaliyesi İPTAL edilmiştir.");
-  }
+  notes.push(...dispatchStatusNotes(report));
   if (report.returns.count > 0) {
     notes.push(
       `* Bu sevkiyattan sonra ${report.returns.count} top / ` +
@@ -178,6 +176,11 @@ export function dispatchReportNotes(report: DispatchReport): string[] {
     );
   }
   return notes;
+}
+
+/** Belgenin GEÇERLİLİĞİNE dair uyarı (iptal) — müşteri irsaliyesi Excel'i de taşır. */
+export function dispatchStatusNotes(report: Pick<DispatchReport, "docStatus">): string[] {
+  return report.docStatus === "VOIDED" ? ["* DİKKAT: Bu sevkiyatın irsaliyesi İPTAL edilmiştir."] : [];
 }
 
 /** Müşteri adı yoksa bizimkine düş — irsaliyedeki fail-open kuralının aynısı. */
