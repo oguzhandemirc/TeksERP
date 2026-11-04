@@ -1,4 +1,6 @@
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { Ban, FileStack, PanelRight, Pencil, Plus, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -27,7 +29,12 @@ import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
 import type { BulkWorkOrder } from "./bulkDocs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
-import { FASONDA_FILTER } from "./work-order-filters";
+import {
+  FASONDA_FILTER,
+  buildPlaceFilters,
+  isInvalidFilterValueError,
+  stripPlaceFilters,
+} from "./work-order-filters";
 
 const FILTERS: FilterDef[] = [
   {
@@ -43,6 +50,8 @@ const FILTERS: FilterDef[] = [
   },
   // Durumun YANINDA ayrı süzgeç (en az bir topu fasonda) — durumla VE'lenir.
   FASONDA_FILTER,
+  // Şu an hangi fasonda / hangi aşamada — top ŞU AN orada (plan değil); sayı seçenekte.
+  ...buildPlaceFilters(() => workOrderService.whereOptions().then((r) => r.data)),
   {
     // TEKİL KALIR (bilinçli): `type` NOT NULL + iki değerli → ikisini seçmek
     // "filtre yok" demektir. Tek seçimdeki açık "Tümü (Tip)" seçeneği daha net.
@@ -112,6 +121,16 @@ export function WorkOrdersPage() {
       targetQuantity: targetQuantityEnabled,
     },
   });
+
+  // Seçilen firma/aşama sunucuda artık yoksa (eski bağlantı, silinmiş kayıt) seçim düşer.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (!isInvalidFilterValueError(query.error)) return;
+    const next = stripPlaceFilters(searchParams);
+    if (!next) return;
+    setSearchParams(next, { replace: true });
+    toast.warning("Seçilen fason/aşama artık geçerli değil; seçim temizlendi.");
+  }, [query.error, searchParams, setSearchParams]);
 
   // Düzenleme artık tam sayfa (/work-orders/:id/edit) — modal değil. Detay
   // panelinden / context menüden çağrılır; paneli kapatıp forma götürür.

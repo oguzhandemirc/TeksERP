@@ -600,6 +600,12 @@ export const workOrderService = {
     apiClient
       .post<ApiResponse<QuickStartResult>>("/api/work-orders/quick-start", payload)
       .then((r) => r.data),
+
+  /** "Şu an hangi fasonda / hangi aşamada" süzgeçlerinin seçenekleri (sayı = şu an orada olan İE). */
+  whereOptions: () =>
+    apiClient
+      .get<ApiResponse<WorkOrderWhereOptions>>("/api/work-orders/where-options")
+      .then((r) => r.data),
 };
 
 /** `POST /api/work-orders/quick-start` gövdesi — backend sözleşmesinin aynası. */
@@ -1275,4 +1281,15 @@ export interface DispatchDyeOverlay {
   stepNote: string | null;
   /** Sevk iptal/kabul edildiyse talimat düzenlenemez (editör disabled). */
   instructionLocked: boolean;
+}
+
+/** `GET /api/work-orders/where-options` yanıtı — sayıya göre azalan, sonra ad. */
+export interface WorkOrderPlaceOption {
+  id: string;
+  name: string;
+  workOrderCount: number;
+}
+export interface WorkOrderWhereOptions {
+  firms: WorkOrderPlaceOption[];
+  stages: WorkOrderPlaceOption[];
 }
