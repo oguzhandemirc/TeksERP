@@ -5,7 +5,7 @@
  */
 import type { AnchorStrategy, FieldSpec, OcrElement, OcrLine, OcrRect, OcrResult, RegexStrategy, RoiStrategy, Row, Strategy } from "./types";
 import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches, findValueBelow, findValueRight, lineElements, type AnchorContext } from "./anchor";
-import { averageConfidence, linesInRoi, unionRect } from "./geometry";
+import { averageConfidence, centerInNormRect, linesInRoi, unionRect } from "./geometry";
 
 export interface RawCandidate {
   raw: string;
@@ -147,6 +147,7 @@ function locateElements(raw: string, start: number, end: number, spans: Array<{ 
 }
 
 function runRoi(strategy: RoiStrategy, index: number, ctx: StrategyContext): RawCandidate[] {
+  if (strategy.fallback) return runRoiWords(strategy, index, ctx);
   const lines = linesInRoi(ctx.rows, strategy.roi, ctx.ocr);
   if (lines.length === 0) return [];
   const raw = lines.map((l) => l.text.trim()).filter(Boolean).join(strategy.joinWith ?? ' ');
@@ -160,4 +161,12 @@ function runRoi(strategy: RoiStrategy, index: number, ctx: StrategyContext): Raw
       kind: 'roi',
     },
   ];
+}
+
+/** Konum yedeği: satırın tamamı değil, merkezi kutuda kalan kelimeler — "Mytei: HH" tek satır okunsa da yalnız "HH" alınır. */
+function runRoiWords(strategy: RoiStrategy, index: number, ctx: StrategyContext): RawCandidate[] {
+  const els = ctx.rows.flatMap((r) => r.lines.flatMap(lineElements)).filter((e) => centerInNormRect(e.rect, strategy.roi, ctx.ocr));
+  const raw = els.map((e) => e.text.trim()).filter(Boolean).join(strategy.joinWith ?? ' ');
+  if (!raw) return [];
+  return [{ raw, ocrConfidence: averageConfidence(els), labelSimilarity: 1, rect: unionRect(els.map((e) => e.rect)), strategyIndex: index, kind: 'roi' }];
 }

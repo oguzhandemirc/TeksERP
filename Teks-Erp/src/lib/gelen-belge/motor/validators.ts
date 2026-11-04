@@ -8,7 +8,7 @@ import type { FieldSpec } from "./types";
 import { matchesPattern } from "./normalizers";
 
 /** Doğrulama hatası sayılmayan bilgi amaçlı kodlar. */
-export const SOFT_ISSUES = new Set(["corrected-by-shape", "low-ocr-confidence"]);
+export const SOFT_ISSUES = new Set(["corrected-by-shape", "low-ocr-confidence", "position-fallback"]);
 
 export function isHardIssue(code: string): boolean {
   return !SOFT_ISSUES.has(code);

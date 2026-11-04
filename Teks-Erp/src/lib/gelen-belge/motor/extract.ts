@@ -67,6 +67,14 @@ function otherLabelsFor(template: DocumentTemplate, field: FieldSpec): string[] 
   return out;
 }
 
+const hasUsableValue = (fr: FieldResult): boolean => fr.value !== null && !fr.issues.some(isHardIssue);
+
+/** Konumdan (etiketsiz) okunan değer kabul edilir ama gözden geçirmeye düşer. */
+function asPositionFallback(fr: FieldResult): FieldResult {
+  if (fr.value === null) return fr;
+  return { ...fr, needsReview: true, issues: [...fr.issues, "position-fallback"] };
+}
+
 /** Kabul edilen aday yokken sonraki adayın öne geçmesi için gereken asgari güven farkı. */
 const FALLBACK_MARGIN = 0.05;
 
@@ -83,9 +91,13 @@ export function extractFields(ocr: OcrResult, template: DocumentTemplate, option
     const evaluated: FieldResult[] = [];
     let chosen: FieldResult | null = null;
     outer: for (let si = 0; si < field.strategies.length; si++) {
-      const cands = runStrategy(field.strategies[si], si, field, ctx);
+      const strategy = field.strategies[si];
+      const fallback = strategy.kind === "roi" && strategy.fallback === true;
+      // Konum yedeği yalnız önceki stratejiler değer bulamadıysa: bulunan etiketin değeri her zaman önce gelir.
+      if (fallback && evaluated.some(hasUsableValue)) continue;
+      const cands = runStrategy(strategy, si, field, ctx);
       for (const c of cands) {
-        const fr = evaluateCandidate(field, c, defaultMin);
+        const fr = fallback ? asPositionFallback(evaluateCandidate(field, c, defaultMin)) : evaluateCandidate(field, c, defaultMin);
         evaluated.push(fr);
         if (!chosen && isAcceptable(fr, field, defaultMin)) {
           chosen = fr;

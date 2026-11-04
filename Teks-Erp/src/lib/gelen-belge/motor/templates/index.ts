@@ -222,6 +222,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
         if (s.group !== undefined && typeof s.group !== 'number') errors.push(`${sp}.group sayı olmalı`);
       } else if (s.kind === 'roi') {
         if (!isNormRect(s.roi)) errors.push(`${sp}.roi NormRect olmalı`);
+        if (s.fallback !== undefined && typeof s.fallback !== 'boolean') errors.push(`${sp}.fallback boolean olmalı`);
       }
     });
   });

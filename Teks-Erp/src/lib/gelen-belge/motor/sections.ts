@@ -104,9 +104,9 @@ function sectionWarnings(s: SectionResult, isLast: boolean, page: SectionsResult
 
 const METER_COLS = ["m", "metre", "mt"];
 
-/** Alanın penceresiz kopyası (anchor `window` düşer; öteki stratejiler aynen). */
+/** Alanın konumsuz kopyası (anchor `window` ve sayfa konumlu roi yedeği düşer; öteki stratejiler aynen). */
 function unpinned(f: FieldSpec): FieldSpec {
-  const strategies = f.strategies.map((st) => {
+  const strategies = f.strategies.filter((st) => !(st.kind === "roi" && st.fallback)).map((st) => {
     if (st.kind !== "anchor" || !st.window) return st;
     const copy = { ...st };
     delete copy.window;

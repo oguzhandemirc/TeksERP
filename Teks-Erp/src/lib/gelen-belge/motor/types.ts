@@ -138,6 +138,9 @@ export interface RoiStrategy {
   kind: "roi";
   roi: NormRect;
   joinWith?: string; // varsayılan ' '
+  /** Tanıtmanın konum yedeği: yalnız önceki stratejiler değer bulamazsa koşar, yalnız kutudaki KELİMELERİ alır,
+   *  sonuç `position-fallback` ile gözden geçirmeye düşer (etiketi bozuk okunan belgede değer kaybolmasın). */
+  fallback?: boolean;
 }
 
 export type Strategy = AnchorStrategy | RegexStrategy | RoiStrategy;

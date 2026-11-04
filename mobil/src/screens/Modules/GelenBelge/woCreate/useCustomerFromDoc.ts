@@ -1,7 +1,8 @@
-// Belgeden İE formu — okunan müşteri adı kayıtlı değilse hızlı kayıt teklifi (Gülkesim 2026-11-04).
-// Akış: benzer aday varsa önce "Bunu mu demek istediniz?" (Evet = seç, Hayır = yeni kayıt); yoksa doğrudan yeni kayıt.
+// Belgeden İE formu — okunan müşteri adı kayıtlı değilse hızlı kayıt teklifi (Gülkesim 2026-11-04; modal 2026-11-05).
+// Akış: benzer aday varsa "Bunu mu demek istediniz?" (aday seç / hiçbiri → yeni kayıt); yoksa doğrudan "Yeni müşteri
+// kaydedilsin mi?". Not başına bir kez kendiliğinden açılır, aynı anda tek teklif (`customerOfferStore`).
 // Token mantıksal deneme başına (`useAttemptToken`); ad değişirse yeni deneme, belirsiz hatada aynı token yapışır.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { customerService } from '../../../../services/customer.service';
 import type { ApiResponse } from '../../../../types/api';
@@ -9,6 +10,7 @@ import type { InboundDocTabletContext, OwnerUnmatched } from '../../../../servic
 import { usePermissions } from '../../../../hooks/usePermission';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
+import { claimAutoOpen, markOpen, releaseOffer, useActiveOffer } from './customerOfferStore';
 
 export type CustomerFromDocStep = 'closed' | 'ask' | 'create';
 
@@ -23,8 +25,10 @@ export function describeQuickCreateError(e: unknown): string {
   return (e as { message?: string } | null)?.message || 'Müşteri kaydedilemedi';
 }
 
-export function useCustomerFromDoc({ unmatched, onPicked }: {
+export function useCustomerFromDoc({ noteId, unmatched, disabled, onPicked }: {
+  noteId: string;
   unmatched: OwnerUnmatched;
+  disabled: boolean;
   onPicked: (customerId: string, name: string) => void;
 }) {
   const perms = usePermissions();
@@ -36,17 +40,35 @@ export function useCustomerFromDoc({ unmatched, onPicked }: {
   const [name, setName] = useState(unmatched.text);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeOffer = useActiveOffer();
 
-  const open = () => {
+  const show = () => {
     setError(null);
     setName(unmatched.text);
     setStep(unmatched.candidates.length > 0 ? 'ask' : 'create');
   };
+  const open = () => {
+    markOpen(noteId);
+    show();
+  };
+  const finish = () => {
+    setStep('closed');
+    releaseOffer(noteId);
+  };
+
+  // Not başına bir kez kendiliğinden; başka teklif açıksa o kapanınca sıra gelir.
+  useEffect(() => {
+    if (!disabled && activeOffer === null && claimAutoOpen(noteId)) show();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `show` her çizimde yeni; tetik yalnız durum değişimi
+  }, [disabled, activeOffer, noteId]);
+  // Satır söküldü (müşteri başka yoldan seçildi, satır çıkarıldı): sıra kilitli kalmasın.
+  useEffect(() => () => releaseOffer(noteId), [noteId]);
+
   const close = () => {
-    if (!busy) setStep('closed');
+    if (!busy) finish();
   };
   const pick = (customerId: string, picked: string) => {
-    setStep('closed');
+    finish();
     onPicked(customerId, picked);
   };
   const decline = () => {
@@ -80,7 +102,7 @@ export function useCustomerFromDoc({ unmatched, onPicked }: {
           : old,
       );
       void qc.invalidateQueries({ queryKey: INBOUND_DOC_CONTEXT_KEY });
-      setStep('closed');
+      finish();
       onPicked(born.id, born.name);
     } catch (e) {
       attempt.onFailure(e);
@@ -90,5 +112,5 @@ export function useCustomerFromDoc({ unmatched, onPicked }: {
     }
   };
 
-  return { step, name, setName, busy, error, canCreate, open, close, pick, decline, save };
+  return { step, name, setName, busy, error, canCreate, open, close, pick, decline, save, finish };
 }
