@@ -10,7 +10,6 @@ import { withCustomerHolds } from "./helpers/cari-hold-badge.helper";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
-import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
 import { Prisma, ShipmentDestination } from "@prisma/client";
 import { nextSeriesNo } from "./number-series.service";
@@ -275,7 +274,7 @@ export class CustomerService extends BaseService {
    * Uç kendi tx'ini açar; patron bulutu gelen kutusu aynı tx'e makbuzunu yazar (atomik değilse idempotency yok).
    * Audit ve finans terimleri tx DIŞINDA, commit SONRASI `finishCardCreate`te.
    */
-  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined): Promise<BornCard> {
+  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined, opts?: { clientToken?: string }): Promise<BornCard> {
     const data = plan.data;
     data.code = await nextCustomerCode();
     this.applyStringFields(data, true);
@@ -290,6 +289,8 @@ export class CustomerService extends BaseService {
     const clean = this.normalizeNameFields(this.sanitizeWriteData(data));
     await this.assertCardNameFree(clean);
     const prismaData = withActor({ ...clean }, userId, "CREATE", "customer");
+    // Gövde süzgeci `clientToken`ı düşürür (kapalı alan); yalnız hızlı kayıt boğazı iç parametreyle yazar.
+    if (opts?.clientToken) prismaData.clientToken = opts.clientToken;
     // İç-içe doğan şubeler de künyeyi aynı aktörle alır (iki-adım yolu `CustomerBranchService.create`).
     if (Array.isArray(prismaData.branches)) {
       prismaData.branches = { create: prismaData.branches.map((b: Record<string, unknown>) => withActor(b, userId, "CREATE", "customerBranch")) };

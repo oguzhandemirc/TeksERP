@@ -11,4 +11,8 @@ export const customerService = {
 
   getById: (id: string): Promise<ApiResponse<Customer>> =>
     apiClient.get<ApiResponse<Customer>>(`/customers/${id}`).then((r) => r.data),
+
+  /** Belgeden İE formunda hızlı müşteri kaydı (yalnız ad). `clientToken` mantıksal deneme başına; aynı token aynı kartı döner. */
+  quickCreate: (body: { name: string; clientToken: string }): Promise<ApiResponse<Customer>> =>
+    apiClient.post<ApiResponse<Customer>>('/customers/quick-create', body).then((r) => r.data),
 };
