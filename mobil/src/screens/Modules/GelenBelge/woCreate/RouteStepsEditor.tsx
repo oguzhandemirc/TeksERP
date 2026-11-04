@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Chip, IconButton, Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import PickerModal from '../../../../components/PickerModal';
+import TruncatedText from '../../../../components/TruncatedText';
 import type { DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
@@ -64,7 +65,7 @@ export default function RouteStepsEditor(p: Props) {
       {p.steps.map((s, i) => (
         <View key={s.key} style={styles.step} testID={`ie-adim-${i + 1}`}>
           <View style={styles.stepHead}>
-            <Text style={styles.stepTitle} testID={`ie-adim-${i + 1}-ad`}>{`${i + 1}. ${s.station?.name ?? 'İstasyon'}`}</Text>
+            <TruncatedText style={styles.stepTitle} testID={`ie-adim-${i + 1}-ad`}>{`${i + 1}. ${s.station?.name ?? 'İstasyon'}`}</TruncatedText>
             {can && (
               <View style={styles.actions}>
                 <IconButton icon="arrow-up" size={26} style={styles.icon} disabled={i === 0} onPress={() => change(moveStep(p.steps, s.key, -1))} accessibilityLabel={`${i + 1}. adımı yukarı taşı`} testID={`ie-adim-${i + 1}-yukari`} />
@@ -136,11 +137,11 @@ function FirmRow(p: { step: EditStep; index: number; firms: FirmsByCategory; edi
   const current = p.step.plannedSubcontractorId;
   const catName = p.step.station?.defaultCategory?.name;
   if (!p.editable) {
-    return <Text style={styles.hint}>{`Fason${catName ? ` (${catName})` : ''}: ${current ? p.firms.nameById.get(current) ?? 'firma seçili' : 'firma seçilmedi'}`}</Text>;
+    return <TruncatedText style={styles.hint}>{`Fason${catName ? ` (${catName})` : ''}: ${current ? p.firms.nameById.get(current) ?? 'firma seçili' : 'firma seçilmedi'}`}</TruncatedText>;
   }
   return (
     <View style={styles.firms} testID={`ie-adim-${p.index}-firma`}>
-      <Text style={styles.hint}>{`Fason firma${catName ? ` (${catName})` : ''}`}</Text>
+      <TruncatedText style={styles.hint}>{`Fason firma${catName ? ` (${catName})` : ''}`}</TruncatedText>
       <View style={styles.chips}>
         <Chip selected={!current} onPress={() => p.onPick(null)} style={styles.chip} testID={`ie-adim-${p.index}-firma-yok`}>
           Seçilmedi

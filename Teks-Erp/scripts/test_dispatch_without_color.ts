@@ -44,12 +44,22 @@ const read = (rel: string): string =>
 
 const FIELD = "dispatchWithoutColor";
 
-/** `blockName: z\n .array(z.object({ ... }))` gövdesini çıkarır (n. eşleşme). */
+/**
+ * `blockName: z\n .array(z.object(...))` gövdelerini çıkarır. Gövde satır içi
+ * nesne (`z.object({…})` / `z.strictObject({…})`) ya da paylaşılan alan sabiti
+ * (`z.object(ad)` veya `{ ...ad, … }`) olabilir; sabit `const ad = {…};` gövdesine çözülür.
+ */
 function zodArrayBlocks(src: string, blockName: string): string[] {
   const out: string[] = [];
-  const re = new RegExp(`  ${blockName}: z\\n    \\.array\\(z\\.object\\(\\{\\n([\\s\\S]*?)\\n    \\}\\)\\)`, "g");
+  const constBody = (name: string): string =>
+    new RegExp(`const ${name} = \\{\\n([\\s\\S]*?)\\n\\};`).exec(src)?.[1] ?? "";
+  const withSpreads = (body: string): string =>
+    body + [...body.matchAll(/^\s*\.\.\.(\w+),/gm)].map((m) => `\n${constBody(m[1])}`).join("");
+  const inline = new RegExp(`  ${blockName}: z\\n    \\.array\\(z\\.(?:object|strictObject)\\(\\{\\n([\\s\\S]*?)\\n    \\}\\)\\)`, "g");
   let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) out.push(m[1]);
+  while ((m = inline.exec(src)) !== null) out.push(withSpreads(m[1]));
+  const byRef = new RegExp(`  ${blockName}: z\\n    \\.array\\(z\\.(?:object|strictObject)\\((\\w+)\\)\\)`, "g");
+  while ((m = byRef.exec(src)) !== null) out.push(constBody(m[1]));
   return out;
 }
 
@@ -95,8 +105,8 @@ async function main(): Promise<void> {
   const stepsBlocks = zodArrayBlocks(ctrl, "steps");
   const planBlocks = zodArrayBlocks(ctrl, "stepPlanning");
   check(
-    "controller: iki `steps` Zod bloğu bulundu (create + replace)",
-    stepsBlocks.length === 2,
+    "controller: üç `steps` Zod bloğu bulundu (create + replace + gelen belge formu)",
+    stepsBlocks.length === 3,
     `bulunan: ${stepsBlocks.length}`,
   );
   check(
