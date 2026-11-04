@@ -37,13 +37,14 @@ function Harness({ batchSource, form = baseForm }: { batchSource: 'SERIES' | 'DO
   return <DocRowCard row={row} wo={wo} customers={[{ value: 'c1', label: 'Gülkesim' }]} customersLoading={false} />;
 }
 
-const bg = (el: { props: { style?: unknown } }) => StyleSheet.flatten(el.props.style as never)?.backgroundColor;
+type Node = { props: { style?: unknown }; parent: unknown };
+const bg = (el: { props: { style?: unknown } }) => (StyleSheet.flatten(el.props.style as never) as { backgroundColor?: unknown } | undefined)?.backgroundColor;
 /** Paper TextInput'un vurgu stili dış sarmalayıcıya iner: testID'li yerli girdinin atalarında arka plan aranır. */
 function highlighted(ui: ReturnType<typeof renderWithPaper>, testID: string): boolean {
-  let n: { props: { style?: unknown }; parent: unknown } | null = ui.getByTestId(testID) as never;
+  let n: Node | null = ui.getByTestId(testID) as unknown as Node;
   while (n) {
     if (bg(n) === DOC_HIGHLIGHT_BG) return true;
-    n = n.parent as typeof n;
+    n = n.parent as Node | null;
   }
   return false;
 }
@@ -51,8 +52,8 @@ function highlighted(ui: ReturnType<typeof renderWithPaper>, testID: string): bo
 /** Paper Chip testID'yi iç düğüme verir: kendisi + ilk 4 atasının düz stilleri. */
 function ancestorStyles(ui: ReturnType<typeof renderWithPaper>, testID: string): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  let n: { props: { style?: unknown }; parent: unknown } | null = ui.getByTestId(testID) as never;
-  for (let i = 0; n && i < 5; i++, n = n.parent as typeof n) out.push((StyleSheet.flatten(n.props.style as never) ?? {}) as Record<string, unknown>);
+  let n: Node | null = ui.getByTestId(testID) as unknown as Node;
+  for (let i = 0; n && i < 5; i++, n = n.parent as Node | null) out.push((StyleSheet.flatten(n.props.style as never) ?? {}) as Record<string, unknown>);
   return out;
 }
 
