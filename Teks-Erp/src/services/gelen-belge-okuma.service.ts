@@ -24,6 +24,7 @@ export const READ_MAX_ATTEMPTS = 3;
 export const READING_STALE_MS = 10 * 60 * 1000;
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SCAN_TABLE = "DOCUMENT_SCAN";
+const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
 
 // ── Claim ────────────────────────────────────────────────────────────────────
 
@@ -153,26 +154,35 @@ export async function assertScanReadable(id: string): Promise<{ id: string; stat
 }
 
 /**
- * Okunmuş ama taslağa satır vermemiş sayfa (ör. silinen taslağın fotoğrafı eski sürümde yeniden bağlandı): bağlı taslak DRAFT
- * ve bu taramadan doğmuş satır YOKSA READ → PENDING/0. Taslak claim'i (satır kilidi) satır sayımını ve okuma işinin satır
- * yazımını serileştirir; satırı olan sayfa yeniden okunmaz (satırlar ikilenirdi) → 409.
+ * Okunmuş sayfayı bağlı DRAFT taslakta READ → PENDING/0 döndürür. Satırsız sayfa doğrudan; aynı belgede tanıtma sonrası
+ * (K30-B) taslağın TÜM satırları bu taramanın ve okuma işinin yazdığı hâliyle (girilmemiş, hiç düzeltilmemiş: updatedAt =
+ * createdAt) duruyorsa satırlar aynı tx'te silinir (deftere yazmamış taslak satırı). Elle satır / düzeltilmiş satır → 409.
+ * Taslak claim'i (satır kilidi) satır düzeltme/silme ve okuma işinin satır yazımını serileştirir.
  */
 async function rereadEmptyScan(id: string, noteId: string | null, userId: string): Promise<void> {
   if (!noteId) throw AppError.conflict("Tarama okunmuş ve bir taslağa bağlı değil; fotoğrafı bir taslağa yükleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ" });
-  await prisma.$transaction(async (tx) => {
+  const dropped = await prisma.$transaction(async (tx) => {
     const claimed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "DRAFT" }, data: { updatedById: userId } });
     if (claimed.count === 0) throw AppError.conflict("Taslak değil; okunmuş sayfa yalnız taslakta yeniden okunur.", { code: "DELIVERY_NOTE_NOT_DRAFT" });
-    const own = await tx.customerDeliveryNoteLine.count({ where: { noteId, scanId: id } });
-    if (own > 0) throw AppError.conflict("Bu sayfanın satırları taslakta; yeniden okumak satırları ikilerdi. Satırları düzenleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ", lineCount: own });
+    const rows = await tx.customerDeliveryNoteLine.findMany({ where: { noteId }, select: { id: true, scanId: true, status: true, rollId: true, createdAt: true, updatedAt: true } });
+    const own = rows.filter((l) => l.scanId === id).length;
+    const pristine = rows.every((l) => l.scanId === id && l.status === "PENDING" && l.rollId === null && l.createdAt.getTime() === l.updatedAt.getTime());
+    if (own > 0 && !pristine) throw AppError.conflict("Bu sayfanın satırları taslakta düzenlenmiş; yeniden okumak satırları ikilerdi. Satırları düzenleyin.", { code: "DOCUMENT_SCAN_ALREADY_READ", lineCount: own });
+    if (own > 0) {
+      const d = await tx.customerDeliveryNoteLine.deleteMany({ where: { id: { in: rows.map((l) => l.id) }, noteId, scanId: id, status: "PENDING", rollId: null } });
+      if (d.count !== rows.length) throw AppError.conflict("Taslak satırları bu arada değişti; yenileyin.", { code: "DOCUMENT_SCAN_STATE_CHANGED" });
+    }
     const c = await tx.documentScan.updateMany({ where: { id, noteId, status: "READ", mimeType: { not: PDF_MIME } }, data: { status: "PENDING", attempts: 0 } });
     if (c.count === 0) throw AppError.conflict("Tarama bu arada başka durumda; yenileyin.", { code: "DOCUMENT_SCAN_STATE_CHANGED" });
+    return own > 0 ? rows.map((l) => l.id) : [];
   });
-  await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READ" }, newData: { status: "PENDING", attempts: 0, noteId, reason: "REREAD_NO_LINES" } });
+  await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READ" }, newData: { status: "PENDING", attempts: 0, noteId, reason: dropped.length > 0 ? "REREAD_UNEDITED_LINES" : "REREAD_NO_LINES", ...(dropped.length > 0 ? { droppedLines: dropped.length } : {}) } });
+  if (dropped.length > 0) await AuditService.logMany(dropped.map((lineId) => ({ userId, action: "DELETE" as const, tableName: LINE_TABLE, recordId: lineId, oldData: { noteId, scanId: id, reason: "REREAD_UNEDITED_LINES" } })));
 }
 
 /**
  * Okut ucu: READ_FAILED → PENDING (deneme sayacı sıfır; atomik claim); PENDING/READING ise dokunmaz; READ ise yalnız
- * bağlı taslakta satırsız sayfa yeniden okunur (`rereadEmptyScan`), aksi 409; PDF 400.
+ * bağlı taslakta satırsız ya da satırları dokunulmamış sayfa yeniden okunur (`rereadEmptyScan`), aksi 409; PDF 400.
  */
 export async function requeueScanForReading(id: string, userId: string) {
   const scan = await assertScanReadable(id);
