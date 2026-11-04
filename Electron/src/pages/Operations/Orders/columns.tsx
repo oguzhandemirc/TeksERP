@@ -20,6 +20,7 @@ import { deriveDeadlineRisk } from "./deadline-risk";
 import type { Order, OrderLine } from "./types";
 import { distinctLineLabels, lineLabelsText, shippedProgress, totalAmountText } from "./order-cell-text";
 import { TERIM } from "@/lib/terim";
+import { deriveOrderOverallState, orderOverallLabels, orderOverallText, orderOverallTones } from "./order-overall-status";
 
 function LineLabelsCell({
   lines,
@@ -65,12 +66,10 @@ function LineLabelsCell({
   );
 }
 
-/** Dışa aktarma metni: rollup etiketi + (n) — NONE ise "—". */
+/** Dışa aktarma metni: YALNIZ rollup etiketi (Excel'de süzülebilsin) — sayı ayrı "İE sayısı" sütununda; NONE ise "—". */
 function rollupExportText(order: Order): string {
-  const { state, activeCount } = deriveWoRollup(order.lines);
-  if (state === "NONE") return "—";
-  const label = woRollupLabels[state];
-  return activeCount > 1 ? `${label} (${activeCount})` : label;
+  const { state } = deriveWoRollup(order.lines);
+  return state === "NONE" ? "—" : woRollupLabels[state];
 }
 
 /**
@@ -167,7 +166,8 @@ function DeadlineCell({ order }: { order: Order }) {
  */
 export function buildOrderColumns(pricingEnabled: boolean, productionEnabled = true): ColumnDef<Order>[] {
   return [
-    ...(productionEnabled ? orderColumns : orderColumns.filter((c) => c.id !== "workOrder")),
+    // "Genel durum" üretim rollup'ından türer → üretim kapalıyken o da düşer (yalnız "Sevk durumu" kalır).
+    ...(productionEnabled ? orderColumns : orderColumns.filter((c) => c.id !== "workOrder" && c.id !== "overallStatus")),
     ...(pricingEnabled
       ? [
           {
@@ -261,22 +261,36 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     id: "workOrder",
-    get header() { return TERIM.terbiyeIsEmri.tekil; },
+    header: "Üretim",
     meta: {
-      get label() { return TERIM.terbiyeIsEmri.tekil; },
+      label: "Üretim",
       exportValue: (o: Order) => rollupExportText(o),
+      // Ekranda sayaç rozeti var; dosyada süzülebilir etiket + ayrı sayı sütunu.
+      exportExtras: [{ label: "İE sayısı", value: (o: Order) => deriveWoRollup(o.lines).activeCount }],
     },
     cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,
   },
   {
     accessorKey: "status",
-    header: () => <SortableHeader field="status" label="Durum" />,
-    meta: { label: "Durum", exportValue: (o: Order) => orderStatusLabels[o.status] ?? o.status },
+    header: () => <SortableHeader field="status" label="Sevk durumu" />,
+    meta: { label: "Sevk durumu", exportValue: (o: Order) => orderStatusLabels[o.status] ?? o.status },
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}
         labels={orderStatusLabels}
         tones={orderStatusTones}
+      />
+    ),
+  },
+  {
+    id: "overallStatus",
+    header: "Genel durum",
+    meta: { label: "Genel durum", exportValue: (o: Order) => orderOverallText(o) },
+    cell: ({ row }) => (
+      <StatusBadge
+        status={deriveOrderOverallState(row.original)}
+        labels={orderOverallLabels()}
+        tones={orderOverallTones}
       />
     ),
   },
