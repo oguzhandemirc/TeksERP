@@ -17,6 +17,35 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-04b",
+      "baslik": "İş emrinden sipariş bağı koparma, Fasonda süzgeci; sipariş Excel'inde Genel durum",
+      "surumler": {
+        "panel": "1.3.9"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İş Emirleri ekranına \"Fasonda\" süzgeci eklendi: seçince yalnız topu şu an boyahanede (fasonda) olan iş emirleri listelenir. Durum süzgeciyle birlikte kullanılabilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İş emri detayına \"Sipariş Bağını Kopar\" tuşu eklendi: yanlış bağlanan sipariş kalemini iş emrinden ayırabilirsiniz. Kalan kalemlerin hepsi aynı renkse, iş emrinin rengini o renge çevirmeniz önerilir. Hedef kumaşı boş iş emrinde son bağ koparılamaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Siparişler listesine \"Genel durum\" sütunu eklendi (Üretimde, Üretim bitti sevk bekliyor, Kısmi sevk, Tamamlandı, İş emri yok, İptal). \"Durum\" sütununun adı \"Sevk durumu\", \"İş Emri\" sütununun adı \"Üretim\" oldu. Excel dosyasında Üretim sütunu yalnız durumu yazar; iş emri sayısı ayrı \"İE sayısı\" sütunundadır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sevk irsaliyesinin Excel dosyasında tablo hücreleri çizgili gelir ve yazdırırken sayfa genişliğine sığar. İrsaliye Excel'inin altındaki brüt ve iade açıklamaları kaldırıldı (muhasebe fişinde duruyor); iptal edilmiş irsaliye uyarısı yerinde."
+        }
+      ]
+    },
+    {
       "id": "2026-11-04",
       "baslik": "Sipariş listesinin Excel dosyası ekrandakiyle aynı; kalem bazında Excel eklendi",
       "surumler": {
