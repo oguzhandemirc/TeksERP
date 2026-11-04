@@ -51,6 +51,7 @@ import {
   assertTargetColorChange,
 } from "./helpers/workorder-target-color.helper";
 import { TERIM } from "../constants/terim";
+import { assertWorkOrderLinesSingleSpec } from "./helpers/workorder-line-spec.helper";
 
 /** Toplu uygulama TEKİL motoru çağırır — kural kopyalanmaz (bkz. applyAttributeToRolls). */
 const inventoryService = new InventoryService();
@@ -241,6 +242,41 @@ export interface RollAttributeTarget {
   }[];
 }
 
+type SpecLineRow = {
+  id: string;
+  itemId: string;
+  colorId: string | null;
+  item: { name: string } | null;
+  color: { name: string } | null;
+  order: { orderNumber: string };
+};
+
+/** İş emrinin AKTİF bağlı kalemleri + yeni kalemler tek kumaş/tek renk mi (hedefe bakmaz). */
+async function assertLinkSetSingleSpec(workOrderId: string, newLines: readonly SpecLineRow[]): Promise<void> {
+  const linkedLines = await prisma.orderLine.findMany({
+    where: {
+      workOrderLinks: { some: { workOrderId, ...ACTIVE_ORDER_LINK } },
+      ...(newLines.length > 0 ? { id: { notIn: newLines.map((l) => l.id) } } : {}),
+    },
+    select: {
+      itemId: true,
+      colorId: true,
+      item: { select: { name: true } },
+      color: { select: { name: true } },
+      order: { select: { orderNumber: true } },
+    },
+  });
+  assertWorkOrderLinesSingleSpec(
+    [...linkedLines, ...newLines].map((l) => ({
+      itemId: l.itemId,
+      colorId: l.colorId,
+      itemName: l.item?.name,
+      colorName: l.color?.name,
+      orderNumber: l.order.orderNumber,
+    })),
+  );
+}
+
 export class WorkOrderLinkService {
   /**
    * BAĞLANABİLİR sipariş satırları — iş emrinin hedefiyle uyumlu olanlar.
@@ -411,6 +447,11 @@ export class WorkOrderLinkService {
         );
       }
     }
+
+    // ── SERT ENGEL: hedef boş olsa da iş emri tek kumaş/tek renk ────────────
+    // Hedef NULL iş emrinde yukarıdaki karşılaştırma koşmaz; mevcut aktif bağların
+    // kalemleriyle yenileri birlikte tek kapıdan geçer (saha: BEYAZ + EKRU, renksiz boyahane).
+    await assertLinkSetSingleSpec(workOrderId, lines);
 
     // ── UYARI: en farkı (engel değil) ───────────────────────────────────────
     const woWidth = num(wo.width);
@@ -1039,6 +1080,10 @@ export class WorkOrderLinkService {
           `${line.order.orderNumber} siparişi "${line.item?.name ?? "—"}" istiyor.`,
       );
     }
+
+    // Override hedef↔kalem farkını düzeltir; kalemler ARASI karışıklığı DELEMEZ.
+    // ① plan yazımından ÖNCE ölçülür — yoksa renk değişip ③ bağ 400'e düşerdi.
+    await assertLinkSetSingleSpec(workOrderId, [line]);
 
     const colorDiff = (wo.targetColorId ?? null) !== (line.colorId ?? null);
     const lineWidth = num(line.width);
