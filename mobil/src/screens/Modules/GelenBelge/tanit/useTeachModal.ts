@@ -222,6 +222,8 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     previewFresh,
     previewError: previewError && previewError.body === bodyKey ? previewError.text : null,
     previewing,
+    /** Önizlemeyi engelleyen ilk eksik (ad hariç); null → önizleme istenebilir. */
+    previewBlocked: previewProblems[0] ?? null,
     runPreview,
     canSave,
     save: () => save(false),

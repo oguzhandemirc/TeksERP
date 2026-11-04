@@ -61,6 +61,8 @@ export function lineElements(line: OcrLine): OcrElement[] {
 }
 
 const MAX_LABEL_WINDOW = 6;
+/** Anchor stratejisinin varsayılan asgari etiket benzerliği (okuma ve tanıtma aynı eşiği ölçer). */
+export const DEFAULT_MIN_LABEL_SIMILARITY = 0.8;
 
 /**
  * Tüm satırlarda etiketi arar. Tüm element n-gram pencereleri (ve ayraçla bölünmüş son element) değerlendirilir.
@@ -115,8 +117,15 @@ export function findLabelMatches(
           o.elementEnd - o.elementStart > m.elementEnd - m.elementStart && o.similarity >= m.similarity,
       ) && !isSubWindowOfOtherLabel(m, ctx),
   );
-  filtered.sort((a, b) => b.similarity - a.similarity || a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+  // Eşit benzerlikte ayraçlı etiket ("Müşteri:") ayraçsız başlık parçasından ("Müşteri KG") önce gelir; sonra üst-sol.
+  filtered.sort((a, b) => b.similarity - a.similarity || Number(hasSeparator(b)) - Number(hasSeparator(a)) || a.rect.y - b.rect.y || a.rect.x - b.rect.x);
   return filtered;
+}
+
+/** Etiketin ardından ':'/'=' geliyor mu (aynı elementte, kalıntıda ya da sonraki elementin başında). */
+function hasSeparator(m: LabelMatch): boolean {
+  if (m.remainder !== "" || /[:=]\s*$/.test(m.matchedText)) return true;
+  return /^\s*[:=]/.test(lineElements(m.line)[m.elementEnd]?.text ?? "");
 }
 
 function isSubWindowOfOtherLabel(m: LabelMatch, ctx: AnchorContext): boolean {
