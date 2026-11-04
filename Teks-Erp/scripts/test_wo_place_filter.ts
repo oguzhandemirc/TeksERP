@@ -6,7 +6,9 @@
 // yazılı firma YETMEZ); `filter[asama]` = topu ŞU AN o istasyonda IN_PRODUCTION.
 // Yüklem tek kaynak (`roll-place.helper`), İE↔top bağı `fasonda` süzgeciyle aynı.
 // Sayım listeyle aynı where'den; UUID değil / kayıt yok → 400 INVALID_FILTER_VALUE;
-// seçenek ucu (`GET /where-options`) aynı yüklemle sayar.
+// seçenek ucu (`GET /where-options`) listenin süzgeçlerini AYNEN alır ve FACETED
+// sayar (kendi anahtarı hariç süzgeçler + o seçenek) → seçenek sayısı = seçilince
+// liste toplamı; fason (EXTERNAL) istasyonu aşama değildir.
 // Temizlik: finally bloğunda, yalnız kendi ürettiklerini siler.
 // =============================================================================
 import type { Request, Response } from "express";
@@ -59,7 +61,7 @@ interface Options {
 }
 
 /** Controller köprüsü dahil: yanıt zarfı `{success, data}` ve durum kodu. */
-async function callWhereOptions(): Promise<{ status: number; body: { success: boolean; data: Options } }> {
+async function callWhereOptions(query: Record<string, string> = {}): Promise<{ status: number; body: { success: boolean; data: Options } }> {
   const ctrl = new WorkOrderController();
   let status = 0;
   let body: unknown;
@@ -75,7 +77,7 @@ async function callWhereOptions(): Promise<{ status: number; body: { success: bo
     },
   } as unknown as Response;
   const handler = ctrl.whereOptions;
-  await handler({ query: {} } as Request, res, (e?: unknown) => {
+  await handler({ query } as unknown as Request, res, (e?: unknown) => {
     error = e;
   });
   if (error) throw error;
@@ -96,8 +98,6 @@ async function main(): Promise<void> {
   try {
     const firmX = await ensureTestSubcontractor(TEST_DYE_HOUSE);
     const firmY = await ensureTestSubcontractor(TEST_SANDING);
-    const before = (await callWhereOptions()).body.data;
-    const firmCountBefore = (id: string): number => before.firms.find((f) => f.id === id)?.workOrderCount ?? 0;
 
     const item = await prisma.item.create({
       data: { code: `${P}-IT`, name: `${P} KUMAS`, itemType: "FABRIC", unit: "MT" },
@@ -191,6 +191,12 @@ async function main(): Promise<void> {
     // W6: top S1 adımına bağlı ama depoda (IN_PRODUCTION değil) → aşamada değil.
     const w6 = await mkWo("6");
     await mkRoll(w6, w6.step[stS1]!, "WAREHOUSE");
+    // W7: top Y'de (açık sevk) — faceted sayımda karşı firma ayrımı için. Liste
+    // tarih süzgeci senaryosu için açılışı 60 gün önce; W5 PLANNED (durum süzgeci).
+    const w7 = await mkWo("7");
+    await mkDispatch(w7, w7.step[stF]!, firmY.id, await mkRoll(w7, w7.step[stF]!, "AT_SUBCONTRACTOR"));
+    await prisma.workOrder.update({ where: { id: w7.id }, data: { createdAt: new Date(Date.now() - 60 * 86_400_000) } });
+    await prisma.workOrder.update({ where: { id: w5.id }, data: { status: "PLANNED" } });
 
     const list = async (q: Record<string, string>): Promise<WoResult> =>
       (await svc.findAll({ query: { search: `${P}-IE`, pageSize: "200", ...q } } as unknown as Request)) as WoResult;
@@ -199,7 +205,7 @@ async function main(): Promise<void> {
       r.data.length === exp.length && exp.every((e) => r.data.some((w) => w.id === e.id)) && r.pagination.total === exp.length;
 
     const all = await list({});
-    check("süzgeçsiz: 6 İE listede", all.data.length === 6, ids(all));
+    check("süzgeçsiz: 7 İE listede", all.data.length === 7, ids(all));
 
     // ── fasonFirma ──────────────────────────────────────────────────────────
     const fx = await list({ "filter[fasonFirma]": firmX.id });
@@ -209,9 +215,9 @@ async function main(): Promise<void> {
     check("firma X: yalnız planda yazılı (W4) görünmez", !fx.data.some((w) => w.id === w4.id));
     check("firma X: sayım = liste", fx.pagination.total === fx.data.length, `${fx.pagination.total}/${fx.data.length}`);
     const fy = await list({ "filter[fasonFirma]": firmY.id });
-    check("firma Y (topu yok): boş", fy.data.length === 0 && fy.pagination.total === 0, ids(fy));
+    check("firma Y: yalnız W7", only(fy, w7), ids(fy));
     const fxy = await list({ "filter[fasonFirma]": `${firmX.id},${firmY.id}` });
-    check("firma X,Y (CSV): W1", only(fxy, w1), ids(fxy));
+    check("firma X,Y (CSV): W1 + W7", only(fxy, w1, w7), ids(fxy));
 
     // ── asama ───────────────────────────────────────────────────────────────
     const s1 = await list({ "filter[asama]": stS1 });
@@ -219,8 +225,8 @@ async function main(): Promise<void> {
     check("aşama S1: depodaki top (W6) görünmez", !s1.data.some((w) => w.id === w6.id));
     const s2 = await list({ "filter[asama]": stS2 });
     check("aşama S2 (topu yok): boş", s2.data.length === 0, ids(s2));
-    const sF = await list({ "filter[asama]": stF });
-    check("aşama FSN: fasondaki top aşama sayılmaz, üretimdeki W3+W4", only(sF, w3, w4), ids(sF));
+    const eF = await expectError(() => list({ "filter[asama]": stF }));
+    check("aşama = fason (EXTERNAL) istasyon → 400 (fason aşama değildir)", eF?.statusCode === 400 && eF.code === "INVALID_FILTER_VALUE", errStr(eF));
 
     // ── AND ─────────────────────────────────────────────────────────────────
     const and1 = await list({ "filter[fasonFirma]": firmX.id, "filter[asama]": stS1 });
@@ -252,29 +258,85 @@ async function main(): Promise<void> {
     check("aşama süzgecine firma kimliği → 400 (yanlış tablo kabul edilmez)", eFirmAsStage?.statusCode === 400 && eFirmAsStage.code === "INVALID_FILTER_VALUE", errStr(eFirmAsStage));
 
     // ── seçenek ucu ─────────────────────────────────────────────────────────
-    const opt = await callWhereOptions();
+    const scope = { search: `${P}-IE` };
+    const opt = await callWhereOptions(scope);
     check("where-options: 200 + success", opt.status === 200 && opt.body.success === true, String(opt.status));
     const o = opt.body.data;
     const st = (id: string): Opt | undefined => o.stages.find((s) => s.id === id);
     check("where-options: S1 sayısı 2 (W1, W5)", st(stS1)?.workOrderCount === 2, JSON.stringify(st(stS1)));
-    check("where-options: FSN sayısı 2 (W3, W4)", st(stF)?.workOrderCount === 2, JSON.stringify(st(stF)));
-    check("where-options: S2 aktif + 0 sayılı listede", st(stS2)?.workOrderCount === 0, JSON.stringify(st(stS2)));
+    check("where-options: fason (EXTERNAL) istasyonu aşama seçeneğinde YOK", st(stF) === undefined, JSON.stringify(st(stF)));
+    check("where-options: S2 aktif + 0 sayılı listede (üretim aşaması 0'da da kalır)", st(stS2)?.workOrderCount === 0, JSON.stringify(st(stS2)));
     const fxOpt = o.firms.find((f) => f.id === firmX.id);
-    check("where-options: firma X sayısı +1 (yalnız W1)", (fxOpt?.workOrderCount ?? -1) - firmCountBefore(firmX.id) === 1, `${firmCountBefore(firmX.id)}→${fxOpt?.workOrderCount}`);
-    const fyOpt = o.firms.find((f) => f.id === firmY.id);
-    check("where-options: firma Y sayısı değişmedi", (fyOpt?.workOrderCount ?? 0) === firmCountBefore(firmY.id), `${fyOpt?.workOrderCount}`);
-    // Seçenek sayısı = süzgeçli liste toplamı (arşivsiz, aynı yüklem).
-    const fxAll = (await svc.findAll({ query: { pageSize: "1", "filter[fasonFirma]": firmX.id } } as unknown as Request)) as WoResult;
-    check("where-options firma X sayısı = süzgeçli liste toplamı", fxAll.pagination.total === fxOpt?.workOrderCount, `${fxAll.pagination.total}/${fxOpt?.workOrderCount}`);
+    check("where-options: kapsamda firma X sayısı 1 (W1)", fxOpt?.workOrderCount === 1, JSON.stringify(fxOpt));
     const sorted = o.stages.every((s, i) => i === 0 || o.stages[i - 1]!.workOrderCount >= s.workOrderCount);
     check("where-options: aşamalar sayıya göre azalan", sorted);
     const shape = [...o.firms, ...o.stages].every((x) => typeof x.id === "string" && typeof x.name === "string" && Number.isInteger(x.workOrderCount));
     check("where-options: biçim {id,name,workOrderCount}", shape);
+    // Kapsamsız (global) da seçenek = liste toplamı.
+    const gx = (await callWhereOptions()).body.data.firms.find((f) => f.id === firmX.id)?.workOrderCount;
+    const fxAll = (await svc.findAll({ query: { pageSize: "1", "filter[fasonFirma]": firmX.id } } as unknown as Request)) as WoResult;
+    check("where-options (süzgeçsiz) firma X sayısı = süzgeçli liste toplamı", fxAll.pagination.total === gx, `${fxAll.pagination.total}/${gx}`);
 
-    // Arşivlenmiş İE sayılmaz (liste varsayılanıyla aynı).
+    // ── FACETED: her süzgeç birleşiminde seçenek sayısı = o seçenek seçilince liste toplamı ──
+    const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const combos: Array<[string, Record<string, string>]> = [
+      ["yalnız kapsam", {}],
+      ["tarih aralığı (son 30 gün)", { dateField: "createdAt", dateFrom: since30 }],
+      ["durum IN_PROGRESS", { "filter[status]": "IN_PROGRESS" }],
+      ["karşı anahtar fasonFirma=X", { "filter[fasonFirma]": firmX.id }],
+      ["karşı anahtar asama=S1", { "filter[asama]": stS1 }],
+      ["tarih + durum + fasonda", { dateField: "createdAt", dateFrom: since30, "filter[status]": "IN_PROGRESS", "filter[fasonda]": "1" }],
+      ["tarih + firma X + aşama S1", { dateField: "createdAt", dateFrom: since30, "filter[fasonFirma]": firmX.id, "filter[asama]": stS1 }],
+    ];
+    for (const [label, q] of combos) {
+      const oc = (await callWhereOptions({ ...scope, ...q })).body.data;
+      const mism: string[] = [];
+      for (const [key, opts, pick] of [
+        ["fasonFirma", oc.firms, [firmX.id, firmY.id]],
+        ["asama", oc.stages, [stS1, stS2]],
+      ] as const) {
+        for (const id of pick) {
+          const n = opts.find((x) => x.id === id)?.workOrderCount ?? 0;
+          const l = await list({ ...q, [`filter[${key}]`]: id });
+          if (l.pagination.total !== n) mism.push(`${key}:${id.slice(0, 6)} seçenek ${n} ≠ liste ${l.pagination.total}`);
+        }
+      }
+      check(`faceted [${label}]: seçenek sayısı = liste toplamı`, mism.length === 0, mism.join(" · ") || "ok");
+    }
+    // Somut beklentiler (sondaların gücü): tarih süzgeci W7'yi düşürür; durum W5'i;
+    // karşı anahtar kendi anahtarını yok sayar.
+    const oDate = (await callWhereOptions({ ...scope, dateField: "createdAt", dateFrom: since30 })).body.data;
+    check("faceted tarih: firma Y 0 (W7 60 gün önce)", (oDate.firms.find((f) => f.id === firmY.id)?.workOrderCount ?? 0) === 0);
+    const oSt = (await callWhereOptions({ ...scope, "filter[status]": "IN_PROGRESS" })).body.data;
+    check("faceted durum: S1 1 (W5 PLANNED düşer)", oSt.stages.find((s) => s.id === stS1)?.workOrderCount === 1, JSON.stringify(oSt.stages.find((s) => s.id === stS1)));
+    const oFx = (await callWhereOptions({ ...scope, "filter[fasonFirma]": firmX.id })).body.data;
+    check("faceted kendi anahtarı hariç: fasonFirma=X iken firma Y yine 1", oFx.firms.find((f) => f.id === firmY.id)?.workOrderCount === 1, JSON.stringify(oFx.firms.find((f) => f.id === firmY.id)));
+    check("faceted karşı anahtar: fasonFirma=X iken S1 1 (W1)", oFx.stages.find((s) => s.id === stS1)?.workOrderCount === 1);
+
+    // ── seçenek ucu fail-closed: liste ile AYNI hata ───────────────────────
+    for (const [key, bad] of [
+      ["fasonFirma", "abc"],
+      ["asama", "abc"],
+      ["fasonFirma", randomUUID()],
+      ["asama", randomUUID()],
+      ["asama", stF],
+    ] as const) {
+      const q = { ...scope, [`filter[${key}]`]: bad };
+      const eo = await expectError(() => callWhereOptions(q));
+      const el = await expectError(() => list(q));
+      check(
+        `where-options ${key}=${bad.slice(-6)} → listeyle aynı 400`,
+        eo?.statusCode === 400 && eo.code === "INVALID_FILTER_VALUE" && eo.message === el?.message,
+        `${errStr(eo)} | ${errStr(el)}`,
+      );
+    }
+
+    // Arşivlenmiş İE sayılmaz (liste varsayılanıyla aynı); withArchived ile sayılır.
     await prisma.workOrder.update({ where: { id: w5.id }, data: { isActive: false } });
-    const o2 = (await callWhereOptions()).body.data;
+    const o2 = (await callWhereOptions(scope)).body.data;
     check("where-options: arşivli W5 sayılmaz (S1 → 1)", o2.stages.find((s) => s.id === stS1)?.workOrderCount === 1, JSON.stringify(o2.stages.find((s) => s.id === stS1)));
+    const o3 = (await callWhereOptions({ ...scope, withArchived: "true" })).body.data;
+    check("where-options: withArchived=true ile W5 sayılır (S1 → 2)", o3.stages.find((s) => s.id === stS1)?.workOrderCount === 2);
   } finally {
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...wos, ...rolls] } } }).catch(() => {});
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatches } } });

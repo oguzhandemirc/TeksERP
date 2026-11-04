@@ -6,7 +6,7 @@
 // satır rozetiyle aynı (topun ŞU AN durduğu adım). Anahtarlar `buildWhereClause`tan
 // ÖNCE okunup silinir (bu serviste allowlist yok, sızan anahtar 500 verir).
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, StationType } from "@prisma/client";
 import { validate as isUuidString } from "uuid";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -21,6 +21,9 @@ export const STAGE_FILTER = "asama";
 export function workOrderHasCurrentRoll(rollWhere: Prisma.RollWhereInput): Prisma.WorkOrderWhereInput {
   return { steps: { some: { currentRolls: { some: rollWhere } } } };
 }
+
+/** Aşama = üretim istasyonu; fason tipi (EXTERNAL) veriden ayrılır, ad eşleşmesiyle değil. */
+export const PRODUCTION_STAGE_STATION = { type: StationType.INTERNAL } satisfies Prisma.StationWhereInput;
 
 const badFilter = (msg: string): AppError => AppError.badRequest(msg, { code: "INVALID_FILTER_VALUE" });
 
@@ -50,9 +53,10 @@ export async function takeWorkOrderPlaceFilters(
   const stationIds = takeIdList(filters, STAGE_FILTER, "aşama");
   const [firmCount, stationCount] = await Promise.all([
     firmIds.length ? prisma.subcontractor.count({ where: { id: { in: firmIds } } }) : 0,
-    stationIds.length ? prisma.station.count({ where: { id: { in: stationIds } } }) : 0,
+    stationIds.length ? prisma.station.count({ where: { id: { in: stationIds }, ...PRODUCTION_STAGE_STATION } }) : 0,
   ]);
   if (firmCount !== firmIds.length) throw badFilter("Seçilen fason firma bulunamadı.");
+  // Fason istasyonu aşama değildir (fasondaki top firma süzgecindedir) → 400.
   if (stationCount !== stationIds.length) throw badFilter("Seçilen üretim aşaması bulunamadı.");
 
   const conds: Prisma.WorkOrderWhereInput[] = [];
@@ -81,26 +85,39 @@ function countDistinct(pairs: Array<[string, string]>): Map<string, number> {
   return new Map([...sets].map(([k, s]) => [k, s.size]));
 }
 
+export interface WorkOrderPlaceOptions {
+  firms: PlaceOption[];
+  stages: PlaceOption[];
+}
+
 /**
- * Seçici seçenekleri: fason firmaları + aşamalar (istasyonlar), şu an oradaki İE
- * sayısıyla; çok olan önde, 0 olanlar sonda. Sabit 4 sorgu (İE sayısından bağımsız).
+ * Seçici seçenekleri (faceted): firma sayısı `firmBase` (liste süzgeçleri − fasonFirma)
+ * içinde, aşama sayısı `stageBase` (− asama) içinde — seçilince listenin toplamıyla
+ * aynı küme. Taban `WorkOrderService.buildListWhere`ten gelir (ikinci where yok).
+ * Sabit 4 sorgu (İE sayısından bağımsız); çok olan önde, 0 olanlar sonda.
  */
-export async function loadWorkOrderPlaceOptions(): Promise<{ firms: PlaceOption[]; stages: PlaceOption[] }> {
-  const liveWo: Prisma.RollWhereInput = { currentStep: { workOrder: { isActive: true } } };
+export async function loadWorkOrderPlaceOptions(bases: {
+  firmBase: Prisma.WorkOrderWhereInput;
+  stageBase: Prisma.WorkOrderWhereInput;
+}): Promise<WorkOrderPlaceOptions> {
+  // roll.currentStep.workOrder ≡ workOrder.steps.some.currentRolls (aynı ilişki, ters yön).
   const [atFason, atStage, firms, stations] = await Promise.all([
     prisma.roll.findMany({
-      where: { AND: [rollAtFasonWhere(), liveWo] },
+      where: { AND: [rollAtFasonWhere(), { currentStep: { workOrder: bases.firmBase } }] },
       select: {
         currentStep: { select: { workOrderId: true } },
         dispatchItems: { where: outstandingItemOfOpenDispatch(), select: { dispatch: { select: { subcontractorId: true } } } },
       },
     }),
     prisma.roll.findMany({
-      where: { AND: [rollAtStageWhere(), liveWo] },
+      where: { AND: [rollAtStageWhere(), { currentStep: { workOrder: bases.stageBase } }] },
       select: { currentStep: { select: { workOrderId: true, stationId: true } } },
     }),
     prisma.subcontractor.findMany({ select: { id: true, name: true, isActive: true } }),
-    prisma.station.findMany({ select: { id: true, name: true, isActive: true, allowAsWorkOrderStep: true } }),
+    prisma.station.findMany({
+      where: PRODUCTION_STAGE_STATION,
+      select: { id: true, name: true, isActive: true, allowAsWorkOrderStep: true },
+    }),
   ]);
 
   const firmCounts = countDistinct(

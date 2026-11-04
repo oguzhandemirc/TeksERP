@@ -15,7 +15,6 @@ import { AppError } from "../utils/app-error";
 import { WorkOrderTimelineService } from "../services/workorder-timeline.service";
 import { TIMELINE_GROUPS, type TimelineGroup } from "../constants/workorder-event-labels";
 import { readFilterList } from "../utils/query-parser";
-import { loadWorkOrderPlaceOptions } from "../services/helpers/workorder-place-filter.helper";
 import "../types/express-augment";
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
@@ -489,11 +488,11 @@ export class WorkOrderController {
    */
   /**
    * GET /api/work-orders/where-options — "şu an hangi fasonda / hangi aşamada"
-   * seçicilerinin seçenekleri (liste süzgeciyle aynı yüklem, İE sayılarıyla).
+   * seçicilerinin seçenekleri; liste süzgeç parametrelerini AYNEN alır, faceted sayar.
    */
-  async whereOptions(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async whereOptions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      res.status(200).json({ success: true, data: await loadWorkOrderPlaceOptions() });
+      res.status(200).json({ success: true, data: await this.service.whereOptions(req) });
     } catch (error) {
       next(error);
     }
