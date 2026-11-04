@@ -17,6 +17,7 @@
 # ⚠️ KÜNYE HEDEF GRUPLA İMZALANIR: panel künyenin kanalını KENDİ güncelleme grubuyla eşler. Terfide paket dosyası
 # BAYT-EŞİT kalır (ortak paketten, sembolik bağla); yalnız `latest.yml` künyesi hedef grubun adıyla yeniden imzalanır.
 # ⚠️ YÜKLEME SIRASI pazarlık dışı: paket + blockmap ÖNCE, `latest.yml` EN SON (yayını açan adım). Cloudflare proxy AÇIK kalır.
+# ⚠️ İZİN: yüklenen her dosya sunucuda 0644; paket dışarıdan HTTP 200 vermeden `latest.yml` YÜKLENMEZ (2026-11-04 403 olayı).
 # ⚠️ GERÇEK YAYIN kullanıcı onayıyla yapılır; `--kuru` ağa hiç çıkmaz.
 # Hedef (ssh takma adı · VDS dizini · doğrulama adresi · defter) YALNIZ deploy/dagitim.json'dan türer
 # (`grup-yayin-kapisi.mjs hedef`); SSH_HEDEF · UZAK_DIZIN · YAYIN_KOK · YAYIN_URL · BASE_URL ortamda doluysa betik DURUR.
@@ -107,6 +108,17 @@ uzak() {
       || { echo "HATA: uzak komut değeri biçimsiz, gönderilmedi: $a" >&2; return 97; }
   done
   ssh -T "$SSH_HEDEF" bash -s -- "$@"
+}
+# Manifestten ÖNCE: önbelleği atlayan adresle (temiz adres önbelleğe 403/404 düşmesin) dışarıdan 200 mü?
+on_dogrula() {
+  local ad="$1" kod
+  kod=$(belirtecli_curl -s -o /dev/null -w "%{http_code}" -I "$YAYIN_URL/$ad?on-dogrulama=$$") || kod="000"
+  if [ "$kod" != "200" ]; then
+    echo "HATA: $ad dışarıdan HTTP $kod veriyor — latest.yml YÜKLENMEDİ (paneller indirilemeyen pakete yönlenmez).
+  Sunucuda kipi ve sahibi incele: ls -l $UZAK_DIZIN/$ad" >&2
+    return 1
+  fi
+  echo "  ✓ $ad dışarıdan 200 (manifestten önce)"
 }
 surum_denetle() {
   printf '%s' "$1" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || hata "Sürüm biçimsiz: '$1' (x.y.z bekleniyor) — uzak komutlara gidemez."
@@ -206,7 +218,7 @@ if [ "$denetim_kipi" = "0" ]; then
   # --- KURU KİP: yerel kapıların hepsi geçti; hiçbir ağ/ssh/scp/curl/etiket işi yok ---
   if [ "$kuru" = "1" ]; then
     echo "[kuru] hedef      : $SSH_HEDEF:$UZAK_DIZIN/"
-    echo "[kuru] sıra       : 1) TeksERP-$surum-Setup.exe + .blockmap (ortak paketten)  2) latest.yml (EN SON, '$grup' künyeli)"
+    echo "[kuru] sıra       : 1) TeksERP-$surum-Setup.exe + .blockmap (ortak paketten)  2) uzakta chmod 0644 + dışarıdan 200  3) latest.yml (EN SON, '$grup' künyeli)"
     echo "[kuru] yayın adresi: $YAYIN_URL/latest.yml"
     echo "[kuru] defter     : $DEFTER_YOLU"
     echo "[kuru] değişmezlik · sha512 · dış doğrulama · budama · panel-v$surum etiketi ATLANDI (ağ gerektirir)"
@@ -251,15 +263,27 @@ UZAK
   node "$kok/scripts/grup-yayin-kapisi.mjs" rotasyon "$grup" "$grup_dizini" "$yayindaki_yml" \
     || { rm -f "$yayindaki_yml"; hata "Rotasyon kilidi — yükleme yapılmadı."; }
 
+  # scp yerel kipi taşır: başka makineden kopyalanmış 0600 paket nginx'te 403 olur (2026-11-04, panel 1.3.8).
+  chmod 0644 "$latest" || { rm -f "$yayindaki_yml"; hata "latest.yml kipi 0644 yapılamadı — yükleme yapılmadı."; }
   if [ "${atla_yukleme:-0}" != "1" ]; then
   echo "1/2  paket + blockmap..."
   scp -s "$setup" "$blockmap" "$SSH_HEDEF:$UZAK_DIZIN/"
+  fi
+  # Atlanan yüklemede de: eski bir yüklemeden kalmış 0600 dosya aynı 403'ü verir.
+  uzak "$UZAK_DIZIN/TeksERP-$surum-Setup.exe" "$UZAK_DIZIN/TeksERP-$surum-Setup.exe.blockmap" <<'UZAK' \
+    || { rm -f "$yayindaki_yml"; hata "Paket dosyalarının kipi sunucuda 0644 yapılamadı — latest.yml YÜKLENMEDİ."; }
+chmod 0644 "$1" "$2"
+UZAK
+  # ÖN DOĞRULAMA: paket dışarıdan 200 vermiyorsa latest.yml paneli indirilemeyen pakete yönlendirir.
+  on_dogrula "TeksERP-$surum-Setup.exe.blockmap" || { rm -f "$yayindaki_yml"; exit 1; }
+  on_dogrula "TeksERP-$surum-Setup.exe" || { rm -f "$yayindaki_yml"; exit 1; }
 
-  echo "2/2  latest.yml (en son — sıra önemli)..."
-  scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
-  elif ! cmp -s "$yayindaki_yml" "$latest"; then
-    echo "2/2  latest.yml (paket zaten yayında; '$grup' künyeli latest.yml yükleniyor)..."
+  if [ "${atla_yukleme:-0}" != "1" ] || ! cmp -s "$yayindaki_yml" "$latest"; then
+    echo "2/2  latest.yml (en son — sıra önemli; '$grup' künyeli)..."
     scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
+    uzak "$UZAK_DIZIN/latest.yml" <<'UZAK' || { rm -f "$yayindaki_yml"; hata "latest.yml kipi sunucuda 0644 yapılamadı."; }
+chmod 0644 "$1"
+UZAK
   fi
   rm -f "$yayindaki_yml"
 

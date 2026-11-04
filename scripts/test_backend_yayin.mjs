@@ -14,6 +14,9 @@
 //      vektör dosyası) · sürüm/paket adı deseni protokolün Zod deseniyle AYNI metin · özet çıkarımı · işaretçi
 //      sürümü · yayın planı güvensiz değeri reddeder · defter satırı sekme/satır sızdırmaz · yayın komutu dosya
 //      kipini açıkça verir (scp yerel 0600'ı taşır → nginx 403; §3c2 uçtan uca ölçer)
+//   §3c3/§3g2 (2026-11-04 403 olayı) sahte kenar "others" okuma biti olmayan dosyaya 403 verir: paket işaretçiden
+//      ÖNCE dışarıdan HEAD ile ölçülür; sunucuda chmod tutmazsa DUR, son.json DEĞİŞMEZ (sonda: ön doğrulama sökülmüş
+//      ağaçta son.json 403 pakete yönlenir)
 //   §2 terfi backend kaynağı: kaynak grubun (test) son.json sürümü ölçülür; prova sürümü terfiye yetmez
 //   §3 uçtan uca (sahte uzak, geçici ağaç, test grubu): kuru kip ağa çıkmaz · ilk yayın düzeni (sürüm dizini +
 //      surum.json + son.json EN SON, geçici dizin kalmaz, defter) · kenar okuması belirteçli ve yüklenenle aynı ·
@@ -212,6 +215,7 @@ for a in "$@"; do komut="$a"; done
 printf 'ssh\\t%s\\n' "$komut" >> '${LOG}'
 komut=$(printf '%s' "$komut" | sed -e 's#${VDS_KOK}#${UZAK}#g' -e 's#${YENI_VDS}/html#${UZAK}/indir-html#g' -e 's#${YENI_VDS}/defter#${UZAK}/indir-defter#g')
 sha256sum() { shasum -a 256 "$@"; }
+[ "$SAHTE_CHMOD_ETKISIZ" = "1" ] && chmod() { :; }
 stat() { if [ "$1" = "-c" ]; then shift 2; wc -c < "$1" | tr -d ' '; else command stat "$@"; fi; }
 eval "$komut"
 `, { mode: 0o755 });
@@ -229,12 +233,15 @@ exit 0
 globalThis.fetch = async (url, secenek = {}) => {
   const u = new URL(String(url));
   const baslik = secenek.headers?.['X-TKL-Indirme'] ?? null;
-  fs.appendFileSync(${JSON.stringify(LOG)}, 'fetch\\t' + u.pathname + '\\t' + (baslik ? 'belirtecli' : 'ANONIM') + '\\n');
+  fs.appendFileSync(${JSON.stringify(LOG)}, 'fetch\\t' + u.pathname + '\\t' + (baslik ? 'belirtecli' : 'ANONIM') + '\\t' + (secenek.method ?? 'GET') + '\\n');
   const yeni = u.hostname === 'indir.etkiliyazilim.com';
   if (u.hostname !== 'guncelleme.etkiliyazilim.com' && !yeni) return new Response('ag yasak', { status: 599 });
   const yol = ${JSON.stringify(UZAK)} + (yeni ? '/indir-html' : '/html') + u.pathname;
   if (!baslik) return new Response('belirtec yok', { status: 403 });
-  return fs.existsSync(yol) ? new Response(fs.readFileSync(yol), { status: 200 }) : new Response('yok', { status: 404 });
+  if (!fs.existsSync(yol)) return new Response('yok', { status: 404 });
+  // nginx başkasının dosyasını yalnız "others" okuma biti varsa sunar (2026-11-04: 0600 paket → 403).
+  if ((fs.statSync(yol).mode & 0o004) === 0) return new Response('yasak', { status: 403 });
+  return new Response(fs.readFileSync(yol), { status: 200 });
 };
 `);
   fs.writeFileSync(path.join(HOME, '.tekserp', 'yayin-belirteci'), `sahte-yayin-belirteci-${'x'.repeat(24)}\n`, { mode: 0o600 });
@@ -425,7 +432,7 @@ const YAMALAR = [
   ['deploy/backend-yayinla.mjs', '  if (process.env.TEKSERP_TEST_KOK_CAPASI) dur(', '  if (false) dur('],
 ];
 /** Notu yazılan (prova olmayan) test sürümleri; §3o notsuz sürümü bilerek dışarıda bırakır. */
-const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10', '9.9.11', '9.9.12', '9.9.13', '9.9.20'];
+const NOTLU = ['9.9.0', '9.9.1', '9.9.2', '9.9.3', '9.9.4', '9.9.5', '9.9.6', '9.9.7', '9.9.8', '9.9.10', '9.9.11', '9.9.12', '9.9.13', '9.9.20', '9.9.40', '9.9.41'];
 let AGAC_HEAD = null;
 /** Yama listesi parametrelidir: §3T yalnız adres kapısı açılmış ikinci bir ağaçta test çapası DUR satırlarını ölçer. */
 function agacKur(hedef = AGAC, yamalar = YAMALAR) {
@@ -496,7 +503,10 @@ function bolum3() {
   ol('§3e geçici dizin/dosya kalmadı', kalan.length === 0, kalan.join(','));
   ol('§3f yayın defteri html/ DIŞINDA, bir satır, backend-<sürüm>', fs.existsSync(DEFTER()) && !DEFTER().includes(`${path.sep}indir-html${path.sep}`) &&
     /\tbackend-9\.9\.1\t/.test(fs.readFileSync(DEFTER(), 'utf8')), DEFTER());
-  const kenar = ilk.log.filter(([t]) => t === 'fetch');
+  const kenar = ilk.log.filter(([t, , , m]) => t === 'fetch' && m !== 'HEAD');
+  const onIdx = ilk.log.findIndex(([t, y, , m]) => t === 'fetch' && m === 'HEAD' && y === `${new URL(GY.backendFeed).pathname}9.9.1/p1.zip`);
+  const isaretciScp = ilk.log.findIndex(([t, c]) => t === 'scp' && /\.son(-zincir)?\.json\./.test(c));
+  ol('§3g2 ⭐ ön doğrulama: paket dışarıdan HEAD (belirteçli) işaretçi yüklemesinden ÖNCE', onIdx >= 0 && isaretciScp > onIdx && ilk.log[onIdx][2] === 'belirtecli', JSON.stringify(ilk.log.filter(([t]) => t === 'fetch')));
   const kenarZincir = KENAR_YOLU.replace(/son\.json$/, 'son-zincir.json');
   ol(`§3g kenar okuması BELİRTEÇLİ ve yalnız ${KENAR_YOLU} + son-zincir.json`, kenar.length >= 2 && kenar.every(([, y, b]) => (y === KENAR_YOLU || y === kenarZincir) && b === 'belirtecli') &&
     kenar.some(([, y]) => y === kenarZincir), JSON.stringify(kenar));
@@ -536,6 +546,15 @@ function bolum3() {
   const rz = yayinlaAgac(arg3(p6), capaOrtami(p6, { SAHTE_SCP_BOZ: '1' }));
   ol('§3q uzakta bozulan paket → DUR, son.json DEĞİŞMEDİ, geçici silindi, sürüm dizini yok', rz.kod !== 0 && once !== null && fs.readFileSync(sonJson, 'utf8') === once &&
     !fs.existsSync(uzakDosya('9.9.6')) && fs.readdirSync(uzakDosya('')).filter((f) => f.startsWith('.')).length === 0, rz.cikti.slice(-400));
+  // 2026-11-04 403 olayı: sunucuda chmod tutmazsa (sahip/ACL) paket 403 verir — işaretçi YÜKLENMEMELİ.
+  const p40 = op('p40', '9.9.40');
+  fs.chmodSync(p40.zip, 0o600);
+  const once40 = isaretciGoruntusu();
+  const r40 = yayinlaAgac(arg3(p40), capaOrtami(p40, { SAHTE_CHMOD_ETKISIZ: '1' }));
+  ol('§3c3 ⭐ dış 403 (0600 paket, sunucuda chmod tutmadı) → DUR, son.json + son-zincir.json DEĞİŞMEDİ, işaretçi scp YOK',
+    r40.kod !== 0 && /PAKET DIŞARIDAN OKUNAMIYOR \(HTTP 403\)/.test(r40.cikti) && isaretciGoruntusu() === once40 &&
+    !r40.log.some(([t, c]) => t === 'scp' && /\.son(-zincir)?\.json\./.test(c)), r40.cikti.slice(-500));
+  bolum3izinSonda();
   const rpg = yayinlaAgac(arg3(p6).map((a) => (a.startsWith('--pg-en-az=') ? '--pg-en-az=16.8' : a)), capaOrtami(p6));
   ol('§3r --pg-en-az kayıttan (deploy/pg/pg-surumu.json) FARKLI → DUR, uzak SIFIR', rpg.kod !== 0 && rpg.log.length === 0 && /kayıttaki değerden/.test(rpg.cikti), rpg.cikti.slice(-300));
   const rkayit = yayinlaAgac([...arg3(p6).filter((a) => !a.startsWith('--pg-')), '--kuru'], capaOrtami(p6));
@@ -552,6 +571,28 @@ function bolum3() {
   bolum3testCapa();
   bolum3oci();
   bolum3guncelleyici();
+}
+
+/** Grubun işaretçileri (son.json + son-zincir.json) — "değişmedi" kıyası için. */
+function isaretciGoruntusu() {
+  return ['son.json', 'son-zincir.json'].map((f) => (fs.existsSync(uzakDosya(f)) ? fs.readFileSync(uzakDosya(f), 'utf8') : '-')).join('\n');
+}
+
+/** §3c3 negatif sonda: ön doğrulama sökülmüş ağaçta aynı 403 hâli işaretçiyi 403 pakete yönlendirir (yüklem KIRMIZI). */
+function bolum3izinSonda() {
+  console.log('\n§3c3 sonda — ön doğrulama sökülmüş geçici ağaç');
+  const dAgac = path.join(GECICI, 'agac-izin-sonda');
+  const dHead = agacKur(dAgac, [...YAMALAR, ['deploy/backend-yayinla.mjs', '  if (on.status !== 200) {', '  if (false) {']]);
+  const pk = ortakPaketKur('ps', { surum: '9.9.41', commit: dHead.slice(0, 8), uretim: URETIM });
+  fs.chmodSync(pk.zip, 0o600);
+  const yedek = Object.fromEntries(['son.json', 'son-zincir.json'].filter((f) => fs.existsSync(uzakDosya(f))).map((f) => [f, fs.readFileSync(uzakDosya(f))]));
+  const once = isaretciGoruntusu();
+  const r = yayinla(arg3(pk), capaOrtami(pk, { SAHTE_CHMOD_ETKISIZ: '1' }), dAgac, `${URETIM.parola}\n${URETIM.parola}\n`);
+  const yonlendi = isaretciGoruntusu() !== once && isaretciSurumu(fs.readFileSync(uzakDosya('son.json'), 'utf8')) === '9.9.41';
+  ol('§3c3 sonda: ön doğrulama söküldü → son.json 403 veren 9.9.41 paketine yönlendi (düzeltme olmadan §3c3 KIRMIZI)', yonlendi, r.cikti.slice(-500));
+  // Sahte uzağı geri sar: sonraki bölümler gerçek yayın düzenini görsün.
+  for (const [f, b] of Object.entries(yedek)) fs.writeFileSync(uzakDosya(f), b);
+  fs.rmSync(uzakDosya('9.9.41'), { recursive: true, force: true });
 }
 
 /* §3L (sözleşme 5, L3) — Linux/OCI teslim paketi `--urun=backend-oci`: sentetik `docker save` fikstürü, gerçek imza aracı. */
@@ -624,7 +665,7 @@ function bolum3oci() {
   ol('§3L5 ⭐ sahte hedefe OCI yayını: <grup>/backend-oci/<sürüm>/ (tar + surum-zincir.json) + son-zincir.json EN SON, geçici yok, kenar belirteçli backend-oci yolundan',
     g.kod === 0 && fs.existsSync(path.join(ociKok, S2, `tekserp-backend-oci-${S2}.tar`)) && fs.existsSync(path.join(ociKok, S2, 'surum-zincir.json')) &&
     fs.existsSync(path.join(ociKok, 'son-zincir.json')) && !fs.existsSync(path.join(ociKok, 'son.json')) &&
-    !fs.readdirSync(ociKok).some((f) => f.startsWith('.')) && okuma.length >= 1 && okuma.every(([, y, b]) => y === `/${GRUP}/backend-oci/son-zincir.json` && b === 'belirtecli'),
+    !fs.readdirSync(ociKok).some((f) => f.startsWith('.')) && okuma.length >= 2 && okuma.every(([, y, b, m]) => (m === 'HEAD' ? y === `/${GRUP}/backend-oci/${S2}/tekserp-backend-oci-${S2}.tar` : y === `/${GRUP}/backend-oci/son-zincir.json`) && b === 'belirtecli'),
     g.cikti.slice(-900) + JSON.stringify(okuma));
   const yuk = (() => { try { return JSON.parse(Buffer.from(JSON.parse(fs.readFileSync(path.join(ociKok, 'son-zincir.json'), 'utf8')).bildirim.split('.')[1], 'base64url').toString('utf8')); } catch { return null; } })();
   ol('§3L5b yayınlanan bildirim linux-x64-oci, imaj kimliği fikstürün config özeti, kanal = grup', yuk?.platform === 'linux-x64-oci' && yuk?.imaj?.kimlik === t2.kimlik && yuk?.kanal === GRUP, JSON.stringify(yuk)?.slice(0, 300));

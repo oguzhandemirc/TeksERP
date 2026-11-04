@@ -5,6 +5,7 @@
 //   §1 ortak OTA paketi denetimi (negatif sondalı) · §2 grup manifesti (bayt-eşit paket, grup adresleri, zincirli imza)
 //   §3 imza malzemesi fail-closed (kuru: atılacak deneme zinciri; parola, 30 gün, kök/yaprak profili) · §4 native parmak izi kararı · §5 tablet artefakt yolu + terfi özeti
 //   §6 CLI negatif yollar (ağ YOK; K-14 `--apk` reddi dahil) · §7 betik kaynağı: kapılar, sıra ve APK yolu YOK (negatif sondalı)
+//   · §7 dosya izni (2026-11-04): paket uzakta 0644 + dışarıdan 200 doğrulaması manifestten ÖNCE (negatif sondalı)
 // ÇIKIŞ: 0 yeşil · 1 KIRMIZI.   node scripts/test_grup_yayin_tablet.mjs
 // =============================================================================
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -262,6 +263,12 @@ function betikIhlalleri(metin) {
   const paketScp = kod.search(/scp\(icerik/);
   const manifestScp = kod.search(/scp\(\[manifestYol/);
   if (paketScp < 0 || manifestScp < 0 || paketScp > manifestScp) f.push('manifest paketten ÖNCE yükleniyor (EN SON olmalı)');
+  // 2026-11-04 403 olayı: scp yerel 0600'ı taşır → paket uzakta herkese okunur yapılır ve dışarıdan 200 doğrulanmadan manifest gitmez.
+  const kipAc = yer(/uzakBetik\('chmod -R u=rwX,go=rX "\$1"\\n', \[`\$\{uzakSurum\}\/\$\{kunye\.damga\}`\]/);
+  const onDog = yer(/await onDogrula\(`\$\{FEED\}ota\//);
+  if (kipAc < 0 || kipAc > manifestScp) f.push('paket dosyaları uzakta 0644 yapılmıyor (manifestten önce)');
+  if (onDog < 0 || onDog > manifestScp || !/if \(r\.status !== 200\) dur\(/.test(kod)) f.push('paket dışarıdan 200 doğrulanmadan manifest yükleniyor');
+  if (!/fs\.chmodSync\(f, 0o644\)/.test(kod)) f.push('manifest yerel kipi 0644 yapılmıyor');
   // K-14: APK yolu yok — reddi var, APK yükleyen/künye imzalayan kod yok.
   if (!/a === '--apk' \|\| a\.startsWith\('--apk='\)\) dur\(/.test(kod)) f.push('--apk reddi YOK (K-14)');
   if (/apkYayinla|grupApkKunyesi|apk-kunye\.mjs|panel-imza\.ts|apk\/surum\.json|apk-imzala/.test(kod)) f.push('APK yayın yolu GERİ GELDİ (K-14)');
@@ -286,6 +293,10 @@ function betikIhlalleri(metin) {
   mut('terfi kapısı söküldü', (m) => m.replace('terfiKapisi(surum, { yerel', 'baskaKapi(surum, { yerel'), /terfi kapısı (çağrısı YOK|ilk yazan)/);
   mut('derleme bağı söküldü', (m) => m.replace('derlemeBagi({ kunyeYolu: path.join(paketDizin', 'baskaBag({ kunyeYolu: path.join(paketDizin'), /derleme bağı (çağrısı YOK|ilk yazan)/);
   mut('manifest paketten önce yükleniyor', (m) => m.replace("scp(icerik, `${uzakSurum}/${kunye.damga}/`, '(2/3) paket dosyaları yükleniyor');", ''), /EN SON/);
+  mut('uzak chmod söküldü', (m) => m.replace(`uzakBetik('chmod -R u=rwX,go=rX "$1"\\n'`, `uzakBetik('true\\n'`), /0644 yapılmıyor/);
+  mut('ön doğrulama söküldü', (m) => m.replace('await onDogrula(`${FEED}ota/', 'void (`${FEED}ota/'), /200 doğrulanmadan/);
+  mut('ön doğrulama 200 değilken durmuyor', (m) => m.replace('if (r.status !== 200) dur(', 'if (false) dur('), /200 doğrulanmadan/);
+  mut('manifest yerel chmod söküldü', (m) => m.replace('fs.chmodSync(f, 0o644)', 'void f'), /manifest yerel kipi/);
   mut('ezme reddi kalktı', (m) => m.replaceAll('yayinEzmeleri(', 'baskaEzme('), /ezme reddi yok/);
   mut('eski kanal kaydı geri geldi', (m) => `${m}\nkanalCoz('x');\n`, /ESKİ kanal kaydından/);
   mut('VDS kökü literal gömüldü', (m) => `${m}\nconst V = '/opt/stack/apps/x';\n`, /LİTERAL/);

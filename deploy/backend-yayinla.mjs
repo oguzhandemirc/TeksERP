@@ -17,6 +17,7 @@
  * ⚠️ CI KAÇIŞI (G22): paketin imzalı künyesinde `ciKokeni.kip = "atlandi"` (üretim imzası CI koşusu OLMADAN,
  *    kullanıcının cümlesiyle — `build-korumali-imza.ts --ci-atla`) görülürse yayın DURMAZ: uyarı basılır, cümle ·
  *    saat · makine · HEAD yayın defterine `ci-atlandi:` kolonu olarak yazılır.
+ * ⚠️ İZİN: paket dizini go=rX, işaretçi 0644 (plan komutu); paket dışarıdan HTTP 200 vermeden işaretçi YÜKLENMEZ (2026-11-04 403 olayı).
  * ⚠️ KENAR DOĞRULAMASI: yayın belirteci (Worker) yoksa HİÇBİR ŞEY yüklenmeden DUR; yayından sonra `son.json`
  *    kenardan belirteçle okunur ve yüklenenle bayt bayt kıyaslanır.
  *
@@ -538,6 +539,17 @@ if (!KURU) {
   bilgi('✓ uzak ölçüm bildirimle birebir');
 }
 uzakZorunlu(plan.komut.yayinla, `sürüm dizini yayında: ${plan.surumDizini}`);
+// ÖN DOĞRULAMA: paket dışarıdan 200 vermeden işaretçi yerine taşınmaz — yoksa kurulumlar indirilemeyen pakete yönlenir
+// (2026-11-04 panel 1.3.8: 0600 dosya nginx'te 403). Önbelleği atlayan adres: temiz adres önbelleğe 403 düşmesin.
+if (!KURU) {
+  const paketUrl = `${KANAL.yayin.backendFeed}${SURUM}/${encodeURIComponent(B.paket.ad)}`;
+  const on = await belirtecliFetch(`${paketUrl}?on-dogrulama=${crypto.randomBytes(6).toString('hex')}`, { method: 'HEAD' });
+  if (on.status !== 200) {
+    dur(`PAKET DIŞARIDAN OKUNAMIYOR (HTTP ${on.status}) — ${ISARETCILER.map((i) => i.son).join(' + ')} YÜKLENMEDİ`, `Adres: ${paketUrl}`,
+      `Sunucuda kipi/sahibi incele: ls -l ${plan.surumDizini}`, 'Sürüm dizini sunucuda KALDI — yeniden koşum "ZATEN VAR" der; işaretçi eski sürümü göstermeye devam eder.');
+  }
+  bilgi('✓ paket dışarıdan 200 (işaretçiden önce)');
+}
 if (KOPRU_YAZ) {
   const kayit = { v: 1, grup: GRUP, surum: SURUM, zaman: istanbulSaati(), cumle: cumleDenetle(KOPRU_ILAN).cumle, kim: `${os.userInfo().username}@${os.hostname().split('.')[0]}` };
   uzakZorunlu(kopruKomutu(KOPRU_YOLU, kayit), `KÖPRÜ İLANI yazıldı (eski takım donar): ${KOPRU_YOLU}`);

@@ -28,6 +28,7 @@
  * `~/.tekserp/satici-uretim/donemler/<damga>/istemci/ota-yaprak/private-key.pem`i ya da yedeği (docs/ops/URETIM-SATICI-TOREN.md §9);
  * verilmezse gerçek yayın DURUR (depoda varsayılan yaprak yok). Yaprak sertifikası o anahtarın yanındaki `certificate.pem`dir.
  * ⚠️ YÜKLEME SIRASI pazarlık dışı: paket/varlıklar ÖNCE, manifest EN SON (yayını açan adım). Cloudflare proxy AÇIK kalır.
+ * ⚠️ İZİN: yüklenen her dosya sunucuda 0644; paket dosyaları dışarıdan HTTP 200 vermeden manifest YÜKLENMEZ (2026-11-04 403 olayı).
  * ⚠️ OTA turunda `versionCode`a dokunulmaz (native sürüm Play'dedir; native değiştiyse runtimeVersion artar → AAB → Play).
  * ⚠️ GERÇEK YAYIN kullanıcı onayıyla yapılır. Hedef YALNIZ dağıtım kaydından türer; ssh/dizin/adres ezmesi RED.
  * Reçete: docs/kurallar/surum-yayin.md · docs/design/TEK-ORTAK-PAKET.md §3.5 · profil matrisi kapısı:
@@ -181,6 +182,17 @@ async function dosyaDogrula(url, { yerelBoyut } = {}) {
   }
   const uzunluk = Number(temiz.headers.get('content-length') ?? '0');
   if (yerelBoyut && uzunluk && uzunluk !== yerelBoyut) dur('DOSYA EKSİK YÜKLENMİŞ', `Adres: ${url}`, `yerel ${yerelBoyut} bayt · yayında ${uzunluk} bayt`);
+}
+/** Manifestten ÖNCE: yalnız önbelleği atlayan adresle (temiz adres önbelleğe 403/404 düşmesin) dışarıdan 200 mü? */
+async function onDogrula(url) {
+  const r = await belirtecliFetch(`${url}${url.includes('?') ? '&' : '?'}on-dogrulama=${process.pid}`, { method: 'HEAD' });
+  if (r.status !== 200) dur('PAKET DOSYASI DIŞARIDAN OKUNAMIYOR — manifest YÜKLENMEDİ', `Adres: ${url}`, `HTTP ${r.status} — sunucuda kipi/sahibi incele (scp yerel 0600 kipini taşır).`);
+}
+/** Paket dizininde yüklenen dosyalar (manifest/künye/grup alt dizini hariç), dizine göre POSIX yol. */
+function yuklenenDosyalar(kok, alt = '') {
+  return fs.readdirSync(path.join(kok, alt), { withFileTypes: true })
+    .filter((g) => alt || (g.name !== GRUP_ALT_DIZINI && g.name !== PANEL_KUNYE_ADI && !g.name.startsWith('manifest')))
+    .flatMap((g) => (g.isDirectory() ? yuklenenDosyalar(kok, path.posix.join(alt, g.name)) : [path.posix.join(alt, g.name)]));
 }
 async function iste(url) {
   const r = await belirtecliFetch(url, { method: 'GET', redirect: 'follow' });
@@ -389,7 +401,15 @@ async function otaYayinla(paketDizin) {
     const icerik = fs.readdirSync(paketDizin).filter((ad) => ad !== GRUP_ALT_DIZINI && ad !== PANEL_KUNYE_ADI && !ad.startsWith('manifest')).map((ad) => path.join(paketDizin, ad));
     scp(icerik, `${uzakSurum}/${kunye.damga}/`, '(2/3) paket dosyaları yükleniyor');
   }
+  // scp yerel kipi taşır: başka makineden kopyalanmış 0600 dosya nginx'te 403 olur; atlanan yüklemede de eski kalıntı düzelir.
+  uzakBetik('chmod -R u=rwX,go=rX "$1"\n', [`${uzakSurum}/${kunye.damga}`], '(2b/3) paket dosyaları herkese okunur yapılıyor (0644)');
+  baslik('ÖN DOĞRULAMA — paket dosyaları dışarıdan 200 mü (manifestten ÖNCE)');
+  const dosyalar = yuklenenDosyalar(paketDizin);
+  for (const g of dosyalar) await onDogrula(`${FEED}ota/${kunye.runtimeVersion}/${kunye.damga}/${g.split('/').map(encodeURIComponent).join('/')}`);
+  bilgi(`✓ ${dosyalar.length} paket dosyası dışarıdan 200`);
+  for (const f of [manifestYol, damgaliYol]) fs.chmodSync(f, 0o644);
   scp([manifestYol, damgaliYol], `${uzakSurum}/`, '(3/3) manifest yükleniyor (yayını AÇAN adım)');
+  uzakBetik('chmod 0644 "$1" "$2"\n', [`${uzakSurum}/manifest`, `${uzakSurum}/manifest-${kunye.damga}`], 'manifest kipi 0644');
 
   baslik('DOĞRULAMA — dışarıdan, gerçek HTTPS ile');
   const url = `${FEED}ota/${kunye.runtimeVersion}/manifest`;
