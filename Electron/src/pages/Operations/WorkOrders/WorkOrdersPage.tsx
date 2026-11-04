@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Ban, FileStack, PanelRight, Pencil, Plus, Printer } from "lucide-react";
@@ -29,6 +29,7 @@ import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
 import type { BulkWorkOrder } from "./bulkDocs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
+import type { ListScope } from "@/types/api";
 import {
   FASONDA_FILTER,
   buildPlaceFilters,
@@ -36,7 +37,8 @@ import {
   stripPlaceFilters,
 } from "./work-order-filters";
 
-const FILTERS: FilterDef[] = [
+// Yer seçicileri listenin o anki kapsamıyla kurulur (faceted sayım) → süzgeç dizisi kapsamdan.
+const buildFilters = (listScope: ListScope): FilterDef[] => [
   {
     kind: "multi-select",
     key: "status",
@@ -51,7 +53,7 @@ const FILTERS: FilterDef[] = [
   // Durumun YANINDA ayrı süzgeç (en az bir topu fasonda) — durumla VE'lenir.
   FASONDA_FILTER,
   // Şu an hangi fasonda / hangi aşamada — top ŞU AN orada (plan değil); sayı seçenekte.
-  ...buildPlaceFilters(() => workOrderService.whereOptions().then((r) => r.data)),
+  ...buildPlaceFilters((scope) => workOrderService.whereOptions(scope).then((r) => r.data), listScope),
   {
     // TEKİL KALIR (bilinçli): `type` NOT NULL + iki değerli → ikisini seçmek
     // "filtre yok" demektir. Tek seçimdeki açık "Tümü (Tip)" seçeneği daha net.
@@ -111,7 +113,7 @@ export function WorkOrdersPage() {
     forceFilters,
   } = useListToggles({ scope: "work-orders", withCompleted: true });
 
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WorkOrder>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
     fetchFn: workOrderService.listCursor,
     columns: workOrderColumns,
@@ -121,6 +123,8 @@ export function WorkOrdersPage() {
       targetQuantity: targetQuantityEnabled,
     },
   });
+
+  const filterDefs = useMemo(() => buildFilters(listScope), [listScope]);
 
   // Seçilen firma/aşama sunucuda artık yoksa (eski bağlantı, silinmiş kayıt) seçim düşer.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -182,7 +186,7 @@ export function WorkOrdersPage() {
           </>
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
+      <FilterBar filters={filterDefs} defaultDateRangeDays={30} />
       <DataTable<WorkOrder>
         table={table}
         isLoading={query.isLoading}

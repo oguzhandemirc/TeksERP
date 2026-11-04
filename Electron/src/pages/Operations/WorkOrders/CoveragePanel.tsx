@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, PackageCheck } from "lucide-react";
 import { AnimatedNumber } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { orderQtyNumber } from "@/pages/Operations/Orders/order-cell-text";
 import { workOrderService, type CoverageLine } from "./service";
 
 interface Props {
@@ -74,6 +75,62 @@ function aggregateBySpec(rows: CoverageLine[]): SpecRow[] {
  * istenen − sevk − WO-rezerve − serbest depo − ham stok = net açık.
  * Serbest stok rezerve edilmez (anlık fotoğraf; planlamacı karar verir).
  */
+/** Kapsama metre defterinden — sipariş miktarıyla aynı biçim (yan panel başlığı 668,3 ise burada da). */
+const qtyFmt = (v: number): string => orderQtyNumber(v, "MT");
+
+function QtyCell({ value, tone }: { value: number; tone: string }) {
+  return (
+    <td className="text-right">
+      <AnimatedNumber
+        value={value}
+        flash
+        format={qtyFmt}
+        className={cn("text-sm font-semibold", value > 0 ? tone : "text-muted-foreground")}
+      />
+    </td>
+  );
+}
+
+function CoverageRow({ s }: { s: SpecRow }) {
+  const surplus = s.netGap <= 0;
+  return (
+    <tr className="border-t [&>td]:px-1.5 [&>td]:py-1">
+      <td className="text-left">
+        <span className="text-sm font-bold text-foreground">{s.label}</span>
+        {s.count > 1 && <span className="text-muted-foreground"> · {s.count} kalem</span>}
+      </td>
+      <td className="text-right">
+        <AnimatedNumber
+          value={s.requested}
+          flash
+          format={qtyFmt}
+          className="text-sm font-bold text-foreground"
+        />
+      </td>
+      <QtyCell value={s.shipped} tone="text-info" />
+      <QtyCell value={s.inProduction} tone="text-station-process" />
+      <QtyCell value={s.freeWarehouse} tone="text-success" />
+      <QtyCell value={s.freeStock} tone="text-station-depo" />
+      <td className="text-right">
+        <span
+          className={cn(
+            "inline-flex items-center justify-end gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-sm font-bold",
+            surplus ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
+          )}
+        >
+          {surplus ? (
+            <PackageCheck className="h-3.5 w-3.5" />
+          ) : (
+            <AlertTriangle className="h-3.5 w-3.5" />
+          )}
+          <AnimatedNumber value={Math.abs(s.netGap)} flash format={qtyFmt} />
+          {surplus ? " fazla" : ""}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
 export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
   const sortedKey = [...lineIds].sort();
   const q = useQuery({
@@ -110,86 +167,9 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {specs.map((s) => {
-                  const surplus = s.netGap <= 0;
-                  return (
-                    <tr key={s.key} className="border-t [&>td]:px-1.5 [&>td]:py-1">
-                      <td className="text-left">
-                        <span className="text-sm font-bold text-foreground">{s.label}</span>
-                        {s.count > 1 && (
-                          <span className="text-muted-foreground"> · {s.count} kalem</span>
-                        )}
-                      </td>
-                      <td className="text-right">
-                        <AnimatedNumber
-                          value={s.requested}
-                          flash
-                          className="text-sm font-bold text-foreground"
-                        />
-                      </td>
-                      <td className="text-right">
-                        <AnimatedNumber
-                          value={s.shipped}
-                          flash
-                          className={cn(
-                            "text-sm font-semibold",
-                            s.shipped > 0 ? "text-info" : "text-muted-foreground",
-                          )}
-                        />
-                      </td>
-                      <td className="text-right">
-                        <AnimatedNumber
-                          value={s.inProduction}
-                          flash
-                          className={cn(
-                            "text-sm font-semibold",
-                            s.inProduction > 0
-                              ? "text-station-process"
-                              : "text-muted-foreground",
-                          )}
-                        />
-                      </td>
-                      <td className="text-right">
-                        <AnimatedNumber
-                          value={s.freeWarehouse}
-                          flash
-                          className={cn(
-                            "text-sm font-semibold",
-                            s.freeWarehouse > 0 ? "text-success" : "text-muted-foreground",
-                          )}
-                        />
-                      </td>
-                      <td className="text-right">
-                        <AnimatedNumber
-                          value={s.freeStock}
-                          flash
-                          className={cn(
-                            "text-sm font-semibold",
-                            s.freeStock > 0 ? "text-station-depo" : "text-muted-foreground",
-                          )}
-                        />
-                      </td>
-                      <td className="text-right">
-                        <span
-                          className={cn(
-                            "inline-flex items-center justify-end gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-sm font-bold",
-                            surplus
-                              ? "bg-success/15 text-success"
-                              : "bg-warning/15 text-warning",
-                          )}
-                        >
-                          {surplus ? (
-                            <PackageCheck className="h-3.5 w-3.5" />
-                          ) : (
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                          )}
-                          <AnimatedNumber value={Math.abs(s.netGap)} flash />
-                          {surplus ? " fazla" : ""}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {specs.map((s) => (
+                  <CoverageRow key={s.key} s={s} />
+                ))}
               </tbody>
             </table>
           </div>

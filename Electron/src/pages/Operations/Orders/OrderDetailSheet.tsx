@@ -26,6 +26,7 @@ import { SevkCell } from "./OrderNeredeCells";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
+import { orderQtyNumber, orderQtyText } from "./order-cell-text";
 import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
@@ -238,7 +239,7 @@ export function OrderDetailSheet({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Sevk İlerlemesi</span>
                     <span className="font-medium tabular-nums">
-                      {order.shippedQty.toLocaleString("tr-TR", { useGrouping: false })} / {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
+                      {orderQtyNumber(order.shippedQty, "MT")} / {orderQtyText(totalQty, "MT")}
                       <span className="ml-1 text-muted-foreground">
                         (%{Math.round((order.shippedQty / totalQty) * 100)})
                       </span>
@@ -285,7 +286,7 @@ export function OrderDetailSheet({
                     </span>
                     <span className="font-medium tabular-nums">
                       {returnsSummary.data.count} top ·{" "}
-                      {returnsSummary.data.totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
+                      {orderQtyText(returnsSummary.data.totalQty, "MT")}
                     </span>
                   </div>
                 </CardContent>

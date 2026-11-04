@@ -5,6 +5,7 @@ import { safeFormat } from "@/lib/format";
 import { orderStatusTones, type Tone } from "@/components/operations/StatusBadge";
 import { orderStatusLabels, type OrderStatus } from "@/types/enums";
 import type { Order, OrderLine, OrderSevk } from "./types";
+import { unitLabel, type ItemUnitCode } from "@/lib/item-unit";
 
 export interface LineLabel {
   key: string;
@@ -50,6 +51,28 @@ export function totalAmountText(o: Order): string | null {
   return `${n} ${o.currency}`;
 }
 
+// ── Sipariş miktarı — TEK biçim (liste "Sevk" cümlesi, yan panel başlığı, kapsama, Nerede) ──
+// Sunucu cümlesinin (`order-nerede.helper` fmtQty: tr-TR, binlik grup, en çok 2 hane)
+// aynası; aynı miktar her yüzeyde aynı metni basar. Adet kesirsiz.
+const ORDER_QTY_MAX_DECIMALS: Record<ItemUnitCode, number> = { MT: 2, KG: 2, ADET: 0 };
+const qtyFormatters = new Map<number, Intl.NumberFormat>();
+
+/** Birimin ondalık kuralıyla sayı ("668,3", "1.200"); birim yoksa metre. */
+export function orderQtyNumber(n: number, unit?: string | null): string {
+  const d = ORDER_QTY_MAX_DECIMALS[(unit ?? "MT") as ItemUnitCode] ?? 2;
+  let f = qtyFormatters.get(d);
+  if (!f) {
+    f = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: d });
+    qtyFormatters.set(d, f);
+  }
+  return f.format(n);
+}
+
+/** Sayı + birim ("668,3 m"). */
+export function orderQtyText(n: number, unit?: string | null): string {
+  return `${orderQtyNumber(n, unit)} ${unitLabel(unit)}`;
+}
+
 /** Gün metni — ekrandaki biçim (panel fabrika saat dilimindedir, `toFactoryYmd` ile aynı varsayım). */
 export function dayText(iso: string | null | undefined): string {
   return safeFormat(iso, "dd.MM.yyyy", "");
@@ -80,12 +103,15 @@ export function orderSevkTone(o: Pick<Order, "status" | "sevk">): Tone {
 }
 
 /**
- * Sevk durumu süzgeci seçenekleri — etiket listedekiyle aynı; yalnız "Hepsi
- * gönderildi" kovası elle kapatılanları da içerdiği için bunu söyler.
+ * Sevk durumu KOVA etiketi (süzgeç seçeneği + özet şeridi rozeti) — listedekiyle aynı;
+ * yalnız "Hepsi gönderildi" kovası elle kapatılanları da saydığı için bunu söyler.
  */
+export function orderSevkBucketLabel(status: OrderStatus): string {
+  const base = orderStatusLabels[status] ?? status;
+  return status === "COMPLETED" ? `${base} ya da elle kapatıldı` : base;
+}
+
+/** Sevk durumu süzgeci seçenekleri — etiket `orderSevkBucketLabel`dan. */
 export const ORDER_SEVK_FILTER_OPTIONS: ReadonlyArray<{ value: OrderStatus; label: string }> = (
   ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const
-).map((value) => ({
-  value,
-  label: value === "COMPLETED" ? `${orderStatusLabels.COMPLETED} ya da elle kapatıldı` : orderStatusLabels[value],
-}));
+).map((value) => ({ value, label: orderSevkBucketLabel(value) }));

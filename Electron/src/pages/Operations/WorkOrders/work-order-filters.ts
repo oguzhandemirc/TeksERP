@@ -1,5 +1,7 @@
 import type { FilterDef } from "@/components/data-table/FilterBar";
 import { foldedIncludes } from "@/lib/search-fold";
+import { buildScopeQueryString } from "@/lib/query-builder";
+import type { ListScope } from "@/types/api";
 
 /** "Fasonda" süzgecinin sunucu anahtarı — anlamı: en az bir topu şu an fasonda. */
 export const FASONDA_FILTER_KEY = "fasonda";
@@ -42,12 +44,17 @@ export function placeOptionLabel(it: { id: string; name?: string; workOrderCount
 /**
  * Seçenek ucu küçük (fason firma + istasyon) → tek istek, arama İSTEMCİDE (Türkçe katlamalı).
  * İki seçici aynı yanıtı paylaşır; kısa ömürlü önbellek açılışta çift isteği önler.
+ * `scope` = listenin o anki kapsamı; uca AYNEN gider (sunucu faceted sayar).
  */
-export function createPlaceLookupService(fetchOptions: () => Promise<PlaceOptions>, ttlMs = 15_000) {
+export function createPlaceLookupService(
+  fetchOptions: (scope?: ListScope) => Promise<PlaceOptions>,
+  ttlMs = 15_000,
+  scope?: ListScope,
+) {
   let cache: { at: number; promise: Promise<PlaceOptions> } | null = null;
   const load = () => {
     if (!cache || Date.now() - cache.at > ttlMs) {
-      const promise = fetchOptions();
+      const promise = fetchOptions(scope);
       cache = { at: Date.now(), promise };
       promise.catch(() => {
         if (cache?.promise === promise) cache = null;
@@ -69,15 +76,23 @@ export function createPlaceLookupService(fetchOptions: () => Promise<PlaceOption
   return { firms: serviceFor((o) => o.firms), stages: serviceFor((o) => o.stages) };
 }
 
-export function buildPlaceFilters(fetchOptions: () => Promise<PlaceOptions>): FilterDef[] {
-  const svc = createPlaceLookupService(fetchOptions);
+/**
+ * Seçici önbellek anahtarı kapsamı içerir → süzgeç/tarih/arama değişince seçenekler
+ * yeniden çekilir (iki seçici yine tek isteği paylaşır).
+ */
+export function buildPlaceFilters(
+  fetchOptions: (scope?: ListScope) => Promise<PlaceOptions>,
+  scope?: ListScope,
+): FilterDef[] {
+  const svc = createPlaceLookupService(fetchOptions, undefined, scope);
+  const scopeKey = scope ? buildScopeQueryString(scope) : "";
   return [
     {
       kind: "multi-lookup",
       key: FASON_FIRMA_FILTER_KEY,
       label: "Şu an hangi fasonda",
       service: svc.firms,
-      queryKey: "work-orders-where-options-firms",
+      queryKey: `work-orders-where-options-firms${scopeKey}`,
       getLabel: placeOptionLabel,
       emptyText: "Şu an fasonda iş emri yok.",
     },
@@ -86,7 +101,7 @@ export function buildPlaceFilters(fetchOptions: () => Promise<PlaceOptions>): Fi
       key: ASAMA_FILTER_KEY,
       label: "Şu an hangi aşamada",
       service: svc.stages,
-      queryKey: "work-orders-where-options-stages",
+      queryKey: `work-orders-where-options-stages${scopeKey}`,
       getLabel: placeOptionLabel,
       emptyText: "Şu an üretim aşamasında iş emri yok.",
     },

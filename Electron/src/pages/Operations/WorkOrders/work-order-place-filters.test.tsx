@@ -8,7 +8,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import type { ReactElement } from "react";
 import { FilterBar } from "@/components/data-table/FilterBar";
-import { buildCursorQueryString, parseUrlToQueryParams } from "@/lib/query-builder";
+import { buildCursorQueryString, buildScopeQueryString, parseUrlToQueryParams } from "@/lib/query-builder";
+import type { ListScope } from "@/types/api";
 import {
   buildPlaceFilters,
   createPlaceLookupService,
@@ -160,7 +161,65 @@ describe("400 INVALID_FILTER_VALUE", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "WorkOrdersPage.tsx"), "utf8");
-    expect(src).toMatch(/ {2}FASONDA_FILTER,\n(?: {2}\/\/[^\n]*\n)* {2}\.\.\.buildPlaceFilters\(\(\) => workOrderService\.whereOptions\(\)/);
+    expect(src).toMatch(
+      / {2}FASONDA_FILTER,\n(?: {2}\/\/[^\n]*\n)* {2}\.\.\.buildPlaceFilters\(\(scope\) => workOrderService\.whereOptions\(scope\)\.then\(\(r\) => r\.data\), listScope\),/,
+    );
+    // Süzgeç dizisi listenin kapsamından kurulur (useDataTable'ın listScope'u) ve FilterBar'a o gider.
+    expect(src).toMatch(/useMemo\(\(\) => buildFilters\(listScope\), \[listScope\]\)/);
+    expect(src).toMatch(/<FilterBar filters=\{filterDefs\}/);
     expect(src).toMatch(/isInvalidFilterValueError\(query\.error\)[\s\S]{0,120}stripPlaceFilters\(searchParams\)/);
+  });
+});
+
+// ── Bulgu 1 (2026-11-04): seçenek sayısı listenin süzgeçleri İÇİNDE (faceted) ──────
+const SCOPE_A: ListScope = {
+  filters: { status: "IN_PROGRESS", fasonFirma: "f1", hideCancelled: "true" },
+  search: "İE-1",
+  dateField: "createdAt",
+  dateFrom: "2026-10-05T00:00:00.000Z",
+  dateTo: "2026-11-04T20:59:59.999Z",
+};
+
+describe("seçenek isteğine listenin kapsamı geçer", () => {
+  it("kapsam sorgu dizgisi liste isteğinin süzgeç/arama/tarih kısmıyla birebir", () => {
+    const scopeQs = new URLSearchParams(buildScopeQueryString(SCOPE_A));
+    const listQs = new URLSearchParams(buildCursorQueryString({ limit: 50, ...SCOPE_A }));
+    listQs.delete("mode");
+    listQs.delete("limit");
+    expect([...scopeQs].sort()).toEqual([...listQs].sort());
+    expect(scopeQs.get("filter[fasonFirma]")).toBe("f1");
+    expect(scopeQs.get("dateFrom")).toBe(SCOPE_A.dateFrom);
+    expect(buildScopeQueryString({ filters: {} })).toBe("");
+  });
+
+  it("seçenek servisi kapsamı uca aynen verir; iki seçici yine tek istek", async () => {
+    const fetchOptions = vi.fn(async (_s?: ListScope) => OPTIONS);
+    const svc = createPlaceLookupService(fetchOptions, undefined, SCOPE_A);
+    await svc.firms.getAll({});
+    await svc.stages.getAll({});
+    expect(fetchOptions).toHaveBeenCalledTimes(1);
+    expect(fetchOptions).toHaveBeenCalledWith(SCOPE_A);
+  });
+
+  it("kapsam değişince seçici önbellek anahtarı değişir (yeniden çekilir)", () => {
+    const keysA = buildPlaceFilters(async () => OPTIONS, SCOPE_A).map((d) => ("queryKey" in d ? d.queryKey : ""));
+    const keysB = buildPlaceFilters(async () => OPTIONS, { ...SCOPE_A, dateFrom: "2026-09-01T00:00:00.000Z" }).map(
+      (d) => ("queryKey" in d ? d.queryKey : ""),
+    );
+    expect(keysA[0]).not.toBe(keysB[0]);
+    expect(keysA[1]).not.toBe(keysB[1]);
+    expect(keysA[0]).not.toBe(keysA[1]);
+  });
+
+  it("FilterBar: seçici açılınca uç o anki kapsamla çağrılır; kapsam değişince yeni kapsamla", async () => {
+    const user = userEvent.setup();
+    const fetchOptions = vi.fn(async (_s?: ListScope) => OPTIONS);
+    const scopeB: ListScope = { ...SCOPE_A, filters: { ...SCOPE_A.filters, status: "PLANNED" } };
+    const view = renderBar(<FilterBar filters={buildPlaceFilters(fetchOptions, SCOPE_A)} />);
+    await user.click(screen.getByRole("button", { name: /Şu an hangi aşamada/ }));
+    await screen.findByText("Kurşun · 4");
+    expect(fetchOptions).toHaveBeenLastCalledWith(SCOPE_A);
+    view.rerender(<FilterBar filters={buildPlaceFilters(fetchOptions, scopeB)} />);
+    await vi.waitFor(() => expect(fetchOptions).toHaveBeenLastCalledWith(scopeB));
   });
 });

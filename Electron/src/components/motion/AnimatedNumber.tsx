@@ -17,17 +17,19 @@ interface Props {
   flash?: boolean;
   /** Sayma animasyonu başlamadan önceki gecikme (saniye). */
   delay?: number;
+  /** Özel metin biçimi (ör. birimin ondalık kuralı); verilirse `decimals` yok sayılır. */
+  format?: (v: number) => string;
 }
 
 /**
  * Sayıyı önceki değerden hedefe doğru sayarak gösterir (tr-TR formatı).
  * OS "hareketi azalt" açıksa anında değeri yazar. `flash` ile güncellemede vurgu.
  */
-export function AnimatedNumber({ value, className, decimals = 0, flash = false, delay = 0 }: Props) {
+export function AnimatedNumber({ value, className, decimals = 0, flash = false, delay = 0, format }: Props) {
   const reduce = useReducedMotion();
   const mv = useMotionValue(0);
   const text = useTransform(mv, (v) =>
-    v.toLocaleString("tr-TR", { useGrouping: false,
+    format ? format(v) : v.toLocaleString("tr-TR", { useGrouping: false,
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     }),

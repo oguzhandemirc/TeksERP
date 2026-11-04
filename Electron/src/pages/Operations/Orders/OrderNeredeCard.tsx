@@ -2,11 +2,10 @@ import { Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { unitLabel } from "@/lib/item-unit";
 import { Card, CardContent } from "@/components/ui/card";
 import type { OrderStatus } from "@/types/enums";
 import { NeredeCell } from "./OrderNeredeCells";
-import { orderSevkText } from "./order-cell-text";
+import { orderQtyText, orderSevkText } from "./order-cell-text";
 import { orderService } from "./service";
 import type { OrderNeredeStep, OrderNeredeWorkOrder } from "./types";
 
@@ -37,7 +36,7 @@ export function StepTrail({ steps }: { steps: OrderNeredeStep[] }) {
 
 function qtyText(n: number | null, unit: string | null): string | null {
   if (n == null) return null;
-  return `${Math.round(n).toLocaleString("tr-TR")} ${unitLabel(unit)}`;
+  return orderQtyText(n, unit);
 }
 
 /** Bir iş emrinin kartı: başlık, ilerleme çizgisi, aşama başına top/metre, sevke hazır, son hareket. */

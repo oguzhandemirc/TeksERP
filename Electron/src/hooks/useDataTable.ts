@@ -183,6 +183,18 @@ export function useDataTable<T>({
     ],
   );
 
+  // Liste kapsamı (süzgeç + arama + tarih) — faceted seçenek uçları listeyle aynı kapsamı görsün.
+  const listScope = useMemo(
+    () => ({
+      filters: baseKey.filters,
+      search: baseKey.search,
+      dateField: baseKey.dateField,
+      dateFrom: baseKey.dateFrom,
+      dateTo: baseKey.dateTo,
+    }),
+    [baseKey.filters, baseKey.search, baseKey.dateField, baseKey.dateFrom, baseKey.dateTo],
+  );
+
   const query = useInfiniteQuery({
     queryKey: [...(queryKeyParts ?? [queryKey]), baseKey],
     queryFn: ({ pageParam }) =>
@@ -274,6 +286,7 @@ export function useDataTable<T>({
     search,
     setSearch: setSearchInput,
     fetchAll,
+    listScope,
     pagination: {
       loaded: flatRows.length,
       total: totalEstimate,
