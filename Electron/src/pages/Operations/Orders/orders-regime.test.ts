@@ -55,6 +55,7 @@ describe("Siparişler — rejim süzgeci", () => {
     // Boş dönen bir fabrika sürümü yukarıdaki "içeriyor/içermiyor"
     // kontrollerini vakumen yeşil bırakırdı.
     expect(colIds(true).length).toBeGreaterThanOrEqual(6);
-    expect(colIds(false).length).toBe(colIds(true).length - 1);
+    // Üretim kapalıyken iki kolon düşer: "Üretim" (workOrder) + ondan türeyen "Genel durum".
+    expect(colIds(false).length).toBe(colIds(true).length - 2);
   });
 });
