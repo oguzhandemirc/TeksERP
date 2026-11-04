@@ -124,6 +124,73 @@ export interface Order {
     district: string | null;
   } | null;
   lines: OrderLine[];
+  /**
+   * "Nerede?" yapısal verisi (`order-where.helper.ts` aynası). Üretim modülü kapalıyken
+   * `null`; eski backend alanı göndermez (undefined). Cümleyi panel kurar (`order-where-text.ts`).
+   */
+  nerede?: OrderWhere | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── "Nerede?" (backend `services/helpers/order-where.helper.ts` aynası) ─────────
+export type OrderWhereState = "IPTAL" | "TAMAM" | "IE_YOK" | "BASLANMADI" | "YERLER" | "GONDERILDI";
+export type OrderWherePlaceKind = "ASAMA" | "FASON" | "HAZIR";
+
+export interface OrderWherePlace {
+  tur: OrderWherePlaceKind;
+  /** ASAMA: istasyon id · FASON: firma id (çözülemeyen → null) · HAZIR: null. */
+  id: string | null;
+  /** ASAMA: istasyon adı · FASON: firma adı (null olabilir) · HAZIR: null. */
+  ad: string | null;
+  topSayisi: number;
+  metre: number;
+  /** Yalnız FASON: en eski gönderimden bu yana geçen fabrika günü. */
+  gun: number | null;
+}
+
+export interface OrderWhere {
+  durum: OrderWhereState;
+  /** Sunucu sıralı: top sayısı çoktan aza. */
+  yerler: OrderWherePlace[];
+  terminGecti: boolean;
+  sonHareket: string | null;
+}
+
+export type OrderWhereStepPhase = "GECTI" | "BURADA" | "SIRADA";
+
+export interface OrderWhereStep {
+  id: string;
+  ad: string;
+  asama: OrderWhereStepPhase;
+  topSayisi: number;
+  metre: number;
+  /** Bu adımdaki toplardan fasonda olanlar. */
+  fasonTop: number;
+}
+
+export interface OrderWhereQty {
+  topSayisi: number;
+  metre: number;
+}
+
+export interface OrderWhereWorkOrder {
+  id: string;
+  no: string;
+  durum: WorkOrderStatus;
+  kumas: string | null;
+  renk: string | null;
+  hedefMetre: number | null;
+  adimlar: OrderWhereStep[];
+  fason: Array<{ firmaId: string; firmaAd: string; topSayisi: number; metre: number; gun: number }>;
+  hazir: OrderWhereQty;
+  gitti: OrderWhereQty;
+  sonHareket: string | null;
+}
+
+/** `GET /api/orders/:id/where` gövdesi. */
+export interface OrderWhereDetail {
+  orderId: string;
+  nerede: OrderWhere;
+  isEmirleri: OrderWhereWorkOrder[];
 }

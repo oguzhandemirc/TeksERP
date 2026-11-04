@@ -118,19 +118,29 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(at("Müşteri")).toBe("Acme Tekstil");
     expect(at("Şube")).toBe("Merkez");
     expect(at("Kalem")).toBe("3");
-    expect(at("Sevk")).toBe("40/300 m (13%)");
+    expect(at("Sevk")).toBe("Bir kısmı gönderildi (40 / 300 m)");
     expect(at("Sevk durumu")).toBe("Onaylandı");
     expect(at("Sipariş Tarihi")).toMatch(/^\d{2}\.\d{2}\.2026$/);
     expect(at("Tutar")).toBe("1500,00 TRY");
   });
 });
 
-describe("Üretim / Sevk durumu / Genel durum sütunları", () => {
+describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
   const wol = (id: string, status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "SUPERSEDED") =>
     ({ workOrder: { id, workOrderNumber: id, status } }) as unknown as NonNullable<OrderLine["workOrderLinks"]>[number];
 
-  it("Üretim etiketi sayısız, sayı ayrı 'İE sayısı' sütununda hemen ardından; Genel durum dolu", () => {
+  it("Üretim etiketi sayısız, sayı ayrı 'İE sayısı' sütununda hemen ardından; Nerede? ekran metni", () => {
     const o = order({
+      deadline: "2026-10-01T00:00:00.000Z",
+      nerede: {
+        durum: "YERLER",
+        yerler: [
+          { tur: "FASON", id: "f1", ad: "Akın Boya", topSayisi: 8, metre: 400, gun: 3 },
+          { tur: "HAZIR", id: null, ad: null, topSayisi: 2, metre: 100, gun: null },
+        ],
+        terminGecti: true,
+        sonHareket: null,
+      },
       lines: [line({ id: "l1", workOrderLinks: [wol("w1", "COMPLETED"), wol("w2", "COMPLETED")] }), line({ id: "l2", workOrderLinks: [wol("w3", "SUPERSEDED")] })],
     });
     const [head = [], row = []] = csvOf([o]);
@@ -140,7 +150,8 @@ describe("Üretim / Sevk durumu / Genel durum sütunları", () => {
     expect(at("Üretim")).toBe("Üretildi");
     expect(at("İE sayısı")).toBe("2");
     expect(at("Sevk durumu")).toBe("Onaylandı");
-    expect(at("Genel durum")).toBe("Üretim bitti, sevk bekliyor");
+    expect(head).not.toContain("Genel durum");
+    expect(at("Nerede?")).toBe("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha · Termini geçti");
   });
 
   it("iş emirsiz sipariş: Üretim '—', İE sayısı 0", () => {
@@ -149,10 +160,15 @@ describe("Üretim / Sevk durumu / Genel durum sütunları", () => {
     expect(row[head.indexOf("İE sayısı")]).toBe("0");
   });
 
-  it("üretim kapalıyken Üretim, İE sayısı ve Genel durum düşer", () => {
+  it("eski backend (nerede alanı yok): Nerede? '—'", () => {
+    const [head = [], row = []] = csvOf([order()]);
+    expect(row[head.indexOf("Nerede?")]).toBe("—");
+  });
+
+  it("üretim kapalıyken Üretim, İE sayısı ve Nerede? düşer", () => {
     const ids = buildOrderColumns(false, false).map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey);
     expect(ids).not.toContain("workOrder");
-    expect(ids).not.toContain("overallStatus");
+    expect(ids).not.toContain("where");
     expect(ids).toContain("status");
   });
 });

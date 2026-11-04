@@ -1,7 +1,7 @@
 // =============================================================================
 // Test: Siparişler ekranı "Nerede?" — türetme + süzgeç ikizi + sorgu bütçesi (2026-11-04)
 // Çalıştır: npx tsx scripts/test_order_where.ts
-// Kaynak: `src/services/helpers/order-where.helper.ts` (OrderService.findAll · extraWhere · getOrderWhereDetail).
+// Kaynak: `src/services/helpers/order-where.helper.ts` + `order-where-filter.helper.ts` (OrderService.findAll · extraWhere · getOrderWhereDetail).
 // Kurulum: kendi müşterisi + 2 TEST istasyonu (Kalite iç · Boyahane dış) + TEST fasoncu; on bir sipariş:
 //   IPT (iptal) · TAM (tamam) · YOK (İE yok) · BAS (PLANNED İE, topsuz) · ASM (3 top Kalite'de) ·
 //   FAS (2 top fasonda, gönderim 5 gün önce) · HAZ (2 top depoda, producedInStep yolu) ·
