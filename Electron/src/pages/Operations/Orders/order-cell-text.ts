@@ -87,5 +87,5 @@ export const ORDER_SEVK_FILTER_OPTIONS: ReadonlyArray<{ value: OrderStatus; labe
   ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const
 ).map((value) => ({
   value,
-  label: value === "COMPLETED" ? `${orderStatusLabels.COMPLETED} ya da kapatıldı` : orderStatusLabels[value],
+  label: value === "COMPLETED" ? `${orderStatusLabels.COMPLETED} ya da elle kapatıldı` : orderStatusLabels[value],
 }));

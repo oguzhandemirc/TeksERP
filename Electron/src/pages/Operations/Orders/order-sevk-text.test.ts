@@ -45,9 +45,9 @@ describe("Sevk durumu metni — tek kaynak", () => {
     expect(orderSevkTone({ status: "PARTIAL_SHIPPED", sevk: sevk("PARTIAL", "x") })).toBe("progress");
   });
 
-  it("elle kapatılan sipariş sunucu cümlesiyle: 'Sipariş kapatıldı (x / y m gönderildi)'", () => {
-    const o = { status: "COMPLETED" as const, sevk: sevk("CLOSED", "Sipariş kapatıldı (1.200 / 2.400 m gönderildi)") };
-    expect(orderSevkText(o)).toBe("Sipariş kapatıldı (1.200 / 2.400 m gönderildi)");
+  it("elle kapatılan sipariş sunucu cümlesiyle: 'Sipariş elle kapatıldı (x / y m gönderildi)'", () => {
+    const o = { status: "COMPLETED" as const, sevk: sevk("CLOSED", "Sipariş elle kapatıldı (1.200 / 2.400 m gönderildi)") };
+    expect(orderSevkText(o)).toBe("Sipariş elle kapatıldı (1.200 / 2.400 m gönderildi)");
     expect(orderSevkTone(o)).toBe("muted");
   });
 
@@ -63,7 +63,7 @@ describe("Sevk durumu metni — tek kaynak", () => {
       { value: "PENDING", label: "Henüz onaylanmadı" },
       { value: "APPROVED", label: "Henüz gönderilmedi" },
       { value: "PARTIAL_SHIPPED", label: "Bir kısmı gönderildi" },
-      { value: "COMPLETED", label: "Hepsi gönderildi ya da kapatıldı" },
+      { value: "COMPLETED", label: "Hepsi gönderildi ya da elle kapatıldı" },
       { value: "CANCELLED", label: "Sipariş iptal edildi" },
     ]);
   });

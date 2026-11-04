@@ -103,7 +103,7 @@ export function OrderDetailSheet({
   const closeMut = useMutation({
     mutationFn: ({ id, r }: { id: string; r: string }) => orderService.manualClose(id, r),
     onSuccess: () => {
-      toast.success("Sipariş manuel olarak kapatıldı.");
+      toast.success("Sipariş elle kapatıldı.");
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["orders"] });
       setCloseOpen(false);
