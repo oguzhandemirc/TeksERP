@@ -58,6 +58,8 @@ export interface FormWorkOrderInput {
   ownerCustomerId: string;
   ourBatchNo?: string | null;
   ourBatchNoKey?: string | null;
+  /** Müşterinin parti no'su (belge başlığı); yalnız gönderildiyse taslağa yazılır. */
+  customerBatchNo?: string | null;
   kursunMeters: number;
   /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
   routeTemplateId?: string;
@@ -232,6 +234,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     if (MANUAL_READ_STATES.includes(read.state)) warnings.push(`${note.noteNo}: sayfa okunamadı; müşteri ve metre elle girilen değerlerle kaydedildi.`);
     await updateDeliveryNote(noteId, {
       ownerCustomerId: input.ownerCustomerId,
+      ...(input.customerBatchNo !== undefined ? { customerBatchNo: input.customerBatchNo } : {}),
       ...(input.ourBatchNo !== undefined ? { ourBatchNo: input.ourBatchNo, ourBatchNoKey: input.ourBatchNo ? (input.ourBatchNoKey ?? null) : null } : {}),
       // Gövdedeki metre operatörün gördüğü değerdir → gözden geçirilmiş sayılır (MANUAL).
       kursunMeters,

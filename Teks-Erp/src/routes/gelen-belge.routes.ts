@@ -666,6 +666,7 @@ const FormWorkOrderBody = z.strictObject({
   ownerCustomerId: Id,
   ourBatchNo: optText(64),
   ourBatchNoKey: BatchNoKey.nullable().optional(),
+  customerBatchNo: optText(64),
   kursunMeters: Money("Kurşun metresi"),
   // K29 S14b: yoksa rotasız (yalnız "Rota uygulaması: Okutmayla"; SIRALI'da servis onaydan ÖNCE 400 GELEN_BELGE_ROUTE_REQUIRED).
   routeTemplateId: Id.optional(),

@@ -20,9 +20,12 @@
 //       yeteneksiz PROCESS_QC false — tekil, liste ve kısayol yanıtında + `GET /api/stations/:id`
 //   §9 ⭐ K29 S14b: rota yok + SIRALI → 400 GELEN_BELGE_ROUTE_REQUIRED (belge DRAFT kalır); SCAN → rotasız İE (scanRouted);
 //      SCAN + rota seçili → seçilen rota
+//   §10 ⭐ müşteri parti no: okuma özeti `customerBatchNo` döner (SORMA + tanıtılmamış/BLIND → null); gövdedeki
+//       `customerBatchNo` taslağa yazılır, verilmezse dokunulmaz; ⭐ detay ucu aday listesi özetle AYNI güven süzgecinden
 // Negatif sonda: `resolveFormWorkOrderRoute`'ta SIRALI 400'ü kaldırılınca §9 DRAFT kırmızı; `assertFormApprovalEnabled` çağrısı kaldırılınca §2 kırmızı; `excludeIds` boş verilince §6 gönderen kırmızı; `senderIds`ten antet/senderText
 // çıkarılınca §6 Takva kırmızı;
-// onay yeniden yalnız DRAFT'ta koşturulunca §8 kırmızı; okuma kapısı [READ, PARTIAL] allowlist'ine dönünce §3b kırmızı.
+// onay yeniden yalnız DRAFT'ta koşturulunca §8 kırmızı; okuma kapısı [READ, PARTIAL] allowlist'ine dönünce §3b kırmızı;
+// özet BLIND süzgeci / detay `trust` argümanı / servis customerBatchNo yazımı kaldırılınca §10 3 kırmızı.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -59,7 +62,7 @@ const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
-  SETTING_KEYS.COMPANY_NAME, SETTING_KEYS.PRODUCTION_ROUTE_MODE,
+  SETTING_KEYS.COMPANY_NAME, SETTING_KEYS.PRODUCTION_ROUTE_MODE, SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI,
 ];
 
 type Resp = { status: number; code?: string; data?: Record<string, unknown> & { [k: string]: unknown }; warnings?: string[] };
@@ -288,6 +291,36 @@ async function run(url: string): Promise<void> {
   const r9d = await formWo(n9d, approver.token, noRoute({ ourBatchNo: `${TAG}-P9D` }));
   check("§9 SCAN + rota yok + iş emri izni yok → 403, belge DRAFT", r9d.status === 403 && (await statusOf(n9d)) === "DRAFT", `${r9d.status} ${r9d.code ?? ""}`);
   await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, null);
+
+  console.log("§10 müşteri parti no + detay güven süzgeci");
+  const mkHeadNote = async (customerBatchNo: string, templateId: string | null) => {
+    const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderCustomerId: sender, customerBatchNo, lines: [{ senderRollNo: `${TAG}-H${made.notes.length}`, meters: 100, itemText: "Kumaş" }] });
+    const id = (r.data as { id?: string } | undefined)?.id ?? "";
+    made.notes.push(id);
+    const content = Buffer.from(`${TAG}-${randomUUID()}`);
+    const sc = await prisma.documentScan.create({ data: { noteId: id, sha256: createHash("sha256").update(content).digest("hex"), mimeType: "image/jpeg", sizeBytes: content.length, content, status: "READ", ocrResult: { ocr: { text: `${TAG} belge` }, regions: [{ templateId, fields: {} }] } }, select: { id: true } });
+    made.scans.push(sc.id);
+    return id;
+  };
+  const n10 = await mkHeadNote(`${TAG}-MP1`, "genel");
+  const o10 = await call("GET", `/api/gelen-belge/irsaliyeler/${n10}/okuma-ozeti`, tk);
+  check("§10 ⭐ SOR: özet customerBatchNo = belgedeki", o10.data?.customerBatchNo === `${TAG}-MP1`, JSON.stringify(o10.data?.customerBatchNo));
+  await setSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, "SORMA");
+  const o10b = await call("GET", `/api/gelen-belge/irsaliyeler/${n10}/okuma-ozeti`, tk);
+  const d10b = await call("GET", `/api/gelen-belge/irsaliyeler/${n10}`, tk);
+  type KC = { lineSum?: string | null } | undefined;
+  check("§10 ⭐ SORMA + tanıtılmamış (BLIND): özet customerBatchNo null", o10b.status === 200 && o10b.data?.customerBatchNo === null, JSON.stringify(o10b.data?.customerBatchNo));
+  check("§10 ⭐ detay ucu özetle AYNI güven süzgeci (BLIND → kurşun adayı yok)", d10b.status === 200 && (d10b.data?.kursunMeterCandidates as KC)?.lineSum === null && (o10b.data?.kursunMeterCandidates as KC)?.lineSum === null, JSON.stringify({ d: d10b.data?.kursunMeterCandidates, o: o10b.data?.kursunMeterCandidates }));
+  await setSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, null);
+  const d10c = await call("GET", `/api/gelen-belge/irsaliyeler/${n10}`, tk);
+  check("§10 SOR (NORMAL): detay kurşun adayı Σ satır", (d10c.data?.kursunMeterCandidates as KC)?.lineSum === "100", JSON.stringify(d10c.data?.kursunMeterCandidates));
+  const r10 = await formWo(n10, woUser.token, body({ ourBatchNo: `${TAG}-P10`, customerBatchNo: `${TAG}-MP1-EL` }));
+  const cb10 = (await prisma.customerDeliveryNote.findUnique({ where: { id: n10 }, select: { customerBatchNo: true } }))?.customerBatchNo;
+  check("§10 ⭐ gövdedeki customerBatchNo taslağa yazıldı", r10.status === 201 && cb10 === `${TAG}-MP1-EL`, `${r10.status} ${r10.code ?? ""} ${cb10}`);
+  const n10d = await mkHeadNote(`${TAG}-MP2`, "genel");
+  const r10d = await formWo(n10d, woUser.token, body({ ourBatchNo: `${TAG}-P10D` }));
+  const cb10d = (await prisma.customerDeliveryNote.findUnique({ where: { id: n10d }, select: { customerBatchNo: true } }))?.customerBatchNo;
+  check("§10 customerBatchNo verilmezse dokunulmaz", r10d.status === 201 && cb10d === `${TAG}-MP2`, `${r10d.status} ${r10d.code ?? ""} ${cb10d}`);
 
   console.log("§7 kısayol listesi");
   const a = await mkRoute("kısayol A", { isWorkOrderShortcut: true, shortcutOrder: 2 });
