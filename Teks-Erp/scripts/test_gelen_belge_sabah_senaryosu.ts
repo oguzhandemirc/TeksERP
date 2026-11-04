@@ -10,7 +10,10 @@
 //   §5 ⭐ `stationDocLookup` açık: Kurşun operatörü aynı kâğıdın YENİ fotoğrafını okutur (`POST /istasyon-okutma`, okuma
 //      servisi) → evrak no ile TEK İE; evrak no kutusu boş kâğıtta parti no yedeğiyle aynı TEK İE
 //   §6 ⭐ `GET /kursun-qc/by-card/:kart` → targetValues = İE'nin gramajı (40 gr), değer/istasyon varsayılanı (25 gr) değil
-// Sonraki adımların (hata işaretleme, tambur kesim) kimlikleri `ctx`te tutulur.
+//   §7 ⭐ Kurşun/KK tabletinde hata işaretleme (`POST /kursun-qc/report-error`) → hata metrajları topta (RollError, PROCESS).
+//      Bu akışta top KK1'de değil FORM ONAYINDA doğar (§4 is-emri ucu) — hata kurşun adımında işaretlenir.
+//   §8 ⭐ Kurşun adımı kapanır (complete-qc2 + finish-step) → Tambur operatörü aynı kâğıdı okutur → aynı İE;
+//      `GET /tambur/by-card` hata metrajlarını taşır; `POST /tambur/:id/cut` ×2 → yeni toplar; `GET /labels/rolls/:id` top no
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -98,7 +101,7 @@ function startFakeSidecar(): Promise<{ server: Server; url: string }> {
 
 const made = {
   customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], stations: [] as string[], routes: [] as string[],
-  shas: [] as string[], workOrders: [] as string[], templates: [] as string[], props: [] as string[],
+  shas: [] as string[], workOrders: [] as string[], templates: [] as string[], props: [] as string[], defectTypes: [] as string[],
 };
 const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
@@ -126,6 +129,8 @@ const ctx = {
   spec: {} as Spec,
   batchNo: "", docNo: "", kursunMeters: "",
   workOrderId: "", workOrderNo: "", rollId: "", rollBarcode: "", cardBarcode: "",
+  /** §7 kurşun adımında işaretlenen hata metrajları (Tambur ekranında görünmeli). */
+  kursunStepId: "", defectTypeId: "", errorMeters: [] as number[],
 };
 
 async function setSetting(key: string, value: unknown): Promise<void> {
@@ -384,6 +389,93 @@ async function step6(): Promise<void> {
     JSON.stringify(gp));
 }
 
+async function step7(): Promise<void> {
+  console.log("§7 kurşun/KK tableti: topta hata işaretleme (top formda doğdu, KK1'de değil)");
+  const roll = ctx.rollId ? await prisma.roll.findUnique({ where: { id: ctx.rollId }, select: { currentStepId: true } }) : null;
+  ctx.kursunStepId = roll?.currentStepId ?? "";
+  const dt = await prisma.defectType.create({ data: { code: `${TAG}-DT`.slice(0, 32), name: `${TAG} leke` }, select: { id: true } });
+  made.defectTypes.push(dt.id);
+  ctx.defectTypeId = dt.id;
+  const report = (startMeter: number, clientErrorId: string = randomUUID()) =>
+    ctx.call("POST", "/api/kursun-qc/report-error", ctx.users.kursun, { rollId: ctx.rollId, stepId: ctx.kursunStepId, startMeter, defectTypeId: ctx.defectTypeId, clientErrorId });
+  // Hata girişi istasyonun MUAYENE yeteneğidir (KQ-D1): kapalıyken fail-closed; yönetici kurşun istasyonunda açar.
+  const closed = await report(120);
+  check("§7 muayene kapalı istasyon → 400 QUALITY_STEP_ERROR", closed.status === 400 && closed.code === "QUALITY_STEP_ERROR", `${closed.status} ${closed.code ?? ""}`);
+  await prisma.station.update({ where: { id: ctx.kursunStationId }, data: { inspectionEnabled: true } });
+  const firstId = randomUUID();
+  const a = await report(120, firstId);
+  const b = await report(1830);
+  const meterOf = (r: Resp) => Number((r.data as { startMeter?: unknown } | undefined)?.startMeter);
+  check("§7 ⭐ iki hata işaretlendi (120 m, 1830 m) → 201", a.status === 201 && b.status === 201 && meterOf(a) === 120 && meterOf(b) === 1830,
+    `${a.status} ${a.code ?? ""} ${b.status} ${b.code ?? ""} ${JSON.stringify(a.data)?.slice(0, 200)}`);
+  if (a.status === 201) ctx.errorMeters.push(120);
+  if (b.status === 201) ctx.errorMeters.push(1830);
+  // Tablet kuyruğu yanıtı kaybedip yeniden gönderir: aynı clientErrorId → aynı kayıt, ikinci satır yok.
+  const replay = await report(120, firstId);
+  check("§7 aynı clientErrorId yeniden gönderim → aynı hata kaydı (idempotent)", replay.status === 201 && (replay.data as { id?: string } | undefined)?.id === firstId, `${replay.status} ${replay.code ?? ""}`);
+  const over = await report(9999);
+  check("§7 top metresini aşan konum → 400 INVALID_DEFECT_METER", over.status === 400 && over.code === "INVALID_DEFECT_METER", `${over.status} ${over.code ?? ""}`);
+  const rows = await prisma.rollError.findMany({ where: { rollId: ctx.rollId }, orderBy: { startMeter: "asc" }, select: { startMeter: true, origin: true, isProcessed: true, detectedAtStepId: true, defectTypeId: true } });
+  check("§7 ⭐ topta iki hata metrajı: kurşun adımında, PROCESS, işlenmemiş (tamburda karara bağlanacak)",
+    rows.length === 2 && JSON.stringify(rows.map((r) => Number(r.startMeter))) === "[120,1830]" && rows.every((r) => r.origin === "PROCESS" && !r.isProcessed && r.detectedAtStepId === ctx.kursunStepId && r.defectTypeId === ctx.defectTypeId),
+    JSON.stringify(rows.map((r) => [Number(r.startMeter), r.origin, r.isProcessed, r.detectedAtStepId === ctx.kursunStepId])));
+}
+
+async function step8(): Promise<void> {
+  console.log("§8 tambur: aynı kâğıt → aynı İE; hata metrajları ekranda; kesim + bölme → yeni toplar + etiket");
+  // Kurşun operatörü topu bitirir (gramaj = İE hedefi) ve adımı kapatır → top Tambur adımına geçer.
+  const gramajCode = (await prisma.fabricPropertyValue.findUnique({ where: { id: ctx.gramaj.g40 }, select: { code: true } }))?.code ?? "";
+  const qc2 = await ctx.call("POST", "/api/kursun-qc/complete-qc2", ctx.users.kursun, { rollId: ctx.rollId, stepId: ctx.kursunStepId, properties: [{ propertyId: ctx.gramajPropId, valueCode: gramajCode }] });
+  check("§8 kurşun: top tamamlandı (gramaj 40 gr) → 201", qc2.status === 201, `${qc2.status} ${qc2.code ?? ""} ${JSON.stringify(qc2.data)?.slice(0, 200)}`);
+  const fin = await ctx.call("POST", "/api/kursun-qc/finish-step", ctx.users.kursun, { stepId: ctx.kursunStepId });
+  const moved = (fin.data as { movedRollCount?: number } | undefined)?.movedRollCount;
+  const atTambur = await prisma.roll.findUnique({ where: { id: ctx.rollId }, select: { status: true, currentStep: { select: { stationId: true, stepSequence: true } } } });
+  check("§8 ⭐ kurşun adımı kapandı → top Tambur adımında", fin.status === 200 && moved === 1 && atTambur?.currentStep?.stationId === ctx.tamburStationId,
+    `${fin.status} ${fin.code ?? ""} moved=${moved} ${JSON.stringify(atTambur)}`);
+  const gramajOnRoll = await prisma.rollProperty.findFirst({ where: { rollId: ctx.rollId, propertyId: ctx.gramajPropId }, select: { valueId: true } });
+  check("§8 topa yazılan gramaj = İE hedefi (40 gr)", gramajOnRoll?.valueId === ctx.gramaj.g40, JSON.stringify(gramajOnRoll));
+
+  // Tambur operatörü aynı kâğıdın yeni fotoğrafını okutur → aynı İE ve kart.
+  const look = await ctx.call("POST", "/api/gelen-belge/istasyon-okutma", ctx.users.tambur, { contentBase64: photo(ctx.spec).toString("base64") });
+  const ld = (look.data ?? {}) as Lookup;
+  check("§8 ⭐ tambur okutması → aynı TEK iş emri + aynı kart", look.status === 200 && ld.outcome === "SINGLE" && ld.workOrders?.length === 1 && ld.workOrders[0]!.id === ctx.workOrderId && ld.workOrders[0]!.cardBarcode === ctx.cardBarcode,
+    `${look.status} ${look.code ?? ""} ${lookupBrief(ld)}`);
+  const card = ld.workOrders?.[0]?.cardBarcode ?? ctx.cardBarcode;
+
+  const bc = await ctx.call("GET", `/api/tambur/by-card/${encodeURIComponent(card)}`, ctx.users.tambur);
+  const bd = (bc.data ?? {}) as { workOrderId?: string; stationId?: string; rolls?: Array<{ rollId: string; currentQty: number; batchNumber: string | null; errors: Array<{ startMeter: number; detectedAtStepId?: string | null }> }> };
+  const tr = bd.rolls?.find((x) => x.rollId === ctx.rollId);
+  check("§8 tambur kartı: bu İE, Tambur istasyonu, top 2475 m, parti no belgeden", bc.status === 200 && bd.workOrderId === ctx.workOrderId && bd.stationId === ctx.tamburStationId && !!tr && Number(tr.currentQty) === 2475 && tr.batchNumber === ctx.batchNo,
+    `${bc.status} ${bc.code ?? ""} ${JSON.stringify(tr ? { q: tr.currentQty, b: tr.batchNumber } : bd.rolls?.length)}`);
+  const em = (tr?.errors ?? []).map((e) => Number(e.startMeter)).sort((x, y) => x - y);
+  check("§8 ⭐ roll.errors: §7'nin hata metrajları (120, 1830), kurşun adımında açılmış", JSON.stringify(em) === JSON.stringify(ctx.errorMeters) && em.length === 2 && (tr?.errors ?? []).every((e) => e.detectedAtStepId === ctx.kursunStepId),
+    JSON.stringify(tr?.errors));
+
+  // Kesim + bölme: hata noktalarının arasından iki top (1000 m + kalan 1475 m).
+  type Cut = { childRoll?: { id: string; barcode: string | null; parentRollId: string | null; initialQty: unknown; status: string }; parentRemainingQty?: number };
+  const cut = (lengthMeters: number) => ctx.call("POST", `/api/tambur/${ctx.rollId}/cut`, ctx.users.tambur, { lengthMeters, status: "WAREHOUSE", clientToken: randomUUID() });
+  const c1 = await cut(1000);
+  const c2 = await cut(1475);
+  const k1 = (c1.data ?? {}) as Cut;
+  const k2 = (c2.data ?? {}) as Cut;
+  const children = [k1.childRoll, k2.childRoll].filter((x): x is NonNullable<Cut["childRoll"]> => !!x);
+  check("§8 ⭐ iki kesim → 201, iki yeni top (1000 m + 1475 m), açık kumaş tükendi", c1.status === 201 && c2.status === 201 && children.length === 2 && k1.parentRemainingQty === 1475 && k2.parentRemainingQty === 0,
+    `${c1.status} ${c1.code ?? ""} ${c2.status} ${c2.code ?? ""} kalan=${k1.parentRemainingQty}/${k2.parentRemainingQty}`);
+  const dbKids = children.length ? await prisma.roll.findMany({ where: { id: { in: children.map((c) => c.id) } }, select: { id: true, barcode: true, parentRollId: true, initialQty: true, status: true, ownerCustomerId: true, batch: { select: { batchNumber: true } } } }) : [];
+  check("§8 ⭐ yeni toplar barkodlu, ebeveyni form topu, depoda, sahip + parti miras",
+    dbKids.length === 2 && dbKids.every((k) => !!k.barcode && k.barcode !== ctx.rollBarcode && k.parentRollId === ctx.rollId && k.status === "WAREHOUSE" && k.ownerCustomerId === ctx.ownerId && k.batch?.batchNumber === ctx.batchNo)
+      && JSON.stringify(dbKids.map((k) => Number(k.initialQty)).sort((x, y) => x - y)) === "[1000,1475]" && new Set(dbKids.map((k) => k.barcode)).size === 2,
+    JSON.stringify(dbKids.map((k) => ({ b: k.barcode, p: k.parentRollId === ctx.rollId, q: Number(k.initialQty), s: k.status, o: k.ownerCustomerId === ctx.ownerId, n: k.batch?.batchNumber }))));
+
+  for (const k of dbKids) {
+    const lab = await ctx.call("GET", `/api/labels/rolls/${k.id}`, ctx.users.tambur);
+    const ld2 = (lab.data ?? {}) as { rollId?: string; barcode?: string; lengthMeters?: number; batchNumber?: string | null; workOrderNumber?: string | null };
+    check(`§8 ⭐ etiket ${Number(k.initialQty)} m: 200, top numarası (barkod) + metre + parti no + İE no`,
+      lab.status === 200 && ld2.rollId === k.id && ld2.barcode === k.barcode && Number(ld2.lengthMeters) === Number(k.initialQty) && ld2.batchNumber === ctx.batchNo && ld2.workOrderNumber === ctx.workOrderNo,
+      `${lab.status} ${lab.code ?? ""} ${JSON.stringify({ b: ld2.barcode, m: ld2.lengthMeters, p: ld2.batchNumber, w: ld2.workOrderNumber })}`);
+  }
+}
+
 async function run(url: string, sidecar: { url: string }): Promise<void> {
   ctx.sidecarUrl = sidecar.url;
   await setup(url);
@@ -393,6 +485,8 @@ async function run(url: string, sidecar: { url: string }): Promise<void> {
   await step4();
   await step5();
   await step6();
+  await step7();
+  await step8();
 }
 
 async function cleanup(): Promise<void> {
@@ -402,16 +496,23 @@ async function cleanup(): Promise<void> {
   const rollIds = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: notes }, rollId: { not: null } }, select: { rollId: true } })).map((r) => r.rollId!);
   const wos = [...new Set([...made.workOrders, ...(await prisma.workOrder.findMany({ where: { routeTemplateId: { in: made.routes } }, select: { id: true } })).map((w) => w.id)])];
   const woRolls = (await prisma.roll.findMany({ where: { batch: { workOrderId: { in: wos } } }, select: { id: true } })).map((r) => r.id);
-  const rolls = [...new Set([...rollIds, ...woRolls])];
+  const parents = [...new Set([...rollIds, ...woRolls])];
+  // §8 tambur kesim çocukları (parentRollId) — ebeveyn bağı çözülmeden ebeveyn silinemez.
+  const kids = parents.length ? (await prisma.roll.findMany({ where: { parentRollId: { in: parents } }, select: { id: true } })).map((r) => r.id) : [];
+  const rolls = [...new Set([...parents, ...kids])];
   await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: { in: notes } }, data: { scanId: null } }).catch(swallow);
   await prisma.documentScan.deleteMany({ where: { id: { in: scans.map((s) => s.id) } } }).catch(swallow);
   await prisma.customerDeliveryNoteLine.deleteMany({ where: { noteId: { in: notes } } }).catch(swallow);
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: notes } } });
-  for (const t of ["rollProperty", "rollOperation", "rollMovement", "rollVariance", "warehouseMovement"] as const) {
+  for (const t of [
+    "rollError", "rollStatusEvent", "rollPlanDeviation", "rollMeterReading", "rollInspection", "rollCustomerCode", "workOrderCloseSnapshotLine",
+    "rollProperty", "rollOperation", "rollMovement", "rollVariance", "warehouseMovement",
+  ] as const) {
     await (prisma[t] as unknown as { deleteMany: (a: unknown) => Promise<unknown> }).deleteMany({ where: { rollId: { in: rolls } } }).catch(swallow);
   }
-  await prisma.roll.updateMany({ where: { id: { in: rolls } }, data: { currentStepId: null, batchId: null } }).catch(swallow);
+  await prisma.roll.updateMany({ where: { id: { in: rolls } }, data: { currentStepId: null, batchId: null, parentRollId: null } }).catch(swallow);
   await prisma.roll.deleteMany({ where: { id: { in: rolls } } }).catch(swallow);
+  await prisma.defectType.deleteMany({ where: { id: { in: made.defectTypes } } }).catch(swallow);
   for (const id of wos) {
     await prisma.workOrderTargetValue.deleteMany({ where: { workOrderId: id } }).catch(swallow);
     await prisma.workOrderTargetProperty.deleteMany({ where: { workOrderId: id } }).catch(swallow);
@@ -437,6 +538,9 @@ async function cleanup(): Promise<void> {
   await prisma.session.deleteMany({ where: { userId: { in: made.users } } }).catch(swallow);
   await prisma.systemLog.deleteMany({ where: { userId: { in: made.users } } }).catch(swallow);
   await prisma.user.deleteMany({ where: { id: { in: made.users } } }).catch(swallow);
+  // Sessiz yutulan silme kalıntı bırakmasın: kesim çocukları dahil top, İE ve hata tipi kalmamalı.
+  const left = { rolls: await prisma.roll.count({ where: { id: { in: rolls } } }), wos: await prisma.workOrder.count({ where: { id: { in: wos } } }), dts: await prisma.defectType.count({ where: { id: { in: made.defectTypes } } }) };
+  check("temizlik: top/İE/hata tipi kalıntısı yok", left.rolls + left.wos + left.dts === 0, JSON.stringify(left));
 }
 
 async function main(): Promise<void> {
