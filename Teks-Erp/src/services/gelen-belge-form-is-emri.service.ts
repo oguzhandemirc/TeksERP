@@ -14,6 +14,7 @@ import { DeliveryNoteStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import type { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
+import type { FormRollInput, FormRollMode } from "../lib/gelen-belge/form-toplar";
 import { TERIM } from "../constants/terim";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { approveDeliveryNote } from "./gelen-belge-onay.service";
@@ -38,6 +39,20 @@ const MANUAL_READ_STATES: readonly ReadSummaryState[] = ["FAILED", "NO_PAGES", "
 /** Onayın (yeniden) koşabileceği başlık durumları; taze APPROVING'i onay claim'i kendisi 409'la reddeder. */
 const APPROVAL_RESUMABLE: readonly DeliveryNoteStatus[] = [DeliveryNoteStatus.DRAFT, DeliveryNoteStatus.PARTIAL, DeliveryNoteStatus.APPROVING];
 
+export { formModeFieldShape } from "../lib/gelen-belge/form-toplar";
+
+/**
+ * TEK KAYNAK: ayrı toplar parti yoluna çevrilir (blok = sıra + 1) — ikinci giriş motoru yok. Gövde kombinasyonu
+ * onaydan ÖNCE doğrulanır (fail-closed): SEPARATE top ister, top SEPARATE ister, partiyle birlikte gelmez.
+ */
+export function rollsAsParties(input: Pick<FormWorkOrderInput, "rollMode" | "rolls" | "parties">): PartyInput[] | null {
+  const rolls = input.rolls?.length ? input.rolls : null;
+  if (input.rollMode === "SEPARATE" && !rolls) throw AppError.badRequest("Toplar ayrı seçildi ama top listesi yok.", { code: "GELEN_BELGE_FORM_ROLLS_REQUIRED" });
+  if (rolls && input.rollMode !== "SEPARATE") throw AppError.badRequest("Top listesi yalnız \"Toplar ayrı geldi\" seçiliyken gönderilir.", { code: "GELEN_BELGE_FORM_ROLLS_NEED_SEPARATE" });
+  if (rolls && input.parties?.length) throw AppError.badRequest("Toplar ayrı seçeneği çok partili belgeyle birlikte kullanılamaz.", { code: "GELEN_BELGE_FORM_ROLLS_WITH_PARTIES" });
+  return rolls ? rolls.map((r, i) => ({ blockNo: i + 1, meters: r.meters, weightKg: r.weightKg ?? null, senderRollNo: r.senderRollNo ?? null })) : null;
+}
+
 export interface FormWorkOrderInput {
   clientToken: string;
   ownerCustomerId: string;
@@ -55,6 +70,9 @@ export interface FormWorkOrderInput {
   parties?: PartyInput[];
   /** Verilmezse fabrika ayarı `gelenBelge.multiPartyWorkOrder` (varsayılan SINGLE). Yalnız `parties` ile anlamlı. */
   mode?: MultiPartyWorkOrderMode;
+  /** "Toplar ayrı geldi": SEPARATE + `rolls` → tek İE, her top ayrı top (parti yoluyla, kip SINGLE). Verilmezse tek parça (bugünkü). */
+  rollMode?: FormRollMode;
+  rolls?: FormRollInput[];
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (onaya geçer). */
   confirmDuplicateDocNo?: boolean;
   /** K30 S16a form alanları: verilen değer türetileni EZER, verilmeyen (undefined/null) bugünkü davranış. `targetItemId`
@@ -192,15 +210,17 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { id: true, status: true, noteNo: true } });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
 
-  const parties = input.parties && input.parties.length > 1 ? input.parties : null;
+  const rollParties = rollsAsParties(input);
+  const parties = rollParties ?? (input.parties && input.parties.length > 1 ? input.parties : null);
   if (parties) assertPartiesShape(parties);
   // K30: kip onaydan ÖNCE çözülür; parti başına İE'de hedef metraj/kg belge toplamı olduğundan her İE'ye yazılamaz.
-  const mode = parties ? (input.mode ?? (await readMultiPartyWorkOrder())) : undefined;
+  // Ayrı toplar her zaman tek İE (SINGLE); gövdenin `mode`u yalnız partiler içindir.
+  const mode = rollParties ? "SINGLE" : parties ? (input.mode ?? (await readMultiPartyWorkOrder())) : undefined;
   if (mode === "PER_PARTY" && (input.targetQuantity != null || input.targetWeight != null)) {
     throw AppError.badRequest(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} kipinde hedef metraj ve hedef kg verilemez (belge toplamıdır).`, { code: "GELEN_BELGE_FORM_TARGET_PER_PARTY" });
   }
   const item = await resolveFormTargetItem(input.targetItemId);
-  // Çok partide kurşun metresi = partilerin toplamı (onay kapısı bu değeri okur; gövdenin tek metresi yerine).
+  // Çok partide / ayrı toplarda kurşun metresi = partilerin (topların) toplamı (onay kapısı bu değeri okur; gövdenin tek metresi yerine).
   const kursunMeters = parties ? Math.round(parties.reduce((s, p) => s + p.meters, 0) * 1000) / 1000 : input.kursunMeters;
   const warnings: string[] = [];
   // Taslak: okuma sürmüyor olmalı → not alanları (yalnız DRAFT'ta yazılır).
@@ -229,7 +249,8 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     const approved = await approveDeliveryNote(noteId, input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}, actor.userId, {
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
-      ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters })) } : {}),
+      ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(rollParties ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : {}) })) } : {}),
+      ...(rollParties ? { separateRolls: true } : {}),
       ...(item ? { item } : {}),
     });
     warnings.push(...approved.warnings);

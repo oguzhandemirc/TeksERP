@@ -10,7 +10,7 @@ import { AppError } from "../utils/app-error";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 import { READ_MAX_ATTEMPTS } from "./gelen-belge-okuma.service";
-import { hasDocumentDeclared, totalsCheck } from "./gelen-belge-kontrol.service";
+import { hasDocumentDeclared, isSummaryLine, totalsCheck } from "./gelen-belge-kontrol.service";
 import { readDocumentTotalCheck } from "./system-setting.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
@@ -76,7 +76,7 @@ export async function getReadSummary(noteId: string) {
     select: {
       id: true, noteNo: true, status: true, ownerCustomerId: true, declaredTopCount: true, totalsDeclared: true, warnings: true,
       ourBatchNo: true, ourBatchNoKey: true, kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true,
-      lines: { select: { blockNo: true, meters: true, weightKg: true, status: true, needsReview: true } },
+      lines: { select: { id: true, lineNo: true, blockNo: true, lineKind: true, senderRollNo: true, meters: true, weightKg: true, status: true, needsReview: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
       scans: { select: { status: true, attempts: true, mimeType: true } },
     },
   });
@@ -115,6 +115,10 @@ export async function getReadSummary(noteId: string) {
     // buradan kurulur (`detailFromSummary`). Eski tablet alanları yok sayar.
     ownerCustomerId: note.ownerCustomerId,
     ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }, trust),
+    // "Toplar ayrı geldi" ön dolumu: belgenin TOP satırları (özet satırı hariç; blok, satır sırası). Eski tablet yok sayar.
+    docRolls: live.filter((l) => l.lineKind === "TOP" && !isSummaryLine(note.id, l)).map((l) => ({
+      lineNo: l.lineNo, meters: Number(l.meters), weightKg: l.weightKg == null ? null : Number(l.weightKg), senderRollNo: l.senderRollNo,
+    })),
     // K30 S16a iş emri tek formu: tanıtılmış alanlar (`formFields`) + `desenRenkEslesme=ONER`de kayıt önerisi (`suggestions`).
     ...(await noteFormFields(note.id, trust)),
     // K30-B tel sözleşmesi madde 1: TANITILDI | TANITILMAMIS; sistem şablonunda alan yok. Eski tablet yok sayar.
