@@ -39,6 +39,8 @@ export interface SuggestPreview {
   matched: boolean;
   score: number;
   fields: Record<string, string | null>;
+  /** Okunan değerin kutusu (OCR çerçevesi; eski sunucuda yok) — güncellemede eski şablonun alanları belge üstünde işaretlenir. */
+  fieldRects?: Record<string, Rect>;
   /** Bölüm (parti) başına beyan: yazan top adedi `count`/`topCount`, parti no `batchNo`. */
   blocks?: Array<{ blockNo: number; count?: string | null; m?: string | null; batchNo?: string | null; orderNo?: string | null; topCount?: number | null }>;
   lineCount: number;

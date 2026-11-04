@@ -112,7 +112,7 @@ describe("tanıtma çekirdeği (saf)", () => {
     const old = { fields: [{ key: "partiNo", label: "Parti No" }, { key: "tarih", label: "Tarih" }], tables: [{ key: "toplar" }], sections: { startLabels: ["Ham PartiNo"], fields: ["partiNo"] } };
     expect(oldParts(old)).toEqual(["tables", "sections"]);
     expect(oldParts({ fields: [] })).toEqual([]);
-    let s = { ...assignField(toggleWord(initialTeach(SCAN, "G", [], oldParts(old)), 6), W, "partiNo"), name: "Güleçsoy" };
+    let s = { ...assignField(toggleWord(initialTeach(SCAN, "G", [], { keepOld: oldParts(old) }), 6), W, "partiNo"), name: "Güleçsoy" };
     expect(suggestBody(s, W, "s1", "u-x").base).toEqual({ code: "u-x", keep: ["tables", "sections"] });
     s = toggleKeepOld(s, "sections");
     expect(suggestBody(s, W, "s1", "u-x").base).toEqual({ code: "u-x", keep: ["tables"] });

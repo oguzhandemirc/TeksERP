@@ -3,7 +3,7 @@
 // Belgeler basılıdır (fabrika cevabı 38): kelime kutusu güvenilir, el yazısı yolu yok. Mobil aynası `mobil/.../tanit/teachDraft.ts`.
 import { lowerTr } from "@/lib/tr-case";
 import type { ScanMark } from "../ZoomableScan";
-import type { ScanWord, ScanWords, SuggestBody, TemplateJson } from "./types";
+import type { Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from "./types";
 
 export const FIELD_OPTIONS = [
   { key: "musteri", label: "Müşteri" },
@@ -51,6 +51,8 @@ export interface TeachState {
   sectionFields: FieldKey[];
   /** "Şablonu güncelle": yeni öneride yoksa eski şablondan taşınacak yapılar (sunucu birleştirir; önizleme = kaydedilen). */
   keepOld: OldPart[];
+  /** "Şablonu güncelle": eski şablonda kayıtlı alanlar. Yeniden atanmayan aynen korunur (sunucu birleştirir), gövdeye ATAMA olarak gitmez. */
+  kept: FieldKey[];
 }
 
 /** Eski şablondan taşınabilen yapılar (backend `UPDATE_KEEP_PARTS` aynası). */
@@ -66,7 +68,7 @@ export interface Pt {
 }
 
 export const emptyTeach = (name = ""): TeachState => ({
-  name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: "", sectionFields: [], keepOld: [],
+  name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: "", sectionFields: [], keepOld: [], kept: [],
 });
 
 const PAD = 3;
@@ -197,8 +199,8 @@ export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
 }
 
 /** Ekran açılınca: ad + hazır seçili kimlik önerileri. */
-export function initialTeach(scan: ScanWords, name = "", keep: readonly string[] = [], keepOld: readonly OldPart[] = []): TeachState {
-  let s: TeachState = { ...emptyTeach(name), keepOld: [...keepOld] };
+export function initialTeach(scan: ScanWords, name = "", keep: readonly string[] = [], old: { keepOld?: readonly OldPart[]; kept?: readonly FieldKey[] } = {}): TeachState {
+  let s: TeachState = { ...emptyTeach(name), keepOld: [...(old.keepOld ?? [])], kept: [...(old.kept ?? [])] };
   for (const t of [...keep, ...suggestIdentifiers(scan)]) s = addIdentifier(s, t);
   return s;
 }
@@ -207,7 +209,7 @@ export function initialTeach(scan: ScanWords, name = "", keep: readonly string[]
 export function teachProblems(s: TeachState): string[] {
   const p: string[] = [];
   if (s.name.trim().length < 2) p.push("Belge tipine bir ad verin (en az 2 karakter).");
-  if (Object.keys(s.fields).length === 0) p.push("En az bir alan atayın (ör. Parti No).");
+  if (Object.keys(s.fields).length === 0 && s.kept.length === 0) p.push("En az bir alan atayın (ör. Parti No).");
   if (!s.identifiers.some((d) => d.on)) p.push("En az bir kimlik yazısı işaretleyin (başlık, firma adı).");
   if (s.repeats && !s.sectionStart.trim()) p.push("Tekrar eden bölümün başlangıç yazısını seçin.");
   if (s.repeats && s.sectionFields.length === 0) p.push("Tekrar eden bölümde en az bir alan bölüm başına okunmalı.");
@@ -260,14 +262,44 @@ export function oldTemplateFieldKeys(t: TemplateJson | null | undefined): string
   return arr(t?.fields).map((f) => (f as { key?: unknown }).key).filter((k): k is string => typeof k === "string");
 }
 
+const FIELD_KEYS = new Set<string>(FIELD_OPTIONS.map((f) => f.key));
+
+/** Eski şablonda kayıtlı, bu ekranda atanabilen alanlar (güncelle kipinde "kayıtlı" görünür; şablon sırası). */
+export function templateFieldKeys(t: TemplateJson | null | undefined): FieldKey[] {
+  const out: FieldKey[] = [];
+  for (const k of oldTemplateFieldKeys(t)) if (FIELD_KEYS.has(k) && !out.includes(k as FieldKey)) out.push(k as FieldKey);
+  return out;
+}
+
+/** Alan eski şablondan aynen korunuyor mu (kayıtlı ve bu ekranda yeniden atanmadı)? */
+export const isKept = (s: TeachState, k: FieldKey): boolean => s.kept.includes(k) && !s.fields[k]?.length;
+
+/** Korunan alanların belge üstündeki kelimeleri: önizlemenin okuduğu değer kutusuna (OCR çerçevesi) merkezi düşen kelimeler. */
+export function locateKept(s: TeachState, words: readonly ScanWord[], rects: Record<string, Rect> | undefined): Partial<Record<FieldKey, number[]>> {
+  const out: Partial<Record<FieldKey, number[]>> = {};
+  if (!rects) return out;
+  for (const k of s.kept) {
+    const r = rects[k];
+    if (!r || !isKept(s, k)) continue;
+    const idx = words.flatMap((w, i) => {
+      const cx = w.rect.x + w.rect.width / 2;
+      const cy = w.rect.y + w.rect.height / 2;
+      return cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height ? [i] : [];
+    });
+    if (idx.length) out[k] = idx;
+  }
+  return out;
+}
+
 /** Eski şablonun kimlik yazıları (güncelle kipinde hazır seçili gelir). */
 export function templateKeywords(t: TemplateJson | null | undefined): string[] {
   return arr((t?.identifiers as TemplateJson | undefined)?.keywords).filter((k): k is string => typeof k === "string");
 }
 
 /** Fotoğraf üstü kutular: kelimeler + seçim + atanmış alan/sütun/toplam etiketi. */
-export function teachMarks(s: TeachState, words: readonly ScanWord[]): ScanMark[] {
+export function teachMarks(s: TeachState, words: readonly ScanWord[], located: Partial<Record<FieldKey, number[]>> = {}): ScanMark[] {
   const tone = new Map<number, { tone: ScanMark["tone"]; label: string }>();
+  for (const f of FIELD_OPTIONS) for (const i of located[f.key] ?? []) tone.set(i, { tone: "field", label: `${f.label} (kayıtlı)` });
   for (const f of FIELD_OPTIONS) for (const i of s.fields[f.key] ?? []) tone.set(i, { tone: s.repeats && s.sectionFields.includes(f.key) ? "section" : "field", label: f.label });
   for (const c of COLUMN_OPTIONS) for (const i of s.columns[c.key] ?? []) tone.set(i, { tone: "column", label: `Sütun: ${c.label}` });
   for (const i of s.totalsLabel ?? []) tone.set(i, { tone: "column", label: "Toplam satırı" });
@@ -277,7 +309,7 @@ export function teachMarks(s: TeachState, words: readonly ScanWord[]): ScanMark[
 
 /** "Aynı tip (güncelle)" seçilince: işaretleme korunur, benzer şablonun adı/kimlik yazıları/eski yapıları eklenir (tablet aynası). */
 export function adoptTemplate(s: TeachState, t: { name: string; template: TemplateJson }): TeachState {
-  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template) };
+  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template), kept: templateFieldKeys(t.template) };
   for (const k of templateKeywords(t.template)) out = addIdentifier(out, k);
   return out;
 }

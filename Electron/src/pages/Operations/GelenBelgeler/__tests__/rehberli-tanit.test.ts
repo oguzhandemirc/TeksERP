@@ -1,6 +1,6 @@
 // K30-T A2/A3 rehberli tanıtma çekirdeği: adım ilerleme, TAP/NEXT/SKIP/RELABEL, ad başlıktan, "Okunan: …" okuması, benzer şablon kararı.
 import { describe, expect, it } from "vitest";
-import { adoptTemplate, emptyTeach, initialTeach } from "../tanit/teachDraft";
+import { adoptTemplate, emptyTeach, initialTeach, isKept, locateKept, suggestBody, teachMarks, teachProblems, templateFieldKeys } from "../tanit/teachDraft";
 import { FINISH_STEP, GUIDED_FIELDS, chipStatus, fieldReadout, guidedMarks, guidedReduce, guidedStart, saveDecision, stepField, suggestName } from "../tanit/guidedTeach";
 import type { ScanWord, ScanWords, SuggestResult } from "../tanit/types";
 
@@ -116,5 +116,40 @@ describe("kayıt kararı (benzer şablon)", () => {
     expect(out.fields).toEqual({ partiNo: [6] });
     expect(out.identifiers).toEqual([{ text: "A BOYA SAN", on: true }]);
     expect(out.keepOld).toEqual(["tables"]);
+  });
+});
+
+describe("şablonu güncelle — kayıtlı alanlar (tablet #549 aynası)", () => {
+  const OLD = { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "partiNo", label: "Parti No" }, { key: "musteri", label: "Müşteri" }, { key: "bilinmez", label: "X" }] };
+  const kept = () => initialTeach(SCAN, "A Boya", ["GÜLEÇSOY BOYA"], { kept: templateFieldKeys(OLD) });
+  const rects = { partiNo: { x: 195, y: 295, width: 100, height: 30 } };
+
+  it("kayıtlı alanlar taslakta; alan atanmadan Kaydet açık; atama olarak gitmez", () => {
+    const s = kept();
+    expect(s.kept).toEqual(["partiNo", "musteri"]);
+    expect(teachProblems(s)).toEqual([]);
+    expect(teachProblems({ ...s, kept: [] })).toContain("En az bir alan atayın (ör. Parti No).");
+    const b = suggestBody(s, W, "s1", "u-a");
+    expect(b.assignments).toEqual([]);
+    expect(b.base).toEqual({ code: "u-a", keep: [] });
+  });
+
+  it("kayıtlı alan ✓ + değeri; belge üstünde işaretli; yeniden atanınca kayıtlı sayılmaz", () => {
+    const s = kept();
+    expect(chipStatus(s, "partiNo", [])).toBe("done");
+    expect(fieldReadout(s, "partiNo", { result: result({ partiNo: "P2618733" }), fresh: false, error: null })).toEqual({ kind: "ok", value: "P2618733", label: null, kept: true });
+    expect(fieldReadout(s, "musteri", { result: null, fresh: false, error: null })).toEqual({ kind: "loading" });
+    const located = locateKept(s, W, rects);
+    expect(located).toEqual({ partiNo: [6] });
+    expect(teachMarks(s, W, located)[6]).toMatchObject({ tone: "field", label: "Parti No (kayıtlı)" });
+    expect(guidedMarks(s, W, 1 + GUIDED_FIELDS.indexOf("partiNo"), located)[6]).toMatchObject({ tone: "selected" });
+    const re = { ...s, fields: { partiNo: [6] } };
+    expect(isKept(re, "partiNo")).toBe(false);
+    expect(locateKept(re, W, rects)).toEqual({});
+    expect(suggestBody(re, W, "s1", "u-a").assignments.map((a) => a.field)).toEqual(["partiNo"]);
+  });
+
+  it("Aynı tip (adoptTemplate) o şablonun kayıtlı alanlarını alır", () => {
+    expect(adoptTemplate(emptyTeach("T"), { name: "A Boya", template: OLD }).kept).toEqual(["partiNo", "musteri"]);
   });
 });
