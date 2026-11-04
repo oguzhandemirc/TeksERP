@@ -26,6 +26,7 @@ import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
+import { OrderLinesExportButton } from "./OrderLinesExportButton";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -432,12 +433,19 @@ export function OrdersPage() {
         table={table}
         exportName="Siparişler"
         actions={
-          <ToolbarToggle
-            checked={showCancelled}
-            onCheckedChange={setShowCancelled}
-            label="İptalleri göster"
-            title="İptal edilmiş siparişler varsayılan olarak gizlidir."
-          />
+          <>
+            <OrderLinesExportButton
+              fetchAll={fetchAll}
+              pricingEnabled={pricingEnabled}
+              productionEnabled={productionEnabled}
+            />
+            <ToolbarToggle
+              checked={showCancelled}
+              onCheckedChange={setShowCancelled}
+              label="İptalleri göster"
+              title="İptal edilmiş siparişler varsayılan olarak gizlidir."
+            />
+          </>
         }
       />
       {/* ⚠️ SIRA SÖZLEŞMESİ (2026-09-04): özet şerit FİLTRELERİN ÜSTÜNDE.

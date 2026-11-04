@@ -17,6 +17,30 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-04",
+      "baslik": "Sipariş listesinin Excel dosyası ekrandakiyle aynı; kalem bazında Excel eklendi",
+      "surumler": {
+        "panel": "1.3.8"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Siparişler ekranından indirilen Excel dosyasında Kumaş, Renk ve Sevk sütunları boş geliyordu; Kalem sütununda sayı yerine renk adları, tarihlerde saatli karışık bir yazı, Durum'da İngilizce kod, Tutar'da para birimsiz rakam çıkıyordu. Artık dosyada her sütun ekranda gördüğünüz yazıyla çıkar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "İptal edilmiş kalemlerin kumaşı ve rengi sipariş listesinde artık görünmez; ekran ve Excel aynı bilgiyi gösterir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Siparişler ekranına “Kalem bazında Excel” düğmesi eklendi: süzgece uyan tüm siparişlerin her kalemi ayrı bir satır olarak iner (sipariş no, müşteri, şube, kumaş, renk, özellikler, en, miktar, birim, fiyat, sevk edilen, kalan, termin, durum, iş emri, kalem notu). İptal edilmiş kalemler dosyaya girmez; fiyat sütunları yalnız listede tutarı görenlere çıkar."
+        }
+      ]
+    },
+    {
       "id": "2026-09-28c",
       "baslik": "Müşteri renk adı kumaşa göre girilebilir; irsaliyede aynı renkteki iki kumaş kendi adını basar; birleştirmeyi geri alma onarıldı",
       "surumler": {
