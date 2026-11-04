@@ -75,9 +75,11 @@ export type Readout =
 export function fieldReadout(
   s: TeachState,
   key: FieldKey,
-  p: { result: SuggestResult | null; fresh: boolean; error: string | null },
+  p: { result: SuggestResult | null; fresh: boolean; error: string | null; blocked?: string | null },
 ): Readout {
   if (!(s.fields[key]?.length)) return { kind: 'idle' };
+  // Önizleme eksik varken hiç istenmez; "okunuyor" demek sonsuz bekletir (2026-11-04 cihaz denemesi: başlık atlanmıştı).
+  if (p.blocked && !p.fresh) return { kind: 'error', text: `Değer, şu eksik tamamlanınca okunur: ${p.blocked}` };
   if (p.error && !p.fresh) return { kind: 'error', text: p.error };
   if (!p.fresh || !p.result) return { kind: 'loading' };
   if (p.result.errors.length) return { kind: 'error', text: p.result.errors[0]! };

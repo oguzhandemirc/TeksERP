@@ -94,6 +94,12 @@ describe('guided — alan adımı', () => {
     expect(fieldReadout(s, 'partiNo', { result: result(), fresh: false, error: null })).toEqual({ kind: 'loading' });
     expect(fieldReadout(s, 'partiNo', { result: result(), fresh: true, error: null })).toEqual({ kind: 'ok', value: 'P2618733', label: 'Ham PartiNo' });
     expect(fieldReadout(s, 'partiNo', { result: null, fresh: false, error: 'Ağ hatası' })).toEqual({ kind: 'error', text: 'Ağ hatası' });
+    // Eksik (ör. kimlik yazısı yok) önizlemeyi engelliyorsa sonsuz "okunuyor" yerine neden söylenir.
+    expect(fieldReadout(s, 'partiNo', { result: null, fresh: false, error: null, blocked: 'En az bir kimlik yazısı işaretleyin' })).toEqual({
+      kind: 'error',
+      text: 'Değer, şu eksik tamamlanınca okunur: En az bir kimlik yazısı işaretleyin',
+    });
+    expect(fieldReadout({ ...s, fields: {} }, 'partiNo', { result: null, fresh: false, error: null, blocked: 'x' })).toEqual({ kind: 'idle' });
     expect(fieldReadout(s, 'partiNo', { result: result({ errors: ['Kutu boş'] }), fresh: true, error: null })).toEqual({ kind: 'error', text: 'Kutu boş' });
     const pos = result({ explain: [{ field: 'partiNo', strategy: 'region' } as never] });
     expect(fieldReadout(s, 'partiNo', { result: pos, fresh: true, error: null })).toEqual({ kind: 'ok', value: 'P2618733', label: null });
