@@ -123,7 +123,7 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
     ocr = r.result;
     source = "OCR";
   }
-  // Sınıflandırma gelen belge okumasıyla aynı: dosya + aktif kullanıcı (`u-…`) şablonları (`engineTemplates` her okumada yükler).
+  // Sınıflandırma gelen belge okumasıyla aynı: aktif dosya + aktif kullanıcı (`u-…`) şablonları (`engineTemplates` her okumada yükler).
   const { header } = await extractDraft(ocr);
   const read = { senderDocNo: header.senderDocNo, ownerText: header.ownerText, senderText: header.senderText };
   const docNo = header.senderDocNo?.trim() || null;
