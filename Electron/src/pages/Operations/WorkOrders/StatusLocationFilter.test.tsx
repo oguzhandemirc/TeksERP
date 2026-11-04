@@ -36,6 +36,25 @@ describe("StatusLocationFilter", () => {
     expect(screen.queryByText("Tezgah 1")).toBeNull();
     expect(screen.queryByText("Eski Ram")).toBeNull();
     expect(screen.getByText("Birden çok istasyonda")).toBeInTheDocument();
+    expect(screen.getByText("Fasonda")).toBeInTheDocument();
+    expect(screen.getByText("Fasonda (en az bir top)")).toBeInTheDocument();
+  });
+
+  it("'Fasonda (en az bir top)' FASONDA'dan ayrı değer yazar; çip etiketi okunur", async () => {
+    renderWithProviders(
+      <>
+        <StatusLocationFilter />
+        <StatusLocationChips />
+        <Search />
+      </>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Durum/ }));
+    await userEvent.click(await screen.findByText("Fasonda (en az bir top)"));
+    expect(search()).toContain("filter[konumSinifi]=FASONDA_EN_AZ_BIR");
+    await userEvent.click(screen.getByText("Fasonda"));
+    expect(search()).toContain("filter[konumSinifi]=FASONDA_EN_AZ_BIR,FASONDA");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByTestId("status-location-chips")).toHaveTextContent("Konum:Fasonda (en az bir top)");
   });
 
   it("her grup kendi anahtarına CSV yazar; çip tek tıkla kaldırır", async () => {

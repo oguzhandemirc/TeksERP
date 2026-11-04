@@ -16,6 +16,8 @@
 // `workOrderLocationClassWhere` (+ ≥2 istasyon için `$queryRaw` id kümesi). Biri
 // değişirse öteki de; bekçi `test_workorder_location.ts` her fikstür iş emri için
 // "özetteki sınıf == süzgecin döndürdüğü sınıf" eşitliğini ölçer.
+// ÖRTÜŞEN SÜZGEÇ: `FASONDA_EN_AZ_BIR` bir `sinif` DEĞİLDİR (özet tek sınıf taşır);
+// bellek ikizi `locationMatchesFilterClass` (= satırdaki fason rozetinin anlamı).
 // =============================================================================
 import { Prisma, RollStatus, StationKind, StationType, WorkOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -31,6 +33,10 @@ export const WORK_ORDER_LOCATION_CLASSES = [
   "BITTI",
 ] as const;
 export type WorkOrderLocationClass = (typeof WORK_ORDER_LOCATION_CLASSES)[number];
+
+/** `filter[konumSinifi]` değerleri: ayrık sınıflar + örtüşen "en az bir top fasonda" (FASONDA'yı kapsar). */
+export const WORK_ORDER_LOCATION_FILTER_CLASSES = [...WORK_ORDER_LOCATION_CLASSES, "FASONDA_EN_AZ_BIR"] as const;
+export type WorkOrderLocationFilterClass = (typeof WORK_ORDER_LOCATION_FILTER_CLASSES)[number];
 
 /** Konumu sayılan top statüleri — liste dışı bırakılan her statü "istasyonda değil" demektir. */
 export const LOCATION_LIVE_STATUSES: readonly RollStatus[] = [
@@ -87,6 +93,18 @@ const HAS_LIVE: Prisma.WorkOrderWhereInput = {
 const HAS_INHOUSE_LIVE: Prisma.WorkOrderWhereInput = {
   steps: { some: { currentRolls: { some: { status: RollStatus.IN_PRODUCTION } } } },
 };
+const HAS_SUBCONTRACTOR_LIVE: Prisma.WorkOrderWhereInput = {
+  steps: { some: { currentRolls: { some: { status: RollStatus.AT_SUBCONTRACTOR } } } },
+};
+
+/**
+ * Süzgeç sınıfının BELLEK ikizi (`workOrderLocationClassWhere`in aynası): ayrık sınıfta
+ * `sinif` eşitliği; `FASONDA_EN_AZ_BIR`de en az bir canlı top fasoncuda.
+ */
+export function locationMatchesFilterClass(cls: WorkOrderLocationFilterClass, konum: WorkOrderLocation): boolean {
+  if (cls === "FASONDA_EN_AZ_BIR") return konum.istasyonlar.some((e) => e.fasondaTop > 0);
+  return konum.sinif === cls;
+}
 
 /**
  * Canlı topları ≥2 FARKLI istasyona dağılmış iş emirleri (bellek tarafındaki
@@ -107,7 +125,7 @@ export async function findSplitWorkOrderIds(): Promise<string[]> {
 
 /** Tek sınıfın Prisma süzgeci; `splitIds` yalnız BOLUNMUS/TEK_ISTASYON için okunur. */
 export function workOrderLocationClassWhere(
-  cls: WorkOrderLocationClass,
+  cls: WorkOrderLocationFilterClass,
   splitIds: readonly string[],
 ): Prisma.WorkOrderWhereInput {
   switch (cls) {
@@ -117,6 +135,8 @@ export function workOrderLocationClassWhere(
       return { status: { not: WorkOrderStatus.PLANNED }, NOT: HAS_LIVE };
     case "FASONDA":
       return { AND: [HAS_LIVE, { NOT: HAS_INHOUSE_LIVE }] };
+    case "FASONDA_EN_AZ_BIR":
+      return HAS_SUBCONTRACTOR_LIVE;
     case "BOLUNMUS":
       // Boş küme → hiçbir satır; `in: []` Prisma'da "eşleşme yok" demektir (notIn: [] değil).
       return { AND: [HAS_INHOUSE_LIVE, { id: { in: [...splitIds] } }] };
@@ -157,15 +177,15 @@ export async function readWorkOrderLocationFilters(
     });
   }
   if (classes.length > 0) {
-    const known = new Set<string>(WORK_ORDER_LOCATION_CLASSES);
+    const known = new Set<string>(WORK_ORDER_LOCATION_FILTER_CLASSES);
     const bad = classes.find((c) => !known.has(c));
     if (bad) {
       throw AppError.badRequest(
-        `Tanınmayan konum sınıfı: "${bad}" (geçerli: ${WORK_ORDER_LOCATION_CLASSES.join(", ")})`,
+        `Tanınmayan konum sınıfı: "${bad}" (geçerli: ${WORK_ORDER_LOCATION_FILTER_CLASSES.join(", ")})`,
         { code: "INVALID_FILTER_VALUE", field: "konumSinifi" },
       );
     }
-    const picked = classes as WorkOrderLocationClass[];
+    const picked = classes as WorkOrderLocationFilterClass[];
     const needsSplit = picked.some((c) => c === "BOLUNMUS" || c === "TEK_ISTASYON");
     const splitIds = needsSplit ? await findSplitWorkOrderIds() : [];
     const parts = picked.map((c) => workOrderLocationClassWhere(c, splitIds));
