@@ -68,7 +68,7 @@ export function docTablesToSheets(payload: DocTablesPayload, extraNotes: string[
   const tables = payload.tables.filter((t) => t.columns.length > 0);
 
   if (tables.length === 0) {
-    return [{ name: uniqueName(payload.documentNo, used), columns: [], rows: [], preamble, notes }];
+    return [{ name: uniqueName(payload.documentNo, used), columns: [], rows: [], preamble, notes, borders: true, fitToWidth: true }];
   }
 
   // Başlık bloğunun etiketi ilk kolonda durur ve yanındaki hücre dolu olduğu için
@@ -93,6 +93,9 @@ export function docTablesToSheets(payload: DocTablesPayload, extraNotes: string[
         ? { totalNumFmt: Object.fromEntries(keys.map((k, i) => [k, numFmtOf(t.footKinds![i] ?? t.columns[i]!.kind)])) }
         : {}),
       preamble,
+      // Belge sayfası: ince kenarlık + sayfa genişliğine sığdır (düz listeler açmaz).
+      borders: true,
+      fitToWidth: true,
       ...(ti === 0 && notes.length ? { notes } : {}),
     };
   });

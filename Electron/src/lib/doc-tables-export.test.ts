@@ -191,3 +191,41 @@ describe("sevk Excel'i elle kolon listesi kurmaz (tek çözücü)", () => {
     expect(dialogSrc).toMatch(/buildDispatchWorkbook\(/);
   });
 });
+
+describe("belge sayfası biçimi: ince kenarlık + sayfa genişliğine sığdır (panel 1.3.9)", () => {
+  const sheets = docTablesToSheets(PAYLOAD);
+  const load = async (s: Parameters<typeof buildWorkbook>[0]) => {
+    const { default: ExcelJS } = await import("exceljs");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await blobBytes(await buildWorkbook(s)));
+    return wb.worksheets[0]!;
+  };
+
+  it("her belge sayfası iki seçeneği açar (boş belge dahil)", () => {
+    for (const s of [...sheets, ...docTablesToSheets({ ...PAYLOAD, tables: [] })]) {
+      expect(s.borders).toBe(true);
+      expect(s.fitToWidth).toBe(true);
+    }
+  });
+
+  it("başlık, veri ve toplam hücreleri ince kenarlıklı; başlık bloğu kenarlıksız", async () => {
+    const ws = await load(sheets);
+    const cols = sheets[0]!.columns.length;
+    const last = 5 + sheets[0]!.rows.length + 1; // kolon başlığı 5 · veri · toplam
+    for (let r = 5; r <= last; r++) {
+      for (let c = 1; c <= cols; c++) expect(ws.getRow(r).getCell(c).border?.top?.style, `${r}:${c}`).toBe("thin");
+    }
+    expect(ws.getRow(1).getCell(1).border?.top).toBeUndefined();
+  });
+
+  it("pageSetup: fitToPage, genişlik 1, yükseklik serbest", async () => {
+    const ws = await load(sheets);
+    expect(ws.pageSetup).toMatchObject({ fitToPage: true, fitToWidth: 1, fitToHeight: 0 });
+  });
+
+  it("düz liste (seçenek yok) değişmez: kenarlık yok, sığdırma yok", async () => {
+    const ws = await load([{ name: "L", columns: [{ header: "A", key: "a" }], rows: [{ a: "x" }], totalRow: { a: "T" } }]);
+    for (const r of [1, 2, 3]) expect(ws.getRow(r).getCell(1).border?.top).toBeUndefined();
+    expect(ws.pageSetup.fitToPage).toBeFalsy();
+  });
+});

@@ -2,10 +2,7 @@ import { printedDocumentService } from "@/services/printedDocumentService";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { docTablesToSheets, type DocTablesPayload } from "@/lib/doc-tables-export";
 import { accountingDispatchService } from "@/pages/Operations/AccountingDispatch/service";
-import {
-  buildDispatchReportSheets,
-  dispatchReportNotes,
-} from "@/pages/Operations/AccountingDispatch/accounting-export";
+import { buildDispatchReportSheets } from "@/pages/Operations/AccountingDispatch/accounting-export";
 import type { DispatchReport } from "@/pages/Operations/AccountingDispatch/types";
 
 // =============================================================================
@@ -76,8 +73,16 @@ export interface TablesOpts {
 }
 
 /**
+ * İrsaliye Excel dipnotu — yalnız iptal uyarısı. Brüt/iade notları muhasebe fişi ve
+ * dönem dökümünde kalır; müşteriye giden irsaliyede PDF'te olmayan satır basılmaz.
+ */
+export function dispatchDocNotes(report: Pick<DispatchReport, "docStatus"> | null): string[] {
+  return report?.docStatus === "VOIDED" ? ["* DİKKAT: Bu sevkiyatın irsaliyesi İPTAL edilmiştir."] : [];
+}
+
+/**
  * Tek sevkiyatın Excel'i. Kolonlar/satırlar/değerler PDF'in çözücüsünden gelir;
- * fiş verisi (`report`) yalnız dipnotlar (brüt · iade · taslak) için okunur.
+ * fiş verisi (`report`) yalnız iptal dipnotu için okunur.
  * Eski sunucu `/tables`ı tanımıyorsa eski fiş kurucusuna düşülür.
  */
 export async function buildDispatchWorkbook(
@@ -88,7 +93,7 @@ export async function buildDispatchWorkbook(
   const rep = report ?? (await reportOf(t)).data ?? null;
   const tables = await fetchDocTables(t, opts);
   if (tables !== "legacy") {
-    return buildWorkbook(docTablesToSheets(tables, rep ? dispatchReportNotes(rep) : []));
+    return buildWorkbook(docTablesToSheets(tables, dispatchDocNotes(rep)));
   }
   return rep ? buildWorkbook(buildDispatchReportSheets(rep)) : null;
 }
