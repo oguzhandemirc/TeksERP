@@ -89,3 +89,20 @@ describe("PageHeader — geri oku", () => {
     expect(router.state.location.pathname).toBe(CHILD);
   });
 });
+
+describe("PageHeader — çok eylemde sarma (Adnan saha bulgusu 2026-11-04)", () => {
+  it("satır sarar, başlık sütunu taban genişliğini korur; eylemler sarılabilir ve sağa yaslanır", () => {
+    const router = createMemoryRouter(
+      [{ path: CHILD, element: <PageHeader title="IE0311260015" actions={<button type="button">Yeni</button>} /> }],
+      { initialEntries: [CHILD] },
+    );
+    render(<RouterProvider router={router} />);
+    const root = screen.getByRole("heading", { name: "IE0311260015" }).closest("div.border-b") as HTMLElement;
+    expect(root.className).toContain("flex-wrap");
+    const titleCol = root.firstElementChild as HTMLElement;
+    expect(titleCol.className).toContain("flex-[1_1_16rem]");
+    const actions = screen.getByRole("button", { name: "Yeni" }).parentElement as HTMLElement;
+    expect(actions.className).toContain("flex-wrap");
+    expect(actions.className).toContain("justify-end");
+  });
+});
