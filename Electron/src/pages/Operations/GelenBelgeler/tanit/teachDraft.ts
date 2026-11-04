@@ -8,7 +8,7 @@ import type { ScanWord, ScanWords, SuggestBody, TemplateJson } from "./types";
 export const FIELD_OPTIONS = [
   { key: "musteri", label: "Müşteri" },
   { key: "partiNo", label: "Parti No" },
-  { key: "toplamMetre", label: "Kurşun metresi" },
+  { key: "toplamMetre", label: "Gelen metre" },
   { key: "evrakNo", label: "Evrak No" },
   { key: "tarih", label: "Tarih" },
   { key: "siparisNo", label: "Sipariş No" },

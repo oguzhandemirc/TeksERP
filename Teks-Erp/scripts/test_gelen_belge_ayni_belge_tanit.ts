@@ -141,6 +141,14 @@ async function main(): Promise<void> {
     const tpl = code ? await prisma.senderTemplate.findUnique({ where: { code }, select: { id: true } }) : null;
     if (tpl) made.templates.push(tpl.id);
     check("§2 tanıtma: öneri 200 + kayıt 201 (u-…)", p.status === 200 && c.status === 201 && code.startsWith("u-"), `${p.status} ${c.status} ${c.code ?? ""} ${JSON.stringify(p.data?.errors)}`);
+    // Kimlik yazısı tavanı (MAX_TEMPLATE_IDENTIFIERS=30): canlı demoda 13 seçim eski 12 tavanına çarpıp yalnız "Validasyon hatası" gösterdi.
+    const kimlikler = (n: number) => Array.from({ length: n }, (_, i) => `${TAG} KIMLIK ${i + 1}`);
+    const oneriGovde = (identifiers: string[]) => ({ scanId: a.scanId, name: `${TAG} kimlik tavani`, identifiers, assignments: [{ field: "partiNo", rect: elRect("P636249") }] });
+    const k13 = await call("POST", "/api/gelen-belge/sablonlar/oneri", oneriGovde(kimlikler(13)));
+    check("§2 13 kimlik yazısıyla öneri 200", k13.status === 200, `${k13.status} ${k13.code ?? ""}`);
+    const r31 = await fetch(`${url}/api/gelen-belge/sablonlar/oneri`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` }, body: JSON.stringify(oneriGovde(kimlikler(31))) });
+    const j31 = (await r31.json().catch(() => ({}))) as { errors?: { field?: string; message?: string }[] };
+    check("§2 31 kimlik yazısı → 400 + Türkçe tavan mesajı", r31.status === 400 && (j31.errors ?? []).some((e) => e.field === "identifiers" && e.message === "En çok 30 kimlik yazısı seçilebilir"), `${r31.status} ${JSON.stringify(j31.errors)}`);
     const o2 = await okut(a.scanId);
     const q2 = await scanRow(a.scanId);
     const l2a = await linesOf(a.noteId);

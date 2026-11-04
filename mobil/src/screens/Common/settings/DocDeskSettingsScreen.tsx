@@ -3,6 +3,7 @@
 // =============================================================================
 // "Bu cihaz belge masası": açılışta İE oluştur ekranı doğrudan kamera-önce masa kipinde açılır (varsayılan kapalı =
 // bugünkü açılış). Çekim: dokunarak (varsayılan) | otomatik (deneysel, paketsiz; ara kare aralığı ayarlı).
+// Belge çekimi (okut/tanıt): kendi çok çekimli kameramız + otomatik iyileştirme (varsayılan) | Google belge tarayıcı.
 // Ekran açık kalma paketi YOK (expo-keep-awake onay bekliyor) → cihazın "şarjdayken uyanık kal" ipucu gösterilir.
 // =============================================================================
 import React from 'react';
@@ -12,6 +13,7 @@ import {
   DOC_DESK_FRAME_MS_OPTIONS,
   useDeviceSettingsStore,
   type DocDeskCaptureMode,
+  type DocScanEngine,
 } from '../../../store/deviceSettingsStore';
 import { TERIM } from '../../../lib/terim';
 import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
@@ -21,9 +23,15 @@ const CAPTURE_OPTIONS: { value: DocDeskCaptureMode; label: string; desc: string 
   { value: 'auto', label: 'Otomatik (deneysel)', desc: 'Kağıt konup hareket durunca kendisi çeker; yanlış çekimde “Tekrar çek”.' },
 ];
 
+const ENGINE_OPTIONS: { value: DocScanEngine; label: string; desc: string }[] = [
+  { value: 'camera', label: 'Kendi kamera (varsayılan)', desc: 'Art arda çekin, Tamam deyin; sayfalar kendiliğinden iyileştirilir, ara ekran yok.' },
+  { value: 'mlkit', label: 'Google belge tarayıcı', desc: 'Kenar bulur ve kırpar; her sayfada inceleme ekranı açılır. Açılamazsa kendi kamera açılır.' },
+];
+
 /** Menü satırının özeti (diğer ayar satırlarıyla aynı kural: seçili durum menüden görünür). */
-export function docDeskSummary(device: boolean, mode: DocDeskCaptureMode): string {
-  return `${device ? 'Bu cihaz belge masası' : 'Kapalı'} · ${mode === 'auto' ? 'otomatik çekim' : 'dokunarak çekim'}`;
+export function docDeskSummary(device: boolean, mode: DocDeskCaptureMode, engine: DocScanEngine = 'camera'): string {
+  const base = `${device ? 'Bu cihaz belge masası' : 'Kapalı'} · ${mode === 'auto' ? 'otomatik çekim' : 'dokunarak çekim'}`;
+  return engine === 'mlkit' ? `${base} · Google tarayıcı` : base;
 }
 
 function Choice({ active, label, desc, onPress, testID }: { active: boolean; label: string; desc?: string; onPress: () => void; testID?: string }) {
@@ -96,11 +104,28 @@ function CaptureCard() {
   );
 }
 
+function ScanEngineCard() {
+  const engine = useDeviceSettingsStore((s) => s.docScanEngine);
+  const setEngine = useDeviceSettingsStore((s) => s.setDocScanEngine);
+  return (
+    <View style={settingsStyles.card}>
+      <Text style={settingsStyles.label}>BELGE ÇEKİMİ</Text>
+      <View style={styles.list}>
+        {ENGINE_OPTIONS.map((o) => (
+          <Choice key={o.value} active={engine === o.value} label={o.label} desc={o.desc} onPress={() => void setEngine(o.value)} testID={`ayar-belge-cekim-${o.value}`} />
+        ))}
+      </View>
+      <Text style={settingsStyles.hint}>Belge okut ve belge tanıt ekranlarındaki “Sayfa çek” düğmesi için geçerlidir.</Text>
+    </View>
+  );
+}
+
 export default function DocDeskSettingsScreen() {
   return (
     <SettingsPage title="Belge Masası">
       <DeviceCard />
       <CaptureCard />
+      <ScanEngineCard />
     </SettingsPage>
   );
 }

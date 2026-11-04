@@ -15,7 +15,7 @@ export interface ScanMark {
 export const FIELD_OPTIONS = [
   { key: 'musteri', label: 'Müşteri' },
   { key: 'partiNo', label: 'Parti No' },
-  { key: 'toplamMetre', label: 'Kurşun metresi' },
+  { key: 'toplamMetre', label: 'Gelen metre' },
   { key: 'evrakNo', label: 'Evrak No' },
   { key: 'tarih', label: 'Tarih' },
   { key: 'siparisNo', label: 'Sipariş No' },
@@ -211,12 +211,24 @@ export function initialTeach(scan: ScanWords, name = '', keep: readonly string[]
   return s;
 }
 
+/** Kimlik yazısı tavanı — backend `MAX_TEMPLATE_IDENTIFIERS` (Teks-Erp/src/lib/gelen-belge/motor/suggest.ts) aynası. */
+export const MAX_TEMPLATE_IDENTIFIERS = 30;
+
+/** Önizle/kaydet hatasının ekran metni: 400 doğrulamada ilk alan mesajı (jenerik "Validasyon hatası" yerine). */
+export function teachErrText(e: unknown): string | undefined {
+  if (!(e instanceof Error)) return undefined;
+  const first = (e as Error & { validationErrors?: { message?: string }[] }).validationErrors?.find((x) => typeof x?.message === 'string' && x.message);
+  return first?.message || e.message;
+}
+
 /** Kaydetmeden/önizlemeden önce eksikler (Türkçe); boş = hazır. */
 export function teachProblems(s: TeachState): string[] {
   const p: string[] = [];
   if (s.name.trim().length < 2) p.push('Belge tipine bir ad verin (en az 2 karakter).');
   if (Object.keys(s.fields).length === 0) p.push('En az bir alan atayın (ör. Parti No).');
   if (!s.identifiers.some((d) => d.on)) p.push('En az bir kimlik yazısı işaretleyin (başlık, firma adı).');
+  const onCount = s.identifiers.filter((d) => d.on).length;
+  if (onCount > MAX_TEMPLATE_IDENTIFIERS) p.push(`En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir (şu an ${onCount}); fazlasının işaretini kaldırın.`);
   if (s.repeats && !s.sectionStart.trim()) p.push('Tekrar eden bölümün başlangıç yazısını seçin.');
   if (s.repeats && s.sectionFields.length === 0) p.push('Tekrar eden bölümde en az bir alan bölüm başına okunmalı.');
   return p;

@@ -32,8 +32,9 @@ jest.mock('./DocRowCard', () => ({ __esModule: true, default: () => null }));
 jest.mock('../useDocScan', () => ({
   useDocScan: () => ({ pages: [], progress: { uploaded: new Set() }, sending: false, headerLocked: false, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: 0 }),
 }));
-jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: jest.fn(), busy: false }) }));
+jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: jest.fn(), busy: false, camera: { visible: false, capacity: 20, firstPageNo: 1, onDone: jest.fn(), onDismiss: jest.fn() } }) }));
 jest.mock('../PageCameraModal', () => ({ __esModule: true, default: () => null }));
+jest.mock('../MultiPageCameraModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../PagePreviewModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../../../services/inboundDoc.service', () => ({
   inboundDocService: { tabletContext: async () => ({ data: { customers: [], kursunMachines: [{ id: 'm1', code: 'K1', name: 'Kurşun 1', stationId: 'stK' }] } }) },

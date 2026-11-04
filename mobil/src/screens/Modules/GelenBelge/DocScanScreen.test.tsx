@@ -4,14 +4,14 @@ import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import Toast from 'react-native-toast-message';
 import DocScanScreen from './DocScanScreen';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+// Sahte sayfalar; ikinci çekim aynı fotoğraftır (tek sayfaya düşer).
+import { PAGE_B64 as mockB64, PAGE_B64_B as mockB64b } from '../../../test/docScanFixture';
 
 const mockCreate = jest.fn();
 const mockUpload = jest.fn();
 const mockSummary = jest.fn();
 const mockDetail = jest.fn();
-// Sahte JPEG (sihirli bayt) — her çekimde aynı içerik: ikinci çekim aynı fotoğraftır.
-const mockB64 = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-1'.repeat(40))]).toString('base64');
-const mockB64b = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('sayfa-2'.repeat(40))]).toString('base64');
 
 jest.mock('../../../services/inboundDoc.service', () => ({
   inboundDocService: {
@@ -37,25 +37,9 @@ jest.mock('../../../components/BarcodeScannerModal', () => {
       ) : null,
   };
 });
-jest.mock('./PageCameraModal', () => {
-  const { Pressable, Text, View } = jest.requireActual('react-native');
-  const { photoSha256 } = jest.requireActual('./docScan');
-  const shot = (b64: string, uri: string) => ({ base64: b64, sha256: photoSha256(b64), uri, width: 2600, height: 1950 });
-  return {
-    __esModule: true,
-    default: (p: { visible: boolean; onCaptured: (x: unknown) => void }) =>
-      p.visible ? (
-        <View>
-          <Pressable testID="sayfa-kamera" onPress={() => p.onCaptured(shot(mockB64, 'file:///1.jpg'))}>
-            <Text>kamera</Text>
-          </Pressable>
-          <Pressable testID="sayfa-kamera-2" onPress={() => p.onCaptured(shot(mockB64b, 'file:///2.jpg'))}>
-            <Text>kamera 2</Text>
-          </Pressable>
-        </View>
-      ) : null,
-  };
-});
+// Kendi çok çekimli kameramız: "Tamam" sayfaları tek seferde verir (iyileştirme modal testinde sınanır).
+jest.mock('./MultiPageCameraModal', () => jest.requireActual('../../../test/docScanFixture').cameraModalMock('multi'));
+jest.mock('./PageCameraModal', () => jest.requireActual('../../../test/docScanFixture').cameraModalMock('single'));
 
 // Portal içeriği host'a mikrotask'ta taşınır (SimplePortal): önizleme içi dokunuştan sonra boşalt.
 // "Sayfa çek" önce tarayıcıyı dener (asenkron); tarayıcı yoksa kamera açılır.
@@ -70,8 +54,9 @@ async function pressFlush(el: Parameters<typeof fireEvent.press>[0]) {
   await act(async () => {});
 }
 
-// Varsayılan: tarayıcı yok (eski APK) → "Sayfa çek" klasik kamerayı açar.
+// Cihaz ayarı ML Kit + tarayıcı yok (eski APK) → "Sayfa çek" kendi kameramızı açar (yedek yol sınanır).
 function resetMocks() {
+  useDeviceSettingsStore.setState({ docScanEngine: 'mlkit' });
   mockScanner.mockReset().mockResolvedValue({ kind: 'unavailable', reason: 'no_module' });
   (Toast.show as jest.Mock).mockClear();
   mockCreate.mockReset().mockResolvedValue({ id: 'n1', noteNo: 'GB-0001', status: 'DRAFT' });
@@ -197,15 +182,15 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
     expect(r.getByText('Sayfalar (0)')).toBeTruthy();
   });
 
-  it('tarayıcı hatası → bilgi verip klasik kameraya düşer', async () => {
+  it('tarayıcı hatası → bilgi verip kendi kameramıza düşer', async () => {
     mockScanner.mockResolvedValue({ kind: 'error', message: 'Taranan sayfa işlenemedi' });
     const r = renderWithPaper(<DocScanScreen />);
     fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
-    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; klasik kamera açıldı' }));
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; kamera açıldı' }));
   });
 
-  it('tarayıcı yok (eski APK / modül inmemiş) → sessizce klasik kamera', async () => {
+  it('tarayıcı yok (eski APK / modül inmemiş) → sessizce kendi kameramız', async () => {
     const r = renderWithPaper(<DocScanScreen />);
     fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
@@ -217,6 +202,16 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
     fireEvent.press(r.getByTestId('belge-tara-klasik-kamera'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
     expect(mockScanner).not.toHaveBeenCalled();
+  });
+
+  it('⭐ varsayılan cihaz ayarı (kendi kamera): tarayıcı hiç denenmez, çok çekimli kamera açılır, sayfalar listeye', async () => {
+    useDeviceSettingsStore.setState({ docScanEngine: 'camera' });
+    const r = renderWithPaper(<DocScanScreen />);
+    fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
+    fireEvent.press(await r.findByTestId('sayfa-kamera'));
+    await waitFor(() => expect(r.getByText('Sayfalar (1)')).toBeTruthy());
+    expect(mockScanner).not.toHaveBeenCalled();
+    expect(Toast.show).not.toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; kamera açıldı' }));
   });
 });
 
