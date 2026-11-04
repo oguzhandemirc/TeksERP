@@ -15,6 +15,7 @@ import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
 import { AddBatchButton } from "./AddBatchButton";
+import { UnlinkOrderButton } from "./UnlinkOrderButton";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
@@ -65,6 +66,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
   // null = kapalı; "color"/"width" hangi hedefin değiştirileceğini söyler.
   const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
+  // "Sipariş Bağını Kopar" önerisi onaylanınca "Rengi Değiştir" bu renkle açılır (başlıkla AYNI).
+  const [prefillColorId, setPrefillColorId] = useState<string | null>(null);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
@@ -189,6 +192,16 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <button type="button" className="btn" onClick={() => setLinkOrderOpen(true)}>
                         <Link2 className="h-3.5 w-3.5" /> Sipariş Bağla
                       </button>
+                    </PermissionGate>
+                    <UnlinkOrderButton
+                      wo={wo}
+                      look="sheet"
+                      onSuggestColor={(id) => {
+                        setPrefillColorId(id);
+                        setChangeMode("color");
+                      }}
+                    />
+                    <PermissionGate permission="workorder:write">
                       {canChangePlan && (
                         <>
                           <button type="button" className="btn" onClick={() => setChangeMode("color")}>
@@ -324,8 +337,14 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             />
             <ChangeTargetDialog
               open={changeMode !== null}
-              onOpenChange={(o) => !o && setChangeMode(null)}
+              onOpenChange={(o) => {
+                if (!o) {
+                  setChangeMode(null);
+                  setPrefillColorId(null);
+                }
+              }}
               mode={changeMode ?? "color"}
+              initialColorId={prefillColorId}
               workOrderId={wo.id}
               workOrderNumber={wo.workOrderNumber}
               currentColorId={wo.targetColorId}

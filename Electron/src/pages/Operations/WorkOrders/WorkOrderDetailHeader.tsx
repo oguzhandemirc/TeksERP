@@ -20,6 +20,7 @@ import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
 import { AddBatchButton } from "./AddBatchButton";
+import { UnlinkOrderButton } from "./UnlinkOrderButton";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
@@ -54,6 +55,8 @@ export function WorkOrderDetailHeader({
   // kullanıcı işi bir ekranda bulup diğerinde bulamaz.
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
   const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
+  // "Sipariş Bağını Kopar" önerisi onaylanınca "Rengi Değiştir" bu renkle açılır.
+  const [prefillColorId, setPrefillColorId] = useState<string | null>(null);
   // Fason Kabul (2026-08-19): ince ayarlı kabul — top bazında gelen metraj (kısmi),
   // parçalar, irsaliye no; kalan-kapama (fire) da bu diyalogdan.
   const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
@@ -144,6 +147,16 @@ export function WorkOrderDetailHeader({
                 <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setLinkOrderOpen(true)}>
                   <Link2 className="h-3.5 w-3.5" /> Sipariş Bağla
                 </Button>
+              </PermissionGate>
+              <UnlinkOrderButton
+                wo={wo}
+                look="header"
+                onSuggestColor={(id) => {
+                  setPrefillColorId(id);
+                  setChangeMode("color");
+                }}
+              />
+              <PermissionGate permission="workorder:write">
                 {canChangePlan && (
                   <>
                     <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("color")}>
@@ -235,8 +248,14 @@ export function WorkOrderDetailHeader({
           />
           <ChangeTargetDialog
             open={changeMode !== null}
-            onOpenChange={(o) => !o && setChangeMode(null)}
+            onOpenChange={(o) => {
+              if (!o) {
+                setChangeMode(null);
+                setPrefillColorId(null);
+              }
+            }}
             mode={changeMode ?? "color"}
+            initialColorId={prefillColorId}
             workOrderId={wo.id}
             workOrderNumber={wo.workOrderNumber}
             currentColorId={wo.targetColorId}
