@@ -2,7 +2,7 @@ import type { Tone } from "@/components/operations/StatusBadge";
 import type { Order, OrderNeredeTone } from "./types";
 
 /**
- * Siparişler "Nerede?" + "Sevk" — panel tarafı SAF katman.
+ * Siparişler "Nerede?" — panel tarafı SAF katman ("Sevk durumu" metni `order-cell-text.ts`).
  * Cümleyi SUNUCU kurar (NEREDE-SOZLESME §1); panel cümle KURMAZ, yalnız rengi
  * eşler. Hücre, Excel ve PDF aynı fonksiyondan okur (ekran ≠ dosya ayrışmasın).
  * Eski sunucuda (2.11.3-) alan yoktur → "—".
@@ -24,11 +24,6 @@ export function neredeExportText(order: Pick<Order, "nerede">): string {
   const n = order.nerede;
   if (!n) return "—";
   return n.overdueText ? `${n.text} · ${n.overdueText}` : n.text;
-}
-
-/** "Sevk" hücresi (ekran + Excel + PDF). */
-export function sevkText(order: Pick<Order, "sevk">): string {
-  return order.sevk?.text ?? "—";
 }
 
 // ── Hızlı sekmeler ─────────────────────────────────────────────────────────

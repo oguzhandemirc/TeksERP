@@ -6,7 +6,6 @@ import {
   neredeTabs,
   neredeTone,
   normalizeFasonGun,
-  sevkText,
 } from "./order-nerede";
 import type { OrderNerede } from "./types";
 
@@ -35,10 +34,6 @@ describe("Nerede? — panel saf katmanı", () => {
       "Ham kontrol aşamasında · 12 top · Termini geçti",
     );
     expect(neredeExportText({})).toBe("—");
-    expect(sevkText({ sevk: { kind: "NONE", text: "Henüz gönderilmedi", shipped: 0, requested: 10, unit: "MT" } })).toBe(
-      "Henüz gönderilmedi",
-    );
-    expect(sevkText({})).toBe("—");
   });
 
   it("hızlı sekmeler: tasarımdaki sıra ve adlar", () => {

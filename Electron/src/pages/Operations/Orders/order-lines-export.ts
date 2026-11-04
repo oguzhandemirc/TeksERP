@@ -4,7 +4,7 @@
 import type { ExportColumn } from "@/lib/list-export";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
 import { workOrderStatusLabels } from "@/types/enums";
-import { dayText, orderStatusText } from "./order-cell-text";
+import { dayText, orderSevkText } from "./order-cell-text";
 import type { Order, OrderLine } from "./types";
 
 export interface OrderLineExportRow {
@@ -75,7 +75,7 @@ export function orderLineExportColumns(
     C("Sevk Edilen", lineShippedQty, singleUnit),
     C("Kalan", lineOpenQty, singleUnit),
     C("Termin", (r) => dayText(r.order.deadline)),
-    C("Durum", (r) => orderStatusText(r.order)),
+    C("Sevk durumu", (r) => orderSevkText(r.order)),
     ...(opts.productionEnabled ? [C("İş Emri", (r) => workOrdersText(r.line))] : []),
     C("Kalem Notu", (r) => r.line.cutNote ?? ""),
   ];

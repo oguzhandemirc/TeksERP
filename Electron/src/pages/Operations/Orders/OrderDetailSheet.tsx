@@ -21,9 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
-import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
-import { orderStatusLabels } from "@/types/enums";
+import { SevkCell } from "./OrderNeredeCells";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
@@ -179,11 +178,7 @@ export function OrderDetailSheet({
             <span className="font-mono">{order?.orderNumber}</span>
             {order && (
               <>
-                <StatusBadge
-                  status={order.status}
-                  labels={orderStatusLabels}
-                  tones={orderStatusTones}
-                />
+                <SevkCell order={order} />
                 {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-17). */}
                 <RecordInfoButton
                   table="ORDER"
@@ -299,7 +294,7 @@ export function OrderDetailSheet({
 
             {/* Bağlı iş emirleri — kaleme WO açıldıysa görünür; tıkta İE detayı
                 açılır (sheet kapanır). Bağ yoksa kart null döner. */}
-            <OrderNeredeCard orderId={order.id} open={open} />
+            <OrderNeredeCard orderId={order.id} status={order.status} open={open} />
             <LinkedWorkOrdersCard lines={order.lines} onNavigate={() => onOpenChange(false)} />
 
             {/* Sevkiyatlar drill-down — hangi sevkiyatlarla sevk edildi/bekliyor.

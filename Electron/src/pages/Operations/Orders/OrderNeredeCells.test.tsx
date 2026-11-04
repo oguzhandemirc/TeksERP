@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { NeredeCell, SevkCell } from "./OrderNeredeCells";
-import { neredeExportText, sevkText } from "./order-nerede";
+import { neredeExportText } from "./order-nerede";
+import { orderSevkText } from "./order-cell-text";
 import type { Order } from "./types";
 
-const row: Pick<Order, "nerede" | "sevk"> = {
+const row: Pick<Order, "status" | "nerede" | "sevk"> = {
+  status: "PARTIAL_SHIPPED",
   nerede: {
     kind: "FASON",
     tone: "orange",
@@ -24,7 +26,8 @@ describe("Nerede? / Sevk hücreleri", () => {
       .join(" · ");
     expect(shown).toBe(neredeExportText(row));
     const s = render(<SevkCell order={row} />);
-    expect(s.container.textContent).toBe(sevkText(row));
+    expect(s.container.textContent).toBe(orderSevkText(row));
+    expect(s.container.textContent).toBe("Bir kısmı gönderildi (1.200 / 2.400 m)");
   });
 
   it("termin geçtiyse kırmızı ek rozet; geçmediyse yok", () => {
@@ -40,6 +43,7 @@ describe("Nerede? / Sevk hücreleri", () => {
 
   it("eski sunucu (alan yok) → '—'", () => {
     expect(render(<NeredeCell order={{}} />).container.textContent).toBe("—");
-    expect(render(<SevkCell order={{}} />).container.textContent).toBe("—");
+    // Sevk durumu eski sunucuda da boş kalmaz: durumun günlük etiketi yazılır.
+    expect(render(<SevkCell order={{ status: "APPROVED" }} />).container.textContent).toBe("Henüz gönderilmedi");
   });
 });

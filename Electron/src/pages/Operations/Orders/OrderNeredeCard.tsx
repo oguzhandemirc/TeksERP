@@ -4,7 +4,9 @@ import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { unitLabel } from "@/lib/item-unit";
 import { Card, CardContent } from "@/components/ui/card";
+import type { OrderStatus } from "@/types/enums";
 import { NeredeCell } from "./OrderNeredeCells";
+import { orderSevkText } from "./order-cell-text";
 import { orderService } from "./service";
 import type { OrderNeredeStep, OrderNeredeWorkOrder } from "./types";
 
@@ -69,7 +71,16 @@ export function NeredeWoCard({ wo }: { wo: OrderNeredeWorkOrder }) {
  * Sipariş detayında "Nerede?" — bağlı her iş emri için ilerleme. Sipariş başına
  * TEK istek (`GET /api/orders/:id/nerede`). Eski sunucuda uç yoksa kart çizilmez.
  */
-export function OrderNeredeCard({ orderId, open }: { orderId: string; open: boolean }) {
+export function OrderNeredeCard({
+  orderId,
+  status,
+  open,
+}: {
+  orderId: string;
+  /** Onaysız/iptal siparişte sunucu cümlesi yerine durum etiketi yazılır (`orderSevkText`). */
+  status: OrderStatus;
+  open: boolean;
+}) {
   const q = useQuery({
     queryKey: ["orders", "nerede", orderId],
     // Bilgi kartı: eski sunucuda (uç yok) ya da hata anında kart çizilmez, panel akışı bozulmaz.
@@ -86,7 +97,7 @@ export function OrderNeredeCard({ orderId, open }: { orderId: string; open: bool
           <MapPin className="h-3.5 w-3.5" /> Nerede?
         </div>
         <NeredeCell order={data} />
-        <div className="text-xs">{data.sevk.text}</div>
+        <div className="text-xs">{orderSevkText({ status, sevk: data.sevk })}</div>
         {data.workOrders.length > 0 && (
           <ul className="space-y-1.5">
             {data.workOrders.map((wo) => (

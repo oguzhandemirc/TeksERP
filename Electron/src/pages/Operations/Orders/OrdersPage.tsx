@@ -42,19 +42,14 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
+import { ORDER_SEVK_FILTER_OPTIONS } from "./order-cell-text";
 
 const FILTERS: FilterDef[] = [
   {
     kind: "multi-select",
     key: "status",
-    label: "Durum",
-    options: [
-      { value: "PENDING", label: "Bekliyor" },
-      { value: "APPROVED", label: "Onaylı" },
-      { value: "PARTIAL_SHIPPED", label: "Kısmi Sevk" },
-      { value: "COMPLETED", label: "Tamamlandı" },
-      { value: "CANCELLED", label: "İptal" },
-    ],
+    label: "Sevk durumu",
+    options: [...ORDER_SEVK_FILTER_OPTIONS],
   },
   {
     // "İş Emri" rollup filtresi — backend'de hesaplanır (OrderService.extraWhere →

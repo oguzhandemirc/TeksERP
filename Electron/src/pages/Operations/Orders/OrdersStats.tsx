@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { orderStatusLabels } from "@/types/enums";
 import type { OrderStats } from "./service";
 
 export type OrderStatsView = "sade" | "onerilen" | "genis";
@@ -35,13 +36,8 @@ const MONEY_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 
 /** Durum kovası → etiket + ton. Sıra üretim akışını izler. */
 const STATUS_ORDER = ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const;
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Bekliyor",
-  APPROVED: "Onaylı",
-  PARTIAL_SHIPPED: "Kısmi Sevk",
-  COMPLETED: "Tamamlandı",
-  CANCELLED: "İptal",
-};
+// Etiket listedeki "Sevk durumu" ile aynı tek haritadan (günlük dil).
+const STATUS_LABEL: Record<string, string> = orderStatusLabels;
 const STATUS_TONE: Record<string, string> = {
   PENDING: "text-amber-600 dark:text-amber-400",
   APPROVED: "text-sky-600 dark:text-sky-400",

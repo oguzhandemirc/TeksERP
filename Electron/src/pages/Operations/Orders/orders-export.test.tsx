@@ -121,16 +121,20 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(at("Müşteri")).toBe("Acme Tekstil");
     expect(at("Şube")).toBe("Merkez");
     expect(at("Kalem")).toBe("3");
-    expect(at("Sevk")).toBe("Bir kısmı gönderildi (40 / 300 m)");
-    expect(at("Sevk durumu")).toBe("Onaylandı");
+    // Tek sevk sütunu: günlük dil + miktar; "Onaylandı" gibi iş akışı sözcüğü yok.
+    expect(at("Sevk durumu")).toBe("Bir kısmı gönderildi (40 / 300 m)");
+    expect(row).not.toContain("Onaylandı");
     expect(at("Sipariş Tarihi")).toBe("01.11.2026");
     expect(at("Termin")).toBe("20.11.2026");
     expect(at("Tutar")).toBe("1500,00 TRY");
   });
 
-  it("başlıklar: Sevk durumu / Üretim / Nerede?; eski 'Durum', 'İş Emri', 'Genel durum' yok", () => {
+  it("başlıklar: Sevk durumu / Üretim / Nerede?; eski 'Durum', 'Sevk', 'İş Emri', 'Genel durum' yok", () => {
     const [head = []] = csvOf([order()]);
-    expect(head).toEqual(expect.arrayContaining(["Sevk durumu", "Üretim", "İE sayısı", "Nerede?", "Sevk"]));
+    expect(head).toEqual(expect.arrayContaining(["Sevk durumu", "Üretim", "İE sayısı", "Nerede?"]));
+    // Aynı soruyu cevaplayan iki sütun yan yana durmaz: "Sevk" ile "Sevk durumu" birleşti.
+    expect(head).not.toContain("Sevk");
+    expect(head.filter((h) => h === "Sevk durumu")).toHaveLength(1);
     // A4'ün "Genel durum" sütunu "Nerede?"ye evrildi — ikisi yan yana durmaz.
     expect(head).not.toContain("Genel durum");
     expect(head).not.toContain("Durum");
@@ -163,10 +167,10 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(r2[h2.indexOf("Nerede?")]).toBe("Tambur aşamasında · 4 top · Termini geçti");
   });
 
-  it("eski sunucu (nerede/sevk alanı yok) → iki sütun da '—'; İE sayısı yine yazılır", () => {
+  it("eski sunucu (nerede/sevk alanı yok) → Nerede? '—', Sevk durumu günlük etiket; İE sayısı yine yazılır", () => {
     const [head = [], row = []] = csvOf([order({ nerede: undefined, sevk: undefined, lines: [line({})] })]);
     expect(row[head.indexOf("Nerede?")]).toBe("—");
-    expect(row[head.indexOf("Sevk")]).toBe("—");
+    expect(row[head.indexOf("Sevk durumu")]).toBe("Henüz gönderilmedi");
     expect(row[head.indexOf("Üretim")]).toBe("—");
     expect(row[head.indexOf("İE sayısı")]).toBe("0");
   });
@@ -225,7 +229,7 @@ describe("kalem bazında Excel", () => {
     expect(first[idx("Sevk Edilen")]).toBe(40);
     expect(first[idx("Kalan")]).toBe(60);
     expect(first[idx("Termin")]).toBe("20.11.2026");
-    expect(first[idx("Durum")]).toBe("Onaylandı");
+    expect(first[idx("Sevk durumu")]).toBe("Bir kısmı gönderildi (40 / 300 m)");
     expect(String(first[idx("İş Emri")])).toMatch(/^IE-7 \(/);
     expect(first[idx("Kalem Notu")]).toBe("2 parça");
     expect(sheet.totalRow?.[idx("Miktar")]).toBe(300);

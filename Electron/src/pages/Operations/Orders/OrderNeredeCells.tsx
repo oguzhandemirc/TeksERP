@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/operations/StatusBadge";
-import { neredeTone, sevkText } from "./order-nerede";
+import { neredeTone } from "./order-nerede";
+import { orderSevkText, orderSevkTone } from "./order-cell-text";
 import type { Order } from "./types";
 
 /**
@@ -26,8 +27,14 @@ export function NeredeCell({ order }: { order: Pick<Order, "nerede"> }) {
   );
 }
 
-/** "Sevk" hücresi — sunucunun cümlesi (BRÜT sevk); eski sunucu "—". */
-export function SevkCell({ order }: { order: Pick<Order, "sevk"> }) {
-  if (!order.sevk) return <span className="text-muted-foreground text-xs">—</span>;
-  return <span className="text-xs">{sevkText(order)}</span>;
+/** "Sevk durumu" hücresi — günlük dil, kısmi sevkte miktar parantezde (`orderSevkText`). */
+export function SevkCell({ order }: { order: Pick<Order, "status" | "sevk"> }) {
+  const text = orderSevkText(order);
+  return (
+    <StatusBadge
+      status={text}
+      tones={{ [text]: orderSevkTone(order) }}
+      className="whitespace-normal text-left"
+    />
+  );
 }

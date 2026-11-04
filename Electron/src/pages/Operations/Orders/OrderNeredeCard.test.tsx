@@ -52,7 +52,7 @@ describe("OrderNeredeCard — yan panel", () => {
 
   it("her iş emri için kart: ilerleme çizgisi, aşama başına top/metre, sevke hazır, son hareket", async () => {
     getNerede.mockResolvedValue({ success: true, data: DETAIL });
-    renderWithProviders(<OrderNeredeCard orderId="o1" open />);
+    renderWithProviders(<OrderNeredeCard orderId="o1" status="APPROVED" open />);
     expect(await screen.findByTestId("order-nerede-card")).toBeInTheDocument();
     expect(getNerede).toHaveBeenCalledTimes(1); // sipariş başına TEK istek
     expect(screen.getAllByTestId("nerede-wo")).toHaveLength(2);
@@ -71,14 +71,21 @@ describe("OrderNeredeCard — yan panel", () => {
     expect(screen.getByText("Henüz gönderilmedi")).toBeInTheDocument();
   });
 
+  it("iptal siparişte sunucunun 'Henüz gönderilmedi' cümlesi yerine 'Sipariş iptal edildi' yazar", async () => {
+    getNerede.mockResolvedValue({ success: true, data: DETAIL });
+    renderWithProviders(<OrderNeredeCard orderId="o1" status="CANCELLED" open />);
+    expect(await screen.findByText("Sipariş iptal edildi")).toBeInTheDocument();
+    expect(screen.queryByText("Henüz gönderilmedi")).toBeNull();
+  });
+
   it("kapalı panelde istek atılmaz", () => {
-    renderWithProviders(<OrderNeredeCard orderId="o1" open={false} />);
+    renderWithProviders(<OrderNeredeCard orderId="o1" status="APPROVED" open={false} />);
     expect(getNerede).not.toHaveBeenCalled();
   });
 
   it("veri yoksa (eski sunucu / hata yakalandı) kart çizilmez", async () => {
     getNerede.mockResolvedValue(null);
-    const { container } = renderWithProviders(<OrderNeredeCard orderId="o1" open />);
+    const { container } = renderWithProviders(<OrderNeredeCard orderId="o1" status="APPROVED" open />);
     await waitFor(() => expect(getNerede.mock.calls.length).toBeGreaterThan(0));
     await new Promise((r) => setTimeout(r, 0));
     expect(container).toBeEmptyDOMElement();
@@ -86,7 +93,7 @@ describe("OrderNeredeCard — yan panel", () => {
 
   it("sunucu hata dönerse kart çizilmez (sayfa kırılmaz)", async () => {
     getNerede.mockRejectedValue(new Error("Sunucu hatası"));
-    const { container } = renderWithProviders(<OrderNeredeCard orderId="o1" open />);
+    const { container } = renderWithProviders(<OrderNeredeCard orderId="o1" status="APPROVED" open />);
     await waitFor(() => expect(getNerede.mock.calls.length).toBeGreaterThan(0));
     await new Promise((r) => setTimeout(r, 0));
     expect(container).toBeEmptyDOMElement();

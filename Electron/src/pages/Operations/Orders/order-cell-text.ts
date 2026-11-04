@@ -2,8 +2,9 @@
 // AYNI fonksiyondan okur. Ayrı yazıldıklarında dışa aktarım boş kalmıştı (Kumaş/Renk/Sevk
 // kolonları yalnız `cell` taşıyordu → `original.items` undefined → boş hücre).
 import { safeFormat } from "@/lib/format";
-import { orderStatusLabels } from "@/types/enums";
-import type { Order, OrderLine } from "./types";
+import { orderStatusTones, type Tone } from "@/components/operations/StatusBadge";
+import { orderStatusLabels, type OrderStatus } from "@/types/enums";
+import type { Order, OrderLine, OrderSevk } from "./types";
 
 export interface LineLabel {
   key: string;
@@ -54,6 +55,37 @@ export function dayText(iso: string | null | undefined): string {
   return safeFormat(iso, "dd.MM.yyyy", "");
 }
 
-export function orderStatusText(o: Order): string {
+// ── Sevk durumu — TEK kaynak (liste hücresi, süzgeç, yan panel, Excel, PDF) ──
+// Sunucu cümlesi (backend 2.11.4+, BRÜT, miktar parantezde) varsa o; onaysız ve
+// iptal siparişte sunucu "Henüz gönderilmedi" der → durum etiketi önce gelir.
+
+/** Sunucu cümlesi bu durumlarda yanıltır; durum etiketi yazılır. */
+const LABEL_FIRST: ReadonlySet<OrderStatus> = new Set(["PENDING", "CANCELLED"]);
+
+export function orderSevkText(o: Pick<Order, "status" | "sevk">): string {
+  if (!LABEL_FIRST.has(o.status) && o.sevk?.text) return o.sevk.text;
   return orderStatusLabels[o.status] ?? o.status;
 }
+
+const SEVK_KIND_TONES: Record<OrderSevk["kind"], Tone> = {
+  NONE: "info",
+  PARTIAL: "progress",
+  ALL: "success",
+  CLOSED: "muted",
+};
+
+export function orderSevkTone(o: Pick<Order, "status" | "sevk">): Tone {
+  if (!LABEL_FIRST.has(o.status) && o.sevk) return SEVK_KIND_TONES[o.sevk.kind] ?? "neutral";
+  return orderStatusTones[o.status] ?? "neutral";
+}
+
+/**
+ * Sevk durumu süzgeci seçenekleri — etiket listedekiyle aynı; yalnız "Hepsi
+ * gönderildi" kovası elle kapatılanları da içerdiği için bunu söyler.
+ */
+export const ORDER_SEVK_FILTER_OPTIONS: ReadonlyArray<{ value: OrderStatus; label: string }> = (
+  ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const
+).map((value) => ({
+  value,
+  label: value === "COMPLETED" ? `${orderStatusLabels.COMPLETED} ya da kapatıldı` : orderStatusLabels[value],
+}));

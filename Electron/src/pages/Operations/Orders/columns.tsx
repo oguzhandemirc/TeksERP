@@ -3,11 +3,10 @@ import { AlertTriangle } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
+import { StatusBadge } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
-import { orderStatusLabels } from "@/types/enums";
 import {
   collectLinkedWorkOrders,
   deriveWoRollup,
@@ -16,13 +15,13 @@ import {
   woRollupTones,
 } from "./work-order-rollup";
 import { deriveDeadlineRisk } from "./deadline-risk";
-import { neredeExportText, sevkText } from "./order-nerede";
+import { neredeExportText } from "./order-nerede";
 import { NeredeCell, SevkCell } from "./OrderNeredeCells";
 import {
   dayText,
   distinctLineLabels,
   lineLabelsText,
-  orderStatusText,
+  orderSevkText,
   totalAmountText,
 } from "./order-cell-text";
 import type { Order, OrderLine } from "./types";
@@ -246,10 +245,11 @@ export const orderColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
-    // Cümleyi sunucu kurar (BRÜT sevk); ekran, Excel ve PDF aynı metni yazar.
+    // TEK sevk sütunu (eski "Sevk" + durum rozeti birleşti): günlük dil, BRÜT sevk;
+    // ekran, Excel ve PDF aynı `orderSevkText`i yazar.
     id: "shipped",
-    header: () => <SortableHeader field="shippedQty" label="Sevk" />,
-    meta: { label: "Sevk", exportValue: (o: Order) => sevkText(o) },
+    header: () => <SortableHeader field="shippedQty" label="Sevk durumu" />,
+    meta: { label: "Sevk durumu", exportValue: (o: Order) => orderSevkText(o) },
     cell: ({ row }) => <SevkCell order={row.original} />,
   },
   {
@@ -267,17 +267,5 @@ export const orderColumns: ColumnDef<Order>[] = [
       exportExtra: [{ label: "İE sayısı", value: (o: Order) => deriveWoRollup(o.lines).activeCount }],
     },
     cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,
-  },
-  {
-    accessorKey: "status",
-    header: () => <SortableHeader field="status" label="Sevk durumu" />,
-    meta: { label: "Sevk durumu", exportValue: (o: Order) => orderStatusText(o) },
-    cell: ({ row }) => (
-      <StatusBadge
-        status={row.original.status}
-        labels={orderStatusLabels}
-        tones={orderStatusTones}
-      />
-    ),
   },
 ];
