@@ -9,7 +9,8 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import type { ReactElement } from "react";
 import { FilterBar } from "@/components/data-table/FilterBar";
 import { TERIM } from "@/lib/terim";
-import { buildCursorQueryString, parseUrlToQueryParams } from "@/lib/query-builder";
+import { buildCursorQueryString, buildScopeQueryString, parseUrlToQueryParams } from "@/lib/query-builder";
+import type { ListScope } from "@/types/api";
 import {
   buildPlaceFilters,
   createPlaceLookupService,
@@ -88,6 +89,43 @@ describe("seçenek servisi (istemci araması)", () => {
   });
 });
 
+describe("faceted kapsam (liste süzgeçleri seçenek ucuna gider)", () => {
+  const SCOPE: ListScope = {
+    filters: { status: "IN_PROGRESS,PLANNED", konumIstasyon: "s1", hideCancelled: "true", fasonFirma: "f2" },
+    search: "Tül",
+    dateField: "createdAt",
+    dateFrom: "2026-10-05T00:00:00.000Z",
+  };
+
+  it("kapsam sorgu dizgisi = liste isteği eksi sayfalama/sıralama", () => {
+    const scopeQs = new URLSearchParams(buildScopeQueryString(SCOPE).slice(1));
+    const listQs = new URLSearchParams(buildCursorQueryString({ ...SCOPE, limit: 50, cursor: "c", withTotal: true, sortBy: "workOrderNumber" }));
+    for (const k of ["mode", "limit", "cursor", "withTotal", "sortBy"]) listQs.delete(k);
+    expect([...scopeQs.entries()].sort()).toEqual([...listQs.entries()].sort());
+    expect(buildScopeQueryString({ filters: {} })).toBe("");
+  });
+
+  it("seçenek isteği kapsamı taşır; kapsam değişince önbellek anahtarı değişir", async () => {
+    const fetchOptions = vi.fn(async (_scope?: ListScope) => OPTIONS);
+    const [def] = buildPlaceFilters(fetchOptions, SCOPE);
+    if (def?.kind !== "multi-lookup") throw new Error("multi-lookup bekleniyordu");
+    await (def.service.getAll as (p: { search?: string }) => Promise<unknown>)({});
+    expect(fetchOptions).toHaveBeenCalledWith(SCOPE);
+    const [other] = buildPlaceFilters(fetchOptions, { ...SCOPE, filters: { status: "COMPLETED" } });
+    expect(other && "queryKey" in other ? other.queryKey : "").not.toBe(def.queryKey);
+    expect(def.queryKey).toContain(buildScopeQueryString(SCOPE));
+  });
+
+  it("FilterBar açılışında seçenekler o anki kapsamla istenir", async () => {
+    const user = userEvent.setup();
+    const fetchOptions = vi.fn(async (_scope?: ListScope) => OPTIONS);
+    renderBar(<FilterBar filters={buildPlaceFilters(fetchOptions, SCOPE)} />);
+    await user.click(screen.getByRole("button", { name: /Şu an hangi fasonda/ }));
+    await screen.findByText("NY Hisar · 7");
+    expect(fetchOptions.mock.calls.at(-1)?.[0]).toEqual(SCOPE);
+  });
+});
+
 describe("FilterBar'da yer seçicileri", () => {
   it("iki firma seçimi URL'e virgüllü yazılır, liste isteğine filter[fasonFirma]=f1,f2 gider", async () => {
     const user = userEvent.setup();
@@ -156,7 +194,9 @@ describe("400 INVALID_FILTER_VALUE", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "WorkOrdersPage.tsx"), "utf8");
-    expect(src).toMatch(/\[\.\.\.FILTERS, \.\.\.buildPlaceFilters\(\(\) => workOrderService\.whereOptions\(\)/);
+    // Seçenekler listenin O ANKİ kapsamıyla istenir (faceted sayım, 2026-11-04 E2E).
+    expect(src).toMatch(/buildPlaceFilters\(\(scope\) => workOrderService\.whereOptions\(scope\)[^\n]*, listScope\)/);
+    expect(src).toMatch(/\[listScope\]/);
     expect(src).toMatch(/<FilterBar filters=\{filters\}/);
     expect(src).toMatch(/isInvalidFilterValueError\(query\.error\)[\s\S]{0,120}stripPlaceFilters\(searchParams\)/);
   });

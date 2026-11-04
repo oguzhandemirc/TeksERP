@@ -4,6 +4,8 @@ import { AnimatedNumber } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { workOrderService, type CoverageLine } from "./service";
 import { TERIM } from "@/lib/terim";
+// Sipariş miktarı her yüzeyde aynı metin: yan panel başlığı "668,3" diyorsa kapsama da (668 değil).
+import { fmtNum } from "@/pages/Operations/Orders/order-where-text";
 
 interface Props {
   lineIds: string[];
@@ -12,6 +14,11 @@ interface Props {
 
 function fmt(n: number): string {
   return Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+}
+
+/** Kapsama hücresi: sayarak gelir, sipariş miktarının tek biçimiyle (`fmtNum`). */
+function Qty({ value, className }: { value: number; className?: string }) {
+  return <AnimatedNumber value={value} flash format={fmtNum} className={className} />;
 }
 
 interface SpecRow {
@@ -122,16 +129,14 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                         )}
                       </td>
                       <td className="text-right">
-                        <AnimatedNumber
+                        <Qty
                           value={s.requested}
-                          flash
                           className="text-sm font-bold text-foreground"
                         />
                       </td>
                       <td className="text-right">
-                        <AnimatedNumber
+                        <Qty
                           value={s.shipped}
-                          flash
                           className={cn(
                             "text-sm font-semibold",
                             s.shipped > 0 ? "text-info" : "text-muted-foreground",
@@ -139,9 +144,8 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                         />
                       </td>
                       <td className="text-right">
-                        <AnimatedNumber
+                        <Qty
                           value={s.inProduction}
-                          flash
                           className={cn(
                             "text-sm font-semibold",
                             s.inProduction > 0
@@ -151,9 +155,8 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                         />
                       </td>
                       <td className="text-right">
-                        <AnimatedNumber
+                        <Qty
                           value={s.freeWarehouse}
-                          flash
                           className={cn(
                             "text-sm font-semibold",
                             s.freeWarehouse > 0 ? "text-success" : "text-muted-foreground",
@@ -161,9 +164,8 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                         />
                       </td>
                       <td className="text-right">
-                        <AnimatedNumber
+                        <Qty
                           value={s.freeStock}
-                          flash
                           className={cn(
                             "text-sm font-semibold",
                             s.freeStock > 0 ? "text-station-depo" : "text-muted-foreground",
@@ -184,7 +186,7 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                           ) : (
                             <AlertTriangle className="h-3.5 w-3.5" />
                           )}
-                          <AnimatedNumber value={Math.abs(s.netGap)} flash />
+                          <Qty value={Math.abs(s.netGap)} />
                           {surplus ? " fazla" : ""}
                         </span>
                       </td>

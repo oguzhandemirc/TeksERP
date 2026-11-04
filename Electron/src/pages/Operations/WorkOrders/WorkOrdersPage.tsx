@@ -94,13 +94,7 @@ export function WorkOrdersPage() {
     forceFilters,
   } = useListToggles({ scope: "work-orders", withCompleted: true });
 
-  // "Şu an hangi fasonda" bileşen içinde kurulur: TERIM okuma anında çözülür (modül düzeyinde donardı).
-  const filters = useMemo<FilterDef[]>(
-    () => [...FILTERS, ...buildPlaceFilters(() => workOrderService.whereOptions().then((r) => r.data))],
-    [],
-  );
-
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WorkOrder>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
     fetchFn: workOrderService.listCursor,
     columns: workOrderColumns,
@@ -110,6 +104,16 @@ export function WorkOrdersPage() {
       targetQuantity: targetQuantityEnabled,
     },
   });
+
+  // "Şu an hangi fasonda" bileşen içinde kurulur: TERIM okuma anında çözülür (modül düzeyinde
+  // donardı); seçenekler listenin o anki kapsamıyla istenir (faceted sayım).
+  const filters = useMemo<FilterDef[]>(
+    () => [
+      ...FILTERS,
+      ...buildPlaceFilters((scope) => workOrderService.whereOptions(scope).then((r) => r.data), listScope),
+    ],
+    [listScope],
+  );
 
   // Seçilen firma sunucuda artık yoksa (eski bağlantı, silinmiş kayıt) seçim düşer.
   const [searchParams, setSearchParams] = useSearchParams();

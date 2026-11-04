@@ -1,6 +1,8 @@
 import type { FilterDef } from "@/components/data-table/FilterBar";
 import { foldedIncludes } from "@/lib/search-fold";
 import { TERIM } from "@/lib/terim";
+import { buildScopeQueryString } from "@/lib/query-builder";
+import type { ListScope } from "@/types/api";
 
 // ── "Şu an hangi fasonda" (2026-11-04) ───────────────────────────────────────
 // Değer = fason firma UUID'si (CSV); sunucu diğer süzgeçlerle VE'ler, tanımadığı
@@ -24,12 +26,19 @@ export function placeOptionLabel(it: { id: string; name?: string; workOrderCount
   return typeof it.workOrderCount === "number" ? `${name} · ${it.workOrderCount}` : name;
 }
 
-/** Seçenek ucu küçük → tek istek, arama İSTEMCİDE (Türkçe katlamalı); kısa ömürlü önbellek. */
-export function createPlaceLookupService(fetchOptions: () => Promise<PlaceOptions>, ttlMs = 15_000) {
+/**
+ * Seçenek ucu küçük → tek istek, arama İSTEMCİDE (Türkçe katlamalı); kısa ömürlü önbellek.
+ * `scope` = listenin o anki kapsamı; uca AYNEN gider (sunucu faceted sayar).
+ */
+export function createPlaceLookupService(
+  fetchOptions: (scope?: ListScope) => Promise<PlaceOptions>,
+  ttlMs = 15_000,
+  scope?: ListScope,
+) {
   let cache: { at: number; promise: Promise<PlaceOptions> } | null = null;
   const load = () => {
     if (!cache || Date.now() - cache.at > ttlMs) {
-      const promise = fetchOptions();
+      const promise = fetchOptions(scope);
       cache = { at: Date.now(), promise };
       promise.catch(() => {
         if (cache?.promise === promise) cache = null;
@@ -51,15 +60,20 @@ export function createPlaceLookupService(fetchOptions: () => Promise<PlaceOption
   };
 }
 
-export function buildPlaceFilters(fetchOptions: () => Promise<PlaceOptions>): FilterDef[] {
-  const svc = createPlaceLookupService(fetchOptions);
+/** Önbellek anahtarı kapsamı içerir → süzgeç/tarih/arama değişince seçenekler yeniden çekilir. */
+export function buildPlaceFilters(
+  fetchOptions: (scope?: ListScope) => Promise<PlaceOptions>,
+  scope?: ListScope,
+): FilterDef[] {
+  const svc = createPlaceLookupService(fetchOptions, undefined, scope);
+  const scopeKey = scope ? buildScopeQueryString(scope) : "";
   return [
     {
       kind: "multi-lookup",
       key: FASON_FIRMA_FILTER_KEY,
       label: "Şu an hangi fasonda",
       service: svc.firms,
-      queryKey: "work-orders-where-options-firms",
+      queryKey: `work-orders-where-options-firms${scopeKey}`,
       getLabel: placeOptionLabel,
       emptyText: `Şu an fasonda ${TERIM.terbiyeIsEmri.tekilKucuk} yok.`,
     },
