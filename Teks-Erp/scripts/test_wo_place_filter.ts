@@ -286,7 +286,8 @@ async function main(): Promise<void> {
     check("faceted: Y seçiliyken X seçeneği hâlâ 1 (kendi anahtarı tabanda değil)", oSel.firms.find((f) => f.id === firmX.id)?.workOrderCount === 1);
     const oDate = (await callWhereOptions({ search: `${P}-IE`, dateField: "createdAt", dateFrom: new Date(ts + 86_400_000).toISOString() })).body.data;
     check("faceted: tarih aralığı dışında X seçeneği 0 (süzgeçler yok sayılmaz)", (oDate.firms.find((f) => f.id === firmX.id)?.workOrderCount ?? 0) === 0);
-    for (const q of [{ "filter[fasonFirma]": "abc" }, { "filter[fasonFirma]": randomUUID() }, { "filter[konumIstasyon]": "abc" }]) {
+    const badQs: Record<string, string>[] = [{ "filter[fasonFirma]": "abc" }, { "filter[fasonFirma]": randomUUID() }, { "filter[konumIstasyon]": "abc" }];
+    for (const q of badQs) {
       const e = await expectError(() => callWhereOptions(q));
       check(`where-options ${Object.keys(q)[0]} geçersiz → listeyle aynı 400`, e?.statusCode === 400 && e.code === "INVALID_FILTER_VALUE", errStr(e));
     }
