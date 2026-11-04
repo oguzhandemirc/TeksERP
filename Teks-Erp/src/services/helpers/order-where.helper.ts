@@ -29,7 +29,7 @@ import { LOCATION_LIVE_STATUSES } from "./workorder-location.helper";
 import { whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
 import { SHIP_READY_GONE_STATUSES, SHIP_READY_READY_STATUSES } from "./ship-readiness.helper";
 import { OPEN_OUTSTANDING, OUTSTANDING_ITEM, outstandingItemOfOpenDispatch } from "./fason-open-dispatch.helper";
-import { DEADLINE_OPEN_ORDER_STATUSES, isDeadlineOpenStatus } from "./order-deadline.helper";
+import { daysPastDeadline, isDeadlineOpenStatus } from "./order-deadline.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 
 /**
@@ -295,7 +295,7 @@ export interface OrderWhereInput {
 
 /** Saf türetme — durum önceliği tasarımın sırasıdır. */
 export function deriveOrderWhere(o: OrderWhereInput, facts: ReadonlyMap<string, WoFacts>, now: Date): OrderWhere {
-  const terminGecti = !!o.deadline && o.deadline.getTime() < now.getTime() && isDeadlineOpenStatus(o.status);
+  const terminGecti = daysPastDeadline(o.deadline, now.getTime()) !== null && isDeadlineOpenStatus(o.status);
   const base = { terminGecti, yerler: [] as OrderWherePlace[], sonHareket: null as string | null };
   if (o.status === OrderStatus.CANCELLED) return { ...base, durum: "IPTAL" };
   if (o.status === OrderStatus.COMPLETED) return { ...base, durum: "TAMAM" };

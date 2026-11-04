@@ -1,5 +1,6 @@
 // "Nerede?" + "Sevk" saf metin katmanı — tasarımın HER durumu birebir metinle.
 import { describe, it, expect } from "vitest";
+import { TERIM } from "@/lib/terim";
 import {
   activeWhereTab,
   normalizeFasonGun,
@@ -22,7 +23,7 @@ describe("Nerede? — durum tablosu", () => {
   it.each([
     [where({ durum: "IPTAL" }), "Sipariş iptal edildi", "muted"],
     [where({ durum: "TAMAM" }), "Hepsi gönderildi", "success"],
-    [where({ durum: "IE_YOK" }), "İş emri açılmadı", "muted"],
+    [where({ durum: "IE_YOK" }), `${TERIM.terbiyeIsEmri.tekil} açılmadı`, "muted"],
     [where({ durum: "BASLANMADI" }), "İşe başlanmadı", "muted"],
     [where({ durum: "GONDERILDI" }), "Üretilen toplar gönderildi", "success"],
     [where({ yerler: [asama("Ham kontrol", 12)] }), "Ham kontrol aşamasında · 12 top", "info"],

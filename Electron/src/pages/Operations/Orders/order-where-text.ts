@@ -8,6 +8,7 @@
 // =============================================================================
 import type { Tone } from "@/components/operations/StatusBadge";
 import { isMeasuredUnit } from "@/lib/item-unit";
+import { TERIM } from "@/lib/terim";
 import type { Order, OrderWherePlace, OrderWhereStep, OrderWhereWorkOrder } from "./types";
 
 const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
@@ -53,7 +54,7 @@ export function orderWhereView(order: Pick<Order, "nerede" | "manualClosedById">
     case "TAMAM":
       return order.manualClosedById ? v("Sipariş kapatıldı", "muted") : v("Hepsi gönderildi", "success");
     case "IE_YOK":
-      return v("İş emri açılmadı", "muted");
+      return v(`${TERIM.terbiyeIsEmri.tekil} açılmadı`, "muted");
     case "BASLANMADI":
       return v("İşe başlanmadı", "muted");
     case "GONDERILDI":
