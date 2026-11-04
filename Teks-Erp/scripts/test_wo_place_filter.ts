@@ -7,7 +7,8 @@
 // ortak); firma bağı sevkin iş emri (`dispatch.workOrderId`). Aşama sorusu mevcut
 // `filter[konumIstasyon]`undur (ikinci seçici yok); burada yalnız AND'i ölçülür.
 // Sayım listeyle aynı where'den; UUID değil / kayıt yok → 400 INVALID_FILTER_VALUE;
-// seçenek ucu (`GET /where-options`) aynı yüklemle sayar.
+// seçenek ucu (`GET /where-options`) aynı yüklemle ve FACETED sayar: liste parametrelerini
+// aynen alır, `fasonFirma` hariç tabanda → seçenek sayısı = seçilince liste toplamı.
 // Temizlik: finally bloğunda, yalnız kendi ürettiklerini siler.
 // =============================================================================
 import type { Request, Response } from "express";
@@ -60,7 +61,7 @@ interface Options {
 }
 
 /** Controller köprüsü dahil: yanıt zarfı `{success, data}` ve durum kodu. */
-async function callWhereOptions(): Promise<{ status: number; body: { success: boolean; data: Options } }> {
+async function callWhereOptions(query: Record<string, string> = {}): Promise<{ status: number; body: { success: boolean; data: Options } }> {
   const ctrl = new WorkOrderController();
   let status = 0;
   let body: unknown;
@@ -76,7 +77,7 @@ async function callWhereOptions(): Promise<{ status: number; body: { success: bo
     },
   } as unknown as Response;
   const handler = ctrl.whereOptions;
-  await handler({ query: {} } as Request, res, (e?: unknown) => {
+  await handler({ query } as unknown as Request, res, (e?: unknown) => {
     error = e;
   });
   if (error) throw error;
@@ -265,6 +266,31 @@ async function main(): Promise<void> {
     check("where-options: firmalar sayıya göre azalan, sonra ad (0'lar sonda)", sorted);
     const shape = o.firms.every((x) => typeof x.id === "string" && typeof x.name === "string" && Number.isInteger(x.workOrderCount));
     check("where-options: biçim {firms:[{id,name,workOrderCount}]}, aşama listesi yok", shape && !("stages" in o), Object.keys(o).join(","));
+
+    // ── faceted: seçenek sayısı = (liste süzgeçleri − fasonFirma + o firma) liste toplamı ──
+    const facet = async (q: Record<string, string>, label: string): Promise<void> => {
+      const scoped = { search: `${P}-IE`, ...q };
+      const oq = (await callWhereOptions(scoped)).body.data;
+      for (const firm of [firmX, firmY]) {
+        const got = oq.firms.find((f) => f.id === firm.id)?.workOrderCount ?? 0;
+        const want = (await list({ ...scoped, "filter[fasonFirma]": firm.id })).pagination.total;
+        check(`faceted ${label}: ${firm === firmX ? "X" : "Y"} seçenek sayısı = liste toplamı`, got === want, `${got}/${want}`);
+      }
+    };
+    await facet({}, "arama");
+    await facet({ "filter[fasonFirma]": firmY.id }, "kendi anahtarı (Y seçili) yok sayılır");
+    await facet({ "filter[konumIstasyon]": stS2 }, "konumIstasyon S2");
+    await facet({ "filter[status]": "COMPLETED" }, "durum COMPLETED");
+    await facet({ dateField: "createdAt", dateFrom: new Date(ts + 86_400_000).toISOString() }, "tarih aralığı (yarın→)");
+    const oSel = (await callWhereOptions({ search: `${P}-IE`, "filter[fasonFirma]": firmY.id })).body.data;
+    check("faceted: Y seçiliyken X seçeneği hâlâ 1 (kendi anahtarı tabanda değil)", oSel.firms.find((f) => f.id === firmX.id)?.workOrderCount === 1);
+    const oDate = (await callWhereOptions({ search: `${P}-IE`, dateField: "createdAt", dateFrom: new Date(ts + 86_400_000).toISOString() })).body.data;
+    check("faceted: tarih aralığı dışında X seçeneği 0 (süzgeçler yok sayılmaz)", (oDate.firms.find((f) => f.id === firmX.id)?.workOrderCount ?? 0) === 0);
+    const badQs: Record<string, string>[] = [{ "filter[fasonFirma]": "abc" }, { "filter[fasonFirma]": randomUUID() }, { "filter[konumIstasyon]": "abc" }];
+    for (const q of badQs) {
+      const e = await expectError(() => callWhereOptions(q));
+      check(`where-options ${Object.keys(q)[0]} geçersiz → listeyle aynı 400`, e?.statusCode === 400 && e.code === "INVALID_FILTER_VALUE", errStr(e));
+    }
 
     // Arşivlenmiş İE sayılmaz (liste varsayılanıyla aynı).
     await prisma.workOrder.update({ where: { id: w1.id }, data: { isActive: false } });

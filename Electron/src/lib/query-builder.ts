@@ -1,4 +1,4 @@
-import type { CursorParams, DateRange, QueryParams } from "@/types/api";
+import type { CursorParams, DateRange, ListScope, QueryParams } from "@/types/api";
 
 type PartialQueryParams = Partial<QueryParams>;
 
@@ -33,6 +33,19 @@ export function buildCursorQueryString(params: CursorParams): string {
   appendDateRange(sp, params);
   appendFilters(sp, params.filters);
   return `?${sp.toString()}`;
+}
+
+/**
+ * Liste kapsamının sorgu dizgisi — liste isteğiyle (`buildCursorQueryString`) AYNI
+ * yazım (search + tarih + filter[*]); sayfalama/sıralama yok. Boşsa "".
+ */
+export function buildScopeQueryString(scope: ListScope): string {
+  const sp = new URLSearchParams();
+  if (scope.search) sp.set("search", scope.search);
+  appendDateRange(sp, scope);
+  appendFilters(sp, scope.filters);
+  const qs = sp.toString();
+  return qs ? `?${qs}` : "";
 }
 
 function appendDateRange(sp: URLSearchParams, range: DateRange): void {

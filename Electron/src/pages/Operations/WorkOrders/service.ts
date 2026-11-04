@@ -1,6 +1,7 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
-import type { ApiResponse } from "@/types/api";
+import type { ApiResponse, ListScope } from "@/types/api";
+import { buildScopeQueryString } from "@/lib/query-builder";
 import type { PrintJobAttachment } from "@/services/printJobService";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type {
@@ -602,10 +603,15 @@ export const workOrderService = {
       .post<ApiResponse<QuickStartResult>>("/api/work-orders/quick-start", payload)
       .then((r) => r.data),
 
-  /** "Şu an hangi fasonda" süzgecinin seçenekleri (sayı = şu an orada topu olan İE). */
-  whereOptions: () =>
+  /**
+   * "Şu an hangi fasonda" seçenekleri. Listenin O ANKİ kapsamı (süzgeç + arama + tarih)
+   * aynen gider; sunucu faceted sayar → seçenek sayısı = seçilince liste toplamı.
+   */
+  whereOptions: (scope?: ListScope) =>
     apiClient
-      .get<ApiResponse<WorkOrderWhereOptions>>("/api/work-orders/where-options")
+      .get<ApiResponse<WorkOrderWhereOptions>>(
+        `/api/work-orders/where-options${scope ? buildScopeQueryString(scope) : ""}`,
+      )
       .then((r) => r.data),
 };
 

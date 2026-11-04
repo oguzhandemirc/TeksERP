@@ -51,6 +51,15 @@ export interface QueryParams extends DateRange {
  * Cursor pagination params — `useDataTable` cursor moduyla çalışırken kullanılır.
  * `cursor` opak token; `limit` sayfa başına satır; `withTotal` ilk fetch'te true.
  */
+/**
+ * Liste KAPSAMI: süzgeç + arama + tarih (sayfalama/sıralama yok). Faceted seçenek
+ * uçları listeyle aynı kapsamı bu biçimle alır (`buildScopeQueryString`).
+ */
+export interface ListScope extends DateRange {
+  filters: Record<string, string | string[]>;
+  search?: string;
+}
+
 export interface CursorParams extends DateRange {
   cursor?: string | null;
   limit: number;

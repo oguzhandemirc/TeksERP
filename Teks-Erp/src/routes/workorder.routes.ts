@@ -79,9 +79,26 @@ router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:faso
  *   get:
  *     tags: [WorkOrders]
  *     summary: '"Şu an hangi fasonda" süzgeç seçenekleri'
- *     description: 'Fason firmalar, şu an orada topu bulunan arşivlenmemiş iş emri sayısıyla (filter[fasonFirma] ile aynı yüklem). Sayı azalan, sonra ad. Pasif firma yalnız sayısı > 0 ise listelenir.'
+ *     description: 'Fason firmalar, şu an orada topu bulunan iş emri sayısıyla (filter[fasonFirma] ile aynı yüklem). Liste ucunun (GET /api/work-orders) süzgeç parametrelerini AYNEN alır (search, filter[*], dateField/dateFrom/dateTo, withArchived, ...) ve FACETED sayar: firma sayısı = liste süzgeçleri (filter[fasonFirma] hariç) + o firma; seçilince listenin toplamına eşit. Tanınmayan süzgeç değeri listeyle aynı 400. Sayı azalan, sonra ad. Pasif firma yalnız sayısı > 0 ise listelenir.'
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter[fasonFirma]
+ *         schema: { type: string }
+ *         description: 'Firma sayımında yok sayılır (faceted)'
+ *       - in: query
+ *         name: dateField
+ *         schema: { type: string }
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200:
  *         description: '`data.firms`: `[{ id, name, workOrderCount }]`'

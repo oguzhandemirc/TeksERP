@@ -35,7 +35,7 @@ import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
-import { ApiResponse, PaginatedResponse } from "../types/api.types";
+import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -144,7 +144,11 @@ import {
 import { computeWoInput } from "./helpers/coverage.helper";
 import { routeTemplateProblem } from "./helpers/route-template-usable.helper";
 import { readWorkOrderLocationFilters, withWorkOrderLocation } from "./helpers/workorder-location.helper";
-import { takeWorkOrderPlaceFilters } from "./helpers/workorder-place-filter.helper";
+import {
+  loadWorkOrderPlaceOptions,
+  takeWorkOrderPlaceFilters,
+  type WorkOrderPlaceOptions,
+} from "./helpers/workorder-place-filter.helper";
 import {
   buildHiddenStatusWhere,
   HIDE_CANCELLED_FILTER,
@@ -1765,21 +1769,11 @@ export class WorkOrderService {
   }
 
   /**
-   * List work orders with dynamic filtering, sorting, pagination.
-   *
-   * Query param: `?withOrderDetail=true`
-   *   - orderLinks → orderLine + order + customer + item + variant açar
-   *   - targetItem (renk/özellikler dahil) join'lenir
-   *   - Her WO'ya `dispatchedTotalQty` (iptal edilmemiş fason sevklerinin toplamı) eklenir
-   *   - Mobil "Fason Sevk" iş emri picker'ı için tasarlanmıştır; web admin liste hala
-   *     hafif projeksiyonla çalışır (geri uyumluluk).
+   * Liste where'i — TEK KAYNAK: `findAll` (liste + cursor + sayım) ve `whereOptions`
+   * (faceted seçenek sayımı) buradan kurar. `params.filters` TÜKETİLİR (okunan
+   * anahtarlar silinir); her kurulum taze `parseQueryParams` ister.
    */
-  async findAll(
-    req: Request
-  ): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
-    const params = parseQueryParams(req);
-    // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
-    params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
+  async buildListWhere(req: Request, params: QueryParams): Promise<Prisma.WorkOrderWhereInput> {
     // İptal gizleme bayrağı: buildWhereClause BU serviste allowlist'ten geçmeyen
     // her filtre anahtarını body'ye kopyalar (Order'daki safeFilters süzgeci burada
     // YOK) → bayrak `where.hideCancelled` olarak Prisma'ya sızar ve "Unknown
@@ -1867,6 +1861,38 @@ export class WorkOrderService {
         },
       };
     }
+    return where as Prisma.WorkOrderWhereInput;
+  }
+
+  /**
+   * "Şu an hangi fasonda" seçenekleri listenin O ANKİ süzgeçleri içinde (faceted):
+   * firma sayısı = liste süzgeçleri − `fasonFirma` + o firma → seçilince liste toplamı.
+   * Tanınmayan süzgeç değeri listeyle aynı 400 (aynı kurucu).
+   */
+  async whereOptions(req: Request): Promise<WorkOrderPlaceOptions> {
+    const params = parseQueryParams(req);
+    // Kendi anahtarı tabandan düşer (faceted) ama değeri listeyle aynı doğrulanır (fail-closed).
+    await takeWorkOrderPlaceFilters(params.filters);
+    return loadWorkOrderPlaceOptions(await this.buildListWhere(req, params));
+  }
+
+  /**
+   * List work orders with dynamic filtering, sorting, pagination.
+   *
+   * Query param: `?withOrderDetail=true`
+   *   - orderLinks → orderLine + order + customer + item + variant açar
+   *   - targetItem (renk/özellikler dahil) join'lenir
+   *   - Her WO'ya `dispatchedTotalQty` (iptal edilmemiş fason sevklerinin toplamı) eklenir
+   *   - Mobil "Fason Sevk" iş emri picker'ı için tasarlanmıştır; web admin liste hala
+   *     hafif projeksiyonla çalışır (geri uyumluluk).
+   */
+  async findAll(
+    req: Request
+  ): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
+    const params = parseQueryParams(req);
+    // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
+    params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
+    const where = await this.buildListWhere(req, params);
     const withOrderDetail = req.query.withOrderDetail === "true";
 
     const select = {

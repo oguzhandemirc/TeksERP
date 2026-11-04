@@ -24,6 +24,8 @@ import {
 import { PermissionGate } from "@/components/PermissionGate";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { ShipCell } from "./OrderWhereCells";
+// Miktar TEK biçimle (liste "Sevk" cümlesiyle aynı): binlik grup, en çok 2 ondalık.
+import { fmtNum } from "./order-where-text";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
@@ -226,7 +228,7 @@ export function OrderDetailSheet({
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">Toplam</div>
                   <div className="font-medium tabular-nums">
-                    {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
+                    {fmtNum(totalQty)} m
                   </div>
                   {unmeasuredLineCount > 0 && (
                     <div className="mt-1 text-[11px] text-amber-700">
@@ -243,7 +245,7 @@ export function OrderDetailSheet({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Sevk İlerlemesi</span>
                     <span className="font-medium tabular-nums">
-                      {order.shippedQty.toLocaleString("tr-TR", { useGrouping: false })} / {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
+                      {fmtNum(order.shippedQty)} / {fmtNum(totalQty)} m
                       <span className="ml-1 text-muted-foreground">
                         (%{Math.round((order.shippedQty / totalQty) * 100)})
                       </span>
@@ -290,7 +292,7 @@ export function OrderDetailSheet({
                     </span>
                     <span className="font-medium tabular-nums">
                       {returnsSummary.data.count} top ·{" "}
-                      {returnsSummary.data.totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
+                      {fmtNum(returnsSummary.data.totalQty)} m
                     </span>
                   </div>
                 </CardContent>
@@ -416,7 +418,7 @@ export function OrderDetailSheet({
                           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                             <span>
                               <span className="font-medium text-foreground">
-                                {line.quantity.toLocaleString("tr-TR", { useGrouping: false })}
+                                {fmtNum(line.quantity)}
                               </span>{" "}
                               {unitLabel(line.unit)}
                               {!isMeasuredUnit(line.unit) && (
