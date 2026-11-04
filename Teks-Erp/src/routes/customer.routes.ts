@@ -6,6 +6,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { CustomerService } from "../services/customer.service";
+import { quickCreate } from "../services/customer-quick-create.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.service";
@@ -187,7 +188,7 @@ const quickCreateBody = z
 router.post("/quick-create", verifyToken, requireAnyPermission(...QUICK_CREATE_PERMISSIONS), async (req, res, next) => {
   try {
     const { name, clientToken } = quickCreateBody.parse(req.body);
-    res.status(201).json(await customerService.quickCreate(name, clientToken, req.user?.userId));
+    res.status(201).json(await quickCreate(customerService, name, clientToken, req.user?.userId));
   } catch (e) {
     next(e);
   }

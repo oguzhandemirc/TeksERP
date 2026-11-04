@@ -8,6 +8,7 @@ import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { ClientOcr } from './deviceOcr';
 import type { CreateWorkOrderRoll, DocRoll } from '../types/inboundDocRolls';
+import type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 import type {
   ScanWords,
   SuggestBody,
@@ -16,6 +17,8 @@ import type {
   UserTemplateDetail,
   UserTemplateView,
 } from '../types/inboundDocTeach';
+
+export type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 
 /** Fotoğraf gövdesi 1–2 MB base64; varsayılan 10 sn atölye Wi-Fi'ında yetmez. */
 const UPLOAD_TIMEOUT_MS = 60_000;
@@ -70,12 +73,6 @@ export interface UploadScanResult {
   boundTo: string | null;
   /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · null/yok: cihaz okuması yok (eski sunucu). */
   deviceOcr?: 'READ' | 'FALLBACK' | null;
-}
-
-/** Çözülemeyen müşteri okuması: okunan ad + benzer aktif cariler (≥0,80, en çok 3, puan azalan). */
-export interface OwnerUnmatched {
-  text: string;
-  candidates: { customerId: string; name: string; score: number }[];
 }
 
 /** Okuma durumu — SUNUCU türetir (`readSummaryState`); istemci yalnız gösterir. */
@@ -199,14 +196,6 @@ export interface InboundNoteScan {
   sha256: string;
   status: string;
   mimeType: string;
-}
-
-export interface OwnerSuggestion {
-  customerId: string;
-  name: string;
-  matchedText: string;
-  /** OWNER_TEXT: okunan sahip alanı (alan dolar) · FULL_TEXT: sayfa metninde geçiyor (yalnız sorulur). Eski sunucu göndermez → alan dolar. */
-  source?: 'OWNER_TEXT' | 'FULL_TEXT';
 }
 
 /** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */

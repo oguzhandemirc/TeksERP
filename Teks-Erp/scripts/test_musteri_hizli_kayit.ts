@@ -23,6 +23,7 @@ import { getReadSummary } from "../src/services/gelen-belge-okuma-ozeti.service"
 import { AuthService } from "../src/services/auth.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
 const blocked = hedefDbEngeli();
 if (blocked) {
@@ -156,13 +157,14 @@ async function run(url: string): Promise<void> {
   }
 }
 
+// Hatayı yutmaz (`test_kart_teardown_hesap` §0c): kalıntı bırakan teardown `main`deki "temizlik" kontrolüyle kırmızı verir.
 async function cleanup(): Promise<void> {
-  const swallow = () => undefined;
-  await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } }).catch(swallow);
-  await prisma.cariAccount.deleteMany({ where: { customerId: { in: made.customers } } }).catch(swallow);
-  await prisma.customer.deleteMany({ where: { id: { in: made.customers } } }).catch(swallow);
-  await prisma.userPermission.deleteMany({ where: { userId: { in: made.users } } }).catch(swallow);
-  await prisma.user.deleteMany({ where: { id: { in: made.users } } }).catch(swallow);
+  await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
+  await cleanupTestCustomers(made.customers);
+  await prisma.userPermission.deleteMany({ where: { userId: { in: made.users } } });
+  await prisma.session.deleteMany({ where: { userId: { in: made.users } } });
+  // Audit satırı (`system_logs`) kullanıcıya bağlı kalır; silinemeyen kullanıcı pasifleşir (`bildirim-http-fikstur` yolu).
+  await prisma.user.deleteMany({ where: { id: { in: made.users } } }).catch(() => prisma.user.updateMany({ where: { id: { in: made.users } }, data: { isActive: false } }));
 }
 
 async function main(): Promise<void> {

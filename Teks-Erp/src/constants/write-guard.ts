@@ -12,7 +12,7 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   machineStopCodeMap: ["createdById", "updatedById"],
   // Kurşun gram fiyatı yalnız `PUT /station-capabilities/:id/kursun` boğazından (para birimi + CHECK doğrulaması orada).
   station: ["kursunGramPrice", "kursunGramCurrency"],
-  // İdempotency anahtarı yalnız hızlı kayıt boğazından (`CustomerService.quickCreate`, tokenReplay); genel gövde yazamaz.
+  // İdempotency anahtarı yalnız hızlı kayıt boğazından (`customer-quick-create.service.ts` `quickCreate`, tokenReplay); genel gövde yazamaz.
   customer: ["clientToken"],
 };
 
