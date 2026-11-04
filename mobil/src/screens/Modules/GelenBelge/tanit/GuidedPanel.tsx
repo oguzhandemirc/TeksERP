@@ -16,7 +16,7 @@ interface Props {
   onStep: (n: number) => void;
   skipped: readonly FieldKey[];
   onSkip: (k: FieldKey) => void;
-  preview: { result: SuggestResult | null; fresh: boolean; error: string | null };
+  preview: { result: SuggestResult | null; fresh: boolean; error: string | null; blocked?: string | null };
 }
 
 export default function GuidedPanel({ state, onChange, step, onStep, skipped, onSkip, preview }: Props) {

@@ -1,8 +1,10 @@
 // BELGE TİPİ TANITMA — tablet (S1b, fabrika cevabı 16/18/38; panel `TanitPage` ikizi). Tam ekran: okunmuş sayfa fotoğrafı +
-// OCR kelime kutuları (1x/2x/3x yakınlaştır, iki yönde kaydır) + yan/alt panel. Varsayılan REHBERLİ kip (K30-A2: başlık → alanlar
+// OCR kelime kutuları (iki parmakla yakınlaştır, serbest kaydır) + yan/alt panel. Varsayılan REHBERLİ kip (K30-A2: başlık → alanlar
 // sırayla → ad + kaydet); "Gelişmiş" eski serbest kip (tablo/bölüm). Yatay tablette yan yana, dikey telefonda alt alta. Yalnız JS.
 import React, { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, Button, IconButton, Text } from 'react-native-paper';
 import AppModal from '../../../../components/AppModal';
@@ -27,7 +29,7 @@ interface Props {
   onSaved?: (r: TeachSaved) => void;
 }
 
-const ZOOMS = [1, 2, 3] as const;
+const MAX_ZOOM = 6;
 // Kenar jetondan; dolgu yarı saydam (altındaki yazı okunur kalsın).
 const TONE: Record<ScanMark['tone'], { border: string; bg: string }> = {
   word: { border: colors.info, bg: 'transparent' },
@@ -38,26 +40,87 @@ const TONE: Record<ScanMark['tone'], { border: string; bg: string }> = {
   identifier: { border: colors.brand, bg: 'rgba(79,70,229,0.30)' },
 };
 
-function ScanPane({ uri, scan, marks, width, onToggle }: { uri: string; scan: ScanWords; marks: ScanMark[]; width: number; onToggle: (i: number) => void }) {
-  const [zoom, setZoom] = useState<(typeof ZOOMS)[number]>(1);
+/** Kaydırma payı: büyütülmüş içerik bölmeden taşan kadar kayar, boşluk açılmaz. */
+function clampShift(t: number, zoom: number, content: number, frame: number) {
+  'worklet';
+  const room = Math.max(0, (content * zoom - frame) / 2);
+  return Math.min(room, Math.max(-room, t));
+}
+
+/** İki parmak yakınlaştırma + tek parmak serbest kaydırma; `zoomed` hareket bitince güncellenen (React) yakınlık. */
+function usePinchPan(frame: { width: number; height: number }, cw: number, ch: number) {
+  const [zoomed, setZoomed] = useState(1);
+  const zoom = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const start = useSharedValue({ zoom: 1, tx: 0, ty: 0, fx: 0, fy: 0 });
+  const reset = (animate: boolean) => {
+    zoom.value = animate ? withTiming(1) : 1;
+    tx.value = animate ? withTiming(0) : 0;
+    ty.value = animate ? withTiming(0) : 0;
+    setZoomed(1);
+  };
+  // Dönüşte bölme ölçüsü değişir; eski kaydırma payı geçersiz kalır.
+  useEffect(() => reset(false), [frame.width, frame.height]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pinch = Gesture.Pinch()
+    .onStart((e) => {
+      'worklet';
+      start.value = { zoom: zoom.value, tx: tx.value, ty: ty.value, fx: e.focalX - frame.width / 2, fy: e.focalY - frame.height / 2 };
+    })
+    .onUpdate((e) => {
+      'worklet';
+      const s0 = start.value;
+      const next = Math.min(MAX_ZOOM, Math.max(1, s0.zoom * e.scale));
+      const r = next / s0.zoom;
+      tx.value = clampShift(e.focalX - frame.width / 2 - r * (s0.fx - s0.tx), next, cw, frame.width);
+      ty.value = clampShift(e.focalY - frame.height / 2 - r * (s0.fy - s0.ty), next, ch, frame.height);
+      zoom.value = next;
+    })
+    .onEnd(() => {
+      'worklet';
+      runOnJS(setZoomed)(zoom.value);
+    });
+  // Tek parmak; ikinci parmak inince kaydırma biter, yakınlaştırma devralır.
+  const pan = Gesture.Pan()
+    .maxPointers(1)
+    .onStart(() => {
+      'worklet';
+      start.value = { ...start.value, tx: tx.value, ty: ty.value };
+    })
+    .onUpdate((e) => {
+      'worklet';
+      tx.value = clampShift(start.value.tx + e.translationX, zoom.value, cw, frame.width);
+      ty.value = clampShift(start.value.ty + e.translationY, zoom.value, ch, frame.height);
+    });
+  const moved = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: zoom.value }] }));
+  return { gesture: Gesture.Simultaneous(pinch, pan), moved, zoomed, reset };
+}
+
+// Fotoğraf galerisi gibi: sayfa bölmeye sığar, iki parmakla yakınlaşır (parmakların altındaki nokta yerinde kalır), tek parmakla
+// her yöne kayar. İç içe ScrollView'lar yalnız dik/yatay kaydırıyordu (2026-11-05 kullanıcı denemesi).
+function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: ScanWords; marks: ScanMark[]; size: ViewStyle; onToggle: (i: number) => void }) {
+  const [frame, setFrame] = useState({ width: 0, height: 0 });
   const photo = photoSize(scan);
-  const w = width * zoom;
-  const k = photo.width > 0 ? w / photo.width : 1;
-  const h = photo.height * k;
+  const k = frame.width > 0 && photo.width > 0 && photo.height > 0 ? Math.min(frame.width / photo.width, frame.height / photo.height) : 0;
+  const cw = photo.width * k;
+  const ch = photo.height * k;
+  const { gesture, moved, zoomed, reset } = usePinchPan(frame, cw, ch);
+  // Kenar kalınlığı yakınlıkla büyümesin (yazıyı örtmesin); hareket bitince bir kez güncellenir.
+  const border = 2 / zoomed;
   return (
-    <View style={styles.scanPane}>
+    <View style={[styles.scanPane, size]}>
       <View style={styles.zoomRow}>
-        {ZOOMS.map((z) => (
-          <Button key={z} mode={z === zoom ? 'contained' : 'outlined'} compact onPress={() => setZoom(z)} contentStyle={styles.btn} testID={`tanit-yakin-${z}`}>
-            {`${z}x`}
-          </Button>
-        ))}
-        <Text style={styles.zoomHint}>Yazıya dokunun; küçük yazıda yakınlaştırıp kaydırın.</Text>
+        <Text style={styles.zoomHint}>Yazıya dokunun · iki parmakla yakınlaştırın · tek parmakla kaydırın</Text>
+        <Button mode="outlined" compact icon="fit-to-screen-outline" disabled={zoomed <= 1.01} onPress={() => reset(true)} contentStyle={styles.btn} testID="tanit-sigdir">
+          Sığdır
+        </Button>
       </View>
-      <ScrollView style={styles.flex1} testID="tanit-foto-dikey">
-        <ScrollView horizontal testID="tanit-foto-yatay">
-          <View style={{ width: w, height: h }}>
-            <Image source={{ uri }} style={{ width: w, height: h }} resizeMode="stretch" testID="tanit-foto" />
+      <GestureDetector gesture={gesture}>
+        <View style={styles.frame} collapsable={false} onLayout={(e) => setFrame({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} testID="tanit-foto-cerceve">
+          <Animated.View style={[{ width: cw, height: ch }, moved]}>
+            {/* Tam çözünürlük (scale): yakınlaşınca küçük yazı bulanıklaşmasın. */}
+            <Image source={{ uri }} style={{ width: cw, height: ch }} resizeMode="stretch" resizeMethod="scale" testID="tanit-foto" />
             {marks.map((m, i) => (
               <Pressable
                 key={m.key}
@@ -66,15 +129,15 @@ function ScanPane({ uri, scan, marks, width, onToggle }: { uri: string; scan: Sc
                 hitSlop={4}
                 style={[
                   styles.mark,
-                  { left: m.box.x * k, top: m.box.y * k, width: Math.max(m.box.width * k, 8), height: Math.max(m.box.height * k, 8) },
+                  { left: m.box.x * k, top: m.box.y * k, width: Math.max(m.box.width * k, 8), height: Math.max(m.box.height * k, 8), borderWidth: border },
                   { borderColor: TONE[m.tone].border, backgroundColor: TONE[m.tone].bg },
                 ]}
                 testID={`tanit-kutu-${i}`}
               />
             ))}
-          </View>
-        </ScrollView>
-      </ScrollView>
+          </Animated.View>
+        </View>
+      </GestureDetector>
     </View>
   );
 }
@@ -97,7 +160,8 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
     { auto: !advanced },
   );
   const title = t.existing ? `Şablonu güncelle — ${t.existing.name}` : 'Bu belgeyi tanıt';
-  const scanWidth = portrait ? width - spacing.md * 2 : Math.round(width * 0.58) - spacing.md * 2;
+  // Bölme oranla (flex 58/42) değil ölçüyle: tablette fotoğraf bölmesi tüm alanı yutup paneli 32 px'e sıkıştırıyordu (2026-11-05 cihaz ölçümü).
+  const paneSize: ViewStyle = portrait ? { height: Math.round(height * 0.45) } : { width: Math.round(width * 0.58) - spacing.md };
   const words = t.words.data?.words ?? [];
   const marks = t.state ? (advanced ? teachMarks(t.state, words) : guidedMarks(t.state, words, step)) : [];
   const onTap = (i: number) =>
@@ -139,7 +203,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
           </View>
         ) : (
           <View style={[styles.body, portrait && styles.bodyPortrait]}>
-            <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} width={scanWidth} onToggle={onTap} />
+            <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} size={paneSize} onToggle={onTap} />
             <ScrollView style={portrait ? styles.sidePortrait : styles.side} contentContainerStyle={styles.sideBody} keyboardShouldPersistTaps="handled">
               <TeachSide t={t} nav={nav} />
             </ScrollView>
@@ -171,7 +235,7 @@ function TeachSide({ t, nav }: { t: TeachModalState; nav: GuidedNav }) {
             t.setState((s) => clearField(s, k));
             nav.skip(k);
           }}
-          preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError }}
+          preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError, blocked: t.previewBlocked }}
         />
       )}
       {t.problems.length > 0 && (advanced || step === FINISH_STEP) && (
@@ -234,17 +298,17 @@ const styles = StyleSheet.create({
   iconBtn: { width: 56, height: 56, margin: 0 },
   body: { flex: 1, flexDirection: 'row', gap: spacing.md },
   bodyPortrait: { flexDirection: 'column' },
-  scanPane: { flex: 58, gap: spacing.sm, backgroundColor: colors.surfaceSunken },
+  scanPane: { gap: spacing.sm, backgroundColor: colors.surfaceSunken },
   zoomRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
-  zoomHint: { fontSize: typography.size.sm, color: colors.textSecondary, marginLeft: spacing.sm },
-  mark: { position: 'absolute', borderWidth: 2, borderRadius: 2 },
-  side: { flex: 42 },
-  sidePortrait: { flex: 45 },
+  zoomHint: { flex: 1, fontSize: typography.size.sm, color: colors.textSecondary, marginLeft: spacing.sm },
+  frame: { flex: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  mark: { position: 'absolute', borderRadius: 2 },
+  side: { flex: 1 },
+  sidePortrait: { flex: 1 },
   sideBody: { gap: spacing.md, paddingBottom: spacing.xl },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm },
   btn: { minHeight: 56 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   error: { fontSize: typography.size.base, color: colors.dangerText },
   warn: { fontSize: typography.size.sm, color: colors.warningText },
-  flex1: { flex: 1 },
 });
