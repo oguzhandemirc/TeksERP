@@ -134,6 +134,8 @@ export type FilterDef =
        * için tetik yazısı ham değeri ("none") basardı.
        */
       sentinelOption?: { value: string; label: string };
+      /** Arama yokken liste boşsa gösterilen açık satır (varsayılan "Sonuç yok."). */
+      emptyText?: string;
     }
   | {
       kind: "dependent-lookup";
@@ -756,7 +758,11 @@ function MultiLookupFilter({
             onValueChange={setSearch}
           />
           <CommandList>
-            {isError ? <LookupErrorRow onRetry={() => void refetch()} /> : <CommandEmpty>Sonuç yok.</CommandEmpty>}
+            {isError ? (
+              <LookupErrorRow onRetry={() => void refetch()} />
+            ) : (
+              <CommandEmpty>{!search.trim() && def.emptyText ? def.emptyText : "Sonuç yok."}</CommandEmpty>
+            )}
             <CommandGroup>
               {sentinel ? (
                 <CommandItem key={sentinel.value} value={sentinel.label} onSelect={() => toggle(sentinel.value)}>
