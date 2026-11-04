@@ -24,6 +24,7 @@ export const palette = {
   amber: { 50: '#fffbeb', 100: '#fef3c7', 300: '#fcd34d', 500: '#f59e0b', 600: '#d97706', 700: '#b45309', 900: '#78350f' },
   violet: { 50: '#f5f3ff', 100: '#ede9fe', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
   blue: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' },
+  cyan: { 100: '#cffafe', 700: '#0e7490', 900: '#164e63' },
   white: '#ffffff',
   black: '#000000',
 } as const;
@@ -81,6 +82,22 @@ export const colors = {
   infoDark: palette.blue[700],
   infoText: palette.blue[900],
   infoContainer: palette.blue[100],
+
+  // Form bölüm şeridi — Gelen Belge camgöbeği; sol çubuk bölümün durumunu taşır.
+  band: {
+    bg: palette.cyan[100],
+    text: palette.cyan[900],
+    aside: palette.cyan[700],
+    bar: { idle: palette.cyan[700], ok: palette.emerald[500], warn: palette.amber[500], missing: palette.red[500] },
+  },
+  // Seçim çipleri — indigo yalnız seçili; "sonra" seçeneği seçiliyken koyu gri.
+  choice: {
+    onBg: palette.indigo[600],
+    onText: palette.white,
+    offBg: palette.white,
+    offBorder: palette.slate[300],
+    laterOnBg: palette.slate[700],
+  },
 } as const;
 
 /** Boşluk skalası (dp). Tutarlı ritim için 4'ün katları. */
@@ -179,5 +196,5 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   FasonDokuma: { tint: '#db2777', bg: '#fce7f3' }, // fason kabulün kardeşi — aynı renk ailesi
   Uyarilar: { tint: '#b91c1c', bg: '#fee2e2' }, // alarm — kırmızı aile (panel şeridiyle aynı ton)
   Muayene: { tint: '#7c3aed', bg: '#ede9fe' }, // kalite güvence — üretim ailelerinden ayrışan mor
-  GelenBelge: { tint: '#0e7490', bg: '#cffafe' }, // gelen belge (Belge Tara) — evrak/ofis camgöbeği
+  GelenBelge: { tint: palette.cyan[700], bg: palette.cyan[100] }, // gelen belge (Belge Tara) — evrak/ofis camgöbeği
 };
