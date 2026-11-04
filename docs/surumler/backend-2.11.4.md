@@ -1,8 +1,8 @@
 # Backend `2.11.4`
 
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-20261104_183757-5bb36948d.zip`
+**SHA256:** `AD230366EE6025AA4028DFFCC247049CDD4F598BB732423F3517DD4743367CDF`
+**Commit:** `5bb36948d`
 **Önceki saha sürümü:** **2.11.2** (etiket `backend-v2.11.2` = `72889f5a`; kuran, kurulumdan önce `/health` ve `app\PAKET.json` ile 2.11.2 olduğunu ÖLÇER — farklıysa DUR).
 
 **Bakım sürümü:** `bakim/adnansahin-backend-2.11.4` dalı, taban `backend-v2.11.3` (o da `backend-v2.11.2` üstünde).
