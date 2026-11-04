@@ -6,6 +6,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import type { ScanWord, ScanWords } from "../tanit/types";
+import { GUIDED_FIELDS } from "../tanit/guidedTeach";
 
 const perms = { list: ["gelen-belge:read", "gelen-belge:template"] };
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.list.includes(p) }) }));
@@ -157,6 +158,23 @@ describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
     expect(screen.getByTestId("guided-kept-old")).toHaveTextContent("Eski şablondaki “Müşteri” tanımı korunur");
     await userEvent.click(screen.getByTestId("guided-skip"));
     expect(screen.queryByTestId("guided-kept-old")).toBeNull();
+  });
+
+  it("güncelle kipi: kayıtlı alan ✓ ve değeriyle görünür, alan atanmadan Kaydet açık, atama olarak gitmez", async () => {
+    nav.search = "sablon=u-a";
+    api.getUserTemplate.mockResolvedValue({ id: "t1", code: "u-a", name: "A Boya", version: 4, isActive: true, updatedAt: "", versions: [], template: { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "partiNo", label: "Parti No" }] } });
+    renderWithProviders(<TeachTemplatePage />);
+    await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(1));
+    expect(api.suggestTemplate.mock.calls[0]![0]).toMatchObject({ assignments: [], base: { code: "u-a" } });
+    const chip = screen.getByTestId(`guided-chip-${1 + GUIDED_FIELDS.indexOf("partiNo")}`);
+    expect(chip.querySelector("svg")).not.toBeNull();
+    await userEvent.click(chip);
+    expect(await screen.findByTestId("guided-readout-ok")).toHaveTextContent("P2618733");
+    expect(screen.getByTestId("teach-save")).toBeEnabled();
+    await userEvent.click(screen.getByTestId("teach-save"));
+    await waitFor(() => expect(api.updateUserTemplate).toHaveBeenCalledTimes(1));
+    expect(api.updateUserTemplate.mock.calls[0]![0]).toBe("u-a");
+    for (const c of api.suggestTemplate.mock.calls) expect((c[0] as { assignments: unknown[] }).assignments).toEqual([]);
   });
 
   it("benzer şablon: Yeni tip olarak kaydet → POST", async () => {

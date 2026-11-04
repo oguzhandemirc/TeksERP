@@ -12,7 +12,7 @@ import { useTabsStore } from "@/store/tabs";
 import { useNoteDetail } from "../useNoteDetail";
 import { getUserTemplate, USER_TEMPLATES_QUERY_KEY } from "./service";
 import { teachableScans } from "./teachScans";
-import { toggleWord, type FieldKey } from "./teachDraft";
+import { teachMarks, toggleWord, type FieldKey } from "./teachDraft";
 import { guidedMarks, guidedReduce, type GuidedEvent } from "./guidedTeach";
 import { useTeach } from "./useTeach";
 import { TeachScan } from "./TeachScan";
@@ -74,7 +74,7 @@ export function TeachTemplatePage() {
                   words={t.words.data.words}
                   frame={wordsRectFrame(t.words.data)}
                   state={t.state}
-                  marks={advanced ? undefined : guidedMarks(t.state, t.words.data.words, nav.step)}
+                  marks={advanced ? teachMarks(t.state, t.words.data.words, t.located) : guidedMarks(t.state, t.words.data.words, nav.step, t.located)}
                   onToggle={(i) => (advanced ? t.setState((s) => toggleWord(s, i)) : dispatch({ type: "TAP", i }))}
                 />
               )}

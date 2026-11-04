@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { chipStatus, fieldLabel, fieldReadout, FINISH_STEP, GUIDED_FIELDS, stepField, type GuidedEvent, type Readout } from "./guidedTeach";
-import type { FieldKey, TeachState } from "./teachDraft";
+import { isKept, type FieldKey, type TeachState } from "./teachDraft";
 import type { SuggestResult } from "./types";
 
 interface Props {
@@ -82,7 +82,7 @@ export function GuidedTeach({ state, step, skipped, dispatch, onName, preview, o
           <ul className="space-y-1 text-sm">
             {GUIDED_FIELDS.map((k) => (
               <li key={k} className="flex gap-2"><span className="w-32 shrink-0 text-muted-foreground">{fieldLabel(k)}</span>
-                {state.fields[k]?.length ? <ReadoutLine r={fieldReadout(state, k, preview)} /> : <span className="text-muted-foreground">{keptOld(k) ? "Eski şablondaki tanım korunur" : skipped.includes(k) ? "Bu belgede yok" : "—"}</span>}
+                {state.fields[k]?.length || isKept(state, k) ? <ReadoutLine r={fieldReadout(state, k, preview)} /> : <span className="text-muted-foreground">{keptOld(k) ? "Eski şablondaki tanım korunur" : skipped.includes(k) ? "Bu belgede yok" : "—"}</span>}
               </li>
             ))}
           </ul>

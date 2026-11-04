@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { INCOMING_DOCUMENT_QUERY_KEY } from "../service";
 import { createUserTemplate, getScanWords, getUserTemplate, TEACH_QUERY_KEY, updateUserTemplate, USER_TEMPLATES_QUERY_KEY } from "./service";
-import { adoptTemplate, initialTeach, oldParts, suggestBody, teachProblems, templateKeywords, type TeachState } from "./teachDraft";
+import { adoptTemplate, initialTeach, locateKept, oldParts, suggestBody, teachProblems, templateFieldKeys, templateKeywords, type TeachState } from "./teachDraft";
 import { saveDecision, suggestName, type SaveChoice } from "./guidedTeach";
 import { useTeachPreview } from "./useTeachPreview";
 import type { SimilarTemplate, SuggestBody, UserTemplateDetail, UserTemplateView } from "./types";
@@ -24,7 +24,7 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
   const [state, setState] = useState<TeachState | null>(null);
   // Sayfa değişince işaretleme o sayfanın kelimeleriyle yeniden başlar (kutu indeksleri sayfaya özgü); ad yoksa başlıktan önerilir.
   useEffect(() => {
-    if (words.data) setState(initialTeach(words.data, existing?.name ?? suggestName(words.data), templateKeywords(existing?.template), oldParts(existing?.template)));
+    if (words.data) setState(initialTeach(words.data, existing?.name ?? suggestName(words.data), templateKeywords(existing?.template), { keepOld: oldParts(existing?.template), kept: templateFieldKeys(existing?.template) }));
   }, [words.data, existing]);
   const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, existing?.code ?? null) : null), [state, scanId, words.data, existing?.code]);
   const previewBody = useMemo(() => (body ? forPreview(body) : null), [body]);
@@ -32,8 +32,15 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
   const [similar, setSimilar] = useState<SimilarTemplate[] | null>(null);
   const problems = state ? teachProblems(state) : [];
   const previewProblems = state ? teachProblems({ ...state, name: PREVIEW_NAME }) : [];
-  const pv = useTeachPreview(previewBody, opts.auto === true && previewProblems.length === 0 && !saving);
+  // Güncelle kipinde ilk önizleme Gelişmiş'te de kendiliğinden: kayıtlı alanların değeri + belge üstündeki yeri ondan gelir.
+  const [firstPreview, setFirstPreview] = useState(false);
+  const pv = useTeachPreview(previewBody, (opts.auto === true || (Boolean(existing) && !firstPreview)) && previewProblems.length === 0 && !saving);
   const { fetchPreview } = pv;
+  useEffect(() => {
+    if (pv.result) setFirstPreview(true);
+  }, [pv.result]);
+  const rects = pv.result?.preview?.fieldRects;
+  const located = useMemo(() => (state && words.data ? locateKept(state, words.data.words, rects) : {}), [state, words.data, rects]);
   const runPreview = () => {
     if (previewBody && previewProblems.length === 0 && !saving) fetchPreview(previewBody).catch(() => undefined);
   };
@@ -88,6 +95,8 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
     problems,
     previewProblems,
     preview: pv.result,
+    /** Kayıtlı (korunan) alanların belge üstündeki kelimeleri — son önizlemenin okuduğu kutudan. */
+    located,
     previewFresh: pv.fresh,
     previewError: pv.error,
     previewing: pv.previewing,
