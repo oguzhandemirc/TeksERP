@@ -7,6 +7,7 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { ClientOcr } from './deviceOcr';
+import type { CreateWorkOrderRoll, DocRoll } from '../types/inboundDocRolls';
 import type {
   ScanWords,
   SuggestBody,
@@ -105,6 +106,8 @@ export interface ReadSummary {
   /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** Toplar ayrı geldi: belgenin top satırları (özet satırı/atlanan hariç). Eski sunucu göndermez. */
+  docRolls?: DocRoll[];
   /** K30-T: belge kullanıcı şablonuyla mı okundu (TANITILDI) / hiçbir şablon tutmadı mı (TANITILMAMIS). Yerleşik şablonda ve eski sunucuda yok. */
   tanitim?: ReadTanitim;
 }
@@ -175,6 +178,8 @@ export interface InboundNoteDetail {
   /** S16a: okuma özetindekiyle aynı (tek form doldurur). */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** Okuma özetindekiyle aynı (toplar ayrı geldi). */
+  docRolls?: DocRoll[];
 }
 
 /** Backend `PhotoRetentionMode` aynası (K28). */
@@ -232,6 +237,9 @@ export interface CreateWorkOrderFromNoteBody {
     stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
   }[];
   mode?: MultiPartyMode;
+  /** Toplar ayrı geldi (SEPARATE + `rolls` 1–200); yok = bugünkü tek parça. `parties` ile birlikte gitmez. Eski sunucu strict gövdeyle 400 verir. */
+  rollMode?: 'SINGLE' | 'SEPARATE';
+  rolls?: CreateWorkOrderRoll[];
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
   confirmDuplicateDocNo?: true;
   // S16a tek form alanları (hepsi isteğe bağlı): verilen açık değer toptan türetileni ezer; yoksa bugünkü davranış.

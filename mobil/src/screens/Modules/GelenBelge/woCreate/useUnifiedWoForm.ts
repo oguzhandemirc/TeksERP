@@ -34,6 +34,7 @@ import {
 } from './woForm';
 import { SCAN_ROUTE, isScanRoute, rowIssues } from './woFromDoc';
 import { multiPartyTotal } from './partyDraft';
+import { rollsTotal } from './rollDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
 
@@ -104,8 +105,8 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
     valuedFields(extras, { stepsEdited: plan.stepsEdited }),
   );
 
-  // Gelen metre: çok partide parti toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
-  const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.meters) : null;
+  // Gelen metre: çok partide parti toplamı, ayrı toplarda top toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
+  const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.rolls ? rollsTotal(row.form.rolls) : row.form.meters) : null;
   const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
   const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
   const issues = [
@@ -201,7 +202,7 @@ function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote']) {
     const next = b.captureMany(ps);
     if (next) void b.send(next);
   };
-  const source = usePageSource(b.pages.length, onPages, () => setCameraOpen(true));
+  const source = usePageSource(b.pages.length, onPages);
   const doneNote = b.done?.note;
   const doneRun = b.done?.runKey ?? 0;
   useEffect(() => {

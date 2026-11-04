@@ -16,6 +16,7 @@ import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
 import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
+import RollRows from './RollRows';
 import TeachBanner from '../tanit/TeachBanner';
 
 interface Props {
@@ -87,7 +88,8 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
                 onPress={() => setPicker('batch')}
                 disabled={locked || candidates.length === 0}
               />
-              <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
+              <RollRows row={row} wo={wo} locked={locked} />
+              {!f.rolls && <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />}
             </>
           )}
           {!hideGramaj && <GramajField row={row} wo={wo} locked={locked} />}

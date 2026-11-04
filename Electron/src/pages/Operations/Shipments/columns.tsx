@@ -7,6 +7,26 @@ import { safeFormat, formatNumber, formatFixed } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
 import { EIrsaliyeStatusBadge } from "./eirsaliye/EIrsaliyeStatusBadge";
 
+// Dışa aktarım metinleri — hücreyle aynı kaynak (hücre bu fonksiyonları çağırır).
+type S = ShipmentListItem;
+const branchText = (s: S) => (s.branch ? `${s.branch.name}${s.branch.code ? ` · ${s.branch.code}` : ""}` : "");
+const countsText = (s: S) => {
+  const c = s._count;
+  return s.kind === "DIRECT"
+    ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
+    : `${c.orders} sipariş · ${c.rolls} top · ${c.sacks} çuval`;
+};
+const kgText = (s: S) => (s.totalKg > 0 ? `${formatNumber(s.totalKg, 1)} kg` : "");
+const metersText = (s: S) => `${formatFixed(s.totalMeters, 2)} m`;
+const vehicleText = (s: S) => [s.plateNumber, s.driverName].filter(Boolean).join(" · ");
+const dateText = (s: S) => safeFormat(s.dispatchedAt ?? s.createdAt, "dd.MM.yyyy HH:mm");
+/** Fatura izi: yalnız çıkmış sevkiyatta anlamlı (PLANNED'da "—"). */
+const invoiceText = (s: S) => {
+  if (s.status !== "DISPATCHED") return "";
+  if (!s.invoiceNo) return "Kesilmedi";
+  return s.invoicedAt ? `${s.invoiceNo} (${safeFormat(s.invoicedAt, "dd.MM.yyyy")})` : s.invoiceNo;
+};
+
 export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     accessorKey: "shipmentNo",
@@ -28,6 +48,10 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     id: "customer",
     header: "Müşteri",
+    meta: {
+      label: "Müşteri",
+      exportValue: (s: S) => [s.customer.name, branchText(s)].filter(Boolean).join(" / "),
+    },
     cell: ({ row }) => {
       const s = row.original;
       return (
@@ -48,6 +72,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     accessorKey: "status",
     header: "Durum",
+    meta: { label: "Durum", exportValue: (s: S) => shipmentStatusLabels[s.status] ?? s.status },
     cell: ({ row }) => (
       <div className="flex flex-wrap items-center gap-1">
         <StatusBadge status={row.original.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />
@@ -65,15 +90,13 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     id: "counts",
     header: "İçerik",
+    meta: { label: "İçerik", exportValue: countsText },
     cell: ({ row }) => {
       const c = row.original._count;
-      const isDirect = row.original.kind === "DIRECT";
       return (
         <span className="flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
           {/* Doğrudan sevkte çuval yok — top (+ karşılanan sipariş) gösterilir. */}
-          {isDirect
-            ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
-            : `${c.orders} sipariş · ${c.rolls} top · ${c.sacks} çuval`}
+          {countsText(row.original)}
           <ReturnsBadge count={c.returns} />
           {/* Yalnız kumaş/renk filtresi aktifken: bu sevkiyattaki eşleşen top sayısı. */}
           {row.original.matchRollCount != null && (
@@ -92,14 +115,14 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     id: "totals",
     header: "Metraj / Kg",
+    meta: { label: "Metraj / Kg", exportValue: (s: S) => [metersText(s), kgText(s)].filter(Boolean).join(" · ") },
     cell: ({ row }) => {
       const s = row.original;
+      const kg = kgText(s);
       return (
         <span className="whitespace-nowrap text-xs tabular-nums">
-          {formatFixed(s.totalMeters, 2)} m
-          {s.totalKg > 0 && (
-            <span className="text-muted-foreground"> · {formatNumber(s.totalKg, 1)} kg</span>
-          )}
+          {metersText(s)}
+          {kg && <span className="text-muted-foreground"> · {kg}</span>}
         </span>
       );
     },
@@ -107,29 +130,17 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     id: "vehicle",
     header: "Araç / Sürücü",
+    meta: { label: "Araç / Sürücü", exportValue: vehicleText },
     cell: ({ row }) => {
-      const s = row.original;
-      if (!s.plateNumber && !s.driverName) {
-        return <span className="text-muted-foreground">—</span>;
-      }
-      return (
-        <span className="text-xs">
-          {s.plateNumber ?? ""}
-          {s.driverName ? ` · ${s.driverName}` : ""}
-        </span>
-      );
+      const text = vehicleText(row.original);
+      return text ? <span className="text-xs">{text}</span> : <span className="text-muted-foreground">—</span>;
     },
   },
   {
     id: "date",
     header: () => <SortableHeader field="createdAt" label="Tarih" />,
-    cell: ({ row }) => {
-      const s = row.original;
-      const d = s.dispatchedAt ?? s.createdAt;
-      return (
-        <span className="whitespace-nowrap text-xs tabular-nums">{safeFormat(d, "dd.MM.yyyy HH:mm")}</span>
-      );
-    },
+    meta: { label: "Tarih", exportValue: dateText },
+    cell: ({ row }) => <span className="whitespace-nowrap text-xs tabular-nums">{dateText(row.original)}</span>,
   },
   {
     // FATURA İZİ — ERP fatura KESMEZ; bu kolon dış muhasebe programındaki belgenin
@@ -138,6 +149,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
     // listesi sanmasınlar diye — sevk edilmemiş mal zaten faturalanmaz).
     id: "invoice",
     header: "Fatura",
+    meta: { label: "Fatura", exportValue: invoiceText },
     cell: ({ row }) => {
       const s = row.original;
       if (s.status !== "DISPATCHED") {

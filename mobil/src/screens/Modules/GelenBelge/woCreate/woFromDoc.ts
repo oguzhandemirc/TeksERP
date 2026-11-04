@@ -14,6 +14,7 @@ import type {
 import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft } from './partyDraft';
+import { rollIssues, withRolls, type RollRow } from './rollDraft';
 
 /** K29 S14b: rotasız seçenek (sözde rota; kimliği sunucuya HİÇ gitmez — gövdede rota anahtarı olmaz). */
 export const SCAN_ROUTE_ID = 'scan-routed';
@@ -91,6 +92,7 @@ export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
     ownerSuggestion: s.ownerSuggestion ?? null,
     formFields: s.formFields ?? null,
     suggestions: s.suggestions ?? null,
+    ...(s.docRolls ? { docRolls: s.docRolls } : {}),
   };
 }
 
@@ -98,9 +100,10 @@ export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
 export function withSummaryFields(d: InboundNoteDetail, s: ReadSummary | null | undefined): InboundNoteDetail {
   const fields = d.formFields ?? s?.formFields ?? null;
   const suggestions = d.suggestions ?? s?.suggestions ?? null;
+  const docRolls = d.docRolls ?? s?.docRolls;
   // Eklenecek bir şey yoksa detay AYNEN döner (eski sunucuda bugünkü nesne).
-  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions)) return d;
-  return { ...d, formFields: fields, suggestions };
+  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls) return d;
+  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}) };
 }
 
 export interface RowForm {
@@ -117,6 +120,8 @@ export interface RowForm {
   gramajValueId: string | null;
   /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
   multi?: MultiPartyDraft | null;
+  /** Toplar ayrı geldi: top satırları (null/yok = kapalı, bugünkü tek parça). Çok partiyle birlikte açılmaz. */
+  rolls?: RollRow[] | null;
   /** Belge masası (K23): kurşun adımının plan makinesi (yok = öneri yok, bugünkü). */
   machineId?: string | null;
 }
@@ -155,6 +160,7 @@ export function rowIssues(f: RowForm): string[] {
   const out: string[] = [];
   if (!f.ownerCustomerId) out.push('Müşteriyi seçin.');
   if (f.multi) out.push(...multiPartyIssues(f.multi));
+  else if (f.rolls) out.push(...rollIssues(f.rolls));
   else if (f.meters === null) out.push('Kurşun metresi yok — metreyi girin.');
   else if (f.metersReview) out.push('Kurşun metresini doğrulayın ya da düzeltin.');
   return out;
@@ -176,7 +182,8 @@ export function buildCreateBody(
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
-  const base = f.multi ? withParties(body, f.multi) : body;
+  // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.
+  const base = f.multi ? withParties(body, f.multi) : f.rolls ? withRolls(body, f.rolls) : body;
   return withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId });
 }
 

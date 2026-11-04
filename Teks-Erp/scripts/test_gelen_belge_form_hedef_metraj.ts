@@ -8,6 +8,7 @@
 //   §2 ⭐ verilen hedef türetmeyi ezer
 //   §3 ⭐ çok parti SINGLE → tek İE hedefi = parti toplamı
 //   §4 ⭐ çok parti PER_PARTY → her İE kendi parti metresi; verilen hedef yine 400 GELEN_BELGE_FORM_TARGET_PER_PARTY
+//   §5 ⭐ toplar ayrı geldi (SEPARATE + rolls) → tek İE hedefi = top toplamı
 // Negatif sonda: form servisindeki `deriveTarget` satırı kaldırılınca §1 kırmızı; `partyMeters` toplam yerine
 // sabit verince §3 + §4 kırmızı.
 // =============================================================================
@@ -160,6 +161,12 @@ async function run(url: string): Promise<void> {
   const n4b = await mkNote(true);
   const r4b = await formWo(n4b, multiBody({ mode: "PER_PARTY", targetQuantity: 700 }));
   check("§4 PER_PARTY + verilen hedef → 400 GELEN_BELGE_FORM_TARGET_PER_PARTY (değişmedi)", r4b.status === 400 && r4b.code === "GELEN_BELGE_FORM_TARGET_PER_PARTY", `${r4b.status} ${r4b.code ?? ""}`);
+
+  console.log("§5 toplar ayrı geldi");
+  const n5 = await mkNote(false);
+  const r5 = await formWo(n5, single({ kursunMeters: "999", rollMode: "SEPARATE", rolls: [{ meters: 120 }, { meters: 130.25 }, { meters: 140, weightKg: 21 }] }));
+  const t5 = await targetOf(r5.data?.workOrderId);
+  check("§5 ⭐ SEPARATE 3 top → tek İE hedefi = top toplamı (390,25; gövdedeki 999 değil)", r5.status === 201 && t5 === 390.25, `${r5.status} ${r5.code ?? ""} t=${t5}`);
 }
 
 async function cleanup(): Promise<void> {

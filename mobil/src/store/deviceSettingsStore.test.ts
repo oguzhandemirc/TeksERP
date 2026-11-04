@@ -1,4 +1,4 @@
-import { useDeviceSettingsStore } from './deviceSettingsStore';
+import { parseDocScanEngine, useDeviceSettingsStore } from './deviceSettingsStore';
 import { storage } from '../utils/storage';
 
 // Cihaz-içi kalıcı tercihler: metraj MANUEL mi OTOMATİK mi girilecek. Saha
@@ -297,5 +297,24 @@ describe('deviceSettingsStore — belge masası (K23/K26)', () => {
     await useDeviceSettingsStore.getState().init();
     const s = useDeviceSettingsStore.getState();
     expect([s.docDeskDevice, s.docDeskCaptureMode, s.docDeskFrameMs]).toEqual([true, 'auto', 1000]);
+  });
+});
+
+describe('deviceSettingsStore — belge çekimi (kendi kamera | ML Kit)', () => {
+  it('⭐ kayıt yok / bozuk → kendi kamera; yalnız birebir "mlkit" tarayıcıyı seçer', () => {
+    expect(parseDocScanEngine(null)).toBe('camera');
+    expect(parseDocScanEngine('MLKIT')).toBe('camera');
+    expect(parseDocScanEngine('camera')).toBe('camera');
+    expect(parseDocScanEngine('mlkit')).toBe('mlkit');
+  });
+
+  it('yazılan seçim kalıcı', async () => {
+    fakeDisk();
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().docScanEngine).toBe('camera');
+    await useDeviceSettingsStore.getState().setDocScanEngine('mlkit');
+    useDeviceSettingsStore.setState({ docScanEngine: 'camera' });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().docScanEngine).toBe('mlkit');
   });
 });

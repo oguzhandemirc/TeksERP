@@ -1,7 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
-import { isMeasuredUnit } from "@/lib/item-unit";
 import { safeFormat } from "@/lib/format";
+import { formatCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
@@ -18,33 +18,8 @@ import {
 } from "./work-order-rollup";
 import { deriveDeadlineRisk } from "./deadline-risk";
 import type { Order, OrderLine } from "./types";
+import { distinctLineLabels, lineLabelsText, shippedProgress, totalAmountText } from "./order-cell-text";
 import { TERIM } from "@/lib/terim";
-
-/**
- * Sipariş kalemlerindeki benzersiz kumaş/renk etiketleri — her zaman BİZDEKİ ad.
- * Satırdaki müşteri override'ı (customerItemName/customerColorName) burada
- * bilinçli basılmaz: override yalnız adın ilk girildiği siparişin satırında dolu
- * olduğundan (sonraki siparişlerde alan kilitli → NULL) aynı kumaş listede iki
- * farklı adla görünüyordu. Müşterideki ad detay panelinde "Müşteride:" rozetiyle
- * etiketli gösterilir. Renksiz kalemler renk listesine girmez.
- */
-function distinctLineLabels(
-  lines: OrderLine[] | undefined,
-  kind: "item" | "color",
-): { key: string; label: string; hex?: string | null }[] {
-  const map = new Map<string, { label: string; hex?: string | null }>();
-  for (const l of lines ?? []) {
-    if (kind === "item") {
-      const label = l.item?.name;
-      if (label && !map.has(l.itemId)) map.set(l.itemId, { label });
-    } else {
-      if (!l.colorId) continue;
-      const label = l.color?.name;
-      if (label && !map.has(l.colorId)) map.set(l.colorId, { label, hex: l.color?.hex });
-    }
-  }
-  return [...map.entries()].map(([key, v]) => ({ key, ...v }));
-}
 
 function LineLabelsCell({
   lines,
@@ -198,19 +173,11 @@ export function buildOrderColumns(pricingEnabled: boolean, productionEnabled = t
           {
             id: "totalAmount",
             header: "Tutar",
+            meta: { label: "Tutar", exportValue: (o: Order) => totalAmountText(o) ?? "" },
             cell: ({ row }) => {
-              const o = row.original;
-              if (!o.totalAmount) {
-                return <span className="text-muted-foreground text-xs">—</span>;
-              }
-              return (
-                <span className="tabular-nums text-xs">
-                  {Number(o.totalAmount).toLocaleString("tr-TR", { useGrouping: false,
-                    minimumFractionDigits: 2,
-                  })}{" "}
-                  {o.currency}
-                </span>
-              );
+              const text = totalAmountText(row.original);
+              if (!text) return <span className="text-muted-foreground text-xs">—</span>;
+              return <span className="tabular-nums text-xs">{text}</span>;
             },
           } as ColumnDef<Order>,
         ]
@@ -227,69 +194,67 @@ export const orderColumns: ColumnDef<Order>[] = [
   {
     id: "customer",
     header: () => <SortableHeader field="customer" label="Müşteri" />,
-    meta: { label: "Müşteri" },
+    meta: { label: "Müşteri", exportValue: (o: Order) => o.customer?.name ?? "" },
     cell: ({ row }) =>
       row.original.customer?.name ?? <span className="text-muted-foreground">—</span>,
   },
   {
     id: "branch",
     header: () => <SortableHeader field="branch" label="Şube" />,
-    meta: { label: "Şube" },
+    meta: { label: "Şube", exportValue: (o: Order) => o.branch?.name ?? "" },
     cell: ({ row }) =>
       row.original.branch?.name ?? <span className="text-muted-foreground">—</span>,
   },
   {
     id: "items",
     header: "Kumaş",
-    meta: { label: "Kumaş" },
+    meta: { label: "Kumaş", exportValue: (o: Order) => lineLabelsText(o.lines, "item") },
     cell: ({ row }) => <LineLabelsCell lines={row.original.lines} kind="item" />,
   },
   {
     id: "colors",
     header: "Renk",
-    meta: { label: "Renk" },
+    meta: { label: "Renk", exportValue: (o: Order) => lineLabelsText(o.lines, "color") },
     cell: ({ row }) => <LineLabelsCell lines={row.original.lines} kind="color" />,
   },
   {
     accessorKey: "orderDate",
     header: () => <SortableHeader field="orderDate" label="Sipariş Tarihi" />,
-    meta: { label: "Sipariş Tarihi" },
+    meta: { label: "Sipariş Tarihi", exportValue: (o: Order) => safeFormat(o.orderDate, "dd.MM.yyyy", "") },
     cell: ({ row }) => safeFormat(row.original.orderDate, "dd.MM.yyyy"),
   },
   {
     accessorKey: "deadline",
     header: () => <SortableHeader field="deadline" label="Termin" />,
-    meta: { label: "Termin" },
+    meta: {
+      label: "Termin",
+      exportValue: (o: Order) => (o.deadline ? formatCalendarDay(o.deadline, "dd.MM.yyyy") : ""),
+    },
     cell: ({ row }) => <DeadlineCell order={row.original} />,
   },
   {
     id: "lines",
     header: () => <SortableHeader field="lineCount" label="Kalem" />,
-    meta: { label: "Kalem" },
+    meta: { label: "Kalem", exportValue: (o: Order) => o.lines?.length ?? 0 },
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
     id: "shipped",
     header: () => <SortableHeader field="shippedQty" label="Sevk" />,
-    meta: { label: "Sevk" },
+    meta: {
+      label: "Sevk",
+      exportValue: (o: Order) => {
+        const p = shippedProgress(o);
+        return p ? `${p.text} ${p.pctText}` : "";
+      },
+    },
     cell: ({ row }) => {
-      const o = row.original;
-      // Yalnız METRE satırları toplanır: kg/adet satırın karşılaması ölçülmez,
-      // paydaya girseydi sipariş asla %100 görünmezdi (ve kg + m toplanamaz).
-      const requested = (o.lines ?? [])
-        .filter((l) => isMeasuredUnit(l.unit))
-        .reduce((s, l) => s + Number(l.quantity ?? 0), 0);
-      if (requested === 0) {
-        return <span className="text-muted-foreground text-xs">—</span>;
-      }
-      const shipped = o.shippedQty ?? 0;
-      const pct = Math.min(100, Math.round((shipped / requested) * 100));
-      const fmt = (n: number) =>
-        n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+      const p = shippedProgress(row.original);
+      if (!p) return <span className="text-muted-foreground text-xs">—</span>;
       return (
         <span className="tabular-nums text-xs">
-          {fmt(shipped)}/{fmt(requested)} m
-          <span className="text-muted-foreground ml-1">({pct}%)</span>
+          {p.text}
+          <span className="text-muted-foreground ml-1">{p.pctText}</span>
         </span>
       );
     },
@@ -306,7 +271,7 @@ export const orderColumns: ColumnDef<Order>[] = [
   {
     accessorKey: "status",
     header: () => <SortableHeader field="status" label="Durum" />,
-    meta: { label: "Durum" },
+    meta: { label: "Durum", exportValue: (o: Order) => orderStatusLabels[o.status] ?? o.status },
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}

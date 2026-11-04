@@ -22,6 +22,8 @@ interface BelgeTarayiciNative {
     quality: number;
     startTimeoutMs: number;
   }) => Promise<{ canceled: boolean; pages: RawScannedPage[] }>;
+  /** Eski APK'da yok: o zaman kendi kameramızın çekimi iyileştirilmeden gider. */
+  enhancePageAsync?: (uri: string, options: { longEdge: number; maxBytes: number; quality: number }) => Promise<RawScannedPage>;
 }
 
 export interface ScanRequest {
@@ -88,5 +90,21 @@ export async function scanWithDocScanner(req: ScanRequest): Promise<ScannerOutco
     // Başlatılamadı (modül inmekte, etkinlik yok): kullanıcı hiçbir şey görmedi → sessiz kamera yedeği.
     if (code === 'ERR_DOC_SCAN_UNAVAILABLE') return { kind: 'unavailable', reason: 'start_failed' };
     return { kind: 'error', message: e instanceof Error && e.message ? e.message : 'Belge tarayıcı hatası' };
+  }
+}
+
+export type EnhanceRequest = Omit<ScanRequest, 'pageLimit'>;
+
+/** Kendi kameramızın çekimini native iyileştirmeye ver (gölge/ışık düzleştirme + seviye; kırpma yok). Fonksiyon yoksa
+ *  (eski APK) ya da hata/bozuk dönüşte `null` — çağıran ham fotoğrafı gönderir; bu işlev hiç fırlatmaz. */
+export async function enhanceWithNative(uri: string, req: EnhanceRequest): Promise<RawScannedPage | null> {
+  const m = nativeModule();
+  if (!m || typeof m.enhancePageAsync !== 'function') return null;
+  try {
+    const quality = Math.round(Math.min(1, Math.max(0.5, req.quality)) * 100);
+    const r = await m.enhancePageAsync(uri, { longEdge: req.longEdge, maxBytes: req.maxBytes, quality });
+    return isRawPage(r) ? r : null;
+  } catch {
+    return null;
   }
 }

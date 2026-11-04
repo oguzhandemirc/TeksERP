@@ -12,6 +12,7 @@ import { TERIM } from '../../../../lib/terim';
 import { colors, spacing, typography } from '../../../../theme';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
 import PageCameraModal from '../PageCameraModal';
+import MultiPageCameraModal from '../MultiPageCameraModal';
 import PagePreviewModal from '../PagePreviewModal';
 import { ScannerSection } from './DocBatchView';
 import DocRowCard, { GramajField } from './DocRowCard';
@@ -128,6 +129,7 @@ function ScanModals({ scan }: { scan: DocScanFlow }) {
         onRemove={scan.removeFromPreview}
         onDismiss={() => scan.setPreviewIndex(null)}
       />
+      <MultiPageCameraModal {...scan.source.camera} onError={(m) => Toast.show({ type: 'error', text1: m })} />
       <PageCameraModal
         visible={scan.cameraOpen}
         pageNo={scan.b.pages.length + 1}

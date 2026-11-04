@@ -35,8 +35,9 @@ jest.mock('./DocRowCard', () => {
 jest.mock('../useDocScan', () => ({
   useDocScan: () => ({ pages: [], progress: { uploaded: new Set() }, sending: false, headerLocked: false, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: 0 }),
 }));
-jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: () => mockAdd(), busy: false }) }));
+jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: () => mockAdd(), busy: false, camera: { visible: false, capacity: 20, firstPageNo: 1, onDone: jest.fn(), onDismiss: jest.fn() } }) }));
 jest.mock('../PageCameraModal', () => ({ __esModule: true, default: () => null }));
+jest.mock('../MultiPageCameraModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../PagePreviewModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../../../services/inboundDoc.service', () => ({ inboundDocService: { tabletContext: async () => ({ data: { customers: [] } }) } }));
 // Kart iskeleti (kendi bekçisi ModuleSheet.test): görünürken içerik + alt düğmeler düz çizilir.
@@ -165,6 +166,16 @@ describe('UnifiedWoForm', () => {
     fireEvent.changeText(s.getByTestId('ie-form-hedef-metraj'), '90');
     expect(s.queryByTestId('gelen-metreden-targetQuantity')).toBeNull();
     expect(mockOpts?.extraBody?.(mockRows[0])).toMatchObject({ targetQuantity: 90 });
+  });
+
+  it('⭐ toplar ayrı geldi: hedef metraj gelen metresi top toplamı', async () => {
+    mockQty = true;
+    const base = row();
+    const rolls = [{ key: 'a', meters: 40, weightKg: null, senderRollNo: '' }, { key: 'b', meters: 60.5, weightKg: null, senderRollNo: '' }];
+    mockRows = [row({ form: { ...form, rolls }, detail: { ...base.detail, formFields: {} } } as unknown as Partial<DocRow>)];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-hedef-metraj').props.value).toBe('100.5'));
+    expect(s.getByTestId('gelen-metreden-targetQuantity')).toBeTruthy();
   });
 
   it('düz karo (rota seçilmedi): belge okunsa da "Rotayı seçin." ile kapalı', async () => {

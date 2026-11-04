@@ -12,7 +12,7 @@ import { ActivityIndicator, Button, Text, TouchableRipple } from 'react-native-p
 import Toast from 'react-native-toast-message';
 import ModuleSheet from '../ModuleSheet';
 import ModalTextInput from '../ModalTextInput';
-import PageCameraModal from '../../screens/Modules/GelenBelge/PageCameraModal';
+import MultiPageCameraModal from '../../screens/Modules/GelenBelge/MultiPageCameraModal';
 import { usePageSource } from '../../screens/Modules/GelenBelge/usePageSource';
 import { MAX_PAGES, type ScanPage } from '../../screens/Modules/GelenBelge/docScan';
 import { stationDocLookupService, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
@@ -65,7 +65,6 @@ function useLookupRun(onOpen: (w: StationLookupWorkOrder) => void) {
 
 export default function StationDocLookupSheet({ visible, onDismiss, onOpen, readerConfigured }: Props) {
   const { view, q, setQ, reset, run } = useLookupRun(onOpen);
-  const [cameraOpen, setCameraOpen] = useState(false);
   const close = () => {
     reset();
     onDismiss();
@@ -73,7 +72,7 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
 
   const fromPage = (p: ScanPage) => void run('Belge okunuyor…', () => stationDocLookupService.byPhoto(p.base64, p.sha256));
   // Tek sayfa yeter: belge no ilk sayfanın başlığında (tarayıcı sınırı MAX_PAGES − 1 → 1 sayfa).
-  const source = usePageSource(MAX_PAGES - 1, (pages) => pages[0] && fromPage(pages[0]), () => setCameraOpen(true));
+  const source = usePageSource(MAX_PAGES - 1, (pages) => pages[0] && fromPage(pages[0]));
   const search = () => {
     if (searchable(q)) void run('Aranıyor…', () => stationDocLookupService.bySearch(q.trim()));
   };
@@ -91,16 +90,7 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
         </Button>
       }
       overlays={
-        <PageCameraModal
-          visible={cameraOpen}
-          pageNo={1}
-          onDismiss={() => setCameraOpen(false)}
-          onCaptured={(p) => {
-            setCameraOpen(false);
-            fromPage(p);
-          }}
-          onError={(m) => Toast.show({ type: 'error', text1: m })}
-        />
+        <MultiPageCameraModal {...source.camera} onError={(m) => Toast.show({ type: 'error', text1: m })} />
       }
     >
       <View style={styles.body}>

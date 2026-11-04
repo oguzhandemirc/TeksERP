@@ -63,6 +63,7 @@ export default function SettingsScreen() {
   const canDocDesk = useVisibleScreens().visibleScreens.some((x) => x.key === 'GelenBelge');
   const docDesk = useDeviceSettingsStore((s) => s.docDeskDevice);
   const docDeskCapture = useDeviceSettingsStore((s) => s.docDeskCaptureMode);
+  const docScanEngine = useDeviceSettingsStore((s) => s.docScanEngine);
   const license = useLicenseStatus();
   const printReports = usePrintReports((st) => st.items);
   const notificationsOn = resolveNotificationInboxEnabled(useFeatureFlags().data);
@@ -149,7 +150,7 @@ export default function SettingsScreen() {
     },
   ];
   if (canDocDesk) {
-    rows.push({ key: 'docDesk', icon: 'file-document-outline', title: 'Belge Masası', value: docDeskSummary(docDesk, docDeskCapture), route: 'SettingsDocDesk' });
+    rows.push({ key: 'docDesk', icon: 'file-document-outline', title: 'Belge Masası', value: docDeskSummary(docDesk, docDeskCapture, docScanEngine), route: 'SettingsDocDesk' });
   }
   if (signedIn) {
     // Bulunabilirlik: satır bayrak kapalıyken de görünür; sayfa nedenini söyler.
