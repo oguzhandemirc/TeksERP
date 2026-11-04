@@ -8,6 +8,7 @@
 import type { AnchorStrategy, NormRect, OcrElement, OcrLine, OcrRect, OcrResult, Row } from "./types";
 import { bottom, centerInNormRect, centerY, horizontalOverlap, right, unionRect } from "./geometry";
 import { normalizeForMatch, similarity } from "./text-normalize";
+import { limitValueElements } from "./value-limit";
 
 /** Element metnini etiket parçası ve ayraçtan sonra kalan değer parçasına ayırır ("No:12345" → "No:" + "12345"). */
 export function splitElement(text: string): { labelPart: string; remainder: string } {
@@ -198,7 +199,7 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
   } else rest = stripLeadingSeparators(els.slice(m.elementEnd));
   if (rest.length > 0) {
     const cut = stop ? findStopIndex(rest, ctx.otherLabels) : rest.length;
-    const c = makeCandidate(rest.slice(0, cut), "right", firstOverride);
+    const c = makeCandidate(limitValueElements(rest.slice(0, cut), strategy, firstOverride), "right", firstOverride);
     if (c) return c;
     // Değer başka bir etiketle kesildi ve boş kaldı → sağdaki satırlara bakma, alt arama denenmeli
     if (cut === 0) return null;
@@ -229,7 +230,7 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
   }
   const cleaned = stripLeadingSeparators(taken);
   const cut = stop ? findStopIndex(cleaned, ctx.otherLabels) : cleaned.length;
-  return makeCandidate(cleaned.slice(0, cut), "right");
+  return makeCandidate(limitValueElements(cleaned.slice(0, cut), strategy), "right");
 }
 
 /** below: etiketin altında, yatayda etiketle çakışan ya da sol kenarı etiket soluna yakın ilk takeLines satır. */
@@ -269,5 +270,5 @@ export function findValueBelow(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     }
     if (cut < els.length) break; // bu satırda başka bir etiket başladı
   }
-  return makeCandidate(collected, "below");
+  return makeCandidate(limitValueElements(collected, strategy), "below");
 }
