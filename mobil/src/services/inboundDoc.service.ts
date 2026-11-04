@@ -7,6 +7,7 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { ClientOcr } from './deviceOcr';
+import type { CreateWorkOrderRoll, DocRoll } from '../types/inboundDocRolls';
 import type {
   ScanWords,
   SuggestBody,
@@ -179,21 +180,6 @@ export interface InboundNoteDetail {
   suggestions?: DocFormSuggestions | null;
   /** Okuma özetindekiyle aynı (toplar ayrı geldi). */
   docRolls?: DocRoll[];
-}
-
-/** Belgenin tek top satırı (okuma özeti `docRolls`). */
-export interface DocRoll {
-  lineNo: number;
-  meters: number;
-  weightKg: number | null;
-  senderRollNo: string | null;
-}
-
-/** Toplar ayrı geldi: her satır ayrı top (tek iş emri); `kursunMeters` = toplam. */
-export interface CreateWorkOrderRoll {
-  meters: number;
-  weightKg?: number | null;
-  senderRollNo?: string | null;
 }
 
 /** Backend `PhotoRetentionMode` aynası (K28). */

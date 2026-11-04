@@ -1,6 +1,7 @@
 // Toplar ayrı geldi (Gülkesim fason) — saf parçalar: belgenin top satırları (`docRolls`) → düzenlenebilir top listesi;
 // kayıt kapısı ve gövde parçası. Tek iş emri açılır, her satır ayrı top doğar; kural sunucudadır.
-import type { CreateWorkOrderFromNoteBody, DocRoll } from '../../../../services/inboundDoc.service';
+import type { CreateWorkOrderFromNoteBody } from '../../../../services/inboundDoc.service';
+import type { DocRoll } from '../../../../types/inboundDocRolls';
 
 export interface RollRow {
   /** Satır kimliği (React anahtarı + düzenleme); sunucuya gitmez. */
