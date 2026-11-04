@@ -45,6 +45,7 @@ import {
 import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
 import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
 import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
+import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 
 let pass = 0;
 let fail = 0;
@@ -364,6 +365,8 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
 // ── §11 Gülkesim: parti no adayları + kurşun metresi (gövde `lib/gelen-belge-motor-parti-metre.ts`; dosya boyu) ──
 gulkesimPartiMetre(check, gercek, sablonlar);
 gulkesimBolum(check, gercek, sablonlar);
+// ── §13 aynı etiket birden çok kez: tanıtmada pencere + ayraç eşitlik bozucusu (`lib/gelen-belge-motor-etiket-pencere.ts`) ──
+etiketPencere(check, gercek);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

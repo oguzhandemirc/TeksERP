@@ -4,7 +4,7 @@
  * Stratejiler: anchor / regex / roi. Her biri ham aday listesi üretir; değerlendirme extract.ts'te.
  */
 import type { AnchorStrategy, FieldSpec, OcrElement, OcrLine, OcrRect, OcrResult, RegexStrategy, RoiStrategy, Row, Strategy } from "./types";
-import { buildAnchorContext, findLabelMatches, findValueBelow, findValueRight, lineElements, type AnchorContext } from "./anchor";
+import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches, findValueBelow, findValueRight, lineElements, type AnchorContext } from "./anchor";
 import { averageConfidence, linesInRoi, unionRect } from "./geometry";
 
 export interface RawCandidate {
@@ -46,7 +46,7 @@ export function runStrategy(strategy: Strategy, index: number, field: FieldSpec,
 
 function runAnchor(strategy: AnchorStrategy, index: number, ctx: StrategyContext): RawCandidate[] {
   const actx: AnchorContext = buildAnchorContext(ctx.ocr, ctx.rows, ctx.otherLabels);
-  const matches = findLabelMatches(actx, strategy.labels, strategy.minLabelSimilarity ?? 0.8, strategy.window).slice(0, MAX_LABEL_MATCHES);
+  const matches = findLabelMatches(actx, strategy.labels, strategy.minLabelSimilarity ?? DEFAULT_MIN_LABEL_SIMILARITY, strategy.window).slice(0, MAX_LABEL_MATCHES);
   const direction = strategy.direction ?? 'rightOrBelow';
   const out: RawCandidate[] = [];
   for (const m of matches) {

@@ -1,8 +1,10 @@
 // S1 (Gülkesim, 2026-11-03): BELGE TİPİ TANITMA — şablon önerisi (saf). Kullanıcı fotoğrafta değer kutusuna dokunup alan atar;
 // sistem değerin yanındaki BASILI ETİKETİ bulur ve anchor stratejisi üretir (aynı satırda solda → "right", üstte → "below");
 // etiket yoksa göreli konum (roi). Kimlik yazıları sınıflandırma anahtarıdır. Belgeler basılıdır (fabrika cevabı 38).
-import { TABLE_TOTAL_SOURCE, type DocumentTemplate, type FieldSpec, type FieldType, type MeterSourcesSpec, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type Strategy, type TableColumnSpec } from "./types";
-import { collectLines } from "./geometry";
+import { TABLE_TOTAL_SOURCE, type DocumentTemplate, type FieldSpec, type FieldType, type MeterSourcesSpec, type NormRect, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type Strategy, type TableColumnSpec } from "./types";
+import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches } from "./anchor";
+import { resolveRegions } from "./document";
+import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry";
 import { isNumericText } from "./labels";
 import { validateTemplate } from "./templates";
 
@@ -62,7 +64,7 @@ const cleanLabel = (t: string) => t.replace(/[:.\s]+$/u, "").replace(/\s+/g, " "
 const isLabelText = (t: string) => t.length >= 2 && t.length <= 40 && !isNumericText(t) && /\p{L}/u.test(t);
 
 /** Değer kutusunun etiketi: aynı satırda önündeki kelimeler → soldaki satır (aynı hiza) → üstteki satır (yatay çakışan). */
-export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; direction: "right" | "below" } | null {
+export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; direction: "right" | "below"; rect: OcrRect } | null {
   const lines = collectLines(ocr);
   const c = center(rect);
   const own = lines.find((l) => inside(c, l.rect));
@@ -71,19 +73,47 @@ export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; di
     // Değer kelimeleri = kutuyla yatayda yarıdan çok çakışanlar; etiket onların ÖNÜNDEKİ kelimeler (satırın tamamı değerse yok).
     const vals = els.filter((e) => hOverlap(e.rect, rect) > e.rect.width / 2);
     const firstX = vals.length ? Math.min(...vals.map((e) => e.rect.x)) : c.x;
-    const before = els.filter((e) => e.rect.x + e.rect.width <= firstX).map((e) => e.text).join(" ");
-    const t = cleanLabel(before);
-    if (isLabelText(t)) return { label: t, direction: "right" };
+    const beforeEls = els.filter((e) => e.rect.x + e.rect.width <= firstX);
+    const t = cleanLabel(beforeEls.map((e) => e.text).join(" "));
+    if (isLabelText(t)) return { label: t, direction: "right", rect: unionRect(beforeEls.map((e) => e.rect)) };
   }
   const others = lines.filter((l) => l !== own && !inside(c, l.rect));
   const left = others
     .filter((l) => l.rect.x + l.rect.width <= rect.x + rect.width * 0.25 && vOverlap(l.rect, rect) > Math.min(l.rect.height, rect.height) * 0.4 && isLabelText(cleanLabel(l.text)))
     .sort((a, b) => b.rect.x + b.rect.width - (a.rect.x + a.rect.width))[0];
-  if (left) return { label: cleanLabel(left.text), direction: "right" };
+  if (left) return { label: cleanLabel(left.text), direction: "right", rect: left.rect };
   const above = others
     .filter((l: OcrLine) => l.rect.y + l.rect.height <= rect.y + rect.height * 0.25 && hOverlap(l.rect, rect) > 0 && rect.y - (l.rect.y + l.rect.height) < rect.height * 3 && isLabelText(cleanLabel(l.text)))
     .sort((a, b) => b.rect.y - a.rect.y)[0];
-  if (above) return { label: cleanLabel(above.text), direction: "below" };
+  if (above) return { label: cleanLabel(above.text), direction: "below", rect: above.rect };
+  return null;
+}
+
+/** Pencere payları (normalize): geniş pay foto kaymasını tolere eder; rakip etiket girerse daralır. */
+const WINDOW_PADS = [0.15, 0.08, 0.04] as const;
+const r4 = (v: number, up: boolean) => (up ? Math.ceil(v * 1e4) : Math.floor(v * 1e4)) / 1e4;
+
+/**
+ * Etiket metni sayfada birden çok kez geçiyorsa ("Müşteri KG" · "Müşteri MT" · "Müşteri:") okuyucu eşitlikte en üsttekini
+ * seçer; tanıtılan etiketi içeren ama rakip eşleşmelerin merkezlerini dışarıda bırakan pencere döner. Tek eşleşmede null
+ * (kırpılmamış/kaymış fotoğrafta konum bağımlılığı istenmez). Ölçü okuyucuyla aynı: `findLabelMatches` + aynı eşik.
+ */
+export function labelWindow(ocr: OcrResult, label: string, labelRect: OcrRect): NormRect | null {
+  const matches = findLabelMatches(buildAnchorContext(ocr, buildRows(ocr), []), [label], DEFAULT_MIN_LABEL_SIMILARITY);
+  if (matches.length < 2) return null;
+  const own = matches.find((m) => hOverlap(m.rect, labelRect) > 0 && vOverlap(m.rect, labelRect) > 0);
+  if (!own) return null;
+  const rivals = matches.filter((m) => m !== own);
+  const W = ocr.imageWidth;
+  const H = ocr.imageHeight;
+  for (const pad of WINDOW_PADS) {
+    const x = r4(Math.max(0, own.rect.x / W - pad), false);
+    const y = r4(Math.max(0, own.rect.y / H - pad), false);
+    const x1 = r4(Math.min(1, (own.rect.x + own.rect.width) / W + pad), true);
+    const y1 = r4(Math.min(1, (own.rect.y + own.rect.height) / H + pad), true);
+    const win: NormRect = { x, y, w: r4(Math.min(1, x1) - x, true), h: r4(Math.min(1, y1) - y, true) };
+    if (centerInNormRect(own.rect, win, ocr) && !rivals.some((m) => centerInNormRect(m.rect, win, ocr))) return win;
+  }
   return null;
 }
 
@@ -100,11 +130,14 @@ function roiOf(ocr: OcrResult, r: OcrRect): Strategy {
 export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion {
   const explain: TemplateSuggestion["explain"] = [];
   const fields: FieldSpec[] = [];
+  const labelRects = new Map<string, OcrRect>();
   for (const a of input.assignments) {
     if (fields.some((f) => f.key === a.field)) continue;
     const meta = ASSIGNABLE_FIELDS[a.field];
     const found = findLabelFor(input.ocr, a.rect);
     const strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction } : roiOf(input.ocr, a.rect);
+    // Bölüm alanı her bölümde ayrı okunur (bant dilimi) → pencere onu ilk bölüme çiviler; pencere yalnız başlık alanına.
+    if (found && !a.section) labelRects.set(a.field, found.rect);
     fields.push({ key: a.field, label: meta.label, type: meta.type, strategies: [strategy], ...(meta.type === "text" ? { maxLength: 80, postProcess: ["collapseSpaces", "trimPunct"] } : {}), ...(meta.type === "alnum" ? { postProcess: ["upper", "stripSpaces"] } : {}) });
     explain.push({ field: a.field, strategy: found ? "anchor" : "roi", label: found?.label ?? null, direction: found?.direction ?? null });
   }
@@ -133,8 +166,25 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   if (batch.length) t.batchNoCandidates = batch;
   if (t.tables?.[0]?.totals) t.meterSources = { output: ["$tableTotal"], ...(has("toplamMetre") ? { total: ["toplamMetre"] } : {}) };
   else if (has("toplamMetre")) t.meterSources = { total: ["toplamMetre"] };
+  addLabelWindows(t, input.ocr, labelRects);
   const v = validateTemplate(t);
   return { template: t, explain, errors: v.errors };
+}
+
+/** Pencere çıkarımın göreceği BÖLGE çerçevesinde kurulur (iki belgeli fotoğrafta bölge koordinatı sayfanınki değil). */
+function addLabelWindows(t: DocumentTemplate, ocr: OcrResult, labelRects: Map<string, OcrRect>): void {
+  if (labelRects.size === 0) return;
+  const regions = resolveRegions(ocr, [t], null);
+  for (const f of t.fields) {
+    const s = f.strategies[0];
+    const rect = labelRects.get(f.key);
+    if (!rect || s?.kind !== "anchor") continue;
+    const cy = rect.y + rect.height / 2;
+    const region = regions.find((r) => cy >= r.rect.y && cy < r.rect.y + r.rect.height) ?? regions[0];
+    if (!region) continue;
+    const win = labelWindow(region.ocr, s.labels[0]!, { ...rect, y: rect.y - region.rect.y });
+    if (win) s.window = win;
+  }
 }
 
 /** "Şablonu güncelle"de eski şablondan taşınabilecek yapılar (yeni öneride yoksa); ekranda kutu olarak sorulur. */
