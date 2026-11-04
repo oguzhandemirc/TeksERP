@@ -17,6 +17,12 @@ import {
 } from "./work-order-rollup";
 import { deriveDeadlineRisk } from "./deadline-risk";
 import {
+  deriveOrderOverallState,
+  orderOverallLabels,
+  orderOverallStatusText,
+  orderOverallTones,
+} from "./order-overall-status";
+import {
   dayText,
   distinctLineLabels,
   lineLabelsText,
@@ -71,16 +77,15 @@ function LineLabelsCell({
   );
 }
 
-/** Dışa aktarma metni: rollup etiketi + (n) — NONE ise "—". */
+/** Dışa aktarma metni: yalnız rollup etiketi — NONE ise "—". Sayı Excel'de ayrı
+ *  "İE sayısı" sütunundadır (metne gömülü sayı süzülemez/toplanamaz). */
 function rollupExportText(order: Order): string {
-  const { state, activeCount } = deriveWoRollup(order.lines);
-  if (state === "NONE") return "—";
-  const label = woRollupLabels[state];
-  return activeCount > 1 ? `${label} (${activeCount})` : label;
+  const { state } = deriveWoRollup(order.lines);
+  return state === "NONE" ? "—" : woRollupLabels[state];
 }
 
 /**
- * "İş Emri" rollup hücresi (named — rules-of-hooks: useOpenTarget hook'u).
+ * "Üretim" (iş emri) rollup hücresi (named — rules-of-hooks: useOpenTarget hook'u).
  * Tek aktif WO'da rozet tıklanabilir (İE detayını açar); birden çok WO'da pasif
  * rozet + sayaç, navigasyon detay panelindeki listeden yapılır.
  */
@@ -173,7 +178,10 @@ function DeadlineCell({ order }: { order: Order }) {
  */
 export function buildOrderColumns(pricingEnabled: boolean, productionEnabled = true): ColumnDef<Order>[] {
   return [
-    ...(productionEnabled ? orderColumns : orderColumns.filter((c) => c.id !== "workOrder")),
+    // "Genel durum" de üretimle düşer: üretimsiz firmada her açık sipariş "İş emri yok" derdi.
+    ...(productionEnabled
+      ? orderColumns
+      : orderColumns.filter((c) => c.id !== "workOrder" && c.id !== "overallStatus")),
     ...(pricingEnabled
       ? [
           {
@@ -261,18 +269,31 @@ export const orderColumns: ColumnDef<Order>[] = [
     },
   },
   {
+    id: "overallStatus",
+    header: "Genel durum",
+    meta: { label: "Genel durum", exportValue: (o: Order) => orderOverallStatusText(o) },
+    cell: ({ row }) => (
+      <StatusBadge
+        status={deriveOrderOverallState(row.original)}
+        labels={orderOverallLabels}
+        tones={orderOverallTones}
+      />
+    ),
+  },
+  {
     id: "workOrder",
-    header: "İş Emri",
+    header: "Üretim",
     meta: {
-      label: "İş Emri",
+      label: "Üretim",
       exportValue: (o: Order) => rollupExportText(o),
+      exportExtra: [{ label: "İE sayısı", value: (o: Order) => deriveWoRollup(o.lines).activeCount }],
     },
     cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,
   },
   {
     accessorKey: "status",
-    header: () => <SortableHeader field="status" label="Durum" />,
-    meta: { label: "Durum", exportValue: (o: Order) => orderStatusText(o) },
+    header: () => <SortableHeader field="status" label="Sevk durumu" />,
+    meta: { label: "Sevk durumu", exportValue: (o: Order) => orderStatusText(o) },
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}

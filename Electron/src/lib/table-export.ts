@@ -22,6 +22,9 @@ declare module "@tanstack/react-table" {
     /** true → Excel'de gerçek SAYI olarak yazılır + altına TOPLAM satırına eklenir
      *  (metre/kg/adet gibi). Diğer kolonlar metin. */
     summable?: boolean;
+    /** Kolonun hemen ardına eklenen YALNIZ-EXPORT sütunlar (ör. "İE sayısı") —
+     *  ekranda rozet içinde duran sayının dosyada ayrı, süzülebilir sütunu. */
+    exportExtra?: { label: string; value: (row: TData) => unknown; summable?: boolean }[];
   }
 }
 
@@ -57,11 +60,18 @@ function tableExportCols<T>(table: Table<T>): Column<T, unknown>[] {
 
 /** Görünür TanStack kolonları → motorun anladığı sütun tarifleri. */
 function toExportColumns<T>(table: Table<T>): ExportColumn<T>[] {
-  return tableExportCols(table).map((c) => ({
-    label: columnLabel(c),
-    value: (row: T) => rawCellValue(c, row),
-    summable: Boolean(c.columnDef.meta?.summable),
-  }));
+  return tableExportCols(table).flatMap((c) => [
+    {
+      label: columnLabel(c),
+      value: (row: T) => rawCellValue(c, row),
+      summable: Boolean(c.columnDef.meta?.summable),
+    },
+    ...(c.columnDef.meta?.exportExtra ?? []).map((x) => ({
+      label: x.label,
+      value: x.value,
+      summable: Boolean(x.summable),
+    })),
+  ]);
 }
 
 /** yyyy-MM-dd (dosya adına eklenen, sıralanabilir tarih damgası). */

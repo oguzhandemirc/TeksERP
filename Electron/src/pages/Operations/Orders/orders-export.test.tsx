@@ -113,17 +113,50 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(row[head.indexOf("Renk")]).toBe("Lacivert");
   });
 
-  it("yalnız-cell kolonlar ekrandaki metni yazar (Kalem sayı, tarih gün, Durum Türkçe, Tutar para birimli)", () => {
+  it("yalnız-cell kolonlar ekrandaki metni yazar (Kalem sayı, tarih gün, Sevk durumu Türkçe, Tutar para birimli)", () => {
     const [head = [], row = []] = csvOf([order()]);
     const at = (label: string) => row[head.indexOf(label)];
     expect(at("Müşteri")).toBe("Acme Tekstil");
     expect(at("Şube")).toBe("Merkez");
     expect(at("Kalem")).toBe("3");
     expect(at("Sevk")).toBe("40/300 m (13%)");
-    expect(at("Durum")).toBe("Onaylandı");
+    expect(at("Sevk durumu")).toBe("Onaylandı");
     expect(at("Sipariş Tarihi")).toBe("01.11.2026");
     expect(at("Termin")).toBe("20.11.2026");
     expect(at("Tutar")).toBe("1500,00 TRY");
+  });
+
+  it("başlıklar: Sevk durumu / Üretim / Genel durum; eski 'Durum' ve 'İş Emri' yok", () => {
+    const [head = []] = csvOf([order()]);
+    expect(head).toEqual(expect.arrayContaining(["Sevk durumu", "Üretim", "İE sayısı", "Genel durum"]));
+    expect(head).not.toContain("Durum");
+    expect(head).not.toContain("İş Emri");
+    // İE sayısı, Üretim sütununun hemen ardında.
+    expect(head.indexOf("İE sayısı")).toBe(head.indexOf("Üretim") + 1);
+  });
+
+  it("Üretim hücresine sayı gömülmez; sayı İE sayısı sütununda", () => {
+    const wo = (id: string, status: "COMPLETED" | "IN_PROGRESS" | "SUPERSEDED") => ({
+      workOrderId: id,
+      workOrder: { id, workOrderNumber: id, status },
+    });
+    const o = order({
+      lines: [line({ id: "a", workOrderLinks: [wo("w1", "COMPLETED")] }), line({ id: "b", workOrderLinks: [wo("w2", "COMPLETED"), wo("w0", "SUPERSEDED")] })],
+    });
+    const [head = [], row = []] = csvOf([o]);
+    const at = (label: string) => row[head.indexOf(label)];
+    expect(at("Üretim")).toBe("Üretildi");
+    expect(at("İE sayısı")).toBe("2");
+    expect(at("Genel durum")).toBe("Üretim bitti, sevk bekliyor");
+  });
+
+  it("Genel durum Excel'de ekrandaki türetmeyle aynı", () => {
+    const [head = [], row = []] = csvOf([order()]);
+    expect(row[head.indexOf("Genel durum")]).toBe("Üretimde");
+    const [h2 = [], r2 = []] = csvOf([order({ lines: [line({})] })]);
+    expect(r2[h2.indexOf("Genel durum")]).toBe("İş emri yok");
+    expect(r2[h2.indexOf("Üretim")]).toBe("—");
+    expect(r2[h2.indexOf("İE sayısı")]).toBe("0");
   });
 
   it("hiçbir liste kolonu boş ya da ham ISO çıkmaz", () => {
