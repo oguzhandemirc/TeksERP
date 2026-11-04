@@ -18,7 +18,7 @@
   "yayinlar": [
     {
       "id": "2026-11-04b",
-      "baslik": "İş emrinden sipariş bağı koparma, Fasonda süzgeci; sipariş Excel'inde Genel durum",
+      "baslik": "İş emrinden sipariş bağı koparma, Fasonda süzgeci; Siparişler nerede?",
       "surumler": {
         "panel": "1.3.9"
       },
@@ -36,7 +36,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Siparişler listesine \"Genel durum\" sütunu eklendi (Üretimde, Üretim bitti sevk bekliyor, Kısmi sevk, Tamamlandı, İş emri yok, İptal). \"Durum\" sütununun adı \"Sevk durumu\", \"İş Emri\" sütununun adı \"Üretim\" oldu. Excel dosyasında Üretim sütunu yalnız durumu yazar; iş emri sayısı ayrı \"İE sayısı\" sütunundadır."
+          "metin": "Siparişler listesine \"Nerede?\" sütunu eklendi: her siparişin şu an ne durumda olduğunu tek cümleyle yazar (ör. \"İş emri açılmadı\", \"Tambur aşamasında · 4 top\", \"Fasonda – firma adı · 8 top · 3 gündür\", \"Sevke hazır · 6 top\", \"Hepsi gönderildi\"); termini geçen siparişte kırmızı \"Termini geçti\" yazısı çıkar. \"Sevk\" sütunu artık \"Henüz gönderilmedi\", \"Bir kısmı gönderildi (1.200 / 2.400 m)\" ya da \"Hepsi gönderildi\" yazar. Listenin üstündeki düğmelerle Bekleyenler, Fasonda, Sevke hazır, Kısmen gidenler ve Gecikenler tek tıkla süzülür; fason firmasını seçebilir, \"Fasonda X günden uzun\" kutusuna gün yazabilirsiniz. Siparişe tıklayınca yan panelde her iş emrinin hangi aşamada kaç top ve kaç metre olduğu ile son hareket saati görünür. Excel ve PDF ekrandaki yazının aynısını yazar; iş emri sayısı Excel'de ayrı \"İE sayısı\" sütunundadır. \"Durum\" sütununun adı \"Sevk durumu\", \"İş Emri\" sütununun adı \"Üretim\" oldu."
         },
         {
           "kapsam": "panel",
