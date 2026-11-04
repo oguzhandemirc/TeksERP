@@ -2,18 +2,19 @@
 // doğrulama, varsayılan gramaj). Kayıt "Hepsini kaydet"ten; sonuç satırda kalır.
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Chip, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Chip, Text, TextInput } from 'react-native-paper';
 import ModuleSheet, { SheetField } from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import { colors, radius, spacing, typography } from '../../../../theme';
+import { DOC_HIGHLIGHT_BG, DocHighlight } from '../../../../components/DocHighlight';
 import { TERIM } from '../../../../lib/terim';
 import { useReadResult } from '../useReadResult';
 import { useApprovalDetail } from '../useApprovalCard';
 import { usePermissions } from '../../../../hooks/usePermission';
 import { readResultView, fmtKursunMeters } from '../readResult';
 import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
-import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
+import { detailFromSummary, editCustomerBatchNo, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
@@ -65,14 +66,16 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
       )}
       {f && (
         <>
-          <SheetField
-            label="Müşteri"
-            value={ownerName}
-            placeholder="Müşteri seçin"
-            onPress={() => setPicker('owner')}
-            disabled={locked}
-            hint={f.ownerSuggested && f.ownerCustomerId ? `Belgeden önerildi: ${f.ownerSuggested}` : undefined}
-          />
+          <View testID={f.ownerSuggested && f.ownerCustomerId ? `belgeden-musteri-${row.noteNo}` : undefined}>
+            <SheetField
+              label="Müşteri"
+              value={ownerName}
+              placeholder="Müşteri seçin"
+              onPress={() => setPicker('owner')}
+              disabled={locked}
+              fieldStyle={f.ownerSuggested && f.ownerCustomerId ? styles.hlInput : undefined}
+            />
+          </View>
           {f.ownerAsk && f.ownerCustomerId !== f.ownerAsk.customerId && (
             <Chip icon="help-circle-outline" onPress={() => wo.updateForm(row.noteId, { ownerCustomerId: f.ownerAsk!.customerId, ownerSuggested: f.ownerAsk!.name })}
               disabled={locked} style={styles.chip} testID={`belge-satir-sahip-sor-${row.noteNo}`}>
@@ -81,13 +84,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
           )}
           {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
             <>
-              <SheetField
-                label="Parti no"
-                value={f.ourBatchNo ?? ''}
-                placeholder={candidates.length > 1 ? `Parti no seçin (${candidates.length} aday)` : 'Belgede parti no yok — seriden verilecek'}
-                onPress={() => setPicker('batch')}
-                disabled={locked || candidates.length === 0}
-              />
+              <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
               <RollRows row={row} wo={wo} locked={locked} />
               {!f.rolls && <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />}
             </>
@@ -114,6 +111,47 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
 }
 
 /**
+ * Müşteri parti no (belgeden okunan, elle yazılabilir düz metin; seçici yok) + bizim parti no (İE partisi). Seri kipinde
+ * bizimki salt okunur "Otomatik verilir"; belgeden kipinde değer ya da aday seçici (bugünkü davranış).
+ */
+function BatchFields({ row, wo, locked, onPick }: { row: DocRow; wo: WoRowsState; locked: boolean; onPick: () => void }) {
+  const f = row.form!;
+  const candidates = row.detail?.batchNoCandidates ?? [];
+  const fromDoc = wo.batchSource === 'DOCUMENT';
+  return (
+    <>
+      <DocHighlight active={!!f.customerBatchNoFromDoc} style={styles.hl}>
+        <TextInput
+          mode="outlined"
+          dense
+          label="Müşteri parti no"
+          value={f.customerBatchNo ?? ''}
+          disabled={locked}
+          maxLength={64}
+          style={f.customerBatchNoFromDoc ? styles.hlInput : undefined}
+          onChangeText={(t) => wo.updateForm(row.noteId, editCustomerBatchNo(t))}
+          testID={`belge-satir-musteri-parti-${row.noteNo}`}
+        />
+      </DocHighlight>
+      {fromDoc ? (
+        <SheetField
+          label="Bizim parti no"
+          value={f.ourBatchNo ?? ''}
+          placeholder={candidates.length > 1 ? `Seçin (${candidates.length} aday)` : 'Otomatik verilir'}
+          onPress={onPick}
+          disabled={locked || candidates.length === 0}
+        />
+      ) : (
+        <View style={styles.autoBatch} testID={`belge-satir-bizim-parti-${row.noteNo}`}>
+          <Text style={styles.label}>Bizim parti no</Text>
+          <Text style={styles.autoText}>Otomatik verilir</Text>
+        </View>
+      )}
+    </>
+  );
+}
+
+/**
  * Satırın okuma izlemi + form kaynağı. Okuma bitti (okunamadı / PDF / okuyucu yok dahil — sunucu yalnız süren okumayı
  * reddeder) → form dolar. Detay ucu `gelen-belge:read` ister; izin yoksa ya da düşerse form okuma özetinden kurulur.
  */
@@ -135,11 +173,14 @@ function useRowRead(row: DocRow, wo: WoRowsState) {
 
 function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: WoRowsState; meterText: string | null; locked: boolean; onEdit: () => void }) {
   const f = row.form!;
+  // Okunan metre elle düzeltilmediyse sarı vurgu (belgeden geldi).
+  const read = row.detail?.kursunMeters != null && row.detail.kursunMeters !== '' ? Number(row.detail.kursunMeters) : null;
+  const fromDoc = read !== null && f.meters === read;
   return (
     <View testID={`belge-satir-metre-${row.noteNo}`}>
       <Text style={styles.label}>Kurşun metresi</Text>
       <View style={styles.row}>
-        <Text style={[styles.meters, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
+        <Text testID={fromDoc ? `belgeden-metre-${row.noteNo}` : undefined} style={[styles.meters, fromDoc && styles.hlText, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
         {f.metersReview && (
           <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-dogrula-${row.noteNo}`}>
             Doğrula
@@ -168,7 +209,9 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
             selected={f.gramajValueId === o.id}
             onPress={() => wo.updateForm(row.noteId, { gramajValueId: f.gramajValueId === o.id ? null : o.id })}
             disabled={locked}
-            style={styles.chip}
+            style={[styles.chip, f.gramajValueId === o.id && styles.chipOn]}
+            textStyle={f.gramajValueId === o.id ? styles.chipOnText : undefined}
+            selectedColor={f.gramajValueId === o.id ? colors.textOnDark : undefined}
             testID={`belge-satir-gramaj-${row.noteNo}-${o.name}`}
           >
             {o.isDefault ? `${o.name} (varsayılan)` : o.name}
@@ -303,8 +346,16 @@ const styles = StyleSheet.create({
   note: { fontSize: typography.size.sm, color: colors.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 56, justifyContent: 'center' },
+  // Seçili gramaj uzaktan belli olsun (istek 3): marka zemini, beyaz kalın yazı, biraz daha yüksek.
+  chipOn: { minHeight: 64, backgroundColor: colors.brand },
+  chipOnText: { color: colors.textOnDark, fontSize: typography.size.lg, fontWeight: typography.weight.bold },
   result: { gap: spacing.sm },
   resultTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
   btn: { minHeight: 56 },
+  hl: { padding: 2 },
+  hlInput: { backgroundColor: DOC_HIGHLIGHT_BG },
+  hlText: { flex: 0, backgroundColor: DOC_HIGHLIGHT_BG, borderRadius: 6, paddingHorizontal: spacing.sm },
+  autoBatch: { gap: 2 },
+  autoText: { fontSize: typography.size.base, color: colors.textMuted },
 });

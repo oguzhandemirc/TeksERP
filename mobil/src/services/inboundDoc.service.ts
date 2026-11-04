@@ -92,6 +92,8 @@ export interface ReadSummary {
   /** Okuma uyarıları (sunucu `noteNotices`, panel şeridiyle aynı liste). Eski sunucu göndermez → yok sayılır. */
   notices?: { code: string; title: string; detail: string }[];
   // Parti no + kurşun metresi (taslak başlığı, sunucu çözer). Eski sunucu göndermez → kartta satır yok.
+  /** Müşterinin parti no'su (belge başlığı; bizim parti no'dan ayrı). Eski sunucu göndermez. */
+  customerBatchNo?: string | null;
   ourBatchNo?: string | null;
   ourBatchNoKey?: string | null;
   /** Prisma Decimal → JSON'da string gelir; sayı da kabul. */
@@ -157,6 +159,8 @@ export interface InboundNoteDetail {
   noteNo: string;
   status: string;
   ownerCustomerId: string | null;
+  /** Müşterinin parti no'su (belge başlığı; bizim parti no'dan ayrı). Eski sunucu göndermez. */
+  customerBatchNo?: string | null;
   ourBatchNo?: string | null;
   ourBatchNoKey?: string | null;
   kursunMeters?: string | number | null;
@@ -208,6 +212,8 @@ export interface InboundDocSettings {
   refakatAutoPrint?: boolean;
   /** S16a `gelenBelge.tabletIeGirisi`; eski sunucu göndermez → IKISI (bugünkü ekran). */
   tabletIeGirisi?: TabletWoEntry;
+  /** İE partisinin numarası: SERIES = seriden (formda "Otomatik verilir") · DOCUMENT = belgedeki parti no. Eski sunucu göndermez. */
+  batchNumberSource?: 'SERIES' | 'DOCUMENT';
 }
 
 /** Tablet iş emri girişi: IKISI = bugünkü (top + belge) · BELGE = her karo tek formu açar · TOP = yalnız top yolu. */
@@ -220,6 +226,8 @@ export interface CreateWorkOrderFromNoteBody {
   /** null = temizle. */
   ourBatchNo?: string | null;
   ourBatchNoKey?: string;
+  /** Müşterinin parti no'su; YALNIZ kullanıcı değiştirdiyse gider (eski sunucu strict gövdesi anahtarı 400'ler). */
+  customerBatchNo?: string | null;
   /** Decimal string; verilince gözden geçirilmiş sayılır. */
   kursunMeters: string;
   /** Yok = rotasız iş emri (K29; yalnız rota uygulaması "Okutmayla", sunucu SIRALI'da 400 verir). */
@@ -306,6 +314,7 @@ export interface NotePartiesView {
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
 export interface InboundNotePatch {
   ownerCustomerId?: string | null;
+  customerBatchNo?: string | null;
   ourBatchNo?: string | null;
   ourBatchNoKey?: string | null;
   kursunMeters?: number | null;
