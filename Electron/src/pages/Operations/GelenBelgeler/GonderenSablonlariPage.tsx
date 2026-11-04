@@ -65,6 +65,8 @@ function BatchNoKeyField({ row, onPatch, busy }: { row: SenderTemplateView; onPa
 }
 
 function TemplateCard({ row, onPatch, busy }: { row: SenderTemplateView; onPatch: (p: SenderTemplatePatch) => void; busy: boolean }) {
+  // Yetim = dosyada artık olmayan dosya şablonu satırı; pasif şablon (dosya ya da kullanıcı) yeniden etkinleştirilebilir.
+  const orphan = !isUserTemplate(row) && !row.inFile;
   return (
     <div className="rounded-lg border bg-card p-4" data-testid={`template-${row.code}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -77,13 +79,13 @@ function TemplateCard({ row, onPatch, busy }: { row: SenderTemplateView; onPatch
         <div className="flex items-center gap-3">
         {isUserTemplate(row) && <UserTemplateEditButton code={row.code} name={row.name} />}
         <label className="flex items-center gap-2 text-sm">
-          {/* Kullanıcı şablonu pasifken motorda değildir ama yeniden etkinleştirilebilir. */}
-          <Switch checked={row.isActive} disabled={busy || (!row.inEngine && !isUserTemplate(row))} onCheckedChange={(v) => onPatch({ isActive: v })} aria-label={`${row.name} aktif`} />
+          <Switch checked={row.isActive} disabled={busy || orphan} onCheckedChange={(v) => onPatch({ isActive: v })} aria-label={`${row.name} aktif`} />
           {row.isActive ? "Aktif" : "Pasif"}
         </label>
         </div>
       </div>
-      {!row.inEngine && !isUserTemplate(row) && (
+      {!row.isActive && !orphan && <div className="mt-1 text-xs text-muted-foreground">Pasif: belge bu şablonla tanınmaz.</div>}
+      {orphan && (
         <Badge variant="outline" className="mt-2">
           Okuma motorunda artık yok
         </Badge>

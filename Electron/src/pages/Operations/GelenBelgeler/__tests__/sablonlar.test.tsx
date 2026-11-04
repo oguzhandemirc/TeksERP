@@ -45,7 +45,7 @@ vi.mock("../tanit/service", () => ({
 }));
 
 const row = (o: Partial<SenderTemplateView>): SenderTemplateView => ({
-  code: "ceki-listesi-a", name: "Kumaş çeki listesi", version: 1, rowVersion: 1, inEngine: true, id: "t1",
+  code: "ceki-listesi-a", name: "Kumaş çeki listesi", version: 1, rowVersion: 1, inEngine: true, inFile: true, id: "t1",
   isActive: true, hitCount: 7, senderCustomer: { id: "c1", code: "C1", name: "Güleçsoy", isActive: true },
   defaultOwnerCustomer: null, updatedAt: "2026-10-29T08:00:00Z", ...o,
 });
@@ -67,6 +67,21 @@ describe("gönderen şablonları sayfası", () => {
     renderWithProviders(<SenderTemplatesPage />);
     await userEvent.click(await screen.findByRole("switch", { name: "Kumaş çeki listesi aktif" }));
     await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("ceki-listesi-a", { isActive: false }));
+  });
+
+  it("⭐ pasif dosya şablonu yeniden etkinleştirilebilir + ipucu; yetim satır kilitli", async () => {
+    listSenderTemplates.mockResolvedValue([
+      row({ isActive: false, inEngine: false }),
+      row({ code: "eski-sablon", name: "Eski şablon", id: "t9", inEngine: false, inFile: false }),
+    ]);
+    renderWithProviders(<SenderTemplatesPage />);
+    const sw = await screen.findByRole("switch", { name: "Kumaş çeki listesi aktif" });
+    expect(sw).toBeEnabled();
+    expect(screen.getByText("Pasif: belge bu şablonla tanınmaz.")).toBeInTheDocument();
+    await userEvent.click(sw);
+    await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("ceki-listesi-a", { isActive: true }));
+    expect(screen.getByRole("switch", { name: "Eski şablon aktif" })).toBeDisabled();
+    expect(screen.getByText("Okuma motorunda artık yok")).toBeInTheDocument();
   });
 
   it("gönderen ve varsayılan sahip seçicisi ayrı alanı yazar", async () => {
@@ -136,7 +151,7 @@ describe("bulunabilirlik", () => {
 });
 
 describe("tanıtılan belge tipleri (S1b)", () => {
-  const user = row({ kind: "USER", code: "u-gulecsoy", name: "Güleçsoy çeki", id: "t7", inEngine: false, isActive: false, senderCustomer: null });
+  const user = row({ kind: "USER", code: "u-gulecsoy", name: "Güleçsoy çeki", id: "t7", inEngine: false, inFile: false, isActive: false, senderCustomer: null });
   beforeEach(() => {
     listSenderTemplates.mockResolvedValue([row({}), user]);
     getUserTemplate.mockReset().mockResolvedValue({

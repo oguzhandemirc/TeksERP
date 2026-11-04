@@ -74,8 +74,10 @@ export interface SenderTemplateView {
   /** Dosyadaki motor şablonunun sürümü (DB satırının doğduğu sürüm `rowVersion`). */
   version: number;
   rowVersion: number | null;
-  /** Dosyada motor şablonu var mı (yoksa DB satırı yetim: motor artık bu kodu üretmez). */
+  /** Motor bu şablonla belge tanır mı: dosya şablonu dosyada VE aktif; kullanıcı şablonu aktif. */
   inEngine: boolean;
+  /** Dosya şablonu dosyada var mı (yoksa DB satırı yetim: motor artık bu kodu üretmez); kullanıcı şablonunda false. */
+  inFile: boolean;
   id: string | null;
   isActive: boolean;
   hitCount: number;
@@ -86,11 +88,14 @@ export interface SenderTemplateView {
   updatedAt: Date | null;
 }
 
-function view(t: { code: string; name: string; version: number; inEngine: boolean }, row: Row | undefined): SenderTemplateView {
-  const { code, name, version, inEngine } = t;
+function view(t: { code: string; name: string; version: number; inFile: boolean }, row: Row | undefined): SenderTemplateView {
+  const { code, name, version, inFile } = t;
+  const user = code.startsWith(USER_TEMPLATE_PREFIX);
   return {
-    code, name, version, inEngine,
-    kind: code.startsWith(USER_TEMPLATE_PREFIX) ? "USER" : "FILE",
+    code, name, version, inFile,
+    // Pasif şablon (dosya ya da kullanıcı) motora girmez (`engineTemplates`); satırsız dosya şablonu aktiftir.
+    inEngine: (inFile || user) && (row?.isActive ?? true),
+    kind: user ? "USER" : "FILE",
     rowVersion: row?.version ?? null,
     id: row?.id ?? null,
     // Satırı olmayan şablon motor tarafından kullanılır, öneri bağı yoktur → aktif sayılır (doğuş varsayılanı).
@@ -107,13 +112,13 @@ function view(t: { code: string; name: string; version: number; inEngine: boolea
 export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
   const rows = await prisma.senderTemplate.findMany({ select: ROW_SELECT, orderBy: { code: "asc" } });
   const byCode = new Map(rows.map((r) => [r.code, r]));
-  const out = bindableTemplates().map((t) => view({ code: t.id, name: t.name, version: t.version, inEngine: true }, byCode.get(t.id)));
+  const out = bindableTemplates().map((t) => view({ code: t.id, name: t.name, version: t.version, inFile: true }, byCode.get(t.id)));
   const fileCodes = new Set(out.map((v) => v.code));
   for (const r of rows) {
     if (fileCodes.has(r.code)) continue;
     const user = r.code.startsWith(USER_TEMPLATE_PREFIX);
     // Kullanıcı şablonu motordadır (aktifken); adı kendi JSON'undan.
-    out.push(view({ code: r.code, name: user ? templateName(r.template, r.code) : r.code, version: r.version, inEngine: user && r.isActive }, r));
+    out.push(view({ code: r.code, name: user ? templateName(r.template, r.code) : r.code, version: r.version, inFile: false }, r));
   }
   return out;
 }
@@ -181,5 +186,5 @@ export async function updateSenderTemplate(code: string, patch: SenderTemplatePa
   await AuditService.log({ userId, action: "UPDATE", tableName: TABLE, recordId: id, oldData: { code, ...auditOf(before) }, newData: { code, ...auditOf(row) } });
   const tpl = bindableTemplates().find((t) => t.id === code);
   const user = code.startsWith(USER_TEMPLATE_PREFIX);
-  return view({ code, name: tpl?.name ?? (user ? templateName(row.template, code) : code), version: tpl?.version ?? row.version, inEngine: !!tpl || (user && row.isActive) }, row);
+  return view({ code, name: tpl?.name ?? (user ? templateName(row.template, code) : code), version: tpl?.version ?? row.version, inFile: !!tpl }, row);
 }

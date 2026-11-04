@@ -58,11 +58,22 @@ export async function loadUserTemplates(): Promise<DocumentTemplate[]> {
   return out;
 }
 
-/** Motorun şablon kümesi: dosya şablonları + aktif kullanıcı şablonları; GENEL yedek SONDA (classifyWithFallback sözleşmesi). */
+/** Panelde PASİF yapılmış dosya şablonu kodları (satırı olmayan = aktif; GENEL hiç sorulmaz). */
+export async function inactiveFileTemplateCodes(files: readonly DocumentTemplate[] = loadTemplates()): Promise<Set<string>> {
+  const codes = files.map((t) => t.id).filter((c) => c !== FALLBACK);
+  const rows = await prisma.senderTemplate.findMany({ where: { isActive: false, code: { in: codes } }, select: { code: true } });
+  return new Set(rows.map((r) => r.code));
+}
+
+/**
+ * Motorun şablon kümesi: AKTİF dosya şablonları + aktif kullanıcı şablonları; GENEL yedek SONDA (classifyWithFallback
+ * sözleşmesi) ve HİÇ çıkarılmaz. Pasif dosya şablonu motora girmez — belge onunla tanınmaz (Gülkesim demo, 2026-11-04).
+ */
 export async function engineTemplates(): Promise<DocumentTemplate[]> {
   const files = loadTemplates();
+  const off = await inactiveFileTemplateCodes(files);
   const user = await loadUserTemplates();
-  return [...files.filter((t) => t.id !== FALLBACK), ...user, ...files.filter((t) => t.id === FALLBACK)];
+  return [...files.filter((t) => t.id !== FALLBACK && !off.has(t.id)), ...user, ...files.filter((t) => t.id === FALLBACK)];
 }
 
 const VIEW_SELECT = { id: true, code: true, version: true, isActive: true, template: true, clientToken: true, updatedAt: true, createdAt: true } as const;

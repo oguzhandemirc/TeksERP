@@ -335,7 +335,10 @@ export interface SenderTemplateView extends SenderTemplateBatchNoFields {
   name: string;
   version: number;
   rowVersion: number | null;
+  /** Motor bu şablonla belge tanır mı (dosyada + aktif; kullanıcı şablonu aktif). */
   inEngine: boolean;
+  /** Dosya şablonu dosyada var mı (false = yetim satır); kullanıcı şablonunda false. */
+  inFile: boolean;
   id: string | null;
   isActive: boolean;
   hitCount: number;
