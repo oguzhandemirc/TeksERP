@@ -44,10 +44,13 @@ export interface UnifiedWoFormProps {
   routeLocked: boolean;
   /** Açıldıktan sonra "Yeni iş emri": üst ekran formu sıfırdan kurar. */
   onNew: () => void;
+  /** Verilirse ⚙ alan seçici açıklığı dışarıdan yönetilir ve gövdedeki "Alanlar" tuşu çizilmez. */
+  fieldsOpen?: boolean;
+  onFieldsOpenChange?: (open: boolean) => void;
 }
 
 /** Formun durumu: rota, ek alanlar, satır (tek belge), tarayıcı; belgeden doldurma ve "oluştur" engeli. */
-export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormProps) {
+export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFieldsOpenChange }: UnifiedWoFormProps) {
   const [route, setRouteState] = useState<ProductionRoute | null>(initialRoute);
   const [form, setForm] = useState<WoFormState>(initialFormState);
   const setRoute = useCallback((r: ProductionRoute) => {
@@ -103,6 +106,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked }: UnifiedWoFormPro
       hasMachine: plan.machines.length > 0,
     },
     valuedFields(extras, { stepsEdited: plan.stepsEdited }),
+    fieldsOpen !== undefined && onFieldsOpenChange ? { open: fieldsOpen, onOpenChange: onFieldsOpenChange } : undefined,
   );
 
   // Gelen metre: çok partide parti toplamı, ayrı toplarda top toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
