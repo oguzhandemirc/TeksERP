@@ -132,6 +132,11 @@ const CONTEXT_LABELS: ReadonlyArray<{ table: string; field: string; value: strin
   // (Kardeşi `SALE` override ALMAZ: yalnız PriceKind'da geçtiği için global
   // "Satış" etiketi zaten doğrudur — aşağıdaki "override farklı olmalı" kuralı.)
   { table: "ITEM_PRICE", field: "kind", value: "PURCHASE", label: "Alış" },
+  // OrderStatus — sipariş kayıt geçmişi sevk diliyle ("Onaylandı" jargonu yok); iş emri/cihaz globalde kalır.
+  { table: "ORDER", field: "status", value: "PENDING", label: "Henüz onaylanmadı" },
+  { table: "ORDER", field: "status", value: "APPROVED", label: "Henüz gönderilmedi" },
+  { table: "ORDER", field: "status", value: "COMPLETED", label: "Hepsi gönderildi ya da elle kapatıldı" },
+  { table: "ORDER", field: "status", value: "CANCELLED", label: "Sipariş iptal edildi" },
   // ChequeStatus.ISSUED — çekin DURUMU; ChequeKind.ISSUED ise TÜRÜ. İkisi AYNI
   // tabloda yaşar, yani tablo-kapsamlı bir katman yetmez (alan da gerekir).
   { table: "CHEQUE", field: "status", value: "ISSUED", label: "Verildi" },
@@ -235,6 +240,13 @@ describe("alan-kapsamlı enum bağlamı (TABLO.alan)", () => {
         `${table}.${field}.${value} override'ı global etiketle AYNI — ya siliniyor ya global düzeltiliyor`,
       ).not.toBe(ENUM_LABELS[value]);
     }
+  });
+
+  it("sipariş durumu override'ı iş emri / cihaz durumlarını BOZMAZ", () => {
+    expect(enumValueLabel("APPROVED", { tableName: "DEVICE", field: "status" })).toBe("Onaylandı");
+    expect(enumValueLabel("COMPLETED", { tableName: "WORK_ORDER", field: "status" })).toBe("Tamamlandı");
+    expect(enumValueLabel("CANCELLED", { tableName: "WORK_ORDER", field: "status" })).toBe("İptal");
+    expect(enumValueLabel("PARTIAL_SHIPPED", { tableName: "ORDER", field: "status" })).toBe("Bir kısmı gönderildi");
   });
 
   it("bağlam YOKSA global sözlük kullanılır (mevcut çağrı yerleri bozulmaz)", () => {

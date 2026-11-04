@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/operations/StatusBadge";
-import { OVERDUE_TEXT, orderShipText, orderWhereView } from "./order-where-text";
+import { OVERDUE_TEXT, orderShipView, orderWhereView } from "./order-where-text";
 import type { Order } from "./types";
 
 /**
@@ -22,7 +22,10 @@ export function WhereCell({ order }: { order: Pick<Order, "nerede" | "manualClos
   );
 }
 
-/** "Sevk" hücresi — BRÜT sevk cümlesi (Excel/PDF ile aynı). */
+/** "Sevk durumu" hücresi — günlük dil rozeti, miktar parantezde (Excel/PDF ile aynı metin). */
 export function ShipCell({ order }: { order: Pick<Order, "status" | "shippedQty" | "manualClosedById" | "lines"> }) {
-  return <span className="text-xs">{orderShipText(order)}</span>;
+  const view = orderShipView(order);
+  return (
+    <StatusBadge status={view.text} tones={{ [view.text]: view.tone }} className="whitespace-normal text-left" />
+  );
 }

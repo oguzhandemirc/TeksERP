@@ -1,17 +1,17 @@
 // Sipariş + cari sözlüğü: fabrika projeksiyonlarındaki ham enum → Türkçe etiket (+ durum tonu).
 // Kaynak enum'lar (Teks-Erp/prisma/schema.prisma): OrderStatus {PENDING, APPROVED, PARTIAL_SHIPPED, COMPLETED, CANCELLED} ·
 // ShipmentDestination {DOMESTIC, EXPORT} (`siparis.yon`) · ItemUnit {MT, KG, ADET} (`siparis-kalemi.birim`) ·
-// CariKind {CUSTOMER, SUBCONTRACTOR} (`cari-hesap.tur`). Etiketler panelin `orderStatusLabels`ıyla aynı; bilinmeyen değer ham döner.
+// CariKind {CUSTOMER, SUBCONTRACTOR} (`cari-hesap.tur`). Etiketler panelin `orderStatusLabels`ıyla aynı (sevk dili, "Onaylandı" jargonu yok); bilinmeyen değer ham döner.
 import type { StatusEntry } from "./ortak";
 
 export type OrderStatus = "PENDING" | "APPROVED" | "PARTIAL_SHIPPED" | "COMPLETED" | "CANCELLED";
 
 export const ORDER_STATUS: Readonly<Record<OrderStatus, StatusEntry>> = {
-  PENDING: { label: "Beklemede", tone: "uyari" },
-  APPROVED: { label: "Onaylandı", tone: "bilgi" },
-  PARTIAL_SHIPPED: { label: "Kısmi sevk", tone: "bilgi" },
-  COMPLETED: { label: "Tamamlandı", tone: "iyi" },
-  CANCELLED: { label: "İptal", tone: "bilgi" },
+  PENDING: { label: "Henüz onaylanmadı", tone: "uyari" },
+  APPROVED: { label: "Henüz gönderilmedi", tone: "bilgi" },
+  PARTIAL_SHIPPED: { label: "Bir kısmı gönderildi", tone: "bilgi" },
+  COMPLETED: { label: "Hepsi gönderildi", tone: "iyi" },
+  CANCELLED: { label: "Sipariş iptal edildi", tone: "bilgi" },
 };
 
 /** Liste süzgecinin sırası (sunucu `durum` parametresi tam eşitlikle süzer). */

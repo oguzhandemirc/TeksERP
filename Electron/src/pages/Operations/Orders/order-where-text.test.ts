@@ -1,10 +1,13 @@
 // "Nerede?" + "Sevk" saf metin katmanı — tasarımın HER durumu birebir metinle.
 import { describe, it, expect } from "vitest";
 import { TERIM } from "@/lib/terim";
+import { orderStatusLabels } from "@/types/enums";
 import {
+  ORDER_SHIP_FILTER_OPTIONS,
   activeWhereTab,
   normalizeFasonGun,
   orderShipText,
+  orderShipView,
   orderWhereExportText,
   orderWhereView,
   stepTrailText,
@@ -42,7 +45,7 @@ describe("Nerede? — durum tablosu", () => {
   });
 
   it("elle kapatılan tamam sipariş 'Hepsi gönderildi' demez", () => {
-    expect(view(where({ durum: "TAMAM" }), "u1")).toEqual({ text: "Sipariş kapatıldı", tone: "muted", overdue: false });
+    expect(view(where({ durum: "TAMAM" }), "u1")).toEqual({ text: "Sipariş elle kapatıldı", tone: "muted", overdue: false });
   });
 
   it("termin geçtiyse ek rozet; Excel metni ekranla aynı sırada birleşir", () => {
@@ -69,21 +72,59 @@ const line = (p: Partial<OrderLine> = {}): OrderLine => ({ quantity: 1200, unit:
 const ship = (status: Order["status"], shippedQty: number, lines: OrderLine[], manualClosedById: string | null = null) =>
   orderShipText({ status, shippedQty, lines, manualClosedById });
 
-describe("Sevk — BRÜT sevk cümlesi", () => {
+describe("Sevk durumu — günlük dil, BRÜT sevk cümlesi", () => {
   it.each([
     ["APPROVED", 0, [line(), line()], null, "Henüz gönderilmedi"],
-    ["PENDING", 0, [line()], null, "Henüz gönderilmedi"],
+    ["PENDING", 0, [line()], null, "Henüz onaylanmadı"],
     ["PARTIAL_SHIPPED", 1200, [line(), line()], null, "Bir kısmı gönderildi (1.200 / 2.400 m)"],
     ["APPROVED", 40.5, [line({ quantity: 300 })], null, "Bir kısmı gönderildi (40,5 / 300 m)"],
     ["COMPLETED", 2400, [line(), line()], null, "Hepsi gönderildi"],
     ["PARTIAL_SHIPPED", 2400, [line(), line()], null, "Hepsi gönderildi"],
-    ["COMPLETED", 1000, [line(), line()], "u1", "Sipariş kapatıldı (1.000 / 2.400 m gönderildi)"],
-    ["COMPLETED", 0, [line({ unit: "KG" })], "u1", "Sipariş kapatıldı"],
+    ["COMPLETED", 1000, [line(), line()], "u1", "Sipariş elle kapatıldı (1.000 / 2.400 m gönderildi)"],
+    ["COMPLETED", 0, [line({ unit: "KG" })], "u1", "Sipariş elle kapatıldı"],
     ["PARTIAL_SHIPPED", 0, [line({ unit: "KG" }), line()], null, "Bir kısmı gönderildi"],
-    ["CANCELLED", 0, [line()], null, "Henüz gönderilmedi"],
+    ["CANCELLED", 0, [line()], null, "Sipariş iptal edildi"],
+    ["CANCELLED", 300, [line()], null, "Sipariş iptal edildi (300 / 1.200 m gönderildi)"],
+    ["CANCELLED", 300, [line({ unit: "KG" })], null, "Sipariş iptal edildi"],
   ] as const)("%s sevk=%s → %s", (...c) => {
     const [status, shipped, lines, closed, text] = c;
     expect(ship(status, shipped, [...lines], closed)).toBe(text);
+  });
+
+  it("her enum değerinin miktarsız metni günlük dil; 'Onaylandı' jargonu yok", () => {
+    expect(orderStatusLabels).toEqual({
+      PENDING: "Henüz onaylanmadı",
+      APPROVED: "Henüz gönderilmedi",
+      PARTIAL_SHIPPED: "Bir kısmı gönderildi",
+      COMPLETED: "Hepsi gönderildi",
+      CANCELLED: "Sipariş iptal edildi",
+    });
+    for (const status of Object.keys(orderStatusLabels) as Order["status"][]) {
+      const text = ship(status, 0, [line({ unit: "KG" })]);
+      expect(text).toBe(orderStatusLabels[status]);
+      expect(text).not.toMatch(/Onaylandı|Onaylı|Kısmi|Tamamlandı|Beklemede/);
+    }
+  });
+
+  it("renk durumla tutarlı: onaysız uyarı, iptal/kapatıldı sönük, kısmi ilerleme, hepsi başarı", () => {
+    const tone = (status: Order["status"], shipped: number, closed: string | null = null) =>
+      orderShipView({ status, shippedQty: shipped, lines: [line()], manualClosedById: closed }).tone;
+    expect(tone("PENDING", 0)).toBe("warning");
+    expect(tone("APPROVED", 0)).toBe("info");
+    expect(tone("PARTIAL_SHIPPED", 600)).toBe("progress");
+    expect(tone("COMPLETED", 1200)).toBe("success");
+    expect(tone("COMPLETED", 600, "u1")).toBe("muted");
+    expect(tone("CANCELLED", 0)).toBe("muted");
+  });
+
+  it("süzgeç seçenekleri liste metniyle aynı; 'Hepsi gönderildi' kovası kapatılanı da söyler", () => {
+    expect(ORDER_SHIP_FILTER_OPTIONS).toEqual([
+      { value: "PENDING", label: "Henüz onaylanmadı" },
+      { value: "APPROVED", label: "Henüz gönderilmedi" },
+      { value: "PARTIAL_SHIPPED", label: "Bir kısmı gönderildi" },
+      { value: "COMPLETED", label: "Hepsi gönderildi ya da elle kapatıldı" },
+      { value: "CANCELLED", label: "Sipariş iptal edildi" },
+    ]);
   });
 
   it("iptal kalem yalnız sevk edilmiş kısmıyla istenene girer", () => {

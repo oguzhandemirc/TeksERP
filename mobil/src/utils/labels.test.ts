@@ -4,7 +4,22 @@ import {
   RETIRED_ROLL_STATUSES,
   ROLL_STATUS_LABEL,
   WORK_ORDER_STATUS_LABEL,
+  ORDER_STATUS_LABEL,
+  ORDER_STATUS_FILTER_LABEL,
 } from "./labels";
+
+describe("sipariş durumu — sevk dili (panel orderStatusLabels ile aynı)", () => {
+  it("her durum günlük dil; 'Onaylandı' / 'Kısmen Sevk' jargonu yok", () => {
+    expect(ORDER_STATUS_LABEL).toEqual({
+      PENDING: "Henüz onaylanmadı",
+      APPROVED: "Henüz gönderilmedi",
+      PARTIAL_SHIPPED: "Bir kısmı gönderildi",
+      COMPLETED: "Hepsi gönderildi",
+      CANCELLED: "Sipariş iptal edildi",
+    });
+    expect(ORDER_STATUS_FILTER_LABEL.COMPLETED).toBe("Hepsi gönderildi ya da elle kapatıldı");
+  });
+});
 
 describe("trLabel (enum → Türkçe etiket)", () => {
   it("bilinen kodu çevirir", () => {

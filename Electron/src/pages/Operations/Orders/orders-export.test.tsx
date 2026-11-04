@@ -118,8 +118,10 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(at("Müşteri")).toBe("Acme Tekstil");
     expect(at("Şube")).toBe("Merkez");
     expect(at("Kalem")).toBe("3");
-    expect(at("Sevk")).toBe("Bir kısmı gönderildi (40 / 300 m)");
-    expect(at("Sevk durumu")).toBe("Onaylandı");
+    // Eski "Sevk" + "Sevk durumu" tek sütunda birleşti; jargon ("Onaylandı") yazılmaz.
+    expect(head).not.toContain("Sevk");
+    expect(head.filter((h) => h === "Sevk durumu")).toHaveLength(1);
+    expect(at("Sevk durumu")).toBe("Bir kısmı gönderildi (40 / 300 m)");
     expect(at("Sipariş Tarihi")).toMatch(/^\d{2}\.\d{2}\.2026$/);
     expect(at("Tutar")).toBe("1500,00 TRY");
   });
@@ -149,7 +151,7 @@ describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
     expect(head.indexOf("İE sayısı")).toBe(head.indexOf("Üretim") + 1);
     expect(at("Üretim")).toBe("Üretildi");
     expect(at("İE sayısı")).toBe("2");
-    expect(at("Sevk durumu")).toBe("Onaylandı");
+    expect(at("Sevk durumu")).toBe("Bir kısmı gönderildi (40 / 200 m)");
     expect(head).not.toContain("Genel durum");
     expect(at("Nerede?")).toBe("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha · Termini geçti");
   });
@@ -169,7 +171,8 @@ describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
     const ids = buildOrderColumns(false, false).map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey);
     expect(ids).not.toContain("workOrder");
     expect(ids).not.toContain("where");
-    expect(ids).toContain("status");
+    expect(ids).toContain("shipped");
+    expect(ids).not.toContain("status");
   });
 });
 
@@ -186,6 +189,16 @@ describe("kalem bazında Excel", () => {
     expect(lineOpenQty({ order: o, line: line({ cancelledAt: "2026-11-02T00:00:00Z" }) })).toBe(0);
     expect(lineOpenQty({ order: o, line: line({ unit: "KG" }) })).toBe("");
     expect(lineOpenQty({ order: order({ status: "COMPLETED" }), line: line({}) })).toBe(0);
+  });
+
+  it("kalem satırındaki 'Sevk durumu' liste ekranının cümlesi (sipariş geneli)", () => {
+    const rows = flattenOrderLines([order(), order({ id: "o3", orderNumber: "SP-003", status: "CANCELLED", shippedQty: 0 })]);
+    const col = orderLineExportColumns(rows, { pricingEnabled: false, productionEnabled: true }).find((c) => c.label === "Sevk durumu");
+    expect(col).toBeDefined();
+    for (const r of rows) {
+      expect(col!.value(r)).toBe(r.order.id === "o3" ? "Sipariş iptal edildi" : "Bir kısmı gönderildi (40 / 300 m)");
+    }
+    expect(orderLineExportColumns(rows, { pricingEnabled: false, productionEnabled: true }).map((c) => c.label)).not.toContain("Sipariş Durumu");
   });
 
   it("fiyat kolonları yalnız pricingEnabled ile; iş emri kolonu üretimle", () => {

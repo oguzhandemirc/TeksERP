@@ -8,7 +8,7 @@ import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { orderService } from '../../../services/order.service';
 import type { Order } from '../../../types/models';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
-import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
+import { ORDER_STATUS_FILTER_LABEL, ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/labels';
 import { queryProblem, QUERY_PROBLEM_TEXT } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 import { formatCalendarDay } from '../../../lib/factory-time';
@@ -27,10 +27,10 @@ const PAGE_SIZE = 20;
 
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: '', label: 'Tümü' },
-  { value: 'APPROVED', label: 'Açık' },
-  { value: 'PARTIAL_SHIPPED', label: 'Kısmi Sevk' },
-  { value: 'COMPLETED', label: 'Tamamlandı' },
-  { value: 'CANCELLED', label: 'İptal' },
+  ...(['APPROVED', 'PARTIAL_SHIPPED', 'COMPLETED', 'CANCELLED'] as const).map((value) => ({
+    value,
+    label: ORDER_STATUS_FILTER_LABEL[value],
+  })),
 ];
 
 /** Prisma Decimal JSON'da string gelebilir — tek yerde sayıya çevir. */

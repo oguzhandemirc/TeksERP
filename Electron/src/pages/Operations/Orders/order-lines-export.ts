@@ -6,8 +6,9 @@ import type { ExportColumn } from "@/lib/list-export";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
 import { safeFormat } from "@/lib/format";
 import { formatCalendarDay } from "@/lib/factory-time";
-import { orderStatusLabels, workOrderStatusLabels } from "@/types/enums";
+import { workOrderStatusLabels } from "@/types/enums";
 import { TERIM } from "@/lib/terim";
+import { orderShipText } from "./order-where-text";
 import type { Order, OrderLine } from "./types";
 
 export interface OrderLineExportRow {
@@ -79,7 +80,8 @@ export function orderLineExportColumns(
   const C = (label: string, value: (r: OrderLineExportRow) => unknown, summable = false) => ({ label, value, summable });
   return [
     C("Sipariş No", (r) => r.order.orderNumber),
-    C("Sipariş Durumu", (r) => orderStatusLabels[r.order.status] ?? r.order.status),
+    // Liste ekranının "Sevk durumu" cümlesi (sipariş geneli, BRÜT).
+    C("Sevk durumu", (r) => orderShipText(r.order)),
     C("Müşteri", (r) => r.order.customer?.name ?? ""),
     C("Şube", (r) => r.order.branch?.name ?? ""),
     C("Sipariş Tarihi", (r) => safeFormat(r.order.orderDate, "dd.MM.yyyy", "")),

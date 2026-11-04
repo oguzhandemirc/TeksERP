@@ -43,6 +43,7 @@ import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
 import { TERIM } from "@/lib/terim";
+import { ORDER_SHIP_FILTER_OPTIONS } from "./order-where-text";
 import { OrderPlanView, ORDER_PLAN_QUERY_KEY } from "./OrderPlanView";
 import { OrdersViewTabs, readOrdersView } from "./OrdersViewTabs";
 import { opensProposalOnApprove, useProposalGates } from "./production-proposal/gates";
@@ -53,13 +54,8 @@ const FILTERS: FilterDef[] = [
     kind: "multi-select",
     key: "status",
     label: "Sevk durumu",
-    options: [
-      { value: "PENDING", label: "Bekliyor" },
-      { value: "APPROVED", label: "Onaylı" },
-      { value: "PARTIAL_SHIPPED", label: "Kısmi Sevk" },
-      { value: "COMPLETED", label: "Tamamlandı" },
-      { value: "CANCELLED", label: "İptal" },
-    ],
+    // Etiket listedeki "Sevk durumu" cümlesiyle aynı kaynaktan (`order-where-text.ts`).
+    options: [...ORDER_SHIP_FILTER_OPTIONS],
   },
   {
     // "İş Emri" rollup filtresi — backend'de hesaplanır (OrderService.extraWhere →

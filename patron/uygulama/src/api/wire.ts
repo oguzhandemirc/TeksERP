@@ -165,11 +165,12 @@ export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
       varsayilan: null,
       secenekler: [
         { deger: "GECIKMIS", etiket: "Gecikmiş", alan: "gecikmis", esit: true },
-        { deger: "BEKLEMEDE", etiket: "Beklemede", alan: "durum", esit: "PENDING" },
-        { deger: "ONAYLANDI", etiket: "Onaylandı", alan: "durum", esit: "APPROVED" },
-        { deger: "KISMI_SEVK", etiket: "Kısmi sevk", alan: "durum", esit: "PARTIAL_SHIPPED" },
-        { deger: "TAMAMLANDI", etiket: "Tamamlandı", alan: "durum", esit: "COMPLETED" },
-        { deger: "IPTAL", etiket: "İptal", alan: "durum", esit: "CANCELLED" },
+        // Etiket sevk dilinde (panel `orderStatusLabels`); `deger` kodları sözleşmedir, değişmez.
+        { deger: "BEKLEMEDE", etiket: "Henüz onaylanmadı", alan: "durum", esit: "PENDING" },
+        { deger: "ONAYLANDI", etiket: "Henüz gönderilmedi", alan: "durum", esit: "APPROVED" },
+        { deger: "KISMI_SEVK", etiket: "Bir kısmı gönderildi", alan: "durum", esit: "PARTIAL_SHIPPED" },
+        { deger: "TAMAMLANDI", etiket: "Hepsi gönderildi ya da elle kapatıldı", alan: "durum", esit: "COMPLETED" },
+        { deger: "IPTAL", etiket: "Sipariş iptal edildi", alan: "durum", esit: "CANCELLED" },
       ],
     },
   },
