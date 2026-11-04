@@ -46,7 +46,7 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'gramaj', label: 'Kurşun gramajı', section: 'Belge', required: false, when: 'Rotada kurşun adımı varsa' },
   { key: 'rota', label: 'Rota', section: 'Üretim', required: true },
   { key: 'rotaAdimlari', label: 'Rota adımları', section: 'Üretim', required: false, when: 'Rota seçilince' },
-  { key: 'makine', label: 'Makine (öneri)', section: 'Üretim', required: false, when: 'Kurşun adımının istasyonunda makine varsa' },
+  { key: 'makine', label: 'Makine seç', section: 'Üretim', required: false, when: 'Kurşun adımının istasyonunda makine varsa' },
   { key: 'isEmriTuru', get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} türü`; }, section: 'Üretim', required: false },
   { key: 'siparis', label: 'Sipariş', section: 'Üretim', required: false },
   { key: 'hedefKumas', label: 'Hedef kumaş', section: 'Üretim', required: false },

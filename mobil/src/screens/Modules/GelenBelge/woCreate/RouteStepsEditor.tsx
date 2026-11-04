@@ -1,5 +1,5 @@
 // K30-D tablet İE formu — rota adımları: sade liste; ekle (istasyon seç), çıkar, yukarı/aşağı, fason adımda firma, adım
-// notu; kurşun adımının satırında "Makine (öneri)". Kullanıcı hiç değiştirmezse liste şablondur ve gövdeye gitmez.
+// notu; kurşun adımının satırında "Makine seç". Kullanıcı hiç değiştirmezse liste şablondur ve gövdeye gitmez.
 // Özel İE kısayolunda rota kilitli → salt okunur. Saf işlemler `woSteps.ts`te.
 import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -11,6 +11,7 @@ import type { DeskKursunMachine } from '../../../../services/inboundDoc.service'
 import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
+import { SectionBand } from '../../../../components/form/SectionBand';
 import { MachineChips } from '../desk/DeskReview';
 import { addStep, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
@@ -48,7 +49,9 @@ export default function RouteStepsEditor(p: Props) {
   return (
     <View style={styles.root} testID="ie-rota-adimlari">
       <View style={styles.head}>
-        <Text style={styles.label}>Rota adımları</Text>
+        <View style={styles.grow}>
+          <SectionBand title="Rota adımları" icon="format-list-numbered" testID="ie-serit-adimlar" />
+        </View>
         {p.edited && can && (
           <Button mode="text" onPress={() => p.onChange(null)} contentStyle={styles.btn} testID="ie-adim-sablona-don">
             Şablona dön
@@ -56,11 +59,9 @@ export default function RouteStepsEditor(p: Props) {
         )}
       </View>
       <Text style={styles.hint} testID="ie-adim-ipucu">
-        {!p.editable
-          ? `Bu ${TERIM.terbiyeIsEmri.tekilKucuk} türünün rotası sabit; adımlar değiştirilemez.`
-          : p.edited
-            ? `Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`
-            : 'Değiştirmezseniz rota şablonu aynen kullanılır.'}
+        {p.edited
+          ? `Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`
+          : 'Değiştirmezseniz rota şablonu aynen kullanılır.'}
       </Text>
       {p.steps.map((s, i) => (
         <View key={s.key} style={styles.step} testID={`ie-adim-${i + 1}`}>
@@ -81,7 +82,7 @@ export default function RouteStepsEditor(p: Props) {
             <Text style={styles.hint}>{s.notes}</Text>
           ) : null}
           {s.key === kursunKey && p.machine && (
-            <MachineChips list={p.machine.list} value={p.machine.value} locked={p.locked} label="Makine (öneri)" testID="ie-form-makine" onChange={p.machine.onChange} />
+            <MachineChips list={p.machine.list} value={p.machine.value} locked={p.locked} label="Makine seç" testID="ie-form-makine" onChange={p.machine.onChange} />
           )}
         </View>
       ))}
@@ -159,7 +160,7 @@ function FirmRow(p: { step: EditStep; index: number; firms: FirmsByCategory; edi
 const styles = StyleSheet.create({
   root: { gap: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
+  grow: { flex: 1 },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
   step: { gap: spacing.xs, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   stepHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },

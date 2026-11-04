@@ -146,7 +146,7 @@ describe('UnifiedWoForm', () => {
     mockRows = [row()];
     const s = renderWithPaper(ui());
     const chip = await s.findByTestId('ie-form-desen-oneri');
-    expect(chip).toHaveTextContent(/DSN-7.*Tül Beyaz \(T-1\) mi\? Evet/);
+    expect(chip).toHaveTextContent(/Tül Beyaz \(T-1\) mi\?.*belgede “DSN-7”.*Evet/);
     expect(s.getByTestId('renk-alani').props.children).toBe('bos');
     fireEvent.press(chip);
     fireEvent.press(s.getByTestId('ie-form-renk-oneri'));
@@ -270,7 +270,7 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
     mockBlob = { theme: 'dark', tabletIeForm: { gizli: ['not', 'planBaslangic', 'rota', 'bilinmeyen'] } };
     const s = renderWithPaper(ui());
     await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (2)'));
-    expect(s.getByText('Rota')).toBeTruthy();
+    expect(s.getByTestId('ie-rota-yolu')).toBeTruthy();
     await openSheet(s);
     for (const k of ['musteri', 'partiNo', 'kursunMetresi', 'rota']) {
       expect(s.getByTestId(`ie-alan-zorunlu-${k}`)).toBeTruthy();
