@@ -38,17 +38,22 @@ export async function takeWorkOrderPlaceFilters(
 export interface PlaceOption {
   id: string;
   name: string;
-  /** Şu an orada topu bulunan (arşivlenmemiş) iş emri sayısı — süzgeçle aynı küme. */
+  /** Liste süzgeçleri içinde şu an orada topu bulunan iş emri sayısı — seçilince liste toplamı. */
   workOrderCount: number;
 }
 
+export interface WorkOrderPlaceOptions {
+  firms: PlaceOption[];
+}
+
 /**
- * Seçici seçenekleri: fason firmaları, şu an orada topu olan arşivlenmemiş İE sayısıyla.
- * Pasif firma yalnız sayısı > 0 ise listelenir; sayı azalan, sonra ad. Sabit 2 sorgu.
+ * Seçici seçenekleri (faceted): firma sayısı `firmBase` (liste süzgeçleri − `fasonFirma`,
+ * `WorkOrderService.buildListWhere`ten) içinde → seçilince listenin toplamı. Pasif firma
+ * yalnız sayısı > 0 ise listelenir; sayı azalan, sonra ad. Sabit 2 sorgu.
  */
-export async function loadWorkOrderPlaceOptions(): Promise<{ firms: PlaceOption[] }> {
+export async function loadWorkOrderPlaceOptions(firmBase: Prisma.WorkOrderWhereInput): Promise<WorkOrderPlaceOptions> {
   const atFason = await prisma.subcontractorDispatchItem.findMany({
-    where: fasonItemNowWhere({ workOrder: { isActive: true } }),
+    where: fasonItemNowWhere({ workOrder: firmBase }),
     select: { dispatch: { select: { workOrderId: true, subcontractorId: true } } },
   });
   const firms = await prisma.subcontractor.findMany({ select: { id: true, name: true, isActive: true } });
