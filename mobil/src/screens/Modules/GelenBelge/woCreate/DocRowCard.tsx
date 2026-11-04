@@ -20,6 +20,7 @@ import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
 import TeachBanner from '../tanit/TeachBanner';
+import CustomerFromDocOffer from './CustomerFromDocSheet';
 
 interface Props {
   row: DocRow;
@@ -82,6 +83,9 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
               {`Belgede “${f.ownerAsk.matchedText}” geçiyor — ${f.ownerAsk.name} mi? Seç`}
             </Chip>
           )}
+          {!f.ownerCustomerId && read.watch?.phase === 'done' && read.watch.summary.ownerUnmatched && (
+            <CustomerFromDocOffer noteNo={row.noteNo} unmatched={read.watch.summary.ownerUnmatched} disabled={locked} onPicked={(id) => wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null })} />
+          )}
           {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
@@ -100,10 +104,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
           choices={meterChoices(row.detail)}
           current={meterText}
           onDismiss={() => setMeterOpen(false)}
-          onSave={(m) => {
-            setMeterOpen(false);
-            wo.updateForm(row.noteId, { meters: m, metersReview: false });
-          }}
+          onSave={(m) => { setMeterOpen(false); wo.updateForm(row.noteId, { meters: m, metersReview: false }); }}
         />
       )}
     </View>

@@ -163,6 +163,12 @@ const BILINCLI_KAPISIZ: ReadonlyArray<{ dosya: string; mount: string; neden: str
     dosya: "routes/dashboard.routes.ts",
     mount: "/api/dashboard",
     neden: "Karma pano — aynı gerekçe.",
+  },  {
+    dosya: "routes/order.routes.ts",
+    mount: "/api/orders",
+    neden:
+      "Sipariş ÇEKİRDEKTİR (ticaret/sevk üretimsiz de çalışır); yalnız üretim-türevi " +
+      "`/:id/where` (İE ilerleme kartları) UÇ BAZLI kapılı (§5).",
   },
 ];
 
@@ -175,6 +181,10 @@ const UC_BAZLI: ReadonlyArray<{ dosya: string; kapili: readonly string[]; acik: 
     dosya: "routes/inventory.routes.ts",
     kapili: ["/open-fabric", "/:id/kursun-finish"],
     acik: ["/initial-entry", "/:id/rescue-preview", "/:id/rescue-stuck"],
+  },  {
+    dosya: "routes/order.routes.ts",
+    kapili: ["/:id/where"],
+    acik: ["/", "/:id"],
   },
 ];
 

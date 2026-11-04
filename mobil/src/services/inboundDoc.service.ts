@@ -17,6 +17,9 @@ import type {
   UserTemplateDetail,
   UserTemplateView,
 } from '../types/inboundDocTeach';
+import type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
+
+export type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 
 /** Fotoğraf gövdesi 1–2 MB base64; varsayılan 10 sn atölye Wi-Fi'ında yetmez. */
 const UPLOAD_TIMEOUT_MS = 60_000;
@@ -106,6 +109,8 @@ export interface ReadSummary {
   /** Taslağın sahibi + müşteri önerisi (OIE): satır formu detay ucu (`gelen-belge:read`) olmadan buradan dolar. Eski sunucu göndermez. */
   ownerCustomerId?: string | null;
   ownerSuggestion?: OwnerSuggestion | null;
+  /** Okunan müşteri adı kayıtlı cariye çözülemedi → "kayıtlı değil / bunu mu demek istediniz?" teklifi. Eski sunucu göndermez. */
+  ownerUnmatched?: OwnerUnmatched;
   /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
@@ -196,14 +201,6 @@ export interface InboundNoteScan {
   sha256: string;
   status: string;
   mimeType: string;
-}
-
-export interface OwnerSuggestion {
-  customerId: string;
-  name: string;
-  matchedText: string;
-  /** OWNER_TEXT: okunan sahip alanı (alan dolar) · FULL_TEXT: sayfa metninde geçiyor (yalnız sorulur). Eski sunucu göndermez → alan dolar. */
-  source?: 'OWNER_TEXT' | 'FULL_TEXT';
 }
 
 /** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */

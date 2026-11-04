@@ -24,6 +24,7 @@ vi.mock("@/pages/Operations/Returns/service", () => ({ returnsService: { summary
 vi.mock("@/pages/Operations/WorkOrders/CoveragePanel", () => ({ CoveragePanel: () => null }));
 vi.mock("./OrderShipmentsCard", () => ({ OrderShipmentsCard: () => null }));
 vi.mock("./LinkedWorkOrdersCard", () => ({ LinkedWorkOrdersCard: () => null }));
+vi.mock("./OrderWhereCard", () => ({ OrderWhereCard: () => null }));
 vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }));
 
 const svc = vi.mocked(customerAliasService);

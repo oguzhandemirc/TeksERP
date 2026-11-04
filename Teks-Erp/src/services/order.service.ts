@@ -94,9 +94,26 @@ import {
   buildPagination,
   buildTextSearch,
   buildWhereClause,
+  assertNoBareFilterParams,
   parseQueryParams,
   readIdCondition,
 } from "../utils/query-parser";
+import {
+  WO_ROLLUP_ACTIVE,
+  deriveOrderWhere,
+  factoryDaysSince,
+  loadWorkOrderFacts,
+  withOrderWhere,
+  type WoFacts,
+} from "./helpers/order-where.helper";
+import {
+  ORDER_WHERE_FILTER_KEYS,
+  needsProduction,
+  orderWhereFilterParts,
+  readOrderWhereFilters,
+} from "./helpers/order-where-filter.helper";
+import { readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import { Request } from "express";
 import { hata } from "../lib/logger";
 import { diffFields } from "./helpers/audit-diff.helper";
@@ -212,11 +229,7 @@ function computeTotalAmount(
 // "Üretimde" sayılır. Durumlar bu tanımla karşılıklı münhasırdır; çoklu seçim
 // OR'lanır. Varlık sorgusu (some) distinct-WO ayrımına duyarsızdır → frontend'in
 // distinct kümesiyle aynı sonucu verir.
-const WO_ROLLUP_ACTIVE: WorkOrderStatus[] = [
-  WorkOrderStatus.PLANNED,
-  WorkOrderStatus.IN_PROGRESS,
-  WorkOrderStatus.COMPLETED,
-];
+// Aktif küme `WO_ROLLUP_ACTIVE` "Nerede?" türetmesiyle ortaktır → `order-where.helper`da tek tanım.
 
 /** "Siparişin herhangi bir kalemi, verilen durumlardan bir WO'ya bağlı" koşulu. */
 function hasWoLink(statuses: WorkOrderStatus[]): Record<string, unknown> {
@@ -433,6 +446,133 @@ export class OrderService extends BaseService {
     return withActiveOrderLinks(super.buildListWhere(params, req));
   }
 
+  /** Yeni "Nerede?" süzgeç adları çıplak gelirse 400 (sessizce yok sayılmasın). */
+  protected override assertListQueryShape(req: Request): void {
+    super.assertListQueryShape(req);
+    assertNoBareFilterParams(req, ORDER_WHERE_FILTER_KEYS);
+  }
+
+  /** Üretim kapalıyken üretim-türevi süzgeç 403 MODULE_DISABLED; dönüş = üretim açık mı. */
+  private async gateOrderWhereFilters(req: Request): Promise<boolean> {
+    const enabled = await readProductionEnabled();
+    if (!enabled && needsProduction(readOrderWhereFilters(parseQueryParams(req).filters))) {
+      throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
+        ?? AppError.forbidden("Üretim modülü kapalı; bu süzgeç kullanılamaz.", { code: "MODULE_DISABLED", modul: "production" });
+    }
+    return enabled;
+  }
+
+  /**
+   * Liste: her satıra `nerede` (ek alan; eski istemci görmez). Sayfa başına sabit 2 sorgu.
+   * Üretim modülü kapalıysa `nerede` null (iş emri/top yüzeyi yok).
+   */
+  override async findAll(req: Request): ReturnType<BaseService["findAll"]> {
+    const productionOn = await this.gateOrderWhereFilters(req);
+    const res = await super.findAll(req);
+    if (!productionOn) {
+      return { ...res, data: (res.data as object[]).map((o) => ({ ...o, nerede: null })) };
+    }
+    type Row = Parameters<typeof withOrderWhere>[0][number];
+    return { ...res, data: await withOrderWhere(res.data as Row[]) };
+  }
+
+  /**
+   * Yan panel: siparişin bağlı her aktif iş emri için kart (rota adımları + ilerleme + aşama dağılımı).
+   * Sabit sorgu: sipariş+İE+adımlar tek Prisma okuması + `loadWorkOrderFacts` (2).
+   */
+  async getOrderWhereDetail(orderId: string): Promise<ApiResponse<unknown>> {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        deadline: true,
+        lines: {
+          select: {
+            workOrderLinks: {
+              where: ACTIVE_ORDER_LINK,
+              select: {
+                workOrder: {
+                  select: {
+                    id: true,
+                    workOrderNumber: true,
+                    status: true,
+                    targetQuantity: true,
+                    targetItem: { select: { name: true } },
+                    targetColor: { select: { name: true } },
+                    steps: {
+                      where: { status: { not: "SKIPPED" } },
+                      orderBy: { stepSequence: "asc" },
+                      select: { id: true, stepSequence: true, status: true, station: { select: { id: true, name: true } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!order) throw AppError.notFound("Sipariş bulunamadı");
+    const wos = new Map<string, NonNullable<(typeof order.lines)[number]["workOrderLinks"][number]["workOrder"]>>();
+    for (const l of order.lines) for (const k of l.workOrderLinks) if (k.workOrder) wos.set(k.workOrder.id, k.workOrder);
+    const active = [...wos.values()].filter((w) => WO_ROLLUP_ACTIVE.includes(w.status));
+    const facts = await loadWorkOrderFacts(active.map((w) => w.id));
+    const now = new Date();
+    const nerede = deriveOrderWhere({ status: order.status, deadline: order.deadline, workOrders: [...wos.values()] }, facts, now);
+    const isEmirleri = active
+      .sort((a, b) => a.workOrderNumber.localeCompare(b.workOrderNumber, "tr"))
+      .map((w) => {
+        const f = facts.get(w.id) as WoFacts;
+        const liveByStep = new Map<string, { top: number; metre: number; fasonTop: number }>();
+        for (const g of f.live) {
+          const e = liveByStep.get(g.stepId) ?? { top: 0, metre: 0, fasonTop: 0 };
+          e.top += g.count;
+          e.metre += g.qty;
+          if (g.status === "AT_SUBCONTRACTOR") e.fasonTop += g.count;
+          liveByStep.set(g.stepId, e);
+        }
+        const liveSeqs = w.steps.filter((s) => liveByStep.has(s.id)).map((s) => s.stepSequence);
+        const maxLive = liveSeqs.length ? Math.max(...liveSeqs) : null;
+        const finished = maxLive === null && f.hazir.count + f.gitti.count > 0;
+        return {
+          id: w.id,
+          no: w.workOrderNumber,
+          durum: w.status,
+          kumas: w.targetItem?.name ?? null,
+          renk: w.targetColor?.name ?? null,
+          hedefMetre: w.targetQuantity != null ? Number(w.targetQuantity) : null,
+          adimlar: w.steps.map((s) => {
+            const live = liveByStep.get(s.id);
+            const asama = live
+              ? "BURADA"
+              : finished || s.status === "COMPLETED" || (maxLive !== null && s.stepSequence < maxLive)
+                ? "GECTI"
+                : "SIRADA";
+            return {
+              id: s.id,
+              ad: s.station.name,
+              asama,
+              topSayisi: live?.top ?? 0,
+              metre: live ? Math.round(live.metre * 10) / 10 : 0,
+              fasonTop: live?.fasonTop ?? 0,
+            };
+          }),
+          fason: f.fason.map((g) => ({
+            firmaId: g.firmaId,
+            firmaAd: g.firmaAd,
+            topSayisi: g.count,
+            metre: Math.round(g.qty * 10) / 10,
+            gun: factoryDaysSince(g.enEski, now),
+          })),
+          hazir: { topSayisi: f.hazir.count, metre: Math.round(f.hazir.qty * 10) / 10 },
+          gitti: { topSayisi: f.gitti.count, metre: Math.round(f.gitti.qty * 10) / 10 },
+          sonHareket: f.sonHareket ? f.sonHareket.toISOString() : null,
+        };
+      });
+    return { success: true, data: { orderId: order.id, nerede, isEmirleri } };
+  }
+
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
     const { filters } = parseQueryParams(req);
     const conds: Record<string, unknown>[] = [];
@@ -446,6 +586,9 @@ export class OrderService extends BaseService {
 
     const woCond = buildWoStateWhere(filters.woState);
     if (woCond) conds.push(woCond);
+
+    // "Nerede?" sekmeleri + fason firma/gün (tek where: liste + cursor + özet). Bozuk değer 400.
+    conds.push(...(orderWhereFilterParts(readOrderWhereFilters(filters), new Date()) as Record<string, unknown>[]));
 
     // İptal edilmiş siparişleri gizle (panel varsayılanı). `safeFilters` bu
     // anahtarı skaler süzgeçte düşürür — burada ham filters'tan okunur.
@@ -709,6 +852,7 @@ export class OrderService extends BaseService {
    * metraj basmasın (gösterim koruması; muhasebe defteri değil).
    */
   async getOrderStats(req: Request): Promise<ApiResponse<OrderStats>> {
+    await this.gateOrderWhereFilters(req);
     const params = parseQueryParams(req);
     const where = this.buildListWhere(params, req) as Prisma.OrderWhereInput;
 

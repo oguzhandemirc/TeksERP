@@ -44,6 +44,8 @@ describe("Siparişler — rejim süzgeci", () => {
   it("üretim kapalıyken 'İş Emri' kolonu düşer, diğerleri kalır", () => {
     const ids = colIds(false);
     expect(ids).not.toContain("workOrder");
+    expect(ids).not.toContain("where");
+    expect(colIds(true)).toContain("where");
     expect(ids).toContain("orderNumber");
   });
 
@@ -55,7 +57,7 @@ describe("Siparişler — rejim süzgeci", () => {
     // Boş dönen bir fabrika sürümü yukarıdaki "içeriyor/içermiyor"
     // kontrollerini vakumen yeşil bırakırdı.
     expect(colIds(true).length).toBeGreaterThanOrEqual(6);
-    // Üretim kapalıyken iki kolon düşer: "Üretim" (workOrder) + ondan türeyen "Genel durum".
+    // Üretim kapalıyken iki kolon düşer: "Üretim" (workOrder) + üretim verisinden türeyen "Nerede?".
     expect(colIds(false).length).toBe(colIds(true).length - 2);
   });
 });

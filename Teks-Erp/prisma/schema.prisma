@@ -4487,6 +4487,10 @@ model Customer {
 
   cariAccount CariAccount?
 
+  /// İdempotency — belgeden İE formunun hızlı müşteri kaydı (`POST /customers/quick-create`) `clientToken @unique`
+  /// sözleşmesiyle doğar; genel gövdeden YAZILAMAZ (`BASE_WRITE_CLOSED_FIELDS.customer`).
+  clientToken String? @unique @db.Uuid
+
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
   fourPointRuleSets      FourPointRuleSet[]

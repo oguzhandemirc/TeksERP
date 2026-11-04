@@ -221,3 +221,39 @@ describe('TeachModal — benzer şablon sorusu', () => {
     expect(mockApi.createUserTemplate).not.toHaveBeenCalled();
   });
 });
+
+// Gülkesim 2026-11-04 cihaz: "Şablonu güncelle"de yalnız Başlık ✓; Müşteri/Parti no/Gelen metre işaretsiz, Kaydet pasif.
+describe('TeachModal — şablonu güncelle (kayıtlı alanlar)', () => {
+  const OLD_T = {
+    ...USER_T,
+    name: 'kömürhan',
+    template: { fields: [{ key: 'musteri' }, { key: 'partiNo', strategies: [{ kind: 'anchor', maxWords: 1 }] }, { key: 'toplamMetre' }], identifiers: { keywords: ['GÜLEÇSOY BOYA'] } },
+  };
+  const MERGED = {
+    ...SUGGEST,
+    template: { id: 'u-gulecsoy', fields: OLD_T.template.fields },
+    explain: [],
+    preview: { ...SUGGEST.preview, fields: { musteri: 'GÜLEÇSOY', partiNo: 'P2618733', toplamMetre: '1234' }, fieldRects: { partiNo: { x: 195, y: 295, width: 100, height: 30 } } },
+  };
+
+  it('⭐ açılışta kayıtlı alanlar ✓ + değer + belge üstünde işaret; yeni atamasız Kaydet → base\'li boş atama → PUT (alan kaybı yok)', async () => {
+    mockApi.getUserTemplate.mockResolvedValue({ ...OLD_T, versions: [] });
+    mockApi.suggestTemplate.mockResolvedValue(MERGED);
+    const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await openGuided(r);
+    await waitFor(() => expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(1));
+    expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({ assignments: [], base: { code: 'u-gulecsoy', keep: [] } });
+    expect(r.queryByTestId('tanit-kaydet-neden')).toBeNull();
+    expect(r.getByTestId('tanit-kaydet')).not.toBeDisabled();
+    expect(r.getByTestId('tanit-adim-partiNo')).toHaveProp('accessibilityLabel', 'Parti no: kayıtlı');
+    expect(r.getByTestId('tanit-adim-en')).toHaveProp('accessibilityLabel', 'En: atanmadı');
+    expect(r.getByTestId('tanit-kutu-6')).toHaveProp('accessibilityLabel', 'Parti No (kayıtlı)');
+    await press(r.getByTestId('tanit-adim-partiNo'));
+    expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Okunan: P2618733/);
+    expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Kayıtlı/);
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.updateUserTemplate).toHaveBeenCalledWith('u-gulecsoy', { expectedVersion: 2, name: 'kömürhan', template: MERGED.template });
+  });
+});

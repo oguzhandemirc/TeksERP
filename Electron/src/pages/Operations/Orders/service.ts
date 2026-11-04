@@ -3,7 +3,7 @@ import { createCrudService } from "@/services/crudService";
 import { buildQueryString } from "@/lib/query-builder";
 import type { ApiResponse, PaginatedResponse, QueryParams } from "@/types/api";
 import type { ShipmentStatus } from "@/pages/Operations/Shipments/types";
-import type { Order } from "./types";
+import type { Order, OrderWhereDetail } from "./types";
 
 const base = createCrudService<Order>("/api/orders");
 
@@ -150,6 +150,15 @@ export const orderService = {
         `/api/orders/${orderId}/lines/${lineId}/color`,
         { colorId, reason },
       )
+      .then((r) => r.data),
+
+  /**
+   * Yan panel "Nerede?" — bağlı her iş emrinin ilerlemesi; sipariş başına TEK istek.
+   * Üretim modülü kapalıyken uç 403 `MODULE_DISABLED` döner (çağıran istek atmaz).
+   */
+  getWhere: (id: string): Promise<ApiResponse<OrderWhereDetail>> =>
+    apiClient
+      .get<ApiResponse<OrderWhereDetail>>(`/api/orders/${id}/where`, { suppressErrorToast: true })
       .then((r) => r.data),
 
   manualClose: (id: string, reason: string): Promise<ApiResponse<Order>> =>

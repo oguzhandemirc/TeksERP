@@ -14,7 +14,7 @@ import { hasDocumentDeclared, isSummaryLine, totalsCheck } from "./gelen-belge-k
 import { readDocumentTotalCheck } from "./system-setting.service";
 import { noteNotices } from "../lib/gelen-belge/uyari";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
-import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
+import { readOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { noteFormFields } from "./gelen-belge-form-alanlari.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 
@@ -116,7 +116,8 @@ export async function getReadSummary(noteId: string) {
     // Taslağın sahibi + müşteri önerisi (OIE) — detayla AYNI helper; tablet `gelen-belge:read` taşımayabilir, satır formu
     // buradan kurulur (`detailFromSummary`). Eski tablet alanları yok sayar.
     ownerCustomerId: note.ownerCustomerId,
-    ownerSuggestion: await suggestOwnerForNote({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }, trust),
+    // `ownerUnmatched`: okunan müşteri adı kayıtlı cariye çözülemedi → tablet "kayıtlı değil / bunu mu demek istediniz?" sorar.
+    ...(await ownerFields({ id: note.id, status: note.status, ownerCustomerId: note.ownerCustomerId }, trust)),
     // "Toplar ayrı geldi" ön dolumu: belgenin TOP satırları (özet satırı hariç; blok, satır sırası). Eski tablet yok sayar.
     docRolls: live.filter((l) => l.lineKind === "TOP" && !isSummaryLine(note.id, l)).map((l) => ({
       lineNo: l.lineNo, meters: Number(l.meters), weightKg: l.weightKg == null ? null : Number(l.weightKg), senderRollNo: l.senderRollNo,
@@ -126,4 +127,10 @@ export async function getReadSummary(noteId: string) {
     // K30-B tel sözleşmesi madde 1: TANITILDI | TANITILMAMIS; sistem şablonunda alan yok. Eski tablet yok sayar.
     ...(tanitim ? { tanitim } : {}),
   };
+}
+
+/** Sahip önerisi + çözülemeyen okuma tek geçişte; `ownerUnmatched` yalnız doluysa (eski tablet yok sayar). */
+async function ownerFields(note: { id: string; status: string; ownerCustomerId: string | null }, trust: Parameters<typeof readOwnerForNote>[1]) {
+  const r = await readOwnerForNote(note, trust);
+  return { ownerSuggestion: r.suggestion, ...(r.unmatched ? { ownerUnmatched: r.unmatched } : {}) };
 }
