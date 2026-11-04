@@ -18,7 +18,7 @@ import { validate as isUuidString } from "uuid";
 import { factoryDateTimeTr, factoryDayKeyUtcMidnight, factoryDayStart } from "../../constants/time";
 import { isActiveLine, isMeasuredLine } from "./order-line-scope.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
-import { outstandingItemOfOpenDispatch } from "./fason-open-dispatch.helper";
+import { rollAtFasonWhere } from "./roll-place.helper";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { whereRollsOfWorkOrders, workOrderHasRollWhere } from "./workorder-rolls.helper";
 
@@ -256,11 +256,7 @@ export function buildNeredeWhere(filters: Record<string, unknown>, now: Date = n
       dispatch.dispatchedAt = { lt: fasonDayCutoff(Number(dayRaw), now) };
     }
     // AYNI top iki koşulu birlikte sağlar: fasonda + açık sevki (firma, gün).
-    const rollWhere: Prisma.RollWhereInput = {
-      status: RollStatus.AT_SUBCONTRACTOR,
-      dispatchItems: { some: outstandingItemOfOpenDispatch(dispatch) },
-    };
-    conds.push(OPEN_ORDER, orderHasActiveWo(workOrderHasRollWhere(rollWhere)));
+    conds.push(OPEN_ORDER, orderHasActiveWo(workOrderHasRollWhere(rollAtFasonWhere(dispatch))));
   }
   return conds;
 }

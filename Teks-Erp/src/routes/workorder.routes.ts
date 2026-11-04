@@ -57,11 +57,34 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         name: filter[fasonda]
  *         schema: { type: string, enum: ['1', 'true'] }
  *         description: 'En az bir topu şu an fasonda (AT_SUBCONTRACTOR) olan iş emirleri — satırdaki fason rozetiyle aynı anlam; başka değer 400 INVALID_FILTER_VALUE'
+ *       - in: query
+ *         name: filter[fasonFirma]
+ *         schema: { type: string }
+ *         description: 'Şu an bu fason firma(lar)da topu olan iş emirleri (firma uuid; CSV ile çoklu). Top AT_SUBCONTRACTOR ve firmaya giden açık sevkte dönmemiş kalemi var; yalnız planda yazılı firma eşleşmez. UUID değil ya da firma yok → 400 INVALID_FILTER_VALUE'
+ *       - in: query
+ *         name: filter[asama]
+ *         schema: { type: string }
+ *         description: 'Şu an bu aşama(lar)da (istasyon uuid; CSV ile çoklu) üretimde (IN_PRODUCTION) topu olan iş emirleri. UUID değil ya da istasyon yok → 400 INVALID_FILTER_VALUE'
  *     responses:
  *       200:
  *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5) ve `customerCount`'
  */
 router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
+
+/**
+ * @openapi
+ * /api/work-orders/where-options:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: '"Şu an hangi fasonda / hangi aşamada" süzgeç seçenekleri'
+ *     description: 'Fason firmalar ve aşamalar (istasyonlar), şu an orada topu bulunan arşivlenmemiş iş emri sayısıyla (liste süzgeciyle aynı yüklem). Sayı azalan, sonra ad. Pasif kayıt yalnız sayısı > 0 ise listelenir.'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: '`data.firms` ve `data.stages`: `[{ id, name, workOrderCount }]`'
+ */
+router.get("/where-options", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.whereOptions);
 
 // K6 (2026-06-12): GET /available-for-attach, PATCH /:id/attach-rolls ve
 // PATCH /:id/detach-rolls HTTP uçları kaldırıldı — hiçbir frontend çağırmıyordu

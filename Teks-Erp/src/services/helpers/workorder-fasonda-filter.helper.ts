@@ -8,14 +8,13 @@
 // =============================================================================
 import { Prisma, RollStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { workOrderHasCurrentRoll } from "./workorder-place-filter.helper";
 
 /** Panelin gönderdiği filtre anahtarı. Tek yerde tanımlı — servislere kopyalama. */
 export const FASONDA_FILTER = "fasonda";
 
 /** Liste rozetiyle aynı yüklem — Prisma parçası. */
-export const FASONDA_WHERE: Prisma.WorkOrderWhereInput = {
-  steps: { some: { currentRolls: { some: { status: RollStatus.AT_SUBCONTRACTOR } } } },
-};
+export const FASONDA_WHERE: Prisma.WorkOrderWhereInput = workOrderHasCurrentRoll({ status: RollStatus.AT_SUBCONTRACTOR });
 
 /**
  * Anahtarı filtre kümesinden OKUR ve SİLER. Yoksa `undefined`; `1`/`true` ise

@@ -1,0 +1,32 @@
+// =============================================================================
+// "TOP ŞU AN NEREDE" — Prisma yüklemleri (TEK KAYNAK, 2026-11-04)
+// =============================================================================
+// Sipariş "Nerede?" türetmesi (`order-nerede*.helper`) ve İş Emirleri listesinin
+// "şu an hangi fasonda / hangi aşamada" süzgeçleri AYNI soruyu sorar. Tanım:
+//   • FASONDA – firma X: top AT_SUBCONTRACTOR ve X'e giden AÇIK bir sevkte
+//     OUTSTANDING kalemi var (kabul/kapama/doğrudan sevkle dönmemiş). Planda/rota
+//     adımında X'in yazılı olması YETMEZ.
+//   • AŞAMADA – istasyon Y: top IN_PRODUCTION ve şu an durduğu adımın istasyonu Y.
+//     (`placesOf`taki STEP dalının Prisma ikizi: canlı, hazır değil, fasonda değil.)
+// =============================================================================
+import { Prisma, RollStatus } from "@prisma/client";
+import { outstandingItemOfOpenDispatch } from "./fason-open-dispatch.helper";
+
+/** Aşamada sayılan top durumu (sevke hazır ve fasondaki toplar aşama değildir). */
+export const ROLL_AT_STAGE_STATUS = RollStatus.IN_PRODUCTION;
+
+/** Şu an fasonda ve `dispatch` koşuluna uyan açık sevkte dönmemiş kalemi olan top. */
+export function rollAtFasonWhere(dispatch?: Prisma.SubcontractorDispatchWhereInput): Prisma.RollWhereInput {
+  return {
+    status: RollStatus.AT_SUBCONTRACTOR,
+    dispatchItems: { some: outstandingItemOfOpenDispatch(dispatch) },
+  };
+}
+
+/** Şu an bir aşamada (verilen istasyonlarda; verilmezse herhangi birinde) duran top. */
+export function rollAtStageWhere(stationIds?: string[]): Prisma.RollWhereInput {
+  return {
+    status: ROLL_AT_STAGE_STATUS,
+    currentStep: stationIds ? { stationId: { in: stationIds } } : { isNot: null },
+  };
+}

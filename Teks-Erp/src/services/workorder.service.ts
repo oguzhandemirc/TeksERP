@@ -32,6 +32,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { assertOrderLinesSameItemAndColor } from "./helpers/order-line-mix.helper";
 import { takeFasondaFilter } from "./helpers/workorder-fasonda-filter.helper";
+import { takeWorkOrderPlaceFilters } from "./helpers/workorder-place-filter.helper";
 import { assertStationsRoutable } from "./helpers/station-routable.helper";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import {
@@ -1687,6 +1688,8 @@ export class WorkOrderService {
     delete params.filters[HIDE_COMPLETED_FILTER];
     // "En az bir topu fasonda" (filter[fasonda]=1) — buildWhereClause'dan ÖNCE okunup silinir.
     const fasondaCond = takeFasondaFilter(params.filters);
+    // "Şu an hangi fasonda / hangi aşamada" (filter[fasonFirma] · filter[asama]) — aynı kural.
+    const placeConds = await takeWorkOrderPlaceFilters(params.filters);
     // Müşteri süzgeci (liste kolonu, 2026-09-15): WO'da customerId YOK — bağ üzerinden
     // (`orderLinks.some.orderLine.order.customerId`). Filtre kümesinden ÇIKARILIR: bu
     // serviste allowlist yok, `filter[customerId]` where'e sızıp 500 verirdi. CSV `in`.
@@ -1717,9 +1720,9 @@ export class WorkOrderService {
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
       w.AND = [...(w.AND ?? []), byCustomer];
     }
-    if (fasondaCond) {
+    if (fasondaCond || placeConds.length > 0) {
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
-      w.AND = [...(w.AND ?? []), fasondaCond];
+      w.AND = [...(w.AND ?? []), ...(fasondaCond ? [fasondaCond] : []), ...placeConds];
     }
     // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
     if (req.query.withArchived !== "true") {

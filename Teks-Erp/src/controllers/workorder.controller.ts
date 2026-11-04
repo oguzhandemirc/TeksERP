@@ -15,6 +15,7 @@ import { AppError } from "../utils/app-error";
 import { WorkOrderTimelineService } from "../services/workorder-timeline.service";
 import { TIMELINE_GROUPS, type TimelineGroup } from "../constants/workorder-event-labels";
 import { readFilterList } from "../utils/query-parser";
+import { loadWorkOrderPlaceOptions } from "../services/helpers/workorder-place-filter.helper";
 import "../types/express-augment";
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
@@ -383,6 +384,7 @@ export class WorkOrderController {
     this.quickStart = this.quickStart.bind(this);
     this.findAll = this.findAll.bind(this);
     this.checkBatchNumber = this.checkBatchNumber.bind(this);
+    this.whereOptions = this.whereOptions.bind(this);
     this.findById = this.findById.bind(this);
     this.getBranches = this.getBranches.bind(this);
     this.getBatchTimeline = this.getBatchTimeline.bind(this);
@@ -485,6 +487,18 @@ export class WorkOrderController {
    * `workOrderNumber`'a döner); değer artık İŞ EMRİ NO'yu (İE…) kontrol eder. Yanıtta
    * yeni `workOrderNumber` + eski `batchNumber` (alias) birlikte döner.
    */
+  /**
+   * GET /api/work-orders/where-options — "şu an hangi fasonda / hangi aşamada"
+   * seçicilerinin seçenekleri (liste süzgeciyle aynı yüklem, İE sayılarıyla).
+   */
+  async whereOptions(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json({ success: true, data: await loadWorkOrderPlaceOptions() });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async checkBatchNumber(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const workOrderNumber =
