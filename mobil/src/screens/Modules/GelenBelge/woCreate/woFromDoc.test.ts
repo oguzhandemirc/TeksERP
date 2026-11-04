@@ -17,6 +17,8 @@ import {
   shortcutRoutes,
   shortcutSub,
   shortcutTitle,
+  withSummaryFields,
+  type RowForm,
 } from './woFromDoc';
 
 const r = (id: string, extra: Partial<ProductionRoute> = {}): ProductionRoute => ({ id, name: `Rota ${id}`, ...extra }) as ProductionRoute;
@@ -172,5 +174,38 @@ describe('K22 — gramaj ön seçimi sunucu çözücüsünden (fabrika cevabı 1
     const pass = [{ propertyId: 'p-br', valueId: 'b1' }];
     expect(buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr', passThrough: pass }).targetValues).toEqual([{ propertyId: 'p-gr', valueId: 'g2' }, ...pass]);
     expect(buildCreateBody({ ...f, gramajValueId: null }, { clientToken: 't', routeTemplateId: 'r', gramajPropertyId: 'p-gr' }).targetValues).toEqual([]);
+  });
+});
+
+describe('toplar ayrı geldi — buildCreateBody rolls', () => {
+  const opts = { clientToken: 't1', routeTemplateId: 'r1', gramajPropertyId: null };
+  const form = (x: Partial<RowForm> = {}): RowForm =>
+    ({ ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null, meters: 300, metersReview: false, gramajValueId: null, ...x });
+  it('⭐ anahtar kapalı (rolls null/yok) → gövdede rollMode/rolls HİÇ yok (bugünkü)', () => {
+    for (const f of [form(), form({ rolls: null })]) {
+      const b = buildCreateBody(f, opts);
+      expect(b.kursunMeters).toBe('300');
+      expect('rollMode' in b).toBe(false);
+      expect('rolls' in b).toBe(false);
+    }
+  });
+  it('⭐ açık → SEPARATE + rolls + kursunMeters toplam; eksik metre kaydı engeller', () => {
+    const rolls = [{ key: 'a', meters: 100, weightKg: 20, senderRollNo: 'T1' }, { key: 'b', meters: 80, weightKg: null, senderRollNo: '' }];
+    const b = buildCreateBody(form({ rolls }), opts);
+    expect(b).toMatchObject({ kursunMeters: '180', rollMode: 'SEPARATE', rolls: [{ meters: 100, weightKg: 20, senderRollNo: 'T1' }, { meters: 80, weightKg: null, senderRollNo: null }] });
+    expect(b.parties).toBeUndefined();
+    expect(rowIssues(form({ rolls: [{ key: 'a', meters: null, weightKg: null, senderRollNo: '' }] }))).toEqual(['Top metresi eksik: 1. top.']);
+  });
+  it('çok parti önceliklidir: multi varken rolls gövdeye gitmez', () => {
+    const b = buildCreateBody(form({ multi: { mode: 'SINGLE', rows: [{ blockNo: 1, batchNo: '', meters: 10 }, { blockNo: 2, batchNo: '', meters: 20 }] }, rolls: [{ key: 'a', meters: 5, weightKg: null, senderRollNo: '' }] }), opts);
+    expect(b.parties).toHaveLength(2);
+    expect('rolls' in b).toBe(false);
+  });
+  it('docRolls özetten detaya taşınır (detailFromSummary / withSummaryFields)', () => {
+    const docRolls = [{ lineNo: 1, meters: 10, weightKg: null, senderRollNo: null }];
+    expect(detailFromSummary({ noteId: 'n1', noteNo: 'GB-1', docRolls } as unknown as ReadSummary).docRolls).toEqual(docRolls);
+    expect(withSummaryFields(detail(), { docRolls } as unknown as ReadSummary).docRolls).toEqual(docRolls);
+    const d = detail();
+    expect(withSummaryFields(d, {} as ReadSummary)).toBe(d);
   });
 });
