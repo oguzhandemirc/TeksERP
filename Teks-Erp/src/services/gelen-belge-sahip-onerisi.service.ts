@@ -18,6 +18,7 @@ import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { readCompanyName } from "./system-setting.service";
 import { suggestCustomer, type Named } from "./gelen-belge-eslestirme.service";
 import type { TrustMode } from "./gelen-belge-parti-metre.service";
+import { noteIntroState } from "./gelen-belge-tanitim-guveni.service";
 
 export interface OwnerSuggestion {
   customerId: string;
@@ -136,8 +137,10 @@ export interface OwnerUnmatched {
 export const UNMATCHED_MAX = 3;
 /** Müşteri adı kolonunun tavanı (`Customer.name` VarChar(100)). */
 const CUSTOMER_NAME_MAX = 100;
-/** Katlanmış adın en kısa uzunluğu — 1-2 harfli okuma gürültüdür, kayıt teklif edilmez. */
+/** Serbest okumada katlanmış adın en kısa uzunluğu — 1-2 harfli okuma gürültüdür, kayıt teklif edilmez. */
 const UNMATCHED_MIN_CHARS = 3;
+/** Tanıtılmış şablonda ad kullanıcının işaretlediği bölgeden gelir: "HH" gürültü değil, gerçek müşteri adıdır (2026-11-05). */
+const UNMATCHED_MIN_CHARS_INTRODUCED = 1;
 
 export interface OwnerReading {
   suggestion: OwnerSuggestion | null;
@@ -177,7 +180,12 @@ export async function readOwnerForNote(note: { id: string; status: string; owner
   }
   // TRUSTED'da tam metin taraması ("… mi? Seç") yapılmaz: çözülemeyen müşteri boş kalır, seçici açık.
   const suggestion = trust === "TRUSTED" ? null : findCustomerInText([...(ownerText ? [ownerText] : []), ...pages.flat()], customers, exclude);
-  if (suggestion || !ownerText || !s || foldNameForCompare(ownerText).length < UNMATCHED_MIN_CHARS) return { suggestion, unmatched: null };
+  if (suggestion || !ownerText || !s) return { suggestion, unmatched: null };
+  const chars = foldNameForCompare(ownerText).length;
+  // Kısa adda tanıtım durumu ayrıca okunur: TRUSTED yalnız SORMA'da doğar, SOR'da da tanıtılmış alan aynı güvendedir.
+  if (chars < UNMATCHED_MIN_CHARS && (chars < UNMATCHED_MIN_CHARS_INTRODUCED || !(trust === "TRUSTED" || (await noteIntroState(note.id))?.durum === "TANITILDI"))) {
+    return { suggestion, unmatched: null };
+  }
   return { suggestion: null, unmatched: unmatchedOf(ownerText, [...(s.suggested ? [s.suggested] : []), ...s.list]) };
 }
 
