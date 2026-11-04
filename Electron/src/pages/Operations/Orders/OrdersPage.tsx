@@ -19,6 +19,7 @@ import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { type FilterDef } from "@/components/data-table/FilterBar";
 import { OrdersFilterRow } from "./OrdersFilterRow";
+import { OrdersNeredeBar } from "./OrdersNeredeBar";
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
@@ -472,6 +473,7 @@ export function OrdersPage() {
           ⚠️ Liste `filters` (rejim-duyarlı) kullanır, ham `FILTERS` DEĞİL —
           ticaret kurulumunda üretim filtreleri süzülür (`resolveOrderFilters`).
           Satır TEK SATIR + yatay kaydırma: `OrdersFilterRow`. */}
+      <OrdersNeredeBar productionEnabled={productionEnabled} />
       <OrdersFilterRow filters={filters} />
 
       <DataTable<Order>

@@ -109,6 +109,90 @@ export interface Order {
     district: string | null;
   } | null;
   lines: OrderLine[];
+  /** "Nerede?" — sunucu türetir (backend 2.11.4+); eski sunucuda YOK → panel "—". */
+  nerede?: OrderNerede;
+  /** "Sevk" cümlesi — sunucu türetir (backend 2.11.4+); eski sunucuda YOK → panel "—". */
+  sevk?: OrderSevk;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── "Nerede?" sözleşmesi (backend 2.11.4) ──────────────────────────────────
+// Bütün Türkçe cümleleri SUNUCU kurar; panel `text`i ekrana, Excel'e ve PDF'e
+// aynen basar. Yapısal alanlar yalnız renk/ikon içindir.
+export type OrderNeredeKind =
+  | "CANCELLED"
+  | "ALL_SHIPPED"
+  | "CLOSED"
+  | "NO_WORK_ORDER"
+  | "NOT_STARTED"
+  | "PRODUCED_SHIPPED"
+  | "STEP"
+  | "FASON"
+  | "READY";
+export type OrderNeredeTone = "gray" | "blue" | "orange" | "green";
+
+export interface OrderNerede {
+  kind: OrderNeredeKind;
+  tone: OrderNeredeTone;
+  /** Tam cümle, "· +K yerde daha" dahil. */
+  text: string;
+  extraPlaces: number;
+  overdue: boolean;
+  /** overdue ise "Termini geçti" (kırmızı ek rozet), değilse null. */
+  overdueText: string | null;
+}
+
+export type OrderQtyUnit = "MT" | "KG" | "ADET";
+
+export interface OrderSevk {
+  kind: "NONE" | "PARTIAL" | "ALL" | "CLOSED";
+  text: string;
+  shipped: number;
+  requested: number | null;
+  unit: OrderQtyUnit | null;
+}
+
+export interface OrderNeredeFason {
+  firmId: string;
+  firmName: string;
+  rollCount: number;
+  qty: number;
+  days: number;
+  text: string;
+}
+
+export interface OrderNeredeStep {
+  id: string;
+  sequence: number;
+  name: string;
+  isExternal: boolean;
+  state: "DONE" | "CURRENT" | "TODO";
+  rollCount: number;
+  qty: number;
+  fason: OrderNeredeFason[];
+  text: string;
+}
+
+export interface OrderNeredeWorkOrder {
+  id: string;
+  workOrderNumber: string;
+  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED";
+  itemName: string | null;
+  colorName: string | null;
+  targetQuantity: number | null;
+  unit: OrderQtyUnit | null;
+  steps: OrderNeredeStep[];
+  ready: { rollCount: number; qty: number; text: string };
+  lastMovementAt: string | null;
+  /** Fabrika saat diliminde biçimli ("04.11.2026 14:32") — sunucu kurar. */
+  lastMovementText: string | null;
+}
+
+/** `GET /api/orders/:id/nerede` cevabı. */
+export interface OrderNeredeDetail {
+  orderId: string;
+  nerede: OrderNerede;
+  sevk: OrderSevk;
+  workOrders: OrderNeredeWorkOrder[];
 }

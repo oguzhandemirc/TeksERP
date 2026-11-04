@@ -1,7 +1,6 @@
 // Sipariş listesi hücrelerinin METNİ — ekran hücresi ile Excel/PDF/CSV dışa aktarımı
 // AYNI fonksiyondan okur. Ayrı yazıldıklarında dışa aktarım boş kalmıştı (Kumaş/Renk/Sevk
 // kolonları yalnız `cell` taşıyordu → `original.items` undefined → boş hücre).
-import { isMeasuredUnit } from "@/lib/item-unit";
 import { safeFormat } from "@/lib/format";
 import { orderStatusLabels } from "@/types/enums";
 import type { Order, OrderLine } from "./types";
@@ -41,28 +40,6 @@ export function lineLabelsText(lines: OrderLine[] | undefined, kind: "item" | "c
   return distinctLineLabels(lines, kind)
     .map((l) => l.label)
     .join("; ");
-}
-
-const fmtQty = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-
-/**
- * "Sevk" hücresi: sevk/istenen m (yüzde). Yalnız METRE satırları toplanır: kg/adet
- * satırın karşılaması ölçülmez, paydaya girseydi sipariş asla %100 görünmezdi.
- * İstenen 0 ise null (ekranda "—").
- */
-export function shippedProgress(o: Order): { text: string; pctText: string } | null {
-  const requested = (o.lines ?? [])
-    .filter((l) => isMeasuredUnit(l.unit))
-    .reduce((s, l) => s + Number(l.quantity ?? 0), 0);
-  if (requested === 0) return null;
-  const shipped = Number(o.shippedQty ?? 0);
-  const pct = Math.min(100, Math.round((shipped / requested) * 100));
-  return { text: `${fmtQty(shipped)}/${fmtQty(requested)} m`, pctText: `(${pct}%)` };
-}
-
-export function shippedText(o: Order): string {
-  const p = shippedProgress(o);
-  return p ? `${p.text} ${p.pctText}` : "";
 }
 
 /** "Tutar" hücresi: "1234,50 TRY"; tutarsız sipariş null. */

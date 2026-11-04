@@ -3,7 +3,7 @@ import { createCrudService } from "@/services/crudService";
 import { buildQueryString } from "@/lib/query-builder";
 import type { ApiResponse, PaginatedResponse, QueryParams } from "@/types/api";
 import type { ShipmentStatus } from "@/pages/Operations/Shipments/types";
-import type { Order } from "./types";
+import type { Order, OrderNeredeDetail } from "./types";
 
 const base = createCrudService<Order>("/api/orders");
 
@@ -272,5 +272,12 @@ export const orderService = {
   getShipments: (orderId: string): Promise<ApiResponse<OrderShipmentsResponse>> =>
     apiClient
       .get<ApiResponse<OrderShipmentsResponse>>(`/api/orders/${orderId}/shipments`)
+      .then((r) => r.data),
+
+  /** Yan panel "Nerede?" — bağlı her İE için aşama/fason/sevke hazır dökümü (tek istek).
+   *  Bilgi kartıdır: eski sunucuda (2.11.3-) uç 404 döner → toast basılmaz, kart çizilmez. */
+  getNerede: (orderId: string): Promise<ApiResponse<OrderNeredeDetail>> =>
+    apiClient
+      .get<ApiResponse<OrderNeredeDetail>>(`/api/orders/${orderId}/nerede`, { suppressErrorToast: true })
       .then((r) => r.data),
 };

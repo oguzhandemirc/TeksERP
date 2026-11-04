@@ -16,19 +16,13 @@ import {
   woRollupTones,
 } from "./work-order-rollup";
 import { deriveDeadlineRisk } from "./deadline-risk";
-import {
-  deriveOrderOverallState,
-  orderOverallLabels,
-  orderOverallStatusText,
-  orderOverallTones,
-} from "./order-overall-status";
+import { neredeExportText, sevkText } from "./order-nerede";
+import { NeredeCell, SevkCell } from "./OrderNeredeCells";
 import {
   dayText,
   distinctLineLabels,
   lineLabelsText,
   orderStatusText,
-  shippedProgress,
-  shippedText,
   totalAmountText,
 } from "./order-cell-text";
 import type { Order, OrderLine } from "./types";
@@ -178,10 +172,10 @@ function DeadlineCell({ order }: { order: Order }) {
  */
 export function buildOrderColumns(pricingEnabled: boolean, productionEnabled = true): ColumnDef<Order>[] {
   return [
-    // "Genel durum" de üretimle düşer: üretimsiz firmada her açık sipariş "İş emri yok" derdi.
+    // "Nerede?" de üretimle düşer: üretimsiz firmada her açık sipariş "İş emri açılmadı" derdi.
     ...(productionEnabled
       ? orderColumns
-      : orderColumns.filter((c) => c.id !== "workOrder" && c.id !== "overallStatus")),
+      : orderColumns.filter((c) => c.id !== "workOrder" && c.id !== "nerede")),
     ...(pricingEnabled
       ? [
           {
@@ -252,33 +246,17 @@ export const orderColumns: ColumnDef<Order>[] = [
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
+    // Cümleyi sunucu kurar (BRÜT sevk); ekran, Excel ve PDF aynı metni yazar.
     id: "shipped",
     header: () => <SortableHeader field="shippedQty" label="Sevk" />,
-    meta: { label: "Sevk", exportValue: (o: Order) => shippedText(o) },
-    cell: ({ row }) => {
-      const p = shippedProgress(row.original);
-      if (!p) {
-        return <span className="text-muted-foreground text-xs">—</span>;
-      }
-      return (
-        <span className="tabular-nums text-xs">
-          {p.text}
-          <span className="text-muted-foreground ml-1">{p.pctText}</span>
-        </span>
-      );
-    },
+    meta: { label: "Sevk", exportValue: (o: Order) => sevkText(o) },
+    cell: ({ row }) => <SevkCell order={row.original} />,
   },
   {
-    id: "overallStatus",
-    header: "Genel durum",
-    meta: { label: "Genel durum", exportValue: (o: Order) => orderOverallStatusText(o) },
-    cell: ({ row }) => (
-      <StatusBadge
-        status={deriveOrderOverallState(row.original)}
-        labels={orderOverallLabels}
-        tones={orderOverallTones}
-      />
-    ),
+    id: "nerede",
+    header: "Nerede?",
+    meta: { label: "Nerede?", exportValue: (o: Order) => neredeExportText(o) },
+    cell: ({ row }) => <NeredeCell order={row.original} />,
   },
   {
     id: "workOrder",

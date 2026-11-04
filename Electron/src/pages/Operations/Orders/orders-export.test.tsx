@@ -55,6 +55,8 @@ const order = (p: Partial<Order> = {}): Order =>
       line({ id: "l2", itemId: "i2", colorId: "c2", item: { id: "i2", code: "K-02", name: "Krep" }, color: { id: "c2", code: "R-02", name: "Ekru", hex: null } }),
       line({ id: "l3" }), // aynı kumaş+renk: tekrarsız listede bir kez
     ],
+    nerede: { kind: "FASON", tone: "orange", text: "Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha", extraPlaces: 1, overdue: false, overdueText: null },
+    sevk: { kind: "PARTIAL", text: "Bir kısmı gönderildi (40 / 300 m)", shipped: 40, requested: 300, unit: "MT" },
     createdAt: "2026-11-01T09:00:00.000Z",
     updatedAt: "2026-11-01T09:00:00.000Z",
     ...p,
@@ -119,16 +121,18 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(at("Müşteri")).toBe("Acme Tekstil");
     expect(at("Şube")).toBe("Merkez");
     expect(at("Kalem")).toBe("3");
-    expect(at("Sevk")).toBe("40/300 m (13%)");
+    expect(at("Sevk")).toBe("Bir kısmı gönderildi (40 / 300 m)");
     expect(at("Sevk durumu")).toBe("Onaylandı");
     expect(at("Sipariş Tarihi")).toBe("01.11.2026");
     expect(at("Termin")).toBe("20.11.2026");
     expect(at("Tutar")).toBe("1500,00 TRY");
   });
 
-  it("başlıklar: Sevk durumu / Üretim / Genel durum; eski 'Durum' ve 'İş Emri' yok", () => {
+  it("başlıklar: Sevk durumu / Üretim / Nerede?; eski 'Durum', 'İş Emri', 'Genel durum' yok", () => {
     const [head = []] = csvOf([order()]);
-    expect(head).toEqual(expect.arrayContaining(["Sevk durumu", "Üretim", "İE sayısı", "Genel durum"]));
+    expect(head).toEqual(expect.arrayContaining(["Sevk durumu", "Üretim", "İE sayısı", "Nerede?", "Sevk"]));
+    // A4'ün "Genel durum" sütunu "Nerede?"ye evrildi — ikisi yan yana durmaz.
+    expect(head).not.toContain("Genel durum");
     expect(head).not.toContain("Durum");
     expect(head).not.toContain("İş Emri");
     // İE sayısı, Üretim sütununun hemen ardında.
@@ -147,16 +151,24 @@ describe("sipariş listesi dışa aktarımı", () => {
     const at = (label: string) => row[head.indexOf(label)];
     expect(at("Üretim")).toBe("Üretildi");
     expect(at("İE sayısı")).toBe("2");
-    expect(at("Genel durum")).toBe("Üretim bitti, sevk bekliyor");
   });
 
-  it("Genel durum Excel'de ekrandaki türetmeyle aynı", () => {
+  it("Nerede? Excel'de sunucunun cümlesi; termin geçtiyse ek rozet de yazılır", () => {
     const [head = [], row = []] = csvOf([order()]);
-    expect(row[head.indexOf("Genel durum")]).toBe("Üretimde");
-    const [h2 = [], r2 = []] = csvOf([order({ lines: [line({})] })]);
-    expect(r2[h2.indexOf("Genel durum")]).toBe("İş emri yok");
-    expect(r2[h2.indexOf("Üretim")]).toBe("—");
-    expect(r2[h2.indexOf("İE sayısı")]).toBe("0");
+    expect(row[head.indexOf("Nerede?")]).toBe("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha");
+    const late = order({
+      nerede: { kind: "STEP", tone: "blue", text: "Tambur aşamasında · 4 top", extraPlaces: 0, overdue: true, overdueText: "Termini geçti" },
+    });
+    const [h2 = [], r2 = []] = csvOf([late]);
+    expect(r2[h2.indexOf("Nerede?")]).toBe("Tambur aşamasında · 4 top · Termini geçti");
+  });
+
+  it("eski sunucu (nerede/sevk alanı yok) → iki sütun da '—'; İE sayısı yine yazılır", () => {
+    const [head = [], row = []] = csvOf([order({ nerede: undefined, sevk: undefined, lines: [line({})] })]);
+    expect(row[head.indexOf("Nerede?")]).toBe("—");
+    expect(row[head.indexOf("Sevk")]).toBe("—");
+    expect(row[head.indexOf("Üretim")]).toBe("—");
+    expect(row[head.indexOf("İE sayısı")]).toBe("0");
   });
 
   it("hiçbir liste kolonu boş ya da ham ISO çıkmaz", () => {

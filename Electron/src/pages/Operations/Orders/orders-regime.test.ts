@@ -27,7 +27,7 @@ describe("Siparişler — rejim süzgeci", () => {
 
   it("⭐ FABRİKADA 'İş Emri' kolonu DURUYOR", () => {
     expect(colIds(true)).toContain("workOrder");
-    expect(colIds(true)).toContain("overallStatus");
+    expect(colIds(true)).toContain("nerede");
   });
 
   it("⭐ FABRİKADA toplu 'İş Emri Aç' DURUYOR", () => {
@@ -45,7 +45,8 @@ describe("Siparişler — rejim süzgeci", () => {
   it("üretim kapalıyken 'İş Emri' kolonu düşer, diğerleri kalır", () => {
     const ids = colIds(false);
     expect(ids).not.toContain("workOrder");
-    expect(ids).not.toContain("overallStatus");
+    expect(ids).not.toContain("nerede");
+    expect(ids).toContain("shipped");
     expect(ids).toContain("orderNumber");
   });
 
@@ -57,6 +58,6 @@ describe("Siparişler — rejim süzgeci", () => {
     // Boş dönen bir fabrika sürümü yukarıdaki "içeriyor/içermiyor"
     // kontrollerini vakumen yeşil bırakırdı.
     expect(colIds(true).length).toBeGreaterThanOrEqual(6);
-    expect(colIds(false).length).toBe(colIds(true).length - 2); // workOrder + overallStatus
+    expect(colIds(false).length).toBe(colIds(true).length - 2); // workOrder + nerede
   });
 });

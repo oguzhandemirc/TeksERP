@@ -37,6 +37,7 @@ import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
+import { OrderNeredeCard } from "./OrderNeredeCard";
 import type { Order, OrderLine } from "./types";
 import { useOrderLineCustomerNames } from "./useOrderLineCustomerNames";
 
@@ -298,6 +299,7 @@ export function OrderDetailSheet({
 
             {/* Bağlı iş emirleri — kaleme WO açıldıysa görünür; tıkta İE detayı
                 açılır (sheet kapanır). Bağ yoksa kart null döner. */}
+            <OrderNeredeCard orderId={order.id} open={open} />
             <LinkedWorkOrdersCard lines={order.lines} onNavigate={() => onOpenChange(false)} />
 
             {/* Sevkiyatlar drill-down — hangi sevkiyatlarla sevk edildi/bekliyor.
