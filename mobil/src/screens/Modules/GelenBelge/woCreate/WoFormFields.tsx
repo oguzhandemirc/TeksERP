@@ -250,13 +250,7 @@ function Badged({ label, k, state, derived }: { label: string; k?: DocFilledKey;
 /** Belgeden dolan değerin sarı vurgusu; `fromDoc` edit'te düştüğü için elle değişince kalkar. */
 function DocFilled({ k, state, children }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode }) {
   const on = state.fromDoc.includes(k);
-  return (
-    <View testID={on ? `belgeden-${k}` : undefined}>
-      <DocHighlight active={on} style={styles.hl}>
-        {children}
-      </DocHighlight>
-    </View>
-  );
+  return <View testID={on ? `belgeden-${k}` : undefined}><DocHighlight active={on} style={styles.hl}>{children}</DocHighlight></View>;
 }
 
 function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => void; days: { value: string; label: string }[] }) {

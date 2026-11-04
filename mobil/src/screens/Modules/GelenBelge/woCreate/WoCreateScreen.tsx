@@ -57,6 +57,7 @@ function useDeskAutoOpen(available: boolean, open: () => void): void {
 
 export default function WoCreateScreen() {
   const [stage, setStage] = useState<Stage>({ kind: 'hub' });
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [hasResult, setHasResult] = useState(false);
   const canManual = useVisibleScreens().visibleScreens.some((s) => s.key === 'HizliIsEmri');
@@ -92,7 +93,7 @@ export default function WoCreateScreen() {
   const title = stage.kind === 'teach' ? 'Belge tanıt' : stage.kind === 'legacy' ? 'Belge Tara' : stage.kind === 'desk' ? DESK : route ? shortcutTitle(route) : stage.kind === 'form' ? quick_() : title_();
 
   return (
-    <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back}>
+    <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back} headerExtras={stage.kind === 'unified' ? <FieldsHeaderChip onPress={() => setFieldsOpen(true)} /> : undefined}>
       {stage.kind === 'hub' && !ready && <ActivityIndicator style={styles.loading} testID="ie-giris-kipi-yukleniyor" />}
       {stage.kind === 'hub' && ready && (
         <Hub
@@ -133,7 +134,7 @@ export default function WoCreateScreen() {
       {stage.kind === 'teach' && <DocScanBody teachOnly />}
       {stage.kind === 'desk' && <DeskView shortcuts={shortcuts} />}
       {stage.kind === 'unified' && (
-        <UnifiedWoForm key={stage.n} initialRoute={stage.route} routeLocked={stage.locked} onNew={() => setStage({ ...stage, n: stage.n + 1 })} />
+        <UnifiedWoForm key={stage.n} initialRoute={stage.route} routeLocked={stage.locked} onNew={() => setStage({ ...stage, n: stage.n + 1 })} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} />
       )}
     </ScreenChrome>
   );
@@ -194,6 +195,24 @@ function Tile({ icon, title, sub, onPress, testID }: { icon: string; title: stri
     </TouchableRipple>
   );
 }
+
+/** Tek formun ⚙ alan seçicisi başlıkta (gövdede yer kaplamasın); RefreshButton başlık çipi kalıbı. */
+function FieldsHeaderChip({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableRipple onPress={onPress} style={hdrStyles.chip} borderless rippleColor="rgba(255,255,255,0.2)" accessibilityLabel="Alanlar" testID="ie-alanlar">
+      <View style={hdrStyles.chipInner}>
+        <Icon source="cog-outline" size={18} color={colors.textOnDark} />
+        <Text style={hdrStyles.chipText}>Alanlar</Text>
+      </View>
+    </TouchableRipple>
+  );
+}
+
+const hdrStyles = StyleSheet.create({
+  chip: { borderRadius: 10, marginLeft: 4, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', overflow: 'hidden' },
+  chipInner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9 },
+  chipText: { color: colors.textOnDark, fontWeight: '700', fontSize: 13 },
+});
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },

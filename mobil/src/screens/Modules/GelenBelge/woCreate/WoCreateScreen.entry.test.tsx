@@ -1,7 +1,7 @@
 // S16b `gelenBelge.tabletIeGirisi`: BELGE kipinde her karo tek formu açar (top/masa/Belge Tara gizli); TOP yalnız top yolu.
 // IKISI = bugünkü ekran — `WoCreateScreen.test.tsx` onu değiştirilmeden ölçer.
 import React, { type ReactNode } from 'react';
-import { act, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import { useAuthStore } from '../../../../store/authStore';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
@@ -18,9 +18,10 @@ jest.mock('../../../../components/ScreenChrome', () => {
   const { Text, View } = jest.requireActual('react-native');
   return {
     __esModule: true,
-    default: ({ title, children }: { title: string; children: ReactNode }) => (
+    default: ({ title, children, headerExtras }: { title: string; children: ReactNode; headerExtras?: ReactNode }) => (
       <View>
         <Text testID="baslik">{title}</Text>
+        <View testID="baslik-ekleri">{headerExtras}</View>
         {children}
       </View>
     ),
@@ -30,7 +31,12 @@ jest.mock('./UnifiedWoForm', () => {
   const { Text } = jest.requireActual('react-native');
   return {
     __esModule: true,
-    default: (p: { initialRoute: { id: string } | null; routeLocked: boolean }) => <Text testID="tek-form">{`${p.initialRoute?.id ?? 'yok'}:${p.routeLocked ? 'kilitli' : 'secilir'}`}</Text>,
+    default: (p: { initialRoute: { id: string } | null; routeLocked: boolean; fieldsOpen?: boolean }) => (
+      <>
+        <Text testID="tek-form">{`${p.initialRoute?.id ?? 'yok'}:${p.routeLocked ? 'kilitli' : 'secilir'}`}</Text>
+        <Text testID="tek-form-alanlar">{String(p.fieldsOpen)}</Text>
+      </>
+    ),
   };
 });
 jest.mock('../../HizliIsEmri/NewWorkOrderView', () => {
@@ -85,6 +91,17 @@ describe('WoCreateScreen — S16b giriş kipi BELGE', () => {
     expect(s.getByTestId('tek-form').props.children).toBe('r1:kilitli');
     expect(s.queryByTestId('hizli-form')).toBeNull();
     expect(s.queryByTestId('ie-birden-cok-belge')).toBeNull();
+  });
+
+  it('⭐ tek formda "Alanlar" başlıkta (gövdede değil): dokununca forma kontrollü açıklık gider; seçicide çip yok', async () => {
+    mockShortcuts.mockResolvedValue({ data: [route('r1', 'Kurşun&Tambur', 1)] });
+    const s = renderWithPaper(<WoCreateScreen />);
+    await s.findByTestId('kisayol-Kurşun&Tambur');
+    expect(within(s.getByTestId('baslik-ekleri')).queryByTestId('ie-alanlar')).toBeNull();
+    fireEvent.press(s.getByTestId('kisayol-Kurşun&Tambur'));
+    expect(s.getByTestId('tek-form-alanlar').props.children).toBe('false');
+    fireEvent.press(within(s.getByTestId('baslik-ekleri')).getByTestId('ie-alanlar'));
+    expect(s.getByTestId('tek-form-alanlar').props.children).toBe('true');
   });
 
   it('rotasız karo (Okutmayla) da tek formu açar', async () => {

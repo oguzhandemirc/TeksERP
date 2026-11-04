@@ -142,44 +142,6 @@ describe('UnifiedWoForm', () => {
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
   });
 
-  it('⭐ belgeden dolan En sarı vurgulu, rozet yazısı yok; elle değişince vurgu kalkar', async () => {
-    mockRows = [row()];
-    const s = renderWithPaper(ui());
-    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
-    expect(highlighted(s, 'ie-form-en')).toBe(true);
-    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
-    expect(s.queryByText('belgeden')).toBeNull();
-    fireEvent.changeText(s.getByTestId('ie-form-en'), '160');
-    expect(s.queryByTestId('belgeden-width')).toBeNull();
-    expect(highlighted(s, 'ie-form-en')).toBe(false);
-    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
-  });
-
-  it('⭐ tablet yatay (1280×800): iki sütun — solda belge okut + belge kartı, sağda üretim alanları; dikeyde tek sütun', async () => {
-    mockRows = [row()];
-    mockDims = { width: 1280, height: 800, scale: 1, fontScale: 1 };
-    const s = renderWithPaper(ui());
-    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
-    const left = within(s.getByTestId('ie-form-sol'));
-    const right = within(s.getByTestId('ie-form-sag'));
-    expect(left.getByTestId('ie-belge-okut')).toBeTruthy();
-    expect(left.getByTestId('satir-karti')).toBeTruthy();
-    expect(right.getByTestId('ie-form-en')).toBeTruthy();
-    expect(left.queryByTestId('ie-form-en')).toBeNull();
-    mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
-    const d = renderWithPaper(ui());
-    expect(d.queryByTestId('ie-form-iki-sutun')).toBeNull();
-  });
-
-  it('⭐ kontrollü Alanlar: fieldsOpen verilince gövde tuşu çizilmez, seçici prop ile açılır', () => {
-    const onChange = jest.fn();
-    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} fieldsOpen={false} onFieldsOpenChange={onChange} />);
-    expect(s.queryByTestId('ie-alanlar')).toBeNull();
-    expect(s.queryByText('Varsayılana dön')).toBeNull();
-    const o = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} fieldsOpen onFieldsOpenChange={onChange} />);
-    expect(o.getByText('Varsayılana dön')).toBeTruthy();
-  });
-
   it('⭐ öneri çipi: "Evet" → hedef kumaş / renk seçili, çip kalkar; öneri alana kendiliğinden yazılmaz', async () => {
     mockRows = [row()];
     const s = renderWithPaper(ui());
@@ -237,6 +199,46 @@ describe('UnifiedWoForm', () => {
     const s = renderWithPaper(ui(null));
     await waitFor(() => expect(s.getByTestId('ie-form-ipucu').props.children).toBe('Rotayı seçin.'));
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
+  });
+});
+
+describe('UnifiedWoForm — vurgu, yerleşim ve kontrollü Alanlar', () => {
+  it('⭐ belgeden dolan En sarı vurgulu, rozet yazısı yok; elle değişince vurgu kalkar', async () => {
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(highlighted(s, 'ie-form-en')).toBe(true);
+    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
+    expect(s.queryByText('belgeden')).toBeNull();
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '160');
+    expect(s.queryByTestId('belgeden-width')).toBeNull();
+    expect(highlighted(s, 'ie-form-en')).toBe(false);
+    expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
+  });
+
+  it('⭐ tablet yatay (1280×800): iki sütun — solda belge okut + belge kartı, sağda üretim alanları; dikeyde tek sütun', async () => {
+    mockRows = [row()];
+    mockDims = { width: 1280, height: 800, scale: 1, fontScale: 1 };
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    const left = within(s.getByTestId('ie-form-sol'));
+    const right = within(s.getByTestId('ie-form-sag'));
+    expect(left.getByTestId('ie-belge-okut')).toBeTruthy();
+    expect(left.getByTestId('satir-karti')).toBeTruthy();
+    expect(right.getByTestId('ie-form-en')).toBeTruthy();
+    expect(left.queryByTestId('ie-form-en')).toBeNull();
+    mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
+    const d = renderWithPaper(ui());
+    expect(d.queryByTestId('ie-form-iki-sutun')).toBeNull();
+  });
+
+  it('⭐ kontrollü Alanlar: fieldsOpen verilince gövde tuşu çizilmez, seçici prop ile açılır', () => {
+    const onChange = jest.fn();
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} fieldsOpen={false} onFieldsOpenChange={onChange} />);
+    expect(s.queryByTestId('ie-alanlar')).toBeNull();
+    expect(s.queryByText('Varsayılana dön')).toBeNull();
+    const o = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} fieldsOpen onFieldsOpenChange={onChange} />);
+    expect(o.getByText('Varsayılana dön')).toBeTruthy();
   });
 });
 

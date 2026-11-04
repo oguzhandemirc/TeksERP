@@ -26,7 +26,7 @@ const DOC_PLACEHOLDER = 'Belge okutulunca dolar';
 
 export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const u = useUnifiedWoForm(props);
-  const { wo, row, scan, form, done, fields } = u;
+  const { wo, scan, form, done, fields } = u;
   const fieldProps = {
     state: form,
     edit: u.edit,
@@ -47,7 +47,47 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const win = useWindowDimensions();
   const layout = woFormLayout(win.width, win.height);
   const twoCol = layout.columns === 2;
-  const docCol = (
+  return (
+    <>
+      <ScrollView contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
+        {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
+        {twoCol ? (
+          <View style={[styles.columns, { gap: layout.pad }]} testID="ie-form-iki-sutun">
+            <View style={styles.col} testID="ie-form-sol">
+              <DocColumn u={u} />
+            </View>
+            <View style={styles.col} testID="ie-form-sag">
+              <FormColumn u={u} fieldProps={fieldProps} />
+            </View>
+          </View>
+        ) : (
+          <>
+            <DocColumn u={u} />
+            <FormColumn u={u} fieldProps={fieldProps} />
+          </>
+        )}
+      </ScrollView>
+      <CreateBar wo={wo} done={done} block={u.block} onNew={props.onNew} pad={layout.pad} />
+      <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
+      <ScanModals scan={scan} />
+      <FieldSelectorSheet
+        visible={fields.sheetOpen}
+        hidden={fields.prefs.hidden}
+        onToggle={fields.prefs.toggle}
+        onReset={fields.prefs.reset}
+        onDismiss={fields.closeSheet}
+        pending={fields.prefs.pending}
+      />
+    </>
+  );
+}
+
+type FormModel = ReturnType<typeof useUnifiedWoForm>;
+
+/** Belge sütunu: Belge okut + tarayıcı + belge kartı (yer tutucu). */
+function DocColumn({ u }: { u: FormModel }) {
+  const { wo, row, scan, done, fields } = u;
+  return (
     <>
       {!done && (
         <Button mode="contained" icon="file-document-outline" onPress={u.okut} disabled={wo.saving || scan.b.sending || scan.source.busy} contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belge-okut">
@@ -69,7 +109,12 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
       )}
     </>
   );
-  const formCol = (
+}
+
+/** Üretim / Plan / Diğer alanlar sütunu. */
+function FormColumn({ u, fieldProps }: { u: FormModel; fieldProps: Omit<React.ComponentProps<typeof WoFormFields>, 'show' | 'zone'> }) {
+  const { wo, row, done, fields } = u;
+  return (
     <>
       <WoFormFields {...fieldProps} show={fields.isTop} />
       <OtherFields count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
@@ -81,39 +126,6 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
           Fabrika ayarı ayrı onay: kayıt taslak kalır; üretim ve plan alanları {TERIM.terbiyeIsEmri.tekilKucuk} panelde onaylanırken girilir.
         </Text>
       )}
-    </>
-  );
-  return (
-    <>
-      <ScrollView contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
-        {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
-        {twoCol ? (
-          <View style={[styles.columns, { gap: layout.pad }]} testID="ie-form-iki-sutun">
-            <View style={styles.col} testID="ie-form-sol">
-              {docCol}
-            </View>
-            <View style={styles.col} testID="ie-form-sag">
-              {formCol}
-            </View>
-          </View>
-        ) : (
-          <>
-            {docCol}
-            {formCol}
-          </>
-        )}
-      </ScrollView>
-      <CreateBar wo={wo} done={done} block={u.block} onNew={props.onNew} pad={layout.pad} />
-      <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
-      <ScanModals scan={scan} />
-      <FieldSelectorSheet
-        visible={fields.sheetOpen}
-        hidden={fields.prefs.hidden}
-        onToggle={fields.prefs.toggle}
-        onReset={fields.prefs.reset}
-        onDismiss={fields.closeSheet}
-        pending={fields.prefs.pending}
-      />
     </>
   );
 }
