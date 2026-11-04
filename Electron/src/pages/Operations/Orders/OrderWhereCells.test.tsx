@@ -41,4 +41,13 @@ describe("Nerede? / Sevk hücreleri", () => {
     expect(container.textContent).toBe("Bir kısmı gönderildi (1.200 / 2.400 m)");
     expect(container.textContent).toBe(orderShipText(o));
   });
+
+  it("Sevk durumu rozeti: iptal sipariş 'Henüz gönderilmedi' demez, sönük renkte", () => {
+    const o = { status: "CANCELLED", shippedQty: 0, manualClosedById: null, lines: [{ quantity: 2400, unit: "MT" } as OrderLine] } as Pick<
+      Order,
+      "status" | "shippedQty" | "manualClosedById" | "lines"
+    >;
+    render(<ShipCell order={o} />);
+    expect(screen.getByText("Sipariş iptal edildi").className).toMatch(/muted/);
+  });
 });

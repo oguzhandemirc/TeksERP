@@ -1,5 +1,5 @@
 // =============================================================================
-// SİPARİŞLER "NEREDE?" + "SEVK" — TEK SAF METİN KATMANI
+// SİPARİŞLER "NEREDE?" + "SEVK DURUMU" — TEK SAF METİN KATMANI
 // =============================================================================
 // Backend yapısal veri döner (`nerede`: durum + yerler); cümleyi YALNIZ burası
 // kurar. Liste hücresi, Excel/PDF (`meta.exportValue`) ve yan panel aynı
@@ -9,6 +9,7 @@
 import type { Tone } from "@/components/operations/StatusBadge";
 import { isMeasuredUnit } from "@/lib/item-unit";
 import { TERIM } from "@/lib/terim";
+import { orderStatusLabels, type OrderStatus } from "@/types/enums";
 import type { Order, OrderWherePlace, OrderWhereStep, OrderWhereWorkOrder } from "./types";
 
 const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
@@ -19,6 +20,9 @@ export const fmtNum = (n: number): string => NUM.format(n);
 export const daysText = (d: number): string => (d <= 0 ? "bugün gönderildi" : `${fmtNum(d)} gündür`);
 
 export const OVERDUE_TEXT = "Termini geçti";
+
+/** Elle kapatılan sipariş (COMPLETED + manualClosedById) — "Nerede?" ve "Sevk durumu" aynı sözcük. */
+export const ORDER_MANUAL_CLOSED_TEXT = "Sipariş elle kapatıldı";
 
 /** Tek yerin cümlesi (satırdaki baş yer). */
 export function placeText(p: OrderWherePlace): string {
@@ -52,7 +56,7 @@ export function orderWhereView(order: Pick<Order, "nerede" | "manualClosedById">
     case "IPTAL":
       return v("Sipariş iptal edildi", "muted");
     case "TAMAM":
-      return order.manualClosedById ? v("Sipariş kapatıldı", "muted") : v("Hepsi gönderildi", "success");
+      return order.manualClosedById ? v(ORDER_MANUAL_CLOSED_TEXT, "muted") : v("Hepsi gönderildi", "success");
     case "IE_YOK":
       return v(`${TERIM.terbiyeIsEmri.tekil} açılmadı`, "muted");
     case "BASLANMADI":
@@ -78,16 +82,25 @@ export function orderWhereExportText(order: Pick<Order, "nerede" | "manualClosed
   return view.overdue ? `${view.text} · ${OVERDUE_TEXT}` : view.text;
 }
 
-// ── Sevk ─────────────────────────────────────────────────────────────────────
+// ── Sevk durumu — TEK kaynak ─────────────────────────────────────────────────
+// Liste hücresi, süzgeç, özet şeridi, detay başlığı, yan panel, Excel/PDF ve kalem
+// bazında Excel AYNI cümleyi yazar. Durum enum'u ham ya da "Onaylandı" gibi iş akışı
+// sözcüğüyle gösterilmez (Adnan Şahin isteği 2026-11-04; her kurulumda geçerli).
+
+export interface OrderShipView {
+  text: string;
+  tone: Tone;
+}
 
 /**
- * "Sevk" cümlesi — BRÜT sevk (`order.shippedQty`, metre defteri). Sayı çifti yalnız
- * bütün kalemler metreyle ölçülüyorsa yazılır (KG/ADET sevki deftere metre düşmez).
- * İstenen = aktif kalem miktarı + iptal kalemin sevk edilmiş kısmı.
+ * Sevk durumu cümlesi + rengi — BRÜT sevk (`order.shippedQty`, metre defteri). Sayı çifti
+ * yalnız bütün kalemler metreyle ölçülüyorsa yazılır (KG/ADET sevki deftere metre düşmez).
+ * İstenen = aktif kalem miktarı + iptal kalemin sevk edilmiş kısmı. Onaysız ve iptal
+ * sipariş miktardan önce durumunu söyler ("Henüz gönderilmedi" yanıltır).
  */
-export function orderShipText(
+export function orderShipView(
   order: Pick<Order, "status" | "shippedQty" | "manualClosedById" | "lines">,
-): string {
+): OrderShipView {
   const lines = order.lines ?? [];
   const measured = lines.length > 0 && lines.every((l) => isMeasuredUnit(l.unit));
   const shipped = Number(order.shippedQty ?? 0);
@@ -96,14 +109,38 @@ export function orderShipText(
     0,
   );
   const pair = measured ? `${fmtNum(shipped)} / ${fmtNum(requested)} m` : null;
+  const L = orderStatusLabels;
 
-  if (order.status === "COMPLETED" && order.manualClosedById) {
-    return pair ? `Sipariş kapatıldı (${pair} gönderildi)` : "Sipariş kapatıldı";
+  if (order.status === "PENDING") return { text: L.PENDING, tone: "warning" };
+  if (order.status === "CANCELLED") {
+    const text = pair && shipped > 0 ? `${L.CANCELLED} (${pair} gönderildi)` : L.CANCELLED;
+    return { text, tone: "muted" };
   }
-  if (order.status === "COMPLETED" || (measured && requested > 0 && shipped >= requested)) return "Hepsi gönderildi";
-  if (shipped <= 0 && order.status !== "PARTIAL_SHIPPED") return "Henüz gönderilmedi";
-  return pair ? `Bir kısmı gönderildi (${pair})` : "Bir kısmı gönderildi";
+  if (order.status === "COMPLETED" && order.manualClosedById) {
+    return { text: pair ? `${ORDER_MANUAL_CLOSED_TEXT} (${pair} gönderildi)` : ORDER_MANUAL_CLOSED_TEXT, tone: "muted" };
+  }
+  if (order.status === "COMPLETED" || (measured && requested > 0 && shipped >= requested)) {
+    return { text: L.COMPLETED, tone: "success" };
+  }
+  if (shipped <= 0 && order.status !== "PARTIAL_SHIPPED") return { text: L.APPROVED, tone: "info" };
+  return { text: pair ? `${L.PARTIAL_SHIPPED} (${pair})` : L.PARTIAL_SHIPPED, tone: "progress" };
 }
+
+/** "Sevk durumu" metni (ekran + Excel + PDF). */
+export function orderShipText(order: Pick<Order, "status" | "shippedQty" | "manualClosedById" | "lines">): string {
+  return orderShipView(order).text;
+}
+
+/**
+ * "Sevk durumu" süzgeci — etiket listedekiyle aynı; yalnız "Hepsi gönderildi" kovası
+ * elle kapatılanları da içerdiği için bunu söyler.
+ */
+export const ORDER_SHIP_FILTER_OPTIONS: ReadonlyArray<{ value: OrderStatus; label: string }> = (
+  ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const
+).map((value) => ({
+  value,
+  label: value === "COMPLETED" ? `${orderStatusLabels.COMPLETED} ya da elle kapatıldı` : orderStatusLabels[value],
+}));
 
 // ── Yan panel (iş emri kartı) ────────────────────────────────────────────────
 

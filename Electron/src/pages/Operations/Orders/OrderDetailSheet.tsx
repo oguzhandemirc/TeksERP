@@ -22,9 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
-import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
-import { orderStatusLabels } from "@/types/enums";
+import { ShipCell } from "./OrderWhereCells";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
@@ -107,7 +106,7 @@ export function OrderDetailSheet({
   const closeMut = useMutation({
     mutationFn: ({ id, r }: { id: string; r: string }) => orderService.manualClose(id, r),
     onSuccess: () => {
-      toast.success("Sipariş manuel olarak kapatıldı.");
+      toast.success("Sipariş elle kapatıldı.");
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["orders"] });
       setCloseOpen(false);
@@ -182,11 +181,8 @@ export function OrderDetailSheet({
             <span className="font-mono">{order?.orderNumber}</span>
             {order && (
               <>
-                <StatusBadge
-                  status={order.status}
-                  labels={orderStatusLabels}
-                  tones={orderStatusTones}
-                />
+                {/* Sevk durumu — listedekiyle aynı günlük cümle (`orderShipView`). */}
+                <ShipCell order={order} />
                 {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-17). */}
                 <RecordInfoButton
                   table="ORDER"

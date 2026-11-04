@@ -101,12 +101,16 @@ export const OrderStatus = {
 } as const;
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
 
+/**
+ * Sipariş durumu kullanıcıya SEVK diliyle söylenir ("Onaylandı" gibi iş akışı sözcüğü
+ * görünmez). Miktarlı cümle `orderShipText` (Orders/order-where-text.ts).
+ */
 export const orderStatusLabels: Record<OrderStatus, string> = {
-  PENDING: "Beklemede",
-  APPROVED: "Onaylandı",
-  PARTIAL_SHIPPED: "Kısmi Sevk",
-  COMPLETED: "Tamamlandı",
-  CANCELLED: "İptal",
+  PENDING: "Henüz onaylanmadı",
+  APPROVED: "Henüz gönderilmedi",
+  PARTIAL_SHIPPED: "Bir kısmı gönderildi",
+  COMPLETED: "Hepsi gönderildi",
+  CANCELLED: "Sipariş iptal edildi",
 };
 
 export const WorkOrderStatus = {

@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { OrderStats } from "./service";
 import { TERIM } from "@/lib/terim";
+import { ORDER_SHIP_FILTER_OPTIONS } from "./order-where-text";
 
 export type OrderStatsView = "sade" | "onerilen" | "genis";
 
@@ -36,13 +37,10 @@ const MONEY_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 
 /** Durum kovası → etiket + ton. Sıra üretim akışını izler. */
 const STATUS_ORDER = ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const;
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Bekliyor",
-  APPROVED: "Onaylı",
-  PARTIAL_SHIPPED: "Kısmi Sevk",
-  COMPLETED: "Tamamlandı",
-  CANCELLED: "İptal",
-};
+/** Kova etiketi = listedeki "Sevk durumu" süzgeci (tek kaynak, `order-where-text.ts`). */
+const STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  ORDER_SHIP_FILTER_OPTIONS.map((o) => [o.value, o.label]),
+);
 const STATUS_TONE: Record<string, string> = {
   PENDING: "text-amber-600 dark:text-amber-400",
   APPROVED: "text-sky-600 dark:text-sky-400",
