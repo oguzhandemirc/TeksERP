@@ -55,6 +55,8 @@ import { resolveTamburListStationId } from './tamburStationFilter';
 import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
 import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
 import { useStationDocLookup } from '../../../components/stationDocLookup/useStationDocLookup';
+import DocSiblingsStrip, { useDocSiblings } from '../../../components/stationDocLookup/DocSiblingsStrip';
+import type { StationLookupWorkOrder } from '../../../services/stationDocLookup.service';
 import { emptyCardHint } from '../../../components/stationDocLookup/emptyCardHint';
 import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenCardSearch';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
@@ -964,6 +966,8 @@ export default function TamburScreen() {
   useRefetchOnOpen(openCardsQuery.refetch, listModalOpen);
   // K17: boyahane belgesinden iş emri bulma + açık kart listesinde fiş/parti no araması (süzme sunucuda).
   const docLookup = useStationDocLookup();
+  // Belgeden açılan işin kardeşleri ("diğerine geç" şeridi).
+  const docSiblings = useDocSiblings();
   const cardSearch = useOpenCardSearch(['tambur', 'open-cards', listStationId, scanMode], (q) => tamburService.listOpenCards(listStationId, q, scanMode));
   // Açık Kartlar modalı içindeki manuel "Yenile" — toast + haptic feedback.
   const openCardsRefresh = useManualRefresh(
@@ -1214,8 +1218,9 @@ export default function TamburScreen() {
     resolveCard(data.trim(), false);
   };
 
-  const handleDocLookupOpen = (workOrder: { cardBarcode: string }) => {
+  const handleDocLookupOpen = (workOrder: StationLookupWorkOrder, siblings: StationLookupWorkOrder[]) => {
     docLookup.setOpen(false);
+    docSiblings.setSiblings(siblings);
     resolveCard(workOrder.cardBarcode, false);
   };
 
@@ -3217,6 +3222,13 @@ export default function TamburScreen() {
         </View>
       ) : null}
 
+      <DocSiblingsStrip
+        siblings={docSiblings.siblings}
+        activeCardBarcode={activeJob?.cardBarcode ?? null}
+        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+        onDismiss={docSiblings.clear}
+      />
+
       {openJobs.length > 0 && (
         <View style={styles.tabBar}>
           <ScrollView
@@ -4486,6 +4498,7 @@ export default function TamburScreen() {
         onDismiss={() => docLookup.setOpen(false)}
         onOpen={handleDocLookupOpen}
         readerConfigured={docLookup.readerConfigured}
+        screen={{ screen: 'TAMBUR', stationId: listStationId }}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
