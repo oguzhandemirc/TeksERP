@@ -3,22 +3,22 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
-import { SheetField } from '../../../../components/ModuleSheet';
+import { SelectButton } from '../../../../components/form/SelectButton';
 import { DOC_HIGHLIGHT_BG, DocHighlight } from '../../../../components/DocHighlight';
-import { colors, typography } from '../../../../theme';
+import { colors, radius, spacing, typography } from '../../../../theme';
 import { editCustomerBatchNo } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 /**
- * Müşteri parti no (belgeden okunan, elle yazılabilir düz metin; seçici yok) + bizim parti no (İE partisi). Seri kipinde
- * bizimki salt okunur "Otomatik verilir"; belgeden kipinde değer ya da aday seçici (bugünkü davranış).
+ * Müşteri parti no (belgeden okunan, elle yazılabilir düz metin; seçici yok) + bizim parti no (İE partisi) aynı satırda.
+ * Seri kipinde bizimki gri "Bizim parti: otomatik" hapı; belgeden kipinde aday seçici düğmesi (bugünkü davranış).
  */
 export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; wo: WoRowsState; locked: boolean; onPick: () => void }) {
   const f = row.form!;
   const candidates = row.detail?.batchNoCandidates ?? [];
   const fromDoc = wo.batchSource === 'DOCUMENT';
   return (
-    <>
+    <View style={styles.row}>
       <DocHighlight active={!!f.customerBatchNoFromDoc} style={styles.hl}>
         <TextInput
           mode="outlined"
@@ -33,27 +33,30 @@ export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; 
         />
       </DocHighlight>
       {fromDoc ? (
-        <SheetField
-          label="Bizim parti no"
-          value={f.ourBatchNo ?? ''}
-          placeholder={candidates.length > 1 ? `Seçin (${candidates.length} aday)` : 'Otomatik verilir'}
-          onPress={onPick}
-          disabled={locked || candidates.length === 0}
-        />
+        <View style={styles.pick}>
+          <SelectButton
+            label={candidates.length > 1 ? `Seçin (${candidates.length} aday)` : 'Bizim parti: otomatik'}
+            caption="Bizim parti"
+            value={f.ourBatchNo}
+            onPress={onPick}
+            disabled={locked || candidates.length === 0}
+            testID={`belge-satir-bizim-parti-sec-${row.noteNo}`}
+          />
+        </View>
       ) : (
-        <View style={styles.autoBatch} testID={`belge-satir-bizim-parti-${row.noteNo}`}>
-          <Text style={styles.label}>Bizim parti no</Text>
-          <Text style={styles.autoText}>Otomatik verilir</Text>
+        <View style={styles.auto} testID={`belge-satir-bizim-parti-${row.noteNo}`}>
+          <Text style={styles.autoText}>Bizim parti: otomatik</Text>
         </View>
       )}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
-  hl: { padding: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  hl: { padding: 2, width: 260, maxWidth: '100%' },
   hlInput: { backgroundColor: DOC_HIGHLIGHT_BG },
-  autoBatch: { gap: 2 },
-  autoText: { fontSize: typography.size.base, color: colors.textMuted },
+  pick: { flex: 1, minWidth: 220 },
+  auto: { minHeight: 40, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceMuted },
+  autoText: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.textSecondary },
 });

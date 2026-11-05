@@ -126,10 +126,10 @@ describe('K30-D ek gövde (buildExtraBody)', () => {
 
   it('⭐ ORDER + sipariş kalemsiz → engel; kalem varken ya da otomatikte engel yok; boş adım listesi engel', () => {
     const ctx = { routeChosen: true, hasTambur: false };
-    expect(extrasIssues(extras({ woType: 'ORDER_PRODUCTION' }), ctx).join(' ')).toMatch(/sipariş kalemi seçin/);
+    expect(extrasIssues(extras({ woType: 'ORDER_PRODUCTION' }), ctx).map((i) => i.text).join(' ')).toMatch(/sipariş kalemi seçin/);
     expect(extrasIssues(extras({ woType: 'ORDER_PRODUCTION', orderLineIds: ['l1'] }), ctx)).toEqual([]);
     expect(extrasIssues(extras(), ctx)).toEqual([]);
-    expect(extrasIssues(extras({ steps: [] }), ctx).join(' ')).toMatch(/en az bir adım/);
+    expect(extrasIssues(extras({ steps: [] }), ctx).map((i) => i.text).join(' ')).toMatch(/en az bir adım/);
   });
 
   it('kumaş değişince dokunulmuş özellik kümesi boşalır; dokunulmamış null kalır; rota değişince hepsi baştan', () => {

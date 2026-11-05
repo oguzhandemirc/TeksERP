@@ -1,15 +1,14 @@
-// S16b tek form — panel klasik formunun üretim/plan inputları (Rota, Sipariş bağı, Hedef kumaş, En, Hedef metraj/kg, Hedef renk, Kat tipi,
-// Planlı başlangıç/bitiş, Not). Belgeden dolan alan sarı vurgulu (elle değişince kalkar); desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
-// K30-D: `show` ile yalnız seçilen alanlar çizilir; gizlenenler aynı bileşenle altta "Diğer alanlar"da (zone="other").
-// Rota adımları / makine / tür / hedef özellikler `plan` ile WoPlanFields'tan.
+// S16b tek form — panel klasik formunun üretim/plan inputları: Rota (+ adım yolu), Sipariş bağı, Hedef bölümü (WoTargetFields),
+// Planlı başlangıç/bitiş, Not. K30-D: `show` ile yalnız seçilen alanlar çizilir; gizlenenler aynı bileşenle altta "Diğer alanlar"da
+// (zone="other"). Rota adımları / makine / tür / hedef özellikler `plan` ile WoPlanFields'tan.
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Chip, Text, TextInput } from 'react-native-paper';
+import { Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import ColorSelectField from '../../../../components/ColorSelectField';
-import { DocHighlight } from '../../../../components/DocHighlight';
 import { SheetField } from '../../../../components/ModuleSheet';
-import NumpadInput from '../../../../components/NumpadInput';
+import { SectionBand } from '../../../../components/form/SectionBand';
+import type { BandTone } from '../../../../components/form/tone';
+import { SelectButton } from '../../../../components/form/SelectButton';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import { usePickableLifecycle } from '../../../../hooks/useFeatureFlags';
 import { fmtDayKey } from '../../../../lib/factory-time';
@@ -18,14 +17,15 @@ import type { FabricPropertyValue } from '../../../../services/fabricProperty.se
 import { itemService } from '../../../../services/item.service';
 import { useTruncationWarning } from '../../../../hooks/useTruncationWarning';
 import type { ProductionRoute } from '../../../../services/route.service';
-import { colors, radius, spacing, typography } from '../../../../theme';
+import { colors, spacing, typography } from '../../../../theme';
 import OrderLinkPicker from '../../HizliIsEmri/OrderLinkPicker';
 import { SCAN_ROUTE_HINT, withScanRouteOption } from '../../HizliIsEmri/scanRouteOption';
 import type { AvailableOrderLine } from '../../../../services/order.service';
 import { SCAN_ROUTE, isScanRoute } from './woFromDoc';
-import { plannedDayOptions, type DocFilledKey, type WoFormExtras, type WoFormState } from './woForm';
+import { plannedDayOptions, type WoFormExtras, type WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
 import { RouteStepsBlock, TargetPropsBlock, WoTypeBlock, type WoPlanCtx } from './WoPlanFields';
+import { DocFilled, FieldLabel, TargetFields } from './WoTargetFields';
 
 interface Props {
   state: WoFormState;
@@ -52,6 +52,8 @@ interface Props {
   zone?: 'top' | 'other';
   /** K30-D: rota adımları + makine, iş emri türü, hedef özellikler; yoksa çizilmez. */
   plan?: WoPlanCtx;
+  /** Hedef şeridinin tonu (engellerden). */
+  targetTone?: BandTone;
 }
 
 type Picker = 'route' | 'item' | 'start' | 'end' | null;
@@ -69,30 +71,39 @@ export default function WoFormFields(props: Props) {
 
   return (
     <View style={styles.root} testID={top ? 'ie-form-alanlari' : 'ie-form-alanlari-diger'}>
-      {top && <Text style={styles.section}>Üretim</Text>}
       {show('rota') && (
-        <SheetField
-          label="Rota"
-          value={p.route ? p.route.name : ''}
-          placeholder="Rota seçin"
-          onPress={() => setPicker('route')}
-          disabled={locked || p.routeLocked}
-          hint={p.route && isScanRoute(p.route) ? SCAN_ROUTE_HINT : stepPath.length ? stepPath.join(' → ') : undefined}
-        />
+        <>
+          {!p.routeLocked && (
+            <SelectButton
+              label="Rota seç"
+              caption="Rota"
+              value={p.route ? p.route.name : null}
+              icon="map-marker-path"
+              onPress={() => setPicker('route')}
+              disabled={locked}
+              testID="ie-form-rota"
+            />
+          )}
+          {p.route && (
+            <Text style={styles.path} numberOfLines={1} testID="ie-rota-yolu">
+              {isScanRoute(p.route) ? SCAN_ROUTE_HINT : stepPath.join(' › ')}
+            </Text>
+          )}
+        </>
       )}
       {p.plan && <RouteStepsBlock plan={p.plan} show={show} locked={locked} />}
       {p.plan && <WoTypeBlock plan={p.plan} show={show} locked={locked} />}
 
       {show('siparis') && (
         <>
-          <Badged label="Sipariş (isteğe bağlı)" />
+          <FieldLabel label="Sipariş (isteğe bağlı)" />
           <View pointerEvents={locked ? 'none' : 'auto'} testID="ie-form-siparis">
             <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} />
           </View>
         </>
       )}
 
-      <TargetFields {...p} onPick={setPicker} />
+      <TargetFields {...p} onPickItem={() => setPicker('item')} />
       {p.plan && <TargetPropsBlock plan={p.plan} show={show} locked={locked} />}
       <FoldAndPlan {...p} onPick={setPicker} />
       <FieldPickers {...p} picker={picker} setPicker={setPicker} days={days} />
@@ -100,99 +111,13 @@ export default function WoFormFields(props: Props) {
   );
 }
 
-/** Hedef kumaş + en / hedef metraj / hedef kg + hedef renk (belgeden önerili). */
-function TargetFields(p: Shown & { onPick: (x: Picker) => void }) {
-  const { state, edit, locked, show } = p;
-  const e = state.extras;
-  const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
-  const itemSug = state.suggestions.targetItem;
-  const colorSug = state.suggestions.targetColor;
-  const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg') };
-  return (
-    <>
-      {show('hedefKumas') && (
-        <>
-          <Badged label="Hedef kumaş" />
-          <SheetField label="" value={e.targetItemLabel ?? ''} placeholder="Hedef kumaş seçin (isteğe bağlı)" onPress={() => p.onPick('item')} disabled={locked} />
-          <Suggest
-            kind="desen"
-            docText={state.docText.desen}
-            name={itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null}
-            accepted={!!itemSug && e.targetItemId === itemSug.id}
-            locked={locked}
-            onAccept={() => itemSug && edit({ targetItemId: itemSug.id, targetItemLabel: itemSug.name })}
-          />
-        </>
-      )}
-
-      {(cols.en || cols.metraj || cols.kg) && (
-        <View style={styles.row}>
-          {cols.en && (
-            <View style={styles.col}>
-              <Badged label="En (cm)" k="width" state={state} />
-              <DocFilled k="width" state={state}>
-                <NumpadInput value={e.width} onChangeText={(t) => edit({ width: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="örn. 150" disabled={locked} style={styles.input} testID="ie-form-en" />
-              </DocFilled>
-            </View>
-          )}
-          {cols.metraj && (
-            <View style={styles.col}>
-              <Badged label="Hedef metraj (m)" k="targetQuantity" state={state} derived={p.targetDerived?.derived} />
-              <DocFilled k="targetQuantity" state={state}>
-                <NumpadInput value={p.targetDerived?.derived ? p.targetDerived.value : e.targetQuantity} onChangeText={(t) => edit({ targetQuantity: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-metraj" />
-              </DocFilled>
-            </View>
-          )}
-          {cols.kg && (
-            <View style={styles.col}>
-              <Badged label="Hedef kg" k="targetWeight" state={state} />
-              <DocFilled k="targetWeight" state={state}>
-                <NumpadInput value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} mode="outlined" dense useNativeKeyboard allowDecimal placeholder="—" disabled={locked} style={styles.input} testID="ie-form-hedef-kg" />
-              </DocFilled>
-            </View>
-          )}
-        </View>
-      )}
-
-      {show('hedefRenk') && (
-        <>
-          <Badged label="Hedef renk" />
-          <ColorSelectField value={e.targetColorId} onChange={(id) => edit({ targetColorId: id })} disabled={locked} />
-          <Suggest
-            kind="renk"
-            docText={state.docText.renk}
-            name={colorSug?.name ?? null}
-            accepted={!!colorSug && e.targetColorId === colorSug.id}
-            locked={locked}
-            onAccept={() => colorSug && edit({ targetColorId: colorSug.id })}
-          />
-        </>
-      )}
-    </>
-  );
-}
-
-/** Kat tipi (yalnız tamburlu rota) + plan tarihleri + not. */
+/** Plan tarihleri + not. */
 function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
   const { show } = p;
   const plan = { start: show('planBaslangic'), end: show('planBitis'), note: show('not') };
   return (
     <>
-      {p.hasTambur && show('katTipi') && (
-        <>
-          <Badged label="Kat tipi" />
-          <View style={styles.chips}>
-            {p.foldValues.map((f) => (
-              <Chip key={f.code} selected={p.state.extras.foldType === f.code} onPress={() => p.edit({ foldType: f.code })} disabled={p.locked} style={styles.chip} testID={`ie-form-kat-${f.code}`}>
-                {f.name}
-              </Chip>
-            ))}
-          </View>
-          {p.foldValues.length === 0 && <Text style={styles.warn}>Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin.</Text>}
-        </>
-      )}
-
-      {(plan.start || plan.end || plan.note) && <Text style={styles.section}>Plan</Text>}
+      {(plan.start || plan.end || plan.note) && <SectionBand title="Plan" icon="calendar-range" testID="ie-serit-plan" />}
       {(plan.start || plan.end) && (
         <View style={styles.row}>
           {plan.start && (
@@ -209,48 +134,14 @@ function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
       )}
       {plan.note && (
         <>
-          <Badged label="Not" k="note" state={p.state} />
-          <DocFilled k="note" state={p.state}>
+          <FieldLabel label="Not" />
+          <DocFilled k="note" state={p.state} highlight>
             <TextInput value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
           </DocFilled>
         </>
       )}
     </>
   );
-}
-
-/** Belgedeki desen/renk: öneri varsa "X mi? Evet" (görevli onaylar, alana kendiliğinden yazılmaz); yoksa yalnız belgedeki yazı. */
-function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: string | null; accepted: boolean; locked: boolean; onAccept: () => void }) {
-  if (p.name && !p.accepted) {
-    return (
-      <Chip icon="help-circle-outline" style={styles.chip} disabled={p.locked} onPress={p.onAccept} testID={`ie-form-${p.kind}-oneri`}>
-        {`${p.docText ? `Belgede “${p.docText}” — ` : ''}${p.name} mi? Evet`}
-      </Chip>
-    );
-  }
-  if (!p.name && p.docText) return <Text style={styles.hint} testID={`ie-form-${p.kind}-metni`}>{`Belgede yazan ${p.kind}: ${p.docText}`}</Text>;
-  return null;
-}
-
-/** Alan etiketi; hedef metraj gelen metreden türediyse yanında rozet. */
-function Badged({ label, k, state, derived }: { label: string; k?: DocFilledKey; state?: WoFormState; derived?: boolean }) {
-  const fromDoc = !!k && !!state?.fromDoc.includes(k);
-  return (
-    <View style={styles.labelRow}>
-      <Text style={styles.label}>{label}</Text>
-      {derived && !fromDoc && (
-        <Text style={styles.badge} testID={`gelen-metreden-${k}`}>
-          gelen metreden
-        </Text>
-      )}
-    </View>
-  );
-}
-
-/** Belgeden dolan değerin sarı vurgusu; `fromDoc` edit'te düştüğü için elle değişince kalkar. */
-function DocFilled({ k, state, children }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode }) {
-  const on = state.fromDoc.includes(k);
-  return <View testID={on ? `belgeden-${k}` : undefined}><DocHighlight active={on} style={styles.hl}>{children}</DocHighlight></View>;
 }
 
 function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => void; days: { value: string; label: string }[] }) {
@@ -313,16 +204,8 @@ function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => voi
 
 const styles = StyleSheet.create({
   root: { gap: spacing.sm },
-  section: { marginTop: spacing.md, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  hl: { padding: 2 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
-  badge: { fontSize: typography.size.xs, color: colors.brand, backgroundColor: colors.brandSoft, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, overflow: 'hidden' },
-  hint: { fontSize: typography.size.sm, color: colors.textSecondary },
-  warn: { fontSize: typography.size.sm, color: colors.warningText },
+  path: { minHeight: 32, textAlignVertical: 'center', fontSize: typography.size.base, color: colors.textSecondary },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   col: { flex: 1, minWidth: 200 },
   input: { backgroundColor: colors.surface },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: 56, justifyContent: 'center', alignSelf: 'flex-start' },
 });

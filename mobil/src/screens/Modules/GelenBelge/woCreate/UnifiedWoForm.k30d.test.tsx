@@ -107,7 +107,7 @@ const body = () => mockOpts?.extraBody?.(mockRows[0]) ?? {};
 /** Düz karo: rota seçilmedi → seçiciden r1 seçilir (adımlar düzenlenebilir). */
 async function openFree() {
   const s = renderWithPaper(<UnifiedWoForm initialRoute={null} routeLocked={false} onNew={jest.fn()} />);
-  fireEvent.press(s.getByText('Rota seçin'));
+  fireEvent.press(s.getByText('Rota seç'));
   fireEvent.press(await s.findByTestId('secim-Rota-r1'));
   await s.findByTestId('ie-rota-adimlari');
   return s;
@@ -122,10 +122,11 @@ beforeEach(() => {
 });
 
 describe('UnifiedWoForm — rota adımları (K30-D)', () => {
-  it('⭐ kilitli rota (özel İE kısayolu): adımlar salt okunur — düğme yok, "sabit" ipucu; gövdede steps yok', async () => {
+  it('⭐ kilitli rota (özel İE kısayolu): editör çizilmez, adımlar yol satırında; makine kendi şeridinde; gövdede steps yok', async () => {
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    expect(await s.findByTestId('ie-adim-1-ad')).toHaveTextContent('1. Kurşun');
-    expect(s.getByTestId('ie-adim-ipucu')).toHaveTextContent(/sabit/);
+    expect(await s.findByTestId('ie-rota-yolu')).toHaveTextContent('Kurşun › Boya');
+    expect(s.queryByTestId('ie-rota-adimlari')).toBeNull();
+    expect(await s.findByTestId('ie-serit-makine')).toHaveTextContent(/Makine seç/);
     for (const id of ['ie-adim-ekle', 'ie-adim-1-yukari', 'ie-adim-1-cikar', 'ie-adim-1-not', 'ie-adim-sablona-don']) expect(s.queryByTestId(id)).toBeNull();
     expect(body()).not.toHaveProperty('steps');
   });
@@ -195,7 +196,7 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
   it('⭐ hedef özellik: varsayılan (BAYRAK) seçili görünür ve gitmez; çipe dokununca tüm küme targetPropertyIds olarak gider', async () => {
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     const p2 = await s.findByTestId('ie-form-ozellik-p2');
-    expect(s.getByTestId('ie-form-ozellik')).toHaveTextContent(/Rotanın varsayılanları seçili/);
+    expect(s.getByTestId('ie-serit-ozellik-durum')).toHaveTextContent('varsayılan');
     expect(body()).not.toHaveProperty('targetPropertyIds');
     fireEvent.press(p2);
     expect(body().targetPropertyIds).toEqual(['p1', 'p2']);
@@ -260,7 +261,7 @@ describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D 
   it('her parti ayrı İE kipinde makine seçilmez ve form bunu söyler', async () => {
     mockRows = [{ ...row, form: { ...form, multi: { mode: 'PER_PARTY', rows: [] } } } as unknown as DocRow];
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(new RegExp(`her ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} sonra seçilir`));
+    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine sonra seçilir.`);
     expect(s.queryByTestId('ie-form-makine')).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → "Şablonu güncelle (<ad>)" bağlantısı;
+// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → "Şablon: <ad>" satırı + "Şablonu güncelle" düğmesi;
 // izin / tanıtım alanı / yerel fotoğraf yoksa ya da satır sonuçlandıysa çizilmez. Kayıt sonrası belge yeniden okutulur
 // (başarılı → onay detayı atılır + rereadRow); sunucu reddederse (409 satırlı taslak) önizleme değerleri applyTaught ile dolar.
 import React from 'react';
@@ -114,20 +114,22 @@ describe('TeachBanner — görünürlük', () => {
   it('⭐ yerelde tanıtılmış satır (yeniden okutulamadı) → sunucu özeti TANITILMAMIS dese de şerit yok, güncelle bağlantısı', () => {
     const s = draw(NOT_TAUGHT, row({ taught: { seq: 1, code: 'u-gulecsoy', name: 'Güleçsoy' } }));
     expect(s.queryByTestId('tanit-serit')).toBeNull();
-    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle \(Güleçsoy\)/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle$/);
+    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
   });
 
   it('⭐ TANITILMAMIS → belirgin şerit + "Tanıt"', () => {
     const s = draw(NOT_TAUGHT);
-    expect(s.getByTestId('tanit-serit')).toHaveTextContent(/tanıtılmamış/);
+    expect(s.getByTestId('tanit-serit')).toHaveTextContent(/Bu belge tanınmadı\. Bir kez tanıtın/);
     expect(s.getByTestId('tanit-serit-ac')).toHaveTextContent(/Tanıt$/);
     expect(s.queryByTestId('tanit-serit-guncelle')).toBeNull();
   });
 
-  it('TANITILDI → şerit yok, "Şablonu güncelle (<ad>)" bağlantısı; modal güncelle kipinde açılır', async () => {
+  it('TANITILDI → şerit yok, şablon satırı + "Şablonu güncelle"; modal güncelle kipinde açılır', async () => {
     const s = draw(TAUGHT);
     expect(s.queryByTestId('tanit-serit')).toBeNull();
-    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle \(Güleçsoy\)/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle$/);
+    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
     await settle();
     await press(s.getByTestId('tanit-serit-guncelle'));
     await waitFor(() => expect(s.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle — Güleçsoy/));

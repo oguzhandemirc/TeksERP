@@ -1,7 +1,7 @@
 // K30-D ⚙ "Alanlar": kullanıcı formda fazlalık gördüğü alanları kapatır (kişisel tercih). Zorunlular kilitli; kapatılan
 // alan kaybolmaz, altta kapalı "Diğer alanlar (n)" bölümüne iner ve dokununca açılır.
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../../theme';
@@ -84,17 +84,20 @@ interface OtherProps {
   valued?: readonly WoFieldKey[];
   open: boolean;
   onToggle: () => void;
+  /** Alt çubuk hapı "Diğer alanlar"a kaydırabilsin diye konum. */
+  onLayout?: (e: LayoutChangeEvent) => void;
   children: React.ReactNode;
 }
 
 /** Altta kapalı bölüm: başlığa dokununca gizlenen alanlar açılır. Dolu gizli alan başlıkta adıyla yazılır. */
-export function OtherFields({ count, valued = [], open, onToggle, children }: OtherProps) {
+export function OtherFields({ count, valued = [], open, onToggle, onLayout, children }: OtherProps) {
   if (count === 0) return null;
   const note = valued.length ? `Dolu, kayda girecek: ${valued.map(fieldLabel).join(', ')}` : null;
   return (
-    <View style={styles.other}>
+    <View style={styles.other} onLayout={onLayout}>
       <TouchableRipple onPress={onToggle} style={styles.otherHead} testID="ie-diger-alanlar" accessibilityLabel={`Diğer alanlar (${count})${note ? `. ${note}` : ''}`}>
-        <View style={styles.rowInner}>
+        <View style={styles.otherInner}>
+          <View style={styles.otherBar} />
           <View style={styles.rowText}>
             <Text style={styles.otherTitle} testID="ie-diger-alanlar-baslik">{`Diğer alanlar (${count})`}</Text>
             {note && (
@@ -103,7 +106,7 @@ export function OtherFields({ count, valued = [], open, onToggle, children }: Ot
               </Text>
             )}
           </View>
-          <Icon source={open ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />
+          <Icon source={open ? 'chevron-up' : 'chevron-down'} size={24} color={colors.band.text} />
         </View>
       </TouchableRipple>
       {open && <View style={styles.otherBody}>{children}</View>}
@@ -123,8 +126,11 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: typography.size.base, color: colors.text },
   rowSub: { fontSize: typography.size.sm, color: colors.textSecondary },
   required: { fontSize: typography.size.xs, color: colors.textSecondary, backgroundColor: colors.surfaceMuted, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, overflow: 'hidden' },
-  other: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
-  otherHead: { borderRadius: radius.md },
-  otherTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  otherBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  // Başlık bölüm şeridi görünümünde (SectionBand ile aynı zemin + çubuk); şerit dokunulabilir olduğu için ayrı çizilir.
+  other: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, overflow: 'hidden' },
+  otherHead: { backgroundColor: colors.band.bg },
+  otherInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingRight: spacing.sm },
+  otherBar: { width: 6, alignSelf: 'stretch', backgroundColor: colors.band.bar.idle },
+  otherTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.band.text },
+  otherBody: { paddingHorizontal: spacing.md, paddingVertical: spacing.md },
 });
