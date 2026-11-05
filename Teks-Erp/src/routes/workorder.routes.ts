@@ -101,7 +101,7 @@ router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:faso
  *         schema: { type: string, format: date-time }
  *     responses:
  *       200:
- *         description: '`data.firms`: `[{ id, name, workOrderCount }]`'
+ *         description: '`data.firms`: `[{ id, name, workOrderCount }]` · `data.stations` (faceted değil, "şu an nerede" istasyon süzgeci): `[{ id, name, kind, dis }]`'
  */
 router.get("/where-options", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.whereOptions);
 
