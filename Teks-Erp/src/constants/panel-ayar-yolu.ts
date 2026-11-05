@@ -7,6 +7,7 @@
 // bayt karşılaştırır ve backend dizgelerinde elle yazılmış yolu yasaklar.
 // =============================================================================
 import { yolBicimle } from "./panel-ekran-yolu";
+import { TERIM } from "./terim";
 
 /** Ayar ekranı (panel kategori kimliği) → menü yolu (`settingsCategoryTrail`). */
 export const PANEL_SETTING_SCREEN = {
@@ -25,7 +26,8 @@ export const PANEL_SETTING_SCREEN = {
   belgeler: "Sistem → Baskı & Cihazlar → Belgeler",
   "gelen-belge": "Sistem → Özellik Anahtarları → Gelen Belge",
   orders: "Sistem → Özellik Anahtarları → Siparişler",
-  "work-orders": "Sistem → Özellik Anahtarları → İş Emirleri",
+  // Panel kategori adı rejime bağlı TERIM getter'ıdır (dokumada "Terbiye İş Emirleri") — okuma anında çözülür.
+  get "work-orders"() { return `Sistem → Özellik Anahtarları → ${TERIM.terbiyeIsEmri.cogul}`; },
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;
