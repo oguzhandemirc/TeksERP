@@ -7,6 +7,8 @@ const SHORTCUTS: { keys: string[]; desc: string }[] = [
   { keys: ["G", "O"], desc: "Operasyon" },
   { keys: ["G", "T"], desc: "Tanımlar" },
   { keys: ["G", "R"], desc: "Raporlar" },
+  { keys: ["Ctrl/⌘", "W"], desc: "Sekmeyi kapat" },
+  { keys: ["Ctrl", "Shift", "W"], desc: "Tüm sekmeleri kapat" },
   { keys: ["?"], desc: "Bu pencere" },
 ];
 
