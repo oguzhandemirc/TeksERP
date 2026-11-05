@@ -70,6 +70,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] Çeki Listesi ilk basımda `Manifest` (`sourceKind=SACK_SELECTION`) doğurur, CL no + içerik donar (render'da üretilmez); aynı içerik → aynı no, farklı → yeni; sürümlenmez; no sağ üstte, aç/kapa yok.
 - [PROFİL] Fason çekisi: `placements.batchInfo`, `sections.accountNo` OPT-IN (kapalı), `sections.fabricHeader` OPT-IN, `gridGroups` 3/4/5 × `gridRows` 1-40 (varsayılan 5×10).
 - [ÇEKİRDEK] `SALES_QUOTE` SENT, `PRICE_LIST` PUBLISHED geçiş tx'inde claim'den sonra donar (lazy yalnız eski kayıt); DRAFT yalnız TASLAK önizlenir; iptal/revizyon belgeyi aynı tx'te VOIDED yapar, liste arşivi yapmaz; sözleşme/`select`e maliyet/kâr/öneri/iç not koyma.
+- [PROFİL] Varsayılan top etiket düzenleri müşteri parti no (`labelBatchNo`) doluyken "Parti: <değer>" basar ve bizim parti no'yu BASMAZ (etikette iki "Parti" olmasın; izlenebilirlik barkoddan sürer); boşken bugünkü baskı aynen.
 
 ### Belge şablon tasarımcısı (GrapesJS + LiquidJS; plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md`)
 

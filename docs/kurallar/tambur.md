@@ -65,6 +65,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** `cutOpenFabric` çocuğu, `finalizeOpenFabric` kalanı ve `rescueStuckRoll` stok defterine GİRİŞ yazar (`TAMBUR_CUT` · `RESCUE`, `postStockMove`, 0 hariç koşulsuz); çocuğun geri alınması bunu `TAMBUR_UNDO` ile bağlı tersler; ebeveyn satır almaz.
 - **[ÇEKİRDEK]** Mutabakat kırmızısı üçe ayrılır (kod hatası · iş kararı bekleyen veri · sorgu kör noktası); `test_consistency` salt-okunur, canlı DB'ye; eski sapma satırlarını toplu UPDATE ile düzeltme, §13'ü DARALTMA; adım durumu verisine dokunma.
 - **[ÇEKİRDEK]** "Sipariş Bağla" `workorder:write`; uyumsuz satır yalnız süpervizörde `order-links/override` (workorder:write AND roll:manual-adjust); kumaş farkı HER ZAMAN red; zincir tek tx değil (bilinçli).
+- **[PROFİL]** Müşteri parti no (`Roll.labelBatchNo`) yalnız cari ayarı `tamburLabelBatchEnabled` açıkken kesimde yazılır (çözücü `tambur-customer-settings.helper`; kapalıyken değer → 400 `LABEL_BATCH_NOT_ENABLED`); çocuğa MİRAS geçmez; tablette değer iş emri boyunca yapışkan, gövdeye ayar kapalıyken hiç girmez; düzeltme `PATCH /rolls/:id/label` (labelDirty + audit).
 
 ## Backend
 
