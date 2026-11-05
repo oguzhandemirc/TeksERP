@@ -8,6 +8,7 @@ import {
   disposeTabRouter,
 } from "@/components/layout/tabs/tab-routers";
 import { recallRoute } from "@/components/layout/tabs/route-memory";
+import { idsToClose, nextActiveAfterClose, type CloseScope } from "@/components/layout/tabs/tab-close";
 import { TERM_REGIME_EVENT } from "@/lib/terim-rejim";
 
 export interface TabItem {
@@ -51,7 +52,8 @@ interface TabsState {
   /** N. sekmeye geç (0 tabanlı, sınır dışıysa yok sayılır). */
   selectIndex: (index: number) => void;
   reorder: (fromId: string, toId: string) => void;
-  closeOthers: (id: string) => void;
+  /** Toplu kapatma (sağ tık menüsü / "Tümünü kapat"): çapaya göre kapsam; "all" çapasızdır. */
+  closeTabs: (scope: CloseScope, anchorId?: string | null) => void;
   /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
   updateTabTitle: (id: string, title: string) => void;
   /**
@@ -157,19 +159,17 @@ export const useTabsStore = create<TabsState>()(
         set({ tabs: tabs.map((t) => (t.id === id ? { ...t, path: pathname, title, custom: undefined } : t)) });
       },
 
-      closeTab: (id) => {
+      closeTab: (id) => get().closeTabs("self", id),
+
+      closeTabs: (scope, anchorId = null) => {
         const { tabs, activeId } = get();
-        const idx = tabs.findIndex((t) => t.id === id);
-        if (idx < 0) return;
-        const next = tabs.filter((t) => t.id !== id);
-        disposeTabRouter(id);
-        let nextActive = activeId;
-        if (activeId === id) {
-          // Komşuya odaklan: önce sağdaki, yoksa soldaki.
-          const neighbor = next[idx] ?? next[idx - 1] ?? null;
-          nextActive = neighbor?.id ?? null;
-        }
-        set({ tabs: next, activeId: nextActive });
+        const closed = new Set(idsToClose(tabs, anchorId, scope));
+        if (closed.size === 0) return;
+        closed.forEach((id) => disposeTabRouter(id));
+        set({
+          tabs: tabs.filter((t) => !closed.has(t.id)),
+          activeId: nextActiveAfterClose(tabs, activeId, closed),
+        });
       },
 
       setActive: (id) => set({ activeId: id }),
@@ -202,15 +202,6 @@ export const useTabsStore = create<TabsState>()(
 
       updateTabTitle: (id, title) => {
         set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title, custom: true } : t)) }));
-      },
-
-      closeOthers: (id) => {
-        const { tabs } = get();
-        tabs.forEach((t) => {
-          if (t.id !== id) disposeTabRouter(t.id);
-        });
-        const keep = tabs.find((t) => t.id === id);
-        set({ tabs: keep ? [keep] : [], activeId: keep?.id ?? null });
       },
     }),
     {
