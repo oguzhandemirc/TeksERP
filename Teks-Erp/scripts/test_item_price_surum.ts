@@ -19,6 +19,7 @@
 //   §8 Liste: varsayılan aktif, `includeRevoked` geçmişi de döner (rows/total aynı where)
 //   §9 Bulut `fiyat` kapsamı: Prisma↔SQL ikizi + damgalı satır KAPSAM_DISI düşer
 //   §10 Kademe ekseni tekilliği + ileri tarihli (zamanlanmış damga) pencere
+//   §11 Yazım: kademe kapıları (SERVICE/SALE/eşleme/aktif) + ileri tarih, bekleyen değişimi, kaldırma, yarış
 // =============================================================================
 import { ItemType, PriceKind } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -215,7 +216,7 @@ async function main(): Promise<void> {
   console.log(`   istisnalar: ${t.istisnalar.length ? t.istisnalar.join(", ") : "yok"}`);
   // MAL-2: maliyet köprüsünün genel alış fiyatı okuyucusu ayrı dosyada (dinamik import; servis statik bağı ticaret kapısını taşırdı).
   // K2a: ürün kartı canlı referans kataloğu müşteri HİZMET fiyatını sayar/listeler (pasife alma kapısı; yazmaz).
-  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-purchase-price.helper.ts", "src/services/helpers/item-lifecycle.helper.ts"]);
+  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-price-write.helper.ts", "src/services/helpers/item-purchase-price.helper.ts", "src/services/helpers/item-lifecycle.helper.ts"]);
   const callFiles = new Set<string>();
   let callCount = 0;
   for (const f of srcFiles(join(kok, "src"))) {
@@ -314,6 +315,70 @@ async function main(): Promise<void> {
     if (db.size !== mem.size || ![...db].every((id) => mem.has(id)) || db.size > 1) twinF = false;
   }
   check("§10i ⭐ validFrom'lu satırlarda bellek ikizi = Prisma parçası; her anda en çok BİR sürüm", twinF && rowsF.length === 2 && !!N.id);
+
+
+  // ── §11 YAZIM: KADEME KAPILARI + ZAMANLANMIŞ DAMGA ────────────────────────
+  const codeOf = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      return "200";
+    } catch (e) {
+      const x = e as { statusCode?: number; details?: { code?: string } };
+      return `${x.statusCode ?? 500}:${x.details?.code ?? "-"}`;
+    }
+  };
+  const svc2 = (await prisma.item.create({ data: { code: `${TAG}-SV2`, name: `${TAG} Hizmet 2`, itemType: ItemType.SERVICE }, select: { id: true } })).id;
+  itemIds.push(svc2);
+  check("§11a ⭐ Başka hizmete eşli kademe → 400 SERVICE_TIER_ITEM_MISMATCH", (await codeOf(() => itemPriceService.upsert({ itemId: svc2, propertyValueId: pv, kind: SALE, currency: "TRY", price: 3 }))) === "400:SERVICE_TIER_ITEM_MISMATCH");
+  check("§11b ⭐ Hizmet olmayan kalem + kademe → 400 SERVICE_TIER_NOT_SERVICE", (await codeOf(() => itemPriceService.upsert({ itemId: item, propertyValueId: pv, kind: SALE, currency: "TRY", price: 3 }))) === "400:SERVICE_TIER_NOT_SERVICE");
+  check("§11c Alış yönünde kademe → 400 SERVICE_TIER_SALE_ONLY", (await codeOf(() => itemPriceService.upsert({ itemId: svc, propertyValueId: pv, kind: PriceKind.PURCHASE, currency: "TRY", price: 3 }))) === "400:SERVICE_TIER_SALE_ONLY");
+  const pvOff = (await prisma.fabricPropertyValue.create({ data: { propertyId: prop, code: `${TAG}-99`.slice(0, 32), name: "99 gr", serviceItemId: svc, isActive: false }, select: { id: true } })).id;
+  check("§11d ⭐ Pasif kademe → 400 SERVICE_TIER_INACTIVE", (await codeOf(() => itemPriceService.upsert({ itemId: svc, propertyValueId: pvOff, kind: SALE, currency: "TRY", price: 3 }))) === "400:SERVICE_TIER_INACTIVE");
+  check("§11e Geçmiş/şimdiki başlangıç → 400 ITEM_PRICE_VALID_FROM_PAST", (await codeOf(() => itemPriceService.upsert({ itemId: svc, kind: SALE, currency: "TRY", price: 3, validFrom: new Date(Date.now() - 1000) }))) === "400:ITEM_PRICE_VALID_FROM_PAST");
+  check("§11f Alış fiyatı ileri tarihli → 400", (await codeOf(() => itemPriceService.upsert({ itemId: svc, kind: PriceKind.PURCHASE, currency: "TRY", price: 3, validFrom: new Date(Date.now() + day) }))) === "400:ITEM_PRICE_FUTURE_SALE_ONLY");
+  // Özellik düzeyi eşleme de geçerli: değerin kalemi yok, özelliğin kalemi svc.
+  await prisma.fabricProperty.update({ where: { id: prop }, data: { serviceItemId: svc } });
+  const pvProp = (await prisma.fabricPropertyValue.create({ data: { propertyId: prop, code: `${TAG}-50`.slice(0, 32), name: "50 gr" }, select: { id: true } })).id;
+  const tierW = await itemPriceService.upsert({ itemId: svc, propertyValueId: pvProp, kind: SALE, currency: "TRY", price: 8 });
+  check("§11g Özellik düzeyi eşleme ile kademe fiyatı yazıldı", tierW.data.created && tierW.data.propertyValueId === pvProp);
+  const tierChg = await itemPriceService.upsert({ itemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 7.5 });
+  const pvRows = await prisma.itemPrice.findMany({ where: { itemId: svc, propertyValueId: pv, customerId: null }, select: { price: true, revokedAt: true } });
+  check("§11h Kademe fiyatı değişimi = damga + yeni satır (genel satıra dokunmaz)", !tierChg.data.created && pvRows.length === 2 && pvRows.filter((r) => r.revokedAt === null).length === 1 && (await resolveItemPrice({ itemId: svc, kind: SALE, currency: "TRY" }))?.price.equals(5) === true);
+
+  const sch = await mkItem("S");
+  const D1 = new Date(Date.now() + 5 * day);
+  const D2 = new Date(Date.now() + 9 * day);
+  const now11 = async (d?: Date) => (await resolveItemPrice({ itemId: sch, kind: SALE, currency: "TRY", asOf: d }))?.price.toString() ?? "null";
+  const openCount = async () => prisma.itemPrice.count({ where: { itemId: sch, revokedAt: null } });
+  await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 10 });
+  const fut1 = await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 11, validFrom: D1 });
+  const rRow = (await rowsOf(sch)).find((r) => r.price.equals(10))!;
+  check("§11i ⭐ İleri tarihli yazım: yürürlükteki R'nin damgası = başlangıç (SCHEDULED), şimdi 10, D1'de 11", rRow.revokedAt?.getTime() === D1.getTime() && rRow.revokeReason === "İleri tarihli fiyatla değişecek" && (await now11()) === "10" && (await now11(D1)) === "11" && fut1.data.validFrom?.getTime() === D1.getTime());
+  check("§11j Anahtar başına AÇIK satır tek (bekleyen)", (await openCount()) === 1);
+  check("§11k Aynı başlangıç + aynı fiyat → no-op", !(await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 11, validFrom: D1 })).message.includes("kaydedildi"));
+  await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 12, validFrom: D2 });
+  check("§11l ⭐ Bekleyen değişti: eski bekleyen hiç yürürlüğe girmez, R D2'ye uzar", (await now11(D1)) === "10" && (await now11(D2)) === "12" && (await openCount()) === 1);
+  await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 9 });
+  check("§11m ⭐ Bekleyen varken anlık yazım: şimdi 9, D2'de yine 12, açık satır tek", (await now11()) === "9" && (await now11(D2)) === "12" && (await openCount()) === 1);
+  const pendingRow = await prisma.itemPrice.findFirst({ where: { itemId: sch, revokedAt: null }, select: { id: true } });
+  const rem = await itemPriceService.remove(pendingRow!.id);
+  check("§11n ⭐ Bekleyen kaldırıldı: önceki sürümün zamanlanmış damgası geri alındı (D2'de 9)", !!rem.data.restoredId && (await now11(D2)) === "9" && (await openCount()) === 1);
+  check("§11o Kaldırılan bekleyen ikinci kez → 409", (await statusOf(() => itemPriceService.remove(pendingRow!.id))) === 409);
+  await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 13, validFrom: D1 });
+  const curRow = (await prisma.itemPrice.findMany({ where: { AND: [{ itemId: sch }, itemPriceValidAt(new Date())] }, select: { id: true } }))[0]!;
+  const rem2 = await itemPriceService.remove(curRow.id);
+  check("§11p ⭐ Zamanlanmış damgalı yürürlükteki satır kaldırıldı: şimdi null, D1'de 13 (bekleyen yerinde)", rem2.data.restoredId === null && (await now11()) === "null" && (await now11(D1)) === "13");
+
+  // Yarış: yalnız-bekleyen anahtarda iki eşzamanlı anlık yazım → her anda en çok BİR geçerli sürüm.
+  const race = await mkItem("R");
+  await itemPriceService.upsert({ itemId: race, kind: SALE, currency: "TRY", price: 20, validFrom: D1 });
+  const rr = await Promise.allSettled([1, 2, 3].map((p) => itemPriceService.upsert({ itemId: race, kind: SALE, currency: "TRY", price: p })));
+  const rrCodes = rr.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => (r.reason as { statusCode?: number }).statusCode ?? 500);
+  let maxValid = 0;
+  for (const p of [new Date(Date.now() + 1000), new Date(D1.getTime() - 1), D1]) {
+    maxValid = Math.max(maxValid, await prisma.itemPrice.count({ where: { AND: [{ itemId: race }, itemPriceValidAt(p)] } }));
+  }
+  check("§11q ⭐ Yalnız-bekleyen anahtarda paralel anlık yazım: örtüşen pencere YOK, kaybeden yalnız 409", maxValid === 1 && rrCodes.every((c) => c === 409), `maxValid=${maxValid} red=${rrCodes.join(",") || "-"}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

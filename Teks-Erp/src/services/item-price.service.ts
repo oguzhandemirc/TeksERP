@@ -43,11 +43,11 @@
 import { Prisma, PriceKind, Currency, ItemType, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { AuditService } from "./audit.service";
 import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
-import { assertItemUsable, assertItemUsableTx } from "./helpers/item-usage.helper";
-import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceNow, itemPriceValidAt } from "./helpers/item-price-validity.helper";
+import { assertItemUsable } from "./helpers/item-usage.helper";
+import { assertTierWritable, normalizePrice, removeItemPrice, writeItemPriceVersionTx, type ItemPriceKey } from "./helpers/item-price-write.helper";
+import { ACTIVE_ITEM_PRICE, itemPriceNow, itemPriceValidAt } from "./helpers/item-price-validity.helper";
 import { logItemPriceVersionWrite, requestedPriceUnit } from "./helpers/item-price-audit.helper";
 
 
@@ -91,49 +91,13 @@ export interface ItemPriceUpsertInput {
   price: Prisma.Decimal.Value;
   /** Hizmet fiyatının birimi (brode: METER/PIECE/STITCH); atlanmış = metre. */
   priceUnit?: ServiceQtyUnit | null;
+  /** Hizmet kademesi (çeşit değeri); null/atlanmış = kalem geneli. Yalnız SERVICE + SALE + eşli değer. */
+  propertyValueId?: string | null;
+  /** İleri tarihli fiyatın başlangıcı (K4); null/atlanmış = hemen geçerli. */
+  validFrom?: Date | null;
 }
 
-/**
- * `Decimal(14,4)` sınırı — 14 basamağın 4'ü ondalık, yani **10 tam hane**:
- * `9999999999.9999`.
- *
- * Sınırı BURADA kontrol etmenin sebebi: aşan değer DB'de `numeric field
- * overflow` ile düşer ve kullanıcı "22P03" gibi bir mesaj görür. Ondalık
- * fazlası ise sessizce YUVARLANIR — o yüzden yuvarlamayı da biz yapıp
- * kaydedilen değerin ne olduğunu deterministik hale getiriyoruz.
- *
- * ⚠️ SABİT KOLONUN GERÇEK SINIRI OLMALI, "yeterince büyük" bir sayı değil.
- * İlk yazımda bir hane eksikti (`999999999.9999`) ve guard, DB'nin KABUL
- * EDECEĞİ bir değeri 400 ile reddediyordu: kullanıcıya "çok büyük" denen ama
- * aslında sığan bir fiyat, sebebi hiçbir yerde yazmayan bir sahte hatadır.
- * Kolonun hassasiyeti değişirse (migration) burası da değişir.
- */
-const MAX_PRICE = new Prisma.Decimal("9999999999.9999");
-
-/**
- * Girilen fiyatı doğrular ve kolon hassasiyetine indirger.
- *
- * ⚠️ SIFIR MEŞRUDUR (promosyon/numune satırı) — DB CHECK'i de yalnız negatifi
- * reddeder (`item_prices_price_nonneg`). Sıfırı burada engellemek, gerçekten
- * bedava verilen numunenin fiyatını "bilinmiyor" gibi göstermeye zorlardı.
- */
-function normalizePrice(value: Prisma.Decimal.Value): Prisma.Decimal {
-  let d: Prisma.Decimal;
-  try {
-    d = new Prisma.Decimal(value);
-  } catch {
-    throw AppError.badRequest("Fiyat sayı olmalı.");
-  }
-  if (!d.isFinite()) throw AppError.badRequest("Fiyat sayı olmalı.");
-  if (d.lt(0)) throw AppError.badRequest("Fiyat negatif olamaz.");
-  // ⚠️ SIRA: önce YUVARLA, sonra sınırı ölç. Ters sırada, sınırın hemen altındaki
-  // bir değer (ör. `9999999999.99995`) kontrolü geçer, yuvarlama onu sınırın
-  // ÜSTÜNE taşır ve kullanıcı anlaşılır 400 yerine ham `numeric field overflow`
-  // görürdü — guard'ın var oluş sebebi tam olarak o mesajı engellemekti.
-  const rounded = d.toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
-  if (rounded.gt(MAX_PRICE)) throw AppError.badRequest(`Fiyat çok büyük (en fazla ${MAX_PRICE.toString()}).`);
-  return rounded;
-}
+// Fiyat normalizasyonu (`Decimal(14,4)` sınırı) ve yazım tx'i: `helpers/item-price-write.helper`.
 
 /** Satır seçimi — liste ve çözümleme AYNI şekli döner (ayrışırsa panel iki yerde iki şey görür). */
 const ROW_SELECT = {
@@ -382,81 +346,44 @@ export class ItemPriceService {
    * çarpar (P2002 → 409). P2002 YUTULMAZ — sessizce yenmek iki varsayılanın
    * yaşadığı duruma göz yummak olurdu.
    */
-  async upsert(input: ItemPriceUpsertInput, userId?: string): Promise<ApiResponse<ResolvedItemPrice & { created: boolean }>> {
+  async upsert(input: ItemPriceUpsertInput, userId?: string): Promise<ApiResponse<ResolvedItemPrice & { created: boolean; propertyValueId: string | null; validFrom: Date | null }>> {
     const price = normalizePrice(input.price);
     const customerId = input.customerId ?? null;
+    const propertyValueId = input.propertyValueId ?? null;
+    const validFrom = input.validFrom ?? null;
     const requestedUnit = requestedPriceUnit(input.priceUnit); // undefined = mevcut sürümün birimi korunur
-    let priceUnit: ServiceQtyUnit | null = requestedUnit ?? null;
 
     // ── Dış referanslar: var mı + AKTİF mi ────────────────────────────────
     // Fiyat karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
     await assertItemUsable(prisma, input.itemId, "DEFINITION");
-
     if (customerId) {
       const cust = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, isActive: true } });
       if (!cust) throw AppError.badRequest("Cari kart bulunamadı.");
       if (!cust.isActive) throw AppError.badRequest(`"${cust.name}" pasif durumda — fiyat istisnası tanımlanamaz.`);
     }
-
-    // Eski sürümün damgası ile yeni sürümün doğumu AYNI an: "şu tarih itibarıyla" her
-    // anda en çok bir sürüm geçerli kalsın (pencere `[createdAt, revokedAt)`).
+    // Eski sürümün damgası ile yeni sürümün doğumu AYNI an (pencereler örtüşmez).
     const at = new Date();
-    type Outcome = { row: { id: string; price: Prisma.Decimal }; previous: { id: string; price: Prisma.Decimal; priceUnit: ServiceQtyUnit | null } | null; wrote: boolean };
-    let outcome: Outcome;
+    await assertTierWritable(prisma, { itemId: input.itemId, propertyValueId, kind: input.kind, validFrom }, at);
+    const key: ItemPriceKey = { itemId: input.itemId, customerId, propertyValueId, kind: input.kind, currency: input.currency };
+    let outcome: Awaited<ReturnType<typeof writeItemPriceVersionTx>>;
     try {
-      outcome = await prisma.$transaction(async (tx): Promise<Outcome> => {
-        // Her fiyat tanımı kart FOR SHARE altında yeniden doğrulanır (D1 sayımına giren müşterili hizmet
-        // fiyatıdır): eşzamanlı pasife alma ya bu satırı sayar ya da bu yazım 409 alır (K3c).
-        await assertItemUsableTx(tx, input.itemId, "DEFINITION");
-        const current = await tx.itemPrice.findFirst({
-          where: { itemId: input.itemId, propertyValueId: null, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
-          select: { id: true, price: true, priceUnit: true },
-        });
-        if (requestedUnit === undefined) priceUnit = current?.priceUnit ?? null;
-        // Aynı fiyat ve birim: sürüm yazılmaz (geçmiş anlamsız tekrarla şişmesin); birim değişimi yeni sürümdür.
-        if (current && current.price.equals(price) && current.priceUnit === priceUnit) return { row: current, previous: current, wrote: false };
-        if (current) {
-          const claim = await tx.itemPrice.updateMany({
-            where: { id: current.id, ...ACTIVE_ITEM_PRICE },
-            data: { revokedAt: at, revokedById: userId ?? null, revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
-          });
-          if (claim.count === 0) {
-            throw AppError.conflict("Fiyat aynı anda başka bir işlemle değişti — listeyi yenileyip tekrar deneyin.");
-          }
-        }
-        const row = await tx.itemPrice.create({
-          data: { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency, price, priceUnit, createdAt: at },
-          select: { id: true, price: true },
-        });
-        return { row, previous: current, wrote: true };
-      });
+      outcome = await prisma.$transaction((tx) => writeItemPriceVersionTx(tx, { key, price, requestedUnit, validFrom, at, userId }));
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         throw AppError.conflict("Bu kalem/müşteri/yön/para birimi için fiyat aynı anda başka bir işlemle yazıldı — listeyi yenileyip tekrar deneyin.");
       }
       // Servis dışından gelen negatif değer DB CHECK'ine takılır (savunma katmanı).
-      if (e instanceof Error && /item_prices_price_nonneg/.test(e.message)) {
-        throw AppError.badRequest("Fiyat negatif olamaz.");
-      }
+      if (e instanceof Error && /item_prices_price_nonneg/.test(e.message)) throw AppError.badRequest("Fiyat negatif olamaz.");
       throw e;
     }
 
-    const { row, previous, wrote } = outcome;
-    const created = previous === null;
-    const key = { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency };
-    if (wrote) logItemPriceVersionWrite({ userId, key, rowId: row.id, previous, price, priceUnit });
-
+    const { row, previous, replacedPending, priceUnit, wrote } = outcome;
+    const created = previous === null && replacedPending === null;
+    if (wrote) logItemPriceVersionWrite({ userId, key, rowId: row.id, previous, replacedPending, price, priceUnit, validFrom });
     return {
       success: true,
-      data: {
-        id: row.id,
-        price: new Prisma.Decimal(row.price),
-        source: customerId ? "CUSTOMER" : "DEFAULT",
-        customerId,
-        priceUnit,
-        created,
-      },
-      message: created ? "Fiyat tanımlandı." : wrote ? "Fiyat güncellendi." : "Fiyat zaten bu değerde — değişiklik yapılmadı.",
+      data: { id: row.id, price: new Prisma.Decimal(row.price), source: customerId ? "CUSTOMER" : "DEFAULT", customerId, priceUnit, created, propertyValueId, validFrom },
+      message: !wrote ? "Fiyat zaten bu değerde — değişiklik yapılmadı." : validFrom ? "İleri tarihli fiyat kaydedildi." : created ? "Fiyat tanımlandı." : "Fiyat güncellendi.",
     };
   }
 
@@ -466,37 +393,9 @@ export class ItemPriceService {
    * KART VARSAYILANINA döner; varsayılan kaldırılınca fiyat "bilinmiyor" olur ve
    * satır BOŞ gelir — sıfıra düşmez.
    */
-  async remove(id: string, userId?: string): Promise<ApiResponse<{ id: string }>> {
-    // `revokedAt` SÜZÜLMEZ — satırın kendisi okunur: yoksa 404, zaten damgalıysa 409.
-    const row = await prisma.itemPrice.findUnique({ where: { id }, select: ROW_SELECT });
-    if (!row) throw AppError.notFound("Fiyat satırı bulunamadı.");
-    if (row.revokedAt) throw AppError.conflict("Bu fiyat satırı zaten kaldırılmış.");
-
-    const claim = await prisma.itemPrice.updateMany({
-      where: { id, ...ACTIVE_ITEM_PRICE },
-      data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: ITEM_PRICE_REVOKE_REASON.REMOVED },
-    });
-    if (claim.count === 0) {
-      throw AppError.conflict("Fiyat satırı aynı anda başka bir işlemle değişti ya da kaldırıldı — listeyi yenileyin.");
-    }
-
-    void AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "ITEM_PRICE",
-      recordId: id,
-      oldData: { revokeReason: null },
-      newData: {
-        itemId: row.itemId,
-        customerId: row.customerId,
-        kind: row.kind,
-        currency: row.currency,
-        price: row.price.toString(),
-        revokeReason: ITEM_PRICE_REVOKE_REASON.REMOVED,
-      },
-    });
-
-    return { success: true, data: { id }, message: "Fiyat satırı kaldırıldı." };
+  async remove(id: string, userId?: string): Promise<ApiResponse<{ id: string; restoredId: string | null }>> {
+    const { restoredId } = await removeItemPrice(id, userId);
+    return { success: true, data: { id, restoredId }, message: restoredId ? "İleri tarihli fiyat kaldırıldı; önceki fiyat geçerli kalır." : "Fiyat satırı kaldırıldı." };
   }
 
   /** Toplu açılış aktarımı okuyucuları — `itemPrice` delegesinin tek sahibi bu dosya (`test_item_price_surum` §7e). */
