@@ -17,6 +17,7 @@
 import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
+import { assertTamburStation, tamburOpenStepWhere } from "./helpers/station-open-step.helper";
 import { consumeForOperationTx } from "./helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
@@ -325,22 +326,6 @@ function cutReplay<R>(parentId: string, length: number, respond: (child: Roll, p
     collisionEk: (child) => ({ childBarcode: child.barcode }),
     respond: async (child) => respond(child, await prisma.roll.findUniqueOrThrow({ where: { id: parentId } })),
   });
-}
-
-/**
- * Tambur listesi istasyon süzgecinin kapısı (fail-closed): bilinmeyen 404, pasif ya da
- * TAMBUR olmayan istasyon 400 — sessizce boş liste dönmek "bekleyen top yok" yalanıdır.
- */
-async function assertTamburStation(stationId: string): Promise<void> {
-  const station = await prisma.station.findUnique({
-    where: { id: stationId },
-    select: { kind: true, isActive: true },
-  });
-  if (!station) throw AppError.notFound("İstasyon bulunamadı.", { code: "STATION_NOT_FOUND" });
-  if (!station.isActive) throw AppError.badRequest("İstasyon pasif.", { code: "STATION_INACTIVE" });
-  if (station.kind !== StationKind.TAMBUR) {
-    throw AppError.badRequest("İstasyon bir Tambur istasyonu değil.", { code: "STATION_NOT_TAMBUR" });
-  }
 }
 
 /** `listOpenCards` adım satırı (rotasız satırlar `ScanRoutedOpenCard`, yalnız istemci isterse). */
@@ -2151,10 +2136,8 @@ export class TamburService {
     const searchWhere = q ? stationWorkSearchWhere(q) : null;
     const steps = await prisma.workOrderStep.findMany({
       where: {
-        ...(stationId ? { stationId } : {}),
-        station: { kind: StationKind.TAMBUR },
-        status: { not: "COMPLETED" },
-        currentRolls: { some: {} },
+        // Açık kart = burada bekleyen iş: tek kaynak `tamburOpenStepWhere` (istasyonda belge okutma da okur).
+        ...tamburOpenStepWhere(stationId),
         // K17: fiş/evrak/parti/İE no araması sunucuda (boş q = bugünkü liste).
         ...(searchWhere ? { workOrder: searchWhere } : {}),
       },

@@ -8,6 +8,8 @@
 // K30-E: belge no tutmazsa / okunamazsa (kullanıcı şablonunda Evrak No atanmamış) okunan PARTİ NO açık iş emirlerinde
 // aranır; iki yol da OCR'a toleranslı karşılaştırmayı `helpers/doc-code-match.helper.ts`ten alır.
 // Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
+// Çok İE (2026-11-06): tablet ekranını bildirirse her İE "burada bekliyor mu" (ekranın açık kart listesinin yüklemi,
+// `helpers/station-open-step.helper.ts`) + şu an nerede (`helpers/workorder-location.helper.ts`) ile döner.
 // =============================================================================
 import { type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -27,6 +29,10 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { type CodeMatchTier, matchCodes } from "./helpers/doc-code-match.helper";
 import { uyari } from "../lib/logger";
 import type { DraftHeader } from "../lib/gelen-belge/taslak";
+import { loadWorkOrderLocations, type WorkOrderLocation } from "./helpers/workorder-location.helper";
+import {
+  assertTamburStation, stationScreenOpenStepWhere, stationScreenStepWhere, type StationScreen,
+} from "./helpers/station-open-step.helper";
 
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
 const MAX_WORK_ORDERS = 20;
@@ -49,8 +55,27 @@ export interface StationLookupWorkOrder {
   readonly cardBarcode: string;
   readonly batchNumbers: string[];
   /** Bu İE'ye top vermiş canlı belgeler (GB no + gönderen belge no). */
-  readonly documents: Array<{ noteNo: string; senderDocNo: string | null }>;
+  readonly documents: Array<{ noteNo: string; senderDocNo: string | null; customerOrderNo: string | null; customerBatchNo: string | null }>;
   readonly createdAt: Date;
+  /** İşlem: belge satırının işlem metni → belge başlığınınki → rota adı. */
+  readonly processText: string | null;
+  /** Canlı top sayısı ve metresi (konum helper'ından). */
+  readonly rollCount: number;
+  readonly meters: number;
+  /** "Şu an: Tambur 1 (3 top)" — `workorder-location.helper`. */
+  readonly locationText: string;
+  /** Bu ekranın açık kart listesinde mi; ekran bildirilmediyse null (eski istemci). */
+  readonly atStation: AtStation | null;
+  readonly atStationText: string | null;
+}
+
+/** HERE = ekranın açık kart listesinde · NOT_YET = adımı var, açık değil · PASSED = adımları bitti · NOT_ON_ROUTE = adımı yok. */
+export type AtStation = "HERE" | "NOT_YET" | "PASSED" | "NOT_ON_ROUTE";
+
+/** İsteği yapan ekran ve (biliniyorsa) istasyonu: kurşun → oturum istasyonu, tambur → açık kart listesinin istasyonu. */
+export interface StationLookupContext {
+  readonly screen: StationScreen;
+  readonly stationId: string | null;
 }
 
 export interface StationLookupResult {
@@ -64,6 +89,8 @@ export interface StationLookupResult {
   readonly closedWorkOrderNumbers?: string[];
   /** Türkçe: tabletin göstereceği sonuç cümlesi. */
   readonly message: string;
+  /** Ekran bildirildiyse hangi istasyon için "burada" denildi; yoksa null. */
+  readonly station?: { screen: StationScreen; label: string } | null;
 }
 
 export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean }> {
@@ -82,10 +109,62 @@ async function assertStationLookupEnabled(): Promise<void> {
 
 export type StationLookupInput = { contentBase64: string; sha256?: string | null } | { q: string };
 
-export async function stationDocLookup(input: StationLookupInput): Promise<StationLookupResult> {
+export async function stationDocLookup(input: StationLookupInput, ctx: StationLookupContext | null = null): Promise<StationLookupResult> {
   await assertStationLookupEnabled();
-  if ("q" in input) return searchLookup(input.q);
-  return photoLookup(input.contentBase64, input.sha256 ?? null);
+  const label = ctx ? await stationLabel(ctx) : null;
+  const result = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null);
+  if (!ctx || !label) return { ...result, station: null };
+  return { ...result, workOrders: await markAtStation(result.workOrders, ctx), station: { screen: ctx.screen, label } };
+}
+
+/** Fail-closed: tambur istasyonu doğrulanır (açık kart listesiyle aynı kapı); kurşun istasyonu oturumdan gelir. */
+async function stationLabel(ctx: StationLookupContext): Promise<string> {
+  if (ctx.screen === "TAMBUR") return ctx.stationId ? (await assertTamburStation(ctx.stationId)).name : "Tambur";
+  if (!ctx.stationId) return "Kurşun / KK";
+  const st = await prisma.station.findUnique({ where: { id: ctx.stationId }, select: { name: true } });
+  return st?.name ?? "Kurşun / KK";
+}
+
+const AT_STATION_TEXT: Record<AtStation, string> = {
+  HERE: "Burada bekliyor",
+  NOT_YET: "Buraya henüz gelmedi",
+  PASSED: "Buradan geçti",
+  NOT_ON_ROUTE: "Rotasında bu istasyon yok",
+};
+
+/** Bellek sınıflaması: `hereIds` ekranın açık kart yükleminden (DB), adım durumları ekranın istasyon yükleminden. */
+export function classifyAtStation(here: boolean, stepStatuses: readonly string[]): AtStation {
+  if (here) return "HERE";
+  if (stepStatuses.length === 0) return "NOT_ON_ROUTE";
+  return stepStatuses.every((s) => s === "COMPLETED") ? "PASSED" : "NOT_YET";
+}
+
+async function markAtStation(wos: StationLookupWorkOrder[], ctx: StationLookupContext): Promise<StationLookupWorkOrder[]> {
+  if (wos.length === 0) return wos;
+  const ids = { workOrderId: { in: wos.map((w) => w.id) } };
+  const here = await prisma.workOrderStep.findMany({
+    where: { AND: [ids, stationScreenOpenStepWhere(ctx.screen, ctx.stationId)] }, select: { workOrderId: true },
+  });
+  const steps = await prisma.workOrderStep.findMany({
+    where: { AND: [ids, stationScreenStepWhere(ctx.screen, ctx.stationId)] }, select: { workOrderId: true, status: true },
+  });
+  const hereIds = new Set(here.map((h) => h.workOrderId));
+  return wos.map((w) => {
+    const at = classifyAtStation(hereIds.has(w.id), steps.filter((s) => s.workOrderId === w.id).map((s) => s.status));
+    return { ...w, atStation: at, atStationText: AT_STATION_TEXT[at] };
+  });
+}
+
+/** "Şu an nerede" cümlesi — konum TEK kaynaktan; en çok üç istasyon. */
+export function locationSentence(k: WorkOrderLocation): string {
+  if (k.sinif === "BASLAMADI") return "Henüz başlamadı";
+  if (k.istasyonlar.length === 0) return "Üretimde topu yok";
+  const parts = k.istasyonlar.slice(0, 3).map((e) => {
+    const fason = e.fasondaTop > 0 ? `, ${e.fasondaTop} fasonda${e.fasoncular.length > 0 ? `: ${e.fasoncular.join(", ")}` : ""}` : "";
+    return `${e.ad} (${e.topSayisi} top${fason})`;
+  });
+  const more = k.istasyonlar.length > 3 ? ` +${k.istasyonlar.length - 3} istasyon` : "";
+  return `Şu an: ${parts.join(", ")}${more}`;
 }
 
 async function searchLookup(q: string): Promise<StationLookupResult> {
@@ -304,24 +383,39 @@ async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds: string
       id: true, workOrderNumber: true, status: true, createdAt: true,
       travelerCards: { where: { status: "ACTIVE" }, select: { barcode: true }, take: 1 },
       batches: { select: { batchNumber: true }, orderBy: { createdAt: "asc" } },
+      routeTemplate: { select: { name: true } },
+      steps: { select: { id: true, station: { select: { id: true, name: true, type: true, kind: true } } } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: MAX_WORK_ORDERS,
   });
   const out: StationLookupWorkOrder[] = [];
-  // İE başına tek sorgu (≤ 20): hangi belgeler bu İE'ye top verdi — bağ tanımı `whereRollsOfWorkOrder`dan.
+  const locations = await loadWorkOrderLocations(rows);
+  // İE başına iki sorgu (≤ 20): hangi belgeler bu İE'ye top verdi + satırların işlem metni — bağ `whereRollsOfWorkOrder`dan.
   for (const w of rows) {
     const docs = await prisma.customerDeliveryNote.findMany({
       where: { status: { in: [...LOOKUP_NOTE_STATUSES] }, ...(noteIds ? { id: { in: noteIds } } : {}), lines: { some: { roll: whereRollsOfWorkOrder(w.id) } } },
-      select: { noteNo: true, senderDocNo: true },
+      select: { noteNo: true, senderDocNo: true, customerOrderNo: true, customerBatchNo: true, processText: true },
       orderBy: { noteNo: "asc" },
       take: 5,
     });
+    const lineProcess = await prisma.customerDeliveryNoteLine.findMany({
+      where: { roll: whereRollsOfWorkOrder(w.id), processText: { not: null }, note: { status: { in: [...LOOKUP_NOTE_STATUSES] } } },
+      select: { processText: true }, distinct: ["processText"], orderBy: { processText: "asc" }, take: 3,
+    });
+    const konum = locations.get(w.id);
+    const processText = joinedText(lineProcess.map((l) => l.processText)) ?? joinedText(docs.map((d) => d.processText)) ?? w.routeTemplate?.name ?? null;
     out.push({
       id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, createdAt: w.createdAt,
       cardBarcode: w.travelerCards[0]!.barcode,
       batchNumbers: [...new Set(w.batches.map((b) => b.batchNumber))],
-      documents: docs,
+      documents: docs.map((d) => ({ noteNo: d.noteNo, senderDocNo: d.senderDocNo, customerOrderNo: d.customerOrderNo, customerBatchNo: d.customerBatchNo })),
+      processText,
+      rollCount: konum?.canliTop ?? 0,
+      meters: Math.round((konum?.istasyonlar.reduce((sum, e) => sum + e.metre, 0) ?? 0) * 10) / 10,
+      locationText: konum ? locationSentence(konum) : "Üretimde topu yok",
+      atStation: null,
+      atStationText: null,
     });
   }
   const closed = out.length > 0 ? [] : (await prisma.workOrder.findMany({
@@ -331,6 +425,11 @@ async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds: string
     take: 3,
   })).map((w) => w.workOrderNumber);
   return { workOrders: out, closed };
+}
+
+function joinedText(values: Array<string | null>): string | null {
+  const list = [...new Set(values.map((v) => v?.trim() ?? "").filter((v) => v.length > 0))];
+  return list.length > 0 ? list.join(" / ") : null;
 }
 
 function finish(p: {
