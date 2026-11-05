@@ -15,6 +15,11 @@ import type { RowForm } from './woFromDoc';
 let mockWatch: ReadWatch | null = null;
 jest.mock('../useReadResult', () => ({ useReadResult: () => ({ watch: mockWatch, recheck: jest.fn() }) }));
 jest.mock('../useApprovalCard', () => ({ useApprovalDetail: () => ({ data: undefined, isError: false }), approvalDetailKey: (id: string) => ['onay', id] }));
+// Parti özeti sorgusu ağa çıkmasın (tam koşumda gecikmeli hata başka testin ortasında patlıyordu); sonuç beklemede kalır.
+jest.mock('../../../../services/inboundDoc.service', () => {
+  const actual = jest.requireActual('../../../../services/inboundDoc.service');
+  return { ...actual, inboundDocService: { ...actual.inboundDocService, noteParties: () => new Promise(() => undefined) } };
+});
 jest.mock('../../../../hooks/usePermission', () => ({ usePermissions: () => ({ has: () => true }) }));
 jest.mock('../../../../components/ModuleSheet', () => {
   const actual = jest.requireActual('../../../../components/ModuleSheet');
@@ -43,7 +48,7 @@ const detail = {
 function draw(opts: { variant?: 'list' | 'single'; form?: Partial<RowForm>; onReread?: () => void; req?: DocRowOpenRequest | null } = {}) {
   const row: DocRow = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, detail: detail as never, form: { ...baseForm, ...opts.form }, gramajTouched: false, result: null };
   const wo = {
-    setDetail: jest.fn(), recent: [], mode: 'WITH_WORK_ORDER', saving: false, removeRow: jest.fn(), showGramaj: false, catalog: { propertyId: null, options: [] },
+    setDetail: jest.fn(), setParties: jest.fn(), recent: [], mode: 'WITH_WORK_ORDER', saving: false, removeRow: jest.fn(), showGramaj: false, catalog: { propertyId: null, options: [] },
     batchSource: 'SERIES', updateForm: jest.fn(), rereadRow: jest.fn(), applyTaught: jest.fn(),
   } as unknown as WoRowsState;
   const el = (req?: DocRowOpenRequest | null) => (
