@@ -559,7 +559,7 @@ export const SETTING_KEYS = {
   WORKORDER_DEFAULT_PLAN_DURATION_DAYS: "workorder.defaultPlanDurationDays",
   /** İş emri VARSAYILAN STOK KARTI (Item.id): hedef kumaşı boş bırakılan stoğa üretim İE'si bu kartla açılır. Boş = bugünkü
    *  davranış (400). Öncelik: elle > müşteri varsayılanı > bu ayar > gelen belge fabrika varsayılanı. Feature-flag yükünde
-   *  DÖNMEZ; tek yazar `PUT /api/work-orders/default-target-item`. */
+   *  DÖNMEZ; tek yazar `PUT /api/feature-flags/work-order-default-item`. */
   WORKORDER_DEFAULT_TARGET_ITEM_ID: "workorder.defaultTargetItemId",
   /** Sahadaki operatör Fason Sevk'te fason talimatını telefondan girebilsin mi.
    *  Default false (kapalı) → talimat yalnızca adım notundan gelir; mobil alan gizli. */

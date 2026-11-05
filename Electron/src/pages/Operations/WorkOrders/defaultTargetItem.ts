@@ -22,12 +22,12 @@ export interface DefaultTargetItemResponse {
 export const DEFAULT_TARGET_ITEM_QUERY_KEY = ["work-orders", "default-target-item"] as const;
 
 export async function getDefaultTargetItem(): Promise<DefaultTargetItemResponse> {
-  return (await apiClient.get<ApiResponse<DefaultTargetItemResponse>>("/work-orders/default-target-item")).data.data;
+  return (await apiClient.get<ApiResponse<DefaultTargetItemResponse>>("/api/work-orders/default-target-item")).data.data;
 }
 
 export function updateDefaultTargetItem(itemId: string | null): Promise<DefaultTargetItemView | null> {
   return withSettingsPassword((headers) =>
-    apiClient.put<ApiResponse<DefaultTargetItemView | null>>("/work-orders/default-target-item", { itemId }, { headers }).then((r) => r.data.data),
+    apiClient.put<ApiResponse<DefaultTargetItemView | null>>("/api/feature-flags/work-order-default-item", { itemId }, { headers }).then((r) => r.data.data),
   );
 }
 

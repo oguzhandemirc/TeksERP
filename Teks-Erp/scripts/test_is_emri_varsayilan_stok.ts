@@ -1,7 +1,7 @@
 // =============================================================================
 // İŞ EMRİ VARSAYILAN STOK KARTI (`workorder.defaultTargetItemId`) — 1e kararı 2026-11-06
 // =============================================================================
-// HTTP + gerçek DB. Uçlar: `GET|PUT /api/work-orders/default-target-item`, `POST /api/work-orders` (panel stoğa üretim),
+// HTTP + gerçek DB. Uçlar: `GET /api/work-orders/default-target-item`, `PUT /api/feature-flags/work-order-default-item`, `POST /api/work-orders` (panel stoğa üretim),
 // `POST /api/gelen-belge/irsaliyeler/:id/is-emri` (belgeden İE), ham `PUT /api/admin/settings/:key`. Sınanan:
 //   §1 ⭐ ayar boş = bugünkü: panel hedefsiz STOCK 400; belge yolu fabrika varsayılanı; ipucu kaynakları
 //   §2 yazım kapısı: top doğuramayan kart 400 WORK_ORDER_DEFAULT_ITEM_INVALID; ham ayar ucu 400 SETTING_KEY_RESERVED
@@ -151,13 +151,13 @@ async function run(url: string): Promise<void> {
   check("§1 tanınmayan sorgu 400", bad1.status === 400, String(bad1.status));
 
   console.log("§2 yazım kapısı");
-  const w2 = await call("PUT", "/api/work-orders/default-target-item", tk, { itemId: yarn });
+  const w2 = await call("PUT", "/api/feature-flags/work-order-default-item", tk, { itemId: yarn });
   check("§2 top doğuramayan kart 400 WORK_ORDER_DEFAULT_ITEM_INVALID", w2.status === 400 && w2.code === "WORK_ORDER_DEFAULT_ITEM_INVALID", `${w2.status} ${w2.code ?? ""}`);
   const raw2 = await call("PUT", `/api/admin/settings/${SETTING_KEYS.WORKORDER_DEFAULT_TARGET_ITEM_ID}`, tk, { value: woDefItem });
   check("§2 ham ayar ucu 400 SETTING_KEY_RESERVED", raw2.status === 400 && raw2.code === "SETTING_KEY_RESERVED", `${raw2.status} ${raw2.code ?? ""}`);
-  const noPerm = await call("PUT", "/api/work-orders/default-target-item", woUser, { itemId: woDefItem });
+  const noPerm = await call("PUT", "/api/feature-flags/work-order-default-item", woUser, { itemId: woDefItem });
   check("§2 izinsiz yazım 403", noPerm.status === 403, String(noPerm.status));
-  const ok2 = await call("PUT", "/api/work-orders/default-target-item", tk, { itemId: woDefItem });
+  const ok2 = await call("PUT", "/api/feature-flags/work-order-default-item", tk, { itemId: woDefItem });
   check("§2 geçerli kart yazılır", ok2.status === 200 && ok2.data?.id === woDefItem, `${ok2.status} ${ok2.code ?? ""}`);
 
   console.log("§3 ayar dolu: panel");
@@ -192,7 +192,7 @@ async function run(url: string): Promise<void> {
   check("§5 elle seçimde pasif varsayılan engel değil", p5m.r.status === 201 && p5m.targetItemId === manualItem, `${p5m.r.status} ${p5m.r.code ?? ""}`);
   const h5 = hintOf(await hint());
   check("§5 ipucu kartı problem'le döner", h5.id === woDefItem && !!h5.problem, JSON.stringify(h5));
-  const clr = await call("PUT", "/api/work-orders/default-target-item", tk, { itemId: null });
+  const clr = await call("PUT", "/api/feature-flags/work-order-default-item", tk, { itemId: null });
   const p5c = await panelWo();
   check("§5 temizlenince bugünkü 400'e döner", clr.status === 200 && clr.data === null && p5c.r.status === 400, `${clr.status} ${p5c.r.status}`);
 }

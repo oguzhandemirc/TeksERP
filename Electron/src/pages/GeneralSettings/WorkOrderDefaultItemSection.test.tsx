@@ -25,10 +25,10 @@ describe("WorkOrderDefaultItemSection", () => {
     mocks.put.mockResolvedValue({ data: { data: null } });
     renderWithProviders(<WorkOrderDefaultItemSection />);
     expect(await screen.findByText("Ham Tül — K-1")).toBeTruthy();
-    expect(mocks.get).toHaveBeenCalledWith("/work-orders/default-target-item");
+    expect(mocks.get).toHaveBeenCalledWith("/api/work-orders/default-target-item");
     fireEvent.click(screen.getByLabelText("Varsayılan stok kartını temizle"));
     fireEvent.click(screen.getByTestId("wo-default-item-save"));
-    await waitFor(() => expect(mocks.put).toHaveBeenCalledWith("/work-orders/default-target-item", { itemId: null }, { headers: {} }));
+    await waitFor(() => expect(mocks.put).toHaveBeenCalledWith("/api/feature-flags/work-order-default-item", { itemId: null }, { headers: {} }));
   });
 
   it("kayıtlı kart kullanılamıyorsa uyarı çizilir", async () => {

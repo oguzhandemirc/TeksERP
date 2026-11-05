@@ -69,6 +69,7 @@ import { z } from "zod";
 import { TrustedDeviceService, parseTrustedDeviceIds, emptyBodySchema } from "../services/trusted-device.service";
 import "../types/express-augment";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { TERIM } from "../constants/terim";
 
 const router = Router();
 
@@ -1780,7 +1781,7 @@ router.put(
       // İE varsayılan stok kartı: kart kapısı (`itemProblem`) yalnız kendi ucunda; düz metin onu atlardı.
       if (key === SETTING_KEYS.WORKORDER_DEFAULT_TARGET_ITEM_ID) {
         throw AppError.badRequest(
-          `İş emri varsayılan stok kartı yalnız kendi ekranından (${settingScreenPath("work-orders")}) değiştirilir`,
+          `${TERIM.terbiyeIsEmri.cumleBasi.yalin} varsayılan stok kartı yalnız kendi ekranından (${settingScreenPath("work-orders")}) değiştirilir`,
           { code: "SETTING_KEY_RESERVED", key },
         );
       }

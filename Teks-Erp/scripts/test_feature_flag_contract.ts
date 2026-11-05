@@ -588,7 +588,7 @@ async function main() {
       needle: "menu-advanced-group",
     },
     WORKORDER_DEFAULT_TARGET_ITEM_ID: {
-      why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/work-orders/default-target-item` (ham ayar ucu reddeder); panel Özellik Anahtarları → İş Emirleri",
+      why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/feature-flags/work-order-default-item` (ham ayar ucu reddeder); panel Özellik Anahtarları → İş Emirleri",
       file: "Electron/src/pages/GeneralSettings/WorkOrderDefaultItemSection.tsx",
       needle: "updateDefaultTargetItem",
     },

@@ -1,4 +1,4 @@
-// İş Emirleri → "Varsayılan stok kartı" (`workorder.defaultTargetItemId`). Tek yazar `PUT /api/work-orders/default-target-item`
+// İş Emirleri → "Varsayılan stok kartı" (`workorder.defaultTargetItemId`). Tek yazar `PUT /api/feature-flags/work-order-default-item`
 // (ayar şifresi); kart kapısı sunucuda. Öncelik sunucuda: elle > müşteri varsayılanı > bu kart > gelen belge fabrika varsayılanı.
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
