@@ -2,7 +2,7 @@
 // fotoğraf → not bağı gönderimde kurulur.
 import type { InboundNoteDetail } from '../../../../services/inboundDoc.service';
 import { initialRowForm } from '../woCreate/woFromDoc';
-import { applyLiveLocks, bindLiveLocks, liveLocksFor, rememberLiveLocks, resetLiveLocks } from './liveLocks';
+import { applyLiveLocks, bindLiveLocks, isLiveInfoOnly, liveFormLocked, liveLocksFor, rememberLiveLocks, resetLiveLocks } from './liveLocks';
 
 const detail = (over: Partial<InboundNoteDetail> = {}): InboundNoteDetail => ({
   id: 'n1',
@@ -66,5 +66,18 @@ describe('kilit deposu', () => {
     rememberLiveLocks('sha-e', {});
     bindLiveLocks('n2', ['sha-e']);
     expect(liveLocksFor('n2')).toBeNull();
+  });
+});
+
+describe('liveFormLocked — otomatik çekim koşulu', () => {
+  const lock = { value: 'x', by: 'vote' as const };
+  it('⭐ müşteri yalnız bilgi: kilitsiz müşteri otomatik çekimi bekletmez', () => {
+    expect(isLiveInfoOnly('musteri')).toBe(true);
+    expect(liveFormLocked([{ key: 'musteri', lock: null }, { key: 'hedefMetraj', lock }])).toBe(true);
+  });
+  it('kilitsiz form alanı ya da yalnız bilgi alanı → hayır', () => {
+    expect(liveFormLocked([{ key: 'en', lock: null }, { key: 'hedefMetraj', lock }])).toBe(false);
+    expect(liveFormLocked([{ key: 'musteri', lock }])).toBe(false);
+    expect(liveFormLocked([])).toBe(false);
   });
 });

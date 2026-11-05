@@ -12,7 +12,7 @@ export const LIVE_REQUEST_INTERVAL_MS = 1000;
 /**
  * Otomatik çekim için en düşük netlik (`onStability.sharpness`, parlaklık birimi 0–255). `LiveTuning.kt` netliği yalnız
  * ÖLÇER (`SHARPNESS_STEP`), eşik tanımlamaz; eşik bu JS sabitidir. Native'e eşik eklenirse aynı değer olmalı (bekçi
- * `liveTuning.test.ts`). Değer cihazda ölçülerek ayarlanacak (L4); düşük tutuldu: kaçan çekim "Şimdi çek"le alınır.
+ * `liveRhythm.test.ts`). GEÇİCİ değer: tablette ölçülecek (L4); düşük tutuldu, kaçan çekim "Şimdi çek"le alınır.
  */
 export const LIVE_MIN_SHARPNESS = 3;
 

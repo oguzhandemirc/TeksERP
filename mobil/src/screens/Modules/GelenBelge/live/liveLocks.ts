@@ -14,6 +14,20 @@ const FORM_FIELD: Partial<Record<string, keyof DocFormFields>> = {
   not: 'not',
 };
 
+/** Panelde yalnız BİLGİ olan alanlar: forma gitmez (müşteri, fotoğrafın sunucu okumasından öneri/modal yoluyla gelir),
+ *  kilitlenmesi otomatik çekimi beklemez. */
+const INFO_ONLY_KEYS = new Set(['musteri']);
+
+export function isLiveInfoOnly(key: string): boolean {
+  return INFO_ONLY_KEYS.has(key);
+}
+
+/** Otomatik çekim koşulu: bilgi dışı en az bir alan var ve hepsi kilitli (belge tanınmadan çekim olmaz). */
+export function liveFormLocked(fields: readonly { key: string; lock: unknown }[]): boolean {
+  const formFields = fields.filter((f) => !isLiveInfoOnly(f.key));
+  return formFields.length > 0 && formFields.every((f) => f.lock !== null);
+}
+
 const clean = (v: string | undefined): string | null => (v != null && v.trim() !== '' ? v.trim() : null);
 
 /**
