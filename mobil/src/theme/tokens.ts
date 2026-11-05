@@ -198,3 +198,15 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   Muayene: { tint: '#7c3aed', bg: '#ede9fe' }, // kalite güvence — üretim ailelerinden ayrışan mor
   GelenBelge: { tint: palette.cyan[700], bg: palette.cyan[100] }, // gelen belge (Belge Tara) — evrak/ofis camgöbeği
 };
+
+/**
+ * İstasyon tonları (HSL) — Electron `index.css` `--station-*` (açık tema) değerlerinin AYNASI; anahtar ↔ tür eşlemesi
+ * `stationTone.ts`te. İki uç eşitliği `stationTone.test.ts` Electron dosyasını okuyarak ölçer — biri değişirse jest düşer.
+ */
+export const stationTonesHsl = {
+  kk1: [199, 89, 48],
+  fason: [25, 95, 53],
+  process: [262, 83, 58],
+  tambur: [160, 84, 39],
+  depo: [43, 96, 50],
+} as const;
