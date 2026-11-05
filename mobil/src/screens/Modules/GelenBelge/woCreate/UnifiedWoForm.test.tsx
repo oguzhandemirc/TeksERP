@@ -34,7 +34,8 @@ jest.mock('./useWoRows', () => ({
 }));
 jest.mock('./DocRowCard', () => {
   const { Text } = jest.requireActual('react-native');
-  return { __esModule: true, default: (p: { row: DocRow }) => <Text testID="satir-karti">{p.row.noteNo}</Text> };
+  // Tek form kipi + "Yeniden okut" bağı görünsün: kart metnine kip, basışa onReread.
+  return { __esModule: true, default: (p: { row: DocRow; variant?: string; onReread?: () => void }) => <Text testID="satir-karti" onPress={p.onReread}>{`${p.row.noteNo} ${p.variant ?? 'list'}`}</Text> };
 });
 jest.mock('../useDocScan', () => ({
   useDocScan: () => ({ pages: [], progress: { uploaded: new Set() }, sending: false, headerLocked: false, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: 0 }),
@@ -137,8 +138,10 @@ describe('UnifiedWoForm', () => {
     expect(s.getByTestId('ie-form-hedef-metraj').props.value).toBe('1200.5');
     expect(s.getByTestId('ie-form-hedef-kg').props.value).toBe('300');
     expect(s.getByTestId('belgeden-targetQuantity')).toBeTruthy();
-    expect(s.getByTestId('satir-karti')).toBeTruthy();
-    expect(s.getByText('Belgeyi değiştir')).toBeTruthy();
+    expect(s.getByTestId('satir-karti')).toHaveTextContent(/single/);
+    // Belge varken dev "Belgeyi okut" düğmesi yok; yeniden okutma kartın Belge şeridinde.
+    expect(s.queryByTestId('ie-belge-okut')).toBeNull();
+    expect(s.queryByText('Belgeyi değiştir')).toBeNull();
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
   });
 
@@ -171,7 +174,7 @@ describe('UnifiedWoForm', () => {
     expect(b).toMatchObject({ width: 160 });
   });
 
-  it('⭐ hedef metraj ayarı açık + belgede hedef yok → gelen metre "gelen metreden" rozetiyle; yazınca rozet kalkar, değer gövdeye gider', async () => {
+  it('⭐ hedef metraj ayarı açık + belgede hedef yok → gelen metre kutu içi "gelen metre" etiketiyle; yazınca rozet kalkar, değer gövdeye gider', async () => {
     mockQty = true;
     const base = row();
     mockRows = [row({ detail: { ...base.detail, formFields: { en: '150' } } } as unknown as Partial<DocRow>)];
@@ -216,15 +219,15 @@ describe('UnifiedWoForm — vurgu, yerleşim ve kontrollü Alanlar', () => {
     expect(highlighted(s, 'ie-form-hedef-kg')).toBe(true);
   });
 
-  it('⭐ tablet yatay (1280×800): iki sütun — solda belge okut + belge kartı, sağda üretim alanları; dikeyde tek sütun', async () => {
+  it('⭐ tablet yatay (1280×800): iki sütun — solda belge kartı, sağda üretim alanları; dikeyde tek sütun', async () => {
     mockRows = [row()];
     mockDims = { width: 1280, height: 800, scale: 1, fontScale: 1 };
     const s = renderWithPaper(ui());
     await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
     const left = within(s.getByTestId('ie-form-sol'));
     const right = within(s.getByTestId('ie-form-sag'));
-    expect(left.getByTestId('ie-belge-okut')).toBeTruthy();
     expect(left.getByTestId('satir-karti')).toBeTruthy();
+    expect(left.queryByTestId('ie-belge-okut')).toBeNull();
     expect(right.getByTestId('ie-form-en')).toBeTruthy();
     expect(left.queryByTestId('ie-form-en')).toBeNull();
     mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
