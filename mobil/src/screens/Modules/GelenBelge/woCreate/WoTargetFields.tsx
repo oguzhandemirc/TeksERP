@@ -10,6 +10,7 @@ import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import { CompactNumberField } from '../../../../components/form/CompactNumberField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { SectionBand } from '../../../../components/form/SectionBand';
+import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import TruncatedText from '../../../../components/TruncatedText';
 import type { FabricPropertyValue } from '../../../../services/fabricProperty.service';
@@ -27,7 +28,14 @@ export interface TargetFieldsProps {
   hasTambur: boolean;
   foldValues: readonly FabricPropertyValue[];
   onPickItem: () => void;
+  /** Hedef engellerinden (`bandTone`): sarı = sayı hatalı, kırmızı = kat tipi eksik. */
+  targetTone?: BandTone;
 }
+
+const TONE_STATUS: Partial<Record<BandTone, { icon: 'alert-outline' | 'alert-circle-outline'; text: string }>> = {
+  warn: { icon: 'alert-outline', text: 'Sayıyı düzeltin' },
+  missing: { icon: 'alert-circle-outline', text: 'Eksik' },
+};
 
 export function TargetFields(p: TargetFieldsProps) {
   const { state, edit, locked, show } = p;
@@ -42,7 +50,7 @@ export function TargetFields(p: TargetFieldsProps) {
   const itemAsk = !!itemSug && e.targetItemId !== itemSug.id;
   return (
     <>
-      <SectionBand title="Hedef" icon="texture-box" testID="ie-serit-hedef" />
+      <SectionBand title="Hedef" icon="texture-box" tone={p.targetTone ?? 'idle'} status={TONE_STATUS[p.targetTone ?? 'idle'] ?? null} testID="ie-serit-hedef" />
       {show('hedefKumas') && (
         <>
           <SelectButton

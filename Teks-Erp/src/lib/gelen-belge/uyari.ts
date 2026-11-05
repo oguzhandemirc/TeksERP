@@ -47,6 +47,8 @@ export const NOTICE_TITLE: Record<string, string> = {
   OVERLAP_ROLL_NO_CONFLICT: "Top No çakışması",
   SECTION_CONTINUES: "Parti sonraki sayfada sürüyor",
   PAGE_INCOMPLETE: "Belgenin diğer sayfaları eksik",
+  SERVER_COMPLETED: "Boş alanlar sunucu okumasıyla dolduruldu",
+  BATCH_NO_DIFFERS: "Parti no farklı okundu",
 };
 const OTHER_TITLE = "Okuma uyarısı";
 

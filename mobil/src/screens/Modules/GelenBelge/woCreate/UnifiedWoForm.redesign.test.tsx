@@ -31,7 +31,14 @@ jest.mock('./useWoRows', () => ({
     };
   },
 }));
-jest.mock('./DocRowCard', () => ({ __esModule: true, default: () => null }));
+// Sol sütun kartı yerine alt çubuktan gelen açma isteğini gösterir (isteğin seçiciyi açtığı DocRowCard.variant testinde).
+jest.mock('./DocRowCard', () => {
+  const { Text } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: (p: { openRequest?: { kind: string; seq: number } | null }) => <Text testID="mock-acma-istegi">{p.openRequest ? `${p.openRequest.kind}:${p.openRequest.seq}` : '-'}</Text>,
+  };
+});
 jest.mock('../useDocScan', () => ({
   useDocScan: () => ({ pages: [], progress: { uploaded: new Set() }, sending: false, headerLocked: false, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: 0 }),
 }));
@@ -107,6 +114,7 @@ jest.mock('../../../../components/ColorSelectField', () => ({ __esModule: true, 
 const form = { ownerCustomerId: 'cu1', ownerSuggested: null, ourBatchNo: 'P-1', meters: 100, metersReview: false, multi: null };
 const row = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, gramajTouched: false, result: null, form, detail: { id: 'n1', noteNo: 'GB-1', status: 'DRAFT', formFields: { en: '150', hedefMetraj: '1200', desenText: 'DSN-7' }, suggestions: {} } } as unknown as DocRow;
 const ui = () => renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+const bar = (s: ReturnType<typeof ui>, id: string) => bg(s.getByTestId(`${id}-kenar`));
 const bg = (el: { props: { style?: unknown } }) => (StyleSheet.flatten(el.props.style as never) as { backgroundColor?: string }).backgroundColor;
 
 beforeEach(() => {
@@ -165,5 +173,51 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 1 (sağ sütun)', () => {
     expect(bg(s.getByTestId('ie-form-en-kutu'))).toBe(DOC_HIGHLIGHT_BG);
     fireEvent.changeText(s.getByTestId('ie-form-en'), '160');
     expect(bg(s.getByTestId('ie-form-en-kutu'))).not.toBe(DOC_HIGHLIGHT_BG);
+  });
+});
+
+describe('UnifiedWoForm — yeniden tasarım Dilim 2 (alt çubuk)', () => {
+  const setRow = (f: Record<string, unknown>) => (mockRows = [{ ...row, form: { ...form, ...f } } as unknown as DocRow]);
+
+  it('⭐ eksik yok → hap yok, "Hazır — kontrol edip oluşturun", Oluştur etkin', async () => {
+    const s = ui();
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(s.queryByTestId('ie-eksik-musteri')).toBeNull();
+    expect(s.queryByTestId('ie-eksik-fazla')).toBeNull();
+    expect(s.getByTestId('ie-form-ipucu')).toHaveTextContent('Hazır — kontrol edip oluşturun');
+    expect(s.getByTestId('ie-form-olustur').props.accessibilityState).toMatchObject({ disabled: false });
+  });
+
+  it('⭐ müşteri boş → "Müşteri seçilmedi" hapı, Oluştur kapalı; hapa dokununca müşteri seçicisi isteği karta gider', async () => {
+    setRow({ ownerCustomerId: null });
+    const s = ui();
+    expect(await s.findByTestId('ie-eksik-musteri')).toHaveTextContent(/Müşteri seçilmedi/);
+    expect(s.getByTestId('ie-form-ipucu')).toHaveTextContent('Müşteriyi seçin.');
+    expect(s.getByTestId('ie-form-olustur').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(s.getByTestId('mock-acma-istegi')).toHaveTextContent('-');
+    fireEvent.press(s.getByTestId('ie-eksik-musteri'));
+    expect(s.getByTestId('mock-acma-istegi')).toHaveTextContent('owner:1');
+  });
+
+  it('⭐ metre yok → "Metre yok" hapı metre sayfası isteği açar', async () => {
+    setRow({ meters: null });
+    const s = ui();
+    fireEvent.press(await s.findByTestId('ie-eksik-kursunMetresi'));
+    expect(s.getByTestId('mock-acma-istegi')).toHaveTextContent('meter:1');
+  });
+
+  it('⭐ dört eksik → ilk üçü hap, kalan "+1"; sayı hatası Hedef şeridini sarı yapar', async () => {
+    setRow({ ownerCustomerId: null, meters: null });
+    const s = ui();
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(bar(s, 'ie-serit-hedef')).not.toBe(colors.band.bar.warn);
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '0');
+    fireEvent.changeText(s.getByTestId('ie-form-hedef-metraj'), '0');
+    expect(s.getByTestId('ie-eksik-musteri')).toBeTruthy();
+    expect(s.getByTestId('ie-eksik-kursunMetresi')).toBeTruthy();
+    expect(s.getByTestId('ie-eksik-en')).toHaveTextContent(/En hatalı/);
+    expect(s.queryByTestId('ie-eksik-hedefMetraj')).toBeNull();
+    expect(s.getByTestId('ie-eksik-fazla')).toHaveTextContent('+1');
+    expect(bar(s, 'ie-serit-hedef')).toBe(colors.band.bar.warn);
   });
 });

@@ -1,7 +1,7 @@
 // K30-D ⚙ "Alanlar": kullanıcı formda fazlalık gördüğü alanları kapatır (kişisel tercih). Zorunlular kilitli; kapatılan
 // alan kaybolmaz, altta kapalı "Diğer alanlar (n)" bölümüne iner ve dokununca açılır.
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../../theme';
@@ -84,15 +84,17 @@ interface OtherProps {
   valued?: readonly WoFieldKey[];
   open: boolean;
   onToggle: () => void;
+  /** Alt çubuk hapı "Diğer alanlar"a kaydırabilsin diye konum. */
+  onLayout?: (e: LayoutChangeEvent) => void;
   children: React.ReactNode;
 }
 
 /** Altta kapalı bölüm: başlığa dokununca gizlenen alanlar açılır. Dolu gizli alan başlıkta adıyla yazılır. */
-export function OtherFields({ count, valued = [], open, onToggle, children }: OtherProps) {
+export function OtherFields({ count, valued = [], open, onToggle, onLayout, children }: OtherProps) {
   if (count === 0) return null;
   const note = valued.length ? `Dolu, kayda girecek: ${valued.map(fieldLabel).join(', ')}` : null;
   return (
-    <View style={styles.other}>
+    <View style={styles.other} onLayout={onLayout}>
       <TouchableRipple onPress={onToggle} style={styles.otherHead} testID="ie-diger-alanlar" accessibilityLabel={`Diğer alanlar (${count})${note ? `. ${note}` : ''}`}>
         <View style={styles.otherInner}>
           <View style={styles.otherBar} />

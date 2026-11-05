@@ -15,6 +15,7 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft } from './partyDraft';
 import { rollIssues, withRolls, type RollRow } from './rollDraft';
+import type { FormIssue } from './woIssues';
 
 /** K29 S14b: rotasız seçenek (sözde rota; kimliği sunucuya HİÇ gitmez — gövdede rota anahtarı olmaz). */
 export const SCAN_ROUTE_ID = 'scan-routed';
@@ -179,16 +180,20 @@ export function editCustomerBatchNo(v: string): Pick<RowForm, 'customerBatchNo' 
   return { customerBatchNo: v === '' ? null : v, customerBatchNoFromDoc: false, customerBatchNoEdited: true };
 }
 
-/** İş emriyle kayıtta engeller (sunucu kapısının aynası; sunucu yine doğrular). */
-export function rowIssues(f: RowForm): string[] {
-  const out: string[] = [];
-  if (!f.ownerCustomerId) out.push('Müşteriyi seçin.');
-  if (f.multi) out.push(...multiPartyIssues(f.multi));
-  else if (f.rolls) out.push(...rollIssues(f.rolls));
-  else if (f.meters === null) out.push('Kurşun metresi yok — metreyi girin.');
-  else if (f.metersReview) out.push('Kurşun metresini doğrulayın ya da düzeltin.');
+/** İş emriyle kayıtta engeller (sunucu kapısının aynası; sunucu yine doğrular); her engel alanına bağlı. */
+export function rowIssueList(f: RowForm): FormIssue[] {
+  const out: FormIssue[] = [];
+  const meter = (text: string): FormIssue => ({ key: 'kursunMetresi', text });
+  if (!f.ownerCustomerId) out.push({ key: 'musteri', text: 'Müşteriyi seçin.' });
+  if (f.multi) out.push(...multiPartyIssues(f.multi).map(meter));
+  else if (f.rolls) out.push(...rollIssues(f.rolls).map(meter));
+  else if (f.meters === null) out.push(meter('Kurşun metresi yok — metreyi girin.'));
+  else if (f.metersReview) out.push({ key: 'metreDogrula', text: 'Kurşun metresini doğrulayın ya da düzeltin.' });
   return out;
 }
+
+/** Düz metin listesi (toplu görünüm maddeleri, kayıt engeli). */
+export const rowIssues = (f: RowForm): string[] => rowIssueList(f).map((i) => i.text);
 
 export function buildCreateBody(
   f: RowForm,

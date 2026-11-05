@@ -1,6 +1,6 @@
 // Belgeden İE satırı — parti no (Gülkesim istek 2) ve kurşun gramajı (istek 3).
 // Müşteri parti no düz metin alanıdır: belgeden geldiyse dolu + sarı vurgu, dokununca seçici AÇILMAZ, yazınca vurgu kalkar.
-// Bizim parti no seri kipinde "Otomatik verilir" (salt okunur); belgeden kipinde aday seçicisi bugünkü gibi.
+// Bizim parti no seri kipinde "Bizim parti: otomatik" (salt okunur); belgeden kipinde aday seçicisi bugünkü gibi.
 // Negatif sonda: BatchFields müşteri alanı kaldırılınca / vurgu her zaman kapalıyken / editCustomerBatchNo vurguyu
 // düşürmeyince / seçili gramaj stili kaldırılınca ilgili vaka kırmızı.
 import React, { useState } from 'react';
@@ -83,10 +83,10 @@ describe('DocRowCard — müşteri parti no ayrı, elle yazılabilir alan', () =
     fireEvent.changeText(ui.getByTestId('belge-satir-musteri-parti-GB-1'), 'EL-1');
     expect(ui.getByTestId('belge-satir-musteri-parti-GB-1').props.value).toBe('EL-1');
   });
-  it('⭐ seri kipinde bizim parti no "Otomatik verilir" (salt okunur)', () => {
+  it('⭐ seri kipinde bizim parti no "Bizim parti: otomatik" (salt okunur)', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
     expect(ui.getByTestId('belge-satir-bizim-parti-GB-1')).toBeTruthy();
-    expect(ui.getByText('Otomatik verilir')).toBeTruthy();
+    expect(ui.getByText('Bizim parti: otomatik')).toBeTruthy();
   });
   it('belgeden kipinde bizim parti no aday seçicisi (bugünkü davranış)', () => {
     const ui = renderWithPaper(<Harness batchSource="DOCUMENT" />);
@@ -102,13 +102,11 @@ describe('DocRowCard — vurgu ve seçili gramaj', () => {
     const ui2 = renderWithPaper(<Harness batchSource="SERIES" form={{ ...baseForm, meters: 300 }} />);
     expect(ui2.queryByTestId('belgeden-metre-GB-1')).toBeNull();
   });
-  it('⭐ seçili gramaj marka zeminli ve daha yüksek; seçili olmayan değil', () => {
+  it('⭐ seçili gramaj marka zeminli; seçili olmayan değil', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
     const on = ancestorStyles(ui, 'belge-satir-gramaj-GB-1-25 gr');
     const off = ancestorStyles(ui, 'belge-satir-gramaj-GB-1-30 gr');
-    expect(on.some((x) => x.backgroundColor === colors.brand)).toBe(true);
-    expect(off.some((x) => x.backgroundColor === colors.brand)).toBe(false);
-    const h = (l: Record<string, unknown>[]) => Math.max(0, ...l.map((x) => (typeof x.minHeight === 'number' ? x.minHeight : 0)));
-    expect(h(on)).toBeGreaterThan(h(off));
+    expect(on.some((x) => x.backgroundColor === colors.choice.onBg)).toBe(true);
+    expect(off.some((x) => x.backgroundColor === colors.choice.onBg)).toBe(false);
   });
 });

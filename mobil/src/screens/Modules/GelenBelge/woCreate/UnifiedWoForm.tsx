@@ -1,28 +1,27 @@
 // S16b tablet TEK iş emri formu (`gelenBelge.tabletIeGirisi = BELGE`): her İE karosu bu formu açar (özel İE = rota
-// hazır). Üstte "Belge okut" → okunan değerler inputlara dolar → görevli kontrol eder → "İş emri oluştur" (form ucu).
+// hazır). Solda "Belgeyi okut" → okunan değerler inputlara dolar → görevli kontrol eder → "İş emri oluştur" (form ucu).
 // Müşteri / parti / kurşun metresi / gramaj / çok parti bugünkü satır kartından (DocRowCard) gelir; üretim + plan
 // inputları WoFormFields'ta (K30-D adımlar/makine/tür/özellik WoPlanFields). Durum `useUnifiedWoForm`; kayıt `useWoRows`
 // + satır başına ek gövde alanlarıyla (S16a sözleşmesi).
-import React from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import React, { useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { Text } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
-import { SheetField } from '../../../../components/ModuleSheet';
 import { TERIM } from '../../../../lib/terim';
 import { colors, spacing, typography } from '../../../../theme';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
 import PageCameraModal from '../PageCameraModal';
 import MultiPageCameraModal from '../MultiPageCameraModal';
 import PagePreviewModal from '../PagePreviewModal';
-import { ScannerSection } from './DocBatchView';
-import DocRowCard, { GramajField } from './DocRowCard';
-import type { WoRowsState } from './useWoRows';
+import { GramajField, type DocRowOpenRequest } from './DocRowCard';
+import DocColumn from './DocColumn';
+import CreateBar from './CreateBar';
 import WoFormFields from './WoFormFields';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
 import { woFormLayout } from './woLayout';
-
-const DOC_PLACEHOLDER = 'Belge okutulunca dolar';
+import { bandTone, TARGET_ISSUE_KEYS, TARGET_WARN_KEYS, type IssueKey } from './woIssues';
+import type { WoFieldKey } from './woFieldCatalog';
 
 export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const u = useUnifiedWoForm(props);
@@ -43,31 +42,37 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
     locked: done || wo.saving,
     onOrderLinePicked: u.onOrderLine,
     plan: u.plan,
+    targetTone: bandTone(u.issues, { keys: TARGET_ISSUE_KEYS, warnKeys: TARGET_WARN_KEYS }),
   };
   const win = useWindowDimensions();
   const layout = woFormLayout(win.width, win.height);
   const twoCol = layout.columns === 2;
+  const jump = useMissingJump(u, twoCol);
   return (
     <>
-      <ScrollView contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
+      <ScrollView ref={jump.scrollRef} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
         {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
         {twoCol ? (
-          <View style={[styles.columns, { gap: layout.pad }]} testID="ie-form-iki-sutun">
+          <View style={[styles.columns, { gap: layout.pad }]} onLayout={jump.at('columns')} testID="ie-form-iki-sutun">
             <View style={styles.col} testID="ie-form-sol">
-              <DocColumn u={u} />
+              <DocColumn u={u} openRequest={jump.request} />
             </View>
-            <View style={styles.col} testID="ie-form-sag">
-              <FormColumn u={u} fieldProps={fieldProps} />
+            <View style={styles.col} onLayout={jump.at('form')} testID="ie-form-sag">
+              <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
             </View>
           </View>
         ) : (
           <>
-            <DocColumn u={u} />
-            <FormColumn u={u} fieldProps={fieldProps} />
+            <View style={styles.stack} onLayout={jump.at('doc')}>
+              <DocColumn u={u} openRequest={jump.request} />
+            </View>
+            <View style={styles.stack} onLayout={jump.at('form')}>
+              <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
+            </View>
           </>
         )}
       </ScrollView>
-      <CreateBar wo={wo} done={done} block={u.block} onNew={props.onNew} pad={layout.pad} />
+      <CreateBar wo={wo} done={done} block={u.block} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
       <FieldSelectorSheet
@@ -84,40 +89,53 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
 
 type FormModel = ReturnType<typeof useUnifiedWoForm>;
 
-/** Belge sütunu: Belge okut + tarayıcı + belge kartı (yer tutucu). */
-function DocColumn({ u }: { u: FormModel }) {
-  const { wo, row, scan, done, fields } = u;
-  return (
-    <>
-      {!done && (
-        <Button mode="contained" icon="file-document-outline" onPress={u.okut} disabled={wo.saving || scan.b.sending || scan.source.busy} contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belge-okut">
-          {row ? 'Belgeyi değiştir' : 'Belge okut'}
-        </Button>
-      )}
-      {!row && (scan.b.pages.length > 0 || scan.b.headerLocked || scan.b.sending) && (
-        <ScannerSection b={scan.b} hasRows={false} onAdd={scan.source.add} busy={scan.source.busy} onClassic={scan.openCamera} onRemove={scan.remove} onOpen={scan.setPreviewIndex} />
-      )}
-      <Text style={styles.section}>Belge</Text>
-      {row ? (
-        <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj')} />
-      ) : (
-        <View style={styles.placeholders} testID="ie-form-belge-yer-tutucu">
-          {['Müşteri', 'Parti no', 'Kurşun metresi'].map((l) => (
-            <SheetField key={l} label={l} value="" placeholder={DOC_PLACEHOLDER} onPress={u.okut} disabled />
-          ))}
-        </View>
-      )}
-    </>
-  );
+type Spot = 'columns' | 'doc' | 'form' | 'other';
+const METER_KEYS: readonly IssueKey[] = ['kursunMetresi', 'metreDogrula'];
+
+/**
+ * Alt çubuk hapı → alan: müşteri seçiciyi, tek parçalı metrede metre sayfasını açar; diğerlerinde ilgili sütuna (kapalı
+ * "Diğer alanlar"daysa önce açıp oraya) kaydırır. Konumlar `onLayout`tan; iç içe kutularda üst kutunun y'si eklenir.
+ */
+function useMissingJump(u: FormModel, twoCol: boolean) {
+  const scrollRef = useRef<ScrollView>(null);
+  const spots = useRef<Partial<Record<Spot, number>>>({});
+  const [request, setRequest] = useState<DocRowOpenRequest | null>(null);
+  const at = (k: Spot) => (e: LayoutChangeEvent) => {
+    spots.current[k] = e.nativeEvent.layout.y;
+  };
+  const y = (k: Spot) => spots.current[k] ?? 0;
+  const formTop = () => (twoCol ? y('columns') : 0) + y('form');
+  const scroll = (to: number) => scrollRef.current?.scrollTo({ y: Math.max(0, to - spacing.md), animated: true });
+  const open = (kind: DocRowOpenRequest['kind']) => setRequest((r) => ({ kind, seq: (r?.seq ?? 0) + 1 }));
+  const go = (key: IssueKey) => {
+    const f = u.row?.form;
+    if (key === 'musteri') return open('owner');
+    if (METER_KEYS.includes(key)) {
+      if (f && !f.multi && !f.rolls) return open('meter');
+      return scroll(twoCol ? y('columns') : y('doc'));
+    }
+    if (key !== 'belge' && u.fields.isOther(key as WoFieldKey)) {
+      if (!u.fields.otherOpen) u.fields.toggleOther();
+      return scroll(formTop() + y('other'));
+    }
+    return scroll(formTop());
+  };
+  return { scrollRef, at, go, request };
 }
 
 /** Üretim / Plan / Diğer alanlar sütunu. */
-function FormColumn({ u, fieldProps }: { u: FormModel; fieldProps: Omit<React.ComponentProps<typeof WoFormFields>, 'show' | 'zone'> }) {
+interface FormColumnProps {
+  u: FormModel;
+  fieldProps: Omit<React.ComponentProps<typeof WoFormFields>, 'show' | 'zone'>;
+  onOtherLayout: (e: LayoutChangeEvent) => void;
+}
+
+function FormColumn({ u, fieldProps, onOtherLayout }: FormColumnProps) {
   const { wo, row, done, fields } = u;
   return (
     <>
       <WoFormFields {...fieldProps} show={fields.isTop} />
-      <OtherFields count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
+      <OtherFields onLayout={onOtherLayout} count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
         {row?.form && fields.isOther('gramaj') && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
         <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
       </OtherFields>
@@ -127,33 +145,6 @@ function FormColumn({ u, fieldProps }: { u: FormModel; fieldProps: Omit<React.Co
         </Text>
       )}
     </>
-  );
-}
-
-function CreateBar({ wo, done, block, onNew, pad }: { wo: WoRowsState; done: boolean; block: string | null; onNew: () => void; pad: number }) {
-  return (
-    <View style={[styles.bar, { paddingHorizontal: pad }]}>
-      <Text style={styles.barText} testID="ie-form-ipucu">
-        {done ? `${TERIM.terbiyeIsEmri.tekil} kaydedildi.` : block ?? 'Kontrol edin ve oluşturun.'}
-      </Text>
-      {done ? (
-        <Button mode="contained" icon="plus" onPress={onNew} contentStyle={styles.btn} testID="ie-form-yeni">
-          {`Yeni ${TERIM.terbiyeIsEmri.tekilKucuk}`}
-        </Button>
-      ) : (
-        <Button
-          mode="contained"
-          icon="check"
-          onPress={() => void wo.saveAll()}
-          loading={wo.saving}
-          disabled={wo.saving || block !== null || wo.counts.ready === 0}
-          contentStyle={styles.btn}
-          testID="ie-form-olustur"
-        >
-          {wo.mode === 'SEPARATE' ? 'Taslak kaydet' : `${TERIM.terbiyeIsEmri.tekil} oluştur`}
-        </Button>
-      )}
-    </View>
   );
 }
 
@@ -187,20 +178,6 @@ const styles = StyleSheet.create({
   body: { gap: spacing.sm },
   columns: { flexDirection: 'row', alignItems: 'flex-start' },
   col: { flex: 1, gap: spacing.sm },
-  section: { marginTop: spacing.md, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  placeholders: { gap: spacing.sm },
+  stack: { gap: spacing.sm },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
-  bigBtn: { minHeight: 64 },
-  bigLabel: { fontSize: typography.size.lg },
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  barText: { flex: 1, fontSize: typography.size.sm, color: colors.textSecondary },
-  btn: { minHeight: 56 },
 });

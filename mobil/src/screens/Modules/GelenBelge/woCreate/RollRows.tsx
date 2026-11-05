@@ -2,7 +2,7 @@
 // emri açılır, her satır ayrı top doğar. Anahtar kapalıyken gövde bugünkü tek parçadır. Çok partili belgede çizilmez.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Chip, Text, TextInput } from 'react-native-paper';
+import { Button, Switch, Text, TextInput, TouchableRipple } from 'react-native-paper';
 import NumpadInput from '../../../../components/NumpadInput';
 import { colors, spacing, typography } from '../../../../theme';
 import { parseMeters } from '../approvalGate';
@@ -23,10 +23,16 @@ export default function RollRows({ row, wo, locked }: { row: DocRow; wo: WoRowsS
   const setRow = (key: string, patch: Partial<RollRow>) => rolls && set(rolls.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   return (
     <View style={styles.box}>
-      <Chip icon={rolls ? 'checkbox-marked' : 'checkbox-blank-outline'} selected={!!rolls} onPress={toggle} disabled={locked} style={styles.chip}
-        testID={`belge-ayri-top-${row.noteNo}`}>
-        Toplar ayrı geldi
-      </Chip>
+      <TouchableRipple onPress={toggle} disabled={locked} accessibilityRole="switch" accessibilityState={{ checked: !!rolls, disabled: locked }}
+        accessibilityLabel="Toplar ayrı geldi" style={[styles.switchRow, locked && styles.disabled]} testID={`belge-ayri-top-${row.noteNo}`}>
+        <View style={styles.switchInner}>
+          <Text style={styles.switchText}>Toplar ayrı geldi</Text>
+          {/* Dokunuşu satır alır; anahtar yalnız göstergedir (çift tetik olmasın). */}
+          <View pointerEvents="none">
+            <Switch value={!!rolls} disabled={locked} />
+          </View>
+        </View>
+      </TouchableRipple>
       {rolls && (
         <View style={styles.box} testID={`belge-toplar-${row.noteNo}`}>
           {rolls.map((r, i) => (
@@ -77,6 +83,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   input: { flex: 1, minWidth: 140 },
   total: { flex: 1, minWidth: 160, fontSize: typography.size.xl, fontWeight: typography.weight.semibold, color: colors.text },
-  chip: { minHeight: 56, justifyContent: 'center', alignSelf: 'flex-start' },
+  switchRow: { minHeight: 56, justifyContent: 'center', alignSelf: 'flex-start', paddingHorizontal: spacing.sm, borderRadius: 8 },
+  switchInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  switchText: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
+  disabled: { opacity: 0.5 },
   btn: { minHeight: 56 },
 });

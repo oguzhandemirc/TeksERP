@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
   },
   text: { flex: 1, fontSize: 15 },
-  action: { borderRadius: radius.sm, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
+  action: { minHeight: 56, justifyContent: 'center', borderRadius: radius.sm, paddingHorizontal: spacing.md },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   actionText: { fontSize: 15, fontWeight: '700' },
 });

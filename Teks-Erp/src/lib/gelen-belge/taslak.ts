@@ -75,7 +75,8 @@ const OWNER_KEYS = ["firma", "musteri", "musteriAdi", "sayin"];
 const SENDER_KEYS = ["gonderen", "gonderici", "gonderenFirma"];
 const DOC_NO_KEYS = ["fisNo", "irsaliyeNo", "evrakNo", "sevkNo", "belgeNo", "isEmriNo"];
 const DATE_KEYS = ["tarih", "sevkTarihi"];
-const BATCH_KEYS = ["hamPartiNo", "partiNo", "musteriPartiNo"];
+/** Müşteri parti no alanları (sunucu tamamlamasının parti karşılaştırması da bunu okur). */
+export const BATCH_KEYS: readonly string[] = ["hamPartiNo", "partiNo", "musteriPartiNo"];
 const PROCESS_KEYS = ["islem", "yapilanIslem"];
 const TOP_COUNT_KEYS = ["topAdet", "girisAdet", "cikisAdet"];
 const WIDTH_KEYS = ["en", "cm"];
@@ -84,7 +85,7 @@ export const clip = (v: string | null | undefined, max: number): string | null =
   const t = v?.trim();
   return t ? t.slice(0, max) : null;
 };
-const pick = (fields: Record<string, FieldResult> | undefined, keys: string[]): string | null => {
+const pick = (fields: Record<string, FieldResult> | undefined, keys: readonly string[]): string | null => {
   for (const k of keys) {
     const v = fields?.[k]?.value;
     if (v) return v;
