@@ -28,6 +28,8 @@ export interface AktifYuklemTanimi {
   model: string;
   /** Tek kaynak sabit — `ACTIVE_MOVEMENT`. */
   sabit: string;
+  /** Aynı helper'dan gelen, süzgeç sayılan ek adlar (ör. zamana bağlı `itemPriceNow()`). */
+  ekSabitler?: string[];
   /** Ham SQL tablo adı — `roll_movements`. */
   tablo: string;
   /** Taramadan muaf tek kaynak dosyası (backend köküne göreli). */
@@ -177,18 +179,19 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
       return true;
     };
     // Alt ağaçta ya da bir düzey referans verilen yerel değişkenin başlatıcısında sabit geçiyor mu?
-    const sabitTasir = (n: ts.Node, sabit: string, derinlik = 0): boolean => {
+    const sabitTasir = (n: ts.Node, sabit: string | ReadonlySet<string>, derinlik = 0): boolean => {
+      const kabul = typeof sabit === "string" ? new Set([sabit]) : sabit;
       let bulundu = false;
       const gez = (m: ts.Node): void => {
         if (bulundu) return;
         if (ts.isIdentifier(m)) {
-          if (m.text === sabit) {
+          if (kabul.has(m.text)) {
             bulundu = true;
             return;
           }
           if (derinlik === 0) {
             const decl = checker.getSymbolAtLocation(m)?.valueDeclaration;
-            if (decl && ts.isVariableDeclaration(decl) && decl.initializer && decl.getSourceFile() === sf && sabitTasir(decl.initializer, sabit, 1)) {
+            if (decl && ts.isVariableDeclaration(decl) && decl.initializer && decl.getSourceFile() === sf && sabitTasir(decl.initializer, kabul, 1)) {
               bulundu = true;
               return;
             }
@@ -213,7 +216,7 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
           if (metod.startsWith("delete")) sonuc.silme.push(yer(n));
           if (OKUMA_GUNCELLEME.has(metod)) {
             sonuc.cagriSayisi++;
-            if (!n.arguments.some((a) => sabitTasir(a, t.sabit)) && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
+            if (!n.arguments.some((a) => sabitTasir(a, new Set([t.sabit, ...(t.ekSabitler ?? [])]))) && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
               sonuc.cagriIhlal.push(`${yer(n)} ${metod}`);
             }
           }
@@ -232,7 +235,7 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
             const everyVar =
               ts.isObjectLiteralExpression(n.initializer) &&
               n.initializer.properties.some((p) => p.name && ts.isIdentifier(p.name) && p.name.text === "every");
-            if ((everyVar || !sabitTasir(n.initializer, t.sabit)) && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
+            if ((everyVar || !sabitTasir(n.initializer, new Set([t.sabit, ...(t.ekSabitler ?? [])]))) && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
               sonuc.iliskiIhlal.push(`${yer(n)}${everyVar ? " every" : ""}`);
             }
           }

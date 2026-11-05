@@ -18,6 +18,7 @@
 //   §7 Kaynak taraması: fiziksel silme yok, her okuma aktif süzgeçli, çağrı kümesi beyanlı
 //   §8 Liste: varsayılan aktif, `includeRevoked` geçmişi de döner (rows/total aynı where)
 //   §9 Bulut `fiyat` kapsamı: Prisma↔SQL ikizi + damgalı satır KAPSAM_DISI düşer
+//   §10 Kademe ekseni tekilliği + ileri tarihli (zamanlanmış damga) pencere
 // =============================================================================
 import { ItemType, PriceKind } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -55,6 +56,7 @@ async function statusOf(fn: () => Promise<unknown>): Promise<number> {
 const TAG = `IPS-${randomUUID().slice(0, 8)}`;
 const itemIds: string[] = [];
 const customerIds: string[] = [];
+const propertyIds: string[] = [];
 const SALE = PriceKind.SALE;
 
 async function mkItem(suffix: string): Promise<string> {
@@ -204,7 +206,7 @@ async function main(): Promise<void> {
   // ── §7 KAYNAK TARAMASI ───────────────────────────────────────────────────
   const kok = join(__dirname, "..");
   const t = aktifYuklemTara(kok, [
-    { delegate: "itemPrice", model: "ItemPrice", sabit: "ACTIVE_ITEM_PRICE", tablo: "item_prices", helper: join("src", "services", "helpers", "item-price-validity.helper.ts") },
+    { delegate: "itemPrice", model: "ItemPrice", sabit: "ACTIVE_ITEM_PRICE", ekSabitler: ["itemPriceNow", "itemPriceValidAt"], tablo: "item_prices", helper: join("src", "services", "helpers", "item-price-validity.helper.ts") },
   ]).get("itemPrice")!;
   check("§7a ⭐ `itemPrice.delete/deleteMany` YOK", t.silme.length === 0, t.silme.join(", ") || "0");
   check("§7b ⭐ Her okuma/güncelleme aktif süzgeç taşır", t.cagriIhlal.length === 0, `çağrı=${t.cagriSayisi}${t.cagriIhlal.length ? " İHLAL: " + t.cagriIhlal.join(", ") : ""}`);
@@ -258,6 +260,61 @@ async function main(): Promise<void> {
     );
   }
 
+
+  // ── §10 KADEME EKSENİ + İLERİ TARİHLİ PENCERE (hizmet fiyat tablosu, 2026-11-06) ──
+  const svc = (await prisma.item.create({ data: { code: `${TAG}-SV`, name: `${TAG} Hizmet`, itemType: ItemType.SERVICE }, select: { id: true } })).id;
+  itemIds.push(svc);
+  const prop = (await prisma.fabricProperty.create({ data: { code: `${TAG}-P`.slice(0, 32), name: `${TAG} Gramaj`, valueType: "FLAG" }, select: { id: true } })).id;
+  propertyIds.push(prop);
+  const pv = (await prisma.fabricPropertyValue.create({ data: { propertyId: prop, code: `${TAG}-40`.slice(0, 32), name: "40 gr", serviceItemId: svc }, select: { id: true } })).id;
+  const p2002 = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      return "yok";
+    } catch (e) {
+      return (e as { code?: string }).code ?? String(e);
+    }
+  };
+  await prisma.itemPrice.create({ data: { itemId: svc, kind: SALE, currency: "TRY", price: 5 } });
+  await prisma.itemPrice.create({ data: { itemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 7 } });
+  check("§10a Kalem geneli + kademe satırı yan yana AÇIK durur (farklı anahtar)", (await prisma.itemPrice.count({ where: { itemId: svc, revokedAt: null } })) === 2);
+  check(
+    "§10b ⭐ Aynı kalem+kademe iki AÇIK kart varsayılanı → 23505/P2002",
+    (await p2002(() => prisma.itemPrice.create({ data: { itemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 8 } }))) === "P2002",
+  );
+  await prisma.itemPrice.create({ data: { itemId: svc, customerId: cust.id, propertyValueId: pv, kind: SALE, currency: "TRY", price: 6.5 } });
+  check(
+    "§10c ⭐ Aynı kalem+kademe+müşteri iki AÇIK istisna → 23505/P2002",
+    (await p2002(() => prisma.itemPrice.create({ data: { itemId: svc, customerId: cust.id, propertyValueId: pv, kind: SALE, currency: "TRY", price: 6 } }))) === "P2002",
+  );
+  check(
+    "§10d ⭐ Kalem fiyatı çözümü kademe satırını OKUMAZ (genel 5, müşteri istisnası yok → 5)",
+    (await resolveItemPrice({ itemId: svc, kind: SALE, currency: "TRY", customerId: cust.id }))?.price.equals(5) === true,
+  );
+  const l10 = await itemPriceService.list({ page: 1, pageSize: 50, filters: { itemId: svc } });
+  const l10t = await itemPriceService.list({ page: 1, pageSize: 50, filters: { itemId: svc }, includeTiers: true });
+  check("§10e Liste varsayılanı YALNIZ kalem geneli; `includeTiers` kademeyi de döner", l10.total === 1 && l10t.total === 3, `${l10.total}/${l10t.total}`);
+
+  // İleri tarihli pencere: R [t0, D) zamanlanmış damgalı, N [D, ∞) bekleyen.
+  const fut = await mkItem("V");
+  const t0 = new Date(Date.now() - 3 * day);
+  const D = new Date(Date.now() + 3 * day);
+  const R = await prisma.itemPrice.create({ data: { itemId: fut, kind: SALE, currency: "TRY", price: 10, createdAt: t0, revokedAt: D, revokeReason: "İleri tarihli fiyatla değişecek" }, select: { id: true } });
+  const N = await prisma.itemPrice.create({ data: { itemId: fut, kind: SALE, currency: "TRY", price: 11, validFrom: D }, select: { id: true } });
+  const atF = async (d?: Date) => (await resolveItemPrice({ itemId: fut, kind: SALE, currency: "TRY", asOf: d }))?.price.toString() ?? "null";
+  check("§10f ⭐ Şu an = yürürlükteki R (bekleyen N değil)", (await atF()) === "10");
+  check("§10g ⭐ asOf(D) = N (başlangıç dahil), asOf(D-1ms) = R", (await atF(D)) === "11" && (await atF(new Date(D.getTime() - 1))) === "10");
+  const lF = await itemPriceService.list({ page: 1, pageSize: 50, filters: { itemId: fut } });
+  check("§10h Liste varsayılanı şu an yürürlükteki satırı döner", lF.total === 1 && (lF.rows[0] as { id: string }).id === R.id);
+  const rowsF = await prisma.itemPrice.findMany({ where: { itemId: fut }, select: { id: true, createdAt: true, validFrom: true, revokedAt: true } });
+  let twinF = true;
+  for (const p of [new Date(t0.getTime() - 1), t0, new Date(), new Date(D.getTime() - 1), D, new Date(D.getTime() + day)]) {
+    const db = new Set((await prisma.itemPrice.findMany({ where: { AND: [{ itemId: fut }, itemPriceValidAt(p)] }, select: { id: true } })).map((r) => r.id));
+    const mem = new Set(rowsF.filter((r) => isItemPriceValidAt(r, p)).map((r) => r.id));
+    if (db.size !== mem.size || ![...db].every((id) => mem.has(id)) || db.size > 1) twinF = false;
+  }
+  check("§10i ⭐ validFrom'lu satırlarda bellek ikizi = Prisma parçası; her anda en çok BİR sürüm", twinF && rowsF.length === 2 && !!N.id);
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
@@ -269,6 +326,8 @@ main()
   .finally(async () => {
     // Fikstür temizliği — üretim yolu değil (birleştirme izleri FK'lıysa sessiz geç).
     await prisma.itemPrice.deleteMany({ where: { itemId: { in: itemIds } } }).catch(() => {});
+    await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: propertyIds } } }).catch(() => {});
+    await prisma.fabricProperty.deleteMany({ where: { id: { in: propertyIds } } }).catch(() => {});
     await prisma.item.deleteMany({ where: { id: { in: itemIds } } }).catch(() => {});
     await prisma.customer.deleteMany({ where: { id: { in: customerIds } } }).catch(() => {});
     await prisma.$disconnect();

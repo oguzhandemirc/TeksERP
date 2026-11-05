@@ -47,7 +47,7 @@ import { AuditService } from "./audit.service";
 import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsable, assertItemUsableTx } from "./helpers/item-usage.helper";
-import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceValidAt } from "./helpers/item-price-validity.helper";
+import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceNow, itemPriceValidAt } from "./helpers/item-price-validity.helper";
 import { logItemPriceVersionWrite, requestedPriceUnit } from "./helpers/item-price-audit.helper";
 
 
@@ -144,6 +144,8 @@ const ROW_SELECT = {
   currency: true,
   price: true,
   priceUnit: true,
+  propertyValueId: true,
+  validFrom: true,
   revokedAt: true,
   revokeReason: true,
   createdAt: true,
@@ -228,8 +230,9 @@ export async function resolveItemPricesFor(params: {
   const db = params.db ?? prisma;
   const customerId = params.customerId ?? null;
 
-  // Damgalı satır ya bugün (aktif) ya o tarihte (pencere) süzülür — ikinci bir yüklem YAZILMAZ.
-  const validity: Prisma.ItemPriceWhereInput = params.asOf ? itemPriceValidAt(params.asOf) : ACTIVE_ITEM_PRICE;
+  // Damgalı satır ya bugün ya o tarihte (pencere) süzülür — ikinci bir yüklem YAZILMAZ.
+  // Bekleyen ileri tarihli satır AÇIKTIR ama yürürlükte değildir: "şu an" da pencereyle okunur.
+  const validity: Prisma.ItemPriceWhereInput = params.asOf ? itemPriceValidAt(params.asOf) : itemPriceNow();
 
   // ⚠️ `customerId` AÇIKÇA yazılır. Prisma'nın `itemId_kind_currency` compound
   // unique'i burada kullanılamaz (dosya başlığındaki "Prisma yalan söyler" notu).
@@ -239,6 +242,8 @@ export async function resolveItemPricesFor(params: {
         validity,
         {
           itemId: { in: ids },
+          // Kalem geneli: kademe satırı (hizmet fiyat tablosu) yalnız hizmet çözücüsünden okunur.
+          propertyValueId: null,
           kind: params.kind,
           currency: params.currency,
           ...(customerId ? { OR: [{ customerId }, { customerId: null }] } : { customerId: null }),
@@ -279,8 +284,10 @@ export class ItemPriceService {
     filters: Record<string, string | string[]>;
     search?: string;
     includeRevoked?: boolean;
+    /** Kademe (hizmet fiyat tablosu) satırları da gelsin; varsayılan YALNIZ kalem geneli (eski panel bozulmasın). */
+    includeTiers?: boolean;
   }): Promise<{ rows: unknown[]; total: number }> {
-    const { itemId, customerId, kind, currency, ...rest } = params.filters;
+    const { itemId, customerId, kind, currency, propertyValueId, ...rest } = params.filters;
     const where: Prisma.ItemPriceWhereInput = buildWhereClause(rest as Record<string, string | string[]>);
 
     const itemCond = readIdCondition(itemId);
@@ -307,7 +314,11 @@ export class ItemPriceService {
     if (params.search?.trim()) {
       where.OR = buildTurkishSearch<Prisma.ItemPriceWhereInput>(params.search, ["item.code", "item.name"]);
     }
-    const scoped: Prisma.ItemPriceWhereInput = params.includeRevoked ? where : { AND: [where, ACTIVE_ITEM_PRICE] };
+    const pvCond = params.includeTiers ? readIdCondition(propertyValueId) : undefined;
+    if (!params.includeTiers) where.propertyValueId = null;
+    else if (pvCond) where.propertyValueId = pvCond;
+    // Varsayılan "şu an yürürlükte" (bekleyen ileri tarihli satır değil); `includeRevoked` hepsini döner.
+    const scoped: Prisma.ItemPriceWhereInput = params.includeRevoked ? where : { AND: [where, itemPriceNow()] };
 
     const [rows, total] = await Promise.all([
       prisma.itemPrice.findMany({
@@ -323,6 +334,7 @@ export class ItemPriceService {
         orderBy: [
           { itemId: "asc" },
           { customerId: { sort: "asc", nulls: "first" } },
+          { propertyValueId: { sort: "asc", nulls: "first" } },
           { kind: "asc" },
           { currency: "asc" },
           { createdAt: "desc" },
@@ -397,7 +409,7 @@ export class ItemPriceService {
         // fiyatıdır): eşzamanlı pasife alma ya bu satırı sayar ya da bu yazım 409 alır (K3c).
         await assertItemUsableTx(tx, input.itemId, "DEFINITION");
         const current = await tx.itemPrice.findFirst({
-          where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
+          where: { itemId: input.itemId, propertyValueId: null, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
           select: { id: true, price: true, priceUnit: true },
         });
         if (requestedUnit === undefined) priceUnit = current?.priceUnit ?? null;
@@ -489,12 +501,12 @@ export class ItemPriceService {
 
   /** Toplu açılış aktarımı okuyucuları — `itemPrice` delegesinin tek sahibi bu dosya (`test_item_price_surum` §7e). */
   findActiveSale(key: { itemId: string; customerId: string; currency: Currency }) {
-    return prisma.itemPrice.findFirst({ where: { ...key, kind: PriceKind.SALE, ...ACTIVE_ITEM_PRICE }, select: { id: true, price: true } });
+    return prisma.itemPrice.findFirst({ where: { AND: [{ ...key, propertyValueId: null, kind: PriceKind.SALE }, itemPriceNow()] }, select: { id: true, price: true } });
   }
   listActiveCustomerServicePrices() {
     const select = { price: true, currency: true, customer: { select: { code: true } }, item: { select: { code: true, unit: true } } };
     return prisma.itemPrice.findMany({
-      where: { kind: PriceKind.SALE, customerId: { not: null }, item: { itemType: ItemType.SERVICE }, ...ACTIVE_ITEM_PRICE },
+      where: { AND: [{ kind: PriceKind.SALE, customerId: { not: null }, propertyValueId: null, item: { itemType: ItemType.SERVICE } }, itemPriceNow()] },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select,
     });

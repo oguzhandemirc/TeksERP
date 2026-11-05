@@ -339,20 +339,7 @@ const PARTIAL_INDEXES: Array<{
   // Postgres NULL'ları birbirine eşit SAYMAZ: düz unique aynı kaleme iki
   // "varsayılan fiyat" satırı doğmasına izin verirdi ve `resolveItemPrice`
   // hangisini seçtiğini kimse söyleyemezdi (hata çıkmaz, fiyat SALINIR).
-  {
-    table: "item_prices",
-    index: "item_price_default_uq",
-    uniq: true,
-    predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
-    why: "kalem+yön+para birimi başına TEK AKTİF kart varsayılanı (damgalı geçmiş kısıta girmez — MAL-0b)",
-  },
-  {
-    table: "item_prices",
-    index: "item_price_customer_uq",
-    uniq: true,
-    predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
-    why: "kalem+müşteri+yön+para birimi başına TEK AKTİF istisna (damgalı geçmiş kısıta girmez — MAL-0b)",
-  },
+  // item_price_default_uq + item_price_customer_uq → 5) EXPRESSION_UNIQUES (hizmet fiyat tablosu, 2026-11-06).
   // 2026-10-25 — MAL-1 maliyet girdileri (migration 20261025140000_maliyet_girdileri); şema-dışı.
   {
     table: "cost_parameter_sets",
@@ -1279,6 +1266,22 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     index: "price_list_lines_item_color_uq",
     expr: `COALESCE("colorId", '00000000-0000-0000-0000-000000000000'::uuid), COALESCE("recipeId", '00000000-0000-0000-0000-000000000000'::uuid)`,
     why: "liste içinde ürün+renk+varyant başına tek satır — renksiz/varyantsız satır da TEK",
+  },
+  {
+    // Hizmet fiyat tablosu (20261106120000): kademe (propertyValueId) ekseni; ileri tarihli
+    // fiyat (validFrom) zamanlanmış damgayla tekilliğe GİRMEZ. NULL sıfır-UUID'ye düşer → bugünkü satırlar eski anahtarla tekil (MAL-0b damgalı geçmiş girmez).
+    table: "item_prices",
+    index: "item_price_default_uq",
+    expr: `COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+kademe+yön+para birimi başına TEK AKTİF kart varsayılanı",
+  },
+  {
+    table: "item_prices",
+    index: "item_price_customer_uq",
+    expr: `COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+müşteri+kademe+yön+para birimi başına TEK AKTİF istisna",
   },
   {
     // MAL-2 + SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul): (itemId) → (itemId, COALESCE(recipeId)).

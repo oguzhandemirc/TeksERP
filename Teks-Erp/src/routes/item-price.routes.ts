@@ -63,6 +63,10 @@ const resolveSchema = z.object({
 
 // Geçmiş görünümü açıkça istenir; tanınmayan değer 400 (fail-closed), sessizce "aktif" sayılmaz.
 const listScopeSchema = z.object({
+  includeTiers: z
+    .enum(["0", "1", "true", "false"], { message: "includeTiers yalnız 0/1/true/false olabilir" })
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
   includeRevoked: z
     .enum(["0", "1", "true", "false"], { message: "includeRevoked yalnız 0/1/true/false olabilir" })
     .optional()
@@ -138,6 +142,7 @@ router.get(
  *       getirir (aynı anahtarda yeniden eskiye).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
+ *       - { in: query, name: includeTiers, schema: { type: string, enum: ["0", "1", "true", "false"] }, description: "Hizmet kademe satırlarını da getir (varsayılan yalnız kalem geneli)" }
  *       - { in: query, name: includeRevoked, schema: { type: string, enum: ["0", "1", "true", "false"] }, description: "Damgalı fiyat geçmişini de getir" }
  *       - { in: query, name: "filter[itemId]", schema: { type: string } }
  *       - { in: query, name: "filter[customerId]", schema: { type: string }, description: "UUID · CSV · 'null' (yalnız varsayılanlar)" }
@@ -153,8 +158,8 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { page, pageSize, filters, search } = parseQueryParams(req);
-      const { includeRevoked } = listScopeSchema.parse({ includeRevoked: req.query.includeRevoked });
-      const { rows, total } = await itemPriceService.list({ page, pageSize, filters, search, includeRevoked });
+      const { includeRevoked, includeTiers } = listScopeSchema.parse({ includeRevoked: req.query.includeRevoked, includeTiers: req.query.includeTiers });
+      const { rows, total } = await itemPriceService.list({ page, pageSize, filters, search, includeRevoked, includeTiers });
       res.status(200).json({
         success: true,
         data: rows,
