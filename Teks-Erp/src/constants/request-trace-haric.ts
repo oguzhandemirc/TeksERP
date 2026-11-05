@@ -39,6 +39,10 @@ export const REQUEST_TRACE_EXCLUSIONS: readonly RequestTraceExclusion[] = [
     method: "POST", routeKey: "/api/machine-signals/heartbeat", prefix: false, file: "routes/machine-signal.routes.ts", pattern: 'router.post("/heartbeat"',
     reason: "makine toplayıcısının kalp atışı; sürekli akar, reddi toplayıcı sağlığı olarak ayrıca izlenir",
   },
+  {
+    method: "POST", routeKey: "/api/gelen-belge/canli-okuma", prefix: false, file: "routes/gelen-belge-canli.routes.ts", pattern: 'router.post("/canli-okuma"',
+    reason: "kamera açıkken saniyede bir kare okuması (salt okuma, yazmaz); red de her karede tekrarlanır",
+  },
 ];
 
 /** `routeKey` (normalleştirilmiş) ve yöntem dışlama listesinde mi. */
