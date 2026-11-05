@@ -8,6 +8,8 @@ export const ItemType = {
   SERVICE: "SERVICE",
 } as const;
 export type ItemType = (typeof ItemType)[keyof typeof ItemType];
+/** Fiziksel stok kalemleri — hizmet (SERVICE) hariç; stok/kumaş seçicileri sunucuya bu kümeyi CSV gönderir. */
+export const STOCK_ITEM_TYPES: readonly ItemType[] = [ItemType.YARN, ItemType.FABRIC, ItemType.CONSUMABLE];
 
 export const itemTypeLabels: Record<ItemType, string> = {
   FABRIC: "Kumaş",
