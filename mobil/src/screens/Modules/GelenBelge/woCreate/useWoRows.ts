@@ -14,6 +14,7 @@ import type { MultiPartyDraft } from './partyDraft';
 import { mergeExtra } from './woSteps';
 import { applyMulti, applyParties, isDone, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
+import { applyLiveLocks, liveLocksFor } from '../live/liveLocks';
 import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
 import {
   buildCreateBody,
@@ -134,7 +135,9 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
 
   const setDetail = useCallback(
     (noteId: string, detail: InboundNoteDetail) => {
-      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail, form: r.form ?? initialRowForm(detail, gramajFor) } : r)));
+      // Canlı okumanın kilitli değerleri okumayı ezer (operatör değeri) — forma giriş sınırı burası.
+      const d = applyLiveLocks(detail, liveLocksFor(noteId));
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail: d, form: r.form ?? initialRowForm(d, gramajFor) } : r)));
     },
     [setRows, gramajFor],
   );
