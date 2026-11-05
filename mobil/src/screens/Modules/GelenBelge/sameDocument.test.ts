@@ -122,6 +122,11 @@ describe('sameDocOnSave (K27 BLOCK)', () => {
     expect(m?.via).toBe('DOC_NO');
     expect(f.calls.lookups[0]).toEqual({ ownerCustomerId: 'own-1', senderDocNo: 'A-1', excludeNoteId: 'n-new' });
   });
+  it('⭐ BLOCK 409 → kopya taslak SİLİNMEZ (1e kararı 2026-11-06: sert silme yok, DRAFT iptal yolu yok → taslak kalır)', async () => {
+    const f = api({ found: match({ via: 'DOC_NO' }) });
+    await sameDocOnSave(f.a, block, { noteId: 'n-new', ownerCustomerId: 'own-1', senderDocNo: 'A-1' });
+    expect(f.calls.deleted).toEqual([]);
+  });
   it('başka hata / sahipsiz / sorgu hatası → null', async () => {
     expect(await sameDocOnSave(api({ found: match() }).a, { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE' } }, { noteId: 'n', ownerCustomerId: 'o', senderDocNo: 'A' })).toBeNull();
     expect(await sameDocOnSave(api({ found: match() }).a, block, { noteId: 'n', ownerCustomerId: null, senderDocNo: 'A' })).toBeNull();

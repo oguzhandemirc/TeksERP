@@ -7,8 +7,11 @@
 //   §3 WARN: ⭐ işi bitmiş belgenin fotoğrafı eşleşme DEĞİL (yükleme yeni kayıt doğurur — `scanNeedsFreshRecord`)
 //   §4 DOC_NO: BLOCK'ta (sahip, belge no) eşi eşleşir · kendi taslağı / başka sahip / iptal eş → null · WARN → null
 //   §5 ⭐ yükleme 409 `DOCUMENT_SCAN_NOT_FREE` details.sameDocument.note.id = fotoğrafın bağlı olduğu taslak
+//   §6 ⭐ K27 BLOCK: sahipsiz okutulan kopya taslak İE kaydında 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO` → kopya taslak
+//      SİLİNMEZ (DRAFT kalır) · DRAFT için iptal yolu yok (`cancelDeliveryNote` 409 NOT_CANCELLABLE) · kart verisi eşi gösterir
+//      (1e kararı 2026-11-06: sert silme yok; iptal ucu yalnız onaylıda — yeni iptal yolu icat edilmez, taslak kalır)
 // Negatif sonda (2026-11-06 koşuldu): servisteki `scanNeedsFreshRecord` satırı kaldırılınca §3 ⭐ KIRMIZI;
-// 409 details'ten `sameDocument` düşürülünce §5 ⭐ KIRMIZI.
+// 409 details'ten `sameDocument` düşürülünce §5 ⭐ KIRMIZI; iptal claim'ine DRAFT eklenince §6 NOT_CANCELLABLE KIRMIZI.
 // Çalıştır: npx tsx scripts/run-all-tests.ts gelen_belge_ayni_belge_kisayol
 // =============================================================================
 import crypto from "node:crypto";
@@ -177,6 +180,31 @@ async function scenarioConflict(fx: Fx): Promise<void> {
   check("§5 ⭐ 409 DOCUMENT_SCAN_NOT_FREE + sameDocument.note.id", details?.code === "DOCUMENT_SCAN_NOT_FREE" && details.boundTo === d.id && details.sameDocument?.note.id === d.id && details.sameDocument.state === "DRAFT", JSON.stringify({ c: details?.code, s: details?.sameDocument?.note.id }));
 }
 
+async function scenarioBlockCopyDraft(fx: Fx): Promise<void> {
+  console.log("§6 K27 BLOCK → kopya taslak kalır");
+  await setMode("BLOCK");
+  const x = docNo("K1");
+  const a = await draft(fx, x);
+  await approveDeliveryNote(a.id, {}, fx.actorId);
+  // OCR sahibi doldurmaz → kopya taslak doğar; çakışma İE kaydında sahip yazılınca çıkar.
+  const b = await createDeliveryNote({
+    sourceKind: "MANUAL", senderText: `${TAG} BOYAHANE`, senderDocNo: x,
+    lines: [{ senderRollNo: `${x}-${++seq}`, meters: 50, itemId: fx.fabric }],
+  }, fx.actorId);
+  made.notes.push(b.id);
+  const codeOf = async (p: Promise<unknown>): Promise<string | undefined> => {
+    try { await p; return "OK"; } catch (e) { if (e instanceof AppError) return (e.details as { code?: string } | undefined)?.code; throw e; }
+  };
+  const woCode = await codeOf(createWorkOrderFromNote(b.id, { clientToken: crypto.randomUUID(), ownerCustomerId: fx.owner, kursunMeters: 50, routeTemplateId: fx.route }, { userId: fx.actorId, permissions: ["workorder:write"] }));
+  check("§6 İE kaydı 409 DELIVERY_NOTE_DUPLICATE_DOC_NO", woCode === "DELIVERY_NOTE_DUPLICATE_DOC_NO", String(woCode));
+  const after = await prisma.customerDeliveryNote.findUnique({ where: { id: b.id }, select: { status: true } });
+  check("§6 ⭐ kopya taslak silinmez, DRAFT kalır", after?.status === "DRAFT", JSON.stringify(after));
+  const cancelCode = await codeOf(cancelDeliveryNote(b.id, { clientToken: crypto.randomUUID(), reason: "Aynı belge zaten işlendi" }, fx.actorId));
+  check("§6 DRAFT iptal yolu yok (409 NOT_CANCELLABLE — karar: taslak olduğu gibi kalır)", cancelCode === "DELIVERY_NOTE_NOT_CANCELLABLE", String(cancelCode));
+  const r = await m({ ownerCustomerId: fx.owner, senderDocNo: x, excludeNoteId: b.id });
+  check("§6 kart verisi: eş (onaylı) belge", r?.via === "DOC_NO" && r.note.id === a.id && r.state === "PROCESSED", JSON.stringify({ id: r?.note.id, s: r?.state }));
+}
+
 async function cleanup(): Promise<void> {
   const swallow = () => undefined;
   const lines = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: made.notes } }, select: { rollId: true } });
@@ -216,6 +244,7 @@ async function main(): Promise<void> {
     await scenarioWarnFinished(fx);
     await scenarioDocNo(fx);
     await scenarioConflict(fx);
+    await scenarioBlockCopyDraft(fx);
   } catch (e) {
     fail++;
     console.error("HATA:", e);
