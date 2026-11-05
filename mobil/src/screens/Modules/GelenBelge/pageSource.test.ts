@@ -26,6 +26,12 @@ describe('acquirePages', () => {
     await expect(acquirePages(MAX_PAGES, scan, 'camera')).resolves.toEqual({ route: 'none' });
     expect(scan).not.toHaveBeenCalled();
   });
+  it('⭐ canlı okuma → tarayıcı hiç açılmaz, canlı kamera; liste doluysa hiçbir şey', async () => {
+    const scan = jest.fn();
+    await expect(acquirePages(0, scan, 'live')).resolves.toEqual({ route: 'camera', live: true });
+    await expect(acquirePages(MAX_PAGES, scan, 'live')).resolves.toEqual({ route: 'none' });
+    expect(scan).not.toHaveBeenCalled();
+  });
   it('⭐ sayfalar → ScanPage (sha256 ham bayttan), sayfa sınırından fazlası kesilir', async () => {
     const scan = jest.fn(async () => ({ kind: 'pages' as const, pages: [raw('a'), raw('b'), raw('c')] }));
     const r = await acquirePages(MAX_PAGES - 2, scan);

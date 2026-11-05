@@ -3,7 +3,7 @@
 // =============================================================================
 // Art arda çek → küçük resim şeridi (sil) → "Tamam" → sayfalar native iyileştirmeyle (gölge/ışık düzleştirme) doğrudan
 // ekrana; ara inceleme ekranı YOK. Kırpma/perspektif yok: ipucu belgeyi çerçeveyi dolduracak şekilde düz tutturur.
-// Yer bitince kendiliğinden biter. Durum `useMultiCapture`, saf mantık `captureSession`.
+// Yer bitince kendiliğinden biter. Durum `useMultiCapture`, saf mantık `captureSession`. `live` → canlı okuma ekranı.
 // =============================================================================
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -17,6 +17,7 @@ import { pickPictureSize } from './docScan';
 import type { FinishResult, Shot } from './captureSession';
 import { useMultiCapture } from './useMultiCapture';
 import type { MultiCameraBinding } from './usePageSource';
+import LiveReadModal from './live/LiveReadModal';
 
 export const MULTI_CAMERA_HINT = 'Belgeyi çerçeveyi dolduracak şekilde düz tutun';
 
@@ -24,7 +25,11 @@ interface Props extends MultiCameraBinding {
   onError: (message: string) => void;
 }
 
-export default function MultiPageCameraModal({ visible, capacity, firstPageNo, onDone, onDismiss, onError }: Props) {
+export default function MultiPageCameraModal(props: Props) {
+  return props.live ? <LiveReadModal {...props} /> : <MultiShotCamera {...props} />;
+}
+
+function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, onError }: Props) {
   const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
