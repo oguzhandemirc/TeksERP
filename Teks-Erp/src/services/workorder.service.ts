@@ -9,6 +9,7 @@
 //   - Rolls attached to a WO change status from STOCK → IN_PRODUCTION.
 // =============================================================================
 
+import { resolveWorkOrderDefaultItemForCreate } from "./workorder-default-item.service";
 import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { workOrderDocSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { randomUUID } from "crypto";
@@ -1098,6 +1099,11 @@ export class WorkOrderService {
     // STOCK_PRODUCTION: zorunlu — planlamacı ne üretiyoruz onu söylemeli.
     // ORDER_PRODUCTION: bağlı sipariş satırlarındaki ürün ile tutarlı olmalı.
     let resolvedTargetItemId: string | null = data.targetItemId ?? null;
+    // İE varsayılan stok kartı: yalnız topsuz/siparişsiz stoğa üretimde boş hedefe (elle seçim ezilmez; ayar boşsa bugünkü 400).
+    const defaultTargetItem = type === "STOCK_PRODUCTION" && !resolvedTargetItemId && !goods && allocations.length === 0
+      ? await resolveWorkOrderDefaultItemForCreate()
+      : null;
+    if (defaultTargetItem) resolvedTargetItemId = defaultTargetItem.id;
 
     if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
       throw AppError.badRequest(
@@ -1330,12 +1336,12 @@ export class WorkOrderService {
     // ONUN üzerinden karar verilir (alan adı `batchNumber`, anlamı iş emri no).
     assertManualNumberAllowed("workOrder", manualWorkOrderNumber);
 
-    return { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, routeWarnings, targetPropertyIds, targetValues, manualWorkOrderNumber };
+    return { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, routeWarnings, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem };
   }
 
   /** Tx gövdesi — `numberDb` verilmezse numara bugünkü gibi tx DIŞINDAN okunur; çok kayıtlı tx kendi tx'ini verir (kendi satırını görsün). */
   async insertPreparedTx(tx: Prisma.TransactionClient, prep: PreparedWorkOrder, userId?: string, numberDb: Pick<typeof prisma, "workOrder"> = prisma) {
-    const { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, targetPropertyIds, targetValues, manualWorkOrderNumber } = prep;
+    const { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem } = prep;
     if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage);
     const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber(numberDb));
     // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
@@ -1408,7 +1414,7 @@ export class WorkOrderService {
         ...targetValuesNestedCreate(targetValues, userId),
       },
       include: WO_CREATE_INCLUDE,
-    });
+    }, defaultTargetItem ? { defaultTargetItemApplied: true } : undefined);
 
     // Phase 1: WO açılışı order status'a dokunmuyor. "Üretim sürüyor mu?"
     // sorusu line.workOrderLinks üzerinden runtime hesabı.
@@ -1423,7 +1429,7 @@ export class WorkOrderService {
 
   /** Tx SONRASI: audit + karar uyarıları (commit'ten sonra okunur). */
   async finishCreate(workOrder: Awaited<ReturnType<WorkOrderService["insertPreparedTx"]>>, prep: PreparedWorkOrder, userId?: string) {
-    const { finalSteps, allocations, routeWarnings, targetPropertyIds, targetValues } = prep;
+    const { finalSteps, allocations, routeWarnings, targetPropertyIds, targetValues, defaultTargetItem } = prep;
 
     await AuditService.log({
       userId,
@@ -1442,8 +1448,12 @@ export class WorkOrderService {
         targetColorId:      workOrder.targetColorId,
         targetPropertyIds,
         targetValues,
+        ...(defaultTargetItem ? { defaultTargetItemApplied: true } : {}),
       },
     });
+    if (defaultTargetItem) {
+      routeWarnings.unshift(`Hedef kumaş seçilmedi; ${TERIM.terbiyeIsEmri.tekilKucuk} varsayılan stok kartı (${defaultTargetItem.name}) yazıldı.`);
+    }
 
     // Tambursuz rota (KQ-D8, K7): yazılmış rotadan okunur; engel değil UYARI.
     routeWarnings.push(...(await collectWorkOrderDecisionWarnings(workOrder.id)));

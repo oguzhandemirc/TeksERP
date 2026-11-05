@@ -25,6 +25,7 @@ export const PANEL_SETTING_SCREEN = {
   belgeler: "Sistem → Baskı & Cihazlar → Belgeler",
   "gelen-belge": "Sistem → Özellik Anahtarları → Gelen Belge",
   orders: "Sistem → Özellik Anahtarları → Siparişler",
+  "work-orders": "Sistem → Özellik Anahtarları → İş Emirleri",
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;

@@ -587,6 +587,11 @@ async function main() {
       file: "Electron/src/pages/System/MenuLayout/MenuLayoutPage.tsx",
       needle: "menu-advanced-group",
     },
+    WORKORDER_DEFAULT_TARGET_ITEM_ID: {
+      why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/work-orders/default-target-item` (ham ayar ucu reddeder); panel Özellik Anahtarları → İş Emirleri",
+      file: "Electron/src/pages/GeneralSettings/WorkOrderDefaultItemSection.tsx",
+      needle: "updateDefaultTargetItem",
+    },
     GELEN_BELGE_DEFAULT_ITEM_ID: {
       why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (ham ayar ucu reddeder); panel Genel Ayarlar → Gelen Belge",
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",

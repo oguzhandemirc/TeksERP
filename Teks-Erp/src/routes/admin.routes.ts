@@ -1777,6 +1777,13 @@ router.put(
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
+      // İE varsayılan stok kartı: kart kapısı (`itemProblem`) yalnız kendi ucunda; düz metin onu atlardı.
+      if (key === SETTING_KEYS.WORKORDER_DEFAULT_TARGET_ITEM_ID) {
+        throw AppError.badRequest(
+          `İş emri varsayılan stok kartı yalnız kendi ekranından (${settingScreenPath("work-orders")}) değiştirilir`,
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
       if (isReservedSettingKey(key)) {
         throw AppError.badRequest(
           "Bu ayar güvenlik satırıdır ve bu uçtan değiştirilemez",

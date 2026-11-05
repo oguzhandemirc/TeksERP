@@ -2,12 +2,15 @@
 // TeksERP - WorkOrder (Parti) Routes
 // =============================================================================
 
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { z } from "zod";
 import { WorkOrderController } from "../controllers/workorder.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
+import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
+import { getEffectiveDefaultTarget, getWorkOrderDefaultItem, setWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
 import { getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
 
@@ -179,6 +182,61 @@ router.get(
  */
 // ⚠️ `/:id`'DEN ÖNCE: sonra kaydedilseydi Express "events"i bir iş emri id'si sanırdı.
 router.get("/events/lookup", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.lookupEvents);
+
+/**
+ * @openapi
+ * /api/work-orders/default-target-item:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Boş hedef kumaşın dolacağı stok kartı (ipucu) — elle > müşteri varsayılanı > İE varsayılanı > gelen belge fabrika varsayılanı
+ *     description: forNote yoksa panel stoğa üretim (yalnız İE varsayılanı); forNote=true belgeden İE (müşteri ve fabrika varsayılanı da).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: forNote, schema: { type: boolean } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ item: {id,code,name,problem} | null, source: CUSTOMER|WORK_ORDER|FACTORY|null, workOrderDefault }" }
+ *       400: { description: Geçersiz sorgu }
+ *   put:
+ *     tags: [WorkOrders]
+ *     summary: İE varsayılan stok kartını yaz (admin:settings ya da settings:work-orders + ayar şifresi); top doğuramayan kart 400 WORK_ORDER_DEFAULT_ITEM_INVALID
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId]
+ *             properties:
+ *               itemId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Güncel varsayılan kart (null = kapalı) }
+ *       400: { description: WORK_ORDER_DEFAULT_ITEM_INVALID }
+ */
+// ⚠️ `/:id`'DEN ÖNCE (Express "default-target-item"i iş emri id'si sanardı).
+const DefaultTargetQuery = z.strictObject({
+  forNote: z.enum(["true", "false"], "forNote true ya da false olmalı").optional(),
+  customerId: z.uuid("Geçersiz müşteri kimliği").optional(),
+});
+const DefaultTargetBody = z.strictObject({ itemId: z.uuid("Geçersiz ürün kimliği").nullable() });
+router.get("/default-target-item", verifyToken, requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = DefaultTargetQuery.parse(req.query);
+    const [eff, workOrderDefault] = [await getEffectiveDefaultTarget({ forNote: q.forNote === "true", customerId: q.customerId ?? null }), await getWorkOrderDefaultItem()];
+    res.status(200).json({ success: true, data: { ...eff, workOrderDefault } });
+  } catch (err) {
+    next(err);
+  }
+});
+router.put("/default-target-item", verifyToken, requireAnyPermission("admin:settings", "settings:work-orders"), requireSettingsPassword, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { itemId } = DefaultTargetBody.parse(req.body);
+    res.status(200).json({ success: true, data: await setWorkOrderDefaultItem(itemId, req.user!.userId) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findById);
 
