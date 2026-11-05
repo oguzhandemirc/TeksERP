@@ -15,9 +15,13 @@ jest.mock('../../../services/workOrder.service', () => ({
     previewTargetColor: (...a: unknown[]) => mockPreview(...a),
     changeTargetColor: (...a: unknown[]) => mockColor(...a),
     changeWidth: (...a: unknown[]) => mockWidth(...a),
+    reprintTravelerCard: jest.fn(),
+  },
+}));
+jest.mock('../../../services/workOrderGramaj.service', () => ({
+  workOrderGramajApi: {
     kursunGramaj: (...a: unknown[]) => mockGramaj(...a),
     changeKursunGramaj: (...a: unknown[]) => mockGramajSave(...a),
-    reprintTravelerCard: jest.fn(),
   },
 }));
 jest.mock('../../../services/travelerCardPrint', () => ({ printTravelerCardForWorkOrder: jest.fn() }));
