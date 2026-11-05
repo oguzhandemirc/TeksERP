@@ -5,13 +5,14 @@ import { onlineManager, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { isAmbiguousFailure } from '../../../../offline/entryAttempt';
-import { INBOUND_DOC_SETTINGS_KEY, inboundDocService, type CreateWorkOrderFromNoteBody, type InboundNoteDetail, type NotePartiesView } from '../../../../services/inboundDoc.service';
+import { INBOUND_DOC_SETTINGS_KEY, inboundDocService, type CreateWorkOrderFromNoteBody, type InboundNoteDetail, type SameDocumentMatch, type NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
 import { kursunStepOf } from '../desk/deskPlan';
 import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../DuplicateDocNoDialog';
 import type { MultiPartyDraft } from './partyDraft';
 import { mergeExtra } from './woSteps';
+import { sameDocOnSave } from './sameDocOnSave';
 import { applyMulti, applyParties, isDone, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import { applyLiveLocks, liveLocksFor } from '../live/liveLocks';
@@ -205,6 +206,8 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
   const pending = rows.filter((r) => r.form && r.detail && !isDone(r));
   // K27 WARN: işi süren aynı belge no'lu eş → satır FAILED kalır, diyalog sorar; onay yalnız o satırı bayrakla gönderir.
   const [duplicate, setDuplicate] = useState<DuplicateRow | null>(null);
+  // K27 BLOCK: aynı belge no'lu eş → kısayol kartı (satır FAILED kalır).
+  const [sameDoc, setSameDoc] = useState<SameDocumentMatch | null>(null);
 
   /** Dönüş: bu çağrıda kaydedilen satırların sonucu (çift dokunuşta / çevrimdışıyken boş). */
   const saveRows = async (targets: DocRow[], confirmNoteId: string | null): Promise<SavedRow[]> => {
@@ -230,6 +233,8 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
         if (error !== undefined) errors.push(error);
         const conflict = error === undefined ? null : duplicateDocNoConflict(error);
         if (conflict) setDuplicate((d) => d ?? { noteId: r.noteId, conflict });
+        const same = error === undefined ? null : await sameDocOnSave(inboundDocService, error, { noteId: r.noteId, ownerCustomerId: r.form!.ownerCustomerId, senderDocNo: r.detail?.senderDocNo });
+        if (same) setSameDoc((m) => m ?? same);
         setResult(r.noteId, result);
         saved.push({ noteId: r.noteId, noteNo: r.noteNo, result });
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
@@ -257,6 +262,8 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
     addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll,
     duplicate,
     dismissDuplicate: () => setDuplicate(null),
+    sameDoc,
+    dismissSameDoc: () => setSameDoc(null),
     /** Diyalogdaki "Yine de onayla": yalnız o satır, `confirmDuplicateDocNo: true` ile. */
     confirmDuplicate: (): Promise<SavedRow[]> => (duplicate ? saveRows(pending.filter((r) => r.noteId === duplicate.noteId), duplicate.noteId) : Promise.resolve([])),
     print: (noteId: string, workOrderId: string) => void printFor(noteId, workOrderId),
