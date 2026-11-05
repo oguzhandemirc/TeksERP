@@ -22,8 +22,13 @@ export const PENDING_BYPASS_WHERE: Prisma.KursunBypassAssignmentWhereInput = {
 /** Hangi ekranın istasyonu: kurşun/KK kart akışı ya da tambur. Adım bu ekranın istasyonunda mı (açık/kapalı fark etmez). */
 export type StationScreen = "KURSUN_QC" | "TAMBUR";
 
+/** Ekranın istasyon türü: tambur ya da kurşun/KK kart akışı (açık kart listesi + rotasız satır kapısı aynı yüklem). */
+export function stationScreenStationWhere(screen: StationScreen): Prisma.StationWhereInput {
+  return screen === "TAMBUR" ? { kind: StationKind.TAMBUR } : { ...STEP_FLOW_WHERE };
+}
+
 export function stationScreenStepWhere(screen: StationScreen, stationId: string | null): Prisma.WorkOrderStepWhereInput {
-  const station: Prisma.StationWhereInput = screen === "TAMBUR" ? { kind: StationKind.TAMBUR } : { ...STEP_FLOW_WHERE };
+  const station = stationScreenStationWhere(screen);
   // Adım KOLONU — `station` spread'ine ek anahtar yazılmaz (OR ezilir).
   return { station, ...(stationId ? { stationId } : {}) };
 }

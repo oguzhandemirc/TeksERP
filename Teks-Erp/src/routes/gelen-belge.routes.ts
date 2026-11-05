@@ -496,7 +496,7 @@ const StationLookupQuery = z.strictObject({
  *       - { in: query, name: screen, schema: { type: string, enum: [KURSUN_QC, TAMBUR] }, description: "İsteyen ekran; verilirse her İE'ye atStation (o ekranın açık kart listesinde mi) eklenir" }
  *       - { in: query, name: stationId, schema: { type: string, format: uuid }, description: "Yalnız TAMBUR: açık kart listesinin istasyonu (kurşun oturum istasyonunu kullanır)" }
  *     responses:
- *       200: { description: "outcome SINGLE|MULTIPLE|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText) · station {screen,label}|null · message" }
+ *       200: { description: "outcome SINGLE|MULTIPLE|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|STARTABLE_HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText) · station {screen,label}|null · message" }
  *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE · STATION_INACTIVE · STATION_NOT_TAMBUR" }
  *       404: { description: "STATION_NOT_FOUND (TAMBUR stationId)" }
  *       403: { description: "GELEN_BELGE_STATION_LOOKUP_DISABLED (ayar kapalı) · MODULE_DISABLED (gelen belge / üretim)" }
@@ -507,7 +507,9 @@ router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIO
   const body = StationLookupBody.parse(req.body);
   const { screen, stationId } = StationLookupQuery.parse(req.query);
   // "Burada" = o ekranın açık kart listesi: kurşun oturum istasyonunu (`kursun-qc` open-cards gibi), tambur listenin istasyonunu okur.
-  const ctx = !screen ? null : screen === "TAMBUR" ? { screen, stationId: stationId ?? null } : { screen, stationId: (await getStampContext(req))?.stationId ?? null };
+  // Rotasız İE'nin adımı OTURUM istasyonuna eklenir (open-cards rotasız satırları gibi) → sessionStationId.
+  const sessionStationId = screen ? (await getStampContext(req))?.stationId ?? null : null;
+  const ctx = !screen ? null : { screen, stationId: screen === "TAMBUR" ? stationId ?? null : sessionStationId, sessionStationId };
   return { status: 200, data: await stationDocLookup(body, ctx) };
 }));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));

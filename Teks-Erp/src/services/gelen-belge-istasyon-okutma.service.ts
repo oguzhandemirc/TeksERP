@@ -31,8 +31,9 @@ import { uyari } from "../lib/logger";
 import type { DraftHeader } from "../lib/gelen-belge/taslak";
 import { loadWorkOrderLocations, type WorkOrderLocation } from "./helpers/workorder-location.helper";
 import {
-  assertTamburStation, stationScreenOpenStepWhere, stationScreenStepWhere, type StationScreen,
+  assertTamburStation, stationScreenOpenStepWhere, stationScreenStationWhere, stationScreenStepWhere, type StationScreen,
 } from "./helpers/station-open-step.helper";
+import { scanRouteStartableWorkOrderIds } from "./helpers/scan-route-open-cards.helper";
 
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
 const MAX_WORK_ORDERS = 20;
@@ -69,13 +70,18 @@ export interface StationLookupWorkOrder {
   readonly atStationText: string | null;
 }
 
-/** HERE = ekranın açık kart listesinde · NOT_YET = adımı var, açık değil · PASSED = adımları bitti · NOT_ON_ROUTE = adımı yok. */
-export type AtStation = "HERE" | "NOT_YET" | "PASSED" | "NOT_ON_ROUTE";
+/**
+ * HERE = ekranın açık kart listesinde · STARTABLE_HERE = rotasız İE, listede "Sahada belirlenecek" satırı (okutunca adım
+ * buraya eklenir; tablet HERE gibi açar) · NOT_YET = adımı var, açık değil · PASSED = adımları bitti · NOT_ON_ROUTE = adımı yok.
+ */
+export type AtStation = "HERE" | "STARTABLE_HERE" | "NOT_YET" | "PASSED" | "NOT_ON_ROUTE";
 
 /** İsteği yapan ekran ve (biliniyorsa) istasyonu: kurşun → oturum istasyonu, tambur → açık kart listesinin istasyonu. */
 export interface StationLookupContext {
   readonly screen: StationScreen;
   readonly stationId: string | null;
+  /** Oturum istasyonu — rotasız İE'nin adımı buraya eklenir (açık kart listesinin rotasız satırları gibi). */
+  readonly sessionStationId?: string | null;
 }
 
 export interface StationLookupResult {
@@ -127,14 +133,18 @@ async function stationLabel(ctx: StationLookupContext): Promise<string> {
 
 const AT_STATION_TEXT: Record<AtStation, string> = {
   HERE: "Burada bekliyor",
+  STARTABLE_HERE: "Rotasız · burada başlatılabilir",
   NOT_YET: "Buraya henüz gelmedi",
   PASSED: "Buradan geçti",
   NOT_ON_ROUTE: "Rotasında bu istasyon yok",
 };
 
+const SCAN_ROUTED_NOT_STARTABLE_TEXT = "Rotasız · şu an burada başlatılamaz";
+
 /** Bellek sınıflaması: `hereIds` ekranın açık kart yükleminden (DB), adım durumları ekranın istasyon yükleminden. */
-export function classifyAtStation(here: boolean, stepStatuses: readonly string[]): AtStation {
+export function classifyAtStation(here: boolean, stepStatuses: readonly string[], startableHere = false): AtStation {
   if (here) return "HERE";
+  if (startableHere) return "STARTABLE_HERE";
   if (stepStatuses.length === 0) return "NOT_ON_ROUTE";
   return stepStatuses.every((s) => s === "COMPLETED") ? "PASSED" : "NOT_YET";
 }
@@ -148,10 +158,17 @@ async function markAtStation(wos: StationLookupWorkOrder[], ctx: StationLookupCo
   const steps = await prisma.workOrderStep.findMany({
     where: { AND: [ids, stationScreenStepWhere(ctx.screen, ctx.stationId)] }, select: { workOrderId: true, status: true },
   });
+  // Rotasız İE: açık kart listesinin "Sahada belirlenecek" satırıyla aynı kapı + where (oturum istasyonu).
+  const startable = await scanRouteStartableWorkOrderIds({
+    stationId: ctx.sessionStationId ?? null, stationWhere: stationScreenStationWhere(ctx.screen), workOrderIds: wos.map((w) => w.id),
+  });
+  const scanRouted = new Set((await prisma.workOrder.findMany({ where: { id: { in: wos.map((w) => w.id) }, scanRouted: true }, select: { id: true } })).map((w) => w.id));
   const hereIds = new Set(here.map((h) => h.workOrderId));
   return wos.map((w) => {
-    const at = classifyAtStation(hereIds.has(w.id), steps.filter((s) => s.workOrderId === w.id).map((s) => s.status));
-    return { ...w, atStation: at, atStationText: AT_STATION_TEXT[at] };
+    const at = classifyAtStation(hereIds.has(w.id), steps.filter((s) => s.workOrderId === w.id).map((s) => s.status), startable.has(w.id));
+    // Rotasız İE'de "rotasında yok" yanlış: rotası sahada belirlenir, yalnız şu an buraya eklenemez.
+    const text = at === "NOT_ON_ROUTE" && scanRouted.has(w.id) ? SCAN_ROUTED_NOT_STARTABLE_TEXT : AT_STATION_TEXT[at];
+    return { ...w, atStation: at, atStationText: text };
   });
 }
 

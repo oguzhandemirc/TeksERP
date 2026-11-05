@@ -16,7 +16,7 @@
 
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
-import { kursunOpenStepWhere, PENDING_BYPASS_WHERE } from "./helpers/station-open-step.helper";
+import { kursunOpenStepWhere, PENDING_BYPASS_WHERE, stationScreenStationWhere } from "./helpers/station-open-step.helper";
 import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
@@ -513,7 +513,7 @@ export class KursunQcService {
 
     // K29 S15b: yalnız istemci isterse (eski APK stepId null satır görmez) — oturum istasyonunda eklenebilecek rotasız İE.
     if (!includeScanRouted) return { success: true, data };
-    const scanRows = await scanRoutedOpenCards({ stationId, stationWhere: STEP_FLOW_WHERE, searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
+    const scanRows = await scanRoutedOpenCards({ stationId, stationWhere: stationScreenStationWhere("KURSUN_QC"), searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
     return { success: true, data: [...data, ...scanRows] };
   }
 

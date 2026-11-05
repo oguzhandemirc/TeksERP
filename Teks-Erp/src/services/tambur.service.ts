@@ -17,7 +17,7 @@
 import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
-import { assertTamburStation, tamburOpenStepWhere } from "./helpers/station-open-step.helper";
+import { assertTamburStation, stationScreenStationWhere, tamburOpenStepWhere } from "./helpers/station-open-step.helper";
 import { consumeForOperationTx } from "./helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
@@ -2208,7 +2208,7 @@ export class TamburService {
 
     // K29 S15b: yalnız istemci isterse (`scan` dolu) — oturum tamburunda eklenebilecek rotasız İE; eski APK görmez.
     if (!scan) return { success: true, data };
-    const scanRows = await scanRoutedOpenCards({ stationId: scan.sessionStationId, stationWhere: { kind: StationKind.TAMBUR }, searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
+    const scanRows = await scanRoutedOpenCards({ stationId: scan.sessionStationId, stationWhere: stationScreenStationWhere("TAMBUR"), searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
     return { success: true, data: [...data, ...scanRows] };
   }
 

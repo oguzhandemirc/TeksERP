@@ -10,7 +10,11 @@
 //   §4 ⭐ ikisi burada → iki HERE
 //   §5 ⭐ HERE kümesi = o ekranın açık kart listesi (`/kursun-qc/open-cards?q=` · `/tambur/open-cards?stationId&q=`)
 //   §6 fail-closed: TAMBUR'a tambur olmayan istasyon 400 · kurşuna stationId 400 · tanınmayan ekran 400
-// Negatif sonda (2026-11-06): `markAtStation` HERE kümesini boş verince §3/§4/§5 kırmızı (ölçüm bekçi haritasında).
+//   §7 ⭐ rotasız İE (Gülkesim, "Okutmayla"): oturum istasyonunda adımı eklenebilirse STARTABLE_HERE ("burada başlatılabilir");
+//      küme = açık kart listesinin "Sahada belirlenecek" satırları; oturumsuz / SIRALI / tür uyuşmaz → NOT_ON_ROUTE ama
+//      metin "Rotasız · şu an burada başlatılamaz" ("rotasında yok" DEĞİL)
+// Negatif sonda (2026-11-06): `markAtStation` HERE kümesini boş verince §3/§4/§5 kırmızı; startable kümesini boş verince §7
+// kırmızı (ölçüm bekçi haritasında).
 // =============================================================================
 import { randomUUID } from "crypto";
 import type { AddressInfo } from "net";
@@ -19,6 +23,9 @@ import * as bcrypt from "bcryptjs";
 import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { stationDocLookup } from "../src/services/gelen-belge-istasyon-okutma.service";
+import { KursunQcService } from "../src/services/kursun-qc.service";
+import { TamburService } from "../src/services/tambur.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -45,7 +52,7 @@ const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
-  SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP,
+  SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, SETTING_KEYS.PRODUCTION_ROUTE_MODE, SETTING_KEYS.PRODUCTION_SCAN_ROUTE_STATIONS,
 ];
 
 type WoRow = {
@@ -110,7 +117,7 @@ async function run(url: string): Promise<void> {
   const routeTK = await mkRoute("tambur-kursun", [T, K]);
   const routeT = await mkRoute("yalniz-tambur", [T]);
 
-  const mkWo = async (n: number, route: string, steps: number) => {
+  const mkWo = async (n: number, route: string | null, steps: number) => {
     const r = await call<{ id?: string }>("POST", "/api/gelen-belge/irsaliyeler", tk, {
       sourceKind: "MANUAL", customerOrderNo: `MS-${D}-${n}`,
       lines: [{ senderRollNo: `${TAG}-${n}`, meters: 100, itemText: "Kumaş" }],
@@ -118,8 +125,8 @@ async function run(url: string): Promise<void> {
     const id = r.data?.id ?? "";
     made.notes.push(id);
     const w = await call<{ workOrderId?: string }>("POST", `/api/gelen-belge/irsaliyeler/${id}/is-emri`, woUser, {
-      clientToken: randomUUID(), ownerCustomerId: owner, ourBatchNo: P, kursunMeters: "100", routeTemplateId: route,
-      stepPlanning: Array.from({ length: steps }, (_, i) => ({ sequence: i + 1 })),
+      clientToken: randomUUID(), ownerCustomerId: owner, ourBatchNo: P, kursunMeters: "100",
+      ...(route ? { routeTemplateId: route, stepPlanning: Array.from({ length: steps }, (_, i) => ({ sequence: i + 1 })) } : {}),
     });
     const wo = w.data?.workOrderId ?? "";
     if (wo) made.workOrders.push(wo);
@@ -193,6 +200,39 @@ async function run(url: string): Promise<void> {
   check("§6 kurşun ekranına stationId → 400", r6b.status === 400, `${r6b.status} ${r6b.code ?? ""}`);
   const r6c = await lookup("?screen=DOKUMA");
   check("§6 tanınmayan ekran → 400", r6c.status === 400, `${r6c.status} ${r6c.code ?? ""}`);
+
+  console.log("§7 rotasız İE (Okutmayla) — burada başlatılabilir");
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, "SCAN");
+  await setSetting(SETTING_KEYS.PRODUCTION_SCAN_ROUTE_STATIONS, "ALL");
+  const wo5 = await mkWo(5, null, 0);
+  await moveTo(wo5, null);
+  const row5 = await prisma.workOrder.findUnique({ where: { id: wo5.id }, select: { scanRouted: true, steps: { select: { id: true } } } });
+  check("§7 kurulum: wo5 rotasız, adımsız, topu üretimde", row5?.scanRouted === true && row5.steps.length === 0 && wo5.rolls.length > 0, JSON.stringify(row5));
+  const svc = async (screen: "KURSUN_QC" | "TAMBUR", stationId: string | null, sessionStationId: string | null) =>
+    ((await stationDocLookup({ q: P }, { screen, stationId, sessionStationId })).workOrders ?? []) as WoRow[];
+  const of5 = (rows: WoRow[]) => rows.find((w) => w.id === wo5.id);
+  const k7 = await svc("KURSUN_QC", K, K);
+  check("§7 ⭐ kurşun (oturum K): rotasız wo5 STARTABLE_HERE + metin", of5(k7)?.atStation === "STARTABLE_HERE" && of5(k7)?.atStationText === "Rotasız · burada başlatılabilir", JSON.stringify(of5(k7)));
+  check("§7 rotalı İE'lerin sınıfı değişmez (wo1/wo2 HERE)", ["HERE", "HERE"].join() === [wo1, wo2].map((w) => k7.find((x) => x.id === w.id)?.atStation).join(), k7.map((w) => w.atStation).join());
+  const t7 = await svc("TAMBUR", T, T);
+  check("§7 ⭐ tambur (oturum T): wo5 STARTABLE_HERE", of5(t7)?.atStation === "STARTABLE_HERE", of5(t7)?.atStation ?? "∅");
+  const startable = (rows: WoRow[]) => rows.filter((w) => w.atStation === "STARTABLE_HERE").map((w) => w.id).sort().join(",");
+  const ours5 = new Set([wo1.id, wo2.id, wo3.id, wo4.id, wo5.id]);
+  const scanRows = (rows: Array<{ workOrderId: string; stepId: string | null }>) => rows.filter((r) => r.stepId === null && ours5.has(r.workOrderId)).map((r) => r.workOrderId).sort().join(",");
+  const kScan = scanRows(((await new KursunQcService().listOpenCards(K, P, null, true)).data ?? []) as Array<{ workOrderId: string; stepId: string | null }>);
+  check("§7 ⭐ kurşun: STARTABLE kümesi = açık listenin 'Sahada belirlenecek' satırları", kScan === startable(k7) && kScan === wo5.id, `${kScan} | ${startable(k7)}`);
+  const tScan = scanRows(((await new TamburService().listOpenCards(null, P, { sessionStationId: T })).data ?? []) as Array<{ workOrderId: string; stepId: string | null }>);
+  check("§7 ⭐ tambur: STARTABLE kümesi = açık listenin 'Sahada belirlenecek' satırları", tScan === startable(t7) && tScan === wo5.id, `${tScan} | ${startable(t7)}`);
+  const notStartable = (w: WoRow | undefined) => w?.atStation === "NOT_ON_ROUTE" && w.atStationText === "Rotasız · şu an burada başlatılamaz";
+  const h7 = await lookup("?screen=KURSUN_QC");
+  check("§7 ⭐ oturumsuz (HTTP, cihaz yok) → NOT_ON_ROUTE + 'rotasız' metni (rotasında yok DEĞİL)", h7.status === 200 && notStartable(byId(h7).get(wo5.id)), JSON.stringify(byId(h7).get(wo5.id)));
+  check("§7 rotalı İE 'Rotasında bu istasyon yok' metnini korur (wo4)", byId(h7).get(wo4.id)?.atStationText === "Rotasında bu istasyon yok", byId(h7).get(wo4.id)?.atStationText ?? "∅");
+  check("§7 tambur ekranı + tambur olmayan oturum istasyonu → başlatılamaz", notStartable(of5(await svc("TAMBUR", T, K))));
+  await setSetting(SETTING_KEYS.PRODUCTION_SCAN_ROUTE_STATIONS, "SELECTED");
+  check("§7 SELECTED + istasyonda anahtar kapalı → başlatılamaz", notStartable(of5(await svc("KURSUN_QC", K, K))));
+  await setSetting(SETTING_KEYS.PRODUCTION_SCAN_ROUTE_STATIONS, "ALL");
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, "SEQUENTIAL");
+  check("§7 SIRALI mod → başlatılamaz", notStartable(of5(await svc("KURSUN_QC", K, K))));
 }
 
 async function cleanup(): Promise<void> {
