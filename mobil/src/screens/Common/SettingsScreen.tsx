@@ -17,7 +17,7 @@ import { Appbar, Text, Icon, TouchableRipple } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBaseUrlStore, displayUrl } from '../../store/baseUrlStore';
-import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
+import { effectiveScanEngine, useDeviceSettingsStore } from '../../store/deviceSettingsStore';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import { resolveNotificationInboxEnabled } from '../../services/featureFlag.service';
 import { useDeviceStore } from '../../store/deviceStore';
@@ -32,6 +32,7 @@ import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
 import { usePrintReports } from '../../services/printJob.service';
 import { printReportsSummary } from './settings/PrintReportsScreen';
 import { docDeskSummary } from './settings/DocDeskSettingsScreen';
+import { isLiveCameraAvailable } from '../../services/liveCamera';
 import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -150,7 +151,7 @@ export default function SettingsScreen() {
     },
   ];
   if (canDocDesk) {
-    rows.push({ key: 'docDesk', icon: 'file-document-outline', title: 'Belge Masası', value: docDeskSummary(docDesk, docDeskCapture, docScanEngine), route: 'SettingsDocDesk' });
+    rows.push({ key: 'docDesk', icon: 'file-document-outline', title: 'Belge Masası', value: docDeskSummary(docDesk, docDeskCapture, effectiveScanEngine(docScanEngine, isLiveCameraAvailable())), route: 'SettingsDocDesk' });
   }
   if (signedIn) {
     // Bulunabilirlik: satır bayrak kapalıyken de görünür; sayfa nedenini söyler.

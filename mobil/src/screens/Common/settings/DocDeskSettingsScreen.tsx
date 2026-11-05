@@ -3,7 +3,8 @@
 // =============================================================================
 // "Bu cihaz belge masası": açılışta İE oluştur ekranı doğrudan kamera-önce masa kipinde açılır (varsayılan kapalı =
 // bugünkü açılış). Çekim: dokunarak (varsayılan) | otomatik (deneysel, paketsiz; ara kare aralığı ayarlı).
-// Belge çekimi (okut/tanıt): kendi çok çekimli kameramız + otomatik iyileştirme (varsayılan) | Google belge tarayıcı.
+// Belge çekimi (okut/tanıt): kendi çok çekimli kameramız + otomatik iyileştirme (varsayılan) | Google belge tarayıcı |
+// canlı okuma (yalnız canlı kamera modülü olan APK'da listelenir).
 // Ekran açık kalma paketi YOK (expo-keep-awake onay bekliyor) → cihazın "şarjdayken uyanık kal" ipucu gösterilir.
 // =============================================================================
 import React from 'react';
@@ -11,11 +12,13 @@ import { StyleSheet, View } from 'react-native';
 import { Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import {
   DOC_DESK_FRAME_MS_OPTIONS,
+  effectiveScanEngine,
   useDeviceSettingsStore,
   type DocDeskCaptureMode,
   type DocScanEngine,
 } from '../../../store/deviceSettingsStore';
 import { TERIM } from '../../../lib/terim';
+import { isLiveCameraAvailable } from '../../../services/liveCamera';
 import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
 
 const CAPTURE_OPTIONS: { value: DocDeskCaptureMode; label: string; desc: string }[] = [
@@ -26,12 +29,19 @@ const CAPTURE_OPTIONS: { value: DocDeskCaptureMode; label: string; desc: string 
 const ENGINE_OPTIONS: { value: DocScanEngine; label: string; desc: string }[] = [
   { value: 'camera', label: 'Kendi kamera (varsayılan)', desc: 'Art arda çekin, Tamam deyin; sayfalar kendiliğinden iyileştirilir, ara ekran yok.' },
   { value: 'mlkit', label: 'Google belge tarayıcı', desc: 'Kenar bulur ve kırpar; her sayfada inceleme ekranı açılır. Açılamazsa kendi kamera açılır.' },
+  { value: 'live', label: 'Canlı okuma', desc: 'Kamera açıkken alanları okur, sağdaki panele doldurur; hepsi kilitlenince kendisi çeker.' },
 ];
+
+/** Eski APK'da (canlı kamera modülü yok) "Canlı okuma" listelenmez. */
+export function engineOptions(liveAvailable: boolean) {
+  return ENGINE_OPTIONS.filter((o) => o.value !== 'live' || liveAvailable);
+}
 
 /** Menü satırının özeti (diğer ayar satırlarıyla aynı kural: seçili durum menüden görünür). */
 export function docDeskSummary(device: boolean, mode: DocDeskCaptureMode, engine: DocScanEngine = 'camera'): string {
   const base = `${device ? 'Bu cihaz belge masası' : 'Kapalı'} · ${mode === 'auto' ? 'otomatik çekim' : 'dokunarak çekim'}`;
-  return engine === 'mlkit' ? `${base} · Google tarayıcı` : base;
+  if (engine === 'mlkit') return `${base} · Google tarayıcı`;
+  return engine === 'live' ? `${base} · canlı okuma` : base;
 }
 
 function Choice({ active, label, desc, onPress, testID }: { active: boolean; label: string; desc?: string; onPress: () => void; testID?: string }) {
@@ -105,13 +115,15 @@ function CaptureCard() {
 }
 
 function ScanEngineCard() {
-  const engine = useDeviceSettingsStore((s) => s.docScanEngine);
+  const stored = useDeviceSettingsStore((s) => s.docScanEngine);
   const setEngine = useDeviceSettingsStore((s) => s.setDocScanEngine);
+  const liveAvailable = isLiveCameraAvailable();
+  const engine = effectiveScanEngine(stored, liveAvailable);
   return (
     <View style={settingsStyles.card}>
       <Text style={settingsStyles.label}>BELGE ÇEKİMİ</Text>
       <View style={styles.list}>
-        {ENGINE_OPTIONS.map((o) => (
+        {engineOptions(liveAvailable).map((o) => (
           <Choice key={o.value} active={engine === o.value} label={o.label} desc={o.desc} onPress={() => void setEngine(o.value)} testID={`ayar-belge-cekim-${o.value}`} />
         ))}
       </View>

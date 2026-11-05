@@ -40,12 +40,17 @@ export type CameraFacing = 'front' | 'back';
 /** Belge masası çekim kipi (K26): dokunarak (varsayılan) | otomatik (deneysel). */
 export type DocDeskCaptureMode = 'tap' | 'auto';
 
-/** Belge okutma çekimi: kendi çok çekimli kameramız (varsayılan) | Google ML Kit belge tarayıcısı (yedek). */
-export type DocScanEngine = 'camera' | 'mlkit';
+/** Belge okutma çekimi: kendi çok çekimli kameramız (varsayılan) | Google ML Kit belge tarayıcısı (yedek) | canlı okuma. */
+export type DocScanEngine = 'camera' | 'mlkit' | 'live';
 
-/** Yalnız birebir 'mlkit' tarayıcıyı seçer; kayıt yok / bozuk → kendi kameramız. */
+/** Yalnız birebir 'mlkit' / 'live' seçer; kayıt yok / bozuk → kendi kameramız. */
 export function parseDocScanEngine(raw: string | null): DocScanEngine {
-  return raw === 'mlkit' ? 'mlkit' : 'camera';
+  return raw === 'mlkit' || raw === 'live' ? raw : 'camera';
+}
+
+/** Kayıtlı 'live' ama canlı kamera modülü yok (eski APK) → bugünkü kendi kameramız. */
+export function effectiveScanEngine(engine: DocScanEngine, liveAvailable: boolean): DocScanEngine {
+  return engine === 'live' && !liveAvailable ? 'camera' : engine;
 }
 
 /** Otomatik çekim ara kare aralığı seçenekleri (ms) — pil/ısı için seyrekleştirilebilir. */

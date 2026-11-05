@@ -1,4 +1,4 @@
-import { parseDocScanEngine, useDeviceSettingsStore } from './deviceSettingsStore';
+import { effectiveScanEngine, parseDocScanEngine, useDeviceSettingsStore } from './deviceSettingsStore';
 import { storage } from '../utils/storage';
 
 // Cihaz-içi kalıcı tercihler: metraj MANUEL mi OTOMATİK mi girilecek. Saha
@@ -306,6 +306,15 @@ describe('deviceSettingsStore — belge çekimi (kendi kamera | ML Kit)', () => 
     expect(parseDocScanEngine('MLKIT')).toBe('camera');
     expect(parseDocScanEngine('camera')).toBe('camera');
     expect(parseDocScanEngine('mlkit')).toBe('mlkit');
+    expect(parseDocScanEngine('live')).toBe('live');
+    expect(parseDocScanEngine('LIVE')).toBe('camera');
+  });
+
+  it('⭐ kayıtlı "live" eski APK\'da (modül yok) bugünkü kendi kameraya düşer', () => {
+    expect(effectiveScanEngine('live', false)).toBe('camera');
+    expect(effectiveScanEngine('live', true)).toBe('live');
+    expect(effectiveScanEngine('mlkit', false)).toBe('mlkit');
+    expect(effectiveScanEngine('camera', true)).toBe('camera');
   });
 
   it('yazılan seçim kalıcı', async () => {
