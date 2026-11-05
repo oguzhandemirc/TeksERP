@@ -49,6 +49,8 @@ export interface RelabelContext {
   width: number | null;
   /** KAT — katalog KODU ("6-KAT"/"TUP"); kat girilmemiş topta null. */
   foldType: string | null;
+  /** Müşterinin etikete istediği parti metni (J1/K30); yoksa null. */
+  labelBatchNo: string | null;
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
@@ -75,6 +77,8 @@ export interface RelabelSpecPayload {
    * ile birebir; `null` ile `undefined` farkını koru (biri siler, biri korur).
    */
   foldType?: string | null;
+  /** Müşteri parti no — aynı üçlü sözleşme: metin yaz · null temizle · alan yok = dokunma. */
+  labelBatchNo?: string | null;
   /** Metraj (mt) düzeltmesi — yalnız değiştiyse gönderilir; bütün topta izinli. */
   currentQty?: number;
   /**

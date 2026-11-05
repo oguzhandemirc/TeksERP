@@ -330,6 +330,12 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       <div className="text-xs">{r.foldType}</div>
                     </>
                   )}
+                  {r.labelBatchNo && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Müşteri Parti</div>
+                      <div className="text-xs">{r.labelBatchNo}</div>
+                    </>
+                  )}
                   {/* BULUNDUĞU İSTASYON — yalnız bir adımda duran topta anlamlı.
                       Depo/ham stok topunda alan null'dur ve satır çizilmez. */}
                   {detail?.currentStep?.station && (

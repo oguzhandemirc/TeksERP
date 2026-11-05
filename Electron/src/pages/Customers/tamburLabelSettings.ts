@@ -8,6 +8,8 @@ export interface TamburLabelSettingsFields {
   tamburWeighRequired?: boolean;
   /** Decimal → API'de metin ya da sayı gelebilir. */
   tamburSplitLengthM?: string | number | null;
+  /** Etikete müşterinin parti no'su (J1/K30) basılır; tablet kesimde sorar. */
+  tamburLabelBatchEnabled?: boolean;
 }
 
 export interface TamburLabelSettingsForm {
@@ -16,6 +18,7 @@ export interface TamburLabelSettingsForm {
   weighRequired: boolean;
   /** Serbest metin; "" = öneri yok. */
   splitLength: string;
+  labelBatchEnabled: boolean;
 }
 
 export const WIDTH_SOURCE_OPTIONS: ReadonlyArray<{ value: "" | LabelWidthSource; label: string; hint: string }> = [
@@ -30,13 +33,14 @@ export function toForm(c: TamburLabelSettingsFields): TamburLabelSettingsForm {
     widthSource: c.labelWidthSource ?? "",
     weighRequired: c.tamburWeighRequired === true,
     splitLength: split == null || split === "" ? "" : String(Number(split)).replace(".", ","),
+    labelBatchEnabled: c.tamburLabelBatchEnabled === true,
   };
 }
 
 /** Form → PATCH gövdesi; bölme ölçüsü bozuksa hata metni döner. */
 export function toPayload(
   f: TamburLabelSettingsForm,
-): { ok: true; body: Required<Pick<TamburLabelSettingsFields, "labelWidthSource" | "tamburWeighRequired">> & { tamburSplitLengthM: number | null } } | { ok: false; error: string } {
+): { ok: true; body: Required<Pick<TamburLabelSettingsFields, "labelWidthSource" | "tamburWeighRequired" | "tamburLabelBatchEnabled">> & { tamburSplitLengthM: number | null } } | { ok: false; error: string } {
   const raw = f.splitLength.trim();
   let split: number | null = null;
   if (raw !== "") {
@@ -46,6 +50,6 @@ export function toPayload(
   }
   return {
     ok: true,
-    body: { labelWidthSource: f.widthSource === "" ? null : f.widthSource, tamburWeighRequired: f.weighRequired, tamburSplitLengthM: split },
+    body: { labelWidthSource: f.widthSource === "" ? null : f.widthSource, tamburWeighRequired: f.weighRequired, tamburSplitLengthM: split, tamburLabelBatchEnabled: f.labelBatchEnabled },
   };
 }
