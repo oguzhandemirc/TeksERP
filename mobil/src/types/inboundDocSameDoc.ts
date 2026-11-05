@@ -6,7 +6,7 @@ export interface SameDocumentMatch {
   note: { id: string; noteNo: string; status: string; senderDocNo: string | null; createdAt: string; approvedAt: string | null; updatedAt: string };
   state: SameDocumentState;
   /** Belgenin toplarının iş emirleri (iptaller dahil, en yeni önce, en çok 5). */
-  workOrders: Array<{ id: string; workOrderNumber: string; status: string }>;
+  workOrders: { id: string; workOrderNumber: string; status: string }[];
 }
 
 export interface SameDocumentQuery {

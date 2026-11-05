@@ -198,6 +198,16 @@ export interface WorkOrderTimelineItem {
   derived: boolean;
 }
 
+/** `GET /work-orders/:id/kursun-gramaj` — tablet "Gramajı Değiştir" önizlemesi (YAZMAZ). */
+export interface KursunGramajPreview {
+  propertyId: string | null;
+  target: { valueId: string; valueName: string } | null;
+  options: { id: string; name: string; isDefault: boolean }[];
+  /** Kurşunu eski gramajla uygulanmış toplar (geçmiş değişmez) · yeni gramajın işleyeceği kalan canlı toplar. */
+  appliedRollCount: number;
+  pendingRollCount: number;
+}
+
 /** `GET /work-orders/:id/target-color/preview` yanıtı. */
 export interface TargetColorPreview {
   blocked: { code: string | null; message: string } | null;
@@ -353,6 +363,15 @@ export const workOrderService = {
       .then((r) => r.data),
 
   // ── Düzeltme menüsü (hareket defteri D5; `mobile:is-emri-duzelt` ∨ `workorder:write`) ──
+  kursunGramaj: (id: string): Promise<KursunGramajPreview> =>
+    apiClient.get<ApiResponse<KursunGramajPreview>>(`/work-orders/${id}/kursun-gramaj`).then((r) => r.data.data),
+
+  /** Gramajı değiştir — yalnız kurşun hedefi; sebep İE hareket defterine düşer; uygulanmış top varsa `warnings`. */
+  changeKursunGramaj: (id: string, data: { propertyId: string; valueId: string; reason: string }): Promise<{ warnings: string[] }> =>
+    apiClient
+      .put<{ warnings?: string[] }>(`/work-orders/${id}/target-values`, { items: [{ propertyId: data.propertyId, valueId: data.valueId }], reason: data.reason })
+      .then((r) => ({ warnings: r.data.warnings ?? [] })),
+
   /** Rengi Değiştir önizlemesi — yazmaz: engel · kısmi boya · sipariş uyarıları · kart bayatlığı. */
   previewTargetColor: (id: string, colorId: string | null): Promise<ApiResponse<TargetColorPreview>> =>
     apiClient

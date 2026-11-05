@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import AppModal from '../../../components/AppModal';
 import WorkOrderDocumentsSheet from './WorkOrderDocumentsSheet';
 import WorkOrderFixSheet, { type FixKind } from './WorkOrderFixSheet';
+import { kursunGramajKey } from './GramajFixSheet';
 import TamburOrderLinkSheet from '../Tambur/TamburOrderLinkSheet';
 import { tabletCancelAllowed } from './workOrderFix';
 import { usePermissions } from '../../../hooks/usePermission';
@@ -80,6 +81,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   const canFix = !!editable && (has('mobile:is-emri-duzelt') || has('workorder:write'));
   // İptal yalnız hiç işlem görmemiş iş emrinde (S3); panel yetkisi her durumda.
   const canCancel = !!wo && !!editable && tabletCancelAllowed(wo, has('workorder:write'));
+  // Gramajı Değiştir yalnız kurşun hedefi olan / kurşunu uygulanmış iş emrinde; eski sunucu (404) → düğme yok.
+  const gramajQ = useQuery({ queryKey: kursunGramajKey(workOrderId ?? ''), queryFn: () => workOrderService.kursunGramaj(workOrderId!), enabled: canFix && !!workOrderId, retry: false });
+  const canGramaj = canFix && !!gramajQ.data?.propertyId && (!!gramajQ.data.target || gramajQ.data.appliedRollCount > 0);
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });
     void qc.invalidateQueries({ queryKey: ['work-order-rolls', workOrderId] });
@@ -307,6 +311,11 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 <Button mode="contained-tonal" icon="tray-plus" onPress={() => setFix('addBatch')} style={styles.fixBtn} contentStyle={styles.btnContent}>
                   Parti Ekle
                 </Button>
+                {canGramaj ? (
+                  <Button mode="contained-tonal" icon="weight-gram" onPress={() => setFix('gramaj')} style={styles.fixBtn} contentStyle={styles.btnContent}>
+                    Gramajı Değiştir
+                  </Button>
+                ) : null}
               </View>
             </View>
           ) : null}
