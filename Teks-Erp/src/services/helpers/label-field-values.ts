@@ -86,6 +86,9 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // eleman şablonda dursa bile baskıda atlanır (sackNote emsali).
     case "foldType":
       return str(payload.foldType);
+    // Müşterinin etikete istediği parti — boşsa present:false (eleman atlanır).
+    case "labelBatchNo":
+      return str(payload.labelBatchNo);
     case "widthCm":
       return measure(payload.widthCm, "cm", payload.unitSettings);
     case "lengthMeters":
