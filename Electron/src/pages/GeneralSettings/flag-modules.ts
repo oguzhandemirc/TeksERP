@@ -252,6 +252,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // --- ÇEKİRDEK: sevkiyat & depo --------------------------------------------
   shipmentConfirmationEnabled: "cekirdek",
   shipmentManualSackCountEnabled: "cekirdek",
+  shipmentLooseLoadEnabled: "cekirdek",
   shipmentUndoSameDayOnly: "cekirdek",
   shippingOrderRequirement: "cekirdek",
   itemPhaseOutNewOrder: "cekirdek",

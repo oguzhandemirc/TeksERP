@@ -457,6 +457,8 @@ export const updateSchema = z.strictObject({
   // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı
   // (default false). Kapalıyken alan hiç sorulmaz ve belgede çıkmaz.
   shipmentManualSackCountEnabled: z.boolean().optional(),
+  // shipping.looseLoadEnabled — çuvalsız sevk (dökme/araba; default false).
+  shipmentLooseLoadEnabled: z.boolean().optional(),
   // shipping.undoDispatchSameDayOnly — sevk geri almayı aynı günle sınırla
   // (default false = sınırsız). Backend ENFORCE (undoDispatch).
   shipmentUndoSameDayOnly: z.boolean().optional(),

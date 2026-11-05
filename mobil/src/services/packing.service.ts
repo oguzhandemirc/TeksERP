@@ -611,6 +611,23 @@ export const packingService = {
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments', body).then((r) => r.data),
 
+  /** Çuvalsız sevk (Hızlı Sevk ucu) — toplar doğrudan; sunucu görünmez yük birimini kendisi açar.
+   *  `dispatchNote` irsaliye açıklamasına yazılır ("Dökme – 12 top"). */
+  createShipmentFromRolls: (body: {
+    rollIds: string[];
+    customerId: string;
+    branchId?: string | null;
+    orderIds?: string[];
+    orderless?: boolean;
+    destination?: ShipmentDestination;
+    destinationChosen?: true;
+    plateNumber?: string | null;
+    driverName?: string | null;
+    dispatchNote?: string | null;
+    clientToken?: string;
+  }): Promise<ApiResponse<CreatedShipment>> =>
+    apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments/from-rolls', body).then((r) => r.data),
+
   /** Sevkiyat kurulum önizlemesi (salt-okunur) — karşılanan sipariş satırları + fazlalık. */
   previewCreateShipment: (body: {
     sackIds: string[];

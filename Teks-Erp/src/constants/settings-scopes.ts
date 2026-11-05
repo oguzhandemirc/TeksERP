@@ -42,6 +42,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "shipmentConfirmationEnabled",
       "scanCustomerCodeLookupEnabled",
       "shipmentManualSackCountEnabled",
+      "shipmentLooseLoadEnabled",
       "shipmentUndoSameDayOnly",
       "returnGradingEnabled",
       "shippingSimulatedWeightEnabled",

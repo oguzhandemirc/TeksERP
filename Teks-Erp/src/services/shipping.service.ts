@@ -2747,6 +2747,8 @@ export class ShippingService {
       driverName?: string | null;
       carrier?: string | null;
       clientToken?: string | null;
+      /** İrsaliye açıklaması (annotation) — kurulumla AYNI tx'te yazılır; boş → yazılmaz. */
+      dispatchNote?: string | null;
     } & DeliveryToInput,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
@@ -2841,7 +2843,7 @@ export class ShippingService {
             );
           }
           // 3) Normal sevkiyat çekirdeği — TAHSİS/İRSALİYE/İADE zinciri birebir aynı.
-          return this.createShipmentCoreTx(tx, {
+          const core = await this.createShipmentCoreTx(tx, {
             sackIds: [sack.id],
             customerId: data.customerId,
             branchId,
@@ -2859,6 +2861,10 @@ export class ShippingService {
             confirmationEnabled: await readShipmentConfirmationEnabled(),
             userId,
           });
+          // 4) İrsaliye açıklaması (annotation; belge basılırken canlı çözülür, sürüm doğurmaz).
+          const note = data.dispatchNote?.trim().slice(0, 500) || null;
+          if (note) await tx.shipment.update({ where: { id: core.id }, data: { dispatchNote: note } });
+          return core;
         }),
       undefined,
       (err) => {
@@ -2881,7 +2887,7 @@ export class ShippingService {
       action: "CREATE",
       tableName: "SHIPMENT",
       recordId: result.id,
-      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds, orderless: data.orderless === true, destination: result.yon.destination },
+      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, dispatchNote: data.dispatchNote?.trim() || null, orderIds, orderless: data.orderless === true, destination: result.yon.destination },
     });
     // Hızlı sevk de ORTAK kancayı çağırır — çuvaldan sevkle davranış ayrışmasın.
     const draftNote = dispatched ? await this.maybeAutoDraftInvoiceAfterDispatch(result.id, userId) : null;

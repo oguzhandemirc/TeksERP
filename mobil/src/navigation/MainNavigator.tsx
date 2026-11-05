@@ -152,6 +152,10 @@ export default function MainNavigator() {
         getComponent={() => require('../screens/Modules/TartiPaket/CuvalDuzeltScreen').default}
       />
       <Stack.Screen
+        name="CuvalsizSevk"
+        getComponent={() => require('../screens/Modules/TartiPaket/CuvalsizSevkScreen').default}
+      />
+      <Stack.Screen
         name="HizliSiparis"
         getComponent={() => require('../screens/Modules/TartiPaket/HizliSiparisScreen').default}
       />

@@ -46,6 +46,7 @@ import SackManualWeightSheet from './SackManualWeightSheet';
 import { SackLabelPrinter, type SackLabelJob } from '../../../components/labels/SackLabelPrinter';
 import {
   useShipmentConfirmationEnabled,
+  useShipmentLooseLoadEnabled,
   useShippingManualWeightRestrictedEnabled,
   useShippingWeighRequiredEnabled,
   usePackingGroupsEnabled,
@@ -136,6 +137,7 @@ export default function PaketlemeScreen() {
   // Sevk onayı açık: createShipment PLANNED bırakır (çıkış Sevk Çıkışı'ndan).
   // Kapalı (varsayılan): backend doğrudan sevk eder (tek adım).
   const confirmationEnabled = useShipmentConfirmationEnabled();
+  const looseLoadEnabled = useShipmentLooseLoadEnabled();
   // Tartı rejimi — kapalıyken (varsayılan) yalnız yurtdışı sevk tartı ister.
   const weighRequiredFlag = useShippingWeighRequiredEnabled();
   // Elle kg kısıtı. ⚠️ Otorite SUNUCUDA; burada yalnız menü satırı çizilmez
@@ -857,6 +859,21 @@ export default function PaketlemeScreen() {
                 {shipButtonLabel({ confirmationEnabled, count: shippableSacks.length, selectionName: groupName })}
               </Button>
             </View>
+            {/* Çuvalsız sevk (dökme / araba) — bayrak kapalıyken düğme yok, ekran bugünkü gibi. */}
+            {looseLoadEnabled && (
+              <Button
+                mode="outlined"
+                icon="truck-outline"
+                onPress={() =>
+                  nav.navigate('CuvalsizSevk', { customerId, branchId, customerName: customer?.name ?? '' })
+                }
+                style={styles.looseBtn}
+                contentStyle={styles.looseBtnContent}
+                testID="paketleme-cuvalsiz-sevk"
+              >
+                Çuvalsız Sevk (dökme / araba)
+              </Button>
+            )}
 
             <View style={styles.scanRow}>
               <Button
@@ -1204,6 +1221,8 @@ const styles = StyleSheet.create({
   },
   footerBtnContent: { height: 54 },
   footerRow: { flexDirection: 'row', gap: spacing.sm },
+  looseBtn: { marginTop: spacing.sm },
+  looseBtnContent: { minHeight: 56 },
   footerBtnFlex: { flex: 1 },
 
   scanRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },

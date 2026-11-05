@@ -146,6 +146,11 @@ export function useShipmentConfirmationEnabled(): boolean {
   return useFeatureFlags().data?.shipmentConfirmationEnabled ?? false;
 }
 
+/** Çuvalsız sevk (dökme / araba) kipi açık mı? Default false — yalnız gerçek `true` kipi açar. */
+export function useShipmentLooseLoadEnabled(): boolean {
+  return useFeatureFlags().data?.shipmentLooseLoadEnabled === true;
+}
+
 /** Sevk öncesi TÜM çuvallar tartılı olmalı mı? Default FALSE (yalnız yurtdışı).
  *  FAIL-OPEN: bayrak yüklenemezse sahayı sevk edemez hâle getirmeyiz — kesin
  *  kapı sunucudadır, ekran yalnız uyarıyı ÖNCEDEN gösterir. */
