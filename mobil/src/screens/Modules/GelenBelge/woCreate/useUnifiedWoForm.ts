@@ -134,8 +134,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   return {
     route, setRoute, form, fields, plan, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, customers, edit,
     customersLoading: ctx.isLoading,
-    routes: routesQ.data?.data ?? [],
-    routesLoading: routesQ.isLoading,
+    routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
   };
 }
