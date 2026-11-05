@@ -1,26 +1,34 @@
 // Belgeden terbiye iş emri — tek belge satırı: okuma izlenir, bitince form dolar (müşteri önerisi, parti adayı, metre +
-// doğrulama, varsayılan gramaj). Kayıt "Hepsini kaydet"ten; sonuç satırda kalır.
+// doğrulama, varsayılan gramaj). Toplu görünüm (`list`) kart + madde listesi; tek form (`single`) şeritlerle, kartsız.
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Chip, Text } from 'react-native-paper';
-import ModuleSheet, { SheetField } from '../../../../components/ModuleSheet';
-import NumpadInput from '../../../../components/NumpadInput';
+import { Button, Text } from 'react-native-paper';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
+import { SectionBand } from '../../../../components/form/SectionBand';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import BatchFields from './DocRowBatchFields';
 import { TERIM } from '../../../../lib/terim';
 import { useReadResult } from '../useReadResult';
 import { useApprovalDetail } from '../useApprovalCard';
 import { usePermissions } from '../../../../hooks/usePermission';
-import { readResultView, fmtKursunMeters } from '../readResult';
-import { batchPatch, meterChoices, parseMeters } from '../approvalGate';
-import { detailFromSummary, pinRecent, rowIssues, withSummaryFields } from './woFromDoc';
+import { fmtKursunMeters } from '../readResult';
+import { batchPatch, meterChoices } from '../approvalGate';
+import { detailFromSummary, pinRecent, rowIssueList, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
-import TeachBanner from '../tanit/TeachBanner';
-import CustomerFromDocOffer from './CustomerFromDocSheet';
+import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
+import DocRowOwner from './DocRowOwner';
+import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
+import { bandTone, type IssueKey } from './woIssues';
+
+export { GramajField } from './DocRowMeasures';
+
+/** Alt çubuk hapından gelen "şu alanı aç" isteği; `seq` her basışta artar (aynı alana ikinci basış da açar). */
+export interface DocRowOpenRequest {
+  kind: 'owner' | 'meter';
+  seq: number;
+}
 
 interface Props {
   row: DocRow;
@@ -29,64 +37,40 @@ interface Props {
   customersLoading: boolean;
   /** Belge masası çok partide gramajı parti başına kendi plan bölümünde çizer. */
   hideGramaj?: boolean;
+  /** `list` (vars.): toplu görünüm/masa kartı; `single`: tek İE formunun sol sütunu. */
+  variant?: DocRowVariant;
+  /** Tek formda "Yeniden okut". */
+  onReread?: () => void;
+  openRequest?: DocRowOpenRequest | null;
 }
 
 type Picker = 'owner' | 'batch' | null;
 
-export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false }: Props) {
-  const { read, readDone, detailFailed } = useRowRead(row, wo);
+const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
+
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, openRequest }: Props) {
+  const { read, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
   const owners = useMemo(() => pinRecent(customers, wo.recent), [customers, wo.recent]);
+  useOpenRequest(openRequest, setPicker, setMeterOpen);
 
+  const single = variant === 'single';
   const f = row.form;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
   const locked = done || wo.saving;
-  const view = read.watch ? readResultView(read.watch, row.noteNo) : null;
-  const issues = f && wo.mode !== 'SEPARATE' ? rowIssues(f) : [];
-  const ownerName = f?.ownerCustomerId ? customers.find((o) => o.value === f.ownerCustomerId)?.label ?? f.ownerSuggested ?? 'Seçili müşteri' : '';
+  const issueList = f && wo.mode !== 'SEPARATE' ? rowIssueList(f) : [];
   const meterText = f?.meters != null ? `${fmtKursunMeters(f.meters)} m` : null;
+  const boxStyle = single ? styles.flat : [styles.box, row.result?.kind === 'OPENED' && styles.ok, row.result?.kind === 'FAILED' && styles.warn];
 
   return (
-    <View style={[styles.box, row.result?.kind === 'OPENED' && styles.ok, row.result?.kind === 'FAILED' && styles.warn]} testID={`belge-satir-${row.noteNo}`}>
-      <View style={styles.head}>
-        <Text style={styles.title}>{row.noteNo}</Text>
-        <Text style={styles.status}>{view?.title ?? 'Okunuyor…'}</Text>
-        {!f && !readDone && read.watch?.phase === 'polling' && <ActivityIndicator size="small" />}
-        {!done && (
-          <Button mode="text" onPress={() => wo.removeRow(row.noteId)} disabled={wo.saving} testID={`belge-satir-cikar-${row.noteNo}`}>
-            Listeden çıkar
-          </Button>
-        )}
-      </View>
-      {view?.reason ? <Text style={styles.note}>{view.reason}</Text> : null}
-      {readDone && read.watch?.phase === 'done' && <TeachBanner row={row} wo={wo} tanitim={read.watch.summary.tanitim} customers={customers} />}
-      {detailFailed && <Text style={styles.note} testID={`belge-satir-detay-hata-${row.noteNo}`}>Belge detayı okunamadı; form okuma özetinden dolduruldu.</Text>}
-      {read.watch && read.watch.phase !== 'polling' && !readDone && (
-        <Button mode="outlined" icon="refresh" onPress={read.recheck} contentStyle={styles.btn}>Yeniden kontrol et</Button>
-      )}
+    <View style={boxStyle} testID={`belge-satir-${row.noteNo}`}>
+      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} customers={customers} />
       {f && (
         <>
-          <View testID={f.ownerSuggested && f.ownerCustomerId ? `belgeden-musteri-${row.noteNo}` : undefined}>
-            <SheetField
-              label="Müşteri"
-              value={ownerName}
-              placeholder="Müşteri seçin"
-              onPress={() => setPicker('owner')}
-              disabled={locked}
-              fieldStyle={f.ownerSuggested && f.ownerCustomerId ? styles.hlInput : undefined}
-            />
-          </View>
-          {f.ownerAsk && f.ownerCustomerId !== f.ownerAsk.customerId && (
-            <Chip icon="help-circle-outline" onPress={() => wo.updateForm(row.noteId, { ownerCustomerId: f.ownerAsk!.customerId, ownerSuggested: f.ownerAsk!.name })}
-              disabled={locked} style={styles.chip} testID={`belge-satir-sahip-sor-${row.noteNo}`}>
-              {`Belgede “${f.ownerAsk.matchedText}” geçiyor — ${f.ownerAsk.name} mi? Seç`}
-            </Chip>
-          )}
-          {!f.ownerCustomerId && read.watch?.phase === 'done' && read.watch.summary.ownerUnmatched && (
-            <CustomerFromDocOffer noteId={row.noteId} noteNo={row.noteNo} unmatched={read.watch.summary.ownerUnmatched} disabled={locked}
-              onPicked={(id) => wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null })} onPickFromList={() => setPicker('owner')} />
-          )}
+          <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />
+          <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)}
+            testID={single ? 'ie-serit-parti' : `belge-serit-parti-${row.noteNo}`} />
           {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
@@ -95,7 +79,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
             </>
           )}
           {!hideGramaj && <GramajField row={row} wo={wo} locked={locked} />}
-          {!done && issues.map((n) => <Text key={n} style={styles.note}>• {n}</Text>)}
+          {!single && !done && issueList.map((n) => <Text key={n.text} style={styles.note}>• {n.text}</Text>)}
         </>
       )}
       <RowResultView row={row} wo={wo} />
@@ -110,6 +94,19 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
       )}
     </View>
   );
+}
+
+/** Alt çubuktan gelen isteği seçiciye çevirir; ilk çizimdeki (eski) istek yeniden açılmaz. */
+function useOpenRequest(req: DocRowOpenRequest | null | undefined, setPicker: (p: Picker) => void, setMeterOpen: (o: boolean) => void) {
+  const seq = req?.seq ?? 0;
+  const kind = req?.kind;
+  const [seen, setSeen] = useState(seq);
+  useEffect(() => {
+    if (seq === seen) return;
+    setSeen(seq);
+    if (kind === 'owner') setPicker('owner');
+    else if (kind === 'meter') setMeterOpen(true);
+  }, [seq, seen, kind, setPicker, setMeterOpen]);
 }
 
 /**
@@ -130,57 +127,6 @@ function useRowRead(row: DocRow, wo: WoRowsState) {
   }, [detail.data, summary, canReadDetail, detailFailed, row.noteId, setDetail]);
   useRowParties(row, wo, readDone && canReadDetail);
   return { read, readDone, detailFailed };
-}
-
-function MeterField({ row, wo, meterText, locked, onEdit }: { row: DocRow; wo: WoRowsState; meterText: string | null; locked: boolean; onEdit: () => void }) {
-  const f = row.form!;
-  // Okunan metre elle düzeltilmediyse sarı vurgu (belgeden geldi).
-  const read = row.detail?.kursunMeters != null && row.detail.kursunMeters !== '' ? Number(row.detail.kursunMeters) : null;
-  const fromDoc = read !== null && f.meters === read;
-  return (
-    <View testID={`belge-satir-metre-${row.noteNo}`}>
-      <Text style={styles.label}>Kurşun metresi</Text>
-      <View style={styles.row}>
-        <Text testID={fromDoc ? `belgeden-metre-${row.noteNo}` : undefined} style={[styles.meters, fromDoc && styles.hlText, f.metersReview && styles.warnText, !meterText && styles.muted]}>{meterText ?? 'Metre okunamadı'}</Text>
-        {f.metersReview && (
-          <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-dogrula-${row.noteNo}`}>
-            Doğrula
-          </Button>
-        )}
-        <Button mode="outlined" icon="pencil" onPress={onEdit} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-duzelt-${row.noteNo}`}>
-          {meterText ? 'Düzelt' : 'Metre gir'}
-        </Button>
-      </View>
-      {f.metersReview && <Text style={styles.warnText}>Metre doğrulama bekliyor: belgedeki değeri kontrol edin.</Text>}
-    </View>
-  );
-}
-
-/** Gramaj yalnız rotada kurşun adımı ve katalogda değer varsa çizilir; varsayılan ön seçili gelir (sözleşme 5). */
-export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
-  const f = row.form!;
-  if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
-  return (
-    <View>
-      <Text style={styles.label}>Kurşun gramajı</Text>
-      <View style={styles.chips}>
-        {wo.catalog.options.map((o) => (
-          <Chip
-            key={o.id}
-            selected={f.gramajValueId === o.id}
-            onPress={() => wo.updateForm(row.noteId, { gramajValueId: f.gramajValueId === o.id ? null : o.id })}
-            disabled={locked}
-            style={[styles.chip, f.gramajValueId === o.id && styles.chipOn]}
-            textStyle={f.gramajValueId === o.id ? styles.chipOnText : undefined}
-            selectedColor={f.gramajValueId === o.id ? colors.textOnDark : undefined}
-            testID={`belge-satir-gramaj-${row.noteNo}-${o.name}`}
-          >
-            {o.isDefault ? `${o.name} (varsayılan)` : o.name}
-          </Chip>
-        ))}
-      </View>
-    </View>
-  );
 }
 
 interface PickersProps {
@@ -259,61 +205,14 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
   );
 }
 
-function MeterSheet({ choices, current, onDismiss, onSave }: { choices: ReturnType<typeof meterChoices>; current: string | null; onDismiss: () => void; onSave: (m: number) => void }) {
-  const [text, setText] = useState('');
-  const entered = parseMeters(text);
-  return (
-    <ModuleSheet
-      visible
-      onDismiss={onDismiss}
-      title="Kurşun metresi"
-      subtitle={current ? `Okunan: ${current}` : 'Belgeden okunamadı'}
-      size="sm"
-      footer={
-        <View style={styles.actions}>
-          <Button onPress={onDismiss} contentStyle={styles.btn}>
-            Vazgeç
-          </Button>
-          <Button mode="contained" disabled={entered === null} onPress={() => entered !== null && onSave(entered)} contentStyle={styles.btn} testID="belge-satir-metre-kaydet">
-            Kaydet
-          </Button>
-        </View>
-      }
-    >
-      <View style={styles.chips}>
-        {choices.map((m) => (
-          <Chip key={m.role} onPress={() => onSave(m.value)} style={styles.chip}>
-            {`${m.label}: ${m.text}`}
-          </Chip>
-        ))}
-      </View>
-      <NumpadInput value={text} onChangeText={setText} label="Metre" mode="outlined" useNativeKeyboard allowDecimal testID="belge-satir-metre-giris" />
-    </ModuleSheet>
-  );
-}
-
 const styles = StyleSheet.create({
   box: { padding: spacing.lg, borderRadius: radius.md, gap: spacing.sm, backgroundColor: colors.surfaceMuted },
+  flat: { gap: spacing.sm },
   ok: { backgroundColor: colors.successContainer },
   warn: { backgroundColor: colors.warningContainer },
-  head: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  title: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.text },
-  status: { flex: 1, fontSize: typography.size.base, color: colors.textSecondary },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
-  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  meters: { flex: 1, minWidth: 160, fontSize: typography.size.xl, fontWeight: typography.weight.semibold, color: colors.text },
   warnText: { color: colors.warningText },
-  muted: { color: colors.textMuted },
   note: { fontSize: typography.size.sm, color: colors.text },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: 56, justifyContent: 'center' },
-  // Seçili gramaj uzaktan belli olsun (istek 3): marka zemini, beyaz kalın yazı, biraz daha yüksek.
-  chipOn: { minHeight: 64, backgroundColor: colors.brand },
-  chipOnText: { color: colors.textOnDark, fontSize: typography.size.lg, fontWeight: typography.weight.bold },
   result: { gap: spacing.sm },
   resultTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
   btn: { minHeight: 56 },
-  hlInput: { backgroundColor: DOC_HIGHLIGHT_BG },
-  hlText: { flex: 0, backgroundColor: DOC_HIGHLIGHT_BG, borderRadius: 6, paddingHorizontal: spacing.sm },
 });

@@ -102,13 +102,11 @@ describe('DocRowCard — vurgu ve seçili gramaj', () => {
     const ui2 = renderWithPaper(<Harness batchSource="SERIES" form={{ ...baseForm, meters: 300 }} />);
     expect(ui2.queryByTestId('belgeden-metre-GB-1')).toBeNull();
   });
-  it('⭐ seçili gramaj marka zeminli ve daha yüksek; seçili olmayan değil', () => {
+  it('⭐ seçili gramaj marka zeminli; seçili olmayan değil', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
     const on = ancestorStyles(ui, 'belge-satir-gramaj-GB-1-25 gr');
     const off = ancestorStyles(ui, 'belge-satir-gramaj-GB-1-30 gr');
-    expect(on.some((x) => x.backgroundColor === colors.brand)).toBe(true);
-    expect(off.some((x) => x.backgroundColor === colors.brand)).toBe(false);
-    const h = (l: Record<string, unknown>[]) => Math.max(0, ...l.map((x) => (typeof x.minHeight === 'number' ? x.minHeight : 0)));
-    expect(h(on)).toBeGreaterThan(h(off));
+    expect(on.some((x) => x.backgroundColor === colors.choice.onBg)).toBe(true);
+    expect(off.some((x) => x.backgroundColor === colors.choice.onBg)).toBe(false);
   });
 });
