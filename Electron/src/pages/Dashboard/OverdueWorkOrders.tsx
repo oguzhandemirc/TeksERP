@@ -10,6 +10,7 @@ import { useTabsStore } from "@/store/tabs";
 import { fetchOverdueWorkOrders } from "./dashboardService";
 import { calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
 import { TERIM } from "@/lib/terim";
+import { locationView } from "@/pages/Operations/WorkOrders/location";
 
 export function OverdueWorkOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir.
@@ -110,13 +111,21 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
 }
 
 /**
- * Aktif adımın istasyonu. Pasife alınmış istasyonda takılan İE gizlenmez (gecikme gerçektir) ama
- * istasyon doluluk kartında olmayan bir adı çıplak basmak yanıltır → "(pasif istasyon)" (prova 11-06).
+ * "Şu an nerede" — İE listesiyle AYNI tek kaynak (`konum`, canlı topların istasyonu). Plan imleci (ACTIVE adım) malın yerini
+ * söylemez; "(pasif istasyon)" eki de kaynakta olmayan bir yorumdu (2. prova 11-06). Konum yoksa (eski sunucu) yazılmaz.
  */
-export function overdueStationLabel(wo: Pick<WorkOrder, "steps">): string | null {
-  const station = wo.steps.find((s) => s.status === "ACTIVE")?.station;
-  if (!station) return null;
-  return station.isActive === false ? `${station.name} (pasif istasyon)` : station.name;
+export function overdueStationLabel(wo: Pick<WorkOrder, "konum" | "status">): string | null {
+  const v = locationView(wo.konum, wo.status);
+  switch (v.kind) {
+    case "stations":
+      return v.extra > 0 ? `${v.primaryLabel} +${v.extra}` : v.primaryLabel;
+    case "not-started":
+      return "Başlamadı";
+    case "done":
+      return v.label;
+    default:
+      return null;
+  }
 }
 
 function LoadingRows() {

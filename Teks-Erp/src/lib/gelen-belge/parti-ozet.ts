@@ -34,6 +34,11 @@ export interface NoteParty {
    */
   suggestedMeters: number | null;
   suggestedMetersSource: "TOTAL" | "LINE_SUM" | null;
+  /**
+   * Onayda doğan parti kaydının (özet satırı) metresi — operatörün elle düzelttiği değer dahil, partinin TEK kayıtlı metresi.
+   * Onaysız belgede null (2026-11-06 2. prova ek alanı; eski istemci yok sayar). Doldurucu `getNoteParties`.
+   */
+  recordedMeters: number | null;
   weightKg: number | null;
   warnings: string[];
 }
@@ -112,6 +117,7 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
       meters,
       suggestedMeters: suggested.meters === null ? null : Number(suggested.meters),
       suggestedMetersSource: suggested.source === "TOTAL" || suggested.source === "LINE_SUM" ? suggested.source : null,
+      recordedMeters: null,
       weightKg: kgs.length ? r3(kgs.reduce((s, x) => s + x, 0)) : null,
       warnings: [],
     };

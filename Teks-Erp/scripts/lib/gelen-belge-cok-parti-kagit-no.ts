@@ -1,7 +1,7 @@
 // test_gelen_belge_cok_parti §15 (Gülkesim 214279 provası, 2026-11-06): çok partili kağıtta (a) partinin metresi beyan ara
 // toplamından önerilir (Σ satır yalnız beyan yoksa; tek partili yolun önceliği) · (b) kağıttaki parti no SERIES kipinde de
 // kaybolmaz: İE partisi seriden doğar ama no künyeye (`parameters.customerBatchNo`) yazılır, istasyon + panel aramasında bulunur;
-// DOCUMENT kipinde parti no'su doğrudan kağıttaki no'dur. Dosya boyu tavanı için ayrı.
+// DOCUMENT kipinde parti no'su doğrudan kağıttaki no'dur · (c) onaydan sonra elle düzeltilen parti metresi `recordedMeters`te (§15f). Dosya boyu tavanı için ayrı.
 import prisma from "../../src/lib/prisma";
 import { stationWorkSearchWhere } from "../../src/services/helpers/workorder-doc-search.helper";
 import { SETTING_KEYS } from "../../src/services/system-setting.service";
@@ -19,7 +19,7 @@ interface Ctx {
   get: (path: string) => Promise<Resp>;
 }
 type WoOut = { workOrderId: string; workOrderNo: string; batchNumber: string | null };
-type PartyView = { blockNo: number; meters: number; declaredMeters: number | null; suggestedMeters?: number | null; suggestedMetersSource?: string | null };
+type PartyView = { blockNo: number; meters: number; declaredMeters: number | null; suggestedMeters?: number | null; suggestedMetersSource?: string | null; recordedMeters?: number | null };
 
 /** Notun blok beyanını değiştirir (OCR'ın okuduğu ara toplam) — satırlar aynı kalır. */
 async function setDeclaredMeters(noteId: string, m: Record<number, string | null>): Promise<void> {
@@ -51,6 +51,14 @@ export async function cokPartiKagitNo(c: Ctx): Promise<void> {
     r.status === 201 && wos.length === 2 && wos.every((w) => !!w.batchNumber && !paper.includes(w.batchNumber))
       && of(wos[0]?.workOrderId)?.batches[0]?.numberSource === "SERIES" && param(wos[0]?.workOrderId) === paper[0] && param(wos[1]?.workOrderId) === paper[1],
     `${r.status} ${r.code ?? ""} ${JSON.stringify(rows.map((x) => [x.parameters, x.batches]))}`);
+
+  // 2. prova: tablette 2. partinin metresi elle 3935'e düzeltildi, panel Partiler kartı Σ satırı (410 burada) göstermeye devam etti.
+  const after = ((await c.parties(n)).data?.parties ?? []) as PartyView[];
+  c.check("§15f ⭐ onaydan sonra parti kaydının (elle girilen) metresi `/partiler`de: 586 / 3935; Σ satır ayrı kalır (330 / 410)",
+    after[0]?.recordedMeters === 586 && after[1]?.recordedMeters === 3935 && after[0]?.meters === 330 && after[1]?.meters === 410,
+    JSON.stringify(after.map((p) => [p.blockNo, p.meters, p.recordedMeters])));
+  const fresh = ((await c.parties(await c.mkNote())).data?.parties ?? []) as PartyView[];
+  c.check("§15f onaysız belgede parti kaydı yok → recordedMeters null", fresh.length === 2 && fresh.every((p) => p.recordedMeters === null), JSON.stringify(fresh.map((p) => p.recordedMeters)));
 
   const hits = async (q: string) => {
     const where = stationWorkSearchWhere(q);
