@@ -110,7 +110,7 @@ export function WorkOrderDetailHeader({
         }
         statusLine={
           wo
-            ? `${workOrderTypeLabels[wo.type]}${wo.routeTemplate ? ` · Rota: ${wo.routeTemplate.name}` : ""}`
+            ? `${workOrderTypeLabels[wo.type]}${wo.customer ? ` · Müşteri: ${wo.customer.name}` : ""}${wo.routeTemplate ? ` · Rota: ${wo.routeTemplate.name}` : ""}`
             : undefined
         }
         parent={{ label: TERIM.terbiyeIsEmri.cogul, to: "/operations/work-orders" }}

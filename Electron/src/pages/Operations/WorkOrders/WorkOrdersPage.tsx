@@ -1,3 +1,4 @@
+import { workOrderTypeLabels } from "@/types/enums";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ const FILTERS: FilterDef[] = [
     options: [
       { value: "ORDER_PRODUCTION", label: "Siparişe Özel" },
       { value: "STOCK_PRODUCTION", label: "Stok" },
+      { value: "CUSTOMER_GOODS_SERVICE", label: workOrderTypeLabels.CUSTOMER_GOODS_SERVICE },
     ],
   },
   // Üretilen kumaş (targetItem) + renk (targetColor) — backend where'e doğrudan

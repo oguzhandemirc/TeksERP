@@ -149,6 +149,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   </div>
                   <div className="sheet-sub">
                     {workOrderTypeLabels[wo.type]}
+                    {wo.customer && <> · Müşteri: {wo.customer.name}</>}
                     {wo.routeTemplate && <> · Rota: {wo.routeTemplate.name}</>}
                   </div>
 
