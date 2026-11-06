@@ -1,7 +1,7 @@
 import type { ProductionRoute } from '../../../services/route.service';
 import type { ReadSummary } from '../../../services/inboundDoc.service';
 import { SCAN_ROUTE_ID } from '../GelenBelge/woCreate/woFromDoc';
-import { defaultType, previewTiles, resolveType, tileLayout, typeGroups } from './scanFlow';
+import { customerGoodsTiles, defaultType, previewTiles, resolveType, scanWoType, tileLayout, typeGroups } from './scanFlow';
 
 const r = (id: string, name: string, over: Partial<ProductionRoute> = {}): ProductionRoute => ({ id, name, steps: [], ...over }) as ProductionRoute;
 const all = [r('b', 'Boya'), r('a', 'Apre'), r('p', 'Pasif', { isActive: false }), r('k', 'Kısayol', { isWorkOrderShortcut: true, shortcutOrder: 1 })];
@@ -75,5 +75,20 @@ describe('kaydırmasız karo yerleşimi', () => {
       expect(L.shown + L.hidden).toBe(n);
       expect(L.shown + (L.hidden > 0 ? 1 : 0)).toBeLessThanOrEqual(L.columns * L.rows);
     }
+  });
+});
+
+describe('Fason okutma', () => {
+  const base = { noteNo: 'N1', lineCount: 2, reviewCount: 0 } as unknown as Parameters<typeof customerGoodsTiles>[0];
+  it('düğme → tür: Fason düğmesi CUSTOMER_GOODS_SERVICE, İE oluştur bugünkü türetme', () => {
+    expect(scanWoType('CUSTOMER_GOODS')).toBe('CUSTOMER_GOODS_SERVICE');
+    expect(scanWoType('STANDARD')).toBeNull();
+  });
+  it('müşteri karosu başta; eşleşmemiş belge metni müşteri sayılmaz', () => {
+    const miss = customerGoodsTiles({ ...base, ownerUnmatched: { text: 'ACME' } } as typeof base);
+    expect(miss[0]).toMatchObject({ key: 'musteri', state: 'missing' });
+    expect(miss.filter((t) => t.key === 'musteri')).toHaveLength(1);
+    const hit = customerGoodsTiles({ ...base, ownerSuggestion: { customerId: 'c1', name: 'Gül Tekstil', matchedText: 'GUL' } } as unknown as typeof base);
+    expect(hit[0]).toMatchObject({ key: 'musteri', value: 'Gül Tekstil', state: 'found' });
   });
 });

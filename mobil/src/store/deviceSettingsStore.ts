@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { storage } from '../utils/storage';
+import { parseWoCreateKinds, WO_CREATE_KINDS_DEFAULT, type WoCreateKind } from './woCreateKinds';
 
 // =============================================================================
 // Cihaz-bazlı operatör ayarları. Sunucudan bağımsız — kamera donanım sorunu
@@ -21,6 +22,7 @@ const DOC_DESK_KEY = 'device_doc_desk';
 const DOC_DESK_CAPTURE_KEY = 'device_doc_desk_capture';
 const DOC_SCAN_ENGINE_KEY = 'device_doc_scan_engine';
 const DOC_DESK_FRAME_MS_KEY = 'device_doc_desk_frame_ms';
+const WO_CREATE_KINDS_KEY = 'device_wo_create_kinds';
 // ⚠️ 2026-08-19: kısa kesim ayarı MERKEZE taşındı (feature-flags). Cihazda artık
 // "bayrak + eşik" değil, ÜÇ DURUMLU override yaşar. Eski anahtarlar
 // (`tambur_short_cut_a1_enabled` / `..._threshold`) sahaya HİÇ ÇIKMADI (APK
@@ -188,6 +190,8 @@ interface DeviceSettingsState {
   docDeskFrameMs: number;
   /** Belge okut / tanıt çekimi (CİHAZDA: tarayıcının bu cihazda çalışıp çalışmadığı cihaza bağlı). */
   docScanEngine: DocScanEngine;
+  /** İE oluştur türleri (Seçenekler; CİHAZDA). Varsayılan yalnız STANDARD = bugünkü davranış. */
+  woCreateKinds: WoCreateKind[];
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -212,6 +216,7 @@ interface DeviceSettingsState {
   setDocDeskCaptureMode: (v: DocDeskCaptureMode) => Promise<void>;
   setDocDeskFrameMs: (v: number) => Promise<void>;
   setDocScanEngine: (v: DocScanEngine) => Promise<void>;
+  setWoCreateKinds: (v: WoCreateKind[]) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -256,10 +261,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   docDeskCaptureMode: 'tap',
   docDeskFrameMs: DOC_DESK_FRAME_MS_DEFAULT,
   docScanEngine: 'camera',
+  woCreateKinds: [...WO_CREATE_KINDS_DEFAULT],
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -278,6 +284,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(DOC_DESK_CAPTURE_KEY),
         storage.getItem(DOC_DESK_FRAME_MS_KEY),
         storage.getItem(DOC_SCAN_ENGINE_KEY),
+        storage.getItem(WO_CREATE_KINDS_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -317,6 +324,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       docDeskCaptureMode: docDeskCapture === 'auto' ? 'auto' : 'tap',
       docDeskFrameMs: parseDocDeskFrameMs(docDeskFrame),
       docScanEngine: parseDocScanEngine(docScanEngine),
+      woCreateKinds: parseWoCreateKinds(woKinds),
       isLoaded: true,
     });
   },
@@ -408,6 +416,12 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   },
 
   // Aynı desen: anahtar ANINDA dönsün diye önce state, sonra disk.
+  setWoCreateKinds: async (v) => {
+    const next = parseWoCreateKinds(v.join(','));
+    set({ woCreateKinds: next });
+    await storage.setItem(WO_CREATE_KINDS_KEY, next.join(','));
+  },
+
   setDocDeskDevice: async (v) => {
     set({ docDeskDevice: v });
     await storage.setItem(DOC_DESK_KEY, v ? 'true' : 'false');

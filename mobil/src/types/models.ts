@@ -55,6 +55,7 @@ export type WorkOrderStatus =
 export type WorkOrderType =
   | 'ORDER_PRODUCTION'
   | 'STOCK_PRODUCTION'
+  | 'CUSTOMER_GOODS_SERVICE'
   | 'SAMPLE_PRODUCTION'
   | 'REPAIR_REWORK';
 

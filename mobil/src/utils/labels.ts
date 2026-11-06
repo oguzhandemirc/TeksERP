@@ -13,6 +13,7 @@ export const WORK_ORDER_STATUS_LABEL: Record<string, string> = {
 export const WORK_ORDER_TYPE_LABEL: Record<string, string> = {
   ORDER_PRODUCTION: 'Sipariş Üretimi',
   STOCK_PRODUCTION: 'Stoğa Üretim',
+  CUSTOMER_GOODS_SERVICE: 'Fason (müşteri malı)',
 };
 
 // Sipariş durumu SEVK diliyle — panelin `orderStatusLabels`ıyla aynı ("Onaylandı" jargonu yok).

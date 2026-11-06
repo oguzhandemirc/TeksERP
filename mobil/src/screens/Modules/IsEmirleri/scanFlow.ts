@@ -10,6 +10,7 @@
 import type { ProductionRoute } from '../../../services/route.service';
 import type { ReadSummary } from '../../../services/inboundDoc.service';
 import { SCAN_ROUTE, shortcutRoutes } from '../GelenBelge/woCreate/woFromDoc';
+import type { WoCreateKind } from '../../../store/woCreateKinds';
 
 export interface TypeGroups {
   special: ProductionRoute[];
@@ -95,4 +96,17 @@ export function tileLayout(count: number, width: number, height: number, gap = 1
   const valueSize = Math.max(16, Math.min(28, Math.round(tileHeight * 0.3)));
   const labelSize = Math.max(12, Math.min(16, Math.round(tileHeight * 0.16)));
   return { columns, rows, shown, hidden: count - shown, tileHeight, valueSize, labelSize };
+}
+
+/** Alt çubuk düğme adları (tür başına ayrı düğme; her biri doğrudan okutmaya gider). */
+export const KIND_BUTTON: Record<WoCreateKind, string> = { STANDARD: 'İE oluştur', CUSTOMER_GOODS: 'Fason İE oluştur' };
+
+/** Okutma akışının İE türü: Fason düğmesi → Fason (müşteri malı); İE oluştur → null (bugünkü türetme). */
+export const scanWoType = (kind: WoCreateKind): 'CUSTOMER_GOODS_SERVICE' | null => (kind === 'CUSTOMER_GOODS' ? 'CUSTOMER_GOODS_SERVICE' : null);
+
+/** Fason önizlemesi: müşteri (malın sahibi) İLK ve büyük karo; eşleşmiş cari yoksa kırmızı "seçin" (ham belge metni müşteri değildir). */
+export function customerGoodsTiles(s: ReadSummary): PreviewTile[] {
+  const name = s.ownerSuggestion?.name ?? null;
+  const head: PreviewTile = { key: 'musteri', label: 'Müşteri (malın sahibi)', value: name ?? 'Bulunamadı — seçin', state: name ? 'found' : 'missing' };
+  return [head, ...previewTiles(s).filter((t) => t.key !== 'musteri')];
 }
