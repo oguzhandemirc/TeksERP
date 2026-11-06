@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useTabsStore } from "@/store/tabs";
 import { isCloseAllShortcut } from "@/components/layout/tabs/tab-close";
+import { closeTabsWithUndo } from "@/components/layout/tabs/close-with-undo";
 
 /**
  * Sekme klavye kısayolları (tarayıcı benzeri):
@@ -29,7 +30,7 @@ export function useTabShortcuts() {
 
       if (isCloseAllShortcut(e)) {
         e.preventDefault();
-        s.closeTabs("all");
+        closeTabsWithUndo("all");
         return;
       }
 
