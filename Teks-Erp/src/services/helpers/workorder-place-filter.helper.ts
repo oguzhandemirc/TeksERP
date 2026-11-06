@@ -5,7 +5,7 @@
 // sipariş "Nerede?" ile ortak). "Hangi aşamada" sorusu `konumIstasyon`undur; ikinci
 // seçici yok. Anahtar `buildWhereClause`tan ÖNCE okunup silinir (sızan anahtar 500).
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, StationKind, StationType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { readFilterList } from "../../utils/query-parser";
@@ -42,8 +42,33 @@ export interface PlaceOption {
   workOrderCount: number;
 }
 
+/** "Şu an nerede" istasyon süzgeci seçeneği (`filter[konumIstasyon]`); `dis` = fason (dış) istasyon. */
+export interface PlaceStationOption {
+  id: string;
+  name: string;
+  kind: StationKind;
+  dis: boolean;
+}
+
 export interface WorkOrderPlaceOptions {
   firms: PlaceOption[];
+  /** Faceted DEĞİL: süzgeçte gösterilecek istasyonlar (tablet `station:read` taşımaz; panel kuralı `stationsForLocationFilter` ile aynı). */
+  stations: PlaceStationOption[];
+}
+
+// Üretim akışı sırası (Electron `location.ts` FLOW_RANK ile aynı): KK1 → Fason → Kurşun/KK2 → Tambur → Depo.
+const FLOW_RANK: Partial<Record<StationKind, number>> = { RAW_QC: 0, PROCESS_QC: 2, TAMBUR: 3, SHIPPING: 4, OTHER: 5 };
+
+/** Pasif, rota adımı olamayan (`allowAsWorkOrderStep=false`) ve tezgah/devere istasyonu hariç — orada İE topu durmaz. */
+export async function loadLocationFilterStations(): Promise<PlaceStationOption[]> {
+  const rows = await prisma.station.findMany({
+    where: { isActive: true, allowAsWorkOrderStep: true, kind: { notIn: [StationKind.WEAVING, StationKind.WARPING] } },
+    select: { id: true, name: true, kind: true, type: true },
+  });
+  const rank = (s: (typeof rows)[number]) => (s.type === StationType.EXTERNAL ? 1 : (FLOW_RANK[s.kind] ?? 5));
+  return rows
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "tr"))
+    .map((s) => ({ id: s.id, name: s.name, kind: s.kind, dis: s.type === StationType.EXTERNAL }));
 }
 
 /**
@@ -62,7 +87,9 @@ export async function loadWorkOrderPlaceOptions(firmBase: Prisma.WorkOrderWhereI
     if (!dispatch.workOrderId) continue;
     sets.set(dispatch.subcontractorId, (sets.get(dispatch.subcontractorId) ?? new Set<string>()).add(dispatch.workOrderId));
   }
+  const stations = await loadLocationFilterStations();
   return {
+    stations,
     firms: firms
       .map((f) => ({ id: f.id, name: f.name, workOrderCount: sets.get(f.id)?.size ?? 0, isActive: f.isActive }))
       .filter((f) => f.isActive || f.workOrderCount > 0)

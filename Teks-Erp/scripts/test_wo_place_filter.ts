@@ -58,6 +58,7 @@ interface Opt {
 }
 interface Options {
   firms: Opt[];
+  stations: Array<{ id: string; name: string; kind: string; dis: boolean }>;
 }
 
 /** Controller köprüsü dahil: yanıt zarfı `{success, data}` ve durum kodu. */
@@ -266,6 +267,23 @@ async function main(): Promise<void> {
     check("where-options: firmalar sayıya göre azalan, sonra ad (0'lar sonda)", sorted);
     const shape = o.firms.every((x) => typeof x.id === "string" && typeof x.name === "string" && Number.isInteger(x.workOrderCount));
     check("where-options: biçim {firms:[{id,name,workOrderCount}]}, aşama listesi yok", shape && !("stages" in o), Object.keys(o).join(","));
+
+    // ── istasyon seçenekleri (tablet "şu an nerede" süzgeci; faceted değil) ──
+    const mkOdd = async (suffix: string, data: { kind?: "WEAVING"; isActive?: boolean; allowAsWorkOrderStep?: boolean }): Promise<string> => {
+      const s = await prisma.station.create({ data: { code: `${P}-${suffix}`, name: `${P} ${suffix}`, type: "INTERNAL", kind: data.kind ?? "OTHER", ...data }, select: { id: true } });
+      stations.push(s.id);
+      return s.id;
+    };
+    const stWeave = await mkOdd("WV", { kind: "WEAVING" });
+    const stPassive = await mkOdd("PS", { isActive: false });
+    const stNoStep = await mkOdd("NS", { allowAsWorkOrderStep: false });
+    const so = (await callWhereOptions()).body.data.stations ?? [];
+    const stIds = so.map((x) => x.id);
+    check("⭐ where-options.stations: fason (dis) + iç istasyon var, biçim {id,name,kind,dis} (makine/ham alan yok)",
+      so.find((x) => x.id === stF)?.dis === true && so.find((x) => x.id === stS1)?.dis === false && so.every((x) => Object.keys(x).sort().join(",") === "dis,id,kind,name"),
+      JSON.stringify(so.filter((x) => x.id === stF || x.id === stS1)));
+    check("⭐ where-options.stations: tezgah, pasif, rota adımı olamayan YOK", ![stWeave, stPassive, stNoStep].some((id) => stIds.includes(id)), JSON.stringify(stIds.length));
+    check("where-options.stations: akış sırası (fason, OTHER'dan önce)", stIds.indexOf(stF) < stIds.indexOf(stS1));
 
     // ── faceted: seçenek sayısı = (liste süzgeçleri − fasonFirma + o firma) liste toplamı ──
     const facet = async (q: Record<string, string>, label: string): Promise<void> => {
