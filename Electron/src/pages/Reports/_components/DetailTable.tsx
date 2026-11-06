@@ -1,4 +1,5 @@
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
+import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -18,6 +19,8 @@ interface Props<T> {
   emptyLabel?: string;
   /** Tablo max yüksekliği (px). Aşan içerik scroll. */
   maxHeight?: number;
+  /** Altta sabit toplam satırı — kolon başına bir hücre (sıra `columns` ile aynı). */
+  totalRow?: ReactNode[];
 }
 
 /**
@@ -32,6 +35,7 @@ export function DetailTable<T>({
   isLoading,
   emptyLabel = "Bu aralıkta veri yok",
   maxHeight = 480,
+  totalRow,
 }: Props<T>) {
   const table = useReactTable({
     data,
@@ -84,6 +88,15 @@ export function DetailTable<T>({
                 </TableRow>
               ))
             )}
+            {totalRow && !isLoading && table.getRowModel().rows.length > 0 ? (
+              <TableRow className="sticky bottom-0 bg-muted font-semibold">
+                {totalRow.map((cell, i) => (
+                  <TableCell key={i} className="text-xs">
+                    {cell}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ) : null}
           </TableBody>
         </Table>
       </div>
