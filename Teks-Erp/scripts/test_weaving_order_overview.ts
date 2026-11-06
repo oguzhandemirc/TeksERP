@@ -15,12 +15,17 @@
 //   §6 levent: devere kapalı → `beams: null`; açık → işe bağlı levent listesi
 //   §7 HTTP: 200 · dokuma kapalı 403 MODULE_DISABLED · izinsiz 403 · bozuk kimlik 400 · bilinmeyen 404
 //   §8 yapısal: servis paylaşılan yüklemleri çağırır, kopya yüklem yazmaz; uç detayla aynı izin kümesi
+//   §9 liste ilerlemesi (tablet Dokuma listesi): satırın `producedM`i genel bakışın top metresiyle AYNI,
+//      `openRunMachines` yalnız açık koşumun tezgahı; koşumsuz/topsuz işte boş dizi + null (0 uydurulmaz)
 //
 // NEGATİF SONDALAR (2026-10-20, koşuldu, dosyalar sha1 ile geri alındı):
 //   ① `rollsOfWeavingOrderWhere`dan `revokedAt: null` düştü → §1a + §1c + §7a ❌ (sayı ve detay birlikte
 //      kayar — §1b eşit kalır; o yüzden mutlak değer de ölçülür)
 //   ② açık koşum sorgusu `OPEN_RUN_WHERE` yerine `{ endedAt: null }` → §2a + §2b + §2d ❌
 //   ③ indirme yükleminden `revokedAt: null` düştü → §1g + §3c ❌
+//   ④ (2026-11-06) liste helper'ında `OPEN_RUN_WHERE` yerine `{ endedAt: null }` → §9e ❌ ·
+//      `rollMetersByWeavingOrder`da `rollsOfWeavingOrderWhere` yerine kopya yüklem → §8e ❌ (kovadaki geri alınmış
+//      ayrımı ikinci hat; ikisi birlikte düşerse §9a ❌ — ölçüldü 2026-11-06: 155 → 225)
 // ⚠️ DB'ye ve global ayara YAZAR → `hedefDbEngeli()` ilk adım; ayarlar `finally`de birebir geri döner.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -35,7 +40,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { factoryDayKeyUtcMidnight } from "../src/constants/time";
 import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import { invalidateFeatureFlagsCache, SETTING_KEYS } from "../src/services/system-setting.service";
-import { createWeavingOrder, getWeavingOrder } from "../src/services/weaving-order.service";
+import { createWeavingOrder, getWeavingOrder, listWeavingOrders } from "../src/services/weaving-order.service";
 import { getWeavingOrderOverview, OVERVIEW_RECENT_RUN_CAP } from "../src/services/weaving-order-overview.service";
 import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -161,6 +166,23 @@ async function serviceSections(f: Awaited<ReturnType<typeof fixture>>, now: Date
   check("§6c bağ defteri açık → açık koşumda takılı levent dizisi (boş)", a2.beamTracking && Array.isArray(a2.liveRuns.items[0]?.beams) && a2.liveRuns.items[0].beams!.length === 0);
 }
 
+async function listSection(f: Awaited<ReturnType<typeof fixture>>, now: Date): Promise<void> {
+  console.log("\n§9 — liste ilerlemesi");
+  // C'nin tek tezgahlı geçmişine T1'de geri alınmış (endedAt null) koşum — "açık" sayılırsa T1 sızar.
+  await prisma.machineRun.create({ data: { machineId: f.t1, productionLineNo: 1, weavingOrderId: f.C, startedAt: new Date(now.getTime() - 0.2 * H), revokedAt: now, revokeReason: "bekçi §9" }, select: { id: true } });
+  const list = await listWeavingOrders({ search: TAG, limit: 100 });
+  const row = (id: string) => list.data.find((r) => r.id === id);
+  const a = row(f.A);
+  const ov = (await getWeavingOrderOverview(f.A, now)).data!;
+  check("§9a ⭐ satırın üretilen metresi genel bakışın top metresiyle AYNI (155)", a?.producedM === ov.progress.rollMeters && a?.producedM === 155, String(a?.producedM));
+  check("§9b açık koşum tezgahı yalnız açık koşumdan (T1; geri alınmış T1/hat2 tekrar yazmaz, kapalı T2 girmez)",
+    a?.openRunMachines?.length === 1 && a.openRunMachines[0].id === f.t1 && a.openRunMachines[0].code === code("T1"), JSON.stringify(a?.openRunMachines));
+  const b = row(f.B);
+  check("§9c koşumsuz ∧ topsuz iş → boş dizi + null", Array.isArray(b?.openRunMachines) && b.openRunMachines.length === 0 && b.producedM === null);
+  check("§9e geri alınmış koşum açık sayılmaz (C: boş dizi)", row(f.C)?.openRunMachines?.length === 0, JSON.stringify(row(f.C)?.openRunMachines));
+  check("§9d sayfadaki üç iş de alanları taşır", [f.A, f.B, f.C].every((id) => row(id) && "producedM" in row(id)!));
+}
+
 type Yanit = { status: number; body: { data?: { progress?: { rollCount?: number } }; error?: { details?: { code?: string } }; details?: { code?: string } } };
 async function api(base: string, p: string, token: string): Promise<Yanit> {
   const r = await fetch(`${base}${p}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -212,6 +234,10 @@ function structuralSection(): void {
     /OPEN_RUN_WHERE/.test(svc) && !/\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|\$transaction/.test(svc));
   const helper = src("src/services/helpers/weaving-order-of-roll.helper.ts");
   check("§8c detayın sayacı da aynı where'i okur", /countRollsOfWeavingOrder[\s\S]*?rollsOfWeavingOrderWhere\(weavingOrderId\)/.test(helper));
+  const list = src("src/services/helpers/weaving-order-list-progress.helper.ts");
+  check("§8e liste ilerlemesi paylaşılan okuyucuları çağırır (`rollMetersByWeavingOrder` → `rollsOfWeavingOrderWhere` · `OPEN_RUN_WHERE`), yazma yok",
+    /rollMetersByWeavingOrder\(prisma, ids\)/.test(list) && /\.\.\.OPEN_RUN_WHERE/.test(list) && !/\.(create|update|upsert|delete)\w*\(|\$transaction/.test(list)
+    && /rollMetersByWeavingOrder[\s\S]*?where:\s*rollsOfWeavingOrderWhere\(weavingOrderIds\)/.test(helper));
   const route = src("src/routes/weaving-order.routes.ts");
   check("§8d uç detayla aynı izin kümesi (`weavingorder:read` + mobile:dokuma)",
     /"\/:id\/overview",\s*requireAnyPermission\("weavingorder:read", \.\.\.MOBILE_DOKUMA\)/.test(route) && /router\.use\(verifyToken, requireDokumaEnabled\)/.test(route));
@@ -256,6 +282,7 @@ async function main(): Promise<void> {
   const now = new Date();
   const f = await fixture(now);
   await serviceSections(f, now);
+  await listSection(f, now);
   await httpSection(f);
   structuralSection();
 }
