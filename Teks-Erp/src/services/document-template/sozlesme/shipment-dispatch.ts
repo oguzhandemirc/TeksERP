@@ -9,7 +9,7 @@
 // =============================================================================
 
 import type { PrintedDocSnapshot } from "../../printed-document.service";
-import { renderShipmentDispatchTables } from "../../document-render/shipment-dispatch.html";
+import { hasSackUnit, renderShipmentDispatchTables } from "../../document-render/shipment-dispatch.html";
 import { customerNameOr, resolveDocNameMode } from "../../document-render/shipment-name-mode";
 import { formatSackSeqLabel } from "../../helpers/sack-seq.helper";
 import { pickExportCode, procedureCodeForDestination } from "../../helpers/shipment-destination.helper";
@@ -232,6 +232,8 @@ function buildContext(
     }),
     ayar: {
       ...(plainJson(config) as unknown as Record<string, ContextValue>),
+      // Yalnız dökme/araba yükünde çuval listesi sayfası yok (eski yolla aynı yüklem: `hasSackUnit`).
+      sections: { ...config.sections, cuval: config.sections.cuval && hasSackUnit(sacks) },
       kolonlar: contextLayout(effective, optIn, mod.productColorSplit),
     },
     ic_acik: internalFlags(optIn),

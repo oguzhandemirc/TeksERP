@@ -15,6 +15,7 @@ import {
 } from "./invoiceDraftVisibility";
 import type { ShippingInvoiceMode } from "@/lib/shipping-flags";
 import type { DispatchListItem } from "./types";
+import { loadUnitsText } from "@/lib/load-unit";
 
 export function buildDispatchColumns(
   /**
@@ -79,23 +80,12 @@ export function buildDispatchColumns(
     {
       id: "counts",
       header: "İçerik",
-      cell: ({ row }) => {
-        const c = row.original._count;
-        // Doğrudan sevkte çuval yok — top (+ karşılanan sipariş) gösterilir.
-        return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-            {row.original.kind === "DIRECT"
-              ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
-              : row.original.manualSackCount != null
-                ? // Beyan varsa ÖNCE fiziksel adet, parantezde sistemin saydığı.
-                  // İkisi biri diğerinin yerine geçmez: 10 çuval tek kayda
-                  // yazıldığında fark meşrudur ve fark bilginin kendisidir.
-                  `${row.original.manualSackCount} çuval (${c.sacks} kayıt) · ${c.rolls} top`
-                : `${c.sacks} çuval · ${c.rolls} top`}
-            <ReturnsBadge count={c.returns} />
-          </span>
-        );
-      },
+      cell: ({ row }) => (
+        <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+          {dispatchContentText(row.original)}
+          <ReturnsBadge count={row.original._count.returns} />
+        </span>
+      ),
     },
     {
       id: "totals",
@@ -237,4 +227,17 @@ export function buildDispatchColumns(
       ),
     },
   ];
+}
+
+/**
+ * "İçerik" hücresi. Doğrudan sevkte çuval yok — top (+ sipariş). Yük birimi dili `loadUnitsText` (Sevkiyatlar listesiyle
+ * tek kaynak): dökme/araba yükünde "1 çuval" yazılmaz (prova 2026-11-06). Çuval beyanı varsa ÖNCE fiziksel adet,
+ * parantezde sistemin saydığı — fark meşrudur ve bilginin kendisidir.
+ */
+export function dispatchContentText(r: Pick<DispatchListItem, "kind" | "_count" | "manualSackCount">): string {
+  const c = r._count;
+  if (r.kind === "DIRECT") return `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`;
+  const loose = (c.carts ?? 0) + (c.bulks ?? 0);
+  if (r.manualSackCount != null && loose === 0) return `${r.manualSackCount} çuval (${c.sacks} kayıt) · ${c.rolls} top`;
+  return `${loadUnitsText(c.sacks, c.carts, c.bulks)} · ${c.rolls} top`;
 }

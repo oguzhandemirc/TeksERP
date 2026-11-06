@@ -224,6 +224,14 @@ export function loadUnitDocLabel(s: Pick<ShipmentDocSack, "code" | "packageCount
   return s.code;
 }
 
+/**
+ * Çuval listesi bu belgede anlamlı mı: en az bir ÇUVAL (unitKind yok) varsa. Yalnız dökme/araba yükünde ayrı
+ * "Çuval Listesi" sayfası basılmaz — bilgisi Ürün + Çeki listesinde zaten var (prova 2026-11-06). Eski snapshot = çuval.
+ */
+export function hasSackUnit(sacks: readonly { unitKind?: unknown }[]): boolean {
+  return sacks.length === 0 || sacks.some((s) => s.unitKind == null);
+}
+
 interface ShipmentDocCeki {
   sackCode: string;
   /** Sevkiyat içi sıra (2026-09-22) — eski snapshot'ta YOK; `meta.sackSeq` ile çizilir. */
@@ -620,7 +628,7 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
     ? { ...cfg.columns?.cuval, shown: [...(cfg.columns?.cuval?.shown ?? []), ...forcedShown] }
     : cfg.columns?.cuval;
 
-  if (listSectionOn(cfg, meta, "cuval")) {
+  if (listSectionOn(cfg, meta, "cuval") && hasSackUnit(sacks)) {
     add<ShipmentDocSack>({
       key: "cuval",
       caption: L.cuvalCaption,
