@@ -26,6 +26,7 @@ import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { ShipCell } from "./OrderWhereCells";
 // Miktar TEK biçimle (liste "Sevk" cümlesiyle aynı): binlik grup, en çok 2 ondalık.
 import { fmtNum } from "./order-where-text";
+import { orderMetreParts, orderMetreProgress } from "./order-cell-text";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
@@ -139,6 +140,8 @@ export function OrderDetailSheet({
   const totalQty = activeLines
     .filter((l) => isMeasuredUnit(l.unit))
     .reduce((acc, l) => acc + Number(l.quantity), 0);
+  const metreProgress = order ? orderMetreProgress(order) : null;
+  const metreParts = order ? orderMetreParts(order) : null;
   const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
   const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
   const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
@@ -239,22 +242,17 @@ export function OrderDetailSheet({
               </Card>
             </div>
 
-            {totalQty > 0 && (
+            {/* Listedeki "Metre" sütunuyla aynı kaynak (`orderMetreParts`). */}
+            {metreParts && metreProgress && (
               <Card>
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Sevk İlerlemesi</span>
                     <span className="font-medium tabular-nums">
-                      {fmtNum(order.shippedQty)} / {fmtNum(totalQty)} m
-                      <span className="ml-1 text-muted-foreground">
-                        (%{Math.round((order.shippedQty / totalQty) * 100)})
-                      </span>
+                      {metreParts.qty} <span className="text-muted-foreground">({metreParts.pct})</span>
                     </span>
                   </div>
-                  <AnimatedProgress
-                    value={(order.shippedQty / totalQty) * 100}
-                    className="mt-2 h-1.5"
-                  />
+                  <AnimatedProgress value={metreProgress.pct} className="mt-2 h-1.5" />
                 </CardContent>
               </Card>
             )}

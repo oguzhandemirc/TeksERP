@@ -91,6 +91,10 @@ describe("sipariş miktarı tek biçim", () => {
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "OrderDetailSheet.tsx"), "utf8");
     expect(src).not.toMatch(/Qty\.toLocaleString|quantity\.toLocaleString/);
-    expect(src).toMatch(/\{fmtNum\(order\.shippedQty\)\} \/ \{fmtNum\(totalQty\)\} m/);
+    // Sevk İlerlemesi listedeki "Metre" ile aynı kaynaktan; o kaynak da fmtNum ile biçimler.
+    expect(src).toMatch(/\{metreParts\.qty\}/);
+    expect(src).toMatch(/orderMetreParts\(order\)/);
+    const cell = readFileSync(resolve(__dirname, "order-cell-text.ts"), "utf8");
+    expect(cell).toMatch(/qty: `\$\{fmtNum\(p\.shipped\)\} \/ \$\{fmtNum\(p\.requested\)\} m`/);
   });
 });
