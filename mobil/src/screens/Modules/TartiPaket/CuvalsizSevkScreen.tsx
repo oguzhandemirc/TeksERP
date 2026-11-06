@@ -3,8 +3,6 @@ import { View, ScrollView, StyleSheet, useWindowDimensions } from 'react-native'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../../components/ScreenChrome';
-import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
-import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
@@ -13,6 +11,7 @@ import { DestinationLockRow } from './DestinationLockRow';
 import { useCuvalsizSevk } from './useCuvalsizSevk';
 import { totalMeters } from './looseLoad';
 import { BottomBar, CartLabelModal, LoadList, LoadModePicker, LoadSummary, VehicleFields } from './CuvalsizSevkView';
+import { LooseScanner } from './LooseScanner';
 
 // =============================================================================
 // Çuvalsız Sevk — toplar çuvala konmadan kamyon kasasına (dökme) ya da top taşıma
@@ -83,27 +82,7 @@ export default function CuvalsizSevkScreen() {
         />
       </View>
 
-      {/* Çok top okutan ekran: trigger="tap" (komşu top istemeden girmesin); geri bildirim signalScan'den. */}
-      <BarcodeScannerModal
-        visible={scanOpen}
-        onDismiss={() => setScanOpen(false)}
-        continuous
-        trigger="tap"
-        captureHaptic={false}
-        onScan={s.scan}
-        title={s.mode === 'CART' && s.activeCart ? `Araba ${s.activeCart} — top okut` : 'Dökme — top okut'}
-        flash={s.scanFb.flash}
-        footer={
-          <ScannerRollStrip
-            rolls={s.rolls.map((r) => ({ barcode: r.barcode, qty: r.qty, width: r.width }))}
-            totalQty={totalMeters(s.rolls)}
-            onRemove={s.removeRoll}
-            rejects={s.scanFb.rejects}
-            onDismissReject={s.scanFb.dismissReject}
-            duplicateBarcode={s.scanFb.duplicateBarcode}
-          />
-        }
-      />
+      <LooseScanner visible={scanOpen} onDismiss={() => setScanOpen(false)} state={s} />
       {s.ambiguousModal}
       <CartLabelModal visible={cartOpen} onDismiss={() => setCartOpen(false)} recent={recentCarts} onChoose={s.chooseCart} />
       <CariHoldBlockedScreen block={s.holdBlock} onClose={s.closeHold} />

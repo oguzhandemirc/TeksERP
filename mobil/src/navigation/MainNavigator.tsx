@@ -153,6 +153,7 @@ export default function MainNavigator() {
       />
       <Stack.Screen
         name="CuvalsizSevk"
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni
         getComponent={() => require('../screens/Modules/TartiPaket/CuvalsizSevkScreen').default}
       />
       <Stack.Screen

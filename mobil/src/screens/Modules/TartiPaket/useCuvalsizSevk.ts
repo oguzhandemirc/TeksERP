@@ -20,117 +20,64 @@ import {
   type LooseRoll,
 } from './looseLoad';
 
-/** Çuvalsız sevk ekranının durumu + okutma + gönderim (ekran yalnız çizer). */
-export function useCuvalsizSevk(customerId: string, branchId: string | null, onDone: () => void) {
-  const qc = useQueryClient();
-  const [mode, setModeState] = useState<LoadMode>('BULK');
-  const [activeCart, setActiveCart] = useState<string | null>(null);
-  const [rolls, setRolls] = useState<LooseRoll[]>([]);
-  const rollsRef = useRef<LooseRoll[]>([]);
-  const [plateNumber, setPlateNumber] = useState('');
-  const [driverName, setDriverName] = useState('');
-  const [picked, setPicked] = useState<ShipmentDestination | null>(null);
-  const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
+/** Okutma: sıralı kuyruk + ön kontrol + geri bildirim. Liste `rollsRef` üzerinden okunur (yarışsız). */
+function useLooseScan(opts: {
+  mode: LoadMode;
+  activeCart: string | null;
+  rollsRef: React.MutableRefObject<LooseRoll[]>;
+  commit: (next: LooseRoll[]) => void;
+}) {
   const scanFb = useScanFeedback();
-  const attempt = useAttemptToken();
-
-  const lockQ = useQuery({
-    queryKey: destinationLockQueryKey(customerId, branchId),
-    queryFn: () => packingService.getDestinationLock(customerId, branchId),
-    staleTime: 10_000,
-  });
-  const dest = resolveDestination({ lock: lockQ.data, picked });
-
-  const commit = (next: LooseRoll[]) => {
-    rollsRef.current = next;
-    setRolls(next);
-    attempt.renew(); // içerik değişti → yeni mantıksal deneme
-  };
-
-  const setMode = (m: LoadMode) => {
-    setModeState(m);
-    commit(applyMode(rollsRef.current, m, activeCart));
-  };
-
-  const chooseCart = (raw: string): boolean => {
-    const label = normalizeCartLabel(raw);
-    if (!label) return false;
-    setActiveCart(label);
-    return true;
-  };
-
   // Okumalar SIRAYLA işlenir — art arda iki okuma aynı topu iki kez eklemesin.
   const queue = useRef<Promise<void>>(Promise.resolve());
-  const scan = (code: string) => {
-    const barcode = code.trim();
-    if (!barcode) return;
-    queue.current = queue.current.then(() => handleScan(barcode));
-  };
 
   const handleScan = async (barcode: string): Promise<void> => {
-    if (mode === 'CART' && !activeCart) {
+    if (opts.mode === 'CART' && !opts.activeCart) {
       scanFb.pushRejects([{ barcode, reason: 'Önce araba no girin' }]);
       return;
     }
     try {
-      const res = await packingService.locateRoll(barcode);
-      const r = res.data;
-      const verdict = checkScannedRoll(r, rollsRef.current.map((x) => x.id));
+      const r = (await packingService.locateRoll(barcode)).data;
+      const verdict = checkScannedRoll(r, opts.rollsRef.current.map((x) => x.id));
       if (!verdict.ok) {
         if (verdict.duplicate) scanFb.flashDuplicate(r.barcode);
         else scanFb.pushRejects([{ barcode: r.barcode, reason: verdict.reason }]);
         return;
       }
       signalScan('accept');
-      commit([
-        ...rollsRef.current,
-        {
-          id: r.id,
-          barcode: r.barcode,
-          itemName: r.item?.name ?? '—',
-          colorName: r.color?.name ?? null,
-          width: r.width,
-          qty: Number(r.currentQty),
-          cartLabel: mode === 'CART' ? activeCart : null,
-        },
-      ]);
+      const cartLabel = opts.mode === 'CART' ? opts.activeCart : null;
+      const item = { id: r.id, barcode: r.barcode, itemName: r.item?.name ?? '—', colorName: r.color?.name ?? null };
+      opts.commit([...opts.rollsRef.current, { ...item, width: r.width, qty: Number(r.currentQty), cartLabel }]);
     } catch (e) {
       if (ambiguous.intercept(e)) return;
-      const msg = (e as { message?: string })?.message ?? 'Top bulunamadı';
-      scanFb.pushRejects([{ barcode, reason: msg }]);
+      scanFb.pushRejects([{ barcode, reason: (e as { message?: string })?.message ?? 'Top bulunamadı' }]);
     }
   };
+  const scan = (code: string) => {
+    const barcode = code.trim();
+    if (barcode) queue.current = queue.current.then(() => handleScan(barcode));
+  };
   const ambiguous = useAmbiguousScanPicker(scan);
+  return { scan, scanFb, ambiguousModal: ambiguous.modal };
+}
 
-  const removeRoll = (barcode: string) => commit(rollsRef.current.filter((r) => r.barcode !== barcode));
-  const moveRollToActiveCart = (id: string) =>
-    activeCart && commit(rollsRef.current.map((r) => (r.id === id ? { ...r, cartLabel: activeCart } : r)));
-
-  const blockReason =
-    validateLoad(mode, rolls) ??
-    (lockQ.data?.quickShipBlockedReason || null) ??
-    (dest.needsPick ? 'Sevk yönünü seçin (Yurtiçi / Yurtdışı)' : null);
-
-  const submitMut = useMutation({
+/** Gönderim: tek `from-rolls` çağrısı; yük açıklaması irsaliye notuna ("Dökme – 12 top"). */
+function useLooseSubmit(opts: {
+  customerId: string;
+  onDone: () => void;
+  build: () => Omit<Parameters<typeof packingService.createShipmentFromRolls>[0], 'clientToken'>;
+}) {
+  const qc = useQueryClient();
+  const attempt = useAttemptToken();
+  const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
+  const mut = useMutation({
     mutationFn: async () => {
-      const groups = mode === 'BULK' ? [{ label: null, n: rolls.length }] : groupByCart(rolls).map((g) => ({ label: g.label, n: g.rolls.length }));
-      const created = await packingService.createShipmentFromRolls({
-        rollIds: rolls.map((r) => r.id),
-        customerId,
-        branchId,
-        destination: dest.destination ?? undefined,
-        ...(dest.chosen ? { destinationChosen: true as const } : {}),
-        plateNumber: plateNumber.trim() || null,
-        driverName: driverName.trim() || null,
-        dispatchNote: groups.map((g) => loadLine(mode, g.label, g.n)).join(' · '),
-        clientToken: attempt.token(),
-      });
+      const created = await packingService.createShipmentFromRolls({ ...opts.build(), clientToken: attempt.token() });
       return { ...created.data, warnings: created.warnings ?? [] };
     },
     onSuccess: (data) => {
       attempt.onSuccess();
-      signalScan('accept');
-      invalidateAfterShipment(qc, customerId);
+      invalidateAfterShipment(qc, opts.customerId);
       Toast.show({
         type: 'success',
         text1: data.dispatched ? 'Sevk edildi' : 'Sevkiyat kuruldu — Sevk Çıkışı’ndan onaylayın',
@@ -139,7 +86,7 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
       if (data.warnings.length > 0) {
         Toast.show({ type: 'info', text1: 'Dikkat', text2: data.warnings.join(' · '), visibilityTime: 8000 });
       }
-      onDone();
+      opts.onDone();
     },
     onError: (e: Error) => {
       attempt.onFailure(e);
@@ -147,18 +94,72 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
       showScreenError(e, 'Sevk edilemedi');
     },
   });
+  // İçerik değişince yeni mantıksal deneme (sonuç yolunda değil).
+  const renew = () => attempt.renew();
+  return { submit: () => mut.mutate(), submitting: mut.isPending, holdBlock, closeHold: () => setHoldBlock(null), renew };
+}
+
+/** Çuvalsız sevk ekranının durumu (ekran yalnız çizer). */
+export function useCuvalsizSevk(customerId: string, branchId: string | null, onDone: () => void) {
+  const [mode, setModeState] = useState<LoadMode>('BULK');
+  const [activeCart, setActiveCart] = useState<string | null>(null);
+  const [rolls, setRolls] = useState<LooseRoll[]>([]);
+  const rollsRef = useRef<LooseRoll[]>([]);
+  const [plateNumber, setPlateNumber] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [picked, setPicked] = useState<ShipmentDestination | null>(null);
+  const lockQ = useQuery({
+    queryKey: destinationLockQueryKey(customerId, branchId),
+    queryFn: () => packingService.getDestinationLock(customerId, branchId),
+    staleTime: 10_000,
+  });
+  const dest = resolveDestination({ lock: lockQ.data, picked });
+
+  const groups = groupByCart(rolls);
+  const sub = useLooseSubmit({
+    customerId,
+    onDone,
+    build: () => ({
+      rollIds: rolls.map((r) => r.id),
+      customerId,
+      branchId,
+      destination: dest.destination ?? undefined,
+      ...(dest.chosen ? { destinationChosen: true as const } : {}),
+      plateNumber: plateNumber.trim() || null,
+      driverName: driverName.trim() || null,
+      dispatchNote: (mode === 'BULK' ? [loadLine('BULK', null, rolls.length)] : groups.map((g) => loadLine('CART', g.label, g.rolls.length))).join(' · '),
+    }),
+  });
+  const commit = (next: LooseRoll[]) => {
+    rollsRef.current = next;
+    setRolls(next);
+    sub.renew(); // içerik değişti → yeni mantıksal deneme
+  };
+  const scanner = useLooseScan({ mode, activeCart, rollsRef, commit });
+
+  const blockReason =
+    validateLoad(mode, rolls) ??
+    (lockQ.data?.quickShipBlockedReason || null) ??
+    (dest.needsPick ? 'Sevk yönünü seçin (Yurtiçi / Yurtdışı)' : null);
 
   return {
     mode,
-    setMode,
+    setMode: (m: LoadMode) => {
+      setModeState(m);
+      commit(applyMode(rollsRef.current, m, activeCart));
+    },
     activeCart,
-    chooseCart,
+    chooseCart: (raw: string): boolean => {
+      const label = normalizeCartLabel(raw);
+      if (label) setActiveCart(label);
+      return !!label;
+    },
     rolls,
-    groups: groupByCart(rolls),
-    scan,
-    scanFb,
-    removeRoll,
-    moveRollToActiveCart,
+    groups,
+    ...scanner,
+    removeRoll: (barcode: string) => commit(rollsRef.current.filter((r) => r.barcode !== barcode)),
+    moveRollToActiveCart: (id: string) =>
+      activeCart && commit(rollsRef.current.map((r) => (r.id === id ? { ...r, cartLabel: activeCart } : r))),
     plateNumber,
     setPlateNumber,
     driverName,
@@ -167,11 +168,7 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
     picked,
     setPicked,
     blockReason,
-    submit: () => submitMut.mutate(),
-    submitting: submitMut.isPending,
-    holdBlock,
-    closeHold: () => setHoldBlock(null),
-    ambiguousModal: ambiguous.modal,
+    ...sub,
   };
 }
 
