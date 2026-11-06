@@ -1,6 +1,6 @@
 // K27 BLOCK: İE kaydı 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO` → aynı (sahip, belge no) belgesi kısayol kartıyla gösterilir.
 // Sorgu düşerse / eski sunucu → null = bugünkü hata satırı. "Yine de yeni kayıt aç" yok (BLOCK fabrika politikası).
-// Kopya taslak SİLİNMEZ, iptal de edilmez: DRAFT iptal yolu yok (1e kararı 2026-11-06) — taslak olduğu gibi kalır.
+// Kopya taslak KENDİLİĞİNDEN silinmez (1e kararı 2026-11-06); eş yarım taslaksa kart operatöre "Taslağı iptal et" sunar.
 import type { InboundDocApi, SameDocumentMatch } from '../../../../services/inboundDoc.service';
 
 export const DUPLICATE_DOC_NO_BLOCK = 'DELIVERY_NOTE_DUPLICATE_DOC_NO';

@@ -1,7 +1,6 @@
 // Gelen belge listesi — Kumaş Stoğu ile aynı ortak DataTable (tam genişlik, yapışkan başlık, seçim çubuğu,
-// sonsuz kaydırma + durum altlığı). Satır tıkı detaya gider; sağ tık: Aç / Sil (taslak değilse pasif + neden).
-// Toplu ve tekil "Sil" AYNI önizleme → onay akışına (BulkDeleteNotesDialog) gider; ayrı silme yolu yok.
-import { useState } from "react";
+// sonsuz kaydırma + durum altlığı). Satır tıkı detaya gider; sağ tık: Aç / Taslağı iptal et (taslak değilse pasif + neden).
+// Toplu, sağ tık ve satır sonu düğmesi AYNI önizleme → onay akışına (BulkDeleteNotesDialog) gider; ayrı silme yolu yok.
 import type { Table } from "@tanstack/react-table";
 import { Trash2 } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -24,6 +23,9 @@ interface Props {
   onOpen: (id: string) => void;
   /** `gelen-belge:write` — seçim kutuları, "Seçilenleri sil" ve sağ tık "Sil". */
   canDelete: boolean;
+  /** Silme/iptal önizlemesine giden kimlikler — sayfada tutulur ki satır sonu düğmesi (kolon) da açabilsin. */
+  deleteIds: string[] | null;
+  onDeleteIdsChange: (ids: string[] | null) => void;
 }
 
 const blockedReason = (r: DeliveryNoteHeader) => DELETE_BLOCK_HINT[r.status];
@@ -35,20 +37,19 @@ function DeleteMenuItem({ note, onDelete }: { note: DeliveryNoteHeader; onDelete
       <ContextMenuItem disabled title={hint} data-testid="note-menu-delete">
         <Trash2 />
         <span className="flex flex-col">
-          Sil<span className="text-xs text-muted-foreground">{hint}</span>
+          Taslağı iptal et<span className="text-xs text-muted-foreground">{hint}</span>
         </span>
       </ContextMenuItem>
     );
   }
   return (
     <ContextMenuItem className="text-destructive" onSelect={() => onDelete([note.id])} data-testid="note-menu-delete">
-      <Trash2 /> Sil
+      <Trash2 /> Taslağı iptal et
     </ContextMenuItem>
   );
 }
 
-export function NoteListTable({ table, isLoading, isError, onRetry, pagination, pathOf, onOpen, canDelete }: Props) {
-  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+export function NoteListTable({ table, isLoading, isError, onRetry, pagination, pathOf, onOpen, canDelete, deleteIds, onDeleteIdsChange: setDeleteIds }: Props) {
   return (
     <>
       <DataTable<DeliveryNoteHeader>

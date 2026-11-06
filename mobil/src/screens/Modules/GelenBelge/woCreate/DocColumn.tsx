@@ -18,7 +18,7 @@ export default function DocColumn({ u, openRequest }: { u: FormModel; openReques
   if (row) {
     return (
       <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj') || u.partyGramaj}
-        variant="single" onReread={u.okut} openRequest={openRequest} partyPlan={u.partyPlan} />
+        variant="single" onReread={u.okut} onDraftCancelled={u.dropDoc} openRequest={openRequest} partyPlan={u.partyPlan} />
     );
   }
   return (

@@ -64,6 +64,17 @@ function sectionBlocks(totalsDeclared: unknown): Array<Record<string, unknown> &
     !!b && typeof b === "object" && typeof (b as { blockNo?: unknown }).blockNo === "number" && ("batchNo" in b || "orderNo" in b || "topCount" in b));
 }
 
+/** Parti sayılan bloklar (bölüm beyanı + beyan varken satırı olan bloklar) — `noteParties` ile sayaçların TEK kaynağı. */
+export function partyBlockNos(lines: ReadonlyArray<{ blockNo: number }>, totalsDeclared: unknown): number[] {
+  const decl = new Set(sectionBlocks(totalsDeclared).map((b) => b.blockNo));
+  return [...new Set([...decl, ...(decl.size ? lines.map((l) => l.blockNo) : [])])].sort((a, b) => a - b);
+}
+
+/** Kullanıcıya söylenen parti sayısı: bölümlü belgede bölüm sayısı, bölümsüz satırlı belgede 1, satırsız belgede 0. */
+export function partyCount(lines: ReadonlyArray<{ blockNo: number }>, totalsDeclared: unknown): number {
+  return partyBlockNos(lines, totalsDeclared).length || (lines.length > 0 ? 1 : 0);
+}
+
 /**
  * Parti listesi: bölüm beyanı olan bloklar + satırı olan bloklar (birleşik, blok sırasıyla). Tek bölümlü/bölümsüz belgede 0–1 parti.
  * `pages`: belgenin beyan ettiği sayfa sayısı ve taranan sayfalar → eksik sayfa uyarısı belge düzeyinde.
@@ -72,7 +83,7 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
   const decl = new Map(sectionBlocks(totalsDeclared).map((b) => [b.blockNo, b]));
   const byBlock = new Map<number, PartyLineInput[]>();
   for (const l of lines) byBlock.set(l.blockNo, [...(byBlock.get(l.blockNo) ?? []), l]);
-  const blockNos = [...new Set([...decl.keys(), ...(decl.size ? byBlock.keys() : [])])].sort((a, b) => a - b);
+  const blockNos = partyBlockNos(lines, totalsDeclared);
   const parties = blockNos.map((blockNo): NoteParty => {
     const d = decl.get(blockNo);
     const ls = byBlock.get(blockNo) ?? [];

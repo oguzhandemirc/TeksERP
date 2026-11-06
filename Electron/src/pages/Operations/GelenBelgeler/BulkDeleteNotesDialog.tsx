@@ -45,7 +45,8 @@ function PreviewRow({ item, checked, onToggle }: { item: BulkDeletePreviewItem; 
         {item.senderDocNo ? ` · ${item.senderDocNo}` : ""}
       </span>
       <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
-        {item.lineCount} satır · {item.scanCount} sayfa
+        {item.lineCount} satır · {item.partyCount != null && `${item.partyCount} parti · `}
+        {item.scanCount} sayfa
       </span>
     </label>
   );
@@ -77,8 +78,13 @@ interface BodyProps {
   toggle: (id: string) => void;
 }
 
+/** Seçilenlerin parti toplamı; bir kayıt bile sayı taşımıyorsa (eski sunucu) toplam yazılmaz — eksik toplam yanıltır. */
+const partyTotal = (items: BulkDeletePreviewItem[]): number | null =>
+  items.every((i) => i.partyCount != null) ? items.reduce((s, i) => s + (i.partyCount ?? 0), 0) : null;
+
 /** Önizleme gövdesi — özet şeridi, kayıt başına seçilebilir taslaklar, silinmeyecekler kutusu. */
 function PreviewBody({ loading, error, deletable, blocked, chosen, excluded, toggle }: BodyProps) {
+  const parties = partyTotal(chosen);
   return (
     <>
         {loading ? (
@@ -93,6 +99,11 @@ function PreviewBody({ loading, error, deletable, blocked, chosen, excluded, tog
             <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="bulk-delete-summary">
               <strong>{chosen.length}</strong> taslak silinecek —{" "}
               <strong>{chosen.reduce((s, i) => s + i.lineCount, 0)}</strong> satır,{" "}
+              {parties != null && (
+                <>
+                  <strong>{parties}</strong> parti,{" "}
+                </>
+              )}
               <strong>{chosen.reduce((s, i) => s + i.scanCount, 0)}</strong> sayfa fotoğrafı çözülecek.
             </div>
             {deletable.length > 0 && (
@@ -111,6 +122,8 @@ function PreviewBody({ loading, error, deletable, blocked, chosen, excluded, tog
 
 export function BulkDeleteNotesDialog({ ids, onOpenChange, onDone }: Props) {
   const open = !!ids && ids.length > 0;
+  // Tek kayıt (satır sonu düğmesi / sağ tık) operatörün diliyle "taslağı iptal et"; çoklu seçim "sil" kalır.
+  const single = ids?.length === 1;
   const qc = useQueryClient();
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const preview = useQuery({
@@ -151,7 +164,7 @@ export function BulkDeleteNotesDialog({ ids, onOpenChange, onDone }: Props) {
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Trash2 className="h-5 w-5" /> Seçilen taslakları sil
+            <Trash2 className="h-5 w-5" /> {single ? "Taslağı iptal et" : "Seçilen taslakları sil"}
           </DialogTitle>
           <DialogDescription>
             Yalnız taslak silinir; satırları kalıcı gider, geri alınamaz. Sayfa fotoğrafları silinmez, yeni belgede
@@ -168,7 +181,7 @@ export function BulkDeleteNotesDialog({ ids, onOpenChange, onDone }: Props) {
           </Button>
           <Button variant="destructive" className="gap-1.5" onClick={() => apply.mutate()} disabled={apply.isPending || preview.isLoading || chosen.length === 0}>
             {apply.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {chosen.length} taslağı sil
+            {single ? "Taslağı iptal et" : `${chosen.length} taslağı sil`}
           </Button>
         </DialogFooter>
       </DialogContent>

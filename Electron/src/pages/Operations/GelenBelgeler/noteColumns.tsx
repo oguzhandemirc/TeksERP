@@ -1,8 +1,10 @@
 // Gelen belge listesi sütunları (DataTable). Sıralama SUNUCUDA sabit (kayıt anı, yeni üstte) — başlıklar sıralamaz.
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatFactory } from "@/lib/factory-time";
+import { FileX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
+import { Button } from "@/components/ui/button";
+import { isDeletable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
 import type { DeliveryNoteHeader } from "./types";
 
 export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
@@ -41,3 +43,28 @@ export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
     cell: ({ row }) => <Badge variant={NOTE_STATUS_VARIANT[row.original.status]}>{NOTE_STATUS_LABEL[row.original.status]}</Badge>,
   },
 ];
+
+/** Satır sonu "Taslağı iptal et" (yalnız DRAFT): sağ tık menüsünü bilmeyen kullanıcı da yarım taslağı görüp kaldırır.
+ *  Tıklama satır tıkına (detaya git) kabarmaz; onay önizlemeli silme diyaloğundadır. */
+export function cancelDraftColumn(onCancel: (id: string) => void): ColumnDef<DeliveryNoteHeader> {
+  return {
+    id: "actions", // dışa aktarılmaz (export-kolon-degeri bekçisinin eylem kolonu kimliği)
+    header: "",
+    enableHiding: false,
+    cell: ({ row }) =>
+      isDeletable(row.original.status) ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 whitespace-nowrap border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel(row.original.id);
+          }}
+          data-testid="note-row-cancel-draft"
+        >
+          <FileX className="h-3.5 w-3.5" /> Taslağı iptal et
+        </Button>
+      ) : null,
+  };
+}

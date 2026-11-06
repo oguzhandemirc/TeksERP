@@ -561,11 +561,11 @@ const BulkDeleteBody = z.strictObject({
  * /api/gelen-belge/irsaliyeler/toplu-sil/onizleme:
  *   post:
  *     tags: [Gelen belge]
- *     summary: Toplu taslak silme ÖNİZLEMESİ — seçilen her belge için silinebilir mi + Türkçe nedeni, satır/sayfa sayısı; YAZMAZ
+ *     summary: Toplu taslak silme ÖNİZLEMESİ — seçilen her belge için silinebilir mi + Türkçe nedeni, satır/parti/sayfa sayısı; YAZMAZ
  *     security: [{ bearerAuth: [] }]
  *     requestBody: { content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string, format: uuid }, maxItems: 200 } } } } } }
  *     responses:
- *       200: { description: "items[] (deletable, code, reason, lineCount, scanCount) + summary" }
+ *       200: { description: "items[] (deletable, code, reason, lineCount, partyCount, scanCount) + summary" }
  *       400: { description: Boş/200'den uzun ya da geçersiz kimlik }
  * /api/gelen-belge/irsaliyeler/toplu-sil:
  *   post:

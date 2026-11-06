@@ -19,6 +19,11 @@ export function showsApprovalCard(d: InboundNoteDetail | null | undefined): d is
   return !!d && d.perDocument !== undefined && OPEN_STATUSES.has(d.status);
 }
 
+/** "Taslağı iptal et" görünür mü: detay yoksa (okunmadı / izin yok) sunucu karar verir; detay varsa yalnız DRAFT. */
+export function showsDraftCancel(d: { status: string } | null | undefined): boolean {
+  return !d || d.status === 'DRAFT';
+}
+
 export type ApprovalAction = 'APPROVE' | 'SAVE_DRAFT';
 
 export interface MeterChoice {
