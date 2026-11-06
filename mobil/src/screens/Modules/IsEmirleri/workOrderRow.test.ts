@@ -1,4 +1,4 @@
-import { activeFilterCount, batchText, buildListQuery, customerText, DEFAULT_FILTERS, fabricText, locationBadge, PAGE_SIZE, rollMeterText, type WorkOrderLocation } from './workOrderRow';
+import { activeFilterCount, batchText, buildListQuery, customerText, DEFAULT_FILTERS, emptyStateFor, fabricText, locationBadge, PAGE_SIZE, rollMeterText, type WorkOrderLocation } from './workOrderRow';
 import { stationToneFor } from '../../../theme/stationTone';
 
 const st = (over: Partial<WorkOrderLocation['istasyonlar'][number]> = {}) => ({
@@ -68,5 +68,29 @@ describe('buildListQuery — süzme sunucuda', () => {
   it('sayfa boyu 30–50 arası', () => {
     expect(PAGE_SIZE).toBeGreaterThanOrEqual(30);
     expect(PAGE_SIZE).toBeLessThanOrEqual(50);
+  });
+});
+
+describe('emptyStateFor — boş liste başlığı + çıkış eylemi', () => {
+  it('varsayılan "Açık" süzgeci: "henüz yok" DEMEZ, tüm durumları önerir', () => {
+    const e = emptyStateFor(DEFAULT_FILTERS);
+    expect(e.title).toBe('"Açık" durumunda terbiye iş emri yok');
+    expect(e.action).toBe('showAllStatuses');
+  });
+
+  it('Tümü + süzgeçsiz: gerçekten hiç kayıt yok, eylem yok', () => {
+    const e = emptyStateFor({ ...DEFAULT_FILTERS, status: 'ALL' });
+    expect(e.title).toBe('Henüz terbiye iş emri yok');
+    expect(e.action).toBeNull();
+  });
+
+  it('arama / istasyon / tarih daraltması: süzgeçleri temizle önerir', () => {
+    expect(emptyStateFor({ ...DEFAULT_FILTERS, search: 'ab' }).action).toBe('clearFilters');
+    expect(emptyStateFor({ ...DEFAULT_FILTERS, status: 'ALL', stationId: 's1' }).action).toBe('clearFilters');
+    expect(emptyStateFor({ ...DEFAULT_FILTERS, range: { from: new Date(), to: new Date() } }).action).toBe('clearFilters');
+  });
+
+  it('tek harflik arama daraltma sayılmaz (sunucuya gitmez)', () => {
+    expect(emptyStateFor({ ...DEFAULT_FILTERS, search: 'a' }).action).toBe('showAllStatuses');
   });
 });

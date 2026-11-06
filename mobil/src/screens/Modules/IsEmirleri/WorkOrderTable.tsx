@@ -12,7 +12,7 @@ import { QUERY_PROBLEM_TEXT, type QueryProblem } from '../../../utils/queryState
 import { WORK_ORDER_STATUS_COLOR, WORK_ORDER_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { visibleDefs, type ColumnDef, type ColumnKey } from './columns';
-import { batchText, customerText, fabricText, locationBadge, rollMeterText, type WorkOrderListRow } from './workOrderRow';
+import { batchText, customerText, fabricText, locationBadge, rollMeterText, type EmptyAction, type WorkOrderListRow } from './workOrderRow';
 
 export const WIDE_MIN = 720;
 
@@ -21,14 +21,20 @@ interface Props {
   visible: ColumnKey[];
   loading: boolean;
   problem: QueryProblem | null;
-  filtered: boolean;
+  empty: { title: string; text: string; action: EmptyAction };
   refreshing: boolean;
   fetchingMore: boolean;
   onEndReached: () => void;
   onRefresh: () => void;
   onRetry: () => void;
   onOpen: (id: string) => void;
+  onEmptyAction: (a: Exclude<EmptyAction, null>) => void;
 }
+
+const EMPTY_ACTION_LABEL: Record<Exclude<EmptyAction, null>, { label: string; icon: string }> = {
+  clearFilters: { label: 'Süzgeçleri temizle', icon: 'filter-remove-outline' },
+  showAllStatuses: { label: 'Tüm durumları göster', icon: 'format-list-checks' },
+};
 
 export default function WorkOrderTable(p: Props) {
   const wide = useWindowDimensions().width >= WIDE_MIN;
@@ -55,8 +61,13 @@ export default function WorkOrderTable(p: Props) {
     return (
       <View style={styles.center} testID="ie-liste-bos">
         <Icon source="clipboard-search-outline" size={52} color={colors.textMuted} />
-        <Text style={styles.centerTitle}>{p.filtered ? 'Bu süzgece uyan kayıt yok' : `Henüz ${TERIM.terbiyeIsEmri.tekilKucuk} yok`}</Text>
-        <Text style={styles.centerText}>{p.filtered ? 'Aramayı ya da süzgeçleri değiştirin.' : 'Alttaki "Okut" ile belgeden açabilirsiniz.'}</Text>
+        <Text style={styles.centerTitle}>{p.empty.title}</Text>
+        <Text style={styles.centerText}>{p.empty.text}</Text>
+        {p.empty.action && (
+          <Button mode="outlined" onPress={() => p.empty.action && p.onEmptyAction(p.empty.action)} contentStyle={styles.bigBtn} icon={EMPTY_ACTION_LABEL[p.empty.action].icon} testID="ie-liste-bos-eylem">
+            {EMPTY_ACTION_LABEL[p.empty.action].label}
+          </Button>
+        )}
       </View>
     );
   }
@@ -166,7 +177,7 @@ const styles = StyleSheet.create({
   centerText: { fontSize: typography.size.base, color: colors.textSecondary, textAlign: 'center' },
   bigBtn: { minHeight: 56, paddingHorizontal: spacing.lg },
   headRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headCell: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.textMuted, textTransform: 'uppercase' },
+  headCell: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.textMuted, textTransform: 'uppercase' },
   chevronSpace: { width: 22 },
   listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   row: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
@@ -174,11 +185,11 @@ const styles = StyleSheet.create({
   rowNarrow: { paddingHorizontal: spacing.sm, paddingVertical: spacing.md, gap: spacing.sm },
   narrowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   narrowLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  narrowLabel: { width: 96, fontSize: typography.size.xs, color: colors.textMuted },
+  narrowLabel: { width: 104, fontSize: typography.size.sm, color: colors.textMuted },
   cell: { justifyContent: 'center' },
   no: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },
   text: { fontSize: typography.size.sm, color: colors.text },
-  sub: { fontSize: typography.size.xs, color: colors.textSecondary },
+  sub: { fontSize: typography.size.sm, color: colors.textSecondary },
   status: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   dot: { width: 10, height: 10, borderRadius: radius.full },
   statusText: { fontSize: typography.size.sm, color: colors.text, fontWeight: typography.weight.medium },

@@ -84,3 +84,16 @@ describe("PickerModal — leadingAction (mor 'yeni ekle' kartı)", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("PickerModal — A-Z harf şeridi", () => {
+  const render = (disableSort?: boolean) =>
+    renderWithPaper(<PickerModal visible title="İstasyon" options={OPTIONS} onSelect={jest.fn()} onDismiss={jest.fn()} disableSort={disableSort} />);
+
+  it("alfabetik listede harf şeridi çizilir", () => {
+    expect(render().queryByLabelText("A harfine git")).not.toBeNull();
+  });
+
+  it("disableSort (akış sırası) listesinde şerit çizilmez — sırasız harf dizisi atlama yapamaz", () => {
+    expect(render(true).queryByLabelText("A harfine git")).toBeNull();
+  });
+});
