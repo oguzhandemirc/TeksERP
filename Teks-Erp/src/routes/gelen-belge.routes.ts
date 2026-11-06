@@ -37,8 +37,7 @@ import { BATCH_NO_KEY_RE, listSenderTemplates, MANUAL_BATCH_NO_KEY, updateSender
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
-import { stationDocLookup, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
-import { getStampContext } from "../services/helpers/work-session.helper";
+import { stationDocLookup, stationLookupContext, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { kickPhotoRetentionIfActive, requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
@@ -467,11 +466,6 @@ const StationLookupBody = z.union([
   }),
   z.strictObject({ q: z.string().trim().min(2, "Aramak için en az 2 karakter yazın").max(64, "En çok 64 karakter") }),
 ], "Fotoğraf (contentBase64) ya da arama metni (q) gönderin");
-// Ekran bilgisi SORGU dizgisinde: gövde strictObject; yeni tablet eski sunucuya gövdeyle gönderse 400 alırdı (sorguyu yok sayar).
-const StationLookupQuery = z.strictObject({
-  screen: z.enum(["KURSUN_QC", "TAMBUR"], "Ekran KURSUN_QC ya da TAMBUR olmalı").optional(),
-  stationId: z.uuid("Geçersiz istasyon").optional(),
-}).refine((q) => !q.stationId || q.screen === "TAMBUR", { message: "İstasyon yalnız TAMBUR ekranında verilir (kurşunda oturum istasyonu kullanılır)", path: ["stationId"] });
 /**
  * @openapi
  * /api/gelen-belge/istasyon-okutma:
@@ -503,15 +497,8 @@ const StationLookupQuery = z.strictObject({
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi yok/ulaşılamaz) · HEIC_CONVERT_UNAVAILABLE" }
  */
 router.get("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async () => ({ status: 200, data: await stationLookupStatus() })));
-router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => {
-  const body = StationLookupBody.parse(req.body);
-  const { screen, stationId } = StationLookupQuery.parse(req.query);
-  // "Burada" = o ekranın açık kart listesi: kurşun oturum istasyonunu (`kursun-qc` open-cards gibi), tambur listenin istasyonunu okur.
-  // Rotasız İE'nin adımı OTURUM istasyonuna eklenir (open-cards rotasız satırları gibi) → sessionStationId.
-  const sessionStationId = screen ? (await getStampContext(req))?.stationId ?? null : null;
-  const ctx = !screen ? null : { screen, stationId: screen === "TAMBUR" ? stationId ?? null : sessionStationId, sessionStationId };
-  return { status: 200, data: await stationDocLookup(body, ctx) };
-}));
+// Ekran bilgisi SORGU dizgisinde (gövde strictObject; yeni tablet + eski sunucu 400 almasın) — `stationLookupContext`.
+router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => ({ status: 200, data: await stationDocLookup(StationLookupBody.parse(req.body), await stationLookupContext(req)) })));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
 
 /**
