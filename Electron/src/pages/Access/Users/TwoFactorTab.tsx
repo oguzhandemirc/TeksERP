@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { requestLogout } from "@/components/layout/tabs/dirty-close-guard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Copy, MonitorSmartphone, ShieldCheck, ShieldOff, ShieldPlus } from "lucide-react";
@@ -47,7 +48,7 @@ export function TwoFactorTab({ userId, username }: Props) {
       window.location.hash = hash;
       return;
     }
-    void logout().then(() => (window.location.hash = hash));
+    requestLogout(() => void logout().then(() => (window.location.hash = hash)));
   };
 
   const statusQ = useQuery({

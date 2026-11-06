@@ -3,6 +3,7 @@
 // yayınlanan liste DEĞİŞMEZ (değişiklik revizyondur). Fiyat ve maliyet sunucudan; panel hesap yapmaz.
 // =============================================================================
 import { useState } from "react";
+import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -23,6 +24,7 @@ export function PriceListDetailPage() {
   const nav = useNavigate();
   const { hasPermission } = useRoleAccess();
   const [dirty, setDirty] = useState(false);
+  useDirtyTab(dirty);
   const q = useQuery({ queryKey: priceListDetailKey(id), queryFn: () => priceListService.get(id), enabled: Boolean(id) });
   const list = q.data?.data;
   const editable = list?.status === "DRAFT" && hasPermission("price-list:write");

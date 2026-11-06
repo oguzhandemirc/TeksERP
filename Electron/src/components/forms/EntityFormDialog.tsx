@@ -13,6 +13,7 @@ import type { ZodType } from "zod";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FormErrorSummary } from "./FormErrorSummary";
+import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
 
 interface Props<TValues extends FieldValues> {
   open: boolean;
@@ -45,6 +46,9 @@ export function EntityFormDialog<TValues extends FieldValues>({
     defaultValues,
   });
 
+  // Kirli sekme kaydı: react-hook-form'un kendi ölçüsü (değer eskiye dönerse temiz); DOM yazım algısı bu formu saymaz.
+  useDirtyTab(open && form.formState.isDirty);
+
   useEffect(() => {
     if (open) form.reset(defaultValues);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,6 +63,7 @@ export function EntityFormDialog<TValues extends FieldValues>({
         </DialogHeader>
         <FormProvider {...form}>
           <form
+            data-dirty-managed=""
             onSubmit={form.handleSubmit(onSubmit)}
             className="space-y-3"
           >

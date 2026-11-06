@@ -7,6 +7,8 @@ import { registerBildirimNotifyIpc } from "./ipc/bildirim-notify.ipc.js";
 import { closeTvWindowWithApp, registerTvWindowIpc } from "./ipc/tv-window.ipc.js";
 import { startDiscoveryIfNeeded } from "./ipc/discovery.ipc.js";
 import { buildAppMenu } from "./menu.js";
+import { installUnloadGuard } from "./window-close-guard.js";
+import { isUserInstallStarted } from "./ipc/updater.ipc.js";
 import { APP_ID, WINDOW_TITLE } from "@shared/channel";
 import { appEntryArgument } from "@shared/app-origin";
 import { setTrustedAppEntry } from "./security/trusted-ipc.js";
@@ -94,6 +96,8 @@ async function createMainWindow(): Promise<void> {
   mainWindow.on("close", () => closeTvWindowWithApp());
   // Pencere başlığı yalnız kanaldan gelir: splash'in ve renderer'ın <title>'ı onu ezmesin.
   mainWindow.on("page-title-updated", (event) => event.preventDefault());
+  // Kirli sekme varken kapanış/yenileme önce sorar (renderer `beforeunload` engeli → yerel diyalog).
+  installUnloadGuard(mainWindow, isUserInstallStarted);
 
   // Yeni pencere hiçbir zaman açılmaz; yalnız beyanlı https listesindeki bağlantı
   // işletim sisteminin tarayıcısına verilir (tek geçit: openExternalSafely).

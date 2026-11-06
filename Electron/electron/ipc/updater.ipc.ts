@@ -271,6 +271,11 @@ const INSTALL_START_WATCH_MS = 20_000;
 
 /** Kurulum (elle/geri sayım ya da kapanış) başladı: kapanış yolu ikinci kez kurmaz, `before-quit` kapanışı tutmaz. */
 let installStarted = false;
+/** Kurulumu kullanıcı başlattı (açık form uyarısını renderer zaten sordu): pencere kapanışı ikinci kez sormaz. */
+let userInstallStarted = false;
+export function isUserInstallStarted(): boolean {
+  return userInstallStarted;
+}
 
 async function installVerified(): Promise<void> {
   if (!status.enabled || status.state !== "ready" || installing || installStarted || !verifier) return;
@@ -287,10 +292,12 @@ async function installVerified(): Promise<void> {
     // dedikten sonrası sessizdir. isForceRunAfter=true → kurulumdan sonra
     // uygulama kendiliğinden geri açılır (operatör boş ekranla kalmasın).
     installStarted = true;
+    userInstallStarted = true;
     setImmediate(() => updater().quitAndInstall(true, true));
     // Uygulama hâlâ ayaktaysa kurulum başlamadı (izin penceresine "Hayır"): yeniden denenebilsin.
     setTimeout(() => {
       installStarted = false;
+      userInstallStarted = false;
     }, INSTALL_START_WATCH_MS);
   } finally {
     installing = false;
