@@ -84,7 +84,7 @@ export function ServicePriceGrid(props: Props) {
   const { commit, move } = useGridEditing(props, rows);
 
   return (
-    <div className="overflow-auto rounded-md border">
+    <div className="overflow-auto border-t">
       <table className="w-full text-sm" aria-label="Hizmet kademe fiyatları">
         <thead className="sticky top-0 z-10 bg-muted/80 text-xs text-muted-foreground backdrop-blur">
           <tr>

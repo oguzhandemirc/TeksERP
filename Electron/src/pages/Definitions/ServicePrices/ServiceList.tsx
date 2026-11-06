@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { foldedIncludes } from "@/lib/search-fold";
+import { ITEM_LIFECYCLE_LABEL } from "@/lib/item-lifecycle";
 import type { ServiceListRow } from "./service";
 
 interface Props {
@@ -101,14 +102,16 @@ function ServiceListItem({
       className={cn(
         "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted/60",
         selected && "bg-primary/10 font-medium",
-        !row.isActive && "opacity-60",
+        row.lifecycleStatus === "ARCHIVED" && "opacity-60",
       )}
     >
       <span className="min-w-0">
         <span className="block truncate">{row.name}</span>
         <span className="block truncate text-xs text-muted-foreground">
           {row.code}
-          {!row.isActive ? " · pasif" : ""}
+          {row.lifecycleStatus !== "ACTIVE"
+            ? ` · ${ITEM_LIFECYCLE_LABEL[row.lifecycleStatus].toLowerCase()}`
+            : ""}
         </span>
       </span>
       <span

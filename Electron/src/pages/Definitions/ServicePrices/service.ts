@@ -2,6 +2,7 @@
 // Yollar TAM yazılır (`apiClient.baseURL` `/api` değil). Yazım idempotent: `clientToken` mantıksal deneme başına.
 import apiClient from "@/services/apiClient";
 import type { Currency, PriceUnit } from "../ItemPrices/service";
+import type { ItemLifecycleStatus } from "@/lib/item-lifecycle";
 
 export type { Currency, PriceUnit };
 
@@ -46,7 +47,7 @@ export interface ServicePriceTierRow {
 }
 
 export interface ServicePriceTable {
-  item: { id: string; code: string; name: string; unit: string; isActive: boolean };
+  item: { id: string; code: string; name: string; unit: string; lifecycleStatus: ItemLifecycleStatus };
   currency: Currency;
   customerId: string | null;
   itemPrice: { general: PriceSlot; customer: PriceSlot | null };
@@ -60,7 +61,7 @@ export interface ServiceListRow {
   code: string;
   name: string;
   unit: string;
-  isActive: boolean;
+  lifecycleStatus: ItemLifecycleStatus;
   tierRowCount: number;
 }
 

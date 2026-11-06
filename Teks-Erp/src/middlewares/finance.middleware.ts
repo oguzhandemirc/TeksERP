@@ -15,7 +15,7 @@
 // kapatmanın etkisi bir sonraki istekte görünmelidir.
 // =============================================================================
 import { Request, Response, NextFunction } from "express";
-import { SETTING_KEYS, readFinanceEnabled, readFinanceServiceBillingEnabled } from "../services/system-setting.service";
+import { SETTING_KEYS, readFinanceEnabled, resolveServiceBillingEnabled } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -50,7 +50,7 @@ export async function requireFinanceEnabled(req: Request, res: Response, next: N
  */
 export async function requireServiceBillingEnabled(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    if (!(await readFinanceServiceBillingEnabled())) {
+    if (!(await resolveServiceBillingEnabled())) {
       throw AppError.forbidden(
         `Hizmet faturası bu kurulumda kapalı. ${settingScreenPath("finance")} ekranından açılabilir.`,
         { code: "SERVICE_BILLING_DISABLED" },

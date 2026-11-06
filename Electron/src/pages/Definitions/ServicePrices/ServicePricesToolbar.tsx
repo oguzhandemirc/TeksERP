@@ -1,4 +1,5 @@
 // Tablo araç çubuğu: para birimi · müşteri görünümü · yürürlük tarihi (boş = hemen) · gram fiyatından doldur.
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { CalendarClock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
@@ -63,12 +64,12 @@ export function ServicePricesToolbar({
         <label className="flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Yürürlük</span>
-          <input
-            type="date"
-            className="h-8 rounded-md border bg-background px-2"
+          <DatePickerInput
+            className="h-8 w-36"
             min={minFutureDayKey()}
             value={validFromDay ?? ""}
-            onChange={(e) => onValidFromDay(e.target.value || null)}
+            onChange={(v) => onValidFromDay(v || null)}
+            placeholder="Hemen"
             aria-label="Yürürlük tarihi (boş = hemen)"
           />
           {validFromDay && (

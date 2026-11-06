@@ -44,7 +44,7 @@ function tier(over: Partial<ServicePriceTierRow> & { valueId: string }): Service
 
 function table(tiers: ServicePriceTierRow[], customerId: string | null = null): ServicePriceTable {
   return {
-    item: { id: "svc", code: "KUR", name: "Kurşun", unit: "MT", isActive: true },
+    item: { id: "svc", code: "KUR", name: "Kurşun", unit: "MT", lifecycleStatus: "ACTIVE" },
     currency: "TRY",
     customerId,
     itemPrice: { general: slot("5"), customer: customerId ? slot(null) : null },

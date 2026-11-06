@@ -5,7 +5,7 @@
 // tarihli fiyatı ve "şu an hangi fiyat uygulanır" kaynağı. Kaynak `pickServicePrice`ten (fatura ile aynı
 // sıra — ikinci kopya yok); yazım `itemPriceService` üzerinden (kapılar + zamanlanmış damga orada).
 // =============================================================================
-import { ItemType, PriceKind, Prisma, type Currency, type ServiceQtyUnit } from "@prisma/client";
+import { ItemLifecycleStatus, ItemType, PriceKind, Prisma, type Currency, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
@@ -47,7 +47,8 @@ export interface ServicePriceTierRow {
 }
 
 export interface ServicePriceTable {
-  item: { id: string; code: string; name: string; unit: string; isActive: boolean };
+  /** Kart durumu yalnız GÖSTERİM içindir; kullanılabilirlik kararı `assertItemUsable`da. */
+  item: { id: string; code: string; name: string; unit: string; lifecycleStatus: ItemLifecycleStatus };
   currency: Currency;
   customerId: string | null;
   itemPrice: { general: PriceSlot; customer: PriceSlot | null };
@@ -79,15 +80,17 @@ function mappedValueWhere(itemId: string): Prisma.FabricPropertyValueWhereInput 
 
 export class ServicePriceService {
   /** Sol liste: hizmet kalemleri + güncel kademe satırı sayısı. */
-  async listServices(): Promise<ApiResponse<Array<{ id: string; code: string; name: string; unit: string; isActive: boolean; tierRowCount: number }>>> {
-    const items = await prisma.item.findMany({ where: { itemType: ItemType.SERVICE }, select: { id: true, code: true, name: true, unit: true, isActive: true }, orderBy: [{ isActive: "desc" }, { code: "asc" }] });
+  async listServices(): Promise<ApiResponse<Array<{ id: string; code: string; name: string; unit: string; lifecycleStatus: ItemLifecycleStatus; tierRowCount: number }>>> {
+    // Pasif (ARCHIVED) kartlar listenin sonunda; durum yalnız gösterim.
+    const rows = await prisma.item.findMany({ where: { itemType: ItemType.SERVICE }, select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true }, orderBy: { code: "asc" } });
+    const items = [...rows].sort((a, b) => Number(a.lifecycleStatus === ItemLifecycleStatus.ARCHIVED) - Number(b.lifecycleStatus === ItemLifecycleStatus.ARCHIVED));
     const byItem = await countServiceTierRows(items.map((i) => i.id), new Date());
     return { success: true, data: items.map((i) => ({ ...i, tierRowCount: byItem.get(i.id) ?? 0 })) };
   }
 
   async table(params: { itemId: string; currency: Currency; customerId: string | null }): Promise<ApiResponse<ServicePriceTable>> {
     const now = new Date();
-    const item = await prisma.item.findUnique({ where: { id: params.itemId }, select: { id: true, code: true, name: true, unit: true, isActive: true, itemType: true } });
+    const item = await prisma.item.findUnique({ where: { id: params.itemId }, select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true, itemType: true } });
     if (!item) throw AppError.notFound("Hizmet bulunamadı.");
     if (item.itemType !== ItemType.SERVICE) throw AppError.badRequest("Hizmet fiyat tablosu yalnız hizmet kalemleri içindir.", { code: "SERVICE_TIER_NOT_SERVICE" });
     // `revokedAt` SÜZÜLMEZ — güncel + bekleyen ayrımı bellekte `isItemPriceValidAt` / `isItemPricePending` ile (tek yüklem ikizi).
@@ -136,7 +139,7 @@ export class ServicePriceService {
     return {
       success: true,
       data: {
-        item: { id: item.id, code: item.code, name: item.name, unit: item.unit, isActive: item.isActive },
+        item: { id: item.id, code: item.code, name: item.name, unit: item.unit, lifecycleStatus: item.lifecycleStatus },
         currency: params.currency, customerId: params.customerId,
         itemPrice: { general: itemGeneral, customer: itemCustomer },
         gram: { customer: customerGram?.toString() ?? null, stations: stations.map((s) => ({ id: s.id, name: s.name, price: s.price.toString() })) },
