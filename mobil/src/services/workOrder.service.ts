@@ -18,9 +18,7 @@ export interface WorkOrderPayload {
   /** İdempotency anahtarı — form-oturumu başına üretilir; timeout-replay'de
    *  mükerrer İE + refakat kartı önlenir (yalnız create/quick-start kullanır). */
   clientToken?: string;
-  type?: 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION' | 'CUSTOMER_GOODS_SERVICE';
-  /** Fason (müşteri malı) türünde müşteri; verilmezse sunucu okutulan topların tek sahibini alır. */
-  customerId?: string | null;
+  type?: 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION' | 'CUSTOMER_GOODS_SERVICE'; customerId?: string | null; // Fason: yoksa topların tek sahibi
   width?: number | null;
   targetQuantity?: number | null;
   targetWeight?: number | null;

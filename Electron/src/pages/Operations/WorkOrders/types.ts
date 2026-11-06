@@ -125,10 +125,7 @@ export interface WorkOrder {
   id: string;
   /** İş Emri No (İE + GGAAYY + NNNN). Parti (P…) AYRI nesnedir — bkz. Batch/BatchLane. */
   workOrderNumber: string;
-  type: WorkOrderType;
-  /** Fason (müşteri malı) türünde İE'nin kendi müşterisi (zorunlu); diğer türlerde null. */
-  customerId?: string | null;
-  customer?: { id: string; name: string; code?: string | null } | null;
+  type: WorkOrderType; customerId?: string | null; customer?: { id: string; name: string; code?: string | null } | null; // Fason (müşteri malı) müşterisi
   status: WorkOrderStatus;
   width: number | null;
   targetQuantity: number | null;

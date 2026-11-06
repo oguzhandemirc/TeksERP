@@ -283,11 +283,7 @@ export async function reopenWorkOrderTx(
 }
 
 // Tip çevirisi yalnız Stok ↔ Sipariş (bağın aynası); Fason (müşteri malı) hiçbir yöne çevrilmez.
-const OTHER_TYPE: Record<WorkOrderType, WorkOrderType | null> = {
-  ORDER_PRODUCTION: WorkOrderType.STOCK_PRODUCTION,
-  STOCK_PRODUCTION: WorkOrderType.ORDER_PRODUCTION,
-  CUSTOMER_GOODS_SERVICE: null,
-};
+const OTHER_TYPE: Partial<Record<WorkOrderType, WorkOrderType>> = { ORDER_PRODUCTION: WorkOrderType.STOCK_PRODUCTION, STOCK_PRODUCTION: WorkOrderType.ORDER_PRODUCTION };
 
 /**
  * İş emri TİPİNİ çeviren tek yol (tip = sipariş bağının aynası). Claim karşı
@@ -302,10 +298,7 @@ export async function setWorkOrderTypeTx(
 ): Promise<"CHANGED" | "ALREADY" | "NO_MATCH"> {
   const from = OTHER_TYPE[to];
   if (!from) return "NO_MATCH";
-  const claim = await tx.workOrder.updateMany({
-    where: { ...opts.where, id: workOrderId, type: from },
-    data: { type: to },
-  });
+  const claim = await tx.workOrder.updateMany({ where: { ...opts.where, id: workOrderId, type: from }, data: { type: to } });
   if (claim.count === 1) {
     await recordWorkOrderFieldChangesTx(
       tx,
