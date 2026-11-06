@@ -27,8 +27,8 @@ export async function cokBlokKismi(c: Ctx): Promise<void> {
   // Eski taslak: blok 2'nin beyanında işlem yok → satırların tek işlem yazısından
   await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: n11, blockNo: 2 }, data: { processText: "YUMUŞAK APRE" } });
   const p11 = await c.parties(n11);
-  const ps = (p11.data?.parties ?? []) as Array<{ blockNo: number; processText: string | null; senderWorkOrderNo: string | null }>;
-  c.check("§11 onaysız belgede parti İE listesi boş", ps.every((p) => Array.isArray((p as { workOrders?: unknown[] }).workOrders) && (p as { workOrders: unknown[] }).workOrders.length === 0), JSON.stringify(ps));
+  const ps = (p11.data?.parties ?? []) as Array<{ blockNo: number; processText: string | null; senderWorkOrderNo: string | null; workOrders?: unknown[] }>;
+  c.check("§11 onaysız belgede parti İE listesi boş", ps.every((p) => Array.isArray(p.workOrders) && p.workOrders.length === 0), JSON.stringify(ps));
   c.check("§11 ⭐ /partiler: blok 1 işlem + gönderen İE no beyandan, blok 2 işlem satırlardan (eski taslak), İE no yok → null",
     p11.status === 200 && ps[0]?.processText === "KDK APRE" && ps[0]?.senderWorkOrderNo === sender && ps[1]?.processText === "YUMUŞAK APRE" && ps[1]?.senderWorkOrderNo === null,
     JSON.stringify(ps));
