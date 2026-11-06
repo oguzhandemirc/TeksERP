@@ -53,5 +53,5 @@ const styles = StyleSheet.create({
   rowOn: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
   inner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   label: { flex: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
-  hint: { fontSize: typography.size.xs, color: colors.textMuted },
+  hint: { fontSize: typography.size.sm, color: colors.textMuted },
 });

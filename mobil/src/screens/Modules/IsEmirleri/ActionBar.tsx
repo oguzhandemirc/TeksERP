@@ -49,6 +49,7 @@ export default function ActionBar({ groups, type, loading, onSelect, onScan }: P
         onSelect={(v) => { onSelect(v); setOpen(false); }}
         onDismiss={() => setOpen(false)}
         disableSort
+        numColumns={2}
       />
     </View>
   );

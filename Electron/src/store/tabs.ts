@@ -54,6 +54,10 @@ interface TabsState {
   reorder: (fromId: string, toId: string) => void;
   /** Toplu kapatma (sağ tık menüsü / "Tümünü kapat"): çapaya göre kapsam; "all" çapasızdır. */
   closeTabs: (scope: CloseScope, anchorId?: string | null) => void;
+  /** Son TOPLU kapatmadan (≥2 sekme) önceki liste; "Geri al" bununla döner. Kalıcı değil, çıkışta silinir. */
+  lastBulkClose: { tabs: TabItem[]; activeId: string | null; closedIds: string[] } | null;
+  /** Son toplu kapatmayı geri al: kapananlar eski yerine, sonradan açılanlar sona; etkin sekme eskisi. */
+  undoBulkClose: () => void;
   /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
   updateTabTitle: (id: string, title: string) => void;
   /**
@@ -82,7 +86,8 @@ export const useTabsStore = create<TabsState>()(
       tabs: [],
       activeId: null,
 
-      resetTabs: () => set({ tabs: [], activeId: null }),
+      resetTabs: () => set({ tabs: [], activeId: null, lastBulkClose: null }),
+      lastBulkClose: null,
 
       openTab: (rawPath, opts = {}) => {
         const { state, forceNew, background } = opts;
@@ -169,6 +174,26 @@ export const useTabsStore = create<TabsState>()(
         set({
           tabs: tabs.filter((t) => !closed.has(t.id)),
           activeId: nextActiveAfterClose(tabs, activeId, closed),
+          // Tekli kapatma geri alma anlık görüntüsünü EZMEZ (toplu kapatmanın hemen ardından X'e basmak "Geri al"ı yemesin).
+          ...(closed.size >= 2 ? { lastBulkClose: { tabs, activeId, closedIds: [...closed] } } : {}),
+        });
+      },
+
+      undoBulkClose: () => {
+        const { tabs, lastBulkClose } = get();
+        if (!lastBulkClose) return;
+        const openIds = new Set(tabs.map((t) => t.id));
+        const bulkClosed = new Set(lastBulkClose.closedIds);
+        const snapIds = new Set(lastBulkClose.tabs.map((t) => t.id));
+        // Toplu kapananlar eski sırasına döner; o arada ELLE kapatılan sekme diriltilmez, yeni açılanlar sona.
+        // Router'lar `getTabRouter` ile yoldan yeniden kurulur.
+        const restored = lastBulkClose.tabs.filter((t) => openIds.has(t.id) || bulkClosed.has(t.id));
+        const next = [...restored, ...tabs.filter((t) => !snapIds.has(t.id))];
+        const prevActive = lastBulkClose.activeId;
+        set({
+          tabs: next,
+          activeId: prevActive && next.some((t) => t.id === prevActive) ? prevActive : get().activeId,
+          lastBulkClose: null,
         });
       },
 

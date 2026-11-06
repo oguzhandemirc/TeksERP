@@ -278,8 +278,9 @@ export default function PickerModal(props: Props) {
   // FlashList'e verilen dizide (aksiyon kartı dahil) hesaplanır — aksiyon kartı
   // her şeyi 1 kaydırdığı için listData üzerinden hesaplamak yanlış satıra
   // atlardı; kartın kendisi indekse GİRMEZ.
+  // `disableSort` listesi alfabetik DEĞİL (ör. akış sırası) — harf şeridi sırasız harf dizer, atlama anlamsızdır.
   const azIndex = useMemo(() => {
-    if (paginated) return [] as { letter: string; index: number }[];
+    if (paginated || disableSort) return [] as { letter: string; index: number }[];
     const seen = new Map<string, number>();
     dataWithLeading.forEach((o, i) => {
       if (o.value === LEADING_ACTION_VALUE) return;
@@ -287,7 +288,7 @@ export default function PickerModal(props: Props) {
       if (ch && !seen.has(ch)) seen.set(ch, i);
     });
     return Array.from(seen.entries()).map(([letter, index]) => ({ letter, index }));
-  }, [paginated, dataWithLeading]);
+  }, [paginated, disableSort, dataWithLeading]);
 
   const jumpToLetter = (index: number) => {
     Haptics.selectionAsync().catch(() => {});

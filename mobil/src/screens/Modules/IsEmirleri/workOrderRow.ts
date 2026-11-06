@@ -7,6 +7,7 @@
 import { factoryDayEndIso, factoryDayStartIso } from '../../../lib/factory-time';
 import { calendarKey, type DateRange } from '../../../components/filters/rollHistoryFilter';
 import { stationToneFor, type StationTone } from '../../../theme/stationTone';
+import { TERIM } from '../../../lib/terim';
 
 export interface LocationStation {
   istasyonId: string;
@@ -148,4 +149,19 @@ export function buildListQuery(f: ListFilters): ListQuery {
 
 export function activeFilterCount(f: ListFilters): number {
   return (f.status !== DEFAULT_FILTERS.status ? 1 : 0) + (f.stationId ? 1 : 0) + (f.range ? 1 : 0);
+}
+
+// ── Boş liste ────────────────────────────────────────────────────────────────
+export type EmptyAction = 'clearFilters' | 'showAllStatuses' | null;
+
+/** Boş listenin başlığı + çıkış eylemi. Varsayılan "Açık" süzgeci de bir süzgeçtir: kapalı/iptal kayıt varken
+ *  "henüz yok" demek yanıltır (UX denetimi 2026-11-06) — operatöre tek dokunuşla tüm durumlar sunulur. */
+export function emptyStateFor(f: ListFilters): { title: string; text: string; action: EmptyAction } {
+  const narrowed = f.search.trim().length >= MIN_SEARCH || !!f.stationId || !!f.range;
+  if (narrowed) return { title: 'Bu süzgece uyan kayıt yok', text: 'Aramayı ya da süzgeçleri değiştirin.', action: 'clearFilters' };
+  if (f.status !== 'ALL') {
+    const label = STATUS_FILTER_OPTIONS.find((o) => o.value === f.status)?.label.replace(/ \(.*\)$/, '') ?? f.status;
+    return { title: `"${label}" durumunda ${TERIM.terbiyeIsEmri.tekilKucuk} yok`, text: 'Diğer durumlardaki kayıtlar için tüm durumları gösterin.', action: 'showAllStatuses' };
+  }
+  return { title: `Henüz ${TERIM.terbiyeIsEmri.tekilKucuk} yok`, text: 'Alttaki "Okut" ile belgeden açabilirsiniz.', action: null };
 }

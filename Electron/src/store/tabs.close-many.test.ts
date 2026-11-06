@@ -16,7 +16,7 @@ const ids = () => useTabsStore.getState().tabs.map((t) => t.id);
 const active = () => useTabsStore.getState().activeId;
 
 beforeEach(() => {
-  useTabsStore.setState({ tabs: ["a", "b", "c", "d"].map(tab), activeId: "c" });
+  useTabsStore.setState({ tabs: ["a", "b", "c", "d"].map(tab), activeId: "c", lastBulkClose: null });
   disposeTabRouter.mockClear();
 });
 
@@ -67,5 +67,36 @@ describe("closeTab (aynı yoldan)", () => {
   it("etkin olmayan kapanınca etkin değişmez", () => {
     useTabsStore.getState().closeTab("a");
     expect(active()).toBe("c");
+  });
+});
+
+describe("undoBulkClose — toplu kapatmayı geri al", () => {
+  it("tümünü kapat → geri al: aynı sıra, aynı etkin sekme", () => {
+    useTabsStore.getState().closeTabs("all");
+    useTabsStore.getState().undoBulkClose();
+    expect(ids()).toEqual(["a", "b", "c", "d"]);
+    expect(active()).toBe("c");
+    expect(useTabsStore.getState().lastBulkClose).toBeNull();
+  });
+
+  it("arada açılan sekme sona eklenir; arada ELLE kapatılan diriltilmez", () => {
+    useTabsStore.getState().closeTabs("right", "b"); // c, d kapanır
+    useTabsStore.setState({ tabs: [...useTabsStore.getState().tabs, tab("e")] });
+    useTabsStore.getState().closeTab("a"); // tekli: anlık görüntüyü ezmez
+    useTabsStore.getState().undoBulkClose();
+    expect(ids()).toEqual(["b", "c", "d", "e"]);
+    expect(active()).toBe("c");
+  });
+
+  it("tekli kapatma geri alınabilir toplu kayıt üretmez", () => {
+    useTabsStore.getState().closeTab("a");
+    expect(useTabsStore.getState().lastBulkClose).toBeNull();
+  });
+
+  it("çıkış (resetTabs) geri alma kaydını siler — sonraki kullanıcı öncekinin sekmelerini diriltemez", () => {
+    useTabsStore.getState().closeTabs("all");
+    useTabsStore.getState().resetTabs();
+    useTabsStore.getState().undoBulkClose();
+    expect(ids()).toEqual([]);
   });
 });
