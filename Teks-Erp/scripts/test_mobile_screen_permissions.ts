@@ -313,6 +313,16 @@ function collectUsages(screens: Screen[]): { usages: Usage[]; unresolved: number
  */
 const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /weaving-orders",
+    why: "İş Emirleri › Dokuma listesi (2026-11-06) yalnız `dokumaAnahtariGorunur` true iken çizilir: etkin dokuma rejimi ∧ `weavingorder:read`|`mobile:dokuma` (`DOKUMA_OKUMA_IZINLERI`, uç guard'ının okuma ikizi). İzinsiz kullanıcıda anahtar yok, uç hiç çağrılmaz; ekran izni BİLEREK genişletilmedi (planlamacıya dokuma okuması vermek ayrı politika kararı).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /weaving-orders/:p/overview",
+    why: "Dokuma satır ayrıntısı; listeyle aynı kapı (`dokumaAnahtariGorunur`) — liste görünmüyorsa satır da yok. `mobile:kk1` listeyi açar ama genel bakışı açmaz; bu yüzden kapı kümesine kk1 ALINMADI.",
+  },
+  {
     screen: "gelen-belge:write",
     path: "GET /gelen-belge/irsaliyeler/:p",
     why: "Belge Tara onay kartı (T2) detayı okur; okunamazsa (gelen-belge:read yok → 403) kart çizilmez, tarama yolu aynen çalışır (fail-closed, `useApprovalDetail`). Belgeden iş emri satırı (`DocRowCard`) izin yoksa detayı hiç istemez, 403'te de formu okuma özetinden (`detailFromSummary`, gelen-belge:write) kurar.",
