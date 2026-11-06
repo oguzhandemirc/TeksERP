@@ -13,6 +13,7 @@ import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
 import PageCameraModal from '../PageCameraModal';
 import MultiPageCameraModal from '../MultiPageCameraModal';
 import PagePreviewModal from '../PagePreviewModal';
+import SameDocumentCard from '../SameDocumentCard';
 import { GramajField, type DocRowOpenRequest } from './DocRowCard';
 import DocColumn from './DocColumn';
 import CreateBar from './CreateBar';
@@ -75,6 +76,11 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
       <CreateBar wo={wo} done={done} block={u.block} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
+      <SameDocumentCard
+        match={scan.b.sameDoc ?? wo.sameDoc}
+        onClose={() => { scan.b.clearSameDoc(); wo.dismissSameDoc(); }}
+        onNewWorkOrder={scan.b.sameDoc ? (n) => scan.b.openNote(n) : undefined}
+      />
       <FieldSelectorSheet
         visible={fields.sheetOpen}
         hidden={fields.prefs.hidden}

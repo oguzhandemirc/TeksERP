@@ -11,6 +11,7 @@
 // =============================================================================
 import { createHash } from "crypto";
 import type { Prisma } from "@prisma/client";
+import { sameDocumentByNoteId } from "./gelen-belge-ayni-belge.service";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -90,7 +91,9 @@ type ScanRow = Prisma.DocumentScanGetPayload<{ select: typeof SCAN_SELECT }>;
  */
 async function reuseExisting(existing: ScanRow, noteId: string | null | undefined, userId: string) {
   if (noteId && existing.noteId && existing.noteId !== noteId) {
-    throw AppError.conflict("Bu fotoğraf başka bir taslağa bağlı; önce oradan çözün.", { code: "DOCUMENT_SCAN_NOT_FREE", boundTo: existing.noteId });
+    // `sameDocument`: tablet kısayol kartı (yarışta açtığı boş taslağı siler); eski istemci alanı yok sayar.
+    const sameDocument = await sameDocumentByNoteId(existing.noteId, "SHA");
+    throw AppError.conflict("Bu fotoğraf başka bir taslağa bağlı; önce oradan çözün.", { code: "DOCUMENT_SCAN_NOT_FREE", boundTo: existing.noteId, sameDocument });
   }
   if (!noteId || existing.noteId === noteId) return { scan: existing, duplicate: true, boundTo: existing.noteId };
   const plans = await prepareStoredReads([existing.id], userId);
