@@ -41,13 +41,27 @@ export function itemPriceNow(): Prisma.ItemPriceWhereInput {
   return itemPriceValidAt(new Date());
 }
 
-/** `itemPriceNow()`un SQL ikizi (kök takma adı `t`) — bulut `fiyat` kapsamı ikisini birlikte taşır. */
+/** `itemPriceNow()`un SQL ikizi (kök takma adı `t`). */
 export const ITEM_PRICE_NOW_SQL =
   '(COALESCE(t."validFrom", t."createdAt") <= now() AND (t."revokedAt" IS NULL OR t."revokedAt" > now()))';
 
-/** Bulut geçişi: penceresi ($1, $2] aralığında AÇILAN ya da KAPANAN satırlar — hiçbir satır değişmeden kapsam döner. */
-export const ITEM_PRICE_WINDOW_CROSSING_SQL =
-  'SELECT t."id" AS root_id FROM "item_prices" t WHERE (t."validFrom" > $1 AND t."validFrom" <= $2) OR (t."revokedAt" > $1 AND t."revokedAt" <= $2)';
+/**
+ * Bulut `fiyat` kapsamı (v2, 2026-11-06): yalnız ŞU AN yürürlükteki sürüm. Prisma parçası sorgu anında
+ * kurulur (getter); bekleyen satır başlangıcında, zamanlanmış damgalı satır bitişinde geçişle yeniden kurulur.
+ */
+export const ITEM_PRICE_CLOUD_SCOPE = {
+  note: "yalnız şu an yürürlükte olan fiyat (bekleyen ileri tarihli ve damgalı satır kapsam dışı; geçiş pencere sınırında kurar)",
+  get prismaWhere(): Prisma.ItemPriceWhereInput {
+    return itemPriceNow();
+  },
+  sql: ITEM_PRICE_NOW_SQL,
+};
+
+/** Geçiş: penceresi ($1, $2] aralığında AÇILAN ya da KAPANAN satırlar — hiçbir satır değişmeden kapsam döner. */
+export const ITEM_PRICE_WINDOW_CROSSING = {
+  name: "yururluk",
+  sql: 'SELECT t."id" AS root_id FROM "item_prices" t WHERE (t."validFrom" > $1 AND t."validFrom" <= $2) OR (t."revokedAt" > $1 AND t."revokedAt" <= $2)',
+};
 
 /** `itemPriceValidAt`in bellek-içi ikizi (pencere sınırı: başı dahil, sonu hariç). */
 export function isItemPriceValidAt(row: { createdAt: Date; validFrom?: Date | null; revokedAt: Date | null }, at: Date): boolean {
