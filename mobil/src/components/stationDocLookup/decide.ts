@@ -1,19 +1,74 @@
 // İstasyonda belgeden iş emri bulma (K17) — sunucu sonucunun ekranda ne yapacağı (saf; jest sınar).
+// Çok İE (2026-11-06): sunucu ekran bilgisini aldıysa her İE "burada bekliyor mu" (`atStation`) ile gelir.
 import type { StationLookupResult, StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 
 export type LookupDecision =
-  | { kind: 'open'; workOrder: StationLookupWorkOrder }
+  /** `siblings`: aynı belgenin bütün İE'leri (şerit için); tek İE'de boş. */
+  | { kind: 'open'; workOrder: StationLookupWorkOrder; siblings: StationLookupWorkOrder[] }
   | { kind: 'choose'; workOrders: StationLookupWorkOrder[]; message: string }
   | { kind: 'empty'; message: string };
 
-/** Tek İE → doğrudan aç; çok → seçtir; yok → sunucunun cümlesi + elle arama. */
+/** "Burada" sayılır: burada bekliyor YA DA rotasız ve burada başlatılabilir (açılınca okutmayla rota adımı ekler). */
+export const isHere = (w: StationLookupWorkOrder): boolean => w.atStation === 'HERE' || w.atStation === 'STARTABLE_HERE';
+
+/**
+ * Tek İE → doğrudan aç · çok İE'de burada bekleyen TEK İE → onu aç (+ şerit) · birden çoğu burada → seçtir (burada
+ * olanlar üstte) · hiçbiri burada → seçtir (her satır nerede olduğunu söyler) · eski sunucu (alan yok) → bugünkü liste.
+ */
 export function decideLookup(r: StationLookupResult): LookupDecision {
-  if (r.workOrders.length === 1) return { kind: 'open', workOrder: r.workOrders[0]! };
-  if (r.workOrders.length > 1) return { kind: 'choose', workOrders: r.workOrders, message: r.message };
-  return { kind: 'empty', message: r.message };
+  const all = r.workOrders;
+  if (all.length === 1) return { kind: 'open', workOrder: all[0]!, siblings: [] };
+  if (all.length === 0) return { kind: 'empty', message: r.message };
+  const known = all.some((w) => w.atStation != null);
+  if (!known) return { kind: 'choose', workOrders: all, message: r.message };
+  const here = all.filter(isHere);
+  if (here.length === 1) return { kind: 'open', workOrder: here[0]!, siblings: all };
+  const where = r.station?.label ? ` (${r.station.label})` : '';
+  if (here.length === 0) {
+    return { kind: 'choose', workOrders: all, message: `Bu belgede ${all.length} parti var; hiçbiri bu istasyonda${where} beklemiyor. Nerede olduklarına bakıp yine de açabilirsiniz.` };
+  }
+  return {
+    kind: 'choose',
+    workOrders: [...here, ...all.filter((w) => !isHere(w))],
+    message: `Bu belgede ${all.length} parti var; ${here.length} tanesi bu istasyonda${where} açılabilir. Açılacak olanı seçin.`,
+  };
 }
 
-/** Liste satırının alt metni: parti no'ları · belge no'ları (fiş no öncelikli). */
+/** Satırın büyük yazısı: parti no (bizim) → müşteri partisi → İE no. */
+export function partyLabel(w: StationLookupWorkOrder): string {
+  if (w.batchNumbers.length > 0) return w.batchNumbers.join(', ');
+  const customer = w.documents.map((d) => d.customerBatchNo).find((v) => !!v);
+  return customer ?? w.workOrderNumber;
+}
+
+/** Satır ayrıntısı: işlem · top/metre · müşteri İE no · İE no (eski sunucuda yalnız bugünkü alt metin). */
+export function rowDetail(w: StationLookupWorkOrder): string {
+  if (w.rollCount === undefined) return workOrderSubtitle(w);
+  const orders = [...new Set(w.documents.map((d) => d.customerOrderNo).filter((v): v is string => !!v))];
+  return [
+    w.processText ?? '',
+    `${w.rollCount} top · ${formatMeters(w.meters ?? 0)} m`,
+    orders.length > 0 ? `Müşteri İE ${orders.join(', ')}` : '',
+    w.workOrderNumber,
+  ].filter(Boolean).join(' · ');
+}
+
+/** "Burada bekliyor" / "Buraya henüz gelmedi · Şu an: Tambur 1 (3 top)". */
+export function rowWhere(w: StationLookupWorkOrder): string {
+  return [w.atStationText ?? '', w.locationText ?? ''].filter(Boolean).join(' · ');
+}
+
+function formatMeters(m: number): string {
+  return Number.isInteger(m) ? String(m) : m.toFixed(1).replace('.', ',');
+}
+
+/** Şerit metni: "Bu belgede 3 parti var · açılan: P1 (YIKAMA)". */
+export function siblingStripText(siblings: StationLookupWorkOrder[], opened: StationLookupWorkOrder): string {
+  const process = opened.processText ? ` (${opened.processText})` : '';
+  return `Bu belgede ${siblings.length} parti var · açılan: ${partyLabel(opened)}${process}`;
+}
+
+/** Liste satırının alt metni (eski sunucu): parti no'ları · belge no'ları (fiş no öncelikli). */
 export function workOrderSubtitle(w: StationLookupWorkOrder): string {
   const docs = w.documents.map((d) => d.senderDocNo ?? d.noteNo);
   return [w.batchNumbers.join(', '), docs.length ? `Belge ${docs.join(', ')}` : ''].filter(Boolean).join(' · ');

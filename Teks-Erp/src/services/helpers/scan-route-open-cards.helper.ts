@@ -33,6 +33,32 @@ export function scanRoutedOpenWorkOrderWhere(stationId: string): Prisma.WorkOrde
   };
 }
 
+/**
+ * Rotasız satır kapısı (TEK): oturum istasyonu okutmayla rotaya açık VE listenin istasyon türünden (Kurşun/KK akışı ya da
+ * Tambur) — değilse null (liste rotasız satır göstermez, belge okutması "burada başlatılabilir" demez).
+ */
+async function scanRouteListStation(stationId: string | null, stationWhere: Prisma.StationWhereInput): Promise<{ name: string; code: string } | null> {
+  if (!stationId || !(await scanRouteEnabledFor(stationId))) return null;
+  return prisma.station.findFirst({ where: { AND: [{ id: stationId }, stationWhere] }, select: { name: true, code: true } });
+}
+
+/**
+ * İstasyonda belge okutması: verilen İE'lerden hangisi bu listede "Sahada belirlenecek" satırı olurdu (okutunca adım
+ * buraya eklenir) — `scanRoutedOpenCards` ile aynı kapı + aynı where.
+ */
+export async function scanRouteStartableWorkOrderIds(args: {
+  stationId: string | null;
+  stationWhere: Prisma.StationWhereInput;
+  workOrderIds: readonly string[];
+}): Promise<Set<string>> {
+  if (!args.stationId || args.workOrderIds.length === 0 || !(await scanRouteListStation(args.stationId, args.stationWhere))) return new Set();
+  const rows = await prisma.workOrder.findMany({
+    where: { AND: [scanRoutedOpenWorkOrderWhere(args.stationId), { id: { in: [...args.workOrderIds] } }] },
+    select: { id: true, travelerCards: { where: { status: TravelerCardStatus.ACTIVE }, select: { id: true }, take: 1 } },
+  });
+  return new Set(rows.filter((r) => r.travelerCards.length > 0).map((r) => r.id));
+}
+
 export interface ScanRoutedOpenCard {
   cardId: string;
   cardNumber: string;
@@ -60,9 +86,8 @@ export async function scanRoutedOpenCards(args: {
   excludeWorkOrderIds: readonly string[];
 }): Promise<ScanRoutedOpenCard[]> {
   const { stationId } = args;
-  if (!stationId || !(await scanRouteEnabledFor(stationId))) return [];
-  const station = await prisma.station.findFirst({ where: { AND: [{ id: stationId }, args.stationWhere] }, select: { name: true, code: true } });
-  if (!station) return [];
+  const station = await scanRouteListStation(stationId, args.stationWhere);
+  if (!stationId || !station) return [];
   const exclude = [...new Set(args.excludeWorkOrderIds)];
   const rows = await prisma.workOrder.findMany({
     where: {
