@@ -370,7 +370,7 @@ async function main(): Promise<void> {
   const rRow = (await rowsOf(sch)).find((r) => r.price.equals(10))!;
   check("§11i ⭐ İleri tarihli yazım: yürürlükteki R'nin damgası = başlangıç (SCHEDULED), şimdi 10, D1'de 11", rRow.revokedAt?.getTime() === D1.getTime() && rRow.revokeReason === "İleri tarihli fiyatla değişecek" && (await now11()) === "10" && (await now11(D1)) === "11" && fut1.data.validFrom?.getTime() === D1.getTime());
   check("§11j Anahtar başına AÇIK satır tek (bekleyen)", (await openCount()) === 1);
-  check("§11k Aynı başlangıç + aynı fiyat → no-op", !(await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 11, validFrom: D1 })).message.includes("kaydedildi"));
+  check("§11k Aynı başlangıç + aynı fiyat → no-op", !((await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 11, validFrom: D1 })).message ?? "").includes("kaydedildi"));
   await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 12, validFrom: D2 });
   check("§11l ⭐ Bekleyen değişti: eski bekleyen hiç yürürlüğe girmez, R D2'ye uzar", (await now11(D1)) === "10" && (await now11(D2)) === "12" && (await openCount()) === 1);
   await itemPriceService.upsert({ itemId: sch, kind: SALE, currency: "TRY", price: 9 });
