@@ -136,10 +136,10 @@ describe('TeachBanner — görünürlük', () => {
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
   });
 
-  it('bu tablette fotoğraf yoksa: TANITILMAMIS şeridi "bu tabletten okutun" der, Tanıt yok; TANITILDI bağlantısı yok', () => {
+  it('bu tablette fotoğraf yoksa: TANITILMAMIS şeridi panel yolunu söyler, Tanıt yok; TANITILDI bağlantısı yok', () => {
     clearLocalPages();
     const a = draw(NOT_TAUGHT);
-    expect(a.getByTestId('tanit-serit')).toHaveTextContent(/bu tabletten okutun/);
+    expect(a.getByTestId('tanit-serit')).toHaveTextContent(/panelde Gelen Belgeler/);
     expect(a.queryByTestId('tanit-serit-ac')).toBeNull();
     const b = draw(TAUGHT);
     expect(b.queryByTestId('tanit-serit-guncelle')).toBeNull();

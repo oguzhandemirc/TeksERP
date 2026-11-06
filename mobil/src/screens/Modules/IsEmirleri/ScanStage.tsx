@@ -11,7 +11,10 @@ import DocBatchView from '../GelenBelge/woCreate/DocBatchView';
 import { useReadResult } from '../GelenBelge/useReadResult';
 import type { DocRowOpenRequest } from '../GelenBelge/woCreate/DocRowCard';
 import type { WoCreateKind } from '../../../store/woCreateKinds';
-import { customerGoodsTiles, previewTiles, scanWoType, tileLayout, type PreviewTile } from './scanFlow';
+import { useQuery } from '@tanstack/react-query';
+import { INBOUND_DOC_CONTEXT_KEY } from '../GelenBelge/DocHeader';
+import { inboundDocService } from '../../../services/inboundDoc.service';
+import { customerGoodsTiles, customerTileMissing, previewTiles, scanWoType, tileLayout, type PreviewTile } from './scanFlow';
 
 const TILE_TONE = {
   found: { bg: colors.successContainer, border: colors.success, fg: colors.successText, icon: 'check-circle' },
@@ -28,6 +31,10 @@ export default function ScanStage({ route, kind, onCancel }: { route: Production
   const { watch } = useReadResult(note?.id ?? null, note?.run ?? 0);
   const summary = watch?.phase === 'done' ? watch.summary : null;
   const open = !!summary && note !== null && dismissedRun !== note.run;
+  // Formla aynı cari listesi (DocBatchView aynı anahtarla çeker; önbellekten gelir).
+  const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000, enabled: customerGoods });
+  const ownerName = (id: string) => ctx.data?.data.customers.find((c) => c.id === id)?.name ?? null;
+  const tiles = summary ? (customerGoods ? customerGoodsTiles(summary, ownerName) : previewTiles(summary)) : [];
 
   return (
     <View style={styles.fill}>
@@ -37,9 +44,9 @@ export default function ScanStage({ route, kind, onCancel }: { route: Production
           visible={open}
           title={`Belge okundu · ${summary.noteNo}`}
           subtitle={summary.reason ?? `${summary.lineCount} satır okundu${summary.reviewCount ? ` · ${summary.reviewCount} satır kontrol istiyor` : ''}`}
-          tiles={customerGoods ? customerGoodsTiles(summary) : previewTiles(summary)}
+          tiles={tiles}
           leadTile={customerGoods}
-          onPickCustomer={customerGoods && !summary.ownerSuggestion ? () => { setDismissedRun(note?.run ?? null); setOwnerReq((r) => ({ kind: 'owner', seq: (r?.seq ?? 0) + 1 })); } : undefined}
+          onPickCustomer={customerGoods && customerTileMissing(tiles) ? () => { setDismissedRun(note?.run ?? null); setOwnerReq((r) => ({ kind: 'owner', seq: (r?.seq ?? 0) + 1 })); } : undefined}
           onContinue={() => setDismissedRun(note?.run ?? null)}
           onCancel={onCancel}
         />
