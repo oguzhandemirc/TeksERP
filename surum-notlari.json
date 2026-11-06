@@ -18,7 +18,7 @@
   "yayinlar": [
     {
       "id": "2026-11-06",
-      "baslik": "Siparişlerde metre sütunu geri geldi; sekmeleri toplu kapatma",
+      "baslik": "Siparişlerde metre sütunu ve tek satır filtre; sekmeleri toplu kapatma",
       "surumler": {
         "panel": "1.3.11"
       },
@@ -32,6 +32,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Sipariş yan panelindeki \"Sevk İlerlemesi\" listedeki \"Metre\" sütunuyla aynı sayıyı yazar. İptal edilen kalemin yalnız gönderilmiş kısmı hesaba girer; yan paneldeki toplam metre de binlik ayraçla yazılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Siparişler ekranındaki filtreler tek satıra indi, listeye daha çok yer kalır. \"Görünüm\" kutusu eski hızlı düğmeleri (Tümü, Bekleyenler, Fasonda, Sevke hazır, Kısmen gidenler, Gecikenler) tek açılır listede toplar; açınca her birinin yanında kaç sipariş olduğu yazar. \"Termin\" kutusuna tıklayınca açılan pencereden Bugün, Son 7 gün, Son 30 gün, Termini geçmiş ya da bir tarih aralığı seçilir; aynı pencerede termin yerine sipariş tarihi de seçilebilir. Şube, kumaş, renk, iş emri, fason firma, fasonda kaç gün ve \"İptaller dahil\" seçenekleri \"+ Filtre\" düğmesinden eklenir. Uygulanan her filtrenin kutusundaki ✕ yalnız o filtreyi kaldırır; sağdaki \"Temizle\" bütün filtreleri bir kerede kaldırır, arama yazısı yerinde kalır. Kayıtlı görünümler aynen çalışır. \"Kalem bazında Excel\" düğmesi sayfanın üstüne taşındı."
         },
         {
           "kapsam": "panel",
