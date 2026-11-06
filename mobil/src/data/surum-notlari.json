@@ -17,6 +17,30 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-07",
+      "baslik": "Stok raporunda kalem bazında liste",
+      "surumler": {
+        "panel": "1.3.12"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "\"Stok & Ölü Stok\" raporunda iki sekme var: \"Genel\" (bugünkü görünüm) ve \"Kalem bazında\". \"Kalem bazında\" sekmesi rafta duran malı iki tabloda gösterir: \"Ham\" tablosunda kumaş başına top sayısı ve metre, \"Bitmiş\" tablosunda kumaş, en, renk ve kat başına top sayısı ve metre. Dışarıdan alınan yarı mamul \"Ham\" tablosuna girmez; sevkiyata okutulmuş ya da çuvala girmiş toplar sayılmaz. Her tablonun altındaki toplam satırı \"Genel\" sekmesindeki \"Ham stok\" ve \"Bitmiş depo\" rakamlarıyla aynıdır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Excel ve PDF o an açık sekmeyi indirir. \"Kalem bazında\" sekmesinden alınan Excel'de \"Ham\" ve \"Bitmiş\" iki ayrı sayfadır ve her sayfanın sonunda toplam satırı vardır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "\"Kalem bazında\" sekmesi için sunucunun da güncellenmiş olması gerekir. Sunucu güncellenmeden açılırsa sekmede \"Bu rapor için sunucunun güncellenmesi gerekiyor.\" yazar; \"Genel\" sekmesi her zamanki gibi çalışır."
+        }
+      ]
+    },
+    {
       "id": "2026-11-06",
       "baslik": "Siparişlerde metre sütunu ve tek satır filtre; sekmeleri toplu kapatma",
       "surumler": {
