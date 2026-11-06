@@ -9,7 +9,7 @@
 //   §5 ⭐ yükleme 409 `DOCUMENT_SCAN_NOT_FREE` details.sameDocument.note.id = fotoğrafın bağlı olduğu taslak
 //   §6 ⭐ K27 BLOCK: sahipsiz okutulan kopya taslak İE kaydında 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO` → kopya taslak
 //      SİLİNMEZ (DRAFT kalır) · DRAFT için iptal yolu yok (`cancelDeliveryNote` 409 NOT_CANCELLABLE) · kart verisi eşi gösterir
-//      (1e kararı 2026-11-06: sert silme yok; iptal ucu yalnız onaylıda — yeni iptal yolu icat edilmez, taslak kalır)
+//      (1e kararı 2026-11-06: OTOMATİK sert silme yok, taslak kalır; kaldırmak operatörün "Taslağı iptal et" eylemi — test_gelen_belge_taslak_iptal)
 // Negatif sonda (2026-11-06 koşuldu): servisteki `scanNeedsFreshRecord` satırı kaldırılınca §3 ⭐ KIRMIZI;
 // 409 details'ten `sameDocument` düşürülünce §5 ⭐ KIRMIZI; iptal claim'ine DRAFT eklenince §6 NOT_CANCELLABLE KIRMIZI.
 // Çalıştır: npx tsx scripts/run-all-tests.ts gelen_belge_ayni_belge_kisayol

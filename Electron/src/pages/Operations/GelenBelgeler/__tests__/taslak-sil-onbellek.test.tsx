@@ -10,7 +10,10 @@ import { INCOMING_DOCUMENT_QUERY_KEY } from "../service";
 
 const apiDelete = vi.fn((_url: string) => Promise.resolve({ data: { data: { id: "n1", noteNo: "GB-0001" } } }));
 vi.mock("@/services/apiClient", () => ({
-  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: (url: string) => apiDelete(url) },
+  default: {
+    get: vi.fn(),
+    post: vi.fn(() => Promise.resolve({ data: { data: { items: [{ id: "n1", noteNo: "GB-0001", deletable: true, lineCount: 0, partyCount: 0, scanCount: 0 }], summary: {} } } })),
+    put: vi.fn(), patch: vi.fn(), delete: (url: string) => apiDelete(url) },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -47,7 +50,9 @@ function setup() {
 async function confirmDelete() {
   await waitFor(() => expect(detailFn).toHaveBeenCalledTimes(1));
   fireEvent.click(screen.getByTestId("note-delete-draft"));
-  fireEvent.click(await screen.findByRole("button", { name: "Sil" }));
+  const confirm = await screen.findByRole("button", { name: "Taslağı iptal et" });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  fireEvent.click(confirm);
 }
 
 describe("taslak silme — önbellek tazeleme", () => {

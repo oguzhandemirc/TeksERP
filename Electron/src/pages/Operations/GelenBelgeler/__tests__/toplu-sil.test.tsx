@@ -1,6 +1,8 @@
 // Gelen belge listesinden toplu taslak silme + sağ tık menüsü: seçim yalnız DRAFT'ta (onaylıda kutu pasif + neden),
 // "Tümünü seç" yalnız silinebilir satırları seçer, önizleme diyaloğu her kaydı listeler ve kayıt başına kaldırılır,
-// uygula yalnız kalan kimlikleri yollar, sonra liste tazelenir; sağ tık "Sil" aynı önizleme akışını tek kayıtla açar.
+// uygula yalnız kalan kimlikleri yollar, sonra liste tazelenir; sağ tık ve satır sonu "Taslağı iptal et" aynı önizleme
+// akışını tek kayıtla açar. Negatif sonda (2026-11-06): kolon `stopPropagation` kaldırılınca §7 (detaya gider) ❌;
+// satırdaki parti dalı kaldırılınca §7 ❌; `canDelete` şartı kaldırılınca §8 ❌.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -17,6 +19,8 @@ vi.mock("@/components/PermissionGate", () => ({ PermissionGate: ({ children }: {
 vi.mock("@/components/forms/CustomerPickerField", () => ({
   CustomerPickerField: ({ placeholder }: { placeholder?: string }) => <button type="button">{placeholder}</button>,
 }));
+const navigateSpy = vi.fn();
+vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigateSpy }));
 const perms = { write: true };
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({ hasPermission: (p: string) => p === "gelen-belge:read" || (perms.write && p === "gelen-belge:write"), isAdmin: false }),
@@ -57,6 +61,7 @@ const pItem = (o: Partial<BulkDeletePreviewItem>): BulkDeletePreviewItem => ({
 const rowOf = (noteNo: string) => screen.getByText(noteNo).closest("tr") as HTMLElement;
 
 beforeEach(() => {
+  navigateSpy.mockReset();
   perms.write = true;
   listDeliveryNotes.mockReset().mockResolvedValue({ items: ROWS, nextCursor: null, summary });
   previewBulkDeleteNotes.mockReset();
@@ -150,7 +155,7 @@ describe("toplu taslak silme", () => {
 });
 
 describe("sağ tık menüsü", () => {
-  it("§6 onaylı belgede 'Sil' pasif + neden; taslakta 'Sil' aynı önizlemeyi tek kayıtla açar", async () => {
+  it("§6 onaylı belgede 'Taslağı iptal et' pasif + neden; taslakta aynı önizlemeyi tek kayıtla açar", async () => {
     previewBulkDeleteNotes.mockResolvedValue({ items: [pItem({ id: "d2", noteNo: "GB-0003" })], summary: { requested: 1, deletable: 1, blocked: 0, lines: 3, scans: 1 } });
     renderWithProviders(<IncomingDocumentsPage />);
     await screen.findByText("GB-0002");
@@ -166,6 +171,34 @@ describe("sağ tık menüsü", () => {
     expect(on).not.toHaveAttribute("data-disabled");
     await userEvent.click(on);
     await waitFor(() => expect(previewBulkDeleteNotes).toHaveBeenCalledWith(["d2"]));
-    expect(await screen.findByRole("button", { name: "1 taslağı sil" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Taslağı iptal et" })).toBeInTheDocument();
+  });
+});
+
+describe("satır sonu 'Taslağı iptal et'", () => {
+  it("§7 yalnız taslak satırında görünür; tık detaya gitmez, tek kayıt önizlemesini satır + parti sayısıyla açar", async () => {
+    previewBulkDeleteNotes.mockResolvedValue({ items: [pItem({ id: "d2", noteNo: "GB-0003", lineCount: 4, partyCount: 2, scanCount: 1 })], summary: { requested: 1, deletable: 1, blocked: 0, lines: 4, scans: 1 } });
+    applyBulkDeleteNotes.mockResolvedValue({ results: [{ id: "d2", noteNo: "GB-0003", ok: true, status: 200, code: null, message: null }], summary: { deleted: 1, failed: 0 } });
+    renderWithProviders(<IncomingDocumentsPage />);
+    await screen.findByText("GB-0002");
+    expect(within(rowOf("GB-0002")).queryByTestId("note-row-cancel-draft")).toBeNull();
+    await userEvent.click(within(rowOf("GB-0003")).getByTestId("note-row-cancel-draft"));
+    expect(previewBulkDeleteNotes).toHaveBeenCalledWith(["d2"]);
+    // Satır tıkı detayı gecikmeli açar (çift tık koruması); gecikme geçtikten sonra da gidilmemiş olmalı.
+    await new Promise((r) => setTimeout(r, 400));
+    expect(navigateSpy).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: /Taslağı iptal et/ })).toBeInTheDocument();
+    expect(await within(dialog).findByTestId("bulk-delete-row")).toHaveTextContent("4 satır · 2 parti · 1 sayfa");
+    expect(within(dialog).getByTestId("bulk-delete-summary")).toHaveTextContent("1 taslak silinecek — 4 satır, 2 parti, 1 sayfa");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Taslağı iptal et" }));
+    await waitFor(() => expect(applyBulkDeleteNotes).toHaveBeenCalledWith(["d2"]));
+  });
+
+  it("§8 yazma izni yoksa satır sonu düğmesi yok", async () => {
+    perms.write = false;
+    renderWithProviders(<IncomingDocumentsPage />);
+    await screen.findByText("GB-0002");
+    expect(screen.queryByTestId("note-row-cancel-draft")).toBeNull();
   });
 });

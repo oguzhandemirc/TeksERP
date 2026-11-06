@@ -2,7 +2,7 @@
 // Düzen Kumaş Stoğu ile aynı: başlık → süzgeç şeridi → tam genişlik DataTable (kendi kaydırıcısı + altlığı).
 // Sayfaya dosya bırakmak "Belge yükle"yi o dosyalarla açar (`usePageFileDrop`).
 // Fotoğraf tabletten ya da panelden (Belge yükle) gelir (okuma işi DRAFT yazar); panel gözden geçirir ve onaylar (SoD: `gelen-belge:approve`).
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { FileCog, PackageCheck, Plus, Upload } from "lucide-react";
@@ -48,6 +48,19 @@ function TemplateLinks() {
   );
 }
 
+/** "Elle taslak": kayıt yaratan uç → deneme başına tek token (yalnız belirsiz hatada yapışır). */
+function useManualNoteCreate(onCreated: (id: string) => void) {
+  const attempt = useAttemptToken();
+  return useMutation({
+    mutationFn: () => createManualNote(attempt.token()),
+    onSuccess: (note) => {
+      attempt.onSuccess();
+      onCreated(note.id);
+    },
+    onError: (e) => attempt.onFailure(e),
+  });
+}
+
 export function IncomingDocumentsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<NoteListFilter>(EMPTY_FILTER);
@@ -56,7 +69,9 @@ export function IncomingDocumentsPage() {
   const { q: list, items, summary } = useNoteList({ ...filter, q }, pageSize);
   const canWrite = useRoleAccess().hasPermission("gelen-belge:write");
   const canDelete = canWrite;
-  const table = useNoteTable(items, canDelete, JSON.stringify(toQuery({ ...filter, q })));
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const cancelDraft = useCallback((id: string) => setDeleteIds([id]), []);
+  const table = useNoteTable(items, canDelete, JSON.stringify(toQuery({ ...filter, q })), cancelDraft);
   const pagination = {
     loaded: items.length,
     // Sekmenin toplamı aynı where'den gelen özet şeridinden (liste ile sayaç ayrışmaz).
@@ -75,15 +90,7 @@ export function IncomingDocumentsPage() {
   };
   // Modal açıkken sayfa bırakmayı dinlemez (modalın kendi bırakma alanı var; portal olayları buraya da kabarır).
   const drop = usePageFileDrop(canWrite && !uploadOpen, (files) => openUpload(files));
-  const attempt = useAttemptToken();
-  const create = useMutation({
-    mutationFn: () => createManualNote(attempt.token()),
-    onSuccess: (note) => {
-      attempt.onSuccess();
-      void navigate(`${INCOMING_DOCUMENTS_PATH}/${note.id}`);
-    },
-    onError: (e) => attempt.onFailure(e),
-  });
+  const create = useManualNoteCreate((id) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${id}`));
 
   return (
     <PageShell className="relative" data-testid="incoming-documents-page" {...drop.handlers}>
@@ -124,6 +131,8 @@ export function IncomingDocumentsPage() {
         pathOf={(id) => `${INCOMING_DOCUMENTS_PATH}/${id}`}
         onOpen={(id) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${id}`)}
         canDelete={canDelete}
+        deleteIds={deleteIds}
+        onDeleteIdsChange={setDeleteIds}
       />
       {uploadOpen && (
         <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} target={{ kind: "new" }} initialFiles={droppedFiles} onDone={(note) => void navigate(`${INCOMING_DOCUMENTS_PATH}/${note.id}`)} />

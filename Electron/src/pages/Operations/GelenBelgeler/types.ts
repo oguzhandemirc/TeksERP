@@ -151,6 +151,8 @@ export interface BulkDeletePreviewItem {
   code: string | null;
   reason: string | null;
   lineCount: number;
+  /** Parti (bölüm) sayısı — eski sunucu göndermez; yoksa gösterilmez. */
+  partyCount?: number;
   scanCount: number;
   ownerName: string | null;
   senderName: string | null;
