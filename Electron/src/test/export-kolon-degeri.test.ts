@@ -39,7 +39,6 @@ const BASELINE: Record<string, string[]> = {
   "Reports/Dokuma/ChainBucketsPanel.tsx": ["ad", "sayi"],
   "Reports/Dokuma/leventColumns.tsx": ["kaynak", "kaynak"],
   "Reports/Dokuma/productionChainColumns.tsx": ["dokuma", "gecikme", "isEmri", "levent", "musteri", "siparis"],
-  "Reports/Inventory/StockScorecardPage.tsx": ["spec"],
   "Reports/Production/WipScorecardPage.tsx": ["spec"],
   "Reports/Quality/PlanDeviationScorecardPage.tsx": ["değişim"],
   "Reports/Quality/ScorecardBreakdown.tsx": ["?", "delta"],
