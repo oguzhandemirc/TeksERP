@@ -7,6 +7,8 @@ import NumpadInput from '../../../components/NumpadInput';
 import { colors, spacing } from '../../../theme/tokens';
 import type { TamburLabelSettings } from '../../../services/tambur.service';
 import { shouldAutoPrintAfterCut, splitSuggestion } from './finalLabel';
+import TamburLabelBatchStrip from './TamburLabelBatchStrip';
+import type { TamburLabelBatch } from './useTamburLabelBatch';
 
 export interface TamburFinalLabelStripProps {
   settings: TamburLabelSettings;
@@ -16,13 +18,18 @@ export interface TamburFinalLabelStripProps {
   onSuggest: (lengthText: string) => void;
   /** Etiket bilgisi penceresini açar; iş emri yoksa düğme çizilmez. */
   onOpenLabelInfo?: () => void;
+  /** Müşteri parti no şeridi (ayar kapalıysa kendisi çizilmez). */
+  batch?: TamburLabelBatch;
 }
 
 export default function TamburFinalLabelStrip(p: TamburFinalLabelStripProps) {
   const suggestion = splitSuggestion(p.settings.splitLengthM, p.remaining);
   const endMode = !shouldAutoPrintAfterCut(p.settings);
-  if (!suggestion && !p.settings.weighRequired && !p.onOpenLabelInfo && !endMode) return null;
+  const batchStrip = p.batch ? <TamburLabelBatchStrip batch={p.batch} /> : null;
+  if (!suggestion && !p.settings.weighRequired && !p.onOpenLabelInfo && !endMode) return batchStrip;
   return (
+    <>
+    {batchStrip}
     <View style={s.root} testID="tambur-final-etiket-serit">
       {suggestion ? (
         <Chip icon="ruler" compact onPress={() => p.onSuggest(suggestion)} testID="tambur-bolme-onerisi">
@@ -51,6 +58,7 @@ export default function TamburFinalLabelStrip(p: TamburFinalLabelStripProps) {
         </Button>
       ) : null}
     </View>
+    </>
   );
 }
 

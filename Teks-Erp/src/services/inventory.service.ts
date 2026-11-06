@@ -26,6 +26,7 @@ import { ambiguousCustomerCodeError, customerCodeSearchRollIds, matchExtras, res
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
+import { normalizeLabelBatchNo } from "./helpers/label-batch-no.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx, warehouseStampTx } from "./helpers/warehouse.helper";
 import {
@@ -349,6 +350,8 @@ export interface RelabelContext {
   /** KAT — katalog KODU ("6-KAT" / "TUP"); kat girilmemiş topta null. Düzelt
    *  diyaloğu bunu seçici ile düzeltir (kolon, pivot DEĞİL — bkz. applyManualProperties). */
   foldType: string | null;
+  /** Müşterinin etikete istediği parti metni (`Roll.labelBatchNo`); yoksa null. */
+  labelBatchNo: string | null;
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
@@ -3126,6 +3129,7 @@ export class InventoryService {
         qualityGradeRef: { select: { id: true, code: true, name: true, color: true } },
         width: true,
         foldType: true,
+        labelBatchNo: true,
         currentQty: true,
         weightKg: true,
         markedForKartela: true,
@@ -3220,6 +3224,7 @@ export class InventoryService {
         qualityGradeRef: roll.qualityGradeRef,
         width: roll.width != null ? Number(roll.width) : null,
         foldType: roll.foldType,
+        labelBatchNo: roll.labelBatchNo,
         currentQty: Number(roll.currentQty),
         weightKg: roll.weightKg != null ? Number(roll.weightKg) : null,
         markedForKartela: roll.markedForKartela,
@@ -4386,6 +4391,8 @@ export class InventoryService {
        * (2026-08-13) katsız doğmuş topların tek düzeltme yolu burasıdır.
        */
       foldType?: string | null;
+      /** Etiket parti no — `undefined` DOKUNMA, null/"" TEMİZLE, metin YAZ (kırpılır). */
+      labelBatchNo?: string | null;
       reason?: string;
     },
     userId?: string,
@@ -4405,6 +4412,7 @@ export class InventoryService {
         width: true,
         qualityGrade: true,
         foldType: true,
+        labelBatchNo: true,
         initialQty: true,
         currentQty: true,
         warehouseId: true,
@@ -4602,6 +4610,11 @@ export class InventoryService {
     const resolvedFold = await resolveFoldTypeForWrite(data.foldType);
     const foldChanged = resolvedFold !== undefined && resolvedFold !== roll.foldType;
     if (foldChanged) rollData.foldType = resolvedFold;
+    // Etiket parti no düzeltmesi müşteri ayarına BAĞLI DEĞİL: ayar sonradan kapansa da
+    // yanlış basılmış değer panelden temizlenebilmeli.
+    const resolvedLabelBatch = normalizeLabelBatchNo(data.labelBatchNo);
+    const labelBatchChanged = resolvedLabelBatch !== undefined && resolvedLabelBatch !== roll.labelBatchNo;
+    if (labelBatchChanged) rollData.labelBatchNo = resolvedLabelBatch;
 
     // Etiket bayat: etiket-görünür bir alan (renk/en/metraj/kalite/özellik) GERÇEKTEN
     // değiştiyse topun fiziksel etiketi artık uyuşmuyor → labelDirty=true (baskıda temizlenir).
@@ -4629,7 +4642,7 @@ export class InventoryService {
       data.qualityGrade.trim() !== roll.qualityGrade;
     // ⚠️ `foldChanged` de etiketi bayatlatır: kat 2026-08-13'ten beri etiket alan
     // kataloğunda (ROLL_RAW + ROLL_FINISHED) — şablona sürüklenmişse kâğıda basılıyor.
-    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged || foldChanged) {
+    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged || foldChanged || labelBatchChanged) {
       rollData.labelDirty = true;
     }
 
@@ -4748,6 +4761,7 @@ export class InventoryService {
         width: roll.width != null ? Number(roll.width) : null,
         qualityGrade: roll.qualityGrade,
         foldType: roll.foldType,
+        labelBatchNo: roll.labelBatchNo,
         currentQty: Number(roll.currentQty),
       },
       newData: {
@@ -4766,6 +4780,7 @@ export class InventoryService {
         // KANONİK değer yazılır (istemcinin ham girdisi değil) — audit ile kolon
         // ayrışırsa "ne yazıldı" sorusunun iki cevabı olur.
         foldType: resolvedFold ?? null,
+        labelBatchNo: resolvedLabelBatch,
         currentQty: data.currentQty ?? null,
         reason: data.reason ?? null,
         // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör

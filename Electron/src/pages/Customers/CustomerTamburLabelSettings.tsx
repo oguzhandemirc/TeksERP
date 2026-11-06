@@ -50,6 +50,11 @@ export function CustomerTamburLabelSettings({ customer }: { customer: Customer }
           onChange={(e) => setForm({ ...form, weighRequired: e.target.checked })} />
         Tamburda tartım zorunlu (kg girilmeden kesim kaydedilmez; kg etikete basılabilir)
       </label>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={form.labelBatchEnabled}
+          onChange={(e) => setForm({ ...form, labelBatchEnabled: e.target.checked })} />
+        Etikete müşterinin parti no'su basılsın (tablet kesimde sorar; doluyken bizim parti no basılmaz)
+      </label>
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Bölme ölçüsü önerisi</span>
         <Input className="h-8 w-28" inputMode="decimal" placeholder="ör. 50" value={form.splitLength}

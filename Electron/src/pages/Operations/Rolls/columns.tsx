@@ -333,6 +333,18 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       ),
   },
   {
+    // Müşteri parti no (etikete basılan J1/K30); yalnız ayarı açık müşterinin toplarında dolu.
+    accessorKey: "labelBatchNo",
+    header: "Müşteri Parti",
+    meta: { label: "Müşteri Parti" },
+    cell: ({ row }) =>
+      row.original.labelBatchNo ? (
+        <span className="text-xs">{row.original.labelBatchNo}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     // BULUNDUĞU İSTASYON (2026-08-05 saha talebi: "Üretimde sekmesi hangi
     // kumaşın hangi istasyonda olduğunu göstermiyor").
     //

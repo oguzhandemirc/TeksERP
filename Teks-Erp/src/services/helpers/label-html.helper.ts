@@ -98,7 +98,9 @@ function buildPortraitRollLabelHtml(
     payload.weightKg != null ? `${formatNumber(payload.weightKg)} kg` : "";
   const quality = escapeHtml(payload.qualityGrade ?? "");
   const date = formatDate(payload.printedAt);
-  const safeBatch = payload.batchNumber ? escapeHtml(payload.batchNumber) : "";
+  // Müşteri partisi basılıyorsa bizim parti no'muz varsayılan düzende basılmaz (iki "parti" karışmasın).
+  const customerBatchShown = !!payload.labelBatchNo && isVisibleDefaultOn(fields, "labelBatchNo");
+  const safeBatch = payload.batchNumber && !customerBatchShown ? escapeHtml(payload.batchNumber) : "";
   const barcode = escapeHtml(payload.barcode || "");
   const customerName = payload.customerName ? escapeHtml(payload.customerName) : "";
   const orderNumber = payload.orderNumber ? escapeHtml(payload.orderNumber) : "";
@@ -121,6 +123,7 @@ function buildPortraitRollLabelHtml(
     { key: "colorCode", value: colorCode, def: "Renk Kodu" },
     { key: "customerName", value: customerName, def: "Müşteri" },
     { key: "orderNumber", value: orderNumber, def: "Sipariş" },
+    { key: "labelBatchNo", value: payload.labelBatchNo ? escapeHtml(payload.labelBatchNo) : "", def: "Parti" },
     { key: "openDefects", value: payload.openDefects ? escapeHtml(payload.openDefects) : "", def: "Hata Notu" },
     { key: "deliveryNoteItemText", value: payload.deliveryNoteItemText ? escapeHtml(payload.deliveryNoteItemText) : "", def: "Müşteri kumaşı" },
     { key: "deliveryNoteColorText", value: payload.deliveryNoteColorText ? escapeHtml(payload.deliveryNoteColorText) : "", def: "Müşteri rengi" },
@@ -128,7 +131,8 @@ function buildPortraitRollLabelHtml(
     { key: "customerCode", value: payload.customerCode ? escapeHtml(payload.customerCode) : "", def: "Müşteri barkodu" },
   ]
     // `openDefects` (KQ-D8) ve müşteri belge metni (E3) OPT-IN: şablonsuz düzende de basılmaz.
-    .filter((r) => r.value && (OPT_IN_ROW_KEYS.has(r.key) ? isVisibleOptIn(fields, r.key) : vis(r.key)))
+    // `labelBatchNo` sonradan eklendi: eski kayıtlı şablonda alan yok → AÇIK say (kartelaMark emsali).
+    .filter((r) => r.value && (OPT_IN_ROW_KEYS.has(r.key) ? isVisibleOptIn(fields, r.key) : r.key === "labelBatchNo" ? isVisibleDefaultOn(fields, r.key) : vis(r.key)))
     .sort((a, b) => orderOf(a.key) - orderOf(b.key))
     .map((r) => `<div class="meta-row" style="${sty(r.key)}"><span class="k">${lbl(r.key, r.def)}</span><span>${r.value}</span></div>`)
     .join("\n    ");

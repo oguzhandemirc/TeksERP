@@ -127,6 +127,8 @@ export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): L
     batchNumber: "P1207261", workOrderNumber: previewSeriesCode(resolveSeriesFormat("workOrder"), 1), printedAt: new Date().toISOString(),
     // KAT — katalog KODU ("2-KAT"/"6-KAT"/"TUP"), ad değil (bkz. LabelPayload.foldType).
     foldType: "2-KAT",
+    // Müşteri partisi — stüdyo önizlemesi alanı dolu göstersin.
+    labelBatchNo: "J1",
     kind, cardNumber: "KRT1207260001", lengthCm: 30, parentRollBarcode: "T120726H0001",
   };
   // SACK dalı ŞART: stüdyo önizlemesi bu payload'ı kullanır. Çuval alanları
@@ -159,7 +161,7 @@ export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): L
     colorCode: null, colorName: null, colorNameDefault: null, colorNameSource: null,
     qualityGrade: "", widthCm: null, markedForKartela: false, lengthMeters: 0, weightKg: null,
     customerName: null, customerId: null, orderNumber: null, orderLineId: null,
-    batchNumber: null, workOrderNumber: null, foldType: null,
+    batchNumber: null, workOrderNumber: null, foldType: null, labelBatchNo: null,
   };
   if (kind === ("MACHINE" as LabelKind)) {
     return {

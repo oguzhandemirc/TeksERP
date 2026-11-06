@@ -41,6 +41,10 @@ const stationFilterQuerySchema = z.object({
     .optional(),
 });
 
+// Müşterinin etikete istediği parti metni (Gülkesim 2026-11-06) — ayar kapısı serviste
+// (`resolveTamburLabelBatchNo`). ⚠️ Zod tanımadığı anahtarı sessizce siler: her şemada şart.
+const labelBatchNoField = z.string().max(64, "Etiket parti no en çok 64 karakter").nullish();
+
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
 export const finalizeSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
@@ -86,6 +90,7 @@ export const finalizeSchema = z.object({
   markedForKartela: z.boolean().optional(),
   // Otomatik kalan kuyruk parçasının kg'ı (S5 tartım kapısı).
   remainingWeightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  labelBatchNo: labelBatchNoField,
   // Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH sonrası aynı istek
   // bu bayrakla tekrarlanır. bkz. constants/tambur-plan-gate.ts.
   confirmMismatch: z.boolean().optional(),
@@ -126,6 +131,7 @@ export const cutOpenFabricSchema = z.object({
   // Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu (servis 400 TAMBUR_WEIGHT_REQUIRED).
   // ⚠️ Zod tanımadığı anahtarı sessizce siler: bu satır düşerse kg hiç yazılmaz.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  labelBatchNo: labelBatchNoField,
   // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
   // düşerse mobil onayı gönderir, backend hiç görmez ve operatör onayladığı hâlde
   // 409'a çarpar (varianceReason dersinin aynısı).
@@ -165,6 +171,7 @@ export const finalizeOpenFabricSchema = z.object({
   confirmMismatch: z.boolean().optional(),
   // Kalan topun kg'ı (S5) — müşteri tartım istiyorsa kalan top doğarken zorunlu.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  labelBatchNo: labelBatchNoField,
 });
 
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
@@ -189,6 +196,7 @@ export const cutWarehouseRollSchema = z.object({
   // Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu (servis 400 TAMBUR_WEIGHT_REQUIRED).
   // ⚠️ Zod tanımadığı anahtarı sessizce siler: bu satır düşerse kg hiç yazılmaz.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  labelBatchNo: labelBatchNoField,
 });
 
 // Kurşun Dağıtım (bypass) kapanışı — Tambur tabletinde refakat kartı okutulur,
@@ -253,6 +261,7 @@ export const finalizeWarehouseCutSchema = z.object({
   varianceReasonText: z.string().max(500).optional().nullable(),
   // Kalan topun kg'ı (S5) — `finalizeOpenFabricSchema` ile aynı sözleşme.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  labelBatchNo: labelBatchNoField,
 });
 
 export class TamburController {

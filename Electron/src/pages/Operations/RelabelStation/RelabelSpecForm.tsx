@@ -46,6 +46,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   const [metraj, setMetraj] = useState<string>(ctx.currentQty != null ? String(ctx.currentQty) : "");
   // KAT — boş string = "kat yok" (temizle). Katalog kodu saklanır, ad değil.
   const [foldType, setFoldType] = useState<string>(ctx.foldType ?? "");
+  const [labelBatchNo, setLabelBatchNo] = useState<string>(ctx.labelBatchNo ?? "");
   const [propertyIds, setPropertyIds] = useState<string[]>(ctx.propertyIds);
   const [marked, setMarked] = useState<boolean>(ctx.markedForKartela);
   // Süpervizör kapsamı: top serbest satılabilir stokta DEĞİLSE (örn. istasyonda,
@@ -89,6 +90,8 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
         // kalır; alanı koşulsuz göndermek o durumda kata dokunma riski taşırdı.
         // Boş string = "kat yok" → null (temizle), backend'in üçlü sözleşmesi.
         ...(foldType !== (ctx.foldType ?? "") ? { foldType: foldType || null } : {}),
+        // Müşteri parti no: yalnız değiştiyse; boş = temizle (null).
+        ...(labelBatchNo.trim() !== (ctx.labelBatchNo ?? "") ? { labelBatchNo: labelBatchNo.trim() || null } : {}),
         // Metraj YALNIZ değiştiyse gönder — değişmediyse göndermeyip backend'in
         // "kısmen tüketilmiş" guard'ını (renk-only kayıtlarda) gereksiz tetikleme.
         currentQty:
@@ -226,6 +229,20 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
               </SelectContent>
             </Select>
           )}
+        </FormField>
+        <FormField
+          label="Müşteri Parti"
+          htmlFor="relabel-label-batch"
+          hint="Etikete basılan müşteri parti no (ör. J1); doluyken etikette bizim parti no basılmaz."
+        >
+          <Input
+            id="relabel-label-batch"
+            maxLength={64}
+            placeholder="—"
+            value={labelBatchNo}
+            disabled={disabled}
+            onChange={(e) => edit(setLabelBatchNo)(e.target.value)}
+          />
         </FormField>
       </div>
 

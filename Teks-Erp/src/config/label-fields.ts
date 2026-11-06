@@ -54,6 +54,8 @@ export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
   { key: "weightKg",        defaultLabel: "Ağırlık (kg)",      type: "number" },
   // KAT — katalog KODU basılır ("6-KAT"/"TUP"), ad değil (bkz. LabelPayload.foldType).
   { key: "foldType",        defaultLabel: "Kat",               type: "text" },
+  // Müşterinin etikete istediği parti (Roll.labelBatchNo) — bizim Parti No'muz değil; boşsa atlanır.
+  { key: "labelBatchNo",    defaultLabel: "Müşteri Parti",     type: "text" },
   // Müşterinin GELEN BELGESİNDEKİ kumaş adı/rengi (hizmet ekseni E3) — ham metin, Tambur çocuğunda ata topun
   // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
   { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },
@@ -85,6 +87,8 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   // KAT — bitmiş topta da basılabilir; kesimde SEÇİLEN değer topun üstünde kalıcıdır
   // (miras alınmaz), yani etikete basılan kat o parçanın gerçeğidir.
   { key: "foldType",         defaultLabel: "Kat",                    type: "text" },
+  // Müşterinin etikete istediği parti (Roll.labelBatchNo, tamburda girilir) — boşsa atlanır.
+  { key: "labelBatchNo",     defaultLabel: "Müşteri Parti",          type: "text" },
   { key: "customerName",     defaultLabel: "Müşteri",                type: "text" },
   { key: "orderNumber",      defaultLabel: "Sipariş No",             type: "text" },
   { key: "batchNumber",      defaultLabel: "Parti No",               type: "text" },
