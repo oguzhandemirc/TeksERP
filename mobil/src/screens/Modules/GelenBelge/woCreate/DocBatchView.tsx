@@ -31,10 +31,26 @@ const MODE_TEXT: Record<FormApproval, string> = {
   get UNKNOWN() { return `Kaydet: ${TERIM.terbiyeIsEmri.tekilKucuk} açılmaya çalışılır; ayar ayrı onay istiyorsa taslak kalır.`; },
 };
 
+type DoneNote = { id: string; noteNo: string };
+type NoteSink = (note: DoneNote, runKey: number) => void;
+
+/** Gönderilen her belge bir satır olur (aynı taslağa sayfa eklenirse satır yeniden okunur); `onNote` dışarıya da bildirir. */
+function useNoteSink(done: { note: DoneNote; runKey: number } | null | undefined, addNote: NoteSink, onNote?: NoteSink) {
+  const doneNote = done?.note;
+  const doneRun = done?.runKey ?? 0;
+  const onNoteRef = useRef(onNote);
+  onNoteRef.current = onNote;
+  useEffect(() => {
+    if (!doneNote) return;
+    addNote(doneNote, doneRun);
+    onNoteRef.current?.(doneNote, doneRun);
+  }, [doneNote, doneRun, addNote]);
+}
+
 /** `multi`: birden çok belge art arda (satır listesi + "Hepsini kaydet"); değilse tek belge okunur, sonra tarayıcı gizlenir.
  *  `autoStart`: "Belge okut"a basınca tarayıcı ek dokunuşsuz açılır. */
 // `onNote`: gönderilen belge (aynı taslağa yeni sayfada aynı not, yeni runKey) — İş Emirleri okutma önizlemesi izler.
-export default function DocBatchView({ route, multi = true, autoStart = false, onNote }: { route: ProductionRoute; multi?: boolean; autoStart?: boolean; onNote?: (note: { id: string; noteNo: string }, runKey: number) => void }) {
+export default function DocBatchView({ route, multi = true, autoStart = false, onNote }: { route: ProductionRoute; multi?: boolean; autoStart?: boolean; onNote?: NoteSink }) {
   const wo = useWoRows(route);
   const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip kaydedin.' });
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -56,17 +72,7 @@ export default function DocBatchView({ route, multi = true, autoStart = false, o
   const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000 });
   const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
 
-  // Gönderilen her belge bir satır olur (aynı taslağa sayfa eklenirse satır yeniden okunur).
-  const { addNote } = wo;
-  const doneNote = b.done?.note;
-  const doneRun = b.done?.runKey ?? 0;
-  const onNoteRef = useRef(onNote);
-  onNoteRef.current = onNote;
-  useEffect(() => {
-    if (!doneNote) return;
-    addNote(doneNote, doneRun);
-    onNoteRef.current?.(doneNote, doneRun);
-  }, [doneNote, doneRun, addNote]);
+  useNoteSink(b.done, wo.addNote, onNote);
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
   const removeFromPreview = (i: number) => {
