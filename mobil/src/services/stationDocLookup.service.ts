@@ -18,6 +18,13 @@ export interface StationLookupStatus {
 
 export type StationLookupOutcome = 'SINGLE' | 'MULTIPLE' | 'NO_WORK_ORDER' | 'NO_DOCUMENT' | 'NO_DOC_NO' | 'UNREADABLE';
 
+/** HERE = bu ekranın açık kart listesinde · NOT_YET · PASSED · NOT_ON_ROUTE (sunucu `station-open-step.helper`). */
+/** STARTABLE_HERE: rotasız İE, okutunca adımı bu istasyona eklenir (açık listede "Sahada belirlenecek"). */
+export type AtStation = 'HERE' | 'STARTABLE_HERE' | 'NOT_YET' | 'PASSED' | 'NOT_ON_ROUTE';
+
+/** Hangi ekran soruyor: sunucu "burada bekliyor mu"yu o ekranın açık kart listesine göre cevaplar. */
+export type LookupScreen = { screen: 'KURSUN_QC' } | { screen: 'TAMBUR'; stationId: string | null };
+
 export interface StationLookupWorkOrder {
   id: string;
   workOrderNumber: string;
@@ -25,7 +32,14 @@ export interface StationLookupWorkOrder {
   /** Ekranın mevcut kart çözümüne verilecek kod (aktif kart barkodu ya da İE no). */
   cardBarcode: string;
   batchNumbers: string[];
-  documents: { noteNo: string; senderDocNo: string | null }[];
+  documents: { noteNo: string; senderDocNo: string | null; customerOrderNo?: string | null; customerBatchNo?: string | null }[];
+  // Aşağıdakiler 2026-11-06 ek alanları — eski sunucu göndermez (undefined).
+  processText?: string | null;
+  rollCount?: number;
+  meters?: number;
+  locationText?: string;
+  atStation?: AtStation | null;
+  atStationText?: string | null;
 }
 
 export interface StationLookupResult {
@@ -35,17 +49,26 @@ export interface StationLookupResult {
   workOrders: StationLookupWorkOrder[];
   /** Sunucunun Türkçe sonuç cümlesi. */
   message: string;
+  station?: { screen: string; label: string } | null;
+}
+
+/** Ekran bilgisi SORGU dizgisinde: eski sunucu sorguyu yok sayar (gövde katı şemadır, ek alan 400 olurdu). */
+function screenParams(s?: LookupScreen): Record<string, string> | undefined {
+  if (!s) return undefined;
+  return s.screen === 'TAMBUR' && s.stationId ? { screen: s.screen, stationId: s.stationId } : { screen: s.screen };
 }
 
 export const stationDocLookupService = {
   status: (): Promise<StationLookupStatus> =>
     apiClient.get<ApiResponse<StationLookupStatus>>('/gelen-belge/istasyon-okutma').then((r) => r.data.data),
 
-  byPhoto: (contentBase64: string, sha256: string): Promise<StationLookupResult> =>
+  byPhoto: (contentBase64: string, sha256: string, screen?: LookupScreen): Promise<StationLookupResult> =>
     apiClient
-      .post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { contentBase64, sha256 }, { timeout: LOOKUP_TIMEOUT_MS })
+      .post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { contentBase64, sha256 }, { timeout: LOOKUP_TIMEOUT_MS, params: screenParams(screen) })
       .then((r) => r.data.data),
 
-  bySearch: (q: string): Promise<StationLookupResult> =>
-    apiClient.post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { q }).then((r) => r.data.data),
+  bySearch: (q: string, screen?: LookupScreen): Promise<StationLookupResult> =>
+    apiClient
+      .post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { q }, { params: screenParams(screen) })
+      .then((r) => r.data.data),
 };

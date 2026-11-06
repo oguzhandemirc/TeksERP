@@ -8,6 +8,8 @@
 // K30-E: belge no tutmazsa / okunamazsa (kullanıcı şablonunda Evrak No atanmamış) okunan PARTİ NO açık iş emirlerinde
 // aranır; iki yol da OCR'a toleranslı karşılaştırmayı `helpers/doc-code-match.helper.ts`ten alır.
 // Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
+// Çok İE (2026-11-06): tablet ekranını bildirirse her İE "burada bekliyor mu" (ekranın açık kart listesinin yüklemi,
+// `helpers/station-open-step.helper.ts`) + şu an nerede ile döner; satır yükleme ve sınıflama `helpers/station-lookup-rows.helper.ts`.
 // =============================================================================
 import { type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -16,7 +18,7 @@ import { TERIM } from "../constants/terim";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { readerOcr } from "../lib/gelen-belge/okuma-istemcisi";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
-import { whereRollsOfWorkOrder, whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
+import { whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
 import { LOOKUP_NOTE_STATUSES, stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { decodeScanUpload, PDF_MIME } from "./gelen-belge-scan.service";
 import { extractDraft, ocrFromEnvelope } from "./gelen-belge-taslak-doldur.service";
@@ -27,9 +29,14 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { type CodeMatchTier, matchCodes } from "./helpers/doc-code-match.helper";
 import { uyari } from "../lib/logger";
 import type { DraftHeader } from "../lib/gelen-belge/taslak";
+import type { StationScreen } from "./helpers/station-open-step.helper";
+import {
+  type LoadedWorkOrders, loadWorkOrders, markAtStation, MAX_WORK_ORDERS, type StationLookupContext, stationLabel, type StationLookupWorkOrder,
+} from "./helpers/station-lookup-rows.helper";
 
-/** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
-const MAX_WORK_ORDERS = 20;
+export type { AtStation, StationLookupContext, StationLookupWorkOrder } from "./helpers/station-lookup-rows.helper";
+export { stationLookupContext } from "./helpers/station-lookup-rows.helper";
+
 /** Parti no yedeği ve toleranslı belge no yalnız AÇIK iş emrine bakar (bitmiş / devredilmiş / iptal eşleşmez). */
 const OPEN_WORK_ORDER_STATUSES: WorkOrderStatus[] = [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS];
 /**
@@ -41,17 +48,6 @@ const TOLERANT_UNIVERSE_CAP = 2000;
 export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE";
 export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "OCR" | "SEARCH";
 
-export interface StationLookupWorkOrder {
-  readonly id: string;
-  readonly workOrderNumber: string;
-  readonly status: WorkOrderStatus;
-  /** Tabletin mevcut kart çözümüne verilecek kod: aktif refakat kartı barkodu (kartsız İE listeye girmez). */
-  readonly cardBarcode: string;
-  readonly batchNumbers: string[];
-  /** Bu İE'ye top vermiş canlı belgeler (GB no + gönderen belge no). */
-  readonly documents: Array<{ noteNo: string; senderDocNo: string | null }>;
-  readonly createdAt: Date;
-}
 
 export interface StationLookupResult {
   readonly outcome: StationLookupOutcome;
@@ -64,6 +60,8 @@ export interface StationLookupResult {
   readonly closedWorkOrderNumbers?: string[];
   /** Türkçe: tabletin göstereceği sonuç cümlesi. */
   readonly message: string;
+  /** Ekran bildirildiyse hangi istasyon için "burada" denildi; yoksa null. */
+  readonly station?: { screen: StationScreen; label: string } | null;
 }
 
 export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean }> {
@@ -82,11 +80,14 @@ async function assertStationLookupEnabled(): Promise<void> {
 
 export type StationLookupInput = { contentBase64: string; sha256?: string | null } | { q: string };
 
-export async function stationDocLookup(input: StationLookupInput): Promise<StationLookupResult> {
+export async function stationDocLookup(input: StationLookupInput, ctx: StationLookupContext | null = null): Promise<StationLookupResult> {
   await assertStationLookupEnabled();
-  if ("q" in input) return searchLookup(input.q);
-  return photoLookup(input.contentBase64, input.sha256 ?? null);
+  const label = ctx ? await stationLabel(ctx) : null;
+  const result = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null);
+  if (!ctx || !label) return { ...result, station: null };
+  return { ...result, workOrders: await markAtStation(result.workOrders, ctx), station: { screen: ctx.screen, label } };
 }
+
 
 async function searchLookup(q: string): Promise<StationLookupResult> {
   const where = stationWorkSearchWhere(q);
@@ -290,48 +291,6 @@ function workOrdersOfNotes(notes: NoteRow[]): Promise<LoadedWorkOrders> {
   return loadWorkOrders(whereWorkOrdersOfRolls({ deliveryNoteLine: { noteId: { in: noteIds } } }), noteIds);
 }
 
-type LoadedWorkOrders = { workOrders: StationLookupWorkOrder[]; closed: string[] };
-
-/**
- * Aktif refakat kartlı, iptal edilmemiş, arşivlenmemiş İE'ler — tablet kartı barkodla çözer, kartsız İE 404 olurdu.
- * Kartı kapanmış eşleşenler yalnız no olarak döner (cümle). `noteIds` verilirse belge listesi o belgelerle sınırlanır.
- */
-async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds: string[] | null): Promise<LoadedWorkOrders> {
-  const base: Prisma.WorkOrderWhereInput = { AND: [where, { status: { not: WorkOrderStatus.CANCELLED }, isActive: true }] };
-  const rows = await prisma.workOrder.findMany({
-    where: { AND: [base, { travelerCards: { some: { status: "ACTIVE" } } }] },
-    select: {
-      id: true, workOrderNumber: true, status: true, createdAt: true,
-      travelerCards: { where: { status: "ACTIVE" }, select: { barcode: true }, take: 1 },
-      batches: { select: { batchNumber: true }, orderBy: { createdAt: "asc" } },
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    take: MAX_WORK_ORDERS,
-  });
-  const out: StationLookupWorkOrder[] = [];
-  // İE başına tek sorgu (≤ 20): hangi belgeler bu İE'ye top verdi — bağ tanımı `whereRollsOfWorkOrder`dan.
-  for (const w of rows) {
-    const docs = await prisma.customerDeliveryNote.findMany({
-      where: { status: { in: [...LOOKUP_NOTE_STATUSES] }, ...(noteIds ? { id: { in: noteIds } } : {}), lines: { some: { roll: whereRollsOfWorkOrder(w.id) } } },
-      select: { noteNo: true, senderDocNo: true },
-      orderBy: { noteNo: "asc" },
-      take: 5,
-    });
-    out.push({
-      id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, createdAt: w.createdAt,
-      cardBarcode: w.travelerCards[0]!.barcode,
-      batchNumbers: [...new Set(w.batches.map((b) => b.batchNumber))],
-      documents: docs,
-    });
-  }
-  const closed = out.length > 0 ? [] : (await prisma.workOrder.findMany({
-    where: { AND: [base, { travelerCards: { none: { status: "ACTIVE" } } }] },
-    select: { workOrderNumber: true },
-    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    take: 3,
-  })).map((w) => w.workOrderNumber);
-  return { workOrders: out, closed };
-}
 
 function finish(p: {
   source: StationLookupSource;

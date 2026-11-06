@@ -11,7 +11,7 @@
 //   §e modül kapalı → 403 MODULE_DISABLED
 //   §f süre: 4000 kelimelik kare `engineMs` (ölçüldü 2026-11-05: medyan ~133 ms, M serisi Mac; eşik değil, rapora yazılır)
 // ⭐ NEGATİF SONDA (2026-11-05, elle, md5 ile geri alındı): servisteki GENEL filtresi (`t.id !== FALLBACK_TEMPLATE_CODE`)
-//    kaldırılınca §b2 düşer; servise şablon isabeti artırımı (`senderTemplate.updateMany … hitCount increment`) eklenince §d düşer; kutu `toFrameBox` yerine undefined
+//    kaldırılınca §b2 düşer; servise şablon isabeti artırımı (`senderTemplate.updateMany … hitCount increment`) eklenince §d düşer; `REQUEST_TRACE_EXCLUSIONS`ten canlı okuma satırı silinince §d düşer (§c'nin 400'leri izlenir, 2026-11-06); kutu `toFrameBox` yerine undefined
 //    dönünce §a kutu kontrolü düşer.
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -21,6 +21,7 @@ import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
+import { flushRequestTraces } from "../src/services/request-trace.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -78,12 +79,17 @@ const GENERIC = frame([{ x: 40, y: 40, text: "TARIH" }, { x: 300, y: 40, text: "
 type Field = { key: string; label: string; value: string | null; needsReview: boolean; issues?: string[]; box?: { x: number; y: number; w: number; h: number } };
 type Live = { template: { code: string; name: string; version: number } | null; score: number; fields: Field[]; engineMs: number };
 type Resp = { status: number; code?: string; data?: unknown };
+const LIVE_ROUTE = "/api/gelen-belge/canli-okuma";
 
 async function snapshot() {
-  await new Promise((r) => setTimeout(r, 400)); // audit + trace best-effort, tx dışında
+  await new Promise((r) => setTimeout(r, 400)); // audit best-effort, tx dışında
+  // Trace kuyruğu ~1 sn'de boşalır: login + şablon kaydının izi "önce" ile "sonra" arasına düşüyordu (CI 28→30).
+  // Kuyruk elle boşaltılır, sayım yalnız canlı okuma ucunun izi — ölçülen şey bu uç.
+  await flushRequestTraces();
   const [scans, notes, tpls, hits, logs, traces] = await Promise.all([
     prisma.documentScan.count(), prisma.customerDeliveryNote.count(), prisma.senderTemplate.count(),
-    prisma.senderTemplate.aggregate({ _sum: { hitCount: true } }), prisma.systemLog.count(), prisma.requestTrace.count(),
+    prisma.senderTemplate.aggregate({ _sum: { hitCount: true } }), prisma.systemLog.count(),
+    prisma.requestTrace.count({ where: { routeKey: LIVE_ROUTE } }),
   ]);
   return { scans, notes, tpls, hits: hits._sum.hitCount ?? 0, logs, traces };
 }
