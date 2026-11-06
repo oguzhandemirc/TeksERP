@@ -92,3 +92,24 @@ export async function liveRollMetersByWeavingOrder(
   }
   return out;
 }
+
+/**
+ * Tablet Dokuma listesi: işten doğan topların Σ ilk metresi, iş başına — genel bakışın `rollMeters`i ile AYNI yüklem
+ * (`rollsOfWeavingOrderWhere`, statü süzgeci yok); sayfa kimlikleriyle toplu. Topu olmayan iş haritada YOK (çağıran null der).
+ */
+export async function rollMetersByWeavingOrder(db: Db, weavingOrderIds: string[]): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (weavingOrderIds.length === 0) return out;
+  const rolls = await db.roll.findMany({
+    where: rollsOfWeavingOrderWhere(weavingOrderIds),
+    select: { initialQty: true, weavingOrderId: true, doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } } },
+  });
+  for (const r of rolls) {
+    // İki kol: geri alınmamış indirme zinciri ya da doff'suz iş bağı (XOR CHECK `rolls_weaving_order_xor_ck`).
+    const id = (r.doffEvent && !r.doffEvent.revokedAt ? r.doffEvent.machineRun?.weavingOrderId : null) ?? r.weavingOrderId;
+    if (!id) continue;
+    const cur = out.get(id);
+    out.set(id, cur ? cur.plus(r.initialQty) : r.initialQty);
+  }
+  return out;
+}

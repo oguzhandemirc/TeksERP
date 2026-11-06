@@ -22,6 +22,9 @@ import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
 import type { ProductionRoute } from '../../../services/route.service';
 import { useColumnPrefs, useLocationStations, useWorkOrderList } from './useWorkOrderList';
 import { DEFAULT_FILTERS, emptyStateFor, type ListFilters } from './workOrderRow';
+import IsEmriTuruAnahtari from './dokuma/IsEmriTuruAnahtari';
+import DokumaListesi from './dokuma/DokumaListesi';
+import { useIsEmriTuru } from './dokuma/useDokumaListesi';
 
 export default function IsEmirleriScreen() {
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
@@ -35,6 +38,9 @@ export default function IsEmirleriScreen() {
   const list = useWorkOrderList(filters);
   const { stations, loading: stationsLoading } = useLocationStations();
   const cols = useColumnPrefs();
+  // Terbiye | Dokuma: dokuma rejimi kapalıysa (ya da okuma izni yoksa) anahtar yok, başlık bugünkü düz metin.
+  const tur = useIsEmriTuru();
+  const anahtar = tur.gorunur ? <IsEmriTuruAnahtari etkin={tur.etkin} onSec={tur.sec} /> : undefined;
 
   if (scanRoute) {
     // Okutma: DocBatchView akışı (BELGE kipinde de); geri → liste (kaydedilen İE listede görünsün diye tazelenir).
@@ -46,8 +52,17 @@ export default function IsEmirleriScreen() {
     );
   }
 
+  if (tur.etkin === 'dokuma') {
+    // Dokuma yalnız izlenir (oluşturma panelde): alt çubuk yok — "Okut" terbiye belgesi akışıdır.
+    return (
+      <ScreenChrome title="" titleRowExtras={anahtar}>
+        <DokumaListesi />
+      </ScreenChrome>
+    );
+  }
+
   return (
-    <ScreenChrome title={TERIM.terbiyeIsEmri.cogul}>
+    <ScreenChrome title={anahtar ? '' : TERIM.terbiyeIsEmri.cogul} titleRowExtras={anahtar}>
       <View style={styles.fill}>
         <FilterBar value={filters} onChange={setFilters} stations={stations} stationsLoading={stationsLoading} searching={list.searching} onColumns={() => setColumnsOpen(true)} onOptions={scan.available ? () => setOptionsOpen(true) : undefined} />
         <WorkOrderTable
