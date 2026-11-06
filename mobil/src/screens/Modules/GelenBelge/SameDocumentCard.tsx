@@ -8,6 +8,7 @@ import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import { formatFactory } from '../../../lib/factory-time';
 import { WORK_ORDER_STATUS_LABEL } from '../../../utils/labels';
 import type { SameDocumentMatch } from '../../../services/inboundDoc.service';
+import { TERIM } from '../../../lib/terim';
 
 // Tembel: İE detayı (okutma geri bildirimi, ses) yalnız düğmeye basılınca yüklenir — belge ekranlarının yükü artmaz.
 const WorkOrderDetailSheet = lazy(() => import('../HizliIsEmri/WorkOrderDetailSheet'));
@@ -23,14 +24,14 @@ export function sameDocumentText(m: SameDocumentMatch): { title: string; lines: 
   }
   const head = `Bu belge ${when}'de işlendi → ${m.workOrders.length ? m.workOrders.map(woLabel).join(', ') : m.note.noteNo}`;
   const lines = [head];
-  if (!live.length) lines.push(m.workOrders.length ? 'Bu belgenin iş emri iptal edildi.' : 'Bu belgeden henüz iş emri açılmadı.');
+  if (!live.length) lines.push(m.workOrders.length ? `Bu belgenin ${TERIM.terbiyeIsEmri.tekilKucuk} iptal edildi.` : `Bu belgeden henüz ${TERIM.terbiyeIsEmri.tekilKucuk} açılmadı.`);
   return { title: 'Bu belge daha önce okutuldu', lines, liveWorkOrderId: live[0]?.id ?? null, canStartNew: live.length === 0 };
 }
 
 interface Props {
   match: SameDocumentMatch | null;
   onClose: () => void;
-  /** Verilirse canlı iş emri yoksa "Bu belgeden yeni iş emri aç" görünür (form ekranları). */
+  /** Verilirse canlı İE yoksa "Bu belgeden yeni İE aç" görünür (form ekranları). */
   onNewWorkOrder?: (note: { id: string; noteNo: string }) => void;
 }
 
@@ -49,8 +50,8 @@ export default function SameDocumentCard({ match, onClose, onNewWorkOrder }: Pro
         footer={
           <>
             <Button mode="text" onPress={onClose}>Kapat</Button>
-            {t.liveWorkOrderId ? <Button mode="contained" onPress={() => setWoId(t.liveWorkOrderId)}>İş emrini aç / düzenle</Button> : null}
-            {startNew ? <Button mode="contained" onPress={startNew}>Bu belgeden yeni iş emri aç</Button> : null}
+            {t.liveWorkOrderId ? <Button mode="contained" onPress={() => setWoId(t.liveWorkOrderId)}>{`${TERIM.terbiyeIsEmri.cumleBasi.belirtme} aç / düzenle`}</Button> : null}
+            {startNew ? <Button mode="contained" onPress={startNew}>{`Bu belgeden yeni ${TERIM.terbiyeIsEmri.tekilKucuk} aç`}</Button> : null}
           </>
         }
       >

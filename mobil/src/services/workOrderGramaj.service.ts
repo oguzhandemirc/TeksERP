@@ -12,7 +12,7 @@ export interface KursunGramajPreview {
   pendingRollCount: number;
 }
 
-export const workOrderGramajApi = {
+export const workOrderGramajService = {
   kursunGramaj: (id: string): Promise<KursunGramajPreview> =>
     apiClient.get<ApiResponse<KursunGramajPreview>>(`/work-orders/${id}/kursun-gramaj`).then((r) => r.data.data),
 

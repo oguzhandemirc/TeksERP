@@ -14,7 +14,7 @@ import { tabletCancelAllowed } from './workOrderFix';
 import { usePermissions } from '../../../hooks/usePermission';
 import WorkOrderRecentEvents from './WorkOrderRecentEvents';
 import { workOrderService } from '../../../services/workOrder.service';
-import { workOrderGramajApi } from '../../../services/workOrderGramaj.service';
+import { workOrderGramajService } from '../../../services/workOrderGramaj.service';
 import {
   WORK_ORDER_STATUS_LABEL,
   WORK_ORDER_STATUS_COLOR,
@@ -83,7 +83,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   // İptal yalnız hiç işlem görmemiş iş emrinde (S3); panel yetkisi her durumda.
   const canCancel = !!wo && !!editable && tabletCancelAllowed(wo, has('workorder:write'));
   // Gramajı Değiştir yalnız kurşun hedefi olan / kurşunu uygulanmış iş emrinde; eski sunucu (404) → düğme yok.
-  const gramajQ = useQuery({ queryKey: kursunGramajKey(workOrderId ?? ''), queryFn: () => workOrderGramajApi.kursunGramaj(workOrderId!), enabled: canFix && !!workOrderId, retry: false });
+  const gramajQ = useQuery({ queryKey: kursunGramajKey(workOrderId ?? ''), queryFn: () => workOrderGramajService.kursunGramaj(workOrderId!), enabled: canFix && !!workOrderId, retry: false });
   const canGramaj = canFix && !!gramajQ.data?.propertyId && (!!gramajQ.data.target || gramajQ.data.appliedRollCount > 0);
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });

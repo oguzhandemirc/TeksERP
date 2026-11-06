@@ -5,6 +5,7 @@ import type { InboundDocApi, SameDocumentMatch } from '../../../services/inbound
 import { SameDocumentFound, SubmitError, sameDocumentOf, submitDocScan, type ScanPage } from './docScan';
 import { sameDocumentText } from './SameDocumentCard';
 import { sameDocOnSave } from './woCreate/sameDocOnSave';
+import { TERIM } from '../../../lib/terim';
 
 
 const page = (s: string): ScanPage => ({ base64: 'QUJD', sha256: s.padEnd(64, '0'), uri: `file:///${s}.jpg`, width: 1, height: 1 });
@@ -101,7 +102,7 @@ describe('sameDocumentText', () => {
   it('⭐ İE iptal → kayıt gösterilir + "bu belgeden yeni İE" yolu', () => {
     const t = sameDocumentText(match({ workOrders: [{ id: 'wo-1', workOrderNumber: 'IE-12', status: 'CANCELLED' }] }));
     expect(t.lines.join(' ')).toContain('IE-12 (İptal');
-    expect(t.lines).toContain('Bu belgenin iş emri iptal edildi.');
+    expect(t.lines).toContain(`Bu belgenin ${TERIM.terbiyeIsEmri.tekilKucuk} iptal edildi.`);
     expect(t.liveWorkOrderId).toBeNull();
     expect(t.canStartNew).toBe(true);
   });

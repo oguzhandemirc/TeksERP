@@ -19,7 +19,7 @@ jest.mock('../../../services/workOrder.service', () => ({
   },
 }));
 jest.mock('../../../services/workOrderGramaj.service', () => ({
-  workOrderGramajApi: {
+  workOrderGramajService: {
     kursunGramaj: (...a: unknown[]) => mockGramaj(...a),
     changeKursunGramaj: (...a: unknown[]) => mockGramajSave(...a),
   },

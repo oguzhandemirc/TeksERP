@@ -9,14 +9,14 @@ import Toast from 'react-native-toast-message';
 import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import ReasonPresetPicker, { type ReasonPresetValue } from '../../../components/reasonPresets/ReasonPresetPicker';
 import { useReasonPresets } from '../../../hooks/useReasonPresets';
-import { workOrderGramajApi } from '../../../services/workOrderGramaj.service';
+import { workOrderGramajService } from '../../../services/workOrderGramaj.service';
 import { gramajImpactText, reasonPayload, reasonReady } from './workOrderFix';
 import { errorText, Footer, useAfterSave, type FixWo } from './fixSheetParts';
 
 export const kursunGramajKey = (woId: string) => ['wo-kursun-gramaj', woId] as const;
 
 export default function GramajFixSheet({ wo, onDismiss, onDone }: { wo: FixWo; onDismiss: () => void; onDone: () => void }) {
-  const q = useQuery({ queryKey: kursunGramajKey(wo.id), queryFn: () => workOrderGramajApi.kursunGramaj(wo.id) });
+  const q = useQuery({ queryKey: kursunGramajKey(wo.id), queryFn: () => workOrderGramajService.kursunGramaj(wo.id) });
   const p = q.data;
   const [valueId, setValueId] = useState<string | null>(null);
   const [reason, setReason] = useState<ReasonPresetValue>({ code: null, text: '' });
@@ -25,7 +25,7 @@ export default function GramajFixSheet({ wo, onDismiss, onDone }: { wo: FixWo; o
   const after = useAfterSave(wo.id, onDone);
   const qc = useQueryClient();
   const save = useMutation({
-    mutationFn: () => workOrderGramajApi.changeKursunGramaj(wo.id, { propertyId: p!.propertyId!, valueId: valueId!, reason: reasonPayload(reason, presets).reason }),
+    mutationFn: () => workOrderGramajService.changeKursunGramaj(wo.id, { propertyId: p!.propertyId!, valueId: valueId!, reason: reasonPayload(reason, presets).reason }),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: kursunGramajKey(wo.id) });
       after('Gramaj değiştirildi', r.warnings);
