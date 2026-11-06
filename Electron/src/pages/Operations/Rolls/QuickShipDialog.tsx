@@ -35,6 +35,7 @@ import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { Item } from "@/pages/Items/types";
+import { ROLL_BEARING_ITEM_TYPES } from "@/types/enums";
 import type { Color } from "@/pages/Colors/types";
 import { quickShip, findRollsForQuickShip, quickShipDestination, type QuickShipRoll } from "./quickShipService";
 import { invalidateDestinationLock, useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
@@ -43,6 +44,9 @@ import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/typ
 import { Callout } from "@/components/ui/callout";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
+
+/** Miktar modu yalnız top taşıyan kartı listeler (top = kumaş); hizmet kalemi sunucuda süzülür. */
+const QUICK_SHIP_ITEM_FILTERS = { itemType: ROLL_BEARING_ITEM_TYPES.join(",") };
 
 interface Props {
   open: boolean;
@@ -194,6 +198,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
                     onChange={setPickItemId}
                     service={itemService}
                     queryKey="items"
+                    extraFilters={QUICK_SHIP_ITEM_FILTERS}
                     getLabel={(it) => `${it.code} — ${it.name}`}
                     placeholder="Kumaş ara..."
                   />
