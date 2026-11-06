@@ -11,6 +11,7 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import { initialMultiParty, partyHeading, partyOutcome, showModeChoice } from './partyDraft';
 import { initialRowForm, openedResult } from './woFromDoc';
 import PartyRows from './PartyRows';
+import { TERIM } from '../../../../lib/terim';
 import { useWoRows, type DocRow, type WoRowsState } from './useWoRows';
 import { isDone, isPartial } from './docRow';
 
@@ -76,7 +77,7 @@ describe('PartyRows (tablet)', () => {
   });
   it('⭐ kısmi sonuç: açılan parti kilitli + İE no, düşen parti nedeniyle ve düzenlenebilir', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(openedResult(partial))} wo={noop} locked={false} />);
-    expect(ui.getByTestId('belge-parti-sonuc-GB-1-1')).toHaveTextContent('İş emri açıldı: IE-1');
+    expect(ui.getByTestId('belge-parti-sonuc-GB-1-1')).toHaveTextContent(`${TERIM.terbiyeIsEmri.tekil} açıldı: IE-1`);
     expect(ui.getByTestId('belge-parti-sonuc-GB-1-2')).toHaveTextContent('Açılamadı: Plan makinesi bulunamadı');
     expect(ui.getByTestId('belge-parti-metre-GB-1-1').props.editable).toBe(false);
     expect(ui.getByTestId('belge-parti-metre-GB-1-2').props.editable).toBe(true);

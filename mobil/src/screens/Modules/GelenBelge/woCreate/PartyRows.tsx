@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import NumpadInput from '../../../../components/NumpadInput';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import { colors, spacing, typography } from '../../../../theme';
+import { TERIM } from '../../../../lib/terim';
 import { parseMeters } from '../approvalGate';
 import { MODE_LABELS, partyHeading, partyOutcome, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
@@ -70,7 +71,7 @@ export default function PartyRows({ row, wo, locked }: { row: DocRow; wo: WoRows
 
 function OutcomeLine({ out, testID }: { out: PartyOutcome; testID: string }) {
   if (!out) return null;
-  if (out.kind === 'OPENED') return <Text style={styles.ok} testID={testID}>{`İş emri açıldı: ${out.workOrderNo}`}</Text>;
+  if (out.kind === 'OPENED') return <Text style={styles.ok} testID={testID}>{`${TERIM.terbiyeIsEmri.tekil} açıldı: ${out.workOrderNo}`}</Text>;
   return <Text style={styles.fail} testID={testID}>{`Açılamadı: ${out.message}`}</Text>;
 }
 
