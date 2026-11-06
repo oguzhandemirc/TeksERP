@@ -339,11 +339,14 @@ export default function AppModal({
   //   YATAYDA ORTALAR. Böylece View sarmalayıcıdan geniş (tablet yatay → taşma) ya da
   //   dar (sola yaslanma) olsa bile simetrik kalıp ekran ortasına gelir. Bu olmadan
   //   flex varsayılanı (explicit width'li çocuk = flex-start) modalı kenara kaydırıyordu.
+  // Seddi (prova 2026-11-06): pencere ölçüsü bayat kalırsa (portrait tarayıcıdan dönüş) tüketicinin hesapladığı boyut
+  // ekrandan taşıyordu; kart hiçbir koşulda kök alandan büyük olamaz. contentStyle sonra gelir → daha dar sınırı kazanır.
+  const viewportSeal = { maxWidth: '100%' as const, maxHeight: '100%' as const };
   const contentBase =
     position === 'center'
       ? contentStyle
-        ? { width: Math.min(width - 32, 560) }
-        : { width: Math.min(width - 32, 560), alignItems: 'center' as const }
+        ? { width: Math.min(width - 32, 560), ...viewportSeal }
+        : { width: Math.min(width - 32, 560), alignItems: 'center' as const, ...viewportSeal }
       : undefined;
 
   return (
