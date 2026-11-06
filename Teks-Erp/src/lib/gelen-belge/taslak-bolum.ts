@@ -8,7 +8,18 @@ export interface SectionIdentity {
   orderNo: string | null;
   /** Bölümde yazan top adedi (canlı denetim satır sayısıyla kıyaslar). */
   topCount: number | null;
+  /** Bölümün işlem yazısı (boyahanenin; bilgi) ve gönderenin İE no'su ("İş Emri No"; K4: bizim İE'ye künye olarak yazılır). */
+  processText: string | null;
+  senderWorkOrderNo: string | null;
 }
+
+/** Bölüm alanlarından işlem / gönderen İE no — dosya şablonu (`islem`, `isEmriNo`) ve tanıtılmış şablon (`islem`, `gonderenIsEmriNo`). */
+const PROCESS_FIELDS = ["islem", "yapilanIslem"];
+const SENDER_WO_FIELDS = ["gonderenIsEmriNo", "isEmriNo"];
+const firstOf = (fields: Record<string, { value: string | null } | undefined>, keys: string[], max: number): string | null => {
+  const v = keys.map((k) => fields[k]?.value?.trim()).find((x) => x);
+  return v ? v.slice(0, max) : null;
+};
 
 /** Bölgenin satır anahtarı → bölüm no eşlemesi; bölümsüz şablonda null (tablo blok no'su sürer — bugünkü davranış). */
 export function sectionOfRow(reg: RegionExtraction): ((blockNo: number, index: number) => number) | null {
@@ -29,6 +40,7 @@ export function sectionDeclaredBlocks(reg: RegionExtraction, blockOffset: number
     blockNo: blockOffset + x.sectionNo,
     count: x.declared?.count ?? null, kg: x.declared?.kg ?? null, m: x.declared?.m ?? null,
     batchNo: x.batchNo, orderNo: x.orderNo, topCount: count(x.declaredCount),
+    processText: firstOf(x.fields, PROCESS_FIELDS, 120), senderWorkOrderNo: firstOf(x.fields, SENDER_WO_FIELDS, 64),
   }));
 }
 

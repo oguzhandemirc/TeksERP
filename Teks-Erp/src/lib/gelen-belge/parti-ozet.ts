@@ -8,12 +8,17 @@ export interface PartyLineInput {
   blockNo: number;
   meters: { toString(): string } | number | string;
   weightKg: { toString(): string } | number | string | null;
+  /** Satırın işlem yazısı (çok blokta kendi bloğundan) — eski taslakta bölüm işleminin yedeği. */
+  processText?: string | null;
 }
 
 export interface NoteParty {
   blockNo: number;
   batchNo: string | null;
   orderNo: string | null;
+  /** Bölümün işlem yazısı (boyahanenin; bilgi) ve gönderenin İE no'su ("İş Emri No"). 2026-11-06 ek alan — eski istemci yok sayar. */
+  processText: string | null;
+  senderWorkOrderNo: string | null;
   /** Belgede yazan top adedi ("4 TOP"); okunmadıysa null. */
   declaredTopCount: number | null;
   /** Bölüm ara toplamı (m); okunmadıysa null. */
@@ -45,6 +50,12 @@ export function withDeclaredPages<T>(totalsDeclared: T, pages: number | null): T
   return { ...totalsDeclared, pages };
 }
 
+/** Eski taslak (bölüm işlemi beyanda yok): bloğun satırları TEK işlem yazısı taşıyorsa o, yoksa null. */
+function soleProcess(lines: ReadonlyArray<PartyLineInput>): string | null {
+  const set = new Set(lines.map((l) => str(l.processText)).filter((x): x is string => x !== null));
+  return set.size === 1 ? [...set][0]! : null;
+}
+
 /** Beyan bloklarından bölüm kimliği taşıyanlar (parti no ya da sipariş no ya da yazan top) — bölümsüz belgede boş. */
 function sectionBlocks(totalsDeclared: unknown): Array<Record<string, unknown> & { blockNo: number }> {
   const blocks = totalsDeclared && typeof totalsDeclared === "object" ? (totalsDeclared as { blocks?: unknown }).blocks : undefined;
@@ -71,6 +82,8 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
       blockNo,
       batchNo: str(d?.batchNo),
       orderNo: str(d?.orderNo),
+      processText: str(d?.processText) ?? soleProcess(ls),
+      senderWorkOrderNo: str(d?.senderWorkOrderNo),
       declaredTopCount: num(d?.topCount),
       declaredMeters: num(d?.m),
       lineCount: ls.length,

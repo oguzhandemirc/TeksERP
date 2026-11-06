@@ -753,7 +753,7 @@ const FormWorkOrderBody = z.strictObject({
  *               type: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION], description: "K30-D iş emri türü; yoksa sipariş bağından türetilir (bugünkü)" }
  *               steps: { type: array, minItems: 1, maxItems: 200, description: "K30-D düzenlenmiş rota adımları (klasik ucun adım şekli; sıra = dizi sırası, sequence verilirse index+1). routeTemplateId ile birlikte zorunlu (seçilen şablonun yerine geçer); stepPlanning ile birlikte verilemez; klasik doğrulama onaydan ÖNCE", items: { type: object, required: [stationId], properties: { stationId: { type: string, format: uuid }, sequence: { type: integer }, notes: { type: string, maxLength: 500, nullable: true }, requiredCategoryId: { type: string, format: uuid, nullable: true }, plannedSubcontractorId: { type: string, format: uuid, nullable: true }, plannedMachineId: { type: string, format: uuid, nullable: true }, dispatchWithoutColor: { type: boolean } } } }
  *     responses:
- *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings)" }
+ *       201: { description: "{ workOrderId, workOrderNo, batchNumber, rollId } (+ warnings). Çok partide + workOrders[] (existing: önceki denemede açılmış, yeniden açılmadı) + failed[] {blockNo, code, message} (PER_PARTY: 4xx ile açılamayan parti; hiçbiri açılmadıysa uç hatayla döner)" }
  *       400: { description: "Doğrulama · GELEN_BELGE_ROUTE_OVERRIDE_INVALID · GELEN_BELGE_ROUTE_REQUIRED (rota yok + SIRALI; belge onaylanmaz) · GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM · OWNER_CUSTOMER_INVALID · GELEN_BELGE_TARGET_ITEM_INVALID · GELEN_BELGE_FORM_TARGET_PER_PARTY · GELEN_BELGE_FORM_ROLLS_REQUIRED · GELEN_BELGE_FORM_ROLLS_NEED_SEPARATE · GELEN_BELGE_FORM_ROLLS_WITH_PARTIES · GELEN_BELGE_FORM_STEPS_NEED_ROUTE · GELEN_BELGE_FORM_STEPS_WITH_PLANNING · GELEN_BELGE_FORM_STEPS_ORDER · GELEN_BELGE_FORM_TYPE_NEEDS_ORDER · pasif/olmayan istasyon (belge onaylanmaz)" }
  *       403: { description: "GELEN_BELGE_FORM_APPROVAL_DISABLED (ayar ayrı onay) · MODULE_DISABLED (üretim) · iş emri açma izni yok" }
  *       409: { description: "DELIVERY_NOTE_NOT_READ (okuma READ/PARTIAL değil) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_ROLL_MISSING · onay kapıları · token çakışması" }
@@ -763,7 +763,7 @@ const FormWorkOrderBody = z.strictObject({
  * /api/gelen-belge/irsaliyeler/{id}/partiler:
  *   get:
  *     tags: [Gelen belge]
- *     summary: Çok partili belgenin parti özeti (parti no, sipariş no, yazan top, satır sayısı, metre, kg + canlı uyarılar) ve fabrika varsayılan kipi
+ *     summary: Çok partili belgenin parti özeti (parti no, sipariş no, işlem, gönderen İE no, yazan top, satır sayısı, metre, kg + canlı uyarılar) ve fabrika varsayılan kipi
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }

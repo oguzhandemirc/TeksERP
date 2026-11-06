@@ -27,7 +27,7 @@ import { WorkOrderService, assertRouteRefsActive, type WorkOrderCreateInput } fr
 import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
-import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder } from "./gelen-belge-cok-parti.service";
+import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder, type PartyWorkOrderFailure } from "./gelen-belge-cok-parti.service";
 import { readIncomingDocFormApproval, readMultiPartyWorkOrder, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
 
@@ -155,6 +155,8 @@ export interface FormWorkOrderResult {
   warnings: string[];
   /** Çok partili kayıtta açılan iş emirleri (ilki üstteki alanlardır; eski istemci yalnız onları okur). */
   workOrders?: PartyWorkOrder[];
+  /** D4: PER_PARTY'de 4xx ile açılamayan partiler (en az biri açıldı; yoksa uç hatayla döner). */
+  failed?: PartyWorkOrderFailure[];
   mode?: MultiPartyWorkOrderMode;
 }
 
@@ -307,7 +309,7 @@ async function finishParties({ note, parties, mode, input, route, steps, userId,
   }, userId);
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;
-  return { workOrderId: first.workOrderId, workOrderNo: first.workOrderNo, batchNumber: first.batchNumber, rollId: first.rollIds[0]!, warnings, workOrders: res.workOrders, mode };
+  return { workOrderId: first.workOrderId, workOrderNo: first.workOrderNo, batchNumber: first.batchNumber, rollId: first.rollIds[0]!, warnings, workOrders: res.workOrders, failed: res.failed, mode };
 }
 
 function round3(n: number): number {

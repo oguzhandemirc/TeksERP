@@ -18,6 +18,8 @@ interface BlockDraft {
   columns: ColumnRect[];
   rows: Row[];
   totalsRows: Row[];
+  /** Sağdaki bitişik sütuna taşmış devam satırları + o sütunun başlık kolonlarına x kayması. */
+  spill?: { rows: Row[]; dx: number };
 }
 
 const DEFAULT_MIN_CONFIDENCE = 0.85;
@@ -79,11 +81,11 @@ function makeCell(col: TableColumnSpec, lines: OcrLine[]): TableCell {
 }
 
 /** Satırın kutularını kolonlara dağıtır; kolon başına birden çok kutu düşerse birleştirilir. */
-function assignCells(row: Row, draft: BlockDraft, spec: TableSpec): Record<string, TableCell> {
+function assignCells(row: Row, draft: BlockDraft, spec: TableSpec, dx = 0): Record<string, TableCell> {
   const tolerance = Math.max(...draft.columns.map((c) => c.rect.width)) * 0.75;
   const byKey = new Map<string, OcrLine[]>();
   for (const line of row.lines) {
-    const key = assignToColumn(line.rect, draft.columns, tolerance);
+    const key = assignToColumn({ ...line.rect, x: line.rect.x - dx }, draft.columns, tolerance);
     if (!key) continue;
     const arr = byKey.get(key) ?? [];
     arr.push(line);
@@ -142,8 +144,9 @@ function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTot
 function buildBlock(draft: BlockDraft, blockNo: number, spec: TableSpec, warnings: string[]): TableBlock {
   const rows: TableRow[] = [];
   let skipped = 0;
-  for (const row of draft.rows) {
-    const cells = assignCells(row, draft, spec);
+  const all = [...draft.rows.map((row) => ({ row, dx: 0 })), ...(draft.spill?.rows ?? []).map((row) => ({ row, dx: draft.spill!.dx }))];
+  for (const { row, dx } of all) {
+    const cells = assignCells(row, draft, spec, dx);
     if (!rowAccepted(cells, spec)) {
       // Yalnız bütün zorunlu kolonları dolu olup değeri çözülemeyen satır sayılır; başlık alanındaki yarım satırlar gürültüdür
       if (spec.columns.filter((c) => c.required).every((c) => cells[c.key])) skipped++;
@@ -154,12 +157,70 @@ function buildBlock(draft: BlockDraft, blockNo: number, spec: TableSpec, warning
       cells,
       rect: unionRect(Object.values(cells).map((c) => c.rect)),
       needsReview: Object.values(cells).some((c) => c.needsReview),
+      ...(dx !== 0 ? { spill: true } : {}),
     });
   }
   if (skipped > 0) warnings.push(`TABLE_ROWS_SKIPPED blok ${blockNo}: ${skipped} satır değeri çözülemediği için atlandı`);
   const declared = draft.totalsRows.length > 0 ? readDeclared(draft.totalsRows[0]!, draft, spec) : null;
   if (draft.totalsRows.length > 1) warnings.push(`TABLE_TOTALS_AMBIGUOUS blok ${blockNo}: ${draft.totalsRows.length} toplam satırı, ilki alındı`);
   return { blockNo, headerRect: draft.headerRect, rows, declared };
+}
+
+const centerX = (r: OcrRect): number => r.x + r.width / 2;
+
+/** Taşma satırının kolonlara x kayması: kayık satır kutularının en çoğunu bir başlık kolonuna oturtan aday (kutu − kolon merkezi). */
+function spillShift(rows: Row[], draft: BlockDraft, spec: TableSpec): number | null {
+  for (const row of rows) {
+    const header = matchHeader(row, spec);
+    if (header.length < (spec.minHeaderMatches ?? 2)) continue;
+    const ds = header.map((h) => centerX(h.rect) - centerX(draft.columns.find((c) => c.key === h.key)?.rect ?? h.rect)).sort((a, b) => a - b);
+    return ds[Math.floor(ds.length / 2)]!;
+  }
+  const lines = rows.flatMap((r) => r.lines);
+  const overlaps = (l: OcrLine, dx: number) => draft.columns.some((c) => l.rect.x - dx < c.rect.x + c.rect.width && l.rect.x + l.rect.width - dx > c.rect.x);
+  let best: { dx: number; hits: number } | null = null;
+  for (const line of lines) {
+    for (const col of draft.columns) {
+      const dx = centerX(line.rect) - centerX(col.rect);
+      if (dx <= 0) continue;
+      const hits = lines.filter((l) => overlaps(l, dx)).length;
+      if (!best || hits > best.hits) best = { dx, hits };
+    }
+  }
+  return best?.dx ?? null;
+}
+
+/**
+ * Sütun taşması (V6, 2026-11-06): tablo kağıdın sağındaki bitişik sütunda devam ediyorsa (başlıklı ya da başlıksız) o satırlar
+ * son bloğun devamıdır. Tablonun sağ kenarını aşan veri kutuları ayrı satır akışına alınır; en az bir satır bütün zorunlu
+ * kolonlarla okunuyorsa son bloğa `spill` olarak eklenir, okunmuyorsa satırlara dokunulmaz (bugünkü okuma bayt-aynı).
+ */
+function withSpill(rows: Row[], spec: TableSpec): { rows: Row[]; spill?: { rows: Row[]; dx: number } } {
+  const all = partition(rows, spec).blocks;
+  const left = (d: BlockDraft) => Math.min(...d.columns.map((c) => c.rect.x));
+  const right = (d: BlockDraft) => Math.max(...d.columns.map((c) => c.rect.x + c.rect.width));
+  // Taşan sütunda başlık tekrarı ayrı blok gibi görünür: başka bir bloğun tamamen sağındaki başlık taşmadır, kenarı o belirlemez.
+  const blocks = all.filter((d) => !all.some((o) => o !== d && left(d) > right(o)));
+  const last = blocks[blocks.length - 1];
+  if (!last) return { rows };
+  const tolerance = (d: BlockDraft) => Math.max(...d.columns.map((c) => c.rect.width)) * 0.75;
+  const edge = Math.max(...blocks.map((d) => right(d) + tolerance(d)));
+  const minHeader = spec.minHeaderMatches ?? 2;
+  // Başlık satırının kolonları kenarın içindedir (kenar onlardan); toplam satırının sayıları kenarı aşabilir (0245 sağ üst) → hariç.
+  const isData = (r: Row) => !isTotalsRow(r, spec);
+  const spillLines = rows.filter(isData).flatMap((r) => r.lines.filter((l) => l.rect.x > edge));
+  if (spillLines.length === 0) return { rows };
+  const spillRows = buildRowsTilted(spillLines);
+  const dx = spillShift(spillRows, last, spec);
+  if (dx === null) return { rows };
+  const minCells = Math.max(spec.minCells ?? 2, Math.min(3, spec.columns.length));
+  const accepted = spillRows.filter((r) => matchHeader(r, spec).length < minHeader).filter((r) => {
+    const cells = assignCells(r, last, spec, dx);
+    return rowAccepted(cells, spec) && Object.keys(cells).length >= minCells;
+  });
+  if (accepted.length === 0) return { rows };
+  const kept = rows.map((r) => (isData(r) ? { ...r, lines: r.lines.filter((l) => l.rect.x <= edge) } : r)).filter((r) => r.lines.length > 0);
+  return { rows: kept, spill: { rows: accepted, dx } };
 }
 
 /** Beyansız bloklar arasında satıra konumca en yakın olanı: önce hemen ALTINDAKİ başlık (0245 yerleşimi), yoksa en yakın. */
@@ -199,7 +260,10 @@ function attachOrphans(orphans: Row[], drafts: BlockDraft[], blocks: TableBlock[
       }
     }
     if (attached) continue;
-    const i = nearestBlock(row, blocks);
+    // Konum yedeği yalnız TEK beyansız blok kaldığında: ikisi arasında "en yakın" yanlış bloğa bağlayıp sert kapıyı yanlış partide
+    // tetikleyebilir (R2, 2026-11-06) → sahipsiz kalır + uyarı, operatör görür.
+    const open = blocks.filter((b) => b.declared === null).length;
+    const i = open === 1 ? nearestBlock(row, blocks) : -1;
     if (i >= 0) {
       const declared = readDeclared(row, drafts[i]!, spec);
       if (declared.kg !== null || declared.m !== null) {
@@ -215,8 +279,9 @@ function attachOrphans(orphans: Row[], drafts: BlockDraft[], blocks: TableBlock[
 /** Şablondaki tablo tanımını OCR sonucuna uygular. */
 export function extractTable(ocr: OcrResult, spec: TableSpec): TableResult {
   const warnings: string[] = [];
-  const rows = buildRowsTilted(collectLines(ocr));
-  const { blocks: drafts, orphanTotals } = partition(rows, spec);
+  const split = withSpill(buildRowsTilted(collectLines(ocr)), spec);
+  const { blocks: drafts, orphanTotals } = partition(split.rows, spec);
+  if (split.spill && drafts.length > 0) drafts[drafts.length - 1]!.spill = split.spill;
   const blocks = drafts.map((d, i) => buildBlock(d, i + 1, spec, warnings));
   warnings.push(...attachOrphans(orphanTotals, drafts, blocks, spec));
   if (blocks.length === 0) warnings.push(`TABLE_NOT_FOUND ${spec.key}: başlık satırı bulunamadı`);
