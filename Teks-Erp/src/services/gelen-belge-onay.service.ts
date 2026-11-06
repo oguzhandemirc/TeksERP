@@ -83,7 +83,7 @@ export type ApproveOptions = {
   separateRolls?: boolean;
   /** K30 S16a (yalnız PER_DOCUMENT): iş emri formunda seçilen hedef ürün — özet satırı topları varsayılan yerine bununla doğar.
    *  Top doğurabilirliği çağıran (`itemProblem`) önceden doğrular. */
-  item?: { id: string; name: string };
+  item?: { id: string; name: string; source?: "FORM" | "WORK_ORDER_DEFAULT" };
 };
 
 export interface ApproveResult {
@@ -110,7 +110,7 @@ const PRE_SELECT = {
 interface PrecheckResult {
   warnings: string[];
   /** Ürünü seçilmemiş açık satır varsa onların doğacağı ürün: sahibin varsayılanı (E4) ya da fabrika ayarı (E3); yoksa null. */
-  defaultItem: { id: string; name: string; source: DefaultItemSource | "FORM" } | null;
+  defaultItem: { id: string; name: string; source: DefaultItemSource | "FORM" | "WORK_ORDER_DEFAULT" } | null;
 }
 
 type PreNote = Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>;
@@ -187,7 +187,7 @@ async function precheckPerDocument(note: PreNote, input: ApproveInput, { parties
   if (gate.code === "KURSUN_METERS_REQUIRED") throw AppError.conflict(`${note.noteNo} için kurşun metresi yok; belge başına tek kayıt kipinde onaydan önce kurşun metresini girin.`, { code: gate.code });
   if (gate.code) throw AppError.conflict(`Kurşun metresi gözden geçirilmedi (${note.kursunMetersSource ?? "?"}). Değeri belgeyle karşılaştırıp onaylayın ya da düzeltin (fabrika ayarı: gözden geçirilmemiş değerle onay engelli).`, { code: gate.code });
   // Özet satırı ürünsüz doğar → formda seçilen hedef ürün (K30) > varsayılan ürün (müşteri > fabrika); yoksa çıkışsız kapı açılmaz.
-  const defaultItem = item ? { ...item, source: "FORM" as const } : await resolveDefaultItemForApproval(note.ownerCustomerId);
+  const defaultItem = item ? { ...item, source: item.source ?? ("FORM" as const) } : await resolveDefaultItemForApproval(note.ownerCustomerId);
   if (!defaultItem) throw AppError.badRequest("Belge başına tek kayıt kipi varsayılan ürün ister: fabrika ya da müşteri varsayılan ürünü seçilmemiş.", { code: "GELEN_BELGE_PER_DOCUMENT_NEEDS_DEFAULT_ITEM" });
   const reason = input.varianceReason?.trim();
   const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));

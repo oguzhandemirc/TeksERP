@@ -17,9 +17,8 @@ import {
   CustomerColorAlias,
   Prisma,
 } from "@prisma/client";
-import { assertItemUsable } from "./helpers/item-usage.helper";
 import { loadCustomerColorIndex } from "./helpers/customer-name.helper";
-import { assertColor, assertCustomer } from "./helpers/customer-alias-gates.helper";
+import { assertAliasItem, assertColor, assertCustomer } from "./helpers/customer-alias-gates.helper";
 import * as itemColor from "./customer-item-color-alias.service";
 
 const TABLE_ITEM = "CUSTOMER_ITEM_ALIAS";
@@ -56,7 +55,7 @@ export class CustomerAliasService {
     userId?: string
   ): Promise<ApiResponse<CustomerItemAlias>> {
     await assertCustomer(customerId);
-    await assertItem(itemId);
+    await assertAliasItem(itemId);
     // 2026-08-19 (kullanıcı kararı): alias da BÜYÜK saklanır — etikete/irsaliyeye
     // basılan müşteri adı `item.name` ile aynı rejimde olsun.
     const trimmed = normalizeDisplayName(alias);
@@ -267,13 +266,4 @@ export class CustomerAliasService {
       colorAlias: colors?.master(customerId, itemId, colorId)?.alias ?? null,
     };
   }
-}
-
-// =============================================================================
-// Local helpers
-// =============================================================================
-
-/** Müşteri ürün adı karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı. */
-async function assertItem(itemId: string): Promise<void> {
-  await assertItemUsable(prisma, itemId, "DEFINITION");
 }

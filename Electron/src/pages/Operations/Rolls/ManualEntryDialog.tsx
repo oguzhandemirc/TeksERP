@@ -35,14 +35,16 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { useEmanetEnabled, useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { Item } from "@/pages/Items/types";
+import { ROLL_BEARING_ITEM_TYPES } from "@/types/enums";
 import type { Customer } from "@/pages/Customers/types";
 import type { LabelCustomerContext } from "@/services/labelService";
 import { rollService, type InitialEntryPayload } from "./service";
 
 // Radix Select boş string value kabul etmez → "Belirsiz" için sentinel.
 const QUALITY_NONE = "__none__";
-/** Belgesiz stok girişi (sınıf C) yalnız Aktif karta — Tükenene kadar kart listelenmez (URUN-YASAM-DONGUSU §8). */
-const MANUAL_ENTRY_ITEM_FILTERS = { lifecycleStatus: "ACTIVE" };
+/** Belgesiz stok girişi (sınıf C) yalnız Aktif KUMAŞ karta — Tükenene kadar kart listelenmez (URUN-YASAM-DONGUSU §8);
+ *  hizmet/iplik/sarf top doğurmaz (backend `createInitialEntry` kapısı), süzme sunucuda. */
+const MANUAL_ENTRY_ITEM_FILTERS = { lifecycleStatus: "ACTIVE", itemType: ROLL_BEARING_ITEM_TYPES.join(",") };
 
 /**
  * Backend mükerrer tuzağının 409'unu tanır → var olan topun barkodu (yoksa null).
