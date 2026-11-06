@@ -15,7 +15,7 @@
 // kapatmanın etkisi bir sonraki istekte görünmelidir.
 // =============================================================================
 import { Request, Response, NextFunction } from "express";
-import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.service";
+import { SETTING_KEYS, readFinanceEnabled, resolveServiceBillingEnabled } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -35,6 +35,25 @@ export async function requireFinanceEnabled(req: Request, res: Response, next: N
       throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden(
         `Ön muhasebe modülü bu kurulumda kapalı. ${settingScreenPath("modules")} ekranından açılabilir.`,
         { code: "MODULE_DISABLED", modul: "finance" },
+      );
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Hizmet faturası alt anahtarı (`finance.serviceBilling.enabled`) — hizmet fiyat tablosu uçları.
+ * `requireFinanceEnabled`ten SONRA takılır (ön muhasebe kapalıysa o kapı lisansı da sorarak cevaplar);
+ * Alt anahtar lisans modülü değildir → kod `SERVICE_BILLING_DISABLED` (dönem faturası emsali), `MODULE_DISABLED` değil.
+ */
+export async function requireServiceBillingEnabled(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!(await resolveServiceBillingEnabled())) {
+      throw AppError.forbidden(
+        `Hizmet faturası bu kurulumda kapalı. ${settingScreenPath("finance")} ekranından açılabilir.`,
+        { code: "SERVICE_BILLING_DISABLED" },
       );
     }
     next();

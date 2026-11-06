@@ -19,7 +19,8 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
-import { applyKursunGramPrices, gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEnteredLaterWarning } from "./kursun-gram-price.helper";
+import { gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEnteredLaterWarning, kursunGramLineLabel, kursunTierLineLabel, loadKursunGramCandidates } from "./kursun-gram-price.helper";
+import { loadServiceTierPrices, pickServicePrice, tierKey, tierMissingWarning } from "./service-price-pick.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 import { readFinanceKursunGramPriceBasis, type KursunGramPriceBasis } from "../system-setting.service";
 
@@ -48,8 +49,10 @@ export interface ServiceRollWork {
   /** Faturalanan birim ve miktar (`service-quantity.helper`); metre işinde `meters`. */
   qtyUnit: ServiceQtyUnit;
   quantity: Prisma.Decimal | null;
-  /** Kurşun gram fiyatından çözüldüyse fatura satırı açıklaması ("Kurşun 40 gr (40 gr/m)"); yoksa yok (bugün). */
+  /** Kurşun gram fiyatından ya da kademe fiyatından çözüldüyse fatura satırı açıklaması; yoksa yok (bugün). */
   gramLabel?: string;
+  /** Kademe fiyatı seçilirse satır açıklaması ("Kurşun 40 gr", "Brode Papatya"). */
+  tierLabel?: string;
 }
 
 /** Hizmet kalemi × birim fiyat grubu (taslak satırı). */
@@ -183,7 +186,8 @@ async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED"
   return flag.works.map((f) => {
     const qtyUnit = serviceWorkUnit(f.propertyCode, ctx.brodeUnit);
     return {
-      rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: null, valueName: f.propertyName, gramajFrom: "NONE",
+      rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: f.valueId, valueName: f.propertyName, gramajFrom: "NONE",
+      ...(f.valueName ? { tierLabel: `${f.propertyName} ${f.valueName}` } : {}),
       serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
       qtyUnit, quantity: serviceWorkQuantity(f, qtyUnit),
     };
@@ -196,32 +200,57 @@ function servicePriceAt(opt: ServiceResolveOptions): (w: ServiceRollWork) => num
   return (w) => (opt.priceAsOfByRoll?.get(w.rollId) ?? opt.priceAsOf ?? w.serviceAt).getTime();
 }
 
-async function applyAsOfPrices(works: ServiceRollWork[], ctx: { opt: ServiceResolveOptions; currency: Currency; customerId: string | null; db: Db }): Promise<void> {
-  const byAt = new Map<number, ServiceRollWork[]>();
+/**
+ * Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur): kalem fiyatı + kademe tablosu (aynı an, tek sorgu
+ * kümesi) + kurşun gram adayı → sıra `pickServicePrice`te. Birim uyuşmayan tarife satırı yok sayılır. Döner: K5
+ * kademesi tabloda olmayan işler (kalem başına uyarı).
+ */
+async function applyServicePrices(
+  works: ServiceRollWork[],
+  ctx: { opt: ServiceResolveOptions; currency: Currency; customerId: string | null; db: Db; warnings: string[] },
+): Promise<Set<ServiceRollWork>> {
   const priceAt = servicePriceAt(ctx.opt);
-  for (const w of works) if (w.serviceItemId) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
+  const priced = works.filter((w) => w.serviceItemId !== null);
+  const basis = ctx.opt.gramPriceBasis ?? await readFinanceKursunGramPriceBasis(ctx.db);
+  const gram = await loadKursunGramCandidates(priced, { currency: ctx.currency, customerId: ctx.customerId, db: ctx.db, basis, priceAt });
+  const byAt = new Map<number, ServiceRollWork[]>();
+  for (const w of priced) byAt.set(priceAt(w), [...(byAt.get(priceAt(w)) ?? []), w]);
+  const tierMissing = new Set<ServiceRollWork>();
+  let gramPriced = 0;
+  let late = 0;
+  let customerLater = 0;
   for (const [at, group] of byAt) {
-    const prices = await resolveItemPricesFor({
-      itemIds: group.map((w) => w.serviceItemId!), kind: PriceKind.SALE, currency: ctx.currency,
-      customerId: ctx.customerId, asOf: new Date(at), db: ctx.db,
-    });
+    const itemIds = group.map((w) => w.serviceItemId!);
+    const prices = await resolveItemPricesFor({ itemIds, kind: PriceKind.SALE, currency: ctx.currency, customerId: ctx.customerId, asOf: new Date(at), db: ctx.db });
+    const tiers = await loadServiceTierPrices({ itemIds, currency: ctx.currency, customerId: ctx.customerId, at: new Date(at), db: ctx.db });
     for (const w of group) {
       const hit = prices.get(w.serviceItemId!);
-      // Tarife satırının birimi işin birimiyle aynı değilse fiyat yok sayılır (metre fiyatı adede uygulanmaz).
-      w.unitPrice = hit && priceUnitMatches(hit.priceUnit, w.qtyUnit) ? hit.price : null;
+      const slot = w.valueId ? tiers.byKey.get(tierKey(w.serviceItemId!, w.valueId)) : undefined;
+      const unitOk = (r: { priceUnit: ServiceQtyUnit | null } | undefined) => !!r && priceUnitMatches(r.priceUnit, w.qtyUnit);
+      const pick = pickServicePrice({
+        customerTier: unitOk(slot?.customer) ? slot!.customer!.price : null,
+        generalTier: unitOk(slot?.general) ? slot!.general!.price : null,
+        gram: gram.get(w) ?? null,
+        item: hit && priceUnitMatches(hit.priceUnit, w.qtyUnit) ? hit.price : null,
+        itemHasTiers: tiers.itemsWithTiers.has(w.serviceItemId!),
+        valueInTable: !!slot,
+      });
+      w.unitPrice = pick.unitPrice;
+      if (pick.tierMissing) tierMissing.add(w);
+      if (pick.gram) {
+        w.gramLabel = kursunGramLineLabel(w.valueName, pick.gram.amount);
+        gramPriced++;
+        if (pick.gram.late) late++;
+        if (pick.gram.customerLater) customerLater++;
+      } else if (pick.source === "CUSTOMER_TIER" || pick.source === "TIER") {
+        w.gramLabel = w.source === "PROPERTY" ? w.tierLabel : kursunTierLineLabel(w.valueName);
+      }
     }
   }
-}
-
-/** K14: kurşun gram fiyatı kalem fiyatını ezer — taban ayarı (verilmezse fabrika ayarı) + uyarılar. */
-async function applyGramPricing(works: ServiceRollWork[], ctx: { opt: ServiceResolveOptions; currency: Currency; customerId: string | null; db: Db; warnings: string[] }): Promise<void> {
-  const basis = ctx.opt.gramPriceBasis ?? await readFinanceKursunGramPriceBasis(ctx.db);
-  const gram = await applyKursunGramPrices(works.filter((w) => w.serviceItemId !== null), {
-    currency: ctx.currency, customerId: ctx.customerId, db: ctx.db, basis, priceAt: servicePriceAt(ctx.opt),
-  });
-  if (basis === "INVOICE_DATE" && gram.priced > 0) ctx.warnings.push(gramPriceCurrentWarning(gram.priced));
-  if (gram.late > 0) ctx.warnings.push(gramPriceEnteredLaterWarning(gram.late));
-  if (gram.customerLater > 0) ctx.warnings.push(gramPriceCustomerLaterWarning(gram.customerLater));
+  if (basis === "INVOICE_DATE" && gramPriced > 0) ctx.warnings.push(gramPriceCurrentWarning(gramPriced));
+  if (late > 0) ctx.warnings.push(gramPriceEnteredLaterWarning(late));
+  if (customerLater > 0) ctx.warnings.push(gramPriceCustomerLaterWarning(customerLater));
+  return tierMissing;
 }
 
 /**
@@ -280,8 +309,7 @@ export async function resolveServiceItemsForRolls(params: {
   for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
   const works = billable.filter((w) => !unknown.includes(w));
 
-  await applyAsOfPrices(works, { opt, currency: params.currency, customerId: params.customerId, db });
-  await applyGramPricing(works, { opt, currency: params.currency, customerId: params.customerId, db, warnings });
+  const tierMissing = await applyServicePrices(works, { opt, currency: params.currency, customerId: params.customerId, db, warnings });
 
   const items = await db.item.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
@@ -290,11 +318,13 @@ export async function resolveServiceItemsForRolls(params: {
   const itemById = new Map(items.map((i) => [i.id, i]));
   const manualReadings = await loadManualReadingIds(works, db);
   const groups = new Map<string, ServiceLine & { sum: Prisma.Decimal }>();
+  const tierMissingByName = new Map<string, number>();
   for (const w of works) {
     if (w.gramajFrom === "WO_TARGET") warnings.push(`Gramajı bilinmeyen iş ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedefinden (${w.valueName}) fiyatlandı — topu kontrol edin.`);
     if (!w.serviceItemId) { warnings.push(`"${w.valueName}" için hizmet kalemi eşlenmemiş — top fiyatlanmadı.`); continue; }
     const item = itemById.get(w.serviceItemId)!;
-    if (w.unitPrice === null) warnings.push(w.qtyUnit === "METER"
+    if (tierMissing.has(w)) tierMissingByName.set(item.name, (tierMissingByName.get(item.name) ?? 0) + 1);
+    else if (w.unitPrice === null) warnings.push(w.qtyUnit === "METER"
       ? `"${item.name}" için ${params.currency} satış fiyatı yok — satır fiyatsız.`
       : `"${item.name}" için ${params.currency} satış fiyatı yok ya da birimi seçilen brode fiyat birimiyle aynı değil — satır fiyatsız.`);
     const key = `${w.serviceItemId}:${w.unitPrice?.toString() ?? "-"}:${w.qtyUnit}:${w.gramLabel ?? ""}`;
@@ -311,6 +341,7 @@ export async function resolveServiceItemsForRolls(params: {
   const lines = [...groups.values()]
     .map(({ sum, ...l }) => ({ ...l, quantity: sum.toFixed(3) }))
     .sort((x, y) => x.code.localeCompare(y.code, "tr") || (x.unitPrice ?? "").localeCompare(y.unitPrice ?? ""));
+  for (const [name, n] of tierMissingByName) warnings.push(tierMissingWarning(name, n));
   for (const l of lines) if (l.manualMeterRollCount > 0) warnings.push(manualMeterWarning(l.name, l.manualMeterRollCount));
   return { lines, works, warnings: [...new Set(warnings)] };
 }

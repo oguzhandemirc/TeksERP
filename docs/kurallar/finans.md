@@ -61,6 +61,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 - **[ÇEKİRDEK]** Toplu açılış aktarımı yalnız tekil servislerden yazar (`setOpeningBalance` · `chequeService.create` · `itemPriceService.upsert`); ikinci defter yazarı açma; geri sarma `REVERSE_ENTRY` · `REVOKE_VERSION`.
 - **[ÇEKİRDEK]** `ItemPrice` silinmez/ezilmez: değişim `revokedAt` damgası (partial unique `revokedAt IS NULL`); okuma `ACTIVE_ITEM_PRICE`/`itemPriceValidAt`, tarihli `resolveItemPrice*({ asOf })`; `isActive` ekleme.
+- **[ÇEKİRDEK]** Hizmet fiyatını yalnız `pickServicePrice` sırasıyla seç (müşteri kademe → müşteri gram → genel kademe → istasyon gram → kalem fiyatı; tabloda olmayan kademe fiyatsız + uyarı); ileri tarihli fiyatı zamanlanmış damgayla yaz (yürürlükteki `revokedAt` = yeni `validFrom`), "şu an"ı `itemPriceNow` ile oku.
 - **[ÇEKİRDEK]** Cari kartında rol bayrağı tek kaynaktır: ticari yön `isCustomerRole`/`isSupplierRole`den; `Customer.type` yalnız geriye dönük okunur, ASLA yazılmaz.
 - **[ÇEKİRDEK]** Fason bacağı (`subcontractorId`) `resolvePartyToCardTx` (`helpers/party-card.helper.ts`) ile karta çözülür (`ensureCariAccountTx` + `cariService.create`); bağsız profil fason hesabına gider.
 - **[ÇEKİRDEK]** Kart → hesap yalnız `findCariAccountForCardTx`; hesap satırı yalnız `ensureCariAccountTx`te (`createMany skipDuplicates`); eski bacaktaki tek hesabı TEK UPDATE ile çevir; kartın kendi hesabı önce (pasifse 409); çiftler `scripts/fix_cari_cift_hesap.ts`.

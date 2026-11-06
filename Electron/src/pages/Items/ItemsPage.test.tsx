@@ -19,7 +19,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ItemsPage } from "./ItemsPage";
 import { itemTypeFilterOptions } from "@/components/forms/itemPicker";
-import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, itemTypeChangeParams, parseItemStatus } from "./itemsFilters";
+import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, itemTypeChangeParams, itemTypeDefaultFilter, parseItemStatus } from "./itemsFilters";
 import { labeledSelectText } from "@/components/forms/LabeledSelect";
 import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
 
@@ -110,11 +110,23 @@ describe("itemsFilters (saf)", () => {
   });
 });
 
+/** K3 (2026-11-06): Tür "Tümü" iken hizmetler listelenmez — stok türleri CSV olarak sunucuya gider. */
+const STOCK_TYPES = "YARN,FABRIC,CONSUMABLE";
+
+describe("ItemsPage — K3 hizmet ayrımı", () => {
+  it("⭐ K3 Tür 'Tümü' hizmetleri dışlar; Tür = Hizmet seçilince yalnız SERVICE gider", async () => {
+    renderPage("/definitions/items?filter[itemType]=SERVICE");
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "SERVICE" }));
+    expect(itemTypeDefaultFilter(new URLSearchParams()).itemType?.split(",")).not.toContain("SERVICE");
+  });
+});
+
 describe("ItemsPage — ad + süzgeç şeridi", () => {
+
   it("⭐ §1/§3 başlık 'Ürünler'; varsayılan istek isActive=true; 'Pasifleri göster' anahtarı YOK", async () => {
     renderPage();
     expect(screen.getByRole("heading", { name: "Ürünler" })).toBeInTheDocument();
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     expect(screen.queryByText("Pasifleri göster")).toBeNull();
     expect(screen.getByRole("combobox", { name: "Durum" })).toHaveTextContent("Durum: Aktif");
     expect(screen.getByRole("combobox", { name: "Tür" })).toHaveTextContent("Tür: Tümü");
@@ -126,23 +138,23 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
   it("⭐ §2 Renk/Özellik seçimi → filter[allowedColorId] / filter[allowedPropertyId] SUNUCUYA; tetik 'Renk: Krem'; URL'den gelen ilk istekte", async () => {
     const user = userEvent.setup();
     renderPage("/definitions/items?filter[allowedColorId]=c1");
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", itemType: STOCK_TYPES }));
     const renk = screen.getByRole("combobox", { name: "Renk" });
     expect(renk).toHaveTextContent("Renk: Krem");
     expect(renk).toHaveAttribute("title", ITEM_CATALOG_HINT); // ipucu modalla TEK kaynak
     await user.click(screen.getByRole("combobox", { name: "Özellik" }));
     await user.click(await screen.findByRole("option", { name: "Fitilli" }));
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", allowedPropertyId: "p1" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", allowedPropertyId: "p1", itemType: STOCK_TYPES }));
     await user.click(renk);
     await user.click(await screen.findByRole("option", { name: "Tümü" }));
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedPropertyId: "p1" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedPropertyId: "p1", itemType: STOCK_TYPES }));
     expect(renk).toHaveTextContent("Renk: Tümü");
   });
 
   it("⭐ Tür = İplik → Renk/Özellik seçicileri ÇİZİLMEZ ve seçili renk sunucuya GİTMEZ; Kumaş'a dönünce geri gelir (Tümü)", async () => {
     const user = userEvent.setup();
     renderPage("/definitions/items?filter[allowedColorId]=c1");
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", itemType: STOCK_TYPES }));
     const tur = screen.getByRole("combobox", { name: "Tür" });
     await user.click(tur);
     await user.click(await screen.findByRole("option", { name: "İplik" }));
@@ -164,7 +176,7 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
   it("katalog sığmadıysa Renk/Özellik seçicisi çizilmez, liste yine ister (modalla aynı karar)", async () => {
     catalogs.mockReturnValue({ colors: null, properties: null });
     renderPage();
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     expect(screen.queryByRole("combobox", { name: "Renk" })).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Özellik" })).toBeNull();
     expect(screen.getByRole("combobox", { name: "Tür" })).toBeInTheDocument();
@@ -173,32 +185,32 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
   it("⭐ §2 Durum seçimi sunucuya gider: Pasif → isActive=false · Onay bekleyen → pendingReview=true · Tümü → süzgeçsiz", async () => {
     const user = userEvent.setup();
     renderPage();
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     const durum = screen.getByRole("combobox", { name: "Durum" });
     await user.click(durum);
     await user.click(await screen.findByRole("option", { name: "Pasif" }));
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "false" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "false", itemType: STOCK_TYPES }));
     expect(durum).toHaveTextContent("Durum: Pasif");
     await user.click(durum);
     await user.click(await screen.findByRole("option", { name: "Tükenene kadar" }));
-    await waitFor(() => expect(lastFilters()).toEqual({ lifecycleStatus: "PHASE_OUT" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ lifecycleStatus: "PHASE_OUT", itemType: STOCK_TYPES }));
     await user.click(durum);
     await user.click(await screen.findByRole("option", { name: "Onay bekleyen" }));
-    await waitFor(() => expect(lastFilters()).toEqual({ pendingReview: "true" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ pendingReview: "true", itemType: STOCK_TYPES }));
     await user.click(durum);
     await user.click(await screen.findByRole("option", { name: "Tümü" }));
-    await waitFor(() => expect(lastFilters()).toEqual({}));
+    await waitFor(() => expect(lastFilters()).toEqual({ itemType: STOCK_TYPES }));
   });
 
   it("⭐ §2 URL'den gelen durum ilk istekte uygulanır (paylaşılabilir bağlantı)", async () => {
     renderPage("/definitions/items?status=pending");
-    await waitFor(() => expect(lastFilters()).toEqual({ pendingReview: "true" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ pendingReview: "true", itemType: STOCK_TYPES }));
   });
 
   it("⭐ §2 Tür ve Birim: seçim → filter[itemType] / filter[unit] SUNUCUYA (Durum korunur)", async () => {
     const user = userEvent.setup();
     renderPage();
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     const tur = screen.getByRole("combobox", { name: "Tür" });
     await user.click(tur);
     await user.click(await screen.findByRole("option", { name: "İplik" }));
@@ -212,7 +224,7 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     // Tümü'ye dönüş: URL anahtarı silinir, sunucuya gitmez
     await user.click(tur);
     await user.click(await screen.findByRole("option", { name: "Tümü" }));
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", unit: "KG" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", unit: "KG", itemType: STOCK_TYPES }));
     expect(tur).toHaveTextContent("Tür: Tümü");
   });
 });

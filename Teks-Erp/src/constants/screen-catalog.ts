@@ -136,6 +136,7 @@ export interface ScreenEntry {
 
 const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[] }> = [
   { key: "definitions/items", app: "desktop", modul: "cekirdek:ana-veri", title: "Ürünler", requires: ["item:read"], capabilities: ["customer-alias:read", "customer-alias:write", "item:write"] },
+  { key: "definitions/services", app: "desktop", modul: "cekirdek:ana-veri", title: "Hizmetler", requires: ["item:read"], capabilities: ["item:write"] },
   { key: "definitions/customers", app: "desktop", modul: "cekirdek:ana-veri", title: "Müşteriler", requires: ["customer:read"], capabilities: ["customer-alias:write", "customer:write", "label-template:write"] },
   { key: "definitions/stations", app: "desktop", modul: "cekirdek:ana-veri", title: "Üretim İstasyonları", requires: ["station:read"], capabilities: ["station:write"] },
   { key: "definitions/machines", app: "desktop", modul: "cekirdek:ana-veri", title: "Makineler", requires: ["station:read"], capabilities: ["station:write"] },
@@ -330,6 +331,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/warehouse-transfers", app: "desktop", modul: "depoMultiEnabled", title: "Depo Transferi", requires: ["warehouse:transfer"], capabilities: [] },
   { key: "definitions/warehouses", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Depolar", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
   { key: "definitions/item-prices", app: "desktop", modul: "ticaretEnabled", title: "Kalem Fiyatları", requires: ["item:read"], capabilities: ["price:write"] },
+  { key: "definitions/service-prices", app: "desktop", modul: "financeEnabled", title: "Hizmet Fiyat Tablosu", requires: ["item:read"], capabilities: ["price:write"] },
   // Cariler = müşteri + fason firma TEK listede (satın alma tarafı da cari
   // gördüğü için). Giriş izni İKİSİNDEN BİRİ yeter — route `requireAnyPermission`.
   { key: "definitions/cariler", app: "desktop", modul: "cekirdek:ana-veri", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },

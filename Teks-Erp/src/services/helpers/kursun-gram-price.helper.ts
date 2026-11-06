@@ -24,6 +24,11 @@ export function kursunGramLineLabel(valueName: string, amount: Prisma.Decimal): 
   return `Kurşun ${valueName} (${amount.toString()} gr/m)`;
 }
 
+/** Kademe fiyatlı (hizmet fiyat tablosu) kurşun satırının açıklaması: "Kurşun 40 gr". */
+export function kursunTierLineLabel(valueName: string): string {
+  return `Kurşun ${valueName}`;
+}
+
 /** Birim metre fiyatı = gr/m × gram fiyatı (4 ondalık; snapshot `unitPrice` hassasiyeti). */
 export function kursunMeterPrice(amount: Prisma.Decimal, gramPrice: Prisma.Decimal): Prisma.Decimal {
   return amount.mul(gramPrice).toDecimalPlaces(4);
@@ -65,16 +70,29 @@ export async function loadKursunGramPricing(params: {
   };
 }
 
+/** Gram fiyatının sahibi — hizmet fiyat sırası (`service-price-pick.helper`) müşteri gramını genel kademeden önce alır. */
+export type GramPriceOwner = "CUSTOMER" | "STATION";
+
+/** Bir işin gram fiyatı adayı (yazılmamış); `late` = iş anında sürüm yoktu, sonradan girilen ilk sürüm. */
+export interface KursunGramCandidate {
+  unitPrice: Prisma.Decimal;
+  amount: Prisma.Decimal;
+  owner: GramPriceOwner;
+  late: boolean;
+  customerLater?: boolean;
+}
+
 /** Tek iş: müşteri özel > istasyon; gramaj sayısı ya da fiyat yoksa null (bugünkü fiyat). */
 export function pickKursunGramPrice(
   p: KursunGramPricing,
   work: { valueId: string | null; workOrderStepId: string | null },
-): { unitPrice: Prisma.Decimal; amount: Prisma.Decimal } | null {
+): KursunGramCandidate | null {
   const amount = work.valueId ? p.amountByValue.get(work.valueId) : undefined;
   if (!amount) return null;
-  const gram = p.customerPrice ?? (work.workOrderStepId ? p.stationPriceByStep.get(work.workOrderStepId) : undefined) ?? null;
+  const station = work.workOrderStepId ? p.stationPriceByStep.get(work.workOrderStepId) ?? null : null;
+  const gram = p.customerPrice ?? station;
   if (gram === null) return null;
-  return { unitPrice: kursunMeterPrice(amount, gram), amount };
+  return { unitPrice: kursunMeterPrice(amount, gram), amount, owner: p.customerPrice ? "CUSTOMER" : "STATION", late: false };
 }
 
 /** Gram fiyatı tarihsiz: fatura anındaki değer kullanıldı (kurşun dışı kalemler iş tarihindeki tarifeden). */
@@ -152,7 +170,7 @@ export function pickKursunGramVersionPrice(
   work: { valueId: string | null; workOrderStepId: string | null },
   at: number,
   currency: Currency,
-): { unitPrice: Prisma.Decimal; amount: Prisma.Decimal; late: boolean; customerLater?: boolean } | null {
+): KursunGramCandidate | null {
   const amount = work.valueId ? p.amountByValue.get(work.valueId) : undefined;
   if (!amount) return null;
   const station = work.workOrderStepId ? p.stationByStep.get(work.workOrderStepId) : undefined;
@@ -162,48 +180,57 @@ export function pickKursunGramVersionPrice(
   const now = cariPrice ?? usable(stationNow, currency);
   // İstasyon fiyatı kullanıldı ama müşterinin işten SONRA girilmiş (o anda sürümü olmayan) fiyatı var → uyarı.
   const customerLater = !cariPrice && !cariNow && usable(p.customer[0], currency) !== null;
-  if (now) return { unitPrice: kursunMeterPrice(amount, now), amount, late: false, ...(customerLater ? { customerLater: true } : {}) };
+  if (now) return { unitPrice: kursunMeterPrice(amount, now), amount, owner: cariPrice ? "CUSTOMER" : "STATION", late: false, ...(customerLater ? { customerLater: true } : {}) };
   // O anda HİÇ sürümü olmayan sahibin ilk sürümü (fiyat ilk girildiğinde önceki işlere de uygulanır).
-  const early = (!cariNow ? usable(p.customer[0], currency) : null) ?? (!stationNow ? usable(station?.[0], currency) : null);
-  return early ? { unitPrice: kursunMeterPrice(amount, early), amount, late: true } : null;
+  const earlyCustomer = !cariNow ? usable(p.customer[0], currency) : null;
+  const early = earlyCustomer ?? (!stationNow ? usable(station?.[0], currency) : null);
+  return early ? { unitPrice: kursunMeterPrice(amount, early), amount, owner: earlyCustomer ? "CUSTOMER" : "STATION", late: true } : null;
 }
 
 /**
- * Kurşun işinde gram fiyatı × gr/m kalem fiyatını EZER; tanımsızsa kalem fiyatı kalır. Çağıran kalemli işleri
- * verir; `priceAt` kalem tarifesinin anıyla aynı fonksiyondur. Döner: gram fiyatıyla fiyatlanan iş sayısı +
- * (SERVICE_DATE) sonradan girilen fiyatla fiyatlanan iş sayısı.
+ * Kurşun işlerinin gram fiyatı ADAYLARI (yazmaz): gr/m × gram fiyatı, sahibiyle. Kalem/kademe fiyatıyla
+ * kıyas ve seçim `service-price-pick.helper` `pickServicePrice`te; `priceAt` kalem tarifesinin anıyla aynıdır.
  */
-export async function applyKursunGramPrices(
+export async function loadKursunGramCandidates(
   works: ServiceRollWork[],
   ctx: { currency: Currency; customerId: string | null; db: Db; basis: KursunGramPriceBasis; priceAt: (w: ServiceRollWork) => number },
-): Promise<{ priced: number; late: number; customerLater: number }> {
+): Promise<Map<ServiceRollWork, KursunGramCandidate>> {
+  const out = new Map<ServiceRollWork, KursunGramCandidate>();
   const kursun = works.filter((w) => w.source !== "PROPERTY" && w.valueId && w.qtyUnit === "METER");
-  if (kursun.length === 0) return { priced: 0, late: 0, customerLater: 0 };
+  if (kursun.length === 0) return out;
   const valueIds = [...new Set(kursun.map((w) => w.valueId!))];
   const stepIds = [...new Set(kursun.map((w) => w.workOrderStepId).filter((v): v is string => v !== null))];
-  let priced = 0;
-  let late = 0;
-  let customerLater = 0;
   if (ctx.basis === "INVOICE_DATE") {
     const pricing = await loadKursunGramPricing({ valueIds, stepIds, customerId: ctx.customerId, currency: ctx.currency, db: ctx.db });
     for (const w of kursun) {
       const hit = pickKursunGramPrice(pricing, w);
-      if (!hit) continue;
-      w.unitPrice = hit.unitPrice;
-      w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
-      priced++;
+      if (hit) out.set(w, hit);
     }
-    return { priced, late, customerLater };
+    return out;
   }
   const versions = await loadKursunGramVersions({ valueIds, stepIds, customerId: ctx.customerId, db: ctx.db });
   for (const w of kursun) {
     const hit = pickKursunGramVersionPrice(versions, w, ctx.priceAt(w), ctx.currency);
-    if (!hit) continue;
-    w.unitPrice = hit.unitPrice;
-    w.gramLabel = kursunGramLineLabel(w.valueName, hit.amount);
-    priced++;
-    if (hit.late) late++;
-    if (hit.customerLater) customerLater++;
+    if (hit) out.set(w, hit);
   }
-  return { priced, late, customerLater };
+  return out;
+}
+
+/** Hizmet fiyat tablosu için ŞU ANKİ gram fiyatları (kolon = güncel değer): müşteri cari kartı + aktif istasyonlar. */
+export async function loadCurrentGramPrices(customerId: string | null, currency: Currency): Promise<{
+  customer: Prisma.Decimal | null;
+  stations: Array<{ id: string; name: string; price: Prisma.Decimal }>;
+}> {
+  const cari = customerId
+    ? await findCariAccountForCardTx(prisma, { customerId, subcontractorId: null }, { kursunGramPrice: true, kursunGramCurrency: true })
+    : null;
+  const stations = await prisma.station.findMany({
+    where: { isActive: true, kursunGramPrice: { not: null }, kursunGramCurrency: currency },
+    select: { id: true, name: true, kursunGramPrice: true },
+    orderBy: { name: "asc" },
+  });
+  return {
+    customer: cari?.kursunGramPrice != null && cari.kursunGramCurrency === currency ? cari.kursunGramPrice : null,
+    stations: stations.map((s) => ({ id: s.id, name: s.name, price: s.kursunGramPrice! })),
+  };
 }

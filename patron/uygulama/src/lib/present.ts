@@ -16,6 +16,8 @@ const KEY_LABEL: Readonly<Record<string, string>> = {
   asOf: "Tarih itibarıyla",
   disNo: "Dış belge no",
   vadesiGecti: "Vadesi geçti",
+  gecerlilikBaslangici: "Yürürlük başlangıcı",
+  gecerlilikBitisi: "Yürürlük bitişi",
 };
 
 /** ASCII anahtar kelimesi → Türkçe yazımı (anahtarlar ASCII; ekranda "Doviz", "Siparis" yazılmaz). */

@@ -257,7 +257,9 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       table: "item_prices",
       column: "customerId",
       label: "Müşteri fiyat istisnası",
-      uniqueOn: ["itemId", "customerId", "kind", "currency"],
+      uniqueOn: ["itemId", "customerId", "propertyValueId", "kind", "currency"],
+      // Kademe (2026-11-06) ifade indeksinde COALESCE'li → NULL güvenli eşitlik.
+      crossSourceOn: { columns: ["itemId", "propertyValueId", "kind", "currency"], nullSafe: ["propertyValueId"] },
       // Partial UNIQUE yalnız aktif satırda: damgalı fiyat geçmişi serbestçe taşınır (MAL-0b).
       activeWhenNull: ["revokedAt"],
       policy: "BLOCK",
