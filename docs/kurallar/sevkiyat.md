@@ -30,7 +30,10 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** `nextPackingGroupSeqTx` İLK ifade `pg_advisory_xact_lock(8031, hashtext(customerId))`; çuval bağlama atomik claim (`updateMany WHERE {shipmentId: null, customerId}`).
 - **[ÇEKİRDEK]** Tablet grubu SEÇER, kurmaz; liste, okutma hedefi ve "Hemen Sevk Et" TEK yüklem `sacksInSelection`; `packingGroupsEnabled` kapalıyken davranış aynen; ölü grupta seçim "Tümü".
 - **[ÇEKİRDEK]** `SackAllocation` sevk ANINDA yazılır (`distributeSacksToLines`); stok yalnız DISPATCH'te `SHIPPED`; PLANNED tahsis sayılmaz; `shippedQty` defterden türer, elle yazılmaz.
-- **[ÇEKİRDEK]** `WorkOrder` yalnız üretimi yönetir; tartı/paket/sevk ayrı domain (`shipping.service.ts`), çuvala bağlanır.
+- **[ÇEKİRDEK]** `WorkOrder` yalnız üretimi yönetir; tartı/paket/sevk ayrı domain (`shipping.service.ts`), yük birimine bağlanır.
+- **[ÇEKİRDEK]** Yük birimi `Sack.unitKind` (SACK · CART · BULK); dökme/araba yalnız sevkiyat içinde doğar (`openLoadUnitTx`), havuza DÖNMEZ — iptal ve storno kapanışı `dissolveLoadUnitsTx` ile çözer (toplar rafa, birim `dissolvedAt` damgalı kalır); tek tek çıkarma 409 `LOAD_UNIT_NOT_REMOVABLE`.
+- **[ÇEKİRDEK]** Dökme sevkiyat başına TEK canlı birim; araba no etikettir, kimlik değil (sevkiyat içinde tekil, elle girilir); dökme/araba tartı/parti/ambalaj no TAŞIMAZ (DB CHECK + trigger).
+- **[ÇEKİRDEK]** İrsaliyede dökme "Dökme – N top", araba "Araba <no> – N top"; snapshot'a `unitKind/unitLabel` yalnız dökme/arabada girer (çuvallı belge bayt-eşit); e-İrsaliye kap adedi DEĞİŞMEZ (muhasebeci teyidi bekleniyor).
 - **[ÇEKİRDEK]** SACK etiketi barkodu `Sack.sackNo` (ayrı kolon EKLEME); şablon çözülemez/uymazsa Türkçe 400, başka etikete sapmaz.
 - **[ÇEKİRDEK]** Sevk rakamı BRÜT: canlı çuval sorgusundan üretilmez; iade ayrı belgeyle (`RETURN_DISPATCH` donar, iptalde VOIDED); `returns {count, meters}` dipnottur.
 - **[ÇEKİRDEK]** Sipariş sevk durumunu kullanıcıya günlük dille göster (Henüz onaylanmadı · Henüz gönderilmedi · Bir kısmı gönderildi (x / y m) · Hepsi gönderildi · Sipariş elle kapatıldı (x / y m gönderildi) · Sipariş iptal edildi); `OrderStatus` etiketi ham ya da "Onaylandı"/"Kısmi Sevk" jargonuyla gösterilmez — panel metni tek kaynaktan (`order-where-text.ts` `orderShipView`), tablet/patron etiketleri aynı sözcüklerle.
@@ -141,6 +144,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 ### Kararlar
 
+- **[PROFİL]** Tablete gelen ofis işleri yalnız sipariş seçerek sevk (önizlemeli) ve bekleyen sevkiyat iptali (önizlemeli); çuval adedi/teslim yeri panelde; storno ve fatura tablete GELMEZ (SoD).
 - **[PROFİL]** `TartiPaket/` = "Sevkiyat", `Sevkiyat/` = "Sevk Çıkışı"; `mobile:tarti-paket` / `mobile:sevkiyat`; backend `/api/shipping`; "Sevk Çıkışı" `confirmationEnabled`a bakmaz.
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
