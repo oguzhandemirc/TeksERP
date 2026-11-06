@@ -21,6 +21,8 @@ import {
   dayText,
   distinctLineLabels,
   lineLabelsText,
+  orderMetreParts,
+  orderMetreText,
   orderSevkText,
   totalAmountText,
 } from "./order-cell-text";
@@ -138,6 +140,17 @@ function WorkOrderRollupCell({ order }: { order: Order }) {
   );
 }
 
+/** "Metre" hücresi — Excel ile aynı parçalar (`orderMetreParts`); yüzde soluk. */
+function MetreCell({ order }: { order: Order }) {
+  const p = orderMetreParts(order);
+  if (!p) return <span className="text-muted-foreground text-xs">—</span>;
+  return (
+    <span className="whitespace-nowrap tabular-nums text-xs">
+      {p.qty} <span className="text-muted-foreground">({p.pct})</span>
+    </span>
+  );
+}
+
 /**
  * Termin hücresi — DeadlineBadge'in soluna koşullu risk üçgeni. DeadlineBadge'e
  * dokunulmaz (WorkOrders ile paylaşılan saf tarih bileşeni); risk sinyali
@@ -248,9 +261,17 @@ export const orderColumns: ColumnDef<Order>[] = [
     // TEK sevk sütunu (eski "Sevk" + durum rozeti birleşti): günlük dil, BRÜT sevk;
     // ekran, Excel ve PDF aynı `orderSevkText`i yazar.
     id: "shipped",
-    header: () => <SortableHeader field="shippedQty" label="Sevk durumu" />,
+    header: "Sevk durumu",
     meta: { label: "Sevk durumu", exportValue: (o: Order) => orderSevkText(o) },
     cell: ({ row }) => <SevkCell order={row.original} />,
+  },
+  {
+    // Gönderilen / istenen metre — gönderilmemiş siparişte de istenen metre görünür
+    // (1.3.10'da cümleye dönünce listeden düşmüştü). Sıralama sevk edilen metreye göre.
+    id: "metre",
+    header: () => <SortableHeader field="shippedQty" label="Metre" />,
+    meta: { label: "Metre", exportValue: (o: Order) => orderMetreText(o) },
+    cell: ({ row }) => <MetreCell order={row.original} />,
   },
   {
     id: "nerede",
