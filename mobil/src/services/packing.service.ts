@@ -382,6 +382,9 @@ export interface SackStoreShipmentLite {
   customer: Ref;
   branch: { id: string; name: string } | null;
   sackCount: number;
+  /** `sackCount` içindeki araba / dökme birimleri. Eski backend göndermez → hepsi çuval sayılır. */
+  cartCount?: number;
+  bulkCount?: number;
   rollCount: number;
   totalKg: number;
   totalQty: number;

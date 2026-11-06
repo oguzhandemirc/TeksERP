@@ -80,11 +80,15 @@ describe('CariHoldChip', () => {
 });
 
 describe('SevkiyatScreen bağlantısı', () => {
-  const src = readFileSync(path.join(__dirname, 'SevkiyatScreen.tsx'), 'utf8');
+  const screenSrc = readFileSync(path.join(__dirname, 'SevkiyatScreen.tsx'), 'utf8');
+  // Kart 2026-11-06'da ShipmentBoardCard'a ayrıldı; çip orada bağlanır.
+  const cardSrc = readFileSync(path.join(__dirname, 'ShipmentBoardCard.tsx'), 'utf8');
+  const src = screenSrc + cardSrc;
   it('dispatch onError tam ekranı cariHoldBlockFromError ile açar, kart çipi holdChipText ile', () => {
-    expect(src).toMatch(/cariHoldBlockFromError\(e\)/);
-    expect(src).toMatch(/<CariHoldBlockedScreen block=\{holdBlock\}/);
-    expect(src).toMatch(/holdChipText\(sh\)/);
+    expect(screenSrc).toMatch(/cariHoldBlockFromError\(e\)/);
+    expect(screenSrc).toMatch(/<CariHoldBlockedScreen block=\{holdBlock\}/);
+    expect(screenSrc).toMatch(/<ShipmentBoardCard /);
+    expect(cardSrc).toMatch(/holdChipText\(sh\)/);
   });
   it('istemci kilit metni üretmez (ekranda "kilitli" literal yok)', () => {
     expect(src).not.toMatch(/['"`][^'"`]*kilitli[^'"`]*['"`]/i);

@@ -6,9 +6,7 @@ import {
   Button,
   TextInput,
   ActivityIndicator,
-  TouchableRipple,
   Appbar,
-  Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import AppModal from '../../../components/AppModal';
@@ -28,12 +26,13 @@ import { FLAGS_KEY, useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 import ShipmentCancelModal from './ShipmentCancelModal';
-import { CariHoldBlockedScreen, CariHoldChip, cariHoldBlockFromError, holdChipText, type CariHoldBlock } from './CariHold';
+import { CariHoldBlockedScreen, cariHoldBlockFromError, type CariHoldBlock } from './CariHold';
+import { BoardEmpty, ShipmentBoardCard, fmtM } from './ShipmentBoardCard';
+import { boardUnitText } from '../../../lib/loadUnit';
 import { READY_WORKS_KEY, ReadyWorksSheet, ReadyWorksStrip } from './ReadyWorks';
 import type { ReadyWorkRow } from '../../../services/readyWorks.service';
 import { showScreenError } from '../../../lib/screenToast';
 import TruncatedText from '../../../components/TruncatedText';
-import { palette } from '../../../theme/tokens';
 
 // =============================================================================
 // Sevk Kapısı — havuzdan kurulmuş, sevk bekleyen PLANNED sevkiyatlar. Sevk onayı
@@ -45,17 +44,6 @@ import { palette } from '../../../theme/tokens';
 // =============================================================================
 
 const PAGE_SIZE = 30;
-
-const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
-
-function waitText(since: string | null): string | null {
-  if (!since) return null;
-  const mins = Math.trunc((Date.now() - new Date(since).getTime()) / 60_000);
-  if (mins < 60) return 'az önce';
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} saattir`;
-  return `${Math.floor(hours / 24)} gündür`;
-}
 
 export default function SevkiyatScreen() {
   usePortraitLock(useDeviceType() === 'phone');
@@ -156,88 +144,9 @@ export default function SevkiyatScreen() {
 
   const busy = dispatchMut.isPending;
 
-  const renderCard = ({ item: sh }: { item: SackStoreShipmentLite }) => {
-    const wait = waitText(sh.createdAt);
-    const holdChip = holdChipText(sh);
-    return (
-      <Surface style={styles.card} elevation={1}>
-        <View style={styles.cardHead}>
-          <View style={styles.titleWrap}>
-            <Text style={styles.shipNo}>{sh.shipmentNo}</Text>
-            <View style={[styles.statusChip, styles.chipReady]}>
-              <Text style={[styles.statusChipText, { color: '#7c3aed' }]}>Planlı</Text>
-            </View>
-            {/* Saha #22: yurtiçi/yurtdışı rozeti */}
-            <View style={[styles.statusChip, sh.destination === 'EXPORT' ? styles.chipExport : styles.chipDomestic]}>
-              <Text style={[styles.statusChipText, { color: sh.destination === 'EXPORT' ? '#0369a1' : '#475569' }]}>
-                {sh.destination === 'EXPORT' ? 'Yurtdışı' : 'Yurtiçi'}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.meta}>
-            {sh.sackCount} çuval · {fmtM(sh.totalQty)}m · {sh.totalKg.toLocaleString('tr-TR')} kg
-          </Text>
-        </View>
-        <View style={styles.customerRow}>
-          <TruncatedText style={[styles.customer, styles.customerFlex]} testID={`sevk-musteri-${sh.id}`}>
-            {sh.customer.name}
-            {sh.branch ? ` · ${sh.branch.name}` : ''}
-          </TruncatedText>
-          {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
-        </View>
-        {holdChip ? <CariHoldChip text={holdChip} testID={`sevk-cari-kilit-${sh.id}`} /> : null}
-
-        {/* İçeriği gör — tıklayınca çuval+rulo dökümü lazy gelir (çuval çıkarma) */}
-        <TouchableRipple onPress={() => setContentsShip(sh)} style={styles.contentsBtn}>
-          <View style={styles.contentsRow}>
-            <Icon source="sack" size={15} color="#4338ca" />
-            <Text style={styles.contentsText}>
-              {sh.rollCount} top · çuval içeriğini gör / çuval çıkar
-            </Text>
-            <Icon source="chevron-right" size={18} color="#94a3b8" />
-          </View>
-        </TouchableRipple>
-
-        {/* Aksiyonlar — çuval çıkar / sevk et (kapı önü ara adımı yok) */}
-        <View style={styles.cardActions}>
-          <Button
-            mode="outlined"
-            icon="sack-percent"
-            textColor="#b45309"
-            onPress={() => setContentsShip(sh)}
-            disabled={busy}
-            style={styles.actBtn}
-            contentStyle={styles.actBtnContent}
-          >
-            Çuval Çıkar
-          </Button>
-          <Button
-            mode="outlined"
-            icon="cancel"
-            textColor={palette.red[600]}
-            onPress={() => setCancelShip(sh)}
-            disabled={busy}
-            style={styles.actBtn}
-            contentStyle={styles.actBtnContent}
-            testID={`sevk-iptal-${sh.id}`}
-          >
-            İptal Et
-          </Button>
-          <Button
-            mode="contained"
-            icon="truck-check"
-            buttonColor="#16a34a"
-            onPress={() => openDispatch(sh)}
-            disabled={busy}
-            style={styles.actBtn}
-            contentStyle={styles.actBtnContent}
-          >
-            Sevk Et
-          </Button>
-        </View>
-      </Surface>
-    );
-  };
+  const renderCard = ({ item: sh }: { item: SackStoreShipmentLite }) => (
+    <ShipmentBoardCard sh={sh} busy={busy} onContents={setContentsShip} onCancel={setCancelShip} onDispatch={openDispatch} />
+  );
 
   return (
     <ScreenChrome
@@ -264,7 +173,6 @@ export default function SevkiyatScreen() {
       <View style={styles.filters}>
         <TextInput
           mode="outlined"
-          dense
           placeholder="Çuval kodu, sevk no veya müşteri ara..."
           value={search}
           onChangeText={setSearch}
@@ -283,15 +191,7 @@ export default function SevkiyatScreen() {
           onEndReached={() => {
             if (listQ.hasNextPage && !listQ.isFetchingNextPage) listQ.fetchNextPage();
           }}
-          ListEmptyComponent={
-            listQ.isLoading ? (
-              <ActivityIndicator style={{ marginTop: 24 }} />
-            ) : (
-              <Text style={styles.emptySub}>
-                {debouncedSearch ? 'Aramayla eşleşen sevk yok.' : 'Bekleyen sevkiyat yok.'}
-              </Text>
-            )
-          }
+          ListEmptyComponent={<BoardEmpty q={listQ} search={debouncedSearch} />}
           ListFooterComponent={
             listQ.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null
           }
@@ -330,7 +230,7 @@ export default function SevkiyatScreen() {
             {dispatchShip?.shipmentNo} — Sevk Et
           </Text>
           <TruncatedText style={styles.customer} revealOnTap>
-            {dispatchShip?.customer.name} · {dispatchShip?.sackCount} çuval ·{' '}
+            {dispatchShip?.customer.name} · {dispatchShip ? boardUnitText(dispatchShip) : ''} ·{' '}
             {dispatchShip ? fmtM(dispatchShip.totalQty) : '0'}m
           </TruncatedText>
           <TextInput mode="outlined" label="Plaka" value={plate} onChangeText={setPlate} autoCapitalize="characters" style={{ marginTop: 12 }} />
@@ -373,27 +273,7 @@ export default function SevkiyatScreen() {
 const styles = StyleSheet.create({
   filters: { padding: 12, gap: 8, backgroundColor: '#fff' },
   body: { padding: 12, paddingBottom: 24 },
-  card: { borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 10 },
-  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  shipNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
-  statusChip: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
-  chipReady: { backgroundColor: '#f3e8ff' },
-  chipExport: { backgroundColor: '#e0f2fe' },
-  chipDomestic: { backgroundColor: '#f1f5f9' },
-  statusChipText: { fontSize: 10, fontWeight: '700' },
-  meta: { fontSize: 12, color: '#64748b' },
   customer: { fontSize: 13, color: '#334155', marginTop: 2 },
-  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  customerFlex: { flex: 1, marginTop: 0 },
-  waitText: { fontSize: 12, color: '#b45309', fontWeight: '600', flexShrink: 0 },
-  contentsBtn: { borderRadius: 8, marginTop: 8, backgroundColor: '#f8fafc' },
-  contentsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
-  contentsText: { flex: 1, fontSize: 12, color: '#4338ca', fontWeight: '600' },
-  cardActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  actBtn: { flex: 1 },
-  actBtnContent: { minHeight: 56 },
-  emptySub: { fontSize: 13, color: '#94a3b8', marginTop: 24, textAlign: 'center' },
   sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff', alignSelf: 'stretch' },
   sheetTitle: { fontWeight: '700', marginBottom: 4, color: '#0f172a' },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },

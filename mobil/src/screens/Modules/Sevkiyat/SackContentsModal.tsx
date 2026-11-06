@@ -6,7 +6,7 @@ import AppModal from '../../../components/AppModal';
 import { packingService, type SackStoreShipmentLite } from '../../../services/packing.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { roleOfCode } from '../../../utils/qualityRole';
-import { isLooseUnit, loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
+import { boardUnitText, isLooseUnit, loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 const fmtKg = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
@@ -51,7 +51,7 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
             <View style={styles.head}>
               <Text style={styles.shipNo}>{shipment.shipmentNo}</Text>
               <Text style={styles.meta}>
-                {shipment.sackCount} çuval · {fmtM(shipment.totalQty)}m ·{' '}
+                {boardUnitText(shipment)} · {fmtM(shipment.totalQty)}m ·{' '}
                 {shipment.totalKg.toLocaleString('tr-TR')} kg
               </Text>
             </View>

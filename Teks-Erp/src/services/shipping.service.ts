@@ -5301,7 +5301,7 @@ export class ShippingService {
     const totals = await boardTotalsWithHold(ids);
     const data = pageRows.map((s) => {
       const t = totals.get(s.id);
-      return { id: s.id, shipmentNo: s.shipmentNo, status: s.status, destination: s.destination, procedureCode: s.procedureCode, createdAt: s.createdAt, customer: s.customer, branch: s.branch, sackCount: t?.sackCount ?? 0, rollCount: t?.rollCount ?? 0, totalKg: t?.totalKg ?? 0, totalQty: t?.totalQty ?? 0, held: t?.held ?? false, holdScopes: t?.holdScopes ?? [], holdText: t?.holdText ?? null };
+      return { id: s.id, shipmentNo: s.shipmentNo, status: s.status, destination: s.destination, procedureCode: s.procedureCode, createdAt: s.createdAt, customer: s.customer, branch: s.branch, sackCount: t?.sackCount ?? 0, cartCount: t?.cartCount ?? 0, bulkCount: t?.bulkCount ?? 0, rollCount: t?.rollCount ?? 0, totalKg: t?.totalKg ?? 0, totalQty: t?.totalQty ?? 0, held: t?.held ?? false, holdScopes: t?.holdScopes ?? [], holdText: t?.holdText ?? null };
     });
     return { success: true, data, pagination: { nextCursor, hasMore, limit } };
   }

@@ -60,3 +60,9 @@ export function labelBatchWarning(enabled: boolean, s: LabelBatchState): string 
   if (!enabled) return null;
   return normalizeLabelBatch(s.value) == null ? 'Parti boş — etikete müşteri partisi basılmaz' : null;
 }
+
+/** Şeridin parçaları: değer büyük yazılır, sayaç yanında küçük; boşsa değer null ("—" + uyarı). */
+export function labelBatchStripParts(s: LabelBatchState): { value: string | null; countText: string | null } {
+  const v = normalizeLabelBatch(s.value);
+  return v == null ? { value: null, countText: null } : { value: v, countText: `bu değerle ${s.count + 1}. top` };
+}

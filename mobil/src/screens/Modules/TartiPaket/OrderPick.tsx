@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import AppModal from '../../../components/AppModal';
 import MultiSelectSheet, { type MultiSelectOption } from '../../../components/MultiSelectSheet';
 import { packingService, type OpenOrder } from '../../../services/packing.service';
+import { queryProblem, type QueryProblem } from '../../../utils/queryState';
 import { palette } from '../../../theme/tokens';
 
 // =============================================================================
@@ -22,6 +23,16 @@ export function orderOptions(orders: readonly OpenOrder[]): MultiSelectOption[] 
     };
   });
 }
+
+// Çevrimdışıyken sorgu DURAKLAR (isError false) — yalnız isError'a bakan liste "açık sipariş yok" yalanını söyler.
+const ORDERS_PROBLEM: Record<QueryProblem, string> = {
+  offline: 'Çevrimdışısınız — açık siparişler alınamıyor. Bağlantı gelince yeniden açın.',
+  error: 'Siparişler alınamadı — bağlantıyı kontrol edin.',
+};
+const PREVIEW_PROBLEM: Record<QueryProblem, string> = {
+  offline: 'Çevrimdışısınız — önizleme alınamıyor. Sevk için bağlantı gerekir.',
+  error: 'Önizleme alınamadı — yine de sevk edebilirsiniz.',
+};
 
 /** Satır metni: seçim yoksa siparişsiz; varsa numaralar. */
 export function orderPickText(selected: readonly string[], orders: readonly OpenOrder[]): string {
@@ -48,6 +59,7 @@ export function OrderPickRow({
     staleTime: 30_000,
   });
   const orders = q.data?.data ?? [];
+  const problem = q.data ? null : queryProblem(q);
   return (
     <>
       <TouchableRipple onPress={() => setOpen(true)} style={styles.row} testID="sevk-siparis-sec">
@@ -69,7 +81,7 @@ export function OrderPickRow({
         value={value}
         onChange={onChange}
         emptyText="Bu müşterinin açık siparişi yok — siparişsiz sevk edilir."
-        errorText={q.isError ? 'Siparişler alınamadı — bağlantıyı kontrol edin.' : null}
+        errorText={problem ? ORDERS_PROBLEM[problem] : null}
         searchable={orders.length > 15}
       />
     </>
@@ -103,6 +115,7 @@ export function ShipConfirmSheet({
     enabled: visible && sackIds.length > 0,
   });
   const p = pq.data?.data ?? null;
+  const previewProblem = p ? null : queryProblem(pq);
   return (
     <AppModal visible={visible} onDismiss={onDismiss}>
       <Surface style={styles.sheet} elevation={4}>
@@ -114,7 +127,11 @@ export function ShipConfirmSheet({
         ) : null}
         <OrderPickRow customerId={customerId} branchId={branchId} value={orderIds} onChange={setOrderIds} />
         {pq.isLoading ? <ActivityIndicator style={styles.loading} /> : null}
-        {pq.isError ? <Text style={styles.warn}>Önizleme alınamadı — yine de sevk edebilirsiniz.</Text> : null}
+        {previewProblem ? (
+          <Text style={styles.warn} testID="sevk-onizleme-sorun">
+            {PREVIEW_PROBLEM[previewProblem]}
+          </Text>
+        ) : null}
         <ScrollView style={styles.list}>
           {(p?.lines ?? []).map((l) => (
             <Text key={l.lineId} style={styles.line}>
@@ -154,7 +171,7 @@ const styles = StyleSheet.create({
   row: { borderWidth: 1, borderColor: palette.slate[300], borderRadius: 8, marginTop: 12 },
   rowInner: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 12 },
   rowText: { flex: 1 },
-  rowLabel: { fontSize: 12, color: palette.slate[500] },
+  rowLabel: { fontSize: 14, color: palette.slate[500] },
   rowValue: { fontSize: 16, fontWeight: '600' },
   sheet: { padding: 20, borderRadius: 12, maxHeight: '90%' },
   title: { fontWeight: '700' },

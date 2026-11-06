@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithPaper } from '../../../../test/render';
 import type { InboundNoteDetail, NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
-import { initialMultiParty, partyHeading, partyOutcome, showModeChoice } from './partyDraft';
+import { initialMultiParty, partyFacts, partyHeading, partyOutcome, partyResultSummary, showModeChoice } from './partyDraft';
 import { initialRowForm, openedResult } from './woFromDoc';
 import PartyRows from './PartyRows';
 import { TERIM } from '../../../../lib/terim';
@@ -47,6 +47,18 @@ describe('parti kartı (saf)', () => {
     expect(partyHeading(1, view().parties[0])).toBe('1. parti · 15 satır / 16 TOP · Sipariş 56967 · İşlem: KDK APRE · Müşteri İE 24749');
     expect(partyHeading(2, view().parties[1])).toBe('2. parti · 15 satır / 16 TOP · Sipariş 56967');
   });
+  it('⭐ künye parçaları ayrı (kartta parça sınırında kırılır); parti yoksa boş', () => {
+    expect(partyFacts(view().parties[0])).toEqual(['15 satır / 16 TOP', 'Sipariş 56967', 'İşlem: KDK APRE', 'Müşteri İE 24749']);
+    expect(partyFacts(undefined)).toEqual([]);
+  });
+  it('⭐ kısmi özet: yalnız düşen parti varken; tam başarıda / sonuçsuz null', () => {
+    const r = openedResult(partial);
+    const opened = r.kind === 'OPENED' ? r : null;
+    expect(partyResultSummary(opened, [1, 2])).toBe('1/2 parti açıldı · 1 parti açılamadı — nedeni kartında; düzeltip yeniden kaydedin');
+    const full = openedResult({ ...partial, failed: [] });
+    expect(partyResultSummary(full.kind === 'OPENED' ? full : null, [1])).toBeNull();
+    expect(partyResultSummary(null, [1, 2])).toBeNull();
+  });
   it('⭐ K1: varsayılan "her parti ayrı" → kip seçimi yok; SINGLE varsayılanında seçim kalır', () => {
     expect(showModeChoice(view())).toBe(false);
     expect(showModeChoice(view({ defaultMode: 'SINGLE' }))).toBe(true);
@@ -71,7 +83,9 @@ describe('PartyRows (tablet)', () => {
   it('⭐ K1: PER_PARTY varsayılanında kip çipleri çizilmez; künye görünür', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(null)} wo={noop} locked={false} />);
     expect(ui.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
-    expect(ui.getByText(/İşlem: KDK APRE · Müşteri İE 24749/)).toBeTruthy();
+    expect(ui.getByText('İşlem: KDK APRE')).toBeTruthy();
+    expect(ui.getByText('Müşteri İE 24749')).toBeTruthy();
+    expect(ui.queryByTestId('belge-parti-ozet-GB-1')).toBeNull();
     const single = renderWithPaper(<PartyRows row={rowOf(null, view({ defaultMode: 'SINGLE' }))} wo={noop} locked={false} />);
     expect(single.getByTestId('belge-parti-kip-GB-1-SINGLE')).toBeTruthy();
   });
@@ -79,6 +93,7 @@ describe('PartyRows (tablet)', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(openedResult(partial))} wo={noop} locked={false} />);
     expect(ui.getByTestId('belge-parti-sonuc-GB-1-1')).toHaveTextContent(`${TERIM.terbiyeIsEmri.tekil} açıldı: IE-1`);
     expect(ui.getByTestId('belge-parti-sonuc-GB-1-2')).toHaveTextContent('Açılamadı: Plan makinesi bulunamadı');
+    expect(ui.getByTestId('belge-parti-ozet-GB-1')).toHaveTextContent(/1\/2 parti açıldı · 1 parti açılamadı/);
     expect(ui.getByTestId('belge-parti-metre-GB-1-1').props.editable).toBe(false);
     expect(ui.getByTestId('belge-parti-metre-GB-1-2').props.editable).toBe(true);
   });

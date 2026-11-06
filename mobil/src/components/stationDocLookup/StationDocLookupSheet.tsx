@@ -21,7 +21,8 @@ import { usePageSource } from '../../screens/Modules/GelenBelge/usePageSource';
 import { MAX_PAGES, type ScanPage } from '../../screens/Modules/GelenBelge/docScan';
 import { stationDocLookupService, type LookupScreen, type OpenedHow, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 import { colors, spacing, typography } from '../../theme';
-import { decideLookup, isHere, partyLabel, rowDetail, rowWhere, searchable, verifyText } from './decide';
+import { decideLookup, isHere, partyLabel, rowDetail, rowWhere, searchable } from './decide';
+import VerifyBadges from './VerifyBadges';
 
 interface Props {
   visible: boolean;
@@ -122,7 +123,6 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
         <View style={styles.searchRow}>
           <ModalTextInput
             mode="outlined"
-            dense
             value={q}
             onChangeText={setQ}
             onSubmitEditing={search}
@@ -133,7 +133,7 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
             style={styles.searchInput}
             testID="belge-okut-ara-metin"
           />
-          <Button mode="outlined" onPress={search} disabled={busy || !searchable(q)} testID="belge-okut-ara">
+          <Button mode="outlined" icon="magnify" onPress={search} disabled={busy || !searchable(q)} contentStyle={styles.big} testID="belge-okut-ara">
             Ara
           </Button>
         </View>
@@ -194,15 +194,15 @@ function ResultView({ view, onPick }: { view: SheetState; onPick: PickFn }) {
 function UnsureList({ items, message, onPick }: { items: StationLookupWorkOrder[]; message: string; onPick: PickFn }) {
   return (
     <View style={styles.list} testID="belge-okut-emin-degil">
-      <Text style={styles.empty}>{message}</Text>
+      <Text style={styles.warn}>{message}</Text>
       {items.map((w) => (
-        <View key={w.id} style={styles.item}>
+        <View key={w.id} style={[styles.item, isHere(w) && styles.itemHere]}>
           <View style={styles.itemBody}>
             <Text style={styles.itemTitle}>{partyLabel(w)}</Text>
             <Text style={styles.itemDetail}>{rowDetail(w)}</Text>
-            <Text style={styles.muted} testID={`belge-okut-dogrulama-${w.workOrderNumber}`}>{verifyText(w)}</Text>
-            {!!rowWhere(w) && <Text style={styles.muted}>{rowWhere(w)}</Text>}
+            {!!rowWhere(w) && <Text style={isHere(w) ? styles.whereHere : styles.muted}>{rowWhere(w)}</Text>}
           </View>
+          <VerifyBadges w={w} />
           <Button mode="outlined" onPress={() => onPick(w, items, 'CONFIRMED')} contentStyle={styles.big} testID={`belge-okut-onayla-${w.workOrderNumber}`}>
             Eminim, bu {TERIM.terbiyeIsEmri.tekilKucuk} — aç
           </Button>
@@ -221,11 +221,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   muted: { color: colors.textSecondary, fontSize: typography.size.sm },
   empty: { color: colors.dangerText, fontSize: typography.size.base, fontWeight: typography.weight.semibold },
+  // Eşik altı bir hata değil, dikkat çağrısıdır: amber.
+  warn: { color: colors.warningText, fontSize: typography.size.base, fontWeight: typography.weight.semibold },
   list: { gap: spacing.sm },
   item: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, minHeight: 56, gap: spacing.sm },
   itemHere: { borderWidth: 2, borderColor: colors.success },
   itemBody: { gap: 2 },
   itemTitle: { color: colors.text, fontSize: typography.size.xl, fontWeight: typography.weight.bold },
   itemDetail: { color: colors.text, fontSize: typography.size.base },
-  whereHere: { color: colors.success, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  whereHere: { color: colors.successText, fontSize: typography.size.base, fontWeight: typography.weight.bold },
 });
