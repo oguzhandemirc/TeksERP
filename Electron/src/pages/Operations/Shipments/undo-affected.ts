@@ -7,6 +7,7 @@
 // =============================================================================
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { EIrsaliyeAffected, UndoAffectedRoll, UndoDispatchPreview } from "./service";
+import { loadUnitTitle } from "@/lib/load-unit";
 
 export interface UndoAffectedRow {
   key: string;
@@ -31,7 +32,8 @@ export function undoAffectedRows(p: Pick<UndoDispatchPreview, "sacks" | "looseRo
   const rows: UndoAffectedRow[] = [];
   for (const s of p.sacks) {
     const rolls = s.rolls ?? [];
-    rows.push({ key: `sack:${s.id}`, kind: "sack", label: s.sackNo, detail: `${rolls.length || s.rollCount} top` });
+    // Dökme/araba birimi adıyla; storno + kapanışta çözülür, toplar rafa döner.
+    rows.push({ key: `sack:${s.id}`, kind: "sack", label: loadUnitTitle(s), detail: `${rolls.length || s.rollCount} top` });
     for (const r of rolls) rows.push({ key: `roll:${r.id}`, kind: "roll", label: r.barcode ?? "(barkodsuz)", detail: undoRollDetail(r) });
   }
   for (const r of p.looseRolls ?? []) rows.push({ key: `roll:${r.id}`, kind: "roll", label: r.barcode ?? "(barkodsuz)", detail: `Çuvalsız · ${undoRollDetail(r)}` });

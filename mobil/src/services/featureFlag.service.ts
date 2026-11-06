@@ -130,6 +130,9 @@ export interface FeatureFlags {
    *  ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ② "Sevk Çıkışı"
    *  ekranından onaylanır. Ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var. */
   shipmentConfirmationEnabled: boolean;
+  /** Çuvalsız sevk (dökme / araba) açık mı (default false). Kapalıyken Paketleme'de
+   *  "Çuvalsız Sevk" düğmesi görünmez — bugünkü ekran aynen. */
+  shipmentLooseLoadEnabled: boolean;
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde onay diyaloğu sonrası kabul edilir;
    *  backend ENFORCE eder (admin kapatırsa aşan giriş 400 döner). */
@@ -265,6 +268,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   kartelaMeasurementEnabled: false,
   fasonNoteMobileEntry: false,
   shipmentConfirmationEnabled: false,
+  // FAIL-CLOSED: yüklenemezse çuvalsız sevk kipi görünmez (bugünkü davranış).
+  shipmentLooseLoadEnabled: false,
   // Default AÇIK (backend ile aynı) — yüklenene/offline'da da aşıma izin var.
   tamburOverQuantityEnabled: true,
   // FAIL-SAFE: bayrak yüklenemezse kural KAPALI — kaliteyi kendiliğinden

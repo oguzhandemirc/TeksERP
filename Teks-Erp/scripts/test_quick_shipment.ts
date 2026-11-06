@@ -257,6 +257,18 @@ async function main(): Promise<void> {
   const nbRoll = await prisma.roll.findUniqueOrThrow({ where: { id: noBarcode }, select: { shipmentId: true, sackId: true } });
   if (nbRoll.sackId) sackIds.push(nbRoll.sackId);
   check("§5 ⭐ BARKODSUZ top sevk edilebildi (etiket zorunlu değil)", nbRoll.shipmentId === nbd.id);
+  const nbShip = await prisma.shipment.findUniqueOrThrow({ where: { id: nbd.id }, select: { dispatchNote: true } });
+  check("§5b Açıklamasız hızlı sevkte irsaliye açıklaması BOŞ (bugünkü davranış)", nbShip.dispatchNote === null);
+
+  // ── §5c İRSALİYE AÇIKLAMASI (tablet çuvalsız sevk: "Dökme – N top") aynı tx'te yazılır ──
+  const noteRoll = await makeRoll(item.id, 15);
+  const nr = await shippingService.createShipmentFromRolls({ rollIds: [noteRoll], customerId: customer.id, dispatchNote: "  Dökme – 1 top  " });
+  const nrd = nr.data as { id: string };
+  shipmentIds.push(nrd.id);
+  const nrRoll = await prisma.roll.findUniqueOrThrow({ where: { id: noteRoll }, select: { sackId: true } });
+  if (nrRoll.sackId) sackIds.push(nrRoll.sackId);
+  const nrShip = await prisma.shipment.findUniqueOrThrow({ where: { id: nrd.id }, select: { dispatchNote: true } });
+  check("§5c ⭐ İrsaliye açıklaması kurulumla birlikte yazıldı (kırpılmış)", nrShip.dispatchNote === "Dökme – 1 top", String(nrShip.dispatchNote));
 
   // ── §6 İHRACAT ──────────────────────────────────────────────────────────
   const e1 = await makeRoll(item.id, 60);

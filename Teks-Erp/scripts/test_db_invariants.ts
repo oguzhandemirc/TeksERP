@@ -283,6 +283,9 @@ const PARTIAL_INDEXES: Array<{
   { table: "warehouse_movements", index: "warehouse_movements_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun belge bağı: yalnız SHIPMENT* olayları taşır" },
   { table: "warehouse_movements", index: "warehouse_movements_rollReturnId_idx", uniq: false, predicate: `("rollReturnId" IS NOT NULL)`, why: "null-yoğun belge bağı: yalnız RETURN olayları taşır" },
   { table: "sacks", index: "sacks_warehouseId_idx", uniq: false, predicate: `("warehouseId" IS NOT NULL)`, why: "eski çuvallar NULL (lazy adoption) — dolu satırlar 'bu depoda hangi çuvallar' sorgusunun yolu" },
+  // Çuvalsız sevk (20261106120000_sack_load_unit): sevkiyat başına bir canlı dökme; araba no sevkiyat içinde tekil.
+  { table: "sacks", index: "sacks_bulk_per_shipment_uq", uniq: true, predicate: `(("unitKind" = 'BULK'::"LoadUnitKind") AND ("dissolvedAt" IS NULL))`, why: "dökme yük sevkiyat başına TEK birim — ikinci dökme okutması var olana eklenir" },
+  { table: "sacks", index: "sacks_cart_label_per_shipment_uq", uniq: true, predicate: `(("unitKind" = 'CART'::"LoadUnitKind") AND ("dissolvedAt" IS NULL))`, why: "araba no kimlik değil etiket: tekillik yalnız sevkiyat içinde, çözülen birim saymaz" },
   { table: "sacks", index: "sacks_branchId_idx", uniq: false, predicate: `("branchId" IS NOT NULL)`, why: "null-yoğun: müşteri şubesi opsiyonel (migration 20260905140000)" },
   { table: "direct_shipments", index: "direct_shipments_branchId_idx", uniq: false, predicate: `("branchId" IS NOT NULL)`, why: "null-yoğun: müşteri şubesi opsiyonel (migration 20260905140000)" },
   // ticaret paketi — ön muhasebe (migration 20260813201311)
@@ -719,6 +722,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
   { table: "manifests", name: "manifests_source_shape" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
+  // Çuvalsız sevk: SACK-dışı birim tartı/parti taşımaz, araba no yalnız CART'ta, SACK çözülmez.
+  { table: "sacks", name: "sacks_load_unit_shape" },
   { table: "work_order_steps", name: "work_order_steps_time_order" },
   // K29 (2026-11-03): adım kökeni yalnız NULL (plan) ya da 'SCAN' (okutmayla sahada eklendi).
   { table: "work_order_steps", name: "work_order_steps_addedVia_check" },
@@ -1460,6 +1465,18 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
   },
   {
     table: "sacks",
+    trigger: "sacks_load_unit_not_in_pool",
+    timing: ["AFTER INSERT OR UPDATE", "DEFERRABLE INITIALLY DEFERRED", "FOR EACH ROW", "sacks_load_unit_guard()"],
+    why: "çuvalsız sevk: dökme/araba birimi havuza dönemez, türü değişmez, çözülmüşte top kalmaz — düşerse havuzda operatörün hiç görmediği birim belirir",
+  },
+  {
+    table: "rolls",
+    trigger: "rolls_load_unit_dissolved",
+    timing: ["AFTER INSERT OR UPDATE OF", "DEFERRABLE INITIALLY DEFERRED", "FOR EACH ROW", "rolls_load_unit_guard()"],
+    why: "çuvalsız sevk: çözülmüş yük birimine top bağlanamaz",
+  },
+  {
+    table: "sacks",
     trigger: "sacks_sync_parent_moved",
     timing: ["AFTER UPDATE OF", "FOR EACH ROW", "sync_mark_sack_old_shipment()"],
     why: "patron bulutu ayrılma körlüğü: çuval sevkiyattan çıkınca ESKİ sevkiyat KIRLI",
@@ -1525,6 +1542,18 @@ const REQUIRED_EXTENSIONS: Array<{ name: string; why: string }> = [
 const TOLERATED_EXTENSIONS = new Set(["unaccent"]);
 
 const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragments: string[]; why: string }> = [
+  {
+    name: "sacks_load_unit_guard",
+    volatility: "v",
+    bodyFragments: ["havuza dönemez", "türü değiştirilemez", "Çözülmüş yük biriminde top kalamaz"],
+    why: "çuvalsız sevk havuz seddi (sacks_load_unit_not_in_pool) — gövde düşerse SACK-dışı birim havuza sızar",
+  },
+  {
+    name: "rolls_load_unit_guard",
+    volatility: "v",
+    bodyFragments: ["Çözülmüş yük birimine top bağlanamaz"],
+    why: "çuvalsız sevk: çözülmüş birime top bağlama seddi",
+  },
   {
     name: "audit_zincir_ozet",
     volatility: "i",

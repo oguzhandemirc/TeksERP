@@ -37,7 +37,8 @@ import type { Customer } from "@/pages/Customers/types";
 import type { Item } from "@/pages/Items/types";
 import { ROLL_BEARING_ITEM_TYPES } from "@/types/enums";
 import type { Color } from "@/pages/Colors/types";
-import { quickShip, findRollsForQuickShip, quickShipDestination, type QuickShipRoll } from "./quickShipService";
+import { quickShip, findRollsForQuickShip, quickShipDestination, quickShipLoadUnits, type QuickShipLoadMode, type QuickShipRoll } from "./quickShipService";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { invalidateDestinationLock, useDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
 import { DestinationLockField } from "@/pages/Operations/SackContentEdit/DestinationLockField";
 import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/types";
@@ -71,6 +72,11 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
   const [rolls, setRolls] = useState<QuickShipRoll[]>(initialRolls);
   // Teslim yeri (K18) — opsiyonel; boşken gövdeye anahtar girmez (bugünkü Hızlı Sevk).
   const [deliveryTo, setDeliveryTo] = useState<DeliveryToState>(EMPTY_DELIVERY_TO);
+  // Çuvalsız sevk — bayrak kapalıyken seçici yok, gövde bugünkü gibi (görünmez çuval).
+  const looseLoadEnabled = useFeatureFlags().data?.data?.shipmentLooseLoadEnabled === true;
+  const [loadMode, setLoadMode] = useState<QuickShipLoadMode>("SACK");
+  const [cartLabel, setCartLabel] = useState("");
+  const loadUnits = quickShipLoadUnits(looseLoadEnabled ? loadMode : "SACK", cartLabel, rolls.map((r) => r.id));
 
   // ② MİKTAR MODU — "3 top patos gri" de, sistem FIFO ile seçsin.
   const [pickItemId, setPickItemId] = useState<string | null>(null);
@@ -118,7 +124,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
   const lockQ = useDestinationLock(customerId, null, open);
   const yon = quickShipDestination(lockQ.data, picked);
   const blockedReason = yon.blockedReason;
-  const valid = Boolean(customerId) && rolls.length > 0 && !yon.blocked && yon.destination != null && !deliveryToError(deliveryTo, customerId);
+  const valid = Boolean(customerId) && rolls.length > 0 && !yon.blocked && yon.destination != null && !deliveryToError(deliveryTo, customerId) && loadUnits !== null;
 
   const attempt = useAttemptToken();
   const shipM = useMutation({
@@ -129,6 +135,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
         destination: yon.destination ?? undefined,
         ...(yon.chosen ? { destinationChosen: true as const } : {}),
         ...deliveryToBody(deliveryTo),
+        ...(loadUnits ? { loadUnits } : {}),
         clientToken: attempt.token(),
       }),
     onError: (e) => attempt.onFailure(e),
@@ -183,6 +190,23 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
               </div>
             )}
           </div>
+
+          {looseLoadEnabled && (
+            <div className="rounded-md border p-3" data-testid="quick-ship-load-mode">
+              <Label className="text-xs">Yükleme biçimi</Label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {([["SACK", "Çuvalla"], ["BULK", "Dökme"], ["CART", "Araba"]] as const).map(([m, t]) => (
+                  <Button key={m} type="button" size="sm" variant={loadMode === m ? "default" : "outline"} onClick={() => setLoadMode(m)}>
+                    {t}
+                  </Button>
+                ))}
+                {loadMode === "CART" && (
+                  <Input className="w-40" maxLength={32} placeholder="Araba no" value={cartLabel} onChange={(e) => setCartLabel(e.target.value)} aria-label="Araba no" />
+                )}
+              </div>
+              {loadMode === "CART" && loadUnits === null && <p className="mt-1 text-xs text-destructive">Araba no girin.</p>}
+            </div>
+          )}
 
           {/* ② MİKTAR MODU */}
           <div className="rounded-md border bg-muted/30 p-3">

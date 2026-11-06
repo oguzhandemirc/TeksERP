@@ -141,6 +141,9 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   ROLL_FINISHED: "Bitmiş Top",
   SWATCH: "Kartela",
   SACK: "Çuval",
+  // LoadUnitKind — sevkiyattaki yük birimi (SACK yukarıda, LabelKind ile ortak)
+  CART: "Araba",
+  BULK: "Dökme",
   RASTER_HTML: "Raster (HTML)",
   DIRECT_THERMAL: "Direkt Termal",
   THERMAL_TRANSFER: "Termal Transfer (Ribonlu)",

@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import type { LoadUnitKind } from '../lib/loadUnit';
 import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 
 // =============================================================================
@@ -272,6 +273,9 @@ export interface ShipmentSack {
   id: string;
   sackNo: string;
   seq: number | null;
+  /** Yük birimi (çuvalsız sevk) — eski sunucu göndermez → çuval. */
+  unitKind?: LoadUnitKind;
+  unitLabel?: string | null;
   /** Operatörün çuval üstüne yazdığı kod. */  weightKg: number | null;
   /** BRÜT: hâlâ çuvalda olanlar + bu çuvaldan iade alınanlar (`returned` dolu). */
   rolls: SackRoll[];
@@ -354,6 +358,15 @@ export interface ShipmentCancelPreview {
   rollCount: number;
   swatchCount: number;
   affectedOrders: { orderNumber: string; qty: string }[];
+  /** Etkilenen her birim + topları (yeni sunucu); `returnsTo` çuvalda havuz, dökme/arabada raf. */
+  units?: {
+    id: string;
+    sackNo: string;
+    unitKind: LoadUnitKind;
+    unitLabel: string | null;
+    returnsTo: 'SACK_POOL' | 'SHELF';
+    rolls: { id: string; barcode: string | null; qty: number }[];
+  }[];
 }
 
 // ── Sevk kapısı board'u — yalnız PLANNED (sevk bekleyen) sevkiyatlar ──
@@ -411,6 +424,9 @@ export interface SackContentSack {
   seq: number | null;  weightKg: number | null;
   /** Çuval yorumu — sevkteki çuvalda salt-okunur gösterilir. */
   notes: string | null;
+  /** Yük birimi (çuvalsız sevk) — eski sunucu göndermez → çuval. */
+  unitKind?: LoadUnitKind;
+  unitLabel?: string | null;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
@@ -610,6 +626,25 @@ export const packingService = {
     clientToken?: string;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments', body).then((r) => r.data),
+
+  /** Çuvalsız sevk (Hızlı Sevk ucu) — toplar doğrudan; sunucu görünmez yük birimini kendisi açar.
+   *  `dispatchNote` irsaliye açıklamasına yazılır ("Dökme – 12 top"). */
+  createShipmentFromRolls: (body: {
+    rollIds: string[];
+    customerId: string;
+    branchId?: string | null;
+    orderIds?: string[];
+    orderless?: boolean;
+    destination?: ShipmentDestination;
+    destinationChosen?: true;
+    plateNumber?: string | null;
+    driverName?: string | null;
+    dispatchNote?: string | null;
+    /** Çuvalsız sevk: dökme tek birim, araba başına bir birim (top kümesini tam böler). */
+    loadUnits?: { kind: 'BULK' | 'CART'; label?: string; rollIds: string[] }[];
+    clientToken?: string;
+  }): Promise<ApiResponse<CreatedShipment>> =>
+    apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments/from-rolls', body).then((r) => r.data),
 
   /** Sevkiyat kurulum önizlemesi (salt-okunur) — karşılanan sipariş satırları + fazlalık. */
   previewCreateShipment: (body: {

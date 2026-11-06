@@ -61,6 +61,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "(kusur ne kadar büyük), ikincisinde bir SÜRE sınıfı (mikro-duruş eşiğinin altı). " +
     "MACHINE_STOP_EVENT.lossClass override'ı ile ayrıldı (2026-09-13)",
   EXTERNAL: "StationType(dış istasyon) ve WarehouseEventType(dış hareket) — ikisi de 'Dış'",
+  // ── Yük birimi (çuvalsız sevk, 2026-11-06)
+  SACK:
+    "LoadUnitKind(sevkiyattaki yük birimi çuval) ve LabelKind(çuval etiketi) — ikisi de aynı fiziksel çuvalı işaret eder; ortak Türkçe doğru",
   // ── Tezgah + levent etiketi (dokuma manuel veri S1b, 2026-10-21)
   MACHINE:
     "MachineDataSource(değer makineden geldi) ve LabelKind(tezgah etiketi) — ikisi de 'Makine'yi işaret eder; ortak Türkçe doğru",

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import type { ShipmentDetailSack, ShipmentDetailRoll } from "./types";
 import { ReturnedRollBadge } from "./ReturnedRollBadge";
+import { isLooseUnit, loadUnitTitle } from "@/lib/load-unit";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 
@@ -38,11 +39,20 @@ export function ShipmentSheetSackCard({
           <ChevronDown
             className={cn("h-3.5 w-3.5 shrink-0 transition-transform", isOpen ? "rotate-0" : "-rotate-90")}
           />
-          {sack.seqLabel ?? `Çuval #${sack.seq}`}
-          <span className="font-mono font-normal text-muted-foreground">· {sack.sackNo}</span>
+          {isLooseUnit(sack) ? (
+            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+              {loadUnitTitle(sack)}
+            </span>
+          ) : (
+            <>
+              {sack.seqLabel ?? `Çuval #${sack.seq}`}
+              <span className="font-mono font-normal text-muted-foreground">· {sack.sackNo}</span>
+            </>
+          )}
         </span>
         <span className="shrink-0 tabular-nums text-[11px] font-normal text-muted-foreground">
-          {sack.weightKg != null ? `${num(sack.weightKg)} kg` : "tartılmadı"} · {rolls.length} top
+          {isLooseUnit(sack) ? "" : sack.weightKg != null ? `${num(sack.weightKg)} kg · ` : "tartılmadı · "}
+          {rolls.length} top
           {sack.returnedCount > 0 ? (
             <span className="text-amber-700 dark:text-amber-400">
               {" "}· {sack.returnedCount} iade
