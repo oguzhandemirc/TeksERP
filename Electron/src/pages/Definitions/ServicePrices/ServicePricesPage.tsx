@@ -5,6 +5,7 @@
 // çözücüsüyle aynı sıra — panel sırayı YENİDEN HESAPLAMAZ). Yürürlük tarihi seçiliyken her kayıt ileri tarihlidir.
 // =============================================================================
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Callout } from "@/components/ui/callout";
@@ -21,7 +22,8 @@ import { useServicePricesAccess } from "./useServicePricesAccess";
 
 export function ServicePricesPage() {
   const access = useServicePricesAccess();
-  const [itemId, setItemId] = useState<string | null>(null);
+  // Hizmetler listesindeki "Fiyat tablosu" bağlantısı `?item=<id>` ile gelir (yalnız ilk seçim).
+  const [itemId, setItemId] = useState<string | null>(useSearchParams()[0].get("item"));
   const [currency, setCurrency] = useState<Currency>("TRY");
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [validFromDay, setValidFromDay] = useState<string | null>(null);

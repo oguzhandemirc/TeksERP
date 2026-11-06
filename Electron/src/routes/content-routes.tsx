@@ -107,6 +107,7 @@ import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { ServicePricesPage } from "@/pages/Definitions/ServicePrices/ServicePricesPage";
+import { ServicesPage } from "@/pages/Definitions/Services/ServicesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
@@ -698,6 +699,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={["purchase-order:read", "purchase-order:write"]}>
         <PurchaseOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/services",
+    element: (
+      <ProtectedRoute requirePermission="item:read">
+        <ServicesPage />
       </ProtectedRoute>
     ),
   },

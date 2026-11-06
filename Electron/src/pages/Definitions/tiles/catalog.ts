@@ -1,5 +1,5 @@
 // Tanımlar › Ürün Kataloğu karoları (sıra = hub sırası).
-import { Package, Award, Palette, Sparkles, Tag, Table2 } from "lucide-react";
+import { Package, Award, Palette, Sparkles, Tag, Table2, Wrench } from "lucide-react";
 import { itemPricesTileVisible } from "../ItemPrices/regime";
 import { servicePricesTileVisible } from "../ServicePrices/regime";
 import { flagOffHint } from "@/lib/flag-setting-path";
@@ -12,6 +12,16 @@ export const catalogTiles: DefinitionTile[] = [
     description: "Kumaş, iplik ve sarf tanımları",
     icon: Package,
     to: "/definitions/items",
+    group: "catalog",
+    permission: "item:read",
+  },
+  // K3 (2026-11-06): hizmet kalemleri Ürünler listesinden ayrı; sade form.
+  {
+    key: "services",
+    title: "Hizmetler",
+    description: "Faturalanan hizmet kalemleri (kurşun, tambur, brode...)",
+    icon: Wrench,
+    to: "/definitions/services",
     group: "catalog",
     permission: "item:read",
   },
