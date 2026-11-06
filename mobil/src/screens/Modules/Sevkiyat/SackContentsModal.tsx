@@ -6,7 +6,8 @@ import AppModal from '../../../components/AppModal';
 import { packingService, type SackStoreShipmentLite } from '../../../services/packing.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { roleOfCode } from '../../../utils/qualityRole';
-import { boardUnitText, isLooseUnit, loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
+import { palette } from '../../../theme/tokens';
+import { boardUnitText, isLooseUnit, loadKgText, loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 const fmtKg = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
@@ -17,13 +18,15 @@ interface Props {
   /** PLANNED sevkiyatta çuval çıkarma — verilirse her çuval başlığında çöp ikonu görünür. */
   onRemoveSack?: (sackId: string, label: string) => void;
   removing?: boolean;
+  /** PLANLI'da dökme/araba topunu çıkar (9.3) — verilirse gevşek birimin top satırında "Çıkar" görünür. */
+  onRemoveLooseRoll?: (rollId: string, barcode: string | null, unitTitle: string, last: boolean) => void;
 }
 
 /**
  * Çuval Depo kartına tıklayınca açılan içerik modalı. Sevkiyatın çuval+rulo
  * dökümünü LAZY çeker (board listesi rulo taşımaz). Tek sevkiyat = sınırlı kapsam.
  */
-export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, removing }: Props) {
+export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, removing, onRemoveLooseRoll }: Props) {
   const q = useQuery({
     queryKey: ['sack-contents', shipment?.id],
     queryFn: () => packingService.getShipmentSackContents(shipment!.id),
@@ -51,8 +54,8 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
             <View style={styles.head}>
               <Text style={styles.shipNo}>{shipment.shipmentNo}</Text>
               <Text style={styles.meta}>
-                {boardUnitText(shipment)} · {fmtM(shipment.totalQty)}m ·{' '}
-                {shipment.totalKg.toLocaleString('tr-TR')} kg
+                {boardUnitText(shipment)} · {fmtM(shipment.totalQty)}m
+                {loadKgText(shipment) ? ` · ${loadKgText(shipment)}` : ''}
               </Text>
             </View>
             <Text style={styles.customer} numberOfLines={1}>
@@ -85,7 +88,8 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                         <Text style={styles.sackChipText}>{loadUnitTitle(sk)}</Text>
                       </View>
                       <Text style={styles.sackMeta}>
-                        {fmtKg(sk.weightKg)} · {sk.rollCount} top
+                        {/* Dökme/araba tartı taşımaz — kg yerine yalnız top/metre. */}
+                        {isLooseUnit(sk) ? `${fmtM(sk.totalQty)} m` : fmtKg(sk.weightKg)} · {sk.rollCount} top
                         {sk.swatchCount > 0 ? ` · ${sk.swatchCount} kartela` : ''}
                       </Text>
                       {/* Dökme/araba tek başına çıkarılamaz (sunucu 409) — yolu sevkiyat iptali. */}
@@ -128,6 +132,17 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                                 : ''}
                             </Text>
                             <Text style={styles.rollQty}>{fmtM(r.qty)}m</Text>
+                            {onRemoveLooseRoll && isLooseUnit(sk) ? (
+                              <IconButton
+                                icon="tray-arrow-up"
+                                size={22}
+                                iconColor={palette.red[600]}
+                                style={styles.rollRemove}
+                                onPress={() => onRemoveLooseRoll(r.id, r.barcode, loadUnitTitle(sk), sk.rolls.length === 1)}
+                                accessibilityLabel={`${r.barcode ?? 'Top'} topunu ${loadUnitTitle(sk)} yükünden çıkar`}
+                                testID={`top-cikar-${r.id}`}
+                              />
+                            ) : null}
                           </View>
                         ))}
                         {sk.swatches.map((s) => (
@@ -198,4 +213,5 @@ const styles = StyleSheet.create({
   barcode: { fontSize: 12, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
   rollMeta: { flex: 1, fontSize: 11, color: '#64748b' },
   rollQty: { fontSize: 12, fontWeight: '600', color: '#0f172a', flexShrink: 0 },
+  rollRemove: { margin: 0, width: 56, height: 56 },
 });

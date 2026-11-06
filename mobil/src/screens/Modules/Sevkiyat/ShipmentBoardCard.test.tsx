@@ -14,15 +14,16 @@ const base = {
   sackCount: 3, rollCount: 5, totalKg: 12, totalQty: 240,
 };
 const noop = jest.fn();
-const card = (over: Record<string, unknown>) =>
+const card = (over: Record<string, unknown>, onAdd?: () => void) =>
   renderWithPaper(
-    <ShipmentBoardCard sh={{ ...base, ...over } as never} busy={false} onContents={noop} onCancel={noop} onDispatch={noop} />,
+    <ShipmentBoardCard sh={{ ...base, ...over } as never} busy={false} onContents={noop} onCancel={noop} onDispatch={noop} onAdd={onAdd} />,
   );
 
 describe('ShipmentBoardCard — yük birimi', () => {
   it('dökme: "Dökme" yazar, Çuval Çıkar yok, içerik satırı çıkarma önermez', () => {
     card({ sackCount: 1, cartCount: 0, bulkCount: 1 });
-    expect(screen.getByTestId('sevk-yuk-s1')).toHaveTextContent(/^Dökme · 240 m · 12 kg$/);
+    // Dökme tartılmaz: kg yazılmaz (kg varsa da çuvala ait değildir).
+    expect(screen.getByTestId('sevk-yuk-s1')).toHaveTextContent(/^Dökme · 240 m$/);
     expect(screen.queryByTestId('sevk-cuval-cikar-s1')).toBeNull();
     expect(screen.getByText('5 top · içeriği gör')).toBeTruthy();
   });
@@ -31,6 +32,21 @@ describe('ShipmentBoardCard — yük birimi', () => {
     expect(screen.getByTestId('sevk-yuk-s1')).toHaveTextContent(/^2 araba · 240 m$/);
     expect(screen.getByTestId('sevk-yuk-s1')).toHaveTextContent(/^2 araba ·/);
     expect(screen.queryByTestId('sevk-cuval-cikar-s1')).toBeNull();
+  });
+  it('araba no biliniyorsa başlık "Araba A-12" yazar', () => {
+    card({ sackCount: 1, cartCount: 1, bulkCount: 0, cartLabels: ['A-12'], totalKg: 0, totalQty: 480 });
+    expect(screen.getByTestId('sevk-yuk-s1')).toHaveTextContent(/^Araba A-12 · 480 m$/);
+  });
+  it('karışık (çuval + araba): kg yalnız çuvallarındır', () => {
+    card({ sackCount: 2, cartCount: 1, bulkCount: 0, cartLabels: ['A-7'], totalKg: 96.7, totalQty: 100 });
+    expect(screen.getByTestId('sevk-yuk-s1')).toHaveTextContent(/^1 çuval · Araba A-7 · 100 m · 96,7 kg \(çuvallar\)$/);
+  });
+  it('Yük Ekle: yeni sunucuda görünür, eski sunucuda (tür alanı yok) gizli', () => {
+    card({ sackCount: 1, cartCount: 0, bulkCount: 1 }, noop);
+    expect(screen.getByTestId('sevk-yuk-ekle-s1')).toBeTruthy();
+    screen.unmount();
+    card({}, noop);
+    expect(screen.queryByTestId('sevk-yuk-ekle-s1')).toBeNull();
   });
   it('eski sunucu: hepsi çuval, Çuval Çıkar görünür', () => {
     card({});

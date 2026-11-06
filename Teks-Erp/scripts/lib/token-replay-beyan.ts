@@ -120,6 +120,10 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}shipping.service.ts::createShipmentFromRollsInner`]: { giris: { [`${S}shipping.service.ts::createShipmentFromRolls`]: "R" } },
   // #15: 8033/8035 yalnız parti ya da "açılışta" modunda — koşullu kilide K′ kurulmaz, yalnız R (4b onayı).
   [`${S}shipping.service.ts::openSackFresh`]: { giris: { [`${S}shipping.service.ts::openSack`]: "R" } },
+  // 9.2: PLANLI sevkiyata dökme/araba yükü; token yalnız yeni doğan birimde saklanır (çözülmüş birimin token'ı 409).
+  [`${S}shipping.service.ts::openLoadUnitTx`]: { helper: "yük birimi tek yaratıcısı (çuval/dökme/araba)" },
+  [`${S}shipping.service.ts::openUnitInShipmentTx`]: { helper: "planlı sevkiyatta yük birimi açıcı; replay kararı addLooseRollsFresh'indir" },
+  [`${S}shipping.service.ts::addLooseRollsFresh`]: { giris: { [`${S}shipping.service.ts::addLooseRollsToShipment`]: "R" } },
   [`${S}warp-beam-mount.service.ts::mountBeamFresh`]: { giris: { [`${S}warp-beam-mount.service.ts::mountBeam`]: "R" } },
   [`${S}warp-beam-wind.service.ts::windWarpBeamFresh`]: { giris: { [`${S}warp-beam-wind.service.ts::windWarpBeam`]: "R" } },
   [`${S}subcontractor-beam.service.ts::returnWarpBeamFresh`]: { giris: { [`${S}subcontractor-beam.service.ts::returnWarpBeam`]: "R" } },
@@ -277,6 +281,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}sack-search.service.ts::pickListReplay`]: ["çuvallar"],
   [`${S}shipping.service.ts::sackReplay`]: ["customerId", "branchId", "packingGroupId", "packageNo"],
   [`${S}shipping.service.ts::shipmentReplay`]: ["customerId", "branchId", "toplar", "cuvallar"],
+  [`${S}shipping.service.ts::looseUnitReplay`]: ["shipmentId", "unitKind", "unitLabel"],
   [`${S}subcontractor-beam.service.ts::returnReplay`]: ["kind", "dispatchId", "warpBeamId", "lengthM"],
   [`${S}subcontractor-weaving.service.ts::weavingReceiptReplay`]: ["weavingOrderId", "manifestNo"],
   [`${S}subcontractor.service.ts::receiptReplay`]: ["workOrderId", "stepId", "subcontractorId", "toplar", "metrajlar", "yeniToplar"],

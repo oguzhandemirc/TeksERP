@@ -13,7 +13,7 @@ import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint
 import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
 import { deliveryToLine } from './deliveryTo';
-import { isLooseUnit, loadUnitTitle } from '../../../lib/loadUnit';
+import { boardUnitText, isLooseUnit, loadKgText, loadUnitTitle } from '../../../lib/loadUnit';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -83,8 +83,8 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
         </Text>
       ) : null}
       <Text style={styles.summary}>
-        {d.summary.rollCount} top · {d.summary.sackCount} çuval · {n(d.summary.totalMeters)} m ·{' '}
-        {n(d.summary.totalKg)} kg
+        {d.summary.rollCount} top · {boardUnitText(d.summary)} · {n(d.summary.totalMeters)} m
+        {loadKgText({ ...d.summary, totalKg: Number(d.summary.totalKg) }) ? ` · ${n(d.summary.totalKg)} kg` : ''}
       </Text>
 
       <Button

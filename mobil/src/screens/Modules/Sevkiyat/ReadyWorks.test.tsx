@@ -20,7 +20,7 @@ import { renderWithPaper } from '../../../test/render';
 // eslint-disable-next-line import/first
 import { readyWorksService, type ReadyWorkRow } from '../../../services/readyWorks.service';
 // eslint-disable-next-line import/first
-import { ReadyWorksSheet, ReadyWorksStrip, readyChipRows, readyChipText } from './ReadyWorks';
+import { ReadyWorksSheet, ReadyWorksStrip, readyChipRows, readyChipText, readyHint } from './ReadyWorks';
 
 const C1 = '11111111-1111-4111-8111-111111111111';
 const C2 = '22222222-2222-4222-8222-222222222222';
@@ -74,6 +74,13 @@ describe('readyWorksService — ayrı tek istek, 404 kolu', () => {
   });
 });
 
+describe('readyHint', () => {
+  it('çuvalsız sevk açıksa dökme / arabadan söz eder, kapalıysa etmez', () => {
+    expect(readyHint(true)).toMatch(/Çuvalsız Sevk/);
+    expect(readyHint(false)).not.toMatch(/Çuvalsız|dökme/);
+  });
+});
+
 describe('readyChipRows / readyChipText', () => {
   it('NONE ve hazır topu olmayan satır çip üretmez; null → boş', () => {
     expect(readyChipRows(null)).toEqual([]);
@@ -81,7 +88,8 @@ describe('readyChipRows / readyChipText', () => {
   });
   it('metin durum + top + metre', () => {
     expect(readyChipText(row(C1))).toBe('Hazır: 3 top · 1.250 m');
-    expect(readyChipText(row(C1, { state: 'PARTIAL' }))).toBe('Kısmen hazır: 3 top · 1.250 m');
+    // Kısmen hazırın NEDENİ yazılır (işlemdeki top); "Kısmen hazır" başlığı tüm işler hazırken yanıltıyordu.
+    expect(readyChipText(row(C1, { state: 'PARTIAL', inProcessCount: 16 }))).toBe('Hazır: 3 top · 1.250 m · 16 top işlemde');
   });
 });
 

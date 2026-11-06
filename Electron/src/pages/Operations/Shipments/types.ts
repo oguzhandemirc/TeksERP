@@ -63,7 +63,7 @@ export interface ShipmentListItem {
    * AYNI rakamı söyler (kök CLAUDE.md 2026-08-02, SVK2007260001). İade bilgisi ayrı
    * alanda (`_count.returns`) durur ve listede rozet olarak gösterilir.
    */
-  _count: { sacks: number; rolls: number; orders: number; returns: number };
+  _count: { sacks: number; rolls: number; orders: number; returns: number; /** araba/dökme — eski sunucuda yok */ carts?: number; bulks?: number };
   /** Brüt toplam metraj (m). DIRECT satırlarda `DirectShipment.totalQty`. */
   totalMeters: number;
   /** Çuval brüt tartısı toplamı (kg). Doğrudan sevkte çuval yok → 0. */
@@ -268,7 +268,11 @@ export interface ShipmentDetail {
     rollCount: number;
     swatchCount: number;
     totalMeters: number;
+    /** TÜM canlı yük birimleri (çuval + araba + dökme). */
     sackCount: number;
+    /** Araba / dökme birim sayısı — eski sunucu göndermez (hepsi çuval sayılır). */
+    cartCount?: number;
+    bulkCount?: number;
     totalKg: number;
     returnedCount: number;
     returnedMeters: number;

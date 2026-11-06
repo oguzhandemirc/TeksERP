@@ -22,7 +22,7 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
-import { FLAGS_KEY, useFeatureFlags } from '../../../hooks/useFeatureFlags';
+import { FLAGS_KEY, useFeatureFlags, useShipmentLooseLoadEnabled } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 import ShipmentCancelModal from './ShipmentCancelModal';
@@ -30,6 +30,9 @@ import { CariHoldBlockedScreen, cariHoldBlockFromError, type CariHoldBlock } fro
 import { BoardEmpty, ShipmentBoardCard, fmtM } from './ShipmentBoardCard';
 import { boardUnitText } from '../../../lib/loadUnit';
 import { READY_WORKS_KEY, ReadyWorksSheet, ReadyWorksStrip } from './ReadyWorks';
+import { LoadAddFlow } from './LoadAddFlow';
+import { LoadPreviewCard } from './LoadPreviewCard';
+import { useLooseRollRemove } from './LooseRollRemove';
 import type { ReadyWorkRow } from '../../../services/readyWorks.service';
 import { showScreenError } from '../../../lib/screenToast';
 import TruncatedText from '../../../components/TruncatedText';
@@ -56,11 +59,14 @@ export default function SevkiyatScreen() {
   const [contentsShip, setContentsShip] = useState<SackStoreShipmentLite | null>(null);
   const [dispatchShip, setDispatchShip] = useState<SackStoreShipmentLite | null>(null);
   const [cancelShip, setCancelShip] = useState<SackStoreShipmentLite | null>(null);
+  const [addShip, setAddShip] = useState<SackStoreShipmentLite | null>(null);
+  const looseRemove = useLooseRollRemove();
   // D4-I4: 409 CARI_HOLD → tam ekran (metin sunucudan); diğer hatalar tost.
   const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
   // D4-J4: hazır iş çipine dokunulan müşteri (liste lazy; sevk mevcut Paketleme akışından).
   const [readyCustomer, setReadyCustomer] = useState<ReadyWorkRow | null>(null);
   const incomingDocsEnabled = useFeatureFlags().data?.gelenBelgeEnabled === true;
+  const looseLoadEnabled = useShipmentLooseLoadEnabled();
   const [plate, setPlate] = useState('');
   const [driver, setDriver] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -135,17 +141,18 @@ export default function SevkiyatScreen() {
     },
   });
 
+  // PLANLI'da girilmiş araç bilgisiyle dolar — boş gönderim kayıtlı plakayı sessizce silmesin.
   const openDispatch = (sh: SackStoreShipmentLite) => {
     setDispatchShip(sh);
-    setPlate('');
-    setDriver('');
-    setCarrier('');
+    setPlate(sh.plateNumber ?? '');
+    setDriver(sh.driverName ?? '');
+    setCarrier(sh.carrier ?? '');
   };
 
   const busy = dispatchMut.isPending;
 
   const renderCard = ({ item: sh }: { item: SackStoreShipmentLite }) => (
-    <ShipmentBoardCard sh={sh} busy={busy} onContents={setContentsShip} onCancel={setCancelShip} onDispatch={openDispatch} />
+    <ShipmentBoardCard sh={sh} busy={busy} onContents={setContentsShip} onCancel={setCancelShip} onDispatch={openDispatch} onAdd={setAddShip} />
   );
 
   return (
@@ -209,8 +216,15 @@ export default function SevkiyatScreen() {
               }
             : undefined
         }
-        removing={removeSackMut.isPending}
+        removing={removeSackMut.isPending || looseRemove.removing}
+        onRemoveLooseRoll={
+          contentsShip
+            ? (rollId, barcode, unitTitle, last) => looseRemove.ask({ shipmentId: contentsShip.id, rollId, barcode, unitTitle, last })
+            : undefined
+        }
       />
+      {looseRemove.modal}
+      <LoadAddFlow shipment={addShip} onDismiss={() => setAddShip(null)} />
 
       {/* Bekleyen sevkiyatı iptal — önizlemeli; storno (sevk edilmiş) tablette yok. */}
       <ShipmentCancelModal
@@ -233,6 +247,8 @@ export default function SevkiyatScreen() {
             {dispatchShip?.customer.name} · {dispatchShip ? boardUnitText(dispatchShip) : ''} ·{' '}
             {dispatchShip ? fmtM(dispatchShip.totalQty) : '0'}m
           </TruncatedText>
+          {/* 9.1: hangi İE'nin kaç topu, eksik var mı, karışık müşteri — engellemez, uyarır. */}
+          <LoadPreviewCard shipmentId={dispatchShip?.id ?? null} />
           <TextInput mode="outlined" label="Plaka" value={plate} onChangeText={setPlate} autoCapitalize="characters" style={{ marginTop: 12 }} />
           <TextInput mode="outlined" label="Şoför" value={driver} onChangeText={setDriver} style={{ marginTop: 8 }} />
           <TextInput mode="outlined" label="Taşıyıcı (opsiyonel)" value={carrier} onChangeText={setCarrier} style={{ marginTop: 8 }} />
@@ -259,6 +275,7 @@ export default function SevkiyatScreen() {
       <ReadyWorksSheet
         customer={readyCustomer}
         incomingDocsEnabled={incomingDocsEnabled}
+        looseLoadEnabled={looseLoadEnabled}
         onDismiss={() => setReadyCustomer(null)}
         onGoPacking={(customerId) => {
           setReadyCustomer(null);

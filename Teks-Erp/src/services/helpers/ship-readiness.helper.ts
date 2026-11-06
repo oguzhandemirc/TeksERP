@@ -88,6 +88,19 @@ export function liveReadinessSql(alias: string): Prisma.Sql {
   return Prisma.sql`${Prisma.raw(`${alias}.status`)} IN (${Prisma.join(live.map((s) => Prisma.sql`${s as string}::"RollStatus"`))})`;
 }
 
+/**
+ * YÜKE BAĞLI top (9.x, 2026-11-06): çuvala ya da sevkiyata (araba/dökme dahil) girmiş bitmiş top. Hazırlık durumunda
+ * bitmiş sayılır ama "sevke hazır N top" sayısına GİRMEZ — aynı top ikinci kez sevke konmasın. Bellek ikizi `isRollLoaded`.
+ */
+export function loadedRollSql(alias: string): Prisma.Sql {
+  return Prisma.raw(`(${alias}."sackId" IS NOT NULL OR ${alias}."shipmentId" IS NOT NULL)`);
+}
+
+/** `loadedRollSql`in bellek ikizi. */
+export function isRollLoaded(r: { sackId: string | null; shipmentId: string | null }): boolean {
+  return r.sackId !== null || r.shipmentId !== null;
+}
+
 export interface ShipReadyPolicy {
   rule: ShipReadyRule;
   tolerancePct: number;
@@ -100,8 +113,12 @@ export async function effectiveShipReadyPolicy(tx?: Pick<typeof prisma, "systemS
 }
 
 export interface ReadinessTotals {
+  /** Yüke bağlı OLMAYAN hazır toplar — "sevke hazır" sayısı. */
   readyCount: number;
   readyMeters: Prisma.Decimal;
+  /** Hazır ama çuvala/sevkiyata girmiş toplar (`loadedRollSql`); durumda bitmiş sayılır, sayıya girmez. Yoksa 0. */
+  loadedCount?: number;
+  loadedMeters?: Prisma.Decimal;
   inProcessCount: number;
   inProcessMeters: Prisma.Decimal;
   shippedMeters: Prisma.Decimal;
@@ -122,20 +139,24 @@ export interface ReadinessVerdict {
 
 /**
  * Birimin sevke hazırlığı.
+ *  · HAZIR burada bitmiş toplamdır: serbest hazır + yüke bağlı hazır (`loadedRollSql`).
  *  · ALL_DONE: İŞLEMDE = 0 ∧ HAZIR > 0 → READY; HAZIR > 0 → PARTIAL; HAZIR = 0 → NONE.
  *  · METER_THRESHOLD: (HAZIR m + GİTTİ m) ≥ (hedef − FİRE m) × (1 − tol/100) ∧ HAZIR > 0 → READY; işlemde top
  *    kalmadıysa yalnız hedefin bütün topları doğmuşsa (belge/parti) READY — İE'de doğmamış metre beklenir. Hedef yok/0 → ALL_DONE.
  */
 export function classifyShipReadiness(t: ReadinessTotals, policy: ShipReadyPolicy): ReadinessVerdict {
+  // Yüke bağlı top sevk işinde ilerlemiştir: listede tutmaz (hepsi yüklüyse yapılacak iş kalmadı), durumda bitmiş sayılır.
   const visible = t.readyCount + t.inProcessCount > 0;
+  const finishedCount = t.readyCount + (t.loadedCount ?? 0);
+  const finishedMeters = t.readyMeters.plus(t.loadedMeters ?? 0);
   const hasTarget = t.targetMeters !== null && t.targetMeters.gt(0);
   const appliedRule: ShipReadyRule = policy.rule === "METER_THRESHOLD" && hasTarget ? "METER_THRESHOLD" : "ALL_DONE";
-  if (t.readyCount === 0) return { state: "NONE", appliedRule, visible };
+  if (finishedCount === 0) return { state: "NONE", appliedRule, visible };
   if (t.inProcessCount === 0 && (appliedRule === "ALL_DONE" || t.targetFullyBorn)) return { state: "READY", appliedRule, visible };
   if (appliedRule === "METER_THRESHOLD") {
     const base = Prisma.Decimal.max(t.targetMeters!.minus(t.scrapMeters), 0);
     const threshold = base.times(new Prisma.Decimal(100).minus(policy.tolerancePct)).div(100);
-    if (t.readyMeters.plus(t.shippedMeters).gte(threshold)) return { state: "READY", appliedRule, visible };
+    if (finishedMeters.plus(t.shippedMeters).gte(threshold)) return { state: "READY", appliedRule, visible };
   }
   return { state: "PARTIAL", appliedRule, visible };
 }

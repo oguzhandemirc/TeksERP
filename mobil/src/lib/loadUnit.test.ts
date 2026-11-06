@@ -1,4 +1,4 @@
-import { boardSackUnits, boardUnitText, isLooseUnit, loadUnitIcon, loadUnitTitle } from './loadUnit';
+import { boardSackUnits, boardUnitText, loadKgText, isLooseUnit, loadUnitIcon, loadUnitTitle } from './loadUnit';
 
 describe('yük birimi adı', () => {
   it('dökme / araba / çuval ve eski sunucu (alan yok)', () => {
@@ -34,3 +34,18 @@ describe('sevk kapısı kart yük özeti', () => {
     expect(boardSackUnits({ sackCount: 3, cartCount: 1, bulkCount: 0 })).toBe(2);
   });
 });
+
+describe('araba no ve kg metni (demo ekran denetimi 2026-11-06)', () => {
+  it('araba no biliniyorsa yazılır, çoksa sayı', () => {
+    expect(boardUnitText({ sackCount: 1, cartCount: 1, bulkCount: 0, cartLabels: ['A-12'] })).toBe('Araba A-12');
+    expect(boardUnitText({ sackCount: 2, cartCount: 2, bulkCount: 0, cartLabels: ['A-1', 'A-2'] })).toBe('Araba A-1, A-2');
+    expect(boardUnitText({ sackCount: 4, cartCount: 4, bulkCount: 0, cartLabels: ['1', '2', '3', '4'] })).toBe('4 araba');
+  });
+  it('kg yalnız çuvallarda; karışıkta "(çuvallar)", dökme/arabada boş', () => {
+    expect(loadKgText({ sackCount: 2, totalKg: 96.7 })).toBe('96,7 kg');
+    expect(loadKgText({ sackCount: 2, cartCount: 1, bulkCount: 0, totalKg: 96.7 })).toBe('96,7 kg (çuvallar)');
+    expect(loadKgText({ sackCount: 1, cartCount: 0, bulkCount: 1, totalKg: 0 })).toBe('');
+    expect(loadKgText({ sackCount: 1, cartCount: 1, bulkCount: 0, totalKg: 12 })).toBe('');
+  });
+});
+

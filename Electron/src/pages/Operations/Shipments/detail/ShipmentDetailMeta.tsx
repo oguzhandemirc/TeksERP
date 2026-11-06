@@ -11,6 +11,8 @@ import { ManualSackCountEditor } from "../ManualSackCountEditor";
 import { DeliveryToEditor } from "../delivery-to/DeliveryToEditor";
 import { PROCEDURE_CODE_BOS, procedureCodeView } from "@/pages/Operations/SackStore/procedureCode";
 
+import { loadSummaryValue } from "@/lib/load-unit";
+
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 const int = (v: number | null | undefined) => formatNumber(v, 0);
 
@@ -36,7 +38,7 @@ export function ShipmentDetailMeta({ d }: { d: ShipmentDetail }) {
             <Sep />
             <Metric label="Toplam Metraj" value={`${int(d.summary.totalMeters)} m`} />
             <Sep />
-            <Metric label="Çuval · Kg" value={`${d.summary.sackCount} · ${num(d.summary.totalKg)} kg`} />
+            <Metric label="Yük" value={loadSummaryValue(d.summary.sackCount, num(d.summary.totalKg), d.summary.cartCount, d.summary.bulkCount)} />
             <Sep />
             <Metric label="İade" value={int(d.summary.returnedCount)} highlight={hasReturns} />
           </div>

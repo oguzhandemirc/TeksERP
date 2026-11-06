@@ -9,6 +9,8 @@ import { EIrsaliyeSection } from "./eirsaliye/EIrsaliyeSection";
 import { ShipmentInspectionSection } from "@/pages/Quality/Inspections/ShipmentInspectionSection";
 
 const int = (v: number | null | undefined) => formatNumber(v, 0);
+import { loadSummaryValue } from "@/lib/load-unit";
+
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 
 /**
@@ -58,7 +60,7 @@ export function ShipmentSheetBody({
       <div className="grid grid-cols-3 gap-2">
         <SummaryCard label="Top" value={int(d.summary.rollCount)} />
         <SummaryCard label="Toplam Metraj" value={`${formatFixed(d.summary.totalMeters, 2)} m`} />
-        <SummaryCard label="Çuval / Kg" value={`${d.summary.sackCount} · ${num(d.summary.totalKg)} kg`} />
+        <SummaryCard label="Yük" value={loadSummaryValue(d.summary.sackCount, num(d.summary.totalKg), d.summary.cartCount, d.summary.bulkCount)} />
       </div>
 
       <Card>
@@ -147,7 +149,7 @@ export function ShipmentSheetBody({
         <Card>
           <CardContent className="p-3">
             <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Çuval İçeriği ({q || onlyMatch ? `${filteredSacks.length}/${d.sacks.length}` : d.sacks.length})
+              {(d.summary.cartCount ?? 0) + (d.summary.bulkCount ?? 0) > 0 ? "Yük İçeriği" : "Çuval İçeriği"} ({q || onlyMatch ? `${filteredSacks.length}/${d.sacks.length}` : d.sacks.length})
             </div>
             {filteredSacks.length === 0 ? (
               <div className="text-[11px] text-muted-foreground">Aramaya uyan top yok.</div>

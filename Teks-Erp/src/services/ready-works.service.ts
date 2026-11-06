@@ -47,8 +47,12 @@ export interface ReadyWorkRow {
   customerName: string | null;
   state: ShipReadyState;
   appliedRule: ShipReadyRule;
+  /** Yük birimine (çuval/araba/dökme) bağlı OLMAYAN hazır toplar. */
   readyCount: number;
   readyMeters: number;
+  /** Hazır ama çuvala/sevkiyata girmiş toplar — "sevke hazır" sayısına girmez (eski istemci yok sayar). */
+  loadedCount: number;
+  loadedMeters: number;
   inProcessCount: number;
   inProcessMeters: number;
   shippedMeters: number;
@@ -193,6 +197,8 @@ export async function computeReadyWorks(unit: ReadyWorkUnit, policy: ShipReadyPo
     const totals = {
       readyCount: Number(a.ready_count),
       readyMeters: dec(a.ready_m),
+      loadedCount: Number(a.loaded_count),
+      loadedMeters: dec(a.loaded_m),
       inProcessCount: Number(a.in_process_count),
       inProcessMeters: dec(a.in_process_m),
       shippedMeters: dec(a.shipped_m),
@@ -213,6 +219,8 @@ export async function computeReadyWorks(unit: ReadyWorkUnit, policy: ShipReadyPo
       appliedRule: verdict.appliedRule,
       readyCount: totals.readyCount,
       readyMeters: num(totals.readyMeters),
+      loadedCount: totals.loadedCount,
+      loadedMeters: num(totals.loadedMeters),
       inProcessCount: totals.inProcessCount,
       inProcessMeters: num(totals.inProcessMeters),
       shippedMeters: num(totals.shippedMeters),
