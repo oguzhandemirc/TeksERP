@@ -4,6 +4,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import type { WorkOrderType } from "@prisma/client";
 import { WorkOrderService } from "../services/workorder.service";
 import { workOrderLinkService } from "../services/workorder-link.service";
 import { workOrderRollDetachService } from "../services/workorder-roll-detach.service";
@@ -38,13 +39,18 @@ const workOrderStepFields = {
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
 // (quickStartSchema) yeniden kullanılabilsin — refine ZodEffects'e çevirir, spread'i bozar.
+/** İş emri türleri — Prisma `WorkOrderType` ile birebir (`satisfies` derlemede ölçer). */
+const WORK_ORDER_TYPES = ["ORDER_PRODUCTION", "STOCK_PRODUCTION", "CUSTOMER_GOODS_SERVICE"] as const satisfies readonly WorkOrderType[];
+
 const workOrderCoreShape = {
   batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
   // İdempotency anahtarı — istemci form-oturumu başına üretir (UUID); timeout
   // sonrası tekrar gönderimde aynı token cached WO döner (mükerrer İE önlenir).
   // Yalnız create + quick-start alır; replace/update şemaları bilinçli almaz.
   clientToken:       z.string().uuid("Geçersiz istemci anahtarı").optional(),
-  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
+  type:              z.enum(WORK_ORDER_TYPES).default("ORDER_PRODUCTION"),
+  /** Fason (müşteri malı) türünde işin müşterisi; quick-start'ta verilmezse topların sahibinden türer. */
+  customerId:        z.string().uuid("Geçersiz müşteri").optional().nullable(),
   width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),
   targetWeight:      z.number().positive().max(999_999_999, "Hedef ağırlık çok büyük").optional().nullable(),
@@ -106,7 +112,7 @@ export const workOrderFormFieldShape = {
   orderLineIds: workOrderCoreShape.orderLineIds,
   // K30-D: panel klasik formunun eksik üç alanı; verilmezse bugünkü davranış (eski istemci).
   targetPropertyIds: workOrderCoreShape.targetPropertyIds,
-  type: z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
+  type: z.enum(WORK_ORDER_TYPES).optional(),
   steps: z
     .array(z.strictObject({
       ...workOrderStepFields,
@@ -140,7 +146,7 @@ const quickStartSchema = z.object({
   // .default("ORDER_PRODUCTION") bu türetmeyi bozuyordu (client type yollamayınca
   // Zod ORDER_PRODUCTION yazıp "sipariş kalemi şart" hatasına düşürüyordu) →
   // override: optional, default YOK. Sipariş bağlanırsa servis ORDER_PRODUCTION türetir.
-  type: z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
+  type: z.enum(WORK_ORDER_TYPES).optional(),
   rollBarcodes: z
     .array(z.string().trim().min(1))
     .min(1, "En az bir top barkodu okutmalısınız")
@@ -370,7 +376,7 @@ const updateWorkOrderSchema = z.object({
 const replaceWorkOrderSchema = z.object({
   // Eski anahtar: iş emri numarası donar — yalnız mevcut numarayla AYNIYSA kabul, farklısı 409.
   batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
-  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
+  type:              z.enum(WORK_ORDER_TYPES).optional(),
   width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),
   targetWeight:      z.number().positive().max(999_999_999, "Hedef ağırlık çok büyük").optional().nullable(),

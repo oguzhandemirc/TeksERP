@@ -127,3 +127,11 @@ export function workOrderOwnerNameSearchWhere(q: string): Prisma.WorkOrderWhereI
   if (leaves.length === 0) return null;
   return { AND: [NO_ACTIVE_ORDER_LINK, whereWorkOrdersOfRolls({ OR: leaves })] };
 }
+
+/**
+ * İE'nin KENDİ müşterisi (yalnız Fason (müşteri malı) türü yazar) varsa liste müşterisi odur — bağdan/türetmeden
+ * gelen rollup yalnız kendi müşterisi olmayan İE'de geçerli (2026-11-06).
+ */
+export function withOwnCustomer(own: WorkOrderCustomerRef | null | undefined, derived: WorkOrderCustomerRollup): WorkOrderCustomerRollup {
+  return own ? { customers: [{ id: own.id, name: own.name }], customerCount: 1 } : derived;
+}

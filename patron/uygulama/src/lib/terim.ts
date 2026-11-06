@@ -153,6 +153,9 @@ export const TERIM_AD = {
   // yük birimiyle (çuvalsız sevk) çakıştığı için görünen ad budur; enum/veri değişmez.
   partiKaydi: "Parti kaydı",
   partiKayitlari: "Parti kayıtları",
+  // İş emri türü `CUSTOMER_GOODS_SERVICE`: müşterinin malına hizmet. Giden fason (Fason Sevk/Kabul) ile karışmasın diye
+  // ad "(müşteri malı)" ekini HEP taşır.
+  fasonMusteriMali: "Fason (müşteri malı)",
 } as const;
 
 export type TermAdKey = keyof typeof TERIM_AD;

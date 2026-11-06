@@ -16,6 +16,7 @@ import { Prisma, WorkOrderEventType, WorkOrderStatus, WorkOrderType } from "@pri
 import { currentOrigin } from "../../lib/request-context";
 import { workOrderEventStampTx } from "./ledger-stamp.helper";
 import { followAsCreatorTx } from "./record-follow.helper";
+import { TERIM_AD } from "../../constants/terim";
 
 type Tx = Prisma.TransactionClient;
 
@@ -34,6 +35,7 @@ export const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
 export const WORK_ORDER_TYPE_LABEL: Record<WorkOrderType, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stok",
+  CUSTOMER_GOODS_SERVICE: TERIM_AD.fasonMusteriMali,
 };
 
 export interface WorkOrderEventCtx {
@@ -280,9 +282,11 @@ export async function reopenWorkOrderTx(
   return from !== null;
 }
 
-const OTHER_TYPE: Record<WorkOrderType, WorkOrderType> = {
+// Tip çevirisi yalnız Stok ↔ Sipariş (bağın aynası); Fason (müşteri malı) hiçbir yöne çevrilmez.
+const OTHER_TYPE: Record<WorkOrderType, WorkOrderType | null> = {
   ORDER_PRODUCTION: WorkOrderType.STOCK_PRODUCTION,
   STOCK_PRODUCTION: WorkOrderType.ORDER_PRODUCTION,
+  CUSTOMER_GOODS_SERVICE: null,
 };
 
 /**
@@ -297,6 +301,7 @@ export async function setWorkOrderTypeTx(
   opts: { where?: Prisma.WorkOrderWhereInput; ctx: WorkOrderEventCtx },
 ): Promise<"CHANGED" | "ALREADY" | "NO_MATCH"> {
   const from = OTHER_TYPE[to];
+  if (!from) return "NO_MATCH";
   const claim = await tx.workOrder.updateMany({
     where: { ...opts.where, id: workOrderId, type: from },
     data: { type: to },

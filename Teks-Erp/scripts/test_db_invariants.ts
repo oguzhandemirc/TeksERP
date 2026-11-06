@@ -856,6 +856,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "direct_shipments", name: "direct_shipments_rollCount_pos" },
   { table: "roll_returns", name: "roll_returns_qty_pos" },
   { table: "work_orders", name: "work_orders_stockprod_targetItem" },
+  { table: "work_orders", name: "work_orders_customer_goods_customer_check" },
   // 2026-08-09 — sapma defteri (migration 20260809015353_roll_variance_ledger).
   // `qty` HER ZAMAN pozitif; yönü `kind` söyler. İşaretli sayı saklamak
   // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,

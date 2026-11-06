@@ -43,6 +43,8 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "labelCustomerId", label: "Top (etiket müşterisi)" },
     // 2026-09-15 (G3 emanet) — mülkiyet bağı üç modelde: referans bağ, tekillik yok; birleştirme kimliği değiştirir, sahipliği değil.
     { kind: "MOVE", model: "Roll", table: "rolls", column: "ownerCustomerId", label: "Top (emanet sahibi)" },
+    // 2026-11-06: Fason (müşteri malı) iş emrinin müşterisi — referans bağ, tekillik yok.
+    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "customerId", label: "Fason (müşteri malı) işi" },
     // D4-F1: müşteri barkodu topun emanet sahibiyle birlikte taşınır; aktif kod müşteride tekil (partial unique).
     {
       kind: "CONFLICT",

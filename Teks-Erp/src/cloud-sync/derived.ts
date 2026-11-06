@@ -138,6 +138,8 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
       steps: { select: { id: true, stepSequence: true, status: true, stationId: true, station: { select: { name: true } } }, orderBy: { stepSequence: "asc" } },
       // Seçim listeyle aynı; aktif bağ yüklemi tek kaynaktan çağrı yerinde (koparılmış bağ projeksiyona girmez).
       orderLinks: { ...WO_LIST_CUSTOMER_LINKS, where: ACTIVE_ORDER_LINK },
+      // Fason (müşteri malı) İE'nin kendi müşterisi — listeyle aynı öncelik (`withOwnCustomer`).
+      customer: { select: { id: true, name: true } },
     },
   });
   const withMeters = await new WorkOrderService().withProductionMeters(wos);
