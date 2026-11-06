@@ -95,6 +95,8 @@ export interface TamburFinalizeOpenFabricVars {
   confirmMismatch?: boolean;
   /** Kalan topun kg'ı (S5 tartım; müşteri ayarı açıksa zorunlu). Eski kuyrukta `undefined`. */
   weightKg?: number;
+  /** Kalan topun etiket parti no'su (müşteri ayarı). Eski kuyrukta `undefined` = dokunma. */
+  labelBatchNo?: string | null;
 }
 
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
@@ -245,6 +247,8 @@ export function registerStationMutationDefaults(): void {
         confirmMismatch: vars.confirmMismatch,
         // Kalan topun kg'ı — aynı sessiz-allowlist tuzağı (S5 tartım).
         weightKg: vars.weightKg,
+        // Müşteri parti no — aynı sessiz-allowlist tuzağı; ayar kapalıysa undefined (alan gitmez).
+        labelBatchNo: vars.labelBatchNo,
       })),
     ...OFFLINE_AWARE,
   });

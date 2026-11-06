@@ -1,4 +1,4 @@
-import { colorSaveGate, detachResultMessage, parseWidth, reasonPayload, reasonReady, tabletCancelAllowed } from './workOrderFix';
+import { colorSaveGate, detachResultMessage, gramajImpactText, parseWidth, reasonPayload, reasonReady, tabletCancelAllowed } from './workOrderFix';
 import type { ReasonPreset } from '../../../services/reasonPreset.service';
 
 const preset = (code: string, label: string, fullText: string | null, requiresText = false): ReasonPreset => ({
@@ -70,5 +70,12 @@ describe('detachResultMessage', () => {
     const m = detachResultMessage(1, ['Bu top işlem gördü (kesildi)', 'x'], false);
     expect(m.type).toBe('error');
     expect(m.text).toBe('1 top terbiye iş emrinden çıkarıldı · 2 top çıkarılamadı: Bu top işlem gördü (kesildi)');
+  });
+});
+
+describe('gramajImpactText', () => {
+  it('uygulanmış top varsa eski gramajı ve kalan sayıyı söyler; yoksa yalnız kalanı', () => {
+    expect(gramajImpactText({ appliedRollCount: 2, pendingRollCount: 4, target: { valueName: '40 gr' } })).toBe('2 topa kurşun eski gramajla (40 gr) uygulandı — bu geçmiş değişmez. Yeni gramaj kalan 4 topa işler.');
+    expect(gramajImpactText({ appliedRollCount: 0, pendingRollCount: 6, target: null })).toBe('Henüz kurşun uygulanmış top yok; yeni gramaj 6 topa işler.');
   });
 });

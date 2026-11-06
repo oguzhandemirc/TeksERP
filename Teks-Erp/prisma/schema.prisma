@@ -3860,6 +3860,11 @@ model Roll {
   /// YAZILMADI: yanlış bir kat değeri, boş değerden daha zararlıdır.
   foldType String? @db.VarChar(64)
 
+  /// Müşterinin etikete basılmasını istediği parti metni (ör. "J1", "K30") — tamburda
+  /// kesim anında yazılır, MİRAS ALINMAZ; bizim `batchId`'miz ve gelen belgenin
+  /// `customerBatchNo`'su DEĞİL. Yalnız cari `tamburLabelBatchEnabled` açıkken yazılır.
+  labelBatchNo String? @db.VarChar(64)
+
   /// İstemcinin BEYAN ETTİĞİ giriş anı — operatörün "Kaydet"e bastığı an.
   ///
   /// Mükerrer top tuzağının 90 sn'lik penceresi bununla ölçülür, `createdAt` ile
@@ -4411,6 +4416,9 @@ model Customer {
   tamburWeighRequired Boolean  @default(false)
   /// Tambur bölme ölçüsü önerisi (m, cevap 9) — tablet kesim metresine öneri; NULL = öneri yok.
   tamburSplitLengthM  Decimal? @db.Decimal(10, 2)
+  /// Etikete müşteri parti no basılır (Gülkesim 2026-11-06): açıksa tamburda "Etiket parti no"
+  /// alanı görünür ve kesilen topa `Roll.labelBatchNo` yazılır. Kapalı = bugünkü davranış.
+  tamburLabelBatchEnabled Boolean @default(false)
 
   // Relations
   orders            Order[]

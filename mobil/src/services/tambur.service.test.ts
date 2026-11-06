@@ -39,4 +39,15 @@ describe('tamburService kesim — etiket niyeti gövdede', () => {
       expect.objectContaining({ targetCustomerId: 'cust-2' }),
     );
   });
+
+  it('müşteri parti no (labelBatchNo) dört kesim/bitir gövdesine geçer — sessiz allowlist bekçisi', async () => {
+    await tamburService.cutOpenFabric('r1', { lengthMeters: 5, status: 'WAREHOUSE', labelBatchNo: 'J1' });
+    await tamburService.cutWarehouseRoll('r2', { cutLength: 5, labelBatchNo: 'J1' });
+    await tamburService.finalizeOpenFabric('r3', { remainingAction: 'keep_1kalite', labelBatchNo: 'J1' });
+    await tamburService.finalizeWarehouseCut('r4', { remainingAction: 'keep_a1', labelBatchNo: 'J1' });
+    expect(post).toHaveBeenCalledTimes(4);
+    for (const call of post.mock.calls) {
+      expect(call[1]).toEqual(expect.objectContaining({ labelBatchNo: 'J1' }));
+    }
+  });
 });

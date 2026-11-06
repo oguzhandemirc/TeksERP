@@ -291,6 +291,8 @@ export interface TamburLabelSettings {
   weighRequired: boolean;
   splitLengthM: number | null;
   printTiming: 'EACH' | 'END';
+  /** Müşteri etikete kendi parti no'sunu istiyor mu (eski backend göndermez → kapalı). */
+  labelBatchEnabled?: boolean;
 }
 
 /** GET/PUT /labels/work-orders/:id/overrides yanıtı. */
@@ -523,7 +525,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null; labelBatchNo?: string | null }
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(
@@ -546,6 +548,8 @@ export const tamburService = {
       varianceReasonText?: string | null;
       /** Kalan topun kg'ı (S5 tartım kapısı). */
       weightKg?: number | null;
+      /** Kalan topun etiketine basılacak müşteri parti no (ayar kapalıysa gönderilmez). */
+      labelBatchNo?: string | null;
     }
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> =>
     apiClient

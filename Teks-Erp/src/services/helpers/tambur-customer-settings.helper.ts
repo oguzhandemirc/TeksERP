@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { normalizeLabelBatchNo } from "./label-batch-no.helper";
 import { readLabelWidthSource, type LabelWidthSource } from "./label-width-source.helper";
 import { readTamburLabelPrintTiming, type TamburLabelPrintTiming } from "../system-setting.service";
 
@@ -16,9 +17,11 @@ export interface TamburCustomerSettings {
   widthSource: LabelWidthSource | null;
   weighRequired: boolean;
   splitLengthM: number | null;
+  /** Etikete müşteri parti no basılır (cari `tamburLabelBatchEnabled`). */
+  labelBatchEnabled: boolean;
 }
 
-const EMPTY: TamburCustomerSettings = { customerId: null, widthSource: null, weighRequired: false, splitLengthM: null };
+const EMPTY: TamburCustomerSettings = { customerId: null, widthSource: null, weighRequired: false, splitLengthM: null, labelBatchEnabled: false };
 
 /** Ayarın sahibi müşteri: etiket müşterisi (Kime?) ?? malın sahibi. */
 export function tamburSettingsCustomerId(targetCustomerId: string | null | undefined, ownerCustomerId: string | null | undefined): string | null {
@@ -29,7 +32,7 @@ export async function loadTamburCustomerSettings(customerId: string | null): Pro
   if (!customerId) return EMPTY;
   const c = await prisma.customer.findUnique({
     where: { id: customerId },
-    select: { id: true, labelWidthSource: true, tamburWeighRequired: true, tamburSplitLengthM: true },
+    select: { id: true, labelWidthSource: true, tamburWeighRequired: true, tamburSplitLengthM: true, tamburLabelBatchEnabled: true },
   });
   if (!c) return EMPTY;
   return {
@@ -37,7 +40,29 @@ export async function loadTamburCustomerSettings(customerId: string | null): Pro
     widthSource: readLabelWidthSource(c.labelWidthSource),
     weighRequired: c.tamburWeighRequired,
     splitLengthM: c.tamburSplitLengthM != null ? Number(c.tamburSplitLengthM) : null,
+    labelBatchEnabled: c.tamburLabelBatchEnabled,
   };
+}
+
+/**
+ * Kesimde doğan topun etiket parti no'su. Değer yoksa null (bugünkü davranış); değer var
+ * ama müşteri ayarı kapalıysa 400 `LABEL_BATCH_NOT_ENABLED` — sessizce atılmaz (fail-closed).
+ */
+export async function resolveTamburLabelBatchNo(args: {
+  labelBatchNo: string | null | undefined;
+  targetCustomerId: string | null | undefined;
+  ownerCustomerId: string | null | undefined;
+}): Promise<string | null> {
+  const v = normalizeLabelBatchNo(args.labelBatchNo);
+  if (v == null) return null;
+  const s = await loadTamburCustomerSettings(tamburSettingsCustomerId(args.targetCustomerId, args.ownerCustomerId));
+  if (!s.labelBatchEnabled) {
+    throw AppError.badRequest("Bu müşteride etikete parti no basılmıyor — cari ayarını açın ya da alanı boşaltın.", {
+      code: "LABEL_BATCH_NOT_ENABLED",
+      customerId: s.customerId,
+    });
+  }
+  return v;
 }
 
 /**

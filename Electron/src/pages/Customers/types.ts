@@ -36,6 +36,7 @@ export interface Customer {
   /** Tambur/etiket ayarları (Gülkesim S5) — null/false = bugünkü davranış. */
   labelWidthSource?: "INCOMING" | "MEASURED" | null;
   tamburWeighRequired?: boolean;
+  tamburLabelBatchEnabled?: boolean;
   tamburSplitLengthM?: string | number | null;
   /** Fason = carinin rolü (2026-09-17): bağlı fason PROFİLİ (hafif); pasif profil rol değildir. */
   subcontractor?: { id: string; isActive: boolean } | null;

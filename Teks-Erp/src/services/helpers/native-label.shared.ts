@@ -335,7 +335,9 @@ export function rollTextLines(p: LabelPayload): RollTextLine[] {
   lines.push({ text: `${cleanCtl(p.lengthMeters)} mt   En: ${p.widthCm ?? "-"} cm`, big: true });
   if (p.weightKg != null) lines.push({ text: `Agirlik: ${cleanCtl(p.weightKg)} kg` });
   if (p.customerName) lines.push({ text: `Musteri: ${cleanCtl(p.customerName)}` });
-  if (p.batchNumber) lines.push({ text: `Parti: ${cleanCtl(p.batchNumber)}` });
+  // Müşterinin istediği parti varsa "Parti" yuvası onundur (müşteri iki parti görmesin).
+  if (p.labelBatchNo) lines.push({ text: `Parti: ${cleanCtl(p.labelBatchNo)}` });
+  else if (p.batchNumber) lines.push({ text: `Parti: ${cleanCtl(p.batchNumber)}` });
   return lines;
 }
 

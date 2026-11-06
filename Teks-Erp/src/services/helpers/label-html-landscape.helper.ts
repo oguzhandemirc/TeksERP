@@ -85,7 +85,9 @@ export function buildLandscapeRollLabelHtml({
   const weightLabel = payload.weightKg != null ? `${formatNumber(payload.weightKg)} kg` : "";
   const quality = escapeHtml(payload.qualityGrade ?? "");
   const date = formatDate(payload.printedAt);
-  const safeBatch = payload.batchNumber ? escapeHtml(payload.batchNumber) : "";
+  // Müşteri partisi basılıyorsa bizim parti no'muz varsayılan düzende basılmaz (iki "parti" karışmasın).
+  const customerBatchShown = !!payload.labelBatchNo && isVisibleDefaultOn(fields, "labelBatchNo");
+  const safeBatch = payload.batchNumber && !customerBatchShown ? escapeHtml(payload.batchNumber) : "";
   const barcode = escapeHtml(payload.barcode || "");
   const customerName = payload.customerName ? escapeHtml(payload.customerName) : "";
   const orderNumber = payload.orderNumber ? escapeHtml(payload.orderNumber) : "";
@@ -110,6 +112,8 @@ export function buildLandscapeRollLabelHtml({
   if (vis("itemCode") && payload.itemCode) rows.push(row("itemCode", "Kod", escapeHtml(payload.itemCode)));
   if (vis("customerName") && customerName) rows.push(row("customerName", "Müşteri", customerName));
   if (vis("orderNumber") && orderNumber) rows.push(row("orderNumber", "Sipariş", orderNumber));
+  // Müşterinin istediği parti — eski kayıtlı şablonda alan yok → AÇIK say (kartelaMark emsali).
+  if (isVisibleDefaultOn(fields, "labelBatchNo") && payload.labelBatchNo) rows.push(row("labelBatchNo", "Parti", escapeHtml(payload.labelBatchNo)));
   const openDefects = payload.openDefects ? escapeHtml(payload.openDefects) : "";
   if (isVisibleOptIn(fields, "openDefects") && openDefects) rows.push(row("openDefects", "Hata Notu", openDefects));
   // Müşteri belgesindeki kumaş/renk (E3) — OPT-IN, gelen belgesiz topta boş.

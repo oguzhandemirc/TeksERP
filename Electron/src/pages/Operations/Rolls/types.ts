@@ -109,6 +109,8 @@ export interface Roll {
   restoreBlockReason?: string | null;
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"). Kalıcı özellik; NULL = kayıtlı değil. */
   foldType?: string | null;
+  /** Müşterinin etikete istediği parti metni (J1/K30); NULL = yok. */
+  labelBatchNo?: string | null;
   entrySource: string;
   /**
    * Elle eklenen topun sebebi — YALNIZ detay ucunda (`GET /rolls/:id`) döner,

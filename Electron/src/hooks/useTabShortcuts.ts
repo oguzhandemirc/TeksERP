@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { useTabsStore } from "@/store/tabs";
+import { isCloseAllShortcut } from "@/components/layout/tabs/tab-close";
 
 /**
  * Sekme klavye kısayolları (tarayıcı benzeri):
  *  - Ctrl/Cmd+T → yeni sekme (Anasayfa)
  *  - Ctrl/Cmd+W → aktif sekmeyi kapat
+ *  - Ctrl+Shift+W → tüm sekmeleri kapat (macOS'ta da Ctrl; Cmd+Shift+W pencereyi kapatır)
  *  - Ctrl+Tab / Ctrl+Shift+Tab → sonraki / önceki sekme (Cmd+Tab macOS'ta
  *    uygulama değiştirici olduğundan bilerek Ctrl)
  *  - Ctrl/Cmd+1..8 → o sıradaki sekme, Ctrl/Cmd+9 → son sekme
@@ -22,6 +24,12 @@ export function useTabShortcuts() {
       if (mod && !e.shiftKey && (e.key === "t" || e.key === "T")) {
         e.preventDefault();
         s.openTab("/", { forceNew: true });
+        return;
+      }
+
+      if (isCloseAllShortcut(e)) {
+        e.preventDefault();
+        s.closeTabs("all");
         return;
       }
 

@@ -61,3 +61,15 @@ export function detachResultMessage(ok: number, failed: string[], reverted: bool
   const rev = reverted ? ` · ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} top kalmadı, Planlandı\'ya döndü` : '';
   return { type: failed.length > 0 ? 'error' : 'success', text: head + rev + tail };
 }
+
+/**
+ * Gramajı Değiştir önizleme metni (2026-11-06): kurşunu uygulanmış toplar eski gramajla kalır (geçmiş `RollOperation`da
+ * donar); yeni hedef yalnız kalan canlı toplara işler. Sayılar sunucu önizlemesinden (`GET /:id/kursun-gramaj`).
+ */
+export function gramajImpactText(p: { appliedRollCount: number; pendingRollCount: number; target: { valueName: string } | null }): string {
+  if (p.appliedRollCount > 0) {
+    const old = p.target ? ` (${p.target.valueName})` : '';
+    return `${p.appliedRollCount} topa kurşun eski gramajla${old} uygulandı — bu geçmiş değişmez. Yeni gramaj kalan ${p.pendingRollCount} topa işler.`;
+  }
+  return `Henüz kurşun uygulanmış top yok; yeni gramaj ${p.pendingRollCount} topa işler.`;
+}

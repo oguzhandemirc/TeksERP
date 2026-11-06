@@ -6,7 +6,7 @@
 // olarak bağlı değil: izinli liste (`ItemAllowedColor`), BOŞ = her renk serbest — sunucu `filter[allowedColorId]`
 // bunu "bu rengi alabileceğim ürünler" diye çözer (`none OR some`), o yüzden listesi boş ürün her renkte görünür.
 // =============================================================================
-import { ItemType, itemTypeLabels } from "@/types/enums";
+import { ItemType, STOCK_ITEM_TYPES, itemTypeLabels } from "@/types/enums";
 import type { Item } from "@/pages/Items/types";
 import { itemLifecycleOf, type ItemLifecycleStatus } from "@/lib/item-lifecycle";
 
@@ -34,7 +34,7 @@ export const ITEM_CATALOG_HINT = "Listesi boş ürünler her seçenekte görün�
 
 /** Çağıranın izin verdiği türler (mal kabul: iplik + kumaş — fiş sarf almaz; alış siparişi: üçü). Boş/verilmemiş = üçü. */
 export type AllowedItemTypes = readonly ItemType[];
-const ALL_TYPES: AllowedItemTypes = ["YARN", "FABRIC", "CONSUMABLE"];
+const ALL_TYPES: AllowedItemTypes = STOCK_ITEM_TYPES;
 /** Enum'un tamamı — stok türleri bunu kapsamıyorsa (SERVICE, H6) "Tümü" de CSV gönderir; hizmet kalemi stok seçicisine sızmaz. */
 const EVERY_TYPE_COUNT = Object.keys(ItemType).length;
 export const normalizeAllowedTypes = (t?: AllowedItemTypes): AllowedItemTypes => (t && t.length ? t : ALL_TYPES);

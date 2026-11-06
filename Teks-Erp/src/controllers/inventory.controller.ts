@@ -160,6 +160,8 @@ const manualAttributesSchema = z.object({
   // KAT — yalnız BİÇİM normalleştirilir; geçerlilik serviste katalogla ölçülür
   // (`resolveFoldTypeForWrite`). Alan gönderilmezse kata DOKUNULMAZ.
   foldType:     foldTypeSchema,
+  // Etiket parti no (müşterinin istediği) — `undefined` dokunma · null/"" temizle · metin yaz.
+  labelBatchNo: z.string().max(64, "Etiket parti no en çok 64 karakter").nullish(),
   reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
 });
 
@@ -228,6 +230,8 @@ const relabelSchema = z.object({
   // doğmuş topların tek düzeltme kapısı. Yalnız BİÇİM burada; katalog doğrulaması
   // serviste (`resolveFoldTypeForWrite`). Gönderilmezse kata dokunulmaz.
   foldType:     foldTypeSchema,
+  // Etiket parti no (müşterinin istediği) — `undefined` dokunma · null/"" temizle · metin yaz.
+  labelBatchNo: z.string().max(64, "Etiket parti no en çok 64 karakter").nullish(),
   // Metraj (currentQty) düzeltmesi — yanlış girilen ölçüm. Aynı guard'lara tabi
   // (hurda/iptal + commit'li sevkiyat reddi). Kısmen tüketilmiş topta servis reddeder.
   currentQty:   z.number().positive("Metraj pozitif olmalı").max(999_999).optional(),
@@ -797,6 +801,7 @@ export class InventoryController {
           width: body.width,
           qualityGrade: body.qualityGrade,
           foldType: body.foldType,
+          labelBatchNo: body.labelBatchNo,
           currentQty: body.currentQty,
           reason: body.reason,
         },
@@ -837,6 +842,7 @@ export class InventoryController {
           width: body.width,
           qualityGrade: body.qualityGrade,
           foldType: body.foldType,
+          labelBatchNo: body.labelBatchNo,
           reason: body.reason,
         },
         req.user?.userId,

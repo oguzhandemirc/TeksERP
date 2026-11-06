@@ -19,6 +19,7 @@ import PageCameraModal from './PageCameraModal';
 import MultiPageCameraModal from './MultiPageCameraModal';
 import PageList from './PageList';
 import PagePreviewModal from './PagePreviewModal';
+import SameDocumentCard from './SameDocumentCard';
 import ApprovalCard from './ApprovalCard';
 import ReadResultCard from './ReadResultCard';
 import { removePage } from './docScan';
@@ -108,6 +109,7 @@ export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {})
           </Button>
         </View>
       </ScrollView>
+      <SameDocumentCard match={b.sameDoc} onClose={b.clearSameDoc} />
       <PagePreviewModal
         pages={b.pages}
         index={previewIndex}
