@@ -206,7 +206,10 @@ async function flagPropertyIds(targets: ReadonlyArray<{ propertyId: string }>): 
   return [...new Set(rows.map((r) => r.variantOfPropertyId).filter((x): x is string => !!x))];
 }
 
-/** Tür seçilmeden belgeden açılan İE (stok türetildi) — yanıtın `warnings`ine; terim çalışma anında (K20 adı rejimi). */
+/**
+ * Belgeden gelen top HEP müşteri malıdır; tür seçilmeyince quickStart bugünkü gibi STOK türetir (2. prova IE0611260014).
+ * Davranış değişmez, yanıt uyarır (Belge Okut ↔ Fason Belge Okut). Terim çalışma anında (K20 adı rejimi).
+ */
 export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşteri malı; tür seçilmediği için ${TERIM.terbiyeIsEmri.tekilKucuk} Stoğa üretim olarak açıldı. Fason (müşteri malı) için "Fason Belge Okut"u kullanın.`;
 
 export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrderInput, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<FormWorkOrderResult> {
@@ -235,10 +238,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   const item = await resolveFormTargetItem(input.targetItemId);
   // Çok partide / ayrı toplarda kurşun metresi = partilerin (topların) toplamı (onay kapısı bu değeri okur; gövdenin tek metresi yerine).
   const kursunMeters = parties ? Math.round(parties.reduce((s, p) => s + p.meters, 0) * 1000) / 1000 : input.kursunMeters;
-  const warnings: string[] = [];
-  // Belgeden gelen top HEP müşteri malıdır (sahip zorunlu); tür seçilmeyince quickStart bugünkü gibi STOK türetir (2. prova
-  // IE0611260014). Davranış değişmez — kullanıcı yanlış düğmeyi (Belge Okut ↔ Fason Belge Okut) görsün.
-  if (input.type == null && !input.orderLineIds?.length) warnings.push(stockFromCustomerGoodsWarning());
+  const warnings: string[] = input.type == null && !input.orderLineIds?.length ? [stockFromCustomerGoodsWarning()] : [];
   // Taslak: okuma sürmüyor olmalı → not alanları (yalnız DRAFT'ta yazılır).
   if (note.status === DeliveryNoteStatus.DRAFT) {
     const read = await getReadSummary(noteId);
