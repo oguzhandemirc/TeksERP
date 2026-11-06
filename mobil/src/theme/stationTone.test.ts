@@ -49,7 +49,7 @@ describe('renk yardımcıları', () => {
   });
 
   it('her istasyon tonunda yazı ≥3:1 (büyük kalın yazı AA)', () => {
-    for (const k of Object.keys(stationTonesHsl) as Array<keyof typeof stationTonesHsl>) {
+    for (const k of Object.keys(stationTonesHsl) as (keyof typeof stationTonesHsl)[]) {
       const t = stationToneFor(k === 'fason', k === 'fason' ? null : { kk1: 'RAW_QC', process: 'PROCESS_QC', tambur: 'TAMBUR', depo: 'SHIPPING', fason: '' }[k]);
       expect(t.key).toBe(k);
       expect(contrastRatio(t.bg, t.fg)).toBeGreaterThanOrEqual(3);
