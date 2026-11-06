@@ -438,6 +438,9 @@ export const SETTING_KEYS = {
   /** İstasyon tabletinde (kurşun · KK · tambur) "Belge okut": boyahane belgesinin fotoğrafından iş emri bulunur (K17).
    *  Varsayılan false = bugünkü (düğme yok). Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   GELEN_BELGE_STATION_DOC_LOOKUP: "gelenBelge.stationDocLookup",
+  /** İstasyon belge okutmada doğrulama eşiği (0–100; 0 = kapalı, bugünkü doğrulamasız davranış). Varsayılan 80: ayar
+   *  yalnız `stationDocLookup` açık kurulumda etkilidir (o da varsayılan kapalı). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
+  GELEN_BELGE_STATION_VERIFY_THRESHOLD: "gelenBelge.stationVerifyThreshold",
   /** Belge fotoğrafı saklama (K28): FULL tam sakla (varsayılan = bugünkü) | SHRINK_ON_APPROVAL | DELETE_ON_APPROVAL |
    *  DELETE_ON_DISPATCH. Geçmiş onaylı belgelere de uygulanır (iş ayarı okur). Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_PHOTO_RETENTION: "gelenBelge.photoRetention",
@@ -6758,6 +6761,18 @@ export async function readIncomingDocStationLookup(tx?: Pick<typeof prisma, "sys
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+export const DEFAULT_STATION_VERIFY_THRESHOLD = 80;
+/** İstasyon okutma doğrulama eşiği; kayıt yok / sayı değil / aralık dışı → varsayılan 80 (0 geçerli: kapalı). */
+export async function readStationVerifyThreshold(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD },
+    select: { value: true },
+  });
+  const n = asNumber(setting?.value);
+  return n !== null && Number.isInteger(n) && n >= 0 && n <= 100 ? n : DEFAULT_STATION_VERIFY_THRESHOLD;
 }
 
 /** Okunan şablonun gönderen carisiyle boş gönderen alanını doldur; kayıt yok / bozuk → false (bugünkü: OCR gönderen doldurmaz). */

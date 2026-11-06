@@ -39,6 +39,7 @@ import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from 
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
 import { stationDocLookup, stationLookupContext, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
+import { listStationScanChecks, markStationScanOpened } from "../services/station-scan-check.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { kickPhotoRetentionIfActive, requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
@@ -422,6 +423,7 @@ const SettingsBody = z.strictObject({
   duplicateDocNo: z.enum(["BLOCK", "WARN", "ALLOW"], "Seçenek BLOCK, WARN ya da ALLOW olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
   stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
+  stationVerifyThreshold: z.number("Doğrulama eşiği sayı olmalı").int("Doğrulama eşiği tam sayı olmalı").min(0, "Doğrulama eşiği en az 0 olmalı").max(100, "Doğrulama eşiği en çok 100 olmalı").nullable().optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
   desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
   tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(), tanitimGuveni: z.enum(["SOR", "SORMA"], "Seçenek SOR ya da SORMA olmalı").optional(),
@@ -462,6 +464,7 @@ const SettingsBody = z.strictObject({
  *               duplicateDocNo: { type: string, enum: [BLOCK, WARN, ALLOW], description: "Aynı gönderen belge no tekrar gelirse: engelle (varsayılan) · işi süren eş varken uyar (onay bayrağıyla geçer) · serbest" }
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
+ *               stationVerifyThreshold: { type: integer, minimum: 0, maximum: 100, nullable: true, description: "İstasyon okutmada doğrulama eşiği %: altındaki aday kendiliğinden açılmaz (0 = kapalı, null = varsayılan 80)" }
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
  *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz (varsayılan) · adı/kodu tutan kayıt önerilir · iş emri notuna eklenir" }
  *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
@@ -516,6 +519,42 @@ const StationLookupBody = z.union([
 router.get("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async () => ({ status: 200, data: await stationLookupStatus() })));
 // Ekran bilgisi SORGU dizgisinde (gövde strictObject; yeni tablet + eski sunucu 400 almasın) — `stationLookupContext`.
 router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => ({ status: 200, data: await stationDocLookup(StationLookupBody.parse(req.body), await stationLookupContext(req)) })));
+const ScanOpenedBody = z.strictObject({
+  workOrderNumber: z.string().trim().min(1, "İş emri no boş").max(64, "En çok 64 karakter"),
+  how: z.enum(["AUTO", "CHOSEN", "CONFIRMED"], "Seçenek AUTO, CHOSEN ya da CONFIRMED olmalı"),
+});
+const ScanChecksQuery = z.strictObject({ take: z.coerce.number().int().min(1).max(200).optional() });
+/**
+ * @openapi
+ * /api/gelen-belge/istasyon-okutma/{id}/acilan:
+ *   post:
+ *     tags: [GelenBelge]
+ *     summary: "Okutma izine tabletin açtığı İE'yi yazar (TELEMETRİ; tek sefer). how AUTO kendiliğinden · CHOSEN listeden · CONFIRMED eşik altı, görevli onayladı"
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [workOrderNumber, how], properties: { workOrderNumber: { type: string }, how: { type: string, enum: [AUTO, CHOSEN, CONFIRMED] } } }
+ *     responses:
+ *       200: { description: "id" }
+ *       409: { description: "STATION_SCAN_CHECK_CLOSED (zaten bildirildi ya da kayıt yok)" }
+ * /api/gelen-belge/istasyon-okutma/son:
+ *   get:
+ *     tags: [GelenBelge]
+ *     summary: "Son okutmalar: puan · karar · açılan İE · görevli onayı (eşiği veriyle ayarlamak için; TELEMETRİ)"
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: take, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: "Okutma izleri (en yeni önce)" }
+ */
+router.get("/istasyon-okutma/son", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await listStationScanChecks(ScanChecksQuery.parse(req.query).take ?? 50) })));
+router.post("/istasyon-okutma/:id/acilan", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => {
+  const body = ScanOpenedBody.parse(req.body);
+  return { status: 200, data: await markStationScanOpened(Id.parse(req.params.id), body.workOrderNumber, body.how) };
+}));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
 
 /**

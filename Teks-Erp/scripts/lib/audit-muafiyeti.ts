@@ -78,6 +78,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "yazdırma geçmişi satırı (izlenebilirlik A1) — kendisi basımın izidir; iş ucunun audit'i (LABEL_PRINT_EVENT · TRAVELER_CARD) ayrıca yazılır, satırın CUD'u ikinci bir iz üretmez; yaşa göre budanır — `defter.md` § Telemetri ≠ defter" },
   { model: "RequestTrace", sinif: "TELEMETRI",
     gerekce: "istek başlığı (izlenebilirlik B1) — kendisi isteğin izidir; iş ucunun audit'i ayrıca yazılır ve `requestId` ile bağlanır, satırın CUD'u ikinci bir iz üretmez; yaşa göre budanır — `defter.md` § Telemetri ≠ defter" },
+  { model: "StationScanCheck", sinif: "TELEMETRI",
+    gerekce: "istasyon okutma doğrulama izi — kendisi okutmanın izidir (puan · karar · açılan İE); okutma bir iş kaydı doğurmaz, satırın CUD'u ikinci bir iz üretmez; yaşa göre budanır — `defter.md` § Telemetri ≠ defter" },
   { model: "SyncMark", sinif: "TELEMETRI",
     gerekce: "patron bulutu eşitleme işareti; satırı DB tetikleyicileri yazar (uygulama CUD'u değil), uygulamanın tek yazımı yaşa göre budamadır (src/cloud-sync/marks-pruning.ts) — `defter.md` § Telemetri ≠ defter" },
   { model: "SyncWatermark", sinif: "SISTEM_ISI",

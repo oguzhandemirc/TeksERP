@@ -21,6 +21,7 @@
 //   · `gelenBelge.duplicateDocNo` — BLOCK (varsayılan, sahip + belge no tek) | WARN (işi süren eşte onay 409 + onay bayrağı) | ALLOW (K27)
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
+//   · `gelenBelge.stationVerifyThreshold` — okutmada doğrulama eşiği % (0 = kapalı; varsayılan 80, yalnız okutma açıkken etkili)
 //   · `gelenBelge.photoRetention` — belge fotoğrafı saklama (K28): FULL (varsayılan) | onayda küçült/sil | sevkte sil
 //   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir (K30)
 //   · `gelenBelge.tabletIeGirisi` — tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP (K30)
@@ -86,6 +87,8 @@ import {
   type DuplicateDocNoMode,
   readRefakatAutoPrint,
   readIncomingDocStationLookup,
+  readStationVerifyThreshold,
+  DEFAULT_STATION_VERIFY_THRESHOLD,
   readPhotoRetention,
   DEFAULT_PHOTO_RETENTION,
   PHOTO_RETENTION_VALUES,
@@ -151,6 +154,9 @@ export interface IncomingDocSettings {
   refakatAutoPrint: boolean;
   /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
   stationDocLookup: boolean;
+  /** İstasyon okutma doğrulama eşiği 0–100 (0 = kapalı; varsayılan 80). */
+  stationVerifyThreshold: number;
+  defaultStationVerifyThreshold: number;
   /** Belge fotoğrafı saklama (K28); geçmiş onaylı belgelere de uygulanır. */
   photoRetention: PhotoRetentionMode;
   /** K30 okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir. */
@@ -223,6 +229,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultDuplicateDocNo: DEFAULT_DUPLICATE_DOC_NO,
     refakatAutoPrint: await readRefakatAutoPrint(),
     stationDocLookup: await readIncomingDocStationLookup(),
+    stationVerifyThreshold: await readStationVerifyThreshold(),
+    defaultStationVerifyThreshold: DEFAULT_STATION_VERIFY_THRESHOLD,
     photoRetention: await readPhotoRetention(),
     defaultPhotoRetention: DEFAULT_PHOTO_RETENTION,
     desenRenkEslesme: await readDesenRenkEslesme(), defaultDesenRenkEslesme: DEFAULT_DESEN_RENK_ESLESME,
@@ -252,6 +260,7 @@ export interface IncomingDocSettingsInput {
   duplicateDocNo?: DuplicateDocNoMode;
   refakatAutoPrint?: boolean;
   stationDocLookup?: boolean;
+  stationVerifyThreshold?: number | null;
   photoRetention?: PhotoRetentionMode;
   desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode;
 }
@@ -363,6 +372,7 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
   if (input.stationDocLookup !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, input.stationDocLookup, `Gelen belge: istasyon tabletinde belge okutarak ${TERIM.terbiyeIsEmri.tekilKucuk} bulma`, userId);
   }
+  await setStationVerifyThreshold(input.stationVerifyThreshold, userId);
   if (input.autoSenderFromTemplate !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
   }
@@ -381,4 +391,13 @@ export const readFactoryDefaultItemId = readIncomingDocDefaultItemId;
 export function defaultItemUnusable(source: "CUSTOMER" | "FACTORY", itemId: string, problem: string | null): AppError {
   const fix = source === "CUSTOMER" ? "Müşteri Varsayılan Ürünleri ekranından sahibin varsayılan ürününü düzeltin" : `${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin`;
   return AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da ${fix}.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId, source });
+}
+
+/** Doğrulama eşiği: 0–100 tam sayı (0 = kapalı); null = varsayılana dön (boş metin yazılır, okuyucu varsayılana düşer). */
+async function setStationVerifyThreshold(v: number | null | undefined, userId: string): Promise<void> {
+  if (v === undefined) return;
+  if (v !== null && !(Number.isInteger(v) && v >= 0 && v <= 100)) {
+    throw AppError.badRequest("Doğrulama eşiği 0 ile 100 arasında tam sayı olmalı.", { code: "VALIDATION_ERROR" });
+  }
+  await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD, v ?? "", "Gelen belge: istasyon belge okutmada doğrulama eşiği (%; 0 = kapalı)", userId);
 }

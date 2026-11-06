@@ -13,6 +13,7 @@ import type { WorkOrderSourceNote } from "./photoRetentionTypes";
 import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
 import type { DuplicateDocNoMode } from "./mukerrerTypes";
 import type { DesenRenkEslesmeMode, TabletIeGirisiMode, TanitimGuveniMode } from "./ieFormTypes";
+import type { StationScanCheckRow } from "./stationVerifyTypes";
 
 const BASE = "/api/gelen-belge";
 
@@ -131,10 +132,15 @@ export async function getIncomingDocumentSettings(): Promise<IncomingDocumentSet
 }
 
 /** Yazım `admin:settings` + ayar şifresi (tanımlıysa diyalog `withSettingsPassword`ten). */
-export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode; desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode }): Promise<IncomingDocumentSettings> {
+export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode; desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode; stationVerifyThreshold?: number | null }): Promise<IncomingDocumentSettings> {
   return withSettingsPassword((headers) =>
     apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
   );
+}
+
+/** Son istasyon okutmaları (doğrulama puanı · açılan İE) — eşiği veriyle ayarlamak için. */
+export async function listStationScanChecks(take = 50): Promise<StationScanCheckRow[]> {
+  return (await apiClient.get<ApiResponse<StationScanCheckRow[]>>(`${BASE}/istasyon-okutma/son`, { params: { take } })).data.data;
 }
 
 /** Gönderen şablonları (E2, `gelen-belge:template`): motor şablonları + DB bağı; satırı olmayan şablon `id: null`. */

@@ -15,6 +15,7 @@ import {
   assertTamburStation, stationScreenOpenStepWhere, stationScreenStationWhere, stationScreenStepWhere, type StationScreen,
 } from "./station-open-step.helper";
 import { scanRouteStartableWorkOrderIds } from "./scan-route-open-cards.helper";
+import type { WorkOrderVerification } from "./station-scan-score.helper";
 
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
 export const MAX_WORK_ORDERS = 20;
@@ -39,6 +40,8 @@ export interface StationLookupWorkOrder {
   /** Bu ekranın açık kart listesinde mi; ekran bildirilmediyse null (eski istemci). */
   readonly atStation: AtStation | null;
   readonly atStationText: string | null;
+  /** Fotoğraf okutmasında doğrulama puanı (`station-scan-verify.helper`); elle aramada / aynı fotoğrafta yok. */
+  readonly verification?: WorkOrderVerification | null;
 }
 
 /**

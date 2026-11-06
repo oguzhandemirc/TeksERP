@@ -9,6 +9,7 @@ export type { AutoWorkOrderPatternlessMode, IncomingDocFormApproval, BatchNoCand
 export type { DocumentTotalCheckMode, LineProblem, TotalsCheck } from "./reviewTypes";
 import type { DuplicateDocNoDetailFields, DuplicateDocNoSettings } from "./mukerrerTypes";
 import type { IeFormSettings } from "./ieFormTypes";
+import type { StationVerifySettings } from "./stationVerifyTypes";
 
 export type { AutoWorkOrderGroup, AutoWorkOrderResult, ChoiceProperty, PlanGroup, PlanRoll, PlanTarget, ProcessValuePage, WorkOrderPlan } from "./workOrderTypes";
 
@@ -299,7 +300,7 @@ export type HeaderPatch = Partial<
 export type UnreviewedApproval = "WARN" | "BLOCK_SUSPECT" | "BLOCK";
 /** Tablosuz belgede satır metresi kaynağı — backend `HeaderLineMeterSource` aynası. */
 export type HeaderLineMeterSource = "OUTPUT" | "INPUT";
-export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, EntryModeSettings, DuplicateDocNoSettings, IeFormSettings {
+export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, EntryModeSettings, DuplicateDocNoSettings, IeFormSettings, StationVerifySettings {
   /** Ürünü seçilmemiş satırın onayda doğacağı ürün; null = ayar boş (bugünkü: satır ürün ister). */
   defaultItem: { id: string; code: string; name: string; problem: string | null } | null;
   unreviewedApproval: UnreviewedApproval;
