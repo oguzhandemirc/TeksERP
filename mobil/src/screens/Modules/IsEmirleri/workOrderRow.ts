@@ -7,7 +7,7 @@
 import { factoryDayEndIso, factoryDayStartIso } from '../../../lib/factory-time';
 import { calendarKey, type DateRange } from '../../../components/filters/rollHistoryFilter';
 import { stationToneFor, type StationTone } from '../../../theme/stationTone';
-import { TERIM } from '../../../lib/terim';
+import { TERIM, TERIM_AD } from '../../../lib/terim';
 
 export interface LocationStation {
   istasyonId: string;
@@ -31,6 +31,8 @@ export interface WorkOrderListRow {
   id: string;
   workOrderNumber: string;
   status: string;
+  /** İE türü (`WorkOrderType`); eski sunucu göndermezse rozet çizilmez. */
+  type?: string | null;
   createdAt: string;
   targetItem?: { name: string } | null;
   targetColor?: { name: string } | null;
@@ -61,6 +63,11 @@ export function locationBadge(konum: WorkOrderLocation | undefined, status: stri
   const text = (fason ? first.fasoncular[0] : undefined) ?? first.ad;
   const detail = fason && text !== first.ad ? `${first.ad} · ${first.topSayisi} top` : `${first.topSayisi} top`;
   return { kind: 'station', text, extra: konum.istasyonlar.length - 1, tone: stationToneFor(first.dis, first.tur), detail };
+}
+
+/** Tür rozeti: yalnız Fason (müşteri malı) işaretlenir — listedeki çoğunluk (kendi üretimimiz) gürültüsüz kalır. */
+export function typeBadgeText(r: Pick<WorkOrderListRow, 'type'>): string | null {
+  return r.type === 'CUSTOMER_GOODS_SERVICE' ? TERIM_AD.fasonMusteriMali : null;
 }
 
 /** Müşteri hücresi: ilk müşteri + "+N". */

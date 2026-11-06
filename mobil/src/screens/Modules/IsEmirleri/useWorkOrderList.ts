@@ -1,6 +1,7 @@
 // İş Emirleri — liste (cursor + sonsuz kaydırma, süzme sunucuda), istasyon seçenekleri ve sütun tercihi hook'ları.
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { workOrderService } from '../../../services/workOrder.service';
 import { workOrderWhereOptionsService } from '../../../services/workOrderWhereOptions.service';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
@@ -32,6 +33,21 @@ export function useWorkOrderList(filters: ListFilters) {
   const total = q.data?.pages[0]?.pagination.totalEstimate;
   // Elde veri varken sorun gösterilmez — bayat liste boş ekrandan iyidir.
   const problem = rows.length === 0 ? queryProblem(q) : null;
+  // Liste başka ekrandan (istasyon, belge okutma, İE detayı) dönünce tazelenir: RN'de react-query odakta kendiliğinden
+  // yenilemez, yeni açılan İE listede görünmüyordu (prova 2026-11-06). İlk odak sorgunun kendi yüklemesidir.
+  const qc = useQueryClient();
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      void qc.invalidateQueries({ queryKey: WORK_ORDER_LIST_KEY });
+    }, [qc]),
+  );
+  /** Bütün süzgeç varyantlarını bayatlatır, görüneni hemen yeniden çeker (okutmadan dönüş). */
+  const refreshAll = useCallback(() => qc.invalidateQueries({ queryKey: WORK_ORDER_LIST_KEY }), [qc]);
   const loadMore = useCallback(() => {
     if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
   }, [q]);
@@ -45,6 +61,7 @@ export function useWorkOrderList(filters: ListFilters) {
     searching: filters.search !== search || (q.isFetching && q.isPlaceholderData),
     loadMore,
     refetch: q.refetch,
+    refreshAll,
   };
 }
 

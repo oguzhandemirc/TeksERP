@@ -44,7 +44,7 @@ export default function IsEmirleriScreen() {
 
   if (scanRoute) {
     // Okutma: DocBatchView akışı (BELGE kipinde de); geri → liste (kaydedilen İE listede görünsün diye tazelenir).
-    const back = () => { setScanRoute(null); void list.refetch(); };
+    const back = () => { setScanRoute(null); void list.refreshAll(); };
     return (
       <ScreenChrome title={`${KIND_BUTTON[scanRoute.kind]} · ${shortcutTitle(scanRoute.route)}`} onStepBack={back}>
         <ScanStage route={scanRoute.route} kind={scanRoute.kind} onCancel={back} />
