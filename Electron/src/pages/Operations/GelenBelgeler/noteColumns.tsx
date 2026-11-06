@@ -48,7 +48,7 @@ export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
  *  Tıklama satır tıkına (detaya git) kabarmaz; onay önizlemeli silme diyaloğundadır. */
 export function cancelDraftColumn(onCancel: (id: string) => void): ColumnDef<DeliveryNoteHeader> {
   return {
-    id: "cancelDraft",
+    id: "actions", // dışa aktarılmaz (export-kolon-degeri bekçisinin eylem kolonu kimliği)
     header: "",
     enableHiding: false,
     cell: ({ row }) =>
