@@ -6,13 +6,15 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { financeTiles } from "./tile-config";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isHubTileHidden } from "@/lib/menu-layout";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 
 export function FinanceHubPage() {
   // Operasyon hub'ıyla aynı kural: `isAdmin` kısa devresi YOK — kısmi admin,
   // yetkisi olmayan muhasebe kartını görmemeli.
   const { hasAnyPermission } = useRoleAccess();
   const menu = useMenuLayout();
-  const visible = financeTiles.filter((t) => hasAnyPermission(t.permissionAny) && !isHubTileHidden(menu, t.to));
+  const ctx = useOperationsVisibilityContext();
+  const visible = financeTiles.filter((t) => hasAnyPermission(t.permissionAny) && (!t.visibleWhen || t.visibleWhen(ctx)) && !isHubTileHidden(menu, t.to));
 
   return (
     <PageShell>

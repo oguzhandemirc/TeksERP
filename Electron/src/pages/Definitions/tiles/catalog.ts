@@ -1,6 +1,7 @@
 // Tanımlar › Ürün Kataloğu karoları (sıra = hub sırası).
-import { Package, Award, Palette, Sparkles, Tag } from "lucide-react";
+import { Package, Award, Palette, Sparkles, Tag, Table2 } from "lucide-react";
 import { itemPricesTileVisible } from "../ItemPrices/regime";
+import { servicePricesTileVisible } from "../ServicePrices/regime";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { DefinitionTile } from "../tile-config";
 
@@ -29,6 +30,18 @@ export const catalogTiles: DefinitionTile[] = [
     permission: "item:read",
     visibleWhen: itemPricesTileVisible,
     offHint: flagOffHint("ticaretEnabled"),
+  },
+  // Hizmet fiyat tablosu (2026-11-06, K6): aynı ekran Ön Muhasebe hub'ında da karodur.
+  {
+    key: "service-prices",
+    title: "Hizmet Fiyat Tablosu",
+    description: "Hizmetin kademe fiyatları: genel, müşteriye özel ve ileri tarihli",
+    icon: Table2,
+    to: "/definitions/service-prices",
+    group: "catalog",
+    permission: "item:read",
+    visibleWhen: servicePricesTileVisible,
+    offHint: flagOffHint("financeEnabled"),
   },
   {
     key: "fabric-properties",
