@@ -119,6 +119,8 @@ export interface ReadSummary {
   docRolls?: DocRoll[];
   /** K30-T: belge kullanıcı şablonuyla mı okundu (TANITILDI) / hiçbir şablon tutmadı mı (TANITILMAMIS). Yerleşik şablonda ve eski sunucuda yok. */
   tanitim?: ReadTanitim;
+  /** Okutma önizlemesi: şablon alanları bulundu (değerli) / bulunamadı (null); GENEL şablonda ve eski sunucuda yok. */
+  templateFields?: { key: string; label: string; value: string | null; required: boolean }[];
 }
 
 export type ReadTanitim = { durum: 'TANITILDI'; sablonKodu: string; sablonAdi: string } | { durum: 'TANITILMAMIS' };

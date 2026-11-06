@@ -44,6 +44,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   Muayene: 'kaliteGuvenceEnabled',
   // Belge Tara (Gülkesim D7) — gelen belge modülü; backend `requireGelenBelgeEnabled` (emanet bağımlılığı sunucuda çözülür).
   GelenBelge: 'gelenBelgeEnabled',
+  // İş emirleri listesi — üretim modülü (backend katalog satırıyla aynı).
+  IsEmirleri: 'productionEnabled',
 };
 
 export type MobileModuleState = Record<MobileModuleFlag, boolean>;
