@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { safeFormat } from "@/lib/format";
+import { fetchProcessSummary, processSummaryKey, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { SCAN_ROUTE_NAME } from "../oie/nav";
 import { workOrderTypeLabels } from "@/types/enums";
 import { useFoldLabel } from "@/hooks/useFoldValues";
 import type { WorkOrder } from "../types";
@@ -10,6 +13,7 @@ import type { WorkOrder } from "../types";
  */
 export function KunyeCard({ wo }: { wo: WorkOrder }) {
   const foldLabel = useFoldLabel();
+  const { catalog } = useKursunGramajCatalog();
   return (
     <div className="card info">
       <div className="info-grid">
@@ -25,12 +29,17 @@ export function KunyeCard({ wo }: { wo: WorkOrder }) {
           )}
         </Field>
         <Field label="En">{wo.width != null ? `${wo.width} cm` : "—"}</Field>
+        {catalog.propertyId && (
+          <Field label="Gramaj">
+            <KunyeGramaj workOrderId={wo.id} />
+          </Field>
+        )}
         <Field label="Kat Tipi">{wo.foldType ? foldLabel(wo.foldType) : "—"}</Field>
         <Field label="Tip">{workOrderTypeLabels[wo.type]}</Field>
         <Field label="Oluşturma">
           <span className="num">{safeFormat(wo.createdAt, "dd.MM.yyyy · HH:mm")}</span>
         </Field>
-        <Field label="Rota">{wo.routeTemplate?.name ?? "Özel rota"}</Field>
+        <Field label="Rota">{kunyeRouteLabel(wo)}</Field>
         <Field label="Refakat Kartı">
           <span className="mono" style={{ fontSize: "13px" }}>
             {wo.workOrderNumber}
@@ -54,6 +63,20 @@ export function KunyeCard({ wo }: { wo: WorkOrder }) {
       </div>
     </div>
   );
+}
+
+/** Rotasız (K29) İE tablet/form ile AYNI adı taşır; "Özel rota" yalnız şablonsuz elle tasarlanmış rotadır (prova 11-06). */
+export function kunyeRouteLabel(wo: Pick<WorkOrder, "routeTemplate" | "scanRouted">): string {
+  if (wo.routeTemplate?.name) return wo.routeTemplate.name;
+  return wo.scanRouted ? SCAN_ROUTE_NAME : "Özel rota";
+}
+
+/** Hedef kurşun gramajı — "Kurşun Gramajı" kartıyla aynı sorgu anahtarı (önbellek paylaşılır, ek istek yok). */
+function KunyeGramaj({ workOrderId }: { workOrderId: string }) {
+  const scope = { workOrderId };
+  const q = useQuery({ queryKey: processSummaryKey(scope), queryFn: () => fetchProcessSummary(scope) });
+  if (q.isLoading) return <>…</>;
+  return <>{q.data?.kursun.target?.valueName ?? "—"}</>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
