@@ -6,6 +6,7 @@ import { ActivityIndicator, Icon, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { shipmentLoadService, type LoadPreview } from '../../../services/shipmentLoad.service';
 import { sourceDocText, workOrderLine } from './loadEdit';
+import { TERIM } from '../../../lib/terim';
 import { colors, palette, radius, spacing, typography } from '../../../theme/tokens';
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
@@ -24,7 +25,7 @@ export function LoadPreviewBody({ data }: { data: LoadPreview }) {
         </View>
       ))}
       {data.noWorkOrder.rollCount > 0 ? (
-        <Text style={styles.sub}>İş emrisiz {data.noWorkOrder.rollCount} top · {fmtM(data.noWorkOrder.meters)} m</Text>
+        <Text style={styles.sub}>{TERIM.terbiyeIsEmri.tekil} bağı olmayan {data.noWorkOrder.rollCount} top · {fmtM(data.noWorkOrder.meters)} m</Text>
       ) : null}
       {data.warnings.map((w) => (
         <View key={w} style={styles.warn}>
