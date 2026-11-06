@@ -212,6 +212,16 @@ interface ShipmentDocSack {
    * ayırt edilemiyordu. Kod TEK KAPIDAN yönetilir: belge tasarımındaki opt-in kolon.
    */
   packingGroupCode?: string | null;
+  /** Çuvalsız sevk (2026-11-06): yalnız dökme/arabada dolu; yoksa ÇUVAL (eski snapshot). */
+  unitKind?: "CART" | "BULK";
+  unitLabel?: string | null;
+}
+
+/** Ambalaj kodu hücresi: çuvalda çuval no; dökme "Dökme – N top", araba "Araba <no> – N top" (kullanıcı kararı 4). */
+export function loadUnitDocLabel(s: Pick<ShipmentDocSack, "code" | "packageCount" | "unitKind" | "unitLabel">): string {
+  if (s.unitKind === "BULK") return `Dökme – ${s.packageCount} top`;
+  if (s.unitKind === "CART") return `Araba ${s.unitLabel ?? "?"} – ${s.packageCount} top`;
+  return s.code;
 }
 
 interface ShipmentDocCeki {
@@ -617,7 +627,7 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
       colCfg: cuvalColCfg,
       rows: sacks,
       cols: [
-        { key: "code", label: L.ambalajKodu, align: "l", kind: TEXT, value: (s) => s.code },
+        { key: "code", label: L.ambalajKodu, align: "l", kind: TEXT, value: (s) => loadUnitDocLabel(s) },
         ...(meta.sackSeq
           ? [{ key: "seq", label: L.sira, align: "r" as const, kind: TEXT, value: (s: ShipmentDocSack) => formatSackSeqLabel(s.seq, sacks.length, meta.sackSeq!) }]
           : []),

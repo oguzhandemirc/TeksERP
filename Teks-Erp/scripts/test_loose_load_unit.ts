@@ -17,14 +17,16 @@
 //   §6 ⭐ İptal: toplar rafta (sackId/shipmentId null), birim havuzda DEĞİL, dissolvedAt dolu
 //   §7 ⭐ Storno + kapanış (undoDispatch releaseSacks) da birimi çözer
 //   §8 DB seddi (negatif sonda): havuza çekme · tür değişimi · çözülmüşe top · ikinci canlı dökme
+//   §9 İrsaliye: dökme/araba snapshot'ta tür + "Dökme – N top"; çuvallı snapshot'ta anahtar YOK (bayt-eşit)
 // =============================================================================
-import { LoadUnitKind, Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
+import { LoadUnitKind, Prisma, PrintedDocType, RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { loadUnitDocLabel } from "../src/services/document-render/shipment-dispatch.html";
 
 const inventory = new InventoryService();
 
@@ -217,6 +219,30 @@ async function main(): Promise<void> {
     const s = await tx.sack.create({ data: { sackNo: `${TAG}-S`, customerId: customer.id }, select: { id: true } });
     await tx.sack.update({ where: { id: s.id }, data: { dissolvedAt: new Date() } });
   })) !== "");
+
+  // ── §9 İRSALİYE ─────────────────────────────────────────────────────────
+  type Snap = { doc?: { sacks?: Array<Record<string, unknown>>; cekiRows?: Array<{ sackCode: string }> } };
+  const snapOf = async (id: string): Promise<Snap> =>
+    ((await prisma.printedDocument.findFirst({
+      where: { docType: PrintedDocType.SHIPMENT_DISPATCH, sourceId: id, status: "ACTIVE" },
+      select: { snapshot: true },
+    }))?.snapshot ?? {}) as Snap;
+  const e = [await makeRoll(11), await makeRoll(12)];
+  const bulkDisp = await quick(e, [{ kind: "BULK", rollIds: e }]);
+  const bSnap = await snapOf(bulkDisp.id);
+  const bRow = bSnap.doc?.sacks?.[0] ?? {};
+  check("§9a Dökme snapshot'ı türü taşır", bRow.unitKind === "BULK", JSON.stringify(bRow).slice(0, 160));
+  check("§9b ⭐ Ambalaj hücresi \"Dökme – 2 top\"", loadUnitDocLabel(bRow as never) === "Dökme – 2 top", loadUnitDocLabel(bRow as never));
+  check("§9c Çeki satırı birimi \"Dökme\" yazar", (bSnap.doc?.cekiRows ?? []).every((r) => r.sackCode === "Dökme") && (bSnap.doc?.cekiRows ?? []).length === 2);
+  const f = [await makeRoll(13)];
+  const cartDisp = await quick(f, [{ kind: "CART", label: "B-7", rollIds: f }]);
+  const cRow = (await snapOf(cartDisp.id)).doc?.sacks?.[0] ?? {};
+  check("§9d Araba hücresi \"Araba B-7 – 1 top\"", loadUnitDocLabel(cRow as never) === "Araba B-7 – 1 top", loadUnitDocLabel(cRow as never));
+  const g = [await makeRoll(14)];
+  const sackDisp = await quick(g, undefined);
+  const sRow = (await snapOf(sackDisp.id)).doc?.sacks?.[0] ?? {};
+  check("§9e ⭐ Çuvallı snapshot'ta unitKind/unitLabel anahtarı YOK", Object.keys(sRow).length > 0 && !("unitKind" in sRow) && !("unitLabel" in sRow), Object.keys(sRow).join(","));
+  check("§9f Çuvalda hücre çuval no", loadUnitDocLabel(sRow as never) === sRow.code);
 }
 
 main()

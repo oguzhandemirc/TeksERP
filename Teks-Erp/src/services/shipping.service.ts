@@ -356,6 +356,19 @@ export async function dissolveLoadUnitsTx(tx: Prisma.TransactionClient, shipment
   return ids;
 }
 
+/** Belge özeti: dökme/arabada birim türü + etiket; çuvalda HİÇ anahtar yok (eski snapshot ile bayt-eşit). */
+function loadUnitDocFields(sk: { unitKind: LoadUnitKind; unitLabel: string | null }): { unitKind?: "CART" | "BULK"; unitLabel?: string | null } {
+  if (sk.unitKind === LoadUnitKind.SACK) return {};
+  return { unitKind: sk.unitKind, unitLabel: sk.unitLabel };
+}
+
+/** Çeki satırının birim kodu: "Dökme" / "Araba <no>"; çuvalda null (sackNo basılır). */
+function loadUnitCekiCode(sk: { unitKind: LoadUnitKind; unitLabel: string | null }): string | null {
+  if (sk.unitKind === LoadUnitKind.BULK) return "Dökme";
+  if (sk.unitKind === LoadUnitKind.CART) return `Araba ${sk.unitLabel ?? ""}`.trim();
+  return null;
+}
+
 async function nextSackNo(tx: Prisma.TransactionClient): Promise<string> {
   return nextSeriesNo("sack", async (prefix) => {
     const todays = await tx.sack.findMany({
@@ -4955,7 +4968,7 @@ export class ShippingService {
         sacks: {
           orderBy: { seq: "asc" },
           select: {
-            id: true, sackNo: true, seq: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true, code: true } },
+            id: true, sackNo: true, seq: true, weightKg: true, packageNo: true, unitKind: true, unitLabel: true, dissolvedAt: true, packingGroup: { select: { name: true, code: true } },
             // ADLİ/DETAY görünüm — hayalet BURADA FİLTRELENMEZ, aksine `status` ile
             // görünür kılınır: "ne oldu?" sorusunun cevabı bu ekranda okunur ve
             // operatörün topu çuvaldan çıkarma yolu buradan geçer. Filtrelemek sorunu
@@ -5144,6 +5157,8 @@ export class ShippingService {
         id: sk.id, sackNo: sk.sackNo, seq: sk.seq, seqLabel: seqLabelOf(sk.seq), weightKg: sk.weightKg,
         // Sevk partisi (2026-09-21) — detay/önizleme rozeti; partisiz çuvalda null.
         packageNo: sk.packageNo, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null,
+        // Yük birimi (çuvalsız sevk): eski panel alanı yok sayar, çuval gibi çizer.
+        unitKind: sk.unitKind, unitLabel: sk.unitLabel, dissolvedAt: sk.dissolvedAt,
         rolls: grossRolls,
         swatches: sk.swatches,
         productSummary: [...summaryMap.values()],
@@ -5691,7 +5706,7 @@ async function collectShipmentDocContent(
         // dolu, kod eski/iade satırlarında tek kalan olabilir.
         // `packageNo`/`packingGroup.name` (2026-09-21, sevk partisi) — belgeye yalnız
         // `shipping.docPackingLot` açıkken basılır; snapshot'a her zaman girer (donuk içerik).
-        select: { id: true, seq: true, sackNo: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true, code: true } }, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
+        select: { id: true, seq: true, sackNo: true, unitKind: true, unitLabel: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true, code: true } }, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
@@ -5860,6 +5875,8 @@ async function collectShipmentDocContent(
       // ⚠️ KOD DOĞUŞTA MATERYALİZE (İ1): belgeye basılan dizgi `PackingGroup.code`
       // kolonunun kendisidir, render'da kurulmaz — ekran da aynı kolonu okur.
       packingGroupCode: sk.packingGroup?.code ?? null,
+      // Çuvalsız sevk: anahtar YALNIZ dökme/arabada — çuvallı belgenin snapshot'ı bayt-aynı kalır.
+      ...loadUnitDocFields(sk),
     };
   });
 
@@ -5874,7 +5891,7 @@ async function collectShipmentDocContent(
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
-      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null, ...(defectNotes.has(r.id) ? { defectNote: defectNotes.get(r.id) } : {}), ...(customerCodes.has(r.id) ? { customerCode: customerCodes.get(r.id) } : {}) };
+      return { rollId: r.id, sackCode: loadUnitCekiCode(sk) ?? sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null, ...(defectNotes.has(r.id) ? { defectNote: defectNotes.get(r.id) } : {}), ...(customerCodes.has(r.id) ? { customerCode: customerCodes.get(r.id) } : {}) };
     })
   );
 
