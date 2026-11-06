@@ -1,6 +1,7 @@
 import { useRef, type WheelEvent } from "react";
 import { X, Plus, CopyX } from "lucide-react";
-import { closeTabsWithUndo } from "./close-with-undo";
+import { requestCloseTabs } from "./dirty-close-guard";
+import { useIsTabDirty } from "./dirty-tabs";
 import {
   DndContext,
   closestCenter,
@@ -26,7 +27,6 @@ export function TabStrip() {
   const tabs = useTabsStore((s) => s.tabs);
   const activeId = useTabsStore((s) => s.activeId);
   const setActive = useTabsStore((s) => s.setActive);
-  const closeTab = useTabsStore((s) => s.closeTab);
   const openTab = useTabsStore((s) => s.openTab);
   const reorder = useTabsStore((s) => s.reorder);
 
@@ -64,7 +64,7 @@ export function TabStrip() {
                 tab={tab}
                 active={tab.id === activeId}
                 onSelect={() => setActive(tab.id)}
-                onClose={() => closeTab(tab.id)}
+                onClose={() => requestCloseTabs("self", tab.id)}
               />
             ))}
           </div>
@@ -82,7 +82,7 @@ export function TabStrip() {
       <div aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border" />
       <button
         type="button"
-        onClick={() => closeTabsWithUndo("all")}
+        onClick={() => requestCloseTabs("all")}
         disabled={tabs.length === 0}
         title={`Tümünü kapat (${CLOSE_ALL_SHORTCUT})`}
         aria-label="Tüm sekmeleri kapat"
@@ -106,6 +106,7 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
     id: tab.id,
   });
   const Icon = resolveTabMeta(tab.path).icon;
+  const dirty = useIsTabDirty(tab.id);
 
   // Tetikleyici asChild: Radix Slot sortable ref'ini ve fare olaylarını birleştirir.
   return (
@@ -141,16 +142,35 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
         >
           <Icon className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{tab.title}</span>
+          {dirty && <span className="sr-only"> (kaydedilmemiş değişiklik)</span>}
         </button>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={`${tab.title} sekmesini kapat`}
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
-        >
-          <X className="h-3 w-3" />
-        </button>
+        <CloseButton title={tab.title} dirty={dirty} onClose={onClose} />
       </div>
     </TabContextMenu>
+  );
+}
+
+/**
+ * Kapat düğmesi; kirli sekmede (VS Code kalıbı) yerinde dolu nokta durur, üstüne gelince X'e döner.
+ * Nokta her zaman görünür — çip aktif olmasa da kaydedilmemiş iş gözden kaçmasın.
+ */
+function CloseButton({ title, dirty, onClose }: { title: string; dirty: boolean; onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={dirty ? `${title} sekmesini kapat (kaydedilmemiş değişiklik var)` : `${title} sekmesini kapat`}
+      title={dirty ? "Kaydedilmemiş değişiklik var" : undefined}
+      data-dirty={dirty ? "" : undefined}
+      className={cn(
+        "group/close relative flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-opacity hover:bg-accent hover:text-foreground",
+        dirty ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+      )}
+    >
+      {dirty && (
+        <span aria-hidden className="h-2 w-2 rounded-full bg-amber-500 group-hover/close:hidden" />
+      )}
+      <X className={cn("h-3 w-3", dirty && "hidden group-hover/close:block")} />
+    </button>
   );
 }

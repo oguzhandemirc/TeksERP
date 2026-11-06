@@ -1,4 +1,5 @@
 import { Menu, PanelLeft, Search, LogOut, RotateCw, Settings, Activity } from "lucide-react";
+import { requestLogout } from "@/components/layout/tabs/dirty-close-guard";
 import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
@@ -159,7 +160,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerO
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
-                void logout().then(() => (window.location.hash = "#/login"));
+                requestLogout(() => void logout().then(() => (window.location.hash = "#/login")));
               }}
             >
               <LogOut className="mr-2 h-4 w-4" /> Çıkış

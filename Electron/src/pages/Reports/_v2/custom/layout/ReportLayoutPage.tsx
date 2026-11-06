@@ -1,4 +1,5 @@
 import { lazy, Suspense, useContext, useEffect, useMemo, useState } from "react";
+import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
 import { Link, UNSAFE_DataRouterContext, useBlocker, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Save } from "lucide-react";
@@ -47,6 +48,7 @@ function LeaveGuard({ when }: { when: () => boolean }) {
 
 /** Pencere kapanırken/yenilenirken tarayıcının kendi uyarısı. */
 function useBeforeUnloadWarning(dirty: boolean) {
+  useDirtyTab(dirty); // sekme kapatma/çıkış onayı + şeritteki kirli işaret
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();

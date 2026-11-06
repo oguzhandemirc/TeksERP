@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Controller, useForm, type Resolver } from "react-hook-form";
+import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -158,6 +159,7 @@ export function WorkOrderFormView({
     resolver: zodResolver(workOrderFormSchema) as Resolver<WorkOrderFormValues>,
     defaultValues: workOrderFormDefaults,
   });
+  useDirtyTab(form.formState.isDirty); // sekme kapatma/çıkış onayı (sayfa formu, diyalog değil)
 
   /**
    * Parti kodu alanından çıkıldığında (blur) backend'e "bu kod daha önce

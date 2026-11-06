@@ -61,6 +61,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 ### Değişmezler
 
 - **[ÇEKİRDEK]** "Geri gidilebilir mi"yi `location.key` ile çözme; tek kaynak `tabs/history-depth.ts` (PUSH +1 · POP −1 · REPLACE değişmez), sekme kimliği `useTabId()`; `PageHeader` sırası onBack > sekme geçmişi > breadcrumb.
+- **[ÇEKİRDEK]** Sekme kapatma (tek/toplu/kısayol/sağ tık) ve elle çıkış YALNIZ `tabs/dirty-close-guard.ts` kapısından geçer; "kirli sekme" tek kaynak `tabs/dirty-tabs.ts` (`useDirtyTab` beyanı + sekmedeki diyalog/sheet'e yazma); sayfa düzeyi editörün kendi kirlilik ölçüsü varsa `useDirtyTab(dirty)` bağlanır, seçici pencere `data-dirty-ignore` taşır.
 
 ### Yasaklar
 

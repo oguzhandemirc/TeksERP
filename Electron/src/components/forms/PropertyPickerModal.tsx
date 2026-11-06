@@ -57,7 +57,7 @@ export function PropertyPickerModal({ itemId, value, onChange, disabled }: Props
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" data-dirty-ignore="">
           <DialogHeader>
             <DialogTitle>Özellikler</DialogTitle>
             <DialogDescription>

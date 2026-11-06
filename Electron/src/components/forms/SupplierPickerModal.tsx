@@ -128,7 +128,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
     <Dialog open={open} onOpenChange={setOpen}>
       {/* Yükseklik SABİT (h-[85vh]): süzgeç/arama sonucu azalınca modal kısalmasın (kullanıcı isteği);
           liste kabı `min-h-0 flex-1` boşlukta da yerini korur. */}
-      <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-3">
+      <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-3" data-dirty-ignore="">
         <DialogHeader>
           <DialogTitle>{TITLE[list].title}</DialogTitle>
           <DialogDescription>{TITLE[list].description}</DialogDescription>
