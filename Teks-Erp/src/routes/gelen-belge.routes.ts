@@ -39,7 +39,6 @@ import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from 
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
 import { stationDocLookup, stationLookupContext, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
-import { listStationScanChecks, markStationScanOpened } from "../services/station-scan-check.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { kickPhotoRetentionIfActive, requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
@@ -49,13 +48,14 @@ import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import gelenBelgeSablonRoutes from "./gelen-belge-sablon.routes";
 import gelenBelgeCanliRoutes from "./gelen-belge-canli.routes";
+import gelenBelgeOkutmaIziRoutes, { STATION_LOOKUP_PERMISSIONS } from "./gelen-belge-okutma-izi.routes";
 
 const router = Router();
 router.use(verifyToken, requireGelenBelgeEnabled);
 // Gövde katmanı kapıdan SONRA ayrı satırda: `test_module_flag_off §2a` kapıyı `use(verifyToken, <kapı>)` olarak ölçer.
 router.use(express.json({ limit: BUYUK_GOVDE_LIMITI }));
-// S1 kullanıcı şablonu + belge tipi tanıtma uçları ve canlı kare okuma (salt okuma) — kapı ve gövde katmanı bu router'dan miras.
-router.use(gelenBelgeSablonRoutes, gelenBelgeCanliRoutes);
+// S1 kullanıcı şablonu + belge tipi tanıtma uçları, canlı kare okuma (salt okuma) ve istasyon okutma izi — kapı ve gövde katmanı bu router'dan miras.
+router.use(gelenBelgeSablonRoutes, gelenBelgeCanliRoutes, gelenBelgeOkutmaIziRoutes);
 
 type Handler = (req: Request) => Promise<{ status: number; data: unknown; warnings?: string[] }>;
 const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunction) => {
@@ -422,8 +422,7 @@ const SettingsBody = z.strictObject({
   multiPartyWorkOrder: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
   duplicateDocNo: z.enum(["BLOCK", "WARN", "ALLOW"], "Seçenek BLOCK, WARN ya da ALLOW olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
-  stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
-  stationVerifyThreshold: z.number("Doğrulama eşiği sayı olmalı").int("Doğrulama eşiği tam sayı olmalı").min(0, "Doğrulama eşiği en az 0 olmalı").max(100, "Doğrulama eşiği en çok 100 olmalı").nullable().optional(),
+  stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(), stationVerifyThreshold: z.number("Doğrulama eşiği sayı olmalı").int("Doğrulama eşiği tam sayı olmalı").min(0, "Doğrulama eşiği en az 0 olmalı").max(100, "Doğrulama eşiği en çok 100 olmalı").nullable().optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
   desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
   tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(), tanitimGuveni: z.enum(["SOR", "SORMA"], "Seçenek SOR ya da SORMA olmalı").optional(),
@@ -478,7 +477,6 @@ router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => (
 // K28: saklama kipi FULL değilse geçmiş onaylılara uygulama beklemeden başlar (iş kendi ön koşulunda durur).
 router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: kickPhotoRetentionIfActive(await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId)) })));
 // ── K17: istasyonda belgeden iş emri bulma (eşleme okuması — hiçbir kayıt doğurmaz) ──────────────────────────
-const STATION_LOOKUP_PERMISSIONS = ["gelen-belge:read", "mobile:kk2-kursun", "mobile:tambur"] as const;
 const StationLookupBody = z.union([
   z.strictObject({
     contentBase64: z.string().min(1, "Dosya içeriği boş"),
@@ -519,42 +517,6 @@ const StationLookupBody = z.union([
 router.get("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async () => ({ status: 200, data: await stationLookupStatus() })));
 // Ekran bilgisi SORGU dizgisinde (gövde strictObject; yeni tablet + eski sunucu 400 almasın) — `stationLookupContext`.
 router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => ({ status: 200, data: await stationDocLookup(StationLookupBody.parse(req.body), await stationLookupContext(req)) })));
-const ScanOpenedBody = z.strictObject({
-  workOrderNumber: z.string().trim().min(1, "İş emri no boş").max(64, "En çok 64 karakter"),
-  how: z.enum(["AUTO", "CHOSEN", "CONFIRMED"], "Seçenek AUTO, CHOSEN ya da CONFIRMED olmalı"),
-});
-const ScanChecksQuery = z.strictObject({ take: z.coerce.number().int().min(1).max(200).optional() });
-/**
- * @openapi
- * /api/gelen-belge/istasyon-okutma/{id}/acilan:
- *   post:
- *     tags: [GelenBelge]
- *     summary: "Okutma izine tabletin açtığı İE'yi yazar (TELEMETRİ; tek sefer). how AUTO kendiliğinden · CHOSEN listeden · CONFIRMED eşik altı, görevli onayladı"
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
- *     requestBody:
- *       content:
- *         application/json:
- *           schema: { type: object, required: [workOrderNumber, how], properties: { workOrderNumber: { type: string }, how: { type: string, enum: [AUTO, CHOSEN, CONFIRMED] } } }
- *     responses:
- *       200: { description: "id" }
- *       409: { description: "STATION_SCAN_CHECK_CLOSED (zaten bildirildi ya da kayıt yok)" }
- * /api/gelen-belge/istasyon-okutma/son:
- *   get:
- *     tags: [GelenBelge]
- *     summary: "Son okutmalar: puan · karar · açılan İE · görevli onayı (eşiği veriyle ayarlamak için; TELEMETRİ)"
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - { in: query, name: take, schema: { type: integer, minimum: 1, maximum: 200 } }
- *     responses:
- *       200: { description: "Okutma izleri (en yeni önce)" }
- */
-router.get("/istasyon-okutma/son", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await listStationScanChecks(ScanChecksQuery.parse(req.query).take ?? 50) })));
-router.post("/istasyon-okutma/:id/acilan", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => {
-  const body = ScanOpenedBody.parse(req.body);
-  return { status: 200, data: await markStationScanOpened(Id.parse(req.params.id), body.workOrderNumber, body.how) };
-}));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
 
 /**

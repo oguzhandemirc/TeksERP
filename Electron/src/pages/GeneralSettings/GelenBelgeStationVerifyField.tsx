@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatFactory } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 import { FieldLabel } from "./SettingRow";
 import { listStationScanChecks } from "@/pages/Operations/GelenBelgeler/service";
 import type { IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
@@ -31,7 +32,7 @@ export function StationVerifyField({ draft, defaultValue }: { draft: ReturnType<
       <FieldLabel
         htmlFor="gb-station-verify-threshold-input"
         label="İstasyonda belge okutma: doğrulama eşiği (%)"
-        desc="Belge okutulunca fiş / parti no ile bulunan iş emri, aynı fotoğraftaki öteki bilgilerle (top no'ları, top metreleri, parti ve sipariş no, müşteri, gönderen, tarih) karşılaştırılır. Benzerlik bu eşiğin altındaysa iş emri kendiliğinden açılmaz; görevli listeden kendisi seçer. Top listesi okunamazsa iş emri hiç kendiliğinden açılmaz. 0 = doğrulama kapalı. Yalnız istasyonda belge okutma açıkken etkilidir."
+        desc={`Belge okutulunca fiş / parti no ile bulunan ${TERIM.terbiyeIsEmri.tekilKucuk}, aynı fotoğraftaki öteki bilgilerle (top no'ları, top metreleri, parti ve sipariş no, müşteri, gönderen, tarih) karşılaştırılır. Benzerlik bu eşiğin altındaysa ${TERIM.terbiyeIsEmri.tekilKucuk} kendiliğinden açılmaz; görevli listeden kendisi seçer. Top listesi okunamazsa hiç kendiliğinden açılmaz. 0 = doğrulama kapalı. Yalnız istasyonda belge okutma açıkken etkilidir.`}
       />
       <Input
         id="gb-station-verify-threshold-input"
@@ -72,7 +73,7 @@ function RecentScans() {
   const rows = q.data ?? [];
   if (rows.length === 0) return <p className="text-xs text-muted-foreground" data-testid="gb-station-verify-recent-empty">Henüz okutma yok.</p>;
   return (
-    <div className="mt-2 max-h-80 overflow-auto rounded-md border" data-testid="gb-station-verify-recent">
+    <div className="mt-2 max-h-80 overflow-auto border-y" data-testid="gb-station-verify-recent">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 text-left">
           <tr><th className="p-2">Zaman</th><th className="p-2">Okunan no</th><th className="p-2">Puan</th><th className="p-2">Sonuç</th><th className="p-2">Açılan</th><th className="p-2">Ne tuttu / ne tutmadı</th></tr>
