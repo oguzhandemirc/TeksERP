@@ -8,6 +8,7 @@ import TruncatedText from '../../../components/TruncatedText';
 import { packingService, type SackStoreShipmentLite, type ShipmentCancelPreview } from '../../../services/packing.service';
 import { showScreenError } from '../../../lib/screenToast';
 import { loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
+import { palette } from '../../../theme/tokens';
 
 // =============================================================================
 // Bekleyen (PLANNED) sevkiyatı İPTAL — yıkıcı işlem: önce sunucu önizlemesi, etkilenen
@@ -22,7 +23,7 @@ function UnitBlock({ u }: { u: Unit }) {
   return (
     <View style={styles.unit}>
       <View style={styles.unitHead}>
-        <Icon source={loadUnitIcon(u)} size={18} color="#4338ca" />
+        <Icon source={loadUnitIcon(u)} size={18} color={palette.indigo[700]} />
         <Text style={styles.unitTitle}>{loadUnitTitle(u)}</Text>
         <Text style={styles.unitMeta}>
           {u.rolls.length} top · {dest}
@@ -103,7 +104,7 @@ export default function ShipmentCancelModal({
           <Button
             mode="contained"
             icon="cancel"
-            buttonColor="#dc2626"
+            buttonColor={palette.red[600]}
             style={styles.btn}
             contentStyle={styles.btnContent}
             loading={cancelMut.isPending}
@@ -122,17 +123,17 @@ export default function ShipmentCancelModal({
 const styles = StyleSheet.create({
   sheet: { padding: 20, borderRadius: 12, maxHeight: '90%' },
   title: { fontWeight: '700' },
-  customer: { fontSize: 15, color: '#334155', marginTop: 4 },
+  customer: { fontSize: 15, color: palette.slate[700], marginTop: 4 },
   loading: { marginVertical: 16 },
   summary: { fontSize: 20, fontWeight: '700', marginTop: 12 },
-  block: { fontSize: 15, color: '#b91c1c', marginTop: 8 },
-  orders: { fontSize: 14, color: '#92400e', marginTop: 8 },
+  block: { fontSize: 15, color: palette.red[700], marginTop: 8 },
+  orders: { fontSize: 14, color: palette.amber[900], marginTop: 8 },
   list: { marginTop: 8, maxHeight: 320 },
-  unit: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#cbd5e1' },
+  unit: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.slate[300] },
   unitHead: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   unitTitle: { fontSize: 16, fontWeight: '700' },
-  unitMeta: { fontSize: 14, color: '#475569' },
-  barcodes: { fontSize: 13, color: '#334155', marginTop: 4 },
+  unitMeta: { fontSize: 14, color: palette.slate[600] },
+  barcodes: { fontSize: 13, color: palette.slate[700], marginTop: 4 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 },
   btn: { minWidth: 140 },
   btnContent: { minHeight: 56 },

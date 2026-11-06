@@ -33,6 +33,7 @@ import { READY_WORKS_KEY, ReadyWorksSheet, ReadyWorksStrip } from './ReadyWorks'
 import type { ReadyWorkRow } from '../../../services/readyWorks.service';
 import { showScreenError } from '../../../lib/screenToast';
 import TruncatedText from '../../../components/TruncatedText';
+import { palette } from '../../../theme/tokens';
 
 // =============================================================================
 // Sevk Kapısı — havuzdan kurulmuş, sevk bekleyen PLANNED sevkiyatlar. Sevk onayı
@@ -213,7 +214,7 @@ export default function SevkiyatScreen() {
           <Button
             mode="outlined"
             icon="cancel"
-            textColor="#dc2626"
+            textColor={palette.red[600]}
             onPress={() => setCancelShip(sh)}
             disabled={busy}
             style={styles.actBtn}

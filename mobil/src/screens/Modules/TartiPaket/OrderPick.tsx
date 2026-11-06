@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import AppModal from '../../../components/AppModal';
 import MultiSelectSheet, { type MultiSelectOption } from '../../../components/MultiSelectSheet';
 import { packingService, type OpenOrder } from '../../../services/packing.service';
+import { palette } from '../../../theme/tokens';
 
 // =============================================================================
 // Sipariş seçerek sevk (tablet) — açık siparişler müşteri/şube kapsamında sunucudan;
@@ -51,12 +52,12 @@ export function OrderPickRow({
     <>
       <TouchableRipple onPress={() => setOpen(true)} style={styles.row} testID="sevk-siparis-sec">
         <View style={styles.rowInner}>
-          <Icon source="clipboard-list-outline" size={22} color="#334155" />
+          <Icon source="clipboard-list-outline" size={22} color={palette.slate[700]} />
           <View style={styles.rowText}>
             <Text style={styles.rowLabel}>Sipariş</Text>
             <Text style={styles.rowValue}>{orderPickText(value, orders)}</Text>
           </View>
-          <Icon source="chevron-right" size={22} color="#94a3b8" />
+          <Icon source="chevron-right" size={22} color={palette.slate[400]} />
         </View>
       </TouchableRipple>
       <MultiSelectSheet
@@ -133,7 +134,7 @@ export function ShipConfirmSheet({
           <Button
             mode="contained"
             icon="truck-fast"
-            buttonColor="#15803d"
+            buttonColor={palette.emerald[700]}
             style={styles.btn}
             contentStyle={styles.btnContent}
             loading={submitting}
@@ -150,18 +151,18 @@ export function ShipConfirmSheet({
 }
 
 const styles = StyleSheet.create({
-  row: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, marginTop: 12 },
+  row: { borderWidth: 1, borderColor: palette.slate[300], borderRadius: 8, marginTop: 12 },
   rowInner: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 12 },
   rowText: { flex: 1 },
-  rowLabel: { fontSize: 12, color: '#64748b' },
+  rowLabel: { fontSize: 12, color: palette.slate[500] },
   rowValue: { fontSize: 16, fontWeight: '600' },
   sheet: { padding: 20, borderRadius: 12, maxHeight: '90%' },
   title: { fontWeight: '700' },
   kpi: { fontSize: 22, fontWeight: '700', marginTop: 8 },
   loading: { marginVertical: 12 },
   list: { marginTop: 8, maxHeight: 260 },
-  line: { fontSize: 14, color: '#334155', paddingVertical: 4 },
-  warn: { fontSize: 14, color: '#b45309', paddingVertical: 4 },
+  line: { fontSize: 14, color: palette.slate[700], paddingVertical: 4 },
+  warn: { fontSize: 14, color: palette.amber[700], paddingVertical: 4 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 },
   btn: { minWidth: 140 },
   btnContent: { minHeight: 56 },
