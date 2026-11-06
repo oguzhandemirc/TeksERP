@@ -11,6 +11,8 @@ import { TERIM } from '../../../../lib/terim';
 import { parseMeters } from '../approvalGate';
 import { MODE_LABELS, partyFacts, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
+import PartyPlanFields from './PartyPlanFields';
+import type { PartyPlanCtx } from './partyPlan';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
 export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): void {
@@ -27,7 +29,8 @@ export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): v
   }, [q.isSuccess, q.isError, q.data, row.noteId, setParties]);
 }
 
-export default function PartyRows({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
+/** `plan`: tek İE formunda "her parti ayrı" kipinde parti başına gramaj + makine (belge masası kendi plan bölümünde çizer). */
+export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: WoRowsState; locked: boolean; plan?: PartyPlanCtx | null }) {
   const m = row.form?.multi;
   const view = row.parties;
   if (!m || !view) return null;
@@ -59,6 +62,7 @@ export default function PartyRows({ row, wo, locked }: { row: DocRow; wo: WoRows
                 onChangeText={(t) => setRow(r.blockNo, { batchNo: t })} testID={`belge-parti-no-${row.noteNo}-${r.blockNo}`} />
               <MeterInput initial={r.meters} locked={partyLocked} onChange={(meters) => setRow(r.blockNo, { meters })} testID={`belge-parti-metre-${row.noteNo}-${r.blockNo}`} />
             </View>
+            {plan && <PartyPlanFields ctx={plan} party={r} locked={partyLocked} noteNo={row.noteNo} onChange={(patch) => setRow(r.blockNo, patch)} />}
             {p?.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
             <OutcomeLine out={out} testID={`belge-parti-sonuc-${row.noteNo}-${r.blockNo}`} />
           </View>

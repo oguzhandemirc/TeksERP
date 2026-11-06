@@ -4,6 +4,7 @@ import { useIdleLock } from './useIdleLock';
 import { useAuthStore } from '../store/authStore';
 import {
   SYSTEM_DIALOG_TRAILING_MS,
+  __resetSystemDialogForTests,
   useLockStore,
   withSystemDialog,
 } from '../store/lockStore';
@@ -34,6 +35,9 @@ let now = 5_000_000_000;
 const advance = (ms: number) => {
   now += ms;
 };
+
+// Modül-yerel diyalog damgası testler arası taşınmasın: sızan bastırılmış arka plan sonraki 'active'i kilitler.
+beforeEach(() => __resetSystemDialogForTests());
 
 describe('useIdleLock — AppState kilidi ve sistem diyaloğu muafiyeti', () => {
   let appStateHandler: ((s: AppStateStatus) => void) | undefined;

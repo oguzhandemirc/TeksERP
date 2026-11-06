@@ -255,22 +255,26 @@ export function flushPrintReports(send: PrintReportSender = defaultSender): Prom
   return flushing;
 }
 
-let installed = false;
+/** Kurulu dinleyicilerin söküm kolları; boş = kurulu değil. Test sıfırlaması söker (sızan abone sırayı bozar). */
+let uninstall: (() => void)[] = [];
 /** Uygulama açılışında bir kez: diskten yükle, çevrimiçi kenarında ve girişte boşalt. */
 export function installPrintReportFlush(): void {
-  if (installed) return;
-  installed = true;
+  if (uninstall.length) return;
   void hydratePrintReports().then(() => flushPrintReports());
-  onlineManager.subscribe((online) => {
-    if (online) void flushPrintReports();
-  });
-  useAuthStore.subscribe((s, prev) => {
-    if (s.token && s.token !== prev.token) void flushPrintReports();
-  });
+  uninstall = [
+    onlineManager.subscribe((online) => {
+      if (online) void flushPrintReports();
+    }),
+    useAuthStore.subscribe((s, prev) => {
+      if (s.token && s.token !== prev.token) void flushPrintReports();
+    }),
+  ];
 }
 
 /** Test kancası. */
 export function __resetPrintReportsForTests(): void {
+  for (const off of uninstall) off();
+  uninstall = [];
   usePrintReports.setState({ items: [], drops: { ...NO_DROPS }, hydrated: false, lastSentAt: null });
   settledTokens.clear();
   flushing = null;
