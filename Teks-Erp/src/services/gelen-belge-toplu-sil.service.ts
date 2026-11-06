@@ -6,10 +6,12 @@
 // düşerse (409/404) yalnız o kaydın sonucu başarısızdır, diğerleri etkilenmez. Önizleme YAZMAZ ve
 // silinebilirliği aynı yüklemden (`isDeletableNoteStatus`) okur — yıkıcı işlem kuralı (kök CLAUDE.md).
 // =============================================================================
-import type { DeliveryNoteStatus } from "@prisma/client";
+import { DeliveryNoteLineStatus, type DeliveryNoteStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { hata } from "../lib/logger";
 import { AppError } from "../utils/app-error";
+import { partyCount } from "../lib/gelen-belge/parti-ozet";
+import { isSummaryLine } from "./gelen-belge-kontrol.service";
 import { deleteDeliveryNote, isDeletableNoteStatus } from "./gelen-belge-note.service";
 
 /** Tek istekte en çok bu kadar belge (gövde Zod'u da aynı tavanı taşır). */
@@ -32,6 +34,8 @@ export interface BulkDeletePreviewItem {
   code: "DELIVERY_NOTE_NOT_DRAFT" | "DELIVERY_NOTE_NOT_FOUND" | null;
   reason: string | null;
   lineCount: number;
+  /** Parti (bölüm) sayısı — `partyCount`; onay modalı satır sayısının yanında gösterir. Eski istemci yok sayar. */
+  partyCount: number;
   scanCount: number;
   ownerName: string | null;
   senderName: string | null;
@@ -55,7 +59,9 @@ export interface BulkDeleteResult {
 }
 
 const PREVIEW_SELECT = {
-  id: true, noteNo: true, status: true, senderText: true, senderDocNo: true,
+  id: true, noteNo: true, status: true, senderText: true, senderDocNo: true, totalsDeclared: true,
+  // Parti sayısı parti özetiyle aynı satır kümesinden: atlanmamış, özet satırı olmayan.
+  lines: { where: { status: { not: DeliveryNoteLineStatus.SKIPPED } }, select: { id: true, blockNo: true } },
   ownerCustomer: { select: { name: true } },
   senderCustomer: { select: { name: true } },
   _count: { select: { lines: true, scans: true } },
@@ -72,14 +78,14 @@ export async function previewBulkDeleteDeliveryNotes(ids: readonly string[]): Pr
   const items = want.map((id): BulkDeletePreviewItem => {
     const r = byId.get(id);
     if (!r) {
-      return { id, noteNo: null, status: null, deletable: false, code: "DELIVERY_NOTE_NOT_FOUND", reason: NOT_FOUND_REASON, lineCount: 0, scanCount: 0, ownerName: null, senderName: null, senderDocNo: null };
+      return { id, noteNo: null, status: null, deletable: false, code: "DELIVERY_NOTE_NOT_FOUND", reason: NOT_FOUND_REASON, lineCount: 0, partyCount: 0, scanCount: 0, ownerName: null, senderName: null, senderDocNo: null };
     }
     const deletable = isDeletableNoteStatus(r.status);
     return {
       id, noteNo: r.noteNo, status: r.status, deletable,
       code: deletable ? null : "DELIVERY_NOTE_NOT_DRAFT",
       reason: deletable ? null : BLOCK_REASON[r.status as keyof typeof BLOCK_REASON],
-      lineCount: r._count.lines, scanCount: r._count.scans,
+      lineCount: r._count.lines, partyCount: partyCount(r.lines.filter((l) => !isSummaryLine(r.id, l)), r.totalsDeclared), scanCount: r._count.scans,
       ownerName: r.ownerCustomer?.name ?? null,
       senderName: r.senderCustomer?.name ?? r.senderText ?? null,
       senderDocNo: r.senderDocNo,
