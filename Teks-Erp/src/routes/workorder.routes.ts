@@ -11,7 +11,7 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
-import { getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
+import { getKursunGramaj, getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -683,11 +683,30 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  *                   properties:
  *                     propertyId: { type: string, format: uuid }
  *                     valueId: { type: string, format: uuid, nullable: true }
+ *               reason: { type: string, nullable: true, description: "Gramaj değişim sebebi (İE hareket defterine)" }
  *     responses:
- *       200: { description: Hedef güncellendi (ya da aynıydı) }
+ *       200: { description: "Hedef güncellendi (ya da aynıydı); kurşun gramajı değişti ve uygulanmış top varsa warnings[] eski/yeni top sayısını söyler" }
+ *       403: { description: "Yalnız mobile:is-emri-duzelt — gövdede kurşun gramajı dışı özellik" }
+ *       409: { description: "WORK_ORDER_PLAN_FROZEN — tablet yolu, iş emri kapanmış" }
  *       400: { description: Özellik çeşit değil / değer o özelliğe ait değil }
  */
-router.put("/:id/target-values", verifyToken, requirePermission("workorder:write"), putTargetValues);
+// Tablet Düzelt (`mobile:is-emri-duzelt`) yalnız kurşun gramajını yazar — daraltma serviste (`kursunOnly`).
+router.put("/:id/target-values", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), putTargetValues);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/kursun-gramaj:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Tablet "Gramajı Değiştir" önizlemesi — kurşun gramajı hedefi, seçenekler, kurşunu uygulanmış / kalan top sayısı (salt okuma)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "propertyId | null, target { valueId, valueName } | null, options[{ id, name, isDefault }], appliedRollCount, pendingRollCount, editable" }
+ *       404: { description: İş emri yok }
+ */
+router.get("/:id/kursun-gramaj", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), getKursunGramaj);
 
 /**
  * @openapi
