@@ -1,9 +1,9 @@
 # Backend `2.11.7`
 
-**Paket:** (paketleme sonrası yazılacak)
-**SHA256:** (paketleme sonrası yazılacak)
-**Commit:** (paketleme sonrası yazılacak)
-**İçerik commit'leri:** `feat(rapor): stock report "by item" tab endpoint (backend 2.11.7, port of #598)` (Stok & Ölü Stok "Kalem bazında" ucu — main #598'in taşıması)
+**Paket:** `tekserp-backend-20261107_013007-5a57bd120.zip`
+**SHA256:** `0882B13677AF6F3939FD3817EF8080741472C7F8CE6EB2817070FC8108CA3A54`
+**Commit:** `5a57bd120`
+**İçerik commit'leri:** `40c941aa6` (Stok & Ölü Stok "Kalem bazında" ucu — main #598'in taşıması)
 **Önceki saha sürümü:** **2.11.6** (etiket `backend-v2.11.6` = `2b6719509`; kuran, kurulumdan önce `/health` ve `app\PAKET.json` ile 2.11.6 olduğunu ÖLÇER — farklıysa DUR).
 
 **Bakım sürümü:** `bakim/adnansahin-backend-2.11.7` dalı, taban `bakim/adnansahin-backend-2.11.6` (2.11.6 künye commit'inin üstünde).
