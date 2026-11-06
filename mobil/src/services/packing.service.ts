@@ -624,6 +624,8 @@ export const packingService = {
     plateNumber?: string | null;
     driverName?: string | null;
     dispatchNote?: string | null;
+    /** Çuvalsız sevk: dökme tek birim, araba başına bir birim (top kümesini tam böler). */
+    loadUnits?: { kind: 'BULK' | 'CART'; label?: string; rollIds: string[] }[];
     clientToken?: string;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient.post<ApiResponse<CreatedShipment>>('/shipping/shipments/from-rolls', body).then((r) => r.data),

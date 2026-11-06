@@ -11,9 +11,9 @@ import { openCariHoldBlock, type CariHoldBlock } from '../Sevkiyat/CariHold';
 import { destinationLockQueryKey, invalidateAfterShipment, resolveDestination } from './destinationDefault';
 import {
   applyMode,
+  buildLoadUnits,
   checkScannedRoll,
   groupByCart,
-  loadLine,
   normalizeCartLabel,
   validateLoad,
   type LoadMode,
@@ -61,7 +61,7 @@ function useLooseScan(opts: {
   return { scan, scanFb, ambiguousModal: ambiguous.modal };
 }
 
-/** Gönderim: tek `from-rolls` çağrısı; yük açıklaması irsaliye notuna ("Dökme – 12 top"). */
+/** Gönderim: tek `from-rolls` çağrısı; yük birimleri sunucuda dökme/araba olarak açılır. */
 function useLooseSubmit(opts: {
   customerId: string;
   onDone: () => void;
@@ -127,7 +127,7 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
       ...(dest.chosen ? { destinationChosen: true as const } : {}),
       plateNumber: plateNumber.trim() || null,
       driverName: driverName.trim() || null,
-      dispatchNote: (mode === 'BULK' ? [loadLine('BULK', null, rolls.length)] : groups.map((g) => loadLine('CART', g.label, g.rolls.length))).join(' · '),
+      loadUnits: buildLoadUnits(mode, rolls),
     }),
   });
   const commit = (next: LooseRoll[]) => {
