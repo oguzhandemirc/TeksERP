@@ -17,6 +17,7 @@ import type { FabricPropertyValue } from '../../../../services/fabricProperty.se
 import { colors, radius, spacing, typography } from '../../../../theme';
 import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
+import { useDefaultTargetHint } from './defaultTargetHint';
 
 export interface TargetFieldsProps {
   state: WoFormState;
@@ -30,6 +31,8 @@ export interface TargetFieldsProps {
   onPickItem: () => void;
   /** Hedef engellerinden (`bandTone`): sarı = sayı hatalı, kırmızı = kat tipi eksik. */
   targetTone?: BandTone;
+  /** Belgenin sahibi: müşteri varsayılanı İE varsayılanını yener ("Boş bırakılırsa" ipucu). */
+  customerId?: string | null;
 }
 
 const TONE_STATUS: Partial<Record<BandTone, { icon: 'alert-outline' | 'alert-circle-outline'; text: string }>> = {
@@ -42,12 +45,15 @@ export function TargetFields(p: TargetFieldsProps) {
   const e = state.extras;
   const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
   const itemSug = state.suggestions.targetItem;
+  const defaultHint = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
   const colorSug = state.suggestions.targetColor;
   const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') };
   const anyNumber = cols.en || cols.metraj || cols.kg || cols.kat;
   if (!show('hedefKumas') && !anyNumber && !show('hedefRenk')) return null;
   const itemName = itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null;
   const itemAsk = !!itemSug && e.targetItemId !== itemSug.id;
+  const docHint = !itemAsk && state.docText.desen ? `Belgede: ${state.docText.desen}` : null;
+  const itemHint = [docHint, !e.targetItemId && !itemAsk ? defaultHint : null].filter(Boolean).join(' · ') || null;
   return (
     <>
       <SectionBand title="Hedef" icon="texture-box" tone={p.targetTone ?? 'idle'} status={TONE_STATUS[p.targetTone ?? 'idle'] ?? null} testID="ie-serit-hedef" />
@@ -57,7 +63,7 @@ export function TargetFields(p: TargetFieldsProps) {
             label="Hedef kumaş seç"
             caption="Hedef kumaş"
             value={e.targetItemLabel}
-            hint={!itemAsk && state.docText.desen ? `Belgede: ${state.docText.desen}` : null}
+            hint={itemHint}
             optional
             onPress={p.onPickItem}
             disabled={locked}
