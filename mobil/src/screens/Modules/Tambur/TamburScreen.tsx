@@ -1121,7 +1121,7 @@ export default function TamburScreen() {
           bypass.alreadyDone
             ? {
                 type: 'info',
-                text1: 'Kurşun/KK2 adımı zaten kapatılmış',
+                text1: 'Kurşun/kalite kontrol adımı zaten kapatılmış',
                 text2: 'Kart Tambur işi olarak açılıyor',
               }
             : bypass.source === 'UNASSIGNED'
@@ -1132,7 +1132,7 @@ export default function TamburScreen() {
                 }
               : {
                   type: 'info',
-                  text1: 'Kurşun/KK2 bypass ile tamamlandı',
+                  text1: 'Kurşun/kalite kontrol atlanarak tamamlandı',
                   text2: `${bypass.movedRollCount} top Tambur'a alındı`,
                 },
         );
@@ -3979,7 +3979,7 @@ export default function TamburScreen() {
                         </View>
                         <Text style={styles.rawDestHint}>
                           {recutRawDestination === 'STOCK'
-                            ? `Parça ham stoğa döner — boyahane/KK2/tambur için yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanabilir.`
+                            ? `Parça ham stoğa döner — boyahane/kalite kontrol/tambur için yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanabilir.`
                             : 'Parça ham-bitmiş olarak depoya iner — ham etiketle sevk edilebilir.'}
                         </Text>
                       </View>

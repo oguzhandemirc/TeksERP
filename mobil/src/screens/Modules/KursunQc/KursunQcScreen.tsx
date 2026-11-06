@@ -704,7 +704,7 @@ export default function KursunQcScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: panels.qualityPanel ? 'KK2 işaretlendi' : 'Top tamamlandı',
+        text1: panels.qualityPanel ? 'Kontrol tamamlandı' : 'Top tamamlandı',
         text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
       });
 
@@ -738,7 +738,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (!meterRecovering) showScreenError(err, 'KK2 başarısız', measuredWidthErrorText(err) ?? undefined);
+      if (!meterRecovering) showScreenError(err, 'Kontrol kaydedilemedi', measuredWidthErrorText(err) ?? undefined);
     },
   });
 
@@ -1619,7 +1619,7 @@ export default function KursunQcScreen() {
                     {missingRequiredProps.length > 0 && (
                       <Text style={styles.propWarnLine}>
                         Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden{' '}
-                        {panels.qualityPanel ? 'KK2 tamamlanamaz.' : 'tamamlanamaz.'}
+                        {panels.qualityPanel ? 'kontrol tamamlanamaz.' : 'tamamlanamaz.'}
                       </Text>
                     )}
                   </Surface>
@@ -1723,7 +1723,7 @@ export default function KursunQcScreen() {
                     contentStyle={styles.footerBtnContent}
                     labelStyle={styles.footerBtnLabel}
                   >
-                    {panels.qualityPanel ? 'KK2 Tamamlandı' : 'Tamamlandı'}
+                    {panels.qualityPanel ? 'Kontrol Tamamlandı' : 'Tamamlandı'}
                   </Button>
                 ) : (
                   // Barkodlu top — aynı offline-aware mantığı: loading/disabled
@@ -2093,9 +2093,9 @@ function ReopenConfirmModal({
         {canReopen ? (
           <>
             <Text style={reopenStyles.warnText}>
-              Bu kartın KK2 adımı kapatılmış; aşağıdaki {preview!.rollCount} top
+              Bu kartın kalite kontrol adımı kapatılmış; aşağıdaki {preview!.rollCount} top
               zaten Tambur'a geçmiş. Yeniden açarsan bu toplar Tambur'dan geri
-              çekilip tekrar KK2'ye alınır.
+              çekilip tekrar kalite kontrole alınır.
             </Text>
             <Text style={reopenStyles.listLabel}>
               Geri çekilecek toplar ({preview!.rollCount})
@@ -2336,11 +2336,11 @@ function RollStatusChips({ errorCount, priorCount, done, qualityStep }: { errorC
       )}
       {done ? (
         <View style={helperStyles.chipBlue}>
-          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 ✓' : 'Tamam ✓'}</Text>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'Kontrol ✓' : 'Tamam ✓'}</Text>
         </View>
       ) : (
         <View style={helperStyles.chipNeutral}>
-          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 bekliyor' : 'Bekliyor'}</Text>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'Kontrol bekliyor' : 'Bekliyor'}</Text>
         </View>
       )}
     </View>
@@ -2358,7 +2358,7 @@ function RollListItem({
   index: number;
   selected: boolean;
   onPress: () => void;
-  /** Kalite paneli kapalı istasyonda (yalnız kurşun) çip "KK2" demez. */
+  /** Kalite paneli kapalı istasyonda (yalnız kurşun) çip "Kontrol" demez. */
   qualityStep: boolean;
 }) {
   const done = roll.qc2Completed;

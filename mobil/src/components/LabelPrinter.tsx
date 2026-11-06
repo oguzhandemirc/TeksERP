@@ -143,7 +143,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
           Toast.show({
             type: 'info',
             text1: 'Bu top için etiket basılamaz',
-            text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
+            text2: 'Açık kumaş (Kurşun/kalite kontrol öncesi) fiziksel etiket almaz.',
           });
         }
         onDoneRef.current(jobRoll); // unmount'ta da — iş askıda kalmasın

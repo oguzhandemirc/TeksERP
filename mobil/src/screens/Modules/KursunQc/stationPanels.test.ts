@@ -20,11 +20,11 @@ describe('composeStationPanels — düzen tablosu', () => {
     islem: boolean;
     etiket: string;
   }[] = [
-    { ad: '(a) yalnız kalite', girdi: { inspectionEnabled: true, properties: [] }, kalite: true, islem: false, etiket: 'KK2 Tamamla' },
+    { ad: '(a) yalnız kalite', girdi: { inspectionEnabled: true, properties: [] }, kalite: true, islem: false, etiket: 'Kontrolü Tamamla' },
     { ad: '(b) yalnız kurşun', girdi: { inspectionEnabled: false, properties: [KURSUN, GRAMAJ] }, kalite: false, islem: true, etiket: 'Tamamla' },
-    { ad: '(c) kurşun + kalite', girdi: { inspectionEnabled: true, properties: [KURSUN, GRAMAJ] }, kalite: true, islem: true, etiket: 'KK2 Tamamla' },
-    { ad: 'eski backend (alan yok) — bugünkü düzen', girdi: { properties: [{ mode: 'AUTO' }] }, kalite: true, islem: true, etiket: 'KK2 Tamamla' },
-    { ad: 'eski backend, özellik yok', girdi: { properties: [] }, kalite: true, islem: false, etiket: 'KK2 Tamamla' },
+    { ad: '(c) kurşun + kalite', girdi: { inspectionEnabled: true, properties: [KURSUN, GRAMAJ] }, kalite: true, islem: true, etiket: 'Kontrolü Tamamla' },
+    { ad: 'eski backend (alan yok) — bugünkü düzen', girdi: { properties: [{ mode: 'AUTO' }] }, kalite: true, islem: true, etiket: 'Kontrolü Tamamla' },
+    { ad: 'eski backend, özellik yok', girdi: { properties: [] }, kalite: true, islem: false, etiket: 'Kontrolü Tamamla' },
   ];
   it.each(rows)('$ad', ({ girdi, kalite, islem, etiket }) => {
     const p = composeStationPanels(girdi);
@@ -158,9 +158,9 @@ describe('flowScreenLabels — Detaylı KK ekran metinleri', () => {
     for (const n of [undefined, null, '  ']) {
       expect(flowScreenLabels(n)).toEqual({
         title: 'Kurşun',
-        queueTitle: 'Kurşun · KK2 İşleri',
-        emptyQueue: "Kurşun + KK2'de bekleyen kart yok",
-        noteTitle: 'Kurşun + KK2 Notu',
+        queueTitle: 'Kurşun · Kalite Kontrol İşleri',
+        emptyQueue: "Kurşun + Kalite Kontrol'de bekleyen kart yok",
+        noteTitle: 'Kurşun + Kalite Kontrol Notu',
       });
     }
   });

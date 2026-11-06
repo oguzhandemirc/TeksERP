@@ -6,6 +6,7 @@ import {
   WORK_ORDER_STATUS_LABEL,
   ORDER_STATUS_LABEL,
   ORDER_STATUS_FILTER_LABEL,
+  STATION_TYPE_LABEL,
 } from "./labels";
 
 describe("sipariş durumu — sevk dili (panel orderStatusLabels ile aynı)", () => {
@@ -59,5 +60,13 @@ describe("isRetiredRoll (emekli/tüketilmiş top durumları)", () => {
     for (const code of RETIRED_ROLL_STATUSES) {
       expect(ROLL_STATUS_LABEL[code]).toBeTruthy();
     }
+  });
+});
+
+describe("istasyon türü — gerçek StationType enumu", () => {
+  it("INTERNAL/EXTERNAL Türkçe; ham enum adı ekrana basılmaz (prova: \"INTERNAL · Aktif\")", () => {
+    expect(trLabel(STATION_TYPE_LABEL, "INTERNAL")).toBe("Fabrika içi");
+    expect(trLabel(STATION_TYPE_LABEL, "EXTERNAL")).toBe("Fason (dış)");
+    expect(Object.keys(STATION_TYPE_LABEL).sort()).toEqual(["EXTERNAL", "INTERNAL"]);
   });
 });

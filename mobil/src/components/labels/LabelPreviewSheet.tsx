@@ -190,7 +190,7 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
             <View style={styles.loadingWrap}>
               <Icon source="alert-circle-outline" size={36} color="#94a3b8" />
               <Text style={styles.body}>
-                Bu Roll için etiket basılamaz — açık kumaş (Kurşun/KK2 öncesi)
+                Bu top için etiket basılamaz — açık kumaş (Kurşun/kalite kontrol öncesi)
                 fiziksel etiket almaz.
               </Text>
             </View>
