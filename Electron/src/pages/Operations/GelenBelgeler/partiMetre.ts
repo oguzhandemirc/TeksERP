@@ -1,7 +1,7 @@
 // Parti no + kurşun metresi yüzeyinin saf parçaları (yalnız GÖSTERİM): kip ve kapı hükmü backend detayındaki
 // `perDocument`ten (onayla aynı `perDocumentGate`); alan yoksa (PER_LINE / eski backend) bugünkü görünüm.
 import { formatNumber } from "@/lib/format";
-import type { BatchNoCandidateKind, KursunMetersSource, PerDocumentGate } from "./partiMetreTypes";
+import type { BatchNoCandidateKind, KursunMeterCandidates, KursunMetersSource, PerDocumentGate } from "./partiMetreTypes";
 import type { DeliveryNoteDetail, DeliveryNoteHeader } from "./types";
 
 /** Kartlar, bilgi satırları ve onay özeti yalnız sunucu PER_DOCUMENT kapısını gönderdiğinde. */
@@ -54,4 +54,16 @@ export function perDocumentPrecheck(note: PerDocNote, gate: PerDocumentGate): { 
   for (const w of gate.warnings) messages.push({ tone: "warn", text: w });
   if (!note.ourBatchNo) messages.push({ tone: "info", text: "Parti no seçilmedi — parti numarası seriden doğacak." });
   return { blocked: gate.code !== null, messages };
+}
+
+/**
+ * Kurşun metresi boşken söylenecek yönerge. "Okunamadı" yalnız okunan fotoğrafı olan belgede doğrudur; elle açılmış belgede
+ * hiçbir şey okunmadı. Satır toplamı biliniyorsa onu önerir (tek dokunuş; sunucuda MANUAL yazılır).
+ */
+export function kursunMissingHint(note: { scans: ReadonlyArray<unknown>; kursunMeterCandidates?: KursunMeterCandidates | null }): { text: string; lineSum: number | null } {
+  const sum = meterValue(note.kursunMeterCandidates?.lineSum ?? null);
+  const lineSum = sum !== null && sum > 0 ? sum : null;
+  const read = note.scans.length > 0;
+  const head = read ? "Metre belgeden okunamadı" : "Kurşun metresi girilmedi";
+  return { text: `${head} — onaydan önce girin${lineSum !== null ? ` ya da satır toplamını kullanın` : ""}.`, lineSum };
 }

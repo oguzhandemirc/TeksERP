@@ -1,6 +1,7 @@
 // Toplam fark şeridi (canlı): onay kapısının hükmü backend `totalsCheck`ten — panel yeniden hesaplamaz; satır yazımı
 // detay sorgusunu tazeler, şerit onunla değişir. Eski backend alanı göndermezse şerit çizilmez.
 import { blockSummary, describeDiff } from "./reviewView";
+import { blockChipLabel } from "./noteLines";
 import type { DocumentCheck, TotalsCheck } from "./reviewTypes";
 
 const HEAD = {
@@ -10,9 +11,13 @@ const HEAD = {
   none: { cls: "bg-muted/40 text-muted-foreground", text: "Belgede toplam beyanı yok — doğrulanamaz" },
 } as const;
 
-/** `approvable` false (onaylanmış belge): onay yönergesi ("fark gerekçesi istenir") basılmaz, yalnız hüküm kalır. */
-export function TotalsStrip({ check, approvable = true }: { check: TotalsCheck | undefined; approvable?: boolean }) {
+/**
+ * `approvable` false (onaylanmış belge): onay yönergesi ("fark gerekçesi istenir") basılmaz, yalnız hüküm kalır.
+ * `partiesShown`: Partiler kartı çiziliyse parti (blok) kartları orada — aynı veri iki terimle iki yerde görünmesin.
+ */
+export function TotalsStrip({ check, approvable = true, partiesShown = false }: { check: TotalsCheck | undefined; approvable?: boolean; partiesShown?: boolean }) {
   if (!check) return null;
+  const blocks = partiesShown ? [] : check.blocks;
   const head = check.ok === true ? HEAD.ok : check.ok === false ? (approvable ? HEAD.bad : HEAD.badClosed) : HEAD.none;
   return (
     <div className="flex flex-col gap-2" data-testid="totals-strip" data-ok={check.ok === null ? "unknown" : String(check.ok)}>
@@ -20,14 +25,14 @@ export function TotalsStrip({ check, approvable = true }: { check: TotalsCheck |
         {head.text}
       </div>
       <div className="flex flex-wrap gap-2">
-        {check.blocks.map((b, i) => (
+        {blocks.map((b, i) => (
           <div
             key={`${b.blockNo}-${i}`}
             data-testid={`block-${b.blockNo}`}
             data-ok={b.ok === null ? "unknown" : String(b.ok)}
             className={`rounded-md border px-3 py-2 text-xs ${b.ok === false ? "border-destructive bg-destructive/10" : b.ok ? "border-emerald-500 bg-emerald-500/10" : "bg-muted/40"}`}
           >
-            <div className="font-medium">Blok {b.blockNo}</div>
+            <div className="font-medium">{blockChipLabel(b.blockNo, blocks.length)}</div>
             <div className="tabular-nums">{blockSummary(b)}</div>
             {b.ok === null && <div className="text-muted-foreground">Beyan yok — doğrulanamaz</div>}
             {b.ok === true && <div className="text-emerald-700 dark:text-emerald-400">Beyanla tutuyor</div>}

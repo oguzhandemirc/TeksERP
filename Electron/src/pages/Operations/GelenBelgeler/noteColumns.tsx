@@ -34,7 +34,8 @@ export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
       </span>
     ),
   },
-  { id: "lines", header: "Satır", accessorFn: (r) => r._count.lines, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue())}</span> },
+  // Belgenin top satırları; onayda doğan parti kaydı (özet satırı) sayılmaz. Eski sunucu `docLineCount` göndermez.
+  { id: "lines", header: "Top", accessorFn: (r) => r.docLineCount ?? r._count.lines, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue())}</span> },
   { id: "sourceKind", header: "Kaynak", accessorFn: (r) => SOURCE_LABEL[r.sourceKind], cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span> },
   {
     id: "status",

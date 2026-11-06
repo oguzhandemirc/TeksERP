@@ -149,6 +149,10 @@ export const TERIM_AD = {
   bildirimProfilleri: "Bildirim Profilleri",
   // Eski ad "Sevkiyatlar (Muhasebe)" (KÜÇÜK-F): yalnız sevk EDİLMİŞ (DISPATCHED) sevkler — fiş, dönem Excel, fatura izi.
   sevkEdilenler: "Sevk Edilenler",
+  // Gelen belgenin onayda doğan özet satırı (enum `ARABA`): partinin sisteme tek top olarak girilen kaydı. "Araba" adı
+  // yük birimiyle (çuvalsız sevk) çakıştığı için görünen ad budur; enum/veri değişmez.
+  partiKaydi: "Parti kaydı",
+  partiKayitlari: "Parti kayıtları",
 } as const;
 
 export type TermAdKey = keyof typeof TERIM_AD;

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BATCH_KIND_LABEL } from "./partiMetre";
+import { isMultiParty, useNoteParties } from "./useNoteParties";
 import type { BatchNoCandidate, DeliveryNoteDetail, HeaderPatch } from "./types";
 
 interface Props {
@@ -29,6 +30,22 @@ function CandidateRow({ c, checked, editable, onPick }: { c: BatchNoCandidate; c
 }
 
 export function BatchNoPicker({ note, editable, onPatch }: Props) {
+  // Çok partili belgede tek parti no anlamsız: her partinin numarası Partiler kartında (onayda parti başına yazılır).
+  const multi = isMultiParty(useNoteParties(note.id).data);
+  if (multi) return <MultiPartyBatchNo />;
+  return <SingleBatchNo note={note} editable={editable} onPatch={onPatch} />;
+}
+
+function MultiPartyBatchNo() {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border p-3" data-testid="batch-no-card" data-multi="1">
+      <p className="text-sm font-medium">Parti no</p>
+      <span className="text-xs text-muted-foreground" data-testid="batch-no-multi">Bu belgede birden çok parti var — numaralar Partiler kartında.</span>
+    </div>
+  );
+}
+
+function SingleBatchNo({ note, editable, onPatch }: Props) {
   const cands = note.batchNoCandidates ?? [];
   const manual = note.ourBatchNoKey === "MANUAL";
   const blurManual = (v: string) => {

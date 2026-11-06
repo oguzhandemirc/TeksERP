@@ -31,8 +31,8 @@ export function ScanViewer({ scans, highlight, highlightScanId = null, selection
   const img = useScanImage(scan?.id ?? null, { purged: isScanPurged(scan) });
   if (!scan)
     return (
-      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Bu taslağın fotoğrafı yok (elle ya da Excel'den açıldı).
+      <div className="self-start rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="scan-none">
+        Bu belgenin fotoğrafı yok (elle ya da Excel'den açıldı).
       </div>
     );
   return (
