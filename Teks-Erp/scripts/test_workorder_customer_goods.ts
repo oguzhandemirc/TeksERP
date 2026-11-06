@@ -51,7 +51,7 @@ async function makeRoll(itemId: string, owner: string | null) {
     data: {
       barcode: `TEST-CGS-${uniq}-${Math.floor(Math.random() * 1e7)}`,
       itemId, colorId: null, width: 150, initialQty: 50, currentQty: 50,
-      status: RollStatus.STOCK, qualityGrade: "1.KALITE", entrySource: RollEntrySource.SUPPLIER_RECEIPT,
+      status: RollStatus.STOCK, entrySource: RollEntrySource.SUPPLIER_RECEIPT,
       ownerCustomerId: owner,
     },
     select: { id: true, barcode: true },
