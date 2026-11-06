@@ -124,7 +124,7 @@ export const FACTS: readonly RecordProjection[] = [
       derived("uretilenMetre", "workorder.service withProductionMeters.producedMeters", ["rolls", "work_order_steps"]),
       derived("girenMetre", "workorder.service withProductionMeters.inputMeters (computeWoInput)", ["rolls", "roll_movements", "work_order_steps"]),
       derived("siparisMetre", "workorder.service withProductionMeters.orderedMeters", ["work_order_to_order_lines", "order_lines"]),
-      derived("cariKartIdleri", "helpers/work-order-customers.helper rollupWorkOrderCustomers (bağlanma sırası, liste önizlemesi)", ["work_order_to_order_lines", "order_lines", "orders"]),
+      derived("cariKartIdleri", "helpers/work-order-customers.helper resolveWorkOrderCustomers (açık bağ: bağlanma sırası; bağsız İE: top sahibi `Roll.ownerCustomerId`; liste önizlemesi)", ["work_order_to_order_lines", "order_lines", "orders", "rolls"]),
       derived("aktifIstasyonId", "helpers/work-order-current-step.helper currentWorkOrderStep", ["work_order_steps"]),
       derived("sevkeHazir", "cloud-sync/derived-ship-ready workOrderReadyWorksWire (ready-works computeReadyWorks + ship-readiness.helper; durum HAZIR/KISMEN/YOK + hazır top·metre; canlı top yoksa null; parti taşıması `batches_sync_wo_moved` + `rolls_sync_parent_moved` batchId dalı, shipping.ready.* yazımı `cloud-sync/ship-ready-dirty` ile KIRLI)", ["rolls"]),
     ],
@@ -136,7 +136,8 @@ export const FACTS: readonly RecordProjection[] = [
       lookup("order_lines", "id", WO_OF_ORDER_LINES),
       lookup("orders", "id", WO_OF_ORDERS)], markedBy: [{ table: "batches", trigger: "batches_sync_wo_moved" }],
     deletion: "YOK", permission: "bulut:uretim:oku", module: "production.enabled",
-    retention: { wireFields: ["olusturulma"], sql: 't."createdAt"' }, catalogVersion: 1,
+    // 2 (2026-11-06): `cariKartIdleri` anlamı genişledi (bağsız İE'de top sahibi) — TAM gönderim eski satırları doldurur.
+    retention: { wireFields: ["olusturulma"], sql: 't."createdAt"' }, catalogVersion: 2,
   },
   {
     name: "cari-hesap", kind: "KAYIT", role: "OLGU", root: { table: "cari_accounts", model: "CariAccount" },

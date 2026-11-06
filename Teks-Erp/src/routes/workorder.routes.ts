@@ -71,7 +71,7 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         description: 'Şu an bu fason firma(lar)da topu olan iş emirleri (firma uuid; CSV ile çoklu): firmaya giden açık sevkte dönmemiş kalem, topu AT_SUBCONTRACTOR; yalnız planda yazılı firma eşleşmez. UUID değil ya da firma yok → 400 INVALID_FILTER_VALUE'
  *     responses:
  *       200:
- *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5), `customerCount` ve `konum` ({ sinif, canliTop, istasyonlar[{ istasyonId, ad, tur, dis, topSayisi, metre, fasondaTop, fasoncular }] } — canlı topların şu anki istasyon dağılımı)'
+ *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, bağlanma sırası, en çok 5; açık sipariş bağı yoksa iş emri toplarının sahibi) ve `filter[customerId]` aynı kuralla süzer, `customerCount` ve `konum` ({ sinif, canliTop, istasyonlar[{ istasyonId, ad, tur, dis, topSayisi, metre, fasondaTop, fasoncular }] } — canlı topların şu anki istasyon dağılımı)'
  */
 router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
 

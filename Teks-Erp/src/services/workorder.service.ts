@@ -47,7 +47,7 @@ import {
   resolveSortBy,
   readIdCondition,
 } from "../utils/query-parser";
-import { rollupWorkOrderCustomers } from "./helpers/work-order-customers.helper";
+import { loadRollOwnersByWorkOrder, resolveWorkOrderCustomers, workOrderCustomerWhere, workOrderOwnerNameSearchWhere } from "./helpers/work-order-customers.helper";
 
 // WO listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) + güvenli
 // ekler. Whitelist dışı sortBy → createdAt (bilinmeyen kolon 500'ünü + indekssiz sortu engeller).
@@ -1800,7 +1800,8 @@ export class WorkOrderService {
     delete params.filters[HIDE_CANCELLED_FILTER];
     delete params.filters[HIDE_COMPLETED_FILTER];
     // Müşteri süzgeci (liste kolonu, 2026-09-15): WO'da customerId YOK — bağ üzerinden
-    // (`orderLinks.some.orderLine.order.customerId`). Filtre kümesinden ÇIKARILIR: bu
+    // (`orderLinks.some.orderLine.order.customerId`), bağsız İE'de top sahibi (2026-11-06,
+    // `workOrderCustomerWhere` — satırdaki müşteriyle aynı kural). Filtre kümesinden ÇIKARILIR: bu
     // serviste allowlist yok, `filter[customerId]` where'e sızıp 500 verirdi. CSV `in`.
     const customerCond = readIdCondition(params.filters.customerId);
     delete params.filters.customerId;
@@ -1831,12 +1832,17 @@ export class WorkOrderService {
       const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
       w.OR = [...(w.OR ?? []), docSearch];
     }
+    // Siparişsiz İE'nin müşterisi top sahibidir (liste kolonu) — adıyla da bulunur.
+    const ownerSearch = params.search ? workOrderOwnerNameSearchWhere(params.search) : null;
+    if (ownerSearch) {
+      const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
+      w.OR = [...(w.OR ?? []), ownerSearch];
+    }
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
     if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);
     if (customerCond) {
       // AND ile: aramanın `orderLinks.some` yolu OR içinde; üstteki `orderLinks` ezilmesin.
-      // Prisma tipli sabit: revoke AST kapısı (§13c) ilişki süzgecini tipten çözüp aktif yüklemi arar.
-      const byCustomer: Prisma.WorkOrderWhereInput = { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { order: { customerId: customerCond } } } } };
+      const byCustomer = await workOrderCustomerWhere(customerCond);
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
       w.AND = [...(w.AND ?? []), byCustomer];
     }
@@ -2063,7 +2069,7 @@ export class WorkOrderService {
       producedMeters: number;
       inputMeters: number;
       orderedMeters: number;
-      /** Bağlı siparişlerin DISTINCT müşterileri (ad sırası, ≤5) + toplam — liste "Müşteri" kolonu. */
+      /** Bağlı siparişlerin DISTINCT müşterileri (bağlanma sırası, ≤5) + toplam; bağsız İE'de top sahipleri — liste "Müşteri" kolonu. */
       customers: { id: string; name: string }[];
       customerCount: number;
       /** Şu an mal tutulan fason istasyon adları (genelde tek) — liste rozeti. */
@@ -2090,6 +2096,10 @@ export class WorkOrderService {
     // select'inde `orderLinks` üzerinde where/take yok.
     const orderedByWo = new Map<string, number>();
     const woIds = wos.map((w) => w.id);
+    // Müşteri kolonu: açık bağı olmayan İE'nin müşterisi top sahibi — yalnız onlar için TEK sorgu.
+    // `orderLinks` hiç gelmediyse (çağıran seçmedi) bugünkü gibi boş kalır; sahip okunmaz.
+    const ownerlessWoIds = wos.filter((w) => Array.isArray(w.orderLinks) && w.orderLinks.length === 0).map((w) => w.id);
+    const rollOwnersByWo = await loadRollOwnersByWorkOrder(ownerlessWoIds);
     if (woIds.length > 0) {
       const preloaded = wos.every((w) => Array.isArray(w.orderLinks));
       const links = preloaded
@@ -2125,7 +2135,7 @@ export class WorkOrderService {
         orderedMeters: orderedByWo.get(w.id) ?? 0,
         currentFasonStations: [],
         fasonFirms: [],
-        ...rollupWorkOrderCustomers(w.orderLinks),
+        ...resolveWorkOrderCustomers(w.orderLinks, rollOwnersByWo.get(w.id)),
       }));
     }
 
@@ -2267,7 +2277,7 @@ export class WorkOrderService {
       orderedMeters: orderedByWo.get(w.id) ?? 0,
       currentFasonStations: [...(fasonStationsByWo.get(w.id) ?? [])],
       fasonFirms: [...(firmsByWo.get(w.id) ?? new Map())].map(([name, current]) => ({ name, current })),
-      ...rollupWorkOrderCustomers(w.orderLinks),
+      ...resolveWorkOrderCustomers(w.orderLinks, rollOwnersByWo.get(w.id)),
     }));
   }
 

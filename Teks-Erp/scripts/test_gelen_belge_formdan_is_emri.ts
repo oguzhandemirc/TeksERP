@@ -9,7 +9,7 @@
 //   §3b ⭐ okuma düştü (READ_FAILED) / okuyucu yok (NO_SERVICE) → elle değerle 201 + "sayfa okunamadı" uyarısı
 //   §8 ⭐ yarım kalan onay aynı token'la devam eder: özet satırı FAILED + başlık PARTIAL → 201 tek top/tek İE;
 //      bayat APPROVING → 201; taze APPROVING → 409 DELIVERY_NOTE_NOT_APPROVABLE (onay claim'i)
-//   §4 ⭐ mutlu yol (gelen-belge:approve OLMADAN): 1 top = kursunMeters, 1 İE, sahip yazıldı, parti no belgeden, rota = seçilen,
+//   §4 ⭐ mutlu yol (gelen-belge:approve OLMADAN): 1 top = kursunMeters, 1 İE, sahip yazıldı, liste müşterisi = sahip, parti no belgeden, rota = seçilen,
 //      hedef değer geçti, adım planı kabul, audit "WITH_WORK_ORDER: <kullanıcı>"
 //   §5 ⭐ aynı clientToken → aynı yanıt, yeni İE/top yok; strict gövde 400
 //   §6 ⭐ ownerSuggestion: tam metinde sahip adı → bulur (gönderen hariç, source FULL_TEXT); yalnız gönderen/parçalı ad → null;
@@ -26,6 +26,7 @@
 // çıkarılınca §6 Takva kırmızı;
 // onay yeniden yalnız DRAFT'ta koşturulunca §8 kırmızı; okuma kapısı [READ, PARTIAL] allowlist'ine dönünce §3b kırmızı;
 // özet BLIND süzgeci / detay `trust` argümanı / servis customerBatchNo yazımı kaldırılınca §10 3 kırmızı.
+// `loadRollOwnersByWorkOrder` boş döndürülünce §4 liste müşterisi kırmızı (2026-11-06).
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -235,6 +236,10 @@ async function run(url: string): Promise<void> {
   check("§4 ⭐ rota = seçilen, token = gövdedeki", wo?.routeTemplateId === chosen && wo?.clientToken === b4.clientToken);
   check("§4 ⭐ parti no belgeden + top partide", d4?.batchNumber === `${TAG}-P1` && !!wo?.batches.some((b) => b.batchNumber === `${TAG}-P1` && b.rolls.some((r) => r.id === d4?.rollId)), `${d4?.batchNumber}`);
   check("§4 ⭐ hedef değer geçti", wo?.targetValues.some((t) => t.valueId === gramaj.values[0].id) === true);
+  // Siparişsiz İE'nin liste müşterisi = belgenin sahibi (onay topa yazar; 2026-11-06) — süzgeç de aynı kuralla bulur.
+  const woList = await call("GET", `/api/work-orders?search=${encodeURIComponent(d4?.workOrderNo ?? "-")}&filter[customerId]=${owner}`, tk);
+  const woRows = (woList.data as unknown as Array<{ id: string; customers: { id: string }[]; customerCount: number }> | undefined) ?? [];
+  check("§4 ⭐ liste: siparişsiz İE'nin müşterisi belge sahibi + filter[customerId]=sahip bulur", woList.status === 200 && woRows.some((w) => w.id === d4?.workOrderId && w.customers[0]?.id === owner && w.customerCount === 1), `${woList.status} ${JSON.stringify(woRows.map((w) => w.customers))}`);
   const audit = await prisma.systemLog.findMany({ where: { tableName: "CUSTOMER_DELIVERY_NOTE", recordId: n }, select: { newData: true } });
   check("§4 ⭐ audit WITH_WORK_ORDER: <kullanıcı>", audit.some((a) => JSON.stringify(a.newData).includes(`WITH_WORK_ORDER: ${woUser.username}`)));
 
