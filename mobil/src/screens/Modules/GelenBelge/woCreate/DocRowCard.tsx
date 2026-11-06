@@ -43,6 +43,8 @@ interface Props {
   variant?: DocRowVariant;
   /** Tek formda "Yeniden okut". */
   onReread?: () => void;
+  /** "Taslağı iptal et" başarılı; verilmezse satır listeden kalkar. */
+  onDraftCancelled?: () => void;
   openRequest?: DocRowOpenRequest | null;
   /** Tek formda "her parti ayrı": parti kartında gramaj + makine. */
   partyPlan?: PartyPlanCtx | null;
@@ -52,7 +54,7 @@ type Picker = 'owner' | 'batch' | null;
 
 const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
 
-export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, openRequest, partyPlan }: Props) {
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, onDraftCancelled, openRequest, partyPlan }: Props) {
   const { read, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
@@ -71,7 +73,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
 
   return (
     <View style={boxStyle} testID={`belge-satir-${row.noteNo}`}>
-      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} customers={customers} />
+      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} onDraftCancelled={onDraftCancelled} customers={customers} />
       {f && (
         <>
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />

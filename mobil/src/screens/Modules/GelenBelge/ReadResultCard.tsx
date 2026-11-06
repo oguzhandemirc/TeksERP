@@ -12,6 +12,8 @@ interface Props {
   actions: { onAddPage: () => void; onDone: () => void; onRecheck: () => void };
   /** Onay kartı tablette açık (T2) → "panelde seçilecek/doğrulanacak" notları basılmaz. */
   tabletApproval?: boolean;
+  /** Eylem çubuğunun başındaki ek eylem (Belge Tara: "Taslağı iptal et"). */
+  extraAction?: React.ReactNode;
 }
 
 const TONE: Record<ReadTone, { bg: string; fg: string }> = {
@@ -21,7 +23,7 @@ const TONE: Record<ReadTone, { bg: string; fg: string }> = {
   error: { bg: colors.dangerContainer, fg: colors.dangerText },
 };
 
-export default function ReadResultCard({ watch, noteNo, actions, tabletApproval }: Props) {
+export default function ReadResultCard({ watch, noteNo, actions, tabletApproval, extraAction }: Props) {
   const v = readResultView(watch, noteNo, { tabletApproval });
   const tone = TONE[v.tone];
   const canRecheck = watch.phase === 'timeout' || watch.phase === 'error';
@@ -52,6 +54,7 @@ export default function ReadResultCard({ watch, noteNo, actions, tabletApproval 
         </Text>
       ))}
       <View style={styles.actions}>
+        {extraAction}
         {canRecheck && (
           <Button mode="text" onPress={actions.onRecheck} contentStyle={styles.btn} testID="belge-tara-sonuc-yeniden">
             Yeniden bak

@@ -20,13 +20,14 @@ import MultiPageCameraModal from './MultiPageCameraModal';
 import PageList from './PageList';
 import PagePreviewModal from './PagePreviewModal';
 import SameDocumentCard from './SameDocumentCard';
+import CancelDraftButton from './CancelDraftButton';
 import ApprovalCard from './ApprovalCard';
 import ReadResultCard from './ReadResultCard';
 import { removePage } from './docScan';
 import { usePageSource } from './usePageSource';
 import { useDocScan } from './useDocScan';
 import { useReadResult } from './useReadResult';
-import { showsApprovalCard } from './approvalGate';
+import { showsApprovalCard, showsDraftCancel } from './approvalGate';
 import { useApprovalDetail } from './useApprovalCard';
 import TeachEntry from './tanit/TeachEntry';
 
@@ -58,10 +59,7 @@ export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {})
   const readDone = read.watch?.phase === 'done' && (read.watch.summary.state === 'READ' || read.watch.summary.state === 'PARTIAL');
   const detail = useApprovalDetail(b.done?.note.id ?? null, readDone).data;
   const approvalOpen = showsApprovalCard(detail);
-  const addPageToNote = () => {
-    b.addToNote();
-    source.add();
-  };
+  const addPageToNote = () => { b.addToNote(); source.add(); };
   const sendLabel = sendButtonLabel(b, teachOnly);
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
@@ -76,7 +74,8 @@ export function DocScanBody({ teachOnly = false }: { teachOnly?: boolean } = {})
     <>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {b.done && read.watch && (
-          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen && !teachOnly} />
+          <ReadResultCard watch={read.watch} noteNo={b.done.note.noteNo} actions={{ onAddPage: addPageToNote, onDone: b.finish, onRecheck: read.recheck }} tabletApproval={approvalOpen && !teachOnly}
+            extraAction={showsDraftCancel(detail) ? <CancelDraftButton note={b.done.note} onCancelled={b.finish} /> : null} />
         )}
         {b.done && readDone && <TeachEntry key={`${b.done.note.id}:${b.done.runKey}`} detail={detail} localPages={b.done.sent} autoOpen={teachOnly} />}
         {b.done && !teachOnly && <ApprovalCard key={`${b.done.note.id}:${b.done.runKey}`} noteId={b.done.note.id} readDone={readDone} onDone={b.finish} />}

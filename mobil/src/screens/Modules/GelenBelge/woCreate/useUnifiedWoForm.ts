@@ -123,20 +123,32 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues });
   // Alt çubuk hapları: belge yokken / okunurken hap yok (çubuk tek cümle söyler).
   const missing = done || !row || reading ? [] : missingChips(issues);
-  const okut = () => {
-    if (row) {
-      wo.removeRow(row.noteId);
-      scan.b.finish();
-      setForm(clearDocRead);
-    }
-    scan.source.add();
-  };
+  const { okut, dropDoc } = docSlotActions(wo, row, scan, setForm);
   return {
-    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, customers, edit,
+    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
   };
+}
+
+/** Belge sütununu boşalt: "Yeniden okut" tarayıcıyı açar; taslak iptal edilince (`dropDoc`) tarayıcı kendiliğinden açılmaz. */
+function docSlotActions(
+  wo: { removeRow: (noteId: string) => void },
+  row: DocRow | null,
+  scan: { b: { finish: () => void }; source: { add: () => void } },
+  setForm: React.Dispatch<React.SetStateAction<WoFormState>>,
+) {
+  const dropDoc = () => {
+    if (row) wo.removeRow(row.noteId);
+    scan.b.finish();
+    setForm(clearDocRead);
+  };
+  const okut = () => {
+    if (row) dropDoc();
+    scan.source.add();
+  };
+  return { okut, dropDoc };
 }
 
 // TERIM okuma anında çözülür (rejim değişebilir) → sabit değil fonksiyon.
