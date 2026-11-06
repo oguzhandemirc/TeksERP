@@ -10,6 +10,7 @@ import type {
   BulkDeletePreview, BulkDeleteResult,
 } from "./types";
 import type { WorkOrderSourceNote } from "./photoRetentionTypes";
+import type { NotePartiesView } from "./partiesTypes";
 import type { NoteCancelPreview, NoteCancelResult } from "./cancelTypes";
 import type { DuplicateDocNoMode } from "./mukerrerTypes";
 import type { DesenRenkEslesmeMode, TabletIeGirisiMode, TanitimGuveniMode } from "./ieFormTypes";
@@ -83,6 +84,11 @@ export async function deleteLine(noteId: string, lineId: string): Promise<unknow
 
 export async function getSuggestions(noteId: string): Promise<NoteMatchSuggestions> {
   return (await apiClient.get<ApiResponse<NoteMatchSuggestions>>(`${BASE}/irsaliyeler/${noteId}/eslestirme`)).data.data;
+}
+
+/** Çok partili belgenin parti özeti (blok başına künye + canlı uyarılar + bağlı İE'ler). */
+export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
+  return (await apiClient.get<ApiResponse<NotePartiesView>>(`${BASE}/irsaliyeler/${noteId}/partiler`)).data.data;
 }
 
 /**

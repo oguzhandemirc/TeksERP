@@ -48,6 +48,7 @@ import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
 import { konumYedegi } from "./lib/gelen-belge-motor-konum-yedegi";
+import { cokBlok, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
 
 let pass = 0;
 let fail = 0;
@@ -373,6 +374,10 @@ etiketPencere(check, gercek);
 degerSiniri(check);
 // ── §15 tanıtmada konum yedeği: bozuk okunan etiket ("Mytei:") değeri kaybettirmez (`lib/gelen-belge-motor-konum-yedegi.ts`) ──
 konumYedegi(check);
+// ── §16 çok blok varyantları: ara toplam yeri, sütun taşması, sıra no ↔ konum (`lib/gelen-belge-motor-cok-blok.ts`) ──
+cokBlok(check, gercek, sablonlar);
+cokBlokSahipsiz(check, gercek, sablonlar);
+cokBlokTanit(check, gercek, sablonlar);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

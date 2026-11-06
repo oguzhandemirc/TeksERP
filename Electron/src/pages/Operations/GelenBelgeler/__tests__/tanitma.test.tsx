@@ -101,7 +101,7 @@ describe("tanıtma çekirdeği (saf)", () => {
   it("tekrar eden bölüm: başlangıç etiketi + parti künyesi alanı bölüm başına", () => {
     let s = assignField(toggleWord(initialTeach(SCAN, "G"), 6), W, "partiNo");
     s = setRepeats(s, true);
-    expect(teachProblems({ ...s, name: "Güleçsoy" })).toEqual(["Tekrar eden bölümün başlangıç yazısını seçin."]);
+    expect(teachProblems({ ...s, name: "Güleçsoy" })).toEqual(["Tekrar eden bölümün başlangıç yazısını seçin.", "Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin."]);
     s = { ...s, name: "Güleçsoy", sectionStart: "Ham PartiNo" };
     const b = suggestBody(s, W, "s1");
     expect(b.assignments[0]).toMatchObject({ field: "partiNo", section: true });

@@ -30,8 +30,8 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
   const previewBody = useMemo(() => (body ? forPreview(body) : null), [body]);
   const [saving, setSaving] = useState(false);
   const [similar, setSimilar] = useState<SimilarTemplate[] | null>(null);
-  const problems = state ? teachProblems(state) : [];
-  const previewProblems = state ? teachProblems({ ...state, name: PREVIEW_NAME }) : [];
+  const problems = state ? teachProblems(state, words.data?.words) : [];
+  const previewProblems = state ? teachProblems({ ...state, name: PREVIEW_NAME }, words.data?.words) : [];
   // Güncelle kipinde ilk önizleme Gelişmiş'te de kendiliğinden: kayıtlı alanların değeri + belge üstündeki yeri ondan gelir.
   const [firstPreview, setFirstPreview] = useState(false);
   const pv = useTeachPreview(previewBody, (opts.auto === true || (Boolean(existing) && !firstPreview)) && previewProblems.length === 0 && !saving);

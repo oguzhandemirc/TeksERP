@@ -134,11 +134,14 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     await press(r.getByTestId('tanit-kutu-4'));
     await press(r.getByTestId('tanit-kutu-5'));
     await press(r.getByTestId('tanit-bolum-secimden'));
+    expect(r.getByTestId('tanit-eksikler')).toHaveTextContent(/top tablosu gerekli/); // çok blok: Metre sütunu şart
+    await press(r.getByTestId('tanit-kutu-7'));
+    await press(r.getByTestId('tanit-sutun-m'));
     await press(r.getByTestId('tanit-onizle'));
     await flush();
     expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({
       assignments: [{ field: 'partiNo', section: true }],
-      sectionStartLabel: 'Ham PartiNo:',
+      sectionStartLabel: 'Ham PartiNo:', table: { columns: [{ key: 'm', header: 'Metre' }] },
     });
   });
 

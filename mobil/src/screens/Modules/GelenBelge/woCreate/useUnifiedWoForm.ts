@@ -15,6 +15,7 @@ import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import { useWoRows, type DocRow } from './useWoRows';
+import { isDone } from './docRow';
 import { useWoFieldLayout } from './useWoFieldPrefs';
 import { valuedFields } from './woFieldCatalog';
 import type { WoPlanCtx } from './WoPlanFields';
@@ -113,7 +114,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   // Gelen metre: çok partide parti toplamı, ayrı toplarda top toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
   const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.rolls ? rollsTotal(row.form.rolls) : row.form.meters) : null;
   const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
-  const done = row?.result?.kind === 'OPENED' || row?.result?.kind === 'DRAFT';
+  const done = !!row && isDone(row);
   // Sıra = göz akışı: sol sütun (belgeden gelenler) önce, sonra sağ sütun (üretim kararı).
   const issues: FormIssue[] = [
     ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssueList(row.form) : []),

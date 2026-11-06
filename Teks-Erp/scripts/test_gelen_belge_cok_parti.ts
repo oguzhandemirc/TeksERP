@@ -35,6 +35,7 @@ import { classifyWithFallback, extractDocument, type OcrResult } from "../src/li
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { sayfaDamgasiUyaridir } from "./lib/gelen-belge-cok-parti-sayfa";
+import { cokBlokKismi } from "./lib/gelen-belge-cok-parti-kismi";
 import { StationCapabilityService } from "../src/services/station-capability.service";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 
@@ -319,6 +320,8 @@ async function run(url: string): Promise<void> {
     check(`§10 ⭐ ${mode}: istasyonun kat varsayılanı her iş emrine (tek parti yoluyla aynı)`, !!fold && r10.status === 201 && ids.length === (mode === "PER_PARTY" ? 2 : 1) && folds.length === ids.length && folds.every((f) => f === fold.code),
       `${r10.status} ${r10.code ?? ""} ${JSON.stringify({ folds, want: fold?.code })}`);
   }
+
+  await cokBlokKismi({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body });
 }
 
 async function cleanup(): Promise<void> {

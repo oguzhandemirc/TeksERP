@@ -103,6 +103,53 @@ function sectionWarnings(s: SectionResult, isLast: boolean, page: SectionsResult
 }
 
 const METER_COLS = ["m", "metre", "mt"];
+const SEQ_COLS = ["siraNo", "sira"];
+
+type PlacedRow = { b: TableResult["blocks"][number]; r: TableResult["blocks"][number]["rows"][number]; cy: number };
+
+/**
+ * Satırın bölümü (2026-11-06, V6): konum bandı + basılı SIRA NO. Her bölümün sınırı, konumla düşen satırlarının en küçük sıra
+ * no'sudur; sütuna taşmış (`spill`) satır bölümünü sıra no'dan alır (konumu anlamsız). Konum ile sıra çelişirse ya da taşma
+ * satırının sırası okunamazsa konum/blok kalır + `SECTION_ROW_ORDER_AMBIGUOUS` (OCR tek rakam düşürebilir, R1).
+ */
+function placeRows(rows: PlacedRow[], idxOf: (cy: number) => number): { rows: Array<PlacedRow & { at: number }>; warnings: string[] } {
+  const seqOf = (x: PlacedRow): number | null => {
+    const v = SEQ_COLS.map((c) => x.r.cells[c]?.value).find((y) => y);
+    const n = v ? Number(v) : NaN;
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+  const pos = (x: PlacedRow) => Math.max(0, idxOf(x.cy));
+  // Taşma satırının konum yedeği: kendi bloğunun konumla düşen son satırının bölümü (yoksa blok başlığının).
+  const blockAt = new Map<unknown, number>();
+  for (const x of rows) if (!x.r.spill) blockAt.set(x.b, pos(x));
+  const startOf = new Map<number, number>();
+  for (const x of rows) {
+    const n = seqOf(x);
+    if (x.r.spill || n === null) continue;
+    const k = pos(x);
+    startOf.set(k, Math.min(startOf.get(k) ?? Infinity, n));
+  }
+  const bounds = [...startOf.entries()].sort((a, c) => a[0] - c[0]);
+  const monotone = bounds.every((e, i) => i === 0 || e[1] > bounds[i - 1]![1]);
+  const bySeq = (n: number): number | null => {
+    if (!monotone || bounds.length === 0) return null;
+    let at: number | null = null;
+    for (const [k, start] of bounds) if (n >= start) at = k;
+    return at;
+  };
+  const warnings: string[] = [];
+  const out = rows.map((x) => {
+    const n = seqOf(x);
+    const seqAt = n !== null ? bySeq(n) : null;
+    const fallback = x.r.spill ? (blockAt.get(x.b) ?? Math.max(0, idxOf(x.b.headerRect.y))) : pos(x);
+    const at = x.r.spill ? (seqAt ?? fallback) : fallback;
+    if ((x.r.spill && seqAt === null) || (!x.r.spill && seqAt !== null && seqAt !== at)) {
+      warnings.push(`SECTION_ROW_ORDER_AMBIGUOUS: sıra ${n ?? "?"} satırının partisi sıra no ile konumdan kesin çıkmadı — satırın partisini kontrol edin`);
+    }
+    return { ...x, at };
+  });
+  return { rows: out, warnings };
+}
 
 /** Alanın konumsuz kopyası (anchor `window` ve sayfa konumlu roi yedeği düşer; öteki stratejiler aynen). */
 function unpinned(f: FieldSpec): FieldSpec {
@@ -147,10 +194,11 @@ export function extractSections(ocr: OcrResult, template: DocumentTemplate, spec
       rowKeys: [], rowCount: 0, meterSum: "0", kgSum: "0", declared: null, warnings: [],
     };
   });
+  const placed = placeRows(rows, idxOf);
   const meters = new Map<number, Array<string | null>>();
   const kgs = new Map<number, Array<string | null>>();
-  for (const { b, r, cy } of rows) {
-    const s = sections[Math.max(0, idxOf(cy))]!;
+  for (const { b, r, at } of placed.rows) {
+    const s = sections[at]!;
     s.rowKeys.push(rowKey(b.blockNo, r.index));
     s.rowCount++;
     (meters.get(s.sectionNo) ?? meters.set(s.sectionNo, []).get(s.sectionNo)!).push(METER_COLS.map((c) => r.cells[c]?.value).find((x) => x) ?? null);
@@ -159,10 +207,7 @@ export function extractSections(ocr: OcrResult, template: DocumentTemplate, spec
   for (const b of table?.blocks ?? []) {
     if (!b.declared || b.rows.length === 0) continue;
     const votes = new Map<number, number>();
-    for (const r of b.rows) {
-      const i = Math.max(0, idxOf(r.rect.y + r.rect.height / 2));
-      votes.set(i, (votes.get(i) ?? 0) + 1);
-    }
+    for (const x of placed.rows) if (x.b === b) votes.set(x.at, (votes.get(x.at) ?? 0) + 1);
     const best = [...votes.entries()].sort((a, c) => c[1] - a[1])[0]![0];
     const s = sections[best]!;
     if (!s.declared) s.declared = { count: b.declared.count, kg: b.declared.kg, m: b.declared.m };
@@ -172,7 +217,7 @@ export function extractSections(ocr: OcrResult, template: DocumentTemplate, spec
     s.kgSum = sumCanonical(kgs.get(s.sectionNo) ?? []);
   }
   sections.forEach((s, i) => s.warnings.push(...sectionWarnings(s, i === sections.length - 1, page)));
-  const warnings = sections.flatMap((s) => s.warnings);
+  const warnings = [...placed.warnings, ...sections.flatMap((s) => s.warnings)];
   if (page && page.no < page.of && !warnings.some((w) => w.startsWith("SECTION_CONTINUES"))) {
     warnings.push(`PAGE_INCOMPLETE: sayfa ${page.no}/${page.of} — belgenin ${page.of} sayfası var; diğer sayfaları aynı belgeye okutun`);
   }

@@ -394,6 +394,8 @@ export interface TableRow {
   cells: Record<string, TableCell>;
   rect: OcrRect;
   needsReview: boolean;
+  /** Tablonun sağındaki bitişik sütuna taşmış devam satırı (konumu bölüm bandı söylemez; bölüm sıra no'dan). */
+  spill?: boolean;
 }
 
 /** Beyan edilen toplamlar; bulunamayan alan null. Kanonik sayı dizesi ("586" / "141.7"). */

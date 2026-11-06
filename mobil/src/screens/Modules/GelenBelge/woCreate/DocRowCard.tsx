@@ -15,6 +15,7 @@ import { fmtKursunMeters } from '../readResult';
 import { batchPatch, meterChoices } from '../approvalGate';
 import { detailFromSummary, pinRecent, rowIssueList, withSummaryFields } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
+import { isDone } from './docRow';
 import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
 import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
@@ -59,6 +60,8 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
   const f = row.form;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
   const locked = done || wo.saving;
+  // PER_PARTY kısmi başarı: belge onaylandı (künye kilitli), düşen partinin alanları + gramaj düzeltilebilir.
+  const partyLocked = isDone(row) || wo.saving;
   const issueList = f && wo.mode !== 'SEPARATE' ? rowIssueList(f) : [];
   const meterText = f?.meters != null ? `${fmtKursunMeters(f.meters)} m` : null;
   const boxStyle = single ? styles.flat : [styles.box, row.result?.kind === 'OPENED' && styles.ok, row.result?.kind === 'FAILED' && styles.warn];
@@ -71,14 +74,14 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />
           <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)}
             testID={single ? 'ie-serit-parti' : `belge-serit-parti-${row.noteNo}`} />
-          {f.multi ? <PartyRows row={row} wo={wo} locked={locked} /> : (
+          {f.multi ? <PartyRows row={row} wo={wo} locked={partyLocked} /> : (
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
               <RollRows row={row} wo={wo} locked={locked} />
               {!f.rolls && <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />}
             </>
           )}
-          {!hideGramaj && <GramajField row={row} wo={wo} locked={locked} />}
+          {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
           {!single && !done && issueList.map((n) => <Text key={n.text} style={styles.note}>• {n.text}</Text>)}
         </>
       )}
@@ -189,6 +192,7 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
             ? `${r.workOrders.length} ${TERIM.terbiyeIsEmri.tekilKucuk} açıldı: ${r.workOrders.map((w) => `${w.workOrderNo} · Parti ${w.batchNumber ?? '—'}`).join(', ')}`
             : `${TERIM.terbiyeIsEmri.tekil} açıldı: ${r.workOrderNo} · Parti ${r.batchNumber}`}
         </Text>
+        {r.failed?.map((f) => <Text key={f.blockNo} style={[styles.note, styles.warnText]} testID={`belge-satir-dusen-${row.noteNo}-${f.blockNo}`}>{`${f.blockNo}. parti açılamadı — düzeltip yeniden kaydedin.`}</Text>)}
         {r.print === 'PRINTED' && <Text style={styles.note}>Refakat kartı yazdırıldı.</Text>}
         {r.print !== 'PRINTED' && (
           <Button mode="outlined" icon="printer" onPress={() => wo.print(row.noteId, r.workOrderId)} contentStyle={styles.btn} testID={`belge-satir-yazdir-${row.noteNo}`}>

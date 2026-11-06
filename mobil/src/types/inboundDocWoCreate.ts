@@ -69,7 +69,40 @@ export interface CreateWorkOrderFromNoteResult {
   batchNumber: string;
   rollId: string;
   /** Çok partili kayıtta açılan iş emirleri (eski sunucu göndermez). */
-  workOrders?: { blockNos: number[]; workOrderId: string; workOrderNo: string; batchNumber: string | null }[];
+  /** `existing`: PER_PARTY yeniden gönderimde önceki denemede açılmış İE (yeniden açılmadı, yeniden basılmaz). */
+  workOrders?: { blockNos: number[]; workOrderId: string; workOrderNo: string; batchNumber: string | null; existing?: boolean }[];
+  /** PER_PARTY kısmi başarı: açılamayan partiler (eski sunucu göndermez); belge onaylı kalır, düzeltip yeniden gönderilir. */
+  failed?: PartyWorkOrderFailure[];
+}
+
+export interface PartyWorkOrderFailure {
+  blockNo: number;
+  code: string | null;
+  message: string;
+}
+
+/** `GET /gelen-belge/irsaliyeler/:id/partiler` — parti özeti + canlı uyarılar + fabrika varsayılan kipi. */
+export interface NoteParty {
+  blockNo: number;
+  batchNo: string | null;
+  orderNo: string | null;
+  declaredTopCount: number | null;
+  declaredMeters: number | null;
+  lineCount: number;
+  meters: number;
+  weightKg: number | null;
+  warnings: string[];
+  // Çok blok (2026-11-06; eski sunucu göndermez → gizlenir): müşterinin işlem yazısı, müşterinin İE no'su, partiye bağlı İE'ler.
+  processText?: string | null;
+  senderWorkOrderNo?: string | null;
+  workOrders?: { id: string; workOrderNumber: string; status: string }[];
+}
+
+export interface NotePartiesView {
+  parties: NoteParty[];
+  warnings: string[];
+  multi: boolean;
+  defaultMode: MultiPartyMode;
 }
 
 export type MultiPartyMode = 'SINGLE' | 'PER_PARTY';

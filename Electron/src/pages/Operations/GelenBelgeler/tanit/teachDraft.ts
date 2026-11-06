@@ -19,6 +19,9 @@ export const FIELD_OPTIONS = [
   { key: "hedefMetraj", label: "Hedef metraj" },
   { key: "hedefKg", label: "Hedef kg" },
   { key: "not", label: "Not" },
+  // Çok blok (2026-11-06; backend ASSIGNABLE_FIELDS aynası): bölümün işlemi (bilgi) ve müşterinin İE no'su (İE künyesi).
+  { key: "islem", label: "İşlem (bilgi)" },
+  { key: "gonderenIsEmriNo", label: "Müşteri İE No" },
 ] as const;
 export type FieldKey = (typeof FIELD_OPTIONS)[number]["key"];
 
@@ -31,7 +34,7 @@ export const COLUMN_OPTIONS = [
 export type ColumnKey = (typeof COLUMN_OPTIONS)[number]["key"];
 
 /** Tekrarlayan bölümde varsayılan olarak bölüm başına okunan alanlar (parti künyesi). */
-export const SECTION_DEFAULT_FIELDS: readonly FieldKey[] = ["partiNo", "siparisNo", "topAdet", "toplamMetre"];
+export const SECTION_DEFAULT_FIELDS: readonly FieldKey[] = ["partiNo", "siparisNo", "topAdet", "toplamMetre", "islem", "gonderenIsEmriNo"];
 
 export interface Identifier {
   text: string;
@@ -206,14 +209,26 @@ export function initialTeach(scan: ScanWords, name = "", keep: readonly string[]
 }
 
 /** Kaydetmeden/önizlemeden önce eksikler (Türkçe); boş = hazır. */
-export function teachProblems(s: TeachState): string[] {
+export function teachProblems(s: TeachState, words?: readonly ScanWord[]): string[] {
   const p: string[] = [];
   if (s.name.trim().length < 2) p.push("Belge tipine bir ad verin (en az 2 karakter).");
   if (Object.keys(s.fields).length === 0 && s.kept.length === 0) p.push("En az bir alan atayın (ör. Parti No).");
   if (!s.identifiers.some((d) => d.on)) p.push("En az bir kimlik yazısı işaretleyin (başlık, firma adı).");
   if (s.repeats && !s.sectionStart.trim()) p.push("Tekrar eden bölümün başlangıç yazısını seçin.");
   if (s.repeats && s.sectionFields.length === 0) p.push("Tekrar eden bölümde en az bir alan bölüm başına okunmalı.");
+  // Çok blok: her bölümün satırları ve metresi tablodan okunur ("Şablonu güncelle" eski tabloyu taşıyabilir).
+  if (s.repeats && !s.columns.m?.length && !s.keepOld.includes("tables")) p.push("Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.");
+  if (words && meterOnCountRow(s, words)) p.push('"Gelen metre" adet satırına atanmış (T.Adet\'in sağındaki sayı top adedidir) — tablonun Metre sütununu işaretleyin, "Gelen metre"yi kaldırın.');
   return p;
+}
+
+/** Backend `suggest.ts` `teachErrors` aynası: "Gelen metre" adet/toplam satırının sağındaki TAM SAYIYA atanmış mı (T.Adet 16 → 16 top). */
+export function meterOnCountRow(s: TeachState, words: readonly ScanWord[]): boolean {
+  const idx = s.fields.toplamMetre;
+  if (!idx?.length || !/^\d+$/.test(textOf(words, idx).trim())) return false;
+  const line = words[idx[0]!]!.lineNo;
+  const x = Math.min(...idx.map((i) => words[i]!.rect.x));
+  return words.some((w) => w.lineNo === line && w.rect.x < x && /adet/i.test(w.text));
 }
 
 /** `POST /gelen-belge/sablonlar/oneri` gövdesi — kutular OCR çerçevesinde. */

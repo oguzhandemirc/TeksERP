@@ -6,7 +6,7 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
-import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode } from '../types/inboundDocWoCreate';
+import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, NotePartiesView } from '../types/inboundDocWoCreate';
 import type { ClientOcr } from './deviceOcr';
 import type { DocRoll } from '../types/inboundDocRolls';
 import type { SameDocumentMatch, SameDocumentQuery } from '../types/inboundDocSameDoc';
@@ -221,27 +221,7 @@ export interface InboundDocSettings {
 export type TabletWoEntry = 'IKISI' | 'BELGE' | 'TOP';
 
 export type { SameDocumentMatch, SameDocumentQuery, SameDocumentState } from '../types/inboundDocSameDoc';
-export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode } from '../types/inboundDocWoCreate';
-
-/** `GET /gelen-belge/irsaliyeler/:id/partiler` — parti özeti + canlı uyarılar + fabrika varsayılan kipi. */
-export interface NoteParty {
-  blockNo: number;
-  batchNo: string | null;
-  orderNo: string | null;
-  declaredTopCount: number | null;
-  declaredMeters: number | null;
-  lineCount: number;
-  meters: number;
-  weightKg: number | null;
-  warnings: string[];
-}
-
-export interface NotePartiesView {
-  parties: NoteParty[];
-  warnings: string[];
-  multi: boolean;
-  defaultMode: MultiPartyMode;
-}
+export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../types/inboundDocWoCreate';
 
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
 export interface InboundNotePatch {

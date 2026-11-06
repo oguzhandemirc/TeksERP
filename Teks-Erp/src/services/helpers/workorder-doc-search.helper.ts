@@ -22,6 +22,9 @@ export function stationWorkSearchWhere(q: string): Prisma.WorkOrderWhereInput | 
   const own = buildTextSearch<Prisma.WorkOrderWhereInput>(q, { code: ["workOrderNumber", "batches.some.batchNumber"] });
   const doc = workOrderDocSearchWhere(q);
   const ors = doc ? [...own, doc] : own;
+  // K4 (2026-11-06): gönderenin İE no'su ("26K-24749") belgeden İE açılırken künyeye yazılır; istasyonda onunla da bulunur.
+  const sender = q.trim().toUpperCase();
+  if (sender.length >= 3) ors.push({ parameters: { path: ["senderWorkOrderNo"], string_contains: sender } });
   return ors.length > 0 ? { OR: ors } : null;
 }
 

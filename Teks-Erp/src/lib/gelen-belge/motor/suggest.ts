@@ -25,6 +25,9 @@ export const ASSIGNABLE_FIELDS = {
   hedefMetraj: { label: "Hedef metraj", type: "decimal" },
   hedefKg: { label: "Hedef kg", type: "decimal" },
   not: { label: "Not", type: "text" },
+  // Çok blok (2026-11-06): bölümün işlemi (boyahanenin; bilgi) ve gönderenin İE no'su — parti kartı + İE künyesi (K4).
+  islem: { label: "İşlem (bilgi)", type: "text" },
+  gonderenIsEmriNo: { label: "Müşteri İE No", type: "alnum" },
 } as const satisfies Record<string, { label: string; type: FieldType }>;
 export type AssignableField = keyof typeof ASSIGNABLE_FIELDS;
 /** Zod enum'u için anahtar listesi (uç ↔ motor tek kaynak). */
@@ -59,6 +62,33 @@ export interface TemplateSuggestion {
   /** Alan başına üretilen strateji özeti (ekranda "Parti No ← 'Ham PartiNo' sağında"). */
   explain: Array<{ field: string; strategy: "anchor" | "roi"; label: string | null; direction: string | null }>;
   errors: string[];
+}
+
+/** Adet etiketi ("T.Adet", "Top Adedi"): sağındaki sayı metre değil top sayısıdır. */
+const COUNT_LABEL = /adet/iu;
+
+/**
+ * Çok blok tanıtma kapısı (2026-11-06, Gülkesim demo şablonu: "Gelen metre" T.Adet'in sağındaki 16'ya bağlanmıştı): "Gelen metre"nin
+ * etiketi adet etiketi ya da tablonun toplam etiketi olamaz. "Tekrar eden bölümde tablo gerekli" tablette (`teachProblems`) —
+ * "Şablonu güncelle" eski tabloyu taşıyabildiği için kararı yalnız tablet bilir.
+ */
+function teachErrors(input: TemplateSuggestInput, explain: TemplateSuggestion["explain"]): string[] {
+  const out: string[] = [];
+  const meterLabel = explain.find((e) => e.field === "toplamMetre")?.label ?? null;
+  const totals = input.table?.totalsLabel?.trim() ?? null;
+  const tapped = input.assignments.find((a) => a.field === "toplamMetre");
+  const integer = !!tapped && /^\d+$/.test(wordsIn(input.ocr, tapped.rect).trim());
+  // Tablolu belgede toplam satırı tablo toplamından okunur; tablosuzda yalnız tam sayı (adet) reddedilir, metre değeri serbest.
+  const countRow = !!meterLabel && (COUNT_LABEL.test(meterLabel) || (!!totals && cleanLabel(meterLabel) === cleanLabel(totals)));
+  if (countRow && (integer || (input.table?.columns.length ?? 0) > 0)) {
+    out.push(`"${meterLabel}" adet/toplam satırıdır — sağındaki sayı top adedi; gelen metre için tablonun Metre sütununu işaretleyin ("Gelen metre" atamasını kaldırın).`);
+  }
+  return out;
+}
+
+/** Kutunun içindeki OCR kelimeleri (merkezi kutuda). */
+function wordsIn(ocr: OcrResult, rect: OcrRect): string {
+  return collectLines(ocr).flatMap((l) => l.elements ?? []).filter((e) => inside(center(e.rect), rect)).map((e) => e.text).join(" ");
 }
 
 const center = (r: OcrRect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
@@ -196,7 +226,7 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   addLabelWindows(t, input.ocr, labelRects);
   addPositionFallbacks(t, input.ocr, valueRects);
   const v = validateTemplate(t);
-  return { template: t, explain, errors: v.errors };
+  return { template: t, explain, errors: [...teachErrors(input, explain), ...v.errors] };
 }
 
 /** Pencere çıkarımın göreceği BÖLGE çerçevesinde kurulur (iki belgeli fotoğrafta bölge koordinatı sayfanınki değil). */

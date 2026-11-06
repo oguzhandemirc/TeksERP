@@ -158,8 +158,8 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
   const bodyKey = previewBody ? JSON.stringify(previewBody) : '';
   const { preview, previewError, previewing, fetchPreview } = usePreview();
   const previewFresh = !!preview && preview.body === bodyKey;
-  const problems = state ? teachProblems(state) : [];
-  const previewProblems = state ? teachProblems({ ...state, name: PREVIEW_NAME }) : [];
+  const problems = state ? teachProblems(state, words.data?.words) : [];
+  const previewProblems = state ? teachProblems({ ...state, name: PREVIEW_NAME }, words.data?.words) : [];
 
   const runPreview = async () => {
     if (!previewBody || previewProblems.length > 0 || saving) return;

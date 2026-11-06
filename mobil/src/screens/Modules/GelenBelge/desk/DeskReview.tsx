@@ -12,6 +12,7 @@ import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import DocRowCard from '../woCreate/DocRowCard';
 import type { DocRow, WoRowsState } from '../woCreate/useWoRows';
+import { isDone } from '../woCreate/docRow';
 import { shortcutTitle } from '../woCreate/woFromDoc';
 import { machinesForRoute } from './deskPlan';
 import { machineChoice } from './machineChoice';
@@ -33,8 +34,7 @@ export interface DeskReviewProps {
 export default function DeskReview(p: DeskReviewProps) {
   const { width, height } = useWindowDimensions();
   const wide = width > height;
-  const done = p.row.result?.kind === 'OPENED' || p.row.result?.kind === 'DRAFT';
-  const locked = done || p.wo.saving;
+  const locked = isDone(p.row) || p.wo.saving;
   const doc = <DocRowCard row={p.row} wo={p.wo} customers={p.customers} customersLoading={p.customersLoading} hideGramaj={p.row.form?.multi?.mode === 'PER_PARTY'} />;
   const side = (
     <>
