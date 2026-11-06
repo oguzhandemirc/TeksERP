@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { formatNumber } from "@/lib/format";
+import { TERIM } from "@/lib/terim";
 import { fmtMeters } from "./partiMetre";
 import { getNoteParties, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { NoteParty } from "./partiesTypes";
@@ -80,7 +81,7 @@ function PartyItem({ p }: { p: NoteParty }) {
       ))}
       {p.workOrders && p.workOrders.length > 0 && (
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs" data-testid={`parti-ie-${p.blockNo}`}>
-          <span className="text-muted-foreground">İş emri:</span>
+          <span className="text-muted-foreground">{`${TERIM.terbiyeIsEmri.tekil}:`}</span>
           {p.workOrders.map((w) => (
             <Link key={w.id} to={`/operations/work-orders/${w.id}`} className="font-medium text-primary underline-offset-2 hover:underline">{w.workOrderNumber}</Link>
           ))}

@@ -34,7 +34,7 @@ describe("Partiler kartı", () => {
     const p1 = within(screen.getByTestId("parti-1"));
     expect(p1.getByText("P2618733")).toBeInTheDocument();
     expect(p1.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Sipariş 56967", "İşlem: KDK APRE", "Müşteri İE 24749", "15 satır / 16 TOP", fmtMeters(3935), "512,5 kg"]);
-    expect(screen.getByTestId("parti-ie-1")).toHaveTextContent(/^İş emri:IE-0001$/);
+    expect(screen.getByTestId("parti-ie-1")).toHaveTextContent(/^(Terbiye )?İş Emri:IE-0001$/);
     expect(screen.getByRole("link", { name: "IE-0001" })).toHaveAttribute("href", "/operations/work-orders/w1");
     expect(screen.getByTestId("parti-2")).toHaveTextContent("Başlıkta 16 TOP yazıyor, 14 satır okundu");
     expect(screen.queryByTestId("parti-ie-2")).toBeNull();
