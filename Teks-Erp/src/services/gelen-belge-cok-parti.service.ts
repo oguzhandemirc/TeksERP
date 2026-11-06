@@ -168,6 +168,8 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
   const run = async ({ token, rolls, targets, plan, batchNo }: { token: string; rolls: OpenInput["rolls"]; targets: OpenInput["targetValues"]; plan: OpenInput["stepPlanning"]; batchNo?: string | null }) => {
     const stepPlanning = plan as WorkOrderCreateInput["stepPlanning"];
     const sender = [...new Set(rolls.map((r) => senderNos.get(r.blockNo)).filter((x): x is string => !!x))].join(", ");
+    const customerBatch = partyBatchNos(i.parties, rolls);
+    const parameters = { ...(sender ? { senderWorkOrderNo: sender } : {}), ...(customerBatch ? { customerBatchNo: customerBatch } : {}) };
     const res = await workOrders.quickStart({
       clientToken: token,
       rollBarcodes: rolls.map((r) => r.barcode),
@@ -177,7 +179,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
       ...(i.foldType ? { foldType: i.foldType } : {}),
       ...(stepPlanning?.length ? { stepPlanning } : {}),
       ...(i.notes ? { notes: i.notes } : {}),
-      ...(sender ? { parameters: { senderWorkOrderNo: sender } } : {}),
+      ...(Object.keys(parameters).length ? { parameters } : {}),
       ...i.fields,
       ...(i.deriveTargetQuantity ? { targetQuantity: partyMeters(i.parties, rolls) } : {}),
       sourceNoteId: i.noteId,
@@ -221,6 +223,15 @@ const errorCode = (e: AppError): string | null => {
   return typeof c === "string" ? c : null;
 };
 
+
+/**
+ * Toplarının partilerinde formda onaylanan parti no'ları (kağıttaki ayırt edici no). `batchNumberSource=SERIES`te İE partisi
+ * seriden doğar; kağıttaki no sessizce kaybolmasın diye künyeye (`parameters.customerBatchNo`) yazılır ve aranır.
+ */
+function partyBatchNos(parties: ReadonlyArray<PartyInput>, rolls: OpenInput["rolls"]): string {
+  const nos = rolls.map((r) => parties.find((p) => p.blockNo === r.blockNo)?.batchNo?.trim()).filter((x): x is string => !!x);
+  return [...new Set(nos)].join(", ").slice(0, 200);
+}
 
 /** Toplarının parti metreleri toplamı (3 hane). */
 function partyMeters(parties: ReadonlyArray<PartyInput>, rolls: OpenInput["rolls"]): number {

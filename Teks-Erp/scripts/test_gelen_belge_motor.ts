@@ -48,7 +48,7 @@ import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
 import { konumYedegi } from "./lib/gelen-belge-motor-konum-yedegi";
-import { cokBlok, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
+import { cokBlok, cokBlokBirlesikToplam, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
 
 let pass = 0;
 let fail = 0;
@@ -378,6 +378,7 @@ konumYedegi(check);
 cokBlok(check, gercek, sablonlar);
 cokBlokSahipsiz(check, gercek, sablonlar);
 cokBlokTanit(check, gercek, sablonlar);
+cokBlokBirlesikToplam(check, gercek, sablonlar);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

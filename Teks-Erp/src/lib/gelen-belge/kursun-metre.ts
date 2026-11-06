@@ -53,12 +53,26 @@ export function resolveKursunMeters(input: KursunMeterInput): KursunMeterResult 
   const src = input.template?.meterSources;
   const lineSum = positive(sumCanonical(input.lineMeters.map((m) => String(m))));
   const candidates: KursunMeterCandidates = { output: roleValue(src?.output, input), total: roleValue(src?.total, input), input: roleValue(src?.input, input), lineSum };
-  const pick: Array<[KursunMeterResult["source"], string | null]> = [["OUTPUT", candidates.output], ["TOTAL", candidates.total], ["LINE_SUM", lineSum]];
+  return pickKursunMeters(candidates, !!input.template?.grid);
+}
+
+/** Öncelik TEK yerde (belge ve parti aynı kuralla): ÇIKIŞ → TOPLAM → Σ satır; `handwritten` (ızgara) her zaman doğrulatır. */
+export function pickKursunMeters(candidates: KursunMeterCandidates, handwritten = false): KursunMeterResult {
+  const pick: Array<[KursunMeterResult["source"], string | null]> = [["OUTPUT", candidates.output], ["TOTAL", candidates.total], ["LINE_SUM", candidates.lineSum]];
   const hit = pick.find(([, v]) => v !== null);
   if (!hit) return { meters: null, source: null, review: false, candidates };
   const [source, meters] = hit as [KursunMeterResult["source"], string];
-  const handwritten = !!input.template?.grid;
   return { meters, source, review: handwritten || contradictsLineSum({ meters, source, candidates }), candidates };
+}
+
+/**
+ * Çok partili belgede PARTİNİN metresi (Gülkesim 214279, 2026-11-06): bölümün beyan ara toplamı ("T.Adet 5 141,70 586,00")
+ * TOPLAM adayıdır, satırlar Σ satır — OCR satır kaçırsa da beyan kazanır (belge düzeyindeki kuralın aynısı).
+ */
+export function resolvePartyMeters(declaredMeters: string | number | null, lineMeters: ReadonlyArray<string | number | { toString(): string }>): KursunMeterResult {
+  const total = declaredMeters === null ? null : positive(String(declaredMeters));
+  const lineSum = positive(sumCanonical(lineMeters.map((m) => String(m))));
+  return pickKursunMeters({ output: null, total, input: null, lineSum });
 }
 
 /** Çıkış/toplam metresi Σ satırla hoşgörü dışında çelişiyor mu — `review`in el yazısından bağımsız bileşeni (K30-B TRUSTED korur). */

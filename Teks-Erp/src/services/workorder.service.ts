@@ -11,7 +11,7 @@
 
 import { resolveWorkOrderDefaultItemForCreate } from "./workorder-default-item.service";
 import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
-import { workOrderDocSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { workOrderDocSearchWhere, workOrderParameterSearch } from "./helpers/workorder-doc-search.helper";
 import { randomUUID } from "crypto";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
@@ -1845,6 +1845,12 @@ export class WorkOrderService {
     if (docSearch) {
       const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
       w.OR = [...(w.OR ?? []), docSearch];
+    }
+    // Künyedeki kağıt kimlikleri (gönderen İE no · çok partide parti no) — istasyon aramasıyla aynı yapraklar.
+    const paramSearch = params.search ? workOrderParameterSearch(params.search) : [];
+    if (paramSearch.length) {
+      const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
+      w.OR = [...(w.OR ?? []), ...paramSearch];
     }
     // Siparişsiz İE'nin müşterisi top sahibidir (liste kolonu) — adıyla da bulunur.
     const ownerSearch = params.search ? workOrderOwnerNameSearchWhere(params.search) : null;

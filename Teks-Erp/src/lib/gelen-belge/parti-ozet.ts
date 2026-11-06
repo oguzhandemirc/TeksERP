@@ -4,6 +4,8 @@
 // Parti = bölüm (blok). Kimlik (parti no, sipariş no, yazan top) okumada `totalsDeclared.blocks[]`e yazılır; satır sayısı/metre
 // CANLI satırlardan sayılır — operatör eksik satırı girince uyarı kendiliğinden düşer (kayıtlı OCR uyarısı bayatlar, gösterilmez).
 // =============================================================================
+import { resolvePartyMeters } from "./kursun-metre";
+
 export interface PartyLineInput {
   blockNo: number;
   meters: { toString(): string } | number | string;
@@ -24,7 +26,14 @@ export interface NoteParty {
   /** Bölüm ara toplamı (m); okunmadıysa null. */
   declaredMeters: number | null;
   lineCount: number;
+  /** Σ satır (canlı). */
   meters: number;
+  /**
+   * Forma önerilecek parti metresi — belge düzeyiyle aynı öncelik (`resolvePartyMeters`): beyan ara toplamı varsa o, yoksa
+   * Σ satır (2026-11-06 ek alan; eski istemci `meters` okur). İstemci kendisi seçmez.
+   */
+  suggestedMeters: number | null;
+  suggestedMetersSource: "TOTAL" | "LINE_SUM" | null;
   weightKg: number | null;
   warnings: string[];
 }
@@ -88,6 +97,8 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
     const d = decl.get(blockNo);
     const ls = byBlock.get(blockNo) ?? [];
     const meters = r3(ls.reduce((s, l) => s + (num(l.meters) ?? 0), 0));
+    const declaredMeters = num(d?.m);
+    const suggested = resolvePartyMeters(declaredMeters, ls.map((l) => (num(l.meters) ?? 0)));
     const kgs = ls.map((l) => num(l.weightKg)).filter((x): x is number => x !== null);
     const p: NoteParty = {
       blockNo,
@@ -96,9 +107,11 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
       processText: str(d?.processText) ?? soleProcess(ls),
       senderWorkOrderNo: str(d?.senderWorkOrderNo),
       declaredTopCount: num(d?.topCount),
-      declaredMeters: num(d?.m),
+      declaredMeters,
       lineCount: ls.length,
       meters,
+      suggestedMeters: suggested.meters === null ? null : Number(suggested.meters),
+      suggestedMetersSource: suggested.source === "TOTAL" || suggested.source === "LINE_SUM" ? suggested.source : null,
       weightKg: kgs.length ? r3(kgs.reduce((s, x) => s + x, 0)) : null,
       warnings: [],
     };
