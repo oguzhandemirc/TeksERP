@@ -84,7 +84,7 @@ router.get(
  *       Bir müşteri-ürün çifti için alias yazar. Varsa günceller, yoksa
  *       oluşturur (idempotent). OrderLine override'ı bu işlemden etkilenmez —
  *       master değişti ama OrderLine.customerItemName dolu olan satırlar
- *       eski değerini korur.
+ *       eski değerini korur. Hizmet kalemi (SERVICE) → 400 ALIAS_ITEM_NOT_STOCK.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -212,7 +212,7 @@ router.get(
  *     description: |
  *       Idempotent. Kapılar: müşteri aktif, kumaş tanım alabilir (Pasif/"Tükenene
  *       kadar" → 409 ITEM_INACTIVE/ITEM_PHASE_OUT), renk aktif. Eşzamanlı ilk
- *       yazım yarışı → 409 ITEM_COLOR_ALIAS_CONFLICT.
+ *       yazım yarışı → 409 ITEM_COLOR_ALIAS_CONFLICT. Hizmet kalemi → 400 ALIAS_ITEM_NOT_STOCK.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: customerId, required: true, schema: { type: string, format: uuid } }

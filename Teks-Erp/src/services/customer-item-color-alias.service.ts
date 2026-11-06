@@ -13,8 +13,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { normalizeDisplayName } from "./helpers/name-normalize.helper";
-import { assertItemUsable } from "./helpers/item-usage.helper";
-import { assertColor, assertCustomer } from "./helpers/customer-alias-gates.helper";
+import { assertAliasItem, assertColor, assertCustomer } from "./helpers/customer-alias-gates.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const TABLE = "CUSTOMER_ITEM_COLOR_ALIAS";
@@ -79,7 +78,7 @@ export async function upsert(
 ): Promise<ApiResponse<CustomerItemColorAliasRow>> {
   const { customerId, itemId, colorId } = key;
   await assertCustomer(customerId);
-  await assertItemUsable(prisma, itemId, "DEFINITION");
+  await assertAliasItem(itemId);
   await assertColor(colorId);
   const ad = normalizeDisplayName(alias);
   if (ad.length === 0) throw AppError.badRequest("Alias boş olamaz");

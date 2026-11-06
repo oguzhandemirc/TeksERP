@@ -45,6 +45,7 @@ import { getAlarmShiftStatus } from "../services/loom-floor.service";
 import { EIRSALIYE_ADAPTERS } from "../constants/e-irsaliye";
 import { isCalendarDate, LEGAL_IDENTITY_LIMITS } from "../services/e-irsaliye/e-irsaliye-settings";
 import { TERIM } from "../constants/terim";
+import { setWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 
 /** Künyenin metin alanları — eksik alan boş metin; tavan tek tablodan (+8: "123 456 78 90"
  *  gibi boşluklu yazım kabul edilir, rakam süzme servisin temizleyicisinde). */
@@ -1128,6 +1129,44 @@ router.get(
       next(error);
     }
   }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/work-order-default-item:
+ *   put:
+ *     tags: [FeatureFlags]
+ *     summary: İE varsayılan stok kartını yaz (admin:settings ya da settings:work-orders + ayar şifresi); top doğuramayan kart 400 WORK_ORDER_DEFAULT_ITEM_INVALID
+ *     description: Boş hedef kumaşta sıra elle > müşteri varsayılanı > bu kart > gelen belge fabrika varsayılanı. Okuma GET /api/work-orders/default-target-item.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId]
+ *             properties:
+ *               itemId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Güncel varsayılan kart (null = kapalı) }
+ *       400: { description: WORK_ORDER_DEFAULT_ITEM_INVALID }
+ */
+// Kapılı ayar yazımı ayar ucunda; `/api/work-orders` altına konsaydı o önekteki `:id` çağrılarıyla karışırdı.
+const WorkOrderDefaultItemBody = z.strictObject({ itemId: z.uuid("Geçersiz ürün kimliği").nullable() });
+router.put(
+  "/work-order-default-item",
+  verifyToken,
+  requireAnyPermission("admin:settings", "settings:work-orders"),
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { itemId } = WorkOrderDefaultItemBody.parse(req.body);
+      res.status(200).json({ success: true, data: await setWorkOrderDefaultItem(itemId, req.user!.userId) });
+    } catch (err) {
+      next(err);
+    }
+  },
 );
 
 /**
