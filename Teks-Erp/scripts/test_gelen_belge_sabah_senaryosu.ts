@@ -107,6 +107,7 @@ const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
+  SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD,
   SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME,
   SETTING_KEYS.GELEN_BELGE_AUTO_SENDER,
 ];
@@ -343,6 +344,8 @@ async function step5(): Promise<void> {
   const off = await lookup(ctx.spec);
   check("§5 ayar kapalı → 403 GELEN_BELGE_STATION_LOOKUP_DISABLED", off.status === 403 && off.code === "GELEN_BELGE_STATION_LOOKUP_DISABLED", `${off.status} ${off.code ?? ""}`);
   await setSetting(SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, true);
+  // Doğrulama eşiği bu bekçinin konusu değil (anahtar eşleme yolu sınanır) — kapalı; eşik `test_istasyon_okutma_dogrulama`.
+  await setSetting(SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD, 0);
   setReaderUrlForTests(ctx.sidecarUrl);
   const st = await ctx.call("GET", "/api/gelen-belge/istasyon-okutma", ctx.users.kursun);
   check("§5 istasyon okutma açık (ayar + üretim) ve okuma servisi tanımlı", st.status === 200 && st.data?.enabled === true && st.data?.readerConfigured === true, `${st.status} ${JSON.stringify(st.data)}`);

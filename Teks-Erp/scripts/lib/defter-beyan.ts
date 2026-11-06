@@ -671,6 +671,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     kararUfku: "YOK — iptal guard'ı labelPrintedAt okur; print_jobs hiçbir karara girmez. Budama yalnız YAŞA bağlıdır (`printLog.retentionDays`, varsayılan 180 gün, 0 = budama yok)",
     silen: ["src/services/print-job.service.ts"] },
 
+  // İstasyon belge okutma doğrulama izi (2026-11-06): puan · karar · açılan İE — eşik ayarı için panel listesi.
+  { model: "StationScanCheck", sinif: "TELEMETRI",
+    gerekce: "okutma doğrulama telemetrisi; tek yazar/okuyucu `src/services/station-scan-check.service.ts`, açma kararı satırdan DEĞİL o anki puandan verilir ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "YOK — yalnız panel listesi (eşiği veriyle ayarlamak); budama yaşa bağlı (180 gün, yazım anında)",
+    silen: ["src/services/station-scan-check.service.ts"] },
+
   // İstek başlığı (izlenebilirlik B1): "kim hangi uca ne attı" — gövdesiz künye.
   { model: "RequestTrace", sinif: "TELEMETRI",
     gerekce: "istek künyesi telemetrisi (yöntem · uç · durum · süre · cihaz · audit sayısı); tek yazar/okuyucu `src/services/request-trace.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",

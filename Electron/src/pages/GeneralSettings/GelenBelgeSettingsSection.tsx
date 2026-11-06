@@ -28,6 +28,7 @@ import { TERIM } from "@/lib/terim";
 import { FieldLabel, FlagToggle } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { OutlierFactorField, useOutlierDraft } from "./GelenBelgeOutlierField";
+import { StationVerifyField, useStationVerifyDraft } from "./GelenBelgeStationVerifyField";
 import { ReadOptionsFields, useReadOptionsDraft } from "./GelenBelgeReadOptionsField";
 import { EntryModeFields, useEntryModeDraft } from "./GelenBelgeEntryModeField";
 import { DuplicateDocNoField, useDuplicateDocNoDraft } from "./GelenBelgeDuplicateDocNoField";
@@ -172,22 +173,23 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const [auto, setAuto] = useState(serverAuto);
   const rd = useRouteDraft(server);
   const od = useOutlierDraft(server);
+  const vd = useStationVerifyDraft(server);
   const ro = useReadOptionsDraft(server);
   const ed = useEntryModeDraft(server);
   const dd = useDuplicateDocNoDraft(server);
   const fd = useIeFormDraft(server);
   const [picking, setPicking] = useState(false);
-  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); ro.reset(); ed.reset(); dd.reset(); fd.reset(); };
+  const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); vd.reset(); ro.reset(); ed.reset(); dd.reset(); fd.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue, fd.serverDesen, fd.serverGiris, fd.serverGuven]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, vd.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue, fd.serverDesen, fd.serverGiris, fd.serverGuven]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
   const autoDirty = auto !== serverAuto;
-  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || ro.dirty || ed.dirty || dd.dirty || fd.dirty;
+  const dirty = itemDirty || modeDirty || autoDirty || rd.routeDirty || rd.priorityDirty || od.dirty || vd.dirty || ro.dirty || ed.dirty || dd.dirty || fd.dirty;
   useRegisterSettingsDirty(dirty);
 
-  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...ro.body, ...ed.body, ...dd.body, ...fd.body };
+  const body = { ...(itemDirty ? { defaultItemId: item?.id ?? null } : {}), ...(modeDirty ? { unreviewedApproval: mode } : {}), ...(autoDirty ? { autoWorkOrder: auto } : {}), ...rd.body, ...od.body, ...vd.body, ...ro.body, ...ed.body, ...dd.body, ...fd.body };
   const mut = useMutation({
     mutationFn: () => updateIncomingDocumentSettings(body),
     onSuccess: (saved) => {
@@ -235,6 +237,7 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
         <OutlierFactorField draft={od} defaultValue={server?.defaultHandwritingOutlierFactor} />
         <ReadOptionsFields draft={ro} />
         <EntryModeFields draft={ed} hasDefaultItem={item !== null} />
+        <StationVerifyField draft={vd} defaultValue={server?.defaultStationVerifyThreshold} />
         <DuplicateDocNoField draft={dd} />
         <IeFormFields draft={fd} />
 

@@ -21,6 +21,7 @@
 //   · `gelenBelge.duplicateDocNo` — BLOCK (varsayılan, sahip + belge no tek) | WARN (işi süren eşte onay 409 + onay bayrağı) | ALLOW (K27)
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
+//   · `gelenBelge.stationVerifyThreshold` — okutmada doğrulama eşiği % (0 = kapalı; varsayılan 80, yalnız okutma açıkken etkili)
 //   · `gelenBelge.photoRetention` — belge fotoğrafı saklama (K28): FULL (varsayılan) | onayda küçült/sil | sevkte sil
 //   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir (K30)
 //   · `gelenBelge.tabletIeGirisi` — tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP (K30)
@@ -36,6 +37,7 @@ import { TERIM } from "../constants/terim";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
 import { DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN } from "../lib/gelen-belge/taslak";
+import { readStationVerifySettings, setStationLookupOptions, type StationVerifySettings } from "./gelen-belge-ayar-istasyon";
 import {
   DEFAULT_UNREVIEWED_APPROVAL,
   UNREVIEWED_APPROVAL_VALUES,
@@ -108,7 +110,7 @@ export interface DefaultItemView {
   problem: string | null;
 }
 
-export interface IncomingDocSettings {
+export interface IncomingDocSettings extends StationVerifySettings {
   defaultItem: DefaultItemView | null;
   unreviewedApproval: UnreviewedApprovalMode;
   defaultUnreviewedApproval: UnreviewedApprovalMode;
@@ -222,7 +224,7 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     duplicateDocNo: await readDuplicateDocNoMode(),
     defaultDuplicateDocNo: DEFAULT_DUPLICATE_DOC_NO,
     refakatAutoPrint: await readRefakatAutoPrint(),
-    stationDocLookup: await readIncomingDocStationLookup(),
+    stationDocLookup: await readIncomingDocStationLookup(), ...(await readStationVerifySettings()),
     photoRetention: await readPhotoRetention(),
     defaultPhotoRetention: DEFAULT_PHOTO_RETENTION,
     desenRenkEslesme: await readDesenRenkEslesme(), defaultDesenRenkEslesme: DEFAULT_DESEN_RENK_ESLESME,
@@ -251,7 +253,7 @@ export interface IncomingDocSettingsInput {
   multiPartyWorkOrder?: MultiPartyWorkOrderMode;
   duplicateDocNo?: DuplicateDocNoMode;
   refakatAutoPrint?: boolean;
-  stationDocLookup?: boolean;
+  stationDocLookup?: boolean; stationVerifyThreshold?: number | null;
   photoRetention?: PhotoRetentionMode;
   desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode;
 }
@@ -360,9 +362,7 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
     }
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, input.photoRetention, "Gelen belge: belge fotoğrafı saklama (FULL tam / SHRINK_ON_APPROVAL onayda küçült / DELETE_ON_APPROVAL onayda sil / DELETE_ON_DISPATCH sevkte sil) — geçmiş onaylı belgelere de uygulanır", userId);
   }
-  if (input.stationDocLookup !== undefined) {
-    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, input.stationDocLookup, `Gelen belge: istasyon tabletinde belge okutarak ${TERIM.terbiyeIsEmri.tekilKucuk} bulma`, userId);
-  }
+  await setStationLookupOptions(input, userId);
   if (input.autoSenderFromTemplate !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
   }
@@ -382,3 +382,4 @@ export function defaultItemUnusable(source: "CUSTOMER" | "FACTORY", itemId: stri
   const fix = source === "CUSTOMER" ? "Müşteri Varsayılan Ürünleri ekranından sahibin varsayılan ürününü düzeltin" : `${settingScreenPath("gelen-belge")} ekranından varsayılan ürünü düzeltin`;
   return AppError.conflict(`Gelen belge varsayılan ürünü kullanılamıyor: ${problem ?? "Ürün bulunamadı."} Satırlarda ürün seçin ya da ${fix}.`, { code: "GELEN_BELGE_DEFAULT_ITEM_UNUSABLE", itemId, source });
 }
+

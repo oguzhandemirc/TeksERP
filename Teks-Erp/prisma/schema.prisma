@@ -14889,3 +14889,33 @@ model ConsumableMovement {
   @@index([goodsReceiptId])
   @@map("consumable_movements")
 }
+
+/// İSTASYON BELGE OKUTMA DOĞRULAMA İZİ (2026-11-06) — TELEMETRİ: her fotoğraf okutmasının puanı, kararı ve tabletin ne
+/// açtığı (panel "son okutmalar" — eşiği veriyle ayarlamak için). Hiçbir karar/sayı bu tablodan türetilmez. FK YOK:
+/// İE no metin olarak donar (telemetri İE guard'larına girmez). Yazan · okuyan · budayan (180 gün) TEK dosya
+/// `src/services/station-scan-check.service.ts`. `decision`/`openedHow` VarChar: küme büyümeye açık (enum değil).
+model StationScanCheck {
+  id                    String    @id @default(uuid()) @db.Uuid
+  screen                String?   @db.VarChar(16)
+  source                String    @db.VarChar(16)
+  readDocNo             String?   @db.VarChar(64)
+  readBatchNo           String?   @db.VarChar(64)
+  threshold             Int       @db.SmallInt
+  bestScore             Int?      @db.SmallInt
+  candidateCount        Int       @db.SmallInt
+  verifiedCount         Int       @db.SmallInt
+  /// VERIFIED (≥1 aday eşiği geçti) · UNSURE (aday var, hiçbiri geçmedi) · NONE (aday yok) · OFF (eşik 0) · SAME_PHOTO
+  decision              String    @db.VarChar(16)
+  /// En yüksek puanlı adayın bileşenleri (ne tuttu / ne tutmadı) — görüntü içindir.
+  components            Json?
+  bestWorkOrderNumber   String?   @db.VarChar(64)
+  openedWorkOrderNumber String?   @db.VarChar(64)
+  /// AUTO (kendiliğinden açıldı) · CHOSEN (listeden seçildi) · CONFIRMED (eşik altı, görevli onayladı)
+  openedHow             String?   @db.VarChar(16)
+  openedAt              DateTime? @db.Timestamptz
+  createdAt             DateTime  @default(now()) @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("station_scan_checks")
+}

@@ -121,6 +121,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/gelen-belge/irsaliyeler": e("gelen belge taslağı açtı", "gelen belge taslağı açmaya çalıştı"),
   "PATCH /api/gelen-belge/irsaliyeler/:id": e("gelen belge taslağını düzenledi", "gelen belge taslağını düzenlemeye çalıştı"),
   "POST /api/gelen-belge/istasyon-okutma": e("istasyonda belge okutarak iş aradı", "istasyonda belge okutarak iş aramaya çalıştı"),
+  "POST /api/gelen-belge/istasyon-okutma/:id/acilan": e("okutmada açtığı işi bildirdi", "okutmada açtığı işi bildirmeye çalıştı"),
   "PUT /api/gelen-belge/ayarlar": e("gelen belge ayarlarını değiştirdi", "gelen belge ayarlarını değiştirmeye çalıştı"),
   "DELETE /api/gelen-belge/irsaliyeler/:id": e("gelen belge taslağını sildi", "gelen belge taslağını silmeye çalıştı"),
   "POST /api/gelen-belge/irsaliyeler/toplu-sil/onizleme": e("gelen belge toplu silme önizlemesi aldı", "gelen belge toplu silme önizlemesi almaya çalıştı"),

@@ -62,6 +62,7 @@ const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
+  SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD,
   SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP,
 ];
 
@@ -198,6 +199,8 @@ async function run(url: string, sidecar: { url: string; hits: () => number }): P
   const r2b = await lookup(kursunOp, { q: UNIQ });
   check("§2 ⭐ ayar kapalı → 403 GELEN_BELGE_STATION_LOOKUP_DISABLED", r2b.status === 403 && r2b.code === "GELEN_BELGE_STATION_LOOKUP_DISABLED", `${r2b.status} ${r2b.code ?? ""}`);
   await setSetting(SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, true);
+  // Doğrulama eşiği bu bekçinin konusu değil (anahtar eşleme yolu sınanır) — kapalı; eşik `test_istasyon_okutma_dogrulama`.
+  await setSetting(SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD, 0);
   const r2c = await lookup(kursunOp, { q: UNIQ });
   check("§2 ayar açık + mobile:kk2-kursun → 200", r2c.status === 200, `${r2c.status} ${r2c.code ?? ""}`);
   await setSetting(SETTING_KEYS.PRODUCTION_ENABLED, false);

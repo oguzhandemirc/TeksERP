@@ -8,8 +8,12 @@ import type { LookupScreen } from '../../services/stationDocLookup.service';
 
 const mockByPhoto = jest.fn();
 const mockBySearch = jest.fn();
+const mockReport = jest.fn();
 jest.mock('../../services/stationDocLookup.service', () => ({
-  stationDocLookupService: { byPhoto: (b: string, s: string, sc?: unknown) => mockByPhoto(b, s, sc), bySearch: (q: string, sc?: unknown) => mockBySearch(q, sc) },
+  stationDocLookupService: {
+    byPhoto: (b: string, s: string, sc?: unknown) => mockByPhoto(b, s, sc), bySearch: (q: string, sc?: unknown) => mockBySearch(q, sc),
+    reportOpened: (...a: unknown[]) => mockReport(...a),
+  },
 }));
 const mockScanner = jest.fn();
 jest.mock('../../services/docScannerNative', () => ({ scanWithDocScanner: (req: unknown) => mockScanner(req) }));
@@ -84,4 +88,26 @@ it('⭐ çok İE, yalnız biri burada → doğrudan açılır, kardeşler şerit
   const { findByTestId, onOpen } = setup(true, { screen: 'KURSUN_QC' });
   fireEvent.press(await findByTestId('belge-okut-cek'));
   await waitFor(() => expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ workOrderNumber: 'IE2' }), [expect.objectContaining({ workOrderNumber: 'IE1' }), expect.objectContaining({ workOrderNumber: 'IE2' })]));
+});
+
+it('⭐ eşik altı aday → kendiliğinden açılmaz; satır ne tuttuğunu söyler; yalnız "Eminim, aç" açar (CONFIRMED bildirilir)', async () => {
+  const verification = { score: 55, passed: false, strongEvidence: true, threshold: 80, targetKey: 'n1', components: [{ key: 'ROLL_NOS', label: 'Top no', weight: 40, ratio: 0.2, matched: false, detail: '3/16' }] };
+  mockByPhoto.mockResolvedValue({ ...result([], 'UNVERIFIED', 'sunucu'), unverifiedWorkOrders: [wo('IE1', { verification })], verification: { threshold: 80, bestScore: 55 }, checkId: 'chk-1' });
+  const { findByTestId, getByTestId, getByText, onOpen } = setup();
+  fireEvent.press(await findByTestId('belge-okut-cek'));
+  expect(await findByTestId('belge-okut-emin-degil')).toBeTruthy();
+  expect(getByText('Belge tam eşleşmedi (%55) — listeden seçin ya da fiş no ile arayın.')).toBeTruthy();
+  expect(getByTestId('belge-okut-dogrulama-IE1')).toHaveTextContent('%55 · Top no ✗ 3/16');
+  expect(onOpen).not.toHaveBeenCalled();
+  fireEvent.press(getByTestId('belge-okut-onayla-IE1'));
+  expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ workOrderNumber: 'IE1' }), [expect.objectContaining({ workOrderNumber: 'IE1' })]);
+  expect(mockReport).toHaveBeenCalledWith('chk-1', 'IE1', 'CONFIRMED');
+});
+
+it('⭐ kendiliğinden açılan İE izine AUTO olarak bildirilir', async () => {
+  mockByPhoto.mockResolvedValue({ ...result([wo('IE1')], 'SINGLE', 'bulundu'), checkId: 'chk-2' });
+  const { findByTestId, onOpen } = setup();
+  fireEvent.press(await findByTestId('belge-okut-cek'));
+  await waitFor(() => expect(onOpen).toHaveBeenCalled());
+  expect(mockReport).toHaveBeenCalledWith('chk-2', 'IE1', 'AUTO');
 });

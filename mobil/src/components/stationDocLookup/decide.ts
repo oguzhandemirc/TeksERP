@@ -6,6 +6,8 @@ export type LookupDecision =
   /** `siblings`: aynı belgenin bütün İE'leri (şerit için); tek İE'de boş. */
   | { kind: 'open'; workOrder: StationLookupWorkOrder; siblings: StationLookupWorkOrder[] }
   | { kind: 'choose'; workOrders: StationLookupWorkOrder[]; message: string }
+  /** Doğrulama eşiği geçilemedi: kendiliğinden AÇILMAZ; görevli "Eminim, aç" derse açılır, değilse elle arar. */
+  | { kind: 'unsure'; workOrders: StationLookupWorkOrder[]; message: string }
   | { kind: 'empty'; message: string };
 
 /** "Burada" sayılır: burada bekliyor YA DA rotasız ve burada başlatılabilir (açılınca okutmayla rota adımı ekler). */
@@ -17,6 +19,10 @@ export const isHere = (w: StationLookupWorkOrder): boolean => w.atStation === 'H
  */
 export function decideLookup(r: StationLookupResult): LookupDecision {
   const all = r.workOrders;
+  const unverified = r.unverifiedWorkOrders ?? [];
+  if (all.length === 0 && unverified.length > 0) return { kind: 'unsure', workOrders: unverified, message: unsureMessage(r.verification?.bestScore ?? null, r.verification?.bestStrong ?? true) };
+  // İki FARKLI belge eşiği geçtiyse (toleranslı eşleşme) hiçbiri kendiliğinden açılmaz.
+  if (new Set(all.map((w) => w.verification?.targetKey ?? '')).size > 1) return { kind: 'choose', workOrders: all, message: r.message };
   if (all.length === 1) return { kind: 'open', workOrder: all[0]!, siblings: [] };
   if (all.length === 0) return { kind: 'empty', message: r.message };
   const known = all.some((w) => w.atStation != null);
@@ -78,4 +84,18 @@ export function workOrderSubtitle(w: StationLookupWorkOrder): string {
 export const MIN_SEARCH_LENGTH = 2;
 export function searchable(q: string): boolean {
   return q.trim().length >= MIN_SEARCH_LENGTH;
+}
+
+/** "Belge tam eşleşmedi (%62) — listeden seçin" · puan yoksa nedeni. */
+export function unsureMessage(best: number | null, strong = true): string {
+  if (best === null || !strong) return 'Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile arayın.';
+  return `Belge tam eşleşmedi (%${best}) — listeden seçin ya da fiş no ile arayın.`;
+}
+
+/** Ne tuttu / ne tutmadı: "%62 · Top no ✗ 3/16 · Müşteri ✓". */
+export function verifyText(w: StationLookupWorkOrder): string {
+  const v = w.verification;
+  if (!v) return '';
+  const parts = v.components.map((c) => `${c.label} ${c.matched ? '✓' : '✗'}${c.detail && c.detail !== 'tuttu' ? ` ${c.detail}` : ''}`);
+  return [v.score === null ? 'Puan yok' : `%${v.score}`, ...parts].join(' · ');
 }

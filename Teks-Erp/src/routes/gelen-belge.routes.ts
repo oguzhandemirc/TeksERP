@@ -48,13 +48,14 @@ import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import gelenBelgeSablonRoutes from "./gelen-belge-sablon.routes";
 import gelenBelgeCanliRoutes from "./gelen-belge-canli.routes";
+import gelenBelgeOkutmaIziRoutes, { STATION_LOOKUP_PERMISSIONS } from "./gelen-belge-okutma-izi.routes";
 
 const router = Router();
 router.use(verifyToken, requireGelenBelgeEnabled);
 // Gövde katmanı kapıdan SONRA ayrı satırda: `test_module_flag_off §2a` kapıyı `use(verifyToken, <kapı>)` olarak ölçer.
 router.use(express.json({ limit: BUYUK_GOVDE_LIMITI }));
-// S1 kullanıcı şablonu + belge tipi tanıtma uçları ve canlı kare okuma (salt okuma) — kapı ve gövde katmanı bu router'dan miras.
-router.use(gelenBelgeSablonRoutes, gelenBelgeCanliRoutes);
+// S1 kullanıcı şablonu + belge tipi tanıtma uçları, canlı kare okuma (salt okuma) ve istasyon okutma izi — kapı ve gövde katmanı bu router'dan miras.
+router.use(gelenBelgeSablonRoutes, gelenBelgeCanliRoutes, gelenBelgeOkutmaIziRoutes);
 
 type Handler = (req: Request) => Promise<{ status: number; data: unknown; warnings?: string[] }>;
 const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunction) => {
@@ -421,7 +422,7 @@ const SettingsBody = z.strictObject({
   multiPartyWorkOrder: z.enum(["SINGLE", "PER_PARTY"], "Seçenek SINGLE ya da PER_PARTY olmalı").optional(),
   duplicateDocNo: z.enum(["BLOCK", "WARN", "ALLOW"], "Seçenek BLOCK, WARN ya da ALLOW olmalı").optional(),
   refakatAutoPrint: z.boolean("Refakat kartı otomatik yazdırma evet/hayır olmalı").optional(),
-  stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(),
+  stationDocLookup: z.boolean("İstasyonda belge okutma evet/hayır olmalı").optional(), stationVerifyThreshold: z.number("Doğrulama eşiği sayı olmalı").int("Doğrulama eşiği tam sayı olmalı").min(0, "Doğrulama eşiği en az 0 olmalı").max(100, "Doğrulama eşiği en çok 100 olmalı").nullable().optional(),
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
   desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
   tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(), tanitimGuveni: z.enum(["SOR", "SORMA"], "Seçenek SOR ya da SORMA olmalı").optional(),
@@ -462,6 +463,7 @@ const SettingsBody = z.strictObject({
  *               duplicateDocNo: { type: string, enum: [BLOCK, WARN, ALLOW], description: "Aynı gönderen belge no tekrar gelirse: engelle (varsayılan) · işi süren eş varken uyar (onay bayrağıyla geçer) · serbest" }
  *               refakatAutoPrint: { type: boolean, description: "İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)" }
  *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
+ *               stationVerifyThreshold: { type: integer, minimum: 0, maximum: 100, nullable: true, description: "İstasyon okutmada doğrulama eşiği %: altındaki aday kendiliğinden açılmaz (0 = kapalı, null = varsayılan 80)" }
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
  *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz (varsayılan) · adı/kodu tutan kayıt önerilir · iş emri notuna eklenir" }
  *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
@@ -475,7 +477,6 @@ router.get("/ayarlar", requirePermission("gelen-belge:read"), wrap(async () => (
 // K28: saklama kipi FULL değilse geçmiş onaylılara uygulama beklemeden başlar (iş kendi ön koşulunda durur).
 router.put("/ayarlar", requirePermission("admin:settings"), requireSettingsPassword, wrap(async (req) => ({ status: 200, data: kickPhotoRetentionIfActive(await updateIncomingDocSettings(SettingsBody.parse(req.body), req.user!.userId)) })));
 // ── K17: istasyonda belgeden iş emri bulma (eşleme okuması — hiçbir kayıt doğurmaz) ──────────────────────────
-const STATION_LOOKUP_PERMISSIONS = ["gelen-belge:read", "mobile:kk2-kursun", "mobile:tambur"] as const;
 const StationLookupBody = z.union([
   z.strictObject({
     contentBase64: z.string().min(1, "Dosya içeriği boş"),
@@ -507,7 +508,7 @@ const StationLookupBody = z.union([
  *       - { in: query, name: screen, schema: { type: string, enum: [KURSUN_QC, TAMBUR] }, description: "İsteyen ekran; verilirse her İE'ye atStation (o ekranın açık kart listesinde mi) eklenir" }
  *       - { in: query, name: stationId, schema: { type: string, format: uuid }, description: "Yalnız TAMBUR: açık kart listesinin istasyonu (kurşun oturum istasyonunu kullanır)" }
  *     responses:
- *       200: { description: "outcome SINGLE|MULTIPLE|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|STARTABLE_HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText) · station {screen,label}|null · message" }
+ *       200: { description: "outcome SINGLE|MULTIPLE|UNVERIFIED|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|STARTABLE_HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText, verification{score,passed,strongEvidence,threshold,components[],targetKey}|null) · unverifiedWorkOrders[] (eşik altı; otomatik açılmaz) · verification {threshold,bestScore,bestStrong}|null · checkId (açılan İE bildirimi için) · station {screen,label}|null · message" }
  *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE · STATION_INACTIVE · STATION_NOT_TAMBUR" }
  *       404: { description: "STATION_NOT_FOUND (TAMBUR stationId)" }
  *       403: { description: "GELEN_BELGE_STATION_LOOKUP_DISABLED (ayar kapalı) · MODULE_DISABLED (gelen belge / üretim)" }

@@ -695,6 +695,11 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
       needle: "gb-tablet-ie-girisi",
     },
+    GELEN_BELGE_STATION_VERIFY_THRESHOLD: {
+      why: "İstasyon okutma doğrulama eşiği % (0 = kapalı, boş = 80) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okutma ucu okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeStationVerifyField.tsx",
+      needle: "gb-station-verify-threshold",
+    },
     // K30-B (2026-11-04): tanıtılan belgeye güven; panel radyosu `GelenBelgeIeFormField.tsx`.
     GELEN_BELGE_TANITIM_GUVENI: {
       why: "Tanıtılan belgeye güven (SOR varsayılan | SORMA) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okuma özeti (`gelen-belge-okuma-ozeti.service`) ve okuma anı parti/metre kolonu okur",

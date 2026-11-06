@@ -1,5 +1,5 @@
 // K17 — istasyonda belgeden iş emri bulma: sunucu sonucu → ekran kararı (tek aç · çok seçtir · yok mesaj).
-import { decideLookup, partyLabel, rowDetail, rowWhere, searchable, siblingStripText, workOrderSubtitle } from './decide';
+import { decideLookup, partyLabel, rowDetail, rowWhere, searchable, siblingStripText, unsureMessage, verifyText, workOrderSubtitle } from './decide';
 import type { StationLookupResult, StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 
 const wo = (n: string, extra: Partial<StationLookupWorkOrder> = {}): StationLookupWorkOrder => ({
@@ -68,5 +68,42 @@ describe('yardımcılar', () => {
   it('arama en az 2 karakter', () => {
     expect(searchable(' 9 ')).toBe(false);
     expect(searchable('91')).toBe(true);
+  });
+});
+
+describe('doğrulama (2026-11-06)', () => {
+  const ver = (score: number | null, passed: boolean, targetKey = 'n1') => ({
+    score, passed, strongEvidence: score !== null, threshold: 80, targetKey,
+    components: [
+      { key: 'ROLL_NOS', label: 'Top no', weight: 40, ratio: 3 / 16, matched: false, detail: '3/16' },
+      { key: 'OWNER', label: 'Müşteri', weight: 5, ratio: 1, matched: true, detail: 'tuttu' },
+    ],
+  });
+  it('⭐ hiçbir aday eşiği geçmedi → TEK aday bile kendiliğinden AÇILMAZ (emin değilim + puan)', () => {
+    const r = { ...res([], 'UNVERIFIED', 'sunucu'), unverifiedWorkOrders: [wo('IE1', { verification: ver(62, false) })], verification: { threshold: 80, bestScore: 62 } };
+    const d = decideLookup(r);
+    expect(d.kind).toBe('unsure');
+    expect(d.kind === 'unsure' && d.message).toBe('Belge tam eşleşmedi (%62) — listeden seçin ya da fiş no ile arayın.');
+    expect(d.kind === 'unsure' && names(d.workOrders)).toEqual(['IE1']);
+  });
+  it('⭐ top listesi okunamadı (puan yok) → nedeni söylenir', () => {
+    expect(unsureMessage(null)).toBe('Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile arayın.');
+    expect(unsureMessage(100, false)).toBe(unsureMessage(null));
+  });
+  it('⭐ eşiği geçen tek aday → açılır (bugünkü yol)', () => {
+    const d = decideLookup(res([wo('IE1', { verification: ver(95, true) })], 'SINGLE'));
+    expect(d.kind).toBe('open');
+  });
+  it('⭐ iki FARKLI belge eşiği geçti → burada olsa bile seçtirilir', () => {
+    const d = decideLookup(res([at('IE1', 'HERE'), at('IE2', 'NOT_YET')].map((w, i) => ({ ...w, verification: ver(90, true, `n${i}`) })), 'MULTIPLE', 'sunucu'));
+    expect(d).toEqual(expect.objectContaining({ kind: 'choose', message: 'sunucu' }));
+  });
+  it('⭐ aynı belgenin partileri (aynı hedef) → burada olan tek İE açılır', () => {
+    const d = decideLookup(res([at('IE1', 'HERE'), at('IE2', 'NOT_YET')].map((w) => ({ ...w, verification: ver(90, true, 'n1') })), 'MULTIPLE'));
+    expect(d.kind === 'open' && d.workOrder.workOrderNumber).toBe('IE1');
+  });
+  it('ne tuttu / ne tutmadı metni', () => {
+    expect(verifyText(wo('IE1', { verification: ver(62, false) }))).toBe('%62 · Top no ✗ 3/16 · Müşteri ✓');
+    expect(verifyText(wo('IE1'))).toBe('');
   });
 });

@@ -10,6 +10,8 @@
 // Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
 // Çok İE (2026-11-06): tablet ekranını bildirirse her İE "burada bekliyor mu" (ekranın açık kart listesinin yüklemi,
 // `helpers/station-open-step.helper.ts`) + şu an nerede ile döner; satır yükleme ve sınıflama `helpers/station-lookup-rows.helper.ts`.
+// Doğrulama (2026-11-06): fotoğraf adayları öteki alanlarla puanlanır; eşik altı OTOMATİK AÇILMAZ (`station-scan-verify.helper`).
+// Tek yazım: okutma izi (TELEMETRİ, `station-scan-check.service`) — iş kaydı doğmaz.
 // =============================================================================
 import { type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -30,6 +32,7 @@ import { type CodeMatchTier, matchCodes } from "./helpers/doc-code-match.helper"
 import { uyari } from "../lib/logger";
 import type { DraftHeader } from "../lib/gelen-belge/taslak";
 import type { StationScreen } from "./helpers/station-open-step.helper";
+import { scanEvidenceOf, type ScanVerifySink, unverifiedMessage, verifiedMessage, verifyScanCandidates } from "./helpers/station-scan-verify.helper";
 import {
   type LoadedWorkOrders, loadWorkOrders, markAtStation, MAX_WORK_ORDERS, type StationLookupContext, stationLabel, type StationLookupWorkOrder,
 } from "./helpers/station-lookup-rows.helper";
@@ -45,7 +48,8 @@ const OPEN_WORK_ORDER_STATUSES: WorkOrderStatus[] = [WorkOrderStatus.PLANNED, Wo
  */
 const TOLERANT_UNIVERSE_CAP = 2000;
 
-export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE";
+/** UNVERIFIED: aday var ama hiçbiri doğrulama eşiğini geçmedi (`unverifiedWorkOrders`; kendiliğinden açılmaz). */
+export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE" | "UNVERIFIED";
 export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "OCR" | "SEARCH";
 
 
@@ -62,6 +66,12 @@ export interface StationLookupResult {
   readonly message: string;
   /** Ekran bildirildiyse hangi istasyon için "burada" denildi; yoksa null. */
   readonly station?: { screen: StationScreen; label: string } | null;
+  /** Fotoğraf okutmasında eşiği GEÇEMEYEN adaylar (görevli onayıyla açılır); `workOrders` yalnız geçenleri taşır. */
+  readonly unverifiedWorkOrders?: StationLookupWorkOrder[];
+  /** Fotoğraf okutmasında eşik + en yüksek puan; elle aramada yok. */
+  readonly verification?: { threshold: number; bestScore: number | null; bestStrong: boolean } | null;
+  /** Okutma izinin kimliği — tablet ne açtığını bununla bildirir; iz yazılamadıysa null. */
+  readonly checkId?: string | null;
 }
 
 export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean }> {
@@ -83,9 +93,24 @@ export type StationLookupInput = { contentBase64: string; sha256?: string | null
 export async function stationDocLookup(input: StationLookupInput, ctx: StationLookupContext | null = null): Promise<StationLookupResult> {
   await assertStationLookupEnabled();
   const label = ctx ? await stationLabel(ctx) : null;
-  const result = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null);
+  const sink: ScanVerifySink = {};
+  const raw = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null, sink);
+  const result = "q" in input ? raw : await applyVerification(raw, sink, ctx?.screen ?? null);
   if (!ctx || !label) return { ...result, station: null };
-  return { ...result, workOrders: await markAtStation(result.workOrders, ctx), station: { screen: ctx.screen, label } };
+  const unverified = result.unverifiedWorkOrders ? await markAtStation(result.unverifiedWorkOrders, ctx) : undefined;
+  return { ...result, workOrders: await markAtStation(result.workOrders, ctx), unverifiedWorkOrders: unverified, station: { screen: ctx.screen, label } };
+}
+
+/** Fotoğraf sonucunu doğrular: eşik altı adaylar `unverifiedWorkOrders`a taşınır, cümle ve sonuç ona göre yazılır. */
+async function applyVerification(r: StationLookupResult, sink: ScanVerifySink, screen: string | null): Promise<StationLookupResult> {
+  const v = await verifyScanCandidates({ workOrders: r.workOrders, noteIds: r.notes.map((n) => n.id), source: r.source, screen }, sink);
+  const base = { ...r, ...v };
+  if (v.workOrders.length === 0 && v.unverifiedWorkOrders.length > 0) return { ...base, outcome: "UNVERIFIED", message: unverifiedMessage(v.verification.bestScore, v.verification.bestStrong) };
+  if (v.workOrders.length === r.workOrders.length) return base;
+  const many = verifiedMessage(v.workOrders);
+  if (many) return { ...base, outcome: "MULTIPLE", message: many };
+  const one = v.workOrders.length === 1;
+  return { ...base, outcome: one ? "SINGLE" : "MULTIPLE", message: one ? `${TERIM.terbiyeIsEmri.tekil} bulundu: ${v.workOrders[0]!.workOrderNumber}` : `${v.workOrders.length} ${TERIM.terbiyeIsEmri.tekilKucuk} bulundu; açılacak olanı seçin.` };
 }
 
 
@@ -95,7 +120,7 @@ async function searchLookup(q: string): Promise<StationLookupResult> {
   return finish({ source: "SEARCH", read: null, notes: [], workOrders, closed, noteCount: null });
 }
 
-async function photoLookup(contentBase64: string, sha256: string | null): Promise<StationLookupResult> {
+async function photoLookup(contentBase64: string, sha256: string | null, sink: ScanVerifySink): Promise<StationLookupResult> {
   const upload = await decodeScanUpload(contentBase64, sha256);
   if (upload.mime === PDF_MIME) {
     throw AppError.badRequest("PDF belge okunmaz; belgenin fotoğrafını çekin.", { code: "DOCUMENT_SCAN_PDF_NOT_READABLE" });
@@ -125,10 +150,11 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
     source = "OCR";
   }
   // Sınıflandırma gelen belge okumasıyla aynı: aktif dosya + aktif kullanıcı (`u-…`) şablonları (`engineTemplates` her okumada yükler).
-  const { header } = await extractDraft(ocr);
+  const { header, lines } = await extractDraft(ocr);
   const read = { senderDocNo: header.senderDocNo, ownerText: header.ownerText, senderText: header.senderText };
   const docNo = header.senderDocNo?.trim() || null;
   const batchNos = readBatchNos(header);
+  Object.assign(sink, { evidence: scanEvidenceOf(header, lines, batchNos), key: "DOC_NO", readDocNo: docNo });
   const readValues = { docNo, batchNos };
   if (!docNo && batchNos.length === 0) return finish({ source, read, notes: [], workOrders: [], noteCount: null, noDocNo: true });
   // (a) belge no — önce (bugünkü yol); TAM eşleşme açık İE verirse biter.
@@ -148,6 +174,7 @@ async function photoLookup(contentBase64: string, sha256: string | null): Promis
     const merged = mergeTolerantDoc(byDoc.loaded.workOrders, byBatch);
     return finish({ source, read, notes: byDoc.notes, workOrders: merged, noteCount: byDoc.notes.length });
   }
+  if (byBatch && byBatch.loaded.workOrders.length > 0) sink.key = "BATCH_NO";
   if (byBatch && byBatch.loaded.workOrders.length > 0) return finish({ source, read, notes: [], ...byBatch.loaded, noteCount: null });
   // Belge bulundu ama açık İE yok → bugünkü cümle (kapanmış İE no'su / "bu belgeye ait İE yok").
   if (byDoc && byDoc.notes.length > 0) return finish({ source, read, notes: byDoc.notes, ...byDoc.loaded, noteCount: byDoc.notes.length });
