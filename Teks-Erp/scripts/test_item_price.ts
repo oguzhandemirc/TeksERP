@@ -351,19 +351,18 @@ async function main(): Promise<void> {
   const edgeRead = await resolveItemPrice({ itemId: itemNoPrice.id, kind: PriceKind.PURCHASE, currency: "RUB" });
   check("§3g Tavan değer DB'ye kayıpsız yazıldı", edgeRead?.price.equals(new Prisma.Decimal(edge)) === true, `${edgeRead?.price}`);
 
-  // ── §4 ⭐ PRISMA COMPOUND UNIQUE TUZAĞI ──────────────────────────────────
-  // `itemId_kind_currency` DB'de PARTIAL'dır (WHERE customerId IS NULL) ama
-  // Prisma predicate'i bilmez. Yalnız MÜŞTERİ istisnası olan bir anahtarda
-  // `findUnique` onu DÖNER — yani "kart varsayılanı var mı" sorusuna YANLIŞ
-  // cevap verir. Servis bu yüzden `customerId`i ve aktif süzgecini açıkça yazar
-  // (MAL-0b: yazım tx içinde claim + create). Bu bölüm o tuzağın CANLI kanıtıdır.
+  // ── §4 ⭐ PRISMA COMPOUND UNIQUE TUZAĞI (kapandı 2026-11-06) ──────────────
+  // Eskiden şemadaki `@@unique([itemId, kind, currency])` PARTIAL index'in predicate'ini
+  // bilmeden müşteri satırını "kart varsayılanı" diye eşleyebiliyordu. Hizmet fiyat
+  // tablosuyla iki tekillik İFADE indeksine döndü (kademe + başlangıç) ve şemadan çıktı:
+  // compound lookup artık yok. Servis yine `customerId`i açıkça yazar — §4b canlı kanıt.
   await itemPriceService.upsert({ itemId: itemNoPrice.id, customerId: c1.id, kind: PriceKind.SALE, currency: "GBP", price: 7 });
-  const trap = await prisma.itemPrice.findUnique({
-    where: { itemId_kind_currency: { itemId: itemNoPrice.id, kind: PriceKind.SALE, currency: "GBP" } },
+  const trap = await prisma.itemPrice.findFirst({
+    where: { itemId: itemNoPrice.id, kind: PriceKind.SALE, currency: "GBP", revokedAt: null },
     select: { id: true, customerId: true },
   });
   check(
-    "§4a ⭐ Prisma'nın unique lookup'ı MÜŞTERİ satırını eşliyor (tuzak gerçek)",
+    "§4a Anahtarda yalnız MÜŞTERİ satırı var (kart varsayılanı yok)",
     trap !== null && trap.customerId !== null,
     `customerId=${trap?.customerId ?? "null"}`,
   );

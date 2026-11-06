@@ -21,13 +21,27 @@ interface PriceVersionRef {
 /** Eski sürümün damgası (UPDATE) + yeni sürümün doğumu (CREATE); yalnız sürüm yazıldıysa çağrılır. */
 export function logItemPriceVersionWrite(args: {
   userId?: string;
-  key: { itemId: string; customerId: string | null; kind: PriceKind; currency: Currency };
+  key: { itemId: string; customerId: string | null; propertyValueId?: string | null; kind: PriceKind; currency: Currency };
   rowId: string;
   previous: PriceVersionRef | null;
+  /** İleri tarihli fiyat değişince yerine geçilen bekleyen satır (hiç yürürlüğe girmeden kapandı). */
+  replacedPending?: { id: string; price: Prisma.Decimal } | null;
   price: Prisma.Decimal;
   priceUnit: ServiceQtyUnit | null;
+  /** İleri tarihli yeni sürümün başlangıcı; doluysa önceki sürüm o tarihte kapanır (zamanlanmış damga). */
+  validFrom?: Date | null;
 }): void {
-  const { userId, key, rowId, previous, price, priceUnit } = args;
+  const { userId, key, rowId, previous, replacedPending, price, priceUnit, validFrom } = args;
+  if (replacedPending) {
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ITEM_PRICE",
+      recordId: replacedPending.id,
+      oldData: { revokeReason: null },
+      newData: { ...key, price: replacedPending.price.toFixed(4), revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
+    });
+  }
   if (previous) {
     void AuditService.log({
       userId,
@@ -35,7 +49,12 @@ export function logItemPriceVersionWrite(args: {
       tableName: "ITEM_PRICE",
       recordId: previous.id,
       oldData: { revokeReason: null },
-      newData: { ...key, price: previous.price.toFixed(4), revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
+      newData: {
+        ...key,
+        price: previous.price.toFixed(4),
+        revokeReason: validFrom ? ITEM_PRICE_REVOKE_REASON.SCHEDULED : ITEM_PRICE_REVOKE_REASON.CHANGED,
+        ...(validFrom ? { revokedAt: validFrom.toISOString() } : {}),
+      },
     });
   }
   void AuditService.log({
@@ -44,6 +63,6 @@ export function logItemPriceVersionWrite(args: {
     tableName: "ITEM_PRICE",
     recordId: rowId,
     oldData: previous ? { price: previous.price.toFixed(4), ...(previous.priceUnit ? { priceUnit: previous.priceUnit } : {}) } : null,
-    newData: { ...key, price: price.toFixed(4), ...(priceUnit ? { priceUnit } : {}) },
+    newData: { ...key, price: price.toFixed(4), ...(priceUnit ? { priceUnit } : {}), ...(validFrom ? { validFrom: validFrom.toISOString() } : {}) },
   });
 }

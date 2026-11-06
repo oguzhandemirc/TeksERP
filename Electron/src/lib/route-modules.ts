@@ -71,6 +71,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/purchase-orders": "ticaretEnabled",
   "operations/stock-counts": "ticaretEnabled",
   "definitions/item-prices": "ticaretEnabled",
+  "definitions/service-prices": "financeEnabled",
   "operations/yarn-stock": "iplikEnabled",
   "operations/warehouse-transfers": "depoMultiEnabled",
   // ── DEVERE · DOKUMA ─────────────────────────────────────────────────────

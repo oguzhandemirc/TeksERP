@@ -283,6 +283,9 @@ const PARTIAL_INDEXES: Array<{
   { table: "warehouse_movements", index: "warehouse_movements_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun belge bağı: yalnız SHIPMENT* olayları taşır" },
   { table: "warehouse_movements", index: "warehouse_movements_rollReturnId_idx", uniq: false, predicate: `("rollReturnId" IS NOT NULL)`, why: "null-yoğun belge bağı: yalnız RETURN olayları taşır" },
   { table: "sacks", index: "sacks_warehouseId_idx", uniq: false, predicate: `("warehouseId" IS NOT NULL)`, why: "eski çuvallar NULL (lazy adoption) — dolu satırlar 'bu depoda hangi çuvallar' sorgusunun yolu" },
+  // Çuvalsız sevk (20261106120000_sack_load_unit): sevkiyat başına bir canlı dökme; araba no sevkiyat içinde tekil.
+  { table: "sacks", index: "sacks_bulk_per_shipment_uq", uniq: true, predicate: `(("unitKind" = 'BULK'::"LoadUnitKind") AND ("dissolvedAt" IS NULL))`, why: "dökme yük sevkiyat başına TEK birim — ikinci dökme okutması var olana eklenir" },
+  { table: "sacks", index: "sacks_cart_label_per_shipment_uq", uniq: true, predicate: `(("unitKind" = 'CART'::"LoadUnitKind") AND ("dissolvedAt" IS NULL))`, why: "araba no kimlik değil etiket: tekillik yalnız sevkiyat içinde, çözülen birim saymaz" },
   { table: "sacks", index: "sacks_branchId_idx", uniq: false, predicate: `("branchId" IS NOT NULL)`, why: "null-yoğun: müşteri şubesi opsiyonel (migration 20260905140000)" },
   { table: "direct_shipments", index: "direct_shipments_branchId_idx", uniq: false, predicate: `("branchId" IS NOT NULL)`, why: "null-yoğun: müşteri şubesi opsiyonel (migration 20260905140000)" },
   // ticaret paketi — ön muhasebe (migration 20260813201311)
@@ -339,20 +342,7 @@ const PARTIAL_INDEXES: Array<{
   // Postgres NULL'ları birbirine eşit SAYMAZ: düz unique aynı kaleme iki
   // "varsayılan fiyat" satırı doğmasına izin verirdi ve `resolveItemPrice`
   // hangisini seçtiğini kimse söyleyemezdi (hata çıkmaz, fiyat SALINIR).
-  {
-    table: "item_prices",
-    index: "item_price_default_uq",
-    uniq: true,
-    predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
-    why: "kalem+yön+para birimi başına TEK AKTİF kart varsayılanı (damgalı geçmiş kısıta girmez — MAL-0b)",
-  },
-  {
-    table: "item_prices",
-    index: "item_price_customer_uq",
-    uniq: true,
-    predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
-    why: "kalem+müşteri+yön+para birimi başına TEK AKTİF istisna (damgalı geçmiş kısıta girmez — MAL-0b)",
-  },
+  // item_price_default_uq + item_price_customer_uq → 5) EXPRESSION_UNIQUES (hizmet fiyat tablosu, 2026-11-06).
   // 2026-10-25 — MAL-1 maliyet girdileri (migration 20261025140000_maliyet_girdileri); şema-dışı.
   {
     table: "cost_parameter_sets",
@@ -732,6 +722,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
   { table: "manifests", name: "manifests_source_shape" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
+  // Çuvalsız sevk: SACK-dışı birim tartı/parti taşımaz, araba no yalnız CART'ta, SACK çözülmez.
+  { table: "sacks", name: "sacks_load_unit_shape" },
   { table: "work_order_steps", name: "work_order_steps_time_order" },
   // K29 (2026-11-03): adım kökeni yalnız NULL (plan) ya da 'SCAN' (okutmayla sahada eklendi).
   { table: "work_order_steps", name: "work_order_steps_addedVia_check" },
@@ -1281,6 +1273,22 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     why: "liste içinde ürün+renk+varyant başına tek satır — renksiz/varyantsız satır da TEK",
   },
   {
+    // Hizmet fiyat tablosu (20261106120000): kademe (propertyValueId) ekseni; ileri tarihli
+    // fiyat (validFrom) zamanlanmış damgayla tekilliğe GİRMEZ. NULL sıfır-UUID'ye düşer → bugünkü satırlar eski anahtarla tekil (MAL-0b damgalı geçmiş girmez).
+    table: "item_prices",
+    index: "item_price_default_uq",
+    expr: `COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+kademe+yön+para birimi başına TEK AKTİF kart varsayılanı",
+  },
+  {
+    table: "item_prices",
+    index: "item_price_customer_uq",
+    expr: `COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+müşteri+kademe+yön+para birimi başına TEK AKTİF istisna",
+  },
+  {
     // MAL-2 + SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul): (itemId) → (itemId, COALESCE(recipeId)).
     table: "standard_cost_versions",
     index: "standard_cost_versions_active_uq",
@@ -1457,6 +1465,18 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
   },
   {
     table: "sacks",
+    trigger: "sacks_load_unit_not_in_pool",
+    timing: ["AFTER INSERT OR UPDATE", "DEFERRABLE INITIALLY DEFERRED", "FOR EACH ROW", "sacks_load_unit_guard()"],
+    why: "çuvalsız sevk: dökme/araba birimi havuza dönemez, türü değişmez, çözülmüşte top kalmaz — düşerse havuzda operatörün hiç görmediği birim belirir",
+  },
+  {
+    table: "rolls",
+    trigger: "rolls_load_unit_dissolved",
+    timing: ["AFTER INSERT OR UPDATE OF", "DEFERRABLE INITIALLY DEFERRED", "FOR EACH ROW", "rolls_load_unit_guard()"],
+    why: "çuvalsız sevk: çözülmüş yük birimine top bağlanamaz",
+  },
+  {
+    table: "sacks",
     trigger: "sacks_sync_parent_moved",
     timing: ["AFTER UPDATE OF", "FOR EACH ROW", "sync_mark_sack_old_shipment()"],
     why: "patron bulutu ayrılma körlüğü: çuval sevkiyattan çıkınca ESKİ sevkiyat KIRLI",
@@ -1522,6 +1542,18 @@ const REQUIRED_EXTENSIONS: Array<{ name: string; why: string }> = [
 const TOLERATED_EXTENSIONS = new Set(["unaccent"]);
 
 const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragments: string[]; why: string }> = [
+  {
+    name: "sacks_load_unit_guard",
+    volatility: "v",
+    bodyFragments: ["havuza dönemez", "türü değiştirilemez", "Çözülmüş yük biriminde top kalamaz"],
+    why: "çuvalsız sevk havuz seddi (sacks_load_unit_not_in_pool) — gövde düşerse SACK-dışı birim havuza sızar",
+  },
+  {
+    name: "rolls_load_unit_guard",
+    volatility: "v",
+    bodyFragments: ["Çözülmüş yük birimine top bağlanamaz"],
+    why: "çuvalsız sevk: çözülmüş birime top bağlama seddi",
+  },
   {
     name: "audit_zincir_ozet",
     volatility: "i",

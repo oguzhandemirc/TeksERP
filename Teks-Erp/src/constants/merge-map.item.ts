@@ -280,10 +280,11 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       table: "item_prices",
       column: "itemId",
       label: "Fiyat kartı",
-      uniqueOn: ["itemId", "kind", "currency"],
+      uniqueOn: ["itemId", "propertyValueId", "kind", "currency"],
       // İki KAYNAK arasında geniş anahtar yanlış bloklardı (farklı müşterilerin istisnaları
       // ya da varsayılan + istisna aynı hedefte yan yana durabilir): iki partial UNIQUE'in birebiri.
-      crossSourceOn: { columns: ["customerId", "kind", "currency"], nullSafe: ["customerId"] },
+      // Kademe (2026-11-06) ifade indeksinde COALESCE'li → NULL güvenli eşitlik.
+      crossSourceOn: { columns: ["customerId", "propertyValueId", "kind", "currency"], nullSafe: ["customerId", "propertyValueId"] },
       // Partial UNIQUE yalnız aktif satırda: damgalı fiyat geçmişi serbestçe taşınır (MAL-0b).
       activeWhenNull: ["revokedAt"],
       policy: "BLOCK",

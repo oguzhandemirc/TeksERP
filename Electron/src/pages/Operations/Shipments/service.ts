@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import type { ShipmentRollList } from "./rollListExport";
 import type { DeliveryToState } from "./delivery-to/deliveryTo";
+import type { LoadUnitKind } from "@/lib/load-unit";
 
 // Liste + cursor: createCrudService (GET /api/shipping/shipments?mode=cursor...).
 // Detay ayrı tip (zengin) → getDetail. Backend listShipments cursor'u non-breaking.
@@ -149,7 +150,7 @@ export interface UndoDispatchPreview {
   rollCount: number;
   swatchCount: number;
   /** Yıkıcı önizleme HER kaydı listeler: çuval + içindeki toplar (barkod · metre · emanet sahibi · döneceği raf). */
-  sacks: { id: string; sackNo: string; rollCount: number; rolls?: UndoAffectedRoll[] }[];
+  sacks: { id: string; sackNo: string; unitKind?: LoadUnitKind; unitLabel?: string | null; rollCount: number; rolls?: UndoAffectedRoll[] }[];
   /** Çuvalsız (doğrudan sevkiyata bağlı) toplar — bugün boş; eski sunucu alanı göndermez. */
   looseRolls?: UndoAffectedRoll[];
   affectedOrders: string[];

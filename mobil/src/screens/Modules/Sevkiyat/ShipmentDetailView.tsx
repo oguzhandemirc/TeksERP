@@ -13,6 +13,7 @@ import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint
 import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
 import { deliveryToLine } from './deliveryTo';
+import { isLooseUnit, loadUnitTitle } from '../../../lib/loadUnit';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -140,13 +141,14 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
         </View>
       ))}
 
-      <Text style={styles.section}>Çuvallar ({d.sacks.length})</Text>
+      <Text style={styles.section}>
+        {d.sacks.some(isLooseUnit) ? 'Yük' : 'Çuvallar'} ({d.sacks.length})
+      </Text>
       {d.sacks.map((s) => (
         <Surface key={s.id} style={styles.card} elevation={0}>
           <View style={styles.rowBetween}>
             <Text style={styles.rowMono}>
-              Çuval {s.seq}
-              {s.sackNo ? ` · ${s.sackNo}` : ''}
+              {isLooseUnit(s) ? loadUnitTitle(s) : `Çuval ${s.seq}${s.sackNo ? ` · ${s.sackNo}` : ''}`}
             </Text>
             {/* `rollCount` BRÜT (sevk anında bu çuvalda ne gittiyse o). Mobil
                 çuval kartı per-top satır BASMADIĞI için rozeti buraya koyamayız —

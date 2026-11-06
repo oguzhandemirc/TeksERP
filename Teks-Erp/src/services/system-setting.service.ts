@@ -600,6 +600,8 @@ export const SETTING_KEYS = {
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
   SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
   SHIPMENT_MANUAL_SACK_COUNT_ENABLED: "shipping.manualSackCountEnabled",
+  /** Çuvalsız sevk (dökme / araba yükü). Default false: tablet kipi görünmez, yük birimi alanı 400. */
+  SHIPMENT_LOOSE_LOAD_ENABLED: "shipping.looseLoadEnabled",
   /** Sevk geri alma (storno) YALNIZ aynı fabrika gününde mi yapılabilsin. Default false
    *  (KAPALI = zaman sınırı YOK). Açıkken `dispatchedAt` bugünün fabrika günü başlangıcından
    *  (Europe/Istanbul) önceyse 409. Fatura ve iade koşulları bu ayardan BAĞIMSIZ ve her
@@ -2345,6 +2347,8 @@ export interface FeatureFlags {
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
   shipmentManualSackCountEnabled: boolean;
+  /** Çuvalsız sevk — toplar dökme ya da araba ile çıkar (default false). */
+  shipmentLooseLoadEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi (default false = sınırsız).
    *  Faturasız + iadesiz koşulları bundan bağımsız her zaman geçerlidir. */
   shipmentUndoSameDayOnly: boolean;
@@ -2962,6 +2966,7 @@ export class SystemSettingService {
       trustedDeviceDays: await readTrustedDeviceDays(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
+      shipmentLooseLoadEnabled: await readShipmentLooseLoadEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
       shippingOrderRequirement: await readShippingOrderRequirement(cacheClient),
       itemPhaseOutNewOrder: await readItemPhaseOutNewOrder(cacheClient),
@@ -4249,6 +4254,18 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPMENT_MANUAL_SACK_COUNT_ENABLED,
         input.shipmentManualSackCountEnabled,
         "Sevkiyatta 'araca yüklenen gerçek çuval adedi' elle girilebilsin (kapalıyken alan hiç sorulmaz)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shipmentLooseLoadEnabled")) {
+      if (typeof input.shipmentLooseLoadEnabled !== "boolean") {
+        throw AppError.badRequest("shipmentLooseLoadEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPMENT_LOOSE_LOAD_ENABLED,
+        input.shipmentLooseLoadEnabled,
+        "Çuvalsız sevk: toplar çuvala konmadan dökme ya da araba ile sevk edilebilsin",
         userId
       );
     }
@@ -7373,6 +7390,18 @@ export async function readShipmentManualSackCountEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.SHIPMENT_MANUAL_SACK_COUNT_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** `shipping.looseLoadEnabled` — çuvalsız sevk (dökme/araba). Kayıt yok = false (bugünkü davranış). */
+export async function readShipmentLooseLoadEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPMENT_LOOSE_LOAD_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

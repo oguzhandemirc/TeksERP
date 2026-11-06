@@ -6,6 +6,7 @@ import AppModal from '../../../components/AppModal';
 import { packingService, type SackStoreShipmentLite } from '../../../services/packing.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { roleOfCode } from '../../../utils/qualityRole';
+import { isLooseUnit, loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 const fmtKg = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
@@ -80,14 +81,15 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                   <View key={sk.id} style={styles.sackBlock}>
                     <View style={styles.sackHead}>
                       <View style={styles.sackChip}>
-                        <Icon source="sack" size={13} color="#4338ca" />
-                        <Text style={styles.sackChipText}>{sk.sackNo || `#${sk.seq}`}</Text>
+                        <Icon source={loadUnitIcon(sk)} size={13} color="#4338ca" />
+                        <Text style={styles.sackChipText}>{loadUnitTitle(sk)}</Text>
                       </View>
                       <Text style={styles.sackMeta}>
                         {fmtKg(sk.weightKg)} · {sk.rollCount} top
                         {sk.swatchCount > 0 ? ` · ${sk.swatchCount} kartela` : ''}
                       </Text>
-                      {onRemoveSack && (
+                      {/* Dökme/araba tek başına çıkarılamaz (sunucu 409) — yolu sevkiyat iptali. */}
+                      {onRemoveSack && !isLooseUnit(sk) && (
                         <IconButton
                           icon="close-circle"
                           size={20}

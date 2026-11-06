@@ -46,6 +46,7 @@ import SackManualWeightSheet from './SackManualWeightSheet';
 import { SackLabelPrinter, type SackLabelJob } from '../../../components/labels/SackLabelPrinter';
 import {
   useShipmentConfirmationEnabled,
+  useShipmentLooseLoadEnabled,
   useShippingManualWeightRestrictedEnabled,
   useShippingWeighRequiredEnabled,
   usePackingGroupsEnabled,
@@ -61,6 +62,7 @@ import { formatFactory } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { CariHoldBlockedScreen, openCariHoldBlock, type CariHoldBlock } from '../Sevkiyat/CariHold';
+import { ShipConfirmSheet } from './OrderPick';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -136,6 +138,7 @@ export default function PaketlemeScreen() {
   // Sevk onayı açık: createShipment PLANNED bırakır (çıkış Sevk Çıkışı'ndan).
   // Kapalı (varsayılan): backend doğrudan sevk eder (tek adım).
   const confirmationEnabled = useShipmentConfirmationEnabled();
+  const looseLoadEnabled = useShipmentLooseLoadEnabled();
   // Tartı rejimi — kapalıyken (varsayılan) yalnız yurtdışı sevk tartı ister.
   const weighRequiredFlag = useShippingWeighRequiredEnabled();
   // Elle kg kısıtı. ⚠️ Otorite SUNUCUDA; burada yalnız menü satırı çizilmez
@@ -338,14 +341,16 @@ export default function PaketlemeScreen() {
   // "Hemen Sevk Et" — dolu çuvallardan SİPARİŞSİZ sevkiyat kur. Sevk onayı kapalıysa
   // backend doğrudan sevk eder (dispatched=true); açıksa PLANNED bırakır. Sipariş
   // eşleştirme yapılmaz (orderIds boş).
+  const [shipConfirmOpen, setShipConfirmOpen] = useState(false);
   const shipMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (orderIds: string[]) => {
       const sackIds = shippableSacks.map((s) => s.id);
       const created = await packingService.createShipmentFromSacks({
         sackIds,
         customerId,
         branchId,
-        orderIds: undefined,
+        // Onay kartında sipariş seçildiyse tahsis o siparişlere; boşsa siparişsiz (bugünkü davranış).
+        orderIds: orderIds.length > 0 ? orderIds : undefined,
         destination: destination ?? undefined,
         ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken: shipAttempt.token(),
@@ -379,6 +384,7 @@ export default function PaketlemeScreen() {
     onError: (e: Error) => {
       if (isWorkSessionLost(e)) return;
       shipAttempt.onFailure(e);
+      setShipConfirmOpen(false);
       if (openCariHoldBlock(e, setHoldBlock)) return;
       showScreenError(e, 'Sevkiyat kurulamadı');
     },
@@ -839,8 +845,8 @@ export default function PaketlemeScreen() {
             ) : (
               <Text style={styles.footerOrderlessHint}>
                 {groupName
-                  ? `Siparişsiz sevk — yalnız “${groupName}” grubunun dolu çuvalları gider.`
-                  : 'Siparişsiz sevk — havuzdaki dolu çuvallar gider. Sipariş eşleştirme Sevk Çıkışı’nda.'}
+                  ? `Yalnız “${groupName}” grubunun dolu çuvalları gider — sipariş sonraki adımda seçilir.`
+                  : 'Havuzdaki dolu çuvallar gider — sipariş sonraki adımda seçilir (boş bırakılırsa siparişsiz).'}
               </Text>
             )}
             <View style={styles.footerRow}>
@@ -850,13 +856,28 @@ export default function PaketlemeScreen() {
                 buttonColor={colors.successDark}
                 disabled={!canShip || shipMut.isPending}
                 loading={shipMut.isPending}
-                onPress={() => shipMut.mutate()}
+                onPress={() => setShipConfirmOpen(true)}
                 style={styles.footerBtnFlex}
                 contentStyle={styles.footerBtnContent}
               >
                 {shipButtonLabel({ confirmationEnabled, count: shippableSacks.length, selectionName: groupName })}
               </Button>
             </View>
+            {/* Çuvalsız sevk (dökme / araba) — bayrak kapalıyken düğme yok, ekran bugünkü gibi. */}
+            {looseLoadEnabled && (
+              <Button
+                mode="outlined"
+                icon="truck-outline"
+                onPress={() =>
+                  nav.navigate('CuvalsizSevk', { customerId, branchId, customerName: customer?.name ?? '' })
+                }
+                style={styles.looseBtn}
+                contentStyle={styles.looseBtnContent}
+                testID="paketleme-cuvalsiz-sevk"
+              >
+                Çuvalsız Sevk (dökme / araba)
+              </Button>
+            )}
 
             <View style={styles.scanRow}>
               <Button
@@ -938,6 +959,17 @@ export default function PaketlemeScreen() {
 
       <SackLabelPrinter job={printJob} onDone={() => setPrintJob(null)} />
       <CariHoldBlockedScreen block={holdBlock} onClose={() => setHoldBlock(null)} />
+      {/* Hemen Sevk Et onayı — sipariş seçimi + sunucu önizlemesi; seçim yoksa siparişsiz. */}
+      <ShipConfirmSheet
+        visible={shipConfirmOpen}
+        onDismiss={() => setShipConfirmOpen(false)}
+        customerId={customerId}
+        branchId={branchId}
+        sackIds={shippableSacks.map((s) => s.id)}
+        title={shipButtonLabel({ confirmationEnabled, count: shippableSacks.length, selectionName: groupName })}
+        submitting={shipMut.isPending}
+        onConfirm={(orderIds) => shipMut.mutate(orderIds)}
+      />
 
       <SackManualWeightSheet
         target={manualWeighTarget}
@@ -1204,6 +1236,8 @@ const styles = StyleSheet.create({
   },
   footerBtnContent: { height: 54 },
   footerRow: { flexDirection: 'row', gap: spacing.sm },
+  looseBtn: { marginTop: spacing.sm },
+  looseBtnContent: { minHeight: 56 },
   footerBtnFlex: { flex: 1 },
 
   scanRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },

@@ -936,6 +936,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken sevkiyat ekranında “araca yüklenen çuval adedi” alanı çıkar ve irsaliyeye bu sayı basılır. Kapalıyken (varsayılan) sistemin saydığı çuval adedi kullanılır.",
       },
       {
+        key: "shipmentLooseLoadEnabled",
+        title: "Çuvalsız sevk (dökme / araba)",
+        summary: "Toplar çuvala konmadan sevk edilebilir: kamyon kasasına dökme ya da top taşıma arabasıyla.",
+        defaultOn: false,
+        audience: ["Sevkiyat"],
+        desc: "Açıkken tablette Paketleme ekranında “Çuvalsız Sevk” düğmesi çıkar: toplar okutulur, yük “Dökme” ya da “Araba <no>” olarak seçilir ve irsaliyeye “Dökme – N top” / “Araba A-12 – N top” diye basılır. Kapalıyken (varsayılan) sevk yalnız çuvalla yapılır.",
+      },
+      {
         key: "shipmentUndoSameDayOnly",
         title: "Sevk geri almayı aynı günle sınırla",
         summary: "Yalnız bugün sevk edilmiş sevkiyatlar geri alınabilir.",

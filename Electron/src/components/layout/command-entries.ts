@@ -95,7 +95,8 @@ export const commandSections: CommandSection[] = [
     // izindir (`permissionAny`). Bayrak kapalı bir kurulumda finance izni
     // atanmamış olur, dolayısıyla satırlar da çıkmaz — ve bayrak açılıp izin
     // verilen an kendiliğinden belirirler. Palete ayrıca bayrak yüklemi
-    // koymak, hub karolarıyla ayrışabilecek İKİNCİ bir kural demekti.
+    // koymak, hub karolarıyla ayrışabilecek İKİNCİ bir kural demekti. İstisna: `item:read` gibi finans dışı izinle
+    // açılan karo (Hizmet Fiyat Tablosu) kendi `visibleWhen`ini taşır — hub ile AYNI yüklem, ikinci kural değil.
     heading: TERIM_AD.onMuhasebe,
     entries: financeTiles.map<CommandEntry>((tile) => ({
       key: `fin:${tile.key}`,
@@ -104,6 +105,7 @@ export const commandSections: CommandSection[] = [
       icon: tile.icon,
       to: tile.to,
       permissionAny: tile.permissionAny,
+      visibleWhen: tile.visibleWhen,
     })),
   },
   {

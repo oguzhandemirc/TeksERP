@@ -49,6 +49,9 @@ export interface FlagWork {
   pieceCount: number | null;
   /** Yapraktaki desen değerinin vuruş sayısı; desensiz/vuruşsuz `null`. */
   stitchCount: number | null;
+  /** Yapraktaki çeşit değeri (brode deseni, tambur katı) — hizmet fiyat tablosunun kademesi; çeşitsiz `null`. */
+  valueId: string | null;
+  valueName: string | null;
 }
 
 type RollRow = {
@@ -116,6 +119,20 @@ const BILLABLE_FLAG_PROPERTY: Prisma.FabricPropertyWhereInput = {
   OR: [{ serviceItemId: { not: null } }, { variant: { is: { values: { some: { serviceItemId: { not: null } } } } } }],
 };
 
+/** Yapraktaki bayrağın aktif çeşit değeri (kalemli ya da kalemsiz): `${rollId}:${flagId}` → değer. */
+async function loadVariantValues(db: Db, props: Array<{ rollId: string; propertyId: string }>): Promise<Map<string, { id: string; name: string }>> {
+  const rows = await db.rollProperty.findMany({
+    where: {
+      rollId: { in: [...new Set(props.map((p) => p.rollId))] },
+      ...ACTIVE_ROLL_PROPERTY,
+      property: { variantOfPropertyId: { in: [...new Set(props.map((p) => p.propertyId))] } },
+      valueId: { not: null },
+    },
+    select: { rollId: true, property: { select: { variantOfPropertyId: true } }, value: { select: { id: true, name: true } } },
+  });
+  return new Map(rows.filter((r) => r.value).map((r) => [`${r.rollId}:${r.property.variantOfPropertyId}`, r.value!]));
+}
+
 /** Yapraklardaki aktif faturalanabilir bayraklar, kalemi çözülmüş; kalemi çözülmeyen (desen eşlemesiz + bayrak kalemsiz) düşer — bugünkü gibi iş yok. */
 async function loadBillableFlagProps(rollIds: string[], db: Db) {
   const rows = await db.rollProperty.findMany({
@@ -126,10 +143,12 @@ async function loadBillableFlagProps(rollIds: string[], db: Db) {
   if (rows.length === 0) return [];
   const valueItemOf = await loadVariantValueItems(db, rows);
   const stitchOf = await loadPatternStitchCounts(db, rows);
+  const variantOf = await loadVariantValues(db, rows);
   return rows
     .map((p) => ({
       ...p,
       stitchCount: stitchOf.get(`${p.rollId}:${p.propertyId}`) ?? null,
+      variant: variantOf.get(`${p.rollId}:${p.propertyId}`) ?? null,
       serviceItemId: pickServiceItemId({ value: valueItemOf.get(`${p.rollId}:${p.propertyId}`), property: p.property.serviceItemId }),
     }))
     .filter((p): p is typeof p & { serviceItemId: string } => p.serviceItemId !== null);
@@ -199,7 +218,7 @@ export async function listFlagServiceWorks(
   for (const p of props) {
     const leaf = byId.get(p.rollId)!;
     const stations = stationsOf.get(p.propertyId) ?? new Set<string>();
-    const base = { propertyId: p.propertyId, propertyName: p.property.name, propertyCode: p.property.code, serviceItemId: p.serviceItemId, stitchCount: p.stitchCount, pieceCount: null };
+    const base = { propertyId: p.propertyId, propertyName: p.property.name, propertyCode: p.property.code, serviceItemId: p.serviceItemId, stitchCount: p.stitchCount, pieceCount: null, valueId: p.variant?.id ?? null, valueName: p.variant?.name ?? null };
     let work: FlagWork | null = null;
     for (const rid of chainOf(leaf.id)) {
       if (rid !== leaf.id && pieceBilled.has(`${rid}:${base.serviceItemId}`)) break;

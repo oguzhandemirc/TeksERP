@@ -191,6 +191,13 @@ enum ReasonPresetKind {
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
+/// Yük birimi türü (`Sack.unitKind`) — sevkiyat yük birimine bağlanır (kullanıcı kararı 2026-11-06).
+enum LoadUnitKind {
+  SACK // Çuval — bugünkü depo nesnesi (havuz, tartı, etiket, parti)
+  CART // Top taşıma arabası — `unitLabel` = elle girilen araba no; tartı/etiket/parti yok
+  BULK // Dökme (kamyon kasasına) — sevkiyat başına en fazla bir canlı birim
+}
+
 enum SackWeightSource {
   SCALE // Fiziksel kantardan okundu (mobil BT-SPP / Electron seri port)
   MANUAL // Operatör elle girdi — kantarsız/arızalı durumun kaçış yolu
@@ -566,6 +573,7 @@ model User {
   directShipments               DirectShipment[]         @relation("DirectShipmentShippedBy")
   invoicedDirectShipments       DirectShipment[]         @relation("DirectShipmentInvoicedBy")
   weighedSacks                  Sack[]                   @relation("SackWeighedBy")
+  dissolvedSacks                Sack[]                   @relation("SackDissolvedBy")
   sackTagAssignments            SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
   sackTagAssignmentsCleared     SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
   sackAllocationsCleared        SackAllocation[]         @relation("SackAllocationClearedBy")
@@ -8558,6 +8566,15 @@ model Sack {
   // (kalıcı toggle VEYA tek-seferlik baskı bayrağı), (c) iç ekranlar (mobil + admin).
   // Sevk belgesine ANNOTATION olarak girer — donmuş çekirdeğe yazılmaz, baskıda canlı çözülür.
   notes          String?           @db.VarChar(500)
+  /// Yük birimi türü. SACK-dışı birim HAVUZA DÖNMEZ (DB seddi `sacks_load_unit_not_in_pool`);
+  /// sevkiyat iptalinde içi rafa boşalır ve `dissolvedAt` damgalanır (`dissolveLoadUnitsTx`).
+  /// Jenerik PATCH'ten yazılamaz; tek yaratıcı `openLoadUnitTx`.
+  unitKind       LoadUnitKind      @default(SACK)
+  /// Araba no (yalnız CART; serbest metin, sevkiyat içinde tekil — kimlik DEĞİL, etiket).
+  unitLabel      String?           @db.VarChar(32)
+  /// Birim çözüldü (sevkiyat iptali): toplar rafa döndü, birim defter izi için sevkiyatında kalır.
+  dissolvedAt    DateTime?         @db.Timestamptz
+  dissolvedById  String?           @db.Uuid
 
   // Relations
   customer           Customer?           @relation(fields: [customerId], references: [id])
@@ -8572,6 +8589,7 @@ model Sack {
   /// SET NULL, konum bilgisini sessizce yok ederdi).
   warehouse          Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   weighedBy          User?               @relation("SackWeighedBy", fields: [weighedById], references: [id])
+  dissolvedBy        User?               @relation("SackDissolvedBy", fields: [dissolvedById], references: [id])
   rolls              Roll[] // Bu çuvaldaki toplar (içerik)
   swatches           Swatch[] // Bu çuvaldaki kartelalar (içerik)
   allocations        SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
@@ -8598,6 +8616,7 @@ model Sack {
   @@index([warehouseId])
   /// Grup bloklarının listesi ve "grubu boş mu" yüklemi bu ağaçtan okunur.
   @@index([packingGroupId])
+  @@index([dissolvedById])
   /// Şube-kırılımlı çuval listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) —
   /// `sacks_warehouseId_idx` emsali (migration 20260905140000).
   @@index([branchId])
@@ -9429,6 +9448,8 @@ model FabricPropertyValue {
   cariKursunDefaults      CariAccount[]            @relation("CariKursunDefaultValue")
   /// K22: bu değeri ön seçim varsayılanı yapan istasyon yetenekleri.
   stationPropertyDefaults StationProperty[]        @relation("StationPropertyDefaultValue")
+  /// Hizmet fiyat tablosu: bu kademenin (çeşit değeri) hizmet fiyatı satırları.
+  itemPrices              ItemPrice[]
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
   serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
@@ -12417,17 +12438,27 @@ enum PriceKind {
 /// hangisini seçtiğini kimse söyleyemezdi. Şemada `@@unique` olarak durmak
 /// ZORUNDA: Prisma 7 predicate farkını drift saymaz, index↔unique farkını SAYAR.
 model ItemPrice {
-  id         String          @id @default(uuid()) @db.Uuid
-  itemId     String          @db.Uuid
-  customerId String?         @db.Uuid
-  kind       PriceKind
-  currency   Currency
-  price      Decimal         @db.Decimal(14, 4)
+  id              String          @id @default(uuid()) @db.Uuid
+  itemId          String          @db.Uuid
+  customerId      String?         @db.Uuid
+  kind            PriceKind
+  currency        Currency
+  price           Decimal         @db.Decimal(14, 4)
   /// Hizmet fiyatının birimi (brode: metre/adet/vuruş). NULL = METER (bugünkü satırlar).
-  priceUnit  ServiceQtyUnit?
+  priceUnit       ServiceQtyUnit?
+  /// Hizmet fiyat tablosu (2026-11-06): kademe ekseni — hizmetin bağlı olduğu ÇEŞİT değeri ("Kurşun 40 gr").
+  /// NULL = kalem geneli (bugünkü her satır). Yalnız `itemPriceService` yazar (SERVICE + SALE + eşleme kapısı).
+  propertyValueId String?         @db.Uuid
+  /// K4 ileri tarihli fiyat: geçerlilik başlangıcı. NULL = `createdAt` (bugünkü her satır). Pencere
+  /// `[COALESCE(validFrom, createdAt), revokedAt)`; ZAMANLANMIŞ DAMGA: ileri tarihli satır doğarken
+  /// yürürlükteki satırın `revokedAt`ı o tarihe kurulur → pencereler örtüşmez, tekillikte `validFrom` yok.
+  validFrom       DateTime?       @db.Timestamptz
+  /// İdempotency — hizmet fiyat tablosu yazım ucu (`clientToken @unique` sözleşmesi); eski uçlar NULL yazar.
+  clientToken     String?         @unique @db.Uuid
 
-  item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  item          Item                 @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  customer      Customer?            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  propertyValue FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
   /// ③a TİCARİ PİVOT (2026-10-24, MAL-0b): satır SİLİNMEZ, fiyat yerinde EZİLMEZ — değişim
   /// eski satırın damgası + YENİ satır, kaldırma damgadır; geçerlilik `[createdAt, revokedAt)`.
@@ -12439,13 +12470,13 @@ model ItemPrice {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  // → partial: WHERE "customerId" IS NULL AND "revokedAt" IS NULL      (aktif kart varsayılanı tektir)
-  @@unique([itemId, kind, currency], map: "item_price_default_uq")
-  // → partial: WHERE "customerId" IS NOT NULL AND "revokedAt" IS NULL  (aktif müşteri istisnası tektir)
-  @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
+  // Tekillik ŞEMA-DIŞI (ifade + partial; Prisma ifade indeksini görmez, envanter `test_db_invariants`):
+  //   item_price_default_uq  (itemId, COALESCE(propertyValueId), kind, currency) WHERE customerId IS NULL AND revokedAt IS NULL
+  //   item_price_customer_uq (itemId, customerId, COALESCE(propertyValueId), kind, currency) WHERE customerId IS NOT NULL AND revokedAt IS NULL
   @@index([customerId])
+  @@index([propertyValueId])
   // "Fiyat şu tarih itibarıyla" okuması (`itemPriceValidAt`): anahtar + pencere başı.
-  @@index([itemId, kind, currency, createdAt], map: "item_prices_asof_idx")
+  @@index([itemId, propertyValueId, kind, currency, createdAt], map: "item_prices_asof_idx")
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "item_prices_updatedAt_esitleme_idx")
   @@map("item_prices")

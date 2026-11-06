@@ -47,3 +47,13 @@ describe("Hızlı Sevk görünürlüğü", () => {
     expect(TABS).toContain("FINISHED_STOCK");
   });
 });
+
+describe("Hızlı Sevk yükleme biçimi (çuvalsız sevk)", () => {
+  it("çuvalda anahtar yok (bugünkü gövde); dökme tek birim; araba no normalize, boşsa gönderilemez", async () => {
+    const { quickShipLoadUnits } = await import("./quickShipService");
+    expect(quickShipLoadUnits("SACK", "", ["a"])).toBeUndefined();
+    expect(quickShipLoadUnits("BULK", "", ["a", "b"])).toEqual([{ kind: "BULK", rollIds: ["a", "b"] }]);
+    expect(quickShipLoadUnits("CART", "  A   12 ", ["a"])).toEqual([{ kind: "CART", label: "A 12", rollIds: ["a"] }]);
+    expect(quickShipLoadUnits("CART", "   ", ["a"])).toBeNull();
+  });
+});

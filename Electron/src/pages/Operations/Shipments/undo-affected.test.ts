@@ -54,3 +54,17 @@ describe("Etkilenen e-İrsaliye kaydı (E6) — iptal edilecekse somut söylenir
     expect(eIrsaliyeAffectedLines(rec({ status: "GONDERILDI", yerelIptalEdilebilir: false }), true)).toEqual([]);
   });
 });
+
+describe("storno önizlemesi — yük birimi adı (çuvalsız sevk)", () => {
+  it("dökme/araba satırı birim adıyla, çuval no ile değil", () => {
+    const rows = undoAffectedRows({
+      sacks: [
+        { id: "u1", sackNo: "CV9", unitKind: "BULK", rollCount: 0, rolls: [] },
+        { id: "u2", sackNo: "CV8", unitKind: "CART", unitLabel: "A-3", rollCount: 0, rolls: [] },
+        { id: "u3", sackNo: "CV7", rollCount: 0, rolls: [] },
+      ],
+      looseRolls: [],
+    });
+    expect(rows.map((r) => r.label)).toEqual(["Dökme", "Araba A-3", "CV7"]);
+  });
+});

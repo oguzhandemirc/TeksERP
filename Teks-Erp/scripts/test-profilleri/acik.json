@@ -108,6 +108,7 @@
     "shippingSimulatedWeightEnabled": true,
     "shipmentConfirmationEnabled": true,
     "shipmentManualSackCountEnabled": true,
+    "shipmentLooseLoadEnabled": true,
     "shipmentUndoSameDayOnly": true,
     "shippingOrderRequirement": "block",
     "shippingOrderCoverage": "block",

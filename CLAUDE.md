@@ -49,7 +49,7 @@ Tekstil fabrikası ERP'si; her alt projenin kendi `CLAUDE.md`'si var:
 - Yetenek "VAR" = motor + çıkış yüzeyi + izin ataması; izin kataloğu koda, atama panele; SoD kümesi (`shipping:invoice`, `shipping:undo-dispatch`, `roll:manual-adjust`, `gelen-belge:approve`) yalnız Muhasebe/Süpervizör; süperadmin rol değil (`yetki-izin.md`).
 - Yeni bayrağın varsayılanı = BUGÜNKÜ davranış (ölçülerek); çıkışsız kapı üreten bayrak açılmaz. Rota kapsaması kategoride UYARIR (`ApiResponse.warnings`), özellikte sert (`rota-renk.md`).
 - Lisans kapısı fabrikayı aniden durdurmaz; veri erişimi hep açık (`lisans.md`). Dışarı giden her istek kurulum anahtarıyla imzalanır; bulut hesap yapmaz (`patron-bulutu.md`).
-- İş emri yalnız üretimi yönetir; tartı/paket/sevkiyat çuvala bağlanır; top↔sipariş bağı yok, karşılama `SackAllocation` ile sevk anında (`is-emri.md`).
+- İş emri yalnız üretimi yönetir; tartı/paket/sevkiyat yük birimine (çuval/araba/dökme) bağlanır; top↔sipariş bağı yok, karşılama `SackAllocation` ile sevk anında (`is-emri.md`).
 
 ### Dağıtım, süreç, sır
 - Backend ÖNCE, panel + tablet sonra; sözleşme kıran değişiklikte "eski istemci ne yapar" cevaplanır; `minVersion` yalnız gerçek kırılmada. Sürüm notu taslağını Claude yazar, kullanıcı TERFİDE onaylar; müşteri kodu argümandan, kanal kimliği `deploy/kanallar.json` (`surum-yayin.md`). Commit edilmemiş migration prod'da sessiz eksiktir (`deploy-kurulum.md`).

@@ -46,6 +46,8 @@ export type MainStackParamList = {
   Paketleme: { customerId: string; branchId?: string | null };
   CuvalDuzelt: undefined;
   HizliSiparis: undefined;
+  // Çuvalsız sevk (dökme / araba) — Paketleme'den müşteri seçili açılır.
+  CuvalsizSevk: { customerId: string; customerName: string; branchId?: string | null };
   KartelaSevkGecmisi: undefined;
   KartelaKabulGecmisi: undefined;
   FasonSevkGecmisi: undefined;

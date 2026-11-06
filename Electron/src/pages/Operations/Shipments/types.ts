@@ -1,5 +1,6 @@
 import type { Tone } from "@/components/operations/StatusBadge";
 import type { ColorNameScope } from "@/services/labelService";
+import type { LoadUnitKind } from "@/lib/load-unit";
 
 export type ShipmentStatus = "PLANNED" | "DISPATCHED" | "CANCELLED";
 
@@ -193,6 +194,9 @@ export interface SackContentSwatch {
 export interface ShipmentDetailSack {
   id: string;
   sackNo: number | string;
+  /** Yük birimi (çuvalsız sevk) — eski sunucu göndermez → çuval. */
+  unitKind?: LoadUnitKind;
+  unitLabel?: string | null;
   seq: number;
   /** Sıra etiketi ("SP3", "P-3/100") — sevkiyatta donan ön ekle; ön ek yoksa null (ekran "Çuval #n" basar). */
   seqLabel?: string | null;
