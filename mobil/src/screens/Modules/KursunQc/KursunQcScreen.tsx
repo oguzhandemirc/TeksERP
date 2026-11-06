@@ -79,6 +79,7 @@ import {
   nextStationLabel,
 } from './stationPanels';
 import GramajTapPanel from './GramajTapPanel';
+import AllDoneFinishPanel from './AllDoneFinishPanel';
 import { useGramajTap } from './useGramajTap';
 import { widthGatedTap } from './widthGatedTap';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
@@ -1484,6 +1485,13 @@ export default function KursunQcScreen() {
               <Text style={styles.readOnlyTitle}>Bu istasyonda top yok</Text>
               <Text style={styles.readOnlyText}>{activeJob.stepSummary.emptyStep.message}</Text>
             </View>
+          ) : !selectedRoll && allQc2Done ? (
+            // Son top bitince seçim boşalır; kapanış düğmesi seçili topun altbilgisinde kalıp kayboluyordu (provada iş tambura düşmedi).
+            <AllDoneFinishPanel
+              rollCount={activeJob.stepSummary.rolls.length}
+              nextStepName={activeJob.stepSummary.nextStepName}
+              onFinish={() => footerThrottled(handleFinishStep)}
+            />
           ) : !selectedRoll ? (
             <View style={styles.emptyState}>
               <Icon source="package-variant" size={64} color="#cbd5e1" />
