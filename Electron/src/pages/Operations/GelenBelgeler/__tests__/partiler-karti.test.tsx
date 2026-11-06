@@ -1,6 +1,7 @@
 // Çok blok D7 (2026-11-06): gelen belge detayında "Partiler" kartı — blok başına künye (işlem, müşteri İE no), satır/beyan
 // adet, Σ m/kg, uyarılar, bağlı İE bağlantısı; tek partili belgede ve eski sunucu alanları yokken kart/alan gizlenir.
-// Negatif sonda: PartiesCard `multi` kapısı kaldırılınca "tek partili belge → kart yok" vakası kırmızı.
+// Negatif sonda: PartiesCard `multi` kapısı kaldırılınca "tek partili belge → kart yok" vakası kırmızı; `recordedMeters` yok sayılınca
+// "onaylı parti" vakası kırmızı (ölçüldü 2026-11-06).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
@@ -59,5 +60,14 @@ describe("Partiler kartı", () => {
     getNoteParties.mockResolvedValue(view({ parties: [party(1, { batchNo: null }), party(2)] }));
     renderWithProviders(<PartiesCard noteId="n1" />);
     expect(await screen.findByText("Parti no yok")).toHaveClass("bg-amber-100");
+  });
+
+  it("⭐ onaylı parti: metre parti kaydından (elle düzeltilen 3.935), okunan Σ satır farklıysa ayrı kutuda (2. prova)", () => {
+    const items = partyFactItems(party(2, { meters: 2464.701, recordedMeters: 3935 })).map((f) => f.text);
+    expect(items).toContain(fmtMeters(3935));
+    expect(items).toContain(`Satır toplamı ${fmtMeters(2464.701)}`);
+    expect(items).not.toContain(fmtMeters(2464.701));
+    expect(partyFactItems(party(1, { meters: 586, recordedMeters: 586 })).filter((f) => f.text.includes("m")).map((f) => f.text)).toEqual([fmtMeters(586)]);
+    expect(partyFactItems(party(1, { meters: 0, recordedMeters: null })).find((f) => f.warn)?.text).toBe("metre yok");
   });
 });

@@ -30,6 +30,7 @@ import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { StationCapabilityService } from "../src/services/station-capability.service";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
+import { stockFromCustomerGoodsWarning } from "../src/services/gelen-belge-form-is-emri.service";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -294,11 +295,15 @@ async function run(url: string): Promise<void> {
     r7a.status === 201 && p7a.includes(flagAuto) && !p7a.includes(flagOther) && s7a.length === 1 && s7a[0]?.stationId === fStation && m7a?.routeTemplateId === fRoute && m7a?.type === "STOCK_PRODUCTION",
     `${r7a.status} ${r7a.code ?? ""} ${JSON.stringify({ p7a, s7a, m7a })}`);
 
+  check("§7 ⭐ tür seçilmeden (Belge Okut) STOK türetilince yanıt uyarır: müşteri malı → Fason Belge Okut (2. prova IE0611260014)",
+    (r7a.warnings ?? []).includes(stockFromCustomerGoodsWarning()), JSON.stringify(r7a.warnings));
+
   const n7b = await mkNote();
   const r7b = await formWo(n7b, body({ routeTemplateId: fRoute, targetPropertyIds: [flagOther], type: "STOCK_PRODUCTION" }));
   const p7b = await woProps(r7b.data?.workOrderId);
   check("§7 ⭐ targetPropertyIds yazılır (istemci kümesi; kaldırılan AUTO bayrak tohumlanmaz)", r7b.status === 201 && p7b.length === 1 && p7b[0] === flagOther, `${r7b.status} ${r7b.code ?? ""} ${JSON.stringify(p7b)}`);
   check("§7 ⭐ type yazılır", (await woMeta(r7b.data?.workOrderId))?.type === "STOCK_PRODUCTION");
+  check("§7 tür AÇIKÇA seçildiyse (Stoğa üretim) uyarı yok", !(r7b.warnings ?? []).includes(stockFromCustomerGoodsWarning()), JSON.stringify(r7b.warnings));
   const n7c = await mkNote();
   const r7c = await formWo(n7c, body({ routeTemplateId: fRoute, targetPropertyIds: [] }));
   check("§7 targetPropertyIds: [] → bayraksız İE", r7c.status === 201 && (await woProps(r7c.data?.workOrderId)).length === 0, `${r7c.status} ${r7c.code ?? ""}`);

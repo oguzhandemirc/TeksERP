@@ -40,12 +40,15 @@ export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
     select: {
       id: true, totalsDeclared: true, pageCount: true,
       scans: { select: { pageNo: true } },
-      lines: { where: { status: { not: DeliveryNoteLineStatus.SKIPPED } }, select: { id: true, blockNo: true, meters: true, weightKg: true, processText: true } },
+      lines: { where: { status: { not: DeliveryNoteLineStatus.SKIPPED } }, select: { id: true, blockNo: true, meters: true, weightKg: true, processText: true, rollId: true } },
     },
   });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));
-  const { parties, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount ?? declaredPageCount(note.totalsDeclared), scannedPages: note.scans.map((s) => s.pageNo) });
+  // Elle düzeltilen parti metresi yalnız parti kaydında (özet satırı) yaşar; kart Σ satırı değil bunu göstersin (2. prova).
+  const recorded = new Map(note.lines.filter((l) => l.rollId && isSummaryLine(note.id, l)).map((l) => [l.blockNo, Number(l.meters)]));
+  const { parties: read, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount ?? declaredPageCount(note.totalsDeclared), scannedPages: note.scans.map((s) => s.pageNo) });
+  const parties = read.map((p) => ({ ...p, recordedMeters: recorded.get(p.blockNo) ?? null }));
   const withWos = [];
   for (const p of parties) withWos.push({ ...p, workOrders: await partyLinkedWorkOrders(note.id, p.blockNo) });
   return { parties: withWos, warnings, multi: parties.length > 1, defaultMode: await readMultiPartyWorkOrder() };

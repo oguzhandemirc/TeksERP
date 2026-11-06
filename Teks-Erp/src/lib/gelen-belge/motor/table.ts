@@ -38,9 +38,21 @@ function matchHeader(row: Row, spec: TableSpec): ColumnRect[] {
   return out;
 }
 
+/**
+ * OCR toplam etiketini adetle BİTİŞİK okuyabilir ("T.Adet16", 214279 2. prova): etiket benzerliği eşiğin altına düşer, satır
+ * toplam sayılmaz ve beyan sessizce kaybolur. Sondaki rakam koşusu ayrılıp etiket yeniden eşlenir; ayrılan sayı adettir.
+ */
+export function gluedTotalsCount(text: string, labels: string[]): string | null {
+  if (matchesLabel(text, labels)) return null;
+  const m = /^(.*[^\d\s])(\d{1,4})$/.exec(text.trim());
+  return m && matchesLabel(m[1]!, labels) ? m[2]! : null;
+}
+
+const isTotalsLabel = (text: string, labels: string[]): boolean => matchesLabel(text, labels) || gluedTotalsCount(text, labels) !== null;
+
 function isTotalsRow(row: Row, spec: TableSpec): boolean {
   if (!spec.totals) return false;
-  return row.lines.some((l) => matchesLabel(l.text, spec.totals!.labels));
+  return row.lines.some((l) => isTotalsLabel(l.text, spec.totals!.labels));
 }
 
 /** Satırları başlık/veri/toplam olarak bloklara böler; başlıktan önceki toplam satırları "sahipsiz" döner. */
@@ -139,7 +151,8 @@ function numericParts(lines: ReadonlyArray<OcrLine>, label: OcrLine | undefined)
 function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTotals {
   const tolerance = Math.max(...draft.columns.map((c) => c.rect.width)) * 0.75;
   const measureKeys = spec.columns.filter((c) => c.key === "kg" || c.key === "m").map((c) => c.key);
-  const label = row.lines.find((l) => matchesLabel(l.text, spec.totals?.labels ?? []));
+  const labels = spec.totals?.labels ?? [];
+  const label = row.lines.find((l) => isTotalsLabel(l.text, labels));
   const out: DeclaredTotals = { count: null, kg: null, m: null, rect: unionRect(row.lines.map((l) => l.rect)) };
   const leftovers: Array<{ value: string; x: number }> = [];
   for (const line of numericParts(row.lines, label)) {
@@ -156,6 +169,7 @@ function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTot
     else if (key === null || col.type !== "decimal") leftovers.push({ value, x: line.rect.x });
   }
   leftovers.sort((a, b) => a.x - b.x);
+  if (out.count === null && label) out.count = gluedTotalsCount(label.text, labels);
   // Kolon hizasında olmayan toplam satırı: etiketten sonra önce adet (tam sayı), sonra ölçüler şablon sırasıyla
   const missing = measureKeys.filter((k) => out[k as "kg" | "m"] === null);
   if (out.count === null && leftovers.length > missing.length && /^\d+$/.test(leftovers[0]!.value)) out.count = leftovers.shift()!.value;

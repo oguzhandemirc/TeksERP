@@ -1,5 +1,5 @@
 // Çok partili belge (çok blok, 2026-11-06): blok başına parti no, sipariş, işlem, müşteri İE no, satır/beyan adet, Σ m/kg,
-// sunucunun canlı uyarıları ve partiye bağlı İE'ler (sunucu zincirinden; panel türetmez). Tek partili belgede çizilmez.
+// onaylıda parti kaydının metresi (elle düzeltme), sunucunun canlı uyarıları ve partiye bağlı İE'ler (sunucu zincirinden; panel türetmez). Tek partili belgede çizilmez.
 import { AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatNumber } from "@/lib/format";
@@ -41,10 +41,20 @@ export function partyFactItems(p: NoteParty): PartyFact[] {
     p.processText ? { text: `İşlem: ${p.processText}` } : null,
     p.senderWorkOrderNo ? { text: `Müşteri İE ${p.senderWorkOrderNo}` } : null,
     { text: `${p.lineCount} top${p.declaredTopCount !== null && p.declaredTopCount !== p.lineCount ? ` (belgede ${p.declaredTopCount})` : ""}` },
-    p.meters > 0 ? { text: fmtMeters(p.meters) } : { text: "metre yok", warn: true },
+    ...partyMeterFacts(p),
     p.weightKg !== null ? { text: `${formatNumber(p.weightKg, 2)} kg` } : null,
   ];
   return items.filter((x): x is PartyFact => !!x);
+}
+
+/**
+ * Onaylı partide metre = parti kaydı (operatörün elle düzelttiği değer dahil; sunucu `recordedMeters`), okunan Σ satır farklıysa
+ * ayrı kutuda; onaysızda okunan Σ satır (2. prova: kart 3.935 yerine 2.464,701 gösteriyordu).
+ */
+function partyMeterFacts(p: NoteParty): PartyFact[] {
+  const rec = p.recordedMeters ?? null;
+  if (rec === null) return [p.meters > 0 ? { text: fmtMeters(p.meters) } : { text: "metre yok", warn: true }];
+  return Math.abs(rec - p.meters) > 0.0005 ? [{ text: fmtMeters(rec) }, { text: `Satır toplamı ${fmtMeters(p.meters)}` }] : [{ text: fmtMeters(rec) }];
 }
 
 export function partyFacts(p: NoteParty): string[] {
