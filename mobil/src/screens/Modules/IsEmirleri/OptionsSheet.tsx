@@ -27,7 +27,7 @@ export default function OptionsSheet({ visible, kinds, onChange, onDismiss }: Pr
       visible={visible}
       onDismiss={onDismiss}
       title="Seçenekler"
-      subtitle="Altta hangi oluştur düğmeleri görünsün? Seçim yalnız bu cihazda saklanır; en az biri açık kalır."
+      subtitle="Altta hangi belge okut düğmeleri görünsün? Seçim yalnız bu cihazda saklanır; en az biri açık kalır."
       size="sm"
       footer={<Button mode="contained" onPress={onDismiss} contentStyle={styles.btn} testID="ie-secenek-tamam">Tamam</Button>}
     >

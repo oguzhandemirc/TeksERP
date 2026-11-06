@@ -99,7 +99,7 @@ export function tileLayout(count: number, width: number, height: number, gap = 1
 }
 
 /** Alt çubuk düğme adları (tür başına ayrı düğme; her biri doğrudan okutmaya gider). */
-export const KIND_BUTTON: Record<WoCreateKind, string> = { STANDARD: 'İE oluştur', CUSTOMER_GOODS: 'Fason İE oluştur' };
+export const KIND_BUTTON: Record<WoCreateKind, string> = { STANDARD: 'Belge Okut', CUSTOMER_GOODS: 'Fason Belge Okut' };
 
 /** Okutma akışının İE türü: Fason düğmesi → Fason (müşteri malı); İE oluştur → null (bugünkü türetme). */
 export const scanWoType = (kind: WoCreateKind): 'CUSTOMER_GOODS_SERVICE' | null => (kind === 'CUSTOMER_GOODS' ? 'CUSTOMER_GOODS_SERVICE' : null);
