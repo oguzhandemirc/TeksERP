@@ -2,14 +2,16 @@
 // TeksERP - WorkOrder (Parti) Routes
 // =============================================================================
 
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { z } from "zod";
 import { WorkOrderController } from "../controllers/workorder.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
+import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
-import { getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
+import { getKursunGramaj, getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -179,6 +181,36 @@ router.get(
  */
 // ⚠️ `/:id`'DEN ÖNCE: sonra kaydedilseydi Express "events"i bir iş emri id'si sanırdı.
 router.get("/events/lookup", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.lookupEvents);
+
+/**
+ * @openapi
+ * /api/work-orders/default-target-item:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Boş hedef kumaşın dolacağı stok kartı (ipucu) — elle > müşteri varsayılanı > İE varsayılanı > gelen belge fabrika varsayılanı
+ *     description: forNote yoksa panel stoğa üretim (yalnız İE varsayılanı); forNote=true belgeden İE (müşteri ve fabrika varsayılanı da). Yazım PUT /api/feature-flags/work-order-default-item.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: forNote, schema: { type: boolean } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ item: {id,code,name,problem} | null, source: CUSTOMER|WORK_ORDER|FACTORY|null, workOrderDefault }" }
+ *       400: { description: Geçersiz sorgu }
+ */
+// ⚠️ `/:id`'DEN ÖNCE (Express "default-target-item"i iş emri id'si sanardı).
+const DefaultTargetQuery = z.strictObject({
+  forNote: z.enum(["true", "false"], "forNote true ya da false olmalı").optional(),
+  customerId: z.uuid("Geçersiz müşteri kimliği").optional(),
+});
+router.get("/default-target-item", verifyToken, requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = DefaultTargetQuery.parse(req.query);
+    const [eff, workOrderDefault] = [await getEffectiveDefaultTarget({ forNote: q.forNote === "true", customerId: q.customerId ?? null }), await getWorkOrderDefaultItem()];
+    res.status(200).json({ success: true, data: { ...eff, workOrderDefault } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findById);
 
@@ -651,11 +683,30 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  *                   properties:
  *                     propertyId: { type: string, format: uuid }
  *                     valueId: { type: string, format: uuid, nullable: true }
+ *               reason: { type: string, nullable: true, description: "Gramaj değişim sebebi (İE hareket defterine)" }
  *     responses:
- *       200: { description: Hedef güncellendi (ya da aynıydı) }
+ *       200: { description: "Hedef güncellendi (ya da aynıydı); kurşun gramajı değişti ve uygulanmış top varsa warnings[] eski/yeni top sayısını söyler" }
+ *       403: { description: "Yalnız mobile:is-emri-duzelt — gövdede kurşun gramajı dışı özellik" }
+ *       409: { description: "WORK_ORDER_PLAN_FROZEN — tablet yolu, iş emri kapanmış" }
  *       400: { description: Özellik çeşit değil / değer o özelliğe ait değil }
  */
-router.put("/:id/target-values", verifyToken, requirePermission("workorder:write"), putTargetValues);
+// Tablet Düzelt (`mobile:is-emri-duzelt`) yalnız kurşun gramajını yazar — daraltma serviste (`kursunOnly`).
+router.put("/:id/target-values", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), putTargetValues);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/kursun-gramaj:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Tablet "Gramajı Değiştir" önizlemesi — kurşun gramajı hedefi, seçenekler, kurşunu uygulanmış / kalan top sayısı (salt okuma)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "propertyId | null, target { valueId, valueName } | null, options[{ id, name, isDefault }], appliedRollCount, pendingRollCount, editable" }
+ *       404: { description: İş emri yok }
+ */
+router.get("/:id/kursun-gramaj", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), getKursunGramaj);
 
 /**
  * @openapi

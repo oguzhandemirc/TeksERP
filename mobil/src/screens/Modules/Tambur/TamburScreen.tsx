@@ -987,7 +987,7 @@ export default function TamburScreen() {
   // KQ-D7: eski backend alanı göndermez → undefined → çekmece çizilmez (bugünkü ekran).
   const inspectionEnabled = activeJob?.stepSummary?.inspectionEnabled === true;
   // Gülkesim S5: müşteri (Kime? ?? top sahibi) tartım/bölme ayarı + fabrika basım zamanı.
-  const openFinal = useTamburFinalLabel(selectedRoll?.rollId, work.voluntaryEntry.targetCustomerId);
+  const openFinal = useTamburFinalLabel(selectedRoll?.rollId, work.voluntaryEntry.targetCustomerId, activeJob?.stepSummary.workOrderId ?? null);
   const recutFinal = useTamburFinalLabel(recutResolvedRollId, recutTargetCustomerId);
   const [labelInfoOpen, setLabelInfoOpen] = useState(false);
   const printTiming = useTamburPrintTiming();
@@ -1366,6 +1366,8 @@ export default function TamburScreen() {
       measure?: TamburMeasure;
       /** S5 tartım (kg) — müşteri "tamburda tartım" açıksa zorunlu. */
       weightKg?: number;
+      /** Müşteri parti no (etiket); ayar kapalıysa undefined. */
+      labelBatchNo?: string | null;
     }) =>
       tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
@@ -1386,9 +1388,11 @@ export default function TamburScreen() {
         // bu satır düşerse operatör onaylar, bayrak isteğe girmez, 409 sürer.
         confirmMismatch: data.confirmMismatch,
         weightKg: data.weightKg,
+        labelBatchNo: data.labelBatchNo,
       }, data.measure)),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      openFinal.batch.recordUse(variables.labelBatchNo);
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
       clearKartelaAfterOutput();
       // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
@@ -1662,6 +1666,7 @@ export default function TamburScreen() {
       clientToken,
       measure,
       weightKg,
+      labelBatchNo,
     }: {
       rollId: string;
       cutLength: number;
@@ -1680,6 +1685,7 @@ export default function TamburScreen() {
       measure?: TamburMeasure;
       /** S5 tartım (kg). */
       weightKg?: number;
+      labelBatchNo?: string | null;
     }) =>
       tamburService.cutWarehouseRoll(rollId, withMeasure({
         cutLength,
@@ -1690,11 +1696,13 @@ export default function TamburScreen() {
         rawDestination,
         clientToken,
         weightKg,
+        labelBatchNo,
       }, measure)),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
       clearKartelaAfterOutput();
+      recutFinal.batch.recordUse(variables.labelBatchNo);
       // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
       recutAttempt.onSuccess();
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
@@ -1785,18 +1793,21 @@ export default function TamburScreen() {
       varianceReasonCode,
       varianceReasonText,
       weightKg,
+      labelBatchNo,
     }: {
       rollId: string;
       remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
       varianceReasonCode?: string | null;
       varianceReasonText?: string | null;
       weightKg?: number;
+      labelBatchNo?: string | null;
     }) =>
       tamburService.finalizeWarehouseCut(rollId, {
         remainingAction,
         varianceReasonCode,
         varianceReasonText,
         weightKg,
+        labelBatchNo,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -2074,6 +2085,7 @@ export default function TamburScreen() {
         // D4-B3: ölçüm değişmeden gidiyorsa makine/simülasyon; aksi hâlde OPERATOR.
         measure: resolveMeasure(capture, length),
         weightKg: openFinal.weightKg(),
+        labelBatchNo: openFinal.batch.body(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
@@ -2355,6 +2367,7 @@ export default function TamburScreen() {
         clientToken: recutAttempt.keyed(recutResolvedRollId),
         measure: resolveMeasure(capture, cut),
         weightKg: recutFinal.weightKg(),
+        labelBatchNo: recutFinal.batch.body(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
@@ -4041,6 +4054,7 @@ export default function TamburScreen() {
                 kgText={recutFinal.kgText}
                 onKgChange={recutFinal.setKgText}
                 onSuggest={handleRecutLengthChange}
+                batch={recutFinal.batch}
                 onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
               />
               <TamburMeasureStrip last={lastMeasure} />
@@ -4408,6 +4422,7 @@ export default function TamburScreen() {
                 remaining={selectedRoll.currentQty}
                 kgText={openFinal.kgText}
                 onKgChange={openFinal.setKgText}
+                batch={openFinal.batch}
                 onSuggest={(t) => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: t } }))}
                 onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
               />
@@ -4680,6 +4695,7 @@ export default function TamburScreen() {
             rollId,
             remainingAction: action,
             weightKg,
+            labelBatchNo: action === 'discard' ? undefined : openFinal.batch.body(),
             foldType: work.foldType ?? null,
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
@@ -4707,6 +4723,7 @@ export default function TamburScreen() {
             rollId: recutResolvedRollId,
             remainingAction: action,
             weightKg: action === 'discard' ? undefined : recutFinal.weightKg(),
+            labelBatchNo: action === 'discard' ? undefined : recutFinal.batch.body(),
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
           });

@@ -96,6 +96,7 @@ const baseCtx: RelabelContext = {
   qualityGradeRef: { id: "qg-1", code: "1.KALITE", name: "1. Kalite", color: null },
   width: 150,
   foldType: null,
+  labelBatchNo: null,
   currentQty: 100,
   weightKg: 30,
   markedForKartela: false,
@@ -129,6 +130,21 @@ describe("RelabelSpecForm — spec düzeltme", () => {
         qualityGrade: "1.KALITE",
       }),
     );
+  });
+
+  it("müşteri parti no: değişmezse gövdede YOK (dokunma), yazılınca trim'li gider, silinince null", async () => {
+    const { unmount } = renderWithProviders(<RelabelSpecForm ctx={{ ...baseCtx, labelBatchNo: "J1" }} onSaved={() => {}} />);
+    const input = screen.getByLabelText(/Müşteri Parti/);
+    await userEvent.clear(input);
+    await userEvent.type(input, " K30 ");
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(applySpec).toHaveBeenLastCalledWith("roll-1", expect.objectContaining({ labelBatchNo: "K30" })));
+    unmount();
+    applySpec.mockClear();
+    renderWithProviders(<RelabelSpecForm ctx={{ ...baseCtx, labelBatchNo: "J1" }} onSaved={() => {}} />);
+    await userEvent.clear(screen.getByLabelText(/Müşteri Parti/));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(applySpec).toHaveBeenLastCalledWith("roll-1", expect.objectContaining({ labelBatchNo: null })));
   });
 
   it("commit'li sevkiyat (specLocked) → kaydet disabled + uyarı", () => {

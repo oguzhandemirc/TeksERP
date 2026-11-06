@@ -19,6 +19,7 @@ import {
   TIMELINE_GROUP_LABEL,
   WORK_ORDER_CHANNEL_LABEL,
   WORK_ORDER_FIELD_LABEL,
+  WORK_ORDER_EXTRA_FIELD_LABEL,
   WORK_ORDER_ROLL_ATTRIBUTE_LABEL,
   WORK_ORDER_STEP_FIELD_LABEL,
   WORK_ORDER_TRIGGER_LABEL,
@@ -91,7 +92,7 @@ function woEventItem(e: {
       return { ...base, group: "PLAN", title: `Toplara ${label} uygulandı`, detail: `${to} · ${n} top` };
     }
     default: {
-      const fieldLabel = e.field ? ((WORK_ORDER_FIELD_LABEL as Record<string, string>)[e.field] ?? e.field) : "Alan";
+      const fieldLabel = e.field ? ((WORK_ORDER_FIELD_LABEL as Record<string, string>)[e.field] ?? WORK_ORDER_EXTRA_FIELD_LABEL[e.field] ?? e.field) : "Alan";
       return { ...base, group: e.field === "isActive" ? "DURUM" : "PLAN", title: `${fieldLabel} değişti`, detail: `${from} → ${to}` };
     }
   }

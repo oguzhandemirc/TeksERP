@@ -10,11 +10,15 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
+import { STOCK_ITEM_TYPES } from "@/types/enums";
 import { customerAliasService, type CustomerItemAlias } from "./aliasService";
 
 interface Props {
   customerId: string;
 }
+
+/** Müşteri ürün adı yalnız stok kalemine verilir; hizmet kalemi sunucuda süzülür (yazma ucu da 400 ALIAS_ITEM_NOT_STOCK). */
+const ALIAS_ITEM_FILTERS = { itemType: STOCK_ITEM_TYPES.join(",") };
 
 export function CustomerItemAliasesPanel({ customerId }: Props) {
   const qc = useQueryClient();
@@ -35,18 +39,17 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
       customerAliasService.upsertItemAlias(customerId, itemId, alias),
     onSuccess: () => {
       toast.success("Müşterideki kumaş adı kaydedildi.");
-      invalidate();
+      void invalidate();
       setDraftItemId(null);
       setDraftAlias("");
     },
   });
 
   const deleteMut = useMutation({
-    mutationFn: (itemId: string) =>
-      customerAliasService.deleteItemAlias(customerId, itemId),
+    mutationFn: (itemId: string) => customerAliasService.deleteItemAlias(customerId, itemId),
     onSuccess: () => {
       toast.success("Müşterideki kumaş adı silindi.");
-      invalidate();
+      void invalidate();
       setDeletingItemId(null);
     },
   });
@@ -70,6 +73,7 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
               service={itemService}
               queryKey="items"
               getLabel={(i) => `${i.code} — ${i.name}`}
+              extraFilters={ALIAS_ITEM_FILTERS}
               placeholder="Kumaş seç..."
             />
           </div>

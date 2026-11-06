@@ -18,6 +18,7 @@ import type { FormRollInput, FormRollMode } from "../lib/gelen-belge/form-toplar
 import { TERIM } from "../constants/terim";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { approveDeliveryNote } from "./gelen-belge-onay.service";
+import { resolveNoteWorkOrderDefaultItem } from "./workorder-default-item.service";
 import { summaryLineId } from "./gelen-belge-kontrol.service";
 import { updateDeliveryNote } from "./gelen-belge-note.service";
 import { getReadSummary, type ReadSummaryState } from "./gelen-belge-okuma-ozeti.service";
@@ -249,13 +250,18 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
       throw AppError.conflict(`${note.noteNo} şu an ${TERIM.terbiyeIsEmri.tekilKucuk} için kaydedilemez (${note.status}).`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: note.status });
     }
     const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { username: true } });
+    // Hedef boşsa: müşteri varsayılanı > İE varsayılan stok kartı > fabrika varsayılanı (müşteri/fabrika onay zincirinde).
+    const owner = item ? null : await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { ownerCustomerId: true } });
+    const woDefault = item ? undefined : await resolveNoteWorkOrderDefaultItem(owner?.ownerCustomerId ?? null);
+    const target = item ?? woDefault;
     const approved = await approveDeliveryNote(noteId, input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}, actor.userId, {
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
       ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(rollParties ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : {}) })) } : {}),
       ...(rollParties ? { separateRolls: true } : {}),
-      ...(item ? { item } : {}),
+      ...(target ? { item: target } : {}),
     });
+    if (woDefault) warnings.push(`Hedef kumaş seçilmedi; ${TERIM.terbiyeIsEmri.tekilKucuk} varsayılan stok kartı (${woDefault.name}) yazıldı.`);
     warnings.push(...approved.warnings);
   }
   // Hedef metraj alanı açık fabrikada boş hedef = gelen metre (kapalıysa bugünkü gibi türetilmez).

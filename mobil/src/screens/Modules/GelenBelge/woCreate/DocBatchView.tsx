@@ -16,6 +16,7 @@ import PageCameraModal from '../PageCameraModal';
 import MultiPageCameraModal from '../MultiPageCameraModal';
 import PageList from '../PageList';
 import PagePreviewModal from '../PagePreviewModal';
+import SameDocumentCard from '../SameDocumentCard';
 import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
@@ -96,6 +97,11 @@ export default function DocBatchView({ route, multi = true, autoStart = false, o
       </ScrollView>
       {wo.rows.length > 0 && <SaveBar wo={wo} label={saveLabel} />}
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
+      <SameDocumentCard
+        match={b.sameDoc ?? wo.sameDoc}
+        onClose={() => { b.clearSameDoc(); wo.dismissSameDoc(); }}
+        onNewWorkOrder={b.sameDoc ? (n) => b.openNote(n) : undefined}
+      />
       <PagePreviewModal
         pages={b.pages}
         index={previewIndex}

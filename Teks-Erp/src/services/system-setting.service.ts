@@ -557,6 +557,10 @@ export const SETTING_KEYS = {
   ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
   /** İş emri oluştururken plannedEndDate verilmediyse plannedStartDate + N gün. Default 7. */
   WORKORDER_DEFAULT_PLAN_DURATION_DAYS: "workorder.defaultPlanDurationDays",
+  /** İş emri VARSAYILAN STOK KARTI (Item.id): hedef kumaşı boş bırakılan stoğa üretim İE'si bu kartla açılır. Boş = bugünkü
+   *  davranış (400). Öncelik: elle > müşteri varsayılanı > bu ayar > gelen belge fabrika varsayılanı. Feature-flag yükünde
+   *  DÖNMEZ; tek yazar `PUT /api/feature-flags/work-order-default-item`. */
+  WORKORDER_DEFAULT_TARGET_ITEM_ID: "workorder.defaultTargetItemId",
   /** Sahadaki operatör Fason Sevk'te fason talimatını telefondan girebilsin mi.
    *  Default false (kapalı) → talimat yalnızca adım notundan gelir; mobil alan gizli. */
   FASON_NOTE_MOBILE_ENTRY: "fason.noteMobileEntry",
@@ -6681,6 +6685,17 @@ export async function readIncomingDocDefaultItemId(tx?: Pick<typeof prisma, "sys
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID },
+    select: { value: true },
+  });
+  const v = typeof setting?.value === "string" ? setting.value.trim() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
+}
+
+/** İE varsayılan stok kartı. Kayıt yok / boş / UUID değil → null (bugünkü davranış: hedefsiz stoğa üretim 400). */
+export async function readWorkOrderDefaultTargetItemId(tx?: Pick<typeof prisma, "systemSetting">): Promise<string | null> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.WORKORDER_DEFAULT_TARGET_ITEM_ID },
     select: { value: true },
   });
   const v = typeof setting?.value === "string" ? setting.value.trim() : "";

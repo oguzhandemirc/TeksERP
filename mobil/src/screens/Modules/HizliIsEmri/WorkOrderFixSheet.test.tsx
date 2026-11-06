@@ -6,6 +6,8 @@ import { renderWithPaper } from '../../../test/render';
 const mockPreview = jest.fn();
 const mockColor = jest.fn();
 const mockWidth = jest.fn();
+const mockGramaj = jest.fn();
+const mockGramajSave = jest.fn();
 // Parti Ekle kartı okutma geri bildirimini (expo-audio) yükler — jest'te ses modülü yok.
 jest.mock('../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 jest.mock('../../../services/workOrder.service', () => ({
@@ -14,6 +16,12 @@ jest.mock('../../../services/workOrder.service', () => ({
     changeTargetColor: (...a: unknown[]) => mockColor(...a),
     changeWidth: (...a: unknown[]) => mockWidth(...a),
     reprintTravelerCard: jest.fn(),
+  },
+}));
+jest.mock('../../../services/workOrderGramaj.service', () => ({
+  workOrderGramajService: {
+    kursunGramaj: (...a: unknown[]) => mockGramaj(...a),
+    changeKursunGramaj: (...a: unknown[]) => mockGramajSave(...a),
   },
 }));
 jest.mock('../../../services/travelerCardPrint', () => ({ printTravelerCardForWorkOrder: jest.fn() }));
@@ -40,7 +48,7 @@ jest.mock('../../../components/ColorSelectField', () => {
 
 const WO = { id: 'wo-1', workOrderNumber: 'IE-1', targetColorId: 'c1', targetColor: { name: 'Mavi' }, width: 180 };
 
-function renderIt(kind: 'color' | 'width') {
+function renderIt(kind: 'color' | 'width' | 'gramaj') {
   const onDone = jest.fn();
   renderWithPaper(<WorkOrderFixSheet kind={kind} wo={WO} onDismiss={() => {}} onDone={onDone} />);
   return { onDone };
@@ -96,6 +104,38 @@ describe('WorkOrderFixSheet — renk', () => {
     fireEvent.press(screen.getByText('renk-sec'));
     await waitFor(() => expect(screen.getByText('Mal boyandı — Tebdil gerekir')).toBeTruthy());
     fireEvent.press(screen.getByText('Müşteri değiştirdi'));
+    expect(await saveDisabled()).toBe(true);
+  });
+});
+
+describe('WorkOrderFixSheet — gramaj (2026-11-06)', () => {
+  beforeEach(() => {
+    mockGramaj.mockReset().mockResolvedValue({
+      propertyId: 'p-k', target: { valueId: 'v40', valueName: '40 gr' },
+      options: [{ id: 'v40', name: '40 gr', isDefault: true }, { id: 'v45', name: '45 gr', isDefault: false }],
+      appliedRollCount: 3, pendingRollCount: 5,
+    });
+    mockGramajSave.mockReset().mockResolvedValue({ warnings: ['3 topa kurşun eski gramajla uygulandı (geçmiş değişmez); yeni gramaj kalan 5 topa işler.'] });
+  });
+
+  it('⭐ önizleme uygulanmış/kalan top sayısını söyler; aynı gramaj ve sebepsiz kaydedilmez; yeni gramaj sebeple gider', async () => {
+    const { onDone } = renderIt('gramaj');
+    expect(await screen.findByText('3 topa kurşun eski gramajla (40 gr) uygulandı — bu geçmiş değişmez. Yeni gramaj kalan 5 topa işler.')).toBeTruthy();
+    expect(await saveDisabled()).toBe(true);
+    fireEvent.press(screen.getByTestId('gramaj-v40'));
+    fireEvent.press(screen.getByText('Müşteri değiştirdi'));
+    expect(await saveDisabled()).toBe(true);
+    fireEvent.press(screen.getByTestId('gramaj-v45'));
+    expect(await saveDisabled()).toBe(false);
+    fireEvent.press(screen.getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mockGramajSave).toHaveBeenCalledWith('wo-1', { propertyId: 'p-k', valueId: 'v45', reason: 'Müşteri isteği değiştirdi' });
+  });
+
+  it('kurşun özelliği tanımsız → seçici yok, kaydedilmez', async () => {
+    mockGramaj.mockResolvedValue({ propertyId: null, target: null, options: [], appliedRollCount: 0, pendingRollCount: 0 });
+    renderIt('gramaj');
+    expect(await screen.findByText('Kurşun gramajı özelliği tanımlı değil.')).toBeTruthy();
     expect(await saveDisabled()).toBe(true);
   });
 });

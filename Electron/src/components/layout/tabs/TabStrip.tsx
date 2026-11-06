@@ -1,5 +1,5 @@
 import { useRef, type WheelEvent } from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus, CopyX } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -17,8 +17,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { useTabsStore, type TabItem } from "@/store/tabs";
 import { resolveTabMeta } from "./tab-meta";
+import { TabContextMenu } from "./TabContextMenu";
+import { CLOSE_ALL_SHORTCUT } from "./tab-close";
 
-/** Açık sekme şeridi — seç / kapat / sürükle-sırala / yeni sekme. */
+/** Açık sekme şeridi — seç / kapat / sağ tık toplu kapat / sürükle-sırala / yeni sekme / tümünü kapat. */
 export function TabStrip() {
   const tabs = useTabsStore((s) => s.tabs);
   const activeId = useTabsStore((s) => s.activeId);
@@ -26,6 +28,7 @@ export function TabStrip() {
   const closeTab = useTabsStore((s) => s.closeTab);
   const openTab = useTabsStore((s) => s.openTab);
   const reorder = useTabsStore((s) => s.reorder);
+  const closeTabs = useTabsStore((s) => s.closeTabs);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
@@ -76,6 +79,16 @@ export function TabStrip() {
       >
         <Plus className="h-4 w-4" />
       </button>
+      <button
+        type="button"
+        onClick={() => closeTabs("all")}
+        disabled={tabs.length === 0}
+        title={`Tümünü kapat (${CLOSE_ALL_SHORTCUT})`}
+        aria-label="Tüm sekmeleri kapat"
+        className="my-1 flex w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      >
+        <CopyX className="h-4 w-4" />
+      </button>
     </div>
   );
 }
@@ -93,47 +106,50 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
   });
   const Icon = resolveTabMeta(tab.path).icon;
 
+  // Tetikleyici asChild: Radix Slot sortable ref'ini ve fare olaylarını birleştirir.
   return (
-    <div
-      ref={setNodeRef}
-      style={{
-        // Yalnız yatay sürükleme: dikey ekseni sıfırla (imleç yukarı/aşağı gitse de çip kaymaz).
-        transform: CSS.Translate.toString(transform ? { ...transform, y: 0 } : transform),
-        transition,
-        opacity: isDragging ? 0.6 : 1,
-        zIndex: isDragging ? 20 : undefined,
-      }}
-      onMouseDown={(e) => {
-        if (e.button === 1) {
-          e.preventDefault();
-          onClose(); // orta tık → kapat
-        }
-      }}
-      className={cn(
-        "group flex h-7 min-w-[100px] max-w-[200px] flex-1 items-center gap-1.5 rounded-md pl-2.5 pr-1.5 text-sm transition-colors touch-none",
-        active
-          ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
-          : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onSelect}
-        {...attributes}
-        {...listeners}
-        className="flex min-w-0 flex-1 items-center gap-1.5"
+    <TabContextMenu tabId={tab.id}>
+      <div
+        ref={setNodeRef}
+        style={{
+          // Yalnız yatay sürükleme: dikey ekseni sıfırla (imleç yukarı/aşağı gitse de çip kaymaz).
+          transform: CSS.Translate.toString(transform ? { ...transform, y: 0 } : transform),
+          transition,
+          opacity: isDragging ? 0.6 : 1,
+          zIndex: isDragging ? 20 : undefined,
+        }}
+        onMouseDown={(e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            onClose(); // orta tık → kapat
+          }
+        }}
+        className={cn(
+          "group flex h-7 min-w-[100px] max-w-[200px] flex-1 items-center gap-1.5 rounded-md pl-2.5 pr-1.5 text-sm transition-colors touch-none",
+          active
+            ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+            : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+        )}
       >
-        <Icon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{tab.title}</span>
-      </button>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label={`${tab.title} sekmesini kapat`}
-        className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </div>
+        <button
+          type="button"
+          onClick={onSelect}
+          {...attributes}
+          {...listeners}
+          className="flex min-w-0 flex-1 items-center gap-1.5"
+        >
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{tab.title}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`${tab.title} sekmesini kapat`}
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    </TabContextMenu>
   );
 }

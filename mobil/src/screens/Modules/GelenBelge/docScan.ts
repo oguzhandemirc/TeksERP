@@ -7,7 +7,7 @@
 // =============================================================================
 import { sha256Bytes } from '../../../lib/qr-parca';
 import type { AttemptToken } from '../../../offline/attemptToken';
-import type { InboundDocApi, UploadScanBody } from '../../../services/inboundDoc.service';
+import type { InboundDocApi, SameDocumentMatch, UploadScanBody } from '../../../services/inboundDoc.service';
 import { logDeviceOcrResponse, readPageText, type ClientOcr } from '../../../services/deviceOcr';
 
 /** Ölçüm bu boyda yapıldı (karar belgesi §2a): uzun kenar ≈ 2600 px, JPEG kalite 0,8. */
@@ -175,6 +175,30 @@ export class SubmitError extends Error {
   }
 }
 
+/** Belge daha önce okutulmuş: yeni taslak AÇILMAZ (açıldıysa sayfasız taslak silindi); ekran kısayol kartını gösterir. */
+export class SameDocumentFound extends Error {
+  constructor(readonly match: SameDocumentMatch) {
+    super(`Bu belge daha önce okutuldu (${match.note.noteNo})`);
+  }
+}
+
+/** Yükleme 409 `DOCUMENT_SCAN_NOT_FREE` ayrıntısındaki kısayol verisi (eski sunucuda alan yok → null). */
+export function sameDocumentOf(e: unknown): SameDocumentMatch | null {
+  const err = e as { status?: number; details?: { code?: string; sameDocument?: SameDocumentMatch | null } } | null;
+  if (err?.status !== 409 || err.details?.code !== 'DOCUMENT_SCAN_NOT_FREE') return null;
+  return err.details.sameDocument ?? null;
+}
+
+/** Taslak açmadan önce sor; sorgu hatası gönderimi durdurmaz (bugünkü yol). */
+async function lookupSameDocument(api: InboundDocApi, input: SubmitInput): Promise<SameDocumentMatch | null> {
+  if (!api.findSameDocument) return null;
+  try {
+    return await api.findSameDocument({ sha256: input.pages.map((p) => p.sha256), ownerCustomerId: input.ownerCustomerId, senderDocNo: input.senderDocNo });
+  } catch {
+    return null;
+  }
+}
+
 export interface SubmitResult {
   note: { id: string; noteNo: string };
   uploaded: number;
@@ -199,7 +223,10 @@ export async function submitDocScan(
   if (!input.pages.length) throw new Error('En az bir sayfa fotoğrafı çekin.');
   let note = prior.note;
   const uploaded = new Set(prior.uploaded);
+  const createdHere = !note;
   if (!note) {
+    const match = await lookupSameDocument(api, input);
+    if (match) throw new SameDocumentFound(match);
     try {
       const created = await api.createDraftNote({
         clientToken: attempt.token(),
@@ -238,6 +265,12 @@ export async function submitDocScan(
       if (r.duplicate) duplicates++;
       uploaded.add(page.sha256);
     } catch (e) {
+      // Yarış: ön sorgudan sonra fotoğraf başka taslağa bağlandı → bu gönderimin açtığı sayfasız taslak yetim kalmaz.
+      const match = createdHere && uploaded.size === 0 ? sameDocumentOf(e) : null;
+      if (match) {
+        await api.deleteDraftNote?.(note.id).catch(() => undefined);
+        throw new SameDocumentFound(match);
+      }
       throw new SubmitError(e, { note, uploaded });
     }
   }
