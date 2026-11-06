@@ -1,18 +1,17 @@
 {
   "_not": "ESLint uyarı TAVANI — yalnız DÜŞER. Ölçüm: node scripts/check-lint-baseline.mjs --yaz",
   "_kapsam": "eslint .",
-  "_dosyaSayisi": 539,
+  "_dosyaSayisi": 1128,
   "kurallar": {
     "@typescript-eslint/array-type": 29,
-    "@typescript-eslint/no-floating-promises": 248,
+    "@typescript-eslint/no-floating-promises": 247,
     "@typescript-eslint/no-require-imports": 25,
-    "@typescript-eslint/no-unused-vars": 27,
+    "@typescript-eslint/no-unused-vars": 24,
     "import/first": 25,
     "import/no-named-as-default-member": 1,
-    "max-lines": 44,
+    "max-lines": 43,
     "max-lines-per-function": 161,
-    "no-restricted-syntax": 2143,
-    "no-unused-vars": 1,
+    "no-restricted-syntax": 2114,
     "react-hooks/exhaustive-deps": 26
   }
 }
