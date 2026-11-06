@@ -3341,7 +3341,7 @@ export class ShippingService {
       { kind: data.unitKind, label: data.unitLabel ?? null, rollIds: [resolved.roll.id], clientToken: data.clientToken ?? null },
       userId,
     );
-    return { ...res, data: { ...(res.data as object), kind: "ROLL", rollId: resolved.roll.id, barcode: resolved.roll.barcode, qty: Number(resolved.roll.currentQty), ...matchExtras(resolved) } };
+    return { ...res, data: { ...(res.data as object), kind: "ROLL", rollId: resolved.roll.id, barcode: resolved.roll.barcode, rollMeters: Number(resolved.roll.currentQty), ...matchExtras(resolved) } };
   }
 
   /**

@@ -12,7 +12,7 @@ export interface AddLoadResult {
   rollId?: string;
   sackId?: string;
   /** Okutulan topun metresi (top yolu). */
-  qty?: number;
+  rollMeters?: number;
   barcode?: string | null;
   sackNo?: string;
   unitKind?: 'SACK' | 'CART' | 'BULK';

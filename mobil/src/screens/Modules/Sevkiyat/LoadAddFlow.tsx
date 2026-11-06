@@ -54,7 +54,7 @@ function useLoadAdd(shipment: SackStoreShipmentLite | null) {
       }
       signalScan('accept');
       ids.current.set(code, { rollId: d.rollId, sackId: d.sackId });
-      setAdded((xs) => [...xs, { barcode: code, qty: d.qty ?? 0 }]);
+      setAdded((xs) => [...xs, { barcode: code, qty: d.rollMeters ?? 0 }]);
     } catch (e) {
       attempt.onFailure(e);
       fb.pushRejects([{ barcode, reason: (e as { message?: string })?.message ?? 'Eklenemedi' }]);
