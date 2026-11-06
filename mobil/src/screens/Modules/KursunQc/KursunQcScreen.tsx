@@ -1497,7 +1497,7 @@ export default function KursunQcScreen() {
               {tapLayout && <GramajTapPanel state={gramajTap} hasRoll={false} />}
             </View>
           ) : (
-            // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton · numpad
+            // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton
             // arası boşluk EŞİT (styles.rollPane gap). Flex-spacer yok.
             <View style={styles.rollPane}>
               {/* KQ-D3: hata girişi TEK bileşen (InspectionPanel; K4P ile ortak) —
@@ -1740,11 +1740,6 @@ export default function KursunQcScreen() {
               </Surface>
               )}
 
-              {/* Tablet: sayısal tuş takımı sol kolonun altında — metre girişi
-                  ile aynı sütunda, aksiyon butonunun hemen altında. fill: numpad
-                  kalan alana esner (dar tablette taşmaz, geniş tablette iri tuş).
-                  Telefonda numpad yok; kalite paneli kapalıysa metre girişi yok → numpad da yok. */}
-              {!compact && panels.qualityPanel && <NumpadHost style={styles.numpadHost} fill />}
             </View>
           )}
         </View>
@@ -1753,6 +1748,11 @@ export default function KursunQcScreen() {
         {!compact && (
           <View style={styles.rightCol}>
             {renderRightContent()}
+            {/* Tablet: tuş takımı SAĞ ALTTA, sabit iri tuşlarla (fill değil). Sol kolonda
+                hata listesi + gramaj + KK2 Tamamla alanı yiyip host'u eziyordu (2026-11-06);
+                top listesi (flex:1) üstte kalanı alır ve kendi içinde kayar. Kalite paneli
+                kapalıysa metre girişi yok → numpad da yok. */}
+            {panels.qualityPanel && <NumpadHost style={styles.numpadHost} />}
           </View>
         )}
       </View>
@@ -2604,7 +2604,7 @@ const styles = StyleSheet.create({
   },
   // Tablet: footer'ın beyaz zemini + üst çizgisi kaldırılır — aksiyon butonu
   // doğrudan sol kolon zemininde durur. Dikey iç boşluk 0: buton→giriş ve
-  // buton→numpad mesafesi rollPane gap'inden gelsin (eşit boşluk).
+  // buton→üst bileşen mesafesi rollPane gap'inden gelsin (eşit boşluk).
   footerBare: {
     backgroundColor: 'transparent',
     borderTopWidth: 0,
@@ -2680,12 +2680,9 @@ const styles = StyleSheet.create({
   paneEmptyText: { fontSize: 14, color: '#94a3b8', fontWeight: '600' },
   paneEmptyHint: { fontSize: 12, color: '#cbd5e1', textAlign: 'center' },
 
-  // Tablet: sol kolonda aksiyon butonunun altında. Üst boşluk rollPane gap'inden
-  // gelir (marginTop 0).
+  // Tablet: sağ kolonun altında, top listesinin altında.
   numpadHost: {
-    marginHorizontal: 8,
-    marginTop: 0,
-    marginBottom: 8,
+    margin: 8,
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 8,

@@ -68,7 +68,9 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   // sistem klavyesine düş. Operatör metrajı yine girer; ekran ölmez. Bu, modal
   // yazarken `useNativeKeyboard` bayrağını koymayı unutmayı da AFFEDER — bayrak
   // hâlâ anlamlı (telefonda bilinçli tercih) ama artık tek savunma hattı değil.
-  const nativeMode = useNativeKeyboard || numpad === null;
+  // Aynı felsefe: host ölçülüp okunur numpad için fazla kısa bulunduysa
+  // (`NUMPAD_HOST_MIN_HEIGHT`) tuşlar görünmez → yine sistem klavyesi.
+  const nativeMode = useNativeKeyboard || numpad === null || numpad.hostTooSmall;
 
   const id = useId();
   const isActive = target?.id === id;
