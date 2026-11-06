@@ -293,6 +293,8 @@ export interface TamburLabelSettings {
   printTiming: 'EACH' | 'END';
   /** Müşteri etikete kendi parti no'sunu istiyor mu (eski backend göndermez → kapalı). */
   labelBatchEnabled?: boolean;
+  /** Topun sahibi (EMANET, fason mal) — Kime?'den bağımsız; eski backend göndermez → undefined (bugünkü davranış). */
+  ownerCustomer?: { id: string; name: string } | null;
 }
 
 /** GET/PUT /labels/work-orders/:id/overrides yanıtı. */

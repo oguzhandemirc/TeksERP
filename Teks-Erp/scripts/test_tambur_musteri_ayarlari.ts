@@ -6,7 +6,7 @@
 //   §2 tartım KAPALI (varsayılan) → kg'sız kesim geçer (bugünkü), kg verilirse çocuğa yazılır
 //   §3 tartım AÇIK → kg'sız kesim 400 TAMBUR_WEIGHT_REQUIRED (depo topu + açık kumaş), kg ile geçer
 //   §4 ayar sahibi müşteri: Kime? (targetCustomerId) sahibi EZER
-//   §5 GET label-settings görünümü: ayarlar + printTiming (varsayılan EACH); yok top 404
+//   §5 GET label-settings görünümü: ayarlar + printTiming (varsayılan EACH) + ownerCustomer (sahip); yok top 404
 //   §6 kesim şeması weightKg'ı TAŞIR (Zod strip tuzağı)
 //   §7 'Bitir' yolları (s5 inceleme): kalan top doğuran finalizeWarehouseCut / finalizeOpenFabric /
 //      segmentli finalize de AYNI kapıdan geçer; discard (top doğmaz) ve ayar kapalı → kg'sız geçer
@@ -175,6 +175,10 @@ async function main(): Promise<void> {
   check("§5 sahibin ayarları + EACH", v.customerId === owner && v.weighRequired && v.splitLengthM === 50 && v.printTiming === "EACH", JSON.stringify(v));
   const v2 = await getTamburLabelSettings({ rollId: w3, customerId: target });
   check("§5 Kime? verilince onun ayarı", v2.customerId === target && !v2.weighRequired && v2.splitLengthM === null);
+  // Tablet fason topta Kime? varsayılanını buradan alır: Kime? verilse de sahip DEĞİŞMEZ (prova 2026-11-06).
+  check("§5 ownerCustomer = malın sahibi (Kime?'den bağımsız)", v.ownerCustomer?.id === owner && v2.ownerCustomer?.id === owner && !!v2.ownerCustomer?.name, JSON.stringify(v2.ownerCustomer));
+  const vNone = await getTamburLabelSettings({});
+  check("§5 topsuz okuma → ownerCustomer null", vNone.ownerCustomer === null);
   check("§5 yok top 404", (await errCode(getTamburLabelSettings({ rollId: "00000000-0000-4000-8000-000000000000" }))).startsWith("404"));
 
   console.log("\n[§6] Zod şeması");

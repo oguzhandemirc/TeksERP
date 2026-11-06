@@ -46,6 +46,7 @@ import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
+import { useOwnerDefaultTarget } from './ownerTarget';
 import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
@@ -995,6 +996,22 @@ export default function TamburScreen() {
   // Gülkesim S5: müşteri (Kime? ?? top sahibi) tartım/bölme ayarı + fabrika basım zamanı.
   const openFinal = useTamburFinalLabel(selectedRoll?.rollId, work.voluntaryEntry.targetCustomerId, activeJob?.stepSummary.workOrderId ?? null);
   const recutFinal = useTamburFinalLabel(recutResolvedRollId, recutTargetCustomerId);
+  // Fason (EMANET) topta Kime? varsayılanı malın sahibi; operatör Stok/başka hedef seçerse ezilmez (ownerTarget.ts).
+  const redecideOwnerTarget = useOwnerDefaultTarget(
+    selectedRoll?.rollId,
+    openFinal.settings.ownerCustomer,
+    !!work.voluntaryEntry.targetOrderLineId || !!work.voluntaryEntry.targetCustomerId,
+    (o) =>
+      setWork((w) =>
+        w.voluntaryEntry.targetOrderLineId || w.voluntaryEntry.targetCustomerId
+          ? w
+          : { ...w, voluntaryEntry: { ...w.voluntaryEntry, targetCustomerId: o.id, targetCustomerName: o.name } },
+      ),
+  );
+  useOwnerDefaultTarget(recutResolvedRollId, recutFinal.settings.ownerCustomer, !!recutTargetLineId || !!recutTargetCustomerId, (o) => {
+    setRecutTargetCustomerId(o.id);
+    setRecutTargetCustomerName(o.name);
+  });
   const [labelInfoOpen, setLabelInfoOpen] = useState(false);
   const printTiming = useTamburPrintTiming();
 
@@ -1013,6 +1030,8 @@ export default function TamburScreen() {
     // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
     const defaultFold: TamburFoldType | null = known ?? planned ?? foldValues[0]?.code ?? null;
     setWork({ ...EMPTY_WORK, foldType: defaultFold });
+    redecideOwnerTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sıfırlayıcı ref temizler, tetik değildir
   }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType, foldValues]);
 
 
