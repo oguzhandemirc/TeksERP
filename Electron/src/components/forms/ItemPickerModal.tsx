@@ -153,7 +153,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, life
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[85vh] max-w-5xl flex-col gap-3">
+      <DialogContent className="flex h-[85vh] max-w-5xl flex-col gap-3" data-dirty-ignore="">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{locked ? `Bütün ${ITEM_TYPE_LABEL[locked]} kartları` : "Bütün ürün kartları"} tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir. Renk/özellik süzgeci "bu rengi alabilecek ürünler"i gösterir.</DialogDescription>

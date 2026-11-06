@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { requestLogout } from "@/components/layout/tabs/dirty-close-guard";
 import {
   Keyboard,
   Loader2,
@@ -172,7 +173,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       key: "logout",
       label: "Çıkış yap",
       icon: LogOut,
-      run: () => void logout().then(() => (window.location.hash = "#/login")),
+      run: () => requestLogout(() => void logout().then(() => (window.location.hash = "#/login"))),
     },
   ];
 

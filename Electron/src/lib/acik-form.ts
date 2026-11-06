@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ForwardedRef } from "react";
+import { getDirtyTabIds } from "@/components/layout/tabs/dirty-tabs";
 
 /**
  * AÇIK / YAZILMIŞ FORM KAYDI — panel güncellemesinin kurulumu bekletip bekletmeyeceğinin TEK kaynağı.
@@ -89,8 +90,9 @@ export function formsBlockingInstall(): Element[] {
   return [...panes, ...dirtyForms];
 }
 
+/** Kirli sekme (`useDirtyTab` beyanı — ör. sayfa editörü) de kurulumu bekletir: pencere kapanışı onu sorardı. */
 export function hasOpenForm(): boolean {
-  return formsBlockingInstall().length > 0;
+  return formsBlockingInstall().length > 0 || getDirtyTabIds().size > 0;
 }
 
 /** Diyalog açılıp kapanması DOM'da olur; ucuz bir yoklama yeter (yalnız kurulum beklerken koşar). */

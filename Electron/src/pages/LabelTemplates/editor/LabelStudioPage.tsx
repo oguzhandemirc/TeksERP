@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { useEffect, useMemo, useState } from "react";
+import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UnitSettingsPanel } from "./UnitSettingsPanel";
@@ -73,6 +74,7 @@ export function LabelStudioPage() {
   const [testPrintOpen, setTestPrintOpen] = useState(false);
 
   const state = useEditorState();
+  useDirtyTab(state.dirty);
   const canvas = {
     widthMm: activeVariant?.widthMm ?? 100,
     heightMm: activeVariant?.heightMm ?? 60,

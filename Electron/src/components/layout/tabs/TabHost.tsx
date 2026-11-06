@@ -7,6 +7,7 @@ import { TabStrip } from "./TabStrip";
 import { TabRouter } from "./TabRouter";
 import { TabActiveProvider, TabIdProvider } from "./tab-active";
 import { TabPortalProvider } from "./tab-portal";
+import { DirtyTabsConfirm } from "./DirtyTabsConfirm";
 import { LICENSE_SUSPENDED_PATH } from "@/lib/license/suspension";
 import { LICENSE_ACTIVATION_PATH } from "@/lib/license/activation-lock";
 
@@ -37,6 +38,7 @@ export function TabHost() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TabStrip />
+      <DirtyTabsConfirm />
       <div className="relative min-h-0 flex-1">
         {tabs.map((tab) => (
           <TabPane key={tab.id} tab={tab} active={tab.id === activeId} />
@@ -66,6 +68,7 @@ const TabPane = memo(function TabPane({ tab, active }: { tab: TabItem; active: b
   return (
     <div
       ref={setContainer}
+      data-tab-id={tab.id}
       aria-hidden={!active}
       className={cn(
         "tab-pane absolute inset-0",
