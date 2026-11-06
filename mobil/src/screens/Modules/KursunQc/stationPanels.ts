@@ -141,6 +141,12 @@ export function finishStepLabel(nextStepName: string | null | undefined): string
   return next ? `Adımı Kapat — Toplar ${dativeTr(next)}` : 'Adımı Kapat';
 }
 
+/** Bütün toplar tamamken (seçili top yok) kapanış panelinin açıklaması. */
+export function allDoneHint(nextStepName: string | null | undefined): string {
+  const next = nextStationLabel(nextStepName);
+  return next ? `Adımı kapatınca iş ${dativeTr(next)} düşer.` : 'Adımı kapatınca bu istasyondaki iş biter.';
+}
+
 /** "Top seçilmedi" ipucu düzene göre: tablette kuyruk sağ sütunda, telefonda
  *  (dikey) üst şeritteki "Açık İşler" çekmecesinde. */
 export function emptyRollHint(compact: boolean): string {
