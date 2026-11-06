@@ -4063,7 +4063,7 @@ export class ShippingService {
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         _count: { select: { sacks: true, rolls: true, swatches: true } },
-        sacks: { orderBy: { seq: "asc" }, select: { id: true, sackNo: true, _count: { select: { rolls: true } } } },
+        sacks: { orderBy: { seq: "asc" }, select: { id: true, sackNo: true, unitKind: true, unitLabel: true, _count: { select: { rolls: true } } } },
         // Yıkıcı önizleme: etkilenen HER top somut (barkod · sahibi · döneceği raf) — soyut sayı yetmez.
         // `SHIPPED` filtresi mutasyonun kümesiyle aynı (`undoDispatch` yalnız sevkteki topları döndürür).
         rolls: { where: { status: RollStatus.SHIPPED }, orderBy: ROLL_DISPLAY_ORDER, select: { id: true, sackId: true, barcode: true, currentQty: true, preShipStatus: true, ownerCustomer: { select: { name: true } } } },
@@ -4133,7 +4133,7 @@ export class ShippingService {
         sackCount: shipment._count.sacks,
         rollCount: shipment._count.rolls,
         swatchCount: shipment._count.swatches,
-        sacks: shipment.sacks.map((s) => ({ id: s.id, sackNo: s.sackNo, rollCount: s._count.rolls, rolls: rollsBySack.get(s.id) ?? [] })),
+        sacks: shipment.sacks.map((s) => ({ id: s.id, sackNo: s.sackNo, unitKind: s.unitKind, unitLabel: s.unitLabel, rollCount: s._count.rolls, rolls: rollsBySack.get(s.id) ?? [] })),
         /** Çuvalsız (doğrudan sevkiyata bağlı) toplar — bugün boş küme; varsa listelenir, gizlenmez. */
         looseRolls,
         affectedOrders: [...new Set(shipment.orders.map((o) => o.order.orderNumber))],

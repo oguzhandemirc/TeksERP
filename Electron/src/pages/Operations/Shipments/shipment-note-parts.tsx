@@ -1,4 +1,5 @@
 import { safeFormat } from "@/lib/format";
+import { isLooseUnit, loadUnitTitle, type LoadUnitKind } from "@/lib/load-unit";
 
 // =============================================================================
 // Sevk İrsaliyesi ortak parçaları + donmuş belge payload tipleri.
@@ -22,6 +23,9 @@ export interface ShipmentDocSack {
   /** Sıra etiketi (sevkiyatta donan ön ek) — yoksa "Çuval #n". */
   seqLabel?: string | null;
   sackNo: string | null;
+  /** Yük birimi (çuvalsız sevk) — eski sunucu göndermez → çuval. */
+  unitKind?: LoadUnitKind;
+  unitLabel?: string | null;
   weightKg: number | null;
   /** Sevk partisi (2026-09-21) — eski backend göndermez, partisiz çuvalda null. */
   packageNo?: number | null;
@@ -143,8 +147,8 @@ export function SackBreakdown({ sacks, totalKg }: { sacks: ShipmentDocSack[]; to
           <div key={s.seq} className="border border-gray-300">
             <div className="flex items-center justify-between border-b border-gray-300 bg-gray-50 px-2 py-1 text-[11px] font-semibold">
               <span>
-                {s.seqLabel ?? `Çuval #${s.seq}`}
-                {s.sackNo ? ` · ${s.sackNo}` : ""}
+                {isLooseUnit(s) ? loadUnitTitle(s) : (s.seqLabel ?? `Çuval #${s.seq}`)}
+                {!isLooseUnit(s) && s.sackNo ? ` · ${s.sackNo}` : ""}
                 {s.packageNo != null ? ` · Ambalaj No ${s.packageNo}` : ""}
                 {s.packingGroupName ? ` · ${s.packingGroupName}` : ""}
               </span>

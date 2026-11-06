@@ -78,6 +78,17 @@ export async function findRollsForQuickShip(params: {
  * `clientToken` çağıran tarafından **mantıksal deneme başına bir kez** üretilir;
  * "Sevk Et"e ikinci kez basmak yeni bir denemedir ve yeni token ister.
  */
+export type QuickShipLoadMode = "SACK" | "BULK" | "CART";
+export type QuickShipLoadUnit = { kind: "BULK" | "CART"; label?: string; rollIds: string[] };
+
+/** Yük biçimi → gövde: çuvalda anahtar YOK (bugünkü Hızlı Sevk); arabada tek araba no, boşsa null (gönderilemez). */
+export function quickShipLoadUnits(mode: QuickShipLoadMode, cartLabel: string, rollIds: string[]): QuickShipLoadUnit[] | undefined | null {
+  if (mode === "SACK") return undefined;
+  if (mode === "BULK") return [{ kind: "BULK", rollIds }];
+  const label = cartLabel.replace(/\s+/g, " ").trim().slice(0, 32);
+  return label ? [{ kind: "CART", label, rollIds }] : null;
+}
+
 export async function quickShip(payload: {
   rollIds: string[];
   customerId: string;
@@ -89,6 +100,8 @@ export async function quickShip(payload: {
   /** Teslim yeri (K18) — `deliveryToBody` çıktısı; boşken anahtar gitmez. */
   deliveryCustomerId?: string;
   deliveryAddress?: string;
+  /** Çuvalsız sevk (`shipping.looseLoadEnabled`): dökme ya da araba; yoksa görünmez çuval. */
+  loadUnits?: QuickShipLoadUnit[];
   clientToken?: string;
 }): Promise<ApiResponse<{ id: string; shipmentNo: string; dispatched?: boolean }>> {
   const res = await apiClient.post<ApiResponse<{ id: string; shipmentNo: string; dispatched?: boolean }>>(
