@@ -271,18 +271,60 @@ export function StandaloneDateRangeFilter({
   return <DateRangeFilter def={def} sp={searchParams} update={update} h="h-7" />;
 }
 
+/**
+ * Tek filtre kontrolü — `FilterBar` ile AYNI URL sözleşmesi; tek satır filtre çubuğu
+ * (`filter-row/FilterRow`) kutularını bununla çizer. `dateRange` burada çizilmez
+ * (kutu kipinde tarih `filter-row/DatePresetFilter` penceresidir).
+ */
+export function FilterControl({ def, chip, autoOpen, h = "h-7" }: { def: Exclude<FilterDef, { kind: "dateRange" }>; chip?: boolean; autoOpen?: boolean; h?: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const update = (mutator: (sp: URLSearchParams) => void) => {
+    const next = new URLSearchParams(searchParams);
+    mutator(next);
+    next.delete("cursor");
+    next.delete("page");
+    setSearchParams(next, { replace: true });
+  };
+  const p = { sp: searchParams, update, h, chip, autoOpen };
+  if (def.kind === "select") return <SelectFilter def={def} {...p} />;
+  if (def.kind === "multi-select") return <MultiSelectFilter def={def} {...p} />;
+  if (def.kind === "lookup") return <LookupFilter def={def} {...p} />;
+  if (def.kind === "multi-lookup") return <MultiLookupFilter def={def} {...p} />;
+  if (def.kind === "dependent-lookup") return <DependentLookupFilter def={def} {...p} />;
+  return <NumberRangeFilter def={def} {...p} />;
+}
+
 interface SubProps<D> {
   def: D;
   sp: URLSearchParams;
   update: (m: (sp: URLSearchParams) => void) => void;
   /** Kontrol yükseklik sınıfı (FilterBar `size`'dan) — h-7 (kompakt) | h-9 (arama ile eşit). */
   h: string;
+  /** Tek satır filtre çubuğu kutusu (`filter-row/FilterChip`): tetik kenarlıksız, yazı "Etiket: değer". */
+  chip?: boolean;
+  /** "+ Filtre"den yeni eklenen kutu kendi listesini açık doğar. */
+  autoOpen?: boolean;
 }
 
-function SelectFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "select" }>>) {
+/** Tetik yazısı: kutu kipinde etiket hep önde ("Müşteri: ABC"), boşken yalnız etiket. */
+function triggerText(label: string, valueText: string | null, chip?: boolean): string {
+  if (valueText === null) return label;
+  return chip ? `${label}: ${valueText}` : valueText;
+}
+
+/** Tetik sınıfı: kutu kipinde çerçeveyi `FilterChip` çizer (✕ ile aynı kapta). */
+function triggerClass(h: string, active: boolean, chip: boolean | undefined, minW: string): string {
+  return chip
+    ? cn(h, "min-w-0 justify-between gap-1 border-0 bg-transparent px-2 text-xs font-normal shadow-none hover:bg-transparent")
+    : cn(h, minW, "justify-between gap-1 px-2 text-xs font-normal", active && "border-primary/50");
+}
+
+function SelectFilter({ def, sp, update, h, chip, autoOpen }: SubProps<Extract<FilterDef, { kind: "select" }>>) {
   const value = sp.get(`filter[${def.key}]`) ?? NONE;
+  const chosen = value === NONE ? null : def.options.find((o) => o.value === value)?.label ?? value;
   return (
     <Select
+      defaultOpen={autoOpen}
       value={value}
       onValueChange={(v) =>
         update((next) => {
@@ -291,8 +333,8 @@ function SelectFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind
         })
       }
     >
-      <SelectTrigger className={cn(h, "w-auto min-w-[140px] gap-1 text-xs")}>
-        <SelectValue placeholder={def.label} />
+      <SelectTrigger className={chip ? cn(triggerClass(h, false, true, ""), "w-auto") : cn(h, "w-auto min-w-[140px] gap-1 text-xs")}>
+        <SelectValue placeholder={def.label}>{chip ? triggerText(def.label, chosen, true) : undefined}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE} className="text-muted-foreground">
@@ -313,8 +355,10 @@ function MultiSelectFilter({
   sp,
   update,
   h,
+  chip,
+  autoOpen,
 }: SubProps<Extract<FilterDef, { kind: "multi-select" }>>) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(autoOpen));
   const csv = sp.get(`filter[${def.key}]`) ?? "";
   const selected = useMemo(
     () => (csv ? csv.split(",").filter(Boolean) : []),
@@ -336,8 +380,8 @@ function MultiSelectFilter({
     selected.length === 0
       ? def.label
       : selected.length === 1
-        ? def.options.find((o) => o.value === selected[0])?.label ?? def.label
-        : `${def.label} (${selected.length})`;
+        ? triggerText(def.label, def.options.find((o) => o.value === selected[0])?.label ?? def.label, chip)
+        : chip ? `${def.label}: ${selected.length} seçili` : `${def.label} (${selected.length})`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -346,11 +390,7 @@ function MultiSelectFilter({
           type="button"
           variant="outline"
           size="sm"
-          className={cn(
-            h,
-            "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
-            selected.length > 0 && "border-primary/50",
-          )}
+          className={triggerClass(h, selected.length > 0, chip, "min-w-[140px]")}
         >
           <span className={cn(selected.length === 0 && "text-muted-foreground")}>
             {triggerLabel}
@@ -451,8 +491,8 @@ function LookupErrorRow({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
-  const [open, setOpen] = useState(false);
+function LookupFilter({ def, sp, update, h, chip, autoOpen }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
+  const [open, setOpen] = useState(Boolean(autoOpen));
   const value = sp.get(`filter[${def.key}]`) ?? "";
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -487,7 +527,7 @@ function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind
     });
 
   const selectedItem = items.find((it) => it.id === value);
-  const triggerLabel = selectedItem ? labelOf(selectedItem) : def.label;
+  const triggerLabel = selectedItem ? triggerText(def.label, labelOf(selectedItem), chip) : def.label;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -496,11 +536,7 @@ function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind
           type="button"
           variant="outline"
           size="sm"
-          className={cn(
-            h,
-            "min-w-[160px] justify-between gap-1 px-2 text-xs font-normal",
-            value && "border-primary/50",
-          )}
+          className={triggerClass(h, Boolean(value), chip, "min-w-[160px]")}
         >
           <span className={cn("truncate", !value && "text-muted-foreground")}>
             {triggerLabel}
@@ -667,8 +703,10 @@ function MultiLookupFilter({
   sp,
   update,
   h,
+  chip,
+  autoOpen,
 }: SubProps<Extract<FilterDef, { kind: "multi-lookup" }>>) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(autoOpen));
   const csv = sp.get(`filter[${def.key}]`) ?? "";
   const selectedIds = useMemo(
     () => (csv ? csv.split(",").filter(Boolean) : []),
@@ -725,8 +763,8 @@ function MultiLookupFilter({
     selectedIds.length === 0
       ? def.label
       : selectedIds.length === 1
-        ? labelOfSelected(selectedIds[0]!)
-        : `${def.label} (${selectedIds.length})`;
+        ? triggerText(def.label, labelOfSelected(selectedIds[0]!), chip)
+        : chip ? `${def.label}: ${selectedIds.length} seçili` : `${def.label} (${selectedIds.length})`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -735,11 +773,7 @@ function MultiLookupFilter({
           type="button"
           variant="outline"
           size="sm"
-          className={cn(
-            h,
-            "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
-            selectedIds.length > 0 && "border-primary/50",
-          )}
+          className={triggerClass(h, selectedIds.length > 0, chip, "min-w-[140px]")}
         >
           <span className={cn(selectedIds.length === 0 && "text-muted-foreground")}>
             {triggerLabel}
@@ -814,8 +848,10 @@ function DependentLookupFilter({
   sp,
   update,
   h,
+  chip,
+  autoOpen,
 }: SubProps<Extract<FilterDef, { kind: "dependent-lookup" }>>) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(autoOpen));
   const parentId = sp.get(`filter[${def.dependsOn}]`) ?? "";
   const csv = sp.get(`filter[${def.key}]`) ?? "";
   const selectedIds = useMemo(
@@ -864,7 +900,7 @@ function DependentLookupFilter({
         variant="outline"
         size="sm"
         disabled
-        className={cn(h, "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal text-muted-foreground")}
+        className={cn(triggerClass(h, false, chip, "min-w-[140px]"), "text-muted-foreground")}
       >
         {def.placeholderNoParent ?? def.label}
         <ChevronDown className="h-3.5 w-3.5 opacity-60" />
@@ -876,8 +912,8 @@ function DependentLookupFilter({
     selectedIds.length === 0
       ? def.label
       : selectedIds.length === 1
-        ? labelOf(items.find((it) => it.id === selectedIds[0]) ?? { id: selectedIds[0]! })
-        : `${def.label} (${selectedIds.length})`;
+        ? triggerText(def.label, labelOf(items.find((it) => it.id === selectedIds[0]) ?? { id: selectedIds[0]! }), chip)
+        : chip ? `${def.label}: ${selectedIds.length} seçili` : `${def.label} (${selectedIds.length})`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -886,11 +922,7 @@ function DependentLookupFilter({
           type="button"
           variant="outline"
           size="sm"
-          className={cn(
-            h,
-            "min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
-            selectedIds.length > 0 && "border-primary/50",
-          )}
+          className={triggerClass(h, selectedIds.length > 0, chip, "min-w-[140px]")}
         >
           <span className={cn(selectedIds.length === 0 && "text-muted-foreground")}>
             {triggerLabel}
@@ -957,6 +989,7 @@ function NumberRangeFilter({
   sp,
   update,
   h,
+  chip,
 }: SubProps<Extract<FilterDef, { kind: "numberRange" }>>) {
   const minKey = `filter[${def.key}Min]`;
   const maxKey = `filter[${def.key}Max]`;
@@ -1006,8 +1039,8 @@ function NumberRangeFilter({
     <div
       className={cn(
         h,
-        "flex items-center gap-1 rounded-md border bg-background px-1.5",
-        hasValue ? "border-primary/50" : "border-input",
+        "flex items-center gap-1 rounded-md px-1.5",
+        chip ? "border-0 bg-transparent" : cn("border bg-background", hasValue ? "border-primary/50" : "border-input"),
       )}
       title={placeholder}
     >
@@ -1031,7 +1064,7 @@ function NumberRangeFilter({
         className="h-6 w-[68px] border-0 px-1 text-xs shadow-none focus-visible:ring-0"
         placeholder="max"
       />
-      {hasValue ? (
+      {hasValue && !chip ? (
         <Button
           type="button"
           size="icon"

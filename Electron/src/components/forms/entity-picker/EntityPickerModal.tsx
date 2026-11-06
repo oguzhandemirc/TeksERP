@@ -53,6 +53,8 @@ export interface EntityPickerModalProps<T extends { id: string }> {
   onQuickAdd?: () => void;
   /** Toplam sayı etiketi — "5 toplam {countLabel}" şeklinde gösterilir. Örn: "müşteri", "kumaş". */
   countLabel?: string;
+  /** İlk çizimde modal açık doğar ("+ Filtre"den yeni eklenen kutu doğrudan seçiciye iner). */
+  defaultOpen?: boolean;
 }
 
 /**
@@ -86,8 +88,9 @@ export function EntityPickerModal<T extends { id: string }>({
   quickAddLabel,
   onQuickAdd,
   countLabel,
+  defaultOpen,
 }: EntityPickerModalProps<T>) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
 

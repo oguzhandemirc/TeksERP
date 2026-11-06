@@ -28,6 +28,8 @@ interface Props<T> {
   /** true → indirme bölümü gizlenir (yalnız sütun göster/gizle kalır). İndirme başka
    *  bir yerde (ör. sayfalama çubuğunda "Tümünü İndir") görünür olduğunda çift olmasın. */
   hideExport?: boolean;
+  /** Dar ekranda yazı düşer, simge kalır (tek satır filtre çubuğu). */
+  compact?: boolean;
 }
 
 const LABELS: Record<ExportKind, string> = {
@@ -40,7 +42,7 @@ const LABELS: Record<ExportKind, string> = {
  * Tablo araçları — sütun göster/gizle (kullanıcı tercihinde kalıcı) ve listeyi
  * PDF/Excel indirme (format seçilir). `fetchAll` verilirse tüm kayıtları indirir.
  */
-export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideExport }: Props<T>) {
+export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideExport, compact }: Props<T>) {
   const [busy, setBusy] = useState<null | ExportKind>(null);
   // Dosya adındaki damga: filtrede tarih aralığı varsa VERİNİN dönemi, yoksa bugün.
   const range = useExportRange();
@@ -90,9 +92,9 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Sütunlar & dışa aktar">
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Sütunlar & dışa aktar" aria-label={compact ? "Sütunlar" : undefined}>
           <Settings2 className="h-3.5 w-3.5" />
-          Sütunlar
+          <span className={compact ? "hidden lg:inline" : undefined}>Sütunlar</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-60 p-2">
