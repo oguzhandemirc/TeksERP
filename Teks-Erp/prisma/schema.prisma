@@ -191,6 +191,13 @@ enum ReasonPresetKind {
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
+/// Yük birimi türü (`Sack.unitKind`) — sevkiyat yük birimine bağlanır (kullanıcı kararı 2026-11-06).
+enum LoadUnitKind {
+  SACK // Çuval — bugünkü depo nesnesi (havuz, tartı, etiket, parti)
+  CART // Top taşıma arabası — `unitLabel` = elle girilen araba no; tartı/etiket/parti yok
+  BULK // Dökme (kamyon kasasına) — sevkiyat başına en fazla bir canlı birim
+}
+
 enum SackWeightSource {
   SCALE // Fiziksel kantardan okundu (mobil BT-SPP / Electron seri port)
   MANUAL // Operatör elle girdi — kantarsız/arızalı durumun kaçış yolu
@@ -566,6 +573,7 @@ model User {
   directShipments               DirectShipment[]         @relation("DirectShipmentShippedBy")
   invoicedDirectShipments       DirectShipment[]         @relation("DirectShipmentInvoicedBy")
   weighedSacks                  Sack[]                   @relation("SackWeighedBy")
+  dissolvedSacks                Sack[]                   @relation("SackDissolvedBy")
   sackTagAssignments            SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
   sackTagAssignmentsCleared     SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
   sackAllocationsCleared        SackAllocation[]         @relation("SackAllocationClearedBy")
@@ -8558,6 +8566,15 @@ model Sack {
   // (kalıcı toggle VEYA tek-seferlik baskı bayrağı), (c) iç ekranlar (mobil + admin).
   // Sevk belgesine ANNOTATION olarak girer — donmuş çekirdeğe yazılmaz, baskıda canlı çözülür.
   notes          String?           @db.VarChar(500)
+  /// Yük birimi türü. SACK-dışı birim HAVUZA DÖNMEZ (DB seddi `sacks_load_unit_not_in_pool`);
+  /// sevkiyat iptalinde içi rafa boşalır ve `dissolvedAt` damgalanır (`dissolveLoadUnitsTx`).
+  /// Jenerik PATCH'ten yazılamaz; tek yaratıcı `openLoadUnitTx`.
+  unitKind       LoadUnitKind      @default(SACK)
+  /// Araba no (yalnız CART; serbest metin, sevkiyat içinde tekil — kimlik DEĞİL, etiket).
+  unitLabel      String?           @db.VarChar(32)
+  /// Birim çözüldü (sevkiyat iptali): toplar rafa döndü, birim defter izi için sevkiyatında kalır.
+  dissolvedAt    DateTime?         @db.Timestamptz
+  dissolvedById  String?           @db.Uuid
 
   // Relations
   customer           Customer?           @relation(fields: [customerId], references: [id])
@@ -8572,6 +8589,7 @@ model Sack {
   /// SET NULL, konum bilgisini sessizce yok ederdi).
   warehouse          Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   weighedBy          User?               @relation("SackWeighedBy", fields: [weighedById], references: [id])
+  dissolvedBy        User?               @relation("SackDissolvedBy", fields: [dissolvedById], references: [id])
   rolls              Roll[] // Bu çuvaldaki toplar (içerik)
   swatches           Swatch[] // Bu çuvaldaki kartelalar (içerik)
   allocations        SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
@@ -8598,6 +8616,7 @@ model Sack {
   @@index([warehouseId])
   /// Grup bloklarının listesi ve "grubu boş mu" yüklemi bu ağaçtan okunur.
   @@index([packingGroupId])
+  @@index([dissolvedById])
   /// Şube-kırılımlı çuval listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) —
   /// `sacks_warehouseId_idx` emsali (migration 20260905140000).
   @@index([branchId])

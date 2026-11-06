@@ -216,6 +216,19 @@ export const quickShipmentSchema = z.object({
   // İrsaliye açıklaması (annotation, `setDispatchNote` ile aynı katman) — tablet çuvalsız sevkte
   // "Dökme" / "Araba A-12" yazar. Gelmezse null = bugünkü davranış (eski istemci göndermez).
   dispatchNote: z.string().trim().max(500, "İrsaliye açıklaması en fazla 500 karakter olabilir").nullable().optional(),
+  // Çuvalsız sevk (shipping.looseLoadEnabled): dökme tek birim, araba başına bir birim.
+  loadUnits: z
+    .array(
+      z.object({
+        kind: z.enum(["BULK", "CART"]),
+        label: z.string().max(64).nullable().optional(),
+        rollIds: z.array(z.string().uuid("Geçersiz top kimliği")).min(1, "Boş yük birimi gönderilemez"),
+      }),
+    )
+    .min(1)
+    .max(200)
+    .nullable()
+    .optional(),
 });
 // FIFO öneri sorgusu — `itemId` ZORUNLU: kumaşsız çağrı "depodaki en eski 20 top"
 // demek olurdu ve karışık spec'li bir öneri sevk edilemez (tek irsaliye tek müşteri
@@ -644,6 +657,7 @@ export class ShippingController {
           carrier: body.carrier ?? null,
           clientToken: body.clientToken ?? null,
           dispatchNote: body.dispatchNote ?? null,
+          loadUnits: body.loadUnits ?? null,
         },
         req.user?.userId,
       );
