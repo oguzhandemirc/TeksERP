@@ -13,6 +13,19 @@ export function retentionDocNoWarning(mode: PhotoRetentionMode | null | undefine
   return `${WHEN[mode]} — belge no'yu kontrol edin.`;
 }
 
+/**
+ * Belgenin saklama kipi — fotoğrafı OLMAYAN belgede (elle/Excel) küçültülecek fotoğraf yok, uyarı da yok (undefined).
+ * Başlık formu ve onay diyaloğu bu tek kapıdan okur.
+ */
+export function retentionModeFor(note: { scans?: ReadonlyArray<unknown>; photoRetention?: PhotoRetentionMode | null }): PhotoRetentionMode | undefined {
+  // Tarama listesi bilinmiyorsa (kısmi nesne) bugünkü davranış: kip aynen.
+  return note.scans === undefined || note.scans.length > 0 ? (note.photoRetention ?? undefined) : undefined;
+}
+
+export function retentionFor(note: { senderDocNo: string | null; scans?: ReadonlyArray<unknown>; photoRetention?: PhotoRetentionMode | null }): { docNo: string | null; mode?: PhotoRetentionMode } {
+  return { docNo: note.senderDocNo, mode: retentionModeFor(note) };
+}
+
 /** K28: fotoğraf saklama ayarı baytı sildi (backend 410 `DOCUMENT_SCAN_PURGED`); satır/okuma/künye duruyor. */
 export const SCAN_PURGED_TEXT = "Fotoğraf saklama ayarı gereği silindi.";
 

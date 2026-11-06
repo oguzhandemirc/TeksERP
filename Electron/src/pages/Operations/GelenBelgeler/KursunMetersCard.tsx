@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NumericKeypad } from "./NumericKeypad";
 import { parseTrNumber } from "./review-queue";
-import { fmtMeters, KURSUN_SOURCE_LABEL, meterValue } from "./partiMetre";
+import { fmtMeters, KURSUN_SOURCE_LABEL, kursunMissingHint, meterValue } from "./partiMetre";
 import type { DeliveryNoteDetail, HeaderPatch } from "./types";
 
 interface Props {
@@ -75,6 +75,8 @@ export function KursunMetersCard({ note, editable, onPatch }: Props) {
   const [open, setOpen] = useState(false);
   const m = meterValue(note.kursunMeters ?? null);
   const review = note.kursunMetersReview === true;
+  const missing = kursunMissingHint(note);
+  const lineSum = missing.lineSum;
   return (
     <div className={`flex flex-col gap-2 rounded-lg border p-3 ${review ? "border-amber-500" : ""}`} data-testid="kursun-meters-card" data-review={review ? "1" : "0"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -85,12 +87,19 @@ export function KursunMetersCard({ note, editable, onPatch }: Props) {
         </span>
       </div>
       {review && <p className="text-xs text-amber-800 dark:text-amber-300" data-testid="kursun-meters-review">Gözden geçirilecek — el yazısı ya da kaynaklar çelişiyor.</p>}
-      {m === null && <p className="text-xs text-destructive">Metre okunamadı — onaydan önce girin.</p>}
+      {m === null && <p className="text-xs text-amber-800 dark:text-amber-300" data-testid="kursun-meters-missing">{missing.text}</p>}
       <OtherSources note={note} />
       {editable && (
-        <Button type="button" variant={review || m === null ? "default" : "outline"} size="sm" className="self-start" onClick={() => setOpen(true)} data-testid="kursun-meters-edit">
-          {review ? "Gözden geçir" : m === null ? "Metre gir" : "Düzelt"}
-        </Button>
+        <span className="flex flex-wrap gap-2">
+          {m === null && lineSum !== null && (
+            <Button type="button" size="sm" onClick={() => void onPatch({ kursunMeters: lineSum }).catch(() => undefined)} data-testid="kursun-meters-use-line-sum">
+              {`Satır toplamını kullan (${fmtMeters(lineSum)})`}
+            </Button>
+          )}
+          <Button type="button" variant={review || (m === null && missing.lineSum === null) ? "default" : "outline"} size="sm" onClick={() => setOpen(true)} data-testid="kursun-meters-edit">
+            {review ? "Gözden geçir" : m === null ? "Metre gir" : "Düzelt"}
+          </Button>
+        </span>
       )}
       {open && <ReviewDialog note={note} editable={editable} onPatch={onPatch} open onOpenChange={setOpen} />}
     </div>

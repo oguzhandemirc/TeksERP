@@ -1,7 +1,7 @@
 // GELEN BELGE DETAYI — fotoğraf + satır vurgusu, başlık eşleme, toplam şeridi, satırlar, kılavuzlu hücre girişi, onay.
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle2, Factory, ScanSearch } from "lucide-react";
+import { CheckCircle2, ScanSearch } from "lucide-react";
 import { CariHoldStrip } from "@/pages/Finance/CariHold/CariHoldStrip";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -28,13 +28,15 @@ import { isApprovable, isEditable, isWorkOrderOpenable, NOTE_STATUS_LABEL, NOTE_
 import { useNoteDetail } from "./useNoteDetail";
 import { ProcessGramajPanel } from "./ProcessGramajPanel";
 import { useProcessGramaj } from "./processChoices";
-import { WorkOrderFromNoteDialog } from "./WorkOrderFromNoteDialog";
+import { OpenWorkOrderAction } from "./OpenWorkOrderAction";
 import { BatchNoPicker } from "./BatchNoPicker";
 import { KursunMetersCard } from "./KursunMetersCard";
 import { PartiesCard } from "./PartiesCard";
 import { showsPerDocument } from "./partiMetre";
 import type { DeliveryNoteDetail } from "./types";
-import { TERIM } from "@/lib/terim";
+import { noteCountText } from "./noteLines";
+import { useNoteTabTitle } from "./useNoteTabTitle";
+import { retentionFor } from "./photoRetention";
 import { TeachButton, UnknownTypeStrip } from "./tanit/TeachEntry";
 
 const LIST_PATH = "/operations/gelen-belgeler";
@@ -48,7 +50,6 @@ interface DetailActionsProps {
 }
 
 function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: DetailActionsProps) {
-  const [workOrderOpen, setWorkOrderOpen] = useState(false);
   return (
     <div className="flex flex-wrap gap-2">
       {addPages}
@@ -68,16 +69,8 @@ function DetailActions({ note, reviewCount, addPages, onReview, onApprove }: Det
           </Button>
         </PermissionGate>
       )}
-      {/* Belgeden iş emri (D4-D2): topları doğmuş belgede; desen grubu başına mevcut quick-start. */}
-      {isWorkOrderOpenable(note.status) && (
-        <PermissionGate permission="workorder:write">
-          <Button variant="outline" onClick={() => setWorkOrderOpen(true)} data-testid="note-open-work-order">
-            <Factory className="mr-1 h-4 w-4" />
-            {TERIM.terbiyeIsEmri.tekil} aç
-          </Button>
-          {workOrderOpen && <WorkOrderFromNoteDialog noteId={note.id} open onOpenChange={setWorkOrderOpen} />}
-        </PermissionGate>
-      )}
+      {/* Belgeden iş emri (D4-D2): topları doğmuş belgede; açılacak parti kalmadıysa pasif + gerekçe. */}
+      {isWorkOrderOpenable(note.status) && <OpenWorkOrderAction noteId={note.id} />}
       {/* Onaylı belge iptali (K15): önizleme + ters kayıt; bileşen durum ve izni kendisi süzer. */}
       <CancelNoteAction note={note} />
       {/* Taslak silme: yalnız DRAFT (bileşen kendisi de süzer); backend aynı izin + DRAFT claim'i. */}
@@ -119,18 +112,18 @@ export function IncomingDocumentDetailPage() {
   const [approveOpen, setApproveOpen] = useState(false);
   const n = note.data;
   const gramaj = useProcessGramaj(n, suggestions.data, !!n && isApprovable(n.status) && hasPermission("gelen-belge:approve"));
+  const multiParty = useNoteTabTitle(id, n?.noteNo);
   if (!n) return <DetailLoading failed={note.isError} />;
   const editable = isEditable(n.status) && hasPermission("gelen-belge:write");
   const reviewCount = buildReviewQueue(n.lines).length;
   const sel = n.lines.find((l) => l.id === selected) ?? null;
   const perDoc = showsPerDocument(n);
-  const maxBlock = Math.max(1, ...n.lines.map((l) => l.blockNo));
   return (
     <PageShell>
       <PageHeader
         title={`Gelen Belge ${n.noteNo}`}
         titleExtra={<Badge variant={NOTE_STATUS_VARIANT[n.status]}>{NOTE_STATUS_LABEL[n.status]}</Badge>}
-        statusLine={`Kaynak: ${SOURCE_LABEL[n.sourceKind]} · ${n.lines.length} satır`}
+        statusLine={`Kaynak: ${SOURCE_LABEL[n.sourceKind]} · ${noteCountText(n.lines)}`}
         parent={{ label: "Gelen Belgeler", to: LIST_PATH }}
         actions={
           <DetailActions
@@ -152,8 +145,8 @@ export function IncomingDocumentDetailPage() {
               {perDoc && <BatchNoPicker note={n} editable={editable} onPatch={(p) => header.mutate(p)} />}
               {perDoc && <KursunMetersCard note={n} editable={editable} onPatch={(p) => header.mutateAsync(p)} />}
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
-              {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} />}{/* iptalde toplar düştü; hüküm anlamsız */}
-              <NoticesStrip notices={n.notices} /><PartiesCard noteId={n.id} />
+              {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} partiesShown={multiParty} />}{/* iptalde toplar düştü; hüküm anlamsız */}
+              <NoticesStrip notices={n.notices} /><PartiesCard noteId={n.id} blocks={n.totalsCheck?.blocks} />
               <NotePeerStrips note={n} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
               <CancelReasonLine note={n} />
@@ -173,7 +166,7 @@ export function IncomingDocumentDetailPage() {
           />
           {editable && (
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <AddLineForm noteId={n.id} defaultBlock={maxBlock} onAdded={() => void invalidate()} />
+              <AddLineForm noteId={n.id} defaultBlock={Math.max(1, ...n.lines.map((l) => l.blockNo))} onAdded={() => void invalidate()} />
               <LineImportButton noteId={n.id} onImported={() => void invalidate()} />
             </div>
           )}
@@ -187,7 +180,7 @@ export function IncomingDocumentDetailPage() {
         scans={n.scans}
         onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
-      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc && n.perDocument ? { note: n, gate: n.perDocument } : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} retention={{ docNo: n.senderDocNo, mode: n.photoRetention }} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
+      <ApproveDialog noteId={n.id} lines={n.lines} perDocument={perDoc && n.perDocument ? { note: n, gate: n.perDocument } : null} processChoices={gramaj.choices} choiceNoun={suggestions.data?.processGroups?.length ? "işlem seçimi" : undefined} retention={retentionFor(n)} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>
   );
 }

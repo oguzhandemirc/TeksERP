@@ -81,6 +81,8 @@ export function useWorkOrderPlan(noteId: string, open: boolean) {
       if (ok.length < outcomes.length) toast.error(`${outcomes.length - ok.length} grup açılamadı — hatayı düzeltip yeniden deneyin (açılanlar tekrar gönderilmez).`);
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "is-emri-plani", noteId] });
+      // Partiler kartı bağlı İE'leri gösterir ve "İE aç" düğmesinin kapısıdır: açılan İE hemen görünsün.
+      void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "partiler", noteId] });
     },
   });
 

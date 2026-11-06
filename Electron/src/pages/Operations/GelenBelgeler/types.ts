@@ -69,6 +69,8 @@ export interface DeliveryNoteHeader extends PartiMetreHeaderFields {
   ownerCustomer: NamedRef | null;
   senderCustomer: NamedRef | null;
   _count: { lines: number; scans: number };
+  /** Liste: özet satırı (parti kaydı) hariç belge satırı sayısı; eski sunucu göndermez → `_count.lines`. */
+  docLineCount?: number;
 }
 
 export interface DeliveryNoteLine {
@@ -77,6 +79,8 @@ export interface DeliveryNoteLine {
   lineNo: number;
   blockNo: number;
   lineKind: "TOP" | "ARABA";
+  /** Onayda doğan parti kaydı (özet satırı, sunucu `isSummaryLine`); eski sunucu göndermez → `lineKind === "ARABA"`. */
+  summary?: boolean;
   senderRollNo: string | null;
   meters: string;
   weightKg: string | null;

@@ -64,7 +64,6 @@ export function LineRow(p: Props) {
     <tr className={`border-t align-top ${p.selected ? "bg-amber-50 dark:bg-amber-950/30" : ""} ${line.needsReview ? "border-l-4 border-l-amber-500" : ""}`} onClick={p.onSelect} data-testid="line-row">
       <td className="p-2 text-xs tabular-nums">
         {line.blockNo}/{line.lineNo}
-        {line.lineKind === "ARABA" && <div className="text-[10px] text-muted-foreground">ARABA</div>}
       </td>
       <td className="p-2 text-xs">{line.senderRollNo ?? "—"}</td>
       <td className="p-2">

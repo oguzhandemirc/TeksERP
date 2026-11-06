@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { SuggestionChips } from "./SuggestionChips";
-import { retentionDocNoWarning } from "./photoRetention";
+import { retentionDocNoWarning, retentionModeFor } from "./photoRetention";
 import type { DeliveryNoteDetail, HeaderPatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
@@ -26,7 +26,7 @@ const TEXT_FIELDS: Array<{ key: TextKey; label: string; max: number }> = [
 
 export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) {
   // K28: fotoğraf onaydan sonra küçülür/silinir → belge no'yu şimdi kontrol ettir (yalnız düzenlenebilir taslakta).
-  const docNoWarning = editable ? retentionDocNoWarning(note.photoRetention) : null;
+  const docNoWarning = editable ? retentionDocNoWarning(retentionModeFor(note)) : null;
   const blurText = (key: TextKey, v: string) => {
     const next = v.trim() || null;
     if (next !== (note[key] ?? null)) onPatch({ [key]: next });
