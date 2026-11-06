@@ -370,6 +370,7 @@ const mobile: ScreenEntry[] = [
   { key: "KartelaKabul", app: "mobile", modul: "planlanan:kartela", title: "Kartela Kabul", requires: ["mobile:kartela-kabul"], capabilities: [] },
   { key: "IadeGirisi", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "İade Girişi", requires: ["mobile:iade"], capabilities: [] },
   { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", get title() { return `Hızlı ${TERIM.terbiyeIsEmri.tekil}`; }, requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }, { code: "mobile:is-emri-duzelt", get label() { return `Açılmış ${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)`; } }] },
+  { key: "IsEmirleri", app: "mobile", modul: "productionEnabled", get title() { return TERIM.terbiyeIsEmri.cogul; }, requires: ["mobile:hizli-is-emri"], capabilities: [] },
   { key: "Siparis", app: "mobile", modul: "cekirdek:siparis-musteri", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
   { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
   { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: TERIM_AD.kursunDagitim, requires: ["mobile:kursun-dagitim"], capabilities: [] },

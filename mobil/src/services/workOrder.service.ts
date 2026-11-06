@@ -181,7 +181,8 @@ export interface WorkOrderCursorParams {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   filters?: Record<string, string | string[]>;
-  withTotal?: boolean;
+  /** Tarih aralığı (liste ucu `applyDateRange`; `dateField` ZORUNLU). */
+  withTotal?: boolean; dateField?: 'createdAt'; dateFrom?: string; dateTo?: string;
 }
 
 /** İş emri hareketi — başlık ve Türkçe etiketler sunucuda kurulur. */
@@ -245,7 +246,7 @@ export const workOrderService = {
    */
   getAllCursor: (
     params: WorkOrderCursorParams,
-    options?: { withOrderDetail?: boolean; hasOpenExternalStep?: boolean },
+    options?: { withOrderDetail?: boolean; hasOpenExternalStep?: boolean; signal?: AbortSignal },
   ): Promise<WorkOrderCursorPage> => {
     const sp = new URLSearchParams();
     sp.set('mode', 'cursor');
@@ -255,6 +256,7 @@ export const workOrderService = {
     if (params.sortBy) sp.set('sortBy', params.sortBy);
     if (params.sortOrder) sp.set('sortOrder', params.sortOrder);
     if (params.withTotal) sp.set('withTotal', 'true');
+    if (params.dateField && (params.dateFrom || params.dateTo)) for (const [k, v] of Object.entries({ dateField: params.dateField, dateFrom: params.dateFrom, dateTo: params.dateTo })) if (v) sp.set(k, v);
     if (params.filters) {
       for (const [k, v] of Object.entries(params.filters)) {
         if (!v || (Array.isArray(v) && v.length === 0)) continue;
@@ -265,7 +267,7 @@ export const workOrderService = {
     if (options?.withOrderDetail) sp.set('withOrderDetail', 'true');
     if (options?.hasOpenExternalStep) sp.set('hasOpenExternalStep', 'true');
     return apiClient
-      .get<WorkOrderCursorPage>(`/work-orders?${sp.toString()}`)
+      .get<WorkOrderCursorPage>(`/work-orders?${sp.toString()}`, { signal: options?.signal })
       .then((r) => r.data);
   },
 

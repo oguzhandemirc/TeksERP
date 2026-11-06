@@ -7,6 +7,7 @@ export const WORK_ORDER_STATUS_LABEL: Record<string, string> = {
   COMPLETED: 'Tamamlandı',
   CANCELLED: 'İptal Edildi',
   PARTIAL_SHIPPED: 'Kısmen Sevk',
+  SUPERSEDED: 'Devredildi',
 };
 
 export const WORK_ORDER_TYPE_LABEL: Record<string, string> = {

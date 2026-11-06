@@ -197,6 +197,7 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   Uyarilar: { tint: '#b91c1c', bg: '#fee2e2' }, // alarm — kırmızı aile (panel şeridiyle aynı ton)
   Muayene: { tint: '#7c3aed', bg: '#ede9fe' }, // kalite güvence — üretim ailelerinden ayrışan mor
   GelenBelge: { tint: palette.cyan[700], bg: palette.cyan[100] }, // gelen belge (Belge Tara) — evrak/ofis camgöbeği
+  IsEmirleri: { tint: palette.indigo[700], bg: palette.indigo[100] }, // iş emri ailesi (Hızlı İş Emri indigo'sunun koyusu)
 };
 
 /**
