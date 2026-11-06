@@ -48,6 +48,11 @@ describe("parti taslağı", () => {
     expect(m).toEqual({ mode: "PER_PARTY", rows: [{ blockNo: 1, batchNo: "P9918733", meters: 586 }, { blockNo: 2, batchNo: "P9918734", meters: 3935 }] });
     expect(initialMultiParty(view())?.mode).toBe("SINGLE");
   });
+  it("⭐ 214279: sunucunun önerdiği parti metresi (beyan ara toplamı) Σ satırın önüne geçer; öneri yoksa (eski sunucu) Σ satır", () => {
+    const v = view({ parties: [party(1, { meters: 266.9, suggestedMeters: 586 }), party(2, { meters: 2345.5, suggestedMeters: 3935 })] });
+    expect(initialMultiParty(v)!.rows.map((r) => r.meters)).toEqual([586, 3935]);
+    expect(initialMultiParty(view({ parties: [party(1, { meters: 266.9 }), party(2, { meters: 0, suggestedMeters: null })] }))!.rows.map((r) => r.meters)).toEqual([266.9, null]);
+  });
   it("eksik parti metresi kaydı keser; boş parti no gövdede null", () => {
     const m: MultiPartyDraft = { mode: "SINGLE", rows: [{ blockNo: 1, batchNo: " ", meters: 586 }, { blockNo: 2, batchNo: "P2", meters: null }] };
     expect(multiPartyReasons(m)).toEqual(["Parti metresi eksik: 2. parti."]);

@@ -22,10 +22,19 @@ export function stationWorkSearchWhere(q: string): Prisma.WorkOrderWhereInput | 
   const own = buildTextSearch<Prisma.WorkOrderWhereInput>(q, { code: ["workOrderNumber", "batches.some.batchNumber"] });
   const doc = workOrderDocSearchWhere(q);
   const ors = doc ? [...own, doc] : own;
-  // K4 (2026-11-06): gönderenin İE no'su ("26K-24749") belgeden İE açılırken künyeye yazılır; istasyonda onunla da bulunur.
-  const sender = q.trim().toUpperCase();
-  if (sender.length >= 3) ors.push({ parameters: { path: ["senderWorkOrderNo"], string_contains: sender } });
+  ors.push(...workOrderParameterSearch(q));
   return ors.length > 0 ? { OR: ors } : null;
+}
+
+/** Künyede aranan kağıt kimlikleri: gönderenin İE no'su (K4) ve çok partide partinin kağıttaki no'su (SERIES'te de kaybolmaz). */
+export const WORK_ORDER_PARAMETER_SEARCH_KEYS = ["senderWorkOrderNo", "customerBatchNo"] as const;
+
+/** "26K-24749" gibi künye kimlikleri — istasyon ve panel İE araması aynı yaprakları kullanır. */
+export function workOrderParameterSearch(q: string): Prisma.WorkOrderWhereInput[] {
+  const raw = q.trim();
+  if (raw.length < 3) return [];
+  const terms = [...new Set([raw, raw.toUpperCase()])];
+  return WORK_ORDER_PARAMETER_SEARCH_KEYS.flatMap((key) => terms.map((t) => ({ parameters: { path: [key], string_contains: t } })));
 }
 
 /** İstasyon açık kart listesi `?q=` — boş/eksik = bugünkü liste (süzme yok). */
