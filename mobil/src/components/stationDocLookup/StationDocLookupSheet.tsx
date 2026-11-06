@@ -4,6 +4,8 @@
 // "Belge okut": belge tarayıcısı (galeri açık) → yoksa klasik kamera → sunucu EŞLEME OKUMASI (kayıt doğmaz).
 // Tek iş emri → doğrudan açılır (`onOpen`); çok → listeden seçilir; yok → sunucunun cümlesi + elle arama
 // (fiş / evrak / parti / İE no). Kart çözümü ekranın mevcut yolundan (`cardBarcode` → getByCardBarcode).
+// Çok İE: ekran (`screen`) sunucuya gider; burada bekleyen TEK İE açılır (kardeşler şerit için `onOpen`a), birden
+// çoğu burada / hiçbiri burada ise liste: büyük parti no, işlem, top/metre, müşteri İE no, nerede.
 // =============================================================================
 import React, { useRef, useState } from 'react';
 import { TERIM } from '../../lib/terim';
@@ -15,23 +17,29 @@ import ModalTextInput from '../ModalTextInput';
 import MultiPageCameraModal from '../../screens/Modules/GelenBelge/MultiPageCameraModal';
 import { usePageSource } from '../../screens/Modules/GelenBelge/usePageSource';
 import { MAX_PAGES, type ScanPage } from '../../screens/Modules/GelenBelge/docScan';
-import { stationDocLookupService, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
+import { stationDocLookupService, type LookupScreen, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 import { colors, spacing, typography } from '../../theme';
-import { decideLookup, searchable, workOrderSubtitle } from './decide';
+import { decideLookup, isHere, partyLabel, rowDetail, rowWhere, searchable } from './decide';
 
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  /** Seçilen / tek bulunan iş emri — ekran kart çözümüne `cardBarcode` verir. */
-  onOpen: (workOrder: StationLookupWorkOrder) => void;
+  /**
+   * Seçilen / açılan iş emri — ekran kart çözümüne `cardBarcode` verir. `siblings`: aynı belgenin bütün İE'leri
+   * (birden çoksa ekran "diğerine geç" şeridini çizer); tek İE'de boş.
+   */
+  onOpen: (workOrder: StationLookupWorkOrder, siblings: StationLookupWorkOrder[]) => void;
   /** Okuma servisi kurulu mu (yoksa yalnız elle arama). */
   readerConfigured: boolean;
+  /** Soran ekran: sunucu "burada bekliyor mu"yu bu ekranın açık kart listesine göre söyler. */
+  screen?: LookupScreen;
 }
 
+type OpenFn = Props['onOpen'];
 type SheetState = { kind: 'idle' } | { kind: 'busy'; text: string } | { kind: 'choose'; items: StationLookupWorkOrder[]; message: string } | { kind: 'empty'; message: string };
 
 /** Sorgu durumu: son istek kazanır (kapanıp açılınca geç gelen yanıt yeni oturumu ezmez). */
-function useLookupRun(onOpen: (w: StationLookupWorkOrder) => void) {
+function useLookupRun(onOpen: OpenFn) {
   const [view, setView] = useState<SheetState>({ kind: 'idle' });
   const [q, setQ] = useState('');
   const seq = useRef(0);
@@ -44,7 +52,7 @@ function useLookupRun(onOpen: (w: StationLookupWorkOrder) => void) {
     const d = decideLookup(r);
     if (d.kind === 'open') {
       reset();
-      onOpen(d.workOrder);
+      onOpen(d.workOrder, d.siblings);
     } else if (d.kind === 'choose') setView({ kind: 'choose', items: d.workOrders, message: d.message });
     else setView({ kind: 'empty', message: d.message });
   };
@@ -63,18 +71,18 @@ function useLookupRun(onOpen: (w: StationLookupWorkOrder) => void) {
   return { view, q, setQ, reset, run };
 }
 
-export default function StationDocLookupSheet({ visible, onDismiss, onOpen, readerConfigured }: Props) {
+export default function StationDocLookupSheet({ visible, onDismiss, onOpen, readerConfigured, screen }: Props) {
   const { view, q, setQ, reset, run } = useLookupRun(onOpen);
   const close = () => {
     reset();
     onDismiss();
   };
 
-  const fromPage = (p: ScanPage) => void run('Belge okunuyor…', () => stationDocLookupService.byPhoto(p.base64, p.sha256));
+  const fromPage = (p: ScanPage) => void run('Belge okunuyor…', () => stationDocLookupService.byPhoto(p.base64, p.sha256, screen));
   // Tek sayfa yeter: belge no ilk sayfanın başlığında (tarayıcı sınırı MAX_PAGES − 1 → 1 sayfa).
   const source = usePageSource(MAX_PAGES - 1, (pages) => pages[0] && fromPage(pages[0]));
   const search = () => {
-    if (searchable(q)) void run('Aranıyor…', () => stationDocLookupService.bySearch(q.trim()));
+    if (searchable(q)) void run('Aranıyor…', () => stationDocLookupService.bySearch(q.trim(), screen));
   };
   const busy = view.kind === 'busy' || source.busy;
 
@@ -124,7 +132,7 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
 }
 
 /** Sonuç alanı: bekleme · "yok" cümlesi · çok İE listesi. */
-function ResultView({ view, onOpen }: { view: SheetState; onOpen: (w: StationLookupWorkOrder) => void }) {
+function ResultView({ view, onOpen }: { view: SheetState; onOpen: OpenFn }) {
   return (
     <>
     {view.kind === 'busy' && (
@@ -142,10 +150,21 @@ function ResultView({ view, onOpen }: { view: SheetState; onOpen: (w: StationLoo
       <View style={styles.list} testID="belge-okut-liste">
         <Text style={styles.muted}>{view.message}</Text>
         {view.items.map((w) => (
-          <TouchableRipple key={w.id} onPress={() => onOpen(w)} style={styles.item} accessibilityRole="button" testID={`belge-okut-ie-${w.workOrderNumber}`}>
-            <View>
-              <Text style={styles.itemTitle}>{w.workOrderNumber}</Text>
-              <Text style={styles.muted}>{workOrderSubtitle(w)}</Text>
+          <TouchableRipple
+            key={w.id}
+            onPress={() => onOpen(w, view.items)}
+            style={[styles.item, isHere(w) && styles.itemHere]}
+            accessibilityRole="button"
+            testID={`belge-okut-ie-${w.workOrderNumber}`}
+          >
+            <View style={styles.itemBody}>
+              <Text style={styles.itemTitle}>{w.rollCount === undefined ? w.workOrderNumber : partyLabel(w)}</Text>
+              <Text style={styles.itemDetail}>{rowDetail(w)}</Text>
+              {!!rowWhere(w) && (
+                <Text style={isHere(w) ? styles.whereHere : styles.muted} testID={`belge-okut-nerede-${w.workOrderNumber}`}>
+                  {rowWhere(w)}
+                </Text>
+              )}
             </View>
           </TouchableRipple>
         ))}
@@ -165,5 +184,9 @@ const styles = StyleSheet.create({
   empty: { color: colors.dangerText, fontSize: typography.size.base, fontWeight: typography.weight.semibold },
   list: { gap: spacing.sm },
   item: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, minHeight: 56 },
-  itemTitle: { color: colors.text, fontSize: typography.size.lg, fontWeight: typography.weight.bold },
+  itemHere: { borderWidth: 2, borderColor: colors.success },
+  itemBody: { gap: 2 },
+  itemTitle: { color: colors.text, fontSize: typography.size.xl, fontWeight: typography.weight.bold },
+  itemDetail: { color: colors.text, fontSize: typography.size.base },
+  whereHere: { color: colors.success, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
 });

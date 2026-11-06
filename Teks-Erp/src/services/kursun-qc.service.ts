@@ -16,6 +16,7 @@
 
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
+import { kursunOpenStepWhere, PENDING_BYPASS_WHERE, stationScreenStationWhere } from "./helpers/station-open-step.helper";
 import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
@@ -108,17 +109,6 @@ import { TERIM } from "../constants/terim";
 /** Muayene satırı KK2/Tambur silme ucundan silinemez (belge parçası; düzeltme revizyondur). */
 const INSPECTION_ERROR_IMMUTABLE_MESSAGE = "Muayene hatası buradan silinemez; muayeneyi panelden düzeltin";
 
-/**
- * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
- * içindeki `findPendingBypassAssignmentTx` ile BİREBİR aynı tanım
- * (`completedAt IS NULL AND cancelledAt IS NULL`). Helper tekil adım sorgusu
- * döndürdüğü için `some`/`none` filtrelerinde ve nested select'lerde
- * kullanılamıyor; yüklemin üç yerde elle kopyalanmaması için tek sabit.
- */
-const PENDING_BYPASS_WHERE: Prisma.KursunBypassAssignmentWhereInput = {
-  completedAt: null,
-  cancelledAt: null,
-};
 
 interface RollDefectSummary {
   id: string;
@@ -447,27 +437,10 @@ export class KursunQcService {
     const steps = await prisma.workOrderStep.findMany({
       where: {
         AND: [machineWhere],
-        station: { ...STEP_FLOW_WHERE },
-        // Adım KOLONU — `station` spread'ine ek anahtar yazılmaz (OR ezilir).
-        ...(stationId ? { stationId } : {}),
-        status: { not: "COMPLETED" },
-        currentRolls: { some: {} },
-        // Kurşun bypass'a DAĞITILMIŞ adımlar bu listede GÖRÜNMEZ: bu liste
-        // "kamera simülasyonu" seçim listesidir ve seçilen her kart tabletin
-        // yazma akışına (completeQc2 → finishStep) girer. Dağıtılmış adımda o
-        // akışın her adımı 409 döner → operatöre seçtirip sonra reddetmek
-        // yerine hiç göstermiyoruz. (Fiziksel kart yine okutulabilir; o yolda
-        // getByCardBarcode `bypassAssignment` ile durumu açıklar.)
-        //
-        // ⚠️ BAYRAK AÇIKKEN "dağıtıma UYGUN" adımlar burada SÜZÜLMEZ (2026-08-05
-        // bilinçli kararı). İki gerekçe: (a) uygunluk kuralı rota + üç dijital-iz
-        // sorgusu ister ve bu uç tablet tarafından 5 SANİYEDE BİR yoklanıyor —
-        // filtre, hiç yapılmayacak bir işi elemek için sürekli maliyet demekti;
-        // (b) artık gereksiz: kart açıldığında `tabletReadOnly` bandı sebebi
-        // SOMUT olarak söylüyor, yani eski "sessiz 409" sorunu kaynağında çözüldü.
-        // Uygun OLMAYAN adımlar zaten listede KALMALI (tablet onları işlemeye
-        // devam eder) — kör bir bayrak filtresi onları da yutardı.
-        kursunBypasses: { none: PENDING_BYPASS_WHERE },
+        // Açık kart = burada bekleyen iş: tek kaynak `kursunOpenStepWhere` (istasyonda belge okutma da okur). Kurşun
+        // bypass'a DAĞITILMIŞ adımlar görünmez; dağıtıma UYGUN adımlar bilerek süzülmez (2026-08-05 kararı: kart
+        // açılınca `tabletReadOnly` bandı sebebi söyler, uygunluk sorgusu 5 sn'lik yoklamada pahalı).
+        ...kursunOpenStepWhere(stationId),
         // K17: fiş/evrak/parti/İE no araması sunucuda (boş q = bugünkü liste).
         ...(searchWhere ? { workOrder: searchWhere } : {}),
       },
@@ -540,7 +513,7 @@ export class KursunQcService {
 
     // K29 S15b: yalnız istemci isterse (eski APK stepId null satır görmez) — oturum istasyonunda eklenebilecek rotasız İE.
     if (!includeScanRouted) return { success: true, data };
-    const scanRows = await scanRoutedOpenCards({ stationId, stationWhere: STEP_FLOW_WHERE, searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
+    const scanRows = await scanRoutedOpenCards({ stationId, stationWhere: stationScreenStationWhere("KURSUN_QC"), searchWhere, excludeWorkOrderIds: data.map((d) => d.workOrderId) });
     return { success: true, data: [...data, ...scanRows] };
   }
 

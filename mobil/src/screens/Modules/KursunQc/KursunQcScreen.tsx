@@ -102,6 +102,8 @@ import PlannedMachineBadge from './PlannedMachineBadge';
 import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
 import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
 import { useStationDocLookup } from '../../../components/stationDocLookup/useStationDocLookup';
+import DocSiblingsStrip, { useDocSiblings } from '../../../components/stationDocLookup/DocSiblingsStrip';
+import type { StationLookupWorkOrder } from '../../../services/stationDocLookup.service';
 import { emptyCardHint } from '../../../components/stationDocLookup/emptyCardHint';
 import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenCardSearch';
 
@@ -224,6 +226,8 @@ export default function KursunQcScreen() {
   const [listModalOpen, setListModalOpen] = useState(false);
   // K17: boyahane belgesinden iş emri bulma + açık kart listesinde fiş/parti no araması (süzme sunucuda).
   const docLookup = useStationDocLookup();
+  // Belgeden açılan işin kardeşleri ("diğerine geç" şeridi).
+  const docSiblings = useDocSiblings();
   // K29 S15b: Okutmayla kipinde rotasız İE satırları da istenir (sıralıda istek bayt-aynı).
   const scanMode = useScanRouteMode();
   const cardSearch = useOpenCardSearch(['kursun-qc', 'open-cards', scanMode], (q) => kursunQcService.listOpenCards(q, scanMode));
@@ -616,8 +620,9 @@ export default function KursunQcScreen() {
     resolveCard(data.trim(), false);
   };
 
-  const handleDocLookupOpen = (workOrder: { cardBarcode: string }) => {
+  const handleDocLookupOpen = (workOrder: StationLookupWorkOrder, siblings: StationLookupWorkOrder[]) => {
     docLookup.setOpen(false);
+    docSiblings.setSiblings(siblings);
     resolveCard(workOrder.cardBarcode, false);
   };
 
@@ -1237,6 +1242,13 @@ export default function KursunQcScreen() {
         </Surface>
       )}
 
+      <DocSiblingsStrip
+        siblings={docSiblings.siblings}
+        activeCardBarcode={activeJob?.cardBarcode ?? null}
+        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+        onDismiss={docSiblings.clear}
+      />
+
       {/* Açık iş emri sekmeleri — Okut + Liste (Açık Kartlar) artık header'ın
           2. katında (phoneSecondRow), burada tekrar etmez. Telefonda KENDİ
           tam-genişlik satırı (tek satır çip); tablette de tek satır. */}
@@ -1766,6 +1778,7 @@ export default function KursunQcScreen() {
         onDismiss={() => docLookup.setOpen(false)}
         onOpen={handleDocLookupOpen}
         readerConfigured={docLookup.readerConfigured}
+        screen={{ screen: 'KURSUN_QC' }}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}

@@ -38,7 +38,7 @@ import { BATCH_NO_KEY_RE, listSenderTemplates, MANUAL_BATCH_NO_KEY, updateSender
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
-import { stationDocLookup, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
+import { stationDocLookup, stationLookupContext, stationLookupStatus } from "../services/gelen-belge-istasyon-okutma.service";
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { kickPhotoRetentionIfActive, requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
@@ -503,14 +503,19 @@ const StationLookupBody = z.union([
  *             oneOf:
  *               - { type: object, required: [contentBase64], properties: { contentBase64: { type: string }, sha256: { type: string } } }
  *               - { type: object, required: [q], properties: { q: { type: string, minLength: 2, maxLength: 64 } } }
+ *     parameters:
+ *       - { in: query, name: screen, schema: { type: string, enum: [KURSUN_QC, TAMBUR] }, description: "İsteyen ekran; verilirse her İE'ye atStation (o ekranın açık kart listesinde mi) eklenir" }
+ *       - { in: query, name: stationId, schema: { type: string, format: uuid }, description: "Yalnız TAMBUR: açık kart listesinin istasyonu (kurşun oturum istasyonunu kullanır)" }
  *     responses:
- *       200: { description: "outcome SINGLE|MULTIPLE|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents) · message" }
- *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE" }
+ *       200: { description: "outcome SINGLE|MULTIPLE|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|STARTABLE_HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText) · station {screen,label}|null · message" }
+ *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE · STATION_INACTIVE · STATION_NOT_TAMBUR" }
+ *       404: { description: "STATION_NOT_FOUND (TAMBUR stationId)" }
  *       403: { description: "GELEN_BELGE_STATION_LOOKUP_DISABLED (ayar kapalı) · MODULE_DISABLED (gelen belge / üretim)" }
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi yok/ulaşılamaz) · HEIC_CONVERT_UNAVAILABLE" }
  */
 router.get("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async () => ({ status: 200, data: await stationLookupStatus() })));
-router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => ({ status: 200, data: await stationDocLookup(StationLookupBody.parse(req.body)) })));
+// Ekran bilgisi SORGU dizgisinde (gövde strictObject; yeni tablet + eski sunucu 400 almasın) — `stationLookupContext`.
+router.post("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async (req) => ({ status: 200, data: await stationDocLookup(StationLookupBody.parse(req.body), await stationLookupContext(req)) })));
 router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
 
 /**
