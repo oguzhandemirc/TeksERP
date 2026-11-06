@@ -91,7 +91,10 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       kursunSequence: ctx.kursunSequence,
     });
     const full = mergeExtra(body, ctx.extra);
-    return { result: openedResult(await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...full, confirmDuplicateDocNo: true } : full)) };
+    const opened = await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...full, confirmDuplicateDocNo: true } : full);
+    // Kayıt yapıldı ama sunucu uyardı (ör. müşteri malı → Fason Belge Okut): ekran listeye dönse de görülsün.
+    if (opened.warnings?.length) Toast.show({ type: 'info', text1: `${opened.workOrderNo} açıldı — dikkat`, text2: opened.warnings.join(' · '), visibilityTime: 8000 });
+    return { result: openedResult(opened) };
   } catch (e) {
     if (!isFormApprovalDisabled(e)) return { result: { kind: 'FAILED', text: errorText(e) }, error: e };
     try {

@@ -1,6 +1,7 @@
 // Çok partili belge (S1, fabrika cevabı 16/17) — saf parçalar: sunucunun parti özeti (`GET /irsaliyeler/:id/partiler`) →
 // satırın düzenlenebilir parti listesi + kip; kayıt kapısı ve gövde parçası. Kural sunucudadır (uyarılar oradan gelir).
 import { TERIM } from '../../../../lib/terim';
+import { fmtMeters } from '../../../../utils/meters';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../../../../services/inboundDoc.service';
 
 export interface PartyRow {
@@ -17,9 +18,12 @@ export interface MultiPartyDraft {
   mode: MultiPartyMode;
 }
 
-/** Forma ilk metre: sunucunun önerisi (beyan ara toplamı önce), eski sunucuda Σ satır; seçim kuralı istemcide kurulmaz. */
+/**
+ * Forma ilk metre: onaylı partide KAYITLI metre (elle düzeltme dahil), yoksa sunucunun önerisi (beyan ara toplamı önce),
+ * eski sunucuda Σ satır; seçim kuralı istemcide kurulmaz.
+ */
 const partyMeters = (p: NoteParty): number | null => {
-  const m = p.suggestedMeters ?? p.meters;
+  const m = p.recordedMeters ?? p.suggestedMeters ?? p.meters;
   return m > 0 ? m : null;
 };
 
@@ -74,6 +78,8 @@ export function partyFacts(p: NoteParty | undefined): string[] {
     p.orderNo ? `Sipariş ${p.orderNo}` : null,
     p.processText ? `İşlem: ${p.processText}` : null,
     p.senderWorkOrderNo ? `Müşteri İE ${p.senderWorkOrderNo}` : null,
+    // Onaylı partide kayıtlı metre ≠ okunan Σ satır → ayrı bilgi olarak (panel Partiler kartıyla aynı).
+    p.recordedMeters != null && Math.abs(p.recordedMeters - p.meters) > 0.0005 ? `Satır toplamı ${fmtMeters(p.meters)} m` : null,
   ].filter((x): x is string => !!x);
 }
 

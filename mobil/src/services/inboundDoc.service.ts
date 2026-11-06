@@ -268,7 +268,8 @@ export const inboundDocService = {
   createWorkOrder: (noteId: string, body: CreateWorkOrderFromNoteBody): Promise<CreateWorkOrderFromNoteResult> =>
     apiClient
       .post<ApiResponse<CreateWorkOrderFromNoteResult>>(`/gelen-belge/irsaliyeler/${noteId}/is-emri`, body, { timeout: UPLOAD_TIMEOUT_MS })
-      .then((r) => r.data.data),
+      // Uyarılar yanıtın KÖKÜNDE (`ApiResponse.warnings`), `data`nın içinde değil — kaybolmasın diye sonuca taşınır.
+      .then((r) => ({ ...r.data.data, warnings: r.data.warnings ?? [] })),
 
   /** Parti özeti; eski sunucu (404) → null = bugünkü tek partili form. */
   noteParties: (noteId: string): Promise<NotePartiesView | null> =>

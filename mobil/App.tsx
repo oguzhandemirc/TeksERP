@@ -12,6 +12,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import WindowDimensionsHeal from './src/components/WindowDimensionsHeal';
 import { StatusBar } from 'expo-status-bar';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -129,6 +130,8 @@ export default function App() {
           / KeyboardStickyView kullanır. Native rebuild gerekir (expo run:android). */}
       <KeyboardProvider>
       <SafeAreaProvider>
+        {/* Portrait kilitli aktiviteden (belge tarayıcı) dönüşte bayat kalan pencere ölçüsünü onarır. */}
+        <WindowDimensionsHeal />
         <PersistQueryClientProvider
           client={queryClient}
           persistOptions={{

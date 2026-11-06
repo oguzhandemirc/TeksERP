@@ -74,6 +74,8 @@ export interface CreateWorkOrderFromNoteResult {
   workOrders?: { blockNos: number[]; workOrderId: string; workOrderNo: string; batchNumber: string | null; existing?: boolean }[];
   /** PER_PARTY kısmi başarı: açılamayan partiler (eski sunucu göndermez); belge onaylı kalır, düzeltip yeniden gönderilir. */
   failed?: PartyWorkOrderFailure[];
+  /** Yanıt kökündeki `ApiResponse.warnings` (servis taşır; ör. müşteri malı belge Stoğa üretim açıldı). Eski sunucu → boş. */
+  warnings?: string[];
 }
 
 export interface PartyWorkOrderFailure {
@@ -100,6 +102,8 @@ export interface NoteParty {
   /** Sunucunun önerdiği parti metresi (beyan ara toplamı > Σ satır; 2026-11-06, eski sunucu göndermez → `meters`). */
   suggestedMeters?: number | null;
   suggestedMetersSource?: 'TOTAL' | 'LINE_SUM' | null;
+  /** Onaylı partinin KAYITLI metresi (özet satırı, elle düzeltme dahil); onaysız/eski sunucu → null/undefined. */
+  recordedMeters?: number | null;
 }
 
 export interface NotePartiesView {

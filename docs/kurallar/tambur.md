@@ -45,6 +45,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Rapor çıpası `Roll.finalizedAt` ve `statusChangedAt` — TRIGGER yazar; kaynak statü listesinde SHIPPED/CANCELLED bilerek YOK; damga üzerine yazılır.
 - **[PROFİL]** `quality.gradeRequiredEnabled` DAR kapsam (KK1 · Tambur kalan-kuyruk · depo kesimi · WO kapanışının satılabilir dalları); fason kabulü · son-adım finalize · `cutOpenFabric` · `attachRolls` DIŞARIDA; kapsamı genişletme.
 - **[PROFİL]** Müşteri tambur ayarlarını (en kaynağı, tartım, bölme ölçüsü) hedef müşteri ?? top sahibinden YALNIZ `tambur-customer-settings.helper` çözer.
+- **[ÇEKİRDEK]** Tablette Kime? varsayılanı fason (EMANET) topta malın sahibidir (`label-settings.ownerCustomer`), sahipsiz topta Stok; top başına bir kez uygulanır, operatörün Stok/başka hedef seçimi ezilmez (`mobil/.../Tambur/ownerTarget.ts`).
 - **[PROFİL]** Top doğuran her yolda tartım kapısı 400 `TAMBUR_WEIGHT_REQUIRED` (discard/kalan 0 hariç); `tambur.labelPrintTiming` (EACH | END) istemci kararıdır.
 
 ### Yasaklar
