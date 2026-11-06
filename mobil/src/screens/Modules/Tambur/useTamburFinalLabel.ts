@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { tamburService, type TamburLabelSettings } from '../../../services/tambur.service';
 import { DEFAULT_LABEL_SETTINGS, parseKg, weightError } from './finalLabel';
+import { useTamburLabelBatch, type TamburLabelBatch } from './useTamburLabelBatch';
 
 export interface TamburFinalLabelState {
   settings: TamburLabelSettings;
@@ -16,9 +17,16 @@ export interface TamburFinalLabelState {
   error: () => string | null;
   /** `error()` varsa "Tartım" toast'ı basar ve true döner (gönderim durur). */
   blocked: () => boolean;
+  /** Müşteri parti no (etiket) — ayar açıksa şerit gösterir, gövdeye gider. */
+  batch: TamburLabelBatch;
 }
 
-export function useTamburFinalLabel(rollId: string | null | undefined, customerId: string | null | undefined): TamburFinalLabelState {
+export function useTamburFinalLabel(
+  rollId: string | null | undefined,
+  customerId: string | null | undefined,
+  /** Parti no yapışkanlığının kapsamı (iş emri id); yoksa çözülen müşteri. */
+  batchScopeKey?: string | null,
+): TamburFinalLabelState {
   const q = useQuery({
     queryKey: ['tambur', 'label-settings', rollId ?? null, customerId ?? null],
     queryFn: () => tamburService.labelSettings({ rollId, customerId }),
@@ -30,8 +38,10 @@ export function useTamburFinalLabel(rollId: string | null | undefined, customerI
   const [kgText, setKgText] = useState('');
   // Yeni top = yeni tartım; önceki topun kg'si sızmasın.
   useEffect(() => setKgText(''), [rollId]);
+  const batch = useTamburLabelBatch(settings.labelBatchEnabled === true, batchScopeKey ?? settings.customerId ?? null);
   return {
     settings,
+    batch,
     kgText,
     setKgText,
     weightKg: () => {

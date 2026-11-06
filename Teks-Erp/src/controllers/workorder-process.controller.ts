@@ -4,9 +4,11 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import { targetValueItemSchema } from "./workorder.controller";
 import {
   getBatchProcessSummary,
+  getWorkOrderKursunGramaj,
   getWorkOrderProcessSummary,
   replaceWorkOrderTargetValues,
 } from "../services/workorder-target-value.service";
@@ -17,14 +19,29 @@ import { updateStepPlannedMachine } from "../services/step-planned-machine.servi
 const targetValueUpdateItemSchema = targetValueItemSchema.extend({
   valueId: z.string().uuid("Geçersiz değer ID").nullable(),
 });
-export const targetValuesBodySchema = z.object({ items: z.array(targetValueUpdateItemSchema).max(20) }).strict();
+export const targetValuesBodySchema = z.object({
+  items: z.array(targetValueUpdateItemSchema).max(20),
+  /** Tablet gramaj düzeltmesinin sebebi — İE hareket defterine yazılır (eski istemci göndermez). */
+  reason: z.string().trim().max(500, "En çok 500 karakter").nullable().optional(),
+}).strict();
 
 /** PUT /api/work-orders/:id/target-values */
 export async function putTargetValues(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const body = targetValuesBodySchema.parse(req.body);
-    res.status(200).json(await replaceWorkOrderTargetValues(id, body.items, req.user?.userId));
+    // `workorder:write` yoksa kapı `mobile:is-emri-duzelt`ten geçmiştir → yalnız kurşun gramajı (servis 403/409).
+    const kursunOnly = !matchesPermission(req.user?.permissions ?? [], "workorder:write");
+    res.status(200).json(await replaceWorkOrderTargetValues(id, body.items, req.user?.userId, { kursunOnly, reason: body.reason ?? null }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/work-orders/:id/kursun-gramaj — tablet Düzelt "Gramajı Değiştir" önizlemesi */
+export async function getKursunGramaj(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(200).json({ success: true, data: await getWorkOrderKursunGramaj(assertValidUuid(req.params.id, "id")) });
   } catch (err) {
     next(err);
   }

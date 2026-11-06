@@ -525,6 +525,16 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /work-orders/:p/batches",
     why: "Parti Ekle (hareket defteri D8) — `mobile:is-emri-duzelt` yeteneği; menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
   },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /work-orders/:p/kursun-gramaj",
+    why: "Gramajı Değiştir'in YAN ETKİSİZ önizlemesi — `mobile:is-emri-duzelt` yeteneğiyle (menü `canFix`).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "PUT /work-orders/:p/target-values",
+    why: "Gramajı Değiştir — `mobile:is-emri-duzelt` yeteneği (panel izni yoksa yalnız kurşun özelliği); menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+  },
 ];
 
 function main(): void {

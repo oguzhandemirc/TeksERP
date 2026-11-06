@@ -103,7 +103,7 @@ export default function WoFormFields(props: Props) {
         </>
       )}
 
-      <TargetFields {...p} onPickItem={() => setPicker('item')} />
+      <TargetFields {...p} customerId={p.plan?.customerId ?? null} onPickItem={() => setPicker('item')} />
       {p.plan && <TargetPropsBlock plan={p.plan} show={show} locked={locked} />}
       <FoldAndPlan {...p} onPick={setPicker} />
       <FieldPickers {...p} picker={picker} setPicker={setPicker} days={days} />

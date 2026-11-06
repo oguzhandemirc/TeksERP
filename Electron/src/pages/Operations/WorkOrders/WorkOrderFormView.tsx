@@ -42,6 +42,7 @@ import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import { useNumberSourceState } from "@/lib/number-source";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
+import { defaultTargetHint, useDefaultTargetItem } from "./defaultTargetItem";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { useStationDefaultTargets } from "@/lib/station-default-targets";
@@ -466,7 +467,10 @@ export function WorkOrderFormView({
       : 0;
 
   // Stoğa üretimde hedef kumaş zorunlu + boşsa → picker'a nabız (dikkat çek).
-  const targetItemMissing = !isOrderProduction && !form.watch("targetItemId");
+  // İE varsayılan stok kartı (yalnız yeni İE; düzenleme boş hedefi reddeder): kullanılabilir kart varsa boş hedef geçer.
+  const defaultTarget = useDefaultTargetItem(!isEdit);
+  const defaultHint = isEdit || isOrderProduction ? null : defaultTargetHint(defaultTarget.data);
+  const targetItemMissing = !isOrderProduction && !form.watch("targetItemId") && !defaultHint?.usable;
 
   // "Şablon Kaydet" şablonun ihtiyaç duyduğu alanlar tamam olmadan pasiftir.
   // Hangi eksik yüzünden pasif kaldığını tooltip'te somut göster (disabled
@@ -499,7 +503,7 @@ export function WorkOrderFormView({
               manualErrors.push("Parti kodu zorunlu.");
             }
             // Sipariş bağlı değil = stoğa üretim; backend hedef kumaş zorunlu kılar.
-            if (pickedLines.length === 0 && !v.targetItemId) {
+            if (pickedLines.length === 0 && !v.targetItemId && !(defaultHint?.usable && !isEdit)) {
               form.setError("targetItemId", {
                 type: "manual",
                 message: "Sipariş bağlı değil — stoğa üretim için hedef kumaş seçilmeli.",
@@ -687,8 +691,10 @@ export function WorkOrderFormView({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
                   label={docScan.label("Hedef Kumaş", "targetItemId")}
-                  required={!isOrderProduction}
+                  required={!isOrderProduction && !defaultHint?.usable}
                   error={form.formState.errors.targetItemId}
+                  hint={!form.watch("targetItemId") && defaultHint ? <span data-testid="wo-default-target-hint">{defaultHint.text}</span> : undefined}
+                  hintTone={defaultHint?.usable === false ? "warning" : "muted"}
                 >
                   <div className={targetItemMissing ? "attention-pulse rounded-md" : undefined}>
                     <TargetItemPicker

@@ -131,7 +131,7 @@ import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { customerCodeSearchRollIds } from "./helpers/roll-scan-resolve.helper";
 import { readTargetValueChips, type TargetValueChip } from "./helpers/workorder-target-value.helper";
 import { TERIM } from "../constants/terim";
-import { resolveTamburCutWeight } from "./helpers/tambur-customer-settings.helper";
+import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "./helpers/tambur-customer-settings.helper";
 import { gateByCard } from "./workorder-scan-route.service";
 
 
@@ -722,6 +722,8 @@ export class TamburService {
       confirmMismatch?: boolean;
       /** S5: otomatik kalan kuyruk parçasının kg'ı (tartım kapısı). */
       remainingWeightKg?: number | null;
+      /** Müşterinin etikete istediği parti metni — bu finalize'da doğan HER parçaya yazılır. */
+      labelBatchNo?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -1111,6 +1113,12 @@ export class TamburService {
         weightKg: null,
       });
     }
+    // Etiket parti no — müşteri ayarı kapalıyken değer 400 (kesim yollarıyla aynı kapı).
+    const labelBatchNo = await resolveTamburLabelBatchNo({
+      labelBatchNo: data.labelBatchNo,
+      targetCustomerId: null,
+      ownerCustomerId: roll.ownerCustomerId,
+    });
     // Tamburda tartım (S5) — depoya inen her parça kesim yollarıyla AYNI kapıdan; tx/barkoddan önce.
     for (const seg of segments) {
       if (seg.status !== RollStatus.WAREHOUSE && seg.rawWeightKg == null) continue;
@@ -1290,6 +1298,7 @@ export class TamburService {
             initialQty: seg.qty,
             currentQty: seg.qty,
             weightKg: seg.weightKg,
+            labelBatchNo,
             status: seg.status,
             qualityGrade: seg.qualityGrade,
             // seg.qualityGrade nullable → null anahtarla katalog araması yok, id null.
@@ -2285,6 +2294,8 @@ export class TamburService {
       measure?: MeterSourceInput | null;
       /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; çocuk `weightKg`. */
       weightKg?: number | null;
+      /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
+      labelBatchNo?: string | null;
     },
     userId?: string,
     /**
@@ -2324,6 +2335,11 @@ export class TamburService {
     // Tamburda tartım — müşteri ayarı (etiket müşterisi ?? sahibi); kapalıysa kg opsiyonel.
     const cutWeightKg = await resolveTamburCutWeight({
       weightKg: data.weightKg,
+      targetCustomerId: data.targetCustomerId,
+      ownerCustomerId: parent.ownerCustomerId,
+    });
+    const cutLabelBatchNo = await resolveTamburLabelBatchNo({
+      labelBatchNo: data.labelBatchNo,
       targetCustomerId: data.targetCustomerId,
       ownerCustomerId: parent.ownerCustomerId,
     });
@@ -2460,6 +2476,7 @@ export class TamburService {
         initialQty: data.cutLength,
         currentQty: data.cutLength,
         weightKg: cutWeightKg,
+        labelBatchNo: cutLabelBatchNo,
         // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
@@ -2781,6 +2798,8 @@ export class TamburService {
       varianceReasonText?: string | null;
       /** S5: kalan topun kg'ı (tartım kapısı). */
       weightKg?: number | null;
+      /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
+      labelBatchNo?: string | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -2843,6 +2862,10 @@ export class TamburService {
     const remainingWeightKg =
       action !== "discard" && Number(parent.currentQty) > 0
         ? await resolveTamburCutWeight({ weightKg: data.weightKg, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+        : null;
+    const remainingLabelBatchNo =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? await resolveTamburLabelBatchNo({ labelBatchNo: data.labelBatchNo, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
         : null;
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
@@ -2956,6 +2979,7 @@ export class TamburService {
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
+            labelBatchNo: remainingLabelBatchNo,
             // Ham parent → kalan ham STOCK/SCRAP; bitmiş parent → WAREHOUSE.
             status: childStatus,
             qualityGrade: childQualityGrade,
@@ -3201,6 +3225,8 @@ export class TamburService {
       measure?: MeterSourceInput | null;
       /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; çocuk `weightKg`. */
       weightKg?: number | null;
+      /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
+      labelBatchNo?: string | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -3231,6 +3257,11 @@ export class TamburService {
     // Tamburda tartım — müşteri ayarı (etiket müşterisi ?? sahibi); kapalıysa kg opsiyonel.
     const cutWeightKg = await resolveTamburCutWeight({
       weightKg: data.weightKg,
+      targetCustomerId: data.targetCustomerId,
+      ownerCustomerId: parent.ownerCustomerId,
+    });
+    const cutLabelBatchNo = await resolveTamburLabelBatchNo({
+      labelBatchNo: data.labelBatchNo,
       targetCustomerId: data.targetCustomerId,
       ownerCustomerId: parent.ownerCustomerId,
     });
@@ -3383,6 +3414,7 @@ export class TamburService {
         initialQty: data.lengthMeters,
         currentQty: data.lengthMeters,
         weightKg: cutWeightKg,
+        labelBatchNo: cutLabelBatchNo,
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
         qualityGradeId: resolvedQualityGradeId,
@@ -3619,6 +3651,8 @@ export class TamburService {
       confirmMismatch?: boolean;
       /** S5: kalan topun kg'ı (tartım kapısı). */
       weightKg?: number | null;
+      /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
+      labelBatchNo?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -3720,6 +3754,10 @@ export class TamburService {
     const remainingWeightKg =
       action !== "discard" && Number(parent.currentQty) > 0
         ? await resolveTamburCutWeight({ weightKg: data.weightKg, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+        : null;
+    const remainingLabelBatchNo =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? await resolveTamburLabelBatchNo({ labelBatchNo: data.labelBatchNo, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
         : null;
     // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
     // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
@@ -3827,6 +3865,7 @@ export class TamburService {
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
+            labelBatchNo: remainingLabelBatchNo,
             status: RollStatus.WAREHOUSE,
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,

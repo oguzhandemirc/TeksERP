@@ -78,6 +78,11 @@ export interface LabelPayload {
    * Kat girilmemiş topta null → alan şablonda dursa bile baskıda atlanır.
    */
   foldType?: string | null;
+  /**
+   * Müşterinin etikete istediği parti metni (`Roll.labelBatchNo`, ör. "J1") — bizim
+   * `batchNumber`ımız DEĞİL. Varsayılan düzende "Parti" yuvası doluysa bunundur.
+   */
+  labelBatchNo?: string | null;
   /** Açık hata notu "12,5 m Leke · 40 m Delik" (KQ-D8); yalnız mamul topta, hatasız "". */
   openDefects?: string | null;
   /** Gelen belge satırındaki müşteri kumaş adı / rengi (E3; ata topa yürünür). Satırı olmayan topta ALAN YOK (payload bayt-aynı). */

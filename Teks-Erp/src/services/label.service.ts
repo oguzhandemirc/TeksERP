@@ -473,6 +473,8 @@ export class LabelService {
       workOrderNumber: roll.batch?.workOrder?.workOrderNumber ?? null,
       // KAT — kolondan OLDUĞU GİBİ (katalog kodu); ada çevrilmez (bkz. LabelPayload).
       foldType: roll.foldType ?? null,
+      // Müşterinin etikete istediği parti (tamburda girilir); boşsa alan basılmaz.
+      labelBatchNo: roll.labelBatchNo ?? null,
       // Tambursuz rotada karar verilmemiş hatalar BİLGİ olarak (KQ-D8); şablonda opt-in.
       openDefects: (preloaded?.openDefectNotes ?? (await loadOpenDefectNotes([roll.id]))).get(roll.id) ?? "",
       printedAt: new Date().toISOString(),

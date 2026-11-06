@@ -1332,6 +1332,8 @@ export interface TamburCutRequest {
   clientToken?: string;
   /** D4-B3 ölçüm kaynağı beyanı (makine / elle / simülasyon). */
   measure?: TamburMeasureBody;
+  /** Çocuğun etiketine basılacak müşteri parti no; ayar kapalıysa GÖNDERİLMEZ (sunucu 400). */
+  labelBatchNo?: string | null;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
@@ -1366,6 +1368,8 @@ export interface TamburFinalizeOpenFabricRequest {
   varianceReasonText?: string | null;
   /** Kalan topun kg'ı (S5 tartım kapısı). */
   weightKg?: number | null;
+  /** Kalan topun etiketine basılacak müşteri parti no (ayar kapalıysa gönderilmez). */
+  labelBatchNo?: string | null;
 }
 
 // =============================================================================

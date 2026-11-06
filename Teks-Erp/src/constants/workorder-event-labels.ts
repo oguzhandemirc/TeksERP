@@ -33,6 +33,10 @@ export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
   isActive: "Arşiv",
 };
 
+/** Kolon olmayan izlenen plan alanı: kurşun gramajı hedefi (`WorkOrderTargetValue`) — FIELD_CHANGED satırı bu adla yazılır. */
+export const KURSUN_GRAMAJ_EVENT_FIELD = "kursunGramaj";
+export const WORK_ORDER_EXTRA_FIELD_LABEL: Record<string, string> = { [KURSUN_GRAMAJ_EVENT_FIELD]: "Kurşun gramajı" };
+
 /** Fason adımı planının alanları (STEP_PLAN_CHANGED; "route" rotanın bütünü). */
 export const WORK_ORDER_STEP_FIELD_LABEL: Record<string, string> = {
   route: "Rota",

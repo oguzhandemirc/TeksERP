@@ -9,6 +9,7 @@ import type { ApiResponse } from '../types/api';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode } from '../types/inboundDocWoCreate';
 import type { ClientOcr } from './deviceOcr';
 import type { DocRoll } from '../types/inboundDocRolls';
+import type { SameDocumentMatch, SameDocumentQuery } from '../types/inboundDocSameDoc';
 import type {
   ScanWords,
   SuggestBody,
@@ -217,6 +218,7 @@ export interface InboundDocSettings {
 /** Tablet iş emri girişi: IKISI = bugünkü (top + belge) · BELGE = her karo tek formu açar · TOP = yalnız top yolu. */
 export type TabletWoEntry = 'IKISI' | 'BELGE' | 'TOP';
 
+export type { SameDocumentMatch, SameDocumentQuery, SameDocumentState } from '../types/inboundDocSameDoc';
 export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode } from '../types/inboundDocWoCreate';
 
 /** `GET /gelen-belge/irsaliyeler/:id/partiler` — parti özeti + canlı uyarılar + fabrika varsayılan kipi. */
@@ -305,6 +307,26 @@ export const inboundDocService = {
       .get<ApiResponse<DeskRouteSuggestion>>('/gelen-belge/rota-onerisi', { params: ownerCustomerId ? { sahip: ownerCustomerId } : {} })
       .then((r) => r.data.data),
 
+  /** Aynı belge daha önce işlendi mi (sha / sahip+belge no); eski sunucu (404) → null = bugünkü yol. YAZMAZ. */
+  findSameDocument: (q: SameDocumentQuery): Promise<SameDocumentMatch | null> => {
+    const params: Record<string, string> = {};
+    if (q.sha256?.length) params.sha256 = q.sha256.slice(0, 20).join(',');
+    if (q.ownerCustomerId) params.sahip = q.ownerCustomerId;
+    if (q.senderDocNo) params.belgeNo = q.senderDocNo;
+    if (q.excludeNoteId) params.haric = q.excludeNoteId;
+    return apiClient
+      .get<ApiResponse<{ match: SameDocumentMatch | null }>>('/gelen-belge/ayni-belge', { params })
+      .then((r) => r.data.data?.match ?? null)
+      .catch((e: { status?: number }) => {
+        if (e?.status === 404) return null;
+        throw e;
+      });
+  },
+
+  /** Sayfasız (deftere yazmamış) taslağı sil — yarışta açılmış boş taslak; sunucu yalnız DRAFT'ı siler. */
+  deleteDraftNote: (noteId: string): Promise<unknown> =>
+    apiClient.delete<ApiResponse<unknown>>(`/gelen-belge/irsaliyeler/${noteId}`).then((r) => r.data.data),
+
   createDraftNote: (body: CreateDraftNoteBody): Promise<DraftNote> =>
     apiClient.post<ApiResponse<DraftNote>>('/gelen-belge/irsaliyeler', body).then((r) => r.data.data),
 
@@ -357,4 +379,5 @@ export const inboundDocService = {
       .then((r) => r.data.data),
 };
 
-export type InboundDocApi = Pick<typeof inboundDocService, 'createDraftNote' | 'uploadScan'>;
+export type InboundDocApi = Pick<typeof inboundDocService, 'createDraftNote' | 'uploadScan'> &
+  Partial<Pick<typeof inboundDocService, 'findSameDocument' | 'deleteDraftNote'>>;

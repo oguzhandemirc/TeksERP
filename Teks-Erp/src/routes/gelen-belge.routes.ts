@@ -29,6 +29,7 @@ import { requireSettingsPassword } from "../middlewares/settings-password.middle
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { deskRouteSuggestion, listDeskKursunMachines } from "../services/gelen-belge-masa.service";
 import { getDocumentScan, readDocumentScanContent } from "../services/gelen-belge-scan.service";
+import { findSameDocumentByQuery } from "./gelen-belge-ayni-belge.query";
 import { uploadScanWithDeviceRead } from "../services/gelen-belge-istemci-okuma.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
@@ -348,10 +349,26 @@ router.get("/tablet-baglam", requirePermission("gelen-belge:write"), wrap(async 
   status: 200,
   data: { ...(await getRollTabletContext()).data, kursunMachines: await listDeskKursunMachines() },
 })));
+// Taramacı `gelen-belge:read` taşımaz (D7) — kısayol yalnız yazma yolunun (taslak açma) öncesidir.
+router.get("/ayni-belge", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await findSameDocumentByQuery(req.query) })));
 const DeskSuggestionQuery = z.object({ sahip: Id.optional() });
-router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (req) => ({
-  status: 200, data: await deskRouteSuggestion(DeskSuggestionQuery.parse(req.query).sahip ?? null),
-})));
+router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await deskRouteSuggestion(DeskSuggestionQuery.parse(req.query).sahip ?? null) })));
+/**
+ * @openapi
+ * /api/gelen-belge/ayni-belge:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: 'Bu belge zaten var mı — tablet taslak AÇMADAN sorar (aynı fotoğraf sha256 · BLOCK kipinde aynı sahip + belge no); salt okunur'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: sha256, required: false, schema: { type: string }, description: "Virgüllü sha256 listesi (en çok 20)" }
+ *       - { in: query, name: sahip, required: false, schema: { type: string, format: uuid } }
+ *       - { in: query, name: belgeNo, required: false, schema: { type: string } }
+ *       - { in: query, name: haric, required: false, schema: { type: string, format: uuid }, description: "Çağıranın kendi taslağı" }
+ *     responses:
+ *       200: { description: "match: null | { via SHA|DOC_NO, note { id, noteNo, status, senderDocNo, createdAt, approvedAt, updatedAt }, state DRAFT|PROCESSED|CANCELLED, workOrders[{ id, workOrderNumber, status }] }" }
+ *       400: { description: "Geçersiz sha256 / kimlik" }
+ */
 /**
  * @openapi
  * /api/gelen-belge/irsaliyeler/{id}/okuma-ozeti:

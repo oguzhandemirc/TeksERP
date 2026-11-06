@@ -318,6 +318,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   labelOverrides: "Etiket bilgisi",
   labelWidthSource: "Etiketteki en kaynağı",
   tamburWeighRequired: "Tamburda tartım",
+  tamburLabelBatchEnabled: "Etikete müşteri parti no",
+  labelBatchNo: "Etiket parti no",
   tamburSplitLengthM: "Tambur bölme ölçüsü (m)",
   wasDirty: "Bayat kopya idi",
   event: "Olay",

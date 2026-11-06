@@ -37,4 +37,7 @@ export function normalizeTamburLabelSettings(data: Record<string, unknown>): voi
   if ("tamburWeighRequired" in data && typeof data.tamburWeighRequired !== "boolean") {
     throw AppError.badRequest("Tamburda tartım ayarı açık/kapalı olmalı.", { code: "CUSTOMER_LABEL_SETTING_INVALID" });
   }
+  if ("tamburLabelBatchEnabled" in data && typeof data.tamburLabelBatchEnabled !== "boolean") {
+    throw AppError.badRequest("Etikete parti no ayarı açık/kapalı olmalı.", { code: "CUSTOMER_LABEL_SETTING_INVALID" });
+  }
 }

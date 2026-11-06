@@ -24,6 +24,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 import { PANEL_SETTING_SCREEN, PANEL_SETTING_ROW } from "../src/constants/panel-ayar-yolu";
+import { TERIM, terimDokumaAyarla, terimDokumaRejimi } from "../src/constants/terim";
 
 let pass = 0;
 let fail = 0;
@@ -45,6 +46,19 @@ const TABLO = "constants/panel-ayar-yolu.ts";
 interface PanelKategori { id: string; label: string; section: string; flags: Map<string, string> }
 interface PanelKatalogu { sectionSurface: Map<string, string>; surfaceLabel: Map<string, string>; kategoriler: PanelKategori[]; trailGovdesi: string }
 
+/** `get label() { return TERIM.a.b; }` → backend TERIM aynasından çözülür (rejime bağlı ad; okuma anındaki rejim). */
+function terimGetter(o: ts.ObjectLiteralExpression, ad: string): string | null {
+  for (const p of o.properties) {
+    if (!ts.isGetAccessorDeclaration(p) || p.name.getText() !== ad || !p.body || p.body.statements.length !== 1) continue;
+    const st = p.body.statements[0];
+    if (!ts.isReturnStatement(st) || !st.expression) continue;
+    const zincir = st.expression.getText().split(".");
+    if (zincir[0] !== "TERIM") continue;
+    const v = zincir.slice(1).reduce<unknown>((o2, k2) => (o2 && typeof o2 === "object" ? (o2 as Record<string, unknown>)[k2] : undefined), TERIM);
+    return typeof v === "string" ? v : null;
+  }
+  return null;
+}
 function strProp(o: ts.ObjectLiteralExpression, ad: string): string | null {
   for (const p of o.properties) {
     if (ts.isPropertyAssignment(p) && p.name.getText() === ad) {
@@ -86,7 +100,7 @@ function paneliOku(kaynak: string): PanelKatalogu {
               }
             }
           }
-          out.kategoriler.push({ id: strProp(el, "id") ?? "", label: strProp(el, "label") ?? "", section: strProp(el, "section") ?? "", flags });
+          out.kategoriler.push({ id: strProp(el, "id") ?? "", label: strProp(el, "label") ?? terimGetter(el, "label") ?? "", section: strProp(el, "section") ?? "", flags });
         }
       }
     }
@@ -155,7 +169,7 @@ function main(): void {
   const flagSayisi = k.kategoriler.reduce((n, c) => n + c.flags.size, 0);
   check("§1a panel kataloğu okundu (körlük zemini: ≥ 20 kategori, ≥ 50 ayar satırı, ekran adları dolu)",
     k.kategoriler.length >= 20 && flagSayisi >= 50 && k.sectionSurface.size >= 5 && k.surfaceLabel.size >= 5, `${k.kategoriler.length} kategori · ${flagSayisi} satır`);
-  // Adı sabit/terimden gelen kategori (ör. iş emirleri) okunamaz; tabloda kullanılırsa §2a "YOK" der.
+  // Adı `get label() { return TERIM.x.y; }` olan kategori (iş emirleri) backend TERIM aynasından çözülür; başka ifade okunamaz → §2a "YOK".
   check("§1b her kategorinin kimliği ve bölümü okunabildi", k.kategoriler.every((c) => c.id && c.section),
     k.kategoriler.filter((c) => !(c.id && c.section)).map((c) => c.id || "?").join(" · "));
   ELLE_YOL = elleYolDeseni([...k.surfaceLabel.values()]);
@@ -190,6 +204,16 @@ function main(): void {
     ekranFarklari(k, { tezgah: "Sistem → Özellik Anahtarları → Tezgah" }).length === 1
       && satirFarklari(k, { tezgahAlarmEnabled: { ekran: "tezgah", baslik: "Tezgah alarmi" } }).length === 1
       && satirFarklari(k, { tezgahAlarmEnabled: { ekran: "dokuma", baslik: "Tezgah alarmı" } }).length === 1);
+  // Rejime bağlı ad: rejim çevrilince panel ve tablo AYNI çekime döner; öbür rejimin sabit adı yakalanır.
+  const onceki = terimDokumaRejimi();
+  const eskiAd = TERIM.terbiyeIsEmri.cogul;
+  terimDokumaAyarla(!onceki);
+  const kd = paneliOku(fs.readFileSync(PANEL, "utf8"));
+  const dYol = PANEL_SETTING_SCREEN["work-orders"];
+  check("§6d sonda: TERIM getter'lı kategori rejimle birlikte döner, sabit eski ad yakalanır",
+    ekranFarklari(kd, { "work-orders": dYol }).length === 0 && dYol.endsWith(TERIM.terbiyeIsEmri.cogul)
+      && eskiAd !== TERIM.terbiyeIsEmri.cogul && ekranFarklari(kd, { "work-orders": `Sistem → Özellik Anahtarları → ${eskiAd}` }).length === 1, dYol);
+  terimDokumaAyarla(onceki);
 }
 
 try {

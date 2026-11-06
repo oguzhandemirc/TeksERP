@@ -9,6 +9,7 @@ export const DEFAULT_LABEL_SETTINGS: TamburLabelSettings = {
   weighRequired: false,
   splitLengthM: null,
   printTiming: 'EACH',
+  labelBatchEnabled: false,
 };
 
 /** Kesimden hemen sonra etiket basılsın mı? END'de iş bitince "Basılmayanları bas". */
