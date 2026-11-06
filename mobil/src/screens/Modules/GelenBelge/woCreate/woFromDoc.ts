@@ -13,7 +13,7 @@ import type {
 } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
-import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft } from './partyDraft';
+import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft, type OpenedWo } from './partyDraft';
 import { rollIssues, withRolls, type RollRow } from './rollDraft';
 import type { FormIssue } from './woIssues';
 
@@ -242,13 +242,16 @@ export type RowResult =
       batchNumber: string;
       print: 'PRINTED' | 'PRINT_FAILED' | null;
       /** Açılan bütün iş emirleri (çok partide PER_PARTY → parti başına bir). */
-      workOrders: { workOrderId: string; workOrderNo: string; batchNumber: string | null }[];
+      workOrders: OpenedWo[];
+      /** PER_PARTY kısmi başarı: açılamayan partiler — satır açık kalır, düzeltilip yeniden gönderilir. */
+      failed?: { blockNo: number; message: string }[];
     }
   | { kind: 'DRAFT'; text: string }
   | { kind: 'FAILED'; text: string };
 
 export function openedResult(r: CreateWorkOrderFromNoteResult): RowResult {
-  return { kind: 'OPENED', workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber, print: null, workOrders: openedWorkOrders(r) };
+  const failed = (r.failed ?? []).map((f) => ({ blockNo: f.blockNo, message: f.message }));
+  return { kind: 'OPENED', workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber, print: null, workOrders: openedWorkOrders(r), ...(failed.length ? { failed } : {}) };
 }
 
 export function draftResult(noteNo: string, disabledByServer: boolean): RowResult {

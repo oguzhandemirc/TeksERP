@@ -13,7 +13,7 @@ import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../Duplicat
 import type { MultiPartyDraft } from './partyDraft';
 import { mergeExtra } from './woSteps';
 import { sameDocOnSave } from './sameDocOnSave';
-import { applyMulti, applyParties, isDone, taughtRow, type DocRow, type SavedRow } from './docRow';
+import { applyMulti, applyParties, isDone, isPartial, keptResult, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import { applyLiveLocks, liveLocksFor } from '../live/liveLocks';
 import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
@@ -153,7 +153,7 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
           const reseed = !touched && 'ownerCustomerId' in patch && patch.ownerCustomerId !== r.form.ownerCustomerId;
           const fresh = reseed ? gramajFor(patch.ownerCustomerId ?? null) : undefined;
           const next = fresh !== undefined ? { ...patch, gramajValueId: fresh } : patch;
-          return { ...r, form: { ...r.form, ...next }, gramajTouched: touched, result: isDone(r) ? r.result : null };
+          return { ...r, form: { ...r.form, ...next }, gramajTouched: touched, result: keptResult(r) };
         }),
       );
     },
@@ -166,7 +166,7 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
   const removeRow = useCallback((noteId: string) => setRows((rs) => rs.filter((r) => r.noteId !== noteId)), [setRows]);
   // K30-A: belge yeni şablonla yeniden okutuldu → okuma baştan izlenir, form yeni okumadan kurulur.
   const rereadRow = useCallback(
-    (noteId: string) => setRows((rs) => rs.map((r) => (r.noteId === noteId && !isDone(r) ? { ...r, runKey: r.runKey + 1, detail: null, form: null, parties: null, gramajTouched: false, result: null, taught: undefined } : r))),
+    (noteId: string) => setRows((rs) => rs.map((r) => (r.noteId === noteId && !isDone(r) && !isPartial(r) ? { ...r, runKey: r.runKey + 1, detail: null, form: null, parties: null, gramajTouched: false, result: null, taught: undefined } : r))),
     [setRows],
   );
   // K30-A: yeniden okutulamayan (satırlı) belgede tanıtma önizlemesinin değerleri forma dolar (sunucu yeniden okumaz).
@@ -238,7 +238,7 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
         setResult(r.noteId, result);
         saved.push({ noteId: r.noteId, noteNo: r.noteNo, result });
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
-        if (result.kind === 'OPENED' && autoPrint) for (const w of result.workOrders) await printFor(r.noteId, w.workOrderId);
+        if (result.kind === 'OPENED' && autoPrint) for (const w of result.workOrders.filter((x) => !x.existing)) await printFor(r.noteId, w.workOrderId);
       }
     } finally {
       setRecent(owners);

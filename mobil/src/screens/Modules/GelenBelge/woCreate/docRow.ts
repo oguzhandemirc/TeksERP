@@ -25,7 +25,12 @@ export interface SavedRow {
   result: RowResult;
 }
 
-export const isDone = (r: DocRow): boolean => r.result?.kind === 'OPENED' || r.result?.kind === 'DRAFT';
+/** PER_PARTY kısmi başarı (2026-11-06): bazı partilerin İE'si açıldı, düşenler düzeltilip yeniden gönderilir (açılanlar yeniden açılmaz). */
+export const isPartial = (r: DocRow): boolean => r.result?.kind === 'OPENED' && (r.result.failed?.length ?? 0) > 0;
+/** Satır kapandı (kilitli, kayıt listesinde değil) — her yüzey bu tek yüklemi okur. */
+export const isDone = (r: DocRow): boolean => (r.result?.kind === 'OPENED' && !isPartial(r)) || r.result?.kind === 'DRAFT';
+/** Düzenleme sonucu siler; açılmış İE'ler (kısmi başarı dahil) ekranda kalır. */
+export const keptResult = (r: DocRow): RowResult | null => (r.result?.kind === 'OPENED' || r.result?.kind === 'DRAFT' ? r.result : null);
 
 /** Parti özeti form kurulduktan sonra gelir: çok partideyse satır listesi bir kez kurulur (kullanıcı düzenlemesi ezilmez). */
 export function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesView | null): DocRow[] {
@@ -33,7 +38,7 @@ export function applyParties(rs: DocRow[], noteId: string, parties: NotePartiesV
 }
 
 export function applyMulti(rs: DocRow[], noteId: string, multi: MultiPartyDraft): DocRow[] {
-  return rs.map((r) => (r.noteId === noteId && r.form && !isDone(r) ? { ...r, form: { ...r.form, multi }, result: null } : r));
+  return rs.map((r) => (r.noteId === noteId && r.form && !isDone(r) ? { ...r, form: { ...r.form, multi }, result: keptResult(r) } : r));
 }
 
 const text = (v: string | null | undefined): string | null => (v != null && v.trim() !== '' ? v.trim() : null);

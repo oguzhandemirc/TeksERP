@@ -1,5 +1,5 @@
 // Çok partili belge (S1): "Bu belgede N parti var" — parti no + metre düzenlenir, sunucunun canlı uyarıları gösterilir,
-// "Her parti ayrı iş emri | Tek iş emri" seçimi (varsayılan fabrika ayarı). Tek partili belgede çizilmez.
+// "Her parti ayrı iş emri | Tek iş emri" seçimi (fabrika varsayılanı "her parti ayrı" ise seçim yok, K1). Tek partili belgede çizilmez.
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip, Text, TextInput } from 'react-native-paper';
@@ -8,7 +8,7 @@ import NumpadInput from '../../../../components/NumpadInput';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import { colors, spacing, typography } from '../../../../theme';
 import { parseMeters } from '../approvalGate';
-import { MODE_LABELS, type MultiPartyDraft, type PartyRow } from './partyDraft';
+import { MODE_LABELS, partyHeading, partyOutcome, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
@@ -32,35 +32,46 @@ export default function PartyRows({ row, wo, locked }: { row: DocRow; wo: WoRows
   if (!m || !view) return null;
   const set = (next: MultiPartyDraft) => wo.setMulti(row.noteId, next);
   const setRow = (blockNo: number, patch: Partial<PartyRow>) => set({ ...m, rows: m.rows.map((r) => (r.blockNo === blockNo ? { ...r, ...patch } : r)) });
+  const result = row.result?.kind === 'OPENED' ? row.result : null;
   return (
     <View style={styles.box} testID={`belge-partiler-${row.noteNo}`}>
       <Text style={styles.title}>{`Bu belgede ${m.rows.length} parti var`}</Text>
       {m.rows.map((r) => {
         const p = view.parties.find((x) => x.blockNo === r.blockNo);
+        const out = partyOutcome(result, r.blockNo);
+        // Açılan partinin İE'si yeniden gönderimde sunucuda yeniden açılmaz; alanları kilitlenir.
+        const partyLocked = locked || out?.kind === 'OPENED';
         return (
           <View key={r.blockNo} style={styles.party} testID={`belge-parti-${row.noteNo}-${r.blockNo}`}>
-            <Text style={styles.label}>
-              {`${r.blockNo}. parti · ${p ? `${p.lineCount} satır${p.declaredTopCount !== null ? ` / ${p.declaredTopCount} TOP` : ''}` : ''}${p?.orderNo ? ` · Sipariş ${p.orderNo}` : ''}`}
-            </Text>
+            <Text style={styles.label}>{partyHeading(r.blockNo, p)}</Text>
             <View style={styles.row}>
-              <TextInput mode="outlined" label="Parti no" value={r.batchNo} disabled={locked} style={styles.input}
+              <TextInput mode="outlined" label="Parti no" value={r.batchNo} disabled={partyLocked} style={styles.input}
                 onChangeText={(t) => setRow(r.blockNo, { batchNo: t })} testID={`belge-parti-no-${row.noteNo}-${r.blockNo}`} />
-              <MeterInput initial={r.meters} locked={locked} onChange={(meters) => setRow(r.blockNo, { meters })} testID={`belge-parti-metre-${row.noteNo}-${r.blockNo}`} />
+              <MeterInput initial={r.meters} locked={partyLocked} onChange={(meters) => setRow(r.blockNo, { meters })} testID={`belge-parti-metre-${row.noteNo}-${r.blockNo}`} />
             </View>
             {p?.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
+            <OutcomeLine out={out} testID={`belge-parti-sonuc-${row.noteNo}-${r.blockNo}`} />
           </View>
         );
       })}
       {view.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
-      <View style={styles.chips}>
-        {(['PER_PARTY', 'SINGLE'] as const).map((k) => (
-          <Chip key={k} selected={m.mode === k} onPress={() => set({ ...m, mode: k })} disabled={locked} style={styles.chip} testID={`belge-parti-kip-${row.noteNo}-${k}`}>
-            {MODE_LABELS[k]}
-          </Chip>
-        ))}
-      </View>
+      {showModeChoice(view) && (
+        <View style={styles.chips}>
+          {(['PER_PARTY', 'SINGLE'] as const).map((k) => (
+            <Chip key={k} selected={m.mode === k} onPress={() => set({ ...m, mode: k })} disabled={locked || !!result} style={styles.chip} testID={`belge-parti-kip-${row.noteNo}-${k}`}>
+              {MODE_LABELS[k]}
+            </Chip>
+          ))}
+        </View>
+      )}
     </View>
   );
+}
+
+function OutcomeLine({ out, testID }: { out: PartyOutcome; testID: string }) {
+  if (!out) return null;
+  if (out.kind === 'OPENED') return <Text style={styles.ok} testID={testID}>{`İş emri açıldı: ${out.workOrderNo}`}</Text>;
+  return <Text style={styles.fail} testID={testID}>{`Açılamadı: ${out.message}`}</Text>;
 }
 
 /** Metin yerelde tutulur ("198," yazarken sayıya çevrilip silinmesin); sayı her tuşta üst forma gider. */
@@ -82,6 +93,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   input: { flex: 1, minWidth: 160 },
   warn: { fontSize: typography.size.sm, color: colors.warningText },
+  ok: { fontSize: typography.size.sm, color: colors.successText, fontWeight: typography.weight.semibold },
+  fail: { fontSize: typography.size.base, color: colors.dangerText, fontWeight: typography.weight.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 56, justifyContent: 'center' },
 });
