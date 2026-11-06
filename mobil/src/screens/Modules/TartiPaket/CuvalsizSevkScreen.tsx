@@ -12,6 +12,7 @@ import { useCuvalsizSevk } from './useCuvalsizSevk';
 import { totalMeters } from './looseLoad';
 import { BottomBar, CartLabelModal, LoadList, LoadModePicker, LoadSummary, VehicleFields } from './CuvalsizSevkView';
 import { LooseScanner } from './LooseScanner';
+import { OrderPickRow } from './OrderPick';
 
 // =============================================================================
 // Çuvalsız Sevk — toplar çuvala konmadan kamyon kasasına (dökme) ya da top taşıma
@@ -44,6 +45,7 @@ export default function CuvalsizSevkScreen() {
       <View style={styles.destCard}>
         <DestinationLockRow lock={s.lock} picked={s.picked} onPick={s.setPicked} hasBranch={!!branchId} />
       </View>
+      <OrderPickRow customerId={customerId} branchId={branchId} value={s.orderIds} onChange={s.setOrderIds} />
       <VehicleFields plateNumber={s.plateNumber} onPlate={s.setPlateNumber} driverName={s.driverName} onDriver={s.setDriverName} />
     </>
   );

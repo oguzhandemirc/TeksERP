@@ -3856,7 +3856,14 @@ export class ShippingService {
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         _count: { select: { sacks: true, rolls: true, swatches: true } },
-        sacks: { select: { allocations: { where: ACTIVE_SACK_ALLOCATION, select: { qty: true, orderLine: { select: { order: { select: { orderNumber: true } } } } } } } },
+        sacks: {
+          orderBy: [{ seq: "asc" }, { id: "asc" }],
+          select: {
+            id: true, sackNo: true, unitKind: true, unitLabel: true, dissolvedAt: true,
+            rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true } },
+            allocations: { where: ACTIVE_SACK_ALLOCATION, select: { qty: true, orderLine: { select: { order: { select: { orderNumber: true } } } } } },
+          },
+        },
       },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
@@ -3886,6 +3893,13 @@ export class ShippingService {
         rollCount: shipment._count.rolls,
         swatchCount: shipment._count.swatches,
         affectedOrders: [...byOrder.entries()].map(([orderNumber, qty]) => ({ orderNumber, qty: qty.toString() })),
+        // Yıkıcı işlem önizlemesi HER kaydı listeler: birim + topları + nereye döneceği
+        // (çuval havuza; dökme/araba çözülür, toplar rafa).
+        units: shipment.sacks.filter((sk) => sk.dissolvedAt === null).map((sk) => ({
+          id: sk.id, sackNo: sk.sackNo, unitKind: sk.unitKind, unitLabel: sk.unitLabel,
+          returnsTo: sk.unitKind === LoadUnitKind.SACK ? "SACK_POOL" : "SHELF",
+          rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, qty: Number(r.currentQty) })),
+        })),
       },
     };
   }
@@ -5301,7 +5315,7 @@ export class ShippingService {
         sacks: {
           orderBy: { seq: "asc" },
           select: {
-            id: true, sackNo: true, seq: true, weightKg: true, notes: true,
+            id: true, sackNo: true, seq: true, weightKg: true, notes: true, unitKind: true, unitLabel: true,
             // `status`: hayalet top görünür kalsın (array FİLTRELENMEZ — operatörün
             // görüp çıkarabilmesi için); sayaçlar/gruplar aşağıda dışlar.
             rolls: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, status: true, currentQty: true, width: true, qualityGrade: true, item: { select: { id: true, name: true } }, color: { select: { id: true, name: true, hex: true } } } },
@@ -5333,7 +5347,7 @@ export class ShippingService {
       }
       return {
         id: sk.id, sackNo: sk.sackNo, seq: sk.seq, seqLabel: seqLabelOf(sk.seq), weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
-        notes: sk.notes,
+        notes: sk.notes, unitKind: sk.unitKind, unitLabel: sk.unitLabel,
         rollCount: present.length, swatchCount: sk.swatches.length, totalQty: Number(sackQty),
         contents: [...groups.values()].map((g) => ({ itemName: g.itemName, colorName: g.colorName, width: g.width, qty: Number(g.qty), rollCount: g.rollCount })),
         rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, status: r.status, qty: Number(r.currentQty), width: r.width != null ? Number(r.width) : null, qualityGrade: r.qualityGrade ?? "", item: r.item, color: r.color })),

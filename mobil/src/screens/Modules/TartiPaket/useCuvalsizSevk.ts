@@ -108,6 +108,7 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
   const [plateNumber, setPlateNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [picked, setPicked] = useState<ShipmentDestination | null>(null);
+  const [orderIds, setOrderIdsState] = useState<string[]>([]);
   const lockQ = useQuery({
     queryKey: destinationLockQueryKey(customerId, branchId),
     queryFn: () => packingService.getDestinationLock(customerId, branchId),
@@ -123,6 +124,7 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
       rollIds: rolls.map((r) => r.id),
       customerId,
       branchId,
+      ...(orderIds.length > 0 ? { orderIds } : {}),
       destination: dest.destination ?? undefined,
       ...(dest.chosen ? { destinationChosen: true as const } : {}),
       plateNumber: plateNumber.trim() || null,
@@ -167,6 +169,11 @@ export function useCuvalsizSevk(customerId: string, branchId: string | null, onD
     lock: lockQ.data,
     picked,
     setPicked,
+    orderIds,
+    setOrderIds: (ids: string[]) => {
+      setOrderIdsState(ids);
+      sub.renew(); // gövde değişti → yeni mantıksal deneme
+    },
     blockReason,
     ...sub,
   };

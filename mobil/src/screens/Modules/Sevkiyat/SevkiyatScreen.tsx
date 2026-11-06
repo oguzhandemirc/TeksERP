@@ -27,6 +27,7 @@ import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { FLAGS_KEY, useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
+import ShipmentCancelModal from './ShipmentCancelModal';
 import { CariHoldBlockedScreen, CariHoldChip, cariHoldBlockFromError, holdChipText, type CariHoldBlock } from './CariHold';
 import { READY_WORKS_KEY, ReadyWorksSheet, ReadyWorksStrip } from './ReadyWorks';
 import type { ReadyWorkRow } from '../../../services/readyWorks.service';
@@ -65,6 +66,7 @@ export default function SevkiyatScreen() {
 
   const [contentsShip, setContentsShip] = useState<SackStoreShipmentLite | null>(null);
   const [dispatchShip, setDispatchShip] = useState<SackStoreShipmentLite | null>(null);
+  const [cancelShip, setCancelShip] = useState<SackStoreShipmentLite | null>(null);
   // D4-I4: 409 CARI_HOLD → tam ekran (metin sunucudan); diğer hatalar tost.
   const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
   // D4-J4: hazır iş çipine dokunulan müşteri (liste lazy; sevk mevcut Paketleme akışından).
@@ -204,8 +206,21 @@ export default function SevkiyatScreen() {
             onPress={() => setContentsShip(sh)}
             disabled={busy}
             style={styles.actBtn}
+            contentStyle={styles.actBtnContent}
           >
             Çuval Çıkar
+          </Button>
+          <Button
+            mode="outlined"
+            icon="cancel"
+            textColor="#dc2626"
+            onPress={() => setCancelShip(sh)}
+            disabled={busy}
+            style={styles.actBtn}
+            contentStyle={styles.actBtnContent}
+            testID={`sevk-iptal-${sh.id}`}
+          >
+            İptal Et
           </Button>
           <Button
             mode="contained"
@@ -214,6 +229,7 @@ export default function SevkiyatScreen() {
             onPress={() => openDispatch(sh)}
             disabled={busy}
             style={styles.actBtn}
+            contentStyle={styles.actBtnContent}
           >
             Sevk Et
           </Button>
@@ -295,6 +311,17 @@ export default function SevkiyatScreen() {
         removing={removeSackMut.isPending}
       />
 
+      {/* Bekleyen sevkiyatı iptal — önizlemeli; storno (sevk edilmiş) tablette yok. */}
+      <ShipmentCancelModal
+        shipment={cancelShip}
+        onDismiss={() => setCancelShip(null)}
+        onDone={() => {
+          setCancelShip(null);
+          refresh();
+          void qc.invalidateQueries({ queryKey: READY_WORKS_KEY });
+        }}
+      />
+
       {/* Sevk çıkışı — plaka/şoför opsiyonel */}
       <AppModal visible={dispatchShip !== null} onDismiss={() => setDispatchShip(null)}>
         <Surface style={styles.sheet} elevation={4}>
@@ -364,6 +391,7 @@ const styles = StyleSheet.create({
   contentsText: { flex: 1, fontSize: 12, color: '#4338ca', fontWeight: '600' },
   cardActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actBtn: { flex: 1 },
+  actBtnContent: { minHeight: 56 },
   emptySub: { fontSize: 13, color: '#94a3b8', marginTop: 24, textAlign: 'center' },
   sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff', alignSelf: 'stretch' },
   sheetTitle: { fontWeight: '700', marginBottom: 4, color: '#0f172a' },

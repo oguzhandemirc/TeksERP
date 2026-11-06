@@ -14,7 +14,7 @@
 //   §3 Araba: araba başına bir CART birim, etiket normalize
 //   §4 Bölme doğrulaması: eksik top · çift top · karışık tür · iki dökme · boş/çift araba no
 //   §5 PLANNED'dan dökme birimi çıkarma → 409 LOAD_UNIT_NOT_REMOVABLE
-//   §6 ⭐ İptal: toplar rafta (sackId/shipmentId null), birim havuzda DEĞİL, dissolvedAt dolu
+//   §6 ⭐ İptal önizlemesi her birim/top + nereye döner; iptal: toplar rafta (sackId/shipmentId null), birim havuzda DEĞİL, dissolvedAt dolu
 //   §7 ⭐ Storno + kapanış (undoDispatch releaseSacks) da birimi çözer
 //   §8 DB seddi (negatif sonda): havuza çekme · tür değişimi · çözülmüşe top · ikinci canlı dökme
 //   §9 İrsaliye: dökme/araba snapshot'ta tür + "Dökme – N top"; çuvallı snapshot'ta anahtar YOK (bayt-eşit)
@@ -181,6 +181,8 @@ async function main(): Promise<void> {
   check("§5 Dökme birimi çıkarma → 409 LOAD_UNIT_NOT_REMOVABLE", rm.code === "LOAD_UNIT_NOT_REMOVABLE" && rm.status === 409, `${rm.status} ${rm.code}`);
 
   // ── §6 İPTAL → ÇÖZÜLME ──────────────────────────────────────────────────
+  const pv = (await shippingService.getCancelPreview(bulk.id)).data as { units: Array<{ unitKind: string; returnsTo: string; rolls: unknown[] }> };
+  check("§6p ⭐ İptal önizlemesi her birimi + topu listeler (dökme → raf)", pv.units.length === 1 && pv.units[0]!.unitKind === "BULK" && pv.units[0]!.returnsTo === "SHELF" && pv.units[0]!.rolls.length === 3, JSON.stringify(pv.units).slice(0, 160));
   await shippingService.cancelShipment(bulk.id);
   const afterRolls = await prisma.roll.findMany({ where: { id: { in: b } }, select: { sackId: true, shipmentId: true, status: true } });
   check("§6a ⭐ Toplar rafta (sackId + shipmentId null)", afterRolls.every((r) => r.sackId === null && r.shipmentId === null), JSON.stringify(afterRolls));
