@@ -17,6 +17,7 @@ import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { readOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { noteFormFields } from "./gelen-belge-form-alanlari.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
+import { noteTemplateFields } from "./gelen-belge-alan-raporu.service";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -126,6 +127,8 @@ export async function getReadSummary(noteId: string) {
     ...(await noteFormFields(note.id, trust)),
     // K30-B tel sözleşmesi madde 1: TANITILDI | TANITILMAMIS; sistem şablonunda alan yok. Eski tablet yok sayar.
     ...(tanitim ? { tanitim } : {}),
+    // Tablet İş Emirleri okutma önizlemesi: şablon alanları bulundu/bulunamadı; GENEL/BLIND'da yok. Eski tablet yok sayar.
+    ...(await noteTemplateFields(note.id, trust).then((r) => (r ? { templateFields: r } : {}))),
   };
 }
 

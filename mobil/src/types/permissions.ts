@@ -100,7 +100,8 @@ export type MobileScreenKey =
   | 'FasonDokuma'
   | 'Uyarilar'
   | 'Muayene'
-  | 'GelenBelge';
+  | 'GelenBelge'
+  | 'IsEmirleri';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -283,6 +284,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     get label() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; },
     icon: 'file-document-outline',
     get description() { return `Hızlı ya da özel ${TERIM.terbiyeIsEmri.tekilKucuk}; irsaliyeyi okut, form dolsun`; },
+  },
+  {
+    // Liste + "şu an nerede" ekranı — istasyon tableti DEĞİL (oturumsuz). Liste ucu bu izni kabul eder; "Okut" ayrıca
+    // `gelen-belge:write` ister (ekran içinde gizlenir).
+    key: 'IsEmirleri',
+    permission: 'mobile:hizli-is-emri',
+    get label() { return TERIM.terbiyeIsEmri.cogul; },
+    icon: 'format-list-bulleted-square',
+    get description() { return `${TERIM.terbiyeIsEmri.cogul} şu an nerede; ara, süz, belge okutup aç`; },
   },
 ];
 
