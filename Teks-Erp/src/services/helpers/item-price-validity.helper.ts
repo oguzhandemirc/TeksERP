@@ -11,7 +11,7 @@
 //
 // Prisma parçası ↔ bellek-içi yüklem BOĞAZ-İKİZİDİR: biri değişirse öteki de
 // değişir (`test_item_price_surum` §4 ikisini aynı satırlarda karşılaştırır).
-// Bulut kapsamının SQL ikizi `cloud-sync/catalog-facts.ts` `fiyat` projeksiyonunda.
+// Bulut kapsamının SQL ikizi `ITEM_PRICE_NOW_SQL` (aşağıda); `fiyat` projeksiyonu ikisini birlikte taşır.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 
@@ -40,6 +40,14 @@ export function itemPriceValidAt(at: Date): Prisma.ItemPriceWhereInput {
 export function itemPriceNow(): Prisma.ItemPriceWhereInput {
   return itemPriceValidAt(new Date());
 }
+
+/** `itemPriceNow()`un SQL ikizi (kök takma adı `t`) — bulut `fiyat` kapsamı ikisini birlikte taşır. */
+export const ITEM_PRICE_NOW_SQL =
+  '(COALESCE(t."validFrom", t."createdAt") <= now() AND (t."revokedAt" IS NULL OR t."revokedAt" > now()))';
+
+/** Bulut geçişi: penceresi ($1, $2] aralığında AÇILAN ya da KAPANAN satırlar — hiçbir satır değişmeden kapsam döner. */
+export const ITEM_PRICE_WINDOW_CROSSING_SQL =
+  'SELECT t."id" AS root_id FROM "item_prices" t WHERE (t."validFrom" > $1 AND t."validFrom" <= $2) OR (t."revokedAt" > $1 AND t."revokedAt" <= $2)';
 
 /** `itemPriceValidAt`in bellek-içi ikizi (pencere sınırı: başı dahil, sonu hariç). */
 export function isItemPriceValidAt(row: { createdAt: Date; validFrom?: Date | null; revokedAt: Date | null }, at: Date): boolean {

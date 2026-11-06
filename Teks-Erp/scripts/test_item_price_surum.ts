@@ -316,6 +316,21 @@ async function main(): Promise<void> {
   }
   check("§10i ⭐ validFrom'lu satırlarda bellek ikizi = Prisma parçası; her anda en çok BİR sürüm", twinF && rowsF.length === 2 && !!N.id);
 
+  // Bulut `fiyat` v2: yalnız ŞU AN yürürlükteki sürüm girer; pencere sınırı geçişle yeniden kurulur.
+  const projF = findRecordProjection("fiyat")!;
+  const bF = await buildRecords(projF, [R.id, N.id], Date.now());
+  const rowsBF = [...bF.rows.values()].flat() as Array<Record<string, unknown>>;
+  check(
+    "§10j ⭐ Bulut: zamanlanmış damgalı R (yürürlükte) gider, bekleyen N KAPSAM_DISI",
+    rowsBF.some((r) => r.id === R.id) && bF.removed.some((r) => r.id === N.id && r.neden === "KAPSAM_DISI"),
+    JSON.stringify({ rows: rowsBF.map((r) => r.id), removed: bF.removed }),
+  );
+  check("§10k Bulut satırı kademe + yürürlük sütunlarını taşır", rowsBF.some((r) => r.id === R.id && "kademeId" in r && "gecerlilikBitisi" in r), JSON.stringify(rowsBF[0] ?? {}));
+  const crossF = async (a: Date, b: Date) => new Set((await prisma.$queryRawUnsafe<Array<{ root_id: string }>>(projF.crossings![0]!.sql, a, b)).map((r) => r.root_id));
+  const cD = await crossF(new Date(D.getTime() - 1), D);
+  const cNow = await crossF(new Date(Date.now() - 1000), new Date());
+  check("§10l ⭐ Geçiş: D anını kapsayan aralık R'yi ve N'yi yeniden kurar; D'siz aralık kurmaz", cD.has(R.id) && cD.has(N.id) && !cNow.has(R.id) && !cNow.has(N.id));
+
 
   // ── §11 YAZIM: KADEME KAPILARI + ZAMANLANMIŞ DAMGA ────────────────────────
   const codeOf = async (fn: () => Promise<unknown>) => {
