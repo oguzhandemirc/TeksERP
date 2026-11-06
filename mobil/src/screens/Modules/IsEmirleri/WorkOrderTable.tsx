@@ -15,6 +15,8 @@ import { visibleDefs, type ColumnDef, type ColumnKey } from './columns';
 import { batchText, customerText, fabricText, locationBadge, rollMeterText, typeBadgeText, type EmptyAction, type WorkOrderListRow } from './workOrderRow';
 
 export const WIDE_MIN = 720;
+/** En yeni üstte duran listede yeni satır başa eklenince görüş alanı tepede kalır (KK1 geçmiş listesi emsali). */
+export const NEWEST_FIRST_LIST = { disabled: true } as const;
 
 interface Props {
   rows: WorkOrderListRow[];
@@ -89,6 +91,9 @@ export default function WorkOrderTable(p: Props) {
         onEndReached={p.onEndReached}
         refreshing={p.refreshing}
         onRefresh={p.onRefresh}
+        // FlashList v2'de görünür içeriğe tutunma VARSAYILAN AÇIK: okutmadan dönüşteki tazelemede başa eklenen yeni İE
+        // görüş alanının ÜSTÜNE itiliyordu ("aşağı çekince geliyor", prova 2026-11-06). Liste en yeni üstte → tutunma kapalı.
+        maintainVisibleContentPosition={NEWEST_FIRST_LIST}
         contentContainerStyle={styles.listContent}
         ListFooterComponent={p.fetchingMore ? <ActivityIndicator style={styles.more} color={colors.brand} /> : null}
       />
