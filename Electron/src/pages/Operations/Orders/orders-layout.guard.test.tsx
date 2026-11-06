@@ -6,7 +6,8 @@
 //      ① özet şerit filtre satırının ÜSTÜNDE,
 //      ② şerit TAM GENİŞLİK ve sola dayalı (eski `flex justify-end` sarmalayıcı
 //        şeridi içeriği kadar bırakıp sağa yapıştırıyordu),
-//      ③ filtreler TEK SATIR + yatay kaydırma (dikeyde yer yemesin).
+//      ③ filtreler TEK SATIR + yatay kaydırma (dikeyde yer yemesin) — 2026-11-06'dan
+//        beri arama + Görünüm + Termin + kutular TEK çubukta (`OrdersFilterRow`).
 //    Bir refactor sırasında `w-full` ya da sarmalayıcı sınıfı düşerse ekran
 //    sessizce eski hâline döner: hata yok, log yok, yalnız kaybolan alan.
 //
@@ -25,6 +26,8 @@
 //   · `w-full` şerit kökünden silindi          → "tam genişlik" KIRMIZI
 //   · `<OrdersStats>` yeniden filtrelerin ALTINA alındı → "sıra" KIRMIZI
 //   · `[&>div]:flex-nowrap` sarmalayıcıdan düştü → "tek satır" KIRMIZI
+//     (2026-11-06: sarmalayıcı kalktı, çubuk ortak `filter-row/FilterRow`; sonda
+//      `FILTER_ROW_CLASS`a flex-wrap yazıldı → "sarmaz" KIRMIZI)
 //   · metraj grubundan `lg:flex` kaldırıldı    → "kademe" KIRMIZI
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -38,6 +41,7 @@ import type { OrderStats } from "./service";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PAGE_SRC = readFileSync(join(HERE, "OrdersPage.tsx"), "utf8");
+const ROW_SRC = readFileSync(join(HERE, "OrdersFilterRow.tsx"), "utf8");
 
 const STATS: OrderStats = {
   totalCount: 12,
@@ -112,27 +116,34 @@ describe("Siparişler — özet şerit yerleşimi", () => {
   });
 });
 
-describe("Siparişler — filtre satırı tek satır + yatay kaydırma", () => {
-  it("⭐ sarmalayıcı yatay kaydırır ve kök satırı flex-nowrap'e çeker", () => {
-    const { getByTestId } = renderWithProviders(<OrdersFilterRow filters={[]} />);
-    const row = getByTestId("orders-filter-row");
-    expect(row.className).toContain("overflow-x-auto");
-    // `shrink-0` da sözleşmenin parçası: overflow'lu flex çocuğunda
-    // `min-height: auto` sıfıra düşer, satır dikey alan daralınca ezilirdi.
-    expect(row.className).toContain("shrink-0");
-    expect(row.className).toContain("[&>div]:flex-nowrap");
-    expect(row.className).toContain("[&>div>*]:shrink-0");
+describe("Siparişler — filtre çubuğu TEK SATIR (2026-11-06)", () => {
+  it("⭐ sayfa ortak tek satır çubuğu kullanır; eski çok şeritli bileşenler geri gelmez", () => {
+    // Eski düzen: DataTableToolbar (arama) + "Nerede?" sekme şeridi + flex-wrap FilterBar = 3 satır.
+    expect(PAGE_SRC).toContain("<OrdersFilterRow");
+    expect(PAGE_SRC).not.toContain("<DataTableToolbar");
+    expect(PAGE_SRC).not.toContain("<FilterBar");
+    expect(PAGE_SRC).not.toContain("OrdersWhereBar");
+    expect(ROW_SRC).toContain("<FilterRow");
   });
 
-  it("⭐ `[&>div]` seçicisinin HEDEFİ var: FilterBar kökü tek bir <div>", () => {
-    // FilterBar bir Fragment'a ya da <section>'a dönerse seçici SESSİZCE ölür
-    // ve satır yeniden sarmaya başlar — kırmızı burada patlar.
-    const { getByTestId } = renderWithProviders(<OrdersFilterRow filters={[]} />);
-    const row = getByTestId("orders-filter-row");
-    expect(row.children.length).toBe(1);
-    const inner = row.children[0] as HTMLElement;
-    expect(inner.tagName).toBe("DIV");
-    // Ezilen sınıf gerçekten orada (yoksa nowrap'in ezecek bir şeyi yok).
-    expect(inner.className).toContain("flex-wrap");
+  it("⭐ çubuk kökü sarmaz, kutu bölgesi yatay kayar", () => {
+    const { getByTestId } = renderWithProviders(
+      <OrdersFilterRow
+        filters={[]}
+        productionEnabled
+        search=""
+        onSearchChange={() => {}}
+        placeholder="Ara"
+        showCancelled={false}
+        setShowCancelled={() => {}}
+        forceFilters={{}}
+      />,
+    );
+    const row = getByTestId("filter-row");
+    expect(row.className).toContain("flex-nowrap");
+    expect(row.className).not.toMatch(/(^|\s)flex-wrap/);
+    // `shrink-0` sözleşmenin parçası: PageShell dikey flex — çubuk dikey alan daralınca ezilmesin.
+    expect(row.className).toContain("shrink-0");
+    expect(getByTestId("filter-row-scroll").className).toContain("overflow-x-auto");
   });
 });

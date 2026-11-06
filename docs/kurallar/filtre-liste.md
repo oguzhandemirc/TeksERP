@@ -77,6 +77,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** "Tümünü göster" picker'ı `loadAllForPicker(service)` kullanır (PICKER_MAX_PAGE_SIZE=500 ↔ MAX_PAGE_SIZE); inline `pageSize: N` YAZMA; 500 aşılınca helper açık hata fırlatır → arama + listCursor, UI hatayı yakalar.
 - **[PROFİL]** Dört ayrı filtre: "İstasyon" (currentStationId, yalnız üretim sekmeleri) · "Giriş İstasyonu" (entryStationId) · "Giriş Kaynağı" (entrySource) · "Ekleyen" (createdById).
 - **[ÇEKİRDEK]** Sayfa kökü `PageShell` (flex h-full min-h-0 flex-col); TEK kaydırıcı `PageBody`; başlık/toolbar/footer shrink-0, eylemler `PageFooter`da; DataTable sayfaları ayrı PageBody istemez.
+- **[PROFİL yüzey]** Liste filtre çubuğunu `components/data-table/filter-row/FilterRow` ile TEK SATIR kur: kutular `FilterControl chip`, hızlı sekmeler `ViewSelect` (faceted sayı, liste açıkken), tarih `DatePresetFilter` penceresi, az kullanılanlar "+ Filtre"; ✕ yalnız kendi anahtarlarını, Temizle hepsini siler (arama kalır); kök `flex-wrap` taşımaz.
 
 ### Kararlar
 
@@ -118,7 +119,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 Backend: `test_fatura_liste_suzgec`, `test_bare_filter_param`, `test_item_allowed_filter`, `test_fabric_property_hierarchy`, `test_filter_multi_select`, `test_workorder_location`
 
-İstemci: `Electron/src/components/forms/ItemPickerModal.test.tsx`, `Electron/src/pages/FabricProperties/hierarchy.test.tsx`
+İstemci: `Electron/src/components/forms/ItemPickerModal.test.tsx`, `Electron/src/pages/FabricProperties/hierarchy.test.tsx`, `Electron/src/components/data-table/filter-row/FilterRow.test.tsx`, `Electron/src/components/data-table/filter-row/date-preset.test.ts`, `Electron/src/pages/Operations/Orders/OrdersFilterRow.test.tsx`
 
 Kural maddelerinin bekçileri (ek): `mobil PickerModal.test.tsx`, `test_tambur_recent_output_filter`, `test_order_stats`, `test_order_line_scope_single_source`, `service.test.ts`, `test_tambur_over_quantity`, `test_emanet_sahip_suzgeci`, `test_client_policy`, `test_shipment_list_gross`, `test_tambur_cut_idempotency`, `history-depth.test.ts`, `PageHeader.test.tsx`, `rollHistoryFilter.test.ts`
 

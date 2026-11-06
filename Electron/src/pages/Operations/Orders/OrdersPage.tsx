@@ -9,16 +9,15 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useHideCancelled } from "@/hooks/useHideCancelled";
-import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { type FilterDef } from "@/components/data-table/FilterBar";
 import { OrdersFilterRow } from "./OrdersFilterRow";
-import { OrdersWhereBar } from "./OrdersWhereBar";
+import { ORDER_FILTERS } from "./orders-filter-defs";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { OrderLinesExportButton } from "./OrderLinesExportButton";
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
@@ -27,89 +26,20 @@ import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
-import { customerService } from "@/pages/Customers/service";
-import { itemService } from "@/pages/Items/service";
-import { colorService } from "@/pages/Colors/service";
-import { branchLookupService } from "@/pages/Operations/Shipments/service";
-import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
 import { useTabsStore } from "@/store/tabs";
 import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { buildCreatePayload, buildUpdatePayload, type CreatePayload, type UpdatePayload } from "./orderPayload";
-import { loadAllForPicker } from "@/lib/picker-loader";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
 import { TERIM } from "@/lib/terim";
-import { ORDER_SHIP_FILTER_OPTIONS } from "./order-where-text";
 import { OrderPlanView, ORDER_PLAN_QUERY_KEY } from "./OrderPlanView";
 import { OrdersViewTabs, readOrdersView } from "./OrdersViewTabs";
 import { opensProposalOnApprove, useProposalGates } from "./production-proposal/gates";
 import { ProductionProposalDialog } from "./production-proposal/ProductionProposalDialog";
-
-const FILTERS: FilterDef[] = [
-  {
-    kind: "multi-select",
-    key: "status",
-    label: "Sevk durumu",
-    // Etiket listedeki "Sevk durumu" cümlesiyle aynı kaynaktan (`order-where-text.ts`).
-    options: [...ORDER_SHIP_FILTER_OPTIONS],
-  },
-  {
-    // "İş Emri" rollup filtresi — backend'de hesaplanır (OrderService.extraWhere →
-    // filter[woState]); rozet kolonuyla aynı semantik (work-order-rollup.ts).
-    kind: "multi-select",
-    key: "woState",
-    label: "Üretim",
-    options: [
-      { value: "NONE", get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`; } },
-      { value: "PLANNED", label: "Planlandı" },
-      { value: "IN_PROGRESS", label: "Üretimde" },
-      { value: "COMPLETED", label: "Üretildi" },
-    ],
-  },
-  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
-  {
-    // Şube SEÇİLEN MÜŞTERİ(LER)E bağlı (dependent-lookup): müşteri seçilmeden
-    // pasif, seçilince yalnız o müşterilerin şubeleri. Müşteri ÇOKLU olabilir —
-    // ham CSV `/api/customer-branches`e aynen geçer, BaseService onu `in` yapar.
-    // Backend filter[branchId] (scalar) otomatik.
-    kind: "dependent-lookup",
-    key: "branchId",
-    label: "Şube",
-    dependsOn: "customerId",
-    queryKey: "branch-lookup",
-    placeholderNoParent: "Şube (önce müşteri)",
-    fetchOptions: (customerId) =>
-      loadAllForPicker(branchLookupService, {
-          sortBy: "name",
-          sortOrder: "asc",
-          filters: { isActive: "true", customerId },
-        })
-        .then((r) => r.data),
-    getLabel: (it) => {
-      const b = it as Partial<BranchLookupItem> & { id: string };
-      if (!b.name) return b.id;
-      return b.city ? `${b.name} (${b.city})` : b.name;
-    },
-  },
-  // Kumaş/renk kalem-içi filtredir (`OrderService.extraWhere` → `lines.some`).
-  // Çoklu seçimde de TEK `some` bloğu kalır: kumaş ∈ seçilenler VE renk ∈
-  // seçilenler AYNI kalemde eşleşmeli ("kırmızı VEYA mavi patos kalemi").
-  { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
-  { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
-  {
-    kind: "dateRange",
-    label: "Tarih",
-    defaultField: "createdAt",
-    fieldOptions: [
-      { value: "createdAt", label: "Sipariş Tarihi" },
-      { value: "deadline", label: "Termin" },
-    ],
-  },
-];
 
 const QUERY_KEY = "orders";
 
@@ -175,7 +105,7 @@ export function OrdersPage() {
     [pricingEnabled, productionEnabled],
   );
   const filters = useMemo(
-    () => resolveOrderFilters(FILTERS, productionEnabled),
+    () => resolveOrderFilters(ORDER_FILTERS, productionEnabled),
     [productionEnabled],
   );
 
@@ -279,6 +209,9 @@ export function OrdersPage() {
         actions={
           <>
             <RefreshButton queryKey={view === "plan" ? ORDER_PLAN_QUERY_KEY : QUERY_KEY} />
+            {view !== "plan" && (
+              <OrderLinesExportButton fetchAll={fetchAll} pricingEnabled={pricingEnabled} productionEnabled={productionEnabled} />
+            )}
             {/* DEFTER ONARIMI — buradan kısa yol. Siparişin "Açık" görünmesinin
                 sebebi çoğu zaman sevkiyatın deftere yazılamamış olmasıdır; o
                 ekrana giden yolun sipariş listesinde durması bilinçli.
@@ -314,29 +247,6 @@ export function OrdersPage() {
         <OrderPlanView pricingEnabled={pricingEnabled} />
       ) : (
       <>
-      <DataTableToolbar
-        fetchAll={fetchAll}
-        search={search}
-        onSearchChange={setSearch}
-        placeholder={`Sipariş no, ${TERIM.terbiyeIsEmri.tekilKucuk} no, firma veya kumaş ara...`}
-        table={table}
-        exportName="Siparişler"
-        actions={
-          <>
-            <ToolbarToggle
-              checked={showCancelled}
-              onCheckedChange={setShowCancelled}
-              label="İptalleri göster"
-              title="İptal edilmiş siparişler varsayılan olarak gizlidir."
-            />
-            <OrderLinesExportButton
-              fetchAll={fetchAll}
-              pricingEnabled={pricingEnabled}
-              productionEnabled={productionEnabled}
-            />
-          </>
-        }
-      />
       {/* ⚠️ SIRA SÖZLEŞMESİ (2026-09-04): özet şerit FİLTRELERİN ÜSTÜNDE.
           Kullanıcı gerekçesi: şerit "hangi kümeyi süzüyorum"un cevabı; filtre
           satırının altında kalınca listeye ait bir başlık gibi okunuyordu.
@@ -355,15 +265,25 @@ export function OrdersPage() {
         />
       </div>
 
-      {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı):
-          "ABC Tekstil'in 200 siparişi" sorusu pencere açıkken cevaplanamıyordu.
-          Sıralama maliyeti `orders_active_createdAt_idx` ile karşılanıyor.
-          ⚠️ Liste `filters` (rejim-duyarlı) kullanır, ham `FILTERS` DEĞİL —
-          ticaret kurulumunda üretim filtreleri süzülür (`resolveOrderFilters`).
-          Satır TEK SATIR + yatay kaydırma: `OrdersFilterRow`. */}
-      {/* "Nerede?" hızlı sekmeleri + fason firma/gün — süzme sunucuda (filter[nerede|fasonFirmaId|fasondaGunden]). */}
-      <OrdersWhereBar productionEnabled={productionEnabled} />
-      <OrdersFilterRow filters={filters} />
+      {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı). Filtreler TEK SATIR
+          (2026-11-06): arama + Görünüm ("Nerede?" sekmeleri) + Termin penceresi + kutular + "+ Filtre".
+          ⚠️ Rejim-duyarlı `filters` verilir, ham `ORDER_FILTERS` DEĞİL (ticarette üretim süzgeci düşer). */}
+      <OrdersFilterRow
+        filters={filters}
+        productionEnabled={productionEnabled}
+        search={search}
+        onSearchChange={setSearch}
+        placeholder={`Sipariş no, ${TERIM.terbiyeIsEmri.tekilKucuk} no, firma veya kumaş ara...`}
+        showCancelled={showCancelled}
+        setShowCancelled={setShowCancelled}
+        forceFilters={forceFilters}
+        trailing={
+          <>
+            <SavedViewsMenu compact />
+            <DataTableTools table={table} exportName="Siparişler" fetchAll={fetchAll} compact />
+          </>
+        }
+      />
 
       <DataTable<Order>
         table={table}
