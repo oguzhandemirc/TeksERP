@@ -6,6 +6,7 @@ import { Button, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../components/ModuleSheet';
 import ModalTextInput from '../../../components/ModalTextInput';
 import { colors, spacing } from '../../../theme/tokens';
+import { TERIM } from '../../../lib/terim';
 import { LABEL_BATCH_MAX } from './labelBatch';
 import type { TamburLabelBatch } from './useTamburLabelBatch';
 
@@ -33,7 +34,7 @@ export default function TamburLabelBatchStrip({ batch }: { batch: TamburLabelBat
         onDismiss={() => setOpen(false)}
         size="sm"
         title="Etikete basılacak müşteri partisi"
-        subtitle="Değer sonraki kesimlerde aynen kalır; iş emri değişince sıfırlanır."
+        subtitle={`Değer sonraki kesimlerde aynen kalır; ${TERIM.terbiyeIsEmri.tekilKucuk} değişince sıfırlanır.`}
         footer={
           <View style={s.actions}>
             <Button mode="text" onPress={() => save('')} testID="tambur-parti-temizle">Temizle</Button>

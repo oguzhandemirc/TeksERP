@@ -214,6 +214,7 @@
   "batchNumber": null,
   "workOrderNumber": null,
   "foldType": null,
+  "labelBatchNo": null,
   "openDefects": ""
  },
  "etiket:Y+L_Y": {
@@ -240,6 +241,7 @@
   "batchNumber": null,
   "workOrderNumber": null,
   "foldType": null,
+  "labelBatchNo": null,
   "openDefects": ""
  },
  "etiket:Y+L_X": {
@@ -266,6 +268,7 @@
   "batchNumber": null,
   "workOrderNumber": null,
   "foldType": null,
+  "labelBatchNo": null,
   "openDefects": ""
  },
  "etiket:Z+C_A": {
@@ -292,6 +295,7 @@
   "batchNumber": null,
   "workOrderNumber": null,
   "foldType": null,
+  "labelBatchNo": null,
   "openDefects": ""
  },
  "etiket:X+C_A": {
@@ -318,6 +322,7 @@
   "batchNumber": null,
   "workOrderNumber": null,
   "foldType": null,
+  "labelBatchNo": null,
   "openDefects": ""
  },
  "etiket:X+stok": {
@@ -344,6 +349,7 @@
   "batchNumber": null,
   "workOrderNumber": null,
   "foldType": null,
+  "labelBatchNo": null,
   "openDefects": ""
  },
  "onizleme:X+L_X": {
