@@ -47,6 +47,7 @@ const LOOP_ROW_KEYS = new Set(TRAVELER_LOOPS.flatMap((l) => l.fields.map((f) => 
 const TYPE_LABELS: Record<string, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stok",
+  CUSTOMER_GOODS_SERVICE: "Fason (müşteri malı)",
 };
 
 function escapeHtml(v: unknown): string {

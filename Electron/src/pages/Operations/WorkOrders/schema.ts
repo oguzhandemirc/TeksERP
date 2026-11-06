@@ -19,7 +19,7 @@ export type WorkOrderStepFormValues = z.infer<typeof workOrderStepSchema>;
 
 export const workOrderFormSchema = z.object({
   type: z.enum(
-    [WorkOrderType.ORDER_PRODUCTION, WorkOrderType.STOCK_PRODUCTION],
+    [WorkOrderType.ORDER_PRODUCTION, WorkOrderType.STOCK_PRODUCTION, WorkOrderType.CUSTOMER_GOODS_SERVICE],
     { get message() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} tipi seçilmeli`; } },
   ),
   // Parti Kodu (backend: batchNumber). Zorunluluk runtime'da (manuel mod / override /
@@ -36,6 +36,8 @@ export const workOrderFormSchema = z.object({
   /** KQ-D6 hedef kurşun gramajı (çeşit değeri); null = hedef yok. Yalnız yeni İE formunda. */
   kursunTargetValueId: z.string().nullable().optional().default(null),
   orderLineIds: z.array(z.string()).optional().default([]),
+  /** Fason (müşteri malı) türünde zorunlu müşteri; diğer türlerde gönderilmez. */
+  customerId: z.string().nullable().optional().default(null),
   width: z
     .union([
       z.coerce.number().positive("En 0'dan büyük olmalı"),
@@ -80,6 +82,7 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   targetPropertyIds: [],
   kursunTargetValueId: null,
   orderLineIds: [],
+  customerId: null,
   width: null,
   targetQuantity: null,
   targetWeight: null,

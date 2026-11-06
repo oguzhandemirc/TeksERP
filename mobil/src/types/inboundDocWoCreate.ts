@@ -50,7 +50,8 @@ export interface CreateWorkOrderFromNoteBody {
   /** Hedef özellikler (BAYRAK); anahtar verilince istemcinin kümesi yazılır (istasyon tohumu eklenmez). */
   targetPropertyIds?: string[];
   /** Yoksa sipariş kalemi varsa ORDER, yoksa STOCK; ORDER + kalemsiz → 400. */
-  type?: 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION';
+  /** Fason (müşteri malı): müşteri belgenin carisinden (sahip) gelir; sipariş kalemi 400. */
+  type?: 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION' | 'CUSTOMER_GOODS_SERVICE';
   /** Düzenlenmiş rota adımları (routeTemplateId ile birlikte; şablonun yerine geçer; stepPlanning ile birlikte 400). */
   steps?: {
     stationId: string;

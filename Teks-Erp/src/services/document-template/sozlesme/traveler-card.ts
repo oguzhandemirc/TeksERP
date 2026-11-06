@@ -26,7 +26,7 @@ export interface TravelerCardSource {
   numberRounding: typeof NUMBER_ROUNDING_HALF_UP;
 }
 
-const TYPE_LABELS: Record<string, string> = { ORDER_PRODUCTION: "Siparişe Özel", STOCK_PRODUCTION: "Stok" };
+const TYPE_LABELS: Record<string, string> = { ORDER_PRODUCTION: "Siparişe Özel", STOCK_PRODUCTION: "Stok", CUSTOMER_GOODS_SERVICE: "Fason (müşteri malı)" };
 
 const f = (yol: string, etiket: string, tur: FieldDef["tur"], ornek: FieldDef["ornek"]): FieldDef => ({
   yol,

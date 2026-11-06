@@ -90,6 +90,7 @@ export async function cloneWorkOrderTx(
     select: {
       id: true,
       type: true,
+      customerId: true,
       width: true,
       targetWeight: true,
       parameters: true,
@@ -122,7 +123,9 @@ export async function cloneWorkOrderTx(
   if (!src) throw AppError.notFound(`Kaynak ${TERIM.terbiyeIsEmri.tekilKucuk} bulunamadı`);
 
   const S = params.reEntryStepSequence;
-  const newType = params.orderMode === "keep" ? src.type : "STOCK_PRODUCTION";
+  // Fason (müşteri malı) mal yine müşterinin: tür + müşteri her kipte korunur (bağı zaten yoktur).
+  const customerGoods = src.type === "CUSTOMER_GOODS_SERVICE";
+  const newType = customerGoods || params.orderMode === "keep" ? src.type : "STOCK_PRODUCTION";
 
   const newWo = await createWorkOrderTx(tx, {
     trigger: "WO_SPLIT_CLONE", userId: params.userId, refType: "WORK_ORDER", refId: src.id,
@@ -130,6 +133,7 @@ export async function cloneWorkOrderTx(
     data: {
       workOrderNumber: await generateWorkOrderNumberTx(tx, now),
       type: newType,
+      customerId: customerGoods ? src.customerId : null,
       width: src.width,
       targetWeight: src.targetWeight,
       targetQuantity: new Prisma.Decimal(params.movedTotalQty),

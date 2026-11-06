@@ -4,27 +4,33 @@
 // =============================================================================
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { TERIM } from '../../../lib/terim';
-import { colors, spacing, typography } from '../../../theme';
+import { colors } from '../../../theme';
 import WorkOrderDetailSheet from '../HizliIsEmri/WorkOrderDetailSheet';
 import ColumnsSheet from './ColumnsSheet';
 import FilterBar from './FilterBar';
 import WorkOrderTable from './WorkOrderTable';
 import ActionBar from './ActionBar';
 import ScanStage from './ScanStage';
+import OptionsSheet from './OptionsSheet';
+import { KIND_BUTTON } from './scanFlow';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import type { WoCreateKind } from '../../../store/woCreateKinds';
 import { useScanAction } from './useScanAction';
 import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
 import type { ProductionRoute } from '../../../services/route.service';
 import { useColumnPrefs, useLocationStations, useWorkOrderList } from './useWorkOrderList';
-import { DEFAULT_FILTERS, emptyStateFor, MIN_SEARCH, type ListFilters } from './workOrderRow';
+import { DEFAULT_FILTERS, emptyStateFor, type ListFilters } from './workOrderRow';
 
 export default function IsEmirleriScreen() {
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [scanRoute, setScanRoute] = useState<ProductionRoute | null>(null);
+  const [scanRoute, setScanRoute] = useState<{ route: ProductionRoute; kind: WoCreateKind } | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const kinds = useDeviceSettingsStore((s) => s.woCreateKinds);
+  const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
   const scan = useScanAction();
   const list = useWorkOrderList(filters);
   const { stations, loading: stationsLoading } = useLocationStations();
@@ -34,8 +40,8 @@ export default function IsEmirleriScreen() {
     // Okutma: DocBatchView akışı (BELGE kipinde de); geri → liste (kaydedilen İE listede görünsün diye tazelenir).
     const back = () => { setScanRoute(null); void list.refetch(); };
     return (
-      <ScreenChrome title={`Okut · ${shortcutTitle(scanRoute)}`} onStepBack={back}>
-        <ScanStage route={scanRoute} onCancel={back} />
+      <ScreenChrome title={`${KIND_BUTTON[scanRoute.kind]} · ${shortcutTitle(scanRoute.route)}`} onStepBack={back}>
+        <ScanStage route={scanRoute.route} kind={scanRoute.kind} onCancel={back} />
       </ScreenChrome>
     );
   }
@@ -43,11 +49,7 @@ export default function IsEmirleriScreen() {
   return (
     <ScreenChrome title={TERIM.terbiyeIsEmri.cogul}>
       <View style={styles.fill}>
-        <FilterBar value={filters} onChange={setFilters} stations={stations} stationsLoading={stationsLoading} searching={list.searching} onColumns={() => setColumnsOpen(true)} />
-        <Text style={styles.total} testID="ie-liste-toplam">
-          {list.total != null ? `${list.total.toLocaleString('tr-TR')} kayıt` : ' '}
-          {filters.search.trim().length > 0 && filters.search.trim().length < MIN_SEARCH ? ` · aramak için en az ${MIN_SEARCH} harf` : ''}
-        </Text>
+        <FilterBar value={filters} onChange={setFilters} stations={stations} stationsLoading={stationsLoading} searching={list.searching} onColumns={() => setColumnsOpen(true)} onOptions={scan.available ? () => setOptionsOpen(true) : undefined} />
         <WorkOrderTable
           rows={list.rows}
           visible={cols.visible}
@@ -62,7 +64,8 @@ export default function IsEmirleriScreen() {
           onOpen={setOpenId}
           onEmptyAction={(a) => setFilters(a === 'clearFilters' ? DEFAULT_FILTERS : { ...filters, status: 'ALL' })}
         />
-        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} onScan={() => scan.type && setScanRoute(scan.type)} />}
+        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} kinds={kinds} onScan={(kind) => scan.type && setScanRoute({ route: scan.type, kind })} />}
+      <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} onDismiss={() => setOptionsOpen(false)} />
       </View>
       <ColumnsSheet visible={columnsOpen} columns={cols.visible} onToggle={cols.toggle} onDismiss={() => setColumnsOpen(false)} />
       <WorkOrderDetailSheet workOrderId={openId} onClose={() => setOpenId(null)} onChanged={() => void list.refetch()} />
@@ -72,5 +75,4 @@ export default function IsEmirleriScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.appBg },
-  total: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs, fontSize: typography.size.sm, color: colors.textSecondary },
 });

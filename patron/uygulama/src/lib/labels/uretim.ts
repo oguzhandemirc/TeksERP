@@ -51,6 +51,7 @@ export const WORK_ORDER_STATUS: Readonly<Record<string, RecordStatusEntry>> = {
 export const WORK_ORDER_TYPE: Readonly<Record<string, string>> = {
   ORDER_PRODUCTION: "Siparişe üretim",
   STOCK_PRODUCTION: "Stoka üretim",
+  CUSTOMER_GOODS_SERVICE: "Fason (müşteri malı)",
 };
 
 /** Sevkiyat durumu (`ShipmentStatus`). */

@@ -72,6 +72,8 @@ import {
 import type { WorkOrder } from "./types";
 import { LastBatchBadge } from "./LastBatchBadge";
 import { TERIM } from "@/lib/terim";
+import { WorkOrderType } from "@/types/enums";
+import { WorkOrderKindSection } from "./WorkOrderKindSection";
 
 /**
  * react-hook-form hata ağacından tüm mesajları toplar (toast özeti için). Her
@@ -421,6 +423,8 @@ export function WorkOrderFormView({
   // Tip artık seçilmez — sipariş kalemi bağlıysa siparişe özel, değilse stoğa
   // üretim. buildPayload submit'te type'ı bu kurala göre türetir.
   const isOrderProduction = pickedLines.length > 0;
+  // Fason (müşteri malı) ayrı türdür: siparişsiz, müşteri zorunlu (2026-11-06).
+  const isCustomerGoods = form.watch("type") === WorkOrderType.CUSTOMER_GOODS_SERVICE;
 
   const orderWidth = derived?.width ?? null;
   const mixedWidths = derived !== null && derived.width == null;
@@ -521,6 +525,10 @@ export function WorkOrderFormView({
               });
               manualErrors.push("Kat tipi seçilmeli.");
             }
+            if (v.type === WorkOrderType.CUSTOMER_GOODS_SERVICE && !v.customerId) {
+              form.setError("customerId", { type: "manual", message: "Müşteri seçilmeli." });
+              manualErrors.push("Fason (müşteri malı) için müşteri seçilmeli.");
+            }
             if (manualErrors.length > 0) {
               toast.error(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı — eksik/hatalı alanlar var`, {
                 description: manualErrors.join(" · "),
@@ -586,8 +594,8 @@ export function WorkOrderFormView({
                 triggerClassName="h-9 w-auto min-w-[190px] shrink-0 items-center gap-2 border-0 bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
                 countLabel="şablon"
               />
-              {/* Şablon Seç'in yanında — sipariş bağlama artık tek buton. */}
-              <Button
+              {/* Şablon Seç'in yanında — sipariş bağlama artık tek buton. Fason (müşteri malı) siparişe bağlanmaz. */}
+              {!isCustomerGoods && <Button
                 type="button"
                 onClick={() => setOrderPickerOpen(true)}
                 className="h-9 min-w-[190px] shrink-0 justify-start gap-2 border-0 bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-600/30 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
@@ -596,7 +604,7 @@ export function WorkOrderFormView({
                 {pickedLines.length > 0
                   ? `Sipariş: ${pickedLines.length} kalem`
                   : "Sipariş Bağla"}
-              </Button>
+              </Button>}
               {belgeOkut && <BelgeOkutButton
                 routeTemplateId={okutRouteId}
                 onScanned={docScan.start}
@@ -643,7 +651,22 @@ export function WorkOrderFormView({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-4">
             {/* Sipariş bağlantısı — YALNIZ edit modunda bölüm. Create'te başlıktaki
                 "Sipariş Bağla" butonu + picker'dan bağlanır (bölüm kaldırıldı). */}
-            {isEdit && (
+            <WorkOrderKindSection
+              isEdit={isEdit}
+              customerGoods={isCustomerGoods}
+              onCustomerGoodsChange={(next) => {
+                form.setValue("type", next ? WorkOrderType.CUSTOMER_GOODS_SERVICE : WorkOrderType.ORDER_PRODUCTION);
+                if (!next) form.setValue("customerId", null);
+              }}
+              customerId={form.watch("customerId") ?? null}
+              onCustomerChange={(id) => {
+                form.setValue("customerId", id);
+                form.clearErrors("customerId");
+              }}
+              blockedReason={pickedLines.length > 0 ? "Sipariş kalemi bağlı — önce sipariş bağını kaldırın." : undefined}
+              error={form.formState.errors.customerId?.message}
+            />
+            {isEdit && !isCustomerGoods && (
             <FormSection
               step={1}
               title="Sipariş Bağlantısı"

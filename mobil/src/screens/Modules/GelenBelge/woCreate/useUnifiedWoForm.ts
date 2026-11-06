@@ -40,6 +40,8 @@ import { usePartyPlan } from './usePartyPlan';
 import { rollsTotal } from './rollDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
+import { defaultWoTypeFor } from '../../../../store/woCreateKinds';
 
 export interface UnifiedWoFormProps {
   /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
@@ -55,7 +57,8 @@ export interface UnifiedWoFormProps {
 /** Formun durumu: rota, ek alanlar, satır (tek belge), tarayıcı; belgeden doldurma ve "oluştur" engeli. */
 export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFieldsOpenChange }: UnifiedWoFormProps) {
   const [route, setRouteState] = useState<ProductionRoute | null>(initialRoute);
-  const [form, setForm] = useState<WoFormState>(initialFormState);
+  // Cihaz varsayılan türü (Seçenekler'de yalnız Fason açıksa Fason) — açılışta bir kez okunur.
+  const [form, setForm] = useState<WoFormState>(() => initialFormState(defaultWoTypeFor(useDeviceSettingsStore.getState().woCreateKinds)));
   const setRoute = useCallback((r: ProductionRoute) => {
     setRouteState(r);
     setForm(resetForRoute);

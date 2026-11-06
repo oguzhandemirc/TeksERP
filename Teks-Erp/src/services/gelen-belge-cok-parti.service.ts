@@ -152,7 +152,7 @@ interface OpenInput {
   notes?: string | null;
   flagPropertyIds: (targets: ReadonlyArray<{ propertyId: string }>) => Promise<string[]>;
   /** K30 S16a form alanları (verilenler) — her iş emrine aynen geçer; PER_PARTY'de hedef metraj/kg çağıranda reddedilir. */
-  fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type">;
+  fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type" | "customerId">;
   /** Hedef metraj verilmedi + fabrika ayarı açık: her İE'nin hedefi kendi toplarının parti metresi (SINGLE = toplam). */
   deriveTargetQuantity?: boolean;
   /** K30-D düzenlenmiş adımlar (çağıran onaydan önce doğruladı): varsa şablonun yerine geçer. */

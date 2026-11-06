@@ -9,7 +9,9 @@ import type { ProductionRoute } from '../../../services/route.service';
 import { colors, radius, spacing, typography } from '../../../theme';
 import DocBatchView from '../GelenBelge/woCreate/DocBatchView';
 import { useReadResult } from '../GelenBelge/useReadResult';
-import { previewTiles, tileLayout, type PreviewTile } from './scanFlow';
+import type { DocRowOpenRequest } from '../GelenBelge/woCreate/DocRowCard';
+import type { WoCreateKind } from '../../../store/woCreateKinds';
+import { customerGoodsTiles, previewTiles, scanWoType, tileLayout, type PreviewTile } from './scanFlow';
 
 const TILE_TONE = {
   found: { bg: colors.successContainer, border: colors.success, fg: colors.successText, icon: 'check-circle' },
@@ -17,8 +19,11 @@ const TILE_TONE = {
   unknown: { bg: colors.surfaceMuted, border: colors.border, fg: colors.textSecondary, icon: 'minus-circle-outline' },
 } as const;
 
-export default function ScanStage({ route, onCancel }: { route: ProductionRoute; onCancel: () => void }) {
+export default function ScanStage({ route, kind, onCancel }: { route: ProductionRoute; kind: WoCreateKind; onCancel: () => void }) {
   const [note, setNote] = useState<{ id: string; run: number } | null>(null);
+  // Fason: müşteri bulunamadıysa "Müşteri seç" kartı kapatır ve formun müşteri seçicisini (PickerModal) açar.
+  const [ownerReq, setOwnerReq] = useState<DocRowOpenRequest | null>(null);
+  const customerGoods = kind === 'CUSTOMER_GOODS';
   const [dismissedRun, setDismissedRun] = useState<number | null>(null);
   const { watch } = useReadResult(note?.id ?? null, note?.run ?? 0);
   const summary = watch?.phase === 'done' ? watch.summary : null;
@@ -26,13 +31,15 @@ export default function ScanStage({ route, onCancel }: { route: ProductionRoute;
 
   return (
     <View style={styles.fill}>
-      <DocBatchView route={route} multi={false} autoStart onNote={(n, run) => setNote({ id: n.id, run })} />
+      <DocBatchView route={route} multi={false} autoStart woType={scanWoType(kind)} openRequest={ownerReq} onNote={(n, run) => setNote({ id: n.id, run })} />
       {summary && (
         <PreviewSheet
           visible={open}
           title={`Belge okundu · ${summary.noteNo}`}
           subtitle={summary.reason ?? `${summary.lineCount} satır okundu${summary.reviewCount ? ` · ${summary.reviewCount} satır kontrol istiyor` : ''}`}
-          tiles={previewTiles(summary)}
+          tiles={customerGoods ? customerGoodsTiles(summary) : previewTiles(summary)}
+          leadTile={customerGoods}
+          onPickCustomer={customerGoods && !summary.ownerSuggestion ? () => { setDismissedRun(note?.run ?? null); setOwnerReq((r) => ({ kind: 'owner', seq: (r?.seq ?? 0) + 1 })); } : undefined}
           onContinue={() => setDismissedRun(note?.run ?? null)}
           onCancel={onCancel}
         />
@@ -41,13 +48,30 @@ export default function ScanStage({ route, onCancel }: { route: ProductionRoute;
   );
 }
 
-function PreviewSheet({ visible, title, subtitle, tiles, onContinue, onCancel }: { visible: boolean; title: string; subtitle: string; tiles: PreviewTile[]; onContinue: () => void; onCancel: () => void }) {
+interface PreviewProps {
+  visible: boolean;
+  title: string;
+  subtitle: string;
+  tiles: PreviewTile[];
+  /** Fason: ilk karo (müşteri) tam genişlik ve büyük yazılır. */
+  leadTile?: boolean;
+  /** Fason + müşteri bulunamadı: kartı kapatıp formun müşteri seçicisini açar. */
+  onPickCustomer?: () => void;
+  onContinue: () => void;
+  onCancel: () => void;
+}
+
+const LEAD_H = 120;
+
+function PreviewSheet({ visible, title, subtitle, tiles: all, leadTile = false, onPickCustomer, onContinue, onCancel }: PreviewProps) {
   const win = useWindowDimensions();
   // Karo alanı: kart genişliği − yan boşluklar; yükseklik: AppModal tavanı (%88) − başlık − düğme şeridi − boşluk.
   const areaW = moduleSheetWidth(win.width) - spacing.xxl * 2;
-  const areaH = Math.round(win.height * 0.88) - 96 - 88 - spacing.lg * 2 - 24;
+  const lead = leadTile ? all[0] ?? null : null;
+  const tiles = lead ? all.slice(1) : all;
+  const areaH = Math.round(win.height * 0.88) - 96 - 88 - spacing.lg * 2 - 24 - (lead ? LEAD_H + spacing.md : 0);
   const L = useMemo(() => tileLayout(tiles.length, areaW, areaH), [tiles.length, areaW, areaH]);
-  const missing = tiles.filter((t) => t.state === 'missing').length;
+  const missing = all.filter((t) => t.state === 'missing').length;
   const tileW = (areaW - spacing.md * (L.columns - 1)) / L.columns;
   return (
     <ModuleSheet
@@ -58,10 +82,12 @@ function PreviewSheet({ visible, title, subtitle, tiles, onContinue, onCancel }:
       footer={
         <>
           <Button mode="outlined" onPress={onCancel} contentStyle={styles.btn} testID="ie-onizleme-vazgec">Vazgeç</Button>
+          {onPickCustomer && <Button mode="contained-tonal" icon="account-search-outline" onPress={onPickCustomer} contentStyle={styles.btn} testID="ie-onizleme-musteri-sec">Müşteri seç</Button>}
           <Button mode="contained" onPress={onContinue} contentStyle={styles.btn} icon="arrow-right" testID="ie-onizleme-devam">Devam et</Button>
         </>
       }
     >
+      {lead && <LeadTile tile={lead} />}
       <View style={styles.grid} testID="ie-onizleme-karolar">
         {tiles.slice(0, L.shown).map((t) => {
           const tone = TILE_TONE[t.state];
@@ -88,7 +114,24 @@ function PreviewSheet({ visible, title, subtitle, tiles, onContinue, onCancel }:
   );
 }
 
+function LeadTile({ tile }: { tile: PreviewTile }) {
+  const tone = TILE_TONE[tile.state];
+  return (
+    <View style={[styles.tile, styles.lead, { backgroundColor: tone.bg, borderColor: tone.border }]} testID={`ie-karo-lead-${tile.key}-${tile.state}`}>
+      <View style={styles.tileHead}>
+        <Icon source={tone.icon} size={24} color={tone.fg} />
+        <Text style={[styles.tileLabel, { fontSize: typography.size.base, color: tone.fg }]}>{tile.label}</Text>
+      </View>
+      <Text style={[styles.tileValue, styles.leadValue, { color: tile.state === 'found' ? colors.text : tone.fg }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {tile.value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  lead: { width: '100%', height: LEAD_H, marginBottom: spacing.md },
+  leadValue: { fontSize: typography.size.display },
   fill: { flex: 1 },
   btn: { minHeight: 56, paddingHorizontal: spacing.xl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },

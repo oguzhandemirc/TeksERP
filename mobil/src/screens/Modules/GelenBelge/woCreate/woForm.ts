@@ -65,7 +65,7 @@ export interface WoFormExtras {
   machineId?: string | null;
 }
 
-export type WoType = 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION';
+export type WoType = 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION' | 'CUSTOMER_GOODS_SERVICE';
 
 /** Panelin türetmesi (workOrderPayload): bağlı sipariş kalemi varsa siparişe üretim, yoksa stoğa. */
 export const deriveWoType = (orderLineIds: readonly string[]): WoType => (orderLineIds.length ? 'ORDER_PRODUCTION' : 'STOCK_PRODUCTION');
@@ -102,8 +102,9 @@ export const EMPTY_EXTRAS: WoFormExtras = {
   steps: null,
 };
 
-export function initialFormState(): WoFormState {
-  return { extras: { ...EMPTY_EXTRAS, orderLineIds: [] }, fromDoc: [], docShown: [], touched: [], suggestions: {}, docText: { desen: null, renk: null }, appliedNoteId: null };
+/** `woType`: cihazın varsayılan türü (yalnız Fason açık cihazda Fason); null = bugünkü türetme. */
+export function initialFormState(woType: WoType | null = null): WoFormState {
+  return { extras: { ...EMPTY_EXTRAS, orderLineIds: [], woType }, fromDoc: [], docShown: [], touched: [], suggestions: {}, docText: { desen: null, renk: null }, appliedNoteId: null };
 }
 
 /** Sunucu sayıyı çözer; eski/ham metin gelirse TR biçimi ("1.234,5") de kabul. ≤0 / çözülemeyen → null. */
