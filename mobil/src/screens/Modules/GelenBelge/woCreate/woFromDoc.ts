@@ -245,13 +245,16 @@ export type RowResult =
       workOrders: OpenedWo[];
       /** PER_PARTY kısmi başarı: açılamayan partiler — satır açık kalır, düzeltilip yeniden gönderilir. */
       failed?: { blockNo: number; message: string }[];
+      /** Sunucu uyarıları (kayıt yapıldı ama dikkat; ör. Fason Belge Okut önerisi). */
+      warnings?: string[];
     }
   | { kind: 'DRAFT'; text: string }
   | { kind: 'FAILED'; text: string };
 
 export function openedResult(r: CreateWorkOrderFromNoteResult): RowResult {
   const failed = (r.failed ?? []).map((f) => ({ blockNo: f.blockNo, message: f.message }));
-  return { kind: 'OPENED', workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber, print: null, workOrders: openedWorkOrders(r), ...(failed.length ? { failed } : {}) };
+  const warnings = r.warnings ?? [];
+  return { kind: 'OPENED', workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber, print: null, workOrders: openedWorkOrders(r), ...(failed.length ? { failed } : {}), ...(warnings.length ? { warnings } : {}) };
 }
 
 export function draftResult(noteNo: string, disabledByServer: boolean): RowResult {
