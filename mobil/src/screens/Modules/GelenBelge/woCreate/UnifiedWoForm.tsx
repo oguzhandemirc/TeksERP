@@ -142,7 +142,7 @@ function FormColumn({ u, fieldProps, onOtherLayout }: FormColumnProps) {
     <>
       <WoFormFields {...fieldProps} show={fields.isTop} />
       <OtherFields onLayout={onOtherLayout} count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
-        {row?.form && fields.isOther('gramaj') && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
+        {row?.form && fields.isOther('gramaj') && !u.partyGramaj && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
         <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
       </OtherFields>
       {wo.mode === 'SEPARATE' && (

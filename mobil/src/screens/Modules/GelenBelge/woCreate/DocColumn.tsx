@@ -17,8 +17,8 @@ export default function DocColumn({ u, openRequest }: { u: FormModel; openReques
   const { wo, row, scan, done, fields } = u;
   if (row) {
     return (
-      <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj')}
-        variant="single" onReread={u.okut} openRequest={openRequest} />
+      <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj') || u.partyGramaj}
+        variant="single" onReread={u.okut} openRequest={openRequest} partyPlan={u.partyPlan} />
     );
   }
   return (

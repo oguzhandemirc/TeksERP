@@ -36,6 +36,7 @@ import {
 import { SCAN_ROUTE, isScanRoute, rowIssueList } from './woFromDoc';
 import { missingChips, type FormIssue } from './woIssues';
 import { multiPartyTotal } from './partyDraft';
+import { usePartyPlan } from './usePartyPlan';
 import { rollsTotal } from './rollDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
@@ -70,12 +71,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const extras = form.extras;
   const eff = useMemo(() => (route && !isScanRoute(route) ? effectiveRoute(route, extras.steps) : route), [route, extras.steps]);
   const hasTambur = useMemo(() => (eff?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'), [eff]);
-  const fold = useFoldValues();
-  // Kat yalnız tamburlu rotada sorulur; ilk katalog değeri ön seçilir (Hızlı İE ile aynı).
-  const firstFold = fold.values[0]?.code ?? null;
-  useEffect(() => {
-    if (hasTambur && firstFold) setForm((s) => (s.extras.foldType ? s : { ...s, extras: { ...s.extras, foldType: firstFold } }));
-  }, [hasTambur, firstFold]);
+  const fold = useFoldDefault(hasTambur, setForm);
 
   const extraBody = useCallback(
     (r: DocRow) => buildExtraBody(extras, { hasTambur, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null }),
@@ -98,12 +94,15 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     stationRoutesLoading: routesQ.isLoading,
     customerId: row?.form?.ownerCustomerId ?? null,
   });
+  const partyPlan = usePartyPlan({ row, wo, route: eff, allMachines: ctx.data?.data.kursunMachines ?? NO_MACHINES, stepsEdited: plan.stepsEdited });
+  // Her parti ayrı + gramaj parti kartında: ortak gramaj alanı çizilmez (parti seçimi yoksa yine o gider).
+  const partyGramaj = !!partyPlan && partyPlan.gramaj.length > 0;
   const fields = useWoFieldLayout(
     form,
     {
       showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
       hasTambur,
-      hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form,
+      hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form && !partyGramaj,
       hasRouteSteps,
       hasMachine: plan.machines.length > 0,
     },
@@ -133,7 +132,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     scan.source.add();
   };
   return {
-    route, setRoute, form, fields, plan, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, customers, edit,
+    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
@@ -141,8 +140,9 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
 }
 
 // TERIM okuma anında çözülür (rejim değişebilir) → sabit değil fonksiyon.
-const perPartyMachineNote = (): string =>
-  `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine sonra seçilir.`;
+const perPartyMachineNote = (stepsEdited: boolean): string =>
+  `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine ${stepsEdited ? 'sonra seçilir' : 'parti kartlarında seçilir'}.`;
+const NO_MACHINES: readonly DeskKursunMachine[] = [];
 
 interface PlanInput {
   route: ProductionRoute | null;
@@ -161,10 +161,11 @@ interface PlanInput {
 /** K30-D plan bölümünün (adımlar, makine, tür, hedef özellik) bağlamı; PER_PARTY'de makine parti başına masada seçilir. */
 function buildPlanCtx(p: PlanInput): WoPlanCtx {
   const { route, eff, extras, edit } = p;
+  const stepsEdited = extras.steps !== null && !sameAsRoute(extras.steps, route);
   return {
     route: eff,
     steps: extras.steps ?? stepsFromRoute(route),
-    stepsEdited: extras.steps !== null && !sameAsRoute(extras.steps, route),
+    stepsEdited,
     showSteps: p.hasRouteSteps,
     stepsEditable: !p.routeLocked,
     // Kurşun adımı çıkarıldı/değişti → seçilen makine o istasyona ait değil: karar sıfırlanır (şablon/öneri yeniden).
@@ -175,7 +176,7 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     stationRoutes: p.stationRoutes,
     stationRoutesLoading: p.stationRoutesLoading,
     machines: p.perParty ? [] : machinesForRoute(eff, p.allMachines),
-    machineNote: p.perParty && machinesForRoute(eff, p.allMachines).length > 0 ? perPartyMachineNote() : null,
+    machineNote: p.perParty && machinesForRoute(eff, p.allMachines).length > 0 ? perPartyMachineNote(stepsEdited) : null,
     machineValue: extras.machineId !== undefined ? extras.machineId : routeDefaultMachineId(eff, p.allMachines) ?? null,
     onMachine: (machineId) => edit({ machineId }),
     customerId: p.customerId,
@@ -185,6 +186,16 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     propertyIds: extras.propertyIds,
     onProperties: (propertyIds) => edit({ propertyIds }),
   };
+}
+
+/** Kat yalnız tamburlu rotada sorulur; ilk katalog değeri ön seçilir (Hızlı İE ile aynı). */
+function useFoldDefault(hasTambur: boolean, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
+  const fold = useFoldValues();
+  const firstFold = fold.values[0]?.code ?? null;
+  useEffect(() => {
+    if (hasTambur && firstFold) setForm((s) => (s.extras.foldType ? s : { ...s, extras: { ...s.extras, foldType: firstFold } }));
+  }, [hasTambur, firstFold, setForm]);
+  return fold;
 }
 
 /** Okuma bitince belgeden gelenler forma dolar (aynı okuma bir kez; elle değiştirilen alan ezilmez); belge çıkınca temizlenir. */
