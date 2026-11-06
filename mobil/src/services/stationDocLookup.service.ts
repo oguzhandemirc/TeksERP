@@ -16,7 +16,31 @@ export interface StationLookupStatus {
   readerConfigured: boolean;
 }
 
-export type StationLookupOutcome = 'SINGLE' | 'MULTIPLE' | 'NO_WORK_ORDER' | 'NO_DOCUMENT' | 'NO_DOC_NO' | 'UNREADABLE';
+/** UNVERIFIED: aday var ama hiçbiri doğrulama eşiğini geçmedi (2026-11-06; `unverifiedWorkOrders`). */
+export type StationLookupOutcome = 'SINGLE' | 'MULTIPLE' | 'NO_WORK_ORDER' | 'NO_DOCUMENT' | 'NO_DOC_NO' | 'UNREADABLE' | 'UNVERIFIED';
+
+/** Doğrulama bileşeni: ne tuttu / ne tutmadı (sunucu `station-scan-score.helper`). */
+export interface VerifyComponent {
+  key: string;
+  label: string;
+  weight: number;
+  ratio: number;
+  matched: boolean;
+  detail: string;
+}
+
+/** Sunucunun adaya verdiği doğrulama; `passed` TEK kaynaktır (eşik karşılaştırması sunucuda). */
+export interface WorkOrderVerification {
+  score: number | null;
+  passed: boolean;
+  strongEvidence: boolean;
+  threshold: number;
+  components: VerifyComponent[];
+  targetKey: string;
+}
+
+/** Tablet ne açtı: kendiliğinden · listeden seçildi · eşik altı, görevli onayladı. */
+export type OpenedHow = 'AUTO' | 'CHOSEN' | 'CONFIRMED';
 
 /** HERE = bu ekranın açık kart listesinde · NOT_YET · PASSED · NOT_ON_ROUTE (sunucu `station-open-step.helper`). */
 /** STARTABLE_HERE: rotasız İE, okutunca adımı bu istasyona eklenir (açık listede "Sahada belirlenecek"). */
@@ -40,6 +64,8 @@ export interface StationLookupWorkOrder {
   locationText?: string;
   atStation?: AtStation | null;
   atStationText?: string | null;
+  /** Fotoğraf okutmasında doğrulama (2026-11-06; eski sunucu göndermez). */
+  verification?: WorkOrderVerification | null;
 }
 
 export interface StationLookupResult {
@@ -50,6 +76,12 @@ export interface StationLookupResult {
   /** Sunucunun Türkçe sonuç cümlesi. */
   message: string;
   station?: { screen: string; label: string } | null;
+  /** Eşiği geçemeyen adaylar — kendiliğinden açılmaz, görevli onaylarsa açılır (eski sunucu göndermez). */
+  unverifiedWorkOrders?: StationLookupWorkOrder[];
+  /** `bestStrong`: en iyi adayda top listesi karşılaştırılabildi mi (değilse "doğrulanamadı"). */
+  verification?: { threshold: number; bestScore: number | null; bestStrong?: boolean } | null;
+  /** Okutma izi kimliği: açılan İE bununla bildirilir. */
+  checkId?: string | null;
 }
 
 /** Ekran bilgisi SORGU dizgisinde: eski sunucu sorguyu yok sayar (gövde katı şemadır, ek alan 400 olurdu). */
@@ -66,6 +98,12 @@ export const stationDocLookupService = {
     apiClient
       .post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { contentBase64, sha256 }, { timeout: LOOKUP_TIMEOUT_MS, params: screenParams(screen) })
       .then((r) => r.data.data),
+
+  /** Okutma izine açılan İE (TELEMETRİ, best-effort — hata yutulur, açmayı etkilemez). */
+  reportOpened: (checkId: string, workOrderNumber: string, how: OpenedHow): Promise<void> =>
+    apiClient
+      .post(`/gelen-belge/istasyon-okutma/${checkId}/acilan`, { workOrderNumber, how })
+      .then(() => undefined, () => undefined),
 
   bySearch: (q: string, screen?: LookupScreen): Promise<StationLookupResult> =>
     apiClient

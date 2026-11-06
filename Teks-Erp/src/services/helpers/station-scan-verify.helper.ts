@@ -29,7 +29,8 @@ export interface ScanVerifySink {
 export interface VerifiedLookup {
   workOrders: StationLookupWorkOrder[];
   unverifiedWorkOrders: StationLookupWorkOrder[];
-  verification: { threshold: number; bestScore: number | null };
+  /** `bestStrong`: en yüksek puanlı adayda top listesi karşılaştırılabildi mi (değilse "doğrulanamadı" denir). */
+  verification: { threshold: number; bestScore: number | null; bestStrong: boolean };
   checkId: string | null;
 }
 
@@ -98,8 +99,8 @@ function decisionOf(threshold: number, candidates: number, verified: number): Sc
 }
 
 /** Eşik altı sonuç cümlesi — sade Türkçe; puan yoksa nedenini söyler. */
-export function unverifiedMessage(best: number | null): string {
-  if (best === null) return "Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile elle arayın.";
+export function unverifiedMessage(best: number | null, strong: boolean): string {
+  if (best === null || !strong) return "Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile elle arayın.";
   return `Belge tam eşleşmedi (%${best}) — listeden seçin ya da fiş no ile elle arayın.`;
 }
 
@@ -130,5 +131,6 @@ export async function verifyScanCandidates(
     decision: sink.evidence ? decisionOf(threshold, scored.length, verified.length) : scored.length > 0 ? "SAME_PHOTO" : "NONE",
     components: best?.verification?.components ?? null, bestWorkOrderNumber: best?.workOrderNumber ?? null,
   });
-  return { workOrders: verified, unverifiedWorkOrders: unverified, verification: { threshold, bestScore }, checkId };
+  const bestStrong = best?.verification?.strongEvidence ?? false;
+  return { workOrders: verified, unverifiedWorkOrders: unverified, verification: { threshold, bestScore, bestStrong }, checkId };
 }

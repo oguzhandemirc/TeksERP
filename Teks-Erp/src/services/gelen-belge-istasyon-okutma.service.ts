@@ -69,7 +69,7 @@ export interface StationLookupResult {
   /** Fotoğraf okutmasında eşiği GEÇEMEYEN adaylar (görevli onayıyla açılır); `workOrders` yalnız geçenleri taşır. */
   readonly unverifiedWorkOrders?: StationLookupWorkOrder[];
   /** Fotoğraf okutmasında eşik + en yüksek puan; elle aramada yok. */
-  readonly verification?: { threshold: number; bestScore: number | null } | null;
+  readonly verification?: { threshold: number; bestScore: number | null; bestStrong: boolean } | null;
   /** Okutma izinin kimliği — tablet ne açtığını bununla bildirir; iz yazılamadıysa null. */
   readonly checkId?: string | null;
 }
@@ -105,7 +105,7 @@ export async function stationDocLookup(input: StationLookupInput, ctx: StationLo
 async function applyVerification(r: StationLookupResult, sink: ScanVerifySink, screen: string | null): Promise<StationLookupResult> {
   const v = await verifyScanCandidates({ workOrders: r.workOrders, noteIds: r.notes.map((n) => n.id), source: r.source, screen }, sink);
   const base = { ...r, ...v };
-  if (v.workOrders.length === 0 && v.unverifiedWorkOrders.length > 0) return { ...base, outcome: "UNVERIFIED", message: unverifiedMessage(v.verification.bestScore) };
+  if (v.workOrders.length === 0 && v.unverifiedWorkOrders.length > 0) return { ...base, outcome: "UNVERIFIED", message: unverifiedMessage(v.verification.bestScore, v.verification.bestStrong) };
   if (v.workOrders.length === r.workOrders.length) return base;
   const many = verifiedMessage(v.workOrders);
   if (many) return { ...base, outcome: "MULTIPLE", message: many };

@@ -6,6 +6,8 @@
 // (fiş / evrak / parti / İE no). Kart çözümü ekranın mevcut yolundan (`cardBarcode` → getByCardBarcode).
 // Çok İE: ekran (`screen`) sunucuya gider; burada bekleyen TEK İE açılır (kardeşler şerit için `onOpen`a), birden
 // çoğu burada / hiçbiri burada ise liste: büyük parti no, işlem, top/metre, müşteri İE no, nerede.
+// Doğrulama (2026-11-06): eşiği geçemeyen aday KENDİLİĞİNDEN AÇILMAZ — "Emin değilim" listesi ne tuttuğunu/tutmadığını
+// gösterir, görevli "Eminim, aç" derse açılır; açılan İE okutma izine bildirilir (AUTO · CHOSEN · CONFIRMED).
 // =============================================================================
 import React, { useRef, useState } from 'react';
 import { TERIM } from '../../lib/terim';
@@ -17,9 +19,9 @@ import ModalTextInput from '../ModalTextInput';
 import MultiPageCameraModal from '../../screens/Modules/GelenBelge/MultiPageCameraModal';
 import { usePageSource } from '../../screens/Modules/GelenBelge/usePageSource';
 import { MAX_PAGES, type ScanPage } from '../../screens/Modules/GelenBelge/docScan';
-import { stationDocLookupService, type LookupScreen, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
+import { stationDocLookupService, type LookupScreen, type OpenedHow, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 import { colors, spacing, typography } from '../../theme';
-import { decideLookup, isHere, partyLabel, rowDetail, rowWhere, searchable } from './decide';
+import { decideLookup, isHere, partyLabel, rowDetail, rowWhere, searchable, verifyText } from './decide';
 
 interface Props {
   visible: boolean;
@@ -36,25 +38,35 @@ interface Props {
 }
 
 type OpenFn = Props['onOpen'];
-type SheetState = { kind: 'idle' } | { kind: 'busy'; text: string } | { kind: 'choose'; items: StationLookupWorkOrder[]; message: string } | { kind: 'empty'; message: string };
+/** Liste satırından açma: nasıl açıldığı okutma izine gider. */
+type PickFn = (workOrder: StationLookupWorkOrder, siblings: StationLookupWorkOrder[], how: OpenedHow) => void;
+type ListKind = 'choose' | 'unsure';
+type SheetState = { kind: 'idle' } | { kind: 'busy'; text: string } | { kind: ListKind; items: StationLookupWorkOrder[]; message: string } | { kind: 'empty'; message: string };
 
 /** Sorgu durumu: son istek kazanır (kapanıp açılınca geç gelen yanıt yeni oturumu ezmez). */
 function useLookupRun(onOpen: OpenFn) {
   const [view, setView] = useState<SheetState>({ kind: 'idle' });
   const [q, setQ] = useState('');
   const seq = useRef(0);
+  const checkId = useRef<string | null>(null);
   const reset = () => {
     seq.current++;
     setView({ kind: 'idle' });
     setQ('');
   };
+  const pick: PickFn = (w, siblings, how) => {
+    if (checkId.current) void stationDocLookupService.reportOpened(checkId.current, w.workOrderNumber, how);
+    checkId.current = null;
+    onOpen(w, siblings);
+  };
   const apply = (r: StationLookupResult) => {
+    checkId.current = r.checkId ?? null;
     const d = decideLookup(r);
     if (d.kind === 'open') {
       reset();
-      onOpen(d.workOrder, d.siblings);
-    } else if (d.kind === 'choose') setView({ kind: 'choose', items: d.workOrders, message: d.message });
-    else setView({ kind: 'empty', message: d.message });
+      pick(d.workOrder, d.siblings, 'AUTO');
+    } else if (d.kind === 'empty') setView({ kind: 'empty', message: d.message });
+    else setView({ kind: d.kind, items: d.workOrders, message: d.message });
   };
   const run = async (text: string, call: () => Promise<StationLookupResult>) => {
     const my = ++seq.current;
@@ -68,11 +80,11 @@ function useLookupRun(onOpen: OpenFn) {
       Toast.show({ type: 'error', text1: 'Belge okutulamadı', text2: e instanceof Error ? e.message : undefined });
     }
   };
-  return { view, q, setQ, reset, run };
+  return { view, q, setQ, reset, run, pick };
 }
 
 export default function StationDocLookupSheet({ visible, onDismiss, onOpen, readerConfigured, screen }: Props) {
-  const { view, q, setQ, reset, run } = useLookupRun(onOpen);
+  const { view, q, setQ, reset, run, pick } = useLookupRun(onOpen);
   const close = () => {
     reset();
     onDismiss();
@@ -125,14 +137,14 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
             Ara
           </Button>
         </View>
-        <ResultView view={view} onOpen={onOpen} />
+        <ResultView view={view} onPick={pick} />
       </View>
     </ModuleSheet>
   );
 }
 
-/** Sonuç alanı: bekleme · "yok" cümlesi · çok İE listesi. */
-function ResultView({ view, onOpen }: { view: SheetState; onOpen: OpenFn }) {
+/** Sonuç alanı: bekleme · "yok" cümlesi · çok İE listesi · "Emin değilim" listesi. */
+function ResultView({ view, onPick }: { view: SheetState; onPick: PickFn }) {
   return (
     <>
     {view.kind === 'busy' && (
@@ -146,13 +158,14 @@ function ResultView({ view, onOpen }: { view: SheetState; onOpen: OpenFn }) {
         {view.message}
       </Text>
     )}
+    {view.kind === 'unsure' && <UnsureList items={view.items} message={view.message} onPick={onPick} />}
     {view.kind === 'choose' && (
       <View style={styles.list} testID="belge-okut-liste">
         <Text style={styles.muted}>{view.message}</Text>
         {view.items.map((w) => (
           <TouchableRipple
             key={w.id}
-            onPress={() => onOpen(w, view.items)}
+            onPress={() => onPick(w, view.items, 'CHOSEN')}
             style={[styles.item, isHere(w) && styles.itemHere]}
             accessibilityRole="button"
             testID={`belge-okut-ie-${w.workOrderNumber}`}
@@ -174,6 +187,32 @@ function ResultView({ view, onOpen }: { view: SheetState; onOpen: OpenFn }) {
   );
 }
 
+/**
+ * Eşik altı adaylar: satıra dokunmak AÇMAZ (yanlış İE asla kazara açılmasın) — yalnız "Eminim, aç" düğmesi açar.
+ * Her satır puanı ve ne tuttuğunu / ne tutmadığını söyler.
+ */
+function UnsureList({ items, message, onPick }: { items: StationLookupWorkOrder[]; message: string; onPick: PickFn }) {
+  return (
+    <View style={styles.list} testID="belge-okut-emin-degil">
+      <Text style={styles.empty}>{message}</Text>
+      {items.map((w) => (
+        <View key={w.id} style={styles.item}>
+          <View style={styles.itemBody}>
+            <Text style={styles.itemTitle}>{partyLabel(w)}</Text>
+            <Text style={styles.itemDetail}>{rowDetail(w)}</Text>
+            <Text style={styles.muted} testID={`belge-okut-dogrulama-${w.workOrderNumber}`}>{verifyText(w)}</Text>
+            {!!rowWhere(w) && <Text style={styles.muted}>{rowWhere(w)}</Text>}
+          </View>
+          <Button mode="outlined" onPress={() => onPick(w, items, 'CONFIRMED')} contentStyle={styles.big} testID={`belge-okut-onayla-${w.workOrderNumber}`}>
+            Eminim, bu {TERIM.terbiyeIsEmri.tekilKucuk} — aç
+          </Button>
+        </View>
+      ))}
+      <Text style={styles.muted}>Emin değilseniz yukarıdan fiş / parti no yazıp arayın.</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   body: { gap: spacing.md },
   big: { minHeight: 56 },
@@ -183,7 +222,7 @@ const styles = StyleSheet.create({
   muted: { color: colors.textSecondary, fontSize: typography.size.sm },
   empty: { color: colors.dangerText, fontSize: typography.size.base, fontWeight: typography.weight.semibold },
   list: { gap: spacing.sm },
-  item: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, minHeight: 56 },
+  item: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, minHeight: 56, gap: spacing.sm },
   itemHere: { borderWidth: 2, borderColor: colors.success },
   itemBody: { gap: 2 },
   itemTitle: { color: colors.text, fontSize: typography.size.xl, fontWeight: typography.weight.bold },
