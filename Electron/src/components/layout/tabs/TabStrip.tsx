@@ -1,5 +1,6 @@
 import { useRef, type WheelEvent } from "react";
 import { X, Plus, CopyX } from "lucide-react";
+import { closeTabsWithUndo } from "./close-with-undo";
 import {
   DndContext,
   closestCenter,
@@ -28,7 +29,6 @@ export function TabStrip() {
   const closeTab = useTabsStore((s) => s.closeTab);
   const openTab = useTabsStore((s) => s.openTab);
   const reorder = useTabsStore((s) => s.reorder);
-  const closeTabs = useTabsStore((s) => s.closeTabs);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
@@ -79,9 +79,10 @@ export function TabStrip() {
       >
         <Plus className="h-4 w-4" />
       </button>
+      <div aria-hidden className="mx-1 h-4 w-px shrink-0 bg-border" />
       <button
         type="button"
-        onClick={() => closeTabs("all")}
+        onClick={() => closeTabsWithUndo("all")}
         disabled={tabs.length === 0}
         title={`Tümünü kapat (${CLOSE_ALL_SHORTCUT})`}
         aria-label="Tüm sekmeleri kapat"
