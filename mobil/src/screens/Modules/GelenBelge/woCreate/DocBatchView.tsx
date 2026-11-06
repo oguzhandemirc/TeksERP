@@ -32,7 +32,8 @@ const MODE_TEXT: Record<FormApproval, string> = {
 
 /** `multi`: birden çok belge art arda (satır listesi + "Hepsini kaydet"); değilse tek belge okunur, sonra tarayıcı gizlenir.
  *  `autoStart`: "Belge okut"a basınca tarayıcı ek dokunuşsuz açılır. */
-export default function DocBatchView({ route, multi = true, autoStart = false }: { route: ProductionRoute; multi?: boolean; autoStart?: boolean }) {
+// `onNote`: gönderilen belge (aynı taslağa yeni sayfada aynı not, yeni runKey) — İş Emirleri okutma önizlemesi izler.
+export default function DocBatchView({ route, multi = true, autoStart = false, onNote }: { route: ProductionRoute; multi?: boolean; autoStart?: boolean; onNote?: (note: { id: string; noteNo: string }, runKey: number) => void }) {
   const wo = useWoRows(route);
   const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip kaydedin.' });
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -58,8 +59,12 @@ export default function DocBatchView({ route, multi = true, autoStart = false }:
   const { addNote } = wo;
   const doneNote = b.done?.note;
   const doneRun = b.done?.runKey ?? 0;
+  const onNoteRef = useRef(onNote);
+  onNoteRef.current = onNote;
   useEffect(() => {
-    if (doneNote) addNote(doneNote, doneRun);
+    if (!doneNote) return;
+    addNote(doneNote, doneRun);
+    onNoteRef.current?.(doneNote, doneRun);
   }, [doneNote, doneRun, addNote]);
 
   const remove = (i: number) => b.setPages(removePage(b.pages, i));

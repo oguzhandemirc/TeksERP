@@ -12,6 +12,11 @@ import WorkOrderDetailSheet from '../HizliIsEmri/WorkOrderDetailSheet';
 import ColumnsSheet from './ColumnsSheet';
 import FilterBar from './FilterBar';
 import WorkOrderTable from './WorkOrderTable';
+import ActionBar from './ActionBar';
+import ScanStage from './ScanStage';
+import { useScanAction } from './useScanAction';
+import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
+import type { ProductionRoute } from '../../../services/route.service';
 import { useColumnPrefs, useLocationStations, useWorkOrderList } from './useWorkOrderList';
 import { activeFilterCount, DEFAULT_FILTERS, MIN_SEARCH, type ListFilters } from './workOrderRow';
 
@@ -19,10 +24,22 @@ export default function IsEmirleriScreen() {
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [scanRoute, setScanRoute] = useState<ProductionRoute | null>(null);
+  const scan = useScanAction();
   const list = useWorkOrderList(filters);
   const { stations, loading: stationsLoading } = useLocationStations();
   const cols = useColumnPrefs();
   const filtered = filters.search.trim().length >= MIN_SEARCH || activeFilterCount(filters) > 0;
+
+  if (scanRoute) {
+    // Okutma: DocBatchView akışı (BELGE kipinde de); geri → liste (kaydedilen İE listede görünsün diye tazelenir).
+    const back = () => { setScanRoute(null); void list.refetch(); };
+    return (
+      <ScreenChrome title={`Okut · ${shortcutTitle(scanRoute)}`} onStepBack={back}>
+        <ScanStage route={scanRoute} onCancel={back} />
+      </ScreenChrome>
+    );
+  }
 
   return (
     <ScreenChrome title={TERIM.terbiyeIsEmri.cogul}>
@@ -45,6 +62,7 @@ export default function IsEmirleriScreen() {
           onRetry={() => void list.refetch()}
           onOpen={setOpenId}
         />
+        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} onScan={() => scan.type && setScanRoute(scan.type)} />}
       </View>
       <ColumnsSheet visible={columnsOpen} columns={cols.visible} onToggle={cols.toggle} onDismiss={() => setColumnsOpen(false)} />
       <WorkOrderDetailSheet workOrderId={openId} onClose={() => setOpenId(null)} onChanged={() => void list.refetch()} />
