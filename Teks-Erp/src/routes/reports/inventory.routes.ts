@@ -14,6 +14,7 @@ import {
   resolveDateRange,
 } from "../../services/reports/_shared";
 import { getStockScorecard } from "../../services/reports/stock-scorecard.report.service";
+import { getStockKalem } from "../../services/reports/stock-kalem.report.service";
 
 const router = Router();
 /**
@@ -33,6 +34,27 @@ router.get("/scorecard", ...reportGate("inventory/scorecard"), async (req: Reque
   try {
     emptyQuerySchema.parse(req.query);
     const data = await getStockScorecard();
+    res.status(200).json(reportEnvelope(data, resolveDateRange({})));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @swagger
+ * /api/reports/inventory/scorecard/kalem:
+ *   get:
+ *     summary: Stok & Ölü Stok — kalem bazında (ham kumaş başına · bitmiş kumaş+en+renk+kat başına top ve metre)
+ *     tags: [Reports]
+ *     responses:
+ *       200: { description: "totals + ham[] + bitmis[]; toplamlar Stok & Ölü Stok kutularıyla aynı" }
+ */
+// Aynı raporun sekmesi → aynı rapor kapısı ve izin (katalog `kapiTasiyici` iki uç).
+// Bakım dalı (2.11.x): satır tavanı (`capReportLists`) bu sürümde yok; satırlar kalem grubudur.
+router.get("/scorecard/kalem", ...reportGate("inventory/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    emptyQuerySchema.parse(req.query);
+    const data = await getStockKalem();
     res.status(200).json(reportEnvelope(data, resolveDateRange({})));
   } catch (e) {
     next(e);

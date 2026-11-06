@@ -113,7 +113,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   // ── STOK & DEPO ───────────────────────────────────────────────────────────
   { key: "inventory/scorecard", baslik: "Stok & Ölü Stok", soru: "Depoda bugün ne kadar mal var ve ne kadarı ölü stok?",
     sinif: "basit", izin: "report:inventory", modul: "cekirdek:stok-giris", varsayilanGun: null, tarih: "yok",
-    panelYolu: "reports/inventory/scorecard", uc: "/api/reports/inventory/scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/inventory.routes.ts", yol: "/scorecard" }], yuzey: "yaprak" },
+    panelYolu: "reports/inventory/scorecard", uc: ["/api/reports/inventory/scorecard", "/api/reports/inventory/scorecard/kalem"], kapiTasiyici: [{ dosya: "src/routes/reports/inventory.routes.ts", yol: "/scorecard" }, { dosya: "src/routes/reports/inventory.routes.ts", yol: "/scorecard/kalem" }], yuzey: "yaprak" },
 
   // ── DOKUMA ────────────────────────────────────────────────────────────────
   { key: "dokuma/randiman", baslik: "Randıman", soru: "Tezgahlar bu dönemde ne kadar verimli çalıştı?",
