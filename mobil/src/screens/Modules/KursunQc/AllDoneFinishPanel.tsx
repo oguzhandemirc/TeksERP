@@ -10,6 +10,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text } from 'react-native-paper';
 import { colors, palette } from '../../../theme/tokens';
+import TruncatedText from '../../../components/TruncatedText';
 import { allDoneHint, finishStepLabel } from './stationPanels';
 
 interface Props {
@@ -24,7 +25,7 @@ export default function AllDoneFinishPanel({ rollCount, nextStepName, onFinish }
     <View style={styles.wrap} testID="kursun-all-done">
       <Icon source="check-circle-outline" size={64} color={palette.emerald[600]} />
       <Text style={styles.title}>Bütün toplar tamamlandı ({rollCount})</Text>
-      <Text style={styles.hint}>{allDoneHint(nextStepName)}</Text>
+      <TruncatedText style={styles.hint}>{allDoneHint(nextStepName)}</TruncatedText>
       <Button
         mode="contained"
         icon="flag-checkered"
