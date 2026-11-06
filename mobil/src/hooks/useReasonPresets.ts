@@ -141,6 +141,13 @@ async function loadDiskCache(): Promise<void> {
   diskListeners.forEach((fn) => fn());
 }
 
+/** Test kancası: modül-yerel disk kademesi + kalıcı kopya testler arası taşınmasın (sızan liste zemini gizler). */
+export async function __resetReasonPresetDiskForTests(): Promise<void> {
+  diskCache = null;
+  diskLoaded = false;
+  await storage.deleteItem(STORAGE_KEY);
+}
+
 function saveDiskCache(rows: ReasonPreset[]): void {
   diskCache = rows;
   void storage.setItem(STORAGE_KEY, JSON.stringify(rows));

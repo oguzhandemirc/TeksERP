@@ -68,7 +68,9 @@ it('açık → zil rozetli; şerit sunucu süzgeciyle ister ve dönen satırı A
   api.list.mockResolvedValue({ items: [row({ kanalTablet: undefined })], nextCursor: null, sayi: 3 });
   renderWithPaper(<><NotificationBellButton /><NotificationStrip /></>);
   expect(await screen.findByTestId('zil-dugmesi')).toBeTruthy();
-  expect(screen.getByText('3')).toBeTruthy();
+  // Rozet ayrı sorgudan (okunmamış sayısı) gelir ve o sorgu zil canlanınca BAŞLAR: zil görünür olduğunda rozet
+  // henüz yoktur — senkron okuma yükte yarışı kaybeder (kararsızlık kök nedeni, 2026-11-06). Rozet beklenir.
+  expect(await screen.findByText('3')).toBeTruthy();
   expect(await screen.findByTestId('bildirim-serit')).toBeTruthy();
   expect(screen.getByText('Levent bitiyor')).toBeTruthy();
   expect(api.list).toHaveBeenCalledWith(expect.objectContaining({ tab: 'okunmamis', extra: STRIP_FILTER }));
