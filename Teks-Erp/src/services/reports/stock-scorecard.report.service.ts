@@ -111,13 +111,17 @@ export interface StockScorecard {
   }>;
 }
 
-interface StockCell {
+/** Rafta duran tek top — Stok & Ölü Stok'un ve Kalem Bazında sekmesinin ORTAK girdisi. */
+export interface StockCell {
   rollId: string;
+  barcode: string | null;
   itemId: string;
   itemName: string;
   colorId: string | null;
   colorName: string | null;
   width: number | null;
+  /** Topun KENDİ kat kolonu (`Roll.foldType`, katalog kodu). */
+  foldType: string | null;
   status: string;
   entrySource: string;
   qty: number;
@@ -129,40 +133,68 @@ const RAW = ["STOCK"];
 /** Ham ↔ yarı mamul ayrımı: statü aynı (STOCK), ayıran şey giriş kaynağı. */
 const SEMI = "SEMI_FINISHED";
 
+/** Bitmiş depo topu (kutu "Bitmiş depo"). Tek tanım — kalem sekmesi de bunu çağırır. */
+export const isFinishedCell = (c: StockCell): boolean => FINISHED.includes(c.status);
+/** Ham stok topu (kutu "Ham stok") — yarı mamul HARİÇ. */
+export const isRawCell = (c: StockCell): boolean => RAW.includes(c.status) && c.entrySource !== SEMI;
+/** Dışarıdan alınan yarı mamul (kutu "Yarı mamul"). */
+export const isSemiCell = (c: StockCell): boolean => RAW.includes(c.status) && c.entrySource === SEMI;
+
 function specKey(itemId: string, colorId: string | null, width: number | null): string {
   return `${itemId}|${colorId ?? ""}|${width ?? ""}`;
 }
 
+/**
+ * Raftaki toplar (bitmiş + ham + yarı mamul). Sevke okutulmuş / çuvala girmiş
+ * top artık "raf" değildir; kalırsa ölü stok rakamı çıkmak üzere olan malı da sayardı.
+ */
+export async function loadShelfCells(): Promise<StockCell[]> {
+  const rows = await prisma.$queryRaw<
+    Array<{
+      rollId: string; barcode: string | null; itemId: string; itemName: string;
+      colorId: string | null; colorName: string | null; width: number | null; foldType: string | null;
+      status: string; entrySource: string; qty: number; days: number | null;
+    }>
+  >(Prisma.sql`
+    SELECT
+      r.id AS "rollId", r.barcode,
+      r."itemId" AS "itemId", i.name AS "itemName",
+      r."colorId" AS "colorId", c.name AS "colorName",
+      r.width::float AS "width",
+      r."foldType" AS "foldType",
+      r.status::text AS "status",
+      r."entrySource"::text AS "entrySource",
+      r."currentQty"::float AS "qty",
+      -- tz-ok: raftaki bekleme YAŞI iki an arası mutlak farktır, takvim günü değil.
+      CASE WHEN r."statusChangedAt" IS NULL THEN NULL
+           -- tz-ok: raf yaşı mutlak farktır (yukarıdaki satırın devamı).
+           ELSE EXTRACT(EPOCH FROM (now() - r."statusChangedAt")) / 86400.0 END AS "days"
+    FROM rolls r
+    JOIN items i       ON i.id = r."itemId"
+    LEFT JOIN colors c ON c.id = r."colorId"
+    WHERE r.status::text IN (${Prisma.join([...FINISHED, ...RAW])})
+      AND r."shipmentId" IS NULL
+      AND r."sackId" IS NULL
+  `);
+  return rows.map((r) => ({
+    rollId: r.rollId,
+    barcode: r.barcode,
+    itemId: r.itemId,
+    itemName: r.itemName,
+    colorId: r.colorId,
+    colorName: r.colorName,
+    width: r.width === null ? null : Number(r.width),
+    foldType: r.foldType,
+    status: r.status,
+    entrySource: r.entrySource,
+    qty: Number(r.qty),
+    days: r.days === null ? null : Number(r.days),
+  }));
+}
+
 export async function getStockScorecard(): Promise<StockScorecard> {
-  const [rows, demandRows] = await Promise.all([
-    prisma.$queryRaw<
-      Array<{
-        rollId: string; itemId: string; itemName: string;
-        colorId: string | null; colorName: string | null; width: number | null;
-        status: string; entrySource: string; qty: number; days: number | null; barcode: string | null;
-      }>
-    >(Prisma.sql`
-      SELECT
-        r.id AS "rollId", r.barcode,
-        r."itemId" AS "itemId", i.name AS "itemName",
-        r."colorId" AS "colorId", c.name AS "colorName",
-        r.width::float AS "width",
-        r.status::text AS "status",
-        r."entrySource"::text AS "entrySource",
-        r."currentQty"::float AS "qty",
-        -- tz-ok: raftaki bekleme YAŞI iki an arası mutlak farktır, takvim günü değil.
-        CASE WHEN r."statusChangedAt" IS NULL THEN NULL
-             -- tz-ok: raf yaşı mutlak farktır (yukarıdaki satırın devamı).
-             ELSE EXTRACT(EPOCH FROM (now() - r."statusChangedAt")) / 86400.0 END AS "days"
-      FROM rolls r
-      JOIN items i       ON i.id = r."itemId"
-      LEFT JOIN colors c ON c.id = r."colorId"
-      WHERE r.status::text IN (${Prisma.join([...FINISHED, ...RAW])})
-        -- Sevke okutulmuş / çuvala girmiş top artık "raf" değildir; kalırsa
-        -- ölü stok rakamı çıkmak üzere olan malı da sayardı.
-        AND r."shipmentId" IS NULL
-        AND r."sackId" IS NULL
-    `),
+  const [cells, demandRows] = await Promise.all([
+    loadShelfCells(),
     // Açık talep — tanım `production-balance.service` ile BİREBİR.
     prisma.orderLine.findMany({
       // İptal edilmiş kalem talep sayılmaz → o spec "siparişsiz" (ölü stok
@@ -177,20 +209,6 @@ export async function getStockScorecard(): Promise<StockScorecard> {
     }),
   ]);
 
-  const cells: StockCell[] = rows.map((r) => ({
-    rollId: r.rollId,
-    itemId: r.itemId,
-    itemName: r.itemName,
-    colorId: r.colorId,
-    colorName: r.colorName,
-    width: r.width,
-    status: r.status,
-    entrySource: r.entrySource,
-    qty: Number(r.qty),
-    days: r.days === null ? null : Number(r.days),
-  }));
-  const barcodeById = new Map(rows.map((r) => [r.rollId, r.barcode]));
-
   // ── Spec bazında açık talep ────────────────────────────────────────────────
   const demandBySpec = new Map<string, number>();
   for (const l of demandRows) {
@@ -200,12 +218,12 @@ export async function getStockScorecard(): Promise<StockScorecard> {
     demandBySpec.set(k, (demandBySpec.get(k) ?? 0) + open);
   }
 
-  const finished = cells.filter((c) => FINISHED.includes(c.status));
+  const finished = cells.filter(isFinishedCell);
   // Ham ↔ yarı mamul: aynı statü, farklı stok türü. Envanterdeki iki sekmeyle
   // BİREBİR aynı ayrım (`rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED`) — ikisi
   // ayrışırsa aynı soruya iki rakam veren iki yüzey doğar.
-  const raw = cells.filter((c) => RAW.includes(c.status) && c.entrySource !== SEMI);
-  const semi = cells.filter((c) => RAW.includes(c.status) && c.entrySource === SEMI);
+  const raw = cells.filter(isRawCell);
+  const semi = cells.filter(isSemiCell);
 
   // ── Siparişsiz metraj — SPEC bazında, top bazında değil (başlık notu) ──────
   const stockBySpec = new Map<string, number>();
@@ -293,7 +311,7 @@ export async function getStockScorecard(): Promise<StockScorecard> {
     .slice(0, 25)
     .map((c) => ({
       rollId: c.rollId,
-      barcode: barcodeById.get(c.rollId) ?? null,
+      barcode: c.barcode,
       itemName: c.itemName,
       colorName: c.colorName,
       status: c.status,

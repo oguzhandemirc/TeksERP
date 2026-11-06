@@ -15,10 +15,11 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { capReportLists, reportEnvelope, REPORT_MAX_ROWS, resolveDateRange } from "../src/services/reports/_shared";
 import { QUALITY_LISTS, SCRAP_LISTS } from "../src/routes/reports/quality.routes";
-import { STOCK_LISTS } from "../src/routes/reports/inventory.routes";
+import { STOCK_LISTS, STOCK_KALEM_LISTS } from "../src/routes/reports/inventory.routes";
 import { getQualityScorecard } from "../src/services/reports/quality-scorecard.report.service";
 import { getScrapScorecard } from "../src/services/reports/scrap-scorecard.report.service";
 import { getStockScorecard } from "../src/services/reports/stock-scorecard.report.service";
+import { getStockKalem } from "../src/services/reports/stock-kalem.report.service";
 
 let pass = 0;
 let fail = 0;
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
     ["quality/scorecard", await getQualityScorecard(bos, null, {}), QUALITY_LISTS],
     ["quality/scrap-scorecard", await getScrapScorecard(bos, null, {}), SCRAP_LISTS],
     ["inventory/scorecard", await getStockScorecard(), STOCK_LISTS],
+    ["inventory/scorecard (kalem)", await getStockKalem(), STOCK_KALEM_LISTS],
   ];
   for (const [ad, rapor, beyan] of raporlar) {
     const beyanli = new Set(beyan.map(([k]) => k));
