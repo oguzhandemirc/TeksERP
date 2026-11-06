@@ -1976,7 +1976,8 @@ export class WorkOrderService {
           id: true,
           stepSequence: true,
           status: true,
-          station: { select: { id: true, code: true, name: true, type: true, kind: true } },
+          // isActive: pasife alınmış istasyonda bekleyen adım listede işaretlenir (prova 11-06, Geciken İE).
+          station: { select: { id: true, code: true, name: true, type: true, kind: true, isActive: true } },
         },
         orderBy: { stepSequence: "asc" },
       },

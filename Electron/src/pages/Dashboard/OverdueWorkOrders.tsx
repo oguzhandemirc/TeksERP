@@ -67,8 +67,7 @@ export function OverdueWorkOrders() {
 function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
   const end = wo.plannedEndDate ? new Date(wo.plannedEndDate) : null;
   const overdueDays = end ? daysSince(end) : null;
-  const activeStep = wo.steps.find((s) => s.status === "ACTIVE");
-  const stationLabel = activeStep?.station?.name ?? "—";
+  const stationLabel = overdueStationLabel(wo);
 
   return (
     <li>
@@ -87,7 +86,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {wo.targetItem?.name ?? "Hedef kumaş yok"}
             {wo.targetColor ? ` • ${wo.targetColor.name}` : ""}
-            {activeStep ? ` • ${stationLabel}` : ""}
+            {stationLabel ? ` • ${stationLabel}` : ""}
           </p>
         </div>
 
@@ -108,6 +107,16 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
       </button>
     </li>
   );
+}
+
+/**
+ * Aktif adımın istasyonu. Pasife alınmış istasyonda takılan İE gizlenmez (gecikme gerçektir) ama
+ * istasyon doluluk kartında olmayan bir adı çıplak basmak yanıltır → "(pasif istasyon)" (prova 11-06).
+ */
+export function overdueStationLabel(wo: Pick<WorkOrder, "steps">): string | null {
+  const station = wo.steps.find((s) => s.status === "ACTIVE")?.station;
+  if (!station) return null;
+  return station.isActive === false ? `${station.name} (pasif istasyon)` : station.name;
 }
 
 function LoadingRows() {
