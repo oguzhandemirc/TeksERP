@@ -2,6 +2,7 @@ import {
   LABEL_BATCH_MAX,
   initialLabelBatch,
   labelBatchBody,
+  labelBatchStripParts,
   labelBatchStripText,
   labelBatchWarning,
   normalizeLabelBatch,
@@ -60,5 +61,11 @@ describe('tambur müşteri parti no (labelBatch)', () => {
     const long = 'x'.repeat(80);
     expect(withValue(initialLabelBatch(null), long).value).toHaveLength(LABEL_BATCH_MAX);
     expect(normalizeLabelBatch(long)).toHaveLength(LABEL_BATCH_MAX);
+  });
+
+  it('şerit parçaları: değer ve sayaç ayrı; boş değerde ikisi de null', () => {
+    const s = withUse(withValue(initialLabelBatch('ie-1'), ' J1 '), 'J1');
+    expect(labelBatchStripParts(s)).toEqual({ value: 'J1', countText: 'bu değerle 2. top' });
+    expect(labelBatchStripParts(initialLabelBatch('ie-1'))).toEqual({ value: null, countText: null });
   });
 });

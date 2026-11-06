@@ -26,3 +26,24 @@ export function loadUnitIcon(u: LoadUnitLike): string {
   if (u.unitKind === 'CART') return 'dolly';
   return 'sack';
 }
+
+export interface BoardUnitCounts {
+  sackCount: number;
+  cartCount?: number;
+  bulkCount?: number;
+}
+
+/** Karttaki çuval birimi sayısı — "Çuval Çıkar" yalnız bu > 0 iken anlamlıdır (dökme/araba çıkarılamaz). */
+export function boardSackUnits(sh: BoardUnitCounts): number {
+  return Math.max(0, sh.sackCount - (sh.cartCount ?? 0) - (sh.bulkCount ?? 0));
+}
+
+/** Sevk kapısı kartının yük özeti: "3 çuval" · "Dökme" · "2 araba" · "2 çuval · 1 araba". Eski sunucu türleri göndermez → hepsi çuval. */
+export function boardUnitText(sh: BoardUnitCounts): string {
+  const sacks = boardSackUnits(sh);
+  const parts: string[] = [];
+  if (sacks > 0) parts.push(`${sacks} çuval`);
+  if ((sh.cartCount ?? 0) > 0) parts.push(`${sh.cartCount} araba`);
+  if ((sh.bulkCount ?? 0) > 0) parts.push('Dökme');
+  return parts.length > 0 ? parts.join(' · ') : 'Yük yok';
+}

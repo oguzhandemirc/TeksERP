@@ -4,6 +4,8 @@
 // Board eskiden iki `groupBy` (çuval · top) atıyordu; kilit çipi üçüncü okuma olmasın diye ikisi ve kilit
 // lateral'i tek SQL'e katlandı (board sorgu sayısı 5 → 4; `test_sevk_kapisi_cari_kilit` §3 ölçer). Sayılar groupBy
 // ile AYNI yüklem: sevkiyata bağlı her çuval / top, statü süzgeci yok (BRÜT).
+// Yük birimi (2026-11-06): `sackCount` bütün birimlerdir; araba/dökme ayrıca sayılır ki tablet dökme sevkiyatı
+// "1 çuval" diye yazmasın ve çıkarılamayan birime "Çuval Çıkar" önermesin (eski istemci alanları yok sayar).
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -12,12 +14,15 @@ import { activeHoldFlagsLateralSql, listHoldView, type HoldFlagRow, type ListHol
 
 export interface BoardShipmentTotals extends ListHoldView {
   sackCount: number;
+  /** `sackCount` içindeki araba (CART) ve dökme (BULK) birimleri. */
+  cartCount: number;
+  bulkCount: number;
   rollCount: number;
   totalKg: number;
   totalQty: number;
 }
 
-type Row = { id: string; sack_count: number; total_kg: string; roll_count: number; total_qty: string; emanet_mode: string | null } & HoldFlagRow;
+type Row = { id: string; sack_count: number; cart_count: number; bulk_count: number; total_kg: string; roll_count: number; total_qty: string; emanet_mode: string | null } & HoldFlagRow;
 
 /** Sayfadaki sevkiyatların çuval/top toplamları + müşterinin kilit görünümü; boş sayfada sorgu atmaz. */
 export async function boardTotalsWithHold(shipmentIds: string[]): Promise<Map<string, BoardShipmentTotals>> {
@@ -25,6 +30,8 @@ export async function boardTotalsWithHold(shipmentIds: string[]): Promise<Map<st
   const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
     SELECT s.id,
            (SELECT COUNT(*)::int FROM sacks k WHERE k."shipmentId" = s.id) AS sack_count,
+           (SELECT COUNT(*)::int FROM sacks k WHERE k."shipmentId" = s.id AND k."unitKind" = 'CART') AS cart_count,
+           (SELECT COUNT(*)::int FROM sacks k WHERE k."shipmentId" = s.id AND k."unitKind" = 'BULK') AS bulk_count,
            (SELECT COALESCE(SUM(k."weightKg"), 0)::text FROM sacks k WHERE k."shipmentId" = s.id) AS total_kg,
            (SELECT COUNT(*)::int FROM rolls r WHERE r."shipmentId" = s.id) AS roll_count,
            (SELECT COALESCE(SUM(r."currentQty"), 0)::text FROM rolls r WHERE r."shipmentId" = s.id) AS total_qty,
@@ -39,6 +46,8 @@ export async function boardTotalsWithHold(shipmentIds: string[]): Promise<Map<st
       r.id,
       {
         sackCount: r.sack_count,
+        cartCount: r.cart_count,
+        bulkCount: r.bulk_count,
         rollCount: r.roll_count,
         totalKg: Number(r.total_kg),
         totalQty: Number(r.total_qty),

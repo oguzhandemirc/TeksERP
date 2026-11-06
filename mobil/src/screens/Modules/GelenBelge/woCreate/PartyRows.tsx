@@ -2,14 +2,14 @@
 // "Her parti ayrı iş emri | Tek iş emri" seçimi (fabrika varsayılanı "her parti ayrı" ise seçim yok, K1). Tek partili belgede çizilmez.
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Chip, Text, TextInput } from 'react-native-paper';
+import { Chip, Icon, Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import NumpadInput from '../../../../components/NumpadInput';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
-import { colors, spacing, typography } from '../../../../theme';
+import { colors, radius, spacing, typography } from '../../../../theme';
 import { TERIM } from '../../../../lib/terim';
 import { parseMeters } from '../approvalGate';
-import { MODE_LABELS, partyHeading, partyOutcome, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
+import { MODE_LABELS, partyFacts, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
@@ -37,14 +37,23 @@ export default function PartyRows({ row, wo, locked }: { row: DocRow; wo: WoRows
   return (
     <View style={styles.box} testID={`belge-partiler-${row.noteNo}`}>
       <Text style={styles.title}>{`Bu belgede ${m.rows.length} parti var`}</Text>
+      <ResultSummary text={partyResultSummary(result, m.rows.map((r) => r.blockNo))} testID={`belge-parti-ozet-${row.noteNo}`} />
       {m.rows.map((r) => {
         const p = view.parties.find((x) => x.blockNo === r.blockNo);
         const out = partyOutcome(result, r.blockNo);
         // Açılan partinin İE'si yeniden gönderimde sunucuda yeniden açılmaz; alanları kilitlenir.
         const partyLocked = locked || out?.kind === 'OPENED';
         return (
-          <View key={r.blockNo} style={styles.party} testID={`belge-parti-${row.noteNo}-${r.blockNo}`}>
-            <Text style={styles.label}>{partyHeading(r.blockNo, p)}</Text>
+          <View key={r.blockNo} style={[styles.party, out?.kind === 'OPENED' && styles.partyOk, out?.kind === 'FAILED' && styles.partyFail]}
+            testID={`belge-parti-${row.noteNo}-${r.blockNo}`} accessibilityLabel={partyHeading(r.blockNo, p)}>
+            <Text style={styles.partyTitle}>{`${r.blockNo}. parti`}</Text>
+            <View style={styles.facts}>
+              {partyFacts(p).map((f) => (
+                <View key={f} style={styles.fact}>
+                  <Text style={styles.factText}>{f}</Text>
+                </View>
+              ))}
+            </View>
             <View style={styles.row}>
               <TextInput mode="outlined" label="Parti no" value={r.batchNo} disabled={partyLocked} style={styles.input}
                 onChangeText={(t) => setRow(r.blockNo, { batchNo: t })} testID={`belge-parti-no-${row.noteNo}-${r.blockNo}`} />
@@ -71,8 +80,26 @@ export default function PartyRows({ row, wo, locked }: { row: DocRow; wo: WoRows
 
 function OutcomeLine({ out, testID }: { out: PartyOutcome; testID: string }) {
   if (!out) return null;
-  if (out.kind === 'OPENED') return <Text style={styles.ok} testID={testID}>{`${TERIM.terbiyeIsEmri.tekil} açıldı: ${out.workOrderNo}`}</Text>;
-  return <Text style={styles.fail} testID={testID}>{`Açılamadı: ${out.message}`}</Text>;
+  const ok = out.kind === 'OPENED';
+  return (
+    <View style={styles.outcome}>
+      <Icon source={ok ? 'check-circle' : 'alert-circle'} size={22} color={ok ? colors.successDark : colors.danger} />
+      <Text style={ok ? styles.ok : styles.fail} testID={testID}>
+        {ok ? `${TERIM.terbiyeIsEmri.tekil} açıldı: ${out.workOrderNo}` : `Açılamadı: ${out.message}`}
+      </Text>
+    </View>
+  );
+}
+
+/** Kısmi başarıda kartın tepesinde tek cümle: kaç parti açıldı, kaçı bekliyor, ne yapılacak. */
+function ResultSummary({ text, testID }: { text: string | null; testID: string }) {
+  if (!text) return null;
+  return (
+    <View style={styles.summary} testID={testID}>
+      <Icon source="alert" size={22} color={colors.warningDark} />
+      <Text style={styles.summaryText}>{text}</Text>
+    </View>
+  );
 }
 
 /** Metin yerelde tutulur ("198," yazarken sayıya çevrilip silinmesin); sayı her tuşta üst forma gider. */
@@ -89,13 +116,23 @@ function MeterInput({ initial, locked, onChange, testID }: { initial: number | n
 const styles = StyleSheet.create({
   box: { gap: spacing.sm },
   title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  party: { gap: spacing.xs },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
+  party: { gap: spacing.xs, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md },
+  partyOk: { borderColor: colors.success, backgroundColor: colors.successContainer },
+  partyFail: { borderWidth: 2, borderColor: colors.danger },
+  partyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text },
+  // Künye parçaları ayrı kutularda: dar ekranda parça sınırında kırılır, "İşlem: …" kendi içinde sarar.
+  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  // Kutu View'da: Android'de yüzde maxWidth'li arka planlı Text yanlış yükseklik ölçüyor.
+  fact: { backgroundColor: colors.surfaceMuted, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2, maxWidth: '100%' },
+  factText: { fontSize: typography.size.sm, color: colors.text },
+  outcome: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  summary: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.warningContainer, borderRadius: radius.md, padding: spacing.md },
+  summaryText: { flex: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   input: { flex: 1, minWidth: 160 },
   warn: { fontSize: typography.size.sm, color: colors.warningText },
-  ok: { fontSize: typography.size.sm, color: colors.successText, fontWeight: typography.weight.semibold },
-  fail: { fontSize: typography.size.base, color: colors.dangerText, fontWeight: typography.weight.semibold },
+  ok: { flex: 1, fontSize: typography.size.base, color: colors.successText, fontWeight: typography.weight.semibold },
+  fail: { flex: 1, fontSize: typography.size.base, color: colors.dangerText, fontWeight: typography.weight.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 56, justifyContent: 'center' },
 });

@@ -99,3 +99,32 @@ export function verifyText(w: StationLookupWorkOrder): string {
   const parts = v.components.map((c) => `${c.label} ${c.matched ? '✓' : '✗'}${c.detail && c.detail !== 'tuttu' ? ` ${c.detail}` : ''}`);
   return [v.score === null ? 'Puan yok' : `%${v.score}`, ...parts].join(' · ');
 }
+
+/** Rozet tonu: tuttu · kısmen tuttu (ör. 14/16, OCR-benzer) · tutmadı. */
+export type VerifyTone = 'ok' | 'partial' | 'miss';
+
+export interface VerifyBadge {
+  key: string;
+  label: string;
+  tone: VerifyTone;
+  /** "3/16" · "okunan 56967"; tutan alanda ("tuttu") boş. */
+  detail: string | null;
+}
+
+/** Bileşen → rozet: `matched` tuttu; 0 < oran < 1 kısmi (yanlış ✗ değil); oran 0 tutmadı. */
+export function verifyBadges(w: StationLookupWorkOrder): VerifyBadge[] {
+  return (w.verification?.components ?? []).map((c) => ({
+    key: c.key,
+    label: c.label,
+    tone: c.matched ? 'ok' : c.ratio > 0 ? 'partial' : 'miss',
+    detail: c.detail && c.detail !== 'tuttu' ? c.detail : null,
+  }));
+}
+
+/** Puan rozeti: puan yoksa "Puan yok"; eşik verilmişse "eşik %80" eki. */
+export function verifyScoreText(w: StationLookupWorkOrder): string | null {
+  const v = w.verification;
+  if (!v) return null;
+  if (v.score === null) return 'Puan yok';
+  return v.threshold > 0 ? `%${v.score} · eşik %${v.threshold}` : `%${v.score}`;
+}

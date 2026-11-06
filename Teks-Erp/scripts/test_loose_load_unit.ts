@@ -11,7 +11,7 @@
 // ÖLÇÜLENLER:
 //   §1 Bayrak kapalı → 400 LOOSE_LOAD_DISABLED, hiçbir şey yazılmaz (fail-closed)
 //   §2 Dökme: tek BULK birim, toplar bağlı, tahsis Σ = top Σ (brüt)
-//   §3 Araba: araba başına bir CART birim, etiket normalize
+//   §3 Araba: araba başına bir CART birim, etiket normalize; board birim türünü sayar (cartCount/bulkCount)
 //   §4 Bölme doğrulaması: eksik top · çift top · karışık tür · iki dökme · boş/çift araba no
 //   §5 PLANNED'dan dökme birimi çıkarma → 409 LOAD_UNIT_NOT_REMOVABLE
 //   §6 ⭐ İptal önizlemesi her birim/top + nereye döner; iptal: toplar rafta (sackId/shipmentId null), birim havuzda DEĞİL, dissolvedAt dolu
@@ -27,6 +27,7 @@ import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { loadUnitDocLabel } from "../src/services/document-render/shipment-dispatch.html";
+import { boardTotalsWithHold } from "../src/services/helpers/sack-store-board.helper";
 
 const inventory = new InventoryService();
 
@@ -158,6 +159,12 @@ async function main(): Promise<void> {
   );
   const a12 = cu.find((u) => u.unitLabel === "A 12");
   check("§3b Toplar doğru arabada", a12?.rolls.map((r) => r.id).sort().join() === [c[0], c[2]].sort().join());
+  // §3c Sevk kapısı board'u birim türünü sayar (tablet "1 çuval" / "Çuval Çıkar" yazmasın).
+  const totals = await boardTotalsWithHold([bulk.id, cart.id]);
+  const tb = totals.get(bulk.id);
+  const tc = totals.get(cart.id);
+  check("§3c ⭐ Board: dökme 1 birim = 1 bulk, 0 araba", tb?.sackCount === 1 && tb.bulkCount === 1 && tb.cartCount === 0, JSON.stringify(tb));
+  check("§3d ⭐ Board: iki araba = 2 cart, 0 bulk", tc?.sackCount === 2 && tc.cartCount === 2 && tc.bulkCount === 0, JSON.stringify(tc));
 
   // ── §4 BÖLME DOĞRULAMASI ────────────────────────────────────────────────
   const v = [await makeRoll(5), await makeRoll(6)];

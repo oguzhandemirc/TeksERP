@@ -8,6 +8,7 @@ import TruncatedText from '../../../components/TruncatedText';
 import { packingService, type SackStoreShipmentLite, type ShipmentCancelPreview } from '../../../services/packing.service';
 import { showScreenError } from '../../../lib/screenToast';
 import { loadUnitIcon, loadUnitTitle } from '../../../lib/loadUnit';
+import { queryProblem } from '../../../utils/queryState';
 import { palette } from '../../../theme/tokens';
 
 // =============================================================================
@@ -15,6 +16,11 @@ import { palette } from '../../../theme/tokens';
 // HER birim ve top listelenir (çuval havuza döner; dökme/araba çözülür, toplar rafa).
 // Storno (sevk edilmişi geri alma) tablete GELMEZ — SoD, yalnız panel.
 // =============================================================================
+
+const PREVIEW_PROBLEM_TEXT = {
+  offline: 'Çevrimdışısınız — iptal önizlemesi alınamıyor. Bağlantı gelince yeniden deneyin.',
+  error: 'Önizleme alınamadı — bağlantıyı kontrol edip yeniden deneyin.',
+} as const;
 
 type Unit = NonNullable<ShipmentCancelPreview['units']>[number];
 
@@ -83,6 +89,8 @@ export default function ShipmentCancelModal({
     },
   });
   const p = previewQ.data?.data ?? null;
+  // Çevrimdışıyken sorgu hata vermez, DURAKLAR (isPaused) — yalnız isError'a bakılırsa modal boş ve sessiz kalır.
+  const problem = p ? null : queryProblem(previewQ);
 
   return (
     <AppModal visible={!!shipment} onDismiss={onDismiss}>
@@ -95,7 +103,14 @@ export default function ShipmentCancelModal({
           {shipment?.branch ? ` · ${shipment.branch.name}` : ''}
         </TruncatedText>
         {previewQ.isLoading ? <ActivityIndicator style={styles.loading} /> : null}
-        {previewQ.isError ? <Text style={styles.block}>Önizleme alınamadı — bağlantıyı kontrol edip tekrar deneyin.</Text> : null}
+        {problem ? (
+          <View style={styles.problem} testID="sevk-iptal-onizleme-sorun">
+            <Text style={styles.block}>{PREVIEW_PROBLEM_TEXT[problem]}</Text>
+            <Button mode="outlined" icon="refresh" onPress={() => void previewQ.refetch()} contentStyle={styles.btnContent}>
+              Yeniden dene
+            </Button>
+          </View>
+        ) : null}
         {p ? <PreviewBody p={p} /> : null}
         <View style={styles.actions}>
           <Button onPress={onDismiss} style={styles.btn} contentStyle={styles.btnContent} testID="sevk-iptal-vazgec">
@@ -125,6 +140,7 @@ const styles = StyleSheet.create({
   title: { fontWeight: '700' },
   customer: { fontSize: 15, color: palette.slate[700], marginTop: 4 },
   loading: { marginVertical: 16 },
+  problem: { gap: 8, alignItems: 'flex-start' },
   summary: { fontSize: 20, fontWeight: '700', marginTop: 12 },
   block: { fontSize: 15, color: palette.red[700], marginTop: 8 },
   orders: { fontSize: 14, color: palette.amber[900], marginTop: 8 },
@@ -133,7 +149,7 @@ const styles = StyleSheet.create({
   unitHead: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   unitTitle: { fontSize: 16, fontWeight: '700' },
   unitMeta: { fontSize: 14, color: palette.slate[600] },
-  barcodes: { fontSize: 13, color: palette.slate[700], marginTop: 4 },
+  barcodes: { fontSize: 14, color: palette.slate[700], marginTop: 4 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 },
   btn: { minWidth: 140 },
   btnContent: { minHeight: 56 },

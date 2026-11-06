@@ -97,7 +97,9 @@ it('⭐ eşik altı aday → kendiliğinden açılmaz; satır ne tuttuğunu söy
   fireEvent.press(await findByTestId('belge-okut-cek'));
   expect(await findByTestId('belge-okut-emin-degil')).toBeTruthy();
   expect(getByText('Belge tam eşleşmedi (%55) — listeden seçin ya da fiş no ile arayın.')).toBeTruthy();
-  expect(getByTestId('belge-okut-dogrulama-IE1')).toHaveTextContent('%55 · Top no ✗ 3/16');
+  expect(getByTestId('belge-okut-dogrulama-IE1')).toHaveTextContent(/%55 · eşik %80.*Top no.*3\/16/);
+  // Rozet: kısmi eşleşme (3/16) "kısmen tuttu" diye okunur — ekran okuyucu ve renk-körü için metin taşır.
+  expect(getByTestId('belge-okut-rozet-IE1-ROLL_NOS').props.accessibilityLabel).toBe('Top no kısmen tuttu, 3/16');
   expect(onOpen).not.toHaveBeenCalled();
   fireEvent.press(getByTestId('belge-okut-onayla-IE1'));
   expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ workOrderNumber: 'IE1' }), [expect.objectContaining({ workOrderNumber: 'IE1' })]);

@@ -60,17 +60,20 @@ export function openedWorkOrders(r: CreateWorkOrderFromNoteResult): OpenedWo[] {
   return [{ workOrderId: r.workOrderId, workOrderNo: r.workOrderNo, batchNumber: r.batchNumber }];
 }
 
-/** Parti kartı başlığı: belgeden okunan künye (eski sunucuda işlem / müşteri İE no yok → yazılmaz). */
-export function partyHeading(blockNo: number, p: NoteParty | undefined): string {
-  if (!p) return `${blockNo}. parti`;
-  const parts = [
-    `${blockNo}. parti`,
+/** Parti künyesinin parçaları (kartta ayrı ayrı kırılır, kelime ortasında bölünmez); eski sunucu alanları yoksa yazılmaz. */
+export function partyFacts(p: NoteParty | undefined): string[] {
+  if (!p) return [];
+  return [
     `${p.lineCount} satır${p.declaredTopCount !== null ? ` / ${p.declaredTopCount} TOP` : ''}`,
     p.orderNo ? `Sipariş ${p.orderNo}` : null,
     p.processText ? `İşlem: ${p.processText}` : null,
     p.senderWorkOrderNo ? `Müşteri İE ${p.senderWorkOrderNo}` : null,
-  ];
-  return parts.filter(Boolean).join(' · ');
+  ].filter((x): x is string => !!x);
+}
+
+/** Parti kartı başlığı tek satırda (ekran okuyucu etiketi): "1. parti · künye…". */
+export function partyHeading(blockNo: number, p: NoteParty | undefined): string {
+  return [`${blockNo}. parti`, ...partyFacts(p)].join(' · ');
 }
 
 /** Kaydın parti başına sonucu: açıldı (İE no) | açılamadı (neden) | henüz yok. */
@@ -94,3 +97,18 @@ export const MODE_LABELS: Record<MultiPartyMode, string> = {
   PER_PARTY: `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}`,
   SINGLE: `Tek ${TERIM.terbiyeIsEmri.tekilKucuk} (partiler ayrı top)`,
 };
+
+/**
+ * Kısmi sonuç özeti (kartın en üstü): "2/3 parti açıldı · 1 parti açılamadı — nedeni kartında; düzeltip yeniden kaydedin".
+ * Sonuç yoksa ya da hepsi açıldıysa null (tam başarıda satır zaten kapanır).
+ */
+export function partyResultSummary(
+  result: { workOrders: OpenedWo[]; failed?: { blockNo: number; message: string }[] } | null,
+  blockNos: number[],
+): string | null {
+  if (!result) return null;
+  const failed = blockNos.filter((b) => partyOutcome(result, b)?.kind === 'FAILED').length;
+  if (failed === 0) return null;
+  const opened = blockNos.filter((b) => partyOutcome(result, b)?.kind === 'OPENED').length;
+  return `${opened}/${blockNos.length} parti açıldı · ${failed} parti açılamadı — nedeni kartında; düzeltip yeniden kaydedin`;
+}

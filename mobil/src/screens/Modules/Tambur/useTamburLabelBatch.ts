@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   initialLabelBatch,
   labelBatchBody,
+  labelBatchStripParts,
   labelBatchStripText,
   labelBatchWarning,
   withScope,
@@ -20,6 +21,8 @@ export interface TamburLabelBatch {
   /** Başarılı kesimin gönderdiği değer → sayaç. */
   recordUse: (sent: string | null | undefined) => void;
   stripText: string;
+  /** Şeritte büyük değer + küçük sayaç. */
+  stripParts: { value: string | null; countText: string | null };
   warning: string | null;
 }
 
@@ -36,6 +39,7 @@ export function useTamburLabelBatch(enabled: boolean, scopeKey: string | null): 
     body: () => labelBatchBody(enabled, st),
     recordUse: (sent) => setSt((s) => withUse(s, sent)),
     stripText: labelBatchStripText(st),
+    stripParts: labelBatchStripParts(st),
     warning: labelBatchWarning(enabled, st),
   };
 }

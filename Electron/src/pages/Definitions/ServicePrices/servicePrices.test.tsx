@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
-import type { ServicePriceTable, ServicePriceTierRow } from "./service";
+import type { ServiceListRow, ServicePriceTable, ServicePriceTierRow } from "./service";
+import { ServiceList } from "./ServiceList";
 import {
   gramFillCandidates,
   nextRowIndex,
@@ -191,5 +192,23 @@ describe("ServicePriceGrid", () => {
       { key: "9" },
     );
     expect(screen.queryByLabelText("Fiyat")).toBeNull();
+  });
+});
+
+describe("hizmet listesi (gece UX turu 2026-11-06)", () => {
+  const row = (x: Partial<ServiceListRow>): ServiceListRow =>
+    ({ id: "s1", code: "HZM-KURSUN-K1", name: "KURŞUN HİZMETİ K1 (≤30 GR/M)", unit: "M", lifecycleStatus: "ACTIVE", tierRowCount: 0, ...x }) as ServiceListRow;
+  const list = (rows: ServiceListRow[]) =>
+    renderWithProviders(<ServiceList rows={rows} isLoading={false} isError={false} onRetry={vi.fn()} selectedId={null} onSelect={vi.fn()} />);
+
+  it("kademeye özel fiyat yoksa 'kademesiz' DEMEZ (gramaj kademesi olabilir); varsa sayıyı söyler", () => {
+    list([row({}), row({ id: "s2", code: "HZM-B", name: "Brode", tierRowCount: 3 })]);
+    expect(screen.queryByText("kademesiz")).toBeNull();
+    expect(screen.getByText("3 kademe fiyatı")).toBeInTheDocument();
+  });
+
+  it("kesilebilen ad üzerine gelince tam okunur (title)", () => {
+    list([row({})]);
+    expect(screen.getByRole("option")).toHaveAttribute("title", "KURŞUN HİZMETİ K1 (≤30 GR/M) (HZM-KURSUN-K1)");
   });
 });

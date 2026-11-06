@@ -2,6 +2,7 @@
 // onay kartı önizlemeyi sunucudan çeker ve seçilen siparişleri sevk çağrısına verir.
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { onlineManager } from '@tanstack/react-query';
 
 const mockGet = jest.fn();
 const mockPost = jest.fn();
@@ -49,5 +50,18 @@ describe('ShipConfirmSheet', () => {
     expect(body.sackIds).toEqual(['s1', 's2']);
     fireEvent.press(screen.getByTestId('sevk-onay'));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith([]));
+  });
+
+  it('çevrimdışı (sorgu duraklar): önizleme yerine sebep görünür, sessiz boş kalmaz', async () => {
+    onlineManager.setOnline(false);
+    try {
+      renderWithPaper(
+        <ShipConfirmSheet visible onDismiss={jest.fn()} customerId="c" branchId={null} sackIds={['s1']} title="Sevk Et" submitting={false} onConfirm={jest.fn()} />,
+      );
+      expect(await screen.findByTestId('sevk-onizleme-sorun')).toHaveTextContent(/Çevrimdışısınız/);
+      expect(mockPost).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });

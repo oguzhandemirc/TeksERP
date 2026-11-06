@@ -1,4 +1,4 @@
-import { isLooseUnit, loadUnitIcon, loadUnitTitle } from './loadUnit';
+import { boardSackUnits, boardUnitText, isLooseUnit, loadUnitIcon, loadUnitTitle } from './loadUnit';
 
 describe('yük birimi adı', () => {
   it('dökme / araba / çuval ve eski sunucu (alan yok)', () => {
@@ -13,5 +13,24 @@ describe('yük birimi adı', () => {
     expect(isLooseUnit({ unitKind: 'SACK' })).toBe(false);
     expect(isLooseUnit({})).toBe(false);
     expect(loadUnitIcon({})).toBe('sack');
+  });
+});
+
+describe('sevk kapısı kart yük özeti', () => {
+  it('çuval / dökme / araba / karışık', () => {
+    expect(boardUnitText({ sackCount: 3, cartCount: 0, bulkCount: 0 })).toBe('3 çuval');
+    expect(boardUnitText({ sackCount: 1, cartCount: 0, bulkCount: 1 })).toBe('Dökme');
+    expect(boardUnitText({ sackCount: 2, cartCount: 2, bulkCount: 0 })).toBe('2 araba');
+    expect(boardUnitText({ sackCount: 3, cartCount: 1, bulkCount: 0 })).toBe('2 çuval · 1 araba');
+    expect(boardUnitText({ sackCount: 0 })).toBe('Yük yok');
+  });
+  it('eski sunucu (tür sayıları yok) hepsini çuval sayar', () => {
+    expect(boardUnitText({ sackCount: 4 })).toBe('4 çuval');
+    expect(boardSackUnits({ sackCount: 4 })).toBe(4);
+  });
+  it('dökme/araba sevkiyatında çıkarılabilir çuval yok', () => {
+    expect(boardSackUnits({ sackCount: 1, cartCount: 0, bulkCount: 1 })).toBe(0);
+    expect(boardSackUnits({ sackCount: 2, cartCount: 2, bulkCount: 0 })).toBe(0);
+    expect(boardSackUnits({ sackCount: 3, cartCount: 1, bulkCount: 0 })).toBe(2);
   });
 });

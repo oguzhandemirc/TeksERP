@@ -39,7 +39,7 @@ export default function DocSiblingsStrip({ siblings, activeCardBarcode, onSwitch
           ))}
         </ScrollView>
       </View>
-      <IconButton icon="close" size={20} onPress={onDismiss} accessibilityLabel="Şeridi kapat" style={styles.close} />
+      <IconButton icon="close" size={24} onPress={onDismiss} accessibilityLabel="Şeridi kapat" style={styles.close} />
     </Surface>
   );
 }
@@ -57,5 +57,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   muted: { color: colors.textSecondary, fontSize: typography.size.sm },
   btn: { minHeight: 56 },
-  close: { margin: 0 },
+  // Eldivenli elde ıskalanmasın: dokunma hedefi 56dp.
+  close: { margin: 0, width: 56, height: 56 },
 });

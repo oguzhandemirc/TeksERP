@@ -1,5 +1,5 @@
 // K17 — istasyonda belgeden iş emri bulma: sunucu sonucu → ekran kararı (tek aç · çok seçtir · yok mesaj).
-import { decideLookup, partyLabel, rowDetail, rowWhere, searchable, siblingStripText, unsureMessage, verifyText, workOrderSubtitle } from './decide';
+import { decideLookup, partyLabel, rowDetail, rowWhere, searchable, siblingStripText, unsureMessage, verifyBadges, verifyScoreText, verifyText, workOrderSubtitle } from './decide';
 import type { StationLookupResult, StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 
 const wo = (n: string, extra: Partial<StationLookupWorkOrder> = {}): StationLookupWorkOrder => ({
@@ -105,5 +105,26 @@ describe('doğrulama (2026-11-06)', () => {
   it('ne tuttu / ne tutmadı metni', () => {
     expect(verifyText(wo('IE1', { verification: ver(62, false) }))).toBe('%62 · Top no ✗ 3/16 · Müşteri ✓');
     expect(verifyText(wo('IE1'))).toBe('');
+  });
+});
+
+describe('doğrulama rozetleri (gece UX turu)', () => {
+  const comp = (key: string, label: string, ratio: number, detail: string) => ({ key, label, weight: 1, ratio, matched: ratio >= 0.999, detail });
+  const v = (components: ReturnType<typeof comp>[], score: number | null = 62) =>
+    wo('IE9', { verification: { score, passed: false, strongEvidence: true, threshold: 80, targetKey: 't', components } });
+  it('⭐ tuttu / kısmi / tutmadı ayrılır; kısmi eşleşme ✗ sayılmaz; "tuttu" ayrıntısı yazılmaz', () => {
+    const b = verifyBadges(v([comp('OWNER', 'Müşteri', 1, 'tuttu'), comp('ROLL_NOS', 'Top no', 3 / 16, '3/16'), comp('BATCH_NO', 'Parti no', 0.75, 'benzer'), comp('ORDER_NO', 'Sipariş no', 0, 'okunan 56967')]));
+    expect(b.map((x) => [x.label, x.tone, x.detail])).toEqual([
+      ['Müşteri', 'ok', null],
+      ['Top no', 'partial', '3/16'],
+      ['Parti no', 'partial', 'benzer'],
+      ['Sipariş no', 'miss', 'okunan 56967'],
+    ]);
+  });
+  it('⭐ puan metni: eşikli · puansız · doğrulamasız', () => {
+    expect(verifyScoreText(v([], 62))).toBe('%62 · eşik %80');
+    expect(verifyScoreText(v([], null))).toBe('Puan yok');
+    expect(verifyScoreText(wo('IE1'))).toBeNull();
+    expect(verifyBadges(wo('IE1'))).toEqual([]);
   });
 });

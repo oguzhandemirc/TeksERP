@@ -2,6 +2,7 @@
 // listeler, nereye döneceğini söyler; sunucu "iptal edilemez" derse düğme kapalı.
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { onlineManager } from '@tanstack/react-query';
 
 const mockGet = jest.fn();
 const mockPost = jest.fn();
@@ -58,5 +59,17 @@ describe('ShipmentCancelModal', () => {
     fireEvent.press(screen.getByTestId('sevk-iptal-onay'));
     await new Promise((r) => setTimeout(r, 30)); // mutasyon mikro-görevleri aksın
     expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('çevrimdışı (sorgu duraklar): modal sessiz kalmaz, sebep + yeniden dene görünür', async () => {
+    onlineManager.setOnline(false);
+    try {
+      mockGet.mockResolvedValue(preview());
+      renderWithPaper(<ShipmentCancelModal shipment={SHIP} onDismiss={jest.fn()} onDone={jest.fn()} />);
+      expect(await screen.findByTestId('sevk-iptal-onizleme-sorun')).toHaveTextContent(/Çevrimdışısınız/);
+      expect(mockGet).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });

@@ -1,4 +1,4 @@
-// Sol liste: hizmet kalemleri (tam liste — sayfalı değil, hizmet kalemi az) + kademe satırı sayısı.
+// Sol liste: hizmet kalemleri (tam liste — sayfalı değil, hizmet kalemi az) + kademeye özel fiyat sayısı.
 // ↑/↓ ile gezinilir, seçim anında tablo açılır.
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
@@ -98,6 +98,7 @@ function ServiceListItem({
       type="button"
       role="option"
       aria-selected={selected}
+      title={`${row.name} (${row.code})`}
       onClick={() => onSelect(row.id)}
       className={cn(
         "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted/60",
@@ -114,12 +115,15 @@ function ServiceListItem({
             : ""}
         </span>
       </span>
-      <span
-        className="shrink-0 text-xs tabular-nums text-muted-foreground"
-        title="Güncel ve ileri tarihli kademe fiyatı sayısı"
-      >
-        {row.tierRowCount > 0 ? `${row.tierRowCount} kademe` : "kademesiz"}
-      </span>
+      {/* Sayı kademeye ÖZEL fiyat satırıdır, kademe tanımı değil: 0'da "kademesiz" yazmak gramaj kademesi olan hizmeti yanlış anlatıyordu. */}
+      {row.tierRowCount > 0 ? (
+        <span
+          className="shrink-0 text-xs tabular-nums text-muted-foreground"
+          title="Kademeye özel güncel ve ileri tarihli fiyat sayısı"
+        >
+          {`${row.tierRowCount} kademe fiyatı`}
+        </span>
+      ) : null}
     </button>
   );
 }
