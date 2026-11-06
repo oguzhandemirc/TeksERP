@@ -18,7 +18,7 @@ import { useScanAction } from './useScanAction';
 import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
 import type { ProductionRoute } from '../../../services/route.service';
 import { useColumnPrefs, useLocationStations, useWorkOrderList } from './useWorkOrderList';
-import { activeFilterCount, DEFAULT_FILTERS, MIN_SEARCH, type ListFilters } from './workOrderRow';
+import { DEFAULT_FILTERS, emptyStateFor, MIN_SEARCH, type ListFilters } from './workOrderRow';
 
 export default function IsEmirleriScreen() {
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
@@ -29,7 +29,6 @@ export default function IsEmirleriScreen() {
   const list = useWorkOrderList(filters);
   const { stations, loading: stationsLoading } = useLocationStations();
   const cols = useColumnPrefs();
-  const filtered = filters.search.trim().length >= MIN_SEARCH || activeFilterCount(filters) > 0;
 
   if (scanRoute) {
     // Okutma: DocBatchView akışı (BELGE kipinde de); geri → liste (kaydedilen İE listede görünsün diye tazelenir).
@@ -54,13 +53,14 @@ export default function IsEmirleriScreen() {
           visible={cols.visible}
           loading={list.loading}
           problem={list.problem}
-          filtered={filtered}
+          empty={emptyStateFor(filters)}
           refreshing={list.refreshing}
           fetchingMore={list.fetchingMore}
           onEndReached={list.loadMore}
           onRefresh={() => void list.refetch()}
           onRetry={() => void list.refetch()}
           onOpen={setOpenId}
+          onEmptyAction={(a) => setFilters(a === 'clearFilters' ? DEFAULT_FILTERS : { ...filters, status: 'ALL' })}
         />
         {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} onScan={() => scan.type && setScanRoute(scan.type)} />}
       </View>

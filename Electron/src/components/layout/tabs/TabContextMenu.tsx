@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useTabsStore } from "@/store/tabs";
 import { CLOSE_ALL_SHORTCUT, CLOSE_TAB_SHORTCUT, idsToClose, type CloseScope } from "./tab-close";
+import { closeTabsWithUndo } from "./close-with-undo";
 
 // Sıra ve ayırıcılar VS Code/Chrome/JetBrains kalıbı: tekli · kapsamlı · tümü.
 const ITEMS: { scope: CloseScope; label: string; shortcut?: string; separatorBefore?: boolean }[] = [
@@ -22,7 +23,6 @@ const ITEMS: { scope: CloseScope; label: string; shortcut?: string; separatorBef
 /** Sekme çipine sağ tık menüsü; kapsamı boş kalan seçenek pasif (aynı `idsToClose` ölçer). */
 export function TabContextMenu({ tabId, children }: { tabId: string; children: ReactNode }) {
   const tabs = useTabsStore((s) => s.tabs);
-  const closeTabs = useTabsStore((s) => s.closeTabs);
 
   return (
     <ContextMenu>
@@ -33,7 +33,7 @@ export function TabContextMenu({ tabId, children }: { tabId: string; children: R
             {separatorBefore && <ContextMenuSeparator />}
             <ContextMenuItem
               disabled={idsToClose(tabs, tabId, scope).length === 0}
-              onSelect={() => closeTabs(scope, tabId)}
+              onSelect={() => closeTabsWithUndo(scope, tabId)}
             >
               {label}
               {shortcut && <ContextMenuShortcut className="pl-4 tracking-normal">{shortcut}</ContextMenuShortcut>}

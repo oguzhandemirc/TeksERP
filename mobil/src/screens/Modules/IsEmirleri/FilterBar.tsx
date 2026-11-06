@@ -48,7 +48,8 @@ export default function FilterBar({ value, onChange, stations, stationsLoading, 
       <TextInput
         mode="outlined"
         dense={false}
-        placeholder={`${TERIM.terbiyeIsEmri.tekil} no, parti, müşteri, kumaş, renk, sipariş…`}
+        placeholder="Ara: no, parti, müşteri, kumaş, renk, sipariş"
+        accessibilityLabel={`${TERIM.terbiyeIsEmri.tekil} ara: no, parti, müşteri, kumaş, renk, sipariş`}
         value={value.search}
         onChangeText={(search) => set({ search })}
         left={<TextInput.Icon icon={searching ? 'timer-sand' : 'magnify'} />}
@@ -114,8 +115,8 @@ const styles = StyleSheet.create({
   btnActive: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
   btnText: { maxWidth: 170 },
-  caption: { fontSize: typography.size.xs, color: colors.textMuted },
-  label: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.text },
+  caption: { fontSize: typography.size.sm, color: colors.textMuted },
+  label: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   labelActive: { color: colors.brandDark },
-  clearBtn: { width: 44, minHeight: 54, alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm },
+  clearBtn: { width: 56, minHeight: 54, alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm },
 });
