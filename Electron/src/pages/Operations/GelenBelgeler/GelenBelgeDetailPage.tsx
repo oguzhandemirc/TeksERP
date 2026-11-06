@@ -31,6 +31,7 @@ import { useProcessGramaj } from "./processChoices";
 import { WorkOrderFromNoteDialog } from "./WorkOrderFromNoteDialog";
 import { BatchNoPicker } from "./BatchNoPicker";
 import { KursunMetersCard } from "./KursunMetersCard";
+import { PartiesCard } from "./PartiesCard";
 import { showsPerDocument } from "./partiMetre";
 import type { DeliveryNoteDetail } from "./types";
 import { TERIM } from "@/lib/terim";
@@ -152,7 +153,7 @@ export function IncomingDocumentDetailPage() {
               {perDoc && <KursunMetersCard note={n} editable={editable} onPatch={(p) => header.mutateAsync(p)} />}
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} />}{/* iptalde toplar düştü; hüküm anlamsız */}
-              <NoticesStrip notices={n.notices} />
+              <NoticesStrip notices={n.notices} /><PartiesCard noteId={n.id} />
               <NotePeerStrips note={n} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
               <CancelReasonLine note={n} />
