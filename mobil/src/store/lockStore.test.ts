@@ -1,4 +1,5 @@
 import {
+  __resetSystemDialogForTests,
   consumeSuppressedBackground,
   isSystemDialogPending,
   noteSuppressedBackground,
@@ -24,6 +25,7 @@ const advance = (ms: number) => {
 beforeEach(() => {
   now += 60 * 60_000; // önceki testin kuyruk/tavan kalıntıları çok geride kalsın
   jest.spyOn(Date, 'now').mockImplementation(() => now);
+  __resetSystemDialogForTests();
 });
 
 afterEach(() => {

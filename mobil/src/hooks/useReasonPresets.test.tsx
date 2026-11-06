@@ -3,7 +3,7 @@ import { render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { useReasonPresets, isBuiltinPreset } from './useReasonPresets';
+import { __resetReasonPresetDiskForTests, useReasonPresets, isBuiltinPreset } from './useReasonPresets';
 import { reasonPresetService } from '../services/reasonPreset.service';
 
 // =============================================================================
@@ -38,7 +38,10 @@ function wrap(ui: React.ReactElement) {
 }
 
 describe('useReasonPresets', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await __resetReasonPresetDiskForTests();
+  });
 
   it('sunucu erişilemezken GÖMÜLÜ ZEMİNE düşer (liste boş kalmaz)', async () => {
     mockList.mockRejectedValue(new Error('Network Error'));

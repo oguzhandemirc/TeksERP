@@ -102,3 +102,11 @@ export function consumeSuppressedBackground(): number {
   suppressedBackgroundAt = null;
   return at == null ? 0 : Date.now() - at;
 }
+
+/** Test kancası: modül-yerel diyalog/damga durumu testler arası taşınmasın (sızan damga sonraki 'active'i kilitler). */
+export function __resetSystemDialogForTests(): void {
+  dialogDepth = 0;
+  lastDialogEnteredAt = 0;
+  lastDialogSettledAt = 0;
+  suppressedBackgroundAt = null;
+}

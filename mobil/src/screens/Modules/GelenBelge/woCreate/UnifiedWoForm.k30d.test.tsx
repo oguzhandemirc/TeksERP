@@ -261,7 +261,7 @@ describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D 
   it('her parti ayrı İE kipinde makine seçilmez ve form bunu söyler', async () => {
     mockRows = [{ ...row, form: { ...form, multi: { mode: 'PER_PARTY', rows: [] } } } as unknown as DocRow];
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine sonra seçilir.`);
+    expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine parti kartlarında seçilir.`);
     expect(s.queryByTestId('ie-form-makine')).toBeNull();
   });
 });

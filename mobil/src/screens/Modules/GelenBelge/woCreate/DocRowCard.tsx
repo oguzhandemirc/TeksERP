@@ -22,6 +22,7 @@ import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
 import DocRowOwner from './DocRowOwner';
 import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
 import { bandTone, type IssueKey } from './woIssues';
+import type { PartyPlanCtx } from './partyPlan';
 
 export { GramajField } from './DocRowMeasures';
 
@@ -43,13 +44,15 @@ interface Props {
   /** Tek formda "Yeniden okut". */
   onReread?: () => void;
   openRequest?: DocRowOpenRequest | null;
+  /** Tek formda "her parti ayrı": parti kartında gramaj + makine. */
+  partyPlan?: PartyPlanCtx | null;
 }
 
 type Picker = 'owner' | 'batch' | null;
 
 const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
 
-export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, openRequest }: Props) {
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, openRequest, partyPlan }: Props) {
   const { read, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
@@ -74,7 +77,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />
           <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)}
             testID={single ? 'ie-serit-parti' : `belge-serit-parti-${row.noteNo}`} />
-          {f.multi ? <PartyRows row={row} wo={wo} locked={partyLocked} /> : (
+          {f.multi ? <PartyRows row={row} wo={wo} locked={partyLocked} plan={partyPlan} /> : (
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
               <RollRows row={row} wo={wo} locked={locked} />
