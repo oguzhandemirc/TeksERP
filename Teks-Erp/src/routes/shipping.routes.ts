@@ -768,6 +768,22 @@ router.get("/shipments", verifyToken, READ, controller.listShipments);
 router.post("/shipments/preview", verifyToken, READ, controller.previewCreateShipment);
 /**
  * @openapi
+ * /api/shipping/shipments/load-preview:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevk öncesi yük önizlemesi — iş emri / kaynak belge / eksik top / karışık müşteri
+ *     description: >
+ *       Salt-okur. Yükteki toplar iş emrine göre gruplanır (bu sevkte N/M top, eksik kalan, kaynak gelen
+ *       belge no); farklı müşterilerin topları karışmışsa uyarı. Engellemez. Girdi sevkiyat id ya da
+ *       kurulacak yükün çuval/top id'leri.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Önizleme (workOrders, owners, warnings) }
+ *       400: { description: Boş seçim }
+ */
+router.post("/shipments/load-preview", verifyToken, READ, controller.previewShipmentLoad);
+/**
+ * @openapi
  * /api/shipping/shipments/from-rolls:
  *   post:
  *     tags: [Shipping]
@@ -835,6 +851,43 @@ router.get("/shipments/:id", verifyToken, READ, controller.getShipment);
 router.post("/shipments/:id/orders", verifyToken, WRITE, controller.setShipmentOrders);
 router.post("/shipments/:id/add-sacks", verifyToken, WRITE, controller.addSacksToShipment);
 router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeSackFromShipment);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/add-scan:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Planlı sevkiyata okutarak yük ekle (çuval kodu ya da top → dökme/araba)
+ *     description: >
+ *       Çuval kodu havuz çuvalını ekler; top barkodu seçilen yük birimine (Dökme ya da Araba no) girer,
+ *       birim yoksa sevkiyatın içinde doğar. Sevkiyatta tek yük türü (karışık 409 LOAD_UNIT_KIND_MIXED).
+ *       clientToken mantıksal deneme başına; aynı topun yeniden okutulması durum-idempotenttir.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Eklendi (ya da zaten yükteydi) }
+ *       400: { description: Yük türü seçilmedi / bayrak kapalı / ihracat / tartı zorunlu / uygun olmayan top }
+ *       404: { description: Çuval ya da top bulunamadı }
+ *       409: { description: Sevkiyat sevk/iptal edildi · top başka akışa girdi · karışık yük }
+ */
+router.post("/shipments/:id/add-scan", verifyToken, WRITE, controller.addLoadByScan);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/remove-roll:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Planlı sevkiyattaki dökme/araba yükünden tek top çıkar (top rafa döner)
+ *     description: >
+ *       Yalnız sevk çıkmadan (PLANNED). Birim boşalırsa çözülür ve sevkiyattan düşer; tahsis yeniden yazılır
+ *       (eski satırlar damgalanır). Çuvaldaki top için 409 ROLL_IN_SACK.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Çıkarıldı }
+ *       409: { description: Sevk çıkmış / top bu sevkiyatta değil / çuvaldaki top }
+ */
+router.post("/shipments/:id/remove-roll", verifyToken, WRITE, controller.removeRollFromLoadUnit);
 router.post("/shipments/:id/destination", verifyToken, WRITE, controller.setDestination);
 router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setProcedureCode);
 /**

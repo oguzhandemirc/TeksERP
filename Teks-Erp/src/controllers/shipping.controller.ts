@@ -248,6 +248,21 @@ const previewShipmentSchema = z.object({
 });
 const sackIdsSchema = z.object({ sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmeli").max(500) });
 const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
+// PLANNED'a okutarak yük ekleme (9.2): çuval kodu ya da top barkodu; top için yük türü zorunlu.
+const addLoadScanSchema = z.object({
+  barcode: z.string().trim().min(1, "Barkod gerekli").max(64),
+  unitKind: z.enum(["BULK", "CART"]).nullable().optional(),
+  unitLabel: z.string().max(64).nullable().optional(),
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+});
+const removeLoadRollSchema = z.object({ rollId: z.string().uuid("Geçersiz top ID") });
+// Sevk öncesi yük önizlemesi (9.1): sevkiyat ya da kurulacak yükün çuval/top kümesi.
+const loadPreviewSchema = z.object({
+  shipmentId: z.string().uuid("Geçersiz sevkiyat ID").nullable().optional(),
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).max(500).optional(),
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).max(500).optional(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullable().optional(),
+}).refine((b) => !!b.shipmentId || (b.sackIds?.length ?? 0) > 0 || (b.rollIds?.length ?? 0) > 0, { message: "Sevkiyat, çuval ya da top seçilmeli" });
 export const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]), destinationChosen: destinationChosenField });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
 export const deliveryToSchema = z.object(deliveryToFields);
@@ -698,6 +713,30 @@ export class ShippingController {
     try {
       const body = removeShipmentSackSchema.parse(req.body);
       const result = await this.service.removeSackFromShipment(req.params.id as string, body.sackId, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  addLoadByScan = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = addLoadScanSchema.parse(req.body);
+      const result = await this.service.addLoadByScan(req.params.id as string, body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  removeRollFromLoadUnit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = removeLoadRollSchema.parse(req.body);
+      const result = await this.service.removeRollFromLoadUnit(req.params.id as string, body.rollId, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  previewShipmentLoad = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = loadPreviewSchema.parse(req.body);
+      const result = await this.service.previewShipmentLoad(body);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

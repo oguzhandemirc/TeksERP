@@ -169,7 +169,8 @@ import type { Request } from "express";
 import { uyari } from "../lib/logger";
 import { PackingGroupService } from "./packing-group.service";
 import { ACTIVE_SACK_ALLOCATION, clearShipmentAllocationsTx } from "./helpers/sack-allocation.helper";
-import { planLoadUnits, type LoadUnitInput, type LoadUnitPlan } from "./helpers/load-unit.helper";
+import { buildShipmentLoadPreview, type LoadPreview, type LoadPreviewInput } from "./helpers/shipment-load-preview.helper";
+import { assertLoadKindCompatible, LIVE_LOAD_UNIT_WHERE, planLoadUnits, type LoadUnitInput, type LoadUnitPlan } from "./helpers/load-unit.helper";
 import {
   parseQueryParams,
   isCursorRequested,
@@ -324,11 +325,14 @@ async function nextShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
  */
 export async function openLoadUnitTx(
   tx: Prisma.TransactionClient,
-  p: { sackNo: string; kind: LoadUnitKind; label: string | null; customerId: string; branchId: string | null; warehouseId: string | null },
+  p: { sackNo: string; kind: LoadUnitKind; label: string | null; customerId: string; branchId: string | null; warehouseId: string | null; clientToken?: string | null; shipmentId?: string; seq?: number },
 ): Promise<{ id: string }> {
   return tx.sack.create({
     data: {
       sackNo: p.sackNo,
+      // PLANNED'a ekleme (9.2): birim sevkiyatın içinde doğar; token mantıksal denemenin kaydıdır.
+      ...(p.shipmentId ? { shipmentId: p.shipmentId, seq: p.seq ?? null } : {}),
+      clientToken: p.clientToken ?? null,
       unitKind: p.kind,
       unitLabel: p.kind === LoadUnitKind.CART ? p.label : null,
       customerId: p.customerId,
@@ -367,6 +371,30 @@ function loadUnitCekiCode(sk: { unitKind: LoadUnitKind; unitLabel: string | null
   if (sk.unitKind === LoadUnitKind.BULK) return "Dökme";
   if (sk.unitKind === LoadUnitKind.CART) return `Araba ${sk.unitLabel ?? ""}`.trim();
   return null;
+}
+
+/** PLANNED'a eklenecek toplar (9.2): rafta, serbest, uygun durumda ve sevkiyatın deposundan. Gerçek guard tx'teki claim'dir. */
+function assertLooseRollsAddable(
+  rolls: { id: string; barcode: string | null; status: RollStatus; sackId: string | null; shipmentId: string | null; warehouseId: string | null }[],
+  shipmentWarehouseId: string | null,
+): void {
+  const ref = (r: { id: string; barcode: string | null }) => r.barcode ?? r.id.slice(0, 8);
+  for (const r of rolls) {
+    if (r.shipmentId) throw AppError.conflict(`${ref(r)}: zaten bir sevkiyatta`, { code: "ROLL_TAKEN" });
+    if (r.sackId) throw AppError.conflict(`${ref(r)}: bir çuvalın içinde — Paketleme ekranından çıkarın`, { code: "ROLL_TAKEN" });
+    if (NON_SACKABLE_STATUSES.includes(r.status)) throw AppError.badRequest(`${ref(r)}: durumu uygun değil (${r.status})`);
+    if (shipmentWarehouseId && r.warehouseId && r.warehouseId !== shipmentWarehouseId) {
+      throw AppError.badRequest(`${ref(r)}: başka depoda — tek sevkiyat tek depodan çıkar.`);
+    }
+  }
+}
+
+/** Özet birim sayıları (9.4): `sackCount` içindeki araba / dökme — eski istemci alanları yok sayar. */
+function countLoadUnits(units: readonly { unitKind: LoadUnitKind }[]): { cartCount: number; bulkCount: number } {
+  return {
+    cartCount: units.filter((u) => u.unitKind === LoadUnitKind.CART).length,
+    bulkCount: units.filter((u) => u.unitKind === LoadUnitKind.BULK).length,
+  };
 }
 
 async function nextSackNo(tx: Prisma.TransactionClient): Promise<string> {
@@ -477,6 +505,29 @@ type ShipmentReplayRow = {
   id: string; shipmentNo: string; status: ShipmentStatus; customerId: string; branchId: string | null;
   sacks: Array<{ id: string }>; rolls: Array<{ id: string }>;
 };
+
+/** PLANNED'a dökme/araba ekleme (9.2) — token yalnız YENİ doğan birimde durur; mevcut birime ekleme durum-idempotenttir. */
+function looseUnitReplay(ident: { shipmentId: string; kind: LoadUnitKind; label: string | null }) {
+  return tokenReplay<{ id: string; shipmentId: string | null; unitKind: LoadUnitKind; unitLabel: string | null; dissolvedAt: Date | null }, ApiResponse<unknown>>({
+    find: (db, clientToken) =>
+      db.sack.findUnique({ where: { clientToken }, select: { id: true, shipmentId: true, unitKind: true, unitLabel: true, dissolvedAt: true } }),
+    alive: (u) => {
+      if (u.dissolvedAt === null) return;
+      throw AppError.conflict("Bu okutmayla açılan yük birimi sonradan boşaltıldı — topu yeniden okutun.", { code: "LOAD_UNIT_DISSOLVED" });
+    },
+    identity: (u) => [
+      { ad: "shipmentId", mevcut: u.shipmentId, gelen: ident.shipmentId },
+      { ad: "unitKind", mevcut: u.unitKind, gelen: ident.kind },
+      { ad: "unitLabel", mevcut: u.unitLabel, gelen: ident.label },
+    ],
+    collision: "Bu istemci anahtarı başka bir sevkiyatın ya da başka bir arabanın yüküne ait. Ekranı yenileyip yeniden okutun.",
+    respond: (u) => ({
+      success: true,
+      data: { shipmentId: u.shipmentId, unitId: u.id, unitKind: u.unitKind, unitLabel: u.unitLabel, added: 0 },
+      message: "Yük eklendi",
+    }),
+  });
+}
 
 /**
  * Sevkiyat replay'i (A4). 4. durum (BULGU-T3-010): tablet "Hemen Sevk Et" der, sunucu kurar ve çıkarır ama yanıt
@@ -2541,6 +2592,10 @@ export class ShippingService {
         procedureCode: p.procedureCode?.trim() || null,
         deliveryCustomerId: teslim.deliveryCustomerId,
         deliveryAddress: teslim.deliveryAddress,
+        // Araç bilgisi PLANLI doğuşta da saklanır (onay açıkken sessizce düşüyordu); sevk anı yalnız GELENİ yazar.
+        plateNumber: p.plateNumber?.trim() || null,
+        driverName: p.driverName?.trim() || null,
+        carrier: p.carrier?.trim() || null,
         // Sıra ön eki burada DONAR — ekran ve belge bu kolonu okur.
         sackSeqPrefix: await readShippingSackSeqPrefix(tx),
         createdById: p.userId ?? null,
@@ -3199,6 +3254,8 @@ export class ShippingService {
     let izAdd: AllocationAuditTrail | null = null;
     await prisma.$transaction(async (tx) => {
       await touchShipmentPlannedTx(tx, shipmentId);
+      const liveUnits = await tx.sack.findMany({ where: { shipmentId, ...LIVE_LOAD_UNIT_WHERE }, select: { unitKind: true } });
+      assertLoadKindCompatible(liveUnits.map((u) => u.unitKind), LoadUnitKind.SACK);
       const lot = await readPackingLotSettings(tx);
       await assertWholeLotDispatchTx(tx, sackIds, lot.partialDispatch);
       const maxSeqRow = await tx.sack.findFirst({ where: { shipmentId }, orderBy: { seq: "desc" }, select: { seq: true } });
@@ -3250,6 +3307,177 @@ export class ShippingService {
     await this.flushAllocationAudit(izRemove, userId);
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "REMOVE_SACK", sackId } });
     return { success: true, data: {}, message: "Çuval sevkiyattan çıkarıldı (depoya döndü)" };
+  }
+
+  /**
+   * PLANNED sevkiyata OKUTARAK yük ekle (tablet, 9.2): çuval kodu → havuz çuvalı (`addSacksToShipment`);
+   * top barkodu → dökme / araba birimi (`addLooseRollsToShipment`). Sınıflama tek boğazdan: çuval serisi
+   * `matchesSeries`, top `resolveRollByScanCode` (müşteri kodu dahil).
+   */
+  async addLoadByScan(
+    shipmentId: string,
+    data: { barcode: string; unitKind?: "BULK" | "CART" | null; unitLabel?: string | null; clientToken?: string | null },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const code = normalizeScanCode(data.barcode);
+    if (!code) throw AppError.badRequest("Barkod gerekli");
+    if (matchesSeries(resolveSeriesFormat("sack"), code)) {
+      const sack = await prisma.sack.findUnique({ where: { sackNo: code }, select: { id: true, sackNo: true, unitKind: true, shipmentId: true } });
+      if (!sack || sack.unitKind !== LoadUnitKind.SACK) throw AppError.notFound(`Çuval bulunamadı: ${code}`);
+      if (sack.shipmentId === shipmentId) {
+        return { success: true, data: { kind: "SACK", sackId: sack.id, sackNo: sack.sackNo, added: 0 }, message: `${sack.sackNo} zaten bu sevkiyatta` };
+      }
+      const res = await this.addSacksToShipment(shipmentId, [sack.id], userId);
+      return { ...res, data: { kind: "SACK", sackId: sack.id, sackNo: sack.sackNo, added: 1 }, message: `${sack.sackNo} eklendi` };
+    }
+    const resolved = await resolveRollByScanCode(code, { load: (where) => prisma.roll.findUnique({ where, select: { id: true, barcode: true, currentQty: true } }) });
+    if (resolved.kind === "AMBIGUOUS") throw ambiguousCustomerCodeError(resolved);
+    if (resolved.kind === "NONE") throw AppError.notFound(`Bu barkodla top ya da çuval bulunamadı: ${code}`);
+    if (!data.unitKind) {
+      throw AppError.badRequest("Top okutuldu — önce yük türünü seçin (Dökme ya da Araba).", { code: "LOAD_UNIT_KIND_REQUIRED" });
+    }
+    const res = await this.addLooseRollsToShipment(
+      shipmentId,
+      { kind: data.unitKind, label: data.unitLabel ?? null, rollIds: [resolved.roll.id], clientToken: data.clientToken ?? null },
+      userId,
+    );
+    return { ...res, data: { ...(res.data as object), kind: "ROLL", rollId: resolved.roll.id, barcode: resolved.roll.barcode, qty: Number(resolved.roll.currentQty), ...matchExtras(resolved) } };
+  }
+
+  /**
+   * PLANNED sevkiyata dökme/araba yükü ekle (9.2). Dökme sevkiyatın TEK canlı birimine, araba aynı no'lu
+   * canlı arabaya eklenir; yoksa birim `openLoadUnitTx` ile sevkiyatın içinde doğar. Bu birimde zaten
+   * olan top atlanır — yeniden deneme durum-idempotenttir; token yalnız yeni birimde durur.
+   */
+  async addLooseRollsToShipment(
+    shipmentId: string,
+    input: LoadUnitInput & { clientToken?: string | null },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    if (!(await readShipmentLooseLoadEnabled())) {
+      throw AppError.badRequest(`Çuvalsız sevk (dökme / araba) bu kurulumda kapalı (${settingRowPath("shipmentLooseLoadEnabled")}).`, { code: "LOOSE_LOAD_DISABLED" });
+    }
+    const rollIds = [...new Set(input.rollIds)];
+    const [plan] = planLoadUnits([{ kind: input.kind, label: input.label, rollIds }], rollIds);
+    return looseUnitReplay({ shipmentId, kind: plan!.kind, label: plan!.label }).run(input.clientToken, () =>
+      this.addLooseRollsFresh(shipmentId, plan!, input.clientToken ?? null, userId),
+    );
+  }
+
+  private async addLooseRollsFresh(shipmentId: string, plan: LoadUnitPlan, clientToken: string | null, userId?: string): Promise<ApiResponse<unknown>> {
+    const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { id: true, status: true, customerId: true, branchId: true, destination: true } });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status !== ShipmentStatus.PLANNED) throw AppError.conflict("Yalnız sevk edilmemiş (planlanan) sevkiyata yük eklenebilir", { code: "SHIPMENT_NOT_PLANNED" });
+    // Hızlı Sevk ile AYNI kapılar: dökme/araba tartılamaz → ihracat ve tartı zorunluluğu kapalı.
+    if (shipment.destination === ShipmentDestination.EXPORT) {
+      throw AppError.badRequest("Yurtdışı sevkiyata dökme / araba yükü eklenemez — çuvallayıp tartın.", { code: "QUICK_SHIP_EXPORT_UNSUPPORTED" });
+    }
+    if (await readShippingWeighRequiredEnabled()) {
+      throw AppError.badRequest("Bu kurulumda sevk öncesi tartı zorunlu — dökme / araba yükü tartılamaz.", { code: "WEIGH_REQUIRED" });
+    }
+    const rolls = await prisma.roll.findMany({ where: { id: { in: plan.rollIds } }, select: { id: true, barcode: true, status: true, sackId: true, shipmentId: true, warehouseId: true } });
+    if (rolls.length !== plan.rollIds.length) throw AppError.notFound("Top bulunamadı");
+    let iz: AllocationAuditTrail | null = null;
+    const out = await prisma.$transaction(async (tx) => {
+      // Kilit sırası sevkiyat → birim → içerik (öteki çuval yollarıyla aynı).
+      await touchShipmentPlannedTx(tx, shipmentId);
+      const live = await tx.$queryRaw<{ id: string; unitKind: LoadUnitKind; unitLabel: string | null; warehouseId: string | null; seq: number | null }[]>`
+        SELECT id, "unitKind", "unitLabel", "warehouseId", seq FROM sacks
+        WHERE "shipmentId" = ${shipmentId}::uuid AND "dissolvedAt" IS NULL ORDER BY id FOR UPDATE`;
+      assertLoadKindCompatible(live.map((u) => u.unitKind), plan.kind);
+      const target = live.find((u) => u.unitKind === plan.kind && (plan.kind === LoadUnitKind.BULK || u.unitLabel === plan.label)) ?? null;
+      const fresh = rolls.filter((r) => !(target && r.sackId === target.id && r.shipmentId === shipmentId));
+      assertLooseRollsAddable(fresh, live.find((u) => u.warehouseId)?.warehouseId ?? null);
+      const unitId = target?.id ?? (await this.openUnitInShipmentTx(tx, { shipment, plan, clientToken, warehouseId: fresh[0]?.warehouseId ?? null })).id;
+      if (fresh.length > 0) {
+        const claimed = await tx.roll.updateMany({ where: { id: { in: fresh.map((r) => r.id) }, ...SHIPPABLE_ROLL_WHERE }, data: { sackId: unitId, shipmentId } });
+        if (claimed.count !== fresh.length) throw AppError.conflict("Top bu sırada başka bir çuvala / sevkiyata girdi — yenileyip tekrar okutun.", { code: "ROLL_TAKEN" });
+        await this.markSackContentChangedTx(tx, [unitId]);
+        const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+        iz = await this.writeShipmentAllocationsTx(tx, shipmentId, orderRows.map((o) => o.orderId), shipment.branchId ?? null);
+      }
+      return { unitId, opened: target === null, added: fresh.length };
+    });
+    await this.flushAllocationAudit(iz, userId);
+    if (out.added > 0) {
+      await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "ADD_LOOSE", unitId: out.unitId, unitKind: plan.kind, unitLabel: plan.label, rollIds: plan.rollIds, opened: out.opened } });
+    }
+    const unitWord = plan.kind === LoadUnitKind.BULK ? "Dökme" : `Araba ${plan.label}`;
+    return {
+      success: true,
+      data: { shipmentId, unitId: out.unitId, unitKind: plan.kind, unitLabel: plan.label, added: out.added },
+      message: out.added > 0 ? `${unitWord} yüküne eklendi (${out.added} top)` : `Top zaten ${unitWord} yükünde`,
+    };
+  }
+
+  /** Sevkiyatın içinde yeni dökme/araba birimi — sıra sevkiyatın son sırasından devam eder. */
+  private async openUnitInShipmentTx(
+    tx: Prisma.TransactionClient,
+    p: { shipment: { id: string; customerId: string; branchId: string | null }; plan: LoadUnitPlan; clientToken: string | null; warehouseId: string | null },
+  ): Promise<{ id: string }> {
+    const maxSeqRow = await tx.sack.findFirst({ where: { shipmentId: p.shipment.id, seq: { not: null } }, orderBy: { seq: "desc" }, select: { seq: true } });
+    const seq = maxSeqRow?.seq != null ? maxSeqRow.seq + 1 : await readSackSeqStart(tx);
+    return openLoadUnitTx(tx, {
+      sackNo: await nextSackNo(tx),
+      kind: p.plan.kind,
+      label: p.plan.label,
+      customerId: p.shipment.customerId,
+      branchId: p.shipment.branchId ?? null,
+      warehouseId: p.warehouseId,
+      clientToken: p.clientToken,
+      shipmentId: p.shipment.id,
+      seq,
+    });
+  }
+
+  /**
+   * PLANNED sevkiyattaki dökme/araba biriminden TEK top çıkar (9.3) → top rafa döner. Birim boşalırsa
+   * ÇÖZÜLÜR (`dissolvedAt`, sıra boşalır): dökme/araba havuza dönemez; çuvalın sevkiyattan çıkmasının
+   * karşılığı budur. Tahsis yeniden yazılır — eski satırlar damgalanır (ters kayıt bugüne), silinmez.
+   */
+  async removeRollFromLoadUnit(shipmentId: string, rollId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const roll = await prisma.roll.findUnique({ where: { id: rollId }, select: { id: true, barcode: true, sackId: true, shipmentId: true, sack: { select: { unitKind: true, unitLabel: true } } } });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (roll.shipmentId !== shipmentId || !roll.sackId) throw AppError.conflict("Top bu sevkiyatta değil — yenileyin.", { code: "ROLL_NOT_IN_SHIPMENT" });
+    if (roll.sack?.unitKind === LoadUnitKind.SACK) {
+      throw AppError.conflict("Çuvaldaki top buradan çıkarılmaz — çuvalı sevkiyattan çıkarıp Paketleme'de düzenleyin.", { code: "ROLL_IN_SACK" });
+    }
+    const unitId = roll.sackId;
+    const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { branchId: true, status: true } });
+    if (shipment?.status !== ShipmentStatus.PLANNED) {
+      throw AppError.conflict("Sevk çıkmış ya da iptal edilmiş sevkiyattan top çıkarılamaz.", { code: "SHIPMENT_NOT_PLANNED" });
+    }
+    let iz: AllocationAuditTrail | null = null;
+    const dissolved = await prisma.$transaction(async (tx) => {
+      // Sevk çıktıysa / iptal edildiyse 409 (claim); kilit sırası sevkiyat → birim → içerik.
+      await touchShipmentPlannedTx(tx, shipmentId);
+      await tx.$queryRaw`SELECT id FROM sacks WHERE id = ${unitId}::uuid FOR UPDATE`;
+      const removed = await tx.roll.updateMany({ where: { id: rollId, sackId: unitId, shipmentId }, data: { sackId: null, shipmentId: null } });
+      if (removed.count !== 1) throw AppError.conflict("Top bu sırada çıkarıldı ya da taşındı — yenileyin.", { code: "ROLL_NOT_IN_SHIPMENT" });
+      const left = await tx.roll.count({ where: { sackId: unitId } });
+      if (left === 0) {
+        await tx.sack.updateMany({ where: { id: unitId, dissolvedAt: null }, data: { dissolvedAt: new Date(), dissolvedById: userId ?? null, seq: null } });
+      } else {
+        await this.markSackContentChangedTx(tx, [unitId]);
+      }
+      const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+      iz = await this.writeShipmentAllocationsTx(tx, shipmentId, orderRows.map((o) => o.orderId), shipment?.branchId ?? null);
+      return left === 0;
+    });
+    await this.flushAllocationAudit(iz, userId);
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "REMOVE_LOOSE_ROLL", unitId, rollId, unitDissolved: dissolved } });
+    const unitWord = roll.sack?.unitKind === LoadUnitKind.BULK ? "Dökme" : `Araba ${roll.sack?.unitLabel ?? ""}`.trim();
+    return {
+      success: true,
+      data: { shipmentId, unitId, rollId, unitDissolved: dissolved },
+      message: dissolved ? `${roll.barcode ?? "Top"} çıkarıldı — ${unitWord} boşaldı, sevkiyattan düştü` : `${roll.barcode ?? "Top"} ${unitWord} yükünden çıkarıldı (rafa döndü)`,
+    };
+  }
+
+  /** Sevk öncesi yük önizlemesi (9.1) — salt-okur, engellemez; hesap tek helper'da. */
+  async previewShipmentLoad(input: LoadPreviewInput): Promise<ApiResponse<LoadPreview>> {
+    const data = await buildShipmentLoadPreview(input);
+    return { success: true, data, ...(data.warnings.length > 0 ? { warnings: data.warnings } : {}) };
   }
 
   /**
@@ -3786,7 +4014,7 @@ export class ShippingService {
   ): Promise<ApiResponse<unknown>> {
     const shipment = await prisma.shipment.findUnique({
       where: { id: shipmentId },
-      select: { id: true, status: true, destination: true, sacks: { select: { sackNo: true, weightKg: true } } },
+      select: { id: true, status: true, destination: true, sacks: { where: LIVE_LOAD_UNIT_WHERE, select: { sackNo: true, weightKg: true } } },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
     if (shipment.status === ShipmentStatus.DISPATCHED) throw AppError.conflict("Sevkiyat zaten sevk edilmiş");
@@ -3857,8 +4085,10 @@ export class ShippingService {
         id: true, shipmentNo: true, status: true,
         customer: { select: { name: true } },
         branch: { select: { name: true } },
-        _count: { select: { sacks: true, rolls: true, swatches: true } },
+        _count: { select: { sacks: { where: LIVE_LOAD_UNIT_WHERE }, rolls: true, swatches: true } },
         sacks: {
+          // Çözülmüş (boşalmış) dökme/araba sayılmaz, listelenmez, belgeye girmez.
+          where: LIVE_LOAD_UNIT_WHERE,
           orderBy: [{ seq: "asc" }, { id: "asc" }],
           select: {
             id: true, sackNo: true, unitKind: true, unitLabel: true, dissolvedAt: true,
@@ -4064,8 +4294,8 @@ export class ShippingService {
         plateNumber: true, driverName: true,
         customer: { select: { name: true } },
         branch: { select: { name: true } },
-        _count: { select: { sacks: true, rolls: true, swatches: true } },
-        sacks: { orderBy: { seq: "asc" }, select: { id: true, sackNo: true, unitKind: true, unitLabel: true, _count: { select: { rolls: true } } } },
+        _count: { select: { sacks: { where: LIVE_LOAD_UNIT_WHERE }, rolls: true, swatches: true } },
+        sacks: { where: LIVE_LOAD_UNIT_WHERE, orderBy: { seq: "asc" }, select: { id: true, sackNo: true, unitKind: true, unitLabel: true, _count: { select: { rolls: true } } } },
         // Yıkıcı önizleme: etkilenen HER top somut (barkod · sahibi · döneceği raf) — soyut sayı yetmez.
         // `SHIPPED` filtresi mutasyonun kümesiyle aynı (`undoDispatch` yalnız sevkteki topları döndürür).
         rolls: { where: { status: RollStatus.SHIPPED }, orderBy: ROLL_DISPLAY_ORDER, select: { id: true, sackId: true, barcode: true, currentQty: true, preShipStatus: true, ownerCustomer: { select: { name: true } } } },
@@ -4542,7 +4772,7 @@ export class ShippingService {
       },
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
-      _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: LIVE_RETURN_WHERE } } },
+      _count: { select: { sacks: { where: LIVE_LOAD_UNIT_WHERE }, rolls: true, orders: true, returns: { where: LIVE_RETURN_WHERE } } },
       eIrsaliyeler: EIRSALIYE_LIST_SELECT,
     } as const;
 
@@ -4753,7 +4983,12 @@ export class ShippingService {
       const shipIds = rows.filter((r) => r.kind === "SHIPMENT").map((r) => r.id);
       if (shipIds.length === 0) return rows;
       // TEK ANLIK GÖRÜNTÜ + brüt formül tek kaynakta (patron bulutu projeksiyonu da okur).
-      const totals = await loadShipmentGrossTotals(shipIds);
+      // Araba/dökme sayısı: "İçerik" sütunu birim farkında olsun (`_count.sacks` tüm canlı birimler).
+      const [totals, looseUnits] = await Promise.all([
+        loadShipmentGrossTotals(shipIds),
+        prisma.sack.groupBy({ by: ["shipmentId", "unitKind"], where: { shipmentId: { in: shipIds }, unitKind: { not: LoadUnitKind.SACK }, ...LIVE_LOAD_UNIT_WHERE }, _count: { _all: true } }),
+      ]);
+      const looseOf = (id: string, kind: LoadUnitKind) => looseUnits.find((u) => u.shipmentId === id && u.unitKind === kind)?._count._all ?? 0;
       return rows.map((r) => {
         if (r.kind !== "SHIPMENT") return r;
         const t = totals.get(r.id);
@@ -4762,7 +4997,7 @@ export class ShippingService {
           totalMeters: Number(t?.grossMeters ?? D0()),
           totalKg: Number(t?.kg ?? D0()),
           // İade sayısı `_count.returns` ile geldi (aynı `LIVE_RETURN_WHERE`) → ayrı sorgu gerekmez.
-          _count: { ...r._count, rolls: grossRollCount(r._count.rolls, r._count.returns) },
+          _count: { ...r._count, rolls: grossRollCount(r._count.rolls, r._count.returns), carts: looseOf(r.id, LoadUnitKind.CART), bulks: looseOf(r.id, LoadUnitKind.BULK) },
         };
       });
     };
@@ -4982,6 +5217,8 @@ export class ShippingService {
         rolls: { select: { id: true, barcode: true, itemId: true, colorId: true, width: true, currentQty: true, qualityGrade: true, sackId: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
         swatches: { select: { id: true, barcode: true, length: true, width: true, sackId: true } },
         sacks: {
+          // Çözülmüş (boşalmış) dökme/araba sayılmaz, listelenmez, belgeye girmez.
+          where: LIVE_LOAD_UNIT_WHERE,
           orderBy: { seq: "asc" },
           select: {
             id: true, sackNo: true, seq: true, weightKg: true, packageNo: true, unitKind: true, unitLabel: true, dissolvedAt: true, packingGroup: { select: { name: true, code: true } },
@@ -5256,7 +5493,9 @@ export class ShippingService {
         // `rollCount − returnedCount` yapar (ikisi de yanıtta).
         // `totalKg` DEĞİŞMEZ: iade `Sack.weightKg`'a dokunmuyor → zaten brüt;
         // geri-ekleme yapmak çift sayardı.
-        summary: { rollCount: grossShipmentRolls.length, swatchCount: shipment.swatches.length, totalMeters, sackCount: shipment.sacks.length, totalKg, returnedCount: returnedRolls.length, returnedMeters },
+        // Birim sayıları (9.4): `sackCount` BÜTÜN canlı birimlerdir (eski istemci sözleşmesi, board ile aynı);
+        // araba/dökme ayrıca sayılır ki özet dökme sevkiyatı "1 çuval" diye yazmasın.
+        summary: { rollCount: grossShipmentRolls.length, swatchCount: shipment.swatches.length, totalMeters, sackCount: shipment.sacks.length, ...countLoadUnits(shipment.sacks), totalKg, returnedCount: returnedRolls.length, returnedMeters },
       },
     };
   }
@@ -5289,7 +5528,7 @@ export class ShippingService {
       where: finalWhere,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: limit + 1,
-      select: { id: true, shipmentNo: true, status: true, destination: true, procedureCode: true, createdAt: true, customer: { select: { id: true, code: true, name: true } }, branch: { select: { id: true, code: true, name: true } } },
+      select: { id: true, shipmentNo: true, status: true, destination: true, procedureCode: true, createdAt: true, plateNumber: true, driverName: true, carrier: true, customer: { select: { id: true, code: true, name: true } }, branch: { select: { id: true, code: true, name: true } } },
     });
 
     const hasMore = rows.length > limit;
@@ -5301,7 +5540,7 @@ export class ShippingService {
     const totals = await boardTotalsWithHold(ids);
     const data = pageRows.map((s) => {
       const t = totals.get(s.id);
-      return { id: s.id, shipmentNo: s.shipmentNo, status: s.status, destination: s.destination, procedureCode: s.procedureCode, createdAt: s.createdAt, customer: s.customer, branch: s.branch, sackCount: t?.sackCount ?? 0, cartCount: t?.cartCount ?? 0, bulkCount: t?.bulkCount ?? 0, rollCount: t?.rollCount ?? 0, totalKg: t?.totalKg ?? 0, totalQty: t?.totalQty ?? 0, held: t?.held ?? false, holdScopes: t?.holdScopes ?? [], holdText: t?.holdText ?? null };
+      return { id: s.id, shipmentNo: s.shipmentNo, status: s.status, destination: s.destination, procedureCode: s.procedureCode, createdAt: s.createdAt, plateNumber: s.plateNumber, driverName: s.driverName, carrier: s.carrier, customer: s.customer, branch: s.branch, sackCount: t?.sackCount ?? 0, cartCount: t?.cartCount ?? 0, bulkCount: t?.bulkCount ?? 0, cartLabels: t?.cartLabels ?? [], rollCount: t?.rollCount ?? 0, totalKg: t?.totalKg ?? 0, totalQty: t?.totalQty ?? 0, held: t?.held ?? false, holdScopes: t?.holdScopes ?? [], holdText: t?.holdText ?? null };
     });
     return { success: true, data, pagination: { nextCursor, hasMore, limit } };
   }
@@ -5315,6 +5554,8 @@ export class ShippingService {
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         sacks: {
+          // Çözülmüş (boşalmış) dökme/araba sayılmaz, listelenmez, belgeye girmez.
+          where: LIVE_LOAD_UNIT_WHERE,
           orderBy: { seq: "asc" },
           select: {
             id: true, sackNo: true, seq: true, weightKg: true, notes: true, unitKind: true, unitLabel: true,
@@ -5357,7 +5598,7 @@ export class ShippingService {
       };
     });
 
-    return { success: true, data: { id: sh.id, shipmentNo: sh.shipmentNo, status: sh.status, plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, customer: sh.customer, branch: sh.branch, sackCount: sh.sacks.length, sacks } };
+    return { success: true, data: { id: sh.id, shipmentNo: sh.shipmentNo, status: sh.status, plateNumber: sh.plateNumber, driverName: sh.driverName, carrier: sh.carrier, customer: sh.customer, branch: sh.branch, sackCount: sh.sacks.length, ...countLoadUnits(sh.sacks), sacks } };
   }
 
   /**
@@ -5699,6 +5940,8 @@ async function collectShipmentDocContent(
       ...DELIVERY_TO_SELECT,
       orders: { select: { orderId: true, order: { select: { orderNumber: true } } } },
       sacks: {
+        // Çözülmüş (boşalmış) dökme/araba sayılmaz, listelenmez, belgeye girmez.
+        where: LIVE_LOAD_UNIT_WHERE,
         orderBy: { seq: "asc" },
         // ⚠️ RESMİ BELGE — hayalet toplar DIŞLANIR (`SACK_ABSENT_STATUSES`; `SHIPPED`
         // SAYILIR). Bu filtre olmadan çuvalda kayıtlı ama fiziksel olarak binada
@@ -6068,6 +6311,8 @@ async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
       customer: { select: { code: true, name: true, taxNumber: true, exportCode: true, address: true, city: true, country: true } },
       orders: { select: { order: { select: { orderNumber: true } } } },
       sacks: {
+        // Çözülmüş (boşalmış) dökme/araba sayılmaz, listelenmez, belgeye girmez.
+        where: LIVE_LOAD_UNIT_WHERE,
         orderBy: { seq: "asc" },
         select: {
           seq: true, sackNo: true, weightKg: true,

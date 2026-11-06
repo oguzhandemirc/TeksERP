@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Icon, Surface, Text, TouchableRipple } from 'react-native-paper';
 import TruncatedText from '../../../components/TruncatedText';
 import type { SackStoreShipmentLite } from '../../../services/packing.service';
-import { boardSackUnits, boardUnitText } from '../../../lib/loadUnit';
+import { boardSackUnits, boardUnitText, loadKgText } from '../../../lib/loadUnit';
 import { QUERY_PROBLEM_TEXT, queryProblem } from '../../../utils/queryState';
 import { colors, palette, radius, spacing, typography } from '../../../theme/tokens';
 import { CariHoldChip, holdChipText } from './CariHold';
@@ -27,9 +27,11 @@ interface CardProps {
   onContents: (sh: SackStoreShipmentLite) => void;
   onCancel: (sh: SackStoreShipmentLite) => void;
   onDispatch: (sh: SackStoreShipmentLite) => void;
+  /** PLANLI sevkiyata okutarak yük ekle (9.2) — verilmezse düğme yok (eski kullanım). */
+  onAdd?: (sh: SackStoreShipmentLite) => void;
 }
 
-export function ShipmentBoardCard({ sh, busy, onContents, onCancel, onDispatch }: CardProps) {
+export function ShipmentBoardCard({ sh, busy, onContents, onCancel, onDispatch, onAdd }: CardProps) {
   const wait = waitText(sh.createdAt);
   const holdChip = holdChipText(sh);
   const removable = boardSackUnits(sh) > 0;
@@ -51,8 +53,8 @@ export function ShipmentBoardCard({ sh, busy, onContents, onCancel, onDispatch }
         </View>
         <Text style={styles.meta} testID={`sevk-yuk-${sh.id}`}>
           {boardUnitText(sh)} · {fmtM(sh.totalQty)} m
-          {/* Dökme/araba tartılmaz — "0 kg" yazmak tartılmış gibi okunur. */}
-          {sh.totalKg > 0 ? ` · ${sh.totalKg.toLocaleString('tr-TR')} kg` : ''}
+          {/* Dökme/araba tartılmaz — "0 kg" yazmak tartılmış gibi okunur; karışıkta kg çuvallarındır. */}
+          {loadKgText(sh) ? ` · ${loadKgText(sh)}` : ''}
         </Text>
       </View>
       <View style={styles.customerRow}>
@@ -80,15 +82,28 @@ export function ShipmentBoardCard({ sh, busy, onContents, onCancel, onDispatch }
         </View>
       </TouchableRipple>
 
-      <CardActions sh={sh} busy={busy} removable={removable} onContents={onContents} onCancel={onCancel} onDispatch={onDispatch} />
+      <CardActions sh={sh} busy={busy} removable={removable} onContents={onContents} onCancel={onCancel} onDispatch={onDispatch} onAdd={onAdd} />
     </Surface>
   );
 }
 
 /** Kart eylemleri — "Çuval Çıkar" yalnız çıkarılabilir çuval varken (dökme/araba yolu iptaldir). */
-function CardActions({ sh, busy, removable, onContents, onCancel, onDispatch }: CardProps & { removable: boolean }) {
+function CardActions({ sh, busy, removable, onContents, onCancel, onDispatch, onAdd }: CardProps & { removable: boolean }) {
   return (
     <View style={styles.cardActions}>
+      {onAdd && sh.cartCount !== undefined ? (
+        <Button
+          mode="outlined"
+          icon="barcode-scan"
+          onPress={() => onAdd(sh)}
+          disabled={busy}
+          style={styles.actBtn}
+          contentStyle={styles.actBtnContent}
+          testID={`sevk-yuk-ekle-${sh.id}`}
+        >
+          Yük Ekle
+        </Button>
+      ) : null}
       {removable ? (
         <Button
           mode="outlined"

@@ -6,6 +6,7 @@ import prisma from "../lib/prisma";
 import { isActiveLine, isMeasuredLine } from "../services/helpers/order-line-scope.helper";
 import { daysPastDeadline, isDeadlineOpenStatus } from "../services/helpers/order-deadline.helper";
 import { grossRollCount, loadShipmentGrossTotals, LIVE_RETURN_WHERE } from "../services/helpers/shipment-gross-totals.helper";
+import { LIVE_LOAD_UNIT_WHERE } from "../services/helpers/load-unit.helper";
 import { loadSackContentTotals } from "../services/helpers/sack-content-totals.helper";
 import { currentWorkOrderStep } from "../services/helpers/work-order-current-step.helper";
 import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
@@ -91,7 +92,7 @@ async function shipmentDerived(rows: readonly RawRow[]): Promise<DerivedValues> 
   const totals = await loadShipmentGrossTotals(shipIds);
   const counts = await prisma.shipment.findMany({
     where: { id: { in: shipIds } },
-    select: { id: true, _count: { select: { sacks: true, rolls: true, returns: { where: LIVE_RETURN_WHERE } } } },
+    select: { id: true, _count: { select: { sacks: { where: LIVE_LOAD_UNIT_WHERE }, rolls: true, returns: { where: LIVE_RETURN_WHERE } } } },
   });
   const countById = new Map(counts.map((c) => [c.id, c._count]));
   const links = await prisma.shipmentOrder.findMany({

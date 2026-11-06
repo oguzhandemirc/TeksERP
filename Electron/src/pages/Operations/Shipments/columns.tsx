@@ -6,6 +6,7 @@ import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat, formatNumber, formatFixed } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
 import { EIrsaliyeStatusBadge } from "./eirsaliye/EIrsaliyeStatusBadge";
+import { loadKgSuffix, loadUnitsText } from "@/lib/load-unit";
 
 // Dışa aktarım metinleri — hücreyle aynı kaynak (hücre bu fonksiyonları çağırır).
 type S = ShipmentListItem;
@@ -14,10 +15,16 @@ const branchText = (s: S) => (s.branch ? `${s.branch.name}${s.branch.code ? ` ·
 export const countsText = (s: Pick<S, "kind" | "_count">) => {
   const c = s._count;
   const orders = c.orders > 0 ? `${c.orders} sipariş` : null;
-  const parts = s.kind === "DIRECT" ? [`${c.rolls} top`, orders] : [orders, `${c.rolls} top`, `${c.sacks} çuval`];
+  const parts = s.kind === "DIRECT" ? [`${c.rolls} top`, orders] : [orders, `${c.rolls} top`, loadUnitsText(c.sacks, c.carts, c.bulks)];
   return parts.filter(Boolean).join(" · ");
 };
-const kgText = (s: S) => (s.totalKg > 0 ? `${formatNumber(s.totalKg, 1)} kg` : "");
+// Kg yalnız çuvallarındır: çuvalsız yükte boş, karışıkta "(çuvallar)".
+const kgText = (s: S) => {
+  if (!(s.totalKg > 0)) return "";
+  const suffix = s.kind === "DIRECT" ? "all" : loadKgSuffix(s._count.sacks, s._count.carts, s._count.bulks);
+  if (suffix === "none") return "";
+  return `${formatNumber(s.totalKg, 1)} kg${suffix === "sacks-only" ? " (çuvallar)" : ""}`;
+};
 const metersText = (s: S) => `${formatFixed(s.totalMeters, 2)} m`;
 const vehicleText = (s: S) => [s.plateNumber, s.driverName].filter(Boolean).join(" · ");
 const dateText = (s: S) => safeFormat(s.dispatchedAt ?? s.createdAt, "dd.MM.yyyy HH:mm");

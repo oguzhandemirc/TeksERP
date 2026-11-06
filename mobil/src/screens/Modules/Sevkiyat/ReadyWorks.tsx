@@ -26,9 +26,18 @@ export function readyChipRows(rows: ReadyWorkRow[] | null | undefined): ReadyWor
   return rows.filter((r) => (r.state === 'READY' || r.state === 'PARTIAL') && r.readyCount > 0);
 }
 
+/** READY → "Hazır: 3 top · 1.250 m"; PARTIAL → neden kısmen olduğunu söyler ("· 16 top işlemde"). */
 export function readyChipText(r: ReadyWorkRow): string {
-  const head = r.state === 'READY' ? 'Hazır' : 'Kısmen hazır';
-  return `${head}: ${r.readyCount} top · ${fmtM(r.readyMeters)} m`;
+  if (r.state === 'READY') return `Hazır: ${r.readyCount} top · ${fmtM(r.readyMeters)} m`;
+  const wait = r.inProcessCount > 0 ? ` · ${r.inProcessCount} top işlemde` : '';
+  return `Hazır: ${r.readyCount} top · ${fmtM(r.readyMeters)} m${wait}`;
+}
+
+/** Sevk yolu ipucu — çuvalsız sevk açıksa onu da söyler. */
+export function readyHint(looseLoadEnabled: boolean): string {
+  return looseLoadEnabled
+    ? 'Sevk Paketleme ekranından kurulur: hazır toplar çuvallanır ya da Çuvalsız Sevk ile dökme / araba olarak yüklenir.'
+    : 'Sevk, hazır topların çuvallanmasıyla Paketleme ekranından kurulur.';
 }
 
 /** Müşteri başına hazır iş çipleri — ayrı istek; 404/hata/boş → hiçbir şey çizilmez. */
@@ -68,11 +77,13 @@ type WorkAxis = 'workOrder' | 'deliveryNote';
 export function ReadyWorksSheet({
   customer,
   incomingDocsEnabled,
+  looseLoadEnabled = false,
   onDismiss,
   onGoPacking,
 }: {
   customer: ReadyWorkRow | null;
   incomingDocsEnabled: boolean;
+  looseLoadEnabled?: boolean;
   onDismiss: () => void;
   onGoPacking: (customerId: string) => void;
 }) {
@@ -127,12 +138,12 @@ export function ReadyWorksSheet({
           <TruncatedText style={styles.workLabel}>{w.label}</TruncatedText>
           <Text style={styles.workMeta}>
             {readyChipText(w)}
-            {w.inProcessCount > 0 ? ` · işlemde ${w.inProcessCount} top` : ''}
+            {(w.loadedCount ?? 0) > 0 ? ` · ${w.loadedCount} top yükte` : ''}
             {w.targetMeters ? ` · hedef ${fmtM(w.targetMeters)} m` : ''}
           </Text>
         </View>
       ))}
-      <Text style={styles.hint}>Sevk, hazır topların çuvallanmasıyla Paketleme ekranından kurulur.</Text>
+      <Text style={styles.hint}>{readyHint(looseLoadEnabled)}</Text>
     </ModuleSheet>
   );
 }

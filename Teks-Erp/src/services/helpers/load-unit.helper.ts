@@ -7,7 +7,7 @@
 // Burada yalnız SAF doğrulama; tek yaratıcı `openLoadUnitTx` ve tek çözücü
 // `dissolveLoadUnitsTx` audit'i basan `shipping.service.ts` içinde.
 // =============================================================================
-import { LoadUnitKind } from "@prisma/client";
+import { LoadUnitKind, type Prisma } from "@prisma/client";
 
 import { AppError } from "../../utils/app-error";
 
@@ -63,4 +63,25 @@ export function planLoadUnits(units: LoadUnitInput[], rollIds: string[]): LoadUn
     throw AppError.badRequest("Seçilen her top bir yük birimine atanmalı", { code: "LOAD_UNITS_INVALID" });
   }
   return plans;
+}
+
+/**
+ * Sevkiyatın CANLI yük birimleri: boşalınca çözülen dökme/araba (`dissolvedAt` dolu, topsuz) sevkiyatta
+ * iz olarak kalır ama sayılmaz, listelenmez, belgeye girmez — çuvalın sevkiyattan çıkmasının karşılığı.
+ */
+export const LIVE_LOAD_UNIT_WHERE = { dissolvedAt: null } satisfies Prisma.SackWhereInput;
+
+const KIND_WORD: Record<LoadUnitKind, string> = { SACK: "çuval", BULK: "dökme yük", CART: "araba" };
+
+/**
+ * Aynı sevkiyatta tek yük türü (karışık sevk ertelendi, kullanıcı kararı 2026-11-06 md. 6): canlı birimlerin
+ * türü gelenle aynı olmalı; boş sevkiyat her türü alır. Çağıran sevkiyatı kilitlemiş olmalı.
+ */
+export function assertLoadKindCompatible(existing: readonly LoadUnitKind[], incoming: LoadUnitKind): void {
+  const other = existing.find((k) => k !== incoming);
+  if (!other) return;
+  throw AppError.conflict(
+    `Bu sevkiyatta ${KIND_WORD[other]} var; aynı sevkiyata ${KIND_WORD[incoming]} eklenemez (karışık yük bu sürümde yok). Ayrı sevkiyat kurun.`,
+    { code: "LOAD_UNIT_KIND_MIXED", existing: other, incoming },
+  );
 }

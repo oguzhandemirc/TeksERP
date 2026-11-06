@@ -41,6 +41,7 @@ import {
   SHIP_READY_READY_STATUSES,
   SHIP_READY_SCRAP_STATUSES,
   readinessClassOf,
+  loadedRollSql,
   readinessClassSql,
 } from "../src/services/helpers/ship-readiness.helper";
 import {
@@ -451,12 +452,14 @@ function referenceAggSql(unit: ReadyWorkUnit): Prisma.Sql {
   return Prisma.sql`
     WITH members AS (${membershipSql(unit)}),
     classed AS (
-      SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls
+      SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls, ${loadedRollSql("r")} AS loaded
       FROM members m JOIN rolls r ON r.id = m.roll_id
     )
     SELECT unit_id,
-      COUNT(*) FILTER (WHERE cls = 'READY')            AS ready_count,
-      SUM(qty) FILTER (WHERE cls = 'READY')            AS ready_m,
+      COUNT(*) FILTER (WHERE cls = 'READY' AND NOT loaded) AS ready_count,
+      SUM(qty) FILTER (WHERE cls = 'READY' AND NOT loaded) AS ready_m,
+      COUNT(*) FILTER (WHERE cls = 'READY' AND loaded) AS loaded_count,
+      SUM(qty) FILTER (WHERE cls = 'READY' AND loaded) AS loaded_m,
       COUNT(*) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_count,
       SUM(qty) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_m,
       SUM(qty) FILTER (WHERE cls = 'GONE')             AS shipped_m,

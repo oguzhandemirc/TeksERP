@@ -18,6 +18,8 @@ export interface ReadyWorkRow {
   state: ReadyWorkState;
   readyCount: number;
   readyMeters: number;
+  /** Hazır ama çuvala/sevkiyata girmiş toplar — hazır sayısına girmez (yeni sunucu). */
+  loadedCount?: number;
   inProcessCount: number;
   inProcessMeters: number;
   shippedMeters: number;

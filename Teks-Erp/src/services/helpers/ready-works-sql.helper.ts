@@ -11,6 +11,7 @@ import {
   customerBatchKeySql,
   customerBatchMemberSql,
   liveReadinessSql,
+  loadedRollSql,
   readinessClassSql,
 } from "./ship-readiness.helper";
 
@@ -114,6 +115,8 @@ export interface AggRow {
   unit_id: string;
   ready_count: bigint;
   ready_m: Prisma.Decimal | null;
+  loaded_count: bigint;
+  loaded_m: Prisma.Decimal | null;
   in_process_count: bigint;
   in_process_m: Prisma.Decimal | null;
   shipped_m: Prisma.Decimal | null;
@@ -134,14 +137,16 @@ export function aggregateUnitsSql(unit: ReadyWorkUnit, units: readonly string[] 
   return Prisma.sql`
     WITH members AS (${membershipSql(unit, undefined, units)}),
     classed AS (
-      SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls
+      SELECT m.unit_id, r."currentQty" AS qty, ${readinessClassSql("r")} AS cls, ${loadedRollSql("r")} AS loaded
       FROM members m ${unit === "deliveryNote" || unit === "customerBatch"
-        ? Prisma.sql`CROSS JOIN LATERAL (SELECT x."currentQty", x.status FROM rolls x WHERE x.id = m.roll_id OFFSET 0) r`
+        ? Prisma.sql`CROSS JOIN LATERAL (SELECT x."currentQty", x.status, x."sackId", x."shipmentId" FROM rolls x WHERE x.id = m.roll_id OFFSET 0) r`
         : Prisma.sql`JOIN rolls r ON r.id = m.roll_id`}
     )
     SELECT unit_id,
-      COUNT(*) FILTER (WHERE cls = 'READY')            AS ready_count,
-      SUM(qty) FILTER (WHERE cls = 'READY')            AS ready_m,
+      COUNT(*) FILTER (WHERE cls = 'READY' AND NOT loaded) AS ready_count,
+      SUM(qty) FILTER (WHERE cls = 'READY' AND NOT loaded) AS ready_m,
+      COUNT(*) FILTER (WHERE cls = 'READY' AND loaded) AS loaded_count,
+      SUM(qty) FILTER (WHERE cls = 'READY' AND loaded) AS loaded_m,
       COUNT(*) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_count,
       SUM(qty) FILTER (WHERE cls = 'IN_PROCESS')       AS in_process_m,
       SUM(qty) FILTER (WHERE cls = 'GONE')             AS shipped_m,

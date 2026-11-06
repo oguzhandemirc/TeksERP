@@ -326,6 +326,8 @@ export interface ShipmentDetail {
     swatchCount: number;
     totalMeters: number;
     sackCount: number;
+    cartCount?: number;
+    bulkCount?: number;
     totalKg: number;
     returnedCount: number;
     returnedMeters: number;
@@ -385,6 +387,11 @@ export interface SackStoreShipmentLite {
   /** `sackCount` içindeki araba / dökme birimleri. Eski backend göndermez → hepsi çuval sayılır. */
   cartCount?: number;
   bulkCount?: number;
+  cartLabels?: string[];
+  /** PLANLI'da girilmiş araç bilgisi (yeni sunucu) — Sevk Et formu bununla dolar. */
+  plateNumber?: string | null;
+  driverName?: string | null;
+  carrier?: string | null;
   rollCount: number;
   totalKg: number;
   totalQty: number;
@@ -447,6 +454,8 @@ export interface ShipmentSackContents {
   customer: Ref;
   branch: { id: string; name: string } | null;
   sackCount: number;
+  cartCount?: number;
+  bulkCount?: number;
   sacks: SackContentSack[];
 }
 
