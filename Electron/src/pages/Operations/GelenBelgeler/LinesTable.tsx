@@ -64,8 +64,8 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
       ) : (
       <ProblemFilter on={onlyProblems} onChange={setOnlyProblems} shown={view.rows.length} total={view.total} problems={view.problemCount} />
       )}
-    <div className="overflow-x-auto rounded-lg border">
-      <LinesGrid perDocument={perDocument} bare>
+    <div>
+      <LinesGrid perDocument={perDocument}>
         <EmptyRows noLines={noDocLines} noProblems={onlyProblems && !perDocument && view.rows.length === 0} cols={perDocument ? 7 : 9} />
         {docLines.map((l) => <LineRow key={l.id} {...rowProps(l)} />)}
       </LinesGrid>
@@ -98,9 +98,10 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
   );
 }
 
-/** Satır tablosu iskeleti; `bare` = dış kaydırıcıyı çağıran sağlar. */
-function LinesGrid({ perDocument, bare = false, children }: { perDocument: boolean; bare?: boolean; children: ReactNode }) {
-  const table = (
+/** Satır tablosu iskeleti (gömülü bölüm tablosu: çerçeveli, kendi içinde yatay kayar). */
+function LinesGrid({ perDocument, children }: { perDocument: boolean; children: ReactNode }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
     <table className="w-full min-w-[900px] text-sm">
       <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
         <tr>
@@ -117,8 +118,8 @@ function LinesGrid({ perDocument, bare = false, children }: { perDocument: boole
       </thead>
       <tbody>{children}</tbody>
     </table>
+    </div>
   );
-  return bare ? table : <div className="overflow-x-auto rounded-lg border">{table}</div>;
 }
 
 function EmptyRows({ noLines, noProblems, cols }: { noLines: boolean; noProblems: boolean; cols: number }) {
