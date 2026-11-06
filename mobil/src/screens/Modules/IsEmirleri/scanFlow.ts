@@ -104,9 +104,27 @@ export const KIND_BUTTON: Record<WoCreateKind, string> = { STANDARD: 'Belge Okut
 /** Okutma akışının İE türü: Fason düğmesi → Fason (müşteri malı); İE oluştur → null (bugünkü türetme). */
 export const scanWoType = (kind: WoCreateKind): 'CUSTOMER_GOODS_SERVICE' | null => (kind === 'CUSTOMER_GOODS' ? 'CUSTOMER_GOODS_SERVICE' : null);
 
-/** Fason önizlemesi: müşteri (malın sahibi) İLK ve büyük karo; eşleşmiş cari yoksa kırmızı "seçin" (ham belge metni müşteri değildir). */
-export function customerGoodsTiles(s: ReadSummary): PreviewTile[] {
-  const name = s.ownerSuggestion?.name ?? null;
-  const head: PreviewTile = { key: 'musteri', label: 'Müşteri (malın sahibi)', value: name ?? 'Bulunamadı — seçin', state: name ? 'found' : 'missing' };
+/**
+ * Fason önizlemesi: müşteri (malın sahibi) İLK ve büyük karo. Karar formun müşteri alanıyla AYNI (`initialRowForm`):
+ * taslakta kayıtlı sahip > güçlü öneri; tam metin eşleşmesi alana yazılmaz, formda sorulur. Kart "bulunamadı"
+ * derken form "Seçildi" demesin (prova 2026-11-06). `ownerName` taslaktaki sahibin adını cari listesinden çözer.
+ */
+export function customerGoodsTiles(s: ReadSummary, ownerName?: (id: string) => string | null | undefined): PreviewTile[] {
+  const label = 'Müşteri (malın sahibi)';
+  const sug = s.ownerSuggestion ?? null;
+  let head: PreviewTile;
+  if (s.ownerCustomerId) {
+    const name = ownerName?.(s.ownerCustomerId) ?? (sug?.customerId === s.ownerCustomerId ? sug.name : null) ?? 'Seçili müşteri';
+    head = { key: 'musteri', label, value: name, state: 'found' };
+  } else if (sug && sug.source !== 'FULL_TEXT') {
+    head = { key: 'musteri', label, value: sug.name, state: 'found' };
+  } else if (sug) {
+    head = { key: 'musteri', label, value: `${sug.name} mi? — formda onaylayın`, state: 'missing' };
+  } else {
+    head = { key: 'musteri', label, value: 'Bulunamadı — seçin', state: 'missing' };
+  }
   return [head, ...previewTiles(s).filter((t) => t.key !== 'musteri')];
 }
+
+/** Önizlemede "Müşteri seç" düğmesi yalnız müşteri karosu eksikken (karo ile aynı karar). */
+export const customerTileMissing = (tiles: readonly PreviewTile[]): boolean => tiles[0]?.key === 'musteri' && tiles[0].state === 'missing';

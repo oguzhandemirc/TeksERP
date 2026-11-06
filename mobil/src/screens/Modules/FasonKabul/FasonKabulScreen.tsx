@@ -2058,7 +2058,7 @@ export default function FasonKabulScreen() {
                       <Text style={styles.newRollHint} numberOfLines={3}>
                         {receiveMode === 'SINGLE'
                           ? 'Toplar dikili TEK parça döndü — GELEN TOPLAM METREYİ yaz. Parça parça geldiyse "Adet Adet Geldi"yi seç.'
-                          : 'İrsaliyede yazılı her parça için metraj gir. KK2/Kurşun ekranı ve stok bu kayıtlardan beslenir.'}
+                          : 'İrsaliyede yazılı her parça için metraj gir. Kurşun/kalite kontrol ekranı ve stok bu kayıtlardan beslenir.'}
                       </Text>
                     </View>
                     {/* "Parça Ekle" YALNIZ parça-parça modunda: tek parça derken
@@ -3057,7 +3057,7 @@ function CancelReceiptModal({
                   <Icon source="alert-octagon" size={16} color="#b91c1c" />
                   <Text style={cancelStyles.unsafeBannerText}>
                     Bazı toplar işlenmiş — iptal güvenli değil. Önce o topları
-                    Kurşun/KK2/Tambur'da geri al, sonra iptal et.
+                    Kurşun/kalite kontrol/Tambur'da geri al, sonra iptal et.
                   </Text>
                 </View>
               )}

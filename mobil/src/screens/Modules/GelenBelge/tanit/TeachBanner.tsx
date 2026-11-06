@@ -9,14 +9,18 @@ import TruncatedText from '../../../../components/TruncatedText';
 import { colors, spacing, typography } from '../../../../theme';
 import { useTeachEntry, type TeachEntry, type TeachEntryInput } from './useTeachEntry';
 
-/** TANITILMAMIS amber şeridi; foto yoksa (başka cihazdan okutulmuş) eylemsiz açıklama. */
+// Fotoğrafın yerel kopyası yoksa (başka tablet, uygulama yeniden açıldı, eski belgeden yeni İE) yeniden okutmak
+// eski belgeye fotoğraf eklemez — doğru yol panel tanıtmasıdır (prova 2026-11-06).
+export const TEACH_NO_PHOTO_TEXT = 'Bu belge tanınmadı. Fotoğrafı bu tablette yok — panelde Gelen Belgeler → belge → "Bu belgeyi tanıt".';
+
+/** TANITILMAMIS amber şeridi; foto yoksa eylemsiz açıklama (panel yolu). */
 export function TeachStrip({ entry }: { entry: TeachEntry }) {
   if (entry.kind !== 'untaught') return null;
   return (
     <NoticeStrip
       tone="warn"
       icon="alert-circle-outline"
-      text={entry.noPhoto ? 'Bu belge tanınmadı. Tanıtmak için belgeyi bu tabletten okutun.' : 'Bu belge tanınmadı. Bir kez tanıtın, sonrakiler doğru okunsun.'}
+      text={entry.noPhoto ? TEACH_NO_PHOTO_TEXT : 'Bu belge tanınmadı. Bir kez tanıtın, sonrakiler doğru okunsun.'}
       action={entry.noPhoto ? undefined : { label: 'Tanıt', icon: 'creation', onPress: entry.open, testID: 'tanit-serit-ac' }}
       testID="tanit-serit"
     />

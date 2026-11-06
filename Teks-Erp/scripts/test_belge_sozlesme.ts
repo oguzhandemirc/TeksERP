@@ -12,6 +12,7 @@
 // §4 eski snapshot · §5 ayarNormalize eksiksiz · §6 pilot: altın fikstür + renderer hizası
 // §7 refakat kartı: uzman kataloğu ↔ sözleşme eşleme tablosu iki yönlü hiza
 // §8 `ornek` senaryosunda toplam kolonu satır toplamı = toplamlar.<k> (tasarımcı örnek belgesi)
+// §9 yalnız dökme/araba yükünde "Çuval Listesi" basılmaz — iki render yolu aynı yüklem (`hasSackUnit`)
 //
 // Negatif sondalar (2026-10-24): `belge.plaka` silindi → §3 ❌ · `fillFields` iç alanı opt-in'siz
 // yazdı → §2 ❌ · `belge.no` türü değişti → §1+§3 ❌ · `cuval_iz` ic→musteri → §3 ❌ · `getContract`
@@ -520,6 +521,31 @@ console.log("§8 `ornek` senaryosunda toplam kolonları: satır toplamı = topla
     }
   }
   check(`körlük zemini: en az 5 toplam kolonu denendi — ${denenen}`, denenen >= 5);
+}
+
+// ── §9 ───────────────────────────────────────────────────────────────────────
+console.log("§9 Dökme/araba yükünde çuval listesi sayfası yok (prova 2026-11-06)");
+{
+  const s = getContract("SHIPMENT_DISPATCH");
+  const sack = (code: string, ek: Record<string, unknown> = {}) => ({ code, totalMeters: 100, totalKg: 0, packageCount: 2, ...ek });
+  const belge = (sacks: unknown[]) => ({ ...(SEVK_BELGE_DOCS.eski as Record<string, unknown>), sacks });
+  const durumlar: Array<[string, unknown[], boolean]> = [
+    ["yalnız dökme", [sack("D1", { unitKind: "BULK" })], false],
+    ["yalnız araba", [sack("A1", { unitKind: "CART", unitLabel: "12" }), sack("A2", { unitKind: "CART", unitLabel: "13" })], false],
+    ["çuval + dökme (karışık)", [sack("C1"), sack("D1", { unitKind: "BULK" })], true],
+    ["eski snapshot (tür alanı yok) = çuval", [sack("C1")], true],
+  ];
+  for (const [ad, sacks, bekle] of durumlar) {
+    const snap = zarf(belge(sacks));
+    const sistem = renderShipmentDispatchTables(snap, {});
+    const c = s.insa(snap, null, []);
+    const ayarCuval = (c.ayar.sections as Record<string, unknown>).cuval;
+    check(`${ad}: Sistem renderer çuval tablosu ${bekle ? "VAR" : "YOK"}`, sistem.tables.some((t) => t.key === "cuval") === bekle);
+    check(`${ad}: şablon bağlamı ayar.sections.cuval = ${bekle}`, ayarCuval === bekle, String(ayarCuval));
+  }
+  // Kalıcı ayarda kapalı çuval listesi, çuvallı yükte de kapalı kalır (yüklem yalnız KAPATIR).
+  const kapali = s.insa(zarf(belge([sack("C1")])), { sections: { cuval: false } }, []);
+  check("ayarda kapalı çuval listesi açılmaz", (kapali.ayar.sections as Record<string, unknown>).cuval === false);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

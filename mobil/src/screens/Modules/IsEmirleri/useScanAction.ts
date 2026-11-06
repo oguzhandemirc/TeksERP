@@ -1,12 +1,16 @@
 // İş Emirleri — "Okut" + "İş Emri Türü" durumu: tür grupları (sunucu rotaları), varsayılan, okutma izni/kipi.
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { routeService } from '../../../services/route.service';
 import { useScanRouteMode } from '../../../hooks/useFeatureFlags';
 import { useVisibleScreens } from '../../../hooks/useVisibleScreens';
 import { useTabletWoEntry } from '../GelenBelge/woCreate/useWoEntry';
 import { WO_SHORTCUTS_KEY } from '../GelenBelge/woCreate/WoCreateScreen';
+import { storage } from '../../../utils/storage';
 import { resolveType, typeGroups } from './scanFlow';
+
+/** Seçili "İş Emri Rotası" CİHAZDA kalıcı: her girişte varsayılana dönmesin (prova 2026-11-06). Silinen/pasif rota → varsayılan. */
+export const WO_SCAN_ROUTE_KEY = 'device_wo_scan_route';
 
 export function useScanAction() {
   const scanMode = useScanRouteMode();
@@ -23,12 +27,26 @@ export function useScanAction() {
   });
   const groups = useMemo(() => typeGroups(routes.data?.data ?? [], shortcuts.data?.data ?? [], scanMode), [routes.data, shortcuts.data, scanMode]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    storage
+      .getItem(WO_SCAN_ROUTE_KEY)
+      .then((v) => alive && v && setSelectedId((cur) => cur ?? v))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const select = useCallback((id: string) => {
+    setSelectedId(id);
+    void storage.setItem(WO_SCAN_ROUTE_KEY, id).catch(() => undefined);
+  }, []);
   const type = resolveType(selectedId, groups, scanMode);
   return {
     available,
     loading: shortcuts.isLoading || routes.isLoading,
     groups,
     type,
-    select: setSelectedId,
+    select,
   };
 }

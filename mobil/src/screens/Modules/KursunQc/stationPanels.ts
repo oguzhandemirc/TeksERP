@@ -7,6 +7,7 @@
 // göndermez → kalite paneli açık (bugünkü ekran).
 // =============================================================================
 
+import { TERIM_AD } from '../../../lib/terim';
 import { lowerTr } from '../../../utils/trCase';
 
 export type StationCompletion = 'BUTTON' | 'TAP_VALUE';
@@ -70,7 +71,7 @@ export function composeStationPanels(input: StationPanelInput): StationPanels {
     qualityPanel,
     processPanel: input.properties.length > 0,
     completion: tap ? 'TAP_VALUE' : 'BUTTON',
-    completeLabel: qualityPanel ? 'KK2 Tamamla' : tap ? 'Değere dokun' : 'Tamamla',
+    completeLabel: qualityPanel ? 'Kontrolü Tamamla' : tap ? 'Değere dokun' : 'Tamamla',
     tap,
   };
 }
@@ -169,9 +170,9 @@ export function flowScreenLabels(stationName: string | null | undefined): FlowSc
   if (!name) {
     return {
       title: 'Kurşun',
-      queueTitle: 'Kurşun · KK2 İşleri',
-      emptyQueue: "Kurşun + KK2'de bekleyen kart yok",
-      noteTitle: 'Kurşun + KK2 Notu',
+      queueTitle: `Kurşun · ${TERIM_AD.kaliteKontrol} İşleri`,
+      emptyQueue: `Kurşun + ${TERIM_AD.kaliteKontrol}'de bekleyen kart yok`,
+      noteTitle: `Kurşun + ${TERIM_AD.kaliteKontrol} Notu`,
     };
   }
   return {

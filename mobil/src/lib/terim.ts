@@ -156,6 +156,8 @@ export const TERIM_AD = {
   // İş emri türü `CUSTOMER_GOODS_SERVICE`: müşterinin malına hizmet. Giden fason (Fason Sevk/Kabul) ile karışmasın diye
   // ad "(müşteri malı)" ekini HEP taşır.
   fasonMusteriMali: "Fason (müşteri malı)",
+  // "KK2" (kurşun sonrası kalite kontrolü) sahada jargondur; operatöre görünen ad bu. Enum/kod adı değişmez.
+  kaliteKontrol: "Kalite Kontrol",
 } as const;
 
 export type TermAdKey = keyof typeof TERIM_AD;
