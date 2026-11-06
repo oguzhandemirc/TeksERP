@@ -2817,7 +2817,9 @@ export class ShippingService {
     let unitPlans: LoadUnitPlan[] | null = null;
     if (data.loadUnits != null) {
       if (!(await readShipmentLooseLoadEnabled())) {
-        throw AppError.badRequest("Çuvalsız sevk (dökme / araba) bu kurulumda kapalı", { code: "LOOSE_LOAD_DISABLED" });
+        throw AppError.badRequest(`Çuvalsız sevk (dökme / araba) bu kurulumda kapalı (${settingRowPath("shipmentLooseLoadEnabled")}).`, {
+          code: "LOOSE_LOAD_DISABLED",
+        });
       }
       unitPlans = planLoadUnits(data.loadUnits, rollIds);
     }
