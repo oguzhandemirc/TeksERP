@@ -121,7 +121,7 @@ export interface PriceWriteOutcome {
  */
 export async function writeItemPriceVersionTx(
   tx: Tx,
-  args: { key: ItemPriceKey; price: Prisma.Decimal; requestedUnit: ServiceQtyUnit | null | undefined; validFrom: Date | null; at: Date; userId?: string },
+  args: { key: ItemPriceKey; price: Prisma.Decimal; requestedUnit: ServiceQtyUnit | null | undefined; validFrom: Date | null; at: Date; userId?: string; clientToken?: string | null },
 ): Promise<PriceWriteOutcome> {
   const { key, price, validFrom, at } = args;
   const by = args.userId ?? null;
@@ -138,7 +138,7 @@ export async function writeItemPriceVersionTx(
     }
     const row = await tx.itemPrice.create({
       data: {
-        ...key, price, priceUnit, createdAt: at,
+        ...key, price, priceUnit, createdAt: at, clientToken: args.clientToken ?? null,
         ...(pending ? { revokedAt: pending.validFrom, revokeReason: ITEM_PRICE_REVOKE_REASON.SCHEDULED } : {}),
       },
       select: { id: true, price: true },
@@ -158,7 +158,7 @@ export async function writeItemPriceVersionTx(
   if (current) {
     await claimStamp(tx, current.id, current.revokedAt, { revokedAt: validFrom, revokeReason: ITEM_PRICE_REVOKE_REASON.SCHEDULED, revokedById: by });
   }
-  const row = await tx.itemPrice.create({ data: { ...key, price, priceUnit, createdAt: at, validFrom }, select: { id: true, price: true } });
+  const row = await tx.itemPrice.create({ data: { ...key, price, priceUnit, createdAt: at, validFrom, clientToken: args.clientToken ?? null }, select: { id: true, price: true } });
   return { row, previous: current, replacedPending: pending, priceUnit, wrote: true };
 }
 

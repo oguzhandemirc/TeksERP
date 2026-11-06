@@ -12426,6 +12426,8 @@ model ItemPrice {
   /// `[COALESCE(validFrom, createdAt), revokedAt)`; ZAMANLANMIŞ DAMGA: ileri tarihli satır doğarken
   /// yürürlükteki satırın `revokedAt`ı o tarihe kurulur → pencereler örtüşmez, tekillikte `validFrom` yok.
   validFrom       DateTime?       @db.Timestamptz
+  /// İdempotency — hizmet fiyat tablosu yazım ucu (`clientToken @unique` sözleşmesi); eski uçlar NULL yazar.
+  clientToken     String?         @unique @db.Uuid
 
   item          Item                 @relation(fields: [itemId], references: [id], onDelete: Cascade)
   customer      Customer?            @relation(fields: [customerId], references: [id], onDelete: Cascade)

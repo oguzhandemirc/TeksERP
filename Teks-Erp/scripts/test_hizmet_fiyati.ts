@@ -282,6 +282,9 @@ const SERVICE_ITEM_ID_FILES = new Set([
   // Hizmet fiyat tablosu (2026-11-06): kademe fiyatı yazım kapısı — değerin eşli kalemini `pickServiceItemId` ile
   // seçip fiyat satırının kalemiyle kıyaslar (SERVICE_TIER_ITEM_MISMATCH); çözücü değil.
   "services/helpers/item-price-write.helper.ts",
+  // Hizmet fiyat tablosu ucu: hizmete eşli kademeleri LİSTELER (değer→özellik→ana bayrak DB süzgeci);
+  // `mapped` bayrağı `pickServiceItemId`ten, etkin fiyat `pickServicePrice`ten — çözücü değil, projeksiyon.
+  "services/service-price.service.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.

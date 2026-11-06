@@ -108,6 +108,7 @@ import chequeDeliveryNoteRoutes from "./routes/cheque-delivery-note.routes";
 // kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
 import yarnRoutes from "./routes/yarn.routes";
 import itemPriceRoutes from "./routes/item-price.routes";
+import servicePriceRoutes from "./routes/service-price.routes";
 import costRoutes from "./routes/cost.routes";
 import quoteRoutes from "./routes/quote.routes";
 import priceListRoutes from "./routes/price-list.routes";
@@ -637,6 +638,7 @@ app.use("/api/consumable-stock", consumableStockRoutes);
 
 app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
+app.use("/api/service-prices", servicePriceRoutes);
 // MAL-1: maliyet girdileri — router kendi kapısını taşır (`requireMaliyetEnabled`).
 app.use("/api/cost", costRoutes);
 app.use("/api/quotes", quoteRoutes);

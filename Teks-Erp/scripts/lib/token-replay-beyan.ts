@@ -101,6 +101,9 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}helpers/warp-beam-wind-write.helper.ts::writeWoundTx`]: { helper: "sarım satırı yazarı (raşel kardeşleri token'sız)" },
   [`${S}shipping.service.ts::createShipmentCoreTx`]: { helper: "sevkiyat çekirdek yazarı" },
   [`${S}batch.service.ts::createBatchTx`]: { helper: "parti yazarı" },
+  // Hizmet fiyat tablosu (2026-11-06): token tek yazar `itemPriceService.upsert` → sürüm helper'ına aktarılır; replay `servicePriceService.write`ta.
+  [`${S}helpers/item-price-write.helper.ts::writeItemPriceVersionTx`]: { helper: "kalem fiyatı sürüm yazarı" },
+  [`${S}item-price.service.ts::upsert`]: { giris: { [`${S}service-price.service.ts::write`]: "R" } },
   // H1: kurşun metre okuması yazarı; replay kararı çağıranın (completeQc2 · recordMeterReading, K kipi `meterReadingReplay.inTx`).
   [`${S}helpers/kursun-meter.helper.ts::writeMeterReadingTx`]: { helper: "kurşun metre okuması yazarı" },
   // D4-B1b: Tambur CUT okuması — token SUNUCU üretir; replay kararı kesim yolunundur (finalize claim · cutReplay · elle top FAZ 2 idempotent dalı).
@@ -313,4 +316,5 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}workorder-batch-add.service.ts::batchReplay`]: ["workOrderId", "missingRolls"],
   [`${S}workorder.service.ts::quickStartReplay`]: ["targetItemId", "orderLines"],
   [`${S}workorder.service.ts::woReplay`]: ["orderLines", "targetItemId", "type"],
+  [`${S}service-price.service.ts::writeReplay`]: ["itemId", "customerId", "propertyValueId", "currency", "price", "validFrom"],
 };

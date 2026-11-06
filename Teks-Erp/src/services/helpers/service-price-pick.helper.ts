@@ -72,6 +72,18 @@ export async function loadServiceTierPrices(params: {
   return out;
 }
 
+/** Hizmet başına güncel + bekleyen kademe satırı sayısı (tablonun sol listesi; fiyat SEÇMEZ). */
+export async function countServiceTierRows(itemIds: string[], now: Date, db: Db = prisma): Promise<Map<string, number>> {
+  if (itemIds.length === 0) return new Map();
+  // `revokedAt` SÜZÜLMEZ — açık ya da zamanlanmış damgalı (yürürlükte) satırlar sayılır.
+  const counts = await db.itemPrice.groupBy({
+    by: ["itemId"],
+    where: { itemId: { in: itemIds }, propertyValueId: { not: null }, OR: [{ revokedAt: null }, { revokedAt: { gt: now } }] },
+    _count: { _all: true },
+  });
+  return new Map(counts.map((c) => [c.itemId, c._count._all]));
+}
+
 export interface ServicePriceCandidates {
   customerTier: Prisma.Decimal | null;
   generalTier: Prisma.Decimal | null;

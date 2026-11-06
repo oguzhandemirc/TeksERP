@@ -215,3 +215,22 @@ export async function loadKursunGramCandidates(
   }
   return out;
 }
+
+/** Hizmet fiyat tablosu için ŞU ANKİ gram fiyatları (kolon = güncel değer): müşteri cari kartı + aktif istasyonlar. */
+export async function loadCurrentGramPrices(customerId: string | null, currency: Currency): Promise<{
+  customer: Prisma.Decimal | null;
+  stations: Array<{ id: string; name: string; price: Prisma.Decimal }>;
+}> {
+  const cari = customerId
+    ? await findCariAccountForCardTx(prisma, { customerId, subcontractorId: null }, { kursunGramPrice: true, kursunGramCurrency: true })
+    : null;
+  const stations = await prisma.station.findMany({
+    where: { isActive: true, kursunGramPrice: { not: null }, kursunGramCurrency: currency },
+    select: { id: true, name: true, kursunGramPrice: true },
+    orderBy: { name: "asc" },
+  });
+  return {
+    customer: cari?.kursunGramPrice != null && cari.kursunGramCurrency === currency ? cari.kursunGramPrice : null,
+    stations: stations.map((s) => ({ id: s.id, name: s.name, price: s.kursunGramPrice! })),
+  };
+}

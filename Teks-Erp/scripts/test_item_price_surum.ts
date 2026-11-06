@@ -216,7 +216,7 @@ async function main(): Promise<void> {
   console.log(`   istisnalar: ${t.istisnalar.length ? t.istisnalar.join(", ") : "yok"}`);
   // MAL-2: maliyet köprüsünün genel alış fiyatı okuyucusu ayrı dosyada (dinamik import; servis statik bağı ticaret kapısını taşırdı).
   // K2a: ürün kartı canlı referans kataloğu müşteri HİZMET fiyatını sayar/listeler (pasife alma kapısı; yazmaz).
-  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-price-write.helper.ts", "src/services/helpers/service-price-pick.helper.ts", "src/services/helpers/item-purchase-price.helper.ts", "src/services/helpers/item-lifecycle.helper.ts"]);
+  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-price-write.helper.ts", "src/services/helpers/service-price-pick.helper.ts", "src/services/service-price.service.ts", "src/services/helpers/item-purchase-price.helper.ts", "src/services/helpers/item-lifecycle.helper.ts"]);
   const callFiles = new Set<string>();
   let callCount = 0;
   for (const f of srcFiles(join(kok, "src"))) {
