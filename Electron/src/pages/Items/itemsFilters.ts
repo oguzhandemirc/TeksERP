@@ -68,6 +68,22 @@ export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
 
 export const itemUrlFilterParam = (key: ItemUrlFilterKey) => `filter[${key}]`;
 
+/**
+ * K3 (2026-11-06): Tür "Tümü" iken hizmet kalemleri listelenmez — stok türleri CSV olarak SUNUCUYA gider
+ * (`buildWhereClause` CSV → `in`). Hizmetler kendi ekranında; Tür = Hizmet seçilince bu varsayılan eklenmez.
+ */
+export function itemTypeDefaultFilter(sp: URLSearchParams): Record<string, string> {
+  if (sp.has(itemUrlFilterParam("itemType"))) return {};
+  const stock = ITEM_TYPE_FILTER_OPTIONS.filter((o) => o.value !== ITEM_FILTER_ALL).map((o) => o.value);
+  return { itemType: stock.join(",") };
+}
+
+/** Liste ekranının sunucu süzgeci: durum + (Tür seçilmemişse) stok türleri. */
+export const itemListFilters = (status: ItemStatusFilter, sp: URLSearchParams): Record<string, string> => ({
+  ...itemStatusFilters(status),
+  ...itemTypeDefaultFilter(sp),
+});
+
 /** Renk/Özellik ekseninin URL anahtarları — Tür kumaş dışına çıkınca ikisi de silinir. */
 export const ITEM_CATALOG_KEYS: readonly ItemUrlFilterKey[] = ["allowedColorId", "allowedPropertyId"];
 

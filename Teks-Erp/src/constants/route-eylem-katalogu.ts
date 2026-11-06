@@ -18,6 +18,9 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Hizmet fiyat tablosu (2026-11-06)
+  "POST /api/service-prices": e("bir hizmet kademe fiyatı kaydetti", "bir hizmet kademe fiyatı kaydetmeye çalıştı"),
+  "POST /api/service-prices/:id/revoke": e("bir hizmet fiyatını kaldırdı", "bir hizmet fiyatını kaldırmaya çalıştı"),
   // ── Cihaz birleştirme (D4)
   "POST /api/admin/devices/merge/preview": e("cihaz birleştirme önizlemesi aldı", "cihaz birleştirme önizlemesi almaya çalıştı"),
   "POST /api/admin/devices/merge": e("cihaz kopyalarını birleştirdi", "cihaz kopyalarını birleştirmeye çalıştı"),

@@ -19,8 +19,11 @@ import {
   Link2,
   Lock,
   Receipt,
+  Table2,
   type LucideIcon,
 } from "lucide-react";
+import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
+import { servicePricesTileVisible } from "@/pages/Definitions/ServicePrices/regime";
 
 export interface FinanceTile {
   key: string;
@@ -31,6 +34,8 @@ export interface FinanceTile {
   tone: string;
   /** Bu izinlerden HERHANGİ biri yeterli. */
   permissionAny: string[];
+  /** Rejim yüklemi (hub + palet aynı yüklemi okur); yoksa yalnız izin. */
+  visibleWhen?: (ctx: OperationsVisibilityContext) => boolean;
 }
 
 export const financeTiles: FinanceTile[] = [
@@ -115,6 +120,17 @@ export const financeTiles: FinanceTile[] = [
     icon: Lock,
     tone: "text-station-depo",
     permissionAny: ["finance:read"],
+  },
+  {
+    // Hizmet fiyat tablosu (2026-11-06, K6): Tanımlar'daki ekranın AYNISI (tek route); izin route ile birebir.
+    key: "service-prices",
+    title: "Hizmet Fiyat Tablosu",
+    description: "Hizmet faturasının kademe fiyatları — genel, müşteriye özel, ileri tarihli.",
+    to: "/definitions/service-prices",
+    icon: Table2,
+    tone: "text-primary",
+    permissionAny: ["item:read"],
+    visibleWhen: servicePricesTileVisible,
   },
   {
     key: "rates",

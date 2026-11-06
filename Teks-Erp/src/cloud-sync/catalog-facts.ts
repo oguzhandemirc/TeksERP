@@ -1,6 +1,7 @@
 // Patron bulutu projeksiyon kataloğu — OLGU projeksiyonları (iş kayıtları). Tek kaynak
 // `projections.ts` üzerinden dışa açılır; tasarım `docs/design/PATRON-BULUTU-ESITLEME.md` §3.2.
 import { factoryDaySql } from "../constants/time";
+import { ITEM_PRICE_CLOUD_SCOPE, ITEM_PRICE_WINDOW_CROSSING } from "../services/helpers/item-price-validity.helper";
 import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
 import { MERGED_INVOICE_RESOLVER, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
 
@@ -264,11 +265,11 @@ export const FACTS: readonly RecordProjection[] = [
   {
     name: "fiyat", kind: "KAYIT", role: "OLGU", root: { table: "item_prices", model: "ItemPrice" },
     columns: [col("id", "id"), col("urunId", "itemId"), col("cariKartId", "customerId"), col("tur", "kind"), col("doviz", "currency"),
-      col("fiyat", "price", "FINANS"), col("degisim", "updatedAt")],
-    derived: [], sources: [self("item_prices")],
-    // Damgalı (değişmiş/kaldırılmış) fiyat güncel değildir: kapsamdan çıkınca bulut satırı düşer (MAL-0b).
-    scope: { note: "damgalı (kaldırılmış/değişmiş) fiyat güncel değildir; kapsamdan çıkınca bulut satırı düşer", prismaWhere: { revokedAt: null }, sql: `t."revokedAt" IS NULL` },
-    deletion: "YOK", permission: "bulut:fiyat:oku", module: "finance.enabled", catalogVersion: 1,
+      col("fiyat", "price", "FINANS"), col("degisim", "updatedAt"), col("kademeId", "propertyValueId"),
+      col("gecerlilikBaslangici", "validFrom"), col("gecerlilikBitisi", "revokedAt")],
+    // v2: yalnız şu an yürürlükteki sürüm; pencere sınırı geçişle yeniden kurulur (ikiz + geçiş helper'da).
+    derived: [], sources: [self("item_prices")], scope: ITEM_PRICE_CLOUD_SCOPE, crossings: [ITEM_PRICE_WINDOW_CROSSING],
+    deletion: "YOK", permission: "bulut:fiyat:oku", module: "finance.enabled", catalogVersion: 2,
   },
   // ── Maliyet & teklif (MAL-8): tutar/kur/maliyet/marj yalnız `.finans` (izni `bulut:maliyet:oku`, subRowPermission) ──
   {

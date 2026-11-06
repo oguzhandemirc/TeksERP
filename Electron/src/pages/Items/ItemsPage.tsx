@@ -18,7 +18,7 @@ import {
   itemCatalogAxisApplies,
   itemCatalogFilterDefs,
   itemTypeChangeParams,
-  itemStatusFilters,
+  itemListFilters,
   itemUrlFilterParam,
   parseItemStatus,
   type ItemStatusFilter,
@@ -31,7 +31,7 @@ import type { Item } from "./types";
 export function ItemsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const status = parseItemStatus(searchParams.get(ITEM_STATUS_PARAM));
-  const extraFilters = useMemo(() => itemStatusFilters(status), [status]);
+  const extraFilters = useMemo(() => itemListFilters(status, searchParams), [status, searchParams]);
   const [lifecycleItem, setLifecycleItem] = useState<Item | null>(null);
   // Renk/Özellik kataloğu ürün seçici modalıyla aynı sorgu anahtarından (tek yükleyici).
   const catalogFilters = itemCatalogFilterDefs(useItemPickerCatalogs(true));
@@ -69,7 +69,7 @@ export function ItemsPage() {
     <>
     <CrudPage<Item>
       title="Ürünler"
-      description="Ürün kataloğu (kumaş · iplik · sarf) — izinli renk ve özellik listesi opsiyoneldir."
+      description="Ürün kataloğu (kumaş · iplik · sarf) — izinli renk ve özellik listesi opsiyoneldir. Hizmetler kendi ekranındadır (Tanımlar › Hizmetler)."
       entityName="Ürün"
       mergeEntity="item"
       importEntity="item"

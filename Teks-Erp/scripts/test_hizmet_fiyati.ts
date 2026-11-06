@@ -279,6 +279,12 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/item-lifecycle.helper.ts",
   // K21: `PropertyValueInput` istemci sözleşmesi tipi servisten buraya taşındı (yalnız tip; çözücü değil).
   "services/helpers/fabric-property-input.helper.ts",
+  // Hizmet fiyat tablosu (2026-11-06): kademe fiyatı yazım kapısı — değerin eşli kalemini `pickServiceItemId` ile
+  // seçip fiyat satırının kalemiyle kıyaslar (SERVICE_TIER_ITEM_MISMATCH); çözücü değil.
+  "services/helpers/item-price-write.helper.ts",
+  // Hizmet fiyat tablosu ucu: hizmete eşli kademeleri LİSTELER (değer→özellik→ana bayrak DB süzgeci);
+  // `mapped` bayrağı `pickServiceItemId`ten, etkin fiyat `pickServicePrice`ten — çözücü değil, projeksiyon.
+  "services/service-price.service.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
@@ -341,6 +347,19 @@ function astChecks(): void {
   const stale = [...SERVICE_ITEM_ID_FILES, ...COST_SIDE_SERVICE_ITEM_ID_FILES].filter((r) => !readers.has(r));
   check("beyan listesinde bayat girdi yok (iki yönlü)", stale.length === 0, JSON.stringify(stale));
   check("eşleme/çözücü dosyalarında FinishingRate okuması yok (maliyet ≠ gelir)", finishingHits.length === 0, JSON.stringify(finishingHits));
+  // Hizmet fiyat tablosu (2026-11-06): fiyat SIRASI tek helper'da; kademe satırı okuyucusu tek; çözücü sırayı oradan alır.
+  const pickDefs: string[] = [];
+  const tierReaders: string[] = [];
+  for (const f of files) {
+    const text = readFileSync(f, "utf8");
+    const rel = relative(SRC, f).split("\\").join("/");
+    if (/function\s+pickServicePrice\b|(const|let)\s+pickServicePrice\s*=/.test(text)) pickDefs.push(rel);
+    if (/propertyValueId:\s*\{\s*not:\s*null\s*\}/.test(text) && /\.itemPrice\./.test(text)) tierReaders.push(rel);
+  }
+  check("⭐ hizmet fiyat sırası `pickServicePrice` TEK tanım (service-price-pick.helper)", pickDefs.length === 1 && pickDefs[0] === "services/helpers/service-price-pick.helper.ts", JSON.stringify(pickDefs));
+  check("kademe fiyat satırı okuyucusu tek dosyada (service-price-pick.helper)", tierReaders.length === 1 && tierReaders[0] === "services/helpers/service-price-pick.helper.ts", JSON.stringify(tierReaders));
+  const pricing = readFileSync(join(SRC, "services/helpers/service-pricing.helper.ts"), "utf8");
+  check("çözücü sırayı helper'dan alır (pickServicePrice çağrısı var)", /pickServicePrice\(/.test(pricing));
 }
 
 async function cleanup(): Promise<void> {

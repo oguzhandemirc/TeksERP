@@ -129,6 +129,7 @@ export const MENU_PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
   "definitions/fabric-properties",
   "definitions/station-capabilities",
   "definitions/item-prices",
+  "definitions/service-prices",
   "finance/invoices",
   "finance/cari",
   "quality",
