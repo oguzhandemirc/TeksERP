@@ -10,11 +10,12 @@ import { EIrsaliyeStatusBadge } from "./eirsaliye/EIrsaliyeStatusBadge";
 // Dışa aktarım metinleri — hücreyle aynı kaynak (hücre bu fonksiyonları çağırır).
 type S = ShipmentListItem;
 const branchText = (s: S) => (s.branch ? `${s.branch.name}${s.branch.code ? ` · ${s.branch.code}` : ""}` : "");
-const countsText = (s: S) => {
+// Siparişsiz sevkte (fason/emanet kurulumu) "0 sipariş" yazılmaz — sayaç yalnız bağ varsa görünür.
+export const countsText = (s: Pick<S, "kind" | "_count">) => {
   const c = s._count;
-  return s.kind === "DIRECT"
-    ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
-    : `${c.orders} sipariş · ${c.rolls} top · ${c.sacks} çuval`;
+  const orders = c.orders > 0 ? `${c.orders} sipariş` : null;
+  const parts = s.kind === "DIRECT" ? [`${c.rolls} top`, orders] : [orders, `${c.rolls} top`, `${c.sacks} çuval`];
+  return parts.filter(Boolean).join(" · ");
 };
 const kgText = (s: S) => (s.totalKg > 0 ? `${formatNumber(s.totalKg, 1)} kg` : "");
 const metersText = (s: S) => `${formatFixed(s.totalMeters, 2)} m`;
