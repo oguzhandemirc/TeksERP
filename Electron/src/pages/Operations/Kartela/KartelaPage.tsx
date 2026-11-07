@@ -31,26 +31,23 @@ import { KartelaTabBar } from "./KartelaTabBar";
 import { OutstandingTab } from "./OutstandingTab";
 import { KartelaDispatchDialog } from "./KartelaDispatchDialog";
 import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
-import { isKartelaTabKey, NEW_DISPATCH_ACTION, type KartelaTabKey } from "./tabs-config";
+import { KartelaStockTab } from "./KartelaStockTab";
+import type { KartelaPickedRoll } from "./kartelaActions";
+import { useKartelaTab, kartelaRefreshKey } from "./useKartelaTab";
+import { NEW_DISPATCH_ACTION } from "./tabs-config";
 
 // Tek kokpit: belge akışı (Sevkler/Bekleyen Kabul/Kabuller) + envanter (Kartelada Toplar =
 // AT_KARTELA rulolar, Kartela Stoğu = swatch'lar). Sevk/kabul/iptal tabletle eşit (kartela:write).
 export function KartelaPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = searchParams.get("tab");
-  const [tab, setTab] = useState<KartelaTabKey>(isKartelaTabKey(urlTab) ? urlTab : "dispatches");
   const [selection, setSelection] = useState<KartelaSelection>(null);
   const [scanCode, setScanCode] = useState("");
   const [scanSwatch, setScanSwatch] = useState<Swatch | null>(null);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [cekiId, setCekiId] = useState<string | null>(null);
-  // Sayfa açıkken gelen `?tab=` (komut paleti) sekmeyi değiştirir.
-  // Açık detay paneli eski sekmenin belgesidir; sekme değişince kapanır.
-  useEffect(() => {
-    if (!isKartelaTabKey(urlTab)) return;
-    setTab(urlTab);
-    setSelection(null);
-  }, [urlTab]);
+  // Kartelalık Stok → "Sevke ekle": seçilen toplar Yeni Sevk'e hazır listeyle gider.
+  const [dispatchSeed, setDispatchSeed] = useState<KartelaPickedRoll[] | null>(null);
+  const { tab, changeTab } = useKartelaTab(() => setSelection(null));
   // Palet derin bağlantısı (`?action=new-dispatch`) diyaloğu bir kez açar; parametre tüketilir.
   useEffect(() => {
     if (searchParams.get("action") !== NEW_DISPATCH_ACTION) return;
@@ -128,15 +125,7 @@ export function KartelaPage() {
     setSearchParams(sp, { replace: true });
   };
 
-  const refreshKey =
-    tab === "dispatches"
-      ? "kartela-dispatches"
-      : tab === "receipts"
-        ? "kartela-receipts"
-        : tab === "rolls"
-          ? "rolls:KARTELA_SENT"
-          : "kartela";
-  // "kartela" anahtarı Hareketler sekmesinin sorgularını da kapsar (["kartela", "events", …]).
+  const refreshKey = kartelaRefreshKey(tab);
 
   return (
     <PageShell>
@@ -155,7 +144,7 @@ export function KartelaPage() {
       />
       <KartelaTabBar
         tab={tab}
-        onTab={setTab}
+        onTab={changeTab}
         trailing={
           tab === "rolls" ? (
             <>
@@ -179,6 +168,13 @@ export function KartelaPage() {
         <OutstandingTab />
       ) : tab === "receipts" ? (
         <ReceiptsTab onSelect={setSelection} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
+      ) : tab === "stock" ? (
+        <KartelaStockTab
+          onAddToDispatch={(rolls) => {
+            setDispatchSeed(rolls);
+            setDispatchOpen(true);
+          }}
+        />
       ) : tab === "rolls" ? (
         <>
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
@@ -210,7 +206,15 @@ export function KartelaPage() {
         <SwatchesPanel onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       )}
 
-      <KartelaDispatchDialog open={dispatchOpen} onOpenChange={setDispatchOpen} onCreated={setCekiId} />
+      <KartelaDispatchDialog
+        open={dispatchOpen}
+        onOpenChange={(o) => {
+          setDispatchOpen(o);
+          if (!o) setDispatchSeed(null);
+        }}
+        onCreated={setCekiId}
+        initialRolls={dispatchSeed}
+      />
       <KartelaCekiPrintDialog dispatchId={cekiId} open={cekiId !== null} onOpenChange={(o) => !o && setCekiId(null)} />
       <KartelaDetailSheet selection={selection} onClose={() => setSelection(null)} />
       <SwatchDetailSheet
