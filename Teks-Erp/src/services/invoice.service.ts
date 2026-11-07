@@ -37,7 +37,7 @@ import {
   type ServiceBillingLinkInput,
 } from "./helpers/service-billing.helper";
 import { resolveShipmentServiceLinksTx, syncDraftServiceLinksTx } from "./helpers/service-preview-gate.helper";
-import { lineSubjectData, normalizeInvoiceLines, type InvoiceLineSubjectInput } from "./helpers/invoice-line-subject.helper";
+import { lineSubjectData, lockInvoiceServiceItemsTx, normalizeInvoiceLines, type InvoiceLineSubjectInput } from "./helpers/invoice-line-subject.helper";
 import { resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -463,6 +463,7 @@ export class InvoiceService {
         await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
       }
 
+      await lockInvoiceServiceItemsTx(tx, input.lines);
       const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
       const totals = computeInvoiceTotals(input.lines);
 
@@ -957,7 +958,7 @@ export class InvoiceService {
       const revoked = input.lines ? await syncDraftServiceLinksTx(tx, { invoiceId: id, ...existing, lines: input.lines, userId: userId ?? null }) : 0;
       if (input.lines) {
         if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
-        await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
+        await lockInvoiceServiceItemsTx(tx, input.lines).then(() => tx.invoiceLine.deleteMany({ where: { invoiceId: id } }));
         for (const [i, l] of input.lines.entries()) {
           const a = computeLineAmounts(l);
           await tx.invoiceLine.create({

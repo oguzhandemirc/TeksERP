@@ -10,6 +10,7 @@
 import { InvoiceLineType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { assertServiceItemUsableTx } from "./item-usage.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -100,6 +101,16 @@ function classify(l: InvoiceLineSubjectInput, services: ReadonlySet<string>): In
 export function lineSubjectData(l: InvoiceLineSubjectInput): InvoiceLineSubject {
   if (!l.lineType) throw new Error("Fatura satırı normalize edilmeden yazılamaz (lineType yok).");
   return { lineType: l.lineType, itemId: l.itemId ?? null, serviceItemId: l.serviceItemId ?? null };
+}
+
+/**
+ * Hizmet satırı yazan tx'te kart kilidi (D1b canlı referansı `DRAFT_INVOICE_LINE`): id artan sırayla 8030 SHARED →
+ * `service_items` FOR SHARE. Eşzamanlı "Pasif'e geç" bu tx bitene dek bekler ve yeni satırı sayar; Pasif kart 409.
+ * Sınıf EXISTING_GOODS: yapılmış iş faturalanır — "Tükenene kadar" kartta serbest. Advisory sırası: 8023 → 8030.
+ */
+export async function lockInvoiceServiceItemsTx(tx: Prisma.TransactionClient, lines: ReadonlyArray<InvoiceLineSubjectInput>): Promise<void> {
+  const ids = [...new Set(lines.map((l) => l.serviceItemId).filter((v): v is string => !!v))].sort();
+  for (const id of ids) await assertServiceItemUsableTx(tx, id, "EXISTING_GOODS");
 }
 
 /**
