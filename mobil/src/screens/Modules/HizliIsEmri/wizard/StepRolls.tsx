@@ -10,7 +10,6 @@ import { colors, spacing, radius } from '../../../../theme';
 import { ITEM_LIFECYCLE_LABEL } from '../../../../lib/item-lifecycle';
 import { useHardwareScanMode } from '../../../../hooks/useScanMethod';
 import HardwareRollsTable from './HardwareRollsTable';
-import LastBatchHint from './LastBatchHint';
 
 interface Props {
   wo: ReturnType<typeof useQuickWorkOrder>;
@@ -55,7 +54,6 @@ export default function StepRolls({
 
   return (
     <View style={styles.root}>
-      <LastBatchHint />
       {hardware ? (
         <HardwareRollsTable
           rolls={wo.scanned}

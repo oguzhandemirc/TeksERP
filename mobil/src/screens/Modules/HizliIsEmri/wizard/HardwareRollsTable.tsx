@@ -2,10 +2,11 @@
 // Hızlı İE adım ① — el terminali (donanım okuyucu) düzeni: okutulan toplar TABLO olarak
 // =============================================================================
 // Kamera modalı yok; ekran tuş okumasını kendisi alır. En yeni top en üstte (ScannerRollStrip ile aynı
-// "son ne oldu" kuralı), mükerrer satır vurgulanır, retler tablonun üstünde sebebiyle durur.
+// "son ne oldu" kuralı), mükerrer satır vurgulanır. Hata TEK yüzeyde (2026-11-07 saha: bir ret üç kez görünüyordu):
+// bant görünürken başka şey yok; bant sönünce yalnız EN SON ret küçük satır olarak kalır, sonra top eklenirse o da düşer.
 // =============================================================================
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, IconButton, Text, TouchableRipple } from 'react-native-paper';
 
@@ -29,14 +30,27 @@ interface Props {
   itemName?: string | null;
 }
 
+/** Ekranda kalan ret notu: bant (flash) varken yok; yoksa en son ret — ondan SONRA top eklendiyse o da yok. */
+function useLingeringReject(rolls: number, rejects: ScanReject[], flash: ScanFlash | null): ScanReject | null {
+  const [staleId, setStaleId] = useState<number | null>(null);
+  const latestRef = useRef<number | null>(null);
+  latestRef.current = rejects[0]?.id ?? null;
+  const prevRolls = useRef(rolls);
+  useEffect(() => {
+    if (rolls > prevRolls.current) setStaleId(latestRef.current);
+    prevRolls.current = rolls;
+  }, [rolls]);
+  const latest = rejects[0];
+  return !flash && latest && latest.id !== staleId ? latest : null;
+}
+
 export default function HardwareRollsTable(p: Props) {
   const newestFirst = [...p.rolls].reverse();
+  const lingering = useLingeringReject(p.rolls.length, p.rejects, p.flash);
   return (
     <View style={styles.root} testID="hw-rolls">
       {p.flash ? <ScanFlashCard flash={p.flash} /> : null}
-      {p.rejects.map((r) => (
-        <RejectRow key={r.id} reject={r} onDismiss={() => p.onDismissReject(r.id)} />
-      ))}
+      {lingering ? <RejectRow reject={lingering} onDismiss={() => p.onDismissReject(lingering.id)} /> : null}
       {p.rolls.length ? <HardwareTriggerHint label="Sıradaki topu okutun" /> : <EmptyCard />}
       {p.itemName ? (
         <View style={styles.item}>

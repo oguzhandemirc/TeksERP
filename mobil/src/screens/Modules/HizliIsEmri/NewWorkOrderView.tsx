@@ -23,6 +23,7 @@ import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import OrderLinkFooterButton from './wizard/OrderLinkFooterButton';
+import LastBatchHint from './wizard/LastBatchHint';
 import { colors, spacing, radius } from '../../../theme';
 
 interface NewWorkOrderViewProps {
@@ -274,10 +275,14 @@ export default function NewWorkOrderView({
             <Icon source="alert-circle" size={18} color={colors.dangerDark} />
             <Text style={styles.errorBannerText}>{wo.submitError}</Text>
           </View>
-        ) : stepHint ? (
+        ) : stepHint && (showErrors || step > 0) ? (
           <Text style={[styles.hint, showErrors && styles.hintError]} numberOfLines={2}>
             {stepHint}
           </Text>
+        ) : step === 0 ? (
+          // Adım ①'de "en az bir top okutun" sürekli yazılmaz (gövdedeki boş kart zaten söylüyor);
+          // yalnız İLERİ'ye eksikle basınca kırmızı çıkar. Yerinde son parti göstergesi durur.
+          <LastBatchHint />
         ) : null}
 
         <View style={styles.navRow}>
