@@ -84,7 +84,7 @@ function consignedOwnerScope(q: ConsignedWorkQuery): Prisma.Sql {
   if (!q.onlyReady) return Prisma.empty;
   return Prisma.sql`AND r."ownerCustomerId" IN (
       SELECT rr."ownerCustomerId" FROM rolls rr
-      WHERE rr."ownerCustomerId" IS NOT NULL AND rr.status::text IN (${Prisma.join(READY_STATUSES)})
+      WHERE rr."ownerCustomerId" IS NOT NULL AND rr.status = ANY(${[...READY_STATUSES]}::"RollStatus"[])
     )`;
 }
 
@@ -99,7 +99,7 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
       r."ownerCustomerId" AS "ownerCustomerId",
       c.name              AS "ownerName",
       CASE
-        WHEN r.status::text IN (${Prisma.join(READY_STATUSES)}) THEN 'ready'
+        WHEN r.status = ANY(${[...READY_STATUSES]}::"RollStatus"[]) THEN 'ready'
         WHEN r."currentStepId" IS NOT NULL                       THEN 'inProcess'
         WHEN r.status::text = ${RollStatus.STOCK}
          AND r."entrySource"::text = ${RollEntrySource.SEMI_FINISHED} THEN 'waitingSemi'
@@ -111,7 +111,7 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
     FROM rolls r
     JOIN customers c ON c.id = r."ownerCustomerId"
     WHERE r."ownerCustomerId" IS NOT NULL
-      AND r.status::text NOT IN (${Prisma.join(NOT_INSIDE_STATUSES)})
+      AND r.status <> ALL(${[...NOT_INSIDE_STATUSES]}::"RollStatus"[])
       ${consignedOwnerScope(q)}
     GROUP BY 1, 2, 3
   `);

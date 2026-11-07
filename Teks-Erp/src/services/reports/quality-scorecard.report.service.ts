@@ -171,7 +171,7 @@ export async function getQualityScorecard(
       LEFT JOIN quality_grades qg ON qg.id = r."qualityGradeId"
       WHERE r."finalizedAt" >= ${range.from}
         AND r."finalizedAt" <= ${range.to}
-        AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+        AND r.status <> ALL(${K18_DEAD_STATUSES}::"RollStatus"[])
         ${beamSql}
       GROUP BY 1
       ORDER BY 1

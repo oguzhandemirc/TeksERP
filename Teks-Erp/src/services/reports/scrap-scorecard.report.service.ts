@@ -218,7 +218,7 @@ async function producedTotal(range: DateRange, beamSql: Prisma.Sql = Prisma.empt
     FROM rolls r
     WHERE r."finalizedAt" >= ${range.from}
       AND r."finalizedAt" <= ${range.to}
-      AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+      AND r.status <> ALL(${K18_DEAD_STATUSES}::"RollStatus"[])
       ${beamSql}
   `);
   return Number(rows[0]?.qty ?? 0);

@@ -43,7 +43,7 @@ function producedRollsSql(range: { from: Date; to: Date }): Prisma.Sql {
     LEFT JOIN subcontractor_receipts sr ON sr.id = r."parentReceiptId"
     LEFT JOIN doff_events dv            ON dv.id = r."doffEventId"
     WHERE r."finalizedAt" >= ${range.from} AND r."finalizedAt" <= ${range.to}
-      AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+      AND r.status <> ALL(${K18_DEAD_STATUSES}::"RollStatus"[])
   ) p`;
 }
 

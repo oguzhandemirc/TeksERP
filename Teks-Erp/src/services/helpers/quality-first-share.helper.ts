@@ -106,7 +106,7 @@ export async function collectPeriod(range: DateRange, beamSql: Prisma.Sql = Pris
     LEFT JOIN subcontractors sub        ON sub.id = sr."subcontractorId"
     WHERE r."finalizedAt" >= ${range.from}
       AND r."finalizedAt" <= ${range.to}
-      AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+      AND r.status <> ALL(${K18_DEAD_STATUSES}::"RollStatus"[])
       ${beamSql}
     GROUP BY r."qualityGradeId", qg.code, qg.name, qg."sortOrder",
              r."itemId", i.name, r."colorId", c.name, sr."subcontractorId", sub.name,

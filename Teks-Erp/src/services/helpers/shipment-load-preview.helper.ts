@@ -77,9 +77,9 @@ export async function buildShipmentLoadPreview(p: LoadPreviewInput): Promise<Loa
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS total,
         COUNT(*) FILTER (WHERE r2.status = 'SHIPPED' AND r2.id NOT IN (SELECT id FROM sel)) AS elsewhere,
-        COUNT(*) FILTER (WHERE r2.status::text = ANY(${IN_PROCESS}::text[]) AND r2.id NOT IN (SELECT id FROM sel)) AS in_process
+        COUNT(*) FILTER (WHERE r2.status = ANY(${IN_PROCESS}::"RollStatus"[]) AND r2.id NOT IN (SELECT id FROM sel)) AS in_process
       FROM rolls r2 JOIN batches b2 ON b2.id = r2."batchId"
-      WHERE b2."workOrderId" = g.wo_id AND NOT (r2.status::text = ANY(${NOT_COUNTED}::text[]))
+      WHERE b2."workOrderId" = g.wo_id AND NOT (r2.status = ANY(${NOT_COUNTED}::"RollStatus"[]))
     ) t ON g.wo_id IS NOT NULL
     LEFT JOIN LATERAL (
       SELECT json_agg(DISTINCT jsonb_build_object('noteNo', n."noteNo", 'senderDocNo', n."senderDocNo")) AS docs

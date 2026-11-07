@@ -40,6 +40,8 @@
 import prisma from "../src/lib/prisma";
 import { readUnvalidatedConstraints } from "../src/lib/constraint-health";
 import { SYNC_ROOT_TABLES } from "../src/cloud-sync/projections";
+import { TAMBUR_ENTRY_SOURCES } from "../src/constants/tambur-entry-sources";
+import { K18_DEAD_STATUSES } from "../src/services/batch.service";
 
 let pass = 0,
   fail = 0;
@@ -200,6 +202,15 @@ const PARTIAL_INDEXES: Array<{
     uniq: false,
     predicate: `(("currentStepId" IS NOT NULL) AND (status <> ALL (ARRAY['WAREHOUSE'::"RollStatus", 'A1_STOCK'::"RollStatus", 'SCRAP'::"RollStatus", 'CANCELLED'::"RollStatus", 'TAMBUR_CONSUMED'::"RollStatus", 'SUBCONTRACTOR_CONSUMED'::"RollStatus", 'RETURNED_FROM_SUBCONTRACTOR'::"RollStatus"])))`,
     why: "Envanter 'Üretimde' sekmesi: kapsam bir NEGASYON, hiçbir düz btree karşılayamaz (ÖLÇÜM: 134 → 46 buffer, plan Seq Scan+Sort → Index Scan Backward)",
+  },
+  // Tambur "son çıkan toplar" (perf 2026-11-07, migration 20261107120000). Beklenen predicate
+  // İKİ SABİTTEN kurulur: küme kodda değişip migration yazılmazsa burası kırmızı (kazanç sessiz kaybolmasın).
+  {
+    table: "rolls",
+    index: "rolls_tambur_createdAt_idx",
+    uniq: false,
+    predicate: `(("entrySource" = ANY (ARRAY[${TAMBUR_ENTRY_SOURCES.map((v) => `'${v}'::"RollEntrySource"`).join(", ")}])) AND (status <> ALL (ARRAY[${K18_DEAD_STATUSES.map((v) => `'${v}'::"RollStatus"`).join(", ")}])))`,
+    why: "Tambur Çıkanlar listesi + sayımı (tablet 15 sn yoklaması): sorgunun sabit where'i predicate'te → Seq Scan yerine LIMIT'te duran sıralı tarama",
   },
   // swatches
   { table: "swatches", index: "swatches_createdAt_idx", uniq: false, predicate: `("cancelledAt" IS NULL)`, why: "iptal edilmemiş kartela listesi" },

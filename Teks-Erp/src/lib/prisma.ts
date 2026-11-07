@@ -14,6 +14,7 @@ import { bilgi, hata, uyari } from "./logger";
 import { checkPrismaClientAlignment } from "./prisma-istemci-hizasi";
 import { resolveEnvFilePath } from "./hizmet-duzeni";
 import { withDirtyTracking } from "../cloud-sync/dirty-flag";
+import { resolvePgPoolMax } from "./pg-pool-max";
 
 // Betik girişleri için; sunucuda server.ts zaten yükledi. Yol düzenden: Windows hizmetinde
 // `<kök>/yapilandirma/.env`, değilse cwd'deki `.env` (dotenv'in kendi varsayılanıyla aynı).
@@ -26,7 +27,7 @@ if (!connectionString) {
 }
 
 // Pool tuning:
-//   max: 30 — orta yüklü API + toplu işlem dalgaları (default 10 yetersiz; 8-çekirdek
+//   max: 30 (varsayılan; `PG_POOL_MAX` ile 2..100 ayarlanır, lib/pg-pool-max.ts) — orta yüklü API + toplu işlem dalgaları (default 10 yetersiz; 8-çekirdek
 //             sunucuda (core×2)+disk ≈ 20-40 bandı, 30 güvenli tampon, 40+ idle/CPU israfı).
 //             Canlıda bu tavana HİÇ yaklaşılmadı (dinlenmede 1 bağlantı; 624k
 //             transaction'da 0 deadlock / 0 conflict) → ne büyütmenin ne küçültmenin
@@ -70,9 +71,12 @@ if (!connectionString) {
 //             olduğunu VARSAYAR; Istanbul oturumunda okumalar +3sa, yazmalar
 //             −3sa kayar (ikisi de ölçüldü). Tam gerekçe + ölçümler:
 //             src/lib/pg-session.ts. Bekçi: scripts/test_timestamptz_contract.ts
+// PG_POOL_MAX (2..100; yok/geçersiz → 30 = yukarıdaki gerekçeli değer). Küçük VDS'te düşürülür.
+const poolMax = resolvePgPoolMax(process.env.PG_POOL_MAX);
+if (poolMax.warning) uyari("prisma-pool", poolMax.warning);
 const pool = new Pool({
   connectionString,
-  max: 30,
+  max: poolMax.max,
   idleTimeoutMillis: 600_000,
   connectionTimeoutMillis: 5_000,
   options: PG_SESSION_OPTIONS,

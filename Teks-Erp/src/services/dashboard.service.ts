@@ -134,7 +134,7 @@ export class DashboardService {
         -- mobil KK1 listesiyle birebir) — elle yazılı liste WEAVING/SEMI_FINISHED'ı kaçırıyordu.
         SELECT COUNT("id")::int AS cnt
         FROM "rolls"
-        WHERE "entrySource"::text IN (${Prisma.join([...KK1_ENTRY_SOURCES])})
+        WHERE "entrySource" = ANY(${[...KK1_ENTRY_SOURCES]}::"RollEntrySource"[])
           AND "createdAt" >= ${today}
           AND "colorId" IS NULL
       ) e ON s."kind" = 'RAW_QC'

@@ -176,8 +176,8 @@ function typedFromTag(tag: CursorValueTag, v: string): unknown {
 /**
  * Dinamik cursor için where clause.
  *
- * asc:  (field > val) OR (field = val AND id > cursor.id)
- * desc: (field < val) OR (field = val AND id < cursor.id)
+ * asc:  field >= val AND ((field > val) OR (field = val AND id > cursor.id))
+ * desc: field <= val AND ((field < val) OR (field = val AND id < cursor.id))
  *
  * NULLABLE sıralama kolonu (`sortNullable=true` — orderBy `nulls:'last'` İLE
  * birlikte kullanılmalı): null grubu her iki yönde de EN SONA gelir; non-null
@@ -214,9 +214,12 @@ export function dynamicCursorWhere(
   if (sortNullable) {
     // Non-null faz bitince null kuyruğuna geçiş (nulls-last ile null'lar "sonra").
     branches.push({ [sortField]: null });
+    return { OR: branches };
   }
 
-  return { OR: branches };
+  // Gereksiz ama SARGABLE sınır (`field <= val` / `>=`): OR tek başına index koşulu olamıyor,
+  // planlayıcı derin sayfada index'i baştan gezip süzüyordu (perf 2026-11-07; sonuç kümesi aynı).
+  return { AND: [{ [sortField]: { [`${op}e`]: typed } }, { OR: branches }] };
 }
 
 export function buildNextDynamicCursor(
