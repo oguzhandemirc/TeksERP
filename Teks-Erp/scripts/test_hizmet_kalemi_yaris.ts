@@ -4,7 +4,7 @@
 // Çalıştırma: npx tsx scripts/test_hizmet_kalemi_yaris.ts
 //
 // NEDEN: Müşterili hizmet fiyatı ve özellik/değer → hizmet kalemi eşlemesi D1 CANLI REFERANSIDIR
-// (`ITEM_LIVE_REF_KINDS` SERVICE_*). Yazarları kartı yalnız tx DIŞINDA okuyordu: sayım ile yazım
+// (`SERVICE_ITEM_LIVE_REF_KINDS`). Yazarları kartı yalnız tx DIŞINDA okuyordu: sayım ile yazım
 // arasında doğan bağ görünmez, "Pasif kalemde canlı fiyat/eşleme" oluşurdu (TOCTOU). Emsal:
 // `test_item_lifecycle_race` (top girişi). Kilit sırası her yolda: 8030 SHARED → kart FOR SHARE.
 //
@@ -25,7 +25,7 @@ import { ensureTestAdmin } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
 import { fabricPropertyService } from "../src/routes/fabric-property.routes";
 import { itemPriceService } from "../src/services/item-price.service";
-import { countItemLiveRefs, totalLiveRefs } from "../src/services/helpers/item-lifecycle.helper";
+import { countServiceItemLiveRefs, totalServiceItemLiveRefs } from "../src/services/helpers/service-item-lifecycle.helper";
 
 let pass = 0;
 let fail = 0;
@@ -57,7 +57,7 @@ async function race(label: string, tag: string, write: Write, adminId: string): 
     const gecikmePasif = i % 2 === 0 ? (i % 8) * 3 : 0;
     const gecikmeYazim = i % 2 === 1 ? (i % 8) * 3 : 0;
     const [pasif, yazim] = await Promise.allSettled([
-      // D1b: hizmet kartı `service_items`'ta — pasife alma, hizmet kartı yaşam döngüsü yazıcısına (D1b) bağlanacak.
+      // D1b: `itemService.transitionLifecycle` hizmet id'sini hizmet kartı tek yazarına yönlendirir (eski panel yolu).
       sleep(gecikmePasif).then(() => itemService.transitionLifecycle(it.id, ItemLifecycleStatus.ARCHIVED, null, adminId)),
       sleep(gecikmeYazim).then(() => write(it.id)),
     ]);
@@ -68,7 +68,7 @@ async function race(label: string, tag: string, write: Write, adminId: string): 
       for (const x of [pasif, yazim]) if (x.status === "rejected") console.log(`   ! ${(x.reason as Error).message?.split("\n")[0]}`);
     }
     const row = await prisma.serviceItem.findUniqueOrThrow({ where: { id: it.id }, select: { lifecycleStatus: true } });
-    const live = totalLiveRefs(await countItemLiveRefs(prisma, it.id));
+    const live = totalServiceItemLiveRefs(await countServiceItemLiveRefs(prisma, it.id));
     if (row.lifecycleStatus === ItemLifecycleStatus.ARCHIVED && live > 0) ihlal++;
   }
   for (const [k, n] of tally) console.log(`   · ${n} tur: ${k}`);

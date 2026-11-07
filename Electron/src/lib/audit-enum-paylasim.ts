@@ -92,6 +92,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   FAILED: "ImportRunStatus(aktarım başarısız) ve DeliveryNoteLineStatus(satırın top girişi başarısız) — ikisi de 'Başarısız'",
   SKIPPED: "StepStatus(adım atlandı) ve DeliveryNoteLineStatus(satır onayda atlandı) — ikisi de 'Atlandı'",
   INFO: "ScanType(bilgi amaçlı tarama) ve DeliveryNoteLineStatus(belge başına tek kayıtta topsuz bilgi satırı) — ikisi de 'Bilgi'",
+  SERVICE: "ItemType(eski hizmet kalemi türü, MV-05 uyumluluk) ve InvoiceLineType(fatura satırının konusu hizmet kartı) — ikisi de 'Hizmet'; ortak Türkçe doğru",
   ITEM: "DuplicateReviewEntity(mükerrer kumaş) ve DeliveryNoteAliasScope(eşleme hedefi kumaş) — ikisi de 'Kumaş'",
   COLOR: "DuplicateReviewEntity(mükerrer renk) ve DeliveryNoteAliasScope(eşleme hedefi renk) — ikisi de 'Renk'",
   PROCESS:

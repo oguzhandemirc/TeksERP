@@ -42,6 +42,7 @@ import { changeConsumableNorm, createConsumableNorm, revokeConsumableNorm } from
 import { consumableNormsValidAt, isCostRateValidAt, machineCostRateValidAt } from "../src/services/helpers/cost-rate-validity.helper";
 import { AppError } from "../src/utils/app-error";
 import { countItemLiveRefs, transitionItemLifecycle } from "../src/services/helpers/item-lifecycle.helper";
+import { transitionServiceItemLifecycle } from "../src/services/helpers/service-item-lifecycle.helper";
 
 let pass = 0;
 let fail = 0;
@@ -313,7 +314,8 @@ async function main(): Promise<void> {
     const n6e = await createConsumableNorm(hizmet, sarf, { qtyPerM: "0.02", clientToken: randomUUID() }, uid);
     const arsivle = (itemId: string) => hata(() => transitionItemLifecycle({ itemId, to: ItemLifecycleStatus.ARCHIVED, userId: uid }));
     const e6eS = await arsivle(sarf);
-    const e6eH = await arsivle(hizmet);
+    // D1b: hizmet kartı `service_items`'ta — kendi tek yazarından geçer.
+    const e6eH = await hata(() => transitionServiceItemLifecycle({ serviceItemId: hizmet, to: ItemLifecycleStatus.ARCHIVED, userId: uid }));
     const normRef = (e: AppError | null) => (e?.details as { references?: Array<{ kind: string; count: number }> } | undefined)?.references?.find((x) => x.kind === "CONSUMABLE_NORM")?.count;
     check("§6e ⭐ aktif normlu sarf + hizmet kalemi pasife alınamaz → 409 ITEM_HAS_LIVE_REFERENCES (CONSUMABLE_NORM=1)",
       kod(e6eS) === "ITEM_HAS_LIVE_REFERENCES" && normRef(e6eS) === 1 && kod(e6eH) === "ITEM_HAS_LIVE_REFERENCES" && normRef(e6eH) === 1,

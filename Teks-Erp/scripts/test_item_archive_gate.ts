@@ -14,6 +14,7 @@ import { Currency, ItemLifecycleStatus, ItemType, PriceKind, RollStatus } from "
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
+import { serviceItemService } from "../src/services/service-item.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
 import { ITEM_LIVE_REF_KINDS } from "../src/services/helpers/item-lifecycle.helper";
@@ -42,7 +43,7 @@ async function errOf(fn: () => Promise<unknown>): Promise<{ code: string; status
 const TAG = `TST-AK-${Date.now()}`;
 const inventory = new InventoryService();
 const itemIds: string[] = [];
-const svcFx = { propIds: [] as string[], customerIds: [] as string[] };
+const svcFx = { propIds: [] as string[], customerIds: [] as string[], serviceIds: [] as string[] };
 
 async function mkItem(suffix: string): Promise<string> {
   const r = await itemService.create({ name: `${TAG} ${suffix}`, itemType: "FABRIC", unit: "MT" }, await testActorId());
@@ -50,6 +51,7 @@ async function mkItem(suffix: string): Promise<string> {
   itemIds.push(id);
   return id;
 }
+const svcState = async (id: string) => prisma.serviceItem.findUniqueOrThrow({ where: { id }, select: { lifecycleStatus: true } });
 const state = async (id: string) =>
   prisma.item.findUniqueOrThrow({ where: { id }, select: { lifecycleStatus: true, isActive: true, lifecycleReason: true } });
 
@@ -133,11 +135,12 @@ async function main(): Promise<void> {
   check("Tükenene kadar hedefe birleştirme 409 ITEM_MERGE_TARGET_NOT_ACTIVE", m.code === "ITEM_MERGE_TARGET_NOT_ACTIVE", m.code);
   check("kaynak dokunulmadı", (await state(K)).lifecycleStatus === "ACTIVE");
 
-  console.log("\n=== 7) Eşlenmiş hizmet kalemi pasife alınamaz (1e K2a 2026-10-29: motor eşlemeyi + müşteri fiyatını her sevkte okur) ===");
-  const svc = (await itemService.create({ name: `${TAG} HIZMET`, itemType: "SERVICE", unit: "MT" }, ADMIN)).data as { id: string };
-  itemIds.push(svc.id);
+  console.log("\n=== 7) Eşlenmiş hizmet kartı pasife alınamaz (1e K2a 2026-10-29; D1b: `service_items` tek yazarı) ===");
+  const svc = (await serviceItemService.create({ name: `${TAG} HIZMET`, unit: "MT" }, ADMIN)).data as { id: string; code: string };
+  svcFx.serviceIds.push(svc.id);
+  check("hizmet kartı HZM serisinden kod aldı", /^HZM-\d{6}$/.test(svc.code), svc.code);
   // Kart varsayılan fiyatı (müşterisiz) TANIMDIR: tek başına pasife almayı engellemez.
-  await prisma.itemPrice.create({ data: { itemId: svc.id, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "1.0000" } });
+  await prisma.itemPrice.create({ data: { serviceItemId: svc.id, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "1.0000" } });
   const prop = await prisma.fabricProperty.create({ data: { code: `${TAG}-P`.slice(0, 32), name: `${TAG} kurşun`, valueType: "FLAG", serviceItemId: svc.id }, select: { id: true } });
   svcFx.propIds.push(prop.id);
   const choice = await prisma.fabricProperty.create({ data: { code: `${TAG}-G`.slice(0, 32), name: `${TAG} gramaj`, valueType: "CHOICE" }, select: { id: true } });
@@ -146,12 +149,14 @@ async function main(): Promise<void> {
   await prisma.fabricPropertyValue.update({ where: { id: val.id }, data: { serviceItemId: svc.id } });
   const cust = await prisma.customer.create({ data: { code: `${TAG}-C`.slice(0, 32), name: `${TAG} müşteri` }, select: { id: true } });
   svcFx.customerIds.push(cust.id);
-  await prisma.itemPrice.create({ data: { itemId: svc.id, customerId: cust.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "2.5000" } });
+  await prisma.itemPrice.create({ data: { serviceItemId: svc.id, customerId: cust.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "2.5000" } });
   const kinds = ["SERVICE_PROPERTY_MAP", "SERVICE_VALUE_MAP", "SERVICE_CUSTOMER_PRICE"];
-  const pv7 = (await itemService.lifecyclePreview(svc.id, ItemLifecycleStatus.ARCHIVED)).data as { canTransition: boolean; liveTotal: number; references: Array<{ kind: string; count: number; records: Array<{ title: string }> }> };
+  const pv7 = (await serviceItemService.lifecyclePreview(svc.id, ItemLifecycleStatus.ARCHIVED)).data as { canTransition: boolean; liveTotal: number; references: Array<{ kind: string; count: number; records: Array<{ title: string }> }> };
   check("⭐ önizleme: eşleme (özellik + değer) ve müşteri fiyatı canlı referans, Pasif KAPALI (varsayılan fiyat sayılmaz)",
     pv7.canTransition === false && pv7.liveTotal === 3 && kinds.every((k) => pv7.references.find((x) => x.kind === k)?.count === 1), JSON.stringify(pv7.references.filter((x) => x.count > 0).map((x) => [x.kind, x.count])));
-  const e7 = await errOf(() => itemService.transitionLifecycle(svc.id, ItemLifecycleStatus.ARCHIVED, null, ADMIN));
+  const pvLegacy = (await itemService.lifecyclePreview(svc.id, ItemLifecycleStatus.ARCHIVED)).data as { liveTotal: number };
+  check("eski uç (`/api/items/:id/lifecycle-preview`) hizmet id'sinde aynı önizlemeyi verir", pvLegacy.liveTotal === 3, String(pvLegacy.liveTotal));
+  const e7 = await errOf(() => serviceItemService.transitionLifecycle(svc.id, ItemLifecycleStatus.ARCHIVED, null, ADMIN));
   const refs7 = (e7.details.references ?? []) as Array<{ kind: string; label: string; count: number; records: Array<{ title: string }> }>;
   check("⭐ pasife alma 409 ITEM_HAS_LIVE_REFERENCES + üç türün kaydı adıyla (Türkçe etiket)",
     e7.status === 409 && e7.code === "ITEM_HAS_LIVE_REFERENCES" && refs7.find((x) => x.kind === "SERVICE_PROPERTY_MAP")?.records[0]?.title === `${TAG} kurşun`
@@ -159,28 +164,32 @@ async function main(): Promise<void> {
       && refs7.find((x) => x.kind === "SERVICE_CUSTOMER_PRICE")?.records[0]?.title === `${TAG} müşteri`
       && refs7.find((x) => x.kind === "SERVICE_CUSTOMER_PRICE")?.label === "Müşteri hizmet fiyatı",
     `${e7.status} ${e7.code} ${JSON.stringify(refs7.filter((x) => x.count > 0))}`);
-  check("kart Aktif kaldı", (await state(svc.id)).lifecycleStatus === "ACTIVE");
+  const e7d = await errOf(() => itemService.softDelete(svc.id, ADMIN));
+  check("eski uç DELETE /api/items/:id hizmet id'sinde de aynı kapıdan geçer (409)", e7d.code === "ITEM_HAS_LIVE_REFERENCES", e7d.code);
+  check("kart Aktif kaldı", (await svcState(svc.id)).lifecycleStatus === "ACTIVE");
   // Çıkış yolu: eşlemeler kaldırılır, müşteri fiyatı damgalanır ⇒ Pasif'e geçilir.
   await prisma.fabricProperty.update({ where: { id: prop.id }, data: { serviceItemId: null } });
   await prisma.fabricPropertyValue.update({ where: { id: val.id }, data: { serviceItemId: null } });
-  await prisma.itemPrice.updateMany({ where: { itemId: svc.id, customerId: cust.id }, data: { revokedAt: new Date() } });
-  const ok7 = await errOf(() => itemService.transitionLifecycle(svc.id, ItemLifecycleStatus.ARCHIVED, null, ADMIN));
-  check("eşleme kaldırılıp müşteri fiyatı damgalanınca Pasif'e geçilir (varsayılan fiyat durur)", ok7.code === "OK" && (await state(svc.id)).lifecycleStatus === "ARCHIVED", ok7.code);
+  await prisma.itemPrice.updateMany({ where: { serviceItemId: svc.id, customerId: cust.id }, data: { revokedAt: new Date() } });
+  const ok7 = await errOf(() => serviceItemService.transitionLifecycle(svc.id, ItemLifecycleStatus.ARCHIVED, null, ADMIN));
+  check("eşleme kaldırılıp müşteri fiyatı damgalanınca Pasif'e geçilir (varsayılan fiyat durur)", ok7.code === "OK" && (await svcState(svc.id)).lifecycleStatus === "ARCHIVED", ok7.code);
 }
 
 async function temizle(): Promise<void> {
-  if (itemIds.length === 0) return;
+  if (itemIds.length === 0 && svcFx.serviceIds.length === 0) return;
   const rolls = await prisma.roll.findMany({ where: { itemId: { in: itemIds } }, select: { id: true } });
   const rollIds = rolls.map((x) => x.id);
   await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: itemIds } } });
-  await prisma.itemPrice.deleteMany({ where: { itemId: { in: itemIds } } });
+  await prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: itemIds } }, { serviceItemId: { in: svcFx.serviceIds } }] } });
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: svcFx.propIds } } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: svcFx.propIds } } });
   await prisma.customer.deleteMany({ where: { id: { in: svcFx.customerIds } } });
   await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: svcFx.serviceIds } } });
+  await prisma.serviceItem.deleteMany({ where: { id: { in: svcFx.serviceIds } } });
 }
 
 main()

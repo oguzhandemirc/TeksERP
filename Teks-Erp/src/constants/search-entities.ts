@@ -25,6 +25,7 @@ import { TERIM } from "./terim";
 export type SearchEntityKey =
   | "customer"
   | "item"
+  | "serviceItem"
   | "color"
   | "order"
   | "workOrder"
@@ -77,6 +78,18 @@ export const SEARCH_ENTITIES: readonly SearchEntity[] = [
     // Müşteri alias'ı da aranır: müşteri "BELLE" der, bizim adımız "18152".
     permissions: ["item:read"],
     searchFields: ["name", "customerAliases.some.alias"],
+    codeSearchFields: ["code"],
+    select: { id: true, code: true, name: true, isActive: true },
+    orderBy: { name: "asc" },
+    activeOnly: true,
+  },
+  {
+    // Hizmet kartları ayrı tabloda (D1b); izin ürün kartıyla aynı.
+    key: "serviceItem",
+    label: "Hizmet Kartları",
+    modelName: "serviceItem",
+    permissions: ["item:read"],
+    searchFields: ["name"],
     codeSearchFields: ["code"],
     select: { id: true, code: true, name: true, isActive: true },
     orderBy: { name: "asc" },

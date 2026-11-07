@@ -24,6 +24,7 @@ installDecimalNumberSerializer();
 // Routes
 import authRoutes from "./routes/auth.routes";
 import itemRoutes from "./routes/item.routes";
+import serviceItemRoutes from "./routes/service-item.routes";
 import customerRoutes from "./routes/customer.routes";
 import customerBarcodeSeriesRoutes from "./routes/customer-barcode-series.routes";
 import customerBranchListRoutes from "./routes/customer-branch-list.routes";
@@ -543,6 +544,8 @@ app.use("/api", licenseGate);
 // =============================================================================
 app.use("/api/auth", authRoutes);
 app.use("/api/items", itemRoutes);
+// Hizmet kartları ayrı tabloda (`service_items`, D1b); izin ürün kartıyla aynı.
+app.use("/api/service-items", serviceItemRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/customers/:id/barcode-series", customerBarcodeSeriesRoutes); // D4-F2 (customer.routes boyut tavanında)
 app.use("/api/customer-branches", customerBranchListRoutes);
