@@ -108,3 +108,31 @@ it('§7 AppModal açık pencere işaretini koyar ve içeriğine kapsama bağlam�
   expect(modal).toMatch(/if \(!visible \|\| scanPassThrough\) return;\s*return openScanOverlay\(overlayId\);/);
   expect(modal).toMatch(/<ScanOverlayContext\.Provider value=\{within\}>\{children\}<\/ScanOverlayContext\.Provider>/);
 });
+
+// §8 (D3) Çok amaçlı ekranlar: tuş "en üstteki pencere / adımın hedefi" kuralıyla tek bir dinleyiciye gider.
+// Varsayılan dinleyici kapalı tarayıcıdır; ikincil okutmalar (Kesme, Çıkan Toplar, Taşı, Etiket doğrulama)
+// kendi görünür panelini açar ve üstte olduğu için okumayı o alır.
+// Bakım hattı: KK1 tezgah etiketi bandı, Levent Sarım okutması ve Dokuma levent bandı bu ağaçta yok.
+const MULTI_PURPOSE = [
+  'screens/Modules/Tambur/TamburScreen.tsx',
+  'screens/Modules/Tambur/TamburBringRollModal.tsx',
+  'screens/Modules/FasonSevk/FasonSevkScreen.tsx',
+  'screens/Modules/TartiPaket/CuvalDuzeltScreen.tsx',
+  'components/session/PlaceConfirmView.tsx',
+];
+it('§8 çok amaçlı ekranlar varsayılan dinleyiciyi kurar ve donanım dalı çizer', () => {
+  for (const rel of MULTI_PURPOSE) {
+    const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
+    expect({
+      rel,
+      listens: /<BarcodeScannerModal\b(?:(?!\/>)[\s\S]){0,1500}?\blistenWhileHidden\b/.test(src),
+      hardwareBranch: /\buseHardwareScanMode\(\)|\bhardwareListening\b/.test(src),
+    }).toEqual({ rel, listens: true, hardwareBranch: true });
+  }
+});
+
+it('§8 ekran durumuna göre yönlenen ekran: Fason Sevk (kart ↔ top)', () => {
+  const fason = fs.readFileSync(path.join(SRC, 'screens/Modules/FasonSevk/FasonSevkScreen.tsx'), 'utf8');
+  expect(fason).toMatch(/visible=\{cardScannerOpen\}\s*listenWhileHidden=\{!workOrderId\}/);
+  expect(fason).toMatch(/visible=\{rollScannerOpen\}\s*listenWhileHidden=\{!!workOrderId && !!stepId\}/);
+});

@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import AppModal from '../../../components/AppModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { packingService, SHIPMENT_STATUS_TR, type LocatedRoll } from '../../../services/packing.service';
@@ -46,6 +47,8 @@ export default function CuvalDuzeltScreen() {
   const [barcode, setBarcode] = useState('');
   const [roll, setRoll] = useState<LocatedRoll | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  // El terminali: tuş varsayılan olarak top bulur; "Taşı" açtığı panel (görünür hedef) açıkken hedef çuval topu alır.
+  const hardware = useHardwareScanMode();
   // Taşıma: hedef çuvaldan bir top okutma modu.
   const [moveScanOpen, setMoveScanOpen] = useState(false);
   const [manualWeighTarget, setManualWeighTarget] = useState<{
@@ -186,7 +189,7 @@ export default function CuvalDuzeltScreen() {
         <View style={styles.scanRow}>
           <TextInput
             mode="outlined"
-            label="Top barkodu"
+            label={hardware ? "Top barkodu — okuyucu tuşuyla okutun" : "Top barkodu"}
             value={barcode}
             onChangeText={setBarcode}
             autoCapitalize="characters"
@@ -195,9 +198,11 @@ export default function CuvalDuzeltScreen() {
             onSubmitEditing={() => barcode.trim() && locate.mutate(barcode.trim())}
             right={<TextInput.Icon icon="magnify" onPress={() => barcode.trim() && locate.mutate(barcode.trim())} />}
           />
-          <Button mode="contained" icon="barcode-scan" onPress={() => setScanOpen(true)} style={styles.scanBtn}>
-            Okut
-          </Button>
+          {!hardware && (
+            <Button mode="contained" icon="barcode-scan" onPress={() => setScanOpen(true)} style={styles.scanBtn}>
+              Okut
+            </Button>
+          )}
         </View>
 
         {locate.isPending && <ActivityIndicator style={{ marginTop: 24 }} />}
@@ -335,6 +340,7 @@ export default function CuvalDuzeltScreen() {
       {/* 1. top okutma */}
       <BarcodeScannerModal
         visible={scanOpen}
+        listenWhileHidden
         onDismiss={() => setScanOpen(false)}
         onScan={(code) => {
           setScanOpen(false);

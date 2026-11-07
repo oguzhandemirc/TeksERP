@@ -48,6 +48,8 @@ import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import { ScanFlashCard } from '../../../components/HardwareScanPanel';
 import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import { useScanFeedback } from '../../../hooks/useScanFeedback';
 import { signalScan } from '../../../services/scanFeedback';
@@ -153,6 +155,9 @@ export default function FasonSevkScreen() {
   const [cardInput, setCardInput] = useState('');
   // Top barkodu kamera tarama — okutulan barkod barcodeInput'a yazılır + resolve edilir.
   const [rollScannerOpen, setRollScannerOpen] = useState(false);
+  // El terminali — tuş ekran durumuna göre yönlenir: iş emri seçilmemişken refakat kartı, iş emri + adım
+  // seçiliyken top (iki bant aynı anda görünmez; aradaki durumda okuma beklenmez).
+  const hardware = useHardwareScanMode();
   const [rollPickerOpen, setRollPickerOpen] = useState(false);
   // Okutma geri bildirimi (merkez bildirim + son okutulanlar şeridi) — Hızlı İş
   // Emri ile AYNI hook. Eskiden buradaki tek iz kaybolan bir toast'tı: operatör
@@ -1117,6 +1122,7 @@ export default function FasonSevkScreen() {
                 onScan={() => setCardScannerOpen(true)}
                 onList={() => setPickerOpen('wo')}
                 tone="blue"
+                hardwareListening
               />
             )}
 
@@ -1229,6 +1235,7 @@ export default function FasonSevkScreen() {
                 onScan={() => setRollScannerOpen(true)}
                 onList={() => setRollPickerOpen(true)}
                 tone="blue"
+                hardwareListening
                 extra={
                   <Button
                     mode="contained"
@@ -1242,6 +1249,7 @@ export default function FasonSevkScreen() {
                   </Button>
                 }
               />
+              {hardware && scanFb.flash ? <ScanFlashCard flash={scanFb.flash} /> : null}
               {scannedRolls.length > 0 && (
                 <View style={styles.rollList}>
                   <Text style={styles.rollListHeader}>
@@ -1513,6 +1521,7 @@ export default function FasonSevkScreen() {
       {/* ── Refakat kartı kamera tarama: WO'yu otomatik seçer ── */}
       <BarcodeScannerModal
         visible={cardScannerOpen}
+        listenWhileHidden={!workOrderId}
         onDismiss={() => setCardScannerOpen(false)}
         onScan={(data) => {
           // İşlemeyi modal TAM kapandıktan sonraya ertele (onModalHide) —
@@ -1542,6 +1551,7 @@ export default function FasonSevkScreen() {
             veriyor; yakalama haptiği üstüne binerse ikisi ayırt edilemez. */}
       <BarcodeScannerModal
         visible={rollScannerOpen}
+        listenWhileHidden={!!workOrderId && !!stepId}
         onDismiss={() => setRollScannerOpen(false)}
         continuous
         trigger="tap"

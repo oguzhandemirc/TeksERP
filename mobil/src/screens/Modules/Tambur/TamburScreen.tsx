@@ -76,6 +76,7 @@ import TamburSendToDyeModal from './TamburSendToDyeModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import StandaloneLabelSheet from '../../../components/labels/StandaloneLabelSheet';
@@ -488,6 +489,9 @@ export default function TamburScreen() {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali — tuş varsayılan olarak refakat kartını okur; Kesme / Çıkan Toplar kendi panelini açar
+  // (görünür panel en üstte, okumayı o alır). "Tara" çipi kamera değil okuyucu panelidir.
+  const hardware = useHardwareScanMode();
 
   // Aktif top'un çalışma state'i — top/sekme değişince sıfırlanır.
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
@@ -3077,6 +3081,7 @@ export default function TamburScreen() {
             onScan={() => openScanner()}
             onList={() => openList()}
             tone="blue"
+            hardwareListening
           />
           {compact && (
             <View style={styles.actionBtnRow}>
@@ -3258,7 +3263,7 @@ export default function TamburScreen() {
         onPress={() => openList()}
         fill
       />
-      <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} fill />
+      <HeaderChip icon={hardware ? 'barcode-scan' : 'camera'} label="Tara" onPress={() => openScanner()} fill />
       {canLinkOrders && activeJob && (
         <HeaderChip
           icon="link-variant"
@@ -4367,6 +4372,7 @@ export default function TamburScreen() {
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         title="Refakat Kartı QR Okut"
         onDismiss={() => setScannerOpen(false)}
         onScan={handleScannerResult}

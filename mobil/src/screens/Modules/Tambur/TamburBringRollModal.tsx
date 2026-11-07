@@ -166,6 +166,8 @@ export default function TamburBringRollModal({
         // üstüne modal kapanıp operatör "olmadı" sanmasın.
         dismissable={!busy}
         swipeToDismiss={!busy}
+        // El terminali: okuyucu dinleyicisi bu sheet'in kardeşi (içinde değil) — sheet onu örtmesin.
+        scanPassThrough
       >
         <Surface style={[styles.sheet, { maxHeight: height * 0.82 }]} elevation={4}>
           <View style={styles.header}>
@@ -219,6 +221,7 @@ export default function TamburBringRollModal({
               inputLeftIcon="barcode-scan"
               onScan={() => setScannerOpen(true)}
               onList={() => setPickerOpen(true)}
+              hardwareListening
             />
 
             {previewMutation.isPending && (
@@ -371,6 +374,7 @@ export default function TamburBringRollModal({
       {/* Kamera — okutma sonucu modal TAM kapandıktan sonra işlenir. */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden={visible}
         title="Topu Buraya Al — Barkod Okut"
         onDismiss={() => setScannerOpen(false)}
         onScan={(code) => {

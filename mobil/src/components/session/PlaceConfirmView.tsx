@@ -25,6 +25,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
+import HardwareTriggerHint from '../HardwareTriggerHint';
+import { useHardwareScanMode } from '../../hooks/useScanMethod';
 import { useSessionStore } from '../../store/sessionStore';
 import { useAuthStore } from '../../store/authStore';
 import { useLockStore } from '../../store/lockStore';
@@ -124,6 +126,8 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
       : (pickedStationId && kindPlaces.find((s) => s.id === pickedStationId)) || null;
 
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali: seçim görünümünde (yükleme/oturum açma sürmüyorken) tuş makine QR'ını okur.
+  const hardware = useHardwareScanMode();
   const [busy, setBusy] = useState(false);
   // Devralma teyidi — MACHINE_OCCUPIED detayı + tekrar denenecek payload.
   const [takeover, setTakeover] = useState<{
@@ -258,18 +262,22 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
         // adım 2 o istasyonun makineleri.
         <View style={styles.body}>
           <View style={[styles.card, styles.cardFill]}>
-            <Button
-              mode="contained"
-              icon="qrcode-scan"
-              buttonColor={C.accent}
-              style={styles.primaryBtn}
-              contentStyle={styles.primaryBtnContent}
-              labelStyle={styles.primaryBtnLabel}
-              disabled={busy}
-              onPress={() => setScannerOpen(true)}
-            >
-              Makine QR'ını Okut
-            </Button>
+            {hardware ? (
+              <HardwareTriggerHint busy={busy} label="Makine QR'ını okuyucuyla okut" style={styles.primaryBtn} />
+            ) : (
+              <Button
+                mode="contained"
+                icon="qrcode-scan"
+                buttonColor={C.accent}
+                style={styles.primaryBtn}
+                contentStyle={styles.primaryBtnContent}
+                labelStyle={styles.primaryBtnLabel}
+                disabled={busy}
+                onPress={() => setScannerOpen(true)}
+              >
+                Makine QR'ını Okut
+              </Button>
+            )}
 
             {kindPlaces.length === 0 && !placesQ.isLoading ? (
               <Text style={[styles.muted, { marginTop: 12 }]}>
@@ -505,6 +513,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
 
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden={!busy && !autoBusy && !(placesQ.isLoading && kindPlaces.length === 0)}
         onDismiss={() => setScannerOpen(false)}
         onScan={(code) => void handleScan(code)}
         title="Makine QR'ını okut"
