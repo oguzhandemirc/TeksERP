@@ -57,3 +57,22 @@ it('§5 köprü kamera açmaz, SDK jar paketlemez', () => {
   expect(kt).not.toMatch(/device\.sdk/);
   expect(manifest).not.toMatch(/uses-library/);
 });
+
+// §6 (D2) Donanım yüzleri kamerayı bağlamaz: Point Mobile kamera açılınca okuyucuyu kapatır.
+const SRC = path.join(__dirname, '..');
+const HW_SURFACES = [
+  'components/HardwareScanPanel.tsx',
+  'components/HardwareTriggerHint.tsx',
+  'screens/Modules/HizliIsEmri/wizard/HardwareRollsTable.tsx',
+];
+it('§6 donanım yüzleri kamera bileşeni içe aktarmaz; modal kamerayı yalnız donanım dışı dalda çizer', () => {
+  for (const rel of HW_SURFACES) {
+    const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
+    expect({ rel, camera: /from 'expo-camera'|import \{[^}]*\bBarcodeScannerView\b[^}]*\} from/.test(src) }).toEqual({
+      rel,
+      camera: false,
+    });
+  }
+  const modal = fs.readFileSync(path.join(SRC, 'components/BarcodeScannerModal.tsx'), 'utf8');
+  expect(modal).toMatch(/\{hardware \? \(\s*<HardwareScanPanel[\s\S]*?\) : \(\s*<View style=\{styles\.cameraLayer\}>\s*<BarcodeScannerView/);
+});

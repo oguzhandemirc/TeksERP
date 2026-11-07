@@ -21,6 +21,8 @@ import ScannedRollsModal from './wizard/ScannedRollsModal';
 import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import OrderLinkFooterButton from './wizard/OrderLinkFooterButton';
 import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 
@@ -68,6 +70,7 @@ export default function NewWorkOrderView({
   const online = useOnlineStatus();
   // Ayarlar → "Kamera arızalı" — listeden seçim kaçış yollarının tek kaynağı.
   const cameraUnusable = useCameraUnusable();
+  const hardware = useHardwareScanMode();
 
   // Başarı ekranı durumunu kabuğa bildir (geri tuşu + liste tazeleme için).
   const hasResult = !!wo.result;
@@ -294,6 +297,8 @@ export default function NewWorkOrderView({
                 <Text style={styles.navBtnSideText}>Geri</Text>
               </View>
             </TouchableRipple>
+          ) : hardware ? (
+            <OrderLinkFooterButton count={wo.orderLineIds.length} onPress={() => setOrderPickerOpen(true)} />
           ) : null}
 
           <TouchableRipple
@@ -336,6 +341,8 @@ export default function NewWorkOrderView({
         visible={scannerOpen}
         onDismiss={() => setScannerOpen(false)}
         onScan={(b) => void wo.handleScan(b)}
+        // El terminali: adım ①'de tuş doğrudan top ekler (modal açılmaz).
+        listenWhileHidden={step === 0}
         title="Stok Topu Okut"
         continuous
         trigger="tap"
