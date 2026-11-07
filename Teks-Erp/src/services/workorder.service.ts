@@ -111,7 +111,7 @@ import {
   ensureWorkOrderInProgress,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
-import { producedOutputWhere } from "./helpers/produced-output.helper";
+import { resolveProducedOutputWhere } from "./helpers/produced-output.helper";
 import { freezeCloseSnapshotTx, loadCloseSnapshotView } from "./helpers/workorder-close-snapshot.helper";
 import {
   claimWorkOrderStatusTx,
@@ -2264,11 +2264,12 @@ export class WorkOrderService {
     //      sessizce sağlam üretim sayardı (schema.prisma QualityGrade notu).
     const buckets = await loadProducedBuckets(prisma);
     const excludedGradeCodes = buckets.fireCodes;
+    const producedSet = await resolveProducedOutputWhere(prisma, stepIds);
     const producedRows = await prisma.roll.groupBy({
       by: ["producedInStepId"],
       where: {
         AND: [
-          producedOutputWhere(stepIds),
+          producedSet,
           // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
           // üretim sayılmalı; düz notIn onu dışlardı → null VEYA (fire değil).
           // Katalogda hiç fire kodu yoksa süzgeç HİÇ yazılmaz (`notIn: []` üretme).
@@ -2622,7 +2623,7 @@ export class WorkOrderService {
       // CANCELLED olanlar listede kalır (rozetle işaretlenir). Metraj initialQty
       // (production anı), currentQty değil — re-cut sonrası sıfırlanmaz, snapshot sabit.
       const producedRollRows = await prisma.roll.findMany({
-        where: producedOutputWhere(stepIds),
+        where: await resolveProducedOutputWhere(prisma, stepIds),
         select: {
           id: true,
           barcode: true,
