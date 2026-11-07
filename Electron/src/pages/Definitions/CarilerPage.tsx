@@ -31,18 +31,17 @@ import { useCustomerFinanceAccess } from "@/pages/Customers/CustomerFinanceSecti
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateDestinationLock } from "@/pages/Operations/SackContentEdit/destinationDefault";
 import { toast } from "sonner";
-import { Search, Plus, Pencil } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { apiErrorText } from "@/lib/api-error";
 import { UNLINKED_SUBCONTRACTOR_FILTER } from "@/components/forms/supplierPicker";
-import { LabeledSelect } from "@/components/forms/LabeledSelect";
-import { DIRECTION_OPTIONS, SUBCONTRACTOR_OPTIONS, partnerRoleLabels, type DirectionFilter, type PartnerRoleFlags, type PartnerRoleKey, type SubcontractorFilter } from "@/lib/partnerRoles";
-import { CARI_FILTER_DEFAULTS, cariPageInfo, cariQueryPlan, isCariFilterDirty, mergeCariRows, type CariFilters } from "./carilerPaging";
+import { partnerRoleLabels, type PartnerRoleFlags, type PartnerRoleKey } from "@/lib/partnerRoles";
+import { cariPageInfo, cariQueryPlan, isCariFilterDirty, mergeCariRows } from "./carilerPaging";
+import { CarilerFilterRow, useCariFilters } from "./CarilerFilterRow";
 import { customerService } from "@/pages/Customers/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
@@ -74,7 +73,7 @@ export function CarilerPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filters, setFilters] = useState<CariFilters>(CARI_FILTER_DEFAULTS);
+  const { filters, ready: filtersReady } = useCariFilters();
   const [page, setPage] = useState(1);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [editSub, setEditSub] = useState<Subcontractor | null>(null);
@@ -109,7 +108,7 @@ export function CarilerPage() {
         // Rol modeli: Yön × Fason süzgeçleri bayrak/`filter[role]` olarak SUNUCUYA gider (tek kaynak partnerRoles).
         filters: { ...plan.customerFilters },
       }),
-    enabled: plan.customers,
+    enabled: plan.customers && filtersReady,
   });
   const subsQ = useQuery({
     queryKey: ["subcontractors", "cariler", page, debouncedSearch],
@@ -123,7 +122,7 @@ export function CarilerPage() {
         // Fason = carinin rolü: bağlı fason cari satırında görünür, bu bacak yalnız BAĞSIZ profilleri ister.
         filters: { ...UNLINKED_SUBCONTRACTOR_FILTER },
       }),
-    enabled: plan.subcontractors,
+    enabled: plan.subcontractors && filtersReady,
   });
 
   const rows = useMemo<Row[]>(() => {
@@ -202,7 +201,7 @@ export function CarilerPage() {
   });
 
   const loading =
-    (plan.customers && customersQ.isLoading) || (plan.subcontractors && subsQ.isLoading);
+    !filtersReady || (plan.customers && customersQ.isLoading) || (plan.subcontractors && subsQ.isLoading);
 
   return (
     <PageShell>
@@ -221,32 +220,17 @@ export function CarilerPage() {
         }
       />
 
-      <div className="flex shrink-0 items-center gap-2 border-b px-6 py-3">
-        <div className="relative w-72">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Ad / kod / vergi no ara…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {/* Rol modeli: iki süzgeç, tetik metni adını taşır ("Yön: Tümü" · "Fason: Tümü"); süzme sunucuda. */}
-        <LabeledSelect label="Yön" value={filters.direction} options={DIRECTION_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, direction: v as DirectionFilter }))} title="Ticari yön: müşteri rolü / tedarikçi rolü / ikisi de" />
-        <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, subcontractor: v as SubcontractorFilter }))} title="Fason iş yapan kartlar (aktif fason profili)" />
-        {isCariFilterDirty(filters) && (
-          <Button variant="ghost" size="sm" onClick={() => setFilters(CARI_FILTER_DEFAULTS)}>
-            Süzgeci temizle
-          </Button>
-        )}
-        {/* Sayaç TOPLAMI söyler, ekrandaki satır sayısını değil: "12 kart"
-            yazan bir ekranda 812 kart olması, kullanıcıya listenin tamamına
-            baktığını düşündürürdü. */}
-        <span className="text-xs text-muted-foreground">
-          {pageInfo.total} kart
-          {pageInfo.total > rows.length && ` · ${rows.length} tanesi bu sayfada`}
-        </span>
-      </div>
+      <CarilerFilterRow
+        search={search}
+        onSearchChange={setSearch}
+        trailing={
+          // Sayaç TOPLAMI söyler, ekrandaki satır sayısını değil ("12 kart" yazan ekranda 812 kart olmasın).
+          <span className="whitespace-nowrap px-1 text-xs text-muted-foreground">
+            {pageInfo.total} kart
+            {pageInfo.total > rows.length && ` · ${rows.length} tanesi bu sayfada`}
+          </span>
+        }
+      />
 
       <PageBody className="p-6">
         {loading ? (

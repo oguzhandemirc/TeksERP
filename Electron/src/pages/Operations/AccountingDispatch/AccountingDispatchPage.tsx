@@ -4,8 +4,8 @@ import { FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar } from "@/components/data-table/FilterBar";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import { downloadDocsPdf, downloadDocsExcel } from "@/pages/Operations/Shipments
 import { BulkInvoiceAction } from "./BulkInvoiceAction";
 import { accountingDispatchService } from "./service";
 import { buildDispatchColumns } from "./columns";
-import { ACCOUNTING_FILTERS } from "./filters";
+import { ACCOUNTING_PERSIST } from "./filters";
+import { AccountingFilterRow } from "./AccountingFilterRow";
 import { InvoiceDialog } from "./InvoiceDialog";
 import { useAccountingExport } from "./useAccountingExport";
 import { useFeatureFlags, useShippingInvoiceMode } from "@/hooks/usePricingEnabled";
@@ -78,6 +79,7 @@ export function AccountingDispatchPage() {
     defaultSortOrder: "desc",
     // Toplu seçim: işaretli sevkleri tek dosyada veya belge olarak ayrı ayrı aktar.
     enableSelection: true,
+    persistFilters: ACCOUNTING_PERSIST,
   });
 
   // Dönem özeti — filtreli KÜMENİN TAMAMI (ilk sayfada gelir; ReturnsPage deseni).
@@ -118,15 +120,16 @@ export function AccountingDispatchPage() {
           </div>
         }
       />
-      <DataTableToolbar
-        fetchAll={fetchAll}
+      <AccountingFilterRow
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sevkiyat no, sipariş no, firma, plaka, sürücü ara..."
-        table={table}
-        exportName="Sevkiyatlar (Muhasebe)"
+        trailing={
+          <>
+            <SavedViewsMenu compact />
+            <DataTableTools table={table} exportName="Sevkiyatlar (Muhasebe)" fetchAll={fetchAll} compact />
+          </>
+        }
       />
-      <FilterBar filters={ACCOUNTING_FILTERS} defaultDateRangeDays={30} />
       {summary && summary.shipmentCount > 0 && (
         <div className="flex gap-6 border-b px-4 py-2 text-sm">
           <span>

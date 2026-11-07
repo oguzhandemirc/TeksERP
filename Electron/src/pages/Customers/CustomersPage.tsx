@@ -70,6 +70,7 @@ export function CustomersPage() {
       mergeEntity="customer"
       importEntity="customer"
       queryKey="customers"
+      persistFilters
       service={customerService}
       columns={customerColumns}
       writePermission="customer:write"

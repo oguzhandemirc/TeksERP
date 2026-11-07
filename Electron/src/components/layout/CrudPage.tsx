@@ -18,6 +18,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ImportDialog } from "@/components/import/ImportDialog";
 import type { CrudService } from "@/services/crudService";
+import { CRUD_PERSIST, useShowInactive } from "@/hooks/useCrudShowInactive";
 
 interface Props<T extends { id: string }> {
   title: string;
@@ -43,6 +44,8 @@ interface Props<T extends { id: string }> {
    *  süzgeciyle (`extraFilters`) yönetir; aynı soruya iki kontrol olmasın. Varsayılan true =
    *  bugünkü davranış (pasifler gizli). */
   inactiveToggle?: boolean;
+  /** true → liste kaydı (kullanıcı başına, `prefs.tableFilters[queryKey]`): sıralama + "Pasifleri göster". */
+  persistFilters?: boolean;
   /** Sayfa başlığındaki aksiyonların SOLUNA (Yenile'den önce) eklenecek ek buton(lar) —
    * başka sayfaya götüren bağlantılar gibi tablo-dışı eylemler için. */
   /**
@@ -101,6 +104,7 @@ export function CrudPage<T extends { id: string }>({
   extraFilters,
   filterBar,
   inactiveToggle = true,
+  persistFilters = false,
   mergeEntity,
   headerExtra,
   glowWhenEmpty,
@@ -118,7 +122,7 @@ export function CrudPage<T extends { id: string }>({
   const [editing, setEditing] = useState<T | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [hardRemoving, setHardRemoving] = useState<T | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useShowInactive(persistFilters);
   const [importOpen, setImportOpen] = useState(false);
 
   const forceFilters = useMemo<Record<string, string>>(
@@ -225,6 +229,7 @@ export function CrudPage<T extends { id: string }>({
     fetchFn: service.listCursor,
     forceFilters,
     columns: tableColumns,
+    persistFilters: persistFilters ? CRUD_PERSIST : undefined,
   });
 
   const onSubmit = async (values: Partial<T>) => {
