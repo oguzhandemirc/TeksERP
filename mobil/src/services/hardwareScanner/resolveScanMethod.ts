@@ -76,3 +76,14 @@ export function parseScanMethodPref(raw: string | null): ScanMethodPref {
 export function parseHardwareLink(raw: string | null): HardwareLink {
   return raw === 'wedge' ? 'wedge' : 'auto';
 }
+
+const METHOD_SUMMARY: Record<ScanMethod['kind'], string> = {
+  intent: 'Donanım okuyucu',
+  wedge: 'Okuyucu (klavye yolu)',
+  camera: 'Kamera',
+};
+
+/** Ayarlar menüsündeki "Barkod ve Kamera" satırının özeti (yöntem + elle yazma). */
+export function scanMenuSummary(kind: ScanMethod['kind'], manualEntry: boolean): string {
+  return manualEntry ? `${METHOD_SUMMARY[kind]} + elle yazma` : METHOD_SUMMARY[kind];
+}

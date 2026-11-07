@@ -7,6 +7,7 @@ import { __resetScanBusForTests, emitScan } from '../../../services/hardwareScan
 import * as capabilities from '../../../services/hardwareScanner/capabilities';
 import { pointMobileAdapter } from '../../../services/hardwareScanner/adapters';
 import ScanMethodCard, { describeDetected } from './ScanMethodCard';
+import { scanMenuSummary } from '../../../services/hardwareScanner/resolveScanMethod';
 
 jest.mock('../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
@@ -70,4 +71,10 @@ it('describeDetected: wedge ve kamera dalları', () => {
   expect(describeDetected({ method: { kind: 'camera' }, device: pm68, hardware: false })).toBe(
     'Point Mobile PM68 — kamera seçili',
   );
+});
+
+it('scanMenuSummary: menü satırı yöntemi ve elle yazmayı özetler', () => {
+  expect(scanMenuSummary('intent', false)).toBe('Donanım okuyucu');
+  expect(scanMenuSummary('camera', true)).toBe('Kamera + elle yazma');
+  expect(scanMenuSummary('wedge', false)).toBe('Okuyucu (klavye yolu)');
 });
