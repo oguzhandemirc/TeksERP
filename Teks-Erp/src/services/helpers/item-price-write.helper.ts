@@ -2,28 +2,60 @@
 // KALEM FİYATI YAZIMI — kademe kapısı + ZAMANLANMIŞ DAMGA (hizmet fiyat tablosu, 2026-11-06)
 // =============================================================================
 // Tek yazar `itemPriceService` (upsert/remove) buraya iner. Anahtar:
-// (itemId, customerId, propertyValueId, kind, currency); anahtar başına AÇIK satır tektir.
+// (itemId | serviceItemId, customerId, propertyValueId, kind, currency); anahtar başına AÇIK satır tektir.
+// Fiyatın KONUSU ürün (`items`) ya da hizmet (`service_items`) kartıdır — tam biri dolu (DB CHECK).
 // İleri tarihli fiyat (K4): yürürlükteki R'nin `revokedAt`ı yeni satırın `validFrom`una kurulur
 // (gerekçe `SCHEDULED`); bekleyen satır anahtarın açık satırıdır. Pencereler örtüşmez.
 // Eşzamanlılık: tx'te kalem FOR SHARE → anahtarın açık satırı FOR UPDATE → durum TAZE okunur;
 // her damga atomik claim (`count===0 → 409`), ikinci açık satır partial unique'e çarpar (P2002 → 409).
 // =============================================================================
-import { Prisma, PriceKind, ItemType, type Currency, type ServiceQtyUnit } from "@prisma/client";
+import { Prisma, PriceKind, type Currency, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { assertItemUsableTx } from "./item-usage.helper";
+import { assertItemUsable, assertItemUsableTx, assertServiceItemUsable, assertServiceItemUsableTx, type ItemUsage } from "./item-usage.helper";
 import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON } from "./item-price-validity.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 
 type Tx = Prisma.TransactionClient;
 
-export interface ItemPriceKey {
-  itemId: string;
+/** Fiyat konusu: ürün kartı XOR hizmet kartı (`item_prices` exactly-one CHECK'inin ikizi). */
+export interface ItemPriceSubject {
+  itemId: string | null;
+  serviceItemId: string | null;
+}
+
+export interface ItemPriceKey extends ItemPriceSubject {
   customerId: string | null;
   propertyValueId: string | null;
   kind: PriceKind;
   currency: Currency;
+}
+
+/** Satırın konu kimliği — dış sözleşmede (`itemId` alanı) ürün ya da hizmet id'si aynı alandan gider. */
+export function priceSubjectId(r: ItemPriceSubject): string {
+  if (r.itemId) return r.itemId;
+  return r.serviceItemId as string;
+}
+
+/** Konu kimliği iki uzaydan birinde (UUID ortak uzay): hizmet kartı ise `serviceItemId`, değilse ürün. Yoksa 400. */
+export async function resolvePriceSubject(db: Tx | Prisma.DefaultPrismaClient, id: string): Promise<ItemPriceSubject> {
+  const svc = await db.serviceItem.findUnique({ where: { id }, select: { id: true } });
+  if (svc) return { itemId: null, serviceItemId: svc.id };
+  const item = await db.item.findUnique({ where: { id }, select: { id: true } });
+  if (!item) throw AppError.badRequest("Kalem bulunamadı.", { code: "ITEM_NOT_FOUND" });
+  return { itemId: item.id, serviceItemId: null };
+}
+
+/** Konunun kullanım kapısı (ürün → `items`, hizmet → `service_items`); tx'te kart FOR SHARE. */
+export async function assertPriceSubjectUsable(db: Tx | Prisma.DefaultPrismaClient, s: ItemPriceSubject, usage: ItemUsage, tx?: Tx): Promise<void> {
+  if (tx) {
+    if (s.serviceItemId) await assertServiceItemUsableTx(tx, s.serviceItemId, usage);
+    else await assertItemUsableTx(tx, s.itemId as string, usage);
+    return;
+  }
+  if (s.serviceItemId) await assertServiceItemUsable(db, s.serviceItemId, usage);
+  else await assertItemUsable(db, s.itemId as string, usage);
 }
 
 /** `Decimal(14,4)` kolonunun GERÇEK sınırı (10 tam hane) — kolon değişirse burası da değişir. */
@@ -53,7 +85,7 @@ export function normalizePrice(value: Prisma.Decimal.Value): Prisma.Decimal {
  */
 export async function assertTierWritable(
   db: Tx | Prisma.DefaultPrismaClient,
-  input: { itemId: string; propertyValueId: string | null; kind: PriceKind; validFrom: Date | null },
+  input: ItemPriceSubject & { propertyValueId: string | null; kind: PriceKind; validFrom: Date | null },
   now: Date,
 ): Promise<void> {
   if (input.validFrom) {
@@ -62,8 +94,8 @@ export async function assertTierWritable(
   }
   if (!input.propertyValueId) return;
   if (input.kind !== PriceKind.SALE) throw AppError.badRequest("Kademe fiyatı yalnız satış fiyatıdır.", { code: "SERVICE_TIER_SALE_ONLY" });
-  const item = await db.item.findUnique({ where: { id: input.itemId }, select: { itemType: true } });
-  if (item?.itemType !== ItemType.SERVICE) throw AppError.badRequest("Kademe fiyatı yalnız hizmet kalemine girilir.", { code: "SERVICE_TIER_NOT_SERVICE" });
+  // Kademe yalnız hizmet kartına: konu `service_items`'ta değilse (ürün kartı) reddedilir.
+  if (!input.serviceItemId) throw AppError.badRequest("Kademe fiyatı yalnız hizmet kalemine girilir.", { code: "SERVICE_TIER_NOT_SERVICE" });
   const value = await db.fabricPropertyValue.findUnique({
     where: { id: input.propertyValueId },
     select: { name: true, isActive: true, serviceItemId: true, property: { select: { serviceItemId: true, variantOf: { select: { serviceItemId: true } } } } },
@@ -71,7 +103,7 @@ export async function assertTierWritable(
   if (!value) throw AppError.badRequest("Kademe (özellik değeri) bulunamadı.");
   if (!value.isActive) throw AppError.badRequest(`"${value.name}" pasif — bu kademeye yeni fiyat girilemez.`, { code: "SERVICE_TIER_INACTIVE" });
   const mapped = pickServiceItemId({ value: value.serviceItemId, property: value.property.serviceItemId, parentFlag: value.property.variantOf?.serviceItemId });
-  if (mapped !== input.itemId) {
+  if (mapped !== input.serviceItemId) {
     throw AppError.badRequest(`"${value.name}" bu hizmete eşli değil — kademe başka bir hizmet kalemine bağlı.`, { code: "SERVICE_TIER_ITEM_MISMATCH" });
   }
 }
@@ -82,7 +114,8 @@ const SEL = { id: true, price: true, priceUnit: true, validFrom: true, revokedAt
 /** Anahtarın AÇIK satırını kilitler ve anahtar durumunu TAZE okur: yürürlükteki R + bekleyen P. */
 async function lockKeyState(tx: Tx, key: ItemPriceKey, now: Date): Promise<{ current: Row | null; pending: Row | null }> {
   await tx.$queryRaw`SELECT id FROM item_prices
-    WHERE "itemId" = ${key.itemId}::uuid AND "customerId" IS NOT DISTINCT FROM ${key.customerId}::uuid
+    WHERE "itemId" IS NOT DISTINCT FROM ${key.itemId}::uuid AND "serviceItemId" IS NOT DISTINCT FROM ${key.serviceItemId}::uuid
+      AND "customerId" IS NOT DISTINCT FROM ${key.customerId}::uuid
       AND "propertyValueId" IS NOT DISTINCT FROM ${key.propertyValueId}::uuid
       AND kind::text = ${key.kind} AND currency::text = ${key.currency} AND "revokedAt" IS NULL
     FOR UPDATE`;
@@ -125,7 +158,7 @@ export async function writeItemPriceVersionTx(
 ): Promise<PriceWriteOutcome> {
   const { key, price, validFrom, at } = args;
   const by = args.userId ?? null;
-  await assertItemUsableTx(tx, key.itemId, "DEFINITION");
+  await assertPriceSubjectUsable(tx, key, "DEFINITION", tx);
   const { current, pending } = await lockKeyState(tx, key, at);
   const priceUnit = args.requestedUnit === undefined ? (pending ?? current)?.priceUnit ?? null : args.requestedUnit;
   const same = (r: Row | null) => !!r && r.price.equals(price) && r.priceUnit === priceUnit;
@@ -169,10 +202,10 @@ export async function writeItemPriceVersionTx(
  */
 async function removeItemPriceTx(tx: Tx, id: string, at: Date, userId?: string): Promise<{ row: Row & ItemPriceKey; restoredId: string | null }> {
   // `revokedAt` SÜZÜLMEZ — satırın kendisi okunur: yoksa 404, geçmişte damgalıysa 409.
-  const row = await tx.itemPrice.findUnique({ where: { id }, select: { ...SEL, itemId: true, customerId: true, propertyValueId: true, kind: true, currency: true } });
+  const row = await tx.itemPrice.findUnique({ where: { id }, select: { ...SEL, itemId: true, serviceItemId: true, customerId: true, propertyValueId: true, kind: true, currency: true } });
   if (!row) throw AppError.notFound("Fiyat satırı bulunamadı.");
   if (row.revokedAt && row.revokedAt.getTime() <= at.getTime()) throw AppError.conflict("Bu fiyat satırı zaten kaldırılmış.");
-  const key: ItemPriceKey = { itemId: row.itemId, customerId: row.customerId, propertyValueId: row.propertyValueId, kind: row.kind, currency: row.currency };
+  const key: ItemPriceKey = { itemId: row.itemId, serviceItemId: row.serviceItemId, customerId: row.customerId, propertyValueId: row.propertyValueId, kind: row.kind, currency: row.currency };
   const { current, pending } = await lockKeyState(tx, key, at);
   const stamp = { revokedAt: at, revokeReason: ITEM_PRICE_REVOKE_REASON.REMOVED, revokedById: userId ?? null };
   if (pending && pending.id === id) {
@@ -196,6 +229,7 @@ export async function removeItemPrice(id: string, userId?: string): Promise<{ re
     oldData: { revokeReason: null },
     newData: {
       itemId: row.itemId,
+      ...(row.serviceItemId ? { serviceItemId: row.serviceItemId } : {}),
       customerId: row.customerId,
       propertyValueId: row.propertyValueId,
       kind: row.kind,

@@ -76,8 +76,16 @@ function bolum0(): void {
   check("§0b yazım yolu değişmedi: tembel IDLE kapanışı iki yerde `endedAt: new Date()` yazar (§8.9)", idleWrites === 2, `bulunan=${idleWrites}`);
 }
 
+/** Hizmet kartları ayrı tabloda (`service_items`); fatura satırı konusu `lineType` + iki FK. */
+const svcIds = new Set<string>();
+const lineSubject = (id: string | null) =>
+  !id ? { lineType: "TEXT" as const } : svcIds.has(id) ? { lineType: "SERVICE" as const, serviceItemId: id } : { lineType: "PRODUCT" as const, itemId: id };
 async function item(code: string, itemType: ItemType, unit: ItemUnit): Promise<string> {
-  const r = await prisma.item.create({ data: { code: `${P}-${code}`, name: `TEST kmg ${code} ${process.pid}`, itemType, unit }, select: { id: true } });
+  const data = { code: `${P}-${code}`, name: `TEST kmg ${code} ${process.pid}`, unit };
+  const r = itemType === ItemType.SERVICE
+    ? await prisma.serviceItem.create({ data, select: { id: true } })
+    : await prisma.item.create({ data: { ...data, itemType }, select: { id: true } });
+  if (itemType === ItemType.SERVICE) svcIds.add(r.id);
   ids.items.push(r.id);
   return r.id;
 }
@@ -154,7 +162,7 @@ async function main(): Promise<void> {
       data: {
         docNo: `${P}-F1`, type: "SALES", status: InvoiceStatus.CONFIRMED, cariId: cari.id, currency: Currency.TRY, exchangeRate: "1",
         issueDate: at("2023-03-20", 9), confirmedAt: at("2023-03-20", 9),
-        lines: { create: [{ lineNo: 1, itemId: S, description: "TEST", qty: "100", unitPrice: "8", lineTotal: "800.00", vatAmount: "0" }] },
+        lines: { create: [{ lineNo: 1, ...lineSubject(S), description: "TEST", qty: "100", unitPrice: "8", lineTotal: "800.00", vatAmount: "0" }] },
       },
       select: { id: true },
     });
@@ -274,8 +282,8 @@ async function main(): Promise<void> {
         docNo: `${P}-F2`, type: "SALES", status: InvoiceStatus.CONFIRMED, cariId: cari.id, currency: Currency.TRY, exchangeRate: "1",
         issueDate: at("2023-03-21", 9), confirmedAt: at("2023-03-21", 9),
         lines: { create: [
-          { lineNo: 1, itemId: S, description: "TEST", qty: "78", unitPrice: "8", lineTotal: "624.00", vatAmount: "0" },
-          { lineNo: 2, itemId: S2, description: "TEST", qty: "30", unitPrice: "5", lineTotal: "150.00", vatAmount: "0" },
+          { lineNo: 1, ...lineSubject(S), description: "TEST", qty: "78", unitPrice: "8", lineTotal: "624.00", vatAmount: "0" },
+          { lineNo: 2, ...lineSubject(S2), description: "TEST", qty: "30", unitPrice: "5", lineTotal: "150.00", vatAmount: "0" },
         ] },
       },
       select: { id: true },
@@ -328,10 +336,11 @@ async function temizle(foto: Array<{ key: string; value: Prisma.JsonValue }>): P
   await q(prisma.cashTransaction.deleteMany({ where: { cashBoxId: { in: ids.boxes } } }));
   await q(prisma.cashBox.deleteMany({ where: { id: { in: ids.boxes } } }));
   await q(prisma.serviceConsumableNorm.deleteMany({ where: { serviceItemId: { in: ids.items } } }));
-  await q(prisma.itemPrice.deleteMany({ where: { itemId: { in: ids.items } } }));
+  await q(prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: ids.items } }, { serviceItemId: { in: ids.items } }] } }));
   await q(prisma.cariAccount.deleteMany({ where: { customerId: { in: ids.customers } } }));
   await q(prisma.customer.deleteMany({ where: { id: { in: ids.customers } } }));
   await q(prisma.item.deleteMany({ where: { id: { in: ids.items } } }));
+  await q(prisma.serviceItem.deleteMany({ where: { id: { in: ids.items } } }));
   await q(prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids.items, ...ids.customers, ...ids.boxes] } } }));
   for (const key of AYARLAR) {
     const eski = foto.find((f) => f.key === key);

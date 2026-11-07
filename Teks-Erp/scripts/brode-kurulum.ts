@@ -17,7 +17,7 @@
 // Çıkış: 0 tamam · 1 çakışma/uygulanamadı · 2 kullanım/geçersiz girdi.
 // =============================================================================
 import { readFileSync } from "node:fs";
-import { ItemType, Prisma, StationKind, StationPropertyMode, StationType } from "@prisma/client";
+import { Prisma, StationKind, StationPropertyMode, StationType } from "@prisma/client";
 import { z } from "zod";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 import { inspectionDefaultForKind } from "../src/services/helpers/quality-station.helper";
@@ -79,13 +79,15 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
   const audit = userId ? { createdById: userId, updatedById: userId } : {};
 
   const ensureItem = async (it: CodeName): Promise<string | null> => {
-    const row = await db.item.findUnique({ where: { code: it.code }, select: { id: true, itemType: true } });
-    if (row && row.itemType !== ItemType.SERVICE) {
-      push({ kind: "ITEM", key: it.code, action: "CONFLICT", detail: `kalem var ama türü ${row.itemType} (SERVICE değil)`, id: row.id });
+    // Hizmet kartı `service_items`'ta; aynı kod ürün kartında varsa çakışma.
+    const product = await db.item.findUnique({ where: { code: it.code }, select: { id: true, itemType: true } });
+    if (product) {
+      push({ kind: "ITEM", key: it.code, action: "CONFLICT", detail: `kod ürün kartında var (türü ${product.itemType}, hizmet kartı değil)`, id: product.id });
       return null;
     }
+    const row = await db.serviceItem.findUnique({ where: { code: it.code }, select: { id: true } });
     if (row) { push({ kind: "ITEM", key: it.code, action: "SAME", detail: it.name, id: row.id }); return row.id; }
-    const id = write ? (await db.item.create({ data: { code: it.code, name: it.name, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id : null;
+    const id = write ? (await db.serviceItem.create({ data: { code: it.code, name: it.name, unit: "MT" }, select: { id: true } })).id : null;
     push({ kind: "ITEM", key: it.code, action: "CREATE", detail: `${it.name} (hizmet kalemi, MT)`, id });
     return id;
   };
@@ -132,7 +134,7 @@ export async function runBrodeSetup(db: Db, input: BrodeSetupInput, write: boole
 
   for (const [i, p] of input.patterns.entries()) {
     const key = `${input.patternProperty.code}/${p.code}`;
-    const itemId = p.serviceItemCode ? (patternItemIds.get(p.serviceItemCode) ?? (await db.item.findUnique({ where: { code: p.serviceItemCode }, select: { id: true } }))?.id ?? null) : null;
+    const itemId = p.serviceItemCode ? (patternItemIds.get(p.serviceItemCode) ?? (await db.serviceItem.findUnique({ where: { code: p.serviceItemCode }, select: { id: true } }))?.id ?? null) : null;
     if (p.serviceItemCode && !itemId && !input.patternServiceItems.some((it) => it.code === p.serviceItemCode)) {
       push({ kind: "FABRIC_PROPERTY_VALUE", key, action: "CONFLICT", detail: `desen kalemi bulunamadı: ${p.serviceItemCode}`, id: null, auditTable: "FABRIC_PROPERTY", auditRecordId: patternId });
       continue;

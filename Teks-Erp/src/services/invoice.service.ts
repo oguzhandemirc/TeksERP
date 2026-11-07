@@ -37,6 +37,7 @@ import {
   type ServiceBillingLinkInput,
 } from "./helpers/service-billing.helper";
 import { resolveShipmentServiceLinksTx, syncDraftServiceLinksTx } from "./helpers/service-preview-gate.helper";
+import { resolveInvoiceLineSubjectsTx } from "./helpers/invoice-line-subject.helper";
 import { resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -459,6 +460,7 @@ export class InvoiceService {
 
       const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
       const totals = computeInvoiceTotals(input.lines);
+      const subjects = await resolveInvoiceLineSubjectsTx(tx, input.lines);
 
       const invoice = await tx.invoice.create({
         data: {
@@ -490,7 +492,7 @@ export class InvoiceService {
               const a = computeLineAmounts(l);
               return {
                 lineNo: i + 1,
-                itemId: l.itemId ?? null,
+                ...subjects[i]!,
                 description: l.description,
                 qty: D(l.qty),
                 unit: l.unit,
@@ -950,13 +952,14 @@ export class InvoiceService {
       if (input.lines) {
         if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
         await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
+        const subjects = await resolveInvoiceLineSubjectsTx(tx, input.lines);
         for (const [i, l] of input.lines.entries()) {
           const a = computeLineAmounts(l);
           await tx.invoiceLine.create({
             data: {
               invoiceId: id,
               lineNo: i + 1,
-              itemId: l.itemId ?? null,
+              ...subjects[i]!,
               description: l.description,
               qty: D(l.qty),
               unit: l.unit,

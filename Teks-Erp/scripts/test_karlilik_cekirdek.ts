@@ -90,8 +90,16 @@ function bolum0(): void {
 }
 
 // ── Fikstür ──────────────────────────────────────────────────────────────────
+/** Hizmet kartları ayrı tabloda (`service_items`); fatura satırı konusu `lineType` + iki FK. */
+const svcIds = new Set<string>();
+const lineSubject = (id: string | null) =>
+  !id ? { lineType: "TEXT" as const } : svcIds.has(id) ? { lineType: "SERVICE" as const, serviceItemId: id } : { lineType: "PRODUCT" as const, itemId: id };
 async function item(code: string, itemType: ItemType, unit: ItemUnit): Promise<string> {
-  const r = await prisma.item.create({ data: { code: `${P}-${code}`, name: `TEST kârlılık ${code} ${process.pid}`, itemType, unit }, select: { id: true } });
+  const data = { code: `${P}-${code}`, name: `TEST kârlılık ${code} ${process.pid}`, unit };
+  const r = itemType === ItemType.SERVICE
+    ? await prisma.serviceItem.create({ data, select: { id: true } })
+    : await prisma.item.create({ data: { ...data, itemType }, select: { id: true } });
+  if (itemType === ItemType.SERVICE) svcIds.add(r.id);
   ids.items.push(r.id);
   return r.id;
 }
@@ -138,7 +146,7 @@ async function invoice(spec: {
       docNo: `${P}-${spec.docNo}`, type: spec.type ?? "SALES", status: spec.status, cariId: spec.cariId, currency: spec.currency ?? Currency.TRY,
       exchangeRate: spec.rate ?? "1", issueDate: spec.issue, confirmedAt: spec.status === InvoiceStatus.DRAFT ? null : spec.issue,
       subcontractorReceiptId: spec.receiptId ?? null,
-      lines: { create: spec.lines.map((l, i) => ({ lineNo: i + 1, itemId: l.item, description: "TEST", qty: l.qty, unitPrice: new Prisma.Decimal(l.total).div(l.qty), lineTotal: l.total, vatAmount: "0" })) },
+      lines: { create: spec.lines.map((l, i) => ({ lineNo: i + 1, ...lineSubject(l.item), description: "TEST", qty: l.qty, unitPrice: new Prisma.Decimal(l.total).div(l.qty), lineTotal: l.total, vatAmount: "0" })) },
     },
     select: { id: true },
   });
@@ -377,10 +385,11 @@ async function temizle(foto: Array<{ key: string; value: Prisma.JsonValue }>): P
   await q(prisma.station.deleteMany({ where: { id: { in: ids.stations } } }));
   await q(prisma.finishingRate.deleteMany({ where: { id: { in: ids.rates } } }));
   await q(prisma.serviceConsumableNorm.deleteMany({ where: { serviceItemId: { in: ids.items } } }));
-  await q(prisma.itemPrice.deleteMany({ where: { itemId: { in: ids.items } } }));
+  await q(prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: ids.items } }, { serviceItemId: { in: ids.items } }] } }));
   await q(prisma.cariAccount.deleteMany({ where: { customerId: { in: ids.customers } } }));
   await q(prisma.customer.deleteMany({ where: { id: { in: ids.customers } } }));
   await q(prisma.item.deleteMany({ where: { id: { in: ids.items } } }));
+  await q(prisma.serviceItem.deleteMany({ where: { id: { in: ids.items } } }));
   await q(prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids.items, ...ids.customers] } } }));
   for (const key of AYARLAR) {
     const eski = foto.find((f) => f.key === key);

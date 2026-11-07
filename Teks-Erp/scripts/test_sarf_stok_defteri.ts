@@ -15,6 +15,7 @@
 //   §6 Kuşak ihtiyacı raporu: değerin sarf kalemi varsa stokta/eksik sütunu (ayar açık; somut değer)
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ConsumableMovementKind, Prisma, RollOperationType, RollStatus } from "@prisma/client";
@@ -65,7 +66,7 @@ async function main(): Promise<void> {
 
   const adminId = (await ensureTestAdmin()).id;
   const mk = async (suffix: string, itemType: "FABRIC" | "CONSUMABLE" | "SERVICE", unit: "MT" | "KG" | "ADET" = "MT") => {
-    const it = await prisma.item.create({ data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}`, itemType, unit }, select: { id: true } });
+    const it = await kartAc({ code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}`, itemType, unit });
     created.items.push(it.id);
     return it.id;
   };
@@ -290,7 +291,7 @@ async function cleanup(): Promise<void> {
   await prisma.serviceConsumableNorm.deleteMany({ where: { id: { in: created.norms } } });
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: created.props } } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: created.props } } });
-  await prisma.item.deleteMany({ where: { id: { in: created.items } } });
+  await kartlariSil(created.items);
   await prisma.customer.deleteMany({ where: { id: { in: created.customers } } });
   for (let i = 0; i < FLAG_KEYS.length; i++) {
     const s = savedSettings[i];

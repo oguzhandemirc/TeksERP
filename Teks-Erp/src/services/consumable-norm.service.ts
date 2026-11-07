@@ -6,13 +6,13 @@
 // Tür kapısı burada (items'ta tür tetiği emsali yok): SERVICE dışı hizmet / CONSUMABLE dışı sarf → 400.
 // `unit` sarf kaleminin birimidir, doğuşta donar. Replay TEK boğazdan; audit miktar DEĞERİ taşımaz.
 // =============================================================================
-import { ItemType, type Prisma, type ServiceConsumableNorm } from "@prisma/client";
+import { ItemType, Prisma, type ServiceConsumableNorm } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
+import { assertItemUsable, assertItemUsableTx, assertServiceItemUsable, assertServiceItemUsableTx } from "./helpers/item-usage.helper";
 import { ACTIVE_COST_RATE, COST_RATE_REVOKE_REASON } from "./helpers/cost-rate-validity.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 
@@ -20,6 +20,8 @@ const TABLE = "SERVICE_CONSUMABLE_NORM";
 const ACTIVE_PAIR_RE = /service_consumable_norms_active_pair_uq|serviceItemId/i;
 
 const ITEM_BRIEF = { select: { id: true, code: true, name: true, itemType: true, isActive: true } } as const;
+// Hizmet kartı `service_items`'ta: tür kolonu yok (hep hizmet).
+const SERVICE_BRIEF = { select: { id: true, code: true, name: true, isActive: true } } as const;
 
 export const CONSUMABLE_NORM_SELECT = {
   id: true,
@@ -33,7 +35,7 @@ export const CONSUMABLE_NORM_SELECT = {
   revokedAt: true,
   revokedById: true,
   revokeReason: true,
-  serviceItem: ITEM_BRIEF,
+  serviceItem: SERVICE_BRIEF,
   consumableItem: ITEM_BRIEF,
 } satisfies Prisma.ServiceConsumableNormSelect;
 
@@ -91,27 +93,35 @@ async function assertItemsWritable(serviceItemId: string, consumableItemId: stri
     where: { id: { in: [serviceItemId, consumableItemId] } },
     select: { id: true, name: true, itemType: true, unit: true },
   });
-  const service = items.find((i) => i.id === serviceItemId);
+  const service = await prisma.serviceItem.findUnique({ where: { id: serviceItemId }, select: { id: true } });
   const consumable = items.find((i) => i.id === consumableItemId);
-  if (!service) throw AppError.badRequest("Hizmet kalemi bulunamadı.", { code: "SERVICE_ITEM_INVALID", itemId: serviceItemId });
-  if (service.itemType !== ItemType.SERVICE) {
-    throw AppError.badRequest(`"${service.name}" bir hizmet kalemi değil — sarf normu yalnız Hizmet türü kaleme tanımlanır.`, { code: "SERVICE_ITEM_INVALID", itemId: serviceItemId });
+  if (!service) {
+    // Ürün kartı id'si hizmet yerine gelmişse operatöre türü söyle; hiçbir tabloda yoksa "bulunamadı".
+    const product = items.find((i) => i.id === serviceItemId);
+    if (!product) throw AppError.badRequest("Hizmet kalemi bulunamadı.", { code: "SERVICE_ITEM_INVALID", itemId: serviceItemId });
+    throw AppError.badRequest(`"${product.name}" bir hizmet kalemi değil — sarf normu yalnız Hizmet türü kaleme tanımlanır.`, { code: "SERVICE_ITEM_INVALID", itemId: serviceItemId });
   }
   if (!consumable) throw AppError.badRequest("Sarf kalemi bulunamadı.", { code: "CONSUMABLE_ITEM_INVALID", itemId: consumableItemId });
   if (consumable.itemType !== ItemType.CONSUMABLE) {
     throw AppError.badRequest(`"${consumable.name}" bir sarf malzemesi değil — normun sarf kalemi Sarf türünde olmalı.`, { code: "CONSUMABLE_ITEM_INVALID", itemId: consumableItemId });
   }
   // Norm karta yeni TANIM ekler — pasif/'Tükenene kadar' kararı tek kaynaktan (item-usage).
-  await runItemUsageChecks(prisma, usageChecks(serviceItemId, consumableItemId));
+  await checkUsage(serviceItemId, consumableItemId);
   return consumable.unit;
 }
 
-/** Ön kontrol ile tx tekrarı aynı listeyi okur; tx tarafı kartları FOR SHARE kilitler (pasife alma yarışı). */
-function usageChecks(serviceItemId: string, consumableItemId: string): ItemUsageCheck[] {
-  return [
-    { itemId: serviceItemId, usage: "DEFINITION" },
-    { itemId: consumableItemId, usage: "DEFINITION" },
-  ];
+/**
+ * Ön kontrol ile tx tekrarı aynı iki kartı okur; tx tarafı kartları FOR SHARE kilitler (pasife alma yarışı).
+ * Sıra sabit: hizmet kartı (`service_items`) → sarf kartı (`items`) — iki ayrı tablo, deterministik.
+ */
+async function checkUsage(serviceItemId: string, consumableItemId: string, tx?: Prisma.TransactionClient): Promise<void> {
+  if (tx) {
+    await assertServiceItemUsableTx(tx, serviceItemId, "DEFINITION");
+    await assertItemUsableTx(tx, consumableItemId, "DEFINITION");
+    return;
+  }
+  await assertServiceItemUsable(prisma, serviceItemId, "DEFINITION");
+  await assertItemUsable(prisma, consumableItemId, "DEFINITION");
 }
 
 function activeExists(serviceItemId: string, consumableItemId: string): AppError {
@@ -157,7 +167,7 @@ export async function createConsumableNorm(
     let created: { id: string };
     try {
       created = await prisma.$transaction(async (tx) => {
-        await runItemUsageChecksTx(tx, usageChecks(serviceItemId, consumableItemId));
+        await checkUsage(serviceItemId, consumableItemId, tx);
         return tx.serviceConsumableNorm.create({
           data: { serviceItemId, consumableItemId, ...values, unit, clientToken: input.clientToken, createdById: userId },
           select: { id: true },
@@ -185,7 +195,7 @@ export async function changeConsumableNorm(normId: string, input: ConsumableNorm
     let created: { id: string };
     try {
       created = await prisma.$transaction(async (tx) => {
-        await runItemUsageChecksTx(tx, usageChecks(serviceItemId, consumableItemId));
+        await checkUsage(serviceItemId, consumableItemId, tx);
         const claim = await tx.serviceConsumableNorm.updateMany({
           where: { id: normId, revokedAt: null },
           data: { revokedAt: at, revokedById: userId, revokeReason: COST_RATE_REVOKE_REASON.CHANGED },

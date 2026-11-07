@@ -1,14 +1,13 @@
 // =============================================================================
 // HİZMET KALEMİ EŞLEMESİ — yazım doğrulaması (Gülkesim dalga 2 · H6)
 // =============================================================================
-// Özellik/gramaj değeri → SERVICE kalemi eşlemesi yalnız SERVICE türüne yapılır (fail-closed).
+// Özellik/gramaj değeri → hizmet kartı (`service_items`) eşlemesi; ürün kartı id'si reddedilir (fail-closed).
 // Fiyat çözücüsünden (`service-pricing.helper`) AYRI dosya: ana veri ucu ticaret
 // modeline (`itemPrice`) dokunmasın — `test_ticaret_regime_gate` router kapısı ister.
 // =============================================================================
-import { ItemType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { assertItemUsable, assertItemUsableTx } from "./item-usage.helper";
+import { assertServiceItemUsable, assertServiceItemUsableTx } from "./item-usage.helper";
 
 /** Bir eşleme alanı: `kept` = bu KAYIT bugün zaten bu kalemi taşıyor (muafiyet kayıt başınadır). */
 interface ServiceItemRef {
@@ -32,15 +31,15 @@ async function assertServiceItemRefs(refs: ServiceItemRef[]): Promise<string[]> 
   }
   const want = [...all];
   if (want.length === 0) return [];
-  const rows = await prisma.item.findMany({ where: { id: { in: want } }, select: { id: true, itemType: true, name: true } });
-  const byId = new Map(rows.map((r) => [r.id, r]));
+  const rows = await prisma.serviceItem.findMany({ where: { id: { in: want } }, select: { id: true } });
+  const found = new Set(rows.map((r) => r.id));
   for (const id of want) {
-    const r = byId.get(id);
-    if (!r) throw AppError.badRequest("Eşlenen hizmet kalemi bulunamadı", { code: "SERVICE_ITEM_INVALID", itemId: id });
-    if (r.itemType !== ItemType.SERVICE) {
-      throw AppError.badRequest(`"${r.name}" bir hizmet kalemi değil — eşleme yalnız Hizmet türü kaleme yapılır`, { code: "SERVICE_ITEM_INVALID", itemId: id });
+    if (!found.has(id)) {
+      const product = await prisma.item.findUnique({ where: { id }, select: { name: true } });
+      if (!product) throw AppError.badRequest("Eşlenen hizmet kalemi bulunamadı", { code: "SERVICE_ITEM_INVALID", itemId: id });
+      throw AppError.badRequest(`"${product.name}" bir hizmet kalemi değil — eşleme yalnız Hizmet türü kaleme yapılır`, { code: "SERVICE_ITEM_INVALID", itemId: id });
     }
-    if (fresh.has(id)) await assertItemUsable(prisma, id, "DEFINITION");
+    if (fresh.has(id)) await assertServiceItemUsable(prisma, id, "DEFINITION");
   }
   return [...fresh];
 }
@@ -91,7 +90,7 @@ export async function withServiceItemLocks<T>(itemIds: string[], write: () => Pr
   if (itemIds.length === 0) return write();
   const sorted = [...new Set(itemIds)].sort();
   return prisma.$transaction(async (tx) => {
-    for (const id of sorted) await assertItemUsableTx(tx, id, "DEFINITION");
+    for (const id of sorted) await assertServiceItemUsableTx(tx, id, "DEFINITION");
     return write();
   });
 }

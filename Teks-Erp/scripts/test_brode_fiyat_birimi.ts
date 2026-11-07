@@ -23,6 +23,7 @@
 // dönünce §4 kırmızı · `allocateRevenue` `billedMeters` payına dönünce §6/§9 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Currency, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, RollStatus } from "@prisma/client";
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
   if (!wh) throw new Error("Varsayılan depo yok");
 
   const fabric = (await prisma.item.create({ data: { code: `${P}-K`.slice(0, 32), name: `TEST BFB kumaş ${STAMP}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } })).id;
-  const svc = (await prisma.item.create({ data: { code: `${P}-S`.slice(0, 32), name: `TEST BFB brode ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id;
+  const svc = (await kartAc({ code: `${P}-S`.slice(0, 32), name: `TEST BFB brode ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" })).id;
   fx.itemIds.push(fabric, svc);
   // BRODE bayrağı kodla tanınır (tek kaynak `BRODE_PROPERTY_CODE`): yoksa bekçi açar ve sonda siler; varsa çeşidi kullanılır.
   let flag = await prisma.fabricProperty.findUnique({ where: { code: BRODE_PROPERTY_CODE }, select: { id: true, variant: { select: { id: true } } } });
@@ -308,8 +309,8 @@ async function cleanup(): Promise<void> {
   await prisma.fabricPropertyValue.deleteMany({ where: { id: { in: fx.valueIds } } });
   await prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } });
-  await prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } });
-  await prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } });
+  await prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) });
+  await kartlariSil(fx.itemIds);
   if (fx.customerId) await prisma.customer.deleteMany({ where: { id: fx.customerId } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids, ...fx.itemIds] } } });
   const key = SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT;

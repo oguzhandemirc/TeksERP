@@ -21,7 +21,7 @@ interface PriceVersionRef {
 /** Eski sürümün damgası (UPDATE) + yeni sürümün doğumu (CREATE); yalnız sürüm yazıldıysa çağrılır. */
 export function logItemPriceVersionWrite(args: {
   userId?: string;
-  key: { itemId: string; customerId: string | null; propertyValueId?: string | null; kind: PriceKind; currency: Currency };
+  key: { itemId: string | null; serviceItemId?: string | null; customerId: string | null; propertyValueId?: string | null; kind: PriceKind; currency: Currency };
   rowId: string;
   previous: PriceVersionRef | null;
   /** İleri tarihli fiyat değişince yerine geçilen bekleyen satır (hiç yürürlüğe girmeden kapandı). */

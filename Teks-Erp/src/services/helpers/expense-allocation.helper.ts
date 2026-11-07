@@ -5,9 +5,9 @@
 // diye OKUMAZ — tek okuyucu `listExpenseAllocationsAsOf`: dönem sonunda geçerli bağlar + dönem içindeki geç bağ
 // olayları. Böylece geçmiş dönemin sonucu sonraki bağ değişiminden etkilenmez, etki değişim dönemine düşer.
 // =============================================================================
-import { CashTxnKind, ItemType, PaymentStatus, Prisma, WorkOrderStatus } from "@prisma/client";
+import { CashTxnKind, PaymentStatus, Prisma, WorkOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { assertItemUsable } from "./item-usage.helper";
+import { assertServiceItemUsable } from "./item-usage.helper";
 import type { ExpenseAllocationClosedWorkOrder } from "../system-setting.service";
 import { TERIM } from "../../constants/terim";
 
@@ -102,10 +102,10 @@ export async function assertAllocationTargetTx(
     return;
   }
   // Kart kullanım kararı TEK kaynaktan (pasif/birleşmiş → 409); bağ yeni kart referansı doğurmaz → kilitsiz kol.
-  const item = await assertItemUsable(tx, t.serviceItemId as string, "EXISTING_GOODS");
-  if (item.itemType !== ItemType.SERVICE) {
-    throw AppError.badRequest(`"${item.name}" bir hizmet kalemi değil.`, { code: "EXPENSE_ALLOCATION_NOT_SERVICE_ITEM" });
-  }
+  // Ürün kartı id'si hizmet yerine gelmişse türü söyle (FK reddi 500 yerine operatör dili).
+  const product = await tx.item.findUnique({ where: { id: t.serviceItemId as string }, select: { name: true } });
+  if (product) throw AppError.badRequest(`"${product.name}" bir hizmet kalemi değil.`, { code: "EXPENSE_ALLOCATION_NOT_SERVICE_ITEM" });
+  await assertServiceItemUsable(tx, t.serviceItemId as string, "EXISTING_GOODS");
 }
 
 /** Σ aktif pay + yeni pay ≤ 100. Masraf satırı kilitliyken çağrılır (kilit Σ okumasını serileştirir). */

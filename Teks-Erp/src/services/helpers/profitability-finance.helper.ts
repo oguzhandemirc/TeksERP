@@ -81,7 +81,7 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
     select: {
       id: true, docNo: true, status: true, exchangeRate: true, issueDate: true, confirmedAt: true, cancelledAt: true,
       cari: { select: { customerId: true } },
-      lines: { select: { itemId: true, lineTotal: true } },
+      lines: { select: { serviceItemId: true, lineTotal: true } },
       serviceBillingLinks: {
         select: {
           id: true, rollId: true, workOrderStepId: true, serviceItemId: true, billedMeters: true, billedQty: true, meterBasis: true, serviceAt: true, revokedAt: true,
@@ -100,7 +100,8 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
   });
   return rows.map((r) => {
     const lineTotalByItem = new Map<string, Prisma.Decimal>();
-    for (const l of r.lines) if (l.itemId) lineTotalByItem.set(l.itemId, (lineTotalByItem.get(l.itemId) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
+    // Hizmet satırı tutarı hizmet kartına göre (`lineType=SERVICE` satırında `serviceItemId`).
+    for (const l of r.lines) if (l.serviceItemId) lineTotalByItem.set(l.serviceItemId, (lineTotalByItem.get(l.serviceItemId) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
     const links = r.status === InvoiceStatus.DRAFT ? r.serviceBillingLinks.filter((l) => l.revokedAt === null) : countedLinks(r.serviceBillingLinks, r.confirmedAt);
     return {
       id: r.id, docNo: r.docNo, status: r.status, exchangeRate: r.exchangeRate, issueDate: r.issueDate, confirmedAt: r.confirmedAt, cancelledAt: r.cancelledAt,

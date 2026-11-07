@@ -19,7 +19,7 @@
 // `withServiceItemLocks` kilitsiz `write()`a indirilince §2/§3/§4 ihlal > 0.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { Currency, ItemLifecycleStatus, ItemType, PriceKind } from "@prisma/client";
+import { Currency, ItemLifecycleStatus, PriceKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { itemService } from "../src/routes/item.routes";
@@ -51,12 +51,13 @@ async function race(label: string, tag: string, write: Write, adminId: string): 
   let ihlal = 0;
   let sunucuHatasi = 0;
   for (let i = 0; i < TURLAR; i++) {
-    const it = await prisma.item.create({ data: { code: `${P}-${tag}${i}`, name: `TEST HKY ${tag} ${i} ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } });
+    const it = await prisma.serviceItem.create({ data: { code: `${P}-${tag}${i}`, name: `TEST HKY ${tag} ${i} ${STAMP}`, unit: "MT" }, select: { id: true } });
     fx.itemIds.push(it.id);
     // Kademeli gecikme: pasife alma yazımın ön kontrolünden SONRA da gelsin; iki sıra da denenir.
     const gecikmePasif = i % 2 === 0 ? (i % 8) * 3 : 0;
     const gecikmeYazim = i % 2 === 1 ? (i % 8) * 3 : 0;
     const [pasif, yazim] = await Promise.allSettled([
+      // D1b: hizmet kartı `service_items`'ta — pasife alma, hizmet kartı yaşam döngüsü yazıcısına (D1b) bağlanacak.
       sleep(gecikmePasif).then(() => itemService.transitionLifecycle(it.id, ItemLifecycleStatus.ARCHIVED, null, adminId)),
       sleep(gecikmeYazim).then(() => write(it.id)),
     ]);
@@ -66,7 +67,7 @@ async function race(label: string, tag: string, write: Write, adminId: string): 
       sunucuHatasi++;
       for (const x of [pasif, yazim]) if (x.status === "rejected") console.log(`   ! ${(x.reason as Error).message?.split("\n")[0]}`);
     }
-    const row = await prisma.item.findUniqueOrThrow({ where: { id: it.id }, select: { lifecycleStatus: true } });
+    const row = await prisma.serviceItem.findUniqueOrThrow({ where: { id: it.id }, select: { lifecycleStatus: true } });
     const live = totalLiveRefs(await countItemLiveRefs(prisma, it.id));
     if (row.lifecycleStatus === ItemLifecycleStatus.ARCHIVED && live > 0) ihlal++;
   }
@@ -114,10 +115,11 @@ async function cleanup(): Promise<void> {
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: fx.propIds } } });
   await prisma.stationProperty.deleteMany({ where: { OR: [{ propertyId: { in: fx.propIds } }, { stationId: { in: fx.stationIds } }] } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } });
-  await prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } });
+  await prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: fx.itemIds } }, { serviceItemId: { in: fx.itemIds } }] } });
   await prisma.customer.deleteMany({ where: { id: { in: fx.customerIds } } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...fx.itemIds, ...fx.propIds, ...fx.customerIds] } } });
   await prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } });
+  await prisma.serviceItem.deleteMany({ where: { id: { in: fx.itemIds } } });
   await prisma.station.deleteMany({ where: { id: { in: fx.stationIds } } });
 }
 

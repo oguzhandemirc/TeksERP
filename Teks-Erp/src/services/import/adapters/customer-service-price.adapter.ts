@@ -1,9 +1,9 @@
 // Müşteri hizmet fiyat listesi içe aktarım adaptörü — toplu açılış aktarımı.
 //
 // ③a DAMGALI SÜRÜM (ItemPrice, SALE, müşteri istisnası): yazım TEK KAYNAKTAN `itemPriceService.upsert`
-// (farklı fiyat eski sürümü damgalar + yeni sürüm; aynı fiyat SKIP). Kalem SERVİS türünde olmalı. Geri
+// (farklı fiyat eski sürümü damgalar + yeni sürüm; aynı fiyat SKIP). Kod hizmet kartından (`service_items`) çözülür. Geri
 // sarma satır SİLMEZ: yaratılan sürüm damgalanır, güncellenen sürümde önceki fiyat yeni sürüm olarak yazılır.
-import { Currency, ItemType, ItemUnit, PriceKind } from "@prisma/client";
+import { Currency, ItemUnit, PriceKind } from "@prisma/client";
 import prisma from "../../../lib/prisma";
 import { itemPriceService } from "../../item-price.service";
 import { resolveReference } from "../import-lookup";
@@ -14,7 +14,7 @@ const UNIT_LABEL: Record<ItemUnit, string> = { MT: "Metre", KG: "Kg", ADET: "Ade
 
 const COLUMNS: ImportColumn[] = [
   { key: "customerCode", label: "Müşteri Kodu", type: "text", required: true, maxLen: 100, help: "Müşteri KODU; bulunamazsa tam ad (uyarılı).", example: "M001" },
-  { key: "itemCode", label: "Hizmet Kodu", type: "text", required: true, maxLen: 100, help: "SERVİS türündeki kalemin kodu.", example: "HZM-KURSUN" },
+  { key: "itemCode", label: "Hizmet Kodu", type: "text", required: true, maxLen: 100, help: "Hizmet kartının kodu.", example: "HZM-KURSUN" },
   {
     key: "unit",
     label: "Birim",
@@ -29,7 +29,7 @@ const COLUMNS: ImportColumn[] = [
 
 interface Resolved {
   customerId: string;
-  itemId: string;
+  serviceItemId: string;
 }
 const resolved = new WeakMap<PreparedRow, Resolved>();
 
@@ -58,19 +58,18 @@ export const customerServicePriceImportAdapter: ImportAdapter = {
     const v = row.values;
     if (typeof v.customerCode !== "string" || typeof v.itemCode !== "string" || typeof v.currency !== "string") return;
     const cust = await resolveReference("customer", v.customerCode, ctx);
-    const item = await resolveReference("item", v.itemCode, ctx);
+    const item = await resolveReference("serviceItem", v.itemCode, ctx);
     for (const [col, out] of [["customerCode", cust], ["itemCode", item]] as const) {
       if (out.error) row.result.errors.push({ column: col, message: out.error.message, fix: out.error.fix });
       if (out.warning) row.result.warnings.push({ column: col, message: out.warning });
     }
     if (!cust.hit || !item.hit) return;
-    const card = await prisma.item.findUnique({ where: { id: item.hit.id }, select: { itemType: true, unit: true } });
-    if (card?.itemType !== ItemType.SERVICE) row.result.errors.push({ column: "itemCode", message: "Kalem SERVİS türünde değil — hizmet fiyat listesi yalnız hizmet kalemlerini alır." });
+    const card = await prisma.serviceItem.findUnique({ where: { id: item.hit.id }, select: { unit: true } });
     if (v.unit && card && v.unit !== card.unit) row.result.errors.push({ column: "unit", message: `Hizmetin birimi ${UNIT_LABEL[card.unit]} — dosyadaki birim farklı.` });
-    const ids = { customerId: cust.hit.id, itemId: item.hit.id };
+    const ids = { customerId: cust.hit.id, serviceItemId: item.hit.id };
     resolved.set(row, ids);
     row.result.label = `${cust.hit.name ?? v.customerCode} · ${item.hit.name ?? v.itemCode}`;
-    claimInFile(ctx, row, { key: `${ids.customerId}|${ids.itemId}|${v.currency}`, column: "itemCode", message: "Aynı müşteri + hizmet + para birimi dosyada iki kez var" });
+    claimInFile(ctx, row, { key: `${ids.customerId}|${ids.serviceItemId}|${v.currency}`, column: "itemCode", message: "Aynı müşteri + hizmet + para birimi dosyada iki kez var" });
 
     const current = await itemPriceService.findActiveSale({ ...ids, currency: v.currency as Currency });
     if (!current) return;
@@ -93,8 +92,8 @@ export const customerServicePriceImportAdapter: ImportAdapter = {
     const rows = await itemPriceService.listActiveCustomerServicePrices();
     return rows.map((r) => ({
       customerCode: r.customer?.code ?? "",
-      itemCode: r.item.code,
-      unit: UNIT_LABEL[r.item.unit],
+      itemCode: r.serviceItem?.code ?? "",
+      unit: r.serviceItem ? UNIT_LABEL[r.serviceItem.unit] : "",
       price: r.price.toString(),
       currency: r.currency,
     }));
@@ -124,7 +123,7 @@ async function write(row: PreparedRow, userId?: string): Promise<{ id: string }>
   const ids = resolved.get(row);
   if (!ids) throw new Error("Müşteri/hizmet çözümü önizlemede yapılmadı.");
   const out = await itemPriceService.upsert(
-    { ...ids, kind: PriceKind.SALE, currency: row.values.currency as Currency, price: String(row.values.price) },
+    { customerId: ids.customerId, itemId: ids.serviceItemId, kind: PriceKind.SALE, currency: row.values.currency as Currency, price: String(row.values.price) },
     userId,
   );
   return { id: out.data!.id };

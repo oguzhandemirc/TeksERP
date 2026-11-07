@@ -13,6 +13,8 @@
 // §3 (c) CHECK'ler: fatura satırı üç durumu + fiyat konusu + kademe + items SERVICE reddi
 //    (her red için önce GEÇERLİ pozitif kontrol — red başka sebepten gelmesin).
 // §4 (d) stokta kullanılmış hizmet → migration Türkçe sayılı mesajla DURUR, hiçbir şey değişmez.
+// §5 servis kapısı (D1a): ürün kartı SERVICE isteği DB CHECK'ine (500) inmeden 400 `ITEM_TYPE_SERVICE_MOVED`.
+//    Negatif sonda (2026-11-07): `item.service.ts` create kapısı kaldırılınca §5a kırmızı.
 // Ölçülemezse (süper olmayan DATABASE_URL) yerelde ⏭, CI'da ❌.
 // =============================================================================
 import "dotenv/config";
@@ -311,10 +313,31 @@ async function testDb(): Promise<void> {
   }
 }
 
+// ── §5 servis kapısı ─────────────────────────────────────────────────────────
+async function testServisKapisi(): Promise<void> {
+  const engel = hedefDbEngeli() ?? fixtureHedefEngeli();
+  if (engel) { check("§5 hedef kapısı: servis kapısı yalnız fixture hedefinde koşar", false, engel); return; }
+  const { itemService } = await import("../src/routes/item.routes");
+  const { pool } = await import("../src/lib/prisma");
+  let sonuc: { durum?: number; kod?: string; mesaj: string } = { mesaj: "hata yok (kart açıldı)" };
+  try {
+    await itemService.create({ name: `TEST-HKT KAPI ${Date.now()}`, itemType: "SERVICE" }, randomUUID());
+  } catch (e) {
+    const x = e as { statusCode?: number; details?: { code?: string }; message: string };
+    sonuc = { durum: x.statusCode, kod: x.details?.code, mesaj: x.message };
+  } finally {
+    await pool.end().catch(() => {});
+  }
+  check("§5a ⭐ ürün kartı Hizmet türünde açılamaz → 400 ITEM_TYPE_SERVICE_MOVED, Türkçe yönlendirme",
+    sonuc.durum === 400 && sonuc.kod === "ITEM_TYPE_SERVICE_MOVED" && sonuc.mesaj.includes("Hizmet Kartları"), JSON.stringify(sonuc).slice(0, 200));
+}
+
 async function main(): Promise<void> {
   console.log("=== §0 kaynak ===");
   testKaynak();
   await testDb();
+  console.log("=== §5 servis kapısı ===");
+  await testServisKapisi();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exitCode = fail > 0 ? 1 : 0;
 }

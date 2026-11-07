@@ -25,6 +25,7 @@
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Ayarlar fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -159,9 +160,8 @@ async function main(): Promise<void> {
     return m.id;
   };
   const kalem = async (itemType: ItemType, isActive = true): Promise<string> => {
-    const it = await prisma.item.create({
-      data: { code: `MUS${process.pid % 100000}-${++sira}`, name: `${TAG} ${itemType} ${sira}`, itemType, unit: itemType === ItemType.CONSUMABLE ? "KG" : "MT", isActive, ...(isActive ? {} : { lifecycleStatus: ItemLifecycleStatus.ARCHIVED }) },
-      select: { id: true },
+    const it = await kartAc({
+      code: `MUS${process.pid % 100000}-${++sira}`, name: `${TAG} ${itemType} ${sira}`, itemType, unit: itemType === ItemType.CONSUMABLE ? "KG" : "MT", isActive, ...(isActive ? {} : { lifecycleStatus: ItemLifecycleStatus.ARCHIVED }),
     });
     ids.items.push(it.id);
     return it.id;
@@ -393,7 +393,7 @@ async function temizle(ids: { stations: string[]; machines: string[]; items: str
   await prisma.serviceConsumableNorm.deleteMany({ where: { serviceItemId: { in: ids.items } } });
   await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
   await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
-  await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
+  await kartlariSil(ids.items);
   for (const u of ids.users) {
     await prisma.userPermission.deleteMany({ where: { userId: u } });
     await prisma.session.deleteMany({ where: { userId: u } }).catch(() => undefined);

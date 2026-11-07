@@ -11,6 +11,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import { CustomerAliasService } from "../src/services/customer-alias.service";
 import { AppError } from "../src/utils/app-error";
 
@@ -42,7 +43,7 @@ async function caught(fn: () => Promise<unknown>): Promise<AppError | null> {
 
 async function setup(): Promise<void> {
   ids.customer = (await prisma.customer.create({ data: { code: `TST-AH-${stamp}`, name: `TST ALIAS HIZMET ${stamp}` }, select: { id: true } })).id;
-  ids.service = (await prisma.item.create({ data: { code: `TST-AH-S-${stamp}`, name: `TST HIZMET ${stamp}`, itemType: "SERVICE" }, select: { id: true } })).id;
+  ids.service = (await kartAc({ code: `TST-AH-S-${stamp}`, name: `TST HIZMET ${stamp}`, itemType: "SERVICE" })).id;
   ids.fabric = (await prisma.item.create({ data: { code: `TST-AH-F-${stamp}`, name: `TST KUMAS ${stamp}`, itemType: "FABRIC" }, select: { id: true } })).id;
   ids.color = (await prisma.color.create({ data: { code: `TST-AH-C-${stamp}`, name: `TST AH RENK ${stamp}` }, select: { id: true } })).id;
 }
@@ -68,7 +69,7 @@ async function cleanup(): Promise<void> {
   await prisma.customerItemColorAlias.deleteMany({ where: { customerId: ids.customer } });
   await prisma.customerItemAlias.deleteMany({ where: { customerId: ids.customer } });
   if (ids.color) await prisma.color.deleteMany({ where: { id: ids.color } });
-  await prisma.item.deleteMany({ where: { id: { in: [ids.service, ids.fabric].filter(Boolean) } } });
+  await kartlariSil([ids.service, ids.fabric].filter(Boolean));
   if (ids.customer) await prisma.customer.deleteMany({ where: { id: ids.customer } });
 }
 

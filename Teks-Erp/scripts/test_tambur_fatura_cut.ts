@@ -30,6 +30,7 @@
 // sapma `measureSource` null'a sabitlenince §10b kırmızı (geri alındı).
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { Currency, ItemType, MeterPhase, Prisma, PriceKind, RollEntrySource, RollStatus, StationKind, StationType, StepStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
@@ -79,9 +80,9 @@ async function fixtures() {
   if (!g) throw new Error("FIRST rollü kalite yok — seed'siz DB");
   fx.gradeCode = g.code;
   const fabric = await prisma.item.create({ data: { code: `${P}-K`, name: `TEST TFC kumaş ${STAMP}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } });
-  const svc = await prisma.item.create({ data: { code: `${P}-S`, name: `TEST TFC tambur hizmeti ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } });
+  const svc = await kartAc({ code: `${P}-S`, name: `TEST TFC tambur hizmeti ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" });
   fx.items.push(fabric.id, svc.id);
-  await prisma.itemPrice.create({ data: { itemId: svc.id, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "2.0000" } });
+  await prisma.itemPrice.create({ data: { serviceItemId: svc.id, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "2.0000" } });
   const flag = await prisma.fabricProperty.create({ data: { code: `${P}-TB`, name: `TEST TFC Tambur`, valueType: "FLAG", serviceItemId: svc.id }, select: { id: true } });
   fx.props.push(flag.id);
   flagId = flag.id;
@@ -397,8 +398,8 @@ async function cleanup() {
   }
   if (fx.props.length) await prisma.fabricProperty.deleteMany({ where: { id: { in: fx.props } } }).catch(cleanupError);
   if (fx.items.length) {
-    await prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.items } } }).catch(cleanupError);
-    await prisma.item.deleteMany({ where: { id: { in: fx.items } } }).catch(cleanupError);
+    await prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.items) }).catch(cleanupError);
+    await kartlariSil(fx.items).catch(cleanupError);
   }
   if (fx.machineId) await prisma.machine.deleteMany({ where: { id: fx.machineId } }).catch(cleanupError);
   if (fx.stationId) await prisma.station.deleteMany({ where: { id: fx.stationId } }).catch(cleanupError);

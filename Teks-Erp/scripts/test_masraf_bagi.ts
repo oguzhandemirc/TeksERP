@@ -17,6 +17,7 @@
 // bağ kapısı replay'in önüne alındı → §9f ❌ + §9g 409 ile düştü; geri alındı → 38/0.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import { ItemType, StationType, type Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
@@ -80,7 +81,7 @@ async function temizle(): Promise<void> {
   if (ids.wos.length) await prisma.workOrder.deleteMany({ where: { id: { in: ids.wos } } });
   if (ids.machines.length) await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
   if (ids.stations.length) await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
-  if (ids.items.length) await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
+  if (ids.items.length) await kartlariSil(ids.items);
 }
 
 async function main(): Promise<void> {
@@ -101,7 +102,7 @@ async function main(): Promise<void> {
     return m.id;
   };
   const kalem = async (itemType: ItemType): Promise<string> => {
-    const it = await prisma.item.create({ data: { code: `MBG${process.pid % 100000}-${++sira}`, name: `${TAG} kalem ${sira}`, itemType, unit: "MT" }, select: { id: true } });
+    const it = await kartAc({ code: `MBG${process.pid % 100000}-${++sira}`, name: `${TAG} kalem ${sira}`, itemType, unit: "MT" });
     ids.items.push(it.id);
     return it.id;
   };

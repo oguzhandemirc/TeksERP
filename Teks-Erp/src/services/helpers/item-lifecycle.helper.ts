@@ -110,8 +110,8 @@ function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
     // Eşleme pasif özellik/değerde de sayılır: çözücü `isActive`e bakmadan faturalar (fail-closed, fazla sayar).
     SERVICE_PROPERTY_MAP: { serviceItemId: itemId },
     SERVICE_VALUE_MAP: { serviceItemId: itemId },
-    // Yalnız HİZMET kaleminin müşteri fiyatı: ürün fiyat istisnası tanımdır, canlı referans değildir (K1 emsali).
-    SERVICE_CUSTOMER_PRICE: { itemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE, item: { itemType: ItemType.SERVICE } },
+    // Yalnız HİZMET kartının müşteri fiyatı (`serviceItemId` kolonu): ürün fiyat istisnası tanımdır, canlı referans değildir (K1 emsali).
+    SERVICE_CUSTOMER_PRICE: { serviceItemId: itemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE },
     // `ACTIVE_COST_RATE` ile aynı yüklem; helper import edilmez (makine ücreti okuyucusunu kart router'ına bağlardı — maliyet rejim bekçisi).
     CONSUMABLE_NORM: { OR: [{ serviceItemId: itemId }, { consumableItemId: itemId }], revokedAt: null },
   };

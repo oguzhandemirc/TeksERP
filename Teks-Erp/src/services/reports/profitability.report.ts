@@ -11,7 +11,7 @@ export async function loadNames(results: ProfitabilityResult[]): Promise<ProfitN
   const rows = results.flatMap((r) => r.rows);
   const ids = <T,>(pick: (x: (typeof rows)[number]) => T | null) => [...new Set(rows.map(pick).filter((v): v is T => v !== null))];
   const customers = await prisma.customer.findMany({ where: { id: { in: ids((r) => r.customerId) } }, select: { id: true, name: true } });
-  const items = await prisma.item.findMany({ where: { id: { in: ids((r) => r.serviceItemId) } }, select: { id: true, name: true } });
+  const items = await prisma.serviceItem.findMany({ where: { id: { in: ids((r) => r.serviceItemId) } }, select: { id: true, name: true } });
   const machines = await prisma.machine.findMany({ where: { id: { in: ids((r) => r.machineId) } }, select: { id: true, name: true } });
   const rolls = await prisma.roll.findMany({ where: { id: { in: ids((r) => r.rollId) } }, select: { id: true, barcode: true } });
   return {

@@ -213,7 +213,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *             properties:
  *               code: { type: string, example: "STK-000123", description: "Opsiyonel — boş bırakılırsa STK-NNNNNN otomatik üretilir" }
  *               name: { type: string, example: "Boyalı Saten Kumaş" }
- *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE, SERVICE] }
+ *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE], description: "SERVICE → 400 ITEM_TYPE_SERVICE_MOVED (hizmet kartları ayrı uçta)" }
  *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
  *     responses:
  *       201:
