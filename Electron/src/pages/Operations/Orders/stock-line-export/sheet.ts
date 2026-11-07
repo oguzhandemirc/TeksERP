@@ -4,6 +4,7 @@ import type { SheetColumn, SheetSpec } from "@/lib/xlsx-export";
 import { upTo3ExcelNumFmt } from "@/lib/number-format";
 import { unitLabel } from "@/lib/item-unit";
 import { formatCalendarDay } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 import type { StockLineResult, StockLineRow, StockLineTotal } from "./aggregate";
 import { STOCK_LINE_COLUMNS, type StockLineColumn, type StockLineOptions } from "./options";
 
@@ -96,12 +97,13 @@ export function buildStockLineSheet({ title, result, options, scopeLines, notes 
 
 /** Dosyanın altındaki "rakam nasıl okunur" notları — seçime göre. */
 export function stockLineNotes(options: StockLineOptions, sourceNotes: string[]): string[] {
+  const ie = TERIM.terbiyeIsEmri;
   const ax = ["kumaş", options.byColor ? "renk" : null, options.byWidth ? "en" : null, "birim"].filter(Boolean).join(" + ");
   return [
     `Satır = ${ax}; sipariş no ve müşteri ayrımı yapılmaz. Farklı birimler (m / kg / adet) asla toplanmaz.`,
     "İptal kalemler ve iptal siparişler hariç. Sevk BRÜT; Açık = kalem başına (sipariş − sevk), 0'ın altına düşmez; elle kapatılan siparişte 0.",
     "kg/adet kalemlerde sevk ve açık ölçülmez (metre defteri) — hücre boş.",
-    "Üretimde = bu kalemlere bağlı iş emirlerinde şu an üretimde/fasonda olan topların metresi (giriş metresi; çekme öncesi). Bir iş emri tek satırda sayılır.",
+    `Üretimde = bu kalemlere bağlı ${ie.cogulCekimKucuk.bulunma} şu an üretimde/fasonda olan topların metresi (giriş metresi; çekme öncesi). Bir ${ie.tekilKucuk} tek satırda sayılır.`,
     "Depoda hazır = bitmiş kumaş stoğu (depo + A1 stok; sevke/çuvala girmemiş), Stok & Ölü Stok raporuyla aynı tanım; kat ayrımı toplanır.",
     "Üretilmesi gereken = Açık − Depoda hazır − Üretimde (0'ın altına düşmez).",
     ...sourceNotes,

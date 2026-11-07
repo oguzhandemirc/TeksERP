@@ -2,6 +2,7 @@
 // okunur cümlesi. Ad çözümü çekilen siparişlerden yapılır (süzgece uyan her sipariş seçilen müşteriyi/
 // kumaşı zaten taşır); ek istek atılmaz. Tanınmayan anahtar ham "anahtar: değer" yazılır, düşmez.
 import { formatCalendarDay } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 import type { Order } from "../types";
 import { ORDER_SHIP_FILTER_OPTIONS, WHERE_TABS } from "../order-where-text";
 
@@ -13,12 +14,13 @@ export interface OrderListScope {
   dateTo?: string;
 }
 
-const WO_STATE_LABELS: Record<string, string> = {
-  NONE: "İş emri yok",
+// Fonksiyon: TERIM adı dokuma rejiminden okuma anında çözülür (modül düzeyinde donmasın).
+const woStateLabels = (): Record<string, string> => ({
+  NONE: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`,
   PLANNED: "Planlandı",
   IN_PROGRESS: "Üretimde",
   COMPLETED: "Üretildi",
-};
+});
 
 const list = (v: string | string[] | undefined): string[] =>
   (Array.isArray(v) ? v : String(v ?? "").split(",")).map((s) => s.trim()).filter(Boolean);
@@ -54,7 +56,7 @@ export function describeOrderScope(scope: OrderListScope, orders: Order[]): stri
         out.push(`Sevk durumu: ${ids.map((v) => ORDER_SHIP_FILTER_OPTIONS.find((x) => x.value === v)?.label ?? v).join(", ")}`);
         break;
       case "woState":
-        out.push(`Üretim: ${ids.map((v) => WO_STATE_LABELS[v] ?? v).join(", ")}`);
+        out.push(`Üretim: ${ids.map((v) => woStateLabels()[v] ?? v).join(", ")}`);
         break;
       case "customerId":
         out.push(`Müşteri: ${names(ids, maps.customer)}`);
