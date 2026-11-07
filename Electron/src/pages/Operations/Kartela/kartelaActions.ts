@@ -9,12 +9,31 @@ import type { KartelaOutstandingItem, KartelaReceiveReturn } from "./service";
 /** Kartela fason kategorisinin kodu — tablet `KARTELA_CATEGORY_CODE` ile aynı. */
 export const KARTELA_CATEGORY_CODE = "KARTELA";
 
-/** Seçici kapsamı — tabletin `RollPickerModal` süzgeci: depodaki serbest (çuvalsız/sevkiyatsız) toplar. */
+/** Depodaki serbest (çuvalsız/sevkiyatsız) toplar — tabletin `RollPickerModal` süzgeci. */
+const WAREHOUSE_FREE = { status: "WAREHOUSE", shipmentScope: "free" } as const;
+
+/** Kartelalık Stok sekmesi ve "Kartelalık toplar" kapsamının TEK süzgeci (useDataTable forceFilters biçimi). */
+export const KARTELA_MARKED_FILTERS: Record<string, string> = { ...WAREHOUSE_FREE, markedForKartela: "true" };
+
+const asQuery = (f: Record<string, string>) =>
+  Object.fromEntries(Object.entries(f).map(([k, v]) => [`filter[${k}]`, v]));
+
+/** Seçici kapsamı: kartelalık işaretli serbest depo topları (varsayılan). */
+export const KARTELA_MARKED_ROLL_SCOPE = {
+  key: "warehouse-free-marked",
+  label: "Kartelalık toplar",
+  filters: asQuery(KARTELA_MARKED_FILTERS),
+};
+
+/** Seçici kapsamı: işaretten bağımsız tüm serbest depo topları. */
 export const KARTELA_ROLL_SCOPE = {
   key: "warehouse-free",
-  label: "Depodaki bitmiş toplar",
-  filters: { "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free" },
+  label: "Tüm bitmiş toplar",
+  filters: asQuery(WAREHOUSE_FREE),
 };
+
+/** Yeni Sevk top seçicisinin kapsamları — ilki varsayılan. */
+export const KARTELA_PICKER_SCOPES = [KARTELA_MARKED_ROLL_SCOPE, KARTELA_ROLL_SCOPE];
 
 /** Sevk listesindeki top satırı. */
 export interface KartelaPickedRoll {
@@ -23,6 +42,23 @@ export interface KartelaPickedRoll {
   itemName: string;
   colorName: string | null;
   qty: number;
+}
+
+/** Top kaydı → sevk satırı (okutma ve Kartelalık Stok'tan "Sevke ekle" aynı eşlemeyi kullanır). */
+export function rollToPicked(roll: {
+  id: string;
+  barcode: string | null;
+  currentQty: string | number;
+  item?: { name: string } | null;
+  color?: { name: string } | null;
+}): KartelaPickedRoll {
+  return {
+    id: roll.id,
+    barcode: roll.barcode,
+    itemName: roll.item?.name ?? "—",
+    colorName: roll.color?.name ?? null,
+    qty: Number(roll.currentQty),
+  };
 }
 
 /** Okutulan topun kartelaya gidemeyeceği sebep; `null` = uygun (son söz backend'de). */

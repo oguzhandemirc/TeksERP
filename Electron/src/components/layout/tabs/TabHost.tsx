@@ -8,8 +8,8 @@ import { TabRouter } from "./TabRouter";
 import { TabActiveProvider, TabIdProvider } from "./tab-active";
 import { TabPortalProvider } from "./tab-portal";
 import { DirtyTabsConfirm } from "./DirtyTabsConfirm";
-import { LICENSE_SUSPENDED_PATH } from "@/lib/license/suspension";
-import { LICENSE_ACTIVATION_PATH } from "@/lib/license/activation-lock";
+
+const HOME_PATH = "/";
 
 /**
  * Sekme barındırıcı. Açık tüm sekmeler aynı anda mount kalır; yalnız aktif olan
@@ -23,16 +23,11 @@ export function TabHost() {
   useRefetchStaleOnTabActivate(activeId);
   useEffect(() => subscribeTermRegimeTitles(), []);
 
-  // İlk açılış: sekme yoksa mevcut hash yolundan (yoksa Anasayfa) bir sekme aç.
+  // Yeni oturum boş defterle bağlanır → TEK sekme Anasayfa. Hash'te kalan eski yol açılmaz
+  // (kullanıcı kararı 2026-11-07: her oturum dashboard'dan başlar); F5'te defter dolu gelir.
   useEffect(() => {
     if (useTabsStore.getState().tabs.length > 0) return;
-    const hash = window.location.hash.replace(/^#/, "");
-    const usable =
-      hash && hash !== "/" && !hash.startsWith("/login") && !hash.startsWith("/forbidden") &&
-      !hash.startsWith(LICENSE_SUSPENDED_PATH) && !hash.startsWith(LICENSE_ACTIVATION_PATH)
-        ? hash
-        : "/";
-    openTab(usable);
+    openTab(HOME_PATH);
   }, [openTab]);
 
   return (
@@ -43,7 +38,7 @@ export function TabHost() {
         {tabs.map((tab) => (
           <TabPane key={tab.id} tab={tab} active={tab.id === activeId} />
         ))}
-        {tabs.length === 0 && <EmptyTabs onOpen={() => openTab("/")} />}
+        {tabs.length === 0 && <EmptyTabs onOpen={() => openTab(HOME_PATH)} />}
       </div>
     </div>
   );

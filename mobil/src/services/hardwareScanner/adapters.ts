@@ -61,6 +61,8 @@ export const PM = {
   EXTRA_SYMBOL: 'EXTRA_EVENT_SYMBOL_NAME',
   LAUNCH_SETTINGS: 'device.common.LAUNCH_SCAN_SETTING',
   SETTINGS_PACKAGE: 'device.settings.scanner',
+  /** Okuma zaman aşımında okuyucu bu sabiti VERİ olarak yollar (semboloji adı da aynı) — okutma değildir. */
+  READ_FAIL: 'READ_FAIL',
   /** ResultType: USERMSG=0 · KBDMSG=1 · COPYPASTE=2 · EVENT=3 (yalnız 3'te veri intent'te gelir). */
   RESULT_EVENT: 3,
   RESULT_COPYPASTE: 2,
@@ -88,7 +90,10 @@ export const pointMobileAdapter: ScannerAdapter = {
     if (e.action === PM.EVENT) {
       const data = decodeBytesExtra(e.extras[PM.EXTRA_VALUE], e.extras[PM.EXTRA_LENGTH]);
       if (data == null) return null;
-      return { scan: { data, symbology: stringExtra(e.extras[PM.EXTRA_SYMBOL]) } };
+      const symbology = stringExtra(e.extras[PM.EXTRA_SYMBOL]);
+      // Okunamayan tetik: barkod değil; ekrana "EKLENMEDİ · READ_FAIL" basmasın.
+      if (data.trim() === PM.READ_FAIL || symbology === PM.READ_FAIL) return null;
+      return { scan: { data, symbology } };
     }
     if (e.action === PM.STATE_RESULT_TYPE) {
       const t = numberExtra(e.extras[PM.EXTRA_RESULT_TYPE]);

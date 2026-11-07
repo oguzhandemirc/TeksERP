@@ -1,15 +1,24 @@
-import { Send, Inbox, PackageCheck, Package, Palette, History, type LucideIcon } from "lucide-react";
+import { Send, Inbox, PackageCheck, Package, Palette, History, Bookmark, type LucideIcon } from "lucide-react";
 
-export type KartelaTabKey = "dispatches" | "outstanding" | "receipts" | "rolls" | "swatches" | "events";
+export type KartelaTabKey = "dispatches" | "outstanding" | "receipts" | "stock" | "rolls" | "swatches" | "events";
+
+export interface KartelaTabDef {
+  key: KartelaTabKey;
+  label: string;
+  Icon: LucideIcon;
+  /** Sayfa iznine (kartela:read) EK izin; yoksa sekme çizilmez, palet girişi bu izni ister. */
+  permission?: string;
+}
 
 /**
  * Kartela Takibi sekmeleri — TEK KAYNAK. Sayfa şeridi ve komut paletinin `?tab=` derin
  * bağlantıları buradan üretilir (kopyalanırsa palet ile sayfa ayrışır).
  */
-export const KARTELA_TABS: { key: KartelaTabKey; label: string; Icon: LucideIcon }[] = [
+export const KARTELA_TABS: KartelaTabDef[] = [
   { key: "dispatches", label: "Sevkler", Icon: Send },
   { key: "outstanding", label: "Bekleyen Kabul", Icon: Inbox },
   { key: "receipts", label: "Kabuller", Icon: PackageCheck },
+  { key: "stock", label: "Kartelalık Stok", Icon: Bookmark, permission: "roll:read" },
   { key: "rolls", label: "Kartelada Toplar", Icon: Package },
   { key: "swatches", label: "Kartela Stoğu", Icon: Palette },
   { key: "events", label: "Hareketler", Icon: History },
