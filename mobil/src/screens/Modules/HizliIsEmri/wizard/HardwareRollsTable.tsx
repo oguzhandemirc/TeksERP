@@ -15,6 +15,7 @@ import { ScanFlashCard } from '../../../../components/HardwareScanPanel';
 import HardwareTriggerHint from '../../../../components/HardwareTriggerHint';
 import { colors, radius, spacing } from '../../../../theme';
 import type { ScannedRoll } from '../useQuickWorkOrder';
+import { TERIM } from '../../../../lib/terim';
 
 interface Props {
   rolls: ScannedRoll[];
@@ -25,6 +26,8 @@ interface Props {
   duplicateBarcode: string | null;
   flash: ScanFlash | null;
   showWidth: boolean;
+  /** Kilitli ürün — ilk toptan sonra tek kumaş kuralının görünür hali. */
+  itemName?: string | null;
 }
 
 export default function HardwareRollsTable(p: Props) {
@@ -35,7 +38,15 @@ export default function HardwareRollsTable(p: Props) {
       {p.rejects.map((r) => (
         <RejectRow key={r.id} reject={r} onDismiss={() => p.onDismissReject(r.id)} />
       ))}
-      <HardwareTriggerHint label={p.rolls.length ? 'Sıradaki topu okutun' : 'Okuyucu tuşuna basıp topu okutun'} />
+      {p.rolls.length ? <HardwareTriggerHint label="Sıradaki topu okutun" /> : <EmptyCard />}
+      {p.itemName ? (
+        <View style={styles.item}>
+          <Icon source="cube-outline" size={16} color={colors.brand} />
+          <Text style={styles.itemText} numberOfLines={2}>
+            {p.itemName}
+          </Text>
+        </View>
+      ) : null}
       {p.rolls.length ? (
         <View style={styles.table}>
           <View style={[styles.row, styles.headRow]}>
@@ -63,6 +74,18 @@ export default function HardwareRollsTable(p: Props) {
           </View>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function EmptyCard() {
+  return (
+    <View style={styles.empty} testID="hw-rolls-empty">
+      <Icon source="barcode-scan" size={48} color={colors.brand} />
+      <Text style={styles.emptyTitle}>Okuyucu tuşuna basıp topu okutun</Text>
+      <Text style={styles.emptyHint}>
+        {`Aynı üründen stok toplarını arka arkaya okutun. Tek ${TERIM.terbiyeIsEmri.tekilKucuk} tek kumaş içindir.`}
+      </Text>
     </View>
   );
 }
@@ -119,6 +142,21 @@ function RejectRow({ reject, onDismiss }: { reject: ScanReject; onDismiss: () =>
 
 const styles = StyleSheet.create({
   root: { gap: spacing.sm },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.xs },
+  itemText: { flex: 1, color: colors.brand, fontWeight: '700', fontSize: 14 },
+  empty: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: colors.brand, textAlign: 'center' },
+  emptyHint: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   table: {
     borderRadius: radius.md,
     borderWidth: 1,

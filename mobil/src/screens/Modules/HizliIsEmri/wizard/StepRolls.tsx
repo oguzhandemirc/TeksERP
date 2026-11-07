@@ -67,6 +67,7 @@ export default function StepRolls({
           duplicateBarcode={wo.duplicateBarcode}
           flash={wo.scanFlash}
           showWidth={wo.mixedWidths.length > 1}
+          itemName={wo.lockedItemName}
         />
       ) : (
       <Surface style={styles.summary} elevation={1}>

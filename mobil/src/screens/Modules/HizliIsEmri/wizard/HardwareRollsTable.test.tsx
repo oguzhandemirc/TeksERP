@@ -20,6 +20,7 @@ const base = {
 
 it('boşken yalnız tuş bandı; tablo yok', () => {
   const r = renderWithPaper(<HardwareRollsTable {...base} rolls={[]} />);
+  expect(r.getByTestId('hw-rolls-empty')).toBeTruthy();
   expect(r.getByText('Okuyucu tuşuna basıp topu okutun')).toBeTruthy();
   expect(r.queryByText('Barkod')).toBeNull();
 });
