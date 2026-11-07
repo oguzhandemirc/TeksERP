@@ -3,12 +3,13 @@
 // Satır silinirse ayrıca test_feature_flag_contract "yönetilemez SAYISAL anahtar" kırmızı verir.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { settingsServiceText } from "@/test/helpers/settings-service-source";
 import { describe, expect, it } from "vitest";
 import { SETTINGS_CATEGORIES } from "./settings-config";
 import { FLAG_MODULE } from "./flag-modules";
 
 const ROUTES = readFileSync(resolve(__dirname, "../../../../Teks-Erp/src/routes/feature-flag.routes.ts"), "utf8");
-const SERVICE = readFileSync(resolve(__dirname, "../../../../Teks-Erp/src/services/system-setting.service.ts"), "utf8");
+const SERVICE = settingsServiceText();
 
 const tezgah = SETTINGS_CATEGORIES.find((c) => c.id === "tezgah")!;
 const numbers = ("numberFlags" in tezgah && tezgah.numberFlags) || [];
