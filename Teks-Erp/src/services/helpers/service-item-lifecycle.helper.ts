@@ -41,7 +41,8 @@ interface LiveRefWhere {
   DRAFT_INVOICE_LINE: Prisma.InvoiceLineWhereInput;
 }
 
-function liveRefWhere(serviceItemId: string): LiveRefWhere {
+/** Tek kart (`string`) ya da toplu sayım (`{ in }`) — aynı yüklem iki yolda (tek kaynak). */
+function liveRefWhere(serviceItemId: string | { in: string[] }): LiveRefWhere {
   return {
     // Eşleme pasif özellik/değerde de sayılır: çözücü `isActive`e bakmadan faturalar (fail-closed).
     SERVICE_PROPERTY_MAP: { serviceItemId },
@@ -63,7 +64,7 @@ export async function countServiceItemLiveRefs(db: Db, serviceItemId: string): P
   const counts: Record<ServiceItemLiveRefKind, number> = {
     SERVICE_PROPERTY_MAP: await db.fabricProperty.count({ where: w.SERVICE_PROPERTY_MAP }),
     SERVICE_VALUE_MAP: await db.fabricPropertyValue.count({ where: w.SERVICE_VALUE_MAP }),
-    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: w.SERVICE_CUSTOMER_PRICE }),
+    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE } }),
     CONSUMABLE_NORM: await db.serviceConsumableNorm.count({ where: w.CONSUMABLE_NORM }),
     DRAFT_INVOICE_LINE: await db.invoiceLine.count({ where: w.DRAFT_INVOICE_LINE }),
   };
@@ -71,6 +72,28 @@ export async function countServiceItemLiveRefs(db: Db, serviceItemId: string): P
 }
 
 export const totalServiceItemLiveRefs = (c: ServiceItemLiveRefCount[]): number => c.reduce((s, x) => s + x.count, 0);
+
+/** Liste rozeti için kart başına toplam canlı referans — kart sayısından bağımsız 5 sorgu (`groupBy`). */
+export async function countServiceItemLiveRefTotals(db: Db, ids: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>(ids.map((id) => [id, 0]));
+  if (ids.length === 0) return out;
+  const w = liveRefWhere({ in: ids });
+  const add = (rows: Array<{ serviceItemId: string | null; _count: { _all: number } }>): void => {
+    for (const r of rows) if (r.serviceItemId) out.set(r.serviceItemId, (out.get(r.serviceItemId) ?? 0) + r._count._all);
+  };
+  // Sıralı: tx istemcisinde Promise.all yasak. Sonuç önce değişkene: bağlamsal tip groupBy aşırı yüklemesini bozar.
+  const props = await db.fabricProperty.groupBy({ by: ["serviceItemId"], where: w.SERVICE_PROPERTY_MAP, _count: { _all: true } });
+  add(props);
+  const values = await db.fabricPropertyValue.groupBy({ by: ["serviceItemId"], where: w.SERVICE_VALUE_MAP, _count: { _all: true } });
+  add(values);
+  const prices = await db.itemPrice.groupBy({ by: ["serviceItemId"], where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, _count: { _all: true } });
+  add(prices);
+  const norms = await db.serviceConsumableNorm.groupBy({ by: ["serviceItemId"], where: w.CONSUMABLE_NORM, _count: { _all: true } });
+  add(norms);
+  const lines = await db.invoiceLine.groupBy({ by: ["serviceItemId"], where: w.DRAFT_INVOICE_LINE, _count: { _all: true } });
+  add(lines);
+  return out;
+}
 
 const LIST_LIMIT = 500;
 
@@ -91,7 +114,7 @@ export async function listServiceItemLiveRefs(
       select: { id: true, code: true, name: true, isActive: true, property: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: `${x.property.name} · ${x.name}`, detail: `${x.code}${x.isActive ? "" : " · pasif"} — eşlemeyi kaldırın` })),
     SERVICE_CUSTOMER_PRICE: (await db.itemPrice.findMany({
-      where: w.SERVICE_CUSTOMER_PRICE, take, orderBy: { createdAt: "asc" },
+      where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, take, orderBy: { createdAt: "asc" },
       select: { id: true, currency: true, customer: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: x.customer?.name ?? "—", detail: `${x.currency} — müşteri fiyatını kaldırın` })),
     CONSUMABLE_NORM: (await db.serviceConsumableNorm.findMany({

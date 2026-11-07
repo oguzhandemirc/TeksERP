@@ -527,7 +527,7 @@ router.post("/cash-transactions/:id/cancel", requirePermission("finance:payment"
 // D1c satır konusu: `lineType` + `itemId` (ürün) / `serviceItemId` (hizmet). `lineType`siz eski gövde serviste
 // normalize edilir (`itemId=<hizmet id>` → SERVICE); şekil kuralı tek kaynak `invoiceLineShapeError`.
 const lineSchema = z.object({
-  lineType: z.enum(["PRODUCT", "SERVICE", "TEXT"]).optional(),
+  lineType: z.enum(["PRODUCT", "SERVICE", "TEXT"], { message: "Satır türü PRODUCT (ürün), SERVICE (hizmet) ya da TEXT (açıklama) olmalı" }).optional(),
   itemId: z.string().uuid().nullable().optional(),
   serviceItemId: z.string().uuid().nullable().optional(),
   description: z.string().min(1).max(300),

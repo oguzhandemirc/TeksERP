@@ -114,7 +114,7 @@ async function kapsamBolumu(): Promise<void> {
         taslak, onayli, `${TAG}T`, `${TAG}O`, cari,
       );
       await tx.$executeRawUnsafe(
-        `INSERT INTO "invoice_lines" ("id", "invoiceId", "lineNo", "description", "qty", "unitPrice", "lineTotal", "vatAmount") VALUES ($1::uuid, $3::uuid, 1, 'a', 1, 1, 1, 0), ($2::uuid, $4::uuid, 1, 'b', 1, 1, 1, 0)`,
+        `INSERT INTO "invoice_lines" ("id", "invoiceId", "lineNo", "lineType", "description", "qty", "unitPrice", "lineTotal", "vatAmount") VALUES ($1::uuid, $3::uuid, 1, 'TEXT', 'a', 1, 1, 1, 0), ($2::uuid, $4::uuid, 1, 'TEXT', 'b', 1, 1, 1, 0)`,
         randomUUID(), randomUUID(), taslak, onayli,
       );
       for (const p of [FATURA, KALEM]) {

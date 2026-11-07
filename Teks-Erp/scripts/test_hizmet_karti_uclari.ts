@@ -5,11 +5,12 @@
 //
 // ÖLÇÜLENLER:
 //   §1 CRUD: oluştur (kod boş → HZM-NNNNNN, ad TR-büyük), listede/aramada görünür, detay, PATCH ad/birim, audit SERVICE_ITEM
-//   §2 400 mesajları: boş ad, bilinmeyen alan (strict), geçersiz birim, STK-/HZM- öneki, PATCH code
+//   §2 400 mesajları: boş ad, bilinmeyen alan (strict), geçersiz birim, STK-/HZM- öneki, PATCH code; ürün kartı HZM- reddi
 //   §3 iki yönlü kimlik: hizmet kodu = ürün kodu (harf farkıyla) → 409 CARD_CODE_TAKEN_BY_OTHER_KIND (iki yön);
-//      ad çakışması → 409 CARD_NAME_TAKEN_BY_OTHER_KIND (iki yön); hizmet ↔ hizmet aynı ad 409
+//      ad çakışması → 409 CARD_NAME_TAKEN_BY_OTHER_KIND (iki yön); hizmet ↔ hizmet aynı ad 409;
+//      §3g/h ad yarışı benzetimi (ön kontrol atlanır) → DB seddi Türkçe ad 409'u, kod yeniden denemesi değil
 //   §4 eski uç şekli: GET /api/items?filter[itemType]=SERVICE ve GET /api/items/:id hizmeti `itemType:SERVICE`
-//      ile döner; PATCH /api/items/:id hizmeti düzenler; POST /api/items {itemType:SERVICE} 400 ITEM_TYPE_SERVICE_MOVED
+//      ile döner; PATCH /api/items/:id hizmeti düzenler; POST /api/items {itemType:SERVICE} hizmet kartı açar (service_items)
 //   §5 yaşam döngüsü: DELETE Pasif'e alır, önizleme şekli, yeniden Aktif; izin: item:read yazamaz (403)
 // Negatif sonda (2026-11-08): `item.service.ts` create'teki `assertCodeFreeInOtherKind` çağrıları kaldırılınca
 // §3c (ürün → hizmet yönü) ❌ 201; `wantsLegacyServiceList` yönlendirmesi kapatılınca §4a ❌ n=0 (25/27).
@@ -21,6 +22,8 @@ import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuthService } from "../src/services/auth.service";
+import { serviceItemService } from "../src/services/service-item.service";
+import { itemService } from "../src/routes/item.routes";
 
 let pass = 0;
 let fail = 0;
@@ -95,6 +98,9 @@ async function main(): Promise<void> {
     check("§2d HZM-/STK- öneki elle yazılamaz → 400", e2d.status === 400 && (e2d.body.message ?? "").includes("HZM-"), e2d.body.message ?? "");
     const e2e = await call("PATCH", `/api/service-items/${String(s1.id)}`, yazar, { code: "YENI" });
     check("§2e PATCH code → 400", e2e.status === 400, String(e2e.status));
+    const e2f = await call("POST", "/api/items", yazar, { name: `${TAG} HZM ONEK`, itemType: "FABRIC", code: "hzm-123456" });
+    if (e2f.status === 201 && typeof data(e2f)?.id === "string") ids.items.push(String(data(e2f).id));
+    check("§2f ürün kartı HZM- önekiyle açılamaz → 400 ITEM_CODE_RESERVED_PREFIX", e2f.status === 400 && kod(e2f) === "ITEM_CODE_RESERVED_PREFIX", `${e2f.status} ${kod(e2f)}`);
 
     console.log("\n── §3 ürün ↔ hizmet kimliği (iki yönlü) ──");
     const urun = await prisma.item.create({ data: { code: `${TAG}-K`, name: `${TAG} KUMAŞ`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } });
@@ -114,6 +120,24 @@ async function main(): Promise<void> {
     check("§3e ürün adı = hizmet adı → 409 CARD_NAME_TAKEN_BY_OTHER_KIND (ters yön)", e3e.status === 409 && kod(e3e) === "CARD_NAME_TAKEN_BY_OTHER_KIND", `${e3e.status} ${kod(e3e)}`);
     const e3f = await call("POST", "/api/service-items", yazar, { name: `${TAG} tambur hizmeti` });
     check("§3f hizmet ↔ hizmet aynı ad → 409", e3f.status === 409, String(e3f.status));
+    // §3g ad YARIŞI benzetimi: ön kontrol atlanınca (iki istek aynı anda) DB seddi P2002 verir; otomatik kod
+    // yeniden denemesi yalnız KOD çakışmasına uygulanır ⇒ ad çakışması "denemede başarısız" değil Türkçe ad 409'u.
+    const svcAny = serviceItemService as unknown as { assertNameNotDuplicate: (...a: unknown[]) => Promise<void> };
+    const itmAny = itemService as unknown as { assertNameNotDuplicate: (...a: unknown[]) => Promise<void> };
+    svcAny.assertNameNotDuplicate = async () => {};
+    itmAny.assertNameNotDuplicate = async () => {};
+    try {
+      const r3g = await call("POST", "/api/service-items", yazar, { name: `${TAG} tambur hizmeti` });
+      check("§3g ⭐ hizmet ad yarışı → 409 Türkçe ad mesajı (kod yeniden denemesine girmez)",
+        r3g.status === 409 && (r3g.body.message ?? "").includes("ad") && !(r3g.body.message ?? "").includes("deneme"), `${r3g.status} ${r3g.body.message ?? ""}`);
+      const r3h = await call("POST", "/api/items", yazar, { name: `${TAG} kumaş`, itemType: "FABRIC" });
+      if (r3h.status === 201 && typeof data(r3h)?.id === "string") ids.items.push(String(data(r3h).id));
+      check("§3h ⭐ ürün ad yarışı → 409 Türkçe ad mesajı (kod yeniden denemesine girmez)",
+        r3h.status === 409 && (r3h.body.message ?? "").includes("ad") && !(r3h.body.message ?? "").includes("deneme"), `${r3h.status} ${r3h.body.message ?? ""}`);
+    } finally {
+      delete (svcAny as Partial<typeof svcAny>).assertNameNotDuplicate;
+      delete (itmAny as Partial<typeof itmAny>).assertNameNotDuplicate;
+    }
 
     console.log("\n── §4 eski istemci uyumluluk yolu ──");
     const l4 = await call("GET", `/api/items?filter[itemType]=SERVICE&search=${encodeURIComponent(TAG)}&pageSize=50`, okur);
@@ -128,7 +152,13 @@ async function main(): Promise<void> {
     check("§4d PATCH /api/items/:id (hizmet id) hizmet kartını düzenler", p4.status === 200 && data(p4)?.itemType === "SERVICE"
       && (await prisma.serviceItem.findUnique({ where: { id: String(s1.id) }, select: { name: true } }))?.name === `${TAG} KURŞUN ESKİ PANEL`, `${p4.status} ${p4.body.message ?? ""}`);
     const e4 = await call("POST", "/api/items", yazar, { name: `${TAG} yeni hizmet`, itemType: "SERVICE" });
-    check("§4e POST /api/items {itemType:SERVICE} → 400 ITEM_TYPE_SERVICE_MOVED", e4.status === 400 && kod(e4) === "ITEM_TYPE_SERVICE_MOVED", `${e4.status} ${kod(e4)}`);
+    const e4id = typeof data(e4)?.id === "string" ? String(data(e4).id) : null;
+    if (e4id) ids.services.push(e4id);
+    const e4svc = e4id ? await prisma.serviceItem.findUnique({ where: { id: e4id }, select: { code: true } }) : null;
+    const e4item = e4id ? await prisma.item.findUnique({ where: { id: e4id }, select: { id: true } }) : null;
+    check("§4e ⭐ POST /api/items {itemType:SERVICE} hizmet kartı açar (service_items, HZM- kodu, eski şekil)",
+      (e4.status === 200 || e4.status === 201) && data(e4)?.itemType === "SERVICE" && e4svc !== null && /^HZM-/.test(e4svc.code) && e4item === null,
+      `${e4.status} ${kod(e4) ?? ""} svc=${e4svc?.code ?? "yok"} item=${e4item ? "var" : "yok"}`);
 
     console.log("\n── §5 yaşam döngüsü + izin ──");
     const pv = await call("GET", `/api/service-items/${String(s1b.id)}/lifecycle-preview?to=ARCHIVED`, yazar);

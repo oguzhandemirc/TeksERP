@@ -35,7 +35,12 @@ BEGIN
         ('expense_allocations', 'serviceItemId'),
         ('item_prices', 'itemId'),
         ('invoice_lines', 'itemId'),
-        ('items', 'mergedIntoId'))
+        ('items', 'mergedIntoId'),
+        -- Saf yapılandırma pivotları (defter ③b; FK'ları zaten ON DELETE CASCADE): kapıyı durdurmaz, 0d'de silinir.
+        ('item_allowed_colors', 'itemId'),
+        ('item_allowed_properties', 'itemId'),
+        ('customer_item_aliases', 'itemId'),
+        ('customer_item_color_aliases', 'itemId'))
     ORDER BY 1, 2
   LOOP
     EXECUTE format(
@@ -74,6 +79,14 @@ BEGIN
     RAISE EXCEPTION 'Hizmet kartı taşıması DURDU: % ürün fiyatı satırında kademe (propertyValueId) dolu; kademe yalnız hizmet fiyatında olabilir.', n;
   END IF;
 END $$;
+
+-- (d) Hizmet kartına bağlı SAF YAPILANDIRMA PİVOTU satırları silinir (defter ③b izinli hard delete):
+--     izinli renk/özellik listesi ve müşteri ürün/renk adı hizmette anlamsızdır (alias kapısı 2026-11-06'dan beri
+--     reddeder). Hiçbir sayı değişmez; deploy öncesi liste `scripts/hizmet-karti-tasima-kontrol.ts`te.
+DELETE FROM "item_allowed_colors" WHERE "itemId" IN (SELECT i."id" FROM "items" i WHERE i."itemType" = 'SERVICE');
+DELETE FROM "item_allowed_properties" WHERE "itemId" IN (SELECT i."id" FROM "items" i WHERE i."itemType" = 'SERVICE');
+DELETE FROM "customer_item_color_aliases" WHERE "itemId" IN (SELECT i."id" FROM "items" i WHERE i."itemType" = 'SERVICE');
+DELETE FROM "customer_item_aliases" WHERE "itemId" IN (SELECT i."id" FROM "items" i WHERE i."itemType" = 'SERVICE');
 
 -- ── 1) service_items tablosu ──────────────────────────────────────────────────
 CREATE TYPE "InvoiceLineType" AS ENUM ('PRODUCT', 'SERVICE', 'TEXT');
@@ -182,7 +195,14 @@ ALTER TABLE "invoice_lines" ADD CONSTRAINT "invoice_lines_line_type_ck" CHECK (
 
 -- ── 6) items'tan kaldır — TAŞIMA (satır aynı id ile service_items'ta yaşıyor) ──
 -- items içi soy (mergedIntoId) yalnız hizmet↔hizmet kalabilir (kapı 0b); SET NULL olsa da silinen satırlardadır.
+-- Bulut: satır `service_items`ta aynı id ile yaşar ⇒ silme tetikleyicisi buluta SILINDI yazmamalı (patron `urun`
+-- projeksiyonu kaydı görmeye devam eder). Tetikleyici yalnız bu ifade için kapanır; migration tek tx'tir.
+ALTER TABLE "items" DISABLE TRIGGER "items_sync_deleted";
 DELETE FROM "items" WHERE "itemType" = 'SERVICE';
+ALTER TABLE "items" ENABLE TRIGGER "items_sync_deleted";
 
 -- ── 7) items artık hizmet taşımaz; enum değeri eski istemci süzgeci için KALIR (plan §5) ──
 ALTER TABLE "items" ADD CONSTRAINT "items_no_service_ck" CHECK ("itemType" <> 'SERVICE');
+
+-- ── 8) Bulut silme işareti — `service_items` `urun` projeksiyonunun ek köküdür (aynı UUID uzayı) ──
+CREATE TRIGGER "service_items_sync_deleted" AFTER DELETE ON "service_items" FOR EACH ROW EXECUTE FUNCTION sync_mark_deleted();

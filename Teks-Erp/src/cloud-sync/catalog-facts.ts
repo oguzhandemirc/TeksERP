@@ -2,7 +2,7 @@
 // `projections.ts` üzerinden dışa açılır; tasarım `docs/design/PATRON-BULUTU-ESITLEME.md` §3.2.
 import { factoryDaySql } from "../constants/time";
 import { ITEM_PRICE_CLOUD_SCOPE, ITEM_PRICE_WINDOW_CROSSING } from "../services/helpers/item-price-validity.helper";
-import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
+import { col, derived, lookup, self, via, type ColumnSpec, type RecordProjection } from "./projection-types";
 import { MERGED_INVOICE_RESOLVER, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
@@ -19,6 +19,11 @@ const ORDERS_OF_CUSTOMERS = 'SELECT o."id" AS root_id FROM "orders" o WHERE o."c
 const SHIPMENTS_OF_CUSTOMERS = 'SELECT s."id" AS root_id FROM "shipments" s WHERE s."customerId" = ANY($1::uuid[])';
 const LINES_OF_ITEMS = 'SELECT l."id" AS root_id FROM "order_lines" l WHERE l."itemId" = ANY($1::uuid[])';
 const LINES_OF_COLORS = 'SELECT l."id" AS root_id FROM "order_lines" l WHERE l."colorId" = ANY($1::uuid[])';
+/** `urunId` = konu kartı: ürün (`itemId`) ya da hizmet kartı (`serviceItemId`, aynı UUID uzayı — bulut bugünkü gibi `urun`a bağlar). */
+const SUBJECT_ID_RESOLVER = (table: string): NonNullable<ColumnSpec["resolvedBy"]> => ({
+  helper: "cloud-sync/derived subjectIdDerived: itemId ?? serviceItemId (hizmet kartı ayrımı 2026-11-08)",
+  reads: [table],
+});
 const NAME_OF = (model: string): string => `cloud-sync/derived displayNames: ${model}.name (BOYUT \`ad\` ile aynı kolon)`;
 
 /** Efektif vade (belge vadesi → tarih + cari vade günü) — `resolveEffectiveDue`in SQL ikizi (UTC oturum, tam gün = 86 400 sn). */
@@ -236,7 +241,7 @@ export const FACTS: readonly RecordProjection[] = [
       prismaWhere: { invoice: { status: { not: "DRAFT" } } },
       sql: `EXISTS (SELECT 1 FROM "invoices" i WHERE i."id" = t."invoiceId" AND i."status" <> 'DRAFT')`,
     },
-    columns: [col("id", "id"), col("faturaId", "invoiceId"), col("sira", "lineNo"), col("urunId", "itemId"),
+    columns: [col("id", "id"), col("faturaId", "invoiceId"), col("sira", "lineNo"), { ...col("urunId", "itemId"), resolvedBy: SUBJECT_ID_RESOLVER("invoice_lines") },
       col("aciklama", "description"), col("miktar", "qty"), col("birim", "unit"), col("birimFiyat", "unitPrice", "FINANS"),
       col("iskontoOrani", "discountRate", "FINANS"), col("kdvOrani", "vatRate", "FINANS"),
       col("tevkifatOrani", "withholdingRate", "FINANS"), col("tutar", "lineTotal", "FINANS"), col("kdvTutari", "vatAmount", "FINANS")],
@@ -265,7 +270,7 @@ export const FACTS: readonly RecordProjection[] = [
   },
   {
     name: "fiyat", kind: "KAYIT", role: "OLGU", root: { table: "item_prices", model: "ItemPrice" },
-    columns: [col("id", "id"), col("urunId", "itemId"), col("cariKartId", "customerId"), col("tur", "kind"), col("doviz", "currency"),
+    columns: [col("id", "id"), { ...col("urunId", "itemId"), resolvedBy: SUBJECT_ID_RESOLVER("item_prices") }, col("cariKartId", "customerId"), col("tur", "kind"), col("doviz", "currency"),
       col("fiyat", "price", "FINANS"), col("degisim", "updatedAt"), col("kademeId", "propertyValueId"),
       col("gecerlilikBaslangici", "validFrom"), col("gecerlilikBitisi", "revokedAt")],
     // v2: yalnız şu an yürürlükteki sürüm; pencere sınırı geçişle yeniden kurulur (ikiz + geçiş helper'da).

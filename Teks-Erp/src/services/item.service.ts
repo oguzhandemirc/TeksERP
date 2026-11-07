@@ -26,7 +26,7 @@ import {
 } from "./helpers/name-normalize.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { codeCountsForCounter } from "./helpers/series-format.helper";
-import { withBarcodeRetry } from "../utils/barcode-retry";
+import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
   ITEM_LIFECYCLE_LABEL,
@@ -284,9 +284,11 @@ export class ItemService extends BaseService {
     // Oluşturan doğuşta yazılır (künye); BaseController `req.user?.userId` verir, eksikse 401.
     const actorId = requireActorId(userId, "Ürün kartı");
     const input = data as unknown as ItemCreateInput;
-    // Hizmet kartları ayrı tabloda (`service_items`); eski panelin SERVICE isteği CHECK 500'ü yerine anlamlı 400 alır.
+    // Hizmet kartları ayrı tabloda (`service_items`): eski panelin SERVICE isteği hizmet kartı boğazına yönlenir
+    // (yalnız ortak alanlar geçer); yanıt eski ürün kartı biçimindedir (`itemType: SERVICE`).
     if (input.itemType === "SERVICE") {
-      throw AppError.badRequest("Hizmet kartları Hizmet Kartları ekranından açılır; ürün kartı Hizmet türünde açılamaz.", { code: "ITEM_TYPE_SERVICE_MOVED" });
+      const { code, name, unit, isActive } = data;
+      return legacyResponse(await serviceItemService.create({ code, name, unit, isActive }, actorId));
     }
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
     const fabricStructure = await readFabricStructureFields(input.itemType, data);
@@ -308,6 +310,13 @@ export class ItemService extends BaseService {
       if (manualCode && /^stk-/i.test(manualCode)) {
         throw AppError.badRequest(
           "Ürün kodu STK- ile başlayamaz — bu önek otomatik stok kodlarına ayrılmıştır (boş bırakın, sistem üretsin)",
+        );
+      }
+      // HZM- hizmet kartı sayacına ayrılmış; iki tablo tek kod uzayıdır (sayaç yükleyicisi ikisini birlikte okur).
+      if (manualCode && /^hzm-/i.test(manualCode)) {
+        throw AppError.badRequest(
+          "Ürün kodu HZM- ile başlayamaz — bu önek otomatik hizmet kartı kodlarına ayrılmıştır",
+          { code: "ITEM_CODE_RESERVED_PREFIX" },
         );
       }
     }
@@ -483,7 +492,9 @@ export class ItemService extends BaseService {
         });
       },
       undefined,
-      () => isAutoCode,
+      // Yalnız otomatik kodun sayaç çakışması tekrarlanır; ad seddi (nameFold) P2002'si Türkçe 409'a düşer.
+      (err) => isAutoCode && p2002TargetsCode(err),
+      "Ürün kodu",
     );
 
     // Diriltme kararının SAHİBİ tx içindeki (kilit altındaki) taze karardır;

@@ -219,7 +219,14 @@ async function paymentDerived(rows: readonly RawRow[]): Promise<DerivedValues> {
   return out;
 }
 
-/** Projeksiyon → türetici. Katalogdaki `derived` tel adları ile BİREBİR (bekçi ölçer). */
+/** Fiyat / fatura kalemi `urunId`: konu ürün ya da hizmet kartı (iki FK, tek tel alanı — UUID uzayı ortak). */
+async function subjectIdDerived(rows: readonly RawRow[]): Promise<DerivedValues> {
+  const out: DerivedValues = new Map();
+  for (const r of rows) out.set(r.id, { urunId: (r.itemId as string | null) ?? (r.serviceItemId as string | null) ?? null });
+  return out;
+}
+
+/** Projeksiyon → türetici. Katalogdaki `derived` tel adları + `resolvedBy` kolonları ile BİREBİR (bekçi ölçer). */
 export const DERIVERS: Readonly<Record<string, Deriver>> = {
   siparis: orderDerived,
   "siparis-kalemi": orderLineDerived,
@@ -229,6 +236,8 @@ export const DERIVERS: Readonly<Record<string, Deriver>> = {
   "cari-hesap": cariAccountDerived,
   fatura: invoiceDerived,
   "tahsilat-odeme": paymentDerived,
+  fiyat: subjectIdDerived,
+  "fatura-kalemi": subjectIdDerived,
   ...COST_DERIVERS,
   ...CASH_DERIVERS,
 };
@@ -243,6 +252,8 @@ export const DERIVER_ROW_FIELDS: Readonly<Record<string, readonly string[]>> = {
   sevkiyat: ["customerId"],
   fatura: ["grandTotal", "paidTotal", "dueDate", "issueDate", "cariId", "status"],
   "tahsilat-odeme": ["amount", "allocatedTotal"],
+  fiyat: ["serviceItemId"],
+  "fatura-kalemi": ["serviceItemId"],
   ...COST_DERIVER_ROW_FIELDS,
   ...CASH_DERIVER_ROW_FIELDS,
 };

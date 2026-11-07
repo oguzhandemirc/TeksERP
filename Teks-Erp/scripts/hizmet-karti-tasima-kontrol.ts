@@ -5,7 +5,8 @@
 //   npx tsx scripts/hizmet-karti-tasima-kontrol.ts [--kaydet <dosya.json>] [--onceki <dosya.json>]
 //
 // Faz kendiliğinden çözülür: `service_items` yoksa ÖNCE (taşınacak hizmet + bağlı her
-// tablodaki satır + taşımayı DURDURACAK kayıtlar listelenir), varsa SONRA (aynı sayılar).
+// tablodaki satır + migration'ın SİLECEĞİ saf pivot satırları + taşımayı DURDURACAK kayıtlar listelenir),
+// varsa SONRA (aynı sayılar). İki fazda da "pasif hizmet kartına bağlı taslak fatura satırı" sayısı basılır.
 // Kurulum provası: önce `--kaydet once.json` → `migrate deploy` → `--onceki once.json`
 // (sayılar, UUID'ler, kodlar ve fiyat/tutar toplamları eşit olmalı).
 // Çıkış: 0 temiz · 1 engel var (ÖNCE) ya da eşitsizlik (SONRA). Tek READ ONLY tx; yazmaz.
@@ -25,6 +26,14 @@ export const HIZMET_TABLOLARI = [
   "expense_allocations",
 ] as const;
 
+/** Migration 0(d)'nin SİLDİĞİ saf yapılandırma pivotları (defter ③b) — kapıyı durdurmaz, deploy öncesi listelenir. */
+export const SILINEN_PIVOTLAR = [
+  ["item_allowed_colors", "itemId"],
+  ["item_allowed_properties", "itemId"],
+  ["customer_item_aliases", "itemId"],
+  ["customer_item_color_aliases", "itemId"],
+] as const;
+
 export interface Engel { tablo: string; kolon: string; sayi: number; ornekIdler: string[] }
 export interface Olcum {
   faz: "ONCE" | "SONRA";
@@ -34,6 +43,8 @@ export interface Olcum {
   /** Para toplamları METİN (Decimal; float'a çevrilmez). */
   toplam: { fiyat: string; faturaSatiri: string };
   engeller: Engel[];
+  /** ÖNCE: migration'ın sileceği pivot satırları (engel DEĞİL; bilgi). SONRA: boş. */
+  silinecek: Engel[];
   /** SONRA: items'ta kalan SERVICE (0 olmalı). */
   itemsServiceKalan: number;
 }
@@ -60,6 +71,14 @@ export async function olc(c: Sorgu): Promise<Olcum> {
   sayim.item_prices_kademe = await sayi(c, `SELECT count(*) AS n FROM "item_prices" WHERE ${fiyatKolon} IN (${kume}) AND "propertyValueId" IS NOT NULL`);
   const satirKolon = sonra ? `"serviceItemId"` : `"itemId"`;
   sayim.invoice_lines = await sayi(c, `SELECT count(*) AS n FROM "invoice_lines" WHERE ${satirKolon} IN (${kume})`);
+  // Pasif (ARCHIVED) hizmet kartına bağlı TASLAK fatura satırı: taşıma bunu değiştirmez, ama kesilmeden önce
+  // kart Aktif'e alınmalı ya da satır düzeltilmeli (D1c kapısı pasif karta yeni satır bağlamaz).
+  const pasifKart = sonra
+    ? `SELECT s."id" FROM "service_items" s WHERE s."lifecycleStatus" = 'ARCHIVED'`
+    : `SELECT i."id" FROM "items" i WHERE i."itemType" = 'SERVICE' AND i."lifecycleStatus" = 'ARCHIVED'`;
+  sayim.taslak_satir_pasif_hizmet = await sayi(c,
+    `SELECT count(*) AS n FROM "invoice_lines" l JOIN "invoices" v ON v."id" = l."invoiceId"
+     WHERE v."status" = 'DRAFT' AND l.${satirKolon} IN (${pasifKart})`);
   if (sonra) sayim.invoice_lines_tip_service = await sayi(c, `SELECT count(*) AS n FROM "invoice_lines" WHERE "lineType" = 'SERVICE'`);
 
   const toplamRow = (await c.query<{ f: string; s: string }>(
@@ -67,6 +86,7 @@ export async function olc(c: Sorgu): Promise<Olcum> {
             (SELECT COALESCE(sum("lineTotal"), 0)::text FROM "invoice_lines" WHERE ${satirKolon} IN (${kume})) AS s`)).rows[0]!;
 
   const engeller: Engel[] = [];
+  const silinecek: Engel[] = [];
   let itemsServiceKalan = 0;
   if (!sonra) {
     // Migration kapısı 0a'nın AYNISI: items'a bakan her FK, taşınan bağlar hariç.
@@ -75,11 +95,14 @@ export async function olc(c: Sorgu): Promise<Olcum> {
        FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
        WHERE c.contype = 'f' AND c.confrelid = 'public.items'::regclass ORDER BY 1, 2`)).rows;
     const tasinan = new Set([...HIZMET_TABLOLARI.map((t) => `${t}.serviceItemId`), "item_prices.itemId", "invoice_lines.itemId", "items.mergedIntoId"]);
+    const pivot = new Set(SILINEN_PIVOTLAR.map(([t, k]) => `${t}.${k}`));
     for (const fk of fkler) {
       if (tasinan.has(`${fk.tablo}.${fk.kolon}`)) continue;
       const r = await c.query<{ id: string }>(
         `SELECT t."id"::text AS id FROM ${fk.tablo} t WHERE t."${fk.kolon.replace(/"/g, '""')}" IN (${kume}) ORDER BY 1`);
-      if (r.rows.length > 0) engeller.push({ tablo: fk.tablo, kolon: fk.kolon, sayi: r.rows.length, ornekIdler: r.rows.slice(0, 20).map((x) => x.id) });
+      if (r.rows.length === 0) continue;
+      const kayit = { tablo: fk.tablo, kolon: fk.kolon, sayi: r.rows.length, ornekIdler: r.rows.slice(0, 20).map((x) => x.id) };
+      (pivot.has(`${fk.tablo}.${fk.kolon}`) ? silinecek : engeller).push(kayit);
     }
     const soy = await sayi(c, `SELECT count(*) AS n FROM "items" a JOIN "items" b ON b."id" = a."mergedIntoId" WHERE (a."itemType" = 'SERVICE') <> (b."itemType" = 'SERVICE')`);
     if (soy > 0) engeller.push({ tablo: "items", kolon: "mergedIntoId (tür sınırını geçen soy)", sayi: soy, ornekIdler: [] });
@@ -88,7 +111,7 @@ export async function olc(c: Sorgu): Promise<Olcum> {
   } else {
     itemsServiceKalan = await sayi(c, `SELECT count(*) AS n FROM "items" WHERE "itemType" = 'SERVICE'`);
   }
-  return { faz: sonra ? "SONRA" : "ONCE", db, kartlar, sayim, toplam: { fiyat: toplamRow.f, faturaSatiri: toplamRow.s }, engeller, itemsServiceKalan };
+  return { faz: sonra ? "SONRA" : "ONCE", db, kartlar, sayim, toplam: { fiyat: toplamRow.f, faturaSatiri: toplamRow.s }, engeller, silinecek, itemsServiceKalan };
 }
 
 /** ÖNCE ↔ SONRA eşitliği; boş dizi = eşit. */
@@ -127,10 +150,18 @@ async function main(): Promise<void> {
     await c.query("COMMIT");
     console.log(`Hedef DB: ${o.db} · faz: ${o.faz === "ONCE" ? "ÖNCE (taşıma yapılmamış)" : "SONRA (service_items var)"}`);
     console.log(`Hizmet kartı: ${o.sayim.kart} (mezar taşı ${o.sayim.kartMezar})`);
-    for (const [k, v] of Object.entries(o.sayim)) if (k !== "kart" && k !== "kartMezar") console.log(`  ${k}: ${v}`);
+    for (const [k, v] of Object.entries(o.sayim)) {
+      if (k === "kart" || k === "kartMezar") continue;
+      if (k === "taslak_satir_pasif_hizmet") console.log(`  Pasif hizmet kartına bağlı taslak fatura satırı: ${v}${v > 0 ? " — kesmeden önce kartı Aktif'e alın ya da satırı düzeltin" : ""}`);
+      else console.log(`  ${k}: ${v}`);
+    }
     console.log(`  fiyat toplamı: ${o.toplam.fiyat} · fatura satırı toplamı: ${o.toplam.faturaSatiri}`);
     let hata = 0;
     if (o.faz === "ONCE") {
+      if (o.silinecek.length === 0) console.log("ℹ️  Migration'ın sileceği pivot satırı yok.");
+      for (const e of o.silinecek) {
+        console.log(`ℹ️  SİLİNECEK (saf pivot, defter ③b) ${e.tablo}.${e.kolon}: ${e.sayi} satır${e.ornekIdler.length ? ` — ${e.ornekIdler.join(", ")}` : ""}`);
+      }
       if (o.engeller.length === 0) console.log("✅ Taşımayı durduracak kayıt yok.");
       for (const e of o.engeller) {
         hata++;

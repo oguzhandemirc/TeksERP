@@ -19,14 +19,15 @@ export const CARD_CODE_LOCK_SCOPE = "item";
 
 const KIND_LABEL: Record<CardKind, string> = { item: "ürün kartında", serviceItem: "hizmet kartında" };
 
-interface Hit { code: string; name: string; isActive: boolean }
+// Durum `lifecycleStatus`ten okunur; tek boolean iki anlamlıdır (test_item_usage_single_source).
+interface Hit { code: string; name: string; lifecycleStatus: string }
 
 async function otherByCode(db: Db, other: CardKind, code: string): Promise<Hit | null> {
   const target = foldCodeForCompare(code);
   // Master tablolar küçük; katlama JS'te (code-unique.helper gerekçesi: PG lower() İ/ı'da hatalı).
   const rows: Hit[] = other === "item"
-    ? await db.item.findMany({ where: { mergedIntoId: null }, select: { code: true, name: true, isActive: true } })
-    : await db.serviceItem.findMany({ where: { mergedIntoId: null }, select: { code: true, name: true, isActive: true } });
+    ? await db.item.findMany({ where: { mergedIntoId: null }, select: { code: true, name: true, lifecycleStatus: true } })
+    : await db.serviceItem.findMany({ where: { mergedIntoId: null }, select: { code: true, name: true, lifecycleStatus: true } });
   return rows.find((r) => foldCodeForCompare(r.code) === target) ?? null;
 }
 
@@ -36,7 +37,7 @@ export async function assertCodeFreeInOtherKind(db: Db, self: CardKind, code: st
   const hit = await otherByCode(db, other, code);
   if (!hit) return;
   throw AppError.conflict(
-    `'${code}' kodu bir ${KIND_LABEL[other]} kullanılıyor — '${hit.code}' (${hit.name})${hit.isActive ? "" : ", pasif"}. ` +
+    `'${code}' kodu bir ${KIND_LABEL[other]} kullanılıyor — '${hit.code}' (${hit.name})${hit.lifecycleStatus === "ARCHIVED" ? ", pasif" : ""}. ` +
       "Ürün ve hizmet kartı kodları birlikte tekildir; farklı bir kod girin.",
     { code: "CARD_CODE_TAKEN_BY_OTHER_KIND" },
   );
@@ -47,7 +48,7 @@ export async function assertNameFreeInOtherKind(db: Db, self: CardKind, name: st
   if (name.trim().length === 0) return;
   const nameFold = foldNameForCompare(name);
   const where = { nameFold, mergedIntoId: null };
-  const select = { code: true, name: true, isActive: true } as const;
+  const select = { code: true, name: true, lifecycleStatus: true } as const;
   const hit: Hit | null = self === "item"
     ? await db.serviceItem.findFirst({ where, select })
     : await db.item.findFirst({ where, select });

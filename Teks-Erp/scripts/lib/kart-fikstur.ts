@@ -7,6 +7,7 @@
 // =============================================================================
 import type { ItemLifecycleStatus, ItemType, ItemUnit } from "@prisma/client";
 import prisma from "../../src/lib/prisma";
+import { fixtureHedefEngeli } from "./hedef-db-kapisi";
 
 export interface KartVerisi {
   code: string;
@@ -27,6 +28,9 @@ export async function kartAc(data: KartVerisi): Promise<{ id: string }> {
 /** Fikstür temizliği: id kümesi iki tabloda da silinir (hangisinde olduğu bilinmeden). */
 export async function kartlariSil(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  // Paylaşılan silme yardımcısı: fikstür olmayan hedefte (fabrika kopyası) silmez.
+  const engel = fixtureHedefEngeli();
+  if (engel) throw new Error(engel);
   await prisma.item.deleteMany({ where: { id: { in: ids } } });
   await prisma.serviceItem.deleteMany({ where: { id: { in: ids } } });
 }

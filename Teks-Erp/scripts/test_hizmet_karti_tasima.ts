@@ -13,8 +13,10 @@
 // §3 (c) CHECK'ler: fatura satırı üç durumu + fiyat konusu + kademe + items SERVICE reddi
 //    (her red için önce GEÇERLİ pozitif kontrol — red başka sebepten gelmesin).
 // §4 (d) stokta kullanılmış hizmet → migration Türkçe sayılı mesajla DURUR, hiçbir şey değişmez.
-// §5 servis kapısı (D1a): ürün kartı SERVICE isteği DB CHECK'ine (500) inmeden 400 `ITEM_TYPE_SERVICE_MOVED`.
-//    Negatif sonda (2026-11-07): `item.service.ts` create kapısı kaldırılınca §5a kırmızı.
+// §2g–j saf pivot (inceleme 2026-11-08): hizmete bağlı izinli renk/özellik + müşteri adı satırları kapıyı durdurmaz,
+//    migration'da silinir; kontrol aracı onları ve pasif hizmete bağlı taslak fatura satırını ayrı listeler.
+// §5 servis kapısı (D1a → inceleme 2026-11-08): ürün kartı SERVICE isteği DB CHECK'ine (500) inmeden hizmet kartı
+//    boğazına yönlenir. Negatif sonda: `item.service.ts` yönlendirmesi kaldırılınca §5a kırmızı (CHECK 500).
 // Ölçülemezse (süper olmayan DATABASE_URL) yerelde ⏭, CI'da ❌.
 // =============================================================================
 import "dotenv/config";
@@ -25,7 +27,7 @@ import { Client } from "pg";
 import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { parseDatabaseUrl, quoteIdent, toClientConfig, withDatabase, type PgConn } from "../src/services/helpers/pg-conn.helper";
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
-import { HIZMET_TABLOLARI, karsilastir, olc } from "./hizmet-karti-tasima-kontrol";
+import { HIZMET_TABLOLARI, SILINEN_PIVOTLAR, karsilastir, olc } from "./hizmet-karti-tasima-kontrol";
 
 const MIG_DIR = join(__dirname, "..", "prisma", "migrations");
 const MIG_AD = "20261107202906_service_items_split";
@@ -138,6 +140,13 @@ async function tohum(c: Sorgu, hizmetli: boolean, stokta: boolean): Promise<Kiml
     await fiyat(id.S1!, "SALE", "14.0000", null, randomUUID());
     await fiyat(id.S3!, "PURCHASE", "7.7500", null, null);
     await satir(1, id.S1!, "125.00");
+    // Pasif (ARCHIVED) hizmete bağlı TASLAK satır — kontrol aracı ayrıca sayar, taşıma değiştirmez.
+    await satir(4, id.S3!, "7.75");
+    // Saf yapılandırma pivotları (defter ③b): kapıyı DURDURMAZ, migration 0(d) siler.
+    await c.query(`INSERT INTO "item_allowed_colors" ("id","itemId","colorId") VALUES ($1,$2,$3)`, [randomUUID(), id.S1, randomUUID()]);
+    await c.query(`INSERT INTO "item_allowed_properties" ("id","itemId","propertyId") VALUES ($1,$2,$3)`, [randomUUID(), id.S1, id.P1]);
+    await c.query(`INSERT INTO "customer_item_aliases" ("id","customerId","itemId","alias","updatedAt") VALUES ($1,$2,$3,'HKT AD',now())`, [randomUUID(), randomUUID(), id.S1]); // tz-ok
+    await c.query(`INSERT INTO "customer_item_color_aliases" ("id","customerId","itemId","colorId","alias","updatedAt") VALUES ($1,$2,$3,$4,'HKT RENK',now())`, [randomUUID(), randomUUID(), id.S1, randomUUID()]); // tz-ok
   }
   if (stokta) await c.query(`INSERT INTO "rolls" ("id","itemId","initialQty","currentQty","updatedAt") VALUES ($1,$2,10,10,now())`, [id.R2, id.S1]); // tz-ok
   await c.query("COMMIT");
@@ -188,10 +197,15 @@ async function testDolu(base: PgConn, db: string): Promise<void> {
   try {
     const id = await tohum(c, true, false);
     const once = await olc(c);
-    check("§2a körlük zemini: tohum ölçüldü (3 kart, 1 mezar, her bağlı tabloda ≥1, 4 fiyat, 1 kademe, 1 satır)",
+    check("§2a körlük zemini: tohum ölçüldü (3 kart, 1 mezar, her bağlı tabloda ≥1, 4 fiyat, 1 kademe, 2 satır)",
       once.sayim.kart === 3 && once.sayim.kartMezar === 1 && HIZMET_TABLOLARI.every((t) => (once.sayim[t] ?? 0) >= 1)
-      && once.sayim.item_prices === 4 && once.sayim.item_prices_kademe === 1 && once.sayim.invoice_lines === 1 && once.engeller.length === 0,
+      && once.sayim.item_prices === 4 && once.sayim.item_prices_kademe === 1 && once.sayim.invoice_lines === 2,
       JSON.stringify(once.sayim));
+    const pivotlar = SILINEN_PIVOTLAR.map(([t, k]) => `${t}.${k}`);
+    check("§2g ⭐ saf pivot satırları ENGEL değil, SİLİNECEK listesinde (4 tablo × 1 satır)",
+      once.engeller.length === 0 && once.silinecek.length === 4 && once.silinecek.every((e) => e.sayi === 1 && pivotlar.includes(`${e.tablo}.${e.kolon}`)),
+      JSON.stringify({ engel: once.engeller, sil: once.silinecek.map((e) => `${e.tablo}=${e.sayi}`) }));
+    check("§2h kontrol aracı pasif hizmete bağlı taslak satırı saydı (1)", once.sayim.taslak_satir_pasif_hizmet === 1, String(once.sayim.taslak_satir_pasif_hizmet));
     await c.query(migSql());
     const sonra = await olc(c);
     const f = karsilastir(once, sonra);
@@ -204,6 +218,11 @@ async function testDolu(base: PgConn, db: string): Promise<void> {
     check("§2e yaşam döngüsü taşındı (ARCHIVED + pasif)", arsiv.rows[0]?.s === "ARCHIVED" && arsiv.rows[0]?.a === false);
     const kalan = await c.query<{ n: string }>(`SELECT count(*) AS n FROM "items" WHERE "id" = ANY($1::uuid[])`, [[id.F1, id.C1]]);
     check("§2f ürün ve sarf kartları items'ta kaldı", kalan.rows[0]!.n === "2");
+    const pivotKalan = await c.query<{ n: string }>(
+      `SELECT ((SELECT count(*) FROM "item_allowed_colors" WHERE "itemId" = $1) + (SELECT count(*) FROM "item_allowed_properties" WHERE "itemId" = $1)
+             + (SELECT count(*) FROM "customer_item_aliases" WHERE "itemId" = $1) + (SELECT count(*) FROM "customer_item_color_aliases" WHERE "itemId" = $1))::text AS n`, [id.S1]);
+    check("§2i ⭐ hizmete bağlı pivot satırları migration'da silindi", pivotKalan.rows[0]!.n === "0", pivotKalan.rows[0]!.n);
+    check("§2j pasif hizmete bağlı taslak satır taşındı, sayı aynı (1)", sonra.sayim.taslak_satir_pasif_hizmet === 1, String(sonra.sayim.taslak_satir_pasif_hizmet));
     await testCheck(c, id);
   } finally {
     await c.end().catch(() => {});
@@ -318,18 +337,34 @@ async function testServisKapisi(): Promise<void> {
   const engel = hedefDbEngeli() ?? fixtureHedefEngeli();
   if (engel) { check("§5 hedef kapısı: servis kapısı yalnız fixture hedefinde koşar", false, engel); return; }
   const { itemService } = await import("../src/routes/item.routes");
-  const { pool } = await import("../src/lib/prisma");
-  let sonuc: { durum?: number; kod?: string; mesaj: string } = { mesaj: "hata yok (kart açıldı)" };
+  const { default: prisma, pool } = await import("../src/lib/prisma");
+  const ad = `TEST-HKT KAPI ${Date.now()}`;
+  let sonuc: { id?: string; itemType?: string; hata?: string } = {};
+  let svc: { code: string } | null = null;
+  let item: { id: string } | null = null;
+  // Aktör iş anahtarıyla kurulur (ortamdaki "herhangi bir kullanıcı"ya yaslanmaz); sonda kart silinince silinir.
+  const aktor = await prisma.user.create({
+    data: { username: `tst-hkt-${Date.now().toString(36)}`, fullName: "TEST-HKT aktör", passwordHash: "x", isActive: false },
+    select: { id: true },
+  });
   try {
-    await itemService.create({ name: `TEST-HKT KAPI ${Date.now()}`, itemType: "SERVICE" }, randomUUID());
+    const r = (await itemService.create({ name: ad, itemType: "SERVICE", unit: "MT" }, aktor.id)) as { data?: { id?: string; itemType?: string } };
+    sonuc = { id: r.data?.id, itemType: r.data?.itemType };
+    if (sonuc.id) {
+      svc = await prisma.serviceItem.findUnique({ where: { id: sonuc.id }, select: { code: true } });
+      item = await prisma.item.findUnique({ where: { id: sonuc.id }, select: { id: true } });
+      await prisma.systemLog.deleteMany({ where: { recordId: sonuc.id } });
+      await prisma.serviceItem.deleteMany({ where: { id: sonuc.id } });
+    }
   } catch (e) {
-    const x = e as { statusCode?: number; details?: { code?: string }; message: string };
-    sonuc = { durum: x.statusCode, kod: x.details?.code, mesaj: x.message };
+    sonuc = { hata: (e as Error).message };
   } finally {
+    await prisma.systemLog.deleteMany({ where: { userId: aktor.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: aktor.id } }).catch(() => undefined);
     await pool.end().catch(() => {});
   }
-  check("§5a ⭐ ürün kartı Hizmet türünde açılamaz → 400 ITEM_TYPE_SERVICE_MOVED, Türkçe yönlendirme",
-    sonuc.durum === 400 && sonuc.kod === "ITEM_TYPE_SERVICE_MOVED" && sonuc.mesaj.includes("Hizmet Kartları"), JSON.stringify(sonuc).slice(0, 200));
+  check("§5a ⭐ ürün kartı ucunun Hizmet isteği hizmet kartı boğazına yönlenir (service_items satırı, items'ta satır yok)",
+    sonuc.itemType === "SERVICE" && svc !== null && /^HZM-/.test(svc.code) && item === null, JSON.stringify({ ...sonuc, svc, item }).slice(0, 200));
 }
 
 async function main(): Promise<void> {

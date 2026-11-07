@@ -10,7 +10,7 @@ import { ItemLifecycleStatus, ItemUnit, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
-import { withBarcodeRetry } from "../utils/barcode-retry";
+import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { validateCode, validateName } from "../lib/string-validators";
 import { AuditService } from "./audit.service";
 import { BaseService, requireActorId, withActor } from "./base.service";
@@ -27,7 +27,7 @@ import {
 } from "./helpers/card-identity.helper";
 import {
   SERVICE_ITEM_TABLE,
-  countServiceItemLiveRefs,
+  countServiceItemLiveRefTotals,
   listServiceItemLiveRefs,
   totalServiceItemLiveRefs,
   transitionServiceItemLifecycle,
@@ -129,7 +129,9 @@ export class ServiceItemService extends BaseService {
         });
       },
       undefined,
-      () => manualCode === null,
+      // Yalnız otomatik kodun sayaç çakışması tekrarlanır; ad seddi (nameFold) P2002'si Türkçe 409'a düşer.
+      (err) => manualCode === null && p2002TargetsCode(err),
+      "Hizmet kartı kodu",
     );
     await AuditService.log({
       userId: actorId,
@@ -219,11 +221,8 @@ export class ServiceItemService extends BaseService {
 
   /** Liste rozeti — kart başına kalan canlı referans (hizmette top yok: `rolls` hep 0). */
   async lifecycleSummary(ids: string[]): Promise<ApiResponse<Array<{ id: string; liveTotal: number; rolls: number }>>> {
-    const rows: Array<{ id: string; liveTotal: number; rolls: number }> = [];
-    for (const id of [...new Set(ids)]) {
-      rows.push({ id, liveTotal: totalServiceItemLiveRefs(await countServiceItemLiveRefs(prisma, id)), rolls: 0 });
-    }
-    return { success: true, data: rows };
+    const totals = await countServiceItemLiveRefTotals(prisma, [...new Set(ids)]);
+    return { success: true, data: [...totals].map(([id, liveTotal]) => ({ id, liveTotal, rolls: 0 })) };
   }
 }
 

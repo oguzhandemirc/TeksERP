@@ -5,6 +5,7 @@
 import prisma from "../lib/prisma";
 import {
   MERGE_ENTITY_TABLES,
+  rootTablesOf,
   type ChangeSource,
   type RecordProjection,
   type RootMapping,
@@ -119,7 +120,8 @@ async function scanMarks(
   from: ScanPosition | null,
   horizon: Date,
 ): Promise<{ deleted: string[]; dirty: string[]; next: ScanPosition; truncated: boolean }> {
-  const params: unknown[] = [p.root.table, horizon];
+  const tables = rootTablesOf(p);
+  const params: unknown[] = [tables, horizon];
   let cond = "";
   if (from?.tie && from.tie.length === 1) {
     params.push(from.at, from.tie[0]);
@@ -131,11 +133,20 @@ async function scanMarks(
   params.push(scanLimit);
   const rows = await prisma.$queryRawUnsafe<Array<{ t: Date; id: string; rowId: string; kind: string }>>(
     `SELECT "createdAt" AS t, "id"::text AS id, "rowId"::text AS "rowId", "kind"::text AS kind FROM "sync_marks" ` +
-      `WHERE "tableName" = $1 AND "createdAt" < $2::timestamptz${cond} ORDER BY "createdAt", "id" LIMIT $${params.length}`,
+      `WHERE "tableName" = ANY($1::text[]) AND "createdAt" < $2::timestamptz${cond} ORDER BY "createdAt", "id" LIMIT $${params.length}`,
     ...params,
   );
-  const deleted = rows.filter((r) => r.kind === "DELETED").map((r) => r.rowId);
+  let deleted = rows.filter((r) => r.kind === "DELETED").map((r) => r.rowId);
   const dirty = rows.filter((r) => r.kind === "DIRTY").map((r) => r.rowId);
+  // Ek köklü projeksiyonda kimlik bir kökten silinip ötekinde yaşıyorsa (taşıma) SILINDI değil yeniden kurulur.
+  if (tables.length > 1 && deleted.length > 0) {
+    const alive = new Set<string>();
+    for (const t of tables) {
+      for (const r of await prisma.$queryRawUnsafe<Array<{ id: string }>>(`SELECT "id"::text AS id FROM "${t}" WHERE "id" = ANY($1::uuid[])`, deleted)) alive.add(r.id);
+    }
+    dirty.push(...deleted.filter((id) => alive.has(id)));
+    deleted = deleted.filter((id) => !alive.has(id));
+  }
   if (rows.length < scanLimit) return { deleted, dirty, next: { at: horizon, tie: null }, truncated: false };
   const last = rows[rows.length - 1]!;
   return { deleted, dirty, next: { at: last.t, tie: [last.id] }, truncated: true };
@@ -167,10 +178,12 @@ async function scanMerges(
   let needsFull = false;
   if (ops.length > 0) {
     const opIds = ops.map((o) => o.id);
-    for (const o of ops) if (MERGE_ENTITY_TABLES[o.entity] === p.root.table) roots.add(o.survivorId);
-    if (ops.some((o) => MERGE_ENTITY_TABLES[o.entity] === p.root.table)) {
+    const rootTables = rootTablesOf(p);
+    const ownsEntity = (entity: string): boolean => rootTables.includes(MERGE_ENTITY_TABLES[entity] ?? "");
+    for (const o of ops) if (ownsEntity(o.entity)) roots.add(o.survivorId);
+    if (ops.some((o) => ownsEntity(o.entity))) {
       const sources = await prisma.mergeOperationSource.findMany({ where: { operationId: { in: opIds } }, select: { sourceId: true, operationId: true } });
-      const own = new Set(ops.filter((o) => MERGE_ENTITY_TABLES[o.entity] === p.root.table).map((o) => o.id));
+      const own = new Set(ops.filter((o) => ownsEntity(o.entity)).map((o) => o.id));
       for (const s of sources) if (own.has(s.operationId)) roots.add(s.sourceId);
     }
     const tables = new Set(p.sources.map((s) => s.table));

@@ -30,5 +30,11 @@
     "sha256": "1ec266ce5b8f2a2326d693d0af3f9a2489131cbf28e0e642966137b876ea5e99",
     "tarih": "2026-10-30",
     "gerekce": "İki tablonun \"createdById\" kolonu NOT NULL doğmuştu; test_record_provenance §3 (künye kolonlarının hepsi NULLABLE) CI'da kırmızı verdi (PR #307). Yalnız bu iki satırdan NOT NULL çıktı; başka ifade değişmedi. Dosya aynı dalda doğdu, main'e inmedi, hiçbir canlı kuruluma uygulanmadı; eski hâli uygulanmış test DB'lerinde yalnız checksum farkı doğar (ALTER COLUMN ... DROP NOT NULL ile elle hizalanır)."
+  },
+  {
+    "migration": "20261107202906_service_items_split",
+    "sha256": "1b3c12fdf9b2d78246c0762594810d090b896897d2c3da9ae6fffd0cb206f125",
+    "tarih": "2026-11-08",
+    "gerekce": "PR #623 bağımsız incelemesinde onarıldı; dal main'e inmedi, migration hiçbir canlı kuruluma uygulanmadı (yalnız oturum test DB'leri). Eski hâli iki yerde sonraki bir migration'la düzeltilemiyordu: (1) FK kapısı hizmete bağlı saf yapılandırma pivotu satırı (izinli renk/özellik, müşteri ürün/renk adı) olan HER kurulumda deploy'u RAISE ile durduruyordu — kapı bu dosyada koştuğu için sonraki migration'a hiç sıra gelmez; pivotlar artık kapı listesinden çıktı ve aynı tx'te silinir (defter ③b). (2) items'tan SERVICE silmesi items_sync_deleted tetiğiyle buluta 'silindi' işareti yazıyordu; silme anında tetik kapatılır, service_items'a aynı tetik kurulur. Yeni adla ikinci migration test_migration_hygiene §2b'yi (aynı tabloya ikinci yaratıcı) kırardı. Ölçüm: test_hizmet_karti_tasima §2g–§2j, test_bulut_hizmet_karti."
   }
 ]
