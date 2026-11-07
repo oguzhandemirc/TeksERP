@@ -54,6 +54,7 @@ import type { Roll } from '../../../types/models';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 
 const PAGE_SIZE = 50;
 
@@ -131,6 +132,8 @@ export default function DepoScreen() {
   const [mode, setMode] = useState<ModeFilter>('ALL');
   const [search, setSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali: tuş doğrudan okur, "Okut" düğmesi çizilmez (kamera açılmaz).
+  const hardware = useHardwareScanMode();
   const [detailRoll, setDetailRoll] = useState<RollListItem | null>(null);
   const [detailSwatch, setDetailSwatch] = useState<SwatchListItem | null>(null);
   const [reduceGroup, setReduceGroup] = useState<KartelaStockGroup | null>(null);
@@ -564,6 +567,7 @@ export default function DepoScreen() {
         {/* Üst — kamera + arama */}
         <Surface style={styles.toolbar} elevation={1}>
           <View style={styles.toolbarRow}>
+            {hardware ? null : (
             <TouchableRipple
               borderless
               onPress={() => setScannerOpen(true)}
@@ -576,6 +580,7 @@ export default function DepoScreen() {
                 </Text>
               </View>
             </TouchableRipple>
+            )}
             <TextInput
               mode="outlined"
               value={search}
@@ -690,6 +695,7 @@ export default function DepoScreen() {
       {/* Kamera barkod tarayıcı */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         onDismiss={() => setScannerOpen(false)}
         onScan={handleBarcodeScanned}
         onModalHide={handleScannerHidden}
