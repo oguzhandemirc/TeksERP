@@ -30,6 +30,9 @@ export interface AppPreferences {
   menuOrder?: Record<string, string[]>;
   /** Tablo sütun sırası — queryKey → sütun id listesi. */
   tableOrder?: Record<string, string[]>;
+  /** Liste filtre kaydı — tablo anahtarı → son kullanılan süzgeç + sıralama (arama hariç; hazır tarih
+   *  göreli `datePreset`). Şekli `filter-row/filter-persist.ts` sahiplenir ve okurken süzer. */
+  tableFilters?: Record<string, { query: string; savedAt: string }>;
   /** Tablo sütun görünürlüğü — queryKey → { columnId: visible }. */
   tableVisibility?: Record<string, Record<string, boolean>>;
   /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */

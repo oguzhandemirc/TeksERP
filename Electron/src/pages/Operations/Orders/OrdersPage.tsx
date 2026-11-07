@@ -12,10 +12,10 @@ import { CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
-import { useHideCancelled } from "@/hooks/useHideCancelled";
+import { SHOW_CANCELLED_PARAM, useHideCancelledInUrl } from "@/hooks/useHideCancelled";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { OrdersFilterRow } from "./OrdersFilterRow";
-import { ORDER_FILTERS } from "./orders-filter-defs";
+import { ORDER_FILTERS, orderPersistConfig } from "./orders-filter-defs";
 import { DataTableTools, type ExtraExportOption } from "@/components/data-table/DataTableTools";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { StockLineExportDialog } from "./stock-line-export/StockLineExportDialog";
@@ -110,18 +110,20 @@ export function OrdersPage() {
     [productionEnabled],
   );
 
-  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
+  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelledInUrl();
+  const persistFilters = useMemo(() => orderPersistConfig(filters, productionEnabled), [filters, productionEnabled]);
 
-  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<Order>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope, filtersReady } = useDataTable<Order>({
     queryKey: QUERY_KEY,
     fetchFn: orderService.listCursor,
     columns,
     defaultPageSize: 50,
     forceFilters,
+    persistFilters,
   });
 
-  // ── Özet şeridi ──────────────────────────────────────────────────────────
-  const statsQuery = useOrderStats(forceFilters);
+  // ── Özet şeridi ── (kayıtlı süzgeç geri yüklenene dek beklenir: çift istek yok)
+  const statsQuery = useOrderStats(forceFilters, filtersReady);
   const { prefs, setPreference, ready: prefsReady } = usePreferences();
   const statsView: OrderStatsView = prefs.orders?.statsView ?? "onerilen";
   const setStatsView = (v: OrderStatsView) =>
@@ -292,6 +294,7 @@ export function OrdersPage() {
         showCancelled={showCancelled}
         setShowCancelled={setShowCancelled}
         forceFilters={forceFilters}
+        cancelledUrlKey={SHOW_CANCELLED_PARAM}
         trailing={
           <>
             <SavedViewsMenu compact />

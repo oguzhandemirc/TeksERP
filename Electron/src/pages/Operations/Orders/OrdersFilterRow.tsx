@@ -19,6 +19,8 @@ export interface OrdersFilterRowProps {
   showCancelled: boolean;
   setShowCancelled: (v: boolean) => void;
   forceFilters: Record<string, string>;
+  /** "İptaller dahil" URL'de duruyorsa anahtarı — ✕/Temizle onu da TEK URL yazımıyla siler. */
+  cancelledUrlKey?: string;
   trailing?: ReactNode;
 }
 
@@ -32,7 +34,7 @@ function defFilter(def: Exclude<FilterDef, { kind: "dateRange" }>, all: FilterDe
  * Süzme SUNUCUDA; çubuk yalnız URL yazar (liste · cursor · özet şeridi tek where).
  */
 export function OrdersFilterRow(p: OrdersFilterRowProps) {
-  const { filters, productionEnabled, showCancelled, setShowCancelled, forceFilters } = p;
+  const { filters, productionEnabled, showCancelled, setShowCancelled, forceFilters, cancelledUrlKey } = p;
   const { primary, more } = useMemo(() => {
     const date = filters.find((f): f is Extract<FilterDef, { kind: "dateRange" }> => f.kind === "dateRange");
     const keyed = filters.filter((f): f is Exclude<FilterDef, { kind: "dateRange" }> => f.kind !== "dateRange");
@@ -48,10 +50,11 @@ export function OrdersFilterRow(p: OrdersFilterRowProps) {
         { id: "fasonGun", label: "Fasonda gün", keys: [FASON_GUN_KEY], render: ({ autoOpen }) => <FasonGunFilter autoOpen={autoOpen} /> },
       );
     }
-    // Yerel anahtar (URL dışı): etkinken "İptaller dahil" kutusu, ✕ varsayılana (gizli) döndürür.
-    tail.push({ id: "iptal", label: "İptaller dahil", keys: [], active: showCancelled, onAdd: () => setShowCancelled(true), onClear: () => setShowCancelled(false), render: () => <span className="px-2 text-xs">İptaller dahil</span> });
+    // Etkinken "İptaller dahil" kutusu, ✕ varsayılana (gizli) döndürür. URL'deyse ✕/Temizle anahtarı siler.
+    const iptalState = cancelledUrlKey ? { keys: [cancelledUrlKey] } : { keys: [], active: showCancelled, onClear: () => setShowCancelled(false) };
+    tail.push({ id: "iptal", label: "İptaller dahil", ...iptalState, onAdd: () => setShowCancelled(true), render: () => <span className="px-2 text-xs">İptaller dahil</span> });
     return { primary: head, more: tail };
-  }, [filters, productionEnabled, forceFilters, showCancelled, setShowCancelled]);
+  }, [filters, productionEnabled, forceFilters, showCancelled, setShowCancelled, cancelledUrlKey]);
 
   return <FilterRow search={p.search} onSearchChange={p.onSearchChange} placeholder={p.placeholder} primary={primary} more={more} trailing={p.trailing} />;
 }

@@ -19,7 +19,7 @@ interface Props<T> {
   hideExport?: boolean;
   /** Ekranın ek dışa aktarma seçenekleri — "Dışa aktar ▾" menüsünde Excel'in altında. */
   extraExports?: ExtraExportOption[];
-  /** Dar ekranda yazı düşer, simge kalır (tek satır filtre çubuğu). */
+  /** Tek satır filtre çubuğu: 2xl altında yazı düşer, simge kalır (kutulara yer). */
   compact?: boolean;
 }
 
@@ -39,7 +39,7 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Görünür sütunlar" aria-label={compact ? "Sütunlar" : undefined}>
             <Settings2 className="h-3.5 w-3.5" />
-            <span className={compact ? "hidden lg:inline" : undefined}>Sütunlar</span>
+            <span className={compact ? "hidden 2xl:inline" : undefined}>Sütunlar</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-60 p-2">
@@ -60,7 +60,7 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
         </PopoverContent>
       </Popover>
       {!hideExport && (
-        <DataTableExportMenu table={table} exportName={exportName} fetchAll={fetchAll} extraExports={extraExports} />
+        <DataTableExportMenu table={table} exportName={exportName} fetchAll={fetchAll} extraExports={extraExports} compact={compact} />
       )}
     </>
   );
