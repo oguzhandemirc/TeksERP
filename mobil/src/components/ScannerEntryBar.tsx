@@ -9,6 +9,8 @@ import {
 
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { recordActivity } from '../store/lockStore';
+import { useHardwareScanMode } from '../hooks/useScanMethod';
+import HardwareTriggerHint from './HardwareTriggerHint';
 
 // =============================================================================
 // ScannerEntryBar — barkod/refakat kartı giriş bandı için ortak satır.
@@ -88,6 +90,9 @@ interface Props {
   /** Kamera-only modda bar'ı tamamen gizler (parent kendi tasarımını
    *  render edecek — Tambur 4-icon pattern'i için). */
   compactCta?: boolean;
+  /** Donanım okuyucu modunda ekran tuş okumasını kendisi alıyor (`listenWhileHidden`): CTA yerine
+   *  "okuyucu tuşuna basın" bandı çıkar. Verilmezse CTA tarayıcı panelini açar (kamera yine açılmaz). */
+  hardwareListening?: boolean;
 }
 
 export default function ScannerEntryBar({
@@ -108,7 +113,9 @@ export default function ScannerEntryBar({
   extra,
   manualMode: manualModeProp,
   compactCta = false,
+  hardwareListening = false,
 }: Props) {
+  const hardware = useHardwareScanMode();
   const manualModeStore = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const manualMode = manualModeProp ?? manualModeStore;
   const colors = TONES[tone];
@@ -163,15 +170,15 @@ export default function ScannerEntryBar({
           style={styles.input}
           disabled={inputDisabled || resolving}
         />
-        {onScan && (
+        {onScan && !(hardware && hardwareListening) && (
           <IconButton
-            icon="camera"
+            icon={hardware ? 'barcode-scan' : 'camera'}
             mode="contained-tonal"
             containerColor={colors.scanContainer}
             iconColor={colors.scanIcon}
             size={26}
             onPress={onScan}
-            accessibilityLabel="Kamera ile okut"
+            accessibilityLabel={hardware ? 'Okuyucu ile okut' : 'Kamera ile okut'}
             style={styles.iconBtn}
             disabled={resolving}
           />
@@ -197,12 +204,15 @@ export default function ScannerEntryBar({
     );
   }
 
-  // Kamera-only: büyük CTA + opsiyonel liste icon
+  // Kamera-only: büyük CTA + opsiyonel liste icon (donanımda ekran dinliyorsa CTA yerine tuş bandı)
   return (
     <View style={styles.row}>
+      {hardware && hardwareListening ? (
+        <HardwareTriggerHint busy={resolving} style={styles.cta} />
+      ) : (
       <Button
         mode="contained"
-        icon={resolving ? undefined : 'camera'}
+        icon={resolving ? undefined : hardware ? 'barcode-scan' : 'camera'}
         buttonColor={colors.scanButton}
         onPress={onScan ?? undefined}
         disabled={resolving || !onScan}
@@ -213,9 +223,10 @@ export default function ScannerEntryBar({
         {resolving ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (
-          scanCtaLabel
+          hardware ? 'Okuyucu ile Okut' : scanCtaLabel
         )}
       </Button>
+      )}
       {onList && (
         <View>
           <IconButton
