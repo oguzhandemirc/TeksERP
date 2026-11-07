@@ -145,6 +145,16 @@ export function extractPrismaValidationField(err: unknown): { field: string; rea
   return null;
 }
 
+/**
+ * `select`/`include`/`omit` biçimini istemci değil SUNUCU kurar: "Unknown field `x` for select statement"
+ * kod ↔ üretilmiş istemci uyuşmazlığıdır (çoğunlukla `prisma generate` koşmamış). 400 "gönderilen alanları
+ * kontrol edin" istemciyi suçlar ve teşhisi yanlış yöne sürer (2026-11-07 pano vakası) → 500.
+ */
+export function isServerQueryShapeError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : "";
+  return /Unknown field `[^`]+` for (?:select|include|omit) statement/.test(msg);
+}
+
 function extractUniqueColumn(meta: Record<string, unknown> | undefined): string | null {
   // `meta.target` yalnız tek yardımcıda okunur (pg adaptöründe boştur).
   return meta ? p2002UniqueColumn(meta) : null;
@@ -816,7 +826,15 @@ export const errorHandler = (
   }
 
   // Prisma validation errors (wrong data shape for model)
-  if (err instanceof Prisma.PrismaClientValidationError || err.constructor.name === "PrismaClientValidationError") {
+  const isPrismaValidation =
+    err instanceof Prisma.PrismaClientValidationError || err.constructor.name === "PrismaClientValidationError";
+  if (isPrismaValidation && isServerQueryShapeError(err)) {
+    hata(
+      "prisma-istemci",
+      "sorgu biçimi üretilmiş Prisma istemcisiyle uyuşmuyor — şema değiştiyse `npm run prisma:generate` + yeniden başlat",
+    );
+    // Aşağıdaki genel 5xx dalına düşer (log + SYSTEM/ERROR + 500).
+  } else if (isPrismaValidation) {
     const alan = extractPrismaValidationField(err);
     res.status(400).json({
       success: false,

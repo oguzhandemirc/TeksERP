@@ -26,7 +26,8 @@
 // bir sonraki koşumda P2002 ile asıl hatayı maskelerdi.
 // =============================================================================
 import prisma from "../src/lib/prisma";
-import { extractPrismaValidationField } from "../src/middlewares/error.middleware";
+import type { NextFunction, Request, Response } from "express";
+import { errorHandler, extractPrismaValidationField, isServerQueryShapeError } from "../src/middlewares/error.middleware";
 
 let gecti = 0;
 let kaldi = 0;
@@ -110,6 +111,45 @@ async function main(): Promise<void> {
   // Ayrıştırıcı "her hataya bir alan uydurmaz": tanımadığı metinde null döner
   // ve çağıran kör mesaja düşer (yanlış alan adı basmaktansa alan adı basmamak).
   check("§6 alakasız hatada null", extractPrismaValidationField(new Error("bağlantı koptu")) === null);
+
+  // ── §7 SUNUCU KURGULU SORGU BİÇİMİ (2026-11-07 pano vakası) ─────────────────
+  // Bayat üretilmiş istemci `select`teki yeni ilişkiyi tanımaz ("Unknown field … for select statement").
+  // `select` sunucu kurgusudur → istemci hatası (400 "gönderilen alanları kontrol edin") DEĞİL.
+  const e7 = await hataAl(() =>
+    // Bayat istemcinin göremediği alan (tsc düşürmez: jenerik select, §2 notu).
+    prisma.workOrder.findMany({ take: 1, select: { id: true, bulunmayanIliski: { select: { id: true } } } }),
+  );
+  check("§7a bilinmeyen select alanı GERÇEKTEN hata attı", e7 !== null);
+  check("§7b sunucu-biçimi hatası olarak tanındı", isServerQueryShapeError(e7));
+  check(
+    "§7c veri-biçimi hataları (§1-§3) sunucu-biçimi SAYILMAZ (400 kalır)",
+    [e1, e2, e3].every((e) => e !== null && !isServerQueryShapeError(e)),
+  );
+
+  // ── §8 HTTP SÖZLEŞMESİ — errorHandler statüsü ───────────────────────────────
+  const durum = (err: unknown): number | null => {
+    let kod: number | null = null;
+    const res = {
+      headersSent: false,
+      statusCode: 200,
+      setHeader: () => res,
+      on: () => res,
+      once: () => res,
+      status(c: number) {
+        kod = c;
+        res.statusCode = c;
+        return res;
+      },
+      json: () => res,
+    };
+    const req = { method: "GET", originalUrl: "/api/work-orders", headers: {}, ip: "127.0.0.1" };
+    errorHandler(err as Error, req as unknown as Request, res as unknown as Response, (() => {}) as NextFunction);
+    return kod;
+  };
+  const s7 = durum(e7);
+  const s1 = durum(e1);
+  check("§8a bayat istemci select hatası → 500", s7 === 500, `statü=${s7}`);
+  check("§8b veri-biçimi hatası → 400 (değişmedi)", s1 === 400, `statü=${s1}`);
 
   console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
   process.exitCode = kaldi > 0 ? 1 : 0;
