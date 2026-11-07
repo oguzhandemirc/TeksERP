@@ -5,7 +5,7 @@
 //   • Ham    : kumaş başına satır.
 //   • Bitmiş : kumaş + en + renk + kat başına satır.
 //
-// ⚠️ İKİNCİ TANIM YOK. Raf kümesi (`loadShelfCells`) ve ham/bitmiş ayrımı
+// ⚠️ İKİNCİ TANIM YOK. Raf kümesi (`loadShelfCellsByOwnership`) ve ham/bitmiş ayrımı
 // (`isRawCell` / `isFinishedCell`) Stok & Ölü Stok'un kutularıyla AYNI
 // fonksiyonlardan gelir; bu dosya yalnız gruplar. Toplamlar kutulardaki
 // "Ham stok" / "Bitmiş depo" rakamlarıyla birebir tutar

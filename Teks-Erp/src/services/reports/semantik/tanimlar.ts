@@ -127,7 +127,7 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
     aciklama: "Depoya ne zaman girdiği bilinmeyen kumaş metresi; yaş gruplarına dağıtılmaz, toplam stokta sayılır.",
     birim: "metre", iyiYon: "azalis", kaynak: { dosya: `${R}/stock-scorecard.report.service.ts`, alan: "StockScorecard.summary.unagedQty" } },
   { kimlik: "stok.bitmisMetre", ad: "Depodaki bitmiş kumaş",
-    aciklama: "Şu an depoda duran bitmiş kumaş metresi; tarih aralığından bağımsız, bugünün durumudur.",
+    aciklama: "Şu an depoda duran bitmiş kumaş metresi (emanet açıkken müşteri malı hariç); tarih aralığından bağımsız, bugünün durumudur.",
     birim: "metre", iyiYon: "notr", kaynak: { dosya: `${R}/stock-scorecard.report.service.ts`, alan: "StockScorecard.summary.finishedQty" } },
   { kimlik: "iplik.ihtiyacKg", ad: "İplik ihtiyacı",
     aciklama: "Açık siparişlerin kalan kumaşını dokumak için gereken çözgü ve atkı ipliği kilogramı; bugünün durumudur.",

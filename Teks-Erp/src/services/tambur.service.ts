@@ -133,6 +133,7 @@ import { readTargetValueChips, type TargetValueChip } from "./helpers/workorder-
 import { TERIM } from "../constants/terim";
 import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "./helpers/tambur-customer-settings.helper";
 import { gateByCard } from "./workorder-scan-route.service";
+import { isConsignedRoll } from "./helpers/stock-ownership.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -1154,7 +1155,7 @@ export class TamburService {
     // kapatılan tekil hatayı iz tutmuyordu). tx İÇİNDE toplanır, commit sonrası emit.
     const closedErrorAudits: Array<{ errorId: string; actionTaken: string }> = [];
     // D4-F2: müşteri kodu doğum yeri — yalnız emanet topta okunur (NONE iken tx ve cevap bayt-aynı).
-    const birthCustomerCodes = roll.ownerCustomerId != null && (await readLabelCustomerCodeAt()) === "TAMBUR_OUTPUT";
+    const birthCustomerCodes = isConsignedRoll(roll) && (await readLabelCustomerCodeAt()) === "TAMBUR_OUTPUT";
     let bornCustomerCodes: BornCustomerCode[] = [];
     let customerCodeWarning: string | null = null;
     // Sarf (kuşak) uyarıları — eksi bakiye işi durdurmaz, yanıtın `warnings`ine taşınır.

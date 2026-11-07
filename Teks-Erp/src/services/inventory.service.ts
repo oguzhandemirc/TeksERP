@@ -2573,7 +2573,8 @@ export class InventoryService {
 
   async getRollStats(req: Request): Promise<ApiResponse<RollStats>> {
     const params = parseQueryParams(req);
-    const { fireCodes } = await loadProducedBuckets(prisma);
+    // tx dışı (global prisma) iki bağımsız okuma — paralel.
+    const [{ fireCodes }, emanetOn] = await Promise.all([loadProducedBuckets(prisma), readEmanetEnabled()]);
     const where = this.buildRollWhere(params, fireCodes, await customerCodeSearchRollIds(params.search)) as Prisma.RollWhereInput;
 
     // TEK TARAMA: (status, qualityGrade) bazlı groupBy bir scan'de hem count
@@ -2582,7 +2583,6 @@ export class InventoryService {
     // geçişe indiriyoruz (CLAUDE.md DB perf kuralı). Grup sayısı küçük
     // (status × qualityGrade ≈ on'lar) → aşağıdaki JS reduce maliyetsiz.
     // Emanet kırılımı aynı where ∧ CONSIGNED_WHERE — liste/şerit ile tek where (filtre-liste.md).
-    const emanetOn = await readEmanetEnabled();
     const [grouped, consignedAgg] = await Promise.all([
       prisma.roll.groupBy({
         where,

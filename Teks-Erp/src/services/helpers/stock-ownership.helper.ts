@@ -20,8 +20,8 @@ export const OWN_STOCK_WHERE = { ownerCustomerId: null } as const satisfies Pris
 export const CONSIGNED_WHERE = { ownerCustomerId: { not: null } } as const satisfies Prisma.RollWhereInput;
 
 /** Bellek yüklemi — `CONSIGNED_WHERE`in ikizi. */
-export function isConsignedRoll(r: { ownerCustomerId: string | null }): boolean {
-  return r.ownerCustomerId !== null;
+export function isConsignedRoll(r: { ownerCustomerId?: string | null }): boolean {
+  return r.ownerCustomerId != null;
 }
 
 /** SQL ikizi — `alias` sabit tablo takma adıdır (kullanıcı girdisi DEĞİL). */

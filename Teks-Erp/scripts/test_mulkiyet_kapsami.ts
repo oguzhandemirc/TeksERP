@@ -14,12 +14,16 @@
 //      AÇIK: bizim + emanet = kapalıyken toplam, siparişsiz eski emanet ölü stoktan DÜŞER
 //   §5 kalem raporu karneyle aynı bölmeyi kullanır · §6 üretim bakiyesi kırılımı (toplam değişmez)
 //   §7 bulut `stok-karnesi` — kapalıyken `emanet` alanı yok, açıkken var
+//   §8 karne talebi mülkiyete böler — sahibin açık siparişi önce kendi emanetinden, kalan bizim stoktan
 //
 // NEGATİF SONDA (B, 2026-11-08, her biri md5 ile birebir geri alındı; 41/0 → ):
 //   N1 `splitByOwnership` bayrağı yok saydı (kapalıyken de böl) → §4a/§4b/§4d/§4e ❌ (37/4)
 //   N2 `consignedRollSql` IS NOT NULL → IS NULL → §0e/§1b/§4c/§4e/§4f ❌ (36/5)
 //   N3 inventory.service'e `{ ownerCustomerId: null }` yüklemi → §0b/§0c ❌ (39/2)
 //   N4 buildRollWhere mülkiyet parçası düşürüldü → §2c/§2d/§3c/§3d ❌ (37/4)
+//   (inceleme turu #622) N5 `ownDemandBySpec` emanet düşümü kapatıldı → §8b/§8c ❌ (42/2) · N6 servise
+//   `!!r.ownerCustomerId` → §0b/§0c ❌ (42/2) · N7 tarayıcının karşılaştırma kalıbı kapatıldı → §0f ❌ (43/1); 44/0.
+//   Genişleyen tarayıcı doğuşta iki gerçek bellek yüklemi buldu (shipment-auto-draft, tambur) → helper'a taşındı.
 // Gerekli mi: §4e doğuşta ölçtü — emanet kapalı davranışta (= F1 öncesi kod) siparişsiz eski emanet 40 m ölü stok sayılıyordu.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
@@ -65,18 +69,25 @@ const SURFACES: Record<string, { from: string; names: string[] }> = {
   "src/services/reports/stock-kalem.report.service.ts": { from: "./stock-scorecard.report.service", names: ["loadShelfCellsByOwnership"] },
 };
 /**
- * F1 öncesi doğmuş, başka soruyu (sevke hazırlık, hizmet faturası, lot/irsaliye sahibi…) cevaplayan
- * owner-null yüklemleri. Yeni dosya buraya EKLENMEZ — helper'dan okur. Göç: sonraki fason dilimleri.
+ * ROLL üstünde F1 öncesi doğmuş owner-null yüklemleri (sevke hazırlık, hizmet faturası kapısı, İçerideki İşler,
+ * emanet sevk kapısı). Aynı soruyu sorarlar — BORÇTUR; yeni dosya EKLENMEZ, göç sonraki fason dilimlerinde.
  */
 const LEGACY: ReadonlySet<string> = new Set([
   "src/services/roll-owner.service.ts",
-  "src/services/yarn-lot.service.ts",
-  "src/services/workorder-scan-route.service.ts",
   "src/services/helpers/ship-readiness.helper.ts",
   "src/services/helpers/work-order-customers.helper.ts",
   "src/services/helpers/emanet-owner.helper.ts",
   "src/services/helpers/ready-works-sql.helper.ts",
   "src/services/helpers/service-billing-gate.helper.ts",
+]);
+/**
+ * FARKLI MODEL — `ownerCustomerId` Roll'un değil başka varlığın kolonu; bu helper'ın sorusu (Roll bizim mi?) değil.
+ * yarn-lot.service: `YarnLot.ownerCustomerId` (emanet iplik lotu) · workorder-scan-route.service:
+ * `CustomerDeliveryNote.ownerCustomerId` (irsaliye satırlı top kapısı). Bunlar muaf KALIR (borç değil).
+ */
+const OTHER_MODEL: ReadonlySet<string> = new Set([
+  "src/services/yarn-lot.service.ts",
+  "src/services/workorder-scan-route.service.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -88,20 +99,33 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const isOwnerKey = (n: ts.PropertyName): boolean =>
-  (ts.isIdentifier(n) || ts.isStringLiteral(n)) && n.text === "ownerCustomerId";
+const isOwnerKey = (n: ts.PropertyName, key = "ownerCustomerId"): boolean =>
+  (ts.isIdentifier(n) || ts.isStringLiteral(n)) && n.text === key;
 const isNull = (e: ts.Expression): boolean => e.kind === ts.SyntaxKind.NullKeyword;
+const isOwnerAccess = (e: ts.Expression): boolean =>
+  (ts.isPropertyAccessExpression(e) && e.name.text === "ownerCustomerId")
+  || (ts.isElementAccessExpression(e) && ts.isStringLiteral(e.argumentExpression) && e.argumentExpression.text === "ownerCustomerId");
+const hasNullKey = (o: ts.Expression, keys: readonly string[]): boolean =>
+  ts.isObjectLiteralExpression(o) && o.properties.some((p) => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && keys.includes(p.name.text) && isNull(p.initializer));
+const NULL_CMP = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.EqualsToken]);
 
-/** Dosyadaki owner-null yüklem sayısı: `ownerCustomerId: null` · `ownerCustomerId: { not: null }` · SQL `"ownerCustomerId" IS [NOT] NULL`. */
+/**
+ * Dosyadaki owner-null yüklem sayısı. Prisma: `ownerCustomerId: null | { not: null } | { equals: null }` ·
+ * `ownerCustomer: { is: null } | { isNot: null }`; bellek: `x.ownerCustomerId (!==|!=|===|==) null` · `!!x.ownerCustomerId`;
+ * atama `where.ownerCustomerId = null`; SQL `"ownerCustomerId" IS [NOT] NULL`.
+ */
 export function ownerNullPredicates(src: string, file = "x.ts"): number {
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true);
   let n = 0;
   const visit = (node: ts.Node): void => {
     if (ts.isPropertyAssignment(node) && isOwnerKey(node.name)) {
-      const init = node.initializer;
-      if (isNull(init)) n++;
-      else if (ts.isObjectLiteralExpression(init) && init.properties.some((p) => ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === "not" && isNull(p.initializer))) n++;
+      if (isNull(node.initializer) || hasNullKey(node.initializer, ["not", "equals"])) n++;
     }
+    if (ts.isPropertyAssignment(node) && isOwnerKey(node.name, "ownerCustomer") && hasNullKey(node.initializer, ["is", "isNot"])) n++;
+    if (ts.isBinaryExpression(node) && NULL_CMP.has(node.operatorToken.kind)
+      && ((isOwnerAccess(node.left) && isNull(node.right)) || (isOwnerAccess(node.right) && isNull(node.left)))) n++;
+    if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken
+      && ts.isPrefixUnaryExpression(node.operand) && node.operand.operator === ts.SyntaxKind.ExclamationToken && isOwnerAccess(node.operand.operand)) n++;
     if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
       if (/"ownerCustomerId"\s+IS\s+(NOT\s+)?NULL/i.test(node.text)) n++;
     }
@@ -135,16 +159,24 @@ function statik(): void {
     if (rel === HELPER) continue;
     const n = ownerNullPredicates(readFileSync(f, "utf8"), rel);
     if (n === 0) continue;
-    if (LEGACY.has(rel)) legacySeen.add(rel);
+    if (LEGACY.has(rel) || OTHER_MODEL.has(rel)) legacySeen.add(rel);
     else offenders.push(`${rel} (${n})`);
   }
   check("§0c helper dışında yeni owner-null yüklemi yok", offenders.length === 0, offenders.join(", "));
-  const dead = [...LEGACY].filter((r) => !legacySeen.has(r));
+  const dead = [...LEGACY, ...OTHER_MODEL].filter((r) => !legacySeen.has(r));
   check("§0d muaf listesinde ölü satır yok (göç eden dosya listeden düşer)", dead.length === 0, dead.join(", "));
   check("§0e helper'ın kendisi üç biçimi taşır", ownerNullPredicates(readFileSync(path.join(ROOT, HELPER), "utf8")) >= 2
     && /IS NOT NULL/.test(readFileSync(path.join(ROOT, HELPER), "utf8")));
   // Tarayıcı öz-sınaması: üç kalıbı da sayar, düz atamayı saymaz.
-  check("§0f tarayıcı öz-sınaması", ownerNullPredicates(`const a = { ownerCustomerId: null }; const b = { ownerCustomerId: { not: null } }; const c = sql\`r."ownerCustomerId" IS NULL\`; const d = { ownerCustomerId: x ?? null };`) === 3);
+  const self = ownerNullPredicates([
+    "const a = { ownerCustomerId: null }; const b = { ownerCustomerId: { not: null } }; const c = sql`r.\"ownerCustomerId\" IS NULL`;",
+    "const e = { ownerCustomerId: { equals: null } }; const f = { ownerCustomer: { isNot: null } }; const g = { ownerCustomer: { is: null } };",
+    "const h = r.ownerCustomerId !== null; const i = r.ownerCustomerId != null; const j = null === r.ownerCustomerId; const k = !!r.ownerCustomerId;",
+    "where.ownerCustomerId = null;",
+    // sayılmayanlar: düz değer aktarımı ve sahip eşitliği
+    "const d = { ownerCustomerId: x ?? null }; const m = r.ownerCustomerId === custId; const o = !r.ownerCustomerId;",
+  ].join("\n"));
+  check("§0f tarayıcı öz-sınaması (11 kalıp sayılır, 3 sayılmaz)", self === 11, `${self}`);
 }
 
 async function main(): Promise<void> {
@@ -158,7 +190,7 @@ async function main(): Promise<void> {
 
   const foto = await prisma.systemSetting.findMany({ where: { key: SETTING_KEYS.EMANET_ENABLED }, select: { key: true, value: true } });
   const setFlag = (v: boolean) => prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.EMANET_ENABLED }, create: { key: SETTING_KEYS.EMANET_ENABLED, value: String(v) }, update: { value: String(v) } });
-  const ids = { item: "", cust: "", order: "", rolls: [] as string[] };
+  const ids = { item: "", item2: "", cust: "", order: "", order2: "", rolls: [] as string[] };
   try {
     const item = await prisma.item.create({ data: { code: `${TAG}-I`, name: `${TAG} Kumaş`, itemType: "FABRIC" }, select: { id: true } });
     ids.item = item.id;
@@ -287,13 +319,38 @@ async function main(): Promise<void> {
     const snOff = await snap();
     check("§7a AÇIK: tel şemasından geçer, `emanet` satırı var", !!snOn && /"emanet"/.test(JSON.stringify(snOn.data)));
     check("§7b KAPALI: `emanet` alanı yok", !!snOff && !/"emanet"/.test(JSON.stringify(snOff.data)));
+
+    // ── §8 talep mülkiyete bölünür ────────────────────────────────────────────
+    // Aynı spec: bizim 100 m + X emaneti 40 m; X siparişi 60 m → 40'ı X'in emanetinden, 20'si bizim stoktan.
+    console.log("\n── §8 sahibin talebi önce kendi emanetinden ──");
+    const item2 = await prisma.item.create({ data: { code: `${TAG}-I2`, name: `${TAG} Kumaş 2`, itemType: "FABRIC" }, select: { id: true } });
+    ids.item2 = item2.id;
+    for (const [q, owner, d] of [[100, null, 120], [40, cust.id, 150]] as const) {
+      const r = await prisma.roll.create({ data: { barcode: `${TAG}-T${q}`, itemId: item2.id, status: RollStatus.WAREHOUSE, initialQty: q, currentQty: q, entrySource: "SUPPLIER_RECEIPT", ownerCustomerId: owner }, select: { id: true } });
+      ids.rolls.push(r.id);
+      await prisma.$executeRaw`UPDATE rolls SET "statusChangedAt" = now() - make_interval(days => ${d}::int) WHERE id = ${r.id}::uuid`;
+    }
+    const order2 = await prisma.order.create({
+      data: { orderNumber: `${TAG}-ORD2`, customerId: cust.id, status: "APPROVED", lines: { create: [{ itemId: item2.id, quantity: 60 }] } },
+      select: { id: true },
+    });
+    ids.order2 = order2.id;
+    const unc = async () => (await getStockScorecard()).byItem.find((r) => r.key === item2.id)?.uncoveredQty;
+    const uOff = await unc();
+    await setFlag(true);
+    const uOn = await unc();
+    check("§8a KAPALI: siparişsiz = 140 − 60 = 80 (bugünkü hesap)", uOff === 80, String(uOff));
+    check("§8b AÇIK: X talebi önce X emanetinden (40), kalan 20 bizim stoktan → bizim siparişsiz 80", uOn === 80, String(uOn));
+    await prisma.orderLine.updateMany({ where: { orderId: order2.id }, data: { quantity: 40 } });
+    const uOn40 = await unc();
+    check("§8c AÇIK: X siparişi 40 → tamamı emanetten, bizim siparişsiz 100 (incelemenin sondası: düzeltmesiz 60)", uOn40 === 100, String(uOn40));
   } finally {
-    if (ids.order) {
-      await prisma.orderLine.deleteMany({ where: { orderId: ids.order } });
-      await prisma.order.deleteMany({ where: { id: ids.order } });
+    for (const oid of [ids.order, ids.order2].filter(Boolean)) {
+      await prisma.orderLine.deleteMany({ where: { orderId: oid } });
+      await prisma.order.deleteMany({ where: { id: oid } });
     }
     if (ids.rolls.length) await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
-    if (ids.item) await prisma.item.deleteMany({ where: { id: ids.item } });
+    await prisma.item.deleteMany({ where: { id: { in: [ids.item, ids.item2].filter(Boolean) } } });
     if (ids.cust) await prisma.customer.deleteMany({ where: { id: ids.cust } });
     // Bayrak fotoğrafa birebir döner; satır yoksa satırsız.
     if (foto.length) await prisma.systemSetting.update({ where: { key: SETTING_KEYS.EMANET_ENABLED }, data: { value: foto[0]!.value as Prisma.InputJsonValue } });

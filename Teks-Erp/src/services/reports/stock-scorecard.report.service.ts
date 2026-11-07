@@ -145,6 +145,8 @@ export interface StockCell {
   days: number | null;
   /** Müşteri malı mı (`consignedRollSql` — mülkiyet helper'ının SQL ikizi). */
   consigned: boolean;
+  /** Emanetin sahibi — sahibin açık talebini önce kendi emaneti karşılar (`ownDemandBySpec`). */
+  ownerCustomerId: string | null;
 }
 
 const FINISHED = ["WAREHOUSE", "A1_STOCK"];
@@ -172,7 +174,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
     Array<{
       rollId: string; barcode: string | null; itemId: string; itemName: string;
       colorId: string | null; colorName: string | null; width: number | null; foldType: string | null;
-      status: string; entrySource: string; qty: number; days: number | null; consigned: boolean;
+      status: string; entrySource: string; qty: number; days: number | null; consigned: boolean; ownerCustomerId: string | null;
     }>
   >(Prisma.sql`
     SELECT
@@ -185,6 +187,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
       r."entrySource"::text AS "entrySource",
       r."currentQty"::float AS "qty",
       ${consignedRollSql("r")} AS "consigned",
+      r."ownerCustomerId"::text AS "ownerCustomerId",
       -- tz-ok: raftaki bekleme YAŞI iki an arası mutlak farktır, takvim günü değil.
       CASE WHEN r."statusChangedAt" IS NULL THEN NULL
            -- tz-ok: raf yaşı mutlak farktır (yukarıdaki satırın devamı).
@@ -210,6 +213,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
     qty: Number(r.qty),
     days: r.days === null ? null : Number(r.days),
     consigned: r.consigned === true,
+    ownerCustomerId: r.ownerCustomerId,
   }));
 }
 
@@ -235,6 +239,42 @@ function consignedRow(cells: readonly StockCell[]): StockConsignedRow {
   };
 }
 
+type DemandRow = {
+  itemId: string; colorId: string | null; width: Prisma.Decimal | null;
+  quantity: Prisma.Decimal; shippedQty: Prisma.Decimal; order: { customerId: string };
+};
+
+/**
+ * Spec başına BİZİM stoğa düşen açık talep. Emanet açıkken müşteri X'in talebi önce X'in aynı spec'teki
+ * bitmiş emanetinden karşılanır (emanet yalnız sahibine sevk edilir — `assertOwnerMatchesTx`); kalan bizim
+ * stoğa düşer. Kapalıyken bütün talep bizim stoğa düşer (bugünkü hesap, bayt-aynı).
+ */
+function ownDemandBySpec(rows: readonly DemandRow[], consigned: readonly StockCell[], emanetOn: boolean): Map<string, number> {
+  const consignedLeft = new Map<string, number>();
+  if (emanetOn) {
+    for (const c of consigned.filter(isFinishedCell)) {
+      const k = `${specKey(c.itemId, c.colorId, c.width)}|${c.ownerCustomerId ?? ""}`;
+      consignedLeft.set(k, (consignedLeft.get(k) ?? 0) + c.qty);
+    }
+  }
+  const demandBySpec = new Map<string, number>();
+  for (const l of rows) {
+    let open = Math.max(0, Number(l.quantity) - Number(l.shippedQty));
+    if (open <= 0) continue;
+    const k = specKey(l.itemId, l.colorId, l.width === null ? null : Number(l.width));
+    const ok = `${k}|${l.order.customerId}`;
+    const avail = consignedLeft.get(ok) ?? 0;
+    if (avail > 0) {
+      const use = Math.min(open, avail);
+      consignedLeft.set(ok, avail - use);
+      open -= use;
+      if (open <= 0) continue;
+    }
+    demandBySpec.set(k, (demandBySpec.get(k) ?? 0) + open);
+  }
+  return demandBySpec;
+}
+
 export async function getStockScorecard(): Promise<StockScorecard> {
   // Emanet açıkken karne BİZİM stoğun karnesidir (müşteri malı ölü stok değildir); emanet ayrı satır.
   const [{ own: cells, consigned, emanetOn }, demandRows] = await Promise.all([
@@ -249,23 +289,17 @@ export async function getStockScorecard(): Promise<StockScorecard> {
         // KG/ADET kalem metre talebine girmez (shippedQty hiç yazılmaz) — tek kaynak.
         ...MEASURED_LINE,
       },
-      select: { itemId: true, colorId: true, width: true, quantity: true, shippedQty: true },
+      select: { itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, order: { select: { customerId: true } } },
     }),
   ]);
 
-  // ── Spec bazında açık talep ────────────────────────────────────────────────
-  const demandBySpec = new Map<string, number>();
-  for (const l of demandRows) {
-    const open = Math.max(0, Number(l.quantity) - Number(l.shippedQty));
-    if (open <= 0) continue;
-    const k = specKey(l.itemId, l.colorId, l.width === null ? null : Number(l.width));
-    demandBySpec.set(k, (demandBySpec.get(k) ?? 0) + open);
-  }
+  // ── Spec bazında açık talep (emanet açıkken sahibin emaneti önce düşülür) ──
+  const demandBySpec = ownDemandBySpec(demandRows, consigned, emanetOn);
 
   const finished = cells.filter(isFinishedCell);
-  // Ham ↔ yarı mamul: aynı statü, farklı stok türü. Envanterdeki iki sekmeyle
-  // BİREBİR aynı ayrım (`rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED`) — ikisi
-  // ayrışırsa aynı soruya iki rakam veren iki yüzey doğar.
+  // Ham ↔ yarı mamul: aynı statü, farklı stok türü; ayrım envanterdeki `rollScope=RAW_STOCK_PURE` /
+  // `SEMI_FINISHED` ile aynı. ⚠️ Emanet açıkken karne müşteri malını HARİÇ tutar, envanter sekmeleri
+  // (panel P1 mülkiyet çipi inene dek) DAHİL — bilinçli geçici ayrışma (arşiv 2026-11-08 F1).
   const raw = cells.filter(isRawCell);
   const semi = cells.filter(isSemiCell);
 
