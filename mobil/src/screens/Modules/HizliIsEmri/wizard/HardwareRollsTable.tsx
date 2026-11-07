@@ -13,6 +13,7 @@ import type { ScanReject } from '../../../../hooks/useScanFeedback';
 import type { ScanFlash } from '../../../../components/BarcodeScannerView';
 import { ScanFlashCard } from '../../../../components/HardwareScanPanel';
 import HardwareTriggerHint from '../../../../components/HardwareTriggerHint';
+import TruncatedText from '../../../../components/TruncatedText';
 import { colors, radius, spacing } from '../../../../theme';
 import type { ScannedRoll } from '../useQuickWorkOrder';
 import { TERIM } from '../../../../lib/terim';
@@ -42,9 +43,9 @@ export default function HardwareRollsTable(p: Props) {
       {p.itemName ? (
         <View style={styles.item}>
           <Icon source="cube-outline" size={16} color={colors.brand} />
-          <Text style={styles.itemText} numberOfLines={2}>
+          <TruncatedText style={styles.itemText} revealOnTap>
             {p.itemName}
-          </Text>
+          </TruncatedText>
         </View>
       ) : null}
       {p.rolls.length ? (

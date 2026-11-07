@@ -70,3 +70,20 @@ it('ScannerEntryBar donanımda: ekran dinliyorsa CTA yerine tuş bandı, dinlemi
   r.rerender(<ScannerEntryBar value="" onChangeText={() => {}} onScan={() => {}} />);
   expect(r.getByText('Okuyucu ile Okut')).toBeTruthy();
 });
+
+it('kapalıyken gelen okumada işleyici bitince onModalHide çağrılır ("kapanınca işle" deseni)', async () => {
+  const order: string[] = [];
+  const onScan = jest.fn(async (b: string) => {
+    await Promise.resolve();
+    order.push(`scan:${b}`);
+  });
+  const onModalHide = jest.fn(() => order.push('hide'));
+  renderWithPaper(
+    <BarcodeScannerModal visible={false} onDismiss={() => {}} onScan={onScan} onModalHide={onModalHide} listenWhileHidden />,
+  );
+  await act(async () => {
+    emitScan({ data: 'TOP-5', symbology: null, source: 'pointmobile' });
+  });
+  // AppModal ilk bağlanışta da onHidden verebilir; sözleşme: okuma işlendikten SONRA bir kez daha.
+  expect(order.slice(-2)).toEqual(['scan:TOP-5', 'hide']);
+});

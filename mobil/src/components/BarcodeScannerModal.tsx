@@ -18,7 +18,7 @@ import HardwareScanPanel from './HardwareScanPanel';
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  onScan: (barcode: string) => void;
+  onScan: (barcode: string) => void | Promise<unknown>;
   /** Üst başlık — neyi taradığımızı operatöre söyler. */
   title?: string;
   /** Hangi barkod tiplerini okusun. Default: QR + Code128. */
@@ -93,7 +93,10 @@ export function BarcodeScannerModal({
     (scan) => {
       recordActivity();
       if (captureHaptic !== false) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onScan(scan.data);
+      const done = onScan(scan.data);
+      // Modal hiç açılmadan gelen okumada AppModal onHidden'ı tetiklemez; "kapanınca işle" deseni
+      // (bkz. onModalHide) bozulmasın diye işleyici bitince aynı çağrı burada yapılır.
+      if (!visible && onModalHide) void Promise.resolve(done).then(onModalHide, onModalHide);
     },
     { active: hardware && (visible || listenWhileHidden) },
   );
