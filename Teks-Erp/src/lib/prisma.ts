@@ -10,7 +10,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import dotenv from "dotenv";
 import { PG_SESSION_OPTIONS } from "./pg-session";
-import { hata } from "./logger";
+import { bilgi, hata, uyari } from "./logger";
+import { checkPrismaClientAlignment } from "./prisma-istemci-hizasi";
 import { resolveEnvFilePath } from "./hizmet-duzeni";
 import { withDirtyTracking } from "../cloud-sync/dirty-flag";
 
@@ -105,6 +106,10 @@ const prisma = withDirtyTracking(new PrismaClient({
 // O3-3: Graceful shutdown TEK noktada (server.ts) toplanmıştır. Buradaki
 // SIGTERM/SIGINT handler'ı KALDIRILDI — çift handler F10 graceful shutdown'ı boşa
 // çıkarıyordu (server.close callback'i prisma.$disconnect + pool.end yapar).
+
+// Bayat üretilmiş istemci sorguları 'Unknown field' ile düşürür; istemci doğarken adıyla söylenir (durdurmaz).
+// Sunucu açılışı da her bekçi de buradan geçer → yanlış ağaçta sessiz arıza kalmaz.
+checkPrismaClientAlignment({ warn: (m) => uyari("prisma-istemci", m), info: (m) => bilgi("prisma-istemci", m) });
 
 export default prisma;
 export { pool };
