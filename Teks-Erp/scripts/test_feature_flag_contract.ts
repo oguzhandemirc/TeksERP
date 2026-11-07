@@ -102,6 +102,7 @@ import {
 } from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
 import { yorumlariSok } from "./lib/regime-gate-scan";
+import { ayarServisDosyasiMi, ayarServisMetni, ayarServisUyeMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -175,7 +176,8 @@ const SERVICE_SRC = path.resolve(
  * yorum körü yapmaktır.
  */
 function readKeys(file: string, re: RegExp): string[] {
-  const src = yorumlariSok(readFileSync(file, "utf8"));
+  // Ayar servisi 2026-11-08 cephe + alan modüllerine bölündü: cephe yolu AİLENİN metnini okur.
+  const src = yorumlariSok(file === SERVICE_SRC ? ayarServisMetni() : readFileSync(file, "utf8"));
   const out = new Set<string>();
   for (const m of src.matchAll(re)) out.add(m[1]!);
   return [...out];
@@ -766,12 +768,9 @@ async function main() {
   // `getFeatureFlags` gövdesinden çağrılan okuyucular → okudukları SETTING_KEYS.
   // İKİ HOP çünkü tek hop yetmiyor: gövde `apiKey: await readX(...)` yazar,
   // anahtarın kendisi `readX`in İÇİNDEDİR.
-  const svc = readFileSync(SERVICE_SRC, "utf8");
-  const gffBody = (() => {
-    const start = svc.indexOf("async getFeatureFlags(");
-    const end = svc.indexOf("\n  }", start);
-    return start >= 0 && end > start ? svc.slice(start, end) : "";
-  })();
+  const svc = ayarServisMetni();
+  // 2026-11-08: gövde cepheden alan modülüne taşındı; AST ile asıl gövde (delegasyon değil) okunur.
+  const gffBody = ayarServisUyeMetni("getFeatureFlags");
   const readersInGff = [...new Set([...gffBody.matchAll(/\b(read[A-Z]\w*)\s*\(/g)].map((m) => m[1]!))];
   const readerBody = (name: string): string => {
     const re = new RegExp(`export (?:async )?function ${name}\\(`);
@@ -1027,7 +1026,6 @@ async function main() {
   // İmport grafiği de koddan kurulur: yorum satırına alınmış bir `from "./x"`
   // sahte kenar üretir (ters yönde yanlış kırmızı).
   const srcCode = new Map([...srcText].map(([rel, text]) => [rel, yorumlariSok(text)]));
-  const SETTING_SERVICE_REL = "services/system-setting.service.ts";
 
   const importsOf = new Map<string, string[]>();
   for (const [rel, text] of srcCode) {
@@ -1107,9 +1105,9 @@ async function main() {
         // kapısız bir router'ın bağladığı KAPILI alt router "ulaşılabilir"
         // sayılır ve kendi kapısı yok sayılırdı.
         if (routeSet.has(next)) continue;
-        // ⚠️ system-setting.service ATLANIR: her okuyucunun TANIMI orada yaşıyor;
+        // ⚠️ system-setting.service AİLESİ (cephe + system-setting/) ATLANIR: her okuyucunun TANIMI orada yaşıyor;
         // grafikte geçilirse "tüketici" kavramı anlamını yitirir.
-        if (next === SETTING_SERVICE_REL || reached.has(next)) continue;
+        if (ayarServisDosyasiMi(next) || reached.has(next)) continue;
         // ⚠️ Kendi rejim kapısını taşıyan dosya BİR KAPIDIR: içine girilmez.
         // `shipment-auto-draft.helper` tam bu durumda — rejimsiz sevk yolundan
         // çağrılıyor ama ilk ifadesi `readFinanceEnabled()`.
@@ -1210,7 +1208,7 @@ async function main() {
   // selfGate metni okuyucunun ADIYLA ve KAPANIŞ PARANTEZİYLE yazılır; parantez
   // unutulursa sızıntı taraması sessizce daralır (`readTicaret` başka ada da uyar).
   const kotuSelfGate = Object.entries(REGIME_GATES).filter(
-    ([, g]) => !g.selfGate.endsWith("(") || !srcCode.get(SETTING_SERVICE_REL)!.includes(g.selfGate),
+    ([, g]) => !g.selfGate.endsWith("(") || ![...srcCode].some(([rel, text]) => ayarServisDosyasiMi(rel) && text.includes(g.selfGate)),
   );
   check(
     "REGIME_GATES `selfGate` metinleri gerçek okuyucuya işaret ediyor (kapanış parantezli)",
@@ -1236,7 +1234,7 @@ async function main() {
     for (const reader of new Set(readerNames)) {
       const re = new RegExp(`\\b${reader}\\b`);
       const consumers = [...srcCode.entries()]
-        .filter(([rel, text]) => rel !== SETTING_SERVICE_REL && !rel.startsWith("routes/") && re.test(text))
+        .filter(([rel, text]) => !ayarServisDosyasiMi(rel) && !rel.startsWith("routes/") && re.test(text))
         .map(([rel]) => rel);
       const open = consumers.filter((c) => reach.has(c));
       if (open.length > 0) {

@@ -29,6 +29,7 @@ import { firstGrade } from "./fixture-quality-grade";
 import { SETTING_KEYS, systemSettingService, readFinanceCariHoldEmanetShipment } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { shippingService } from "../src/services/shipping.service";
+import { ayarServisEtiketi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -91,7 +92,7 @@ function statik(): void {
   check("§0a kod sabiti CARI_HOLD_EMANET_SHIPMENT kaynakta yok (karar ayardan)", sabit.length === 0, sabit.join(", ") || "temiz");
   const yuklem = dosyalar.filter((d) => olcumSuzgeciSay(d.src) > 0).map((d) => d.rel);
   check("§0b ⭐ 'işlenmiş' yüklemi (meterReadings.some süzgeci) yalnız emanet-shipment.helper'da", JSON.stringify(yuklem) === JSON.stringify([HELPER]), yuklem.join(", "));
-  const okuyan = dosyalar.filter((d) => /readFinanceCariHoldEmanetShipment\(/.test(d.src)).map((d) => d.rel).sort();
+  const okuyan = [...new Set(dosyalar.filter((d) => /readFinanceCariHoldEmanetShipment\(/.test(d.src)).map((d) => ayarServisEtiketi(d.rel)))].sort(); // ayar servisi ailesi tek etiket
   check("§0c ayar okuması yalnız helper + ayar servisi (getFeatureFlags)", JSON.stringify(okuyan) === JSON.stringify([HELPER, "services/system-setting.service.ts"]), okuyan.join(", "));
   const sahip = dosyalar.filter((d) => /rollsAllOwnedByTx\(/.test(d.src)).map((d) => d.rel).sort();
   check("§0d rollsAllOwnedByTx yalnız emanet-owner (tanım) + emanet-shipment (karar) — kilit ve risk kapısı kopya kurmaz", JSON.stringify(sahip) === JSON.stringify(["services/helpers/emanet-owner.helper.ts", HELPER]), sahip.join(", "));

@@ -5,8 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import * as ts from "typescript";
 import { walkTs } from "./ts-tarama";
+import { ayarServisEtiketi, ayarServisMetni } from "./ayar-servis-kaynak";
 
 export const SRC_KOKU = path.join(__dirname, "..", "..", "src");
+/** Ayar servisi cephesi; 2026-11-08 bölmesinden beri metin AİLEDEN (cephe + system-setting/) okunur. */
 export const SERVIS = path.join(SRC_KOKU, "services", "system-setting.service.ts");
 
 export interface OkuyucuCifti {
@@ -46,7 +48,7 @@ function fonksiyonGovdesi(sf: ts.SourceFile, ad: string): string {
 
 /** Servisteki `readXEnabledRaw` ↔ `readXEnabled` çiftleri. */
 export function okuyucuCiftleri(): OkuyucuCifti[] {
-  const sf = kaynak(SERVIS);
+  const sf = ts.createSourceFile(SERVIS, ayarServisMetni(), ts.ScriptTarget.Latest, true);
   const hamlar: string[] = [];
   for (const st of sf.statements) {
     if (ts.isFunctionDeclaration(st) && st.name && /^read[A-Z]\w*EnabledRaw$/.test(st.name.text)) hamlar.push(st.name.text);
@@ -89,7 +91,8 @@ export function anilislar(adlar: ReadonlySet<string>): Anilis[] {
         const bildirim = ts.isImportSpecifier(p) || ts.isExportSpecifier(p) || (ts.isFunctionDeclaration(p) && p.name === n);
         if (!bildirim) {
           const cagri = ts.isCallExpression(p) && p.expression === n;
-          out.push({ dosya: path.relative(SRC_KOKU, dosya), fonksiyon: enYakinFonksiyon(n), ad: n.text, cagri });
+          // Ayar servisi ailesi tek dosya etiketiyle (beyanlar `services/system-setting.service.ts#…`).
+          out.push({ dosya: ayarServisEtiketi(path.relative(SRC_KOKU, dosya)), fonksiyon: enYakinFonksiyon(n), ad: n.text, cagri });
         }
       }
       ts.forEachChild(n, gez);
@@ -171,7 +174,7 @@ export function lisansModulTaramasi(): { literalDosyalari: string[]; ureticiler:
   const kapaliSiteleri: ModulKapaliSitesi[] = [];
   for (const dosya of walkTs(SRC_KOKU)) {
     const sf = kaynak(dosya);
-    const rel = path.relative(SRC_KOKU, dosya);
+    const rel = ayarServisEtiketi(path.relative(SRC_KOKU, dosya)); // ayar servisi ailesi tek etiket
     const yardimciCagrilari = new Map<string, ts.CallExpression[]>();
     const kapalilar: ts.CallExpression[] = [];
     const gez = (n: ts.Node): void => {

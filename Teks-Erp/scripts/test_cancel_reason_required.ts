@@ -25,6 +25,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { SETTING_KEYS, readProductionCancelReasonRequired, resolveCancelReasonRequired } from "../src/services/system-setting.service";
 import { CANCEL_REASON_REQUIRED_CODE, hasCancelReason } from "../src/services/helpers/cancel-reason.helper";
 import { AppError } from "../src/utils/app-error";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -66,7 +67,7 @@ function statik(): void {
   check("§0b top iptali sebebi OPSİYONEL alır (query `reason`/`reasonCode`) — bayrağın tek yolu", /const reason = typeof req\.query\.reason === "string" \? req\.query\.reason : undefined;/.test(invCtrl));
   const inv = oku("src/services/inventory.service.ts");
   check("§0c kapı TEK helper: `softDelete`te `assertCancelReasonTx` yalnız iptalde (`!isScrap`), `existing` okunmadan ÖNCE; elle kopya yok", /if \(!isScrap\) await assertCancelReasonTx\(prisma, \{ reason: opts\?\.reason, reasonCode: opts\?\.reasonCode \}, "Top iptali"\);\n\s*const existing = await prisma\.roll\.findUnique/.test(inv) && (inv.match(/assertCancelReasonTx\(/g) ?? []).length === 1 && !/code: "CANCEL_REASON_REQUIRED"/.test(inv));
-  const sys = oku("src/services/system-setting.service.ts");
+  const sys = ayarServisMetni();
   const govde = sys.slice(sys.indexOf("export async function resolveCancelReasonRequired"), sys.indexOf("export async function resolveCancelReasonRequired") + 300);
   check("§0d resolver = üretim ∧ bayrak", /readProductionEnabled\(tx\)/.test(govde) && /readProductionCancelReasonRequired\(tx\)/.test(govde));
   check("§0e önizlemeler `reasonRequired` taşır: top (resolver) · levent sarım (sabit true) · fason makbuz (sabit true)", /reasonRequired: await resolveCancelReasonRequired\(\)/.test(inv) && /reasonRequired: true,/.test(oku("src/services/warp-beam-wind.service.ts")) && /reasonRequired: true,/.test(oku("src/services/subcontractor-weaving-receipt.service.ts")));

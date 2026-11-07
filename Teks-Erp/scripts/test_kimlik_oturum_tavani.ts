@@ -55,6 +55,7 @@ import {
   effectiveAbsoluteSessionCapDays,
   readSessionDurationMinutes,
 } from "../src/services/system-setting.service";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 const SONDA = process.argv.find((a) => a.startsWith("--sonda="))?.slice("--sonda=".length) ?? null;
 const KOK = resolve(__dirname, "..");
@@ -139,7 +140,7 @@ async function kilitKapatilamaz() {
   }
 
   let kilit = oku(resolve(KOK, "src/middlewares/login-lockout.ts"));
-  let ayar = oku(resolve(KOK, "src/services/system-setting.service.ts"));
+  let ayar = ayarServisMetni();
   if (SONDA === "kapanir") {
     kilit = kilit.replace("await readPinLockoutConfig();", "await readPinLockoutConfig();\n  if (!enabled) return { blocked: false, retryAfterSec: 0, justLocked: false };");
     ayar = ayar.replace("return DEFAULT_PIN_LOCKOUT_ENABLED;\n}", "return asBoolean(setting.value);\n}");

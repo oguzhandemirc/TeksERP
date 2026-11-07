@@ -47,6 +47,7 @@ import { getRollTabletContext } from "../src/services/roll-tablet.service";
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -93,7 +94,7 @@ function statik(): void {
   check("§0c grandfathering damgası: `emanet.enabled` sabit false, koşullu INSERT, ON CONFLICT", /'emanet\.enabled', 'false'::jsonb/.test(gf) && /WHERE EXISTS \(SELECT 1 FROM "rolls"/.test(gf) && /ON CONFLICT \("key"\) DO NOTHING/.test(gf));
   const flags = readFileSync(path.join(ROOT, "src/constants/module-flags.ts"), "utf8");
   const profiles = readFileSync(path.join(ROOT, "src/constants/module-profiles.ts"), "utf8");
-  const svc = readFileSync(path.join(ROOT, "src/services/system-setting.service.ts"), "utf8");
+  const svc = ayarServisMetni();
   const route = readFileSync(path.join(ROOT, "src/routes/feature-flag.routes.ts"), "utf8");
   check("§0d modül anahtarı: MODULE_FLAG_KEYS/SETTING_KEYS/LABELS · profil haritası+açıklama · SETTING_KEYS.EMANET_ENABLED · reader · setFeatureFlags dalı · zod",
     /"emanetEnabled",/.test(flags) && /"emanet\.enabled",/.test(flags) && /emanetEnabled: "Emanet/.test(flags) &&

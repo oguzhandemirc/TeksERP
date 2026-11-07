@@ -158,8 +158,9 @@ function blok(metin, bas, ac, kapa) {
  */
 export function bayrakAnahtarlari({ servis, kapsamlar, moduller }) {
   const sk = settingKeysOku(servis);
-  const i = servis.indexOf("  async setFeatureFlags(");
-  if (i < 0) throw new Error("system-setting.service.ts: setFeatureFlags bulunamadı — ayrıştırma bayat");
+  // Gövde 2026-11-08'de cepheden `system-setting/feature-flags-write.ts`e taşındı (cephede yalnız delegasyon).
+  const i = servis.indexOf("export async function setFeatureFlags(");
+  if (i < 0) throw new Error("system-setting ailesi: setFeatureFlags bulunamadı — ayrıştırma bayat");
   const govde = blok(servis, servis.indexOf("): Promise<ApiResponse<FeatureFlags>> {", i), "{", "}");
   const adlar = [...new Set([...govde.matchAll(/SETTING_KEYS\.([A-Z0-9_]+)/g)].map((m) => m[1]))];
   const bilinmeyen = adlar.filter((a) => !sk.has(a));

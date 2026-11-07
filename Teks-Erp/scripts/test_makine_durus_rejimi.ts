@@ -41,6 +41,7 @@ import * as bcrypt from "bcryptjs";
 import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import { ensureTestAdmin, kosumaOzguParola, testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ayarServisDosyasiMi, ayarServisEtiketi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -82,14 +83,17 @@ function callSites(name: string): string[] {
     if (!text.includes(name)) continue;
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
     const visit = (n: ts.Node): void => {
-      if (ts.isIdentifier(n) && n.text === name && !ts.isImportSpecifier(n.parent) && !(ts.isFunctionDeclaration(n.parent) && n.parent.name === n)) {
+      // Ayar servisi ailesinin cephe yeniden dışa aktarımı (`system-setting/index.ts`) anılış sayılmaz — tanım gibi bildirimdir.
+      const aileDisaAktarim = n.parent !== undefined && ts.isExportSpecifier(n.parent) && ayarServisDosyasiMi(file);
+      if (ts.isIdentifier(n) && n.text === name && !ts.isImportSpecifier(n.parent) && !aileDisaAktarim && !(ts.isFunctionDeclaration(n.parent) && n.parent.name === n)) {
         let p: ts.Node | undefined = n.parent;
         let fn = "<modül>";
         while (p) {
           if ((ts.isFunctionDeclaration(p) || ts.isMethodDeclaration(p)) && p.name) { fn = p.name.getText(); break; }
           p = p.parent;
         }
-        out.push(`${relative(SRC, file).split("\\").join("/")}#${fn}`);
+        // Ayar servisi ailesi (cephe + services/system-setting/) tek etiket (2026-11-08 bölmesi).
+        out.push(`${ayarServisEtiketi(relative(SRC, file).split("\\").join("/"))}#${fn}`);
       }
       ts.forEachChild(n, visit);
     };

@@ -57,6 +57,7 @@ import { migrationDamgaDegerleri, yorumlariSok } from "./lib/regime-gate-scan";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { atlamaDefteri } from "./lib/atlama";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0,
   fail = 0;
@@ -83,7 +84,6 @@ function atla(label: string, neden: string, adet: number | "?" = 1): void {
 
 const KOK = path.resolve(__dirname, "..");
 const SRC = path.join(KOK, "src");
-const SERVIS = path.join(SRC, "services/system-setting.service.ts");
 const SERVER = path.join(SRC, "server.ts");
 const JOB = path.join(SRC, "jobs/module-profile.job.ts");
 const ADMIN_ROUTES = path.join(SRC, "routes/admin.routes.ts");
@@ -98,7 +98,7 @@ const SIHIRBAZ_ISS = path.resolve(KOK, "../deploy/kurulum/tekserp-kurulum.iss");
 
 /** `this.set(SETTING_KEYS.X, input.Y, "AÇIKLAMA", …)` → { camelCase: açıklama }. */
 function servisAciklamalari(): Map<string, string> {
-  const kod = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
+  const kod = yorumlariSok(ayarServisMetni());
   const out = new Map<string, string>();
   const re = /this\.set\(\s*SETTING_KEYS\.([A-Z0-9_]+),\s*input\.([A-Za-z0-9_]+),\s*"([^"]+)"/g;
   for (const m of kod.matchAll(re)) out.set(m[2]!, m[3]!);

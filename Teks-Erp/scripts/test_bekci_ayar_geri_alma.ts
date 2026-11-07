@@ -18,7 +18,7 @@
 //      ⑥ yorumda "finally" geçmesi sayılmaz → İHLAL · ⑦ seri sınıfı ayrı ölçülür
 //   §1b ANAHTAR DÜZEYİ: bilinen anahtarlı her SET (literal · SABİT · `setFeatureFlags` alanı · yol
 //      anahtarı) aynı anahtarı geri alan bir RESTORE ya da o sınıfta genel (döngü) RESTORE ile örtülür.
-//      Anahtarlar DB adına normalleşir; eşleme `system-setting.service.ts`ten TÜRETİLİR (elle liste yok).
+//      Anahtarlar DB adına normalleşir; eşleme ayar servisi ailesinden (`lib/ayar-servis-kaynak`) TÜRETİLİR (elle liste yok).
 //   §4 körlük zemini: yazan bekçi sayısı ≥ 80
 // ⚠️ SINIR (beyan): anahtarı çözülemeyen (değişken) yazım sınıf düzeyinde kalır; genel bir RESTORE
 //    varsa örtülü sayılır. Birebirlik (ayarın ESKİ değerine dönmesi) ölçülmez;
@@ -27,6 +27,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { dosyaTara, kaynaktanCozucu } from "./lib/bekci-ayar-geri-alma";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -46,7 +47,7 @@ function main(): void {
   const dizin = __dirname;
   const dosyalar = fs.readdirSync(dizin).filter((f) => /^test_.*\.ts$/.test(f));
   const muafSet = new Set(MUAF.map((m) => m.dosya));
-  const cozucu = kaynaktanCozucu(fs.readFileSync(path.join(dizin, "..", "src", "services", "system-setting.service.ts"), "utf8"));
+  const cozucu = kaynaktanCozucu(ayarServisMetni());
   let yazan = 0;
   const ihlal: string[] = [];
   const ortusmeyen: string[] = [];

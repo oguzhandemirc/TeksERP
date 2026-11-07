@@ -48,6 +48,7 @@ import {
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { middlewareGovdeAnalizi, yorumlariSok } from "./lib/regime-gate-scan";
 import { createManualMoveFixture } from "./fixture-manual-move";
+import { ayarServisTanimDosyasi } from "./lib/ayar-servis-kaynak";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -56,7 +57,6 @@ const workOrders = new WorkOrderService();
 
 const KOK = path.resolve(__dirname, "..");
 const SRC = path.join(KOK, "src");
-const SERVIS = path.join(SRC, "services/system-setting.service.ts");
 const ELECTRON_CONFIG = path.resolve(
   KOK,
   "../Electron/src/pages/GeneralSettings/settings-config.ts",
@@ -487,7 +487,7 @@ async function main(): Promise<void> {
     // tüketicisi zaten üretim kapılı bir router'ın arkasında. Bu yüzden okuyucu
     // gövdeleri HAM'dır — başka bir bayrak okumazlar.
     for (const okuyucu of ["readQualityGradeRequiredEnabled", "readBatchAutoCreateEnabled"]) {
-      const analiz = middlewareGovdeAnalizi(SERVIS, okuyucu);
+      const analiz = middlewareGovdeAnalizi(ayarServisTanimDosyasi(okuyucu), okuyucu);
       check(`§7 zemin: ${okuyucu} tanımlı`, analiz.bulundu);
       check(
         `§7 ⭐ ${okuyucu} HAM değer döner (modül şalteri okumaz — ÇEKİRDEK)`,
