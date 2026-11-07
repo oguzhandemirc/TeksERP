@@ -116,7 +116,7 @@ export function CancelReceiptDialog({ receiptId, onOpenChange }: ReceiptProps) {
             Şu kartelalar sevkiyatta/çuvalda olduğu için iptal yapılamadı: <strong>{blocked.join(", ")}</strong>. Önce sevkiyattan/çuvaldan çıkarın.
           </Callout>
         )}
-        <PreviewList preview={p ?? null} loading={preview.isLoading} />
+        <PreviewList preview={p ?? null} loading={preview.isLoading} hideWarning={blocked !== null} />
         <ReasonField value={reason} onChange={setReason} disabled={pending || !p?.cancellable} placeholder="Örn. yanlış kabul edildi" />
         <DialogFooter>
           <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Vazgeç</Button>
@@ -130,12 +130,15 @@ export function CancelReceiptDialog({ receiptId, onOpenChange }: ReceiptProps) {
 }
 
 /** Etkilenen her kartela — engelliler kırmızı sebepleriyle; engel varsa üstte uyarı. */
-function PreviewList({ preview, loading }: { preview: KartelaReceiptCancelPreview | null; loading: boolean }) {
+// `hideWarning`: 409 sonrası kırmızı uyarı aynı şeyi söylüyor — ikinci (sarı) uyarı çizilmez.
+function PreviewList({ preview, loading, hideWarning }: { preview: KartelaReceiptCancelPreview | null; loading: boolean; hideWarning: boolean }) {
   if (loading || !preview) return <Skeleton className="h-32 w-full" />;
   const blockedCount = preview.swatches.filter((s) => !s.safeToCancel).length;
+  // Engelliler başa: uzun kabulde engel sebebi listenin dibinde kaybolmasın.
+  const rows = [...preview.swatches].sort((a, b) => Number(a.safeToCancel) - Number(b.safeToCancel));
   return (
     <>
-      {blockedCount > 0 && (
+      {blockedCount > 0 && !hideWarning && (
         <Callout tone="warning">
           {blockedCount} kartela sevkiyatta/çuvalda — kabul iptal edilemez. Önce bu kartelaları sevkiyattan/çuvaldan çıkarın.
         </Callout>
@@ -143,8 +146,8 @@ function PreviewList({ preview, loading }: { preview: KartelaReceiptCancelPrevie
       <div className="min-h-0 flex-1 overflow-auto rounded-md border" data-testid="iptal-onizleme">
         {preview.swatches.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">Bu kabulde geri alınacak canlı kartela yok.</p>
-        ) : preview.swatches.map((s) => (
-          <div key={s.id} className="flex items-center gap-3 border-b px-3 py-1.5 text-sm last:border-0">
+        ) : rows.map((s) => (
+          <div key={s.id} className={`flex items-center gap-3 border-b px-3 py-1.5 text-sm last:border-0 ${s.safeToCancel ? "" : "bg-destructive/5"}`}>
             <span className="w-36 font-mono text-xs">{s.cardNumber}</span>
             <span className="min-w-0 flex-1 truncate">{s.item.name}</span>
             {s.safeToCancel ? (

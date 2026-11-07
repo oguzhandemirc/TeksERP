@@ -48,19 +48,25 @@ describe("Kabulü İptal Et", () => {
     get.mockResolvedValue(preview([sw("1"), sw("2", ["Bir sevkiyatta", "Bir çuvalda"])]));
     renderWithProviders(<CancelReceiptDialog receiptId="k1" onOpenChange={vi.fn()} />);
     expect(await screen.findByText("Bir sevkiyatta · Bir çuvalda")).toBeInTheDocument();
+    // Engelli kartela listenin başında (uzun kabulde kaybolmasın).
+    expect(screen.getByTestId("iptal-onizleme").firstElementChild).toHaveTextContent("KRT2");
     expect(screen.getByText(/1 kartela sevkiyatta\/çuvalda/)).toBeInTheDocument();
     expect(screen.getByLabelText("İptal sebebi")).toBeDisabled();
     expect(screen.getByRole("button", { name: /Kabulü İptal Et \(2/ })).toBeDisabled();
   });
 
   it("409 SWATCHES_DOWNSTREAM: engelleyen kart numaraları diyalogda listelenir", async () => {
-    get.mockResolvedValue(preview([sw("1")]));
+    // İlk önizleme temiz; 409 sonrası tazelenen önizleme engelli (yarış).
+    get.mockResolvedValueOnce(preview([sw("1")])).mockResolvedValue(preview([sw("1", ["Bir çuvalda"])]));
     post.mockRejectedValue({ response: { status: 409, data: { message: "1 kartela…", details: { code: "SWATCHES_DOWNSTREAM", blocked: ["KRT1"] } } } });
     renderWithProviders(<CancelReceiptDialog receiptId="k1" onOpenChange={vi.fn()} />);
     await screen.findByTestId("iptal-onizleme");
     fireEvent.change(screen.getByLabelText("İptal sebebi"), { target: { value: "deneme" } });
     fireEvent.click(screen.getByRole("button", { name: /Kabulü İptal Et \(1/ }));
     expect(await screen.findByText(/iptal yapılamadı/)).toHaveTextContent("KRT1");
+    expect(await screen.findByText("Bir çuvalda")).toBeInTheDocument();
+    // Aynı engel tek uyarıyla söylenir (sarı uyarı kırmızının tekrarı olmaz).
+    expect(screen.queryByText(/kabul iptal edilemez/)).toBeNull();
   });
 });
 

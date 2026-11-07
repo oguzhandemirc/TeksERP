@@ -45,8 +45,11 @@ export function KartelaPage() {
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [cekiId, setCekiId] = useState<string | null>(null);
   // Sayfa açıkken gelen `?tab=` (komut paleti) sekmeyi değiştirir.
+  // Açık detay paneli eski sekmenin belgesidir; sekme değişince kapanır.
   useEffect(() => {
-    if (isKartelaTabKey(urlTab)) setTab(urlTab);
+    if (!isKartelaTabKey(urlTab)) return;
+    setTab(urlTab);
+    setSelection(null);
   }, [urlTab]);
   // Palet derin bağlantısı (`?action=new-dispatch`) diyaloğu bir kez açar; parametre tüketilir.
   useEffect(() => {
