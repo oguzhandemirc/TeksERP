@@ -7,8 +7,8 @@ import { useExportRange } from "@/hooks/useExportRange";
 import { useExportConfirm } from "@/hooks/useExportConfirm";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { Order } from "../types";
-import { aggregateStockLines } from "./aggregate";
-import { loadFinishedStock, loadLiveMetersByWorkOrder } from "./sources";
+import { aggregateStockLines, type StockCellInput } from "./aggregate";
+import { loadAllFinishedStock, loadFinishedStock, loadLiveMetersByWorkOrder, type SourceResult } from "./sources";
 import { buildStockLineSheet, stockLineNotes } from "./sheet";
 import { describeOrderScope, type OrderListScope } from "./scope-summary";
 import type { StockLineOptions } from "./options";
@@ -38,14 +38,22 @@ export function useStockLineExportRun(props: { fetchAll: OrdersFetchAll; listSco
       // Kaynaklar sipariş çekimiyle paralel; ölçülemeyen kaynak null + not döner (hata fırlatmaz).
       const stockP = loadFinishedStock(hasPermission("report:inventory"));
       const liveP = loadLiveMetersByWorkOrder(hasPermission("roll:read"), props.productionEnabled);
+      // "Depoda (tümü)" yalnız seçiliyse çekilir (tüm depo topları imleçle iner).
+      const stockAllP: Promise<SourceResult<StockCellInput[]>> = options.columns.includes("inStockAll")
+        ? loadAllFinishedStock(hasPermission("roll:read"))
+        : Promise.resolve({ value: null, notes: [] });
       const orders = await props.fetchAll(
         (loaded, total) =>
           setProgress(`${loaded.toLocaleString("tr-TR")}${total ? ` / ~${total.toLocaleString("tr-TR")}` : ""} sipariş…`),
         (loaded) => toast.warning(truncatedExportNote(loaded), { duration: 12000 }),
         confirmTotal,
       );
-      const [stock, live] = await Promise.all([stockP, liveP]);
-      const result = aggregateStockLines(orders, options, { stock: stock.value, liveMetersByWorkOrder: live.value });
+      const [stock, stockAll, live] = await Promise.all([stockP, stockAllP, liveP]);
+      const result = aggregateStockLines(orders, options, {
+        stock: stock.value,
+        stockAll: stockAll.value,
+        liveMetersByWorkOrder: live.value,
+      });
       if (result.rows.length === 0) {
         toast.info(options.onlyOpen ? "Açığı olan stok kalemi yok." : "İndirilecek kalem yok.");
         return false;
@@ -56,7 +64,7 @@ export function useStockLineExportRun(props: { fetchAll: OrdersFetchAll; listSco
         result,
         options,
         scopeLines: describeOrderScope(props.listScope, orders),
-        notes: stockLineNotes(options, [...stock.notes, ...live.notes]),
+        notes: stockLineNotes(options, [...stock.notes, ...stockAll.notes, ...live.notes]),
       });
       await saveWorkbook(await buildWorkbook([sheet]), name);
       return true;

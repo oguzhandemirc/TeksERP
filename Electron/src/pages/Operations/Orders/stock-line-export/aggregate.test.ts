@@ -41,7 +41,7 @@ const order = (id: string, customer: string, lines: OrderLine[], p: Partial<Orde
     ...p,
   }) as Order;
 
-const NO_SRC: StockLineSources = { stock: [], liveMetersByWorkOrder: new Map() };
+const NO_SRC: StockLineSources = { stock: [], stockAll: [], liveMetersByWorkOrder: new Map() };
 const opts = (p: Partial<StockLineOptions> = {}): StockLineOptions => ({ ...DEFAULT_STOCK_LINE_OPTIONS, ...p });
 const wo = (id: string, status = "IN_PROGRESS") =>
   ({ workOrderId: id, workOrder: { id, workOrderNumber: id, status } }) as NonNullable<OrderLine["workOrderLinks"]>[number];
@@ -125,6 +125,7 @@ describe("aggregateStockLines — üretimde / depoda hazır / sıra", () => {
         { itemId: KREP.id, colorId: EKRU.id, width: 160, qty: 999 }, // başka en: eşleşmez
         { itemId: SATEN.id, colorId: EKRU.id, width: 150, qty: 80 },
       ],
+      stockAll: [],
       liveMetersByWorkOrder: new Map([["w1", 250], ["w2", 90]]),
     };
     const rows = aggregateStockLines(orders, opts(), src).rows;
@@ -138,13 +139,17 @@ describe("aggregateStockLines — üretimde / depoda hazır / sıra", () => {
       order("o2", "B", [line({ workOrderLinks: [wo("w1")] })]),
     ];
     const live = new Map([["w1", 120], ["wx", 500], ["ws", 500]]);
-    const r = aggregateStockLines(orders, opts(), { stock: [], liveMetersByWorkOrder: live });
+    const r = aggregateStockLines(orders, opts(), { stock: [], stockAll: [], liveMetersByWorkOrder: live });
     expect(r.rows[0]?.inProduction).toBe(120);
   });
 
   it("ölçülemeyen kaynak: hücre boş ve üretilmesi gereken hesaplanmaz", () => {
-    const r = aggregateStockLines([order("o1", "A", [line()])], opts(), { stock: null, liveMetersByWorkOrder: new Map() });
-    expect(r.rows[0]).toMatchObject({ inStock: null, inProduction: 0, toProduce: null });
+    const r = aggregateStockLines([order("o1", "A", [line()])], opts(), {
+      stock: null,
+      stockAll: null,
+      liveMetersByWorkOrder: new Map(),
+    });
+    expect(r.rows[0]).toMatchObject({ inStock: null, inStockAll: null, inProduction: 0, toProduce: null });
   });
 
   it("yalnız açığı olanlar süzgeci + açık çoktan aza sıra + en yakın termin yalnız açık kalemden", () => {
@@ -160,5 +165,41 @@ describe("aggregateStockLines — üretimde / depoda hazır / sıra", () => {
     const all = aggregateStockLines(orders, opts({ onlyOpen: false }), NO_SRC).rows;
     expect(all).toHaveLength(3);
     expect(all.find((x) => x.itemName === "İPEK KREP" && x.colorName === "EKRU")?.nearestDeadline).toBeNull();
+  });
+});
+
+describe("aggregateStockLines — depoda hazır (serbest) ↔ depoda (tümü)", () => {
+  // Serbest kaynak (kalem ucu) çuvaldaki/sevke ayrılmış topu zaten içermez; tümü kaynağı (top listesi) içerir.
+  const free = { itemId: KREP.id, colorId: EKRU.id, width: 150, qty: 120 };
+  const inSack = { itemId: KREP.id, colorId: EKRU.id, width: "150.000" as unknown as number, qty: 70 };
+  const onShipment = { itemId: KREP.id, colorId: EKRU.id, width: 150, qty: 30 };
+
+  it("çuvaldaki ve sevkiyata ayrılmış top yalnız tümüye girer; üretilmesi gereken serbestle hesaplanır", () => {
+    const r = aggregateStockLines([order("o1", "A", [line({ quantity: 1000 })])], opts(), {
+      stock: [free],
+      stockAll: [free, inSack, onShipment],
+      liveMetersByWorkOrder: new Map(),
+    });
+    expect(r.rows[0]).toMatchObject({ inStock: 120, inStockAll: 220, toProduce: 880 });
+    expect(r.totals[0]).toMatchObject({ inStock: 120, inStockAll: 220, toProduce: 880 });
+  });
+
+  it("tümü ölçülemediyse (seçilmedi / yetki yok) yalnız o hücre boş; serbest ve üretilecek etkilenmez", () => {
+    const r = aggregateStockLines([order("o1", "A", [line({ quantity: 500 })])], opts(), {
+      stock: [free],
+      stockAll: null,
+      liveMetersByWorkOrder: new Map(),
+    });
+    expect(r.rows[0]).toMatchObject({ inStock: 120, inStockAll: null, toProduce: 380 });
+    expect(r.totals[0]?.inStockAll).toBeNull();
+  });
+
+  it("kg kalemde iki depo hücresi de boş", () => {
+    const r = aggregateStockLines([order("o1", "A", [line({ unit: "KG" })])], opts(), {
+      stock: [free],
+      stockAll: [free, inSack],
+      liveMetersByWorkOrder: new Map(),
+    });
+    expect(r.rows[0]).toMatchObject({ inStock: null, inStockAll: null });
   });
 });
