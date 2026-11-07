@@ -21,6 +21,9 @@
 // NE ÖLÇER:
 //   §1 electron-yayinla.sh — hedef PAKETİN kimliğinden; niyet (--musteri) ≠ paket → ssh'tan ÖNCE dur;
 //      paketin İÇİ (asar package.json · ana süreç · arayüz) başka kanalınsa dur; --kuru ağa hiç çıkmaz
+//   §1p dosya izni + iki aşamalı yayın: sahte scp yerel kipi taşır, sahte kenar "others" okuma biti yoksa 403 verir —
+//      yerel 0600 paket sunucuda 0644 olur; dış 403 / sha512 uyuşmazlığı / mv arızasında latest.yml'e DOKUNULMAZ;
+//      sıra exe → chmod → doğrula → latest.yml.yukleniyor → mv → defter; defter idempotent (beş negatif sonda)
 //   §2 electron-paketle.sh — bilinmeyen kanal → hiçbir dosya yazılmadan dur; kimlik derleme ANINDA
 //      enjekte edilir: testfabrika paketi kendi kimliğiyle doğar, iki paketleme de dinlenmedeki
 //      dosyaları BAYT BAYT aynı bırakır; enjeksiyonun iki bacağından biri düşerse paket DURUR
@@ -106,7 +109,11 @@ if (arac === 'ssh') {
   const komut = k.join(' ');
   if (/^bash -s\b/.test(komut)) { stdinOku(); yaz({ host, komut, tur: 'budama' }); process.exit(0); }
   yaz({ host, komut });
-  const r = spawnSync('bash', ['-c', komut.replaceAll('/opt/stack', UZAK + '/opt/stack')], { encoding: 'utf8' });
+  // SAHTE_SSH_BOZUK: desene uyan uzak komut düşer (ör. mv) — temizlik yolu sondası.
+  if (process.env.SAHTE_SSH_BOZUK && new RegExp(process.env.SAHTE_SSH_BOZUK).test(komut)) { process.stderr.write('ssh: sahte arıza\n'); process.exit(1); }
+  // SAHTE_UZAK_KISITLI: sunucu "others" okuma bitini düşürüyor ve chmod tutmuyor (sahip/varsayılan ACL) — dış 403 kalır, ön doğrulama tek set olur.
+  const govde = (process.env.SAHTE_UZAK_KISITLI === '1' ? 'chmod() { :; }; ' : '') + komut.replaceAll('/opt/stack', UZAK + '/opt/stack');
+  const r = spawnSync('bash', ['-c', govde], { encoding: 'utf8' });
   process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? '');
   process.exit(r.status ?? 1);
 }
@@ -119,6 +126,8 @@ if (arac === 'scp') {
     const hedefDosya = uzak.endsWith('/') ? path.join(uzakYol(uzak), path.basename(kaynak)) : uzakYol(uzak);
     if (!fs.existsSync(path.dirname(hedefDosya))) { process.stderr.write('scp: hedef dizin yok: ' + uzak + '\n'); process.exit(1); }
     fs.cpSync(kaynak, hedefDosya, { recursive: true });
+    // scp yeni dosyaya KAYNAĞIN kipini taşır (0600 yerel → 0600 uzak; 1.3.8 · 1.3.13 · 1.3.15 403 olayı).
+    if (fs.statSync(hedefDosya).isFile()) fs.chmodSync(hedefDosya, process.env.SAHTE_UZAK_KISITLI === '1' ? 0o600 : fs.statSync(kaynak).mode & 0o777);
   }
   process.exit(0);
 }
@@ -134,11 +143,14 @@ if (arac === 'curl') {
   // Kopuk ağ taklidi (bağlantı reddi, curl çıkış 7): okunamayan kaynak = ÖLÇÜLEMEDİ sondası.
   if (process.env.SAHTE_CURL_KOPUK && tem.includes(process.env.SAHTE_CURL_KOPUK)) { process.stderr.write('curl: (7) Failed to connect\n'); process.exit(7); }
   const dosya = uzakYol('/opt/stack/apps/tekserp-guncelleme/html/' + tem.slice(HOST.length));
-  const var_ = fs.existsSync(dosya) && fs.statSync(dosya).isFile();
+  const bulundu = fs.existsSync(dosya) && fs.statSync(dosya).isFile();
+  // nginx (www-data) başkasının dosyasını yalnız "others" okuma biti varsa sunar; yoksa 403.
+  const yasak = bulundu && (fs.statSync(dosya).mode & 0o004) === 0;
+  const var_ = bulundu && !yasak;
   if (bicim) {
     // -w ile gövde de istenmişse (terfi kapısının okuması) önce gövde, sonra biçim — gerçek curl gibi.
     if (var_ && !bas && !a.includes('/dev/null')) process.stdout.write(fs.readFileSync(dosya));
-    process.stdout.write(bicim.replace('%{http_code}', var_ ? '200' : '404')
+    process.stdout.write(bicim.replace('%{http_code}', var_ ? '200' : yasak ? '403' : '404')
       .replace('%{size_download}', var_ && !bas ? String(fs.statSync(dosya).size) : '0'));
     process.exit(0);
   }
@@ -418,6 +430,9 @@ function iz(o) {
       if (/sha256sum/.test(c.komut)) return `ssh sha256-sorgu ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       if (/openssl dgst/.test(c.komut)) return `ssh sha512 ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       if (/YAYIN-DEFTERI/.test(c.komut)) return `ssh defter ${/>> '([^']+)'/.exec(c.komut)?.[1]}`;
+      if (/^chmod 0644 .* && mv -f /.test(c.komut)) return `ssh chmod+mv ${/mv -f '[^']+' '([^']+)'/.exec(c.komut)?.[1]}`;
+      if (/^chmod 0644 /.test(c.komut)) return `ssh chmod ${[...c.komut.matchAll(/'([^']+)'/g)].map((m) => m[1]).join(', ')}`;
+      if (/^unlink /.test(c.komut)) return `ssh unlink ${/'([^']+)'/.exec(c.komut)?.[1]}`;
       return `ssh ?? ${c.komut.slice(0, 60)}`;
     }
     if (c.arac === 'curl') return `curl${c.bas ? ' -I' : ''} ${c.url}`;
@@ -437,7 +452,7 @@ console.log('\n§1 — electron-yayinla.sh: hedef paketin kimliğinden, ssh\'tan
 const ESKI_KANALLI = ESKI ? gitGoster(ESKI, 'deploy/electron-yayinla.sh').includes('--musteri=') : false;
 
 function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artefakt = ADNANSAHIN_PANEL, dizin = 'adnansahin', surum = '9.9.9', ekArg = [],
-  terfi, mutasyon = null } = {}) {
+  terfi, mutasyon = null, hazirlik = null, ortamEk = {} } = {}) {
   const o = ortam();
   const agac = agacKur(o, { ref });
   // Bugünden sonra adnansahin'e yayın terfi şartı ister: varsayılan senaryo şartları KURAR (yeni betik, adnansahin);
@@ -453,9 +468,11 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   }
   const rel = ref && !ESKI_KANALLI ? path.join(agac, 'Electron/release', surum) : path.join(agac, 'Electron/release', dizin, surum);
   if (artefakt) panelArtefakti(rel, { ...artefakt, surum });
+  // Paket doğduktan, betik koşmadan önce senaryo müdahalesi (kip · bozuk sha512 · uzak ön durum).
+  if (hazirlik) hazirlik({ o, agac, rel });
   const args = [musteriArg, surum, ...ekArg].filter(Boolean);
-  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac });
-  return { o, r, agac };
+  const r = kos(o, path.join(agac, 'deploy/electron-yayinla.sh'), args, { cwd: agac, ortamEk });
+  return { o, r, agac, rel, args };
 }
 
 {
@@ -465,10 +482,11 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   const sirali = iz(o);
   const scpIz = sirali.filter((s) => s.startsWith('scp'));
   ol('1a adnansahin paketi --musteri=adnansahin → çıkış 0', r.kod === 0, r.cikti.slice(-600));
-  ol('1a yükleme yalnız …/html/adnansahin/electron/ — önce exe+blockmap, EN SON latest.yml',
+  ol('1a yükleme yalnız …/html/adnansahin/electron/ — önce exe+blockmap, EN SON latest.yml (geçici ada, mv ile yerine)',
     scpIz.length === 2 &&
       scpIz[0] === `scp [TeksERP-9.9.9-Setup.exe, TeksERP-9.9.9-Setup.exe.blockmap] → ${kok}/` &&
-      scpIz[1] === `scp [latest.yml] → ${kok}/`, scpIz.join('\n'));
+      scpIz[1] === `scp [latest.yml] → ${kok}/latest.yml.yukleniyor` &&
+      sirali.includes(`ssh chmod+mv ${kok}/latest.yml`), scpIz.join('\n'));
   // Kurulumun koyduğu kaynak kanal latest.yml'i (terfi şartı ③) yüklemenin etkisi değildir.
   const KAYNAK_YML = `${VDS}/html/testfabrika/electron/latest.yml`;
   const yuklenen = (agacU) => Object.keys(agacU).filter((k) => k !== KAYNAK_YML);
@@ -552,7 +570,7 @@ function yayinSenaryosu({ ref = null, musteriArg = '--musteri=adnansahin', artef
   const kok = `${VDS}/html/testfabrika/electron`;
   const hedefler = o.cagrilar().filter((c) => c.arac === 'scp').map((c) => c.hedef);
   ol('1h testfabrika paketi + --musteri=testfabrika → yalnız …/html/testfabrika/electron/ + testfabrika defteri',
-    r.kod === 0 && hedefler.length === 2 && hedefler.every((h) => h === `${kok}/`) &&
+    r.kod === 0 && hedefler.length === 2 && hedefler.every((h) => h === `${kok}/` || h === `${kok}/latest.yml.yukleniyor`) &&
       Object.keys(uzakAgaci(o)).includes(`${VDS}/defter/testfabrika-YAYIN-DEFTERI.tsv`) &&
       !Object.keys(uzakAgaci(o)).some((k) => k.includes('/adnansahin/')), `${r.cikti.slice(-400)}\n${hedefler.join('\n')}`);
 }
@@ -598,6 +616,122 @@ const agSifir = (o) => o.cagrilar().filter((c) => ['ssh', 'scp', 'curl'].include
 {
   const { o, r } = yayinSenaryosu({ artefakt: { ...ADNANSAHIN_PANEL, asarYok: true } });
   ol('1o paket arşivi (app.asar) yok → ÖLÇÜLEMEDİ, ssh/scp SIFIR', r.kod !== 0 && agText(o).length === 0 && /ÖLÇÜLEMEDİ/.test(r.cikti), r.cikti.slice(-300));
+}
+
+/* ------------------------------------------------------------------ *
+ * §1p dosya izni + İKİ AŞAMALI yayın (2026-11-07; 1.3.8 · 1.3.13 · 1.3.15'te 0600 paket → nginx 403,
+ *     latest.yml zaten yeni sürümü gösteriyordu; defter/etiket elle tamamlandı)
+ * ------------------------------------------------------------------ */
+
+console.log('\n§1p — dosya izni + iki aşamalı yayın: paket 0644 + dışarıdan 200/boyut/sha512 geçmeden latest.yml YÜKLENMEZ');
+{
+  const GERCEK_YAYINLA = fs.readFileSync(path.join(KOK, 'deploy/electron-yayinla.sh'), 'utf8');
+  const EXE = 'TeksERP-9.9.9-Setup.exe';
+  const kipi = (f) => (fs.existsSync(f) ? fs.statSync(f).mode & 0o777 : null);
+  const uzakYolu = (o, f) => path.join(o.uzak, VDS, 'html/adnansahin/electron', f);
+  const defterYolu = (o) => path.join(o.uzak, VDS, 'defter/adnansahin-YAYIN-DEFTERI.tsv');
+  const ESKI_YML = 'version: 9.9.8\npath: TeksERP-9.9.8-Setup.exe\n';
+  /** Yerel paket Mac'ten kopyalanmış gibi 0600; yayında ESKİ sürümün latest.yml'i duruyor (dokunulmamalı). */
+  const kisitla = ({ o, rel }) => {
+    for (const f of [EXE, `${EXE}.blockmap`, 'latest.yml']) fs.chmodSync(path.join(rel, f), 0o600);
+    fs.writeFileSync(uzakYolu(o, 'latest.yml'), ESKI_YML);
+  };
+  /** latest.yml'deki sha512 paketin özeti DEĞİL (bozuk derleme kalıntısı). */
+  const sha512Boz = (s) => {
+    kisitla(s);
+    const y = path.join(s.rel, 'latest.yml');
+    fs.writeFileSync(y, fs.readFileSync(y, 'utf8').replace(/sha512: \S+/g, `sha512: ${Buffer.alloc(64, 7).toString('base64')}`));
+  };
+  function izinSenaryosu(ek = {}) {
+    const s = yayinSenaryosu({ hazirlik: kisitla, ...ek });
+    const c = s.o.cagrilar();
+    return {
+      ...s,
+      latestScp: c.some((x) => x.arac === 'scp' && x.kaynaklar.includes('latest.yml')),
+      uzakLatest: fs.existsSync(uzakYolu(s.o, 'latest.yml')) ? fs.readFileSync(uzakYolu(s.o, 'latest.yml'), 'utf8') : null,
+      gecici: fs.existsSync(uzakYolu(s.o, 'latest.yml.yukleniyor')),
+      kipler: [EXE, `${EXE}.blockmap`, 'latest.yml'].map((f) => kipi(uzakYolu(s.o, f))),
+      defterSatir: fs.existsSync(defterYolu(s.o)) ? fs.readFileSync(defterYolu(s.o), 'utf8').trim().split('\n').filter(Boolean).length : 0,
+    };
+  }
+  /** "latest.yml'e dokunulmadı": çıkış ≠ 0 · latest.yml scp'si YOK · yayındaki ESKİ manifest aynen · geçici dosya yok · defter yok. */
+  const manifestDokunulmadi = (z) => z.r.kod !== 0 && !z.latestScp && z.uzakLatest === ESKI_YML && !z.gecici && z.defterSatir === 0;
+  const yayinTemiz = (z) => z.r.kod === 0 && z.kipler.every((k) => k === 0o644) && z.uzakLatest !== ESKI_YML && !z.gecici && z.defterSatir === 1;
+  /** Başarılı yolun sırası: exe+blockmap → sunucuda chmod → dışarıdan HEAD → sha512 → latest.yml.yukleniyor → chmod+mv → defter; nihai ada doğrudan scp YOK. */
+  function sira(o) {
+    const c = o.cagrilar();
+    const idx = (f) => c.findIndex(f);
+    const i = {
+      paket: idx((x) => x.arac === 'scp' && x.kaynaklar.includes(EXE)),
+      chmod: idx((x) => x.arac === 'ssh' && /^chmod 0644 '[^']*Setup\.exe' '[^']*\.blockmap'$/.test(x.komut)),
+      onDogrulama: idx((x) => x.arac === 'curl' && x.bas && x.url.endsWith(`/${EXE}`)),
+      sha512: idx((x) => x.arac === 'ssh' && /openssl dgst -sha512/.test(x.komut)),
+      gecici: idx((x) => x.arac === 'scp' && x.kaynaklar.join() === 'latest.yml' && x.hedef.endsWith('/latest.yml.yukleniyor')),
+      mv: idx((x) => x.arac === 'ssh' && /^chmod 0644 '[^']*latest\.yml\.yukleniyor' && mv -f /.test(x.komut)),
+      defter: idx((x) => x.arac === 'ssh' && /YAYIN-DEFTERI/.test(x.komut)),
+    };
+    const dizi = [i.paket, i.chmod, i.onDogrulama, i.sha512, i.gecici, i.mv, i.defter];
+    const dogrudan = c.some((x) => x.arac === 'scp' && x.kaynaklar.includes('latest.yml') && x.hedef.endsWith('/'));
+    return { dogru: dizi.every((v) => v >= 0) && dizi.every((v, k) => k === 0 || v > dizi[k - 1]) && !dogrudan, i, dogrudan };
+  }
+  const mutasyon = (ad, f) => { const m = f(GERCEK_YAYINLA); if (m === GERCEK_YAYINLA) throw new Error(`sonda uygulanmadı: ${ad}`); return (x) => f(x); };
+  const CHMOD_YEREL = 'chmod 0644 "$setup" "$blockmap" "$latest"';
+  const CHMOD_UZAK = `ssh "$SSH_HEDEF" "chmod 0644 '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' '$UZAK_DIZIN/TeksERP-$surum-Setup.exe.blockmap'"`;
+  const SCP_GECICI = 'scp "$latest" "$SSH_HEDEF:$gecici_yml"';
+  const MV_UZAK = `ssh "$SSH_HEDEF" "chmod 0644 '$gecici_yml' && mv -f '$gecici_yml' '$UZAK_DIZIN/latest.yml'"`;
+  const AWK_DEFTER = /awk -F'\\t' -v s='\$surum' -v h='\$defter_sha16' '[^']*' '\$defter_dosya'/;
+  const chmodsuz = mutasyon('chmod', (m) => m.replace(CHMOD_YEREL, 'true').replace(CHMOD_UZAK, 'true'));
+  const ondogrulamasiz = mutasyon('on_dogrula', (m) => m.replace(/^  on_dogrula "TeksERP-[^\n]*$/gm, '  :'));
+  const sha512siz = mutasyon('sha512', (m) => m.replace(/^  bek_sha512=\$\(grep [^\n]*$/m, '  bek_sha512=""'));
+  const dogrudanYukleyen = mutasyon('tek aşama', (m) => m.replace(SCP_GECICI, 'scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"').replace(MV_UZAK, 'true'));
+  const defterCiftleyen = mutasyon('defter idempotency', (m) => m.replace(AWK_DEFTER, 'false'));
+
+  // Pozitif yol
+  const z = izinSenaryosu();
+  ol('1p ⭐ yerel 0600 paket + blockmap + latest.yml → yayın çıkış 0; sunucuda üçü de 0644, eski manifest yenisiyle değişti, geçici dosya kalmadı, defter 1 satır',
+    yayinTemiz(z), `${z.kipler.map((k) => k?.toString(8)).join(',')} defter=${z.defterSatir}\n${z.r.cikti.slice(-700)}`);
+  const s = sira(z.o);
+  ol('1p ⭐ (c) sıra: exe+blockmap → sunucuda chmod → dışarıdan HEAD+boyut → sha512 → latest.yml.yukleniyor → chmod+mv → defter; nihai ada doğrudan scp YOK',
+    s.dogru, JSON.stringify(s));
+  ol('1p çıktı yeni sırayı anlatır (ön doğrulama "manifestten önce", "yayın AÇIK")', /manifestten önce/.test(z.r.cikti) && /latest\.yml yerine kondu — yayın AÇIK/.test(z.r.cikti), z.r.cikti.slice(-700));
+  // İdempotent defter: aynı yayın ikinci kez → paket yeniden yüklenmez, defter satırı ÇİFTLENMEZ.
+  const z2 = kos(z.o, path.join(z.agac, 'deploy/electron-yayinla.sh'), z.args, { cwd: z.agac });
+  const defter2 = fs.readFileSync(defterYolu(z.o), 'utf8').trim().split('\n').filter(Boolean);
+  ol('1p ⭐ aynı yayın ikinci kez: AYNI bayt → yükleme atlanır, defterde "zaten var", satır sayısı 1 kalır',
+    z2.kod === 0 && /AYNI baytlarla zaten var/.test(z2.cikti) && /yayın defterinde zaten var/.test(z2.cikti) && defter2.length === 1, `${defter2.length}\n${z2.cikti.slice(-500)}`);
+
+  // Negatif yollar: latest.yml'e DOKUNULMAZ
+  const a = izinSenaryosu({ ortamEk: { SAHTE_UZAK_KISITLI: '1' } });
+  ol('1p ⭐ (a) paket sunucuya 0600 indi, chmod tutmadı → dış HTTP 403 → DUR; latest.yml HİÇ yazılmadı (eski manifest aynen), geçici yok, defter yok, çıkış ≠ 0',
+    manifestDokunulmadi(a) && /HTTP 403/.test(a.r.cikti) && /latest\.yml YÜKLENMEDİ/.test(a.r.cikti), `${JSON.stringify({ kod: a.r.kod, latestScp: a.latestScp, gecici: a.gecici, defter: a.defterSatir })}\n${a.r.cikti.slice(-500)}`);
+  const b = izinSenaryosu({ hazirlik: sha512Boz });
+  ol('1p ⭐ (b) latest.yml sha512 ≠ sunucudaki exe → DUR; latest.yml yazılmadı, defter yok, çıkış ≠ 0',
+    manifestDokunulmadi(b) && /SAĞLAMA UYUŞMUYOR/.test(b.r.cikti), `${JSON.stringify({ kod: b.r.kod, latestScp: b.latestScp })}\n${b.r.cikti.slice(-500)}`);
+  const m = izinSenaryosu({ ortamEk: { SAHTE_SSH_BOZUK: 'mv -f' } });
+  ol('1p geçici → nihai mv düşerse: eski manifest aynen, geçici dosya unlink ile silindi, defter yok, çıkış ≠ 0',
+    m.r.kod !== 0 && m.uzakLatest === ESKI_YML && !m.gecici && m.defterSatir === 0 && m.o.cagrilar().some((x) => x.arac === 'ssh' && /^unlink '[^']*latest\.yml\.yukleniyor'/.test(x.komut)) && /DEĞİŞMEDİ/.test(m.r.cikti),
+    `${JSON.stringify({ kod: m.r.kod, gecici: m.gecici, uzak: m.uzakLatest })}\n${m.r.cikti.slice(-500)}`);
+  const d = yayinSenaryosu({ hazirlik: kisitla, ekArg: ['--dogrula'] });
+  ol('1p --dogrula yalnız raporlar: 403\'lü yayına defter/etiket yazmaz, ssh/scp SIFIR', d.r.kod !== 0 && agText(d.o).length === 0 && !fs.existsSync(defterYolu(d.o)), d.r.cikti.slice(-400));
+
+  // ⭐ SONDALAR: düzeltme sökülünce aynı yüklemler KIRMIZI olmalı (her biri tek sed).
+  const s1 = izinSenaryosu({ mutasyon: chmodsuz });
+  ol('1p sonda: chmod (yerel + uzak) söküldü → paket sunucuda 0600 kalır, "üçü 0644" yüklemi KIRMIZI; ön doğrulama 403\'te yine DURDURUR (ikinci set)',
+    !yayinTemiz(s1) && manifestDokunulmadi(s1) && /HTTP 403/.test(s1.r.cikti), `${s1.kipler.map((k) => k?.toString(8)).join(',')}\n${s1.r.cikti.slice(-300)}`);
+  const s2 = izinSenaryosu({ mutasyon: ondogrulamasiz, ortamEk: { SAHTE_UZAK_KISITLI: '1' } });
+  ol('1p sonda: ön doğrulama söküldü → 403 pakete rağmen latest.yml yüklenir, (a) yüklemi KIRMIZI', !manifestDokunulmadi(s2) && s2.latestScp, s2.r.cikti.slice(-300));
+  const s3 = izinSenaryosu({ mutasyon: sha512siz, hazirlik: sha512Boz });
+  ol('1p sonda: sha512 denetimi söküldü → bozuk manifest yüklenir, (b) yüklemi KIRMIZI', !manifestDokunulmadi(s3) && s3.latestScp, s3.r.cikti.slice(-300));
+  const s4 = izinSenaryosu({ mutasyon: dogrudanYukleyen });
+  ol('1p sonda: latest.yml nihai ada doğrudan scp (geçici ad + mv yok) → (c) sıra yüklemi KIRMIZI', s4.r.kod === 0 && !sira(s4.o).dogru && sira(s4.o).dogrudan, JSON.stringify(sira(s4.o)));
+  const s5 = izinSenaryosu({ mutasyon: defterCiftleyen });
+  const s5b = kos(s5.o, path.join(s5.agac, 'deploy/electron-yayinla.sh'), s5.args, { cwd: s5.agac });
+  const defter5 = fs.readFileSync(defterYolu(s5.o), 'utf8').trim().split('\n').filter(Boolean);
+  ol('1p sonda: defter "zaten var" denetimi söküldü → ikinci koşum satırı çiftler, idempotency yüklemi KIRMIZI', s5b.kod === 0 && defter5.length === 2 && !/yayın defterinde zaten var/.test(s5b.cikti), `${defter5.length}\n${s5b.cikti.slice(-300)}`);
+  // --kuru planı yeni sırayı yazar.
+  const k = yayinSenaryosu({ ekArg: ['--kuru'], terfi: { kaynakSurum: null } });
+  ol('1p --kuru planı yeni sırayı yazar (chmod 0644 → ön doğrulama → latest.yml.yukleniyor → atomik mv → defter), ağ SIFIR',
+    k.r.kod === 0 && agSifir(k.o) && /yerelde chmod 0644/.test(k.r.cikti) && /latest\.yml\.yukleniyor \(0644\) → atomik mv/.test(k.r.cikti) && /manifestten ÖNCE/.test(k.r.cikti), k.r.cikti.slice(-600));
 }
 
 /* ------------------------------------------------------------------ *

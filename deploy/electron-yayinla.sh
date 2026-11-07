@@ -19,6 +19,12 @@
 # Ters sırada, henüz yüklenmemiş bir .exe'yi işaret eden bir latest.yml yayında
 # kalır ve o aralıkta kontrol yapan paneller "sürüm dosyası bulunamadı" der.
 #
+# ⚠️ İKİ AŞAMALI YAYIN (2026-11-07; 1.3.8 · 1.3.13 · 1.3.15'te üç kez 403): scp dosyayı Mac'teki
+# kipiyle (0600) taşır, nginx okuyamaz. Paket + blockmap yüklenir → yerelde ve sunucuda 0644 →
+# dışarıdan HTTP 200 + boyut + sha512 → ANCAK O ZAMAN latest.yml geçici ada gider, 0644 + atomik
+# `mv`. Ön doğrulama düşerse latest.yml'e DOKUNULMAZ (paneller eski sürümde kalır), çıkış ≠ 0.
+# Defter · budama · etiket yayın canlıya çıktığı (mv) anda koşar; defter satırı idempotenttir.
+#
 # ⚠️ HEDEF PAKETİN KİMLİĞİNDEN ÇÖZÜLÜR: `--musteri` NİYETTİR, paketin gömülü
 # kimliği (app-update.yml adresi · updater önbelleği · exe adı) OTORİTEDİR; ikisi
 # aynı kanalı göstermezse ssh'tan ÖNCE durulur. Çalışma ağacındaki musteri.json
@@ -149,10 +155,10 @@ if [ "$denetim_kipi" = "0" ]; then
   # --- KURU KİP: yerel kapıların hepsi geçti; hiçbir ağ/ssh/scp/curl/etiket işi yok ---
   if [ "$kuru" = "1" ]; then
     echo "[kuru] hedef      : $SSH_HEDEF:$UZAK_DIZIN/"
-    echo "[kuru] sıra       : 1) TeksERP-$surum-Setup.exe + .blockmap  2) latest.yml (EN SON)"
+    echo "[kuru] sıra       : 1) yerelde chmod 0644 → TeksERP-$surum-Setup.exe + .blockmap  2) sunucuda chmod 0644 → dışarıdan HTTP 200 + boyut + sha512 (manifestten ÖNCE)  3) latest.yml → latest.yml.yukleniyor (0644) → atomik mv (EN SON)  4) son dış doğrulama → defter · budama · etiket"
     echo "[kuru] yayın adresi: $YAYIN_URL/latest.yml"
-    echo "[kuru] defter     : $(dirname "$YAYIN_KOK")/defter/$musteri-YAYIN-DEFTERI.tsv"
-    echo "[kuru] değişmezlik · sha512 · dış doğrulama · budama · panel-v$surum etiketi ATLANDI (ağ gerektirir)"
+    echo "[kuru] defter     : $(dirname "$YAYIN_KOK")/defter/$musteri-YAYIN-DEFTERI.tsv (sürüm + özet satırı varsa yeniden yazılmaz)"
+    echo "[kuru] değişmezlik · izin · ön doğrulama · sha512 · dış doğrulama · budama · panel-v$surum etiketi ATLANDI (ağ gerektirir)"
     [ "$terfi_atla_verildi" = "1" ] && echo "[kuru] terfi atlama kaydı (yayın defteri + etiket mesajı) ATLANDI (yayın yok)"
     echo "KURU — paket '$musteri' kanalının; yükleme yapılmadı."
     exit 0
@@ -180,35 +186,70 @@ if [ "$denetim_kipi" = "0" ]; then
     fi
   fi
 
+  # --- AŞAMA 1: paket + blockmap -------------------------------------------
+  # scp kaynağın kipini taşır: başka makineden kopyalanmış/0600 paket sunucuda
+  # 0600 olur, nginx (www-data) okuyamaz → 403. Kip YEREL + SUNUCU, ikisinde de.
+  chmod 0644 "$setup" "$blockmap" "$latest" \
+    || hata "Yerel paket dosyalarının kipi 0644 yapılamadı — yükleme yapılmadı."
   if [ "${atla_yukleme:-0}" != "1" ]; then
-  echo "1/2  paket + blockmap..."
+  echo "1/3  paket + blockmap..."
   scp "$setup" "$blockmap" "$SSH_HEDEF:$UZAK_DIZIN/"
-
-  echo "2/2  latest.yml (en son — sıra önemli)..."
-  scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
   fi
+  # Atlanan yüklemede de: eski bir yüklemeden kalmış 0600 dosya aynı 403'ü verir.
+  echo "2/3  sunucuda kip 0644 + dışarıdan ön doğrulama (manifestten ÖNCE)..."
+  ssh "$SSH_HEDEF" "chmod 0644 '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' '$UZAK_DIZIN/TeksERP-$surum-Setup.exe.blockmap'" \
+    || hata "Paket dosyalarının kipi sunucuda 0644 yapılamadı — latest.yml YÜKLENMEDİ (paneller eski sürümde kalır)."
 
-  # --- SAĞLAMA DOĞRULAMASI (boyut YETMEZ) --------------------------------
-  # Boyut kıyası yarım yüklemeyi yakalar ama BOZUK yüklemeyi yakalamaz: aynı
-  # uzunlukta bozulmuş bayt dizisi de doğru boyutu verir. `latest.yml`in
-  # taşıdığı sha512 zaten electron-updater'ın kuracağı beklentidir — sunucuya
-  # İNEN dosyadan yeniden hesaplayıp karşılaştırmak, panel indirmeden önce
-  # aynı soruyu sormak demektir. Hesap SUNUCUDA yapılır (141 MB'ı geri
-  # indirmeden).
+  # --- AŞAMA 2: ön doğrulama — latest.yml'den ÖNCE -----------------------
+  # Panelin göreceği yoldan (HTTP, önbelleği atlayan adres): 200 + boyut. Dışarıdan
+  # okunamayan pakete yönlendiren manifest, panelleri "indirilemiyor"da bırakır.
+  on_dogrula() {
+    local ad="$1" yerel="$2" url kod uzak
+    url="$YAYIN_URL/$ad"
+    kod=$(curl -s -o /dev/null -w "%{http_code}" -I "$url?on-dogrulama=$$") || kod="000"
+    if [ "$kod" != "200" ]; then
+      hata "$ad dışarıdan HTTP $kod veriyor — latest.yml YÜKLENMEDİ (paneller indirilemeyen pakete yönlenmez).
+  Sunucuda kipi ve sahibi incele: ls -l $UZAK_DIZIN/$ad"
+    fi
+    uzak=$(curl -s -o /dev/null -w "%{size_download}" "$url?onbellek-atla=$$") || uzak="?"
+    [ "$uzak" = "$yerel" ] \
+      || hata "$ad boyutu uyuşmuyor (yerel: $yerel, yayında: $uzak) — latest.yml YÜKLENMEDİ. Yükleme yarım kalmış olabilir."
+    echo "  ✓ $ad dışarıdan 200 + boyut $yerel (manifestten önce)"
+  }
+  on_dogrula "TeksERP-$surum-Setup.exe.blockmap" "$(wc -c < "$blockmap" | tr -d ' ')"
+  on_dogrula "TeksERP-$surum-Setup.exe" "$(wc -c < "$setup" | tr -d ' ')"
+
+  # --- SAĞLAMA DOĞRULAMASI (boyut YETMEZ) — latest.yml'den ÖNCE ---------
+  # Boyut yarım yüklemeyi yakalar, BOZUK yüklemeyi yakalamaz. `latest.yml`in
+  # taşıdığı sha512 electron-updater'ın kuracağı beklentidir; sunucuya İNEN
+  # dosyadan yeniden hesaplanır (SUNUCUDA — 141 MB geri indirilmeden).
   bek_sha512=$(grep -m1 -A2 "url: TeksERP-$surum-Setup.exe" "$latest" | grep -m1 "sha512:" | awk '{print $2}')
   if [ -n "$bek_sha512" ]; then
     gercek_sha512=$(ssh "$SSH_HEDEF" \
-      "openssl dgst -sha512 -binary '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' | openssl base64 -A")
+      "openssl dgst -sha512 -binary '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' | openssl base64 -A") \
+      || hata "Sunucuda sha512 hesaplanamadı — latest.yml YÜKLENMEDİ."
     if [ "$bek_sha512" != "$gercek_sha512" ]; then
-      hata "SAĞLAMA UYUŞMUYOR — sunucudaki paket latest.yml'in söylediği dosya DEĞİL.
+      hata "SAĞLAMA UYUŞMUYOR — sunucudaki paket latest.yml'in söylediği dosya DEĞİL; latest.yml YÜKLENMEDİ.
   beklenen: $bek_sha512
   sunucuda: $gercek_sha512
-  Panel bu paketi reddeder. Yeniden yükle."
+  Panel bu paketi reddederdi. Yeniden yükle."
     fi
     echo "  ✓ sha512 doğrulandı (latest.yml ↔ sunucudaki paket)"
   else
     echo "  ⚠️ latest.yml'de sha512 bulunamadı — sağlama doğrulaması ATLANDI."
   fi
+
+  # --- AŞAMA 3: latest.yml — geçici ad, 0644, atomik mv (yayını AÇAN adım) ---
+  # Nihai ada doğrudan scp iki pencere açar: yarım yazılmış manifest ve 0600 manifest.
+  # Geçici ada yükle → kip → `mv` (aynı dizin, tek rename): paneller ya eskiyi ya yeniyi görür.
+  gecici_yml="$UZAK_DIZIN/latest.yml.yukleniyor"
+  gecici_sil() { ssh "$SSH_HEDEF" "unlink '$gecici_yml' 2>/dev/null || true" 2>/dev/null || true; }
+  echo "3/3  latest.yml (EN SON — geçici ad → 0644 → atomik mv)..."
+  scp "$latest" "$SSH_HEDEF:$gecici_yml" \
+    || { gecici_sil; hata "latest.yml geçici ada yüklenemedi — yayındaki latest.yml DEĞİŞMEDİ."; }
+  ssh "$SSH_HEDEF" "chmod 0644 '$gecici_yml' && mv -f '$gecici_yml' '$UZAK_DIZIN/latest.yml'" \
+    || { gecici_sil; hata "latest.yml kipi/yerine koyma düştü — yayındaki latest.yml DEĞİŞMEDİ, geçici dosya silindi."; }
+  echo "  ✓ latest.yml yerine kondu — yayın AÇIK: $surum"
 fi
 
 echo "Doğrulanıyor..."
@@ -244,21 +285,38 @@ dogrula() {
   fi
 }
 
-yayindaki=$(curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" | grep "^version:" | awk '{print $2}')
-[ "$yayindaki" = "$surum" ] || hata "Yayındaki sürüm '$yayindaki', beklenen '$surum'."
+son_dogrulama() {
+  local yayindaki
+  yayindaki=$(curl -fsS "$YAYIN_URL/latest.yml?onbellek-atla=$$" | grep "^version:" | awk '{print $2}')
+  [ "$yayindaki" = "$surum" ] || hata "Yayındaki sürüm '$yayindaki', beklenen '$surum'."
+  dogrula "latest.yml" ""
+  if [ "$denetim_kipi" = "1" ]; then
+    # Yerel paket yoksa boyut kıyası yapılamaz; yalnız erişilebilirlik denetlenir.
+    dogrula "TeksERP-$surum-Setup.exe.blockmap" ""
+    dogrula "TeksERP-$surum-Setup.exe" ""
+  else
+    dogrula "TeksERP-$surum-Setup.exe.blockmap" "$(wc -c < "$blockmap" | tr -d ' ')"
+    dogrula "TeksERP-$surum-Setup.exe" "$(wc -c < "$setup" | tr -d ' ')"
+  fi
+}
 
-dogrula "latest.yml" ""
 if [ "$denetim_kipi" = "1" ]; then
-  # Yerel paket yoksa boyut kıyası yapılamaz; yalnız erişilebilirlik denetlenir.
-  dogrula "TeksERP-$surum-Setup.exe.blockmap" ""
-  dogrula "TeksERP-$surum-Setup.exe" ""
-else
-  dogrula "TeksERP-$surum-Setup.exe.blockmap" "$(wc -c < "$blockmap" | tr -d ' ')"
-  dogrula "TeksERP-$surum-Setup.exe" "$(wc -c < "$setup" | tr -d ' ')"
+  # --dogrula yalnız RAPORLAR: eksik defter/etiket kaydını tamamlamaz.
+  son_dogrulama
+  echo "OK — yayında: $surum"
+  exit 0
 fi
 
-echo "OK — yayında: $surum"
-[ "$denetim_kipi" = "1" ] && exit 0
+# Yayın `mv` anında CANLI oldu; son dış doğrulama düşse de (önbellek vb.) defter · budama · etiket
+# yazılır — aksi hâlde kayıt gerçeği yansıtmaz ve elle tamamlanır (1.3.15'te yaşandı). Çıkış yine ≠ 0.
+son_kod=0
+( son_dogrulama ) || son_kod=$?
+if [ "$son_kod" = "0" ]; then
+  echo "OK — yayında: $surum"
+else
+  echo "⚠️ latest.yml yerine kondu (yayın CANLI) ama son dış doğrulama düştü — defter/budama/etiket yine yazılıyor.
+  Sonra: ./deploy/electron-yayinla.sh --musteri=$musteri --dogrula $surum" >&2
+fi
 
 # --- YAYIN DEFTERİ ---------------------------------------------------------
 # "Bu sürümü kim, ne zaman, hangi makineden, hangi sağlamayla yayınladı."
@@ -279,12 +337,21 @@ if [ "$terfi_atla_verildi" = "1" ]; then
   terfi_atla_kacisli=$(printf '%s' "$terfi_atla" | tr '\t\r\n' '   ' | sed "s/'/'\\\\''/g")
   defter_ek=" 'terfi-atlandi: $terfi_atla_kacisli'"
 fi
-ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && printf '$defter_bicim' \
+# İDEMPOTENT: aynı sürüm + aynı özet (2. ve 4. kolon) zaten varsa satır yinelenmez — yarıda kalan
+# yayının yeniden koşumu defteri çiftlemez ("ne oldu" bir kez yazılır).
+defter_dosya="$DEFTER_DIZIN/$musteri-YAYIN-DEFTERI.tsv"
+defter_sha16=$(shasum -a 256 "$setup" | cut -c1-16)
+defter_sonuc=$(ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && \
+  if [ -f '$defter_dosya' ] && awk -F'\t' -v s='$surum' -v h='$defter_sha16' '\$2==s && \$4==h {b=1} END {exit !b}' '$defter_dosya'; then echo zaten-var; \
+  else printf '$defter_bicim' \
   '$(date -Iseconds)' '$surum' '$(whoami)@$(hostname -s)' \
-  '$(shasum -a 256 "$setup" | cut -c1-16)' '$(wc -c < "$setup" | tr -d " ")'$defter_ek \
-  >> '$DEFTER_DIZIN/$musteri-YAYIN-DEFTERI.tsv'" 2>/dev/null \
-  && echo "  ✓ yayın defterine yazıldı" \
-  || echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)"
+  '$defter_sha16' '$(wc -c < "$setup" | tr -d " ")'$defter_ek \
+  >> '$defter_dosya' && echo yazildi; fi" 2>/dev/null) || defter_sonuc="hata"
+case "$defter_sonuc" in
+  yazildi)   echo "  ✓ yayın defterine yazıldı" ;;
+  zaten-var) echo "  · yayın defterinde zaten var ($surum · $defter_sha16) — yeniden yazılmadı" ;;
+  *)         echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)" ;;
+esac
 
 # --- ESKİ SÜRÜMLERİ BUDA ---------------------------------------------------
 # Son 5 sürüm durur. Bugün sınırsız birikiyordu: her paket ~141 MB, yılda
@@ -332,3 +399,5 @@ fi
 
 echo "Bu kanaldaki paneller en geç 15 dk içinde görür (açılışta 30 sn)."
 echo "Hemen denemek için: Genel Ayarlar > Bu Bilgisayar > Güncelleme > Şimdi kontrol et"
+# Kayıtlar yazıldı; son dış doğrulama düştüyse yayın yine de "temiz" sayılmaz.
+[ "$son_kod" = "0" ] || hata "Son dış doğrulama düştü (yukarıdaki satırlar) — yayın canlı, kayıtlar yazıldı; önbelleği temizleyip --dogrula ile yeniden denetle."
