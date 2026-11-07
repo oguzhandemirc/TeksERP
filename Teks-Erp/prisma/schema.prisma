@@ -80,7 +80,8 @@ enum ItemType {
   YARN
   FABRIC
   CONSUMABLE
-  /// Müşteriye kesilen hizmet kalemi (kurşun kademesi, brode, tambur — H6); top/stok doğurmaz.
+  /// KULLANILMAZ (2026-11-07 hizmet kartı ayrımı): hizmetler `ServiceItem`'da; `items`ta CHECK
+  /// `items_no_service_ck` reddeder. Değer eski panel süzgeci 400 almasın diye KALIR (plan §5 kalkma koşulu).
   SERVICE
 }
 
@@ -614,6 +615,10 @@ model User {
   createdItems             Item[]                      @relation("ItemCreatedBy")
   updatedItems             Item[]                      @relation("ItemUpdatedBy")
   lifecycleChangedItems    Item[]                      @relation("ItemLifecycleChangedBy")
+  createdServiceItems          ServiceItem[]           @relation("ServiceItemCreatedBy")
+  updatedServiceItems          ServiceItem[]           @relation("ServiceItemUpdatedBy")
+  lifecycleChangedServiceItems ServiceItem[]           @relation("ServiceItemLifecycleChangedBy")
+  mergedServiceItems           ServiceItem[]           @relation("ServiceItemMergedBy")
   createdMachines          Machine[]                   @relation("MachineCreatedBy")
   updatedMachines          Machine[]                   @relation("MachineUpdatedBy")
   createdMachineSpecs      MachineSpec[]               @relation("MachineSpecCreatedBy")
@@ -3652,16 +3657,10 @@ model Item {
   standardCostLinesAsYarn        StandardCostLine[]          @relation("StandardCostLineYarn")
   salesQuoteLines                SalesQuoteLine[]            @relation("SalesQuoteLineItem")
   priceListLines                 PriceListLine[]             @relation("PriceListLineItem")
-  serviceForProperties           FabricProperty[]            @relation("FabricPropertyServiceItem")
-  serviceForPropertyValues       FabricPropertyValue[]       @relation("FabricPropertyValueServiceItem")
-  /// D4-G1a: hizmet kaleminin sarf normları (SERVICE) / sarf kalemi olarak geçtiği normlar (CONSUMABLE).
-  consumableNormsAsService       ServiceConsumableNorm[]     @relation("ServiceConsumableNormService")
+  /// D4-G1a: sarf kalemi (CONSUMABLE) olarak geçtiği hizmet normları; hizmet tarafı `ServiceItem`.
   consumableNormsAsConsumable    ServiceConsumableNorm[]     @relation("ServiceConsumableNormConsumable")
   consumableMovements            ConsumableMovement[]
   consumableForPropertyValues    FabricPropertyValue[]       @relation("FabricPropertyValueConsumableItem")
-  serviceBillingLinks            ServiceBillingLink[]        @relation("ServiceBillingLinkItem")
-  /// D4-H3: hizmet kalemine bağlanan kasa masrafı payları.
-  expenseAllocations             ExpenseAllocation[]
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -3753,6 +3752,59 @@ model Item {
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")
   @@map("items")
+}
+
+/// HİZMET KARTI (2026-11-07, migration `service_items_split`) — müşteriye kesilen / fasona verilen
+/// hizmet (kurşun kademesi, brode, tambur). `Item` = yalnız ürün; hizmet top/kg/sarf defteri doğurmaz.
+/// Taşınan kartlar `items`taki ESKİ id ve ESKİ `STK-` koduyla yaşar (K2); yeni kod `serviceItem` serisi (HZM).
+/// Stok/kumaş/KDV kolonu YOK (K3). Yaşam döngüsü `Item` deseninin aynısı (CHECK `service_items_lifecycle_isactive_ck`).
+model ServiceItem {
+  id       String   @id @default(uuid()) @db.Uuid
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  unit     ItemUnit @default(MT)
+  isActive Boolean  @default(true)
+
+  lifecycleStatus      ItemLifecycleStatus @default(ACTIVE)
+  lifecycleChangedAt   DateTime?           @db.Timestamptz
+  lifecycleChangedById String?             @db.Uuid
+  lifecycleChangedBy   User?               @relation("ServiceItemLifecycleChangedBy", fields: [lifecycleChangedById], references: [id])
+  lifecycleReason      String?             @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — `GENERATED ALWAYS AS (public.tr_fold("name")) STORED`; uygulama YAZMAZ (Item.nameFold emsali).
+  nameFold  String?  @default(dbgenerated())
+
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ServiceItemCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ServiceItemUpdatedBy", fields: [updatedById], references: [id])
+
+  /// Taşınan birleşme SOYU (K4: yeni birleştirme bu işte yok) — `items`ta hizmet↔hizmet birleşmiş
+  /// mezar taşları tarihçesiyle gelir; `nameFold` canlı tekilliğinin predicate'idir.
+  mergedIntoId   String?       @db.Uuid
+  mergedAt       DateTime?     @db.Timestamptz
+  mergedById     String?       @db.Uuid
+  mergedInto     ServiceItem?  @relation("ServiceItemMergeLineage", fields: [mergedIntoId], references: [id])
+  mergedChildren ServiceItem[] @relation("ServiceItemMergeLineage")
+  mergedBy       User?         @relation("ServiceItemMergedBy", fields: [mergedById], references: [id])
+
+  serviceForProperties     FabricProperty[]        @relation("FabricPropertyServiceItem")
+  serviceForPropertyValues FabricPropertyValue[]   @relation("FabricPropertyValueServiceItem")
+  consumableNormsAsService ServiceConsumableNorm[] @relation("ServiceConsumableNormService")
+  serviceBillingLinks      ServiceBillingLink[]    @relation("ServiceBillingLinkItem")
+  expenseAllocations       ExpenseAllocation[]
+  prices                   ItemPrice[]
+  invoiceLines             InvoiceLine[]
+
+  // Canlı ad tekilliği PARTIAL (WHERE "mergedIntoId" IS NULL) — Item emsali, @@unique zorunlu (drift).
+  @@unique([nameFold])
+  @@index([nameFold])
+  @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "service_items_nameFold_trgm_idx", type: Gin)
+  @@index([mergedIntoId])
+  @@index([updatedAt, id], map: "service_items_updatedAt_esitleme_idx")
+  @@map("service_items")
 }
 
 model Roll {
@@ -9364,7 +9416,7 @@ model FabricProperty {
   values                FabricPropertyValue[]
   /// İşlem (FLAG) → müşteriye kesilen hizmet kalemi (H6); değer eşlemesi önce gelir.
   serviceItemId         String?                        @db.Uuid
-  serviceItem           Item?                          @relation("FabricPropertyServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  serviceItem           ServiceItem?                   @relation("FabricPropertyServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -9466,7 +9518,7 @@ model FabricPropertyValue {
   itemPrices              ItemPrice[]
   /// Gramaj kademesi → hizmet kalemi (H6, "KURŞUN-K2"); yoksa özelliğin eşlemesi.
   serviceItemId           String?                  @db.Uuid
-  serviceItem             Item?                    @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  serviceItem             ServiceItem?             @relation("FabricPropertyValueServiceItem", fields: [serviceItemId], references: [id], onDelete: Restrict)
   /// Sarf stoğu (kuşak): bu değer üretimde uygulanınca top başına 1 birim düşülen sarf kalemi (CONSUMABLE); yoksa düşüm yok.
   consumableItemId        String?                  @db.Uuid
   consumableItem          Item?                    @relation("FabricPropertyValueConsumableItem", fields: [consumableItemId], references: [id], onDelete: Restrict)
@@ -11287,13 +11339,24 @@ model InvoiceToGoodsReceipt {
 /// ⚠️ Serbest satır bilinçli: firma iplik de satabiliyor ve iplik stok modelinde
 /// YOK. Zorunlu `itemId`, olmayan bir ürünü uydurmaya zorlardı. Açıklama her
 /// satırda vardır ve belgeye o basılır.
+/// Fatura satırının KONUSU (Logo LINETYPE emsali): ürün · hizmet · yalnız açıklama.
+/// `lineType` ↔ FK tutarlılığı CHECK `invoice_lines_line_type_ck` (MV-02: iki AYRI varlık sınıfı, XOR değil).
+enum InvoiceLineType {
+  PRODUCT
+  SERVICE
+  TEXT
+}
+
 model InvoiceLine {
   id        String @id @default(uuid()) @db.Uuid
   invoiceId String @db.Uuid
   lineNo    Int
 
-  itemId      String? @db.Uuid
-  description String  @db.VarChar(300)
+  /// Varsayılansız: satır tipi beyanla doğar (PRODUCT⇔itemId · SERVICE⇔serviceItemId · TEXT⇔ikisi boş).
+  lineType      InvoiceLineType
+  itemId        String?         @db.Uuid
+  serviceItemId String?         @db.Uuid
+  description   String          @db.VarChar(300)
 
   qty       Decimal @db.Decimal(14, 3)
   unit      String  @default("m") @db.VarChar(16)
@@ -11310,13 +11373,15 @@ model InvoiceLine {
   lineTotal Decimal @db.Decimal(14, 2)
   vatAmount Decimal @db.Decimal(14, 2)
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  item    Item?   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item        Item?        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  serviceItem ServiceItem? @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([invoiceId, lineNo])
   @@index([itemId])
+  @@index([serviceItemId])
   @@map("invoice_lines")
 }
 
@@ -12453,7 +12518,10 @@ enum PriceKind {
 /// ZORUNDA: Prisma 7 predicate farkını drift saymaz, index↔unique farkını SAYAR.
 model ItemPrice {
   id              String          @id @default(uuid()) @db.Uuid
-  itemId          String          @db.Uuid
+  /// Fiyatın KONUSU: ürün (`itemId`) ya da hizmet (`serviceItemId`) — TAM BİRİ dolu
+  /// (CHECK `item_prices_subject_ck`); kademe (`propertyValueId`) yalnız hizmette (`item_prices_tier_service_ck`).
+  itemId          String?         @db.Uuid
+  serviceItemId   String?         @db.Uuid
   customerId      String?         @db.Uuid
   kind            PriceKind
   currency        Currency
@@ -12470,7 +12538,8 @@ model ItemPrice {
   /// İdempotency — hizmet fiyat tablosu yazım ucu (`clientToken @unique` sözleşmesi); eski uçlar NULL yazar.
   clientToken     String?         @unique @db.Uuid
 
-  item          Item                 @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item          Item?                @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  serviceItem   ServiceItem?         @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
   customer      Customer?            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   propertyValue FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
@@ -12485,12 +12554,13 @@ model ItemPrice {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Tekillik ŞEMA-DIŞI (ifade + partial; Prisma ifade indeksini görmez, envanter `test_db_invariants`):
-  //   item_price_default_uq  (itemId, COALESCE(propertyValueId), kind, currency) WHERE customerId IS NULL AND revokedAt IS NULL
-  //   item_price_customer_uq (itemId, customerId, COALESCE(propertyValueId), kind, currency) WHERE customerId IS NOT NULL AND revokedAt IS NULL
+  //   item_price_default_uq  (COALESCE(itemId, serviceItemId), COALESCE(propertyValueId), kind, currency) WHERE customerId IS NULL AND revokedAt IS NULL
+  //   item_price_customer_uq (COALESCE(itemId, serviceItemId), customerId, COALESCE(propertyValueId), kind, currency) WHERE customerId IS NOT NULL AND revokedAt IS NULL
   @@index([customerId])
   @@index([propertyValueId])
   // "Fiyat şu tarih itibarıyla" okuması (`itemPriceValidAt`): anahtar + pencere başı.
   @@index([itemId, propertyValueId, kind, currency, createdAt], map: "item_prices_asof_idx")
+  @@index([serviceItemId, propertyValueId, kind, currency, createdAt], map: "item_prices_service_asof_idx")
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "item_prices_updatedAt_esitleme_idx")
   @@map("item_prices")
@@ -14037,7 +14107,7 @@ model ServiceConsumableNorm {
   revokedById      String?   @db.Uuid
   revokeReason     String?   @db.VarChar(300)
 
-  serviceItem    Item @relation("ServiceConsumableNormService", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  serviceItem    ServiceItem @relation("ServiceConsumableNormService", fields: [serviceItemId], references: [id], onDelete: Restrict)
   consumableItem Item @relation("ServiceConsumableNormConsumable", fields: [consumableItemId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -14070,7 +14140,7 @@ model ExpenseAllocation {
   cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Restrict)
   machine         Machine?        @relation(fields: [machineId], references: [id], onDelete: Restrict)
   workOrder       WorkOrder?      @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
-  serviceItem     Item?           @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+  serviceItem     ServiceItem?    @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -14848,7 +14918,7 @@ model ServiceBillingLink {
   invoice     Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   roll        Roll              @relation(fields: [rollId], references: [id])
   step        WorkOrderStep?    @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
-  serviceItem Item              @relation("ServiceBillingLinkItem", fields: [serviceItemId], references: [id])
+  serviceItem ServiceItem       @relation("ServiceBillingLinkItem", fields: [serviceItemId], references: [id])
   reading     RollMeterReading? @relation(fields: [readingId], references: [id], onDelete: Restrict)
 
   // Kısmi unique migration SQL'inde: (rollId, serviceItemId, workOrderStepId) NULLS NOT DISTINCT
