@@ -26,6 +26,7 @@ import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
 import { invoiceListQuerySchema } from "./finance-invoice-list.query";
 import { resolveInvoiceTaxDefaults } from "../services/helpers/invoice-tax-defaults.helper";
+import { invoiceLineShapeError } from "../services/helpers/invoice-line-subject.helper";
 import { SERVICE_PERIOD_PATTERN, createServicePeriodDraft, previewServicePeriodDraft } from "../services/service-period-invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
@@ -523,8 +524,12 @@ router.post("/cash-transactions/:id/cancel", requirePermission("finance:payment"
 // FATURALAR
 // -----------------------------------------------------------------------------
 
+// D1c satır konusu: `lineType` + `itemId` (ürün) / `serviceItemId` (hizmet). `lineType`siz eski gövde serviste
+// normalize edilir (`itemId=<hizmet id>` → SERVICE); şekil kuralı tek kaynak `invoiceLineShapeError`.
 const lineSchema = z.object({
+  lineType: z.enum(["PRODUCT", "SERVICE", "TEXT"]).optional(),
   itemId: z.string().uuid().nullable().optional(),
+  serviceItemId: z.string().uuid().nullable().optional(),
   description: z.string().min(1).max(300),
   qty: decimalString,
   // Birim ZORUNLU: sessiz "m" varsayılanı kg satırını metre gibi bastırırdı.
@@ -533,6 +538,9 @@ const lineSchema = z.object({
   discountRate: decimalString.optional(),
   vatRate: decimalString.optional(),
   withholdingRate: decimalString.optional(),
+}).superRefine((l, ctx) => {
+  const err = invoiceLineShapeError(l);
+  if (err) ctx.addIssue({ code: "custom", message: err, path: ["lineType"] });
 });
 
 const invoiceCreateSchema = z
@@ -1049,6 +1057,7 @@ router.post("/exchange-rates/fetch-tcmb", requirePermission("finance:write"), as
  *       otomatik kanca (finance.autoDraftFromShipmentEnabled) ile elle taslak
  *       aynı kurucuyu paylaşır (C1): ürün kırılımı + sipariş (sözleşme) fiyatı
  *       > D2 zinciri; çelişkili sipariş fiyatı UYDURULMAZ, sayaçla söylenir.
+ *       Hizmet satırı `lineType=SERVICE` + `serviceItemId` taşır; `itemId` eski panel için aynı id'nin aynasıdır.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "{ lines, orderPriced, orderConflicts, currency }" }

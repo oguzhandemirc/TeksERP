@@ -381,7 +381,7 @@ async function main(): Promise<void> {
 
   // ── §7 ───────────────────────────────────────────────────────────────────
   section("§7 gelir ItemPrice, maliyet karışmaz; kurşun dışı çeşitli bayrak bir kez");
-  const bLine = d4.lines.find((l) => l.itemId === BRODE);
+  const bLine = d4.lines.find((l) => l.serviceItemId === BRODE);
   check("BRODE birim fiyatı 5 (ItemPrice), 1,5 (FinishingRate) DEĞİL", eq(bLine?.unitPrice, 5), JSON.stringify(bLine));
   const P5 = await mkParent(70, [KT]);
   const C7 = await cut(P5, 70);

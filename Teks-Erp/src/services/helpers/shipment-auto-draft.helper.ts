@@ -41,7 +41,8 @@
 // duruyor — orası ayrı bir karar (ve ayrı bir bayrak) ister.
 // =============================================================================
 
-import { Currency, InvoiceStatus, InvoiceType, PriceKind, Prisma, ShipmentStatus } from "@prisma/client";
+import { Currency, InvoiceStatus, InvoiceType, PriceKind, Prisma, ShipmentStatus, type InvoiceLineType } from "@prisma/client";
+import { withLegacyServiceItemMirror } from "./invoice-line-subject.helper";
 import prisma from "../../lib/prisma";
 import { ACTIVE_SACK_ALLOCATION } from "./sack-allocation.helper";
 import { AppError } from "../../utils/app-error";
@@ -97,7 +98,11 @@ import { isConsignedRoll } from "./stock-ownership.helper";
  * yazılı.
  */
 export interface ShipmentDraftLine {
-  itemId: string;
+  /** Ürün satırında ürün kartı; hizmet satırında null (D1c — konu `serviceItemId`'de, eski panel aynası önizlemede). */
+  itemId: string | null;
+  /** D1c: yalnız hizmet satırı taşır (ürün satırı bugünkü gibi `lineType`siz — kapalı yolda yanıt bayt-aynı). */
+  lineType?: InvoiceLineType;
+  serviceItemId?: string;
   description: string;
   qty: Prisma.Decimal;
   unit: string;
@@ -392,7 +397,8 @@ export async function buildShipmentInvoiceDraftPreview(
   const cari = await findCariAccountForCardTx(prisma, { customerId: sh.customerId, subcontractorId: null }, { defaultCurrency: true });
   const currency = (cari?.defaultCurrency ?? Currency.TRY) as Currency;
   const result = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
-  return { ...result, currency };
+  // Eski panel satırı `itemId` ile geri yollar (`toPrefillLines`) — hizmet satırına ayna, yoksa bağ kopardı.
+  return { ...result, lines: result.lines.map(withLegacyServiceItemMirror), currency };
 }
 
 /**
