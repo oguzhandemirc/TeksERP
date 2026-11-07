@@ -40,7 +40,7 @@ jobs:
   # ===========================================================================
   changes:
     name: Değişiklik süzgeci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       electron: ${{ steps.suz.outputs.electron }}
       mobil: ${{ steps.suz.outputs.mobil }}
@@ -109,7 +109,7 @@ jobs:
   # ===========================================================================
   docs:
     name: Doküman bekçisi (link + bayatlık)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -246,7 +246,7 @@ jobs:
   # ikisinin hizasını ölçer.
   backend-lint:
     name: Backend lint + tsc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: write
@@ -305,7 +305,7 @@ jobs:
 
   backend-test:
     name: Backend test ${{ matrix.parca }}/8
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # İş düzeyi izin üst düzeyin YERİNE geçer: contents:read burada da yazılı.
     permissions:
       contents: read
@@ -489,7 +489,7 @@ jobs:
 
   backend:
     name: Backend (tsc + test)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [backend-lint, backend-test]
     # `always()`: bir parça düşse de birleşim denetimi koşar ve kırmızının ADRESİNİ basar.
     if: always()
@@ -539,7 +539,7 @@ jobs:
     name: Yük testi (throughput/p95)
     needs: changes
     if: needs.changes.outputs.load_test == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     continue-on-error: true
     defaults:
       run:
@@ -600,7 +600,7 @@ jobs:
     name: Electron lint + tsc
     needs: changes
     if: needs.changes.outputs.electron == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: Electron
@@ -639,7 +639,7 @@ jobs:
     name: Electron vitest ${{ matrix.dilim }}/3
     needs: changes
     if: needs.changes.outputs.electron == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -664,7 +664,7 @@ jobs:
   # düşerse (bağımlılar sessizce skipped olur) özet KIRMIZI.
   electron:
     name: Electron (tsc + vitest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [changes, electron-lint, electron-test]
     if: always()
     steps:
@@ -688,7 +688,7 @@ jobs:
     name: Mobil (tsc + jest)
     needs: changes
     if: needs.changes.outputs.mobil == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: mobil
@@ -734,7 +734,7 @@ jobs:
     name: Satıcı (tsc + lint + bekçi)
     needs: changes
     if: needs.changes.outputs.satici == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: satici/sunucu
@@ -831,7 +831,7 @@ jobs:
     name: Satıcı web (tsc + lint + vitest + build)
     needs: changes
     if: needs.changes.outputs.satici_web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: satici/web
@@ -868,7 +868,7 @@ jobs:
     name: Native çalışma alanı (fmt + clippy + test + kâhin)
     needs: changes
     if: needs.changes.outputs.native == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: Teks-Erp/native/lisans-cekirdek
@@ -927,7 +927,7 @@ jobs:
     name: Patron sunucusu (tsc + lint + RLS + bekçi)
     needs: changes
     if: needs.changes.outputs.patron == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: patron/sunucu
@@ -986,7 +986,7 @@ jobs:
     name: Electron E2E (smoke)
     needs: changes
     if: needs.changes.outputs.electron == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     continue-on-error: true
     # apt aynası bir koşumda ~55 dk takıldı; asılan iş inişi bekletmesin (continue-on-error ile koşu yeşil kalır)
     timeout-minutes: 20
@@ -1017,7 +1017,7 @@ jobs:
     name: Patron uygulaması (tsc + jest + web export)
     needs: changes
     if: needs.changes.outputs.patron == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: patron/uygulama
