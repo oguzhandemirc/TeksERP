@@ -16,20 +16,29 @@ export interface HardwareScan {
 }
 
 export type ScanHandler = (scan: HardwareScan) => void;
-export type EmitResult = 'delivered' | 'duplicate' | 'empty' | 'no-target';
+export type EmitResult = 'delivered' | 'duplicate' | 'empty' | 'no-target' | 'covered';
+/** `covered`: tek hedef kapalı pencerenin arka plan dinleyicisiydi ve üstünde açık bir pencere var. */
+export type UnhandledReason = 'no-target' | 'covered';
 
 /** Aynı yayının iki kez teslimine karşı pencere — operatörün yeniden basması bundan uzundur. */
 export const DOUBLE_DELIVERY_MS = 300;
 
+// "En üstteki açık pencere" kuralı: ARKA PLAN hedefi (kapalı tarayıcının ekran dinleyicisi), kendisini
+// KAPSAMAYAN bir pencere (AppModal) açıkken okuma almaz — sıra değil kapsama bakılır, böylece hedefin ne
+// zaman bağlandığı sonucu değiştirmez. Görünür hedef (açık tarayıcı/sheet'in kendi hedefi) etkilenmez.
 interface Target {
   id: number;
   handler: { current: ScanHandler };
+  background: { current: boolean };
+  /** Hedefi kapsayan pencerelerin kimlikleri (dıştan içe). */
+  within: readonly number[];
 }
 
 let stack: Target[] = [];
+const overlays = new Set<number>();
 let seq = 0;
 let last: { data: string; at: number } | null = null;
-let unhandled: ScanHandler | null = null;
+let unhandled: ((scan: HardwareScan, reason: UnhandledReason) => void) | null = null;
 const stackListeners = new Set<(depth: number) => void>();
 
 function notifyStack(): void {
@@ -37,14 +46,31 @@ function notifyStack(): void {
 }
 
 /** Hedefi yığının ÜSTÜNE koyar; dönen işlev onu (yerinden bağımsız) çıkarır. */
-export function pushScanTarget(handler: { current: ScanHandler }): () => void {
+export function pushScanTarget(
+  handler: { current: ScanHandler },
+  background: { current: boolean } = { current: false },
+  within: readonly number[] = [],
+): () => void {
   const id = ++seq;
-  stack.push({ id, handler });
+  stack.push({ id, handler, background, within });
   notifyStack();
   return () => {
     const before = stack.length;
     stack = stack.filter((t) => t.id !== id);
     if (stack.length !== before) notifyStack();
+  };
+}
+
+/** Pencere kimliği (AppModal örneği başına bir kez). */
+export function newScanOverlayId(): number {
+  return ++seq;
+}
+
+/** Açık pencere işareti — kapsamadığı arka plan hedeflerini örter (AppModal görünürken). */
+export function openScanOverlay(id: number): () => void {
+  overlays.add(id);
+  return () => {
+    overlays.delete(id);
   };
 }
 
@@ -58,8 +84,22 @@ export function subscribeScanTargets(listener: (depth: number) => void): () => v
 }
 
 /** Hedefsiz okuma bildirimi (host uyarı verir). */
-export function setUnhandledScanListener(fn: ScanHandler | null): void {
+export function setUnhandledScanListener(fn: ((scan: HardwareScan, reason: UnhandledReason) => void) | null): void {
   unhandled = fn;
+}
+
+function isCovered(t: Target): boolean {
+  if (!t.background.current) return false;
+  for (const o of overlays) if (!t.within.includes(o)) return true;
+  return false;
+}
+
+/** Üstten aşağı ilk okuma alabilen hedef; yoksa nedeni. */
+function resolveTarget(): { handler: ScanHandler } | { reason: UnhandledReason } {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    if (!isCovered(stack[i])) return { handler: stack[i].handler.current };
+  }
+  return { reason: stack.length > 0 ? 'covered' : 'no-target' };
 }
 
 export function emitScan(
@@ -73,18 +113,19 @@ export function emitScan(
   if (last && last.data === data && now - last.at <= DOUBLE_DELIVERY_MS) return 'duplicate';
   last = { data, at: now };
   const scan: HardwareScan = { data, raw, symbology: input.symbology ?? null, source: input.source, at: now };
-  const top = stack[stack.length - 1];
-  if (!top) {
-    unhandled?.(scan);
-    return 'no-target';
+  const target = resolveTarget();
+  if ('reason' in target) {
+    unhandled?.(scan, target.reason);
+    return target.reason;
   }
-  top.handler.current(scan);
+  target.handler(scan);
   return 'delivered';
 }
 
 /** Yalnız testler. */
 export function __resetScanBusForTests(): void {
   stack = [];
+  overlays.clear();
   last = null;
   unhandled = null;
   stackListeners.clear();

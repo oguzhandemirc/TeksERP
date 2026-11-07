@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import TruncatedText from '../../../components/TruncatedText';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import { inboundDocService } from '../../../services/inboundDoc.service';
 import { colors, spacing, typography } from '../../../theme';
 
@@ -32,6 +33,8 @@ interface Props {
 export default function DocHeader({ owner, onOwner, senderDocNo, onBarcode, locked }: Props) {
   const [ownerOpen, setOwnerOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali: kilitli değilken irsaliye barkodu tuşla doğrudan okunur (kamera düğmesi yok).
+  const hardware = useHardwareScanMode();
   const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000 });
   const options: PickerOption[] = useMemo(
     () => (ctx.data?.data.customers ?? []).map((c) => ({ value: c.id, label: c.name })),
@@ -55,16 +58,19 @@ export default function DocHeader({ owner, onOwner, senderDocNo, onBarcode, lock
       <Text style={styles.section}>Gönderen belge no</Text>
       <View style={styles.row}>
         <Text style={[styles.value, !senderDocNo && styles.muted]} testID="belge-tara-belge-no">
-          {senderDocNo ?? 'Barkod okutulmadı (isteğe bağlı)'}
+          {senderDocNo ?? (hardware && !locked ? 'Okuyucu tuşuyla okutun (isteğe bağlı)' : 'Barkod okutulmadı (isteğe bağlı)')}
         </Text>
-        <Button mode="outlined" icon="barcode-scan" onPress={() => setScannerOpen(true)} disabled={locked} contentStyle={styles.btn} testID="belge-tara-barkod">
-          Barkod okut
-        </Button>
+        {!hardware && (
+          <Button mode="outlined" icon="barcode-scan" onPress={() => setScannerOpen(true)} disabled={locked} contentStyle={styles.btn} testID="belge-tara-barkod">
+            Barkod okut
+          </Button>
+        )}
         {senderDocNo && !locked && <Button onPress={() => onBarcode(null)}>Temizle</Button>}
       </View>
 
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden={!locked}
         title="İrsaliye barkodu"
         onDismiss={() => setScannerOpen(false)}
         onScan={(code) => {

@@ -4,6 +4,9 @@ import { Text, Button, SegmentedButtons, IconButton, TouchableRipple } from 'rea
 import AppModal from '../../../components/AppModal';
 import ModalTextInput from '../../../components/ModalTextInput';
 import TruncatedText from '../../../components/TruncatedText';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
+import { ScanFlashCard } from '../../../components/HardwareScanPanel';
+import type { ScanFeedback } from '../../../hooks/useScanFeedback';
 import { colors, palette, radius, spacing } from '../../../theme/tokens';
 import { loadLine, totalMeters, type CartGroup, type LoadMode, type LooseRoll } from './looseLoad';
 
@@ -180,16 +183,24 @@ export function BottomBar(props: {
   submitting: boolean;
   /** Dar (telefon dikey) ekranda düğmeler alt alta. */
   stacked?: boolean;
+  /** El terminali: ekran tuşu doğrudan dinler — düğme yerine bant, okutma sonucu kartı barın üstünde. */
+  hardware?: boolean;
+  flash?: ScanFeedback['flash'];
   onScan: () => void;
   onSubmit: () => void;
 }) {
   return (
     <View style={styles.bottom}>
+      {props.hardware && props.flash ? <ScanFlashCard flash={props.flash} /> : null}
       {props.blockReason && props.count > 0 && <Text style={styles.block}>{props.blockReason}</Text>}
       <View style={[styles.bottomRow, props.stacked && styles.bottomStack]}>
-        <Button mode="outlined" icon="barcode-scan" onPress={props.onScan} style={[styles.bottomBtn, !props.stacked && styles.grow1]} contentStyle={styles.bigContent} labelStyle={styles.bigLabel} testID="loose-scan">
-          Top Okut
-        </Button>
+        {props.hardware ? (
+          <HardwareTriggerHint label="Tuşla okut" style={!props.stacked && styles.grow1} />
+        ) : (
+          <Button mode="outlined" icon="barcode-scan" onPress={props.onScan} style={[styles.bottomBtn, !props.stacked && styles.grow1]} contentStyle={styles.bigContent} labelStyle={styles.bigLabel} testID="loose-scan">
+            Top Okut
+          </Button>
+        )}
         <Button
           mode="contained"
           icon="truck-check"
@@ -241,7 +252,7 @@ const styles = StyleSheet.create({
   chip: { marginRight: spacing.sm, marginBottom: spacing.sm },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.lg, gap: spacing.sm },
   btnContent: { minHeight: 56 },
-  bottom: { padding: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
+  bottom: { padding: spacing.md, gap: spacing.sm, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
   block: { color: colors.warningText, fontSize: 14, fontWeight: '700', marginBottom: spacing.sm, textAlign: 'center' },
   bottomRow: { flexDirection: 'row', gap: spacing.md },
   bottomStack: { flexDirection: 'column-reverse' },

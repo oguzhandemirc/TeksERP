@@ -98,7 +98,7 @@ export function BarcodeScannerModal({
       // (bkz. onModalHide) bozulmasın diye işleyici bitince aynı çağrı burada yapılır.
       if (!visible && onModalHide) void Promise.resolve(done).then(onModalHide, onModalHide);
     },
-    { active: hardware && (visible || listenWhileHidden) },
+    { active: hardware && (visible || listenWhileHidden), background: !visible },
   );
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();

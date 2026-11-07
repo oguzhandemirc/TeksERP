@@ -13,6 +13,7 @@ import { totalMeters } from './looseLoad';
 import { BottomBar, CartLabelModal, LoadList, LoadModePicker, LoadSummary, VehicleFields } from './CuvalsizSevkView';
 import { LooseScanner } from './LooseScanner';
 import { OrderPickRow } from './OrderPick';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 
 // =============================================================================
 // Çuvalsız Sevk — toplar çuvala konmadan kamyon kasasına (dökme) ya da top taşıma
@@ -32,6 +33,8 @@ export default function CuvalsizSevkScreen() {
   const s = useCuvalsizSevk(customerId, branchId, () => nav.goBack());
   const [scanOpen, setScanOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  // El terminali: OKUT bandı hep görünür → ekran tuşu hep dinler (araba no yoksa ret: "Önce araba no girin").
+  const hardware = useHardwareScanMode();
 
   const openScan = () => {
     if (s.mode === 'CART' && !s.activeCart) setCartOpen(true);
@@ -79,12 +82,14 @@ export default function CuvalsizSevkScreen() {
           blockReason={s.blockReason}
           submitting={s.submitting}
           stacked={phone && !wide}
+          hardware={hardware}
+          flash={s.scanFb.flash}
           onScan={openScan}
           onSubmit={s.submit}
         />
       </View>
 
-      <LooseScanner visible={scanOpen} onDismiss={() => setScanOpen(false)} state={s} />
+      <LooseScanner visible={scanOpen} onDismiss={() => setScanOpen(false)} state={s} listenWhileHidden />
       {s.ambiguousModal}
       <CartLabelModal visible={cartOpen} onDismiss={() => setCartOpen(false)} recent={recentCarts} onChoose={s.chooseCart} />
       <CariHoldBlockedScreen block={s.holdBlock} onClose={s.closeHold} />

@@ -7,6 +7,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { rollService } from '../../../services/roll.service';
 import { customerService } from '../../../services/customer.service';
@@ -43,6 +45,8 @@ export default function HizliSiparisScreen() {
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
 
   const [scanOpen, setScanOpen] = useState(false);
+  // El terminali: OKUT hep görünür → ekran tuş okumasını doğrudan dinler.
+  const hardware = useHardwareScanMode();
   const [custOpen, setCustOpen] = useState(false);
   const [custSearch, setCustSearch] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -79,9 +83,10 @@ export default function HizliSiparisScreen() {
       ]);
       Toast.show({ type: 'success', text1: 'Eklendi', text2: r.barcode ?? '' });
     },
-    // Belirsiz müşteri barkodu → aday modalı; başka hata bugünkü gibi (sessiz).
+    // Belirsiz müşteri barkodu → aday modalı; başka hata kamerada bugünkü gibi (sessiz). Tuş okumasında
+    // görünür tarayıcı yok — sessiz kalırsa operatör "okumadı" sanar, hata gösterilir.
     onError: (e) => {
-      ambiguous.intercept(e);
+      if (!ambiguous.intercept(e) && hardware) showScreenError(e, 'Top bulunamadı');
     },
   });
   const ambiguous = useAmbiguousScanPicker((b) => lookupMut.mutate(b));
@@ -139,9 +144,13 @@ export default function HizliSiparisScreen() {
   return (
     <ScreenChrome title="Hızlı Sipariş" subtitle="Ham top okut → müşteri seç → sipariş">
       <ScrollView contentContainerStyle={styles.body}>
-        <Button mode="contained" icon="barcode-scan" onPress={() => setScanOpen(true)} style={styles.scanBtn}>
-          Top Okut ({rolls.length})
-        </Button>
+        {hardware ? (
+          <HardwareTriggerHint label={`Tuşla okut (${rolls.length})`} style={styles.scanBtn} />
+        ) : (
+          <Button mode="contained" icon="barcode-scan" onPress={() => setScanOpen(true)} style={styles.scanBtn}>
+            Top Okut ({rolls.length})
+          </Button>
+        )}
 
         {/* Müşteri seçimi */}
         <TouchableRipple onPress={() => setCustOpen(true)} style={styles.custField} borderless>
@@ -206,6 +215,7 @@ export default function HizliSiparisScreen() {
 
       <BarcodeScannerModal
         visible={scanOpen}
+        listenWhileHidden
         onDismiss={() => setScanOpen(false)}
         onScan={(code) => lookupMut.mutate(code)}
         title="Ham Top Okut"

@@ -99,6 +99,7 @@ export default function InspectionScreen() {
             onResolve={() => void s.scan(s.barcode)}
             resolving={s.scanBusy}
             onScan={() => setCamera(true)}
+            hardwareListening
             scanCtaLabel="Top okut"
             tone="indigo"
           />
@@ -112,6 +113,7 @@ export default function InspectionScreen() {
       </View>
       <BarcodeScannerModal
         visible={camera}
+        listenWhileHidden
         title="Muayene edilecek topu okut"
         trigger="auto"
         onDismiss={() => setCamera(false)}
