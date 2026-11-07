@@ -94,9 +94,27 @@ describe("FilterRow — TEK SATIR sözleşmesi", () => {
     expect(FILTER_ROW_CLASS).not.toMatch(/(^|\s)flex-wrap/);
     const scroll = screen.getByTestId("filter-row-scroll");
     expect(scroll.className).toContain(FILTER_ROW_SCROLL_CLASS);
-    for (const c of ["overflow-x-auto", "min-w-0", "flex-1", "flex-nowrap"]) expect(FILTER_ROW_SCROLL_CLASS).toContain(c);
+    for (const c of ["overflow-x-auto", "min-w-0", "shrink", "flex-nowrap"]) expect(FILTER_ROW_SCROLL_CLASS).toContain(c);
     // Kutular kaydırma bölgesinde; sağ uç (trailing) onun DIŞINDA → hep görünür.
     expect(within(scroll).getByTestId("filter-chip-a")).toBeInTheDocument();
     expect(within(scroll).queryByText("SAG")).toBeNull();
   });
+
+  it("⭐ '+ Filtre' kaydırma bölgesinin DIŞINDA (kutular kaysa da hep görünür)", () => {
+    setup("/", [f("a", ["filter[a]"])], [f("kumas", ["filter[itemId]"])]);
+    expect(within(screen.getByTestId("filter-row-scroll")).queryByRole("button", { name: "Filtre ekle" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Filtre ekle" })).toBeInTheDocument();
+  });
+
+  it("⭐ dar ekranda (lg altı) boş kalıcı kutu satırdan kalkar ve menüde çıkar; etkin kutu hep satırda", () => {
+    setup("/?filter[b]=1", [f("a", ["filter[a]"]), f("b", ["filter[b]"])], [f("kumas", ["filter[itemId]"])]);
+    expect(screen.getByTestId("filter-chip-a").className).toContain("hidden lg:inline-flex");
+    expect(screen.getByTestId("filter-chip-b").className).not.toContain("hidden");
+    fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
+    const menu = within(screen.getByRole("menu"));
+    expect(menu.getByRole("menuitem", { name: "A" }).className).toContain("lg:hidden");
+    expect(menu.getByRole("menuitem", { name: "KUMAS" }).className).not.toContain("lg:hidden");
+    expect(menu.queryByRole("menuitem", { name: "B" })).toBeNull();
+  });
 });
+

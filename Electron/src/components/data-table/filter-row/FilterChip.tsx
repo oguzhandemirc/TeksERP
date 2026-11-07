@@ -12,6 +12,7 @@ export function FilterChip({
   active,
   removable,
   onRemove,
+  className,
   children,
 }: {
   id: string;
@@ -19,6 +20,7 @@ export function FilterChip({
   active: boolean;
   removable: boolean;
   onRemove: () => void;
+  className?: string;
   children: ReactNode;
 }) {
   return (
@@ -32,6 +34,7 @@ export function FilterChip({
         // Boş kutunun adı da okunur renkte (soluk yazı "pasif" sanılıyordu); pasif tetik kendi rengini korur.
         "[&>button:enabled_span]:text-foreground",
         active ? "border-primary/60 bg-primary/10 text-foreground" : "border-input bg-background",
+        className,
       )}
     >
       {children}

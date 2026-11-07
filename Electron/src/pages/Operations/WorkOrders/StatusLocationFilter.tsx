@@ -61,6 +61,14 @@ function useStatusLocationState() {
   return { stations, stationsError: stationsQ.isError, selected, labelOf, toggle, clearAll, count };
 }
 
+function chipLabel(s: ReturnType<typeof useStatusLocationState>, chip?: boolean): string {
+  if (s.count === 0) return "Durum";
+  if (!chip) return `Durum (${s.count})`;
+  if (s.count > 1) return `Durum: ${s.count} seçili`;
+  const k = GROUP_KEYS.find((g) => s.selected[g].length > 0)!;
+  return `Durum: ${s.labelOf(k, s.selected[k][0]!)}`;
+}
+
 function Item({ on, onSelect, children, value }: { on: boolean; onSelect: () => void; children: ReactNode; value: string }) {
   return (
     <CommandItem value={value} onSelect={onSelect} className="py-1.5 text-xs">
@@ -70,10 +78,14 @@ function Item({ on, onSelect, children, value }: { on: boolean; onSelect: () => 
   );
 }
 
-export function StatusLocationFilter() {
-  const [open, setOpen] = useState(false);
+/** Durum + konum anahtarları — tek satır kutusu ✕/Temizle ile bunları siler, filtre kaydı saklar. */
+export const STATUS_LOCATION_URL_KEYS = GROUP_KEYS.map((k) => `filter[${k}]`);
+
+/** `chip`: tek satır çubuğun kutusu (çerçeveyi `FilterChip` çizer, tetik kenarlıksız). */
+export function StatusLocationFilter({ chip, autoOpen }: { chip?: boolean; autoOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(Boolean(autoOpen));
   const s = useStatusLocationState();
-  const label = s.count === 0 ? "Durum" : `Durum (${s.count})`;
+  const label = chipLabel(s, chip);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -81,9 +93,13 @@ export function StatusLocationFilter() {
           type="button"
           variant="outline"
           size="sm"
-          className={cn("h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal", s.count > 0 && "border-primary/50")}
+          className={
+            chip
+              ? "h-7 min-w-0 justify-between gap-1 border-0 bg-transparent px-2 text-xs font-normal shadow-none hover:bg-transparent"
+              : cn("h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal", s.count > 0 && "border-primary/50")
+          }
         >
-          <span className={cn(s.count === 0 && "text-muted-foreground")}>{label}</span>
+          <span className={cn(s.count === 0 && !chip && "text-muted-foreground")}>{label}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </Button>
       </PopoverTrigger>

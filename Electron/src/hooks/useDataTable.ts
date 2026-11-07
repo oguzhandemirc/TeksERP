@@ -13,6 +13,8 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import { usePersistedTableFilters } from "@/hooks/usePersistedTableFilters";
+import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 import { drainCursor, EXPORT_PAGE_LIMIT, ExportCancelledError } from "@/lib/export-drain";
 
 interface Options<T> {
@@ -52,6 +54,9 @@ interface Options<T> {
    *  Kullanım: hook üst bileşende çağrılıp tablo kimi sekmelerde hiç
    *  gösterilmiyorsa (ör. Envanter KANBAN sekmesi) gereksiz fetch'i keser. */
   enabled?: boolean;
+  /** Opt-in: son kullanılan süzgeç + sıralama kullanıcı tercihinde (tablo anahtarı = `queryKey`)
+   *  saklanır, sayfaya dönünce geri gelir; arama kaydedilmez. `usePersistedTableFilters`. */
+  persistFilters?: TableFilterPersistConfig;
 }
 
 /**
@@ -73,8 +78,10 @@ export function useDataTable<T>({
   enableSelection = true,
   initialVisibility,
   enabled = true,
+  persistFilters,
 }: Options<T>) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const persist = usePersistedTableFilters({ tableKey: queryKey, config: persistFilters, searchParams, setSearchParams });
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const urlParams = useMemo(
@@ -138,6 +145,12 @@ export function useDataTable<T>({
   // Search debounce → URL'e yaz (cursor stack reset).
   useEffect(() => {
     const handle = setTimeout(() => {
+      // Arama değişmediyse YAZMA: router geçişi henüz çizilmemişken bayat kopya, aradaki URL
+      // yazımını (filtre kaydı geri yükleme/sıfırlama) geri alırdı.
+      if (search === (searchParamsRef.current.get("search") ?? "")) {
+        lastPushedSearchRef.current = search;
+        return;
+      }
       const next = new URLSearchParams(searchParamsRef.current);
       if (search) next.set("search", search);
       else next.delete("search");
@@ -214,13 +227,20 @@ export function useDataTable<T>({
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.pagination.nextCursor,
-    enabled,
+    // Kayıtlı süzgeç geri yüklenene dek istek yok (ilk açılışta filtresiz + filtreli çift istek olmasın).
+    enabled: enabled && persist.ready,
     // ⚠️ `refetchOnMount:"always"` + `staleTime:0` DEĞİL (2026-09-05 ölçümü): infinite
     // query remount'ta YÜKLÜ TÜM SAYFALARI seri çeker — 9 sayfalık Envanter'de sekme
     // içi her git-gel 9 istek. 15 sn'lik tazelik penceresi bunu 0'a indirir; mutasyon
     // tazeliği etkilenmez (invalidate staleTime'dan bağımsız olarak refetch tetikler).
     staleTime: 15_000,
   });
+
+  const { reportListResult } = persist;
+  useEffect(() => {
+    reportListResult(query.isSuccess, query.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.isSuccess, query.error]);
 
   const flatRows = useMemo<T[]>(
     () => query.data?.pages.flatMap((p) => p.data) ?? [],
@@ -289,6 +309,8 @@ export function useDataTable<T>({
     setSearch: setSearchInput,
     fetchAll,
     listScope,
+    /** Kayıtlı süzgeç geri yüklendi (opt-in değilse hep true) — kardeş sorgular (özet şeridi) bunu bekler. */
+    filtersReady: persist.ready,
     pagination: {
       loaded: flatRows.length,
       total: totalEstimate,
