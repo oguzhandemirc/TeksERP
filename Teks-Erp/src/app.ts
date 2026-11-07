@@ -9,7 +9,6 @@ import { setupSwagger } from "./config/swagger";
 import { APP_VERSION } from "./lib/app-version";
 import { errorHandler } from "./middlewares/error.middleware";
 import { installDecimalNumberSerializer } from "./utils/json-replacer";
-import { redactSecretQueryParams } from "./utils/url-redaction";
 import prisma from "./lib/prisma";
 import { buildRichHealth } from "./lib/health-snapshot";
 import { isDirectLoopback, localLicenseHealth } from "./lib/yerel-saglik";
@@ -140,6 +139,8 @@ import notificationRoutes from "./routes/bildirim.routes";
 import { isNotificationBellPath } from "./constants/notification-stream";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { requestTraceMiddleware } from "./middlewares/request-trace.middleware";
+import { requestIdMiddleware } from "./middlewares/request-id.middleware";
+import { PROD_ACCESS_LOG_FORMAT, registerAccessLogTokens } from "./lib/access-log";
 import { licenseGate } from "./middlewares/license.middleware";
 import { isWebPanelMode } from "./lib/web-session-cookie";
 import { clientInfoMiddleware } from "./middlewares/client-info.middleware";
@@ -282,17 +283,14 @@ app.use(compression({
   threshold: 1024,
   filter: (req, res) => !isNotificationBellPath(req.originalUrl ?? req.url) && compression.filter(req, res),
 }));
-// F17: production'da 'combined' (tarih/IP/UA — pm2 dosya log'una ANSI'siz),
+// F17: production'da combined + teşhis kuyruğu (tarih/IP/UA — pm2 dosya log'una ANSI'siz),
 // dev'de renkli kısa 'dev'.
 const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
-// Erişim günlüğü sır taşımaz: `url` ve `referrer` jetonları sır parametrelerinin DEĞERİNİ
-// maskeler (etkinleştirme kodu, kurulum token'ı…). İki biçim de (`combined`/`dev`) bu jetonları okur.
-morgan.token<Request, Response>("url", (req) => redactSecretQueryParams(req.originalUrl || req.url || ""));
-morgan.token<Request, Response>("referrer", (req) => {
-  const ref = req.headers.referer ?? req.headers.referrer;
-  return ref ? redactSecretQueryParams(String(ref)) : undefined;
-});
-app.use(morgan(isProd ? "combined" : "dev"));
+// İstek kimliği + `details.code` yakalayıcı morgan'dan ÖNCE: log satırı, latency halkası ve `X-Request-Id` aynı kimliği görür.
+app.use(requestIdMiddleware);
+// Erişim günlüğü sır taşımaz (url/referrer maskeli, Authorization okunmaz); üretim satırı süre/rid/uid/code taşır.
+registerAccessLogTokens(morgan);
+app.use(morgan(isProd ? PROD_ACCESS_LOG_FORMAT : "dev"));
 
 // Per-endpoint gecikme istatistiği (istek başına O(1)) — morgan'dan sonra,
 // resolveDevice'tan ÖNCE: statik/health/swagger dahil her şey ölçülür. Canlı

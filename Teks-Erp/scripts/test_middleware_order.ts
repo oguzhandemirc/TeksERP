@@ -37,6 +37,7 @@ const ORDER = [
   "helmetMiddleware",
   "corsMiddleware",
   "compression",
+  "requestIdMiddleware", // istek kimliği + details.code — morgan satırı rid/code okur, ÖNCE olmalı
   "logger", // morgan
   "latencyMiddleware",
   "jsonParser", // express.json — morgan+latency'den SONRA (F-CORE-OPS-003)

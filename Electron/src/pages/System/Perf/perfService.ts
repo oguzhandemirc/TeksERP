@@ -20,6 +20,12 @@ export interface SlowRequest {
   route: string;
   status: number;
   ms: number;
+  /** Erişim logundaki `rid=` ile aynı — sunucu logunda grep anahtarı (eski backend göndermez). */
+  reqId?: string | null;
+  userId?: string | null;
+  clientType?: string | null;
+  /** Sır parametreleri maskeli sorgu dizgisi. */
+  query?: string | null;
 }
 
 export interface PerfPersistHealth {

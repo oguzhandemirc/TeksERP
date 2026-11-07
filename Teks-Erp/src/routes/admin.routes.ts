@@ -1156,7 +1156,7 @@ router.delete(
  *     summary: Endpoint gecikme istatistikleri
  *     description: >
  *       Route bazında count/errCount/p50/p95/max (bucket-yaklaşık) + son yavaş
- *       istekler (≥1sn, son 50). Süreç başlangıcından (veya son reset'ten) beri.
+ *       istekler (≥500 ms, son 50; reqId/userId/clientType/maskeli sorgu ile). Süreç başlangıcından (veya son reset'ten) beri.
  *     security: [{ bearerAuth: [] }]
  */
 router.get(

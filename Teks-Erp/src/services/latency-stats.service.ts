@@ -13,6 +13,8 @@
 //     hassasiyetinde); endpoint'ler arası KARŞILAŞTIRMA ve trend için yeterli,
 //     mikro-benchmark için değil.
 
+import { uyari } from "../lib/logger";
+
 /** Bucket üst sınırları (ms) — son eleman +∞ (maxMs ile raporlanır).
  *  DIŞA AÇIK: latency-persist.service günlük özetleri aynı hizalamayla yazar. */
 export const BUCKET_BOUNDS_MS = [
@@ -20,8 +22,9 @@ export const BUCKET_BOUNDS_MS = [
   Number.POSITIVE_INFINITY,
 ];
 
-/** Bu eşik ve üstü istekler yavaş-istek defterine (ring) yazılır. */
-export const SLOW_REQUEST_MS = 1_000;
+/** Bu eşik ve üstü istekler yavaş-istek defterine (ring) + tek `UYARI [yavas-istek]` satırına yazılır.
+ *  500: sahadaki kuyruk (%0,4, 0,5–1,2 sn) 1 sn eşiğinde görünmüyordu (2026-11-07 ölçümü). */
+export const SLOW_REQUEST_MS = 500;
 /** Yavaş-istek defteri boyu. */
 const SLOW_RING_SIZE = 50;
 /** Route anahtarı tavanı — aşımı `(diğer)` kovasına düşer (kardinalite guard'ı). */
@@ -44,13 +47,24 @@ interface RouteStat {
   buckets: number[];
 }
 
-export interface SlowRequestEntry {
+/** Yavaş isteğin teşhis künyesi — yalnız eşik aşılınca kurulur (istek başına maliyet yok). */
+export interface SlowRequestContext {
+  reqId: string | null;
+  userId: string | null;
+  clientType: string | null;
+  /** Sır parametreleri maskelenmiş sorgu dizgisi (`?` sonrası); yoksa null. */
+  query: string | null;
+}
+
+export interface SlowRequestEntry extends SlowRequestContext {
   at: number;
   method: string;
   route: string;
   status: number;
   ms: number;
 }
+
+const EMPTY_SLOW_CONTEXT: SlowRequestContext = { reqId: null, userId: null, clientType: null, query: null };
 
 export interface RouteSnapshot {
   route: string;
@@ -60,6 +74,15 @@ export interface RouteSnapshot {
   p95Ms: number;
   maxMs: number;
   lastAt: number;
+}
+
+/** Tek satır, greplenebilir: `UYARI [yavas-istek] 612ms GET /api/rolls status=200 rid=… uid=… client=… q=…`.
+ *  Telemetridir — SystemLog/DB'ye yazılmaz. */
+export function formatSlowRequestLine(e: SlowRequestEntry): string {
+  return (
+    `${e.ms}ms ${e.method} ${e.route} status=${e.status} rid=${e.reqId ?? "-"} uid=${e.userId ?? "-"} ` +
+    `client=${e.clientType ?? "-"} q=${e.query ?? "-"}`
+  );
 }
 
 const stats = new Map<string, RouteStat>();
@@ -103,8 +126,22 @@ function percentileMs(stat: RouteStat, p: number): number {
   return percentileFromBuckets(stat.buckets, stat.count, p, stat.maxMs);
 }
 
-/** Middleware'in tek giriş noktası — istek başına O(1). */
+/** Saf giriş (birim testleri, künyesiz kayıt) — `recordLatencySample`a delege eder. */
 export function recordLatency(method: string, routeKey: string, status: number, ms: number): void {
+  recordLatencySample({ method, routeKey, status, ms });
+}
+
+export interface LatencySample {
+  method: string;
+  routeKey: string;
+  status: number;
+  ms: number;
+  /** Yalnız eşik aşılınca çağrılır — istek başına künye maliyeti yok. */
+  slowContext?: () => SlowRequestContext;
+}
+
+/** Middleware'in tek giriş noktası — istek başına O(1). */
+export function recordLatencySample({ method, routeKey, status, ms, slowContext }: LatencySample): void {
   const key = `${method} ${routeKey}`;
   let stat = stats.get(key);
   if (!stat) {
@@ -128,8 +165,11 @@ export function recordLatency(method: string, routeKey: string, status: number, 
   stat.buckets[bucketIndex(ms)] += 1;
 
   if (ms >= SLOW_REQUEST_MS) {
-    slowRing.push({ at: Date.now(), method, route: routeKey, status, ms: Math.round(ms) });
+    const ctx = slowContext ? slowContext() : EMPTY_SLOW_CONTEXT;
+    const entry: SlowRequestEntry = { at: Date.now(), method, route: routeKey, status, ms: Math.round(ms), ...ctx };
+    slowRing.push(entry);
     if (slowRing.length > SLOW_RING_SIZE) slowRing.splice(0, slowRing.length - SLOW_RING_SIZE);
+    uyari("yavas-istek", formatSlowRequestLine(entry));
   }
 }
 
