@@ -20,7 +20,12 @@
 #     icermeyen baska liste varsa ezilmez (elle komut ipucu); birlesim yalniz -Uygula -OnYuklemeBirlestir ile.
 #   - Sira: CREATE EXTENSION ALTER SYSTEM'den ONCE (kutuphane yuklenemiyorsa hicbir ayar yazilmadan durur).
 #     N. ALTER SYSTEM duserse oncekiler auto.conf'ta kalir, reload yapilmaz; nedeni duzeltip tekrar kos
-#     (ayni degerler TAMAM/BEKLIYOR gorunur, yalniz kalanlar yazilir).
+#     (ayni degerler TAMAM/BEKLIYOR gorunur, yalniz kalanlar yazilir). ERTELENDI satirlari restart sonrasi
+#     ikinci kosumda yazilir.
+#   - Uzanti ayari (pg_stat_statements.*) modul postmaster'da on yuklu degilken YAZILMAZ: PG 16 ALTER SYSTEM
+#     tanimsiz parametreyi reddeder (olculdu). Durum ERTELENDI; restart sonrasi betik yeniden kosulur.
+#   - Kutuphane listeleri buyuk/kucuk harf DUYARSIZ karsilastirilir, yinelenen elenir (Windows'ta ayni DLL iki
+#     kez _PG_init -> FATAL olasi). postgresql.conf'ta restart bekleyen farkli liste varsa liste yazilmaz.
 #   - CREATE EXTENSION yalniz hariciBakim.uzantiVeritabani'nda (postgres) - uygulama DB'sinde DEGIL (dokume
 #     girer, super olmayan rolle geri yukleme kirilir); migration'a KONMAZ.
 #   - Superuser ister (pg_file_settings + ALTER SYSTEM); degilse durur, kuru kipte de.
@@ -195,7 +200,7 @@ function Lit([string]$s) { return "'" + ($s -creplace "'", "''") + "'" }
 # Karsilastirma birimden bagimsiz: bellek kB'a, sure ms'ye; liste (on yukleme) sirali kume.
 function Normal([string]$ad, [string]$v) {
   $v = $v.Trim()
-  if ($ad -ceq "shared_preload_libraries") { return ((@($v -csplit ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ }) | Sort-Object) -join ',') }
+  if ($ad -ceq "shared_preload_libraries") { return ((@($v -csplit ',' | ForEach-Object { $_.Trim().Trim('"').ToLowerInvariant() } | Where-Object { $_ }) | Sort-Object -Unique) -join ',') }
   if ($v -cmatch '^(\d+)\s*(kB|MB|GB|TB)$') { $k = @{ kB = 1; MB = 1024; GB = 1048576; TB = 1073741824 }[$Matches[2]]; return "$([long]$Matches[1] * $k)kB" }
   if ($v -cmatch '^(\d+)\s*(ms|s|min|h|d)$') { $k = @{ ms = 1; s = 1000; min = 60000; h = 3600000; d = 86400000 }[$Matches[2]]; return "$([long]$Matches[1] * $k)ms" }
   return $v
@@ -235,19 +240,40 @@ $uzantiKurulu = (Psql $uzantiVt "SELECT count(*) FROM pg_extension WHERE extname
 
 # On yukleme: var olan kutuphaneler korunur, uzanti sona eklenir. Taban: auto.conf (restart sonrasi gecerli olan)
 # varsa o, yoksa su anki deger. auto.conf listesi uzantiyi icermiyorsa ezilmez (yalniz -OnYuklemeBirlestir).
-function ListeOku([string]$v) { return @($v -csplit ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ }) }
+# Liste: buyuk/kucuk harf duyarsiz tekil (-notcontains duyarsizdir; ilk gorulen yazim korunur).
+function ListeOku([string]$v) {
+  $l = @()
+  foreach ($k in @($v -csplit ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })) { if ($l -notcontains $k) { $l += $k } }
+  return ,$l
+}
+function ListeBirlesim($taban, $ek) {
+  $l = @($taban)
+  foreach ($k in @($ek)) { if ($l -notcontains $k) { $l += $k } }
+  return ,$l
+}
+function ListeSql($l) { return (@($l | ForEach-Object { Lit $_ })) -join ', ' }
 $onYukleme = @()
-$otoListe = $oto.ContainsKey("shared_preload_libraries")
-if ($otoListe) { $onYukleme = ListeOku $oto["shared_preload_libraries"] }
+$otoVar = $oto.ContainsKey("shared_preload_libraries")
+if ($otoVar) { $onYukleme = ListeOku $oto["shared_preload_libraries"] }
 elseif ($mevcut.ContainsKey("shared_preload_libraries")) { $onYukleme = ListeOku $mevcut["shared_preload_libraries"].deger }
-$onYuklemeEngel = $otoListe -and ($onYukleme -cnotcontains $uzanti) -and -not $OnYuklemeBirlestir
-$birlestir = $otoListe -and ($onYukleme -cnotcontains $uzanti) -and $OnYuklemeBirlestir
+# auto.conf'ta BOS liste ('') "baska liste" degildir: uzerine uzanti eklenir.
+$otoListe = $otoVar -and (@($onYukleme).Count -gt 0)
+$onYuklemeEngel = $otoListe -and ($onYukleme -notcontains $uzanti) -and -not $OnYuklemeBirlestir
+$birlestir = $otoListe -and ($onYukleme -notcontains $uzanti) -and $OnYuklemeBirlestir
 if ($onYuklemeEngel) { $uzantiNeden = "auto.conf'taki on yukleme listesi uzantiyi icermiyor (ezilmedi) - uzanti ayarlari da atlandi" }
+# postgresql.conf'ta calisandan farkli, restart bekleyen liste (applied=false): ustune yazmak niyeti siler.
+$confBekleyen = $null
+if (-not $otoVar) {
+  $cs = @(Satirlar (Psql "postgres" "SELECT coalesce(setting, '') || '|' || applied FROM pg_file_settings WHERE lower(name) = 'shared_preload_libraries' AND sourcefile NOT LIKE '%postgresql.auto.conf' ORDER BY seqno"))
+  if ($cs.Count) {
+    $p = $cs[-1] -csplit '\|', 2
+    $calisan = if ($mevcut.ContainsKey("shared_preload_libraries")) { $mevcut["shared_preload_libraries"].deger } else { "" }
+    if ($p[1] -cne "t" -and (Normal "shared_preload_libraries" $p[0]) -cne (Normal "shared_preload_libraries" $calisan)) { $confBekleyen = ListeOku $p[0] }
+  }
+}
 if ($hedef.Contains("shared_preload_libraries")) {
-  $istenen = @($hedef["shared_preload_libraries"] -csplit ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-  $liste = @($onYukleme)
-  foreach ($k in $istenen) { if ($liste -cnotcontains $k) { $liste += $k } }
-  $hedef["shared_preload_libraries"] = $liste -join ', '
+  $istenen = ListeOku $hedef["shared_preload_libraries"]
+  $hedef["shared_preload_libraries"] = (ListeBirlesim $onYukleme $istenen) -join ', '
 }
 
 $satirlar = @()
@@ -260,7 +286,10 @@ foreach ($ad in $hedef.Keys) {
   if (-not $uzantiVar -and $uzantiAyari) { $durum = "ATLANDI" }
   elseif ($ad -ceq "shared_preload_libraries" -and $onYuklemeEngel) { $durum = "EZILMEDI" }
   elseif ($onYuklemeEngel -and $uzantiAyari) { $durum = "ATLANDI" }
-  elseif ($ad -ceq "shared_preload_libraries" -and $birlestir) { $durum = "YAZILACAK" }
+  elseif ($ad -ceq "shared_preload_libraries" -and $null -ne $confBekleyen) { $durum = "CONFBEKLIYOR" }
+  # Modul on yuklu degilse parametre tanimsiz: ALTER SYSTEM reddeder (PG 16) -> restart sonrasi ikinci kosum.
+  elseif ($ad.StartsWith("$uzanti.") -and -not $mevcut.ContainsKey($ad)) { $durum = "ERTELENDI" }
+  elseif ($ad -ceq "shared_preload_libraries" -and ($birlestir -or ($otoVar -and -not $otoListe))) { $durum = "YAZILACAK" }
   elseif ($oto.ContainsKey($ad)) {
     if ((Normal $ad $oto[$ad]) -ceq (Normal $ad $h)) { $durum = if ($null -ne $m -and (Normal $ad $m) -ceq (Normal $ad $h)) { "TAMAM" } else { "BEKLIYOR" } }
     else { $durum = "EZILMEDI" }
@@ -276,14 +305,16 @@ foreach ($r in $satirlar) {
   $not = switch ($r.durum) {
     "EZILMEDI" {
       $n = "ALTER SYSTEM ile farkli deger var ($($oto[$r.ad])), ezilmedi"
-      if ($r.ad -ceq "shared_preload_libraries") { $n += " - birlestirmek icin -Uygula -OnYuklemeBirlestir ya da elle: ALTER SYSTEM SET shared_preload_libraries = $((@($r.hedef -csplit ',' | ForEach-Object { Lit $_.Trim() })) -join ', ')" }
+      if ($r.ad -ceq "shared_preload_libraries") { $n += " - birlestirmek icin -Uygula -OnYuklemeBirlestir ya da elle: ALTER SYSTEM SET shared_preload_libraries = $(ListeSql (ListeOku $r.hedef))" }
       $n
     }
     "ATLANDI"  { "$uzantiNeden - on yukleme yazilmaz" }
     "BEKLIYOR" { "yazili (postgresql.auto.conf), yeniden baslatma/yukleme bekliyor" }
+    "ERTELENDI" { "ERTELENDI: modul on yuklu degil (parametre tanimsiz) - on yukleme restart sonrasi etkinlesince yeniden kos; hedef PG varsayilaniyla ayni" }
+    "CONFBEKLIYOR" { "ATLANDI: postgresql.conf'ta restart bekleyen farkli liste var ($($confBekleyen -join ', ')) - once restart ya da elle: ALTER SYSTEM SET shared_preload_libraries = $(ListeSql (ListeBirlesim $confBekleyen (ListeOku $r.hedef)))" }
     default    { $r.durum }
   }
-  if ($r.restart -and $r.durum -cne "TAMAM") { $not += "  [RESTART]" }
+  if ($r.restart -and $r.durum -cnotin @("TAMAM", "ERTELENDI", "ATLANDI", "CONFBEKLIYOR", "EZILMEDI")) { $not += "  [RESTART]" }
   Write-Host ("  {0,-30} {1,-22} {2,-22} {3}" -f $r.ad, $r.mevcut, $r.hedef, $not)
 }
 $uzantiYaz = $uzantiVar -and -not $onYuklemeEngel -and -not $uzantiKurulu
@@ -304,7 +335,7 @@ if ($Uygula) {
   }
   foreach ($r in $yazilacak) {
     # Liste ayari (on yukleme) her ogeyi AYRI literal ister: tek literal 'a, b' tek kutuphane adi sayilir.
-    $deger = if ($r.ad -ceq "shared_preload_libraries") { (@($r.hedef -csplit ',' | ForEach-Object { Lit $_.Trim() })) -join ', ' } else { Lit $r.hedef }
+    $deger = if ($r.ad -ceq "shared_preload_libraries") { ListeSql (ListeOku $r.hedef) } else { Lit $r.hedef }
     $a = Psql "postgres" "ALTER SYSTEM SET $($r.ad) = $deger"
     if ($a.kod -ne 0) { Dur "$($r.ad) yazilamadi: $($a.cikti)" }
     Ok "yazildi: $($r.ad) = $($r.hedef)  (onceki $($r.mevcut))"
@@ -335,4 +366,6 @@ if ($bekleyen.Count) {
 } elseif ($Uygula.IsPresent) {
   Ok "yeniden baslatma gerekmiyor"
 }
+$ertelenen = @($satirlar | Where-Object { $_.durum -ceq "ERTELENDI" } | ForEach-Object { $_.ad })
+if ($ertelenen.Count) { Uyar "ERTELENDI ($($ertelenen -join ', ')): on yukleme restart ile etkinlesince ayni komutu yeniden kos." }
 exit 0
