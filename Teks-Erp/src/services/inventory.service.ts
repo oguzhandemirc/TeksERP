@@ -2679,16 +2679,22 @@ export class InventoryService {
    *  - çuval depo: shipmentId null + sackId dolu (çuvala konmuş, sevk edilmemiş)
    *  - planlı:     shipment.status PLANNED (onay bekleyen sevkiyata atandı, henüz sevk edilmedi)
    * Hepsi hâlâ binada (WAREHOUSE) ama yalnız "serbest" satılabilir stoktur. SHIPPED hariç.
+   * `filter[mulkiyet]` (T3, tablet Depo şeridi) listeyle aynı helper'dan AND'lenir; boş = bugünkü sayılar.
    */
-  async getWarehouseScope(): Promise<
+  async getWarehouseScope(rawOwnership?: unknown): Promise<
     ApiResponse<{
       free: { count: number; qty: number };
       pool: { count: number; qty: number };
       planned: { count: number; qty: number };
     }>
   > {
+    const ownership = ownershipScopeWhere(readOwnershipScope(rawOwnership));
     const agg = (where: Prisma.RollWhereInput) =>
-      prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
+      prisma.roll.aggregate({
+        where: ownership ? { AND: [where, ownership] } : where,
+        _count: { _all: true },
+        _sum: { currentQty: true },
+      });
 
     const [free, pool, planned] = await Promise.all([
       agg({ status: RollStatus.WAREHOUSE, shipmentId: null, sackId: null }),
@@ -3097,6 +3103,8 @@ export class InventoryService {
         // insan adı ilişkiden gelir. Küçük join; hot path'e ölçülebilir yük katmaz
         // (nullable FK, satır başına en fazla bir kullanıcı).
         cancelledBy: { select: { id: true, fullName: true, username: true } },
+        // EMANET sahibi — tablet okutma satırındaki sahip rozeti (T3); liste include'uyla AYNI şekil.
+        ownerCustomer: ROLL_LIST_INCLUDE.ownerCustomer,
         // En güncel iade kaydı — Tambur/depo barkod okutmada iade notu/nedeni görünür.
         returns: {
           orderBy: { createdAt: "desc" },

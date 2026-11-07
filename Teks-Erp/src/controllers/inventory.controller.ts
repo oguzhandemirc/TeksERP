@@ -560,9 +560,11 @@ export class InventoryController {
     }
   }
 
-  async getWarehouseScope(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getWarehouseScope(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getWarehouseScope();
+      // Yalnız `filter[mulkiyet]` okunur (servis liste/şeritle aynı okuyucudan geçirir, tanınmayan 400);
+      // sorgunun geri kalanı bu uçta hep yok sayıldı — tam çözümleme ilgisiz parametrede 400 üretirdi.
+      const result = await this.service.getWarehouseScope(req.query["filter[mulkiyet]"]);
       res.status(200).json(result);
     } catch (error) {
       next(error);

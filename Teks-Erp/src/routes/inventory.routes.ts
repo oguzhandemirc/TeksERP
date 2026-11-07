@@ -184,6 +184,25 @@ router.get("/", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_RE
  *     responses:
  *       200:
  *         description: Top detayı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   nullable: true
+ *                   description: Top kartı (item, color, shipment, sack, cancelledBy, returns …).
+ *                   properties:
+ *                     ownerCustomerId: { type: string, format: uuid, nullable: true }
+ *                     ownerCustomer:
+ *                       type: object
+ *                       nullable: true
+ *                       description: Emanet sahibi (müşteri malı) — tablet satır rozeti (T3); sahipsiz topta null.
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         name: { type: string }
  *       404:
  *         description: Barkod bulunamadı
  */
@@ -412,9 +431,17 @@ router.get(
  *     description: WAREHOUSE topları fiziksel yere göre ayırır. Yalnız "free" satılabilir serbest stoktur.
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: filter[mulkiyet]
+ *         required: false
+ *         schema: { type: string, enum: [ALL, OWN, CONSIGNED] }
+ *         description: Bizim stok / emanet kapsamı (top listesiyle aynı okuyucu); boş = ALL, tanınmayan 400 OWNERSHIP_SCOPE_INVALID.
  *     responses:
  *       200:
  *         description: "{ free, pool, planned } — her biri { count, qty }."
+ *       400:
+ *         description: Geçersiz mülkiyet süzgeci.
  */
 router.get(
   "/warehouse-scope",

@@ -5,6 +5,7 @@ import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import AppModal from '../../../../components/AppModal';
 import type { ScannedRoll } from '../useQuickWorkOrder';
 import { colors, spacing, radius } from '../../../../theme';
+import OwnerBadge from '../../../../components/OwnerBadge';
 
 interface Props {
   visible: boolean;
@@ -13,6 +14,8 @@ interface Props {
   totalQty: number;
   onRemove: (barcode: string) => void;
   onClearAll: () => void;
+  /** Emanet modülü — açıkken sahipli topta rozet (T3). */
+  emanetOn?: boolean;
 }
 
 /**
@@ -28,6 +31,7 @@ export default function ScannedRollsModal({
   totalQty,
   onRemove,
   onClearAll,
+  emanetOn = false,
 }: Props) {
   return (
     <AppModal visible={visible} onDismiss={onDismiss} position="bottom" contentStyle={styles.sheet}>
@@ -77,6 +81,7 @@ export default function ScannedRollsModal({
                     ) : null}
                   </View>
                 ) : null}
+                <OwnerBadge emanetOn={emanetOn} roll={s} />
               </View>
               <Text style={styles.qty}>{Math.round(s.qty)} m</Text>
               <TouchableRipple onPress={() => onRemove(s.barcode)} borderless style={styles.remove}>

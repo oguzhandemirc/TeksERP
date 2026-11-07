@@ -63,6 +63,9 @@ export interface ScannedRoll {
   labelPrintedAt: string | null;
   /** Kartın yaşam döngüsü okutma anında (`/rolls/barcode` tam kart döner) — kilit çipi rozeti. */
   itemLifecycle: ItemLifecycleStatus;
+  /** Emanet sahibi (T3 rozeti; emanet kapalıyken çizilmez). Ad eski sunucuda gelmez → yalnız "Emanet". */
+  ownerCustomerId?: string | null;
+  ownerCustomer?: { id: string; name: string } | null;
 }
 
 /** Okutma geri bildirimi ortak hook'ta (`hooks/useScanFeedback`) — Fason Sevk de
@@ -634,6 +637,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
           labelPrintedAt: roll.labelPrintedAt ?? null,
           itemLifecycle: itemLifecycleOf(roll.item),
           customerMatch: scanMatchOf(roll),
+          ownerCustomerId: roll.ownerCustomerId ?? null,
+          ownerCustomer: roll.ownerCustomer ?? null,
         });
       }
 
