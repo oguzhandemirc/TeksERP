@@ -39,18 +39,51 @@ it('toplar en yeni üstte, sıra numarası eklenme sırası; toplam satırı; ç
   expect(onRemove).toHaveBeenCalledWith('A1');
 });
 
-it('ret satırı sebebiyle görünür, dokununca kapanır; mükerrer flaş kartı çıkar', () => {
+it('bant görünürken ret satırı YOK — aynı hata iki kez görünmez', () => {
+  const r = renderWithPaper(
+    <HardwareRollsTable
+      {...base}
+      rolls={[roll('A1', 100)]}
+      rejects={[{ id: 7, barcode: 'X9', reason: 'Top bulunamadı' }]}
+      flash={{ kind: 'reject', title: 'EKLENMEDİ', detail: 'X9 · Top bulunamadı' }}
+    />,
+  );
+  expect(r.getAllByTestId('scan-flash')).toHaveLength(1);
+  expect(r.queryByLabelText('Ret notunu kapat')).toBeNull();
+  expect(r.getAllByText(/X9/)).toHaveLength(1);
+});
+
+it('bant sönünce yalnız EN SON ret kalır (birikmez); dokununca kapanır', () => {
   const onDismissReject = jest.fn();
   const r = renderWithPaper(
     <HardwareRollsTable
       {...base}
       rolls={[roll('A1', 100)]}
-      rejects={[{ id: 7, barcode: 'X9', reason: 'Farklı ürün' }]}
+      rejects={[
+        { id: 9, barcode: 'X9', reason: 'Top bulunamadı' },
+        { id: 8, barcode: 'X9', reason: 'Top bulunamadı' },
+        { id: 7, barcode: 'Y1', reason: 'Farklı ürün' },
+      ]}
       onDismissReject={onDismissReject}
-      flash={{ kind: 'duplicate', title: 'ZATEN OKUTULDU', detail: 'A1' }}
     />,
   );
-  expect(r.getByText('ZATEN OKUTULDU')).toBeTruthy();
+  expect(r.getAllByLabelText('Ret notunu kapat')).toHaveLength(1);
+  expect(r.queryByText('Y1')).toBeNull();
   fireEvent.press(r.getByLabelText('Ret notunu kapat'));
-  expect(onDismissReject).toHaveBeenCalledWith(7);
+  expect(onDismissReject).toHaveBeenCalledWith(9);
+});
+
+it('retten SONRA top eklenince eski ret notu düşer', () => {
+  const rejects = [{ id: 7, barcode: 'X9', reason: 'Top bulunamadı' }];
+  const r = renderWithPaper(<HardwareRollsTable {...base} rolls={[roll('A1', 100)]} rejects={rejects} />);
+  expect(r.getByLabelText('Ret notunu kapat')).toBeTruthy();
+  r.rerender(<HardwareRollsTable {...base} rolls={[roll('A1', 100), roll('B2', 50)]} rejects={rejects} />);
+  expect(r.queryByLabelText('Ret notunu kapat')).toBeNull();
+});
+
+it('mükerrer flaş kartı çıkar', () => {
+  const r = renderWithPaper(
+    <HardwareRollsTable {...base} rolls={[roll('A1', 100)]} flash={{ kind: 'duplicate', title: 'ZATEN OKUTULDU', detail: 'A1' }} />,
+  );
+  expect(r.getByText('ZATEN OKUTULDU')).toBeTruthy();
 });
