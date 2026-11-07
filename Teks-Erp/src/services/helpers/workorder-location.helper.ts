@@ -117,7 +117,7 @@ export async function findSplitWorkOrderIds(): Promise<string[]> {
     FROM rolls r
     JOIN work_order_steps s ON s.id = r."currentStepId"
     WHERE r."currentStepId" IS NOT NULL
-      AND r.status::text IN (${Prisma.join(LOCATION_LIVE_STATUSES.map((s) => s as string))})
+      AND r.status = ANY(${[...LOCATION_LIVE_STATUSES]}::"RollStatus"[])
     GROUP BY s."workOrderId"
     HAVING COUNT(DISTINCT s."stationId") >= 2`;
   return rows.map((r) => r.workOrderId);
