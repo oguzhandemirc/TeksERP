@@ -179,9 +179,9 @@ async function main(): Promise<void> {
   const total = amount(tl);
   check("iki iş tek satır: 42 adet × 3 = 126", two.lines.length === 1 && eq(tl.qty, 42) && eq(total, 126), JSON.stringify(two.lines));
   let rec409 = false;
-  try { reconcileServiceLinksWithLines([{ itemId: svc, qty: "100", description: "x" }], two.links); } catch { rec409 = true; }
+  try { reconcileServiceLinksWithLines([{ serviceItemId: svc, qty: "100", description: "x" }], two.links); } catch { rec409 = true; }
   let recOk = true;
-  try { reconcileServiceLinksWithLines([{ itemId: svc, qty: tl.qty, description: "x" }], two.links); } catch { recOk = false; }
+  try { reconcileServiceLinksWithLines([{ serviceItemId: svc, qty: tl.qty, description: "x" }], two.links); } catch { recOk = false; }
   check("bağ tutarlılığı adetle tutar; metre toplamıyla (100) 409", recOk && rec409, `ok=${recOk} 409=${rec409}`);
   const shares = allocateRevenue(total, two.links as unknown as RevenueLinkRow[]);
   const byRoll = new Map(two.links.map((l, i) => [l.rollId, shares[i]!]));

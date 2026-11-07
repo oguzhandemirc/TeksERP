@@ -9,7 +9,7 @@
 // Ters yol: DRAFT silme → Cascade; iptal → AYNI tx'te damga (iş yeniden faturalanır).
 // İade bağı ÇÖZMEZ (storno ≠ iade).
 // =============================================================================
-import { Currency, Prisma, ServiceMeterBasis, ShipmentStatus, type ServiceQtyUnit } from "@prisma/client";
+import { Currency, InvoiceLineType, Prisma, ServiceMeterBasis, ShipmentStatus, type ServiceQtyUnit } from "@prisma/client";
 import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import { findCariAccountForCardTx } from "./finance.helper";
 import prisma from "../../lib/prisma";
@@ -40,7 +40,8 @@ export interface ServiceBillingLinkInput {
 }
 
 export interface ServiceBillingDraft {
-  lines: Array<{ itemId: string; description: string; qty: Prisma.Decimal; unit: string; unitPrice: Prisma.Decimal }>;
+  /** D1c: hizmet satırı kanonik (`lineType=SERVICE` + `serviceItemId`, `itemId` yok); eski panel aynası yanıt sınırında. */
+  lines: Array<{ lineType: typeof InvoiceLineType.SERVICE; itemId: null; serviceItemId: string; description: string; qty: Prisma.Decimal; unit: string; unitPrice: Prisma.Decimal }>;
   links: ServiceBillingLinkInput[];
   warnings: string[];
 }
@@ -109,7 +110,9 @@ export async function collectServiceBillingDraft(params: {
     },
   });
   const lines = res.lines.map((l) => ({
-    itemId: l.serviceItemId,
+    lineType: InvoiceLineType.SERVICE,
+    itemId: null,
+    serviceItemId: l.serviceItemId,
     description: `${l.label ?? l.name} (${l.rollCount} top)`,
     qty: new Prisma.Decimal(l.quantity),
     unit: SERVICE_QTY_UNIT_LABEL[l.unit],
@@ -139,7 +142,7 @@ export async function collectServiceBillingDraft(params: {
  * aksi hâlde iş ya faturada olmadan "faturalandı" sayılır ya da iki kez kesilir.
  */
 export function reconcileServiceLinksWithLines<T extends { serviceItemId: string; billedMeters: Prisma.Decimal; billedQty?: Prisma.Decimal | null }>(
-  lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>,
+  lines: Array<{ serviceItemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>,
   links: T[],
 ): { keep: T[]; droppedItemIds: string[] } {
   const byItem = new Map<string, { sum: Prisma.Decimal; n: number }>();
@@ -149,7 +152,7 @@ export function reconcileServiceLinksWithLines<T extends { serviceItemId: string
   }
   const dropped: string[] = [];
   for (const [itemId, g] of byItem) {
-    const itemLines = lines.filter((l) => l.itemId === itemId);
+    const itemLines = lines.filter((l) => l.serviceItemId === itemId);
     if (itemLines.length === 0) { dropped.push(itemId); continue; }
     const qty = itemLines.reduce((acc, l) => acc.plus(new Prisma.Decimal(l.qty)), new Prisma.Decimal(0));
     // Bağ metresi iş başına 3 haneye yuvarlı, satır toplamı yuvarlanmadan toplanır → iş başına 0,001 pay.
@@ -232,7 +235,7 @@ export async function revokeServiceLinksTx(
 export async function syncServiceLinksToLinesTx(
   tx: Tx,
   invoiceId: string,
-  lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>,
+  lines: Array<{ serviceItemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>,
   userId: string | null,
 ): Promise<number> {
   const active = await tx.serviceBillingLink.findMany({ where: { invoiceId, revokedAt: null }, select: { serviceItemId: true, billedMeters: true, billedQty: true } });

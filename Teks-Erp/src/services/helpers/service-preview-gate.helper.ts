@@ -1,6 +1,7 @@
 // =============================================================================
 // HİZMET FATURASI ÖNİZLEME KAPISI — F1 (Gülkesim dalga 3a)
 // =============================================================================
+// Satırlar KANONİK gelir (D1c `normalizeInvoiceLines`): hizmet kalemi `serviceItemId`'dedir.
 // Soru: "önizlemeden bu yana tetik ya da işlerin bağ durumu değişti mi?" Panel sevk taslağı istek gövdesinde bağ
 // taşımaz; bağlar fatura tx'inde sevk kilidi altında yeniden çözülür. Sevkin emanet işine ait hizmet satırı taze
 // bağlarla örtüşmüyorsa 409 — emanet işine BAĞSIZ hizmet satırı hiçbir yoldan yazılmaz (çift fatura seddi).
@@ -40,8 +41,8 @@ async function loadShipmentServiceWorkState(tx: Tx, p: { shipmentId: string; cus
   return { links: draft.links, billed, itemIds };
 }
 
-function sumLineQty(lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value }>, itemId: string): Prisma.Decimal {
-  return lines.filter((l) => l.itemId === itemId).reduce((a, l) => a.plus(new Prisma.Decimal(l.qty)), new Prisma.Decimal(0));
+function sumLineQty(lines: Array<{ serviceItemId?: string | null; qty: Prisma.Decimal.Value }>, itemId: string): Prisma.Decimal {
+  return lines.filter((l) => l.serviceItemId === itemId).reduce((a, l) => a.plus(new Prisma.Decimal(l.qty)), new Prisma.Decimal(0));
 }
 
 /**
@@ -51,14 +52,14 @@ function sumLineQty(lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.V
  */
 export async function resolveShipmentServiceLinksTx(
   tx: Tx,
-  p: { shipmentId: string; customerId: string; currency: Currency; lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }> },
+  p: { shipmentId: string; customerId: string; currency: Currency; lines: Array<{ serviceItemId?: string | null; qty: Prisma.Decimal.Value; description?: string }> },
 ): Promise<ServiceBillingLinkInput[]> {
   const settings = await loadServiceBillingSettings(tx);
   if (!settings.enabled) return [];
   const { trigger } = await resolveCustomerServiceBillingTrigger(p.customerId, settings, tx);
   const state = await loadShipmentServiceWorkState(tx, { ...p, settings });
   const fresh = trigger === "PERIOD_END" ? [] : state.links;
-  for (const itemId of new Set(p.lines.map((l) => l.itemId).filter((v): v is string => !!v && state.itemIds.has(v)))) {
+  for (const itemId of new Set(p.lines.map((l) => l.serviceItemId).filter((v): v is string => !!v && state.itemIds.has(v)))) {
     if (trigger === "PERIOD_END") throw servicePreviewStale("bu müşterinin hizmet işleri artık dönem sonu faturasında kesiliyor", itemId);
     const own = fresh.filter((l) => l.serviceItemId === itemId);
     if (own.length === 0) throw servicePreviewStale("işler başka bir faturaya bağlandı", itemId);
@@ -75,11 +76,11 @@ export async function resolveShipmentServiceLinksTx(
  */
 export async function assertNoUnlinkedShipmentServiceLinesTx(
   tx: Tx,
-  p: { invoiceId: string; shipmentId: string; customerId: string; currency: Currency; lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value }> },
+  p: { invoiceId: string; shipmentId: string; customerId: string; currency: Currency; lines: Array<{ serviceItemId?: string | null; qty: Prisma.Decimal.Value }> },
 ): Promise<void> {
   const settings = await loadServiceBillingSettings(tx);
   if (!settings.enabled) return;
-  const lineItems = new Set(p.lines.map((l) => l.itemId).filter((v): v is string => !!v));
+  const lineItems = new Set(p.lines.map((l) => l.serviceItemId).filter((v): v is string => !!v));
   if (lineItems.size === 0) return;
   const state = await loadShipmentServiceWorkState(tx, { ...p, settings });
   for (const itemId of lineItems) {
@@ -98,9 +99,9 @@ export async function assertNoUnlinkedShipmentServiceLinesTx(
  */
 export async function assertNoUnlinkedPeriodServiceLinesTx(
   tx: Tx,
-  p: { invoiceId: string; lines: Array<{ itemId?: string | null }> },
+  p: { invoiceId: string; lines: Array<{ serviceItemId?: string | null }> },
 ): Promise<void> {
-  const lineItems = [...new Set(p.lines.map((l) => l.itemId).filter((v): v is string => !!v))];
+  const lineItems = [...new Set(p.lines.map((l) => l.serviceItemId).filter((v): v is string => !!v))];
   if (lineItems.length === 0) return;
   // Dönem taslağı = bağ kurulmuş (damgalı dahil) sevksiz satış taslağı; elle açılmış serbest fatura bu kapıya girmez.
   if ((await tx.serviceBillingLink.count({ where: { invoiceId: p.invoiceId } })) === 0) return;
@@ -124,7 +125,7 @@ export async function assertNoUnlinkedPeriodServiceLinesTx(
 /** Taslak düzenlemesinin hizmet ayağı: bağ ↔ satır eşitlemesi (H7) + sevk (F1) / dönem (K3b) taslağında bağsız emanet satırı kapısı. */
 export async function syncDraftServiceLinksTx(
   tx: Tx,
-  p: { invoiceId: string; type: string; shipmentId: string | null; currency: Currency; cari: { customerId: string | null }; lines: Array<{ itemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>; userId: string | null },
+  p: { invoiceId: string; type: string; shipmentId: string | null; currency: Currency; cari: { customerId: string | null }; lines: Array<{ serviceItemId?: string | null; qty: Prisma.Decimal.Value; description?: string }>; userId: string | null },
 ): Promise<number> {
   const revoked = await syncServiceLinksToLinesTx(tx, p.invoiceId, p.lines, p.userId);
   if (p.type === "SALES" && p.shipmentId && p.cari.customerId) {

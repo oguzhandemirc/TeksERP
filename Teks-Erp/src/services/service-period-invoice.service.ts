@@ -42,7 +42,8 @@ export interface ServicePeriodPreview {
   workCount: number;
   alreadyBilledWorkCount: number;
   totalMeters: string;
-  lines: Array<{ itemId: string; description: string; qty: string; unit: string; unitPrice: string; amount: string }>;
+  /** D1c: `lineType`=SERVICE + `serviceItemId`; `itemId` eski panel aynası (= serviceItemId). */
+  lines: Array<{ lineType: "SERVICE"; serviceItemId: string; itemId: string; description: string; qty: string; unit: string; unitPrice: string; amount: string }>;
   subtotal: string;
   periodClosed: string | null;
   warnings: string[];
@@ -111,7 +112,7 @@ async function buildPeriodDraft(input: ServicePeriodInput) {
 export async function previewServicePeriodDraft(input: ServicePeriodInput): Promise<ServicePeriodPreview> {
   const { cari, bounds, draft, closedAt, effective } = await buildPeriodDraft(input);
   const lines = draft.lines.map((l) => ({
-    itemId: l.itemId, description: l.description, qty: l.qty.toFixed(3), unit: l.unit, unitPrice: l.unitPrice.toFixed(4),
+    lineType: l.lineType, serviceItemId: l.serviceItemId, itemId: l.serviceItemId, description: l.description, qty: l.qty.toFixed(3), unit: l.unit, unitPrice: l.unitPrice.toFixed(4),
     amount: l.qty.mul(l.unitPrice).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toFixed(2),
   }));
   const meters = draft.links.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));

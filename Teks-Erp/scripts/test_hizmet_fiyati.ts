@@ -297,6 +297,11 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/invoice-line-subject.helper.ts",
   // D1a: hizmet kartı kullanım kapısı (`service_items` satırı) — çözücü değil.
   "services/helpers/item-usage.helper.ts",
+  // D1c: fatura satırı sözleşmesi (`lineType` + `serviceItemId` gövde alanı, detay `serviceItem`, önizleme eski
+  // panel aynası) — satırın KONU kolonu taşınır; hizmet kalemi çözümü değil (çözücü `pickServiceItemId`).
+  "routes/finance.routes.ts",
+  "services/helpers/shipment-auto-draft.helper.ts",
+  "services/service-period-invoice.service.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
