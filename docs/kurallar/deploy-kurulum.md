@@ -110,6 +110,7 @@
 - [ÇEKİRDEK] `/health` PUBLIC, `auditGuard` yok; o `/api/admin/health`te.
 - [ÇEKİRDEK] Kurulum talimatı `docs/surumler/backend-<sürüm>.md`den; önceki saha sürümünü TAHMİN ETME.
 - [ÇEKİRDEK] `kur.ps1` çıkış kodlarını toplamaz, başarısızları adıyla raporlar.
+- [ÇEKİRDEK] `[prisma-istemci]` uyarısı ya da liste uçlarında toplu 500/400 "Unknown field … for select statement" görürsen önce `npm run prisma:generate` + yeniden başlat; istemciyi suçlama (arşiv 2026-11-07 pano 400).
 - [ÇEKİRDEK] `[5/9]` taşıması `TasiIsrarla`; çıplak `Move-Item` yok.
 - [ÇEKİRDEK] Betikler PS 5.1 + kısıtlı ilkede koşar: ASCII metin, `npm.cmd`, `NativeArg`, `-NoProfile -ExecutionPolicy Bypass -File`.
 - [ÇEKİRDEK] Dev backend P2023'te `prisma generate` + restart; `pkill -f "tsx src/server.ts"` YASAK.
