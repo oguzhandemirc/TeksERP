@@ -112,7 +112,7 @@ yayınları logcat'te, önceki mod 2'ye döner; logcat'te `CameraService`/`Scann
 - Hızlı İE → Yeni İş Emri, 1. adım TOPLAR (`StepRolls`): OKUT düğmesi yok; "Sipariş Bağla" alt çubukta İLERİ'nin
   yanında; adım okutulan topları TABLO olarak gösterir (480×800 dikey birinci hedef; tablet düzeni bozulmaz).
 - Tek amaçlı ekranlar (envanter 1–4, 13, 17, 21–23, 25–27, 32).
-  Uygulanan (PR #602'ye bakın): modal `listenWhileHidden` (modal açılmadan tuş okur; gizli okumada `onModalHide`
+  Uygulanan (PR #603'ye bakın): modal `listenWhileHidden` (modal açılmadan tuş okur; gizli okumada `onModalHide`
   işleyici bitince çağrılır) + `ScannerEntryBar hardwareListening`; ekranlar: Hızlı İE adım ①, Depo, Kartela Sevk.
   Kalan tek amaçlılar (Kurşun KK, Paketleme, Hızlı Sipariş, Cuvalsız sevk, Fason Kabul, İade, Muayene, İE'ye top
   ekle, Gelen Belge irsaliye, giriş kartı, lisans/eşleme QR) modal paneliyle kamerasız çalışır; doğrudan dinleme
