@@ -17,6 +17,20 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-07c",
+      "baslik": "Stok kalemi Excel'inde depodaki tüm toplar",
+      "surumler": {
+        "panel": "1.3.14"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Siparişler ekranında \"Dışa aktar\" menüsündeki \"Excel (stok kalemi bazında)…\" penceresine yeni \"Depoda (tümü)\" sütunu eklendi: depoda duran bütün bitmiş toplar, çuvala girmiş ya da sevkiyata ayrılmış olanlar da dahil. Eski sütunun adı \"Depoda hazır (serbest)\" oldu; o sütun eskisi gibi yalnız çuvala ve sevkiyata girmemiş topları sayar. Yeni sütun yalnız top listesini görme yetkisi olan kullanıcılarda dolar."
+        }
+      ]
+    },
+    {
       "id": "2026-11-07b",
       "baslik": "Kartela sevki ve kabulü panelden; listelerde Dışa aktar menüsü",
       "surumler": {
