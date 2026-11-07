@@ -1,7 +1,7 @@
 // =============================================================================
 // LEVENT LİSTESİ — sekmeler: Planlı (sar / taslak sil) · Bugün sarılan (iptal, yetenek izniyle) · Tezgahta (Faz 3, bayrakla)
 // =============================================================================
-import React, { useState } from "react";
+import React from "react";
 import { View, StyleSheet, FlatList } from "react-native";
 import {
   Text,
@@ -21,7 +21,8 @@ import type { DevereScreenState } from "./useDevereScreen";
 import MountedTab from "./MountedTab";
 import { factoryLocaleTimeString } from '../../../lib/factory-time';
 
-type Tab = "planned" | "today" | "mounted";
+export type BeamTab = "planned" | "today" | "mounted";
+type Tab = BeamTab;
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
@@ -104,8 +105,9 @@ function Row({ beam, state }: { beam: WarpBeam; state: DevereScreenState }) {
   );
 }
 
-export default function BeamList({ state }: { state: DevereScreenState }) {
-  const [tab, setTab] = useState<Tab>("planned");
+/** Sekme üstte tutulur: el terminalinde hangi okutma bandının tuşu dinleyeceğini sekme belirler. */
+export default function BeamList({ state, tab, onTab }: { state: DevereScreenState; tab: Tab; onTab: (t: Tab) => void }) {
+  const setTab = onTab;
   const rows = tab === "planned" ? state.planned : state.todayWound;
   const loading = tab === "planned" ? state.plannedLoading : state.readyLoading;
   const mountedTab = tab === "mounted" && state.mountTracking;

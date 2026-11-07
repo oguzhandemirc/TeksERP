@@ -49,7 +49,7 @@ export default function MountModal({ state, loomMachines, methodRequired, isOnli
       footer={<Button onPress={state.close} disabled={state.pending}>Vazgeç</Button>}
       overlays={
         <>
-        <BarcodeScannerModal visible={camera} title="Tezgah etiketini okut" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); state.scanMachine(c); }} />
+        <BarcodeScannerModal visible={camera} listenWhileHidden={!state.presetMachineId} title="Tezgah etiketini okut" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); state.scanMachine(c); }} />
         <PickerModal visible={picker} title="Tezgah seç" options={options} selectedValue={f.machineId ?? ''} emptyText="Levent tüketen istasyonda aktif makine yok — istasyon kartında 'levent tüketir' işaretlenir." onDismiss={() => setPicker(false)} onSelect={(v) => { state.setForm({ ...f, machineId: v, position: '1' }); setPicker(false); }} />
         </>
       }
@@ -58,7 +58,7 @@ export default function MountModal({ state, loomMachines, methodRequired, isOnli
         <TruncatedText style={sheet.label}>{`Tezgah: ${machine ? `${machine.code} — ${machine.name}` : 'bu tezgah'} (oturum)`}</TruncatedText>
       ) : (
         <>
-          <ScannerEntryBar value={code} onChangeText={setCode} placeholder="Tezgah etiketi okut/yaz…" onResolve={() => { state.scanMachine(code); setCode(''); }} onScan={() => setCamera(true)} scanCtaLabel="Tezgah etiketini okut" tone="indigo" />
+          <ScannerEntryBar value={code} onChangeText={setCode} placeholder="Tezgah etiketi okut/yaz…" onResolve={() => { state.scanMachine(code); setCode(''); }} onScan={() => setCamera(true)} scanCtaLabel="Tezgah etiketini okut" tone="indigo" hardwareListening />
           <SheetField label="Tezgah / makine (listeden)" value={machine ? `${machine.code} — ${machine.name}` : ''} placeholder={loomMachines.length ? 'Okutun ya da seçin' : 'Levent tüketen istasyonda makine yok'} onPress={() => setPicker(true)} />
         </>
       )}
