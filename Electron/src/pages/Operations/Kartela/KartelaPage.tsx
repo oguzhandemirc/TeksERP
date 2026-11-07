@@ -1,7 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Send, PackageCheck, Package, Palette, History } from "lucide-react";
+import { Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -9,7 +11,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { FilterBar, StandaloneDateRangeFilter } from "@/components/data-table/FilterBar";
-import { cn } from "@/lib/utils";
 import { ScanField } from "@/components/scanner/ScanField";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { useDataTable } from "@/hooks/useDataTable";
@@ -26,59 +27,38 @@ import { useFoldValues } from "@/hooks/useFoldValues";
 import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet";
 import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
 import { KartelaEventsTab } from "./KartelaEventsTab";
+import { KartelaTabBar } from "./KartelaTabBar";
+import { OutstandingTab } from "./OutstandingTab";
+import { KartelaDispatchDialog } from "./KartelaDispatchDialog";
+import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
+import { isKartelaTabKey, NEW_DISPATCH_ACTION, type KartelaTabKey } from "./tabs-config";
 
-// Tek kokpit: belge akışı (Sevkler/Kabuller) + envanter (Kartelada Toplar =
-// AT_KARTELA rulolar, Üretilen Kartelalar = swatch'lar). Kumaş Stoğu görünümleri
-// Toplar sayfasından buraya taşındı — kartela tek yerden yönetilir.
-type Tab = "dispatches" | "receipts" | "rolls" | "swatches" | "events";
-
-const TABS: { key: Tab; label: string; Icon: typeof Send }[] = [
-  { key: "dispatches", label: "Sevkler", Icon: Send },
-  { key: "receipts", label: "Kabuller", Icon: PackageCheck },
-  { key: "rolls", label: "Kartelada Toplar", Icon: Package },
-  { key: "swatches", label: "Kartela Stoğu", Icon: Palette },
-  { key: "events", label: "Hareketler", Icon: History },
-];
-
-function KartelaTabBar({
-  tab,
-  onTab,
-  trailing,
-}: {
-  tab: Tab;
-  onTab: (t: Tab) => void;
-  /** Aktif sekmenin araçları (ör. Sütunlar/Görünümler) — sağda, sekmelerle AYNI satırda. */
-  trailing?: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1 border-b px-3">
-      {TABS.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          onClick={() => onTab(t.key)}
-          className={cn(
-            "flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            tab === t.key
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <t.Icon className="h-4 w-4" />
-          {t.label}
-        </button>
-      ))}
-      {trailing ? <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{trailing}</div> : null}
-    </div>
-  );
-}
-
+// Tek kokpit: belge akışı (Sevkler/Bekleyen Kabul/Kabuller) + envanter (Kartelada Toplar =
+// AT_KARTELA rulolar, Kartela Stoğu = swatch'lar). Sevk/kabul/iptal tabletle eşit (kartela:write).
 export function KartelaPage() {
-  const [tab, setTab] = useState<Tab>("dispatches");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const [tab, setTab] = useState<KartelaTabKey>(isKartelaTabKey(urlTab) ? urlTab : "dispatches");
   const [selection, setSelection] = useState<KartelaSelection>(null);
   const [scanCode, setScanCode] = useState("");
   const [scanSwatch, setScanSwatch] = useState<Swatch | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [cekiId, setCekiId] = useState<string | null>(null);
+  // Sayfa açıkken gelen `?tab=` (komut paleti) sekmeyi değiştirir.
+  // Açık detay paneli eski sekmenin belgesidir; sekme değişince kapanır.
+  useEffect(() => {
+    if (!isKartelaTabKey(urlTab)) return;
+    setTab(urlTab);
+    setSelection(null);
+  }, [urlTab]);
+  // Palet derin bağlantısı (`?action=new-dispatch`) diyaloğu bir kez açar; parametre tüketilir.
+  useEffect(() => {
+    if (searchParams.get("action") !== NEW_DISPATCH_ACTION) return;
+    setDispatchOpen(true);
+    const sp = new URLSearchParams(searchParams);
+    sp.delete("action");
+    setSearchParams(sp, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Kartela (SW-) barkodu okut → kartela detayını aç (404 toast'ı interceptor'dan).
   const swatchLookup = useMutation({
@@ -162,7 +142,16 @@ export function KartelaPage() {
     <PageShell>
       <PageHeader
         title="Kartela"
-        actions={<RefreshButton queryKey={refreshKey} extraKeys={[["kartela"]]} />}
+        actions={
+          <>
+            <PermissionGate permission="kartela:write">
+              <Button size="sm" className="gap-1.5" onClick={() => setDispatchOpen(true)}>
+                <Send className="h-4 w-4" /> Yeni Sevk
+              </Button>
+            </PermissionGate>
+            <RefreshButton queryKey={refreshKey} extraKeys={[["kartela"]]} />
+          </>
+        }
       />
       <KartelaTabBar
         tab={tab}
@@ -186,6 +175,8 @@ export function KartelaPage() {
 
       {tab === "dispatches" ? (
         <DispatchesTab onSelect={setSelection} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
+      ) : tab === "outstanding" ? (
+        <OutstandingTab />
       ) : tab === "receipts" ? (
         <ReceiptsTab onSelect={setSelection} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       ) : tab === "rolls" ? (
@@ -219,6 +210,8 @@ export function KartelaPage() {
         <SwatchesPanel onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       )}
 
+      <KartelaDispatchDialog open={dispatchOpen} onOpenChange={setDispatchOpen} onCreated={setCekiId} />
+      <KartelaCekiPrintDialog dispatchId={cekiId} open={cekiId !== null} onOpenChange={(o) => !o && setCekiId(null)} />
       <KartelaDetailSheet selection={selection} onClose={() => setSelection(null)} />
       <SwatchDetailSheet
         swatch={scanSwatch}
