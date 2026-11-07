@@ -36,10 +36,10 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 vi.mock("@/components/RefreshButton", () => ({ RefreshButton: () => null }));
-vi.mock("@/components/data-table/FilterBar", () => ({ FilterBar: () => null }));
+vi.mock("@/components/data-table/FilterBar", () => ({ FilterControl: () => null }));
 vi.mock("./fason/FasonSheet", () => ({ FasonSheet: () => null }));
 vi.mock("@/providers/PreferencesProvider", () => ({
-  usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }),
+  usePreferences: () => ({ prefs: { density: "comfortable" }, ready: true, setPreference: vi.fn() }),
 }));
 
 import { WeavingOrderDetailSheet } from "./WeavingOrderDetailSheet";
