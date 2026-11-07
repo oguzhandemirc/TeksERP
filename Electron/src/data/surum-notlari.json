@@ -17,6 +17,40 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-07d",
+      "baslik": "Her girişte temiz sekmeler; kartelalık stok; listelerde son kullanılan süzgeçler hatırlanır",
+      "surumler": {
+        "panel": "1.3.15"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Panelden çıkış yapınca ya da oturum düşüp yeniden giriş yapınca eski sekmeler açılmaz; program tek \"Anasayfa\" sekmesiyle başlar. Programı kapatıp yeniden açınca da sekmeler temizdir. Sayfayı yenilemek (F5) açık sekmeleri korur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kumaş Stoğu'nda sekmeler tek satırda kaldı; durum sekmeleri ile yer sekmeleri arasına ayraç geldi. \"Bitmiş Depo\" sekmesinde süzgeç satırının sağına \"Kartelalık\" kutusu eklendi: işaretlenince yalnız kartelalık işaretli toplar listelenir, üstteki toplam sayılar da aynı topları sayar. \"Fire dahil\" seçeneği \"+ Filtre\" menüsündedir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "\"Kartela Takibi\" sayfasına \"Kartelalık Stok\" sekmesi eklendi: depoda duran, kartelalık işaretli bitmiş toplar listelenir; satırlar seçilip \"Sevke ekle\" ile doğrudan kartela sevkine alınır (\"Kartela işlemi yapabilir\" yetkisi gerekir). \"Yeni Sevk\" penceresindeki \"Listeden Seç\" önce kartelalık topları gösterir; gerekirse \"Tüm bitmiş\" seçilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Listelerin üstündeki süzgeçler tek satıra indi ve son kullandığınız süzgeçler kullanıcınıza kaydedilir: ekrandan çıkıp geri gelince ya da program yeniden açılınca liste aynı süzgeçlerle gelir. Arama yazısı kaydedilmez. \"Son 7 gün\" gibi göreli tarih seçimleri her açılışta bugüne göre yeniden hesaplanır. Sağdaki \"Temizle\" bütün süzgeçleri kaldırır; kayıt da boşalır. Bu ekranlarda geçerli: Siparişler, İş Emirleri, Sevkiyatlar, Kumaş Stoğu (her sekme ayrı), Kartela Takibi, Müşteriler, Cariler, Sevk Edilenler (Muhasebe), İadeler, Leventler, Dokuma İş Emirleri, Çuvallar ve Top Arşivi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İş Emirleri ve Sevkiyatlar kayıtlı süzgeç yokken son 30 günü gösterir. Barkod okutarak ya da başka ekrandan bağlantıyla açılan liste (örneğin bir partinin çuvalları) kayıtlı süzgeci uygulamaz; gelen seçimi gösterir ve kayıtlı süzgeci bozmaz. Çuvallar'da müşteri, şube ve parti seçimi kaydedilmez. Bu sürüm için sunucu güncellemesi gerekmez."
+        }
+      ]
+    },
+    {
       "id": "2026-11-07c",
       "baslik": "Stok kalemi Excel'inde depodaki tüm toplar",
       "surumler": {
