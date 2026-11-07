@@ -175,7 +175,8 @@ async function main(): Promise<void> {
   // ── §4 ARAYÜZ KAPILARI (kaynak taraması) ────────────────────────────────
   // Her yeni depo yüzeyi tek kaynaktan gelen karara bağlı olmalı.
   const rollsPage = readSrc("pages/Operations/Rolls/RollsPage.tsx");
-  const rollsBody = readSrc("pages/Operations/Rolls/RollsTableBody.tsx");
+  // Kumaş Stoğu süzgeç tanımları 2026-11-07 (panel filtre dalga 2) RollsTableBody'den ayrıldı.
+  const rollFilterDefs = readSrc("pages/Operations/Rolls/roll-filter-defs.ts");
   const receiptForm = readSrc("pages/Operations/GoodsReceipts/GoodsReceiptFormDialog.tsx");
   const hook = readSrc("hooks/useWarehouses.ts");
 
@@ -205,7 +206,7 @@ async function main(): Promise<void> {
   );
   check(
     "§4d Rolls 'Depo' filtresi multiWarehouse kapılı",
-    rollsBody.includes("multiWarehouse"),
+    rollFilterDefs.includes("useMultiWarehouse") && rollFilterDefs.includes("multiWarehouse ? [f] : []"),
   );
   check(
     "§4e Mal Kabul depo seçicisi tek depoda çizilmiyor",

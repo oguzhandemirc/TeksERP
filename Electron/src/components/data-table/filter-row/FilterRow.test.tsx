@@ -1,7 +1,7 @@
 // Bekçi — tek satır filtre çubuğu: ✕ yalnız kendi filtresini, "Temizle" hepsini kaldırır;
 // "+ Filtre" kutu ekler; satır hiçbir genişlikte sarmaz (sınıf sözleşmesi — jsdom CSS hesaplamaz).
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { FilterRow, FILTER_ROW_CLASS, FILTER_ROW_SCROLL_CLASS } from "./FilterRow";
 import type { RowFilter } from "./row-filter";
@@ -115,6 +115,17 @@ describe("FilterRow — TEK SATIR sözleşmesi", () => {
     expect(menu.getByRole("menuitem", { name: "A" }).className).toContain("lg:hidden");
     expect(menu.getByRole("menuitem", { name: "KUMAS" }).className).not.toContain("lg:hidden");
     expect(menu.queryByRole("menuitem", { name: "B" })).toBeNull();
+  });
+
+  it("⭐ eklenecek filtre yoksa '+ Filtre' çizilmez; yalnız dar-ekran kutuları varsa geniş ekranda gizli", () => {
+    setup("/?filter[a]=1", [f("a", ["filter[a]"])]);
+    expect(screen.queryByRole("button", { name: "Filtre ekle" })).toBeNull();
+    cleanup();
+    setup("/", [f("a", ["filter[a]"])]);
+    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).toContain("lg:hidden");
+    cleanup();
+    setup("/", [f("a", ["filter[a]"])], [f("kumas", ["filter[itemId]"])]);
+    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).not.toContain("lg:hidden");
   });
 });
 

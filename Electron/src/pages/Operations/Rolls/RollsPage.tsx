@@ -8,7 +8,6 @@ import { DemoBar } from "@/components/demo/DemoBar";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
 import { classifyBarcode, matchesFullFormat } from "@/lib/scanner/barcode-kind";
@@ -21,7 +20,10 @@ import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { RollScanBar } from "./RollScanBar";
 import { UrlFlagToggle } from "./UrlFlagToggle";
-import { RollsTableBody, dropFinishedOnlyFilters, KARTELA_MARKED_PARAM } from "./RollsTableBody";
+import { RollsTableBody } from "./RollsTableBody";
+import { KARTELA_MARKED_PARAM, useRollFilterDefs } from "./roll-filter-defs";
+import { RollsFilterRow, rollPersistConfig } from "./RollsFilterRow";
+import { FILTER_ROW_CLASS } from "@/components/data-table/filter-row/FilterRow";
 import { RollsKanban } from "./RollsKanban";
 import { RollsStats } from "./RollsStats";
 import { useRollStats } from "./useRollStats";
@@ -126,9 +128,6 @@ export function RollsPage() {
     }),
   );
 
-  // "Top/Metre" özeti — Üretim Akışı (KANBAN) sekmesinde rulo tablosu olmadığından
-  // gizli (sorgu da kapalı). Artık sekme şeridinin sağında (Arşiv'in eski yeri).
-  const statsQuery = useRollStats(tab === "KANBAN" ? null : tab);
   // Fasonda rozetinde "Fasonda" yerine seçili işlem/firmayı göster
   // ("Boyahane (Boyer Boyacılık)" / "Boyahane" / firma seçili değilse "Fasonda").
   const fasonScopeLabel = useFasonScopeLabel(tab === "SUBCONTRACTOR");
@@ -164,6 +163,7 @@ export function RollsPage() {
     [qualityGradesQuery.data],
   );
   const columns = useMemo(() => makeRollColumns(qualityGrades), [qualityGrades]);
+  const filterDefs = useRollFilterDefs(tab === "KANBAN" ? "RAW_STOCK" : tab);
 
   const dataTable = useDataTable<Roll>({
     queryKey: `rolls:${tab}`,
@@ -205,7 +205,13 @@ export function RollsPage() {
       warehouse: multiWarehouse,
     },
     enabled: isTableTab,
+    // Son kullanılan süzgeç SEKME BAŞINA (anahtar = queryKey); Üretim Akışı'nda tablo yok.
+    persistFilters: tab === "KANBAN" ? undefined : rollPersistConfig(tab),
   });
+
+  // "Top/Metre" özeti — Üretim Akışı (KANBAN) sekmesinde gizli (sorgu da kapalı); kayıtlı
+  // süzgeç URL'ye yazılana dek beklenir (filtresiz + filtreli çift istek olmasın).
+  const statsQuery = useRollStats(tab === "KANBAN" ? null : tab, dataTable.filtersReady);
 
   // Sağ alttaki "Tümünü İndir" — aktif sekmenin (filtreli) SUNUCUDAKİ TÜM kayıtlarını
   // PDF/Excel/CSV indirir (ekrandaki 100 değil). İlerleme sağ altta "N / ~T" görünür.
@@ -215,45 +221,9 @@ export function RollsPage() {
     name: "Kumaş Stoğu",
   });
 
-  // "Fire kaliteyi de göster" — URL filter[includeFire]; tablo + özet ikisi de okur.
-  const includeFire = searchParams.get("filter[includeFire]") === "true";
-  const toggleIncludeFire = (next: boolean) => {
-    const sp = new URLSearchParams(searchParams);
-    if (next) sp.set("filter[includeFire]", "true");
-    else sp.delete("filter[includeFire]");
-    setSearchParams(sp, { replace: true });
-  };
-
-  // Fason chip/kart filtreleri yalnız Fasonda sekmesinde anlamlı — sekmeden
-  // ayrılırken URL'den temizle (başka sekmede dispatch-bazlı filtre listeyi
-  // sessizce yanlış daraltırdı).
-  const selectTab = (next: RollTabKey) => {
-    // Ham Stok ↔ Yarı Mamul: iki sekme aynı `entrySource` alanını force filtre ile
-    // zaten daraltıyor. Kullanıcının seçtiği chip yapışık kalırsa force filtreyle
-    // çelişir ve liste sessizce boşalır — Fasonda emsali, aynı temizlik.
-    if (isEntryTab && (next === "RAW_STOCK" || next === "SEMI_FINISHED") && next !== tab) {
-      const sp = new URLSearchParams(searchParams);
-      if (sp.has("filter[entrySource]")) {
-        sp.delete("filter[entrySource]");
-        setSearchParams(sp, { replace: true });
-      }
-    }
-    // Bitmiş Depo'ya özgü süzgeçler (Sevkiyat · Kartelalık) başka sekmede görünmez;
-    // URL'de kalırsa listeyi sessizce daraltırdı.
-    if (tab === "FINISHED_STOCK" && next !== "FINISHED_STOCK") {
-      const sp = new URLSearchParams(searchParams);
-      if (dropFinishedOnlyFilters(sp)) setSearchParams(sp, { replace: true });
-    }
-    if (tab === "SUBCONTRACTOR" && next !== "SUBCONTRACTOR") {
-      const sp = new URLSearchParams(searchParams);
-      if (sp.has("filter[subcontractorId]") || sp.has("filter[subcontractorCategoryId]")) {
-        sp.delete("filter[subcontractorId]");
-        sp.delete("filter[subcontractorCategoryId]");
-        setSearchParams(sp, { replace: true });
-      }
-    }
-    setTab(next);
-  };
+  // Sekmeler aynı URL'i paylaşır; eski sekmenin süzgecini çıkarıp yeni sekmenin kaydını getiren
+  // `usePersistedTableFilters` (anahtar `rolls:<sekme>`) — Fasonda/Bitmiş Depo'ya özgü süzgeç taşınmaz.
+  const selectTab = (next: RollTabKey) => setTab(next);
 
   // ⚠️ REJİM DEĞİŞİNCE / GİZLİ SEKMEYE DERİN BAĞLANTIYLA GELİNİNCE düşülecek
   // bir yer olmalı: ticarette `?tab=PRODUCTION` sekmeyi ŞERİTTE göstermez ama
@@ -267,14 +237,17 @@ export function RollsPage() {
 
   // Dashboard'tan `?tab=...` ile gelindiğinde initial state ile senkron;
   // URL'i temizle ki sekme değişimi geri-tuş davranışına karışmasın.
+  // Kayıtlı süzgeç yazılana dek beklenir: bayat kopyadan silmek geri yüklemeyi geri alırdı.
   useEffect(() => {
-    if (!urlTab) return;
+    if (!urlTab || !dataTable.filtersReady) return;
     if (isRollTabKey(urlTab) && urlTab !== tab) setTab(urlTab);
     const next = new URLSearchParams(searchParams);
     next.delete("tab");
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTab]);
+  }, [urlTab, dataTable.filtersReady]);
+
+  const scanBar = <RollScanBar openDetail={openDetail} scanPending={scanLookup.isPending} />;
 
   return (
     <PageShell>
@@ -320,27 +293,6 @@ export function RollsPage() {
         rollId={labelRoll?.id ?? null}
         onOpenChange={(o) => !o && setLabelRoll(null)}
       />
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
-        {/* Okut/ara kutusu + "Aç" + toggle — izole alt bileşen (perf: tuş vuruşu
-            tabloyu re-render etmesin). */}
-        <RollScanBar openDetail={openDetail} scanPending={scanLookup.isPending} />
-        {/* Tablo araçları (Sütunlar/Görünümler) + "Fire" toggle okut/ara satırında,
-            en sağda. KANBAN'da rulo tablosu yok → gizli. */}
-        {isTableTab && (
-          <div className="ml-auto flex items-center gap-2">
-            <DataTableTools table={dataTable.table} hideExport />
-            <SavedViewsMenu />
-            {tab === "FINISHED_STOCK" && <UrlFlagToggle param={KARTELA_MARKED_PARAM} label="Kartelalık" />}
-            <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-              <Checkbox
-                checked={includeFire}
-                onCheckedChange={(v) => toggleIncludeFire(v === true)}
-              />
-              Fire kaliteyi de göster
-            </label>
-          </div>
-        )}
-      </div>
       <RollDetailSheet
         roll={scanRoll}
         open={Boolean(scanRoll)}
@@ -366,6 +318,22 @@ export function RollsPage() {
           ) : undefined
         }
       />
+      {/* Okutma alanı satırın başında (arama kutusunun yeri); Üretim Akışı'nda süzgeç yok. */}
+      {tab === "KANBAN" ? (
+        <div className={FILTER_ROW_CLASS}>{scanBar}</div>
+      ) : (
+        <RollsFilterRow
+          filters={filterDefs}
+          leading={scanBar}
+          trailing={
+            <>
+              {tab === "FINISHED_STOCK" && <UrlFlagToggle param={KARTELA_MARKED_PARAM} label="Kartelalık" />}
+              <SavedViewsMenu compact />
+              <DataTableTools table={dataTable.table} hideExport compact />
+            </>
+          }
+        />
+      )}
       {tab === "KANBAN" ? (
         <RollsKanban />
       ) : (
@@ -375,6 +343,7 @@ export function RollsPage() {
           isLoading={dataTable.query.isLoading}
           pagination={dataTable.pagination}
           exportName="Kumaş Stoğu"
+          hideFilterBar
           paginationActions={
             <>
               <ExportMenu

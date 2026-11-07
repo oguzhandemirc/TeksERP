@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import type { AppPreferences } from "@/types/preferences";
 import {
-  decodeStored,
-  defaultSubset,
   encodeForStore,
   isDeepLink,
   isPersistedKey,
   persistedSubset,
+  restoredSubset,
   storedQuery,
+  switchTableUrl,
   withStoredEntry,
   type TableFilterPersistConfig,
 } from "@/components/data-table/filter-row/filter-persist";
@@ -34,6 +35,8 @@ interface Args {
  * - URL'de kaydedilen anahtar, arama ya da odak VARSA (derin bağlantı) kayıt uygulanmaz ve kullanıcı değiştirene dek yazılmaz.
  * - Kayıt yoksa `config.defaultDate` uygulanır (derin bağlantıda uygulanmaz).
  * - Arama metni, sayfa/cursor kaydedilmez. Config yoksa kanca etkisizdir (`ready=true`).
+ * - `tableKey` değişirse (sayfa içi sekme): eski + yeni tablonun kayıtlı anahtarları URL'den çıkar,
+ *   yeni tablonun kaydı yazılır; o ana dek `ready=false`. Sekme geçişi derin bağlantı değildir.
  */
 export function usePersistedTableFilters({ tableKey, config, searchParams, setSearchParams }: Args) {
   const { prefs, setPreference, ready: prefsReadyRaw } = usePreferences();
@@ -58,15 +61,15 @@ export function usePersistedTableFilters({ tableKey, config, searchParams, setSe
   const awaitUrlRef = useRef<string | null>(null);
   const spRef = useRef(searchParams);
   spRef.current = searchParams;
+  const switching = useTableKeySwitch({ tableKey, config, cfg, prefsReady, tableFilters: prefs.tableFilters, phase, setPhase, spRef, setSearchParams, refs: { targetRef, suppressWriteRef, restoredRef, awaitUrlRef } });
 
   const current = on ? persistedSubset(searchParams, cfg).toString() : "";
 
   // Geri yükleme: tercih gelince TEK KEZ.
   useEffect(() => {
-    if (phase !== "wait" || !prefsReady) return;
-    const raw = prefs.tableFilters?.[tableKey];
+    if (phase !== "wait" || !prefsReady || switching) return;
     // Kayıt yoksa ya da okunamıyorsa sayfanın varsayılanı (ör. son 30 gün); kayıtlı "Tümü" boş döner.
-    const restored = (raw === undefined ? null : decodeStored(raw, cfg)) ?? defaultSubset(cfg);
+    const restored = restoredSubset(prefs.tableFilters?.[tableKey], cfg);
     if (restored.toString() === "") {
       setPhase("done");
       return;
@@ -78,7 +81,7 @@ export function usePersistedTableFilters({ tableKey, config, searchParams, setSe
     restoredRef.current = true;
     setSearchParams(next, { replace: true });
     setPhase("apply");
-  }, [phase, prefsReady, prefs.tableFilters, tableKey, cfg, setSearchParams]);
+  }, [phase, prefsReady, switching, prefs.tableFilters, tableKey, cfg, setSearchParams]);
 
   const applied = phase === "apply" && current === targetRef.current;
   useEffect(() => {
@@ -91,7 +94,7 @@ export function usePersistedTableFilters({ tableKey, config, searchParams, setSe
     return () => clearTimeout(h);
   }, [phase, applied]);
 
-  const ready = phase === "done" || applied;
+  const ready = !switching && (phase === "done" || applied);
 
   // Yazma: son kullanılan süzgeç + sıralama (debounce'lu). Tercih yüklenmeden ASLA yazılmaz —
   // boş önbellek + yama kullanıcının bütün tercihlerini ezerdi.
@@ -131,4 +134,55 @@ export function usePersistedTableFilters({ tableKey, config, searchParams, setSe
   };
 
   return { ready, reportListResult };
+}
+
+interface SwitchArgs {
+  tableKey: string;
+  config: TableFilterPersistConfig | undefined;
+  cfg: TableFilterPersistConfig;
+  prefsReady: boolean;
+  tableFilters: AppPreferences["tableFilters"];
+  phase: Phase;
+  setPhase: (p: Phase) => void;
+  spRef: MutableRefObject<URLSearchParams>;
+  setSearchParams: SetURLSearchParams;
+  refs: {
+    targetRef: MutableRefObject<string>;
+    suppressWriteRef: MutableRefObject<boolean>;
+    restoredRef: MutableRefObject<boolean>;
+    awaitUrlRef: MutableRefObject<string | null>;
+  };
+}
+
+/**
+ * Sayfa içi sekme geçişi (tablo anahtarı değişti): eski sekmenin süzgeci yeni sekmeye taşınmaz,
+ * yeni sekmenin kaydı gelir. Geçiş bitene dek `true` döner (liste istek atmaz, kayıt yazılmaz).
+ */
+function useTableKeySwitch(a: SwitchArgs): boolean {
+  const { tableKey, config, cfg, prefsReady, phase, setPhase, refs } = a;
+  const [activeKey, setActiveKey] = useState(tableKey);
+  const switching = activeKey !== tableKey;
+  /** Son yerleşik config — geçişte eski tablonun anahtarlarını URL'den silmek için. */
+  const prevConfigRef = useRef(config);
+  useEffect(() => {
+    if (!switching) return;
+    // İlk geri yükleme henüz olmadıysa onu yeni anahtarla yapsın.
+    if (phase === "wait") return setActiveKey(tableKey);
+    if (config && !prefsReady) return;
+    const raw = config ? a.tableFilters?.[tableKey] : undefined;
+    const { next, restored } = switchTableUrl(a.spRef.current, prevConfigRef.current, config && cfg, raw);
+    refs.suppressWriteRef.current = false;
+    refs.awaitUrlRef.current = null;
+    refs.restoredRef.current = restored;
+    refs.targetRef.current = config ? persistedSubset(next, cfg).toString() : "";
+    if (next.toString() !== a.spRef.current.toString()) a.setSearchParams(next, { replace: true });
+    setActiveKey(tableKey);
+    setPhase(config ? "apply" : "done");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız anahtar değişimi ve tercih hazırlığı tetikler
+  }, [switching, tableKey, prefsReady]);
+  // Geçiş beklerken eski tablonun config'i korunur (yukarıdaki etki onu okur).
+  useEffect(() => {
+    if (!switching) prevConfigRef.current = config;
+  });
+  return switching;
 }

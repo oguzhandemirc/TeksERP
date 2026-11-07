@@ -123,3 +123,29 @@ export function storedQuery(map: unknown, tableKey: string): string {
   const q = (map as Record<string, { query?: unknown } | undefined>)[tableKey]?.query;
   return typeof q === "string" ? q : "";
 }
+
+/** Geri yüklenecek alt küme: okunabilen kayıt, yoksa sayfanın varsayılanı (kayıtlı "Tümü" boş döner). */
+export function restoredSubset(raw: unknown, cfg: TableFilterPersistConfig, now: Date = new Date()): URLSearchParams {
+  return (raw === undefined ? null : decodeStored(raw, cfg, now)) ?? defaultSubset(cfg, now);
+}
+
+/**
+ * Sayfa içi sekme geçişi (tablo anahtarı değişti): eski ve yeni tablonun kaydedilen anahtarları
+ * URL'den çıkar, yeni tablonun kaydı eklenir — bir sekmenin süzgeci ötekine taşınmaz.
+ * Config'i olmayan tablo (ör. Üretim Akışı) yalnız eski süzgeci temizler.
+ */
+export function switchTableUrl(
+  sp: URLSearchParams,
+  prevCfg: TableFilterPersistConfig | undefined,
+  nextCfg: TableFilterPersistConfig | undefined,
+  raw: unknown,
+): { next: URLSearchParams; restored: boolean } {
+  const owned = (k: string) => Boolean((prevCfg && isPersistedKey(k, prevCfg)) || (nextCfg && isPersistedKey(k, nextCfg)));
+  const next = new URLSearchParams(sp);
+  for (const k of [...next.keys()]) if (owned(k)) next.delete(k);
+  next.delete("cursor");
+  next.delete("page");
+  const restored = nextCfg ? restoredSubset(raw, nextCfg) : new URLSearchParams();
+  restored.forEach((v, k) => next.append(k, v));
+  return { next, restored: restored.toString() !== "" };
+}

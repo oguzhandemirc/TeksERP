@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,23 +7,10 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DataTableTools } from "@/components/data-table/DataTableTools";
-import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
-import { FilterBar, StandaloneDateRangeFilter } from "@/components/data-table/FilterBar";
-import { ScanField } from "@/components/scanner/ScanField";
 import { useScanSeed } from "@/hooks/useScanSeed";
-import { useDataTable } from "@/hooks/useDataTable";
-import { makeRollColumns } from "@/pages/Operations/Rolls/columns";
-import { qualityGradeService } from "@/pages/QualityGrades/service";
-import { loadAllForPicker } from "@/lib/picker-loader";
-import { rollService, buildRollForceFilters } from "@/pages/Operations/Rolls/service";
-import { RollsTableBody, buildRollFilterDefs, DATE_FILTER } from "@/pages/Operations/Rolls/RollsTableBody";
 import { SwatchesPanel } from "@/pages/Operations/Rolls/SwatchesPanel";
 import { SwatchDetailSheet } from "@/pages/Operations/Rolls/SwatchDetailSheet";
 import { swatchService, type Swatch } from "@/pages/Operations/Rolls/swatchService";
-import type { Roll } from "@/pages/Operations/Rolls/types";
-import { useFoldValues } from "@/hooks/useFoldValues";
 import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet";
 import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
 import { KartelaEventsTab } from "./KartelaEventsTab";
@@ -32,6 +19,7 @@ import { OutstandingTab } from "./OutstandingTab";
 import { KartelaDispatchDialog } from "./KartelaDispatchDialog";
 import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
 import { KartelaStockTab } from "./KartelaStockTab";
+import { KartelaRollsTab } from "./KartelaRollsTab";
 import type { KartelaPickedRoll } from "./kartelaActions";
 import { useKartelaTab, kartelaRefreshKey } from "./useKartelaTab";
 import { NEW_DISPATCH_ACTION } from "./tabs-config";
@@ -47,7 +35,7 @@ export function KartelaPage() {
   const [cekiId, setCekiId] = useState<string | null>(null);
   // Kartelalık Stok → "Sevke ekle": seçilen toplar Yeni Sevk'e hazır listeyle gider.
   const [dispatchSeed, setDispatchSeed] = useState<KartelaPickedRoll[] | null>(null);
-  const { tab, changeTab } = useKartelaTab(() => setSelection(null));
+  const { tab, changeTab, settled } = useKartelaTab(() => setSelection(null));
   // Palet derin bağlantısı (`?action=new-dispatch`) diyaloğu bir kez açar; parametre tüketilir.
   useEffect(() => {
     if (searchParams.get("action") !== NEW_DISPATCH_ACTION) return;
@@ -68,63 +56,6 @@ export function KartelaPage() {
   };
   useScanSeed("scanCode", openSwatch);
 
-  // "Kartelada Toplar" tablosu — Sütunlar/Görünümler/Fire araçlarını sekme
-  // şeridiyle AYNI satırda göstermek için tablo örneği burada (üst chrome'da)
-  // kurulur; diğer sekmelerde `enabled: false` ile fetch atılmaz.
-  // Kat seçenekleri katalogdan; boşsa filtre hiç çizilmez (buildRollFilterDefs).
-  const { values: foldValues } = useFoldValues();
-  const rollFilterDefs = useMemo(
-    () =>
-      buildRollFilterDefs(
-        "KARTELA_SENT",
-        foldValues.map((v) => ({ value: v.code, label: v.name })),
-      ),
-    [foldValues],
-  );
-  const rollForceFilters = useMemo(() => buildRollForceFilters("KARTELA_SENT"), []);
-  // KALİTE KATALOĞU — rozet rengi/kararı buradan (karar ①). Anahtar mevcut
-  // `picker` ile AYNI: react-query anahtar bazında tekilleştirir, yeni önbellek
-  // girdisi doğmaz (Electron'da bu katalog altı farklı anahtarla çekiliyor —
-  // birleştirme ayrı iş).
-  const qualityGradesQuery = useQuery({
-    queryKey: ["quality-grades", "picker"],
-    queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
-    // 5 dk — bu anahtarın ÖNCEDEN VAR OLAN dört okuyucusuyla aynı. Farklı
-    // yazsaydık aynı önbellek girdisi iki farklı yaşta veriyi taze sayardı
-    // (react-query staleTime'ı GÖZLEMCİ BAŞINA uygular): admin bir kaliteyi
-    // pasifleştirir, bir sekme 10 dk eski kataloğu doğru sayar, öteki 5'te
-    // tazeler. Görünmez, çünkü ikisi de geçerli bir katalog döner.
-    staleTime: 5 * 60_000,
-  });
-  // Boş dizi = katalog henüz yok → rozet çizilmez, kalite ham koduyla yazılır.
-  // ⚠️ KENDİ useMemo'sunda: `?? []` her render'da YENİ dizi üretir ve ona bağlı
-  // `useMemo` her render'da yeniden koşardı (`exhaustive-deps`).
-  const qualityGrades = useMemo(
-    () => qualityGradesQuery.data?.data ?? [],
-    [qualityGradesQuery.data],
-  );
-  const columns = useMemo(() => makeRollColumns(qualityGrades), [qualityGrades]);
-
-  const rollsTable = useDataTable<Roll>({
-    queryKey: "rolls:KARTELA_SENT",
-    queryKeyParts: ["rolls", "KARTELA_SENT"],
-    fetchFn: rollService.listCursor,
-    columns,
-    defaultPageSize: 100,
-    forceFilters: rollForceFilters,
-    // Fason sütunları kartela tablosunda anlamsız (AT_KARTELA topta aktif fason
-    // sevki yok) — default gizli; Sütunlar'dan açılırsa "—" gösterir.
-    initialVisibility: { subcontractorCategory: false, subcontractor: false },
-    enabled: tab === "rolls",
-  });
-  const includeFire = searchParams.get("filter[includeFire]") === "true";
-  const toggleIncludeFire = (next: boolean) => {
-    const sp = new URLSearchParams(searchParams);
-    if (next) sp.set("filter[includeFire]", "true");
-    else sp.delete("filter[includeFire]");
-    setSearchParams(sp, { replace: true });
-  };
-
   const refreshKey = kartelaRefreshKey(tab);
 
   return (
@@ -142,27 +73,10 @@ export function KartelaPage() {
           </>
         }
       />
-      <KartelaTabBar
-        tab={tab}
-        onTab={changeTab}
-        trailing={
-          tab === "rolls" ? (
-            <>
-              <DataTableTools table={rollsTable.table} exportName="Kumaş Stoğu" fetchAll={rollsTable.fetchAll} />
-              <SavedViewsMenu />
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <Checkbox
-                  checked={includeFire}
-                  onCheckedChange={(v) => toggleIncludeFire(v === true)}
-                />
-                Fire kaliteyi de göster
-              </label>
-            </>
-          ) : null
-        }
-      />
+      <KartelaTabBar tab={tab} onTab={changeTab} />
 
-      {tab === "dispatches" ? (
+      {/* Sekme geçişinde eski sekmenin süzgeci URL'den çıkana dek yeni sekme bağlanmaz (filtre kaydı). */}
+      {!settled ? null : tab === "dispatches" ? (
         <DispatchesTab onSelect={setSelection} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       ) : tab === "outstanding" ? (
         <OutstandingTab />
@@ -176,30 +90,7 @@ export function KartelaPage() {
           }}
         />
       ) : tab === "rolls" ? (
-        <>
-          <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-            <ScanField
-              value={scanCode}
-              onChange={setScanCode}
-              onScan={openSwatch}
-              placeholder="Barkod okut..."
-              expectPrefix="SWATCH"
-              busy={swatchLookup.isPending}
-              widthClassName="w-64"
-              inputClassName="h-8 text-xs"
-              clearable
-            />
-            <StandaloneDateRangeFilter def={DATE_FILTER} />
-            <FilterBar filters={rollFilterDefs} inline />
-          </div>
-          <RollsTableBody
-            tab="KARTELA_SENT"
-            table={rollsTable.table}
-            isLoading={rollsTable.query.isLoading}
-            pagination={rollsTable.pagination}
-            hideFilterBar
-          />
-        </>
+        <KartelaRollsTab scanCode={scanCode} onScanCodeChange={setScanCode} onScanSwatch={openSwatch} swatchLookupPending={swatchLookup.isPending} />
       ) : tab === "events" ? (
         <KartelaEventsTab />
       ) : (
