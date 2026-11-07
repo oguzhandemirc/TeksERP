@@ -78,7 +78,8 @@ export interface WorkOrderStepLite {
   id: string;
   stepSequence: number;
   status: StepStatus;
-  station?: { id: string; code: string; name: string; type?: string; kind?: string };
+  /** `isActive` liste ucunda gelir; eski sunucu göndermez (yok = aktif sayılır). */
+  station?: { id: string; code: string; name: string; type?: string; kind?: string; isActive?: boolean };
   /** findById include eder; list view'de yok. */
   notes?: string | null;
   requiredCategoryId?: string | null;
@@ -125,7 +126,7 @@ export interface WorkOrder {
   id: string;
   /** İş Emri No (İE + GGAAYY + NNNN). Parti (P…) AYRI nesnedir — bkz. Batch/BatchLane. */
   workOrderNumber: string;
-  type: WorkOrderType;
+  type: WorkOrderType; customerId?: string | null; customer?: { id: string; name: string; code?: string | null } | null; // Fason (müşteri malı) müşterisi
   status: WorkOrderStatus;
   width: number | null;
   targetQuantity: number | null;

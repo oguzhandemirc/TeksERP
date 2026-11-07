@@ -11,7 +11,7 @@
 
 import { resolveWorkOrderDefaultItemForCreate } from "./workorder-default-item.service";
 import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
-import { workOrderDocSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { workOrderDocSearchWhere, workOrderParameterSearch } from "./helpers/workorder-doc-search.helper";
 import { randomUUID } from "crypto";
 import { ROLL_DISPLAY_ORDER } from "../constants/roll-order";
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
@@ -47,7 +47,8 @@ import {
   resolveSortBy,
   readIdCondition,
 } from "../utils/query-parser";
-import { loadRollOwnersByWorkOrder, resolveWorkOrderCustomers, workOrderCustomerWhere, workOrderOwnerNameSearchWhere } from "./helpers/work-order-customers.helper";
+import { loadRollOwnersByWorkOrder, resolveWorkOrderCustomers, workOrderCustomerWhere, workOrderOwnerNameSearchWhere, withOwnCustomer } from "./helpers/work-order-customers.helper";
+import { assertCustomerGoodsHasNoOrderLines, assertCustomerGoodsTypeFrozen, customerFromRollOwners, isOrderlessWorkOrderType, readWorkOrderTypeFilter, resolveCreateCustomer } from "./helpers/workorder-customer-goods.helper";
 
 // WO listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) + güvenli
 // ekler. Whitelist dışı sortBy → createdAt (bilinmeyen kolon 500'ünü + indekssiz sortu engeller).
@@ -538,6 +539,8 @@ export interface WorkOrderCreateInput {
    *  farklı payload ile gelirse 409 CLIENT_TOKEN_COLLISION. */
   clientToken?:       string | null;
   type?:              string;
+  /** Fason (müşteri malı) türünde işin müşterisi — o türde ZORUNLU, diğerlerinde yok sayılır. */
+  customerId?:        string | null;
   width?:             number | null;
   targetQuantity?:    number | null;
   targetWeight?:      number | null;
@@ -1094,20 +1097,23 @@ export class WorkOrderService {
         `Siparişe özel üretim ${TERIM.terbiyeIsEmri.tekilKucuk} en az bir sipariş kalemine bağlanmalıdır.`
       );
     }
+    // Fason (müşteri malı): sipariş yok, müşteri İE'nin üstünde ve zorunlu.
+    assertCustomerGoodsHasNoOrderLines(type, allocations.length);
+    const customerId = await resolveCreateCustomer(type, data.customerId);
 
     // ── Hedef ürün (targetItem) doğrulaması ─────────────────────────────────
     // STOCK_PRODUCTION: zorunlu — planlamacı ne üretiyoruz onu söylemeli.
     // ORDER_PRODUCTION: bağlı sipariş satırlarındaki ürün ile tutarlı olmalı.
     let resolvedTargetItemId: string | null = data.targetItemId ?? null;
     // İE varsayılan stok kartı: yalnız topsuz/siparişsiz stoğa üretimde boş hedefe (elle seçim ezilmez; ayar boşsa bugünkü 400).
-    const defaultTargetItem = type === "STOCK_PRODUCTION" && !resolvedTargetItemId && !goods && allocations.length === 0
+    const defaultTargetItem = isOrderlessWorkOrderType(type) && !resolvedTargetItemId && !goods && allocations.length === 0
       ? await resolveWorkOrderDefaultItemForCreate()
       : null;
     if (defaultTargetItem) resolvedTargetItemId = defaultTargetItem.id;
 
-    if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
+    if (isOrderlessWorkOrderType(type) && !resolvedTargetItemId) {
       throw AppError.badRequest(
-        `Stoğa üretim ${TERIM.terbiyeIsEmri.tekilKucuk} için hedef ürün seçmelisiniz.`
+        `Siparişsiz ${TERIM.terbiyeIsEmri.tekilKucuk} için hedef ürün seçmelisiniz.`
       );
     }
 
@@ -1336,12 +1342,12 @@ export class WorkOrderService {
     // ONUN üzerinden karar verilir (alan adı `batchNumber`, anlamı iş emri no).
     assertManualNumberAllowed("workOrder", manualWorkOrderNumber);
 
-    return { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, routeWarnings, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem };
+    return { data, type, customerId, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, routeWarnings, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem };
   }
 
   /** Tx gövdesi — `numberDb` verilmezse numara bugünkü gibi tx DIŞINDAN okunur; çok kayıtlı tx kendi tx'ini verir (kendi satırını görsün). */
   async insertPreparedTx(tx: Prisma.TransactionClient, prep: PreparedWorkOrder, userId?: string, numberDb: Pick<typeof prisma, "workOrder"> = prisma) {
-    const { data, type, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem } = prep;
+    const { data, type, customerId, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem } = prep;
     if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage);
     const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber(numberDb));
     // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
@@ -1368,6 +1374,7 @@ export class WorkOrderService {
         workOrderNumber,
         clientToken:       data.clientToken ?? null,
         type,
+        customerId,
         width:             data.width          ?? null,
         targetQuantity:    data.targetQuantity ?? null,
         targetWeight:      data.targetWeight ?? null,
@@ -1439,6 +1446,7 @@ export class WorkOrderService {
       newData: {
         workOrderNumber:    workOrder.workOrderNumber,
         type:               workOrder.type,
+        ...(workOrder.customerId ? { customerId: workOrder.customerId } : {}),
         width:              workOrder.width,
         status:             workOrder.status,
         stepCount:          finalSteps.length,
@@ -1582,6 +1590,7 @@ export class WorkOrderService {
         // sipariş bağlı + boyahanesiz rota yine 400 verir.
         colorId: true,
         properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true } },
+        ownerCustomerId: true,
       },
     });
     const byBarcode = new Map(rolls.map((r) => [r.barcode, r]));
@@ -1635,7 +1644,9 @@ export class WorkOrderService {
     }
 
     // ── 2) WO oluştur ───────────────────────────────────────────────────────
-    const createRes = await this.create({ ...woInput, type, targetItemId }, userId, {
+    // Fason (müşteri malı): müşteri gövdeden ya da topların tek sahibinden (gelen belge onayı belge carisini topa yazar).
+    const customerId = customerFromRollOwners(type, woInput.customerId, rolls.map((r) => r.ownerCustomerId));
+    const createRes = await this.create({ ...woInput, type, targetItemId, customerId }, userId, {
       colorIds: rolls.map((r) => r.colorId),
       propertyIdSets: rolls.map((r) => r.properties.map((p) => p.propertyId)),
     });
@@ -1805,6 +1816,9 @@ export class WorkOrderService {
     // serviste allowlist yok, `filter[customerId]` where'e sızıp 500 verirdi. CSV `in`.
     const customerCond = readIdCondition(params.filters.customerId);
     delete params.filters.customerId;
+    // Tür süzgeci (2026-11-06): CSV, tanınmayan değer 400 (fail-closed; eskiden ham Prisma'ya sızıp 500 veriyordu).
+    const typeCond = readWorkOrderTypeFilter(params.filters.type);
+    delete params.filters.type;
     // "Şu an nerede" süzgeçleri (2026-10-24): istasyon + konum sınıfı; filtre kümesinden
     // helper çıkarır, tanınmayan değer 400. Liste + cursor + sayım AYNI where'i görür.
     const locationConds = await readWorkOrderLocationFilters(params.filters);
@@ -1832,6 +1846,12 @@ export class WorkOrderService {
       const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
       w.OR = [...(w.OR ?? []), docSearch];
     }
+    // Künyedeki kağıt kimlikleri (gönderen İE no · çok partide parti no) — istasyon aramasıyla aynı yapraklar.
+    const paramSearch = params.search ? workOrderParameterSearch(params.search) : [];
+    if (paramSearch.length) {
+      const w = where as { OR?: Prisma.WorkOrderWhereInput[] };
+      w.OR = [...(w.OR ?? []), ...paramSearch];
+    }
     // Siparişsiz İE'nin müşterisi top sahibidir (liste kolonu) — adıyla da bulunur.
     const ownerSearch = params.search ? workOrderOwnerNameSearchWhere(params.search) : null;
     if (ownerSearch) {
@@ -1842,9 +1862,14 @@ export class WorkOrderService {
     if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);
     if (customerCond) {
       // AND ile: aramanın `orderLinks.some` yolu OR içinde; üstteki `orderLinks` ezilmesin.
-      const byCustomer = await workOrderCustomerWhere(customerCond);
+      // Fason (müşteri malı) İE'nin kendi müşterisi ∨ sipariş/top sahibi kuralı (liste müşterisiyle aynı: `withOwnCustomer`).
+      const byCustomer: Prisma.WorkOrderWhereInput = { OR: [{ customerId: customerCond }, await workOrderCustomerWhere(customerCond)] };
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
       w.AND = [...(w.AND ?? []), byCustomer];
+    }
+    if (typeCond) {
+      const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
+      w.AND = [...(w.AND ?? []), { type: typeCond }];
     }
     if (locationConds.length > 0) {
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
@@ -1944,12 +1969,15 @@ export class WorkOrderService {
         take: BATCH_PREVIEW_LIMIT,
       },
       _count: { select: { batches: { where: { mergedIntoId: null } } } },
+      // Fason (müşteri malı) İE'nin kendi müşterisi — liste müşterisinde bağdan önce gelir.
+      customer: { select: { id: true, name: true } },
       steps: {
         select: {
           id: true,
           stepSequence: true,
           status: true,
-          station: { select: { id: true, code: true, name: true, type: true, kind: true } },
+          // isActive: pasife alınmış istasyonda bekleyen adım listede işaretlenir (prova 11-06, Geciken İE).
+          station: { select: { id: true, code: true, name: true, type: true, kind: true, isActive: true } },
         },
         orderBy: { stepSequence: "asc" },
       },
@@ -2061,6 +2089,8 @@ export class WorkOrderService {
       // sorgulamamak için). Gelmezlerse geçişler DB turuna düşer — davranış aynı.
       steps: { id: string; stepSequence: number; station?: { name: string } | null }[];
       orderLinks?: { orderLineId: string; orderLine?: { order?: { customer?: { id: string; name: string } | null } | null } | null }[];
+      /** Fason (müşteri malı) İE'nin kendi müşterisi — varsa rollup'ın önüne geçer. */
+      customer?: { id: string; name: string } | null;
     },
   >(
     wos: T[]
@@ -2135,7 +2165,7 @@ export class WorkOrderService {
         orderedMeters: orderedByWo.get(w.id) ?? 0,
         currentFasonStations: [],
         fasonFirms: [],
-        ...resolveWorkOrderCustomers(w.orderLinks, rollOwnersByWo.get(w.id)),
+        ...withOwnCustomer(w.customer, resolveWorkOrderCustomers(w.orderLinks, rollOwnersByWo.get(w.id))),
       }));
     }
 
@@ -2277,7 +2307,7 @@ export class WorkOrderService {
       orderedMeters: orderedByWo.get(w.id) ?? 0,
       currentFasonStations: [...(fasonStationsByWo.get(w.id) ?? [])],
       fasonFirms: [...(firmsByWo.get(w.id) ?? new Map())].map(([name, current]) => ({ name, current })),
-      ...resolveWorkOrderCustomers(w.orderLinks, rollOwnersByWo.get(w.id)),
+      ...withOwnCustomer(w.customer, resolveWorkOrderCustomers(w.orderLinks, rollOwnersByWo.get(w.id))),
     }));
   }
 
@@ -2290,6 +2320,7 @@ export class WorkOrderService {
       include: {
         targetItem: true,
         targetColor: true,
+        customer: { select: { id: true, name: true, code: true } },
         // Aktif süzgeç ŞART: panel prefill bu listeyi PUT replace'e echo eder — damgalı
         // hedef burada dönerse replace onu DİRİLTİR.
         targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },
@@ -5168,7 +5199,7 @@ export class WorkOrderService {
     }
 
     // STOCK_PRODUCTION'da targetItemId zorunlu — null'a çevirme yasak
-    if (wo.type === "STOCK_PRODUCTION" && data.targetItemId === null) {
+    if (isOrderlessWorkOrderType(wo.type) && data.targetItemId === null) {
       throw AppError.badRequest(
         `Stoğa üretim ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} hedef ürün boş bırakılamaz.`
       );
@@ -5414,6 +5445,7 @@ export class WorkOrderService {
       }
     }
 
+    assertCustomerGoodsTypeFrozen(existing.type, data.type);
     let type = (data.type as WorkOrder["type"]) ?? existing.type;
 
     // ── Rota adımlarını hazırla (şablondan veya raw'dan) — create() ile aynı.
@@ -5524,11 +5556,12 @@ export class WorkOrderService {
         `Siparişe özel üretim ${TERIM.terbiyeIsEmri.tekilKucuk} en az bir sipariş kalemine bağlanmalıdır.`,
       );
     }
+    assertCustomerGoodsHasNoOrderLines(type, allocations.length);
 
     // ── Hedef ürün doğrulaması ───────────────────────────────────────────────
     let resolvedTargetItemId: string | null = data.targetItemId ?? null;
 
-    if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
+    if (isOrderlessWorkOrderType(type) && !resolvedTargetItemId) {
       throw AppError.badRequest(
         `Stoğa üretim ${TERIM.terbiyeIsEmri.tekilKucuk} için hedef ürün seçmelisiniz.`,
       );

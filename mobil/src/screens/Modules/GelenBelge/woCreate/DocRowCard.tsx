@@ -198,6 +198,7 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
             : `${TERIM.terbiyeIsEmri.tekil} açıldı: ${r.workOrderNo} · Parti ${r.batchNumber}`}
         </Text>
         {r.failed?.map((f) => <Text key={f.blockNo} style={[styles.note, styles.warnText]} testID={`belge-satir-dusen-${row.noteNo}-${f.blockNo}`}>{`${f.blockNo}. parti açılamadı — düzeltip yeniden kaydedin.`}</Text>)}
+        {r.warnings?.map((w, i) => <Text key={`w${i}`} style={[styles.note, styles.warnText]} testID={`belge-satir-uyari-${row.noteNo}-${i}`}>{w}</Text>)}
         {r.print === 'PRINTED' && <Text style={styles.note}>Refakat kartı yazdırıldı.</Text>}
         {r.print !== 'PRINTED' && (
           <Button mode="outlined" icon="printer" onPress={() => wo.print(row.noteId, r.workOrderId)} contentStyle={styles.btn} testID={`belge-satir-yazdir-${row.noteNo}`}>

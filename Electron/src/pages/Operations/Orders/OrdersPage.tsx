@@ -16,9 +16,9 @@ import { useHideCancelled } from "@/hooks/useHideCancelled";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { OrdersFilterRow } from "./OrdersFilterRow";
 import { ORDER_FILTERS } from "./orders-filter-defs";
-import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { DataTableTools, type ExtraExportOption } from "@/components/data-table/DataTableTools";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
-import { OrderLinesExportButton } from "./OrderLinesExportButton";
+import { StockLineExportDialog } from "./stock-line-export/StockLineExportDialog";
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
@@ -54,6 +54,7 @@ export function OrdersPage() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [stockLineOpen, setStockLineOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
   // İdempotency anahtarı — create mantıksal deneme kimliği (kk1.md). Form create modunda
   // her açılışta, başarılı create'te ve kesin 4xx'te yenilenir; belirsiz hatada SABİT kalır
@@ -111,7 +112,7 @@ export function OrdersPage() {
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<Order>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<Order>({
     queryKey: QUERY_KEY,
     fetchFn: orderService.listCursor,
     columns,
@@ -191,6 +192,16 @@ export function OrdersPage() {
     },
   });
 
+  // "Dışa aktar ▾" menüsünde Excel'in altında (eski başlık düğmesinin yerine, #602).
+  const stockLineExports: ExtraExportOption[] = [
+    {
+      key: "stock-line",
+      label: "Excel (stok kalemi bazında)…",
+      title: "Kumaş + renk başına tek satır: sipariş, sevk, açık, üretimde, depoda hazır",
+      onSelect: () => setStockLineOpen(true),
+    },
+  ];
+
   const handleEdit = (order: Order) => {
     setEditing(order);
     setSelected(null);
@@ -209,9 +220,6 @@ export function OrdersPage() {
         actions={
           <>
             <RefreshButton queryKey={view === "plan" ? ORDER_PLAN_QUERY_KEY : QUERY_KEY} />
-            {view !== "plan" && (
-              <OrderLinesExportButton fetchAll={fetchAll} pricingEnabled={pricingEnabled} productionEnabled={productionEnabled} />
-            )}
             {/* DEFTER ONARIMI — buradan kısa yol. Siparişin "Açık" görünmesinin
                 sebebi çoğu zaman sevkiyatın deftere yazılamamış olmasıdır; o
                 ekrana giden yolun sipariş listesinde durması bilinçli.
@@ -247,6 +255,13 @@ export function OrdersPage() {
         <OrderPlanView pricingEnabled={pricingEnabled} />
       ) : (
       <>
+      <StockLineExportDialog
+        open={stockLineOpen}
+        onOpenChange={setStockLineOpen}
+        fetchAll={fetchAll}
+        listScope={listScope}
+        productionEnabled={productionEnabled}
+      />
       {/* ⚠️ SIRA SÖZLEŞMESİ (2026-09-04): özet şerit FİLTRELERİN ÜSTÜNDE.
           Kullanıcı gerekçesi: şerit "hangi kümeyi süzüyorum"un cevabı; filtre
           satırının altında kalınca listeye ait bir başlık gibi okunuyordu.
@@ -280,7 +295,13 @@ export function OrdersPage() {
         trailing={
           <>
             <SavedViewsMenu compact />
-            <DataTableTools table={table} exportName="Siparişler" fetchAll={fetchAll} compact />
+            <DataTableTools
+              table={table}
+              exportName="Siparişler"
+              fetchAll={fetchAll}
+              extraExports={stockLineExports}
+              compact
+            />
           </>
         }
       />

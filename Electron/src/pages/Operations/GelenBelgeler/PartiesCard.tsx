@@ -1,22 +1,23 @@
 // Çok partili belge (çok blok, 2026-11-06): blok başına parti no, sipariş, işlem, müşteri İE no, satır/beyan adet, Σ m/kg,
-// sunucunun canlı uyarıları ve partiye bağlı İE'ler (sunucu zincirinden; panel türetmez). Tek partili belgede çizilmez.
+// onaylıda parti kaydının metresi (elle düzeltme), sunucunun canlı uyarıları ve partiye bağlı İE'ler (sunucu zincirinden; panel türetmez). Tek partili belgede çizilmez.
 import { AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { formatNumber } from "@/lib/format";
 import { TERIM } from "@/lib/terim";
 import { fmtMeters } from "./partiMetre";
-import { getNoteParties, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
+import { describeDiff } from "./reviewView";
+import { isMultiParty, useNoteParties } from "./useNoteParties";
 import type { NoteParty } from "./partiesTypes";
+import type { BlockCheck } from "./reviewTypes";
 
-export function PartiesCard({ noteId }: { noteId: string }) {
-  const q = useQuery({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "partiler", noteId], queryFn: () => getNoteParties(noteId), retry: false });
-  const v = q.data;
-  if (!v?.multi || v.parties.length < 2) return null;
+/** `blocks`: toplam kapısının blok hükmü (detay `totalsCheck`) — çok partide toplam şeridi blok kartı çizmez, hüküm burada. */
+export function PartiesCard({ noteId, blocks = [] }: { noteId: string; blocks?: BlockCheck[] }) {
+  const v = useNoteParties(noteId).data;
+  if (!v || !isMultiParty(v)) return null;
   return (
     <section className="flex flex-col gap-2 rounded-md border p-3" data-testid="partiler-karti">
       <h3 className="text-sm font-semibold">{`Bu belgede ${v.parties.length} parti var`}</h3>
-      {v.parties.map((p) => <PartyItem key={p.blockNo} p={p} />)}
+      {v.parties.map((p) => <PartyItem key={p.blockNo} p={p} check={blocks.find((b) => b.blockNo === p.blockNo)} />)}
       {v.warnings.map((w) => (
         <p key={w} className={`flex items-start gap-1 text-xs ${WARN_TEXT}`}>
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
@@ -39,11 +40,21 @@ export function partyFactItems(p: NoteParty): PartyFact[] {
     p.orderNo ? { text: `Sipariş ${p.orderNo}` } : null,
     p.processText ? { text: `İşlem: ${p.processText}` } : null,
     p.senderWorkOrderNo ? { text: `Müşteri İE ${p.senderWorkOrderNo}` } : null,
-    { text: `${p.lineCount} satır${p.declaredTopCount !== null ? ` / ${p.declaredTopCount} TOP` : ""}` },
-    p.meters > 0 ? { text: fmtMeters(p.meters) } : { text: "metre yok", warn: true },
+    { text: `${p.lineCount} top${p.declaredTopCount !== null && p.declaredTopCount !== p.lineCount ? ` (belgede ${p.declaredTopCount})` : ""}` },
+    ...partyMeterFacts(p),
     p.weightKg !== null ? { text: `${formatNumber(p.weightKg, 2)} kg` } : null,
   ];
   return items.filter((x): x is PartyFact => !!x);
+}
+
+/**
+ * Onaylı partide metre = parti kaydı (operatörün elle düzelttiği değer dahil; sunucu `recordedMeters`), okunan Σ satır farklıysa
+ * ayrı kutuda; onaysızda okunan Σ satır (2. prova: kart 3.935 yerine 2.464,701 gösteriyordu).
+ */
+function partyMeterFacts(p: NoteParty): PartyFact[] {
+  const rec = p.recordedMeters ?? null;
+  if (rec === null) return [p.meters > 0 ? { text: fmtMeters(p.meters) } : { text: "metre yok", warn: true }];
+  return Math.abs(rec - p.meters) > 0.0005 ? [{ text: fmtMeters(rec) }, { text: `Satır toplamı ${fmtMeters(p.meters)}` }] : [{ text: fmtMeters(rec) }];
 }
 
 export function partyFacts(p: NoteParty): string[] {
@@ -52,7 +63,19 @@ export function partyFacts(p: NoteParty): string[] {
 
 const WARN_TEXT = "text-amber-800 dark:text-amber-300";
 
-function PartyItem({ p }: { p: NoteParty }) {
+/** Partinin beyan hükmü (toplam kapısıyla aynı): tutuyor · fark satırları · beyan yok. */
+function PartyCheck({ check }: { check: BlockCheck | undefined }) {
+  if (!check) return null;
+  if (check.ok === true) return <p className="text-xs text-emerald-700 dark:text-emerald-400" data-testid="parti-hukum">Beyanla tutuyor</p>;
+  if (check.ok === null) return <p className="text-xs text-muted-foreground" data-testid="parti-hukum">Beyan yok — doğrulanamaz</p>;
+  return (
+    <div className="flex flex-col text-xs tabular-nums text-destructive" data-testid="parti-hukum">
+      {check.diffs.map((d) => <span key={d.field}>{describeDiff(d)}</span>)}
+    </div>
+  );
+}
+
+function PartyItem({ p, check }: { p: NoteParty; check?: BlockCheck }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-md border bg-muted/30 px-3 py-2 text-sm" data-testid={`parti-${p.blockNo}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -73,6 +96,7 @@ function PartyItem({ p }: { p: NoteParty }) {
           </li>
         ))}
       </ul>
+      <PartyCheck check={check} />
       {p.warnings.map((w) => (
         <div key={w} className={`flex items-start gap-1 text-xs ${WARN_TEXT}`}>
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />

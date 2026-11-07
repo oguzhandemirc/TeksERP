@@ -15,6 +15,9 @@
 //   §7b ⭐ "Şablonu güncelle" (`base`): önizleme birleşik şablonla; keep [] → bölüm/tablo kalkar, keep → taşınır; önizlenen aynen kaydedilir
 //   §9 ⭐ OCR "1/2" damgası uyarıdır: pageCount'a yazılmaz, iş emri formu 201 + uyarı; elle pageCount beyanı bugünkü 409 (scripts/lib/gelen-belge-cok-parti-sayfa.ts)
 //   §10 ⭐ K22: istasyonun KAT varsayılanı çok partili İE'lere de yazılır (PER_PARTY + SINGLE; tek parti yoluyla aynı)
+//   §15 ⭐ 214279: parti metresi beyan ara toplamından (Σ satır yalnız beyansızda); SERIES'te kağıttaki parti no künyede + aramada;
+//      DOCUMENT'ta İE parti no'su kağıttaki no (scripts/lib/gelen-belge-cok-parti-kagit-no.ts)
+//   §14 ⭐ parti kaydı (özet satırı) top sayısına karışmaz: detay `summary`, liste `docLineCount` (scripts/lib/gelen-belge-cok-parti-sayim.ts)
 // Negatif sonda: `partyWorkOrderToken` sabit token'a (clientToken) bağlanınca §5 ikinci İE replay'e düşer → kırmızı;
 // `engineTemplates` yalnız dosya şablonlarını dönünce §8 kırmızı.
 // =============================================================================
@@ -36,6 +39,8 @@ import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { sayfaDamgasiUyaridir } from "./lib/gelen-belge-cok-parti-sayfa";
 import { cokBlokKismi } from "./lib/gelen-belge-cok-parti-kismi";
+import { cokPartiSayim } from "./lib/gelen-belge-cok-parti-sayim";
+import { cokPartiKagitNo } from "./lib/gelen-belge-cok-parti-kagit-no";
 import { StationCapabilityService } from "../src/services/station-capability.service";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 
@@ -178,6 +183,8 @@ async function run(url: string): Promise<void> {
     && pr3.length === 2 && pr3.every((r) => r.rollId) && Number(pr3[0]!.meters) === 330 && Number(pr3[1]!.meters) === 410 && wo3.length === 2 && wo3[0]?.workOrderId === wo3[1]?.workOrderId && wo3[0]?.workOrderId === r3.data?.workOrderId
     && Number(kur?.kursunMeters) === 740 && kur?.status === "APPROVED",
     `${r3.status} ${r3.code ?? ""} ${JSON.stringify({ m: r3.data?.mode, pr: pr3.map((r) => Number(r.meters)), wo: wo3, k: kur })}`);
+
+  await cokPartiSayim({ check, noteId: n1, get: (path) => call("GET", path, tk) });
 
   console.log("§4 replay");
   const before4 = await prisma.workOrder.count();
@@ -322,6 +329,7 @@ async function run(url: string): Promise<void> {
   }
 
   await cokBlokKismi({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body });
+  await cokPartiKagitNo({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body, setSetting, get: (path) => call("GET", path, tk) });
 }
 
 async function cleanup(): Promise<void> {

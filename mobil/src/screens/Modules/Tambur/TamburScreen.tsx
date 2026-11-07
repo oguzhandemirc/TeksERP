@@ -37,6 +37,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import AppMenu from '../../../components/AppMenu';
+import { tamburHeaderActions, type TamburHeaderAction } from './headerActions';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
 import { showStopOpenEntryWarning } from '../../../components/machine-stop/entryWarning';
 import CutActionBar from './CutActionBar';
@@ -44,6 +46,7 @@ import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
+import { useOwnerDefaultTarget } from './ownerTarget';
 import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
@@ -109,6 +112,7 @@ import TamburSendToDyeModal from './TamburSendToDyeModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { useLabelCopies } from '../../../hooks/useLabelCopies';
@@ -520,6 +524,9 @@ export default function TamburScreen() {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali — tuş varsayılan olarak refakat kartını okur; Kesme / Çıkan Toplar kendi panelini açar
+  // (görünür panel en üstte, okumayı o alır). "Tara" çipi kamera değil okuyucu panelidir.
+  const hardware = useHardwareScanMode();
 
   // Aktif top'un çalışma state'i — top/sekme değişince sıfırlanır.
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
@@ -993,6 +1000,22 @@ export default function TamburScreen() {
   // Gülkesim S5: müşteri (Kime? ?? top sahibi) tartım/bölme ayarı + fabrika basım zamanı.
   const openFinal = useTamburFinalLabel(selectedRoll?.rollId, work.voluntaryEntry.targetCustomerId, activeJob?.stepSummary.workOrderId ?? null);
   const recutFinal = useTamburFinalLabel(recutResolvedRollId, recutTargetCustomerId);
+  // Fason (EMANET) topta Kime? varsayılanı malın sahibi; operatör Stok/başka hedef seçerse ezilmez (ownerTarget.ts).
+  const redecideOwnerTarget = useOwnerDefaultTarget(
+    selectedRoll?.rollId,
+    openFinal.settings.ownerCustomer,
+    !!work.voluntaryEntry.targetOrderLineId || !!work.voluntaryEntry.targetCustomerId,
+    (o) =>
+      setWork((w) =>
+        w.voluntaryEntry.targetOrderLineId || w.voluntaryEntry.targetCustomerId
+          ? w
+          : { ...w, voluntaryEntry: { ...w.voluntaryEntry, targetCustomerId: o.id, targetCustomerName: o.name } },
+      ),
+  );
+  useOwnerDefaultTarget(recutResolvedRollId, recutFinal.settings.ownerCustomer, !!recutTargetLineId || !!recutTargetCustomerId, (o) => {
+    setRecutTargetCustomerId(o.id);
+    setRecutTargetCustomerName(o.name);
+  });
   const [labelInfoOpen, setLabelInfoOpen] = useState(false);
   const printTiming = useTamburPrintTiming();
 
@@ -1011,6 +1034,8 @@ export default function TamburScreen() {
     // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
     const defaultFold: TamburFoldType | null = known ?? planned ?? foldValues[0]?.code ?? null;
     setWork({ ...EMPTY_WORK, foldType: defaultFold });
+    redecideOwnerTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sıfırlayıcı ref temizler, tetik değildir
   }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType, foldValues]);
 
 
@@ -1119,7 +1144,7 @@ export default function TamburScreen() {
           bypass.alreadyDone
             ? {
                 type: 'info',
-                text1: 'Kurşun/KK2 adımı zaten kapatılmış',
+                text1: 'Kurşun/kalite kontrol adımı zaten kapatılmış',
                 text2: 'Kart Tambur işi olarak açılıyor',
               }
             : bypass.source === 'UNASSIGNED'
@@ -1130,7 +1155,7 @@ export default function TamburScreen() {
                 }
               : {
                   type: 'info',
-                  text1: 'Kurşun/KK2 bypass ile tamamlandı',
+                  text1: 'Kurşun/kalite kontrol atlanarak tamamlandı',
                   text2: `${bypass.movedRollCount} top Tambur'a alındı`,
                 },
         );
@@ -3155,6 +3180,7 @@ export default function TamburScreen() {
             onScan={() => openScanner()}
             onList={() => openList()}
             tone="blue"
+            hardwareListening
           />
           {compact && (
             <View style={styles.actionBtnRow}>
@@ -3354,7 +3380,7 @@ export default function TamburScreen() {
         onPress={() => openList()}
         fill
       />
-      <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} fill />
+      <HeaderChip icon={hardware ? 'barcode-scan' : 'camera'} label="Tara" onPress={() => openScanner()} fill />
       {docLookup.enabled && (
         <HeaderChip icon="file-document-outline" label="Belge" onPress={() => drawerQueue.run(() => docLookup.setOpen(true))} fill />
       )}
@@ -3383,6 +3409,65 @@ export default function TamburScreen() {
     </>
   );
 
+  // Tablet başlık aksiyonları — tek tablo; yerleşim kararı saf `tamburHeaderActions`ta.
+  const { width: headerWinW } = useWindowDimensions();
+  const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
+  const headerLayout = tamburHeaderActions({
+    width: headerWinW,
+    manualMode,
+    docLookupEnabled: docLookup.enabled,
+    canLinkOrders,
+    canFieldFix,
+    hasActiveJob: !!activeJob,
+  });
+  const headerActionMeta = (
+    a: TamburHeaderAction,
+  ): { icon: string; label: string; onPress: () => void } => {
+    switch (a) {
+      case 'list':
+        return { icon: 'format-list-bulleted', label: 'Liste', onPress: () => openList() };
+      case 'scan':
+        return { icon: hardware ? 'barcode-scan' : 'camera', label: 'Tara', onPress: () => openScanner() };
+      case 'doc':
+        return {
+          icon: 'file-document-outline',
+          label: 'Belge okut',
+          onPress: () => drawerQueue.run(() => docLookup.setOpen(true)),
+        };
+      case 'recent':
+        return { icon: 'printer-search', label: 'Çıkanlar', onPress: () => openRecentOutput() };
+      case 'recut':
+        return { icon: 'content-cut', label: 'Kesme', onPress: () => openRecut() };
+      case 'orderLink':
+        return { icon: 'link-variant', label: 'Sipariş Bağla', onPress: () => setOrderLinkOpen(true) };
+      case 'fieldFix':
+        return { icon: 'wrench-outline', label: 'Düzelt', onPress: () => openFieldFix() };
+      case 'manual':
+        return {
+          icon: manualMode ? 'hand-back-right' : 'hand-back-right-outline',
+          label: manualMode ? 'MANUEL MOD AÇIK' : 'Manuel Ekle',
+          onPress: toggleManualMode,
+        };
+      case 'standalone':
+        return { icon: 'tag-multiple', label: 'Serbest Etiket', onPress: () => openStandalone() };
+    }
+  };
+  const renderHeaderAction = (a: TamburHeaderAction) => {
+    const m = headerActionMeta(a);
+    return (
+      <HeaderChip
+        key={a}
+        icon={m.icon}
+        label={m.label}
+        onPress={m.onPress}
+        accent={a === 'fieldFix'}
+        active={a === 'manual' ? manualMode : undefined}
+        // Serbest Etiket profil tuşunun yanında yalnız ikon (2026-08-04).
+        iconOnly={a === 'standalone'}
+      />
+    );
+  };
+
   // ── Render ──
   return (
     <ScreenChrome
@@ -3394,82 +3479,39 @@ export default function TamburScreen() {
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
-          {/* Tablet: kart aksiyonları header'a etiketli pill olarak alınır →
-              sağ kolonda liste için alan açılır. Telefonda erişim 2. kattaki
-              chip'lerden (phoneSecondRow) + drawer içinden. */}
+          {/* Tablet: kart aksiyonları header'a etiketli pill; dar tablette seyrek
+              aksiyonlar "Diğer" menüsüne katlanır (headerActions). Telefonda
+              erişim 2. kattaki chip'lerden (phoneSecondRow) + drawer içinden. */}
           {!compact && (
             <>
-              {/* Kart aksiyonları — MANUEL MODDA çizilmez (kart okutulmuyor). */}
-              {!manualMode && (
-                <>
-                  <HeaderChip
-                    icon="format-list-bulleted"
-                    label="Liste"
-                    onPress={() => openList()}
-                  />
-                  <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} />
-                  {docLookup.enabled && (
-                    <HeaderChip icon="file-document-outline" label="Belge okut" onPress={() => drawerQueue.run(() => docLookup.setOpen(true))} />
-                  )}
-                </>
-              )}
-              <HeaderChip
-                icon="printer-search"
-                label="Çıkanlar"
-                onPress={() => openRecentOutput()}
-              />
-              {/* Top Kesme, Manuel Mod ile DIŞLAYAN bir moddur — birlikte açılamaz. */}
-              {!manualMode && (
-                <HeaderChip
-                  icon="content-cut"
-                  label="Kesme"
-                  onPress={() => openRecut()}
-                />
-              )}
-              {/* Sipariş Bağla — yalnız planlama yetkilisinde (workorder:write)
-                  ve açık kart varken (iş emri hedefi ondan okunur). */}
-              {canLinkOrders && activeJob && !manualMode && (
-                <HeaderChip
-                  icon="link-variant"
-                  label="Sipariş Bağla"
-                  onPress={() => setOrderLinkOpen(true)}
-                />
-              )}
-              {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken
-                  (iki uç da ekrandaki Tambur ADIMINI hedef alır; iş yoksa hedef
-                  yok). Yetkisizde hiç çizilmez, gri buton bırakılmaz. */}
-              {canFieldFix && activeJob && !manualMode && (
-                <HeaderChip
-                  icon="wrench-outline"
-                  label="Düzelt"
-                  onPress={() => openFieldFix()}
-                  accent
-                />
-              )}
-              {/* MANUEL EKLE anahtarı — aynı yetki kapısı (`canFieldFix`)
-                  arkasında: backend ucu `roll:manual-adjust` /
-                  `mobile:tambur-duzelt` ister, yetkisiz operatöre 403 verecek
-                  gri buton gösterilmez. AÇIKKEN dolu amber: operatör hangi modda
-                  olduğunu bir bakışta görmeli. (Telefonda karşılığı 2. kattaki
-                  chip — bkz. phoneSecondRow.) */}
-              {canFieldFix && (
-                <HeaderChip
-                  icon={manualMode ? 'hand-back-right' : 'hand-back-right-outline'}
-                  label={manualMode ? 'MANUEL MOD AÇIK' : 'Manuel Ekle'}
-                  onPress={toggleManualMode}
-                  active={manualMode}
-                />
-              )}
-              {/* Serbest Etiket — EN SAĞDA, profil tuşunun yanında ve YALNIZ İKON
-                  (2026-08-04). MANUEL MODDA ÇİZİLMEZ: o modda ekran zaten form
-                  dolu, kalabalığı azaltmak için yalnız "Çıkanlar" bırakılır. */}
-              {!manualMode && (
-                <HeaderChip
-                  icon="tag-multiple"
-                  label="Serbest Etiket"
-                  onPress={() => openStandalone()}
-                  iconOnly
-                />
+              {headerLayout.inline.map((a) => renderHeaderAction(a))}
+              {headerLayout.overflow.length > 0 && (
+                <AppMenu
+                  visible={headerMoreOpen}
+                  onDismiss={() => setHeaderMoreOpen(false)}
+                  anchor={
+                    <HeaderChip
+                      icon="dots-horizontal"
+                      label="Diğer"
+                      onPress={() => setHeaderMoreOpen(true)}
+                    />
+                  }
+                >
+                  {headerLayout.overflow.map((a) => {
+                    const m = headerActionMeta(a);
+                    return (
+                      <AppMenu.Item
+                        key={a}
+                        leadingIcon={m.icon}
+                        title={m.label}
+                        onPress={() => {
+                          setHeaderMoreOpen(false);
+                          m.onPress();
+                        }}
+                      />
+                    );
+                  })}
+                </AppMenu>
               )}
             </>
           )}
@@ -3961,7 +4003,7 @@ export default function TamburScreen() {
                         </View>
                         <Text style={styles.rawDestHint}>
                           {recutRawDestination === 'STOCK'
-                            ? `Parça ham stoğa döner — boyahane/KK2/tambur için yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanabilir.`
+                            ? `Parça ham stoğa döner — boyahane/kalite kontrol/tambur için yeni ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlanabilir.`
                             : 'Parça ham-bitmiş olarak depoya iner — ham etiketle sevk edilebilir.'}
                         </Text>
                       </View>
@@ -4519,6 +4561,7 @@ export default function TamburScreen() {
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         title="Refakat Kartı QR Okut"
         onDismiss={() => setScannerOpen(false)}
         onScan={handleScannerResult}

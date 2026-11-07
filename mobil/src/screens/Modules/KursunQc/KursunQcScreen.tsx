@@ -38,6 +38,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import {
   kursunQcService,
   type CompleteQc2Request,
@@ -79,6 +80,7 @@ import {
   nextStationLabel,
 } from './stationPanels';
 import GramajTapPanel from './GramajTapPanel';
+import AllDoneFinishPanel from './AllDoneFinishPanel';
 import { useGramajTap } from './useGramajTap';
 import { widthGatedTap } from './widthGatedTap';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
@@ -182,6 +184,8 @@ export default function KursunQcScreen() {
   const device = useDeviceType();
   const compact = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
+  // Donanım okuyuculu cihazda kart okutma tuşla yapılır; kamera açan çipler gizlenir.
+  const hardware = useHardwareScanMode();
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
 
@@ -703,7 +707,7 @@ export default function KursunQcScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: panels.qualityPanel ? 'KK2 işaretlendi' : 'Top tamamlandı',
+        text1: panels.qualityPanel ? 'Kontrol tamamlandı' : 'Top tamamlandı',
         text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
       });
 
@@ -737,7 +741,7 @@ export default function KursunQcScreen() {
         );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (!meterRecovering) showScreenError(err, 'KK2 başarısız', measuredWidthErrorText(err) ?? undefined);
+      if (!meterRecovering) showScreenError(err, 'Kontrol kaydedilemedi', measuredWidthErrorText(err) ?? undefined);
     },
   });
 
@@ -1216,6 +1220,7 @@ export default function KursunQcScreen() {
             // giriş bandındaki ikinci (pasif duran) kamera butonu kaldırıldı.
             // Telefonda header pill'i yok, kamera butonu burada kalır.
             onScan={compact ? () => drawerQueue.run(() => setScannerOpen(true)) : undefined}
+            hardwareListening
             onList={() => drawerQueue.run(() => setListModalOpen(true))}
             tone="green"
             listContainerColor={urgentCount > 0 ? '#fee2e2' : undefined}
@@ -1350,12 +1355,14 @@ export default function KursunQcScreen() {
         badge={<UrgentBadge count={urgentCount} />}
         fill
       />
-      <HeaderChip
-        icon="camera"
-        label="Tara"
-        onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-        fill
-      />
+      {!hardware && (
+        <HeaderChip
+          icon="camera"
+          label="Tara"
+          onPress={() => drawerQueue.run(() => setScannerOpen(true))}
+          fill
+        />
+      )}
       {docLookup.enabled && (
         <HeaderChip
           icon="file-document-outline"
@@ -1375,11 +1382,13 @@ export default function KursunQcScreen() {
           kalır, erişim 2. kattaki chip'ten (phoneSecondRow). */}
       {!compact && (
         <>
-          <HeaderChip
-            icon="camera"
-            label="Kart Okut"
-            onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-          />
+          {!hardware && (
+            <HeaderChip
+              icon="camera"
+              label="Kart Okut"
+              onPress={() => drawerQueue.run(() => setScannerOpen(true))}
+            />
+          )}
           <HeaderChip
             icon="format-list-bulleted"
             label="Liste"
@@ -1484,6 +1493,13 @@ export default function KursunQcScreen() {
               <Text style={styles.readOnlyTitle}>Bu istasyonda top yok</Text>
               <Text style={styles.readOnlyText}>{activeJob.stepSummary.emptyStep.message}</Text>
             </View>
+          ) : !selectedRoll && allQc2Done ? (
+            // Son top bitince seçim boşalır; kapanış düğmesi seçili topun altbilgisinde kalıp kayboluyordu (provada iş tambura düşmedi).
+            <AllDoneFinishPanel
+              rollCount={activeJob.stepSummary.rolls.length}
+              nextStepName={activeJob.stepSummary.nextStepName}
+              onFinish={() => footerThrottled(handleFinishStep)}
+            />
           ) : !selectedRoll ? (
             <View style={styles.emptyState}>
               <Icon source="package-variant" size={64} color="#cbd5e1" />
@@ -1497,7 +1513,7 @@ export default function KursunQcScreen() {
               {tapLayout && <GramajTapPanel state={gramajTap} hasRoll={false} />}
             </View>
           ) : (
-            // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton · numpad
+            // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton
             // arası boşluk EŞİT (styles.rollPane gap). Flex-spacer yok.
             <View style={styles.rollPane}>
               {/* KQ-D3: hata girişi TEK bileşen (InspectionPanel; K4P ile ortak) —
@@ -1611,7 +1627,7 @@ export default function KursunQcScreen() {
                     {missingRequiredProps.length > 0 && (
                       <Text style={styles.propWarnLine}>
                         Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden{' '}
-                        {panels.qualityPanel ? 'KK2 tamamlanamaz.' : 'tamamlanamaz.'}
+                        {panels.qualityPanel ? 'kontrol tamamlanamaz.' : 'tamamlanamaz.'}
                       </Text>
                     )}
                   </Surface>
@@ -1715,7 +1731,7 @@ export default function KursunQcScreen() {
                     contentStyle={styles.footerBtnContent}
                     labelStyle={styles.footerBtnLabel}
                   >
-                    {panels.qualityPanel ? 'KK2 Tamamlandı' : 'Tamamlandı'}
+                    {panels.qualityPanel ? 'Kontrol Tamamlandı' : 'Tamamlandı'}
                   </Button>
                 ) : (
                   // Barkodlu top — aynı offline-aware mantığı: loading/disabled
@@ -1740,11 +1756,6 @@ export default function KursunQcScreen() {
               </Surface>
               )}
 
-              {/* Tablet: sayısal tuş takımı sol kolonun altında — metre girişi
-                  ile aynı sütunda, aksiyon butonunun hemen altında. fill: numpad
-                  kalan alana esner (dar tablette taşmaz, geniş tablette iri tuş).
-                  Telefonda numpad yok; kalite paneli kapalıysa metre girişi yok → numpad da yok. */}
-              {!compact && panels.qualityPanel && <NumpadHost style={styles.numpadHost} fill />}
             </View>
           )}
         </View>
@@ -1753,6 +1764,11 @@ export default function KursunQcScreen() {
         {!compact && (
           <View style={styles.rightCol}>
             {renderRightContent()}
+            {/* Tablet: tuş takımı SAĞ ALTTA, sabit iri tuşlarla (fill değil). Sol kolonda
+                hata listesi + gramaj + KK2 Tamamla alanı yiyip host'u eziyordu (2026-11-06);
+                top listesi (flex:1) üstte kalanı alır ve kendi içinde kayar. Kalite paneli
+                kapalıysa metre girişi yok → numpad da yok. */}
+            {panels.qualityPanel && <NumpadHost style={styles.numpadHost} />}
           </View>
         )}
       </View>
@@ -1784,6 +1800,7 @@ export default function KursunQcScreen() {
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         title="Refakat Kartı QR Okut"
         onDismiss={() => setScannerOpen(false)}
         onScan={handleScannerResult}
@@ -2085,9 +2102,9 @@ function ReopenConfirmModal({
         {canReopen ? (
           <>
             <Text style={reopenStyles.warnText}>
-              Bu kartın KK2 adımı kapatılmış; aşağıdaki {preview!.rollCount} top
+              Bu kartın kalite kontrol adımı kapatılmış; aşağıdaki {preview!.rollCount} top
               zaten Tambur'a geçmiş. Yeniden açarsan bu toplar Tambur'dan geri
-              çekilip tekrar KK2'ye alınır.
+              çekilip tekrar kalite kontrole alınır.
             </Text>
             <Text style={reopenStyles.listLabel}>
               Geri çekilecek toplar ({preview!.rollCount})
@@ -2328,11 +2345,11 @@ function RollStatusChips({ errorCount, priorCount, done, qualityStep }: { errorC
       )}
       {done ? (
         <View style={helperStyles.chipBlue}>
-          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 ✓' : 'Tamam ✓'}</Text>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'Kontrol ✓' : 'Tamam ✓'}</Text>
         </View>
       ) : (
         <View style={helperStyles.chipNeutral}>
-          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 bekliyor' : 'Bekliyor'}</Text>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'Kontrol bekliyor' : 'Bekliyor'}</Text>
         </View>
       )}
     </View>
@@ -2350,7 +2367,7 @@ function RollListItem({
   index: number;
   selected: boolean;
   onPress: () => void;
-  /** Kalite paneli kapalı istasyonda (yalnız kurşun) çip "KK2" demez. */
+  /** Kalite paneli kapalı istasyonda (yalnız kurşun) çip "Kontrol" demez. */
   qualityStep: boolean;
 }) {
   const done = roll.qc2Completed;
@@ -2604,7 +2621,7 @@ const styles = StyleSheet.create({
   },
   // Tablet: footer'ın beyaz zemini + üst çizgisi kaldırılır — aksiyon butonu
   // doğrudan sol kolon zemininde durur. Dikey iç boşluk 0: buton→giriş ve
-  // buton→numpad mesafesi rollPane gap'inden gelsin (eşit boşluk).
+  // buton→üst bileşen mesafesi rollPane gap'inden gelsin (eşit boşluk).
   footerBare: {
     backgroundColor: 'transparent',
     borderTopWidth: 0,
@@ -2680,12 +2697,9 @@ const styles = StyleSheet.create({
   paneEmptyText: { fontSize: 14, color: '#94a3b8', fontWeight: '600' },
   paneEmptyHint: { fontSize: 12, color: '#cbd5e1', textAlign: 'center' },
 
-  // Tablet: sol kolonda aksiyon butonunun altında. Üst boşluk rollPane gap'inden
-  // gelir (marginTop 0).
+  // Tablet: sağ kolonun altında, top listesinin altında.
   numpadHost: {
-    marginHorizontal: 8,
-    marginTop: 0,
-    marginBottom: 8,
+    margin: 8,
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 8,

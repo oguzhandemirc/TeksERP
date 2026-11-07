@@ -39,7 +39,8 @@ function LabelFailures() {
   );
 }
 
-export default function WindScanColumn({ station }: { station: WindStationState }) {
+/** `listening`: el terminalinde tuş bu banda gider (tezgah sekmesi açıkken levent-tak bandı alır). */
+export default function WindScanColumn({ station, listening = true }: { station: WindStationState; listening?: boolean }) {
   const [camera, setCamera] = useState(false);
   return (
     <View style={styles.root}>
@@ -50,12 +51,14 @@ export default function WindScanColumn({ station }: { station: WindStationState 
         onResolve={() => station.submitScan(station.scanValue)}
         onScan={() => setCamera(true)}
         scanCtaLabel="Levent / gövde okut"
+        hardwareListening={listening}
         tone="blue"
       />
       {station.scanMessage ? <Text style={styles.scanMessage}>{station.scanMessage}</Text> : null}
       <LabelFailures />
       <BarcodeScannerModal
         visible={camera}
+        listenWhileHidden={listening}
         title="Levent no ya da gövde no okut"
         trigger="auto"
         onDismiss={() => setCamera(false)}

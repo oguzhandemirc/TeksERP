@@ -41,6 +41,11 @@ describe('parti taslağı (saf)', () => {
       mode: 'PER_PARTY', rows: [{ blockNo: 1, batchNo: 'P9918733', meters: 586 }, { blockNo: 2, batchNo: 'P9918734', meters: 3935 }],
     });
   });
+  it('⭐ 214279: sunucunun önerdiği parti metresi (beyan ara toplamı) Σ satırın önüne geçer; öneri yoksa (eski sunucu) Σ satır', () => {
+    const v = view({ parties: [party(1, { meters: 266.9, suggestedMeters: 586 }), party(2, { meters: 2345.5, suggestedMeters: 3935 })] });
+    expect(initialMultiParty(v)!.rows.map((r) => r.meters)).toEqual([586, 3935]);
+    expect(initialMultiParty(view({ parties: [party(1, { meters: 266.9 }), party(2, { meters: 0, suggestedMeters: null })] }))!.rows.map((r) => r.meters)).toEqual([266.9, null]);
+  });
   it('⭐ gövde: parties[] + mode + kurşun metresi = parti toplamı; boş parti no null', () => {
     const m = initialMultiParty(view())!;
     m.rows[0]!.batchNo = ' ';

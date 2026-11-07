@@ -24,6 +24,7 @@ import { updateDeliveryNote } from "./gelen-belge-note.service";
 import { getReadSummary, type ReadSummaryState } from "./gelen-belge-okuma-ozeti.service";
 import { resolveFormWorkOrderRoute, routeInput, type FormWorkOrderRoute } from "./gelen-belge-oto-is-emri.service";
 import { WorkOrderService, assertRouteRefsActive, type WorkOrderCreateInput } from "./workorder.service";
+import { assertCustomerGoodsHasNoOrderLines } from "./helpers/workorder-customer-goods.helper";
 import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -92,7 +93,7 @@ export interface FormWorkOrderInput {
   /** K30-D: anahtar VARSA istemcinin hedef özellik kümesi (istasyon bayrakları eklenmez; kullanıcı kaldırabilir), yoksa bugünkü. */
   targetPropertyIds?: string[];
   /** K30-D: yoksa quickStart sipariş bağından türetir (bugünkü). */
-  type?: "ORDER_PRODUCTION" | "STOCK_PRODUCTION";
+  type?: "ORDER_PRODUCTION" | "STOCK_PRODUCTION" | "CUSTOMER_GOODS_SERVICE";
   /** K30-D: düzenlenmiş rota adımları (sıra = dizi sırası); routeTemplateId ile birlikte, şablonun yerine geçer. */
   steps?: FormWorkOrderStep[];
 }
@@ -130,12 +131,14 @@ export async function assertFormSteps(input: FormWorkOrderInput): Promise<WorkOr
 }
 
 /** quickStart'a geçen form alanları — yalnız verilenler (yoksa quickStart bugünkü gibi türetir). */
-export type FormWorkOrderFields = Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type">;
+export type FormWorkOrderFields = Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type" | "customerId">;
 export function formWorkOrderFields(input: FormWorkOrderInput): FormWorkOrderFields {
   const keys = ["targetItemId", "targetColorId", "width", "targetQuantity", "targetWeight", "plannedStartDate", "plannedEndDate", "type"] as const;
   const out: FormWorkOrderFields = {};
   for (const k of keys) if (input[k] != null) Object.assign(out, { [k]: input[k] });
   if (input.orderLineIds?.length) out.orderLineIds = input.orderLineIds;
+  // Fason (müşteri malı): işin müşterisi = belgenin carisi (topların sahibiyle aynı; quickStart uyuşmayı ölçer).
+  if (input.type === "CUSTOMER_GOODS_SERVICE") out.customerId = input.ownerCustomerId;
   return out;
 }
 
@@ -203,6 +206,12 @@ async function flagPropertyIds(targets: ReadonlyArray<{ propertyId: string }>): 
   return [...new Set(rows.map((r) => r.variantOfPropertyId).filter((x): x is string => !!x))];
 }
 
+/**
+ * Belgeden gelen top HEP müşteri malıdır; tür seçilmeyince quickStart bugünkü gibi STOK türetir (2. prova IE0611260014).
+ * Davranış değişmez, yanıt uyarır (Belge Okut ↔ Fason Belge Okut). Terim çalışma anında (K20 adı rejimi).
+ */
+export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşteri malı; tür seçilmediği için ${TERIM.terbiyeIsEmri.tekilKucuk} Stoğa üretim olarak açıldı. Fason (müşteri malı) için "Fason Belge Okut"u kullanın.`;
+
 export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrderInput, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<FormWorkOrderResult> {
   await assertFormApprovalEnabled();
   // İzin + üretim modülü (lisans sorusu önce) + rota/rotasız — onaydan ÖNCE (fail-closed; tek kapı, SIRALI'da rota zorunlu).
@@ -212,6 +221,8 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (input.type === "ORDER_PRODUCTION" && !input.orderLineIds?.length) {
     throw AppError.badRequest(`Siparişe özel ${TERIM.terbiyeIsEmri.tekilKucuk} için sipariş kalemi seçin.`, { code: "GELEN_BELGE_FORM_TYPE_NEEDS_ORDER" });
   }
+  // Fason (müşteri malı) kuralı da onaydan ÖNCE: sipariş kalemi 400 (belge iş emirsiz onaylı kalmasın).
+  assertCustomerGoodsHasNoOrderLines(input.type, input.orderLineIds?.length ?? 0);
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { id: true, status: true, noteNo: true } });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
 
@@ -227,7 +238,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   const item = await resolveFormTargetItem(input.targetItemId);
   // Çok partide / ayrı toplarda kurşun metresi = partilerin (topların) toplamı (onay kapısı bu değeri okur; gövdenin tek metresi yerine).
   const kursunMeters = parties ? Math.round(parties.reduce((s, p) => s + p.meters, 0) * 1000) / 1000 : input.kursunMeters;
-  const warnings: string[] = [];
+  const warnings: string[] = input.type == null && !input.orderLineIds?.length ? [stockFromCustomerGoodsWarning()] : [];
   // Taslak: okuma sürmüyor olmalı → not alanları (yalnız DRAFT'ta yazılır).
   if (note.status === DeliveryNoteStatus.DRAFT) {
     const read = await getReadSummary(noteId);

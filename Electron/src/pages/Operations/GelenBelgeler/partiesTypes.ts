@@ -13,6 +13,11 @@ export interface NoteParty {
   processText?: string | null;
   senderWorkOrderNo?: string | null;
   workOrders?: { id: string; workOrderNumber: string; status: string }[];
+  /** Sunucunun önerdiği parti metresi (beyan ara toplamı > Σ satır; 2026-11-06, eski sunucu göndermez → `meters`). */
+  suggestedMeters?: number | null;
+  suggestedMetersSource?: "TOTAL" | "LINE_SUM" | null;
+  /** Onaylı belgede parti kaydının metresi (elle düzeltme dahil; 2. prova 2026-11-06). Eski sunucu/onaysız belge → null/yok. */
+  recordedMeters?: number | null;
 }
 
 export interface NotePartiesView {

@@ -38,6 +38,7 @@ import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { recordRollAttributesAppliedTx, setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
+import { assertCustomerGoodsHasNoOrderLines } from "./helpers/workorder-customer-goods.helper";
 import { resolveReasonCode } from "./reason-preset.service";
 import { recordWorkOrderFieldDiffTx } from "./helpers/workorder-field-diff.helper";
 import { InventoryService } from "./inventory.service";
@@ -384,6 +385,7 @@ export class WorkOrderLinkService {
 
     const wo = await loadWo(workOrderId);
     assertPlanEditable(wo);
+    assertCustomerGoodsHasNoOrderLines(wo.type, ids.length);
 
     const lines = await prisma.orderLine.findMany({
       where: { id: { in: ids } },
@@ -1057,6 +1059,7 @@ export class WorkOrderLinkService {
     const wo = await loadWo(workOrderId);
     // Plan değişikliği zinciri — COMPLETED da kapalı (uyumlu normal bağ açık kalır).
     assertPlanChangeAllowed(wo);
+    assertCustomerGoodsHasNoOrderLines(wo.type, 1);
 
     const line = await prisma.orderLine.findUnique({
       where: { id: orderLineId },

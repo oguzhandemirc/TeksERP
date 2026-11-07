@@ -10,6 +10,7 @@
 import type { ProductionRoute } from '../../../services/route.service';
 import type { ReadSummary } from '../../../services/inboundDoc.service';
 import { SCAN_ROUTE, shortcutRoutes } from '../GelenBelge/woCreate/woFromDoc';
+import type { WoCreateKind } from '../../../store/woCreateKinds';
 
 export interface TypeGroups {
   special: ProductionRoute[];
@@ -96,3 +97,34 @@ export function tileLayout(count: number, width: number, height: number, gap = 1
   const labelSize = Math.max(12, Math.min(16, Math.round(tileHeight * 0.16)));
   return { columns, rows, shown, hidden: count - shown, tileHeight, valueSize, labelSize };
 }
+
+/** Alt çubuk düğme adları (tür başına ayrı düğme; her biri doğrudan okutmaya gider). */
+export const KIND_BUTTON: Record<WoCreateKind, string> = { STANDARD: 'Belge Okut', CUSTOMER_GOODS: 'Fason Belge Okut' };
+
+/** Okutma akışının İE türü: Fason düğmesi → Fason (müşteri malı); İE oluştur → null (bugünkü türetme). */
+export const scanWoType = (kind: WoCreateKind): 'CUSTOMER_GOODS_SERVICE' | null => (kind === 'CUSTOMER_GOODS' ? 'CUSTOMER_GOODS_SERVICE' : null);
+
+/**
+ * Fason önizlemesi: müşteri (malın sahibi) İLK ve büyük karo. Karar formun müşteri alanıyla AYNI (`initialRowForm`):
+ * taslakta kayıtlı sahip > güçlü öneri; tam metin eşleşmesi alana yazılmaz, formda sorulur. Kart "bulunamadı"
+ * derken form "Seçildi" demesin (prova 2026-11-06). `ownerName` taslaktaki sahibin adını cari listesinden çözer.
+ */
+export function customerGoodsTiles(s: ReadSummary, ownerName?: (id: string) => string | null | undefined): PreviewTile[] {
+  const label = 'Müşteri (malın sahibi)';
+  const sug = s.ownerSuggestion ?? null;
+  let head: PreviewTile;
+  if (s.ownerCustomerId) {
+    const name = ownerName?.(s.ownerCustomerId) ?? (sug?.customerId === s.ownerCustomerId ? sug.name : null) ?? 'Seçili müşteri';
+    head = { key: 'musteri', label, value: name, state: 'found' };
+  } else if (sug && sug.source !== 'FULL_TEXT') {
+    head = { key: 'musteri', label, value: sug.name, state: 'found' };
+  } else if (sug) {
+    head = { key: 'musteri', label, value: `${sug.name} mi? — formda onaylayın`, state: 'missing' };
+  } else {
+    head = { key: 'musteri', label, value: 'Bulunamadı — seçin', state: 'missing' };
+  }
+  return [head, ...previewTiles(s).filter((t) => t.key !== 'musteri')];
+}
+
+/** Önizlemede "Müşteri seç" düğmesi yalnız müşteri karosu eksikken (karo ile aynı karar). */
+export const customerTileMissing = (tiles: readonly PreviewTile[]): boolean => tiles[0]?.key === 'musteri' && tiles[0].state === 'missing';

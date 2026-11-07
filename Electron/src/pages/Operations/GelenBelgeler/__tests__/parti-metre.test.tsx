@@ -35,6 +35,7 @@ vi.mock("../CellReviewDialog", () => ({ CellReviewDialog: () => null }));
 vi.mock("../ScanReadBanner", () => ({ ScanReadBanner: () => null }));
 vi.mock("../AddPagesAction", () => ({ AddPagesAction: () => null }));
 vi.mock("../ProcessGramajPanel", () => ({ ProcessGramajPanel: () => null }));
+vi.mock("../useNoteTabTitle", () => ({ useNoteTabTitle: () => false }));
 
 const line = (id: string, lineNo: number, o: Partial<DeliveryNoteLine> = {}): DeliveryNoteLine =>
   ({

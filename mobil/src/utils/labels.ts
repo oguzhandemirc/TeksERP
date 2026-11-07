@@ -1,3 +1,4 @@
+import type { StationType } from '../types/models';
 // Backend enum kodlarını Türkçe etikete çevirir.
 // Tek kaynak — tüm ekranlar buradan import eder.
 
@@ -13,6 +14,7 @@ export const WORK_ORDER_STATUS_LABEL: Record<string, string> = {
 export const WORK_ORDER_TYPE_LABEL: Record<string, string> = {
   ORDER_PRODUCTION: 'Sipariş Üretimi',
   STOCK_PRODUCTION: 'Stoğa Üretim',
+  CUSTOMER_GOODS_SERVICE: 'Fason (müşteri malı)',
 };
 
 // Sipariş durumu SEVK diliyle — panelin `orderStatusLabels`ıyla aynı ("Onaylandı" jargonu yok).
@@ -46,11 +48,11 @@ export const STEP_STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'İptal Edildi',
 };
 
-export const STATION_TYPE_LABEL: Record<string, string> = {
-  PROCESS: 'İç İşlem',
-  PROCESS_QC: 'Kalite Kontrol',
-  EXTERNAL: 'Fason',
-  WAREHOUSE: 'Depo',
+// Backend `StationType` (INTERNAL | EXTERNAL). Eski anahtarlar (PROCESS…) gerçek enumda yoktu; İE detayında
+// "INTERNAL · Aktif" ham basılıyordu (prova 2026-11-06).
+export const STATION_TYPE_LABEL: Record<StationType, string> = {
+  INTERNAL: 'Fabrika içi',
+  EXTERNAL: 'Fason (dış)',
 };
 
 export const ROLL_STATUS_LABEL: Record<string, string> = {

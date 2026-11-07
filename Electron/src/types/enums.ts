@@ -1,3 +1,5 @@
+import { TERIM_AD } from "@/lib/terim";
+
 // WARP (Çözgü) bilinçli olarak YOK — backend Prisma ItemType enum'unda hiç
 // olmadı (fabrika çözgü/dokuma yapmaz); burada sunulunca create her zaman patlıyordu.
 export const ItemType = {
@@ -139,12 +141,15 @@ export const workOrderStatusLabels: Record<WorkOrderStatus, string> = {
 export const WorkOrderType = {
   ORDER_PRODUCTION: "ORDER_PRODUCTION",
   STOCK_PRODUCTION: "STOCK_PRODUCTION",
+  /** Fason (müşteri malı): siparişsiz, müşteri İE'nin üstünde ve zorunlu (2026-11-06). */
+  CUSTOMER_GOODS_SERVICE: "CUSTOMER_GOODS_SERVICE",
 } as const;
 export type WorkOrderType = (typeof WorkOrderType)[keyof typeof WorkOrderType];
 
 export const workOrderTypeLabels: Record<WorkOrderType, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stok",
+  CUSTOMER_GOODS_SERVICE: TERIM_AD.fasonMusteriMali,
 };
 
 export const StepStatus = {

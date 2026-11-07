@@ -48,6 +48,8 @@ export interface CreatePayload {
   /** KQ-D6 hedef çeşit değerleri (hedef kurşun gramajı) — yalnız create; sunucu zod'u iki uçta. */
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   orderLineIds?: string[];
+  /** Fason (müşteri malı) türünde zorunlu müşteri — elle kurulan allowlist, alan burada da yazılır. */
+  customerId?: string;
   stepPlanning?: StepPlanPayload[];
   width: number | null;
   targetQuantity: number | null;
@@ -69,7 +71,9 @@ export function buildPayload(
   meta: WorkOrderFormMeta,
   targetQuantityEnabled: boolean,
 ): CreatePayload {
-  const orderLineIds = v.orderLineIds ?? [];
+  const customerGoods = v.type === WorkOrderType.CUSTOMER_GOODS_SERVICE;
+  // Fason (müşteri malı) siparişe bağlanmaz; müşteri İE'nin üstünde durur.
+  const orderLineIds = customerGoods ? [] : (v.orderLineIds ?? []);
   const hasLines = orderLineIds.length > 0;
   const usingCustom = meta.customSteps.length > 0;
 
@@ -107,7 +111,8 @@ export function buildPayload(
 
   return {
     // Tip artık formda seçilmez — bağlı kalem varsa siparişe özel, yoksa stoğa.
-    type: hasLines ? WorkOrderType.ORDER_PRODUCTION : WorkOrderType.STOCK_PRODUCTION,
+    type: customerGoods ? WorkOrderType.CUSTOMER_GOODS_SERVICE : hasLines ? WorkOrderType.ORDER_PRODUCTION : WorkOrderType.STOCK_PRODUCTION,
+    ...(customerGoods && v.customerId ? { customerId: v.customerId } : {}),
     ...(batchNumber ? { batchNumber } : {}),
     ...routePart,
     targetItemId: v.targetItemId ?? null,

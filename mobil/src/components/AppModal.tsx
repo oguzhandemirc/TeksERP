@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
   Pressable,
@@ -18,6 +18,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { newScanOverlayId, openScanOverlay } from '../services/hardwareScanner/scanBus';
+import { ScanOverlayContext } from '../hooks/useHardwareScanTarget';
 
 export type AppModalPosition = 'center' | 'bottom' | 'right';
 
@@ -38,6 +40,9 @@ export interface AppModalProps {
   /** Sürükleyerek kapatma (bottom/center=aşağı, right=sağa). Default true.
    *  `dismissable=false` ise zaten devre dışıdır. Kritik/zorunlu modallarda kapat. */
   swipeToDismiss?: boolean;
+  /** El terminali: açıkken alttaki ekranın arka plan okuma dinleyicisini ÖRTMESİN (yan panel gibi
+   *  ekranın parçası sayılan yüzeyler). Default false — açık pencere okumayı keser. */
+  scanPassThrough?: boolean;
 }
 
 // Sürükle-kapat eşikleri.
@@ -103,6 +108,7 @@ export default function AppModal({
   position = 'center',
   onHidden,
   swipeToDismiss = true,
+  scanPassThrough = false,
 }: AppModalProps) {
   // `rendered`: çıkış animasyonu bitene kadar Portal mount'ta kalır (yoksa içerik
   // anında kaybolur, kapanış animasyonu hiç oynamaz).
@@ -164,6 +170,16 @@ export default function AppModal({
     // progress/finishHide kararlı; sadece visible geçişinde çalışmalı.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  // "En üstteki açık pencere" kuralı: görünürken kapsamadığı kapalı tarayıcıların dinleyicisi susar;
+  // içerik bu pencerenin kimliğini bağlamdan alır (portal bağlamı taşımaz, sağlayıcı içeride).
+  const [overlayId] = useState(newScanOverlayId);
+  const parentOverlays = useContext(ScanOverlayContext);
+  const within = useMemo(() => [...parentOverlays, overlayId], [parentOverlays, overlayId]);
+  useEffect(() => {
+    if (!visible || scanPassThrough) return;
+    return openScanOverlay(overlayId);
+  }, [visible, scanPassThrough, overlayId]);
 
   // Android donanım geri tuşu — açıkken kapatır (dismissable ise).
   useEffect(() => {
@@ -339,11 +355,14 @@ export default function AppModal({
   //   YATAYDA ORTALAR. Böylece View sarmalayıcıdan geniş (tablet yatay → taşma) ya da
   //   dar (sola yaslanma) olsa bile simetrik kalıp ekran ortasına gelir. Bu olmadan
   //   flex varsayılanı (explicit width'li çocuk = flex-start) modalı kenara kaydırıyordu.
+  // Seddi (prova 2026-11-06): pencere ölçüsü bayat kalırsa (portrait tarayıcıdan dönüş) tüketicinin hesapladığı boyut
+  // ekrandan taşıyordu; kart hiçbir koşulda kök alandan büyük olamaz. contentStyle sonra gelir → daha dar sınırı kazanır.
+  const viewportSeal = { maxWidth: '100%' as const, maxHeight: '100%' as const };
   const contentBase =
     position === 'center'
       ? contentStyle
-        ? { width: Math.min(width - 32, 560) }
-        : { width: Math.min(width - 32, 560), alignItems: 'center' as const }
+        ? { width: Math.min(width - 32, 560), ...viewportSeal }
+        : { width: Math.min(width - 32, 560), alignItems: 'center' as const, ...viewportSeal }
       : undefined;
 
   return (
@@ -368,7 +387,7 @@ export default function AppModal({
             }}
             style={[contentBase, contentAnimStyle, contentStyle]}
           >
-            {children}
+            <ScanOverlayContext.Provider value={within}>{children}</ScanOverlayContext.Provider>
           </Animated.View>
         </GestureDetector>
       </Animated.View>

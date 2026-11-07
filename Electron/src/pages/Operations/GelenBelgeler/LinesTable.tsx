@@ -1,11 +1,13 @@
 // Satır tablosu — dar ekranda kendi içinde yatay kayar; kumaş seçici tablo başına TEK modal.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { Switch } from "@/components/ui/switch";
 import { LineRow } from "./LineRow";
 import { visibleLines } from "./reviewView";
-import type { DeliveryNoteDetail, LinePatch, NoteMatchSuggestions } from "./types";
+import { isSummaryRow, splitNoteLines } from "./noteLines";
+import { TERIM_AD } from "@/lib/terim";
+import type { DeliveryNoteDetail, DeliveryNoteLine, LinePatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
   note: DeliveryNoteDetail;
@@ -32,49 +34,41 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
   // "Sorunlu" hükmü backend `problems`ten (onay ön kontrolüyle aynı yüklem); burada yalnız gösterim süzgeci.
   const [onlyProblems, setOnlyProblems] = useState(false);
   const view = visibleLines(note.lines, onlyProblems && !perDocument);
+  const { docLines, summaryLines } = splitNoteLines(view.rows);
+  const rowProps = (l: DeliveryNoteLine) => ({
+    line: l,
+    suggestion: suggestions?.lines.find((s) => s.lineId === l.id),
+    editable,
+    fixable: canWrite && partial && l.status === "FAILED" && !l.rollId,
+    selected: selectedId === l.id,
+    ownerCustomerId: note.ownerCustomerId,
+    defaultItem,
+    onSelect: () => onSelect(l.id),
+    onPatch: (p: LinePatch) => (p.skip ? setConfirm({ kind: "skip", lineId: l.id }) : onPatch(l.id, p)),
+    onDelete: () => setConfirm({ kind: "delete", lineId: l.id }),
+    onPickItem: () => setPickFor(l.id),
+    infoOnly: perDocument,
+  });
+  const noDocLines = note.lines.every((l) => isSummaryRow(l));
   return (
     <div className="flex flex-col gap-2">
+      {/* Onayda doğan parti kayıtları belgenin topları değildir: ayrı bölüm, top sayısına karışmaz. */}
+      {summaryLines.length > 0 && (
+        <section className="flex flex-col gap-2" data-testid="summary-lines">
+          <p className="text-sm font-medium">{TERIM_AD.partiKayitlari}{" "}<span className="font-normal text-muted-foreground">— her parti sisteme tek top olarak girildi</span></p>
+          <LinesGrid perDocument={perDocument}>{summaryLines.map((l) => <LineRow key={l.id} {...rowProps(l)} />)}</LinesGrid>
+        </section>
+      )}
       {perDocument ? (
-        <p className="text-sm font-medium" data-testid="info-lines-title">Belgedeki satırlar (bilgi)</p>
+        <p className="text-sm font-medium" data-testid="info-lines-title">{`Belgedeki satırlar (bilgi) · ${docLines.length} top`}</p>
       ) : (
       <ProblemFilter on={onlyProblems} onChange={setOnlyProblems} shown={view.rows.length} total={view.total} problems={view.problemCount} />
       )}
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full min-w-[900px] text-sm">
-        <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-          <tr>
-            <th className="p-2 text-left">Blok/Satır</th>
-            <th className="p-2 text-left">Top No</th>
-            <th className="p-2 text-left">Metre</th>
-            <th className="p-2 text-left">Kilo</th>
-            <th className="p-2 text-left">En</th>
-            {!perDocument && <th className="p-2 text-left">Kumaş</th>}
-            {!perDocument && <th className="p-2 text-left">Renk</th>}
-            <th className="p-2 text-left">Durum</th>
-            <th className="p-2" />
-          </tr>
-        </thead>
-        <tbody>
-          <EmptyRows noLines={note.lines.length === 0} noProblems={onlyProblems && !perDocument && view.rows.length === 0} cols={perDocument ? 7 : 9} />
-          {view.rows.map((l) => (
-            <LineRow
-              key={l.id}
-              line={l}
-              suggestion={suggestions?.lines.find((s) => s.lineId === l.id)}
-              editable={editable}
-              fixable={canWrite && partial && l.status === "FAILED" && !l.rollId}
-              selected={selectedId === l.id}
-              ownerCustomerId={note.ownerCustomerId}
-              defaultItem={defaultItem}
-              onSelect={() => onSelect(l.id)}
-              onPatch={(p) => (p.skip ? setConfirm({ kind: "skip", lineId: l.id }) : onPatch(l.id, p))}
-              onDelete={() => setConfirm({ kind: "delete", lineId: l.id })}
-              onPickItem={() => setPickFor(l.id)}
-              infoOnly={perDocument}
-            />
-          ))}
-        </tbody>
-      </table>
+    <div>
+      <LinesGrid perDocument={perDocument}>
+        <EmptyRows noLines={noDocLines} noProblems={onlyProblems && !perDocument && view.rows.length === 0} cols={perDocument ? 7 : 9} />
+        {docLines.map((l) => <LineRow key={l.id} {...rowProps(l)} />)}
+      </LinesGrid>
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(o) => !o && setConfirm(null)}
@@ -100,6 +94,30 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
         onPick={(row) => pickFor && onPatch(pickFor, { itemId: row.id })}
       />
     </div>
+    </div>
+  );
+}
+
+/** Satır tablosu iskeleti (gömülü bölüm tablosu: çerçeveli, kendi içinde yatay kayar). */
+function LinesGrid({ perDocument, children }: { perDocument: boolean; children: ReactNode }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+    <table className="w-full min-w-[900px] text-sm">
+      <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+        <tr>
+          <th className="p-2 text-left">Blok/Satır</th>
+          <th className="p-2 text-left">Top No</th>
+          <th className="p-2 text-left">Metre</th>
+          <th className="p-2 text-left">Kilo</th>
+          <th className="p-2 text-left">En</th>
+          {!perDocument && <th className="p-2 text-left">Kumaş</th>}
+          {!perDocument && <th className="p-2 text-left">Renk</th>}
+          <th className="p-2 text-left">Durum</th>
+          <th className="p-2" />
+        </tr>
+      </thead>
+      <tbody>{children}</tbody>
+    </table>
     </div>
   );
 }

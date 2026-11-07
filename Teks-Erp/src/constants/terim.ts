@@ -149,6 +149,15 @@ export const TERIM_AD = {
   bildirimProfilleri: "Bildirim Profilleri",
   // Eski ad "Sevkiyatlar (Muhasebe)" (KÜÇÜK-F): yalnız sevk EDİLMİŞ (DISPATCHED) sevkler — fiş, dönem Excel, fatura izi.
   sevkEdilenler: "Sevk Edilenler",
+  // Gelen belgenin onayda doğan özet satırı (enum `ARABA`): partinin sisteme tek top olarak girilen kaydı. "Araba" adı
+  // yük birimiyle (çuvalsız sevk) çakıştığı için görünen ad budur; enum/veri değişmez.
+  partiKaydi: "Parti kaydı",
+  partiKayitlari: "Parti kayıtları",
+  // İş emri türü `CUSTOMER_GOODS_SERVICE`: müşterinin malına hizmet. Giden fason (Fason Sevk/Kabul) ile karışmasın diye
+  // ad "(müşteri malı)" ekini HEP taşır.
+  fasonMusteriMali: "Fason (müşteri malı)",
+  // "KK2" (kurşun sonrası kalite kontrolü) sahada jargondur; operatöre görünen ad bu. Enum/kod adı değişmez.
+  kaliteKontrol: "Kalite Kontrol",
 } as const;
 
 export type TermAdKey = keyof typeof TERIM_AD;

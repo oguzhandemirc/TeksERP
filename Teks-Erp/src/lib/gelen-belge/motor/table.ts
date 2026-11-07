@@ -1,7 +1,7 @@
 // D3a (2026-10-28): TABLO stratejisi — basılı çeki listesi satırları (0245: 2 blok, 21/21; 0246: 1 satır + TOPLAM).
 // Başlık satırı → blok; satırlar eğime duyarlı gruplanır (rows-tilted.ts); hücreler başlık kolonuna yatay çakışmayla
 // atanır; "T.Adet"/"TOPLAM" satırı beyan edilen toplamdır ve deftere DEĞİL computeNoteTotals'a gider.
-import type { DeclaredTotals, FieldSpec, OcrLine, OcrRect, OcrResult, Row, TableBlock, TableCell, TableColumnSpec, TableResult, TableRow, TableSpec } from "./types";
+import type { DeclaredTotals, FieldSpec, OcrElement, OcrLine, OcrRect, OcrResult, Row, TableBlock, TableCell, TableColumnSpec, TableResult, TableRow, TableSpec } from "./types";
 import { collectLines, unionRect, averageConfidence } from "./geometry";
 import { buildRowsTilted } from "./rows-tilted";
 import { assignToColumn, isNumericText, labelSimilarity, matchesLabel, LABEL_MIN_SIMILARITY } from "./labels";
@@ -38,9 +38,21 @@ function matchHeader(row: Row, spec: TableSpec): ColumnRect[] {
   return out;
 }
 
+/**
+ * OCR toplam etiketini adetle BİTİŞİK okuyabilir ("T.Adet16", 214279 2. prova): etiket benzerliği eşiğin altına düşer, satır
+ * toplam sayılmaz ve beyan sessizce kaybolur. Sondaki rakam koşusu ayrılıp etiket yeniden eşlenir; ayrılan sayı adettir.
+ */
+export function gluedTotalsCount(text: string, labels: string[]): string | null {
+  if (matchesLabel(text, labels)) return null;
+  const m = /^(.*[^\d\s])(\d{1,4})$/.exec(text.trim());
+  return m && matchesLabel(m[1]!, labels) ? m[2]! : null;
+}
+
+const isTotalsLabel = (text: string, labels: string[]): boolean => matchesLabel(text, labels) || gluedTotalsCount(text, labels) !== null;
+
 function isTotalsRow(row: Row, spec: TableSpec): boolean {
   if (!spec.totals) return false;
-  return row.lines.some((l) => matchesLabel(l.text, spec.totals!.labels));
+  return row.lines.some((l) => isTotalsLabel(l.text, spec.totals!.labels));
 }
 
 /** Satırları başlık/veri/toplam olarak bloklara böler; başlıktan önceki toplam satırları "sahipsiz" döner. */
@@ -106,6 +118,31 @@ function rowAccepted(cells: Record<string, TableCell>, spec: TableSpec): boolean
   return required.every((c) => cells[c.key]?.value !== null && cells[c.key]?.value !== undefined);
 }
 
+/** Kelimeyi tek kelimelik satıra çevirir (kolon ataması kutuyla yapılır). */
+const elementLine = (e: OcrElement): OcrLine => ({ text: e.text, rect: e.rect, confidence: e.confidence, angle: e.angle ?? null, elements: [e] });
+
+/**
+ * Toplam satırının sayı parçaları. Cihaz OCR'ı (ML Kit) bitişik sayıları tek satıra ("819,20 3.935,00") ve etiketle adedi
+ * ("|T.Adet 16") birleştirebilir (Gülkesim 214279, 2026-11-06) → yalnız SAYILARDAN oluşan satır kelimelerine, etiket satırı
+ * etiketten SONRAKİ sayı kelimelerine bölünür; harfli karışık satır ("4 TOP") bölünmez.
+ */
+function numericParts(lines: ReadonlyArray<OcrLine>, label: OcrLine | undefined): OcrLine[] {
+  const out: OcrLine[] = [];
+  for (const line of lines) {
+    if (isNumericText(line.text)) { out.push(line); continue; }
+    const els = lineElements(line);
+    if (els.length < 2) continue;
+    if (line === label) {
+      let i = els.length;
+      while (i > 0 && isNumericText(els[i - 1]!.text)) i--;
+      if (i > 0) out.push(...els.slice(i).map(elementLine));
+    } else if (els.every((e) => isNumericText(e.text))) {
+      out.push(...els.map(elementLine));
+    }
+  }
+  return out;
+}
+
 /**
  * Toplam satırından beyan: yalnız etiketin SAĞINDAKİ sayılar; kg/m önce kolon çakışmasıyla, çakışmayan ondalıklar
  * x sırasıyla şablondaki ölçü kolonu sırasına (0245 üst satır: "T.Adet 16 819,20 3.935,00" kolon hizasında değildir);
@@ -114,10 +151,11 @@ function rowAccepted(cells: Record<string, TableCell>, spec: TableSpec): boolean
 function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTotals {
   const tolerance = Math.max(...draft.columns.map((c) => c.rect.width)) * 0.75;
   const measureKeys = spec.columns.filter((c) => c.key === "kg" || c.key === "m").map((c) => c.key);
-  const label = row.lines.find((l) => matchesLabel(l.text, spec.totals?.labels ?? []));
+  const labels = spec.totals?.labels ?? [];
+  const label = row.lines.find((l) => isTotalsLabel(l.text, labels));
   const out: DeclaredTotals = { count: null, kg: null, m: null, rect: unionRect(row.lines.map((l) => l.rect)) };
   const leftovers: Array<{ value: string; x: number }> = [];
-  for (const line of row.lines) {
+  for (const line of numericParts(row.lines, label)) {
     if (!isNumericText(line.text) || (label && line.rect.x <= label.rect.x)) continue;
     const key = assignToColumn(line.rect, draft.columns, tolerance);
     const col = spec.columns.find((c) => c.key === key) ?? { key: "n", label: "n", type: "decimal" as const, headers: [] };
@@ -131,6 +169,7 @@ function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTot
     else if (key === null || col.type !== "decimal") leftovers.push({ value, x: line.rect.x });
   }
   leftovers.sort((a, b) => a.x - b.x);
+  if (out.count === null && label) out.count = gluedTotalsCount(label.text, labels);
   // Kolon hizasında olmayan toplam satırı: etiketten sonra önce adet (tam sayı), sonra ölçüler şablon sırasıyla
   const missing = measureKeys.filter((k) => out[k as "kg" | "m"] === null);
   if (out.count === null && leftovers.length > missing.length && /^\d+$/.test(leftovers[0]!.value)) out.count = leftovers.shift()!.value;

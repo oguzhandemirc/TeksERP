@@ -10,6 +10,7 @@ import { useTabsStore } from "@/store/tabs";
 import { fetchOverdueWorkOrders } from "./dashboardService";
 import { calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
 import { TERIM } from "@/lib/terim";
+import { locationView } from "@/pages/Operations/WorkOrders/location";
 
 export function OverdueWorkOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir.
@@ -67,8 +68,7 @@ export function OverdueWorkOrders() {
 function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
   const end = wo.plannedEndDate ? new Date(wo.plannedEndDate) : null;
   const overdueDays = end ? daysSince(end) : null;
-  const activeStep = wo.steps.find((s) => s.status === "ACTIVE");
-  const stationLabel = activeStep?.station?.name ?? "—";
+  const stationLabel = overdueStationLabel(wo);
 
   return (
     <li>
@@ -87,7 +87,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {wo.targetItem?.name ?? "Hedef kumaş yok"}
             {wo.targetColor ? ` • ${wo.targetColor.name}` : ""}
-            {activeStep ? ` • ${stationLabel}` : ""}
+            {stationLabel ? ` • ${stationLabel}` : ""}
           </p>
         </div>
 
@@ -108,6 +108,24 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
       </button>
     </li>
   );
+}
+
+/**
+ * "Şu an nerede" — İE listesiyle AYNI tek kaynak (`konum`, canlı topların istasyonu). Plan imleci (ACTIVE adım) malın yerini
+ * söylemez; "(pasif istasyon)" eki de kaynakta olmayan bir yorumdu (2. prova 11-06). Konum yoksa (eski sunucu) yazılmaz.
+ */
+export function overdueStationLabel(wo: Pick<WorkOrder, "konum" | "status">): string | null {
+  const v = locationView(wo.konum, wo.status);
+  switch (v.kind) {
+    case "stations":
+      return v.extra > 0 ? `${v.primaryLabel} +${v.extra}` : v.primaryLabel;
+    case "not-started":
+      return "Başlamadı";
+    case "done":
+      return v.label;
+    default:
+      return null;
+  }
 }
 
 function LoadingRows() {

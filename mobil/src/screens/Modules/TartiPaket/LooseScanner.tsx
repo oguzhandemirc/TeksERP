@@ -5,10 +5,22 @@ import { totalMeters } from './looseLoad';
 import type { CuvalsizSevkState } from './useCuvalsizSevk';
 
 /** Çok top okutan ekran: trigger="tap" (komşu top istemeden girmesin); kabul/ret sinyali signalScan'den. */
-export function LooseScanner({ visible, onDismiss, state: s }: { visible: boolean; onDismiss: () => void; state: CuvalsizSevkState }) {
+export function LooseScanner({
+  visible,
+  onDismiss,
+  state: s,
+  listenWhileHidden,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  state: CuvalsizSevkState;
+  /** El terminali: kapalıyken de tuş okumasını alır (ekran OKUT bandını gösterirken). */
+  listenWhileHidden?: boolean;
+}) {
   return (
     <BarcodeScannerModal
       visible={visible}
+      listenWhileHidden={listenWhileHidden}
       onDismiss={onDismiss}
       continuous
       trigger="tap"

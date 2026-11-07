@@ -52,7 +52,7 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, COMPLETED, CANCELLED] }
  *       - in: query
  *         name: filter[type]
- *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION] }
+ *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION, CUSTOMER_GOODS_SERVICE] }
  *       - in: query
  *         name: filter[customerId]
  *         schema: { type: string }
@@ -433,7 +433,7 @@ router.get("/manifest-by-id/:manifestId", verifyToken, requireAnyPermission("wor
  *                 example: "PARTI-2026-001"
  *               type:
  *                 type: string
- *                 enum: [ORDER_PRODUCTION, STOCK_PRODUCTION]
+ *                 enum: [ORDER_PRODUCTION, STOCK_PRODUCTION, CUSTOMER_GOODS_SERVICE]
  *                 default: ORDER_PRODUCTION
  *               width:
  *                 type: number

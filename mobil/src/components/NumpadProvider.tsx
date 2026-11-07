@@ -2,15 +2,25 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
-import { StyleSheet, StyleProp, View, ViewStyle, useWindowDimensions } from 'react-native';
+import {
+  Keyboard,
+  LayoutChangeEvent,
+  StyleSheet,
+  StyleProp,
+  View,
+  ViewStyle,
+  useWindowDimensions,
+} from 'react-native';
 import { Button, Surface, Text } from 'react-native-paper';
 import AppModal from './AppModal';
 import Numpad from './Numpad';
+import { colors } from '../theme/tokens';
 
 export interface NumpadTarget {
   id: string;
@@ -51,7 +61,18 @@ interface NumpadContextValue {
   closeTarget: (id?: string) => void;
   notifyChange: (id: string) => void;
   notifier: ValueNotifier;
+  /** Host ölçüldü ve okunur bir numpad için fazla kısa → NumpadInput sistem
+   *  klavyesine düşer (fail-soft). Ölçülmeden önce false = bugünkü davranış. */
+  hostTooSmall: boolean;
+  reportHostTooSmall: (tooSmall: boolean) => void;
 }
+
+/**
+ * Okunur bir numpad'in en küçük host yüksekliği (dp). Tuş metni 28 punto
+ * (~34 dp satır + kenarlık) → satır ≥38 dp; 4 satır + 3×8 gap + 2×12 padding ≈ 200.
+ * Altında tuşlar gri çizgiye ezilir (2026-11-06 Kurşun, SM-X210) → sistem klavyesi.
+ */
+export const NUMPAD_HOST_MIN_HEIGHT = 200;
 
 const NumpadContext = createContext<NumpadContextValue | null>(null);
 
@@ -100,6 +121,11 @@ export function NumpadProvider({ children }: { children: React.ReactNode }) {
     setTarget(null);
   }, []);
 
+  const [hostTooSmall, setHostTooSmall] = useState(false);
+  const reportHostTooSmall = useCallback((tooSmall: boolean) => {
+    setHostTooSmall(tooSmall);
+  }, []);
+
   const notifyChange = useCallback((id: string) => {
     if (targetRef.current?.id === id) {
       notifierRef.current!.notify();
@@ -113,8 +139,10 @@ export function NumpadProvider({ children }: { children: React.ReactNode }) {
       closeTarget,
       notifyChange,
       notifier: notifierRef.current!,
+      hostTooSmall,
+      reportHostTooSmall,
     }),
-    [target, openTarget, closeTarget, notifyChange]
+    [target, openTarget, closeTarget, notifyChange, hostTooSmall, reportHostTooSmall]
   );
 
   return <NumpadContext.Provider value={value}>{children}</NumpadContext.Provider>;
@@ -128,8 +156,20 @@ interface NumpadHostProps {
 }
 
 export function NumpadHost({ style, fill = false }: NumpadHostProps) {
-  const { target, notifier } = useNumpadContext();
+  const { target, notifier, hostTooSmall, reportHostTooSmall } = useNumpadContext();
   useSyncExternalStore(notifier.subscribe, notifier.getSnapshot);
+
+  // Host kaldırılınca provider bugünkü varsayılana (özel numpad) döner.
+  useEffect(() => () => reportHostTooSmall(false), [reportHostTooSmall]);
+
+  const handleLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      // Sistem klavyesi açıkken (adjustResize) ölçülen boy geçicidir; karar verme.
+      if (Keyboard.isVisible?.()) return;
+      reportHostTooSmall(e.nativeEvent.layout.height < NUMPAD_HOST_MIN_HEIGHT);
+    },
+    [reportHostTooSmall]
+  );
 
   const value = target ? target.getValue() : '';
   const onChange = target?.onChange ?? noop;
@@ -138,15 +178,27 @@ export function NumpadHost({ style, fill = false }: NumpadHostProps) {
   const disabled = !target;
 
   return (
-    <Surface style={[styles.host, fill && styles.hostFill, style]} elevation={1}>
-      <Numpad
-        value={value}
-        onChange={onChange}
-        allowDecimal={allowDecimal}
-        maxLength={maxLength}
-        disabled={disabled}
-        fill={fill}
-      />
+    <Surface
+      style={[styles.host, fill && styles.hostFill, style]}
+      elevation={1}
+      onLayout={handleLayout}
+      testID="numpad-host"
+    >
+      {hostTooSmall && fill ? (
+        // fill host'un boyu içerikten değil üst kaptan gelir → ipucu boyu değiştirmez.
+        <Text style={styles.tooSmallHint} numberOfLines={1}>
+          Sayı alanına dokunun — tablet klavyesi açılır
+        </Text>
+      ) : (
+        <Numpad
+          value={value}
+          onChange={onChange}
+          allowDecimal={allowDecimal}
+          maxLength={maxLength}
+          disabled={disabled}
+          fill={fill}
+        />
+      )}
     </Surface>
   );
 }
@@ -207,6 +259,7 @@ const styles = StyleSheet.create({
   },
   // fill: host kalan dikey alanı kaplar; içteki Numpad (fill) tuşları buna yayar.
   hostFill: { flex: 1 },
+  tooSmallHint: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
 });
 
 const modalStyles = StyleSheet.create({

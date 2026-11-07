@@ -10,6 +10,8 @@ export interface NoteParty {
   declaredMeters: number | null;
   lineCount: number;
   meters: number;
+  /** Sunucunun önerdiği parti metresi (beyan ara toplamı > Σ satır; 2026-11-06, eski sunucu göndermez → `meters`). */
+  suggestedMeters?: number | null;
   weightKg: number | null;
   warnings: string[];
 }
@@ -32,11 +34,17 @@ export interface MultiPartyDraft {
   mode: MultiPartyMode;
 }
 
+/** Forma ilk metre: sunucunun önerisi (beyan ara toplamı önce), eski sunucuda Σ satır; seçim kuralı istemcide kurulmaz. */
+const partyMeters = (p: NoteParty): number | null => {
+  const m = p.suggestedMeters ?? p.meters;
+  return m > 0 ? m : null;
+};
+
 /** Çok parti (≥2) ise satırlar + fabrika varsayılan kipi; tek/bölümsüz belgede null (bugünkü form). */
 export function initialMultiParty(view: NotePartiesView | null | undefined): MultiPartyDraft | null {
   if (!view?.multi || view.parties.length < 2) return null;
   return {
-    rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo ?? "", meters: p.meters > 0 ? p.meters : null })),
+    rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo ?? "", meters: partyMeters(p) })),
     mode: view.defaultMode === "PER_PARTY" ? "PER_PARTY" : "SINGLE",
   };
 }

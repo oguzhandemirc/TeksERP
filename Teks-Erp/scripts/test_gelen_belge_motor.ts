@@ -23,6 +23,7 @@
 //    GRID_EMPTY kapatılınca §10f düşer — ÖLÇÜLDÜ 2026-11-02 (her biri tek başına 70/1; elle geri alındı).
 //    (demo 2. tur 2026-11-02) taslakta `documentDeclared` kapatılınca §9h2, validator headerTotals dalı kapatılınca §9h3 düşer.
 //    (Gülkesim A 2026-11-02 §11) kurşun önceliği ters (giriş önce) → §11a/§11c ❌; yıldız soyma kapatılınca §11f ❌.
+//    (2. prova 2026-11-06 §7i) `isTotalsLabel` yalnız `matchesLabel`e indirilince bitişik "T.Adet16" vakası ❌ (137/1; geri alındı).
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -48,7 +49,7 @@ import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
 import { konumYedegi } from "./lib/gelen-belge-motor-konum-yedegi";
-import { cokBlok, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
+import { cokBlok, cokBlokBirlesikToplam, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
 
 let pass = 0;
 let fail = 0;
@@ -210,6 +211,24 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§7h ⭐ beyanı başlık ÜSTÜNDE olan blok 2 bozulunca TOTAL_MISMATCH blok 2 (m beyan 3935 / hesap 3936), ORPHAN yok; blok 1 MATCH",
     r2.totals?.blocks[0]?.status === "MATCH" && r2.totals.blocks[1]?.status === "MISMATCH" && r2.warnings.some((w) => w.startsWith("TOTAL_MISMATCH blok 2") && w.includes("3935") && w.includes("3936")) && !r2.warnings.some((w) => w.startsWith("TABLE_TOTALS_ORPHAN")),
     r2.warnings.join(" | "));
+  // 214279 2. prova: OCR etiketi adetle BİTİŞİK okudu ("T.Adet16") → satır toplam sayılmıyor, beyan sessizce kayboluyordu.
+  const ocr3 = JSON.parse(JSON.stringify(gercek("0245-ceki-listesi-a"))) as OcrResult;
+  let birlesti = 0;
+  const ust = (t: string) => ocr3.blocks.flatMap((b) => b.lines.map((l) => ({ b, l }))).find((x) => x.l.text === t && x.l.rect.y < 400);
+  const etiket = ust("T.Adet");
+  const adet = ust("16");
+  if (etiket && adet) {
+    etiket.l.text = "T.Adet16";
+    etiket.l.elements = [{ ...etiket.l.elements[0]!, text: "T.Adet16" }];
+    adet.b.lines = adet.b.lines.filter((l) => l !== adet.l);
+    birlesti++;
+  }
+  check("§7i sonda ön koşulu: 'T.Adet' + '16' tek kutuya birleşti", birlesti === 1, String(birlesti));
+  const r3 = extractDocument(ocr3, sablonlar).regions[0]!;
+  const d3 = r3.tables[0]?.blocks[1]?.declared;
+  check("§7i ⭐ bitişik 'T.Adet16' toplam satırı sayılır: blok 2 beyanı 16 / 819,2 / 3935, ORPHAN yok, blok 2 MATCH",
+    d3?.count === "16" && d3?.kg === "819.2" && d3?.m === "3935" && r3.totals?.blocks[1]?.status === "MATCH" && !r3.warnings.some((w) => w.startsWith("TABLE_TOTALS_ORPHAN")),
+    `${JSON.stringify(d3)} | ${r3.warnings.join(" | ")}`);
 }
 
 // ── §8 Sentetik alt küme — alan doğruluğu ≥ %93 ─────────────────────────────
@@ -378,6 +397,7 @@ konumYedegi(check);
 cokBlok(check, gercek, sablonlar);
 cokBlokSahipsiz(check, gercek, sablonlar);
 cokBlokTanit(check, gercek, sablonlar);
+cokBlokBirlesikToplam(check, gercek, sablonlar);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

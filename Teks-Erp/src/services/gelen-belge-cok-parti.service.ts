@@ -40,12 +40,15 @@ export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
     select: {
       id: true, totalsDeclared: true, pageCount: true,
       scans: { select: { pageNo: true } },
-      lines: { where: { status: { not: DeliveryNoteLineStatus.SKIPPED } }, select: { id: true, blockNo: true, meters: true, weightKg: true, processText: true } },
+      lines: { where: { status: { not: DeliveryNoteLineStatus.SKIPPED } }, select: { id: true, blockNo: true, meters: true, weightKg: true, processText: true, rollId: true } },
     },
   });
   if (!note) throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const docLines = note.lines.filter((l) => !isSummaryLine(note.id, l));
-  const { parties, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount ?? declaredPageCount(note.totalsDeclared), scannedPages: note.scans.map((s) => s.pageNo) });
+  // Elle düzeltilen parti metresi yalnız parti kaydında (özet satırı) yaşar; kart Σ satırı değil bunu göstersin (2. prova).
+  const recorded = new Map(note.lines.filter((l) => l.rollId && isSummaryLine(note.id, l)).map((l) => [l.blockNo, Number(l.meters)]));
+  const { parties: read, warnings } = noteParties(docLines, note.totalsDeclared, { pageCount: note.pageCount ?? declaredPageCount(note.totalsDeclared), scannedPages: note.scans.map((s) => s.pageNo) });
+  const parties = read.map((p) => ({ ...p, recordedMeters: recorded.get(p.blockNo) ?? null }));
   const withWos = [];
   for (const p of parties) withWos.push({ ...p, workOrders: await partyLinkedWorkOrders(note.id, p.blockNo) });
   return { parties: withWos, warnings, multi: parties.length > 1, defaultMode: await readMultiPartyWorkOrder() };
@@ -152,7 +155,7 @@ interface OpenInput {
   notes?: string | null;
   flagPropertyIds: (targets: ReadonlyArray<{ propertyId: string }>) => Promise<string[]>;
   /** K30 S16a form alanları (verilenler) — her iş emrine aynen geçer; PER_PARTY'de hedef metraj/kg çağıranda reddedilir. */
-  fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type">;
+  fields?: Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type" | "customerId">;
   /** Hedef metraj verilmedi + fabrika ayarı açık: her İE'nin hedefi kendi toplarının parti metresi (SINGLE = toplam). */
   deriveTargetQuantity?: boolean;
   /** K30-D düzenlenmiş adımlar (çağıran onaydan önce doğruladı): varsa şablonun yerine geçer. */
@@ -168,6 +171,8 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
   const run = async ({ token, rolls, targets, plan, batchNo }: { token: string; rolls: OpenInput["rolls"]; targets: OpenInput["targetValues"]; plan: OpenInput["stepPlanning"]; batchNo?: string | null }) => {
     const stepPlanning = plan as WorkOrderCreateInput["stepPlanning"];
     const sender = [...new Set(rolls.map((r) => senderNos.get(r.blockNo)).filter((x): x is string => !!x))].join(", ");
+    const customerBatch = partyBatchNos(i.parties, rolls);
+    const parameters = { ...(sender ? { senderWorkOrderNo: sender } : {}), ...(customerBatch ? { customerBatchNo: customerBatch } : {}) };
     const res = await workOrders.quickStart({
       clientToken: token,
       rollBarcodes: rolls.map((r) => r.barcode),
@@ -177,7 +182,7 @@ export async function openPartyWorkOrders(i: OpenInput, userId: string): Promise
       ...(i.foldType ? { foldType: i.foldType } : {}),
       ...(stepPlanning?.length ? { stepPlanning } : {}),
       ...(i.notes ? { notes: i.notes } : {}),
-      ...(sender ? { parameters: { senderWorkOrderNo: sender } } : {}),
+      ...(Object.keys(parameters).length ? { parameters } : {}),
       ...i.fields,
       ...(i.deriveTargetQuantity ? { targetQuantity: partyMeters(i.parties, rolls) } : {}),
       sourceNoteId: i.noteId,
@@ -221,6 +226,15 @@ const errorCode = (e: AppError): string | null => {
   return typeof c === "string" ? c : null;
 };
 
+
+/**
+ * Toplarının partilerinde formda onaylanan parti no'ları (kağıttaki ayırt edici no). `batchNumberSource=SERIES`te İE partisi
+ * seriden doğar; kağıttaki no sessizce kaybolmasın diye künyeye (`parameters.customerBatchNo`) yazılır ve aranır.
+ */
+function partyBatchNos(parties: ReadonlyArray<PartyInput>, rolls: OpenInput["rolls"]): string {
+  const nos = rolls.map((r) => parties.find((p) => p.blockNo === r.blockNo)?.batchNo?.trim()).filter((x): x is string => !!x);
+  return [...new Set(nos)].join(", ").slice(0, 200);
+}
 
 /** Toplarının parti metreleri toplamı (3 hane). */
 function partyMeters(parties: ReadonlyArray<PartyInput>, rolls: OpenInput["rolls"]): number {

@@ -4,7 +4,9 @@
 // inputları WoFormFields'ta (K30-D adımlar/makine/tür/özellik WoPlanFields). Durum `useUnifiedWoForm`; kayıt `useWoRows`
 // + satır başına ek gövde alanlarıyla (S16a sözleşmesi).
 import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+// Klavye düzenlenen alanı örtmesin (prova 2026-11-06): odaktaki girdi klavyenin üstüne kayar; özel numpad (NumpadHost) etkilenmez.
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { Text } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { TERIM } from '../../../../lib/terim';
@@ -51,7 +53,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const jump = useMissingJump(u, twoCol);
   return (
     <>
-      <ScrollView ref={jump.scrollRef} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
+      <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
         {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
         {twoCol ? (
           <View style={[styles.columns, { gap: layout.pad }]} onLayout={jump.at('columns')} testID="ie-form-iki-sutun">
@@ -72,7 +74,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
             </View>
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
       <CreateBar wo={wo} done={done} block={u.block} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
@@ -103,7 +105,7 @@ const METER_KEYS: readonly IssueKey[] = ['kursunMetresi', 'metreDogrula'];
  * "Diğer alanlar"daysa önce açıp oraya) kaydırır. Konumlar `onLayout`tan; iç içe kutularda üst kutunun y'si eklenir.
  */
 function useMissingJump(u: FormModel, twoCol: boolean) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const spots = useRef<Partial<Record<Spot, number>>>({});
   const [request, setRequest] = useState<DocRowOpenRequest | null>(null);
   const at = (k: Spot) => (e: LayoutChangeEvent) => {

@@ -1,6 +1,7 @@
 // Belge masası kipi (K23/K26) — kamera ↔ TEK inceleme döngüsü. Belge okununca inceleme açılır; "İş emri oluştur"
 // başarılıysa İE no'ları bildirilir, son oluşturulanlar şeridine düşer ve DOĞRUDAN kameraya dönülür. Kayıt yolu
 // belgeden İE ile aynıdır (`useWoRows`: satır anahtarlı deneme token'ı, çift dokunuş kapısı); masa yalnız ön seçim ekler.
+import { defaultWoTypeFor } from '../../../../store/woCreateKinds';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -64,7 +65,9 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
   const suggestedId = useSuggestedRouteId(owner);
   // K29 S14b: "Okutmayla" kipinde rotasız seçenek başta ve varsayılandır — müşteri rota önerisi onu ezmez.
   const route = pickShortcut(shortcuts, { touchedId, suggestedId: isScanRoute(shortcuts[0]) ? null : suggestedId }) ?? shortcuts[0];
-  const wo = useWoRows(route);
+  // Cihaz varsayılan türü: Seçenekler'de yalnız Fason açıksa masadan açılan İE de Fason (müşteri malı).
+  const woType = useDeviceSettingsStore((s) => defaultWoTypeFor(s.woCreateKinds));
+  const wo = useWoRows(route, woType ? { extraBody: () => ({ type: woType }) } : undefined);
   const row = wo.rows[0] ?? null;
   const ownerNow = row?.form?.ownerCustomerId ?? null;
   useEffect(() => setOwner(ownerNow), [ownerNow]);

@@ -16,7 +16,7 @@ import RouteStepsEditor from './RouteStepsEditor';
 import type { WoFieldKey } from './woFieldCatalog';
 import { deriveWoType, type WoType } from './woForm';
 import type { EditStep } from './woSteps';
-import { TERIM } from '../../../../lib/terim';
+import { TERIM, TERIM_AD } from '../../../../lib/terim';
 
 export interface WoPlanCtx {
   /** Etkin rota (düzenlenmiş adımlarla); varsayılan hedefler bundan. */
@@ -108,7 +108,7 @@ function MachineBand(p: { list: readonly DeskKursunMachine[]; value: string | nu
   );
 }
 
-const TYPE_LABEL: Record<WoType, string> = { ORDER_PRODUCTION: 'Siparişe üretim', STOCK_PRODUCTION: 'Stoğa üretim' };
+const TYPE_LABEL: Record<WoType, string> = { ORDER_PRODUCTION: 'Siparişe üretim', STOCK_PRODUCTION: 'Stoğa üretim', CUSTOMER_GOODS_SERVICE: TERIM_AD.fasonMusteriMali };
 const TYPE_OPTIONS = (Object.keys(TYPE_LABEL) as WoType[]).map((t) => ({ value: t, label: TYPE_LABEL[t], testID: `ie-form-tur-${t}` }));
 
 /** İş emri türü: dokunulmadıkça otomatik (sipariş kalemi varsa siparişe, yoksa stoğa) ve gövdeye gitmez. */
@@ -133,7 +133,7 @@ export function WoTypeBlock({ plan, show, locked }: BlockProps) {
         )}
       </View>
       <Text style={styles.hint}>
-        {plan.woType === null ? 'Otomatik: sipariş kalemi bağlıysa siparişe, değilse stoğa üretim.' : plan.woType === 'ORDER_PRODUCTION' && plan.orderLineIds.length === 0 ? 'Siparişe üretim için yukarıdan sipariş kalemi seçin.' : 'Elle seçildi.'}
+        {plan.woType === null ? 'Otomatik: sipariş kalemi bağlıysa siparişe, değilse stoğa üretim.' : plan.woType === 'CUSTOMER_GOODS_SERVICE' ? 'Müşteri belgenin carisidir; sipariş kalemi bağlanmaz.' : plan.woType === 'ORDER_PRODUCTION' && plan.orderLineIds.length === 0 ? 'Siparişe üretim için yukarıdan sipariş kalemi seçin.' : 'Elle seçildi.'}
       </Text>
     </View>
   );

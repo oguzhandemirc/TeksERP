@@ -4,7 +4,9 @@
 // S16b `gelenBelge.tabletIeGirisi`: IKISI = bu ekran BİREBİR; BELGE = her karo tek formu (UnifiedWoForm) açar, top/masa/
 // Belge Tara gizli; TOP = yalnız top yolu (Hızlı İE), belge okutma yok.
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+// Klavye düzenlenen alanı örtmesin (prova 2026-11-06): odaktaki girdi klavyenin üstüne kayar; özel numpad (NumpadHost) etkilenmez.
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import ScreenChrome from '../../../../components/ScreenChrome';
@@ -156,7 +158,7 @@ interface HubProps {
 /** Seçici: 1. satır sabit türler (giriş kipine göre), 2. satır "Özel iş emirleri" kısayolları. */
 function Hub(p: HubProps) {
   return (
-    <ScrollView contentContainerStyle={styles.body}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" bottomOffset={24}>
       <View style={styles.grid} testID="ie-sabit-turler">
         {p.tiles.quick && <Tile icon="rocket-launch-outline" title={quick_()} sub="Topu okutup başlat" onPress={p.onQuick} testID="ie-tur-hizli" />}
         {p.tiles.form && <Tile icon="file-document-edit-outline" title={title_()} sub="Belge okut → kontrol et → oluştur" onPress={p.onForm} testID="ie-tur-form" />}
@@ -180,7 +182,7 @@ function Hub(p: HubProps) {
           </View>
         </>
       ) : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

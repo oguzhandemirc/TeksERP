@@ -42,6 +42,8 @@ interface Props {
    * yapılır — picker unmount olsa da "tek spec" çapası kaybolmaz.
    */
   picked?: PickedOrderLines;
+  /** Tetik satırını çizme — açma düğmesi başka yerde (el terminali: alt çubukta İLERİ'nin yanında). */
+  hideTrigger?: boolean;
 }
 
 // "İş emrini siparişe bağla" — açık kalemleri çoklu seçtirir. Seçim varsa
@@ -54,6 +56,7 @@ export default function OrderLinkPicker({
   open: openProp,
   onOpenChange,
   picked: pickedProp,
+  hideTrigger = false,
 }: Props) {
   const [openInternal, setOpenInternal] = useState(false);
   const open = openProp ?? openInternal;
@@ -243,6 +246,7 @@ export default function OrderLinkPicker({
   return (
     <View>
       {/* Tetik — gerçek buton görünümü (≥56dp dokunma hedefi, proje UI kuralı). */}
+      {hideTrigger ? null : (
       <TouchableRipple
         onPress={() => setOpen(true)}
         style={[styles.trigger, value.length > 0 && styles.triggerActive]}
@@ -262,6 +266,7 @@ export default function OrderLinkPicker({
           <Icon source="chevron-right" size={22} color={colors.textMuted} />
         </View>
       </TouchableRipple>
+      )}
 
       {selectedLines.length > 0 ? (
         <View style={styles.chips}>

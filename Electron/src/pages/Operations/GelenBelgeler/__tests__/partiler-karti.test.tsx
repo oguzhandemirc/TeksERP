@@ -1,6 +1,7 @@
 // Çok blok D7 (2026-11-06): gelen belge detayında "Partiler" kartı — blok başına künye (işlem, müşteri İE no), satır/beyan
 // adet, Σ m/kg, uyarılar, bağlı İE bağlantısı; tek partili belgede ve eski sunucu alanları yokken kart/alan gizlenir.
-// Negatif sonda: PartiesCard `multi` kapısı kaldırılınca "tek partili belge → kart yok" vakası kırmızı.
+// Negatif sonda: PartiesCard `multi` kapısı kaldırılınca "tek partili belge → kart yok" vakası kırmızı; `recordedMeters` yok sayılınca
+// "onaylı parti" vakası kırmızı (ölçüldü 2026-11-06).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
@@ -33,7 +34,7 @@ describe("Partiler kartı", () => {
     // Künye parçaları ayrı kutu (dar ekranda kelime ortasından kırılmaz); parti no başlıkta.
     const p1 = within(screen.getByTestId("parti-1"));
     expect(p1.getByText("P2618733")).toBeInTheDocument();
-    expect(p1.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Sipariş 56967", "İşlem: KDK APRE", "Müşteri İE 24749", "15 satır / 16 TOP", fmtMeters(3935), "512,5 kg"]);
+    expect(p1.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Sipariş 56967", "İşlem: KDK APRE", "Müşteri İE 24749", "15 top (belgede 16)", fmtMeters(3935), "512,5 kg"]);
     expect(screen.getByTestId("parti-ie-1")).toHaveTextContent(/^(Terbiye )?İş Emri:IE-0001$/);
     expect(screen.getByRole("link", { name: "IE-0001" })).toHaveAttribute("href", "/operations/work-orders/w1");
     expect(screen.getByTestId("parti-2")).toHaveTextContent("Başlıkta 16 TOP yazıyor, 14 satır okundu");
@@ -49,7 +50,7 @@ describe("Partiler kartı", () => {
   });
 
   it("eski sunucu: işlem / müşteri İE no / İE alanı yoksa yazılmaz; kg varsa yazılır", () => {
-    expect(partyFacts(party(2))).toEqual(["Parti P2618734", "Sipariş 56967", "15 satır / 16 TOP", fmtMeters(3935)]);
+    expect(partyFacts(party(2))).toEqual(["Parti P2618734", "Sipariş 56967", "15 top (belgede 16)", fmtMeters(3935)]);
     expect(partyFacts(party(1, { weightKg: 512.5, batchNo: null })).at(-1)).toMatch(/kg$/);
   });
 
@@ -59,5 +60,14 @@ describe("Partiler kartı", () => {
     getNoteParties.mockResolvedValue(view({ parties: [party(1, { batchNo: null }), party(2)] }));
     renderWithProviders(<PartiesCard noteId="n1" />);
     expect(await screen.findByText("Parti no yok")).toHaveClass("bg-amber-100");
+  });
+
+  it("⭐ onaylı parti: metre parti kaydından (elle düzeltilen 3.935), okunan Σ satır farklıysa ayrı kutuda (2. prova)", () => {
+    const items = partyFactItems(party(2, { meters: 2464.701, recordedMeters: 3935 })).map((f) => f.text);
+    expect(items).toContain(fmtMeters(3935));
+    expect(items).toContain(`Satır toplamı ${fmtMeters(2464.701)}`);
+    expect(items).not.toContain(fmtMeters(2464.701));
+    expect(partyFactItems(party(1, { meters: 586, recordedMeters: 586 })).filter((f) => f.text.includes("m")).map((f) => f.text)).toEqual([fmtMeters(586)]);
+    expect(partyFactItems(party(1, { meters: 0, recordedMeters: null })).find((f) => f.warn)?.text).toBe("metre yok");
   });
 });

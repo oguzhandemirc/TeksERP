@@ -26,7 +26,7 @@ function dateToInput(iso: string | null | undefined): string {
 }
 
 function pickFormType(t: WorkOrder["type"]): WorkOrderFormValues["type"] {
-  if (t === WorkOrderType.STOCK_PRODUCTION) return t;
+  if (t === WorkOrderType.STOCK_PRODUCTION || t === WorkOrderType.CUSTOMER_GOODS_SERVICE) return t;
   return WorkOrderType.ORDER_PRODUCTION;
 }
 
@@ -42,6 +42,7 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     // Düzenlemede hedef gramaj formda değil, detay kartından (ayrı uç) değişir.
     kursunTargetValueId: null,
     orderLineIds: (wo.orderLinks ?? []).map((l) => l.orderLineId),
+    customerId: wo.customerId ?? null,
     width: wo.width,
     targetQuantity: wo.targetQuantity,
     targetWeight: wo.targetWeight,

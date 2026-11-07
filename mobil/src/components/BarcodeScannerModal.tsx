@@ -9,11 +9,16 @@ import {
   type SupportedBarcodeType,
 } from './BarcodeScannerView';
 import { useDeviceType } from '../hooks/useDeviceType';
+import { useHardwareScanMode } from '../hooks/useScanMethod';
+import { useHardwareScanTarget } from '../hooks/useHardwareScanTarget';
+import { recordActivity } from '../store/lockStore';
+import * as Haptics from 'expo-haptics';
+import HardwareScanPanel from './HardwareScanPanel';
 
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  onScan: (barcode: string) => void;
+  onScan: (barcode: string) => void | Promise<unknown>;
   /** Üst başlık — neyi taradığımızı operatöre söyler. */
   title?: string;
   /** Hangi barkod tiplerini okusun. Default: QR + Code128. */
@@ -48,6 +53,9 @@ interface Props {
   /** Kadrajın ortasında kısa süre duran bildirim (mükerrer / ret).
    *  bkz. BarcodeScannerView.flash + hooks/useScanFeedback. */
   flash?: ScanFlash | null;
+  /** Donanım okuyucu modunda modal KAPALIYKEN de okumayı al (tek amaçlı ekran: OKUT'a basmadan tuşla okut).
+   *  Yalnız ekranda tek tarayıcı olan ekranlar açar; çok amaçlı ekranlar hedefi kendisi seçer (D3). */
+  listenWhileHidden?: boolean;
 }
 
 /**
@@ -77,7 +85,21 @@ export function BarcodeScannerModal({
   trigger,
   footer,
   flash,
+  listenWhileHidden = false,
 }: Props) {
+  const hardware = useHardwareScanMode();
+  // Donanım modunda kamera hiç bağlanmaz; okuma tuştan gelir ve kameranın onScan'ine aynen düşer.
+  useHardwareScanTarget(
+    (scan) => {
+      recordActivity();
+      if (captureHaptic !== false) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const done = onScan(scan.data);
+      // Modal hiç açılmadan gelen okumada AppModal onHidden'ı tetiklemez; "kapanınca işle" deseni
+      // (bkz. onModalHide) bozulmasın diye işleyici bitince aynı çağrı burada yapılır.
+      if (!visible && onModalHide) void Promise.resolve(done).then(onModalHide, onModalHide);
+    },
+    { active: hardware && (visible || listenWhileHidden), background: !visible },
+  );
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTablet = useDeviceType() === 'tablet';
@@ -130,36 +152,48 @@ export function BarcodeScannerModal({
       <View style={[styles.sheet, sheetSize]}>
         {/* Kamera + üzerindeki "Listeden Seç" ayrı bir katmanda: şerit eklendiğinde
             absolute buton şeridin üstüne binmesin diye sarmalayıcı gerekiyor. */}
-        <View style={styles.cameraLayer}>
-          <BarcodeScannerView
-            active={visible}
-            onClose={onDismiss}
-            onScan={onScan}
+        {hardware ? (
+          <HardwareScanPanel
             title={title}
-            barcodeTypes={barcodeTypes}
-            continuous={continuous}
             notice={notice}
             counter={counter}
-            captureHaptic={captureHaptic}
-            initialFacing={initialFacing}
-            trigger={trigger}
             flash={flash}
+            continuous={continuous}
+            onClose={onDismiss}
+            onPickFromList={onPickFromList}
           />
-          {onPickFromList && (
-            <View style={styles.pickRow}>
-              <Button
-                mode="contained-tonal"
-                icon="format-list-bulleted"
-                onPress={() => {
-                  onDismiss();
-                  onPickFromList();
-                }}
-              >
-                Listeden Seç
-              </Button>
-            </View>
-          )}
-        </View>
+        ) : (
+          <View style={styles.cameraLayer}>
+            <BarcodeScannerView
+              active={visible}
+              onClose={onDismiss}
+              onScan={onScan}
+              title={title}
+              barcodeTypes={barcodeTypes}
+              continuous={continuous}
+              notice={notice}
+              counter={counter}
+              captureHaptic={captureHaptic}
+              initialFacing={initialFacing}
+              trigger={trigger}
+              flash={flash}
+            />
+            {onPickFromList && (
+              <View style={styles.pickRow}>
+                <Button
+                  mode="contained-tonal"
+                  icon="format-list-bulleted"
+                  onPress={() => {
+                    onDismiss();
+                    onPickFromList();
+                  }}
+                >
+                  Listeden Seç
+                </Button>
+              </View>
+            )}
+          </View>
+        )}
         {footer}
       </View>
     </AppModal>

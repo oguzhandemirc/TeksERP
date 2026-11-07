@@ -1,7 +1,9 @@
 // Belge okut (K6/K8): mevcut tarayıcı (ML Kit + galeri + klasik kamera, sayfa toplama) → taslak + okuma → satır formu.
 // Birden çok belge art arda okutulur; her biri ayrı satır, "Hepsini kaydet" satır başına sonuç yazar.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+// Klavye düzenlenen alanı örtmesin (prova 2026-11-06): odaktaki girdi klavyenin üstüne kayar; özel numpad (NumpadHost) etkilenmez.
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -21,7 +23,8 @@ import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
-import DocRowCard from './DocRowCard';
+import DocRowCard, { type DocRowOpenRequest } from './DocRowCard';
+import type { WoType } from './woForm';
 import { useWoRows, type WoRowsState } from './useWoRows';
 import { shortcutTitle, type FormApproval } from './woFromDoc';
 
@@ -50,8 +53,9 @@ function useNoteSink(done: { note: DoneNote; runKey: number } | null | undefined
 /** `multi`: birden çok belge art arda (satır listesi + "Hepsini kaydet"); değilse tek belge okunur, sonra tarayıcı gizlenir.
  *  `autoStart`: "Belge okut"a basınca tarayıcı ek dokunuşsuz açılır. */
 // `onNote`: gönderilen belge (aynı taslağa yeni sayfada aynı not, yeni runKey) — İş Emirleri okutma önizlemesi izler.
-export default function DocBatchView({ route, multi = true, autoStart = false, onNote }: { route: ProductionRoute; multi?: boolean; autoStart?: boolean; onNote?: NoteSink }) {
-  const wo = useWoRows(route);
+// `woType`: İE türü (Fason düğmesi → CUSTOMER_GOODS_SERVICE; null = bugünkü türetme). `openRequest`: satırın seçicisini dışarıdan aç.
+export default function DocBatchView({ route, multi = true, autoStart = false, onNote, woType = null, openRequest = null }: { route: ProductionRoute; multi?: boolean; autoStart?: boolean; onNote?: NoteSink; woType?: WoType | null; openRequest?: DocRowOpenRequest | null }) {
+  const wo = useWoRows(route, woType ? { extraBody: () => ({ type: woType }) } : undefined);
   const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip kaydedin.' });
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -88,19 +92,19 @@ export default function DocBatchView({ route, multi = true, autoStart = false, o
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         <View style={styles.banner} testID="belge-ie-kip">
           <TruncatedText style={styles.bannerTitle}>{shortcutTitle(route)}</TruncatedText>
           <Text style={styles.bannerText}>{MODE_TEXT[wo.mode]}</Text>
           {wo.autoPrint && <Text style={styles.bannerText}>Refakat kartı her açılan {TERIM.terbiyeIsEmri.tekilKucuk} için otomatik yazdırılır.</Text>}
         </View>
         {wo.rows.map((r) => (
-          <DocRowCard key={r.noteId} row={r} wo={wo} customers={customers} customersLoading={ctx.isLoading} />
+          <DocRowCard key={r.noteId} row={r} wo={wo} customers={customers} customersLoading={ctx.isLoading} openRequest={openRequest} />
         ))}
         {showScanner && (
           <ScannerSection b={b} hasRows={wo.rows.length > 0} onAdd={source.add} busy={source.busy} onClassic={() => setCameraOpen(true)} onRemove={remove} onOpen={setPreviewIndex} />
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
       {wo.rows.length > 0 && <SaveBar wo={wo} label={saveLabel} />}
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <SameDocumentCard

@@ -48,6 +48,7 @@ export function RightPanelDrawer({
       onDismiss={onDismiss}
       position="right"
       onHidden={onClosed}
+      scanPassThrough
     >
       <View
         style={[

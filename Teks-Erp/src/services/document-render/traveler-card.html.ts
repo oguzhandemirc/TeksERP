@@ -128,6 +128,7 @@ export interface TravelerCardMeta {
 const TYPE_LABELS: Record<string, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stok",
+  CUSTOMER_GOODS_SERVICE: "Fason (müşteri malı)",
 };
 
 function esc(v: unknown): string {

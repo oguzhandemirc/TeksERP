@@ -114,7 +114,7 @@ export default function KursunDagitimScreen() {
       Toast.show({
         type: 'success',
         text1: 'Dağıtım kaldırıldı',
-        text2: 'İş normal tabletli Kurşun + KK2 akışına döndü.',
+        text2: 'İş normal tabletli Kurşun + kalite kontrol akışına döndü.',
       });
       setCancelTarget(null);
       void refresh();
@@ -325,7 +325,7 @@ export default function KursunDagitimScreen() {
                   : ''}
               </Text>
               <Text style={styles.confirmNote}>
-                İş NORMAL tabletli Kurşun + KK2 akışına geri girer. Adımın istasyonu zaten
+                İş NORMAL tabletli Kurşun + kalite kontrol akışına geri girer. Adımın istasyonu zaten
                 hiç değişmedi (atama makine bazındadır) — yalnız makine ataması kalkar.
                 Toplara dokunulmaz, hiçbir kayıt silinmez.
               </Text>

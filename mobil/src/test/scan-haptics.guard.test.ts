@@ -50,6 +50,8 @@ const EK_OKUTMA_HANDLERLARI: Record<string, string> = {
 const MUAF: Record<string, string> = {
   'components/BarcodeScannerView.tsx#handleScanned':
     'YAKALAMA onayı (opt-in `captureHaptic`): "gördüm" der, kabul/ret demez. Paylaşılan tarayıcı bileşeni; sonucu ÇAĞIRAN yönetir (bileşenin kendi notu).',
+  'components/BarcodeScannerModal.tsx#BarcodeScannerModal':
+    'donanım okuyucu dalının YAKALAMA onayı — kamera dalındaki `BarcodeScannerView#handleScanned` ile aynı opt-in `captureHaptic`; sonucu çağıran verir.',
   'screens/Modules/HizliIsEmri/useQuickWorkOrder.ts#handleScan':
     'yakalama tıkı; sonucu aynı dosya `signalScan`/`flashDuplicate` ile ayrıca veriyor. Sözleşmede "yakalandı" sonucu YOK — dördüncüsü uydurulmaz.',
   'screens/Auth/LoginScreen.tsx#submitCard':

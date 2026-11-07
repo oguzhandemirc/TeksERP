@@ -27,6 +27,8 @@ import type { Roll } from '../../../types/models';
 import type { MainStackParamList } from '../../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showScreenError } from '../../../lib/screenToast';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
 
 // O12 fix: okutulmuş top listesi Android LMK kill'inde sıfırlanıyordu —
 // FasonKabul draft deseni (debounce + savedAt + 8h TTL).
@@ -55,6 +57,8 @@ export default function KartelaSevkScreen() {
   const [firmPickerOpen, setFirmPickerOpen] = useState(false);
   const [barcode, setBarcode] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali: tuş doğrudan okur; birincil hücre kamera düğmesi yerine tuş bandı olur.
+  const hardware = useHardwareScanMode();
   const [rollPickerOpen, setRollPickerOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [rolls, setRolls] = useState<ScannedRoll[]>([]);
@@ -387,6 +391,9 @@ export default function KartelaSevkScreen() {
           </View>
 
           <View style={styles.barCellPrimary}>
+            {hardware ? (
+              <HardwareTriggerHint label="Tuşla okut" />
+            ) : (
             <TouchableRipple
               onPress={() => setScannerOpen(true)}
               style={[styles.barBtn, styles.barBtnPrimaryFill]}
@@ -398,6 +405,7 @@ export default function KartelaSevkScreen() {
                 <Text style={[styles.barBtnText, { color: '#fff' }]}>Kamera ile Okut</Text>
               </View>
             </TouchableRipple>
+            )}
           </View>
 
           <View style={styles.barCellSide}>
@@ -445,6 +453,7 @@ export default function KartelaSevkScreen() {
 
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         title="Top Barkodu Okut — arka arkaya okutabilirsin"
         continuous
         onDismiss={() => setScannerOpen(false)}

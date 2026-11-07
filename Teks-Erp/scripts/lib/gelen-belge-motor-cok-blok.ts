@@ -120,3 +120,31 @@ export function cokBlokTanit(check: Check, gercek: (ad: string) => OcrResult, sa
   check("§16n toplam satırının METRE değeri ('3.935,00'): tablolu belgede reddedilir (tablo toplamı okunur), tablosuz belgede serbest",
     tablolu.errors.some((e) => e.includes("T.Adet")) && tablosuz.errors.length === 0, JSON.stringify({ a: tablolu.errors, b: tablosuz.errors }));
 }
+
+/**
+ * §16o–p (Gülkesim 214279 provası, 2026-11-06): cihaz OCR'ı (ML Kit) sağ üst ara toplamı iki satıra birleştirir — "|T.Adet 16"
+ * (etiket + adet) ve "819,20 3.935,00" (iki sayı tek satır). Toplam yine blok 2'ye bağlanır; satır kaçsa da (Σ tutmaz) tek açık
+ * bloğa konumla bağlanır, sahipsiz kalmaz.
+ */
+export function cokBlokBirlesikToplam(check: Check, gercek: (ad: string) => OcrResult, sablonlar: DocumentTemplate[]): void {
+  const base = gercek("0245-ceki-listesi-a");
+  const lines = base.blocks.flatMap((b) => b.lines).filter(topRight);
+  const el = (t: string) => lines.find((l) => l.text === t)!.elements[0]!;
+  const join = (els: OcrLine["elements"], text: string): OcrLine => {
+    const x = Math.min(...els.map((e) => e.rect.x)), y = Math.min(...els.map((e) => e.rect.y));
+    const rect = { x, y, width: Math.max(...els.map((e) => e.rect.x + e.rect.width)) - x, height: Math.max(...els.map((e) => e.rect.y + e.rect.height)) - y };
+    return { text, rect, confidence: null, angle: null, elements: els };
+  };
+  const merge = (l: OcrLine): OcrLine | null => {
+    if (!topRight(l)) return l;
+    if (l.text === "T.Adet") return join([{ ...el("T.Adet"), text: "|T.Adet" }, el("16")], "|T.Adet 16");
+    if (l.text === "819,20") return join([el("819,20"), el("3.935,00")], "819,20 3.935,00");
+    return null;
+  };
+  const v = run(edit(base, merge), sablonlar);
+  check("§16o ⭐ ML Kit birleşik ara toplam ('|T.Adet 16' + '819,20 3.935,00'): blok 2'ye bağlanır (16 · 819.2 · 3935), sahipsiz yok",
+    v.per.join() === "5,16" && v.tb[1]?.m === "3935" && v.tb[1]?.kg === "819.2" && v.tb[1]?.count === "16" && !v.has("TABLE_TOTALS_ORPHAN") && !v.has("TOTAL_MISMATCH"), v.info);
+  const kacan = run(edit(base, (l) => (tail(l) ? null : merge(l))), sablonlar);
+  check("§16p ⭐ birleşik ara toplam + blok 2 satır kaçırdı (Σ tutmaz): tek açık bloğa bağlanır, beyan 3935 korunur, fark TOTAL_MISMATCH blok 2",
+    kacan.tb[1]?.m === "3935" && !kacan.has("TABLE_TOTALS_ORPHAN") && kacan.has("TOTAL_MISMATCH", 2) && kacan.tb[0]?.m === "586", kacan.info);
+}

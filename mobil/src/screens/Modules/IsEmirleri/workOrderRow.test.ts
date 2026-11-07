@@ -1,4 +1,4 @@
-import { activeFilterCount, batchText, buildListQuery, customerText, DEFAULT_FILTERS, emptyStateFor, fabricText, locationBadge, PAGE_SIZE, rollMeterText, type WorkOrderLocation } from './workOrderRow';
+import { activeFilterCount, batchText, buildListQuery, customerText, DEFAULT_FILTERS, emptyStateFor, fabricText, locationBadge, PAGE_SIZE, rollMeterText, typeBadgeText, type WorkOrderLocation } from './workOrderRow';
 import { stationToneFor } from '../../../theme/stationTone';
 
 const st = (over: Partial<WorkOrderLocation['istasyonlar'][number]> = {}) => ({
@@ -92,5 +92,14 @@ describe('emptyStateFor — boş liste başlığı + çıkış eylemi', () => {
 
   it('tek harflik arama daraltma sayılmaz (sunucuya gitmez)', () => {
     expect(emptyStateFor({ ...DEFAULT_FILTERS, search: 'a' }).action).toBe('showAllStatuses');
+  });
+});
+
+describe('typeBadgeText — tür rozeti', () => {
+  it('yalnız Fason (müşteri malı) işaretlenir; kendi üretimi ve eski sunucu rozetsiz', () => {
+    expect(typeBadgeText({ type: 'CUSTOMER_GOODS_SERVICE' })).toBe('Fason (müşteri malı)');
+    expect(typeBadgeText({ type: 'ORDER_PRODUCTION' })).toBeNull();
+    expect(typeBadgeText({ type: 'STOCK_PRODUCTION' })).toBeNull();
+    expect(typeBadgeText({})).toBeNull();
   });
 });

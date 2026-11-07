@@ -71,6 +71,8 @@ function LoomOverlays({ loom, camera, setCamera }: { loom: LoomBirthApi; camera:
     <>
       <BarcodeScannerModal
         visible={camera}
+        // El terminali: bar görünürken tuş tezgah etiketini okur; etiket doğrulama kendi panelini açar (üstteki pencere).
+        listenWhileHidden
         title="Tezgah etiketini okut"
         trigger="tap"
         onDismiss={() => setCamera(false)}
@@ -130,6 +132,7 @@ export default function LoomBirthBar({ loom, rollBirth, onBeforeOpen }: Props) {
         }}
         scanCtaLabel="Tezgah etiketini okut"
         tone="indigo"
+        hardwareListening
       />
       {canPickOrder ? (
         <Button compact mode="text" icon="format-list-bulleted" onPress={() => { onBeforeOpen?.(); loom.setOrdersOpen(true); }} testID="loom-order-ac">

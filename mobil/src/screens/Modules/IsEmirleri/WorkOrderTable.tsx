@@ -12,9 +12,11 @@ import { QUERY_PROBLEM_TEXT, type QueryProblem } from '../../../utils/queryState
 import { WORK_ORDER_STATUS_COLOR, WORK_ORDER_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { visibleDefs, type ColumnDef, type ColumnKey } from './columns';
-import { batchText, customerText, fabricText, locationBadge, rollMeterText, type EmptyAction, type WorkOrderListRow } from './workOrderRow';
+import { batchText, customerText, fabricText, locationBadge, rollMeterText, typeBadgeText, type EmptyAction, type WorkOrderListRow } from './workOrderRow';
 
 export const WIDE_MIN = 720;
+/** En yeni üstte duran listede yeni satır başa eklenince görüş alanı tepede kalır (KK1 geçmiş listesi emsali). */
+export const NEWEST_FIRST_LIST = { disabled: true } as const;
 
 interface Props {
   rows: WorkOrderListRow[];
@@ -89,6 +91,9 @@ export default function WorkOrderTable(p: Props) {
         onEndReached={p.onEndReached}
         refreshing={p.refreshing}
         onRefresh={p.onRefresh}
+        // FlashList v2'de görünür içeriğe tutunma VARSAYILAN AÇIK: okutmadan dönüşteki tazelemede başa eklenen yeni İE
+        // görüş alanının ÜSTÜNE itiliyordu ("aşağı çekince geliyor", prova 2026-11-06). Liste en yeni üstte → tutunma kapalı.
+        maintainVisibleContentPosition={NEWEST_FIRST_LIST}
         contentContainerStyle={styles.listContent}
         ListFooterComponent={p.fetchingMore ? <ActivityIndicator style={styles.more} color={colors.brand} /> : null}
       />
@@ -128,8 +133,15 @@ function Row({ row, defs, wide, onOpen }: { row: WorkOrderListRow; defs: ColumnD
 
 function Cell({ k, row }: { k: ColumnKey; row: WorkOrderListRow }) {
   switch (k) {
-    case 'no':
-      return <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>;
+    case 'no': {
+      const tur = typeBadgeText(row);
+      return (
+        <View style={styles.noWrap}>
+          <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>
+          {tur && <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text>}
+        </View>
+      );
+    }
     case 'musteri':
       return <TruncatedText style={styles.text}>{customerText(row)}</TruncatedText>;
     case 'kumas':
@@ -188,6 +200,8 @@ const styles = StyleSheet.create({
   narrowLabel: { width: 104, fontSize: typography.size.sm, color: colors.textMuted },
   cell: { justifyContent: 'center' },
   no: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },
+  noWrap: { gap: 2, alignItems: 'flex-start' },
+  typeBadge: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.infoText, backgroundColor: colors.infoContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
   text: { fontSize: typography.size.sm, color: colors.text },
   sub: { fontSize: typography.size.sm, color: colors.textSecondary },
   status: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

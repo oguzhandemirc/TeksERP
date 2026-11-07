@@ -1,5 +1,5 @@
 // =============================================================================
-// Sipariş listesi dışa aktarımı — Kumaş/Renk BOŞ çıkmasın; kalem bazında Excel
+// Sipariş listesi dışa aktarımı — Kumaş/Renk BOŞ çıkmasın
 // =============================================================================
 // Saha (2026-11-04): liste Excel'inde Kumaş ve Renk boştu (kolon yalnız `cell`).
 // Burada GERÇEK tablo adaptörü (`buildCsv`) ve gerçek kolonlar ölçülür.
@@ -8,10 +8,8 @@ import { describe, it, expect } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { buildCsv } from "@/lib/table-export";
-import { buildListSheet } from "@/lib/list-export";
 import { buildOrderColumns } from "./columns";
 import { lineLabelsText } from "./order-cell-text";
-import { flattenOrderLines, orderLineExportColumns, lineOpenQty, lineStatusText } from "./order-lines-export";
 import type { Order, OrderLine } from "./types";
 
 const line = (p: Partial<OrderLine>): OrderLine =>
@@ -173,57 +171,5 @@ describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
     expect(ids).not.toContain("where");
     expect(ids).toContain("shipped");
     expect(ids).not.toContain("status");
-  });
-});
-
-describe("kalem bazında Excel", () => {
-  it("her kalem bir satır; sipariş başlığı her satırda", () => {
-    const rows = flattenOrderLines([order(), order({ id: "o2", orderNumber: "SP-002", lines: [line({ id: "x" })] })]);
-    expect(rows.map((r) => `${r.order.orderNumber}/${r.line.id}`)).toEqual(["SP-001/l1", "SP-001/l2", "SP-001/l3", "SP-002/x"]);
-  });
-
-  it("kalan/durum: iptal kalem 0, kısmi sevk, ölçülmeyen birim boş", () => {
-    const o = order();
-    expect(lineOpenQty({ order: o, line: line({ shippedQty: 40 }) })).toBe(60);
-    expect(lineStatusText({ order: o, line: line({ shippedQty: 40 }) })).toBe("Kısmi sevk");
-    expect(lineOpenQty({ order: o, line: line({ cancelledAt: "2026-11-02T00:00:00Z" }) })).toBe(0);
-    expect(lineOpenQty({ order: o, line: line({ unit: "KG" }) })).toBe("");
-    expect(lineOpenQty({ order: order({ status: "COMPLETED" }), line: line({}) })).toBe(0);
-  });
-
-  it("kalem satırındaki 'Sevk durumu' liste ekranının cümlesi (sipariş geneli)", () => {
-    const rows = flattenOrderLines([order(), order({ id: "o3", orderNumber: "SP-003", status: "CANCELLED", shippedQty: 0 })]);
-    const col = orderLineExportColumns(rows, { pricingEnabled: false, productionEnabled: true }).find((c) => c.label === "Sevk durumu");
-    expect(col).toBeDefined();
-    for (const r of rows) {
-      expect(col!.value(r)).toBe(r.order.id === "o3" ? "Sipariş iptal edildi" : "Bir kısmı gönderildi (40 / 300 m)");
-    }
-    expect(orderLineExportColumns(rows, { pricingEnabled: false, productionEnabled: true }).map((c) => c.label)).not.toContain("Sipariş Durumu");
-  });
-
-  it("fiyat kolonları yalnız pricingEnabled ile; iş emri kolonu üretimle", () => {
-    const rows = flattenOrderLines([order()]);
-    const labels = (pricingEnabled: boolean, productionEnabled: boolean) =>
-      orderLineExportColumns(rows, { pricingEnabled, productionEnabled }).map((c) => c.label);
-    expect(labels(false, true)).not.toContain("Birim Fiyat");
-    expect(labels(false, true)).not.toContain("Tutar");
-    expect(labels(true, true)).toEqual(expect.arrayContaining(["Birim Fiyat", "Para Birimi", "Tutar"]));
-    expect(labels(true, false).some((l) => l.startsWith("Bağlı"))).toBe(false);
-  });
-
-  it("sayfa: kumaş/renk/miktar/tutar dolu; tek birimde metraj toplanır, karışıkta toplanmaz", () => {
-    const rows = flattenOrderLines([order()]);
-    const sheet = buildListSheet(orderLineExportColumns(rows, { pricingEnabled: true, productionEnabled: true }), rows, "x");
-    const idx = (h: string) => `c${sheet.columns.findIndex((c) => c.header === h)}`;
-    const first = sheet.rows[0] ?? {};
-    expect(first[idx("Kumaş")]).toBe("Saten");
-    expect(first[idx("Renk")]).toBe("Lacivert");
-    expect(first[idx("Miktar")]).toBe(100);
-    expect(first[idx("Tutar")]).toBe(1050);
-    expect(sheet.totalRow?.[idx("Miktar")]).toBe(300);
-
-    const mixed = flattenOrderLines([order({ lines: [line({}), line({ id: "k", unit: "KG" })] })]);
-    const cols = orderLineExportColumns(mixed, { pricingEnabled: false, productionEnabled: true });
-    expect(cols.find((c) => c.label === "Miktar")?.summable).toBe(false);
   });
 });

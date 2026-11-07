@@ -37,6 +37,7 @@ import { assertOrderLinesLinkableTx, normalizeOrderLineLinks, type NormalizedOrd
 import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper";
 import { assertNoOpenRunsTx, assertRefs, throwClaimFailureTx } from "./helpers/weaving-order-guards.helper";
 import { countRollsOfWeavingOrder } from "./helpers/weaving-order-of-roll.helper";
+import { weavingOrderListProgress, type WeavingOrderListProgress } from "./helpers/weaving-order-list-progress.helper";
 import { itemDefaultWarpSpecId } from "./helpers/tablet-prefill.helper";
 import { normalizeConstructionInput, resolveConstructionPatch, resolveWeavingConstructionChoice } from "./helpers/weaving-order-construction.helper";
 import {
@@ -103,7 +104,7 @@ export async function getWeavingOrder(id: string): Promise<ApiResponse<WeavingOr
 /** Cursor'lu liste — süzme SUNUCUDA, en yeni önce. Özet (`totalEstimate`) aynı where'den. */
 export async function listWeavingOrders(
   params: WeavingOrderListParams,
-): Promise<CursorPaginatedResponse<WeavingOrderDto>> {
+): Promise<CursorPaginatedResponse<WeavingOrderDto & Partial<WeavingOrderListProgress>>> {
   const limit = Math.min(Math.max(1, params.limit ?? 50), 100);
   const where: Prisma.WeavingOrderWhereInput = {};
   if (params.status && params.status.length > 0) where.status = { in: params.status };
@@ -130,9 +131,11 @@ export async function listWeavingOrders(
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1] as Record<string, unknown> | undefined;
+  // Tablet listesi: açık koşum tezgahı + üretilen metre — genel bakışın yüklemleri, sayfa başına toplu (ek alan).
+  const progress = await weavingOrderListProgress(page);
   return {
     success: true,
-    data: page.map(toWeavingOrderDto),
+    data: page.map((row) => ({ ...toWeavingOrderDto(row), ...progress.get(row.id) })),
     pagination: {
       nextCursor: hasMore ? buildNextDynamicCursor(last, "createdAt") : null,
       hasMore,

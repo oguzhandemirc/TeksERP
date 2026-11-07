@@ -34,6 +34,7 @@ import { assertDocNoUniqueTx, duplicateDocNoNotice, lockDocNosTx } from "./helpe
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { getReaderUrl } from "../lib/gelen-belge/url";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
+import { withDocLineCount } from "./gelen-belge-satir-sayim.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -163,7 +164,8 @@ export async function getDeliveryNote(id: string) {
   // Gözden geçirme: onay kapısının AYNI yüklemleri (satır `problems`, toplam `totalsCheck`) — panel yeniden hesaplamaz.
   // Varsayılan ürün onayla AYNI yüklemden: onunla doğacak satır sorunlu değil, `itemFallback` bilgisi taşır (eski istemci yok sayar).
   const fallback = note.lines.some((l) => !l.itemId) ? usableDefaultItem(await resolveEffectiveDefaultItem(note.ownerCustomerId)) : null;
-  const lines = note.lines.map(({ ocrRaw, ...l }) => ({ ...l, problems: lineProblems({ ...l, ocrRaw }, fallback), itemFallback: lineItemFallback(l, fallback) }));
+  // `summary`: onayda doğan parti kaydı (özet satırı) — panel belgenin satırlarından ayrı çizer; eski istemci yok sayar.
+  const lines = note.lines.map(({ ocrRaw, ...l }) => ({ ...l, summary: isSummaryLine(note.id, l), problems: lineProblems({ ...l, ocrRaw }, fallback), itemFallback: lineItemFallback(l, fallback) }));
   // Taslak uyarıları (okuma özetiyle AYNI helper): eski istemci alanı yok sayar.
   // Aynı müşteri partisinin başka belgeleri (bilgi, engel değil); eski istemci alanı yok sayar.
   const sameBatch = await sameBatchNotes(note);
@@ -222,14 +224,13 @@ export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
   const where: Prisma.CustomerDeliveryNoteWhereInput = q.status ? { AND: [base, { status: q.status }] } : base;
   const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
   const offset = decodeOffsetCursor(q.cursor);
-  const rows = await prisma.customerDeliveryNote.findMany({
-    where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: offset, take: limit + 1, select: HEADER_SELECT,
-  });
+  const rows = await prisma.customerDeliveryNote.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: offset, take: limit + 1, select: HEADER_SELECT });
   const page = rows.slice(0, limit);
   const grouped = await prisma.customerDeliveryNote.groupBy({ by: ["status"], where: base, _count: { _all: true } });
   const summary = Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<DeliveryNoteStatus, number>;
+  // `docLineCount`: özet satırı hariç belge satırı (listede "Top"); eski istemci `_count.lines` okur.
   return {
-    items: page,
+    items: await withDocLineCount(page),
     nextCursor: rows.length > limit ? encodeOffsetCursor(offset + limit) : null,
     summary: { ...summary, total: Object.values(summary).reduce((a, b) => a + b, 0) },
   };

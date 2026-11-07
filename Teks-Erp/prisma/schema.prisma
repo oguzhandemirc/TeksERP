@@ -276,6 +276,9 @@ enum OrderStatus {
 enum WorkOrderType {
   ORDER_PRODUCTION // Siparişe Özel Üretim
   STOCK_PRODUCTION // Stoka Üretim
+  /// Fason (müşteri malı): müşterinin emanet malına hizmet; sipariş istemez, `WorkOrder.customerId` ZORUNLU (DB CHECK).
+  /// Giden fason (Subcontractor/AT_SUBCONTRACTOR) ile KARIŞMAZ — o biz dışarı göndeririz, bu müşteri bize getirir.
+  CUSTOMER_GOODS_SERVICE
 }
 
 enum WorkOrderStatus {
@@ -4435,6 +4438,7 @@ model Customer {
   labelledRolls     Roll[]                    @relation("RollLabelCustomer")
   /// G3 emanet: bu müşterinin malı olan toplar / leventler / iplik lotları.
   ownedRolls        Roll[]                    @relation("RollOwner")
+  workOrders        WorkOrder[]               @relation("WorkOrderCustomer")
   ownedWarpBeams    WarpBeam[]                @relation("WarpBeamOwner")
   ownedYarnLots     YarnLot[]                 @relation("YarnLotOwner")
   branches          CustomerBranch[]
@@ -4924,6 +4928,12 @@ model WorkOrder {
   /// "ayrıldı → P-XXX" izi bu bağdan okunur. NULL = ayrılmamış normal WO.
   splitFromId String? @db.Uuid
 
+  /// İşin müşterisi (cari kimliği) — yalnız `CUSTOMER_GOODS_SERVICE` yazar ve orada ZORUNLU (CHECK
+  /// `work_orders_customer_goods_customer_check`); diğer türlerde NULL kalır, müşteri sipariş bağından türer.
+  /// Nullable: mevcut kayıtlar değişmez.
+  customerId String?   @db.Uuid
+  customer   Customer? @relation("WorkOrderCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
   // Relations
   steps            WorkOrderStep[]
   orderLinks       WorkOrderToOrderLine[]
@@ -4980,6 +4990,7 @@ model WorkOrder {
   @@index([isActive])
   // Ayrılma soy bağı — null-yoğun; migration'da partial'a çevrilir (IS NOT NULL)
   @@index([splitFromId])
+  @@index([customerId])
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([workOrderNumber(ops: raw("gin_trgm_ops"))], map: "work_orders_workOrderNumber_trgm_idx", type: Gin)
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.

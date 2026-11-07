@@ -125,6 +125,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // WorkOrderType
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stoğa Üretim",
+  CUSTOMER_GOODS_SERVICE: "Fason (müşteri malı)",
   // TravelerCardStatus / PrintedDocStatus
   REPRINTED: "Yeniden Basıldı",
   VOIDED: "İptal",

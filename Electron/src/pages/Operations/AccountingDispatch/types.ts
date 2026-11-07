@@ -17,7 +17,8 @@ export interface DispatchListItem {
   customer: { id: string; code?: string; name: string };
   branch: { id: string; code: string | null; name: string } | null;
   /** ⚠️ BRÜT — iade düşülmez; fiş/irsaliye ile birebir (bkz. ShipmentListItem). */
-  _count: { sacks: number; rolls: number; orders: number; returns: number };
+  /** `carts`/`bulks`: çuvalsız yük birimleri (`sacks` hepsini sayar); eski sunucu göndermez → hepsi çuval. */
+  _count: { sacks: number; rolls: number; orders: number; returns: number; carts?: number; bulks?: number };
   totalMeters: number;
   totalKg: number;
   /** DIŞ muhasebe programındaki belgenin izi — bu sistemde fatura KESMEZ. */
