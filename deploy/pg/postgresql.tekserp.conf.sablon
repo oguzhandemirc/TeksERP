@@ -2,7 +2,7 @@
 # TeksERP - KENDI PostgreSQL ORNEGI - sunucu ayarlari (tekserp.conf)
 # =============================================================================
 # URETILIR, ELLE DUZENLENMEZ. Kaynak: deploy/pg/postgresql.tekserp.conf.sablon
-# + deploy/pg/pg-ornegi.json (bellek formulu). initdb'nin yazdigi postgresql.conf
+# + deploy/pg/pg-ornegi.json (bellek formulu, disk profili). initdb'nin yazdigi postgresql.conf
 # dosyasinin SONUNA tek satir eklenir:  include 'tekserp.conf'
 # Sonra gelen ayar oncekini ezer; ALTER SYSTEM (postgresql.auto.conf) bunu da ezer,
 # o yuzden kurulum postgresql.auto.conf'a YAZMAZ (saglik kontrolu sapmayi raporlar).
@@ -23,6 +23,17 @@ shared_buffers = {{SHARED_BUFFERS}}
 effective_cache_size = {{EFFECTIVE_CACHE_SIZE}}
 maintenance_work_mem = {{MAINTENANCE_WORK_MEM}}
 work_mem = 16MB
+
+# --- Disk: pg-ornegi.json yapilandirma.disk (varsayilan SSD 1.1; donen disk 4).
+#     effective_io_concurrency YOK: Windows'ta posix_fadvise yok, sifir disi deger sunucuyu kaldirmaz. ---
+random_page_cost = {{RANDOM_PAGE_COST}}
+
+# --- Sorgu gorunurlugu: pg_stat_statements (kutuphane PG paketinde zorunlu - pg-surumu.json
+#     zorunlu.uzantilar). Uzanti yalniz 'postgres' veritabanina kurulur, migration'a konmaz. ---
+shared_preload_libraries = 'pg_stat_statements'
+pg_stat_statements.track = top
+pg_stat_statements.max = 5000
+track_io_timing = on
 
 # --- Zaman: sunucu UTC. Fabrika saat dilimi uygulamanin donemler defterinden gelir
 #     (factory_timezone_periods); veritabani sunucusuna profil degeri yazilmaz. ---

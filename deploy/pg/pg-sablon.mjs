@@ -6,8 +6,8 @@
 // dosya yazılmadan ÖNCE yasaklara karşı denetlenir (yalnız 127.0.0.1 · yalnız SCRAM ·
 // trust yok · UTC); ihlalde dosya YAZILMAZ.
 //
-//   node deploy/pg/pg-sablon.mjs --ram-mb <MB> --port <N> [--cikti <dizin>]
-//        --cikti yoksa iki dosya ayraçla stdout'a basılır
+//   node deploy/pg/pg-sablon.mjs --ram-mb <MB> --port <N> [--disk ssd|hdd] [--cikti <dizin>]
+//        --cikti yoksa iki dosya ayraçla stdout'a basılır; --disk yoksa pg-ornegi.json disk.varsayilan
 //   node deploy/pg/pg-sablon.mjs --denetle <tekserp.conf> <pg_hba.conf>
 //        kurulu (üretilmiş) dosyaları aynı yasaklara karşı denetler
 //
@@ -51,7 +51,7 @@ function denetle(confYol, hbaYol) {
 function uret() {
   const ramMB = Number(arg('--ram-mb'));
   const port = Number(arg('--port'));
-  if (!Number.isInteger(ramMB) || !Number.isInteger(port)) dur(2, 'Kullanım: --ram-mb <MB> --port <N> [--cikti <dizin>]  |  --denetle <tekserp.conf> <pg_hba.conf>');
+  if (!Number.isInteger(ramMB) || !Number.isInteger(port)) dur(2, 'Kullanım: --ram-mb <MB> --port <N> [--disk ssd|hdd] [--cikti <dizin>]  |  --denetle <tekserp.conf> <pg_hba.conf>');
   let ornek;
   let confSablon;
   let hbaSablon;
@@ -66,7 +66,7 @@ function uret() {
   }
   let cikti;
   try {
-    cikti = yapilandirmaUret({ ramMB, port }, { ornek, confSablon, hbaSablon });
+    cikti = yapilandirmaUret({ ramMB, port, disk: arg('--disk') }, { ornek, confSablon, hbaSablon });
   } catch (e) {
     dur(2, e.message);
   }
@@ -82,7 +82,7 @@ function uret() {
   fs.writeFileSync(path.join(dizin, ornek.yapilandirma.includeDosyasi), cikti.conf);
   fs.writeFileSync(path.join(dizin, 'pg_hba.conf'), cikti.hba);
   const d = cikti.degerler;
-  console.log(`✅ ${dizin}: ${ornek.yapilandirma.includeDosyasi} (port ${d.PORT} · shared_buffers ${d.SHARED_BUFFERS} · effective_cache_size ${d.EFFECTIVE_CACHE_SIZE} · maintenance_work_mem ${d.MAINTENANCE_WORK_MEM}) + pg_hba.conf`);
+  console.log(`✅ ${dizin}: ${ornek.yapilandirma.includeDosyasi} (port ${d.PORT} · shared_buffers ${d.SHARED_BUFFERS} · effective_cache_size ${d.EFFECTIVE_CACHE_SIZE} · maintenance_work_mem ${d.MAINTENANCE_WORK_MEM} · random_page_cost ${d.RANDOM_PAGE_COST}) + pg_hba.conf`);
   console.log(`   postgresql.conf sonuna: ${ornek.yapilandirma.includeSatiri}`);
 }
 

@@ -1,7 +1,8 @@
 {
   "_aciklama": [
     "TeksERP KENDI PostgreSQL ORNEGI - kurulum/guncelleme sozlesmesi. TEK KAYNAK: kurulum (setup.exe), guncelleyici (Rust) ve gecis araci degerleri BURADAN okur, koda kopyalamaz. Ikili surum/adres/ozet: pg-surumu.json.",
-    "Bellek formulu TAMSAYI yuzdedir: deger = floor(ramMB * yuzde / 100), sonra altMB ile tabana, ustMB ile tavana (ust null = tavansiz); bicim: 1024'un kati ise <n>GB, degilse <n>MB (ilk-kurulum.ps1 MbDeger ile ayni). Tamsayi aritmetigi diller arasi bayt-esit sonuc verir; baska dilde yazan taraf pg-sablon-vektorleri.json ile kendini dogrular.",
+    "Bellek formulu TAMSAYIDIR: deger = floor(ramMB * yuzde / 100) ya da (bolen verilmisse) floor(ramMB / bolen), sonra altMB ile tabana, ustMB ile tavana (ust null = tavansiz); bicim: 1024'un kati ise <n>GB, degilse <n>MB (ilk-kurulum.ps1 MbDeger ile ayni). Tamsayi aritmetigi diller arasi bayt-esit sonuc verir; baska dilde yazan taraf pg-sablon-vektorleri.json ile kendini dogrular.",
+    "Disk: random_page_cost disk profilinden (varsayilan ssd 1.1; donen diskte hdd 4). effective_io_concurrency Windows'ta YAZILMAZ: posix_fadvise yok, sifir disi deger sunucuyu kaldirmaz (PG 16 GUC denetimi). hariciBakim = kurulum disi/mevcut PostgreSQL'e (ilk-kurulum duzeni, eski installer) deploy/pg/pg-ayar.ps1 ile ALTER SYSTEM'le uygulanan sablon alt kumesi; uzanti yalniz uzantiVeritabani'na kurulur (uygulama DB'sine degil: dokume girer, super olmayan rolle geri yukleme kirilir).",
     "Port: onceki kurulumun portu (ornek kaydi) varsa O kullanilir; acik istenen port mesgulse DURULUR (sessiz baska port yok); yoksa aralikta ilk bos port. Mesgul = 127.0.0.1'e baglanilamiyor YA DA herhangi bir adreste dinleyen var YA DA makinedeki bir PostgreSQL hizmetinin yapilandirmasi o portu tutuyor (durmus olsa bile).",
     "Dizin: ikili <ikiliKok>\\<surum>-<derleme> (ayni surumun yeni derlemesi de yan yana acilabilsin); istemci araclari <istemciBaglanti> JUNCTION'u uzerinden (PG_BIN_DIR, yedekle.ps1, bakim-rolu.ps1, kur.ps1 bu yolu okur - sozlesme korunur).",
     "Tasarim + gerekceler: docs/design/KENDI-POSTGRESQL.md. Bekci: node scripts/test_pg_ornegi.mjs."
@@ -50,7 +51,21 @@
     "bellek": {
       "SHARED_BUFFERS": { "ayar": "shared_buffers", "yuzde": 25, "altMB": 128, "ustMB": 8192 },
       "EFFECTIVE_CACHE_SIZE": { "ayar": "effective_cache_size", "yuzde": 60, "altMB": 512, "ustMB": null },
-      "MAINTENANCE_WORK_MEM": { "ayar": "maintenance_work_mem", "yuzde": 5, "altMB": 64, "ustMB": 512 }
+      "MAINTENANCE_WORK_MEM": { "ayar": "maintenance_work_mem", "bolen": 16, "altMB": 64, "ustMB": 512 }
+    },
+    "disk": {
+      "varsayilan": "ssd",
+      "ayarlar": { "RANDOM_PAGE_COST": "random_page_cost" },
+      "profiller": {
+        "ssd": { "RANDOM_PAGE_COST": "1.1" },
+        "hdd": { "RANDOM_PAGE_COST": "4" }
+      }
+    },
+    "hariciBakim": {
+      "ayarlar": ["shared_buffers", "effective_cache_size", "maintenance_work_mem", "work_mem", "random_page_cost", "shared_preload_libraries", "pg_stat_statements.track", "pg_stat_statements.max", "track_io_timing", "log_min_duration_statement", "log_line_prefix"],
+      "yenidenBaslatma": ["shared_buffers", "shared_preload_libraries", "pg_stat_statements.max"],
+      "uzanti": "pg_stat_statements",
+      "uzantiVeritabani": "postgres"
     }
   },
   "roller": {

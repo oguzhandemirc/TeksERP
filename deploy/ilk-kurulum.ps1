@@ -517,7 +517,8 @@ foreach ($ad in $dbAyarlari.Keys) {
 # --- PostgreSQL sunucu ayarlari (runbook §6) -----------------------------------
 # Eski installer'in postgresql.conf'a yazdiklari. Sunucu GENELI oldugu icin yalniz
 # -PgAyarla ile yazilir (ALTER SYSTEM -> postgresql.auto.conf); onceden ALTER SYSTEM ile
-# konmus farkli deger ezilmez. Bellek degerleri RAM'den (installer olcegi).
+# konmus farkli deger ezilmez. Bellek degerleri RAM'den (deploy/pg/pg-ornegi.json formulu). Gorunurluk/disk
+# profili (pg_stat_statements, random_page_cost...) mevcut kurulumlara deploy\pg\pg-ayar.ps1 ile uygulanir.
 Adim "PostgreSQL sunucu ayarlari..."
 function MbDeger([double]$mb) {
   $mb = [math]::Floor($mb)
@@ -541,7 +542,7 @@ try { $ramMB = [math]::Floor((Get-CimInstance Win32_ComputerSystem -ErrorAction 
 if ($ramMB) {
   $pgHedef["shared_buffers"]       = MbDeger ([math]::Min([math]::Max($ramMB * 0.25, 128), 8192))
   $pgHedef["effective_cache_size"] = MbDeger ([math]::Max($ramMB * 0.60, 512))
-  $pgHedef["maintenance_work_mem"] = MbDeger ([math]::Min([math]::Max($ramMB * 0.05, 64), 512))
+  $pgHedef["maintenance_work_mem"] = MbDeger ([math]::Min([math]::Max($ramMB / 16, 64), 512))
 } else {
   Acik "RAM olculemedi - shared_buffers / effective_cache_size / maintenance_work_mem hesaplanmadi"
 }

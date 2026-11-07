@@ -933,7 +933,7 @@ function kurulumOlcumIhlalleri(kur: string): string[] {
 //   Kaldırma koşulu: filoda pm2 düzeninde kurulum kalmaması (portal filo görünümü) — o gün bu tablo da gider.
 const DONMUS: ReadonlyArray<{ dosya: string; sha256: string; gerekce: string }> = [
   { dosya: "deploy/kur.ps1", sha256: "8152ccb78f1ebd47af538da2f8ae4aef54d4e1d63b3ed86787479540b8ea2228", gerekce: "2026-10-13 düzeltme: geri yükleme ipucu `--no-acl` (başka kümeden döküm \"role does not exist\" ile düşmesin)" },
-  { dosya: "deploy/ilk-kurulum.ps1", sha256: "5a1e0803b1e08f7a88e6e71d178cc7053ff04a210703fd3c3f6eaa3831386640", gerekce: "D6 2026-10-01: dondurma başlığı + HizmetDuzeniIzi kapısı" },
+  { dosya: "deploy/ilk-kurulum.ps1", sha256: "96c5854da533d6841772d45c13c5be9dde03b41469bbd49d5af701dc11757d24", gerekce: "2026-11-07 düzeltme: maintenance_work_mem formülü pg-ornegi.json ile hizalandı (RAM/16, 64–512MB); görünürlük profili pg-ayar.ps1'de (yeni özellik pm2 yoluna eklenmedi)" },
   { dosya: "deploy/pm2-boot.cmd", sha256: "2659a7f160d0aeb1d7aa2a20b3fe3139b047391e1b2b4abb18794a79d90cf214", gerekce: "D8c 2026-10-01 DÜZELTME: pm2.cmd `call`lı — setlocal ortamı çağrısız çağrıda düşüyor, açılışta pm2 SYSTEM profiline gidip backend'i kaldırmıyordu (thinkpad-1, yönetici onayı)" },
   { dosya: "Teks-Erp/ecosystem.config.js", sha256: "aabeb95d3c4baf37b8bc48a6c36e688a8f411e5e4a2cc874ce86c6bcbefbfc3e", gerekce: "D6 2026-10-01: dondurma başlığı" },
 ];

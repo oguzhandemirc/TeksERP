@@ -1,14 +1,14 @@
 {
   "_aciklama": [
     "ALTIN VEKTORLER - pg-ornegi.json + sablonlari okuyan HER uygulama (Node motoru, setup, Rust guncelleyici) bu vektorleri gecmek ZORUNDADIR; baska dilde yazan taraf bunlari kendi birim testine koyar.",
-    "bellek: KAHIN ilk-kurulum.ps1 MbDeger + runbook 6 formuludur (pwsh ile 9/9 esit olculdu); motordan uretilmedi. port: kural metninden elle yazildi ('mesgul': 'aralik' = pg-ornegi.json port araliginin tamami).",
+    "bellek: formul metninden ELLE turetilir (yuzde/bolen + taban/tavan); PowerShell kahini deploy/pg/pg-ayar.ps1 -YalnizHedef ayni vektorleri gecer (scripts/test_pg_ayar.mjs; ilk-kurulum.ps1 MbDeger ayni formul). 4/8/32 GB: shared_buffers 1GB/2GB/8GB (tavan), effective_cache_size ~%60, maintenance_work_mem RAM/16 (64..512MB). disk: random_page_cost profilden (ssd 1.1 / hdd 4), bilinmeyen profil HATA. port: kural metninden elle yazildi ('mesgul': 'aralik' = pg-ornegi.json port araliginin tamami).",
     "uretim: doldurulmus tekserp.conf ve pg_hba.conf'un SHA256'si (UTF-8, LF). Sablon degisince bu ozetler bilerek guncellenir (bekci gercek ozeti basar) - sessiz sablon degisimi olmasin diye."
   ],
   "bellek": [
     { "ramMB": 1024, "beklenen": { "SHARED_BUFFERS": "256MB", "EFFECTIVE_CACHE_SIZE": "614MB", "MAINTENANCE_WORK_MEM": "64MB" } },
-    { "ramMB": 2048, "beklenen": { "SHARED_BUFFERS": "512MB", "EFFECTIVE_CACHE_SIZE": "1228MB", "MAINTENANCE_WORK_MEM": "102MB" } },
-    { "ramMB": 4096, "beklenen": { "SHARED_BUFFERS": "1GB", "EFFECTIVE_CACHE_SIZE": "2457MB", "MAINTENANCE_WORK_MEM": "204MB" } },
-    { "ramMB": 8192, "beklenen": { "SHARED_BUFFERS": "2GB", "EFFECTIVE_CACHE_SIZE": "4915MB", "MAINTENANCE_WORK_MEM": "409MB" } },
+    { "ramMB": 2048, "beklenen": { "SHARED_BUFFERS": "512MB", "EFFECTIVE_CACHE_SIZE": "1228MB", "MAINTENANCE_WORK_MEM": "128MB" } },
+    { "ramMB": 4096, "beklenen": { "SHARED_BUFFERS": "1GB", "EFFECTIVE_CACHE_SIZE": "2457MB", "MAINTENANCE_WORK_MEM": "256MB" } },
+    { "ramMB": 8192, "beklenen": { "SHARED_BUFFERS": "2GB", "EFFECTIVE_CACHE_SIZE": "4915MB", "MAINTENANCE_WORK_MEM": "512MB" } },
     { "ramMB": 16255, "beklenen": { "SHARED_BUFFERS": "4063MB", "EFFECTIVE_CACHE_SIZE": "9753MB", "MAINTENANCE_WORK_MEM": "512MB" } },
     { "ramMB": 16384, "beklenen": { "SHARED_BUFFERS": "4GB", "EFFECTIVE_CACHE_SIZE": "9830MB", "MAINTENANCE_WORK_MEM": "512MB" } },
     { "ramMB": 32768, "beklenen": { "SHARED_BUFFERS": "8GB", "EFFECTIVE_CACHE_SIZE": "19660MB", "MAINTENANCE_WORK_MEM": "512MB" } },
@@ -26,9 +26,15 @@
     { "ad": "istenen port ayricalikli aralikta", "girdi": { "mesgul": [], "istenen": 80 }, "beklenen": { "hata": true } },
     { "ad": "sozlesme araliginin tamami dolu", "girdi": { "mesgul": "aralik" }, "beklenen": { "hata": true } }
   ],
+  "disk": [
+    { "disk": "ssd", "beklenen": { "RANDOM_PAGE_COST": "1.1" } },
+    { "disk": "hdd", "beklenen": { "RANDOM_PAGE_COST": "4" } },
+    { "disk": "nvme", "beklenen": { "hata": true } }
+  ],
   "uretim": [
-    { "ramMB": 2048, "port": 5432, "confSha256": "bb4e84e276876e73be321894b2a6482250fbe8c9453edef0865dcd45426ac80e", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
-    { "ramMB": 16255, "port": 5432, "confSha256": "fd0facaf98de531890fa3086dcbb3341d8cd1a893f85e2340fad76443ecfd4c7", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
-    { "ramMB": 65536, "port": 5433, "confSha256": "843a2cb51c32625887b127fe5d775eae0ad105c421808c5e1d04ce9f8c3326ed", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" }
+    { "ramMB": 2048, "port": 5432, "confSha256": "18846291fe265fec9012d88a4d2214457d65de0c6a80a426b4e4bd523b94aa5b", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
+    { "ramMB": 16255, "port": 5432, "confSha256": "ed5e302d668c8f98f135de70c199c49ed33084e9751340f531eb13b1e4e883ef", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
+    { "ramMB": 65536, "port": 5433, "confSha256": "905f3096b55b134c517f75def4bba1f916ac7c6bf1848887c6cd335cf6cdf4ef", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" },
+    { "ramMB": 4096, "port": 5432, "disk": "hdd", "confSha256": "d282dda63de1ecd5a4035672ee46a6710f9b220e66cc170b8ecbc182a6b97417", "hbaSha256": "f7def0e315f36f8a49f9c66af36548ec0be353f24917aa8ac4629996ae3b76f6" }
   ]
 }

@@ -178,5 +178,5 @@ Harici kipte `kip: "harici"`, `hizmet` o hizmetin adı (ör. `postgresql-tekserp
 - **Ölçülecek (Windows):** `pg_ctl register` + sanal hesap `-P`'siz · initdb kısıtlı token + hizmet-önce-ACL sırası · kurucunun yalnız-çıkar kipi (W3) · §5 süreleri · taşıma süresi (thinkpad-1).
 - **Öneri (karar yok):** CI backend işinin PostgreSQL'i sahayla aynı collation'da (`POSTGRES_INITDB_ARGS: --locale=C`) koşması — bugün geliştirme/CI `en_US.utf8`, saha ve kendi örnek C; ayrışma katlama pini sayesinde etkisiz ama ancak ölçüldüğü kadar.
 - Linux teslimi (Docker) kendi `postgres:16` imaj pinini taşır; küçük sürüm hizası ayrı iş (Linux güncelleyicisi kapsam dışı).
-- `pg_stat_statements` (yavaş sorgu teşhisi) ayrı karar.
+- `pg_stat_statements` KARARLANDI (2026-11-07): şablonda `shared_preload_libraries` + `track=top` + `max=5000` + `track_io_timing`; kütüphane pakette ölçüldü ve `pg-surumu.json` `zorunlu.uzantilar`'da (ikili doğrulayıcı yokluğunda durur). `CREATE EXTENSION` yalnız `postgres` veritabanında (uygulama DB'sinde değil, migration'da değil) — kendi örnekte kurulum betiğinin rol/DB adımında yapılacak (açık iş); harici PG'de `deploy/pg/pg-ayar.ps1 -Uygula`.
 - Bekçinin commit kapısına bağlanması (`deploy/pg/**` → `test_pg_ornegi`, ~0,2 sn, DB'siz/ağsız) ve hızlı mandal kümesine alınması yönetici kararıdır.

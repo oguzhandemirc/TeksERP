@@ -43,6 +43,7 @@
 - [ÇEKİRDEK] DB ayarlarını (`teks.audit_guard`, `statement_timeout`, `idle_in_transaction_session_timeout`) restore'dan SONRA kur; `teks.*` superuser'la; farklı değeri ezme.
 - [ÇEKİRDEK] Audit koruması "tam" yalnız uygulama rolü sahip/süper değil ve zincir sağlamken; değilse çalışır, `auditProtection.level = "kismi"`.
 - [ÇEKİRDEK] PG sunucu ayarı `ilk-kurulum.ps1 -PgAyarla` (`ALTER SYSTEM`); bayraksız yalnız rapor; farklı değer ezilmez; restart yalnız `-PgYenidenBaslat`.
+- [ÇEKİRDEK] Mevcut PG'ye ayar profili yalnız `deploy/pg/pg-ayar.ps1` (değer `pg-ornegi.json` + şablondan): varsayılan KURU tablo, yazma `-Uygula`; auto.conf'taki farklı değer ezilmez; restart yapmaz, söyler; `pg_stat_statements` yalnız `postgres` DB'sine, migration'a değil.
 - [ÇEKİRDEK] Sırlı dosyalar yalnız SYSTEM+Administrators (SID, miras kesik), daraltma ölçülür; `kur.ps1` `%TEMP%`e sır yazmaz; parola argv'den gelmez.
 - [ÇEKİRDEK] Sıfırdan kurulum `TeksERP-Backend-Boot` ve `TeksERP-DB-Backup` görevlerini kurar, ezmez; `yedekle.ps1` `.part` → `pg_restore --list` → `.dump`, saklama başarıdan sonra.
 - [ÇEKİRDEK] Şifreleme niyeti tek kaynak `.env` `BACKUP_KEY_DIR` (yedek klasörü dışı); niyet varken düz döküm dışarı çıkmaz; parola yalnız TTY/`X-Backup-Password`.
@@ -219,7 +220,7 @@ Backend: `test_yedek_barindirma`, `test_migration_super_olmayan`, `test_db_rol_g
 
 Native (`cd Teks-Erp/native && npm test`): `tekserp-hizmet/tests/env_dosyasi_vektorleri.rs` · `tekserp-guncelleyici/tests/ayar_env.rs` · `tekserp-guncelleyici/tests/systemd_birimi.rs` · `tekserp-guncelleyici/tests/izin_umask.rs` · `tekserp-guncelleyici/tests/on_duyuru.rs` · `tekserp-guncelleyici/tests/linux_paket.rs` · `tekserp-guncelleyici/tests/sema_hizasi.rs` · `tekserp-guncelleyici/src/platform/linux/sys.rs` · `tekserp-guncelleyici/src/platform/linux/docker.rs` · `tekserp-guncelleyici/tests/docker_gercek.rs` · `tekserp-guncelleyici/tests/tani_paketi.rs` · `tekserp-guncelleyici/tests/self_update.rs` · `tekserp-guncelleyici/tests/disk_dolu.rs` · `tekserp-guncelleyici/tests/aday_sorgu_sikligi.rs`
 
-Kök: `test_bulut_kenar.mjs` · `test_bulut_yedek_cek.mjs`
+Kök: `test_bulut_kenar.mjs` · `test_bulut_yedek_cek.mjs` · `test_pg_ornegi.mjs` (`--sonda`) · `test_pg_ayar.mjs` (`--sonda`)
 
 İstemci: `GuncellemeDugmesi.test.tsx`⚠️, `surum-notlari.test.ts`⚠️, `version-compare.test.ts`⚠️, `clients-utils.test.ts`, `update-check-interval.test.ts`, `update-feed-url.test.ts`, `update-gate-escape.test.ts`, `UpdateActions.test.tsx`, `appUpdate.service.test.ts`, `clientPolicy.service.test.ts`, `surumNotlari.test.ts`
 
