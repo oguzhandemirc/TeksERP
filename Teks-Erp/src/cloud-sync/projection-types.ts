@@ -178,7 +178,7 @@ export function rootFromSql(p: RecordProjection): string {
 }
 
 /** Tel `urunId` = konu kartı: ürün (`itemId`) ya da hizmet kartı (`serviceItemId`, aynı UUID uzayı — bulut `urun`a bağlar). */
-export const subjectIdCol = (table: string): ColumnSpec => ({
-  ...col("urunId", "itemId"),
-  resolvedBy: { helper: "cloud-sync/derived subjectIdDerived: itemId ?? serviceItemId (hizmet kartı ayrımı 2026-11-08)", reads: [table] },
+export const subjectIdResolver = (table: string): NonNullable<ColumnSpec["resolvedBy"]> => ({
+  helper: "cloud-sync/derived subjectIdDerived: itemId ?? serviceItemId (hizmet kartı ayrımı 2026-11-08)",
+  reads: [table],
 });
