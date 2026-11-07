@@ -32,6 +32,7 @@ import { applyYarnMovementTx, yarnService } from "../src/services/yarn.service";
 import { yarnLotService } from "../src/services/yarn-lot.service";
 import { YARN_LOT_QUALITY_GATED_KINDS } from "../src/services/helpers/yarn-lot.helper";
 import { AppError } from "../src/utils/app-error";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -83,7 +84,7 @@ function statik(): void {
   const kapi = yarnSvc.indexOf("await assertLotQualityReleasedTx(tx, input.lotId, input.kind)");
   const yazim = yarnSvc.indexOf("tx.yarnMovement.create({");
   check("§0d kapı TEK YAZARIN içinde, kimlikten SONRA ve yazımdan ÖNCE (yeni çağıran kapısız doğamaz)", kimlik > 0 && kapi > kimlik && yazim > kapi, `${kimlik}<${kapi}<${yazim}`);
-  const sys = readFileSync(path.join(ROOT, "src/services/system-setting.service.ts"), "utf8");
+  const sys = ayarServisMetni();
   const govde = sys.slice(sys.indexOf("export async function resolveYarnQualityHoldEnabled"), sys.indexOf("export async function resolveYarnQualityHoldEnabled") + 400);
   check("§0e resolver = ticaret ∧ iplik ∧ bayrak (modül kapalıyken kapı KOŞMAZ)", /readTicaretEnabled\(tx\)/.test(govde) && /readIplikEnabled\(tx\)/.test(govde) && /readGoodsReceiptYarnQualityHoldEnabled\(tx\)/.test(govde));
 }

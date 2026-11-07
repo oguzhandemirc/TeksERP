@@ -38,6 +38,7 @@ import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import prisma from "../src/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 const KOK = join(__dirname, "..");
 const ORTA = join(KOK, "src/middlewares/report.middleware.ts");
@@ -187,7 +188,7 @@ async function main(): Promise<void> {
     /SUPERADMIN_ONLY_SETTING_KEYS\.has\(key\)/.test(adminRota) && /code: "MODULE_KEY_RESERVED"/.test(adminRota));
 
   // ── §5 BİLİNMEYEN ANAHTAR — YAZMADA 400, OKUMADA YOK SAY ─────────────────
-  const servis = readFileSync(join(KOK, "src/services/system-setting.service.ts"), "utf8");
+  const servis = ayarServisMetni();
   check("§5a yazmada tanınmayan anahtar 400 `REPORT_KEY_UNKNOWN` ve ADIYLA",
     /code: "REPORT_KEY_UNKNOWN", keys: bilinmeyen/.test(servis) && /REPORT_BY_KEY\.has\(k\)/.test(servis));
   check("§5b `null` YAZILAMAZ (null yalnız okuma tarafının \"ölçülemedi\" işareti)",

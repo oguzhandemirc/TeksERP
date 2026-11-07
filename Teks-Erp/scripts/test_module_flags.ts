@@ -57,6 +57,7 @@ import {
   MODULE_LABELS,
 } from "../src/constants/module-flags";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { ayarServisEtiketi, ayarServisMetni, ayarServisTanimDosyasi, ayarServisUyeMetni } from "./lib/ayar-servis-kaynak";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import {
   middlewareGovdeAnalizi,
@@ -78,7 +79,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const KOK = path.resolve(__dirname, "..");
 const SRC = path.join(KOK, "src");
-const SERVIS = path.join(SRC, "services/system-setting.service.ts");
+// Ayar servisi 2026-11-08 cephe + alan modüllerine bölündü: metin AİLEDEN okunur (`lib/ayar-servis-kaynak`).
 const MW = path.join(SRC, "middlewares/module.middleware.ts");
 const ADMIN_ROUTES = path.join(SRC, "routes/admin.routes.ts");
 /**
@@ -117,7 +118,7 @@ const MIGRASYON_DISI: Record<string, string> = {
 };
 
 function servisMetni(): string {
-  return yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
+  return yorumlariSok(ayarServisMetni());
 }
 
 /** `this.set(SETTING_KEYS.X, input.Y, "AÇIKLAMA", userId)` → { camelCase: açıklama }. */
@@ -382,7 +383,8 @@ function main(): void {
     .filter((f) =>
       /\breadFinanceYarnOutOnInvoiceEnabled\s*\(/.test(yorumlariSok(fs.readFileSync(f, "utf8"))),
     )
-    .map((f) => path.relative(SRC, f).split(path.sep).join("/"));
+    .map((f) => ayarServisEtiketi(path.relative(SRC, f).split(path.sep).join("/")))
+    .filter((r, i, a) => a.indexOf(r) === i);
   check(
     "§8 ⭐ Köprü alt bayrağı YALNIZ `resolveYarnOutOnInvoiceEnabled` içinde okunuyor",
     altBayrakCagiranlar.length === 1 &&
@@ -458,7 +460,7 @@ function main(): void {
     readConsumableStockEnabled: { resolver: "resolveConsumableStockEnabled", ebeveyn: "ticaret" },
   };
 
-  const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
+  const servisKodu = yorumlariSok(ayarServisMetni());
   /** §8c tamlık taraması — yorumlar SÖKÜLMÜŞ hâl (yorumdaki örnek imza sayılmasın). */
   const servisKaynagiHam = servisKodu;
 
@@ -495,7 +497,8 @@ function main(): void {
   for (const [hamOkuyucu, { resolver, ebeveyn }] of Object.entries(RESOLVER_ALTI)) {
     const cagiranlar = srcDosyalari
       .filter((f) => new RegExp(`\\b${hamOkuyucu}\\s*\\(`).test(yorumlariSok(fs.readFileSync(f, "utf8"))))
-      .map((f) => path.relative(SRC, f).split(path.sep).join("/"));
+      .map((f) => ayarServisEtiketi(path.relative(SRC, f).split(path.sep).join("/")))
+      .filter((r, i, a) => a.indexOf(r) === i);
     check(
       `§8b ⭐ ${hamOkuyucu} YALNIZ system-setting.service içinde okunuyor (${ebeveyn} altı)`,
       cagiranlar.length === 1 && cagiranlar[0] === "services/system-setting.service.ts",
@@ -504,7 +507,7 @@ function main(): void {
     );
     // Resolver GERÇEKTEN modül şalterini soruyor mu? "resolve" adını taşıyıp
     // ham değeri döndüren bir gövde §8b'yi vakumen yeşile düşürürdü.
-    const govde = middlewareGovdeAnalizi(SERVIS, resolver);
+    const govde = middlewareGovdeAnalizi(ayarServisTanimDosyasi(resolver), resolver);
     check(
       `§8b ${resolver} tanımlı ve modül şalterini okuyor`,
       // Modül şalterleri: üretim · ticaret · muhasebe (`REGIME_GATES`) + tezgah (lisans tavanlı modül okuyucusu).
@@ -524,9 +527,9 @@ function main(): void {
   // kullanıcı bayrağı açar ve toggle kapalı görünmeye devam ederdi.
   // Gövde bir sonraki sınıf üyesine kadar — sabit karakter penceresi (12000) gövde
   // uzadıkça son okuyucuları dışarıda bırakıp yanlış kırmızı veriyordu (D4-E1).
-  const ffBas = servisKodu.indexOf("async getFeatureFlags(");
-  const ffSon = servisKodu.indexOf("\n  async ", ffBas + 1);
-  const ffGovde = servisKodu.slice(ffBas, ffSon > ffBas ? ffSon : undefined);
+  // 2026-11-08: gövde cepheden alan modülüne taşındı; AST ile asıl gövde (delegasyon değil) okunur.
+  const ffGovde = yorumlariSok(ayarServisUyeMetni("getFeatureFlags"));
+  const ffBas = ffGovde ? 0 : -1;
   check("§8b körlük zemini: getFeatureFlags gövdesi bulundu", ffBas >= 0 && ffGovde.includes("cacheClient"));
   for (const [hamOkuyucu, { resolver }] of Object.entries(RESOLVER_ALTI)) {
     check(
@@ -546,7 +549,7 @@ function main(): void {
   // `read*Enabled(` çağırmaz.
   for (const alan of flagKeys) {
     const okuyucu = `read${alan.charAt(0).toUpperCase()}${alan.slice(1)}`;
-    const analiz = middlewareGovdeAnalizi(SERVIS, okuyucu);
+    const analiz = middlewareGovdeAnalizi(ayarServisTanimDosyasi(okuyucu), okuyucu);
     check(`§9a Körlük zemini: ${okuyucu} tanımlı`, analiz.bulundu);
     if (!analiz.bulundu) continue;
     const cagrilar = [...new Set(analiz.okuyucular.map((o) => o.ad))];

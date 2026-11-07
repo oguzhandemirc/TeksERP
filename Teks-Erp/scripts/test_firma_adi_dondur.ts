@@ -26,6 +26,7 @@ import { DEFAULT_COMPANY_NAME, readCompanyName } from "../src/services/system-se
 import { buildRollLabelHtml } from "../src/services/helpers/label-html.helper";
 import { resolveTravelerCompanyName } from "../src/services/document-render/traveler-card-raw";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -63,7 +64,7 @@ function section1(): void {
       /ON CONFLICT \("key"\) DO NOTHING/.test(sql),
   );
   check("§1c düz now() (AT TIME ZONE yok)", !/AT TIME ZONE/i.test(sql) && /now\(\), now\(\)/.test(sql));
-  const servis = fs.readFileSync(path.join(KOK, "src/services/system-setting.service.ts"), "utf8");
+  const servis = ayarServisMetni();
   const m = servis.match(/SETTING_KEYS\.COMPANY_NAME,\s*trimmed \|\| DEFAULT_COMPANY_NAME,\s*"([^"]+)"/);
   const acik = m?.[1] ?? "";
   check("§1d description yazma dalıyla birebir", acik.length > 0 && sql.includes(acik.replace(/'/g, "''")), acik || "yazma dalı bulunamadı");

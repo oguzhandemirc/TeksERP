@@ -1,6 +1,7 @@
 ---
 paths:
   - "{Teks-Erp,Electron,mobil}/src/**/*{feature-flag,featureFlag,module-flag,module-profile,module.middleware,system-setting,SystemSetting,flag-modules,screen-catalog,settings-surface}*"
+  - "Teks-Erp/src/services/system-setting/**"
   - "{Teks-Erp,Electron,mobil}/src/**/GeneralSettings/**"
 ---
 

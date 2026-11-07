@@ -27,6 +27,7 @@ import { totpCodeForStep, totpStep } from "../src/services/totp.service";
 import { SETTING_KEYS, invalidateFeatureFlagsCache, systemSettingService } from "../src/services/system-setting.service";
 import { setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 const SONDA = process.argv.find((a) => a.startsWith("--sonda="))?.slice("--sonda=".length) ?? null;
 const KOK = resolve(__dirname, "..");
@@ -183,7 +184,7 @@ function statik() {
     const t = g.indexOf("this.issueToken(");
     check(`§5a ${ad}: assertSecondFactor(…, "${via}") issueToken'dan ÖNCE`, g !== "" && k >= 0 && t > k, `kapı=${k} token=${t}`);
   }
-  const svc = readFileSync(resolve(KOK, "src/services/system-setting.service.ts"), "utf8");
+  const svc = ayarServisMetni();
   check("§5b bayrak okuyucusu varsayılan false (asBoolean, yok=false)",
     /readShortCredentialTotpRequired[\s\S]{0,400}return asBoolean\(setting\?\.value\);/.test(svc));
 }

@@ -48,6 +48,7 @@ import {
 } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ayarServisDosyasiMi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, m: string, d = "") => {
@@ -571,7 +572,13 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
     // ── E. EN EŞİĞİ FABRİKA AYARI (D4-E1) ──
     console.log("E) En eşiği/kontrolü fabrika ayarı");
     // E7 (statik, davranış bölümlerinden ÖNCE — kırmızısı onlara bağlı kalmasın): AST — sabit `src/`de yalnız tanımında ve ayar okuyucusunda okunur.
-    const { scanned, refs } = identifierRefs("TAMBUR_PLAN_WIDTH_TOLERANCE_CM");
+    const { scanned, refs: refsHam } = identifierRefs("TAMBUR_PLAN_WIDTH_TOLERANCE_CM");
+    // Ayar servisi ailesi (cephe + services/system-setting/) TEK dosya sayılır (2026-11-08 bölmesi).
+    const refs = new Map<string, string[]>();
+    for (const [file, owners] of refsHam) {
+      const k = ayarServisDosyasiMi(file) ? path.join("services", "system-setting.service.ts") : file;
+      refs.set(k, [...new Set([...(refs.get(k) ?? []), ...owners])]);
+    }
     ok(scanned > 300, "E7 körlük zemini: src/ taraması > 300 dosya", `n=${scanned}`);
     const allowed: Record<string, Set<string>> = {
       [path.join("constants", "tambur-plan-gate.ts")]: new Set(["(modül)"]),

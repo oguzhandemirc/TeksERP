@@ -19,7 +19,7 @@
 // Çıktı değer basmaz (isim/vergi no/sır yok) — yalnız tablo adı, anahtar adı ve sayı.
 // =============================================================================
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -82,7 +82,10 @@ function kurulumDesenleri() {
 /** Modül/bayrak/özellik DB anahtarları — kodun tek kaynaklarından (bkz. bayrakAnahtarlari). */
 function bayrakKumesi() {
   const oku = (y) => readFileSync(join(KOK, "Teks-Erp/src", y), "utf8");
-  return bayrakAnahtarlari({ servis: oku("services/system-setting.service.ts"), kapsamlar: oku("constants/settings-scopes.ts"), moduller: oku("constants/module-flags.ts") });
+  // Ayar servisi 2026-11-08'den beri cephe + `services/system-setting/*.ts` (aile birlikte okunur).
+  const aile = readdirSync(join(KOK, "Teks-Erp/src/services/system-setting")).filter((f) => f.endsWith(".ts")).sort();
+  const servis = [oku("services/system-setting.service.ts"), ...aile.map((f) => oku(`services/system-setting/${f}`))].join("\n");
+  return bayrakAnahtarlari({ servis, kapsamlar: oku("constants/settings-scopes.ts"), moduller: oku("constants/module-flags.ts") });
 }
 const kurulumMu = (desenler, key) => desenler.some((d) => (d.endsWith("%") ? key.startsWith(d.slice(0, -1)) : key === d));
 

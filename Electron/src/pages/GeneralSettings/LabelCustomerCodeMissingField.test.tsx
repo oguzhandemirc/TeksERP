@@ -1,7 +1,6 @@
 // D4-F3: `label.customerCodeMissing` panel satırı — varsayılan BLOCK (backend ile birebir),
 // ROLL_BARCODE seçilip kaydedilince PATCH yalnız `labelCustomerCodeMissing` taşır.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { settingsServiceText } from "@/test/helpers/settings-service-source";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
@@ -29,7 +28,7 @@ beforeEach(() => {
 
 describe("Müşteri barkodu yoksa (label.customerCodeMissing)", () => {
   it("varsayılan backend DEFAULT_LABEL_CUSTOMER_CODE_MISSING ile aynı", () => {
-    const src = readFileSync(resolve(__dirname, "../../../../Teks-Erp/src/services/system-setting.service.ts"), "utf8");
+    const src = settingsServiceText();
     const m = src.match(/DEFAULT_LABEL_CUSTOMER_CODE_MISSING: LabelCustomerCodeMissing = "([A-Z_]+)"/);
     expect(m?.[1]).toBe(DEFAULT_LABEL_CUSTOMER_CODE_MISSING);
   });

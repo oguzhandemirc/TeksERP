@@ -50,6 +50,7 @@ import {
 import { listReadyWorkRolls } from "../src/services/ready-work-rolls.service";
 import { ShippingController } from "../src/controllers/shipping.controller";
 import { AppError } from "../src/utils/app-error";
+import { ayarServisDosyasiMi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -128,7 +129,7 @@ export function astViolations(): string[] {
         if (isFn && PREDICATE_NAME_RE.test(n.name.text)) out.push(`${rel}: tanım ${n.name.text}`);
       }
       // (b) kural okuyucusunu helper ve kendi dosyası dışında çağırmak.
-      if (ts.isCallExpression(n) && rel !== "src/services/system-setting.service.ts") {
+      if (ts.isCallExpression(n) && !ayarServisDosyasiMi(rel)) { // kendi dosyası = ayar servisi ailesi (cephe + system-setting/)
         const callee = ts.isIdentifier(n.expression) ? n.expression.text : ts.isPropertyAccessExpression(n.expression) ? n.expression.name.text : "";
         if (SETTING_READERS.has(callee)) out.push(`${rel}: çağrı ${callee}`);
       }

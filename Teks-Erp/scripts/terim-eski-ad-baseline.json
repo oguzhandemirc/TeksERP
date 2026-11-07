@@ -8,7 +8,7 @@
     "Teks-Erp/src/constants/role-template-catalog.ts": {
       "isEmri": 1
     },
-    "Teks-Erp/src/services/system-setting.service.ts": {
+    "Teks-Erp/src/services/system-setting/feature-flags-write.ts": {
       "dokumaIsi": 2,
       "isEmri": 1
     }

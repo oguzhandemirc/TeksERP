@@ -70,6 +70,7 @@ import { alarmClockStart, alarmEnableBlocked, alarmShiftEligible, alarmShiftNoti
 import { getAlarmShiftStatus, getLoomFloor } from "../src/services/loom-floor.service";
 import { AppError } from "../src/utils/app-error";
 import { testActorId } from "./fixture-test-user";
+import { ayarServisDosyasiMi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -618,7 +619,7 @@ async function sebepsizAnahtar({ at, simdi, tezgah }: KipCtx): Promise<void> {
 
   // §10d etkin hedef TEK resolver'dan: ham süre okuyucusu üretim kaynağında yalnız ayar servisinde çağrılır.
   const ham2 = tsDosyalari(path.join(__dirname, "..", "src")).flatMap((f) => {
-    if (f.endsWith("system-setting.service.ts")) return [];
+    if (ayarServisDosyasiMi(f)) return []; // ayar servisi ailesi (cephe + services/system-setting/)
     return /\breadTezgahAlarmUnclassifiedTargetMinutes\s*\(/.test(fs.readFileSync(f, "utf8")) ? [path.basename(f)] : [];
   });
   check("§10d motor ve salon sebepsiz hedefi `resolveTezgahAlarmUnclassifiedTarget`ten okur (ham süre okuyucusu yalnız ayar servisinde)", ham2.length === 0, ham2.join(","));

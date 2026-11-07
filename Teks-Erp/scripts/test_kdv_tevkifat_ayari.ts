@@ -28,6 +28,7 @@ import { computeInvoiceTotals, ensureCariAccountTx } from "../src/services/helpe
 import { cariService } from "../src/services/cari.service";
 import { testActorId } from "./fixture-test-user";
 import { checkConstraintMessage, extractCheckConstraint } from "../src/middlewares/error.middleware";
+import { ayarServisEtiketi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -50,7 +51,8 @@ async function errOf(fn: () => Promise<unknown>): Promise<{ status: number; code
 }
 
 const SRC = path.resolve(__dirname, "../src");
-const rel = (f: string) => path.relative(SRC, f).split(path.sep).join("/");
+// Ayar servisi ailesi (cephe + services/system-setting/) tek etiket (2026-11-08 bölmesi).
+const rel = (f: string) => ayarServisEtiketi(path.relative(SRC, f).split(path.sep).join("/"));
 const RESOLVER = "services/helpers/invoice-tax-defaults.helper.ts";
 const SETTING_READERS = new Set([
   "readFinanceDefaultVatRate",

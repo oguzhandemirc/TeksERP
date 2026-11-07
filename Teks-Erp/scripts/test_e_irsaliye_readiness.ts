@@ -28,6 +28,7 @@ import {
 } from "../src/services/e-irsaliye/e-irsaliye-settings";
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { git } from "./lib/git";
+import { ayarServisDosyasiMi, ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -119,7 +120,7 @@ async function main() {
   check("§5d Zod: kısmi künye kabul, eksik alan boş metin", z4.success && z4.data.companyLegalIdentity?.unvan === "");
   const v = validateEIrsaliyeConfigInput({ adapter: "logo", yururlukTarihi: null });
   check("§5e servis doğrulayıcısı Zod'u atlayan çağrıda da reddeder (`yok`a düşürmez)", !v.ok && v.message.includes("Bağdaştırıcı tanınmıyor"));
-  const svc = readFileSync(path.resolve(__dirname, "../src/services/system-setting.service.ts"), "utf8");
+  const svc = ayarServisMetni();
   const branch = svc.slice(svc.indexOf('hasOwnProperty.call(input, "eIrsaliyeConfig")'), svc.indexOf("SETTING_KEYS.EIRSALIYE_CONFIG,"));
   check("§5f servisin yazma dalı doğrulayıcıyı çağırıp 400 atar", branch.includes("validateEIrsaliyeConfigInput(") && branch.includes("AppError.badRequest"));
 
@@ -143,7 +144,7 @@ async function main() {
   check("§7a bağdaştırıcı tanıma yalnız helper'da", adapterSet.length === 1 && adapterSet[0] === HELPER, adapterSet.join(", "));
   // Ayarın ham okuyucusu yalnız yük (getFeatureFlags) ve helper'da; başka yer okursa kendi hazırlık cevabını kuruyordur.
   const SERVICE = "Teks-Erp/src/services/system-setting.service.ts";
-  const readers = grep("readEIrsaliyeConfig\\(").filter((f) => f !== SERVICE);
+  const readers = grep("readEIrsaliyeConfig\\(").filter((f) => f !== SERVICE && !ayarServisDosyasiMi(f));
   check("§7b e-İrsaliye ayarının ham okuyucusu helper dışında çağrılmıyor", readers.length === 1 && readers[0] === HELPER, readers.join(", "));
   check("§7c tarayıcı boşa düşmedi (helper bulundu)", adapterSet.includes(HELPER));
 

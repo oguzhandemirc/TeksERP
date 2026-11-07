@@ -18,6 +18,7 @@ import { FLAG_KEY_SCOPE } from "../src/constants/settings-scopes";
 import { HIZMET_AYAR_PAKETI } from "./hizmet-ayar-paketi";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ayarServisEtiketi } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -88,7 +89,8 @@ async function main(): Promise<void> {
   const allowed = ["services/system-setting.service.ts", "routes/feature-flag.routes.ts", "constants/settings-scopes.ts"];
   const sites = walk(SRC)
     .filter((f) => { const t = readFileSync(f, "utf8"); return t.includes(FIELD) || t.includes("MACHINE_STOP_OPEN_WARNING_ENABLED") || t.includes("makineDurusAcikUyarisi"); })
-    .map((f) => relative(SRC, f));
+    .map((f) => ayarServisEtiketi(relative(SRC, f))) // ayar servisi ailesi tek etiket (2026-11-08 bölmesi)
+    .filter((r, i, a) => a.indexOf(r) === i);
   check("§6 ⭐ ayar yalnız ayar servisi + Zod + kapsamda (sunucu kapısı yok, K2)", sites.every((s) => allowed.includes(s)) && sites.length === allowed.length, sites.join(" | "));
 }
 

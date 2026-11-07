@@ -15,6 +15,7 @@ import {
   resolveStepWorkInstructions,
   resolveStepDyeColor,
 } from "../src/services/helpers/fason-work-instructions.helper";
+import { AYAR_SERVIS_CEPHE, ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -725,7 +726,7 @@ function testElectronMirror(): void {
 function testPreviewSchemaParity(): void {
   console.log("\n── 17) Önizleme şeması ↔ kayıt kapısı hizası ──");
   const CTRL = path.resolve(__dirname, "../src/controllers/printed-document.controller.ts");
-  const SETTINGS = path.resolve(__dirname, "../src/services/system-setting.service.ts");
+  const SETTINGS = AYAR_SERVIS_CEPHE; // metin ailenin tamamından (`lib/ayar-servis-kaynak`)
   if (!fs.existsSync(CTRL) || !fs.existsSync(SETTINGS)) {
     console.log("  ⚠️  kaynak bulunamadı, hiza kontrolü atlandı");
     return;
@@ -737,7 +738,7 @@ function testPreviewSchemaParity(): void {
 
   // Kayıt kapısındaki (sanitizeDocumentsConfig) DocumentConfig alan listesi.
   const typeBlock = /export interface DocumentConfig \{([\s\S]*?)\n\}/.exec(
-    fs.readFileSync(SETTINGS, "utf8"),
+    ayarServisMetni(),
   );
   check("DocumentConfig tipi okunabildi", typeBlock !== null);
   if (!typeBlock) return;

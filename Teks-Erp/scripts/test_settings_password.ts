@@ -134,6 +134,7 @@ import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 import { atlamaDefteri } from "./lib/atlama";
+import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 
 const SRC = path.join(__dirname, "..", "src");
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4112";
@@ -799,7 +800,7 @@ async function main(): Promise<void> {
   );
 
   const ayarKaynak = yorumlariSok(
-    fs.readFileSync(path.join(SRC, "services", "system-setting.service.ts"), "utf8"),
+    ayarServisMetni(),
   );
   const listeIdx = ayarKaynak.indexOf("async list(");
   const listeGovde = listeIdx > -1 ? ayarKaynak.slice(listeIdx, listeIdx + 600) : "";
