@@ -65,6 +65,10 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     ozet: z.strictObject({
       bitmisMiktar: Num, bitmisAdet: Num, hamMiktar: Num, hamAdet: Num, yariMamulMiktar: Num, yariMamulAdet: Num,
       yasliMiktar: Num, oluMiktar: Num, oluStokGun: Num, yassizAdet: Num, yassizMiktar: Num,
+      // F1: emanet açıkken yukarısı BİZİM stok, müşteri malı bu satırda (isteğe bağlı; kapalıyken alan yok → özet aynı).
+      emanet: z.strictObject({
+        bitmisMiktar: Num, bitmisAdet: Num, hamMiktar: Num, hamAdet: Num, yariMamulMiktar: Num, yariMamulAdet: Num,
+      }).optional(),
     }),
     yasKovalari: z.array(z.strictObject({ anahtar: Str, etiket: Str, adet: Num, miktar: Num, yuzde: Num })),
     urunler: z.array(z.strictObject({ anahtar: Str, etiket: Str, adet: Num, miktar: Num, enEskiGun: Num.nullable(), siparissizMiktar: Num })),
@@ -159,6 +163,14 @@ async function buildStock(): Promise<BuiltSnapshot> {
       bitmisMiktar: s.finishedQty, bitmisAdet: s.finishedCount, hamMiktar: s.rawQty, hamAdet: s.rawCount,
       yariMamulMiktar: s.semiQty, yariMamulAdet: s.semiCount, yasliMiktar: s.agedQty, oluMiktar: s.deadQty,
       oluStokGun: s.deadStockDays, yassizAdet: s.unagedCount, yassizMiktar: s.unagedQty,
+      ...(s.consigned
+        ? {
+            emanet: {
+              bitmisMiktar: s.consigned.finishedQty, bitmisAdet: s.consigned.finishedCount, hamMiktar: s.consigned.rawQty,
+              hamAdet: s.consigned.rawCount, yariMamulMiktar: s.consigned.semiQty, yariMamulAdet: s.consigned.semiCount,
+            },
+          }
+        : {}),
     },
     yasKovalari: r.byAge.map((a) => ({ anahtar: a.key, etiket: a.label, adet: a.count, miktar: a.qty, yuzde: a.pct })),
     urunler: r.byItem.map((i) => ({ anahtar: i.key, etiket: i.label, adet: i.count, miktar: i.qty, enEskiGun: i.oldestDays, siparissizMiktar: i.uncoveredQty })),

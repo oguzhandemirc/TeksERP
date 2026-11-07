@@ -60,6 +60,7 @@ import {
   readKk1DuplicateGuardEnabled,
   readQualityGradeRequiredEnabled,
   resolveCancelReasonRequired,
+  readEmanetEnabled,
 } from "./system-setting.service";
 import {
   parseQueryParams,
@@ -219,6 +220,7 @@ import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
+import { CONSIGNED_WHERE, ownershipScopeWhere, readOwnershipScope } from "./helpers/stock-ownership.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -230,6 +232,8 @@ export interface RollStats {
   byStatus: Record<string, number>;
   /** qualityGrade kodu → adet (A1, FIRE, 1.KALITE, …). */
   byQuality: Record<string, number>;
+  /** Emanet kırılımı (F1) — toplamın müşteri malı kısmı; yalnız `emanet.enabled` açıkken döner (kapalıyken yanıt bayt-aynı). */
+  consigned?: { count: number; qty: number; weight: number };
 }
 
 /** Fasonda özet şeridi — GET /api/rolls/subcontractor-summary cevabı. */
@@ -1814,6 +1818,13 @@ export class InventoryService {
     if (ownerCustomerIdFilter) {
       where.ownerCustomerId = ownerCustomerIdFilter;
     }
+    // MÜLKİYET (F1) — `filter[mulkiyet]=ALL|OWN|CONSIGNED`; ALL/boş = bugünkü şekil, tanınmayan 400.
+    // AND'e eklenir: sahip süzgeciyle kesişir, onu ezmez. Modülden bağımsız (sahip süzgeci emsali).
+    const ownershipWhere = ownershipScopeWhere(readOwnershipScope(f["mulkiyet"]));
+    delete where.mulkiyet;
+    if (ownershipWhere) {
+      where.AND = [...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []), ownershipWhere];
+    }
 
     const processingStatus = f["processingStatus"] as string | undefined;
     delete where.processingStatus;
@@ -2570,12 +2581,23 @@ export class InventoryService {
     // status + groupBy qualityGrade) → 500k satırda 3 kez tarama. Bunu tek
     // geçişe indiriyoruz (CLAUDE.md DB perf kuralı). Grup sayısı küçük
     // (status × qualityGrade ≈ on'lar) → aşağıdaki JS reduce maliyetsiz.
-    const grouped = await prisma.roll.groupBy({
-      where,
-      by: ["status", "qualityGrade"],
-      _count: { _all: true },
-      _sum: { currentQty: true, weightKg: true },
-    });
+    // Emanet kırılımı aynı where ∧ CONSIGNED_WHERE — liste/şerit ile tek where (filtre-liste.md).
+    const emanetOn = await readEmanetEnabled();
+    const [grouped, consignedAgg] = await Promise.all([
+      prisma.roll.groupBy({
+        where,
+        by: ["status", "qualityGrade"],
+        _count: { _all: true },
+        _sum: { currentQty: true, weightKg: true },
+      }),
+      emanetOn
+        ? prisma.roll.aggregate({
+            where: { AND: [where, CONSIGNED_WHERE] },
+            _count: { _all: true },
+            _sum: { currentQty: true, weightKg: true },
+          })
+        : Promise.resolve(null),
+    ]);
 
     let totalCount = 0;
     // Decimal toplamları Prisma.Decimal ile biriktir — JS float aritmetiği
@@ -2604,6 +2626,15 @@ export class InventoryService {
         totalWeight: Number(totalWeight),
         byStatus,
         byQuality,
+        ...(consignedAgg
+          ? {
+              consigned: {
+                count: consignedAgg._count._all,
+                qty: Number(consignedAgg._sum.currentQty ?? 0),
+                weight: Number(consignedAgg._sum.weightKg ?? 0),
+              },
+            }
+          : {}),
       },
     };
   }

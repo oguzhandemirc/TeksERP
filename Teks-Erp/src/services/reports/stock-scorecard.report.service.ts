@@ -42,6 +42,8 @@ import prisma from "../../lib/prisma";
 import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { pctOf, round1 } from "./_breakdown";
+import { readEmanetEnabled } from "../system-setting.service";
+import { consignedRollSql, splitByOwnership } from "../helpers/stock-ownership.helper";
 
 /** Yaş kovaları (gün) — üst sınır dahil değil; sonuncusu açık uçlu. */
 const AGE_BUCKETS = [
@@ -97,6 +99,12 @@ export interface StockScorecard {
     /** Yaş çıpası olmayan toplar — kovalara dağıtılmadı, metrajı toplama dahil. */
     unagedCount: number;
     unagedQty: number;
+    /**
+     * EMANET satırı (F1) — müşteri malı; yalnız `emanet.enabled` açıkken döner. Açıkken yukarıdaki BÜTÜN
+     * alanlar (kovalar, kumaş, en eski dahil) BİZİM stoktur: emanet ölü/yaşlı stok sayılmaz.
+     * Fiziksel raf toplamı = bizim + emanet.
+     */
+    consigned?: StockConsignedRow;
   };
   byAge: StockAgeRow[];
   byItem: StockItemRow[];
@@ -109,6 +117,15 @@ export interface StockScorecard {
     qty: number;
     days: number;
   }>;
+}
+
+export interface StockConsignedRow {
+  finishedQty: number;
+  finishedCount: number;
+  rawQty: number;
+  rawCount: number;
+  semiQty: number;
+  semiCount: number;
 }
 
 /** Rafta duran tek top — Stok & Ölü Stok'un ve Kalem Bazında sekmesinin ORTAK girdisi. */
@@ -126,6 +143,8 @@ export interface StockCell {
   entrySource: string;
   qty: number;
   days: number | null;
+  /** Müşteri malı mı (`consignedRollSql` — mülkiyet helper'ının SQL ikizi). */
+  consigned: boolean;
 }
 
 const FINISHED = ["WAREHOUSE", "A1_STOCK"];
@@ -153,7 +172,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
     Array<{
       rollId: string; barcode: string | null; itemId: string; itemName: string;
       colorId: string | null; colorName: string | null; width: number | null; foldType: string | null;
-      status: string; entrySource: string; qty: number; days: number | null;
+      status: string; entrySource: string; qty: number; days: number | null; consigned: boolean;
     }>
   >(Prisma.sql`
     SELECT
@@ -165,6 +184,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
       r.status::text AS "status",
       r."entrySource"::text AS "entrySource",
       r."currentQty"::float AS "qty",
+      ${consignedRollSql("r")} AS "consigned",
       -- tz-ok: raftaki bekleme YAŞI iki an arası mutlak farktır, takvim günü değil.
       CASE WHEN r."statusChangedAt" IS NULL THEN NULL
            -- tz-ok: raf yaşı mutlak farktır (yukarıdaki satırın devamı).
@@ -189,12 +209,36 @@ export async function loadShelfCells(): Promise<StockCell[]> {
     entrySource: r.entrySource,
     qty: Number(r.qty),
     days: r.days === null ? null : Number(r.days),
+    consigned: r.consigned === true,
   }));
 }
 
+/**
+ * Raf hücrelerini bizim ↔ emanet diye böler (Stok & Ölü Stok ve Kalem Bazında AYNI bölmeyi kullanır).
+ * Emanet kapalıyken bölme yok → iki rapor bugünkü çıktıyı bayt-aynı verir.
+ */
+export async function loadShelfCellsByOwnership(): Promise<{ own: StockCell[]; consigned: StockCell[]; emanetOn: boolean }> {
+  const [cells, emanetOn] = await Promise.all([loadShelfCells(), readEmanetEnabled()]);
+  return { ...splitByOwnership(cells, emanetOn, (c) => c.consigned), emanetOn };
+}
+
+const sumQty = (cells: readonly StockCell[]): number => round1(cells.reduce((a, c) => a + c.qty, 0));
+
+function consignedRow(cells: readonly StockCell[]): StockConsignedRow {
+  const f = cells.filter(isFinishedCell);
+  const r = cells.filter(isRawCell);
+  const s = cells.filter(isSemiCell);
+  return {
+    finishedQty: sumQty(f), finishedCount: f.length,
+    rawQty: sumQty(r), rawCount: r.length,
+    semiQty: sumQty(s), semiCount: s.length,
+  };
+}
+
 export async function getStockScorecard(): Promise<StockScorecard> {
-  const [cells, demandRows] = await Promise.all([
-    loadShelfCells(),
+  // Emanet açıkken karne BİZİM stoğun karnesidir (müşteri malı ölü stok değildir); emanet ayrı satır.
+  const [{ own: cells, consigned, emanetOn }, demandRows] = await Promise.all([
+    loadShelfCellsByOwnership(),
     // Açık talep — tanım `production-balance.service` ile BİREBİR.
     prisma.orderLine.findMany({
       // İptal edilmiş kalem talep sayılmaz → o spec "siparişsiz" (ölü stok
@@ -332,6 +376,7 @@ export async function getStockScorecard(): Promise<StockScorecard> {
       deadStockDays: DEAD_STOCK_DAYS,
       unagedCount,
       unagedQty: round1(unagedQty),
+      ...(emanetOn ? { consigned: consignedRow(consigned) } : {}),
     },
     byAge,
     byItem,

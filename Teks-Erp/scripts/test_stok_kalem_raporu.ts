@@ -9,7 +9,7 @@
 //   §3 Bitmiş = kumaş + en + renk + KAT (Roll.foldType) başına ayrı satır.
 //   §4 Kat adı katalogdan; katalogda olmayan kod aynen; katsız top `null`.
 //   §5 İKİNCİ TANIM YOK: servis statü/giriş kaynağı literali yazmaz, ortak
-//      yüklemleri (`isRawCell`/`isFinishedCell`/`loadShelfCells`) çağırır.
+//      yüklemleri (`isRawCell`/`isFinishedCell`/`loadShelfCellsByOwnership`) çağırır.
 // Negatif sonda (commit mesajında): servisteki `isRawCell` → statü==="STOCK"
 // süzgeci yapıldı → §1/§2 (yarı mamul sızdı) ve §5 kırmızı.
 // =============================================================================
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
     .replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   const literals = ["\"WAREHOUSE\"", "\"A1_STOCK\"", "\"STOCK\"", "SEMI_FINISHED", "K18_DEAD_STATUSES", "$queryRaw", "prisma."].filter((l) => src.includes(l));
   check("§5a servis statü/giriş kaynağı literali ve kendi sorgusu yazmıyor", literals.length === 0, literals.join(", "));
-  check("§5b ortak yüklemleri çağırıyor", ["loadShelfCells()", "filter(isRawCell)", "filter(isFinishedCell)"].every((s) => src.includes(s)));
+  check("§5b ortak yüklemleri çağırıyor", ["loadShelfCellsByOwnership()", "filter(isRawCell)", "filter(isFinishedCell)"].every((s) => src.includes(s)));
 }
 
 main()

@@ -14,9 +14,10 @@
 // KAT = `Roll.foldType` (topun KENDİ kolonu, katalog kodu). İş emrinin/reçetenin
 // katı PLANDIR; tamburda seçilen değer topa yazılır ve etikete basılan odur.
 // Görünen ad kat kataloğundan (`loadFoldTypeCatalog`); katalogda yoksa kod.
+// EMANET (F1): bölme karneyle AYNI (`loadShelfCellsByOwnership`); açıkken satırlar BİZİM stok, emanet `consignedTotals`.
 // =============================================================================
 
-import { isFinishedCell, isRawCell, loadShelfCells, type StockCell } from "./stock-scorecard.report.service";
+import { isFinishedCell, isRawCell, loadShelfCellsByOwnership, type StockCell } from "./stock-scorecard.report.service";
 import { loadFoldTypeCatalog } from "../helpers/fold-type";
 import { round1 } from "./_breakdown";
 
@@ -43,9 +44,24 @@ export interface StockKalemBitmisRow {
   qty: number;
 }
 
+export interface KalemTotals { hamCount: number; hamQty: number; bitmisCount: number; bitmisQty: number }
+
+function totalsOf(cells: readonly StockCell[]): KalemTotals {
+  const raw = cells.filter(isRawCell);
+  const finished = cells.filter(isFinishedCell);
+  return {
+    hamCount: raw.length,
+    hamQty: round1(raw.reduce((a, c) => a + c.qty, 0)),
+    bitmisCount: finished.length,
+    bitmisQty: round1(finished.reduce((a, c) => a + c.qty, 0)),
+  };
+}
+
 export interface StockKalem {
   /** Toplamlar TÜM kümeden (satır tavanından önce) — kutularla aynı rakam. */
-  totals: { hamCount: number; hamQty: number; bitmisCount: number; bitmisQty: number };
+  totals: KalemTotals;
+  /** Emanet (müşteri malı) toplamları — yalnız `emanet.enabled` açıkken; o zaman `totals` + satırlar bizim stok. */
+  consignedTotals?: KalemTotals;
   ham: StockKalemHamRow[];
   bitmis: StockKalemBitmisRow[];
 }
@@ -70,7 +86,7 @@ function group<R extends { count: number; qty: number }>(
 }
 
 export async function getStockKalem(): Promise<StockKalem> {
-  const [cells, foldCatalog] = await Promise.all([loadShelfCells(), loadFoldTypeCatalog()]);
+  const [{ own: cells, consigned, emanetOn }, foldCatalog] = await Promise.all([loadShelfCellsByOwnership(), loadFoldTypeCatalog()]);
   const raw = cells.filter(isRawCell);
   const finished = cells.filter(isFinishedCell);
 
@@ -106,12 +122,8 @@ export async function getStockKalem(): Promise<StockKalem> {
   );
 
   return {
-    totals: {
-      hamCount: raw.length,
-      hamQty: round1(raw.reduce((a, c) => a + c.qty, 0)),
-      bitmisCount: finished.length,
-      bitmisQty: round1(finished.reduce((a, c) => a + c.qty, 0)),
-    },
+    totals: totalsOf(cells),
+    ...(emanetOn ? { consignedTotals: totalsOf(consigned) } : {}),
     ham,
     bitmis,
   };
