@@ -17,8 +17,10 @@ export interface StockCellInput {
 }
 
 export interface StockLineSources {
-  /** null = ölçülemedi (yetki yok / rapor kapalı / uç hatası) → "Depoda hazır" boş. */
+  /** Serbest bitmiş stok. null = ölçülemedi (yetki yok / rapor kapalı / uç hatası) → "Depoda hazır (serbest)" boş. */
   stock: StockCellInput[] | null;
+  /** Çuvaldaki + sevkiyata ayrılmış dahil TÜM bitmiş stok. null = ölçülemedi / sütun seçilmedi → "Depoda (tümü)" boş. */
+  stockAll: StockCellInput[] | null;
   /** İş emri id → canlı top metresi. null = ölçülemedi → "Üretimde" boş. */
   liveMetersByWorkOrder: Map<string, number> | null;
 }
@@ -38,6 +40,7 @@ export interface StockLineRow {
   open: number | null;
   inProduction: number | null;
   inStock: number | null;
+  inStockAll: number | null;
   toProduce: number | null;
   customers: string[];
   orderCount: number;
@@ -53,6 +56,7 @@ export interface StockLineTotal {
   open: number | null;
   inProduction: number | null;
   inStock: number | null;
+  inStockAll: number | null;
   toProduce: number | null;
   customerCount: number;
   orderCount: number;
@@ -112,6 +116,7 @@ function newAcc(key: string, line: OrderLine, unit: string, o: StockLineOptions)
       open: measured ? 0 : null,
       inProduction: null,
       inStock: null,
+      inStockAll: null,
       toProduce: null,
       customers: [],
       orderCount: 0,
@@ -177,6 +182,16 @@ function productionByGroup(groups: Map<string, Acc>, woGroups: Map<string, Set<s
   return prodByKey;
 }
 
+/** Stok: aynı ayrım anahtarına toplanır (kat ve ayrılmayan eksenler toplanır); yalnız MT grubuna. */
+function sumBySpec(cells: StockCellInput[] | null, o: StockLineOptions): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const c of cells ?? []) {
+    const k = specKey(c.itemId, c.colorId, c.width, o);
+    m.set(k, (m.get(k) ?? 0) + num(c.qty));
+  }
+  return m;
+}
+
 export function aggregateStockLines(orders: Order[], o: StockLineOptions, src: StockLineSources): StockLineResult {
   const groups = new Map<string, Acc>();
   // İş emri → bağlı grup anahtarları (her İE TEK gruba sayılır; çift sayım yok).
@@ -188,12 +203,8 @@ export function aggregateStockLines(orders: Order[], o: StockLineOptions, src: S
     }
   }
 
-  // Stok: aynı ayrım anahtarına toplanır (kat ve ayrılmayan eksenler toplanır); yalnız MT grubuna.
-  const stockBySpec = new Map<string, number>();
-  for (const c of src.stock ?? []) {
-    const k = specKey(c.itemId, c.colorId, c.width, o);
-    stockBySpec.set(k, (stockBySpec.get(k) ?? 0) + num(c.qty));
-  }
+  const stockBySpec = sumBySpec(src.stock, o);
+  const stockAllBySpec = sumBySpec(src.stockAll, o);
   const live = src.liveMetersByWorkOrder;
   const prodByKey = live ? productionByGroup(groups, woGroups, live) : new Map<string, number>();
 
@@ -209,7 +220,9 @@ export function aggregateStockLines(orders: Order[], o: StockLineOptions, src: S
       r.open = round(r.open ?? 0);
       const spec = r.key.slice(0, r.key.lastIndexOf("|"));
       r.inStock = src.stock ? round(stockBySpec.get(spec) ?? 0) : null;
+      r.inStockAll = src.stockAll ? round(stockAllBySpec.get(spec) ?? 0) : null;
       r.inProduction = live ? round(prodByKey.get(r.key) ?? 0) : null;
+      // Üretilecek SERBEST stoktan düşülür: çuvaldaki/sevke ayrılmış top başka talebe gidiyor.
       r.toProduce =
         r.inStock !== null && r.inProduction !== null ? round(Math.max(0, r.open - r.inStock - r.inProduction)) : null;
     }
@@ -245,7 +258,7 @@ function unitTotals(rows: StockLineRow[], groups: Map<string, Acc>): StockLineTo
   const by = new Map<string, StockLineTotal & { cust: Set<string>; ord: Set<string> }>();
   for (const r of rows) {
     const t = by.get(r.unit) ?? {
-      unit: r.unit, ordered: 0, shipped: null, open: null, inProduction: null, inStock: null, toProduce: null,
+      unit: r.unit, ordered: 0, shipped: null, open: null, inProduction: null, inStock: null, inStockAll: null, toProduce: null,
       customerCount: 0, orderCount: 0, cust: new Set<string>(), ord: new Set<string>(),
     };
     t.ordered = round(t.ordered + r.ordered);
@@ -253,6 +266,7 @@ function unitTotals(rows: StockLineRow[], groups: Map<string, Acc>): StockLineTo
     t.open = addNullable(t.open, r.open);
     t.inProduction = addNullable(t.inProduction, r.inProduction);
     t.inStock = addNullable(t.inStock, r.inStock);
+    t.inStockAll = addNullable(t.inStockAll, r.inStockAll);
     t.toProduce = addNullable(t.toProduce, r.toProduce);
     const g = groups.get(r.key);
     for (const id of g?.customerIds.keys() ?? []) t.cust.add(id);
