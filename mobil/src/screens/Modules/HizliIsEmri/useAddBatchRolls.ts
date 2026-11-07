@@ -6,6 +6,7 @@ import { normalizeScanCode } from '../../../utils/scanCode';
 import type { Roll } from '../../../types/models';
 import { addBatchOutcome, type AddBatchRoll } from './addBatch';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
+import { SCAN_NOT_FOUND_REASON, scanLookupReason } from './scanLookupReason';
 
 /** Parti Ekle'nin top listesi: okutma + listeden seçme aynı kabul kuralından geçer (`addBatchOutcome`). */
 export function useAddBatchRolls(lockedItemId: string | null) {
@@ -34,10 +35,10 @@ export function useAddBatchRolls(lockedItemId: string | null) {
     try {
       const res = await rollService.getByBarcode(barcode);
       if (res.data) take([res.data]);
-      else feedback.pushRejects([{ barcode, reason: 'Bulunamadı' }]);
+      else feedback.pushRejects([{ barcode, reason: SCAN_NOT_FOUND_REASON }]);
     } catch (e) {
       if (interceptAmbiguous(e)) return;
-      feedback.pushRejects([{ barcode, reason: 'Okunamadı' }]);
+      feedback.pushRejects([{ barcode, reason: scanLookupReason(e) }]);
     }
   }, [feedback, take, interceptAmbiguous]);
   onScanRef.current = onScan;

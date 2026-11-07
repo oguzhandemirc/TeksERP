@@ -218,6 +218,9 @@ function QuickWorkOrderHost() {
         <Text>okut</Text>
       </Pressable>
       <ScannerRollStrip rolls={wo.scanned} totalQty={wo.totalQty} onRemove={wo.removeRoll} />
+      {wo.rejects.map((r) => (
+        <Text key={r.id} testID="quick-reject">{`${r.barcode} · ${r.reason}`}</Text>
+      ))}
       {wo.ambiguousModal}
     </>
   );
@@ -241,12 +244,15 @@ describe('Hızlı İş Emri — top ekleme', () => {
     expect(await screen.findByTestId('musteri-kodu-eslesme')).toHaveTextContent('Müşteri barkodu ACR500 ile bulundu');
   });
 
-  it('eski backend 404 → modal YOK (bugünkü "Okunamadı" yolu)', async () => {
+  it('eski backend 404 → modal YOK; TEK ret: sebep "Top bulunamadı", toast yok (bant tek yüzey)', async () => {
     mockLegacyBackend = true;
     renderWithPaper(<QuickWorkOrderHost />);
     await scanWith('quick', AMBIGUOUS_CODE);
     expect(screen.queryByText(ambiguousTitle())).toBeNull();
-    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Top eklenmedi' }));
+    expect(await screen.findByTestId('quick-reject')).toHaveTextContent(`${AMBIGUOUS_CODE} · Top bulunamadı`);
+    expect(signalScan).toHaveBeenCalledTimes(1);
+    expect(signalScan).toHaveBeenCalledWith('reject');
+    expect(Toast.show).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
   });
 
   it('⭐ ekran bağlantısı: NewWorkOrderView kancanın modalını çizer (yoksa intercept okutmayı sessizce yutar)', () => {
