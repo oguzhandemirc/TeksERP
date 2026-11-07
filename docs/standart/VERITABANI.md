@@ -73,6 +73,7 @@ Bu bölüm bir hatırlatma değil, bir KURALDIR. 368 FK alanının 272'si bir in
 
 - **[DB-13]** Composite index sırası: EŞİTLİK kolonları önce, range/order kolonu sonra · zorlama: insan:doğru sıra sorgunun şeklinden okunur, index tanımından değil · kanıt: 106 composite'in 0'ı tarih kolonuyla BAŞLIYOR, 68'i tarih kolonuyla BİTİYOR; emsal `schema.prisma:4610` `@@index([isActive, sortOrder])` · devralınan: yok
 - **[DB-14]** Partial index'i ham SQL migration'da kur ve şemada düz `@@index([col])` bırak; partial UNIQUE için şemada `@@unique` yaz · zorlama: bekçi:`scripts/test_db_invariants.ts` + `scripts/test_schema_drift.ts` · kanıt: `schema.prisma:2035` düz `@@index([sackId])` ↔ DB'de `rolls_sackId_idx` PARTIAL; 68 partial (37'si unique); Prisma'nın predicate/unique ayrımı `docs/KOD-KURALLARI.md` § deploy · devralınan: yok
+  - **Prisma `in`/`notIn` enum'u `CAST($n::text AS "Enum")` olarak bağlar; partial index predicate'i bu sorguda İSPATLANAMAZ** — partial index yalnız ham SQL'de `= ANY($1::"Enum"[])` ya da literal ile kullanılır; planı uygulama yolunun ürettiği SQL ile EXPLAIN et, psql literaliyle değil. <sub>(arşiv:2026-11-07, #621 incelemesi)</sub>
 
 ## 5 · Enum mü `VarChar` mı
 

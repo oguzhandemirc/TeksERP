@@ -308,16 +308,16 @@ function scopeWhere(scope: SackSearchScope): Prisma.SackWhereInput[] {
  * `scopeWhere`in SQL İKİZİ — cari kapısı toplulaştırma sorgusu (raw SQL) için.
  * Aynı dört anahtar, aynı hüküm; biri değişince öteki de değişir (bekçi
  * `test_sack_customer_gate §10` iki tarafı aynı fikstürle ölçer). Enum kolonu
- * `::text` ile karşılaştırılır (parametre text gelir).
+ * parametre ENUM'a çevrilerek karşılaştırılır — `::text` index'i kapatır (test_enum_metin_karsilastirma).
  */
 function scopeSql(scope: SackSearchScope): Prisma.Sql {
   switch (scope) {
     case "POOL":
       return Prisma.sql`s."shipmentId" IS NULL`;
     case "PLANNED":
-      return Prisma.sql`sh.status::text IN (${Prisma.join(PLANNED_STATUSES.map((v) => Prisma.sql`${v}`))})`;
+      return Prisma.sql`sh.status = ANY(${PLANNED_STATUSES}::"ShipmentStatus"[])`;
     case "DISPATCHED":
-      return Prisma.sql`sh.status::text = ${ShipmentStatus.DISPATCHED}`;
+      return Prisma.sql`sh.status = ${ShipmentStatus.DISPATCHED}::"ShipmentStatus"`;
     case "ALL":
       return Prisma.sql`TRUE`;
   }

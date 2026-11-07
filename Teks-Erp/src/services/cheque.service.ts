@@ -2242,9 +2242,7 @@ export class ChequeService {
     // SQL unutulduğunda sessizce ayrışırdı.
     const liveWhere = Prisma.join(
       (Object.keys(CHEQUE_DUE_LIVE_STATUSES) as ChequeKind[]).map(
-        (kind) => Prisma.sql`(c.kind::text = ${kind} AND c.status::text IN (${Prisma.join(
-          CHEQUE_DUE_LIVE_STATUSES[kind].map((s) => Prisma.sql`${s}`),
-        )}))`,
+        (kind) => Prisma.sql`(c.kind = ${kind}::"ChequeKind" AND c.status = ANY(${CHEQUE_DUE_LIVE_STATUSES[kind]}::"ChequeStatus"[]))`,
       ),
       " OR ",
     );

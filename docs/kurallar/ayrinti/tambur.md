@@ -68,7 +68,7 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** İş emri ÜRETİM ÇIKTISI kümesi tek kaynak `workorder.service.producedOutputWhere` (Tambur birinci-nesil çocukları + çocuğa bölünmeden final statüye ulaşan finalize çıktıları); liste ÇIKAN metriği ve detay `producedRolls` aynı kümeyi kullanır. · bekçi: `scripts/test_produced_buckets.ts + test_consistency_derived.ts` <sub>(CLAUDE.md:180)</sub>
+- **[ÇEKİRDEK]** İş emri ÜRETİM ÇIKTISI kümesi (Tambur birinci-nesil çocukları + çocuğa bölünmeden final statüye ulaşan finalize çıktıları) tek kaynak `helpers/produced-output.helper.ts`; liste ÇIKAN, detay `producedRolls` ve künye kümeyi `resolveProducedOutputWhere` ile sorar, `producedOutputWhere`ı (tanım/bekçi ikizi) doğrudan sorguya koymaz. · bekçi: `scripts/test_produced_output_resolve.ts` + `test_produced_buckets.ts` + `test_consistency_derived.ts` <sub>(#618, `3f8913af8`)</sub>
 
 ### Reçeteler
 

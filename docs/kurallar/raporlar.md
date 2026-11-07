@@ -83,6 +83,7 @@
 
 ### Yasaklar
 
+- **[ÇEKİRDEK]** Ham SQL'de kolonu metne çevirip küme karşılaştırma (`::text IN (…)`, `::text = ANY(…::text[])`); parametreyi kolon tipine çevir: `= ANY(${dizi}::"EnumAdı"[])` / `<> ALL(…)`; doğrulanmamış kullanıcı girdisi istisnası mandalda adetle beyanlı. · bekçi: `test_enum_metin_karsilastirma` (hızlı mandal) <sub>(arşiv:2026-11-07)</sub>
 - **[ÇEKİRDEK]** `resolveDateRange` sınırı istemcinindir (`useReportDateRange.ts` yerel 00:00/23:59:59.999); backend ekstra gün yuvarlaması YAPMAZ; gruplama fabrika gününe göre.
 
 ### Tuzaklar

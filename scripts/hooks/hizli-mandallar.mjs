@@ -78,6 +78,7 @@ const MANDALLAR = [
   "test_musteri_adi_kodda_yok", // üretim kanalının müşteri adı ürün koduna metin olarak gömülmez (ad listesi deploy/kanallar.json'dan) · Teks-Erp/src + Electron/src + mobil/src + test profilleri (ad+kod) · DB'siz · ~1,6 sn · istisna listesi boş, kullanılmayan istisna da kırmızı (33., 2026-09-28)
   "test_lisans_kabul_metni", // sözleşme kabul metni tek kaynaktan: docs/hukuk/KABUL-METNI.md §2 ⇄ üretilmiş katalog + gösterim metni bayt-eşit (belge değişip üretici koşulmadıysa kırmızı) · docs/hukuk + Teks-Erp/src/lib/license · DB'siz · ~0,3 sn (34., yönetici kararı 2026-09-30)
   "test_process_exit_kalibi", // scripts/ altında YENİ `process.exit(` çağrısı yok (exitCode + doğal çıkış); beyanlı taban scripts/lib/process-exit-istisnalari.json, düşen taban + hayalet sert (AST) · DB'siz · ~4,5 sn (2026-10-26)
+  "test_enum_metin_karsilastirma", // ham SQL'de kolon `::text [NOT] IN (` / `::text = ANY(` yok (index'i kapatır); beyanlı istisna tam eşleşir (AST) · src · ağaç · DB'siz · ~1 sn (2026-11-07)
 ];
 
 function izoleAgacMi() {

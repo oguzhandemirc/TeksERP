@@ -52,7 +52,8 @@ check(
 
 // §2
 const dash = readFileSync(join(__dirname, "..", "src", "services", "dashboard.service.ts"), "utf8").replace(/^\s*--.*$/gm, "");
-check("§2 dashboard KK1 karnesi sabitten okuyor", /Prisma\.join\(\[\.\.\.KK1_ENTRY_SOURCES\]\)/.test(dash));
+// Biçim: `= ANY(${[...KK1_ENTRY_SOURCES]}::"RollEntrySource"[])` (enum karşılaştırması, perf 2026-11-07) ya da eski `Prisma.join(...)`.
+check("§2 dashboard KK1 karnesi sabitten okuyor", /\$\{\s*(?:Prisma\.join\(\s*)?\[\.\.\.KK1_ENTRY_SOURCES\]/.test(dash));
 check("§2 dashboard SQL'inde elle 'SUPPLIER_RECEIPT' literali yok", !/'SUPPLIER_RECEIPT'/.test(dash));
 
 // §3

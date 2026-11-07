@@ -172,7 +172,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
     FROM rolls r
     JOIN items i       ON i.id = r."itemId"
     LEFT JOIN colors c ON c.id = r."colorId"
-    WHERE r.status::text IN (${Prisma.join([...FINISHED, ...RAW])})
+    WHERE r.status = ANY(${[...FINISHED, ...RAW]}::"RollStatus"[])
       AND r."shipmentId" IS NULL
       AND r."sackId" IS NULL
   `);

@@ -149,10 +149,10 @@ export async function loadWorkOrderFacts(woIds: readonly string[]): Promise<Map<
     JOIN work_order_steps s ON s.id = r."currentStepId"
     JOIN stations st ON st.id = s."stationId"
     WHERE s."workOrderId" = ANY(${ids}::uuid[])
-      AND r.status::text IN (${Prisma.join(live)})
+      AND r.status = ANY(${live}::"RollStatus"[])
     GROUP BY s."workOrderId", r.status, s.id, st.id, st.name, st.type
     UNION ALL
-    SELECT wr.wo, CASE WHEN r.status::text IN (${Prisma.join(ready)}) THEN 'READY' ELSE 'GONE' END AS kind,
+    SELECT wr.wo, CASE WHEN r.status = ANY(${ready}::"RollStatus"[]) THEN 'READY' ELSE 'GONE' END AS kind,
            NULL, NULL, NULL, NULL, NULL,
            COUNT(*)::int, COALESCE(SUM(r."currentQty"), 0)::float8, MAX(r."statusChangedAt")
     FROM (
@@ -166,7 +166,7 @@ export async function loadWorkOrderFacts(woIds: readonly string[]): Promise<Map<
         WHERE b."workOrderId" = ANY(${ids}::uuid[])
     ) wr
     JOIN rolls r ON r.id = wr.id
-    WHERE r.status::text IN (${Prisma.join([...ready, ...gone])})
+    WHERE r.status = ANY(${[...ready, ...gone]}::"RollStatus"[])
     GROUP BY wr.wo, 2`;
 
   const bump = (f: WoFacts, last: Date | null) => {

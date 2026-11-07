@@ -4370,6 +4370,9 @@ model Roll {
   @@index([updatedAt(sort: Desc)], map: "rolls_uretim_updatedAt_idx")
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "rolls_updatedAt_esitleme_idx")
+  /// Envanter "Tümü" sekmesi + kapsamsız createdAt sıralaması (perf 2026-11-07, migration 20261107120000):
+  /// `(status, createdAt)` / `(entrySource, createdAt)` kapsamsız listeye ordering vermiyordu → Seq Scan + top-N.
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "rolls_createdAt_id_idx")
   @@map("rolls")
 }
 
