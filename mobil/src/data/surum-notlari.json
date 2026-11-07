@@ -17,6 +17,40 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-07d",
+      "baslik": "El terminali (tepesinde barkod okuyucu olan cihaz) desteği: okuyucu tuşuyla okutma, kamera açılmaz",
+      "surumler": {
+        "tablet": "1.0.13"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Tepesinde barkod okuyucu olan el terminallerinde (ilk cihaz Point Mobile PM68) okutma artık okuyucu tuşuyla yapılır; barkod için kamera açılmaz. Ayarlar → “Barkod ve Kamera” sayfasının üstündeki “Okutma Yöntemi” kartında üç seçenek vardır: “Otomatik” (okuyucu varsa onu, yoksa kamerayı kullanır), “Donanım okuyucu” ve “Kamera”. Okuyucusu olmayan tablet ve telefonlarda “Otomatik” bugünkü gibi kamerayı kullanır, bir şey değişmez. Kartta algılanan cihaz yazar; “Okuyucuyu dene” ile tuşa basıp okunan kodu görebilir, “Okuyucu ayarlarını aç” ile cihazın kendi okuyucu ayarlarına gidebilirsiniz."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Okuyucu modunda ekranlarda kamera düğmesi yerine “Tuşla okut” bandı görünür ve tuşa basınca ekranın okutma işi doğrudan yapılır: Hızlı İş Emri top adımı, Depo, Kartela Sevk, Kurşun KK, İade Girişi, Paketleme, Hızlı Sipariş, Fason Kabul, iş emrine parti ekleme ve giriş ekranındaki kart. Tambur'da tuş varsayılan olarak refakat kartını okur; Kesme ve Çıkan Toplar kendi panelini açtığında okumayı o panel alır. Fason Sevk'te iş emri seçilmeden önce kart, seçildikten sonra top okunur. Çuval Düzelt'te tuş topu bulur, “Taşı” paneli açıkken hedef çuvaldaki topu okur. Ekranda bir pencere açıksa okumayı en üstteki pencere alır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Hızlı İş Emri top adımı okuyucu modunda okutulan topları tablo olarak gösterir; “Sipariş Bağla” alt çubukta İLERİ düğmesinin yanına taşındı. Okutulan top kabul edilmezse tek bir satırda sebebi yazar: sunucuda yoksa “Top bulunamadı”, sunucuya ulaşılamıyorsa “Sunucuya ulaşılamadı”."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Ayarlar → “Barkod ve Kamera” sayfasındaki “Kamera arızalı” anahtarının adı “Elle yazma alanlarını göster” oldu; davranışı aynıdır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Bu sürüm yeni bir uygulama kurulumu ister: tabletlere ve telefonlara yeni uygulama dosyası elle kurulur (mevcut uygulamanın üstüne, veriler silinmeden). Kurulmayan cihazlar eski sürümde çalışmaya devam eder, ama bundan sonraki uzaktan güncellemeleri yalnız yeni sürümü kurulmuş cihazlar alır."
+        }
+      ]
+    },
+    {
       "id": "2026-09-28c",
       "baslik": "Müşteri renk adı kumaşa göre girilebilir; irsaliyede aynı renkteki iki kumaş kendi adını basar; birleştirmeyi geri alma onarıldı",
       "surumler": {

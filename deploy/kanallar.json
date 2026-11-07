@@ -22,7 +22,7 @@
         "panelFeed": "https://guncelleme.etkiliyazilim.com/adnansahin/electron/",
         "panelManifest": "https://guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml",
         "mobilFeed": "https://guncelleme.etkiliyazilim.com/adnansahin/mobil/",
-        "otaManifest": "https://guncelleme.etkiliyazilim.com/adnansahin/mobil/ota/54.2/manifest",
+        "otaManifest": "https://guncelleme.etkiliyazilim.com/adnansahin/mobil/ota/54.3/manifest",
         "apkKunye": "https://guncelleme.etkiliyazilim.com/adnansahin/mobil/apk/surum.json",
         "vdsPanel": "/opt/stack/apps/tekserp-guncelleme/html/adnansahin/electron",
         "vdsMobil": "/opt/stack/apps/tekserp-guncelleme/html/adnansahin/mobil",
@@ -39,7 +39,7 @@
         "androidPaket": "com.teks.erp.mobil",
         "gorunenAd": "TeksERP",
         "erpAdresi": "http://192.168.1.250:4000/api",
-        "runtimeVersion": "54.2",
+        "runtimeVersion": "54.3",
         "otaSertifika": "keystore/ota-certs/certificate.pem"
       }
     },
@@ -52,7 +52,7 @@
         "panelFeed": "https://guncelleme.etkiliyazilim.com/testfabrika/electron/",
         "panelManifest": "https://guncelleme.etkiliyazilim.com/testfabrika/electron/latest.yml",
         "mobilFeed": "https://guncelleme.etkiliyazilim.com/testfabrika/mobil/",
-        "otaManifest": "https://guncelleme.etkiliyazilim.com/testfabrika/mobil/ota/54.2/manifest",
+        "otaManifest": "https://guncelleme.etkiliyazilim.com/testfabrika/mobil/ota/54.3/manifest",
         "apkKunye": "https://guncelleme.etkiliyazilim.com/testfabrika/mobil/apk/surum.json",
         "vdsPanel": "/opt/stack/apps/tekserp-guncelleme/html/testfabrika/electron",
         "vdsMobil": "/opt/stack/apps/tekserp-guncelleme/html/testfabrika/mobil",
@@ -69,7 +69,7 @@
         "androidPaket": "com.teks.erp.mobil.testfabrika",
         "gorunenAd": "TeksERP Test",
         "erpAdresi": "http://100.70.47.46:4000/api",
-        "runtimeVersion": "54.2",
+        "runtimeVersion": "54.3",
         "otaSertifika": "keystore/ota-certs-testfabrika/certificate.pem"
       }
     }
