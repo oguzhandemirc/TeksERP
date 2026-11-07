@@ -3,7 +3,7 @@
   "_kapsam": "eslint . --ext .ts,.tsx",
   "_dosyaSayisi": 3595,
   "kurallar": {
-    "@typescript-eslint/no-floating-promises": 30,
+    "@typescript-eslint/no-floating-promises": 29,
     "@typescript-eslint/no-unused-vars": 20,
     "max-lines": 104,
     "max-lines-per-function": 453,

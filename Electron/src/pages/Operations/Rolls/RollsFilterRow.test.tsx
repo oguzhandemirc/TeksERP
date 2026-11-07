@@ -53,7 +53,7 @@ describe("Kumaş Stoğu — tek satır", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));
     for (const n of ["Özellik", "Giriş Kaynağı", "Ekleyen", "Fire dahil"]) expect(menu.getByRole("menuitem", { name: n })).toBeTruthy();
-    act(() => fireEvent.click(menu.getByRole("menuitem", { name: "Fire dahil" })));
+    act(() => { fireEvent.click(menu.getByRole("menuitem", { name: "Fire dahil" })); });
     expect(t.url()).toBe(`?search=x&${INCLUDE_FIRE_PARAM}=true`);
     expect(screen.getByTestId("filter-chip-fire").dataset.active).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Temizle" }));
