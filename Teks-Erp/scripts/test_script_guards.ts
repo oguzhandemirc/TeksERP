@@ -659,6 +659,15 @@ function main(): void {
     applyMigKod.includes("SELECT current_database()") && applyMigKod.includes("HEDEF ÇELİŞKİSİ"),
     "current_database() + durdurma",
   );
+  // 2026-11-08 (PR #623 ikinci tur): tek tx'siz psql hata anında önceki ifadeleri BIRAKIR —
+  // tetik kapat → DELETE hatası → tetik kapalı kalır. SQL yürütmesi iki dalda da (`-f` · stdin) tek tx.
+  const sqlKosum = applyMigKod.match(/const tek = \[[^\]]*\]/)?.[0] ?? "";
+  const tekKullanim = (applyMigKod.match(/\.\.\.tek, "-f"/g) ?? []).length;
+  check(
+    "§13d ⭐ migration SQL'i tek tx'te ve ilk hatada durarak koşar (iki dal: dosya + stdin)",
+    sqlKosum.includes('"--single-transaction"') && sqlKosum.includes('"ON_ERROR_STOP=1"') && tekKullanim === 2,
+    `${sqlKosum || "(tek dizisi yok)"} · kullanım=${tekKullanim}`,
+  );
 
   // ═══ §14 — `prisma generate` İZOLE WORKTREE'DE ORTAK CLIENT'I EZEMEZ ══════
   // Şemada generator `output` yok ⇒ client `node_modules/.prisma/client`a yazılır

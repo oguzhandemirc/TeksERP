@@ -12,6 +12,8 @@
 //   §4 uzlaştırma küme özeti iki kökün birleşimini sayar (hizmet kartı `membershipIds`te)
 //   §5 migration: `items` SERVICE silmesi tetik KAPALIYKEN (buluta mezar yazmaz), sonra tetik yeniden AÇIK;
 //      `service_items_sync_deleted` kurulu ve etkin
+//   §6 ⭐ hizmet kartı ad değişikliği ve pasife alma (servis yazarıyla) → `urun` kirli, SILINDI değil, sync_marks
+//      mezarı yok; tel satırı yeni ad + `aktif:false` (inceleme 2026-11-08, ikinci tur)
 //
 // NEGATİF SONDA (dosya dışı mutasyon, geri alındı; commit mesajında):
 //   N1 `urun.extraRoots` kaldırıldı → §1 ❌ (hizmet SILINDI) · N2 `scanMarks` canlılık taşıması kaldırıldı → §3a ❌
@@ -27,6 +29,7 @@ import { buildRecords } from "../src/cloud-sync/record-builder";
 import { collectProjectionChanges } from "../src/cloud-sync/change-scan";
 import { membershipIds } from "../src/cloud-sync/reconcile";
 import { wmKey, type StoredWatermark } from "../src/cloud-sync/watermarks";
+import { serviceItemService } from "../src/services/service-item.service";
 
 
 let pass = 0;
@@ -39,7 +42,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 const MIG = path.resolve(__dirname, "..", "prisma", "migrations", "20261107202906_service_items_split", "migration.sql");
 const D = randomUUID().slice(0, 6).toUpperCase();
-const ids = { svc: randomUUID(), item: randomUUID(), gone: randomUUID(), price: randomUUID(), cari: randomUUID(), inv: randomUUID(), line: randomUUID() };
+const ids = { actor: randomUUID(), svc: randomUUID(), item: randomUUID(), gone: randomUUID(), price: randomUUID(), cari: randomUUID(), inv: randomUUID(), line: randomUUID() };
 
 function proj(name: string) {
   const p = findRecordProjection(name);
@@ -47,10 +50,10 @@ function proj(name: string) {
   return p;
 }
 
-/** Yalnız işaret kaynağını belirli bir andan taratan filigran haritası (kaynaklar ufukta başlar). */
-async function marksFrom(name: string, at: Date): Promise<Map<string, StoredWatermark>> {
+/** İşaret kaynağı `at`tan; kaynaklar `kaynakAt`tan (verilmezse şimdiki ufuk — yalnız işaretler taranır). */
+async function marksFrom(name: string, at: Date, kaynakAt?: Date): Promise<Map<string, StoredWatermark>> {
   const p = proj(name);
-  const now = (await prisma.$queryRawUnsafe<Array<{ t: Date }>>(`SELECT now() AS t`))[0]!.t;
+  const now = kaynakAt ?? (await prisma.$queryRawUnsafe<Array<{ t: Date }>>(`SELECT now() AS t`))[0]!.t;
   const m = new Map<string, StoredWatermark>();
   const put = (source: string, a: Date) => m.set(source, { source, at: a, tie: null, catalogVersion: p.catalogVersion, digest: null, retentionFrom: null });
   for (const s of p.sources) put(wmKey.source(p.name, s.table, s.watermark), now);
@@ -65,6 +68,8 @@ async function dbNow(): Promise<Date> {
 }
 
 async function kur(): Promise<void> {
+  // §6 yazarı: iş anahtarlı geçici kullanıcı (ortamdaki kullanıcıya bağlanılmaz); temizlikte silinir.
+  await prisma.user.create({ data: { id: ids.actor, username: `tst-bhk-${D.toLowerCase()}`, fullName: `TST BHK ${D}`, passwordHash: "x", isActive: false } });
   await prisma.serviceItem.create({ data: { id: ids.svc, code: `TST-BHK-S${D}`, name: `TST BHK HIZMET ${D}`, unit: "KG" } });
   await prisma.item.create({ data: { id: ids.item, code: `TST-BHK-U${D}`, name: `TST BHK KUMAS ${D}`, itemType: "FABRIC", unit: "MT" } });
   await prisma.itemPrice.create({ data: { id: ids.price, serviceItemId: ids.svc, kind: "SALE", currency: "TRY", price: "12.5" } });
@@ -101,6 +106,8 @@ async function temizle(): Promise<void> {
   await prisma.itemPrice.deleteMany({ where: { id: ids.price } });
   await prisma.serviceItem.deleteMany({ where: { id: ids.svc } });
   await prisma.item.deleteMany({ where: { id: ids.item } });
+  await prisma.systemLog.deleteMany({ where: { OR: [{ userId: ids.actor }, { recordId: ids.svc }] } });
+  await prisma.user.deleteMany({ where: { id: ids.actor } });
   await prisma.$executeRawUnsafe(`DELETE FROM "sync_marks" WHERE "rowId" = ANY($1::uuid[])`, Object.values(ids));
 }
 
@@ -164,6 +171,27 @@ async function main(): Promise<void> {
     const durum = new Map(tg.map((r) => [r.t, r.e]));
     check("§5b DB'de items_sync_deleted yeniden etkin, service_items_sync_deleted kurulu ve etkin",
       durum.get("items_sync_deleted") === "O" && durum.get("service_items_sync_deleted") === "O", JSON.stringify(Object.fromEntries(durum)));
+
+    console.log("\n── §6 hizmet kartı düzenleme + pasife alma ──");
+    const t6 = await dbNow();
+    await new Promise((r) => setTimeout(r, 20));
+    await serviceItemService.update(ids.svc, { name: `TST BHK HIZMET YENI ${D}` }, ids.actor);
+    const c6a = await collectProjectionChanges(urun, await marksFrom("urun", t6, t6), new Date((await dbNow()).getTime() + 1000));
+    check("§6a ⭐ ad değişikliği urun projeksiyonunda kirli (service_items kaynağı), SILINDI değil",
+      c6a.dirty.has(ids.svc) && !c6a.deleted.has(ids.svc), `dirty=${c6a.dirty.has(ids.svc)} deleted=${c6a.deleted.has(ids.svc)}`);
+    const t6b = await dbNow();
+    await new Promise((r) => setTimeout(r, 20));
+    await serviceItemService.update(ids.svc, { isActive: false }, ids.actor);
+    const c6b = await collectProjectionChanges(urun, await marksFrom("urun", t6b, t6b), new Date((await dbNow()).getTime() + 1000));
+    check("§6b ⭐ pasife alma urun projeksiyonunda kirli, SILINDI değil", c6b.dirty.has(ids.svc) && !c6b.deleted.has(ids.svc),
+      `dirty=${c6b.dirty.has(ids.svc)} deleted=${c6b.deleted.has(ids.svc)}`);
+    const mezar = await prisma.syncMark.count({ where: { rowId: ids.svc, createdAt: { gte: t6 } } });
+    check("§6c düzenleme/pasife alma silme damgası (sync_marks) yazmaz", mezar === 0, String(mezar));
+    const b6 = await buildRecords(urun, [ids.svc], Date.now());
+    const s6 = (b6.rows.get("urun") ?? []).find((r) => r.id === ids.svc);
+    check("§6d tel satırı yeni ad + aktif:false + ARCHIVED (kaldırılmadı)",
+      !!s6 && s6.ad === `TST BHK HIZMET YENI ${D}` && s6.aktif === false && s6.yasamDurumu === "ARCHIVED" && !b6.removed.some((r) => r.id === ids.svc),
+      JSON.stringify(s6 ?? b6.removed));
   } finally {
     await temizle();
   }

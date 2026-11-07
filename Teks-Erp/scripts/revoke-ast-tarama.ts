@@ -16,6 +16,8 @@
 // Gerekçeli istisna, erişimin üstündeki "`revokedAt` SÜZÜLMEZ" işaretidir: en fazla
 // 3 satır yukarıda ya da araya yalnız yorum / `alan: true,` satırları giren aynı
 // blokta (bir işaret altında gruplanmış `_count` anahtarları). Her istisna döndürülür.
+// Süzgeç izleme: yerel değişkenin başlatıcısı bir düzey; `w.K` + `const w = f(...)` (aynı dosya,
+// tek `return` nesnesi) ise YALNIZ dönen nesnenin `K` değeri — başka anahtardaki süzgeç saymaz.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -178,12 +180,44 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
       sonuc.istisnalar.push(yer(n));
       return true;
     };
+    // `const w = f(...)` ve `f` aynı dosyada nesne döndüren fonksiyonsa, dönen nesnenin `anahtar` değeri.
+    // Birden çok `return` varsa HEPSİ o anahtarı taşımalı; biri eksikse çözülmez (izlenmez → ihlal kalır).
+    const uretilenAnahtar = (degisken: ts.Identifier, anahtar: string): ts.Expression | null => {
+      const decl = checker.getSymbolAtLocation(degisken)?.valueDeclaration;
+      if (!decl || !ts.isVariableDeclaration(decl) || decl.getSourceFile() !== sf || !decl.initializer) return null;
+      const cagri = decl.initializer;
+      if (!ts.isCallExpression(cagri) || !ts.isIdentifier(cagri.expression)) return null;
+      const fn = checker.getSymbolAtLocation(cagri.expression)?.valueDeclaration;
+      if (!fn || !ts.isFunctionDeclaration(fn) || fn.getSourceFile() !== sf || !fn.body) return null;
+      const donenler: ts.Expression[] = [];
+      const topla = (x: ts.Node): void => {
+        if (ts.isFunctionLike(x)) return;
+        if (ts.isReturnStatement(x) && x.expression) donenler.push(x.expression);
+        ts.forEachChild(x, topla);
+      };
+      ts.forEachChild(fn.body, topla);
+      const degerler = donenler.map((r) => {
+        if (!ts.isObjectLiteralExpression(r)) return null;
+        const p = r.properties.find((q) => ts.isPropertyAssignment(q) && q.name && (ts.isIdentifier(q.name) || ts.isStringLiteral(q.name)) && q.name.text === anahtar);
+        return p && ts.isPropertyAssignment(p) ? p.initializer : null;
+      });
+      if (degerler.length !== 1 || degerler[0] === null) return null;
+      return degerler[0];
+    };
     // Alt ağaçta ya da bir düzey referans verilen yerel değişkenin başlatıcısında sabit geçiyor mu?
     const sabitTasir = (n: ts.Node, sabit: string | ReadonlySet<string>, derinlik = 0): boolean => {
       const kabul = typeof sabit === "string" ? new Set([sabit]) : sabit;
       let bulundu = false;
       const gez = (m: ts.Node): void => {
         if (bulundu) return;
+        // `w.ANAHTAR` + `const w = yuklemUret(...)` (aynı dosya): yalnız dönen nesnenin O anahtarı sayılır.
+        if (derinlik === 0 && ts.isPropertyAccessExpression(m) && ts.isIdentifier(m.expression)) {
+          const deger = uretilenAnahtar(m.expression, m.name.text);
+          if (deger && sabitTasir(deger, kabul, 2)) {
+            bulundu = true;
+            return;
+          }
+        }
         if (ts.isIdentifier(m)) {
           if (kabul.has(m.text)) {
             bulundu = true;

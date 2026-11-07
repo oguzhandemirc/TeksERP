@@ -10,7 +10,8 @@
 //      ad çakışması → 409 CARD_NAME_TAKEN_BY_OTHER_KIND (iki yön); hizmet ↔ hizmet aynı ad 409;
 //      §3g/h ad yarışı benzetimi (ön kontrol atlanır) → DB seddi Türkçe ad 409'u, kod yeniden denemesi değil
 //   §4 eski uç şekli: GET /api/items?filter[itemType]=SERVICE ve GET /api/items/:id hizmeti `itemType:SERVICE`
-//      ile döner; PATCH /api/items/:id hizmeti düzenler; POST /api/items {itemType:SERVICE} hizmet kartı açar (service_items)
+//      ile döner; PATCH /api/items/:id hizmeti düzenler; POST /api/items {itemType:SERVICE} hizmet kartı açar (service_items);
+//      §4f/g SERVICE dalı item:write ister (mobile:kumas 403, kumaş dalı açık); §4h audit anlatısı "hizmet kartı"
 //   §5 yaşam döngüsü: DELETE Pasif'e alır, önizleme şekli, yeniden Aktif; izin: item:read yazamaz (403)
 // Negatif sonda (2026-11-08): `item.service.ts` create'teki `assertCodeFreeInOtherKind` çağrıları kaldırılınca
 // §3c (ürün → hizmet yönü) ❌ 201; `wantsLegacyServiceList` yönlendirmesi kapatılınca §4a ❌ n=0 (25/27).
@@ -24,6 +25,8 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuthService } from "../src/services/auth.service";
 import { serviceItemService } from "../src/services/service-item.service";
 import { itemService } from "../src/routes/item.routes";
+import { narrateRows, type Anlati, type NarrativeRow } from "../src/services/audit-narrative";
+import { islemBasligi } from "../src/services/audit-narrative/islem";
 
 let pass = 0;
 let fail = 0;
@@ -49,13 +52,13 @@ async function main(): Promise<void> {
       const r = await fetch(`${base}${p}`, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
       return { status: r.status, body: (await r.json().catch(() => ({}))) as Resp["body"] };
     };
-    const kullanici = async (ek: string, izinler: string[]): Promise<string> => {
+    const kullanici = async (ek: string, izinler: string[], clientType = "electron"): Promise<string> => {
       const username = `${TAG}-${ek}`.toLowerCase();
       const u = await prisma.user.create({ data: { username, fullName: `${TAG} ${ek}`, passwordHash: await AuthService.hashPassword("test123456"), isActive: true }, select: { id: true } });
       ids.users.push(u.id);
       const perms = await prisma.permission.findMany({ where: { code: { in: izinler } }, select: { id: true } });
       await prisma.userPermission.createMany({ data: perms.map((p) => ({ userId: u.id, permissionId: p.id })) });
-      const r = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password: "test123456", clientType: "electron" }) });
+      const r = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password: "test123456", clientType }) });
       const token = ((await r.json()) as { data?: { token?: string } }).data?.token;
       if (!token) throw new Error(`login başarısız: ${username} (${r.status})`);
       return token;
@@ -159,6 +162,25 @@ async function main(): Promise<void> {
     check("§4e ⭐ POST /api/items {itemType:SERVICE} hizmet kartı açar (service_items, HZM- kodu, eski şekil)",
       (e4.status === 200 || e4.status === 201) && data(e4)?.itemType === "SERVICE" && e4svc !== null && /^HZM-/.test(e4svc.code) && e4item === null,
       `${e4.status} ${kod(e4) ?? ""} svc=${e4svc?.code ?? "yok"} item=${e4item ? "var" : "yok"}`);
+
+    // §4f/g inceleme 2026-11-08: eski yolun SERVICE dalı `mobile:kumas` ile hizmet kartı AÇAMAZ; kumaş dalı açık kalır.
+    const mobil = await kullanici("m", ["mobile:kumas"], "mobile"); // mobil-only hesap masaüstü kanalına giremez
+    const e4f = await call("POST", "/api/items", mobil, { name: `${TAG} mobil hizmet`, itemType: "SERVICE" });
+    const e4fRow = await prisma.serviceItem.findFirst({ where: { name: { startsWith: `${TAG} MOBİL` } }, select: { id: true } });
+    if (e4fRow) ids.services.push(e4fRow.id);
+    check("§4f ⭐ POST /api/items {itemType:SERVICE} yalnız mobile:kumas ile → 403 PERMISSION_DENIED (item:write), kart açılmaz",
+      e4f.status === 403 && kod(e4f) === "PERMISSION_DENIED" && e4fRow === null, `${e4f.status} ${kod(e4f)} kart=${e4fRow ? "var" : "yok"}`);
+    const e4g = await call("POST", "/api/items", mobil, { name: `${TAG} mobil kumaş`, itemType: "FABRIC", unit: "MT" });
+    const e4gId = typeof data(e4g)?.id === "string" ? String(data(e4g).id) : null;
+    if (e4gId) ids.items.push(e4gId);
+    check("§4g mobile:kumas kumaş açmaya devam eder (izin kapısından geçer)", e4g.status !== 403, `${e4g.status} ${kod(e4g)} ${e4g.body.message ?? ""}`);
+    // §4h eski yolun audit anlatısı + işlem başlığı "hizmet kartı" der (POST /api/items katalogda yok → kök satır anlatısı).
+    const e4logs = e4id ? await prisma.systemLog.findMany({ where: { recordId: e4id }, include: { user: true } }) : [];
+    const e4n = await narrateRows(e4logs as never) as Array<NarrativeRow & { anlati: Anlati }>;
+    const baslik = islemBasligi(e4logs[0]?.user as never ?? null, { method: "POST", routeKey: "/api/items", status: 201, errorCode: null }, e4n);
+    check("§4h eski yol SERVICE create audit'i SERVICE_ITEM ve anlatı/başlık \"hizmet kartını oluşturdu\" (ürün kartı değil)",
+      e4n.length === 1 && e4n[0]!.tableName === "SERVICE_ITEM" && e4n[0]!.anlati.metin.includes("hizmet kartını oluşturdu") && baslik.metin.includes("hizmet kartını oluşturdu") && !/ürün|stok kalem|kumaş/i.test(baslik.metin),
+      `${e4n.map((x) => `${x.tableName}: ${x.anlati.metin}`).join(" | ")} · başlık: ${baslik.metin}`);
 
     console.log("\n── §5 yaşam döngüsü + izin ──");
     const pv = await call("GET", `/api/service-items/${String(s1b.id)}/lifecycle-preview?to=ARCHIVED`, yazar);

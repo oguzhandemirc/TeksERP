@@ -64,7 +64,7 @@ export async function countServiceItemLiveRefs(db: Db, serviceItemId: string): P
   const counts: Record<ServiceItemLiveRefKind, number> = {
     SERVICE_PROPERTY_MAP: await db.fabricProperty.count({ where: w.SERVICE_PROPERTY_MAP }),
     SERVICE_VALUE_MAP: await db.fabricPropertyValue.count({ where: w.SERVICE_VALUE_MAP }),
-    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE } }),
+    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: w.SERVICE_CUSTOMER_PRICE }),
     CONSUMABLE_NORM: await db.serviceConsumableNorm.count({ where: w.CONSUMABLE_NORM }),
     DRAFT_INVOICE_LINE: await db.invoiceLine.count({ where: w.DRAFT_INVOICE_LINE }),
   };
@@ -86,7 +86,7 @@ export async function countServiceItemLiveRefTotals(db: Db, ids: string[]): Prom
   add(props);
   const values = await db.fabricPropertyValue.groupBy({ by: ["serviceItemId"], where: w.SERVICE_VALUE_MAP, _count: { _all: true } });
   add(values);
-  const prices = await db.itemPrice.groupBy({ by: ["serviceItemId"], where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, _count: { _all: true } });
+  const prices = await db.itemPrice.groupBy({ by: ["serviceItemId"], where: w.SERVICE_CUSTOMER_PRICE, _count: { _all: true } });
   add(prices);
   const norms = await db.serviceConsumableNorm.groupBy({ by: ["serviceItemId"], where: w.CONSUMABLE_NORM, _count: { _all: true } });
   add(norms);
@@ -114,7 +114,7 @@ export async function listServiceItemLiveRefs(
       select: { id: true, code: true, name: true, isActive: true, property: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: `${x.property.name} · ${x.name}`, detail: `${x.code}${x.isActive ? "" : " · pasif"} — eşlemeyi kaldırın` })),
     SERVICE_CUSTOMER_PRICE: (await db.itemPrice.findMany({
-      where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, take, orderBy: { createdAt: "asc" },
+      where: w.SERVICE_CUSTOMER_PRICE, take, orderBy: { createdAt: "asc" },
       select: { id: true, currency: true, customer: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: x.customer?.name ?? "—", detail: `${x.currency} — müşteri fiyatını kaldırın` })),
     CONSUMABLE_NORM: (await db.serviceConsumableNorm.findMany({

@@ -34,7 +34,8 @@ export const SILINEN_PIVOTLAR = [
   ["customer_item_color_aliases", "itemId"],
 ] as const;
 
-export interface Engel { tablo: string; kolon: string; sayi: number; ornekIdler: string[] }
+/** `idler`: SİLİNECEK pivotta TAM liste (yıkıcı işlem her kaydı gösterir); ENGEL'de ilk 20 örnek. */
+export interface Engel { tablo: string; kolon: string; sayi: number; idler: string[] }
 export interface Olcum {
   faz: "ONCE" | "SONRA";
   db: string;
@@ -101,13 +102,14 @@ export async function olc(c: Sorgu): Promise<Olcum> {
       const r = await c.query<{ id: string }>(
         `SELECT t."id"::text AS id FROM ${fk.tablo} t WHERE t."${fk.kolon.replace(/"/g, '""')}" IN (${kume}) ORDER BY 1`);
       if (r.rows.length === 0) continue;
-      const kayit = { tablo: fk.tablo, kolon: fk.kolon, sayi: r.rows.length, ornekIdler: r.rows.slice(0, 20).map((x) => x.id) };
-      (pivot.has(`${fk.tablo}.${fk.kolon}`) ? silinecek : engeller).push(kayit);
+      const sil = pivot.has(`${fk.tablo}.${fk.kolon}`);
+      const idler = (sil ? r.rows : r.rows.slice(0, 20)).map((x) => x.id);
+      (sil ? silinecek : engeller).push({ tablo: fk.tablo, kolon: fk.kolon, sayi: r.rows.length, idler });
     }
     const soy = await sayi(c, `SELECT count(*) AS n FROM "items" a JOIN "items" b ON b."id" = a."mergedIntoId" WHERE (a."itemType" = 'SERVICE') <> (b."itemType" = 'SERVICE')`);
-    if (soy > 0) engeller.push({ tablo: "items", kolon: "mergedIntoId (tür sınırını geçen soy)", sayi: soy, ornekIdler: [] });
+    if (soy > 0) engeller.push({ tablo: "items", kolon: "mergedIntoId (tür sınırını geçen soy)", sayi: soy, idler: [] });
     const kademe = await sayi(c, `SELECT count(*) AS n FROM "item_prices" p JOIN "items" i ON i."id" = p."itemId" WHERE p."propertyValueId" IS NOT NULL AND i."itemType" <> 'SERVICE'`);
-    if (kademe > 0) engeller.push({ tablo: "item_prices", kolon: "propertyValueId (ürün fiyatında kademe)", sayi: kademe, ornekIdler: [] });
+    if (kademe > 0) engeller.push({ tablo: "item_prices", kolon: "propertyValueId (ürün fiyatında kademe)", sayi: kademe, idler: [] });
   } else {
     itemsServiceKalan = await sayi(c, `SELECT count(*) AS n FROM "items" WHERE "itemType" = 'SERVICE'`);
   }
@@ -160,12 +162,12 @@ async function main(): Promise<void> {
     if (o.faz === "ONCE") {
       if (o.silinecek.length === 0) console.log("ℹ️  Migration'ın sileceği pivot satırı yok.");
       for (const e of o.silinecek) {
-        console.log(`ℹ️  SİLİNECEK (saf pivot, defter ③b) ${e.tablo}.${e.kolon}: ${e.sayi} satır${e.ornekIdler.length ? ` — ${e.ornekIdler.join(", ")}` : ""}`);
+        console.log(`ℹ️  SİLİNECEK (saf pivot, defter ③b) ${e.tablo}.${e.kolon}: ${e.sayi} satır${e.idler.length ? ` — ${e.idler.join(", ")}` : ""}`);
       }
       if (o.engeller.length === 0) console.log("✅ Taşımayı durduracak kayıt yok.");
       for (const e of o.engeller) {
         hata++;
-        console.log(`❌ ENGEL ${e.tablo}.${e.kolon}: ${e.sayi} kayıt${e.ornekIdler.length ? ` — ${e.ornekIdler.join(", ")}` : ""}`);
+        console.log(`❌ ENGEL ${e.tablo}.${e.kolon}: ${e.sayi} kayıt${e.idler.length ? ` — ilk ${e.idler.length}: ${e.idler.join(", ")}` : ""}`);
       }
     } else if (o.itemsServiceKalan !== 0) {
       hata++;

@@ -13,7 +13,7 @@
 // §3 (c) CHECK'ler: fatura satırı üç durumu + fiyat konusu + kademe + items SERVICE reddi
 //    (her red için önce GEÇERLİ pozitif kontrol — red başka sebepten gelmesin).
 // §4 (d) stokta kullanılmış hizmet → migration Türkçe sayılı mesajla DURUR, hiçbir şey değişmez.
-// §2g–j saf pivot (inceleme 2026-11-08): hizmete bağlı izinli renk/özellik + müşteri adı satırları kapıyı durdurmaz,
+// §2g–k saf pivot (inceleme 2026-11-08): hizmete bağlı izinli renk/özellik + müşteri adı satırları kapıyı durdurmaz,
 //    migration'da silinir; kontrol aracı onları ve pasif hizmete bağlı taslak fatura satırını ayrı listeler.
 // §5 servis kapısı (D1a → inceleme 2026-11-08): ürün kartı SERVICE isteği DB CHECK'ine (500) inmeden hizmet kartı
 //    boğazına yönlenir. Negatif sonda: `item.service.ts` yönlendirmesi kaldırılınca §5a kırmızı (CHECK 500).
@@ -34,6 +34,8 @@ const MIG_AD = "20261107202906_service_items_split";
 const CI = !!process.env.CI;
 let pass = 0;
 let fail = 0;
+const PIVOT_RENK = 25;
+
 function check(label: string, ok: boolean, detay = ""): void {
   if (ok) pass++;
   else fail++;
@@ -143,7 +145,8 @@ async function tohum(c: Sorgu, hizmetli: boolean, stokta: boolean): Promise<Kiml
     // Pasif (ARCHIVED) hizmete bağlı TASLAK satır — kontrol aracı ayrıca sayar, taşıma değiştirmez.
     await satir(4, id.S3!, "7.75");
     // Saf yapılandırma pivotları (defter ③b): kapıyı DURDURMAZ, migration 0(d) siler.
-    await c.query(`INSERT INTO "item_allowed_colors" ("id","itemId","colorId") VALUES ($1,$2,$3)`, [randomUUID(), id.S1, randomUUID()]);
+    // 25 renk pivotu: kontrol aracının SİLİNECEK listesi 20 örnekle kesilmemeli (§2k).
+    for (let i = 0; i < PIVOT_RENK; i++) await c.query(`INSERT INTO "item_allowed_colors" ("id","itemId","colorId") VALUES ($1,$2,$3)`, [randomUUID(), id.S1, randomUUID()]);
     await c.query(`INSERT INTO "item_allowed_properties" ("id","itemId","propertyId") VALUES ($1,$2,$3)`, [randomUUID(), id.S1, id.P1]);
     await c.query(`INSERT INTO "customer_item_aliases" ("id","customerId","itemId","alias","updatedAt") VALUES ($1,$2,$3,'HKT AD',now())`, [randomUUID(), randomUUID(), id.S1]); // tz-ok
     await c.query(`INSERT INTO "customer_item_color_aliases" ("id","customerId","itemId","colorId","alias","updatedAt") VALUES ($1,$2,$3,$4,'HKT RENK',now())`, [randomUUID(), randomUUID(), id.S1, randomUUID()]); // tz-ok
@@ -202,9 +205,13 @@ async function testDolu(base: PgConn, db: string): Promise<void> {
       && once.sayim.item_prices === 4 && once.sayim.item_prices_kademe === 1 && once.sayim.invoice_lines === 2,
       JSON.stringify(once.sayim));
     const pivotlar = SILINEN_PIVOTLAR.map(([t, k]) => `${t}.${k}`);
-    check("§2g ⭐ saf pivot satırları ENGEL değil, SİLİNECEK listesinde (4 tablo × 1 satır)",
-      once.engeller.length === 0 && once.silinecek.length === 4 && once.silinecek.every((e) => e.sayi === 1 && pivotlar.includes(`${e.tablo}.${e.kolon}`)),
+    const beklenenSayi = (t: string) => (t === "item_allowed_colors" ? PIVOT_RENK : 1);
+    check("§2g ⭐ saf pivot satırları ENGEL değil, SİLİNECEK listesinde (4 tablo; renk 25, diğerleri 1 satır)",
+      once.engeller.length === 0 && once.silinecek.length === 4 && once.silinecek.every((e) => e.sayi === beklenenSayi(e.tablo) && pivotlar.includes(`${e.tablo}.${e.kolon}`)),
       JSON.stringify({ engel: once.engeller, sil: once.silinecek.map((e) => `${e.tablo}=${e.sayi}`) }));
+    check("§2k ⭐ SİLİNECEK listesi her satırı id'siyle taşır (20 örnekle kesilmez)",
+      once.silinecek.every((e) => e.idler.length === e.sayi && new Set(e.idler).size === e.sayi),
+      once.silinecek.map((e) => `${e.tablo}=${e.idler.length}/${e.sayi}`).join(","));
     check("§2h kontrol aracı pasif hizmete bağlı taslak satırı saydı (1)", once.sayim.taslak_satir_pasif_hizmet === 1, String(once.sayim.taslak_satir_pasif_hizmet));
     await c.query(migSql());
     const sonra = await olc(c);
@@ -287,7 +294,7 @@ async function testStok(base: PgConn, db: string): Promise<void> {
     const id = await tohum(c, true, true);
     const once = await olc(c);
     const engel = once.engeller.find((e) => e.tablo === "rolls" && e.kolon === "itemId");
-    check("§4a kontrol aracı engeli LİSTELEDİ (rolls.itemId, top id'siyle)", !!engel && engel.sayi === 1 && engel.ornekIdler[0] === id.R2, JSON.stringify(once.engeller));
+    check("§4a kontrol aracı engeli LİSTELEDİ (rolls.itemId, top id'siyle)", !!engel && engel.sayi === 1 && engel.idler[0] === id.R2, JSON.stringify(once.engeller));
     let mesaj = "";
     try { await c.query(migSql()); } catch (e) { mesaj = (e as Error).message; }
     check("§4b ⭐ migration DURDU, mesaj Türkçe ve sayılı", /taşıması DURDU: 1 kayıt/.test(mesaj) && mesaj.includes("rolls.itemId=1"), mesaj.slice(0, 200));
