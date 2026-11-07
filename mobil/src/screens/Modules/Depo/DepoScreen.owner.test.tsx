@@ -90,3 +90,36 @@ it('emanet AÇIK: sahipli satırda rozet; "Emanet" seçimi liste + şerit + kaps
   // Sekme seti korunur (yalnız mulkiyet eklenir).
   expect(urls('/rolls?').filter((u) => u.includes('mulkiyet=CONSIGNED')).every((u) => u.includes('filter[statusIn]=WAREHOUSE,A1_STOCK,STOCK'))).toBe(true);
 });
+
+it('emanet kapanınca seçim ALL\'a sıfırlanır; yeniden açılınca "Emanet" geri gelmez', async () => {
+  mockEmanet = true;
+  const r = renderWithPaper(<DepoScreen />);
+  await screen.findByText('Akın Tekstil');
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('depo-owner-CONSIGNED'));
+  });
+  await waitFor(() => expect(urls('/rolls?').some((u) => u.includes('filter[mulkiyet]=CONSIGNED'))).toBe(true));
+  expect(screen.getByTestId('depo-owner-CONSIGNED').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+
+  mockEmanet = false;
+  r.rerender(<DepoScreen />);
+  await waitFor(() => expect(screen.queryByTestId('depo-owner-filter')).toBeNull());
+
+  mockGet.mockClear();
+  mockEmanet = true;
+  r.rerender(<DepoScreen />);
+  await screen.findByTestId('depo-owner-filter');
+  expect(screen.getByTestId('depo-owner-ALL').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+  expect(screen.getByTestId('depo-owner-CONSIGNED').props.accessibilityState).toEqual(expect.objectContaining({ selected: false }));
+  expect(mockGet.mock.calls.some((c) => /mulkiyet/.test(decodeURIComponent(c[0] as string)))).toBe(false);
+});
+
+it('Sahip çipleri ≥56dp dokunma hedefi', async () => {
+  mockEmanet = true;
+  renderWithPaper(<DepoScreen />);
+  await screen.findByTestId('depo-owner-filter');
+  for (const k of ['ALL', 'OWN', 'CONSIGNED']) {
+    const flat = Object.assign({}, ...[screen.getByTestId(`depo-owner-${k}`).props.style].flat(Infinity).filter(Boolean));
+    expect(flat.minHeight).toBeGreaterThanOrEqual(56);
+  }
+});

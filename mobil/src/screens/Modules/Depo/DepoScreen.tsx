@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import {
   Text,
@@ -149,6 +149,10 @@ export default function DepoScreen() {
   const emanetOn = useEmanetEnabled();
   const [ownershipPick, setOwnershipPick] = useState<OwnershipScope>('ALL');
   const ownership = effectiveOwnershipScope(emanetOn, ownershipPick);
+  // Modül kapanınca seçim de sıfırlanır — yeniden açıldığında eski "Emanet" seçimi sessizce geri gelmesin.
+  useEffect(() => {
+    if (!emanetOn) setOwnershipPick('ALL');
+  }, [emanetOn]);
   // ALL'da anahtar eskisiyle aynı kalır; kapsam seçilince ayrı önbellek girdisi.
   const scopeKey = ownership === 'ALL' ? [] : [ownership];
   const [search, setSearch] = useState('');
@@ -658,7 +662,7 @@ export default function DepoScreen() {
                     accessibilityLabel={`Sahip: ${t.label}`}
                     accessibilityState={{ selected: active }}
                     testID={`depo-owner-${t.key}`}
-                    style={[styles.statusChip, active && styles.ownerChipActive]}
+                    style={[styles.statusChip, styles.ownerChip, active && styles.ownerChipActive]}
                   >
                     <Text style={[styles.statusChipText, active && { color: '#fff' }]}>{t.label}</Text>
                   </TouchableRipple>
@@ -1316,6 +1320,8 @@ const styles = StyleSheet.create({
   ownerTabs: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ownerTabsLabel: { fontSize: 12, fontWeight: '700', color: '#64748b' },
   ownerBadgeInline: { alignSelf: 'center' },
+  // Saha dokunma hedefi ≥56dp (mobil/CLAUDE.md); mevcut sekme çipleri bu dilimde değişmez.
+  ownerChip: { minHeight: 56, minWidth: 64, justifyContent: 'center', alignItems: 'center' },
   ownerChipActive: { backgroundColor: '#0e7490', borderColor: '#0e7490' },
 
   listContent: { padding: 4 },

@@ -17,7 +17,8 @@
 //   §8 karne talebi mülkiyete böler — sahibin açık siparişi önce kendi emanetinden, kalan bizim stoktan
 //   §9 tablet Depo (T3) — her sekmenin süzgeç seti × mülkiyet: cursor listesi = şerit, bizim + emanet = tümü
 //      (açık ve kapalı); `/rolls/warehouse-scope` `filter[mulkiyet]` (süzgeçsiz = ALL bayt-aynı, toplam tutar,
-//      serbest = Depo sekmesi şeridi, tanınmayan 400, kontrolcü kablolaması, kapalıyken de uygulanır);
+//      serbest = Depo sekmesi şeridi, tanınmayan 400, kontrolcü kablolaması, ilgisiz parametre yok sayılır,
+//      kapalıyken de uygulanır);
 //      `/rolls/barcode` emanet topta `ownerCustomer` döner (Hızlı İE rozeti)
 //
 // NEGATİF SONDA (B, 2026-11-08, her biri md5 ile birebir geri alındı; 41/0 → ):
@@ -29,6 +30,7 @@
 //   `!!r.ownerCustomerId` → §0b/§0c ❌ (42/2) · N7 tarayıcının karşılaştırma kalıbı kapatıldı → §0f ❌ (43/1); 44/0.
 //   (T3, 2026-11-08) N8 warehouse-scope kapsamı yok sayıldı → §9c/§9d/§9g ❌ · N9 kontrolcü süzgeci geçirmedi → §9f ❌ ·
 //   N10 okutma include'u düştü → §9h ❌ · N11 buildRollWhere mülkiyet parçası düştü → §2c/§2d/§3c/§3d/§9a/§9d ❌; 53/0.
+//   (inceleme #624) N12 kontrolcü sorguyu tam çözümledi (`parseQueryParams`) → §9f2 ❌ (53/1); 54/0.
 //   Genişleyen tarayıcı doğuşta iki gerçek bellek yüklemi buldu (shipment-auto-draft, tambur) → helper'a taşındı.
 // Gerekli mi: §4e doğuşta ölçtü — emanet kapalı davranışta (= F1 öncesi kod) siparişsiz eski emanet 40 m ölü stok sayılıyordu.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
@@ -186,17 +188,22 @@ function statik(): void {
   check("§0f tarayıcı öz-sınaması (11 kalıp sayılır, 3 sayılmaz)", self === 11, `${self}`);
 }
 
-/** Tablet Depo sekmelerinin GÖNDERDİĞİ süzgeç setleri — `mobil/.../DepoScreen.tsx` `rollsFilters` aynası. */
+/**
+ * Tablet Depo sekmelerinin GÖNDERDİĞİ süzgeç setleri — tek kaynak `mobil/src/screens/Modules/Depo/depoFilters.ts`
+ * (`depoRollsFilters`; oradaki `depoFilters.test.ts` aynı setleri bayt-aynı tutar). Set değişirse burası da değişir.
+ */
 const TABLET_DEPO_TABS: Record<string, Record<string, string>> = {
   ALL: { includeFire: "true", statusIn: "WAREHOUSE,A1_STOCK,STOCK" },
   WAREHOUSE: { includeFire: "true", shipmentScope: "free", status: "WAREHOUSE" },
   IN_SACK: { includeFire: "true", rollScope: "IN_SACK", status: "ALL" },
   STOCK: { includeFire: "true", shipmentScope: "free", rollScope: "RAW_STOCK_PURE", status: "ALL" },
   SEMI_FINISHED: { includeFire: "true", shipmentScope: "free", rollScope: "SEMI_FINISHED", status: "ALL" },
+  KARTELALIK: { includeFire: "true", shipmentScope: "free", statusIn: "WAREHOUSE,A1_STOCK,STOCK", markedForKartela: "true" },
 };
-/** Fikstürde beklenen [ALL, OWN, CONSIGNED] — ownWh/consWh WAREHOUSE, ownRaw/consRaw ham, consSemi yarı mamul. */
+/** Fikstürde beklenen [ALL, OWN, CONSIGNED] — ownWh/consWh WAREHOUSE, ownRaw/consRaw ham, consSemi yarı mamul;
+ *  §9 başında ownWh + consRaw kartelalık işaretlenir (KARTELALIK sekmesi iki kapsamı da görsün). */
 const TABLET_DEPO_EXPECT: Record<string, [number, number, number]> = {
-  ALL: [5, 2, 3], WAREHOUSE: [2, 1, 1], IN_SACK: [0, 0, 0], STOCK: [2, 1, 1], SEMI_FINISHED: [1, 0, 1],
+  ALL: [5, 2, 3], WAREHOUSE: [2, 1, 1], IN_SACK: [0, 0, 0], STOCK: [2, 1, 1], SEMI_FINISHED: [1, 0, 1], KARTELALIK: [2, 1, 1],
 };
 const filt = (f: Record<string, string>) => Object.fromEntries(Object.entries(f).map(([k, v]) => [`filter[${k}]`, v]));
 const codeOf = (e: unknown) => (e instanceof AppError ? `${e.statusCode}:${(e.details as { code?: string } | undefined)?.code}` : String(e));
@@ -204,9 +211,10 @@ const codeOf = (e: unknown) => (e instanceof AppError ? `${e.statusCode}:${(e.de
 async function section9(
   itemId: string,
   custId: string,
-  r: { ownWh: string; consWh: string },
+  r: { ownWh: string; consWh: string; consRaw: string },
   setFlag: (v: boolean) => Promise<unknown>,
 ): Promise<void> {
+  await prisma.roll.updateMany({ where: { id: { in: [r.ownWh, r.consRaw] } }, data: { markedForKartela: true } });
   // Cursor'u limit=2 ile SONUNA kadar yürür — liste sayısı sayfalamadan bağımsız ölçülsün.
   const cursorCount = async (f: Record<string, string>) => {
     let n = 0;
@@ -245,7 +253,7 @@ async function section9(
   const ws = async (raw?: string) => (await inventory.getWarehouseScope(raw)).data!;
   const wAll = await ws();
   const [wA, wO, wC] = [await ws("ALL"), await ws("OWN"), await ws("CONSIGNED")];
-  check("§9b warehouse-scope: süzgeçsiz = ALL (bayt-aynı, eski tablet)", JSON.stringify(wA) === JSON.stringify(wAll));
+  check("§9b warehouse-scope: süzgeçsiz = ALL (eski tablet)", JSON.stringify(wA) === JSON.stringify(wAll));
   const sum = (k: "free" | "pool" | "planned") => wO[k].count + wC[k].count === wAll[k].count && Math.abs(wO[k].qty + wC[k].qty - wAll[k].qty) < 1e-6;
   check("§9c warehouse-scope: bizim + emanet = tümü (serbest/çuval/planlı)", sum("free") && sum("pool") && sum("planned"), JSON.stringify({ wAll, wO, wC }));
   const freeStat = async (scope: string) => statCount({ status: "WAREHOUSE", shipmentScope: "free", includeFire: "true", mulkiyet: scope });
@@ -265,6 +273,12 @@ async function section9(
   };
   const cC = await viaCtrl({ "filter[mulkiyet]": "CONSIGNED" });
   const cBad = await viaCtrl({ "filter[mulkiyet]": "BIZIM" });
+  // Uç T3 öncesi sorgu okumuyordu: ilgisiz parametre (tam çözümlemede 400 üreten `pageSize=1000` dahil) yok sayılır.
+  const cJunk = await viaCtrl({ pageSize: "1000", sortBy: "yok", "filter[status]": "SHIPPED" });
+  const cJunkC = await viaCtrl({ pageSize: "1000", "filter[mulkiyet]": "CONSIGNED" });
+  check("§9f2 uç: ilgisiz parametreler yok sayılır (süzgeçsiz = ALL, mulkiyet yine uygulanır)",
+    !cJunk.err && JSON.stringify(cJunk.body?.data) === JSON.stringify(wAll) && !cJunkC.err && JSON.stringify(cJunkC.body?.data) === JSON.stringify(wC),
+    `${codeOf(cJunk.err)} · ${codeOf(cJunkC.err)}`);
   check("§9f uç: `filter[mulkiyet]` kontrolcüden servise geçer, tanınmayan 400", JSON.stringify(cC.body?.data) === JSON.stringify(wC) && codeOf(cBad.err) === "400:OWNERSHIP_SCOPE_INVALID",
     `${JSON.stringify(cC.body?.data)} · ${codeOf(cBad.err)}`);
   await setFlag(false);
@@ -451,7 +465,7 @@ async function main(): Promise<void> {
 
     // ── §9 tablet Depo (T3) ───────────────────────────────────────────────────
     console.log("\n── §9 tablet Depo: sekme × mülkiyet ──");
-    await section9(item.id, cust.id, { ownWh, consWh }, setFlag);
+    await section9(item.id, cust.id, { ownWh, consWh, consRaw }, setFlag);
   } finally {
     for (const oid of [ids.order, ids.order2].filter(Boolean)) {
       await prisma.orderLine.deleteMany({ where: { orderId: oid } });
