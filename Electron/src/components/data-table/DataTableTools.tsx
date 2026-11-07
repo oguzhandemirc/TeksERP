@@ -19,6 +19,8 @@ interface Props<T> {
   hideExport?: boolean;
   /** Ekranın ek dışa aktarma seçenekleri — "Dışa aktar ▾" menüsünde Excel'in altında. */
   extraExports?: ExtraExportOption[];
+  /** Dar ekranda yazı düşer, simge kalır (tek satır filtre çubuğu). */
+  compact?: boolean;
 }
 
 /**
@@ -26,7 +28,7 @@ interface Props<T> {
  * "Dışa aktar ▾" menüsü (Excel · ek seçenekler · PDF · CSV). SAP Fiori/MUI deseni: görünürlük
  * ile dışa aktarma ayrı düğmelerdir (kullanıcı talebi 2026-11-07).
  */
-export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideExport, extraExports }: Props<T>) {
+export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideExport, extraExports, compact }: Props<T>) {
   const hideable = table
     .getAllLeafColumns()
     .filter((c) => c.getCanHide() && c.id !== "select" && c.id !== "actions");
@@ -35,9 +37,9 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
     <>
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Görünür sütunlar">
+          <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Görünür sütunlar" aria-label={compact ? "Sütunlar" : undefined}>
             <Settings2 className="h-3.5 w-3.5" />
-            Sütunlar
+            <span className={compact ? "hidden lg:inline" : undefined}>Sütunlar</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-60 p-2">

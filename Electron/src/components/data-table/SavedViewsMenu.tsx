@@ -15,7 +15,8 @@ import { useSavedViews } from "@/hooks/useSavedViews";
  * Uygulama URL'i değiştirir; FilterBar ve arama kutusu (useDataTable URL→input
  * geri-senkronu sayesinde) anında yansır.
  */
-export function SavedViewsMenu() {
+/** `compact`: yalnız simge (tek satır filtre çubuğu — "Görünüm" kutusuyla ad çakışmasın). */
+export function SavedViewsMenu({ compact = false }: { compact?: boolean } = {}) {
   const { pathname } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { views, saveView, removeView } = useSavedViews(pathname);
@@ -35,9 +36,9 @@ export function SavedViewsMenu() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5">
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Kayıtlı görünümler" aria-label="Kayıtlı görünümler">
           <Bookmark className="h-3.5 w-3.5" />
-          Görünümler
+          {compact ? null : "Görünümler"}
           {views.length > 0 && (
             <span className="ml-0.5 rounded bg-muted px-1 text-[10px] tabular-nums">
               {views.length}
