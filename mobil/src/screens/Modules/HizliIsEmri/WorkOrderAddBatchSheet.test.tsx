@@ -123,7 +123,7 @@ describe('WorkOrderAddBatchSheet — D4-KUC3d müşteri barkodu', () => {
     expect(screen.getByTestId('musteri-kodu-eslesme')).toHaveTextContent('Müşteri barkodu ACR500 ile bulundu');
   });
 
-  it('başka hata (eski backend 404) → bugünkü "Okunamadı" yolu, modal YOK', async () => {
+  it('başka hata (eski backend 404) → "Top bulunamadı" reti, modal YOK', async () => {
     mockByBarcode.mockRejectedValue({ status: 404, message: 'Endpoint bulunamadı', details: {} });
     renderWithPaper(<WorkOrderAddBatchSheet wo={WO} onDismiss={() => {}} onDone={() => {}} />);
     fireEvent.press(screen.getByText('Top Okut'));

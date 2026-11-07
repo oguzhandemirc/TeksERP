@@ -35,6 +35,7 @@ import { useAmbiguousScanPicker } from '../../../components/customerCode/Custome
 import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerCode/customerCodeLogic';
 import { TERIM } from '../../../lib/terim';
 import { addPicked, prunePicked, type PickedOrderLines } from './orderLinkAnchor';
+import { SCAN_NOT_FOUND_REASON, scanLookupReason } from './scanLookupReason';
 
 export interface ScannedRoll {
   id: string;
@@ -652,17 +653,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
           visibilityTime: 900,
         });
       }
-      if (rejected.length > 0) {
-        pushRejects(rejected);
-        Toast.show({
-          type: 'error',
-          text1: 'Top eklenmedi',
-          text2:
-            rejected.length === 1
-              ? `${rejected[0].barcode} · ${rejected[0].reason}`
-              : `${rejected.length} top eklenmedi: ${rejected[0].reason}`,
-        });
-      }
+      // Ret TEK yüzeyde: `pushRejects` bandı + sesi verir. Üstüne toast basmak aynı hatayı iki kez söylüyordu.
+      if (rejected.length > 0) pushRejects(rejected);
       // Mükerrer sinyali yalnız BAŞKA hiçbir şey olmadıysa — kabul/ret sinyalinin
       // üstüne binerse operatör hangi sesi duyduğunu ayırt edemez.
       if (duplicates.length > 0 && additions.length === 0 && rejected.length === 0) {
@@ -706,15 +698,13 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
         const res = await rollService.getByBarcode(barcode);
         const roll = res.data;
         if (!roll) {
-          pushRejects([{ barcode, reason: 'Bulunamadı' }]);
-          Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} bulunamadı` });
+          pushRejects([{ barcode, reason: SCAN_NOT_FOUND_REASON }]);
           return;
         }
         addRolls([roll]);
       } catch (e) {
         if (interceptAmbiguous(e)) return;
-        pushRejects([{ barcode, reason: 'Okunamadı' }]);
-        Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} okunamadı` });
+        pushRejects([{ barcode, reason: scanLookupReason(e) }]);
       } finally {
         resolvingRef.current = false;
         const next = pendingScanQueueRef.current.shift();
