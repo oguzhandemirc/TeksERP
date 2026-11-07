@@ -1,9 +1,11 @@
 // Bitmiş Depo "Kartelalık" süzgeci: filter[markedForKartela]=true URL'e yazılır (liste + özet aynı URL'i okur);
-// filtre çubuğuna satır eklemez; sekmeden çıkınca URL'den silinir.
+// filtre çubuğuna satır eklemez; sekmeden çıkınca URL'den silinir (sekme başına filtre kaydı).
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { buildRollFilterDefs, dropFinishedOnlyFilters, KARTELA_MARKED_PARAM } from "./RollsTableBody";
+import { buildRollFilterDefs, KARTELA_MARKED_PARAM } from "./RollsTableBody";
+import { rollPersistConfig } from "./RollsFilterRow";
+import { switchTableUrl } from "@/components/data-table/filter-row/filter-persist";
 import { UrlFlagToggle } from "./UrlFlagToggle";
 
 function Where() {
@@ -31,10 +33,10 @@ describe("Kartelalık süzgeci", () => {
     expect(keys).not.toContain("markedForKartela");
   });
 
-  it("sekmeden çıkarken Bitmiş Depo süzgeçleri silinir, ötekiler kalır", () => {
-    const sp = new URLSearchParams("filter[markedForKartela]=true&filter[shipmentScope]=free&filter[itemId]=a");
-    expect(dropFinishedOnlyFilters(sp)).toBe(true);
-    expect(sp.toString()).toBe("filter%5BitemId%5D=a");
-    expect(dropFinishedOnlyFilters(sp)).toBe(false);
+  it("⭐ sekmeden çıkarken Bitmiş Depo süzgeçleri silinir; yeni sekmenin kaydı gelir, arama kalır", () => {
+    const sp = new URLSearchParams("filter[markedForKartela]=true&filter[shipmentScope]=free&filter[itemId]=a&search=x");
+    const raw = { query: "filter%5BcolorId%5D=c1", savedAt: "2026-11-07T00:00:00Z" };
+    const { next } = switchTableUrl(sp, rollPersistConfig("FINISHED_STOCK"), rollPersistConfig("RAW_STOCK"), raw);
+    expect(next.toString()).toBe("search=x&filter%5BcolorId%5D=c1");
   });
 });

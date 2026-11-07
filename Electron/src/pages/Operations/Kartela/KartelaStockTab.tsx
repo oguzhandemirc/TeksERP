@@ -14,6 +14,8 @@ import { KARTELA_MARKED_FILTERS, rollToPicked, type KartelaPickedRoll } from "./
 /** Sütunlar bu sırayla: barkod · kumaş · renk · en · metre · tarih (Son İşlem). */
 export const KARTELA_STOCK_COLUMN_IDS = ["barcode", "item", "color", "width", "currentQty", "updatedAt"] as const;
 
+const SORT_ONLY = { filterKeys: [] as string[] };
+
 const columnId = (c: ColumnDef<Roll>) => c.id ?? ("accessorKey" in c ? String(c.accessorKey) : "");
 
 export function KartelaStockTab({ onAddToDispatch }: { onAddToDispatch: (rolls: KartelaPickedRoll[]) => void }) {
@@ -29,6 +31,8 @@ export function KartelaStockTab({ onAddToDispatch }: { onAddToDispatch: (rolls: 
     defaultPageSize: 100,
     forceFilters: KARTELA_MARKED_FILTERS,
     defaultSortBy: "updatedAt",
+    // Süzgeç yok; yalnız son sıralama hatırlanır (anahtar `rolls:KARTELA_STOCK`).
+    persistFilters: SORT_ONLY,
   });
   return (
     <DataTable<Roll>
