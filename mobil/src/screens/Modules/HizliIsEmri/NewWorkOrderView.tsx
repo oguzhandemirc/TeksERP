@@ -22,6 +22,7 @@ import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import { useEmanetEnabled } from '../../../hooks/useFeatureFlags';
 import OrderLinkFooterButton from './wizard/OrderLinkFooterButton';
 import LastBatchHint from './wizard/LastBatchHint';
 import { colors, spacing, radius } from '../../../theme';
@@ -72,6 +73,7 @@ export default function NewWorkOrderView({
   // Ayarlar → "Kamera arızalı" — listeden seçim kaçış yollarının tek kaynağı.
   const cameraUnusable = useCameraUnusable();
   const hardware = useHardwareScanMode();
+  const emanetOn = useEmanetEnabled();
 
   // Başarı ekranı durumunu kabuğa bildir (geri tuşu + liste tazeleme için).
   const hasResult = !!wo.result;
@@ -447,6 +449,7 @@ export default function NewWorkOrderView({
         rolls={wo.scanned}
         totalQty={wo.totalQty}
         onRemove={wo.removeRoll}
+        emanetOn={emanetOn}
         onClearAll={() => {
           wo.clearScanned();
           setScannedListOpen(false);

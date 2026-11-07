@@ -38,7 +38,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
-import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
+import { useEmanetEnabled, useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
 import { useIsOnline } from '../../../offline/hooks';
 import { STATION_MUT } from '../../../offline/mutations';
 import { signalScan } from '../../../services/scanFeedback';
@@ -63,6 +63,15 @@ import { useAmbiguousScanPicker } from '../../../components/customerCode/Custome
 import { CustomerCodeMatchNote } from '../../../components/customerCode/CustomerCodeMatchNote';
 import { scanMatchOf } from '../../../components/customerCode/customerCodeLogic';
 import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import OwnerBadge from '../../../components/OwnerBadge';
+import {
+  OWNERSHIP_TABS,
+  effectiveOwnershipScope,
+  ownerBadgeOf,
+  ownershipFilter,
+  type OwnershipScope,
+} from '../../../utils/ownership';
+import { depoRollsFilters, type ModeFilter } from './depoFilters';
 
 const PAGE_SIZE = 50;
 
@@ -79,11 +88,7 @@ const PAGE_SIZE = 50;
 // ⚠️ "Ham" ve "Yarı Mamul" AYNI statüyü (STOCK) paylaşır — ayıran şey giriş
 // kaynağıdır (2026-08-27). Eskiden tek sekmeydi ve dışarıdan boyalı gelen mal
 // ham kumaşla karışık görünüyordu; masaüstünde de aynı ayrım yapıldı.
-// Ayrım SUNUCUDA: `rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED`. Düz `status`
-// süzgeci ikisini ayıramaz — negasyon jenerik filtre katmanında YOK.
-type ModeFilter =
-  | 'ALL' | 'WAREHOUSE' | 'IN_SACK' | 'STOCK' | 'SEMI_FINISHED' | 'SWATCH' | 'KARTELALIK';
-
+// Ayrım SUNUCUDA: `rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED` (süzgeç seti `depoFilters.ts`).
 const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'ALL', label: 'Tümü', color: '#475569' },
   { key: 'WAREHOUSE', label: 'Depo', color: '#d97706' },
@@ -140,6 +145,12 @@ export default function DepoScreen() {
   const isPhone = device === 'phone';
   useLandscapeLock(!isPhone); // tablet yatay
   const [mode, setMode] = useState<ModeFilter>('ALL');
+  // Sahip süzgeci (T3) — yalnız emanet açıkken çizilir; kapalıyken etkin kapsam ALL (istek bayt-aynı).
+  const emanetOn = useEmanetEnabled();
+  const [ownershipPick, setOwnershipPick] = useState<OwnershipScope>('ALL');
+  const ownership = effectiveOwnershipScope(emanetOn, ownershipPick);
+  // ALL'da anahtar eskisiyle aynı kalır; kapsam seçilince ayrı önbellek girdisi.
+  const scopeKey = ownership === 'ALL' ? [] : [ownership];
   const [search, setSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   // El terminali: tuş doğrudan okur, "Okut" düğmesi çizilmez (kamera açılmaz).
@@ -187,39 +198,12 @@ export default function DepoScreen() {
   // A1_STOCK (2. kalite satılabilir), STOCK (ham + yarı mamul — statü ikisini de
   // taşır, "Tümü"de ayrım GEREKMEZ, ayrı sekmeler zaten var).
   // includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
-  const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
-    // Çuvalda sekmesi: bir çuvala konmuş (sackId dolu) + sevk edilmemiş toplar
-    // (rollScope=IN_SACK). shipmentScope:'free' BİLİNÇLİ verilmez — o, çuvallanmış
-    // topları elerdi (çelişki). status:'ALL' → varsayılan STOCK süzgeci devre dışı.
-    if (mode === 'IN_SACK') {
-      return { includeFire: 'true', rollScope: 'IN_SACK', status: 'ALL' };
-    }
-    const f: Record<string, string | string[]> = { includeFire: 'true' };
-    if (mode === 'ALL') {
-      // Tümü = TÜM envanter (serbest + çuvaldaki). shipmentScope BİLİNÇLİ verilmez →
-      // çuvallanmış toplar da listelenir; satırdaki çuval rozetiyle ayrışırlar.
-      f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
-    } else {
-      // Depo/Ham/Kartelalık = yalnız SERBEST stok. shipmentScope:'free' çuvallanmış
-      // (çuvala/sevkiyata okutulmuş) topları eler → çuvaldakiler "Çuvalda" sekmesinde/"Tümü"de.
-      f.shipmentScope = 'free';
-      if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
-      // ⚠️ `status:'STOCK'` DEĞİL: o, yarı mamulü de kapsar. İki dar kapsam
-      // sunucuda yaşıyor; `status:'ALL'` varsayılan STOCK süzgecini kaldırır.
-      else if (mode === 'STOCK') { f.rollScope = 'RAW_STOCK_PURE'; f.status = 'ALL'; }
-      else if (mode === 'SEMI_FINISHED') { f.rollScope = 'SEMI_FINISHED'; f.status = 'ALL'; }
-      else if (mode === 'KARTELALIK') {
-        f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
-        f.markedForKartela = 'true';
-      }
-    }
-    return f;
-  }, [mode]);
+  const rollsFilters = useMemo(() => depoRollsFilters(mode, ownership), [mode, ownership]);
 
   // Liste — cursor-mode infinite scroll. mode/search değiştiğinde queryKey
   // değişir → useInfiniteQuery state'i sıfırlar (ilk sayfa).
   const rollsQuery = useInfiniteQuery({
-    queryKey: ['rolls', 'depo', mode, effectiveSearch] as const,
+    queryKey: ['rolls', 'depo', mode, effectiveSearch, ...scopeKey] as const,
     queryFn: ({ pageParam }) =>
       rollService.getAllCursor({
         limit: PAGE_SIZE,
@@ -250,7 +234,7 @@ export default function DepoScreen() {
   const grades = gradesQuery.data?.data ?? [];
 
   const rollStatsQuery = useQuery({
-    queryKey: ['rolls', 'depo', 'stats', mode, effectiveSearch] as const,
+    queryKey: ['rolls', 'depo', 'stats', mode, effectiveSearch, ...scopeKey] as const,
     queryFn: () =>
       rollService.getStats({
         search: effectiveSearch || undefined,
@@ -262,8 +246,9 @@ export default function DepoScreen() {
 
   // Depo kapsam sayaçları — çuvallanmış (serbest stoktan düşen) malın görünürlüğü.
   const scopeQuery = useQuery({
-    queryKey: ['rolls', 'warehouse-scope'] as const,
-    queryFn: () => rollService.getWarehouseScope(),
+    queryKey: ['rolls', 'warehouse-scope', ...scopeKey] as const,
+    // Serbest/Çuvalda kutuları listeyle aynı mülkiyet kapsamında sayılır (sunucuda).
+    queryFn: () => rollService.getWarehouseScope(ownershipFilter(ownership)),
     enabled: !isSwatchMode,
     staleTime: 30 * 1000,
   });
@@ -625,10 +610,12 @@ export default function DepoScreen() {
             />
           </View>
 
-          {/* Mode tab'ları */}
+          {/* Mode tab'ları (+ emanet açıkken sahip süzgeci; telefonda alt satırda) */}
+          <View style={[styles.tabsRow, isPhone && styles.tabsRowPhone]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={isPhone ? undefined : styles.tabsScroll}
             contentContainerStyle={styles.statusTabs}
           >
             {modeTabs.map((t) => {
@@ -658,6 +645,28 @@ export default function DepoScreen() {
               );
             })}
           </ScrollView>
+          {emanetOn && !isSwatchMode ? (
+            <View style={styles.ownerTabs} testID="depo-owner-filter">
+              <Text style={styles.ownerTabsLabel}>Sahip</Text>
+              {OWNERSHIP_TABS.map((t) => {
+                const active = ownership === t.key;
+                return (
+                  <TouchableRipple
+                    key={t.key}
+                    borderless
+                    onPress={() => setOwnershipPick(t.key)}
+                    accessibilityLabel={`Sahip: ${t.label}`}
+                    accessibilityState={{ selected: active }}
+                    testID={`depo-owner-${t.key}`}
+                    style={[styles.statusChip, active && styles.ownerChipActive]}
+                  >
+                    <Text style={[styles.statusChipText, active && { color: '#fff' }]}>{t.label}</Text>
+                  </TouchableRipple>
+                );
+              })}
+            </View>
+          ) : null}
+          </View>
         </Surface>
 
         {/* Liste */}
@@ -710,7 +719,12 @@ export default function DepoScreen() {
                 ) : null
               }
               renderItem={({ item }) => (
-                <RollListRow grades={grades} roll={item} onPress={() => setDetailRoll(item)} />
+                <RollListRow
+                  grades={grades}
+                  roll={item}
+                  emanetOn={emanetOn}
+                  onPress={() => setDetailRoll(item)}
+                />
               )}
             />
           )}
@@ -802,6 +816,7 @@ function StatBox({
 function RollListRow({
   grades,
   roll,
+  emanetOn,
   onPress,
 }: {
   /** Kalite kataloğu — rozet kararı ve rengi buradan (aşağıdaki nota bak).
@@ -809,6 +824,8 @@ function RollListRow({
    *  context makinesi ağır; zincir tek kademe. */
   grades: readonly QualityGradeLike[];
   roll: RollListItem;
+  /** Emanet modülü — kapalıyken sahip rozeti çizilmez (satır bayt-aynı). */
+  emanetOn: boolean;
   onPress: () => void;
 }) {
   return (
@@ -866,6 +883,7 @@ function RollListRow({
                   </Text>
                 </View>
               )}
+              <OwnerBadge emanetOn={emanetOn} roll={roll} style={styles.ownerBadgeInline} />
             </View>
             <View style={styles.rollMeta}>
               {roll.color?.hex && (
@@ -1001,6 +1019,7 @@ function RollDetailModal({
   onRemoveFromStock?: (roll: RollListItem) => void;
 }) {
   const qc = useQueryClient();
+  const emanetOn = useEmanetEnabled();
   const historyQuery = useQuery({
     queryKey: ['roll-history', roll?.id],
     queryFn: () => (roll ? rollService.getHistory(roll.id) : Promise.resolve(null)),
@@ -1057,6 +1076,13 @@ function RollDetailModal({
       : []),
     { icon: 'star-circle', label: 'Kalite', value: roll.qualityGrade },
     { icon: 'circle', label: 'Durum', value: trLabel(ROLL_STATUS_LABEL, roll.status) },
+    // Emanet (müşteri malı) — yalnız modül açıkken; ad eski sunucuda yoksa yalnız "Emanet".
+    ...((() => {
+      const owner = ownerBadgeOf(emanetOn, roll);
+      return owner
+        ? [{ icon: 'account-lock-outline', label: 'Sahibi', value: owner.name ? `Emanet · ${owner.name}` : 'Emanet' } as SummaryItem]
+        : [];
+    })()),
     // Çuvala/sevkiyata bağlı top — serbest stok DEĞİL. Yalnız shipmentId'ye değil
     // sackId'ye de bak: çuvala konmuş ama sevkiyatı olmayan top da "Çuvalda"dır.
     ...(roll.shipmentId || roll.sackId
@@ -1284,6 +1310,13 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
   },
   statusChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tabsScroll: { flex: 1 },
+  tabsRowPhone: { flexDirection: 'column', alignItems: 'stretch' },
+  ownerTabs: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ownerTabsLabel: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  ownerBadgeInline: { alignSelf: 'center' },
+  ownerChipActive: { backgroundColor: '#0e7490', borderColor: '#0e7490' },
 
   listContent: { padding: 4 },
   footerLoader: { paddingVertical: 16, alignItems: 'center' },

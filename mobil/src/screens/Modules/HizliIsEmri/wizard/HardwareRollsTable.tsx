@@ -18,6 +18,7 @@ import TruncatedText from '../../../../components/TruncatedText';
 import { colors, radius, spacing } from '../../../../theme';
 import type { ScannedRoll } from '../useQuickWorkOrder';
 import { TERIM } from '../../../../lib/terim';
+import OwnerBadge from '../../../../components/OwnerBadge';
 
 interface Props {
   rolls: ScannedRoll[];
@@ -30,6 +31,8 @@ interface Props {
   showWidth: boolean;
   /** Kilitli ürün — ilk toptan sonra tek kumaş kuralının görünür hali. */
   itemName?: string | null;
+  /** Emanet modülü — açıkken sahipli topta "Emanet · ad" rozeti (T3); yoksa satır bugünkü gibi. */
+  emanetOn?: boolean;
 }
 
 /** Ekranda kalan ret notu: bant (flash) varken yok; yoksa en son ret — ondan SONRA top eklendiyse o da yok. */
@@ -79,6 +82,7 @@ export default function HardwareRollsTable(p: Props) {
               newest={i === 0}
               duplicate={r.barcode === p.duplicateBarcode}
               showWidth={p.showWidth}
+              emanetOn={p.emanetOn ?? false}
               onRemove={() => p.onRemove(r.barcode)}
             />
           ))}
@@ -111,6 +115,7 @@ function RollRow(p: {
   newest: boolean;
   duplicate: boolean;
   showWidth: boolean;
+  emanetOn: boolean;
   onRemove: () => void;
 }) {
   const { roll } = p;
@@ -125,6 +130,7 @@ function RollRow(p: {
           {roll.barcode}
         </Text>
         {roll.status !== 'STOCK' ? <Text style={styles.rework}>yeniden üretim</Text> : null}
+        <OwnerBadge emanetOn={p.emanetOn} roll={roll} />
       </View>
       {p.showWidth ? <Text style={styles.cellNum}>{roll.width ?? '—'}</Text> : null}
       <Text style={[styles.cellNum, styles.qty]}>{Math.round(roll.qty)}</Text>

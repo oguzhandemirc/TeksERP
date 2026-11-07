@@ -87,3 +87,15 @@ it('mükerrer flaş kartı çıkar', () => {
   );
   expect(r.getByText('ZATEN OKUTULDU')).toBeTruthy();
 });
+
+it('emanet açıkken sahipli topta "Emanet · ad" rozeti; bizim topta ve emanet kapalıyken yok (T3)', () => {
+  const owned = { ...roll('E1', 40), ownerCustomerId: 'c1', ownerCustomer: { id: 'c1', name: 'Akın Tekstil' } } as ScannedRoll;
+  const on = renderWithPaper(<HardwareRollsTable {...base} emanetOn rolls={[roll('A1', 100), owned]} />);
+  expect(on.getAllByTestId('owner-badge')).toHaveLength(1);
+  expect(on.getByText('Emanet')).toBeTruthy();
+  expect(on.getByText('Akın Tekstil')).toBeTruthy();
+  on.unmount();
+  const off = renderWithPaper(<HardwareRollsTable {...base} rolls={[roll('A1', 100), owned]} />);
+  expect(off.queryByTestId('owner-badge')).toBeNull();
+  expect(off.queryByText('Akın Tekstil')).toBeNull();
+});

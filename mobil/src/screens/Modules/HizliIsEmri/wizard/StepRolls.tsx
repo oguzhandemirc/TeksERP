@@ -10,6 +10,7 @@ import { colors, spacing, radius } from '../../../../theme';
 import { ITEM_LIFECYCLE_LABEL } from '../../../../lib/item-lifecycle';
 import { TERIM } from '../../../../lib/terim';
 import { useHardwareScanMode } from '../../../../hooks/useScanMethod';
+import { useEmanetEnabled } from '../../../../hooks/useFeatureFlags';
 import HardwareRollsTable from './HardwareRollsTable';
 
 interface Props {
@@ -52,6 +53,7 @@ export default function StepRolls({
   const hasRolls = wo.scanned.length > 0;
   // El terminali: kamera/OKUT yok, okutulanlar tablo; "Sipariş Bağla" alt çubukta (NewWorkOrderView).
   const hardware = useHardwareScanMode();
+  const emanetOn = useEmanetEnabled();
 
   return (
     <View style={styles.root}>
@@ -66,6 +68,7 @@ export default function StepRolls({
           flash={wo.scanFlash}
           showWidth={wo.mixedWidths.length > 1}
           itemName={wo.lockedItemName}
+          emanetOn={emanetOn}
         />
       ) : (
       <Surface style={styles.summary} elevation={1}>

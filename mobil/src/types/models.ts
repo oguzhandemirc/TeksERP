@@ -424,6 +424,8 @@ export interface Roll {
   barcode: string | null;
   /** Emanet sahibi (G3; müşteri malı) — müşteri barkodu yalnız emanet topa bağlanır (D4-F4). */
   ownerCustomerId?: string | null;
+  /** Sahip müşterinin adı — `/rolls` listesi ve `/rolls/barcode` döner (T3 rozeti); eski sunucuda yok. */
+  ownerCustomer?: { id: string; name: string } | null;
   itemId: string;
   colorId?: string | null;
   initialQty: number;

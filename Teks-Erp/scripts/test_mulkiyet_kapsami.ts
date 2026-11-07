@@ -15,6 +15,10 @@
 //   §5 kalem raporu karneyle aynı bölmeyi kullanır · §6 üretim bakiyesi kırılımı (toplam değişmez)
 //   §7 bulut `stok-karnesi` — kapalıyken `emanet` alanı yok, açıkken var
 //   §8 karne talebi mülkiyete böler — sahibin açık siparişi önce kendi emanetinden, kalan bizim stoktan
+//   §9 tablet Depo (T3) — her sekmenin süzgeç seti × mülkiyet: cursor listesi = şerit, bizim + emanet = tümü
+//      (açık ve kapalı); `/rolls/warehouse-scope` `filter[mulkiyet]` (süzgeçsiz = ALL bayt-aynı, toplam tutar,
+//      serbest = Depo sekmesi şeridi, tanınmayan 400, kontrolcü kablolaması, kapalıyken de uygulanır);
+//      `/rolls/barcode` emanet topta `ownerCustomer` döner (Hızlı İE rozeti)
 //
 // NEGATİF SONDA (B, 2026-11-08, her biri md5 ile birebir geri alındı; 41/0 → ):
 //   N1 `splitByOwnership` bayrağı yok saydı (kapalıyken de böl) → §4a/§4b/§4d/§4e ❌ (37/4)
@@ -23,6 +27,8 @@
 //   N4 buildRollWhere mülkiyet parçası düşürüldü → §2c/§2d/§3c/§3d ❌ (37/4)
 //   (inceleme turu #622) N5 `ownDemandBySpec` emanet düşümü kapatıldı → §8b/§8c ❌ (42/2) · N6 servise
 //   `!!r.ownerCustomerId` → §0b/§0c ❌ (42/2) · N7 tarayıcının karşılaştırma kalıbı kapatıldı → §0f ❌ (43/1); 44/0.
+//   (T3, 2026-11-08) N8 warehouse-scope kapsamı yok sayıldı → §9c/§9d/§9g ❌ · N9 kontrolcü süzgeci geçirmedi → §9f ❌ ·
+//   N10 okutma include'u düştü → §9h ❌ · N11 buildRollWhere mülkiyet parçası düştü → §2c/§2d/§3c/§3d/§9a/§9d ❌; 53/0.
 //   Genişleyen tarayıcı doğuşta iki gerçek bellek yüklemi buldu (shipment-auto-draft, tambur) → helper'a taşındı.
 // Gerekli mi: §4e doğuşta ölçtü — emanet kapalı davranışta (= F1 öncesi kod) siparişsiz eski emanet 40 m ölü stok sayılıyordu.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
@@ -30,12 +36,13 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { InventoryService } from "../src/services/inventory.service";
+import { InventoryController } from "../src/controllers/inventory.controller";
 import { getStockScorecard } from "../src/services/reports/stock-scorecard.report.service";
 import { getStockKalem } from "../src/services/reports/stock-kalem.report.service";
 import { ProductionBalanceService } from "../src/services/production-balance.service";
@@ -177,6 +184,103 @@ function statik(): void {
     "const d = { ownerCustomerId: x ?? null }; const m = r.ownerCustomerId === custId; const o = !r.ownerCustomerId;",
   ].join("\n"));
   check("§0f tarayıcı öz-sınaması (11 kalıp sayılır, 3 sayılmaz)", self === 11, `${self}`);
+}
+
+/** Tablet Depo sekmelerinin GÖNDERDİĞİ süzgeç setleri — `mobil/.../DepoScreen.tsx` `rollsFilters` aynası. */
+const TABLET_DEPO_TABS: Record<string, Record<string, string>> = {
+  ALL: { includeFire: "true", statusIn: "WAREHOUSE,A1_STOCK,STOCK" },
+  WAREHOUSE: { includeFire: "true", shipmentScope: "free", status: "WAREHOUSE" },
+  IN_SACK: { includeFire: "true", rollScope: "IN_SACK", status: "ALL" },
+  STOCK: { includeFire: "true", shipmentScope: "free", rollScope: "RAW_STOCK_PURE", status: "ALL" },
+  SEMI_FINISHED: { includeFire: "true", shipmentScope: "free", rollScope: "SEMI_FINISHED", status: "ALL" },
+};
+/** Fikstürde beklenen [ALL, OWN, CONSIGNED] — ownWh/consWh WAREHOUSE, ownRaw/consRaw ham, consSemi yarı mamul. */
+const TABLET_DEPO_EXPECT: Record<string, [number, number, number]> = {
+  ALL: [5, 2, 3], WAREHOUSE: [2, 1, 1], IN_SACK: [0, 0, 0], STOCK: [2, 1, 1], SEMI_FINISHED: [1, 0, 1],
+};
+const filt = (f: Record<string, string>) => Object.fromEntries(Object.entries(f).map(([k, v]) => [`filter[${k}]`, v]));
+const codeOf = (e: unknown) => (e instanceof AppError ? `${e.statusCode}:${(e.details as { code?: string } | undefined)?.code}` : String(e));
+
+async function section9(
+  itemId: string,
+  custId: string,
+  r: { ownWh: string; consWh: string },
+  setFlag: (v: boolean) => Promise<unknown>,
+): Promise<void> {
+  // Cursor'u limit=2 ile SONUNA kadar yürür — liste sayısı sayfalamadan bağımsız ölçülsün.
+  const cursorCount = async (f: Record<string, string>) => {
+    let n = 0;
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 50; guard++) {
+      const page = (await inventory.findAllRolls(fakeReq({ ...filt(f), mode: "cursor", limit: "2", ...(cursor ? { cursor } : {}) }))) as unknown as {
+        data: unknown[]; pagination: { nextCursor: string | null; hasMore: boolean };
+      };
+      n += page.data.length;
+      if (!page.pagination.hasMore || !page.pagination.nextCursor) break;
+      cursor = page.pagination.nextCursor;
+    }
+    return n;
+  };
+  const statCount = async (f: Record<string, string>) => (await inventory.getRollStats(fakeReq(filt(f)))).data!.totalCount;
+  for (const flag of [true, false]) {
+    await setFlag(flag);
+    const tag = flag ? "AÇIK" : "KAPALI";
+    const bad: string[] = [];
+    for (const [tab, f] of Object.entries(TABLET_DEPO_TABS)) {
+      const got: number[] = [];
+      for (const scope of ["", "OWN", "CONSIGNED"]) {
+        const q = { ...f, itemId, ...(scope ? { mulkiyet: scope } : {}) };
+        const [c, st] = [await cursorCount(q), await statCount(q)];
+        if (c !== st) bad.push(`${tab}/${scope || "ALL"} liste ${c} ≠ şerit ${st}`);
+        got.push(c);
+      }
+      if (got.join() !== TABLET_DEPO_EXPECT[tab]!.join()) bad.push(`${tab} ${got.join("/")} ≠ ${TABLET_DEPO_EXPECT[tab]!.join("/")}`);
+      if (got[1]! + got[2]! !== got[0]) bad.push(`${tab} bizim+emanet ≠ tümü`);
+    }
+    check(`§9a ${tag}: her sekmede liste (cursor) = şerit, bizim + emanet = tümü, beklenen sayılar`, bad.length === 0, bad.join(" · "));
+  }
+
+  // §9b warehouse-scope — Serbest/Çuvalda kutuları listeyle aynı kapsamda (global sayılar; fikstür içinde).
+  await setFlag(true);
+  const ws = async (raw?: string) => (await inventory.getWarehouseScope(raw)).data!;
+  const wAll = await ws();
+  const [wA, wO, wC] = [await ws("ALL"), await ws("OWN"), await ws("CONSIGNED")];
+  check("§9b warehouse-scope: süzgeçsiz = ALL (bayt-aynı, eski tablet)", JSON.stringify(wA) === JSON.stringify(wAll));
+  const sum = (k: "free" | "pool" | "planned") => wO[k].count + wC[k].count === wAll[k].count && Math.abs(wO[k].qty + wC[k].qty - wAll[k].qty) < 1e-6;
+  check("§9c warehouse-scope: bizim + emanet = tümü (serbest/çuval/planlı)", sum("free") && sum("pool") && sum("planned"), JSON.stringify({ wAll, wO, wC }));
+  const freeStat = async (scope: string) => statCount({ status: "WAREHOUSE", shipmentScope: "free", includeFire: "true", mulkiyet: scope });
+  check("§9d warehouse-scope serbest = Depo sekmesi şeridi (aynı kapsam)", wO.free.count === (await freeStat("OWN")) && wC.free.count === (await freeStat("CONSIGNED")) && wC.free.count >= 1,
+    `${wO.free.count}/${wC.free.count}`);
+  let wErr: unknown = null;
+  try { await ws("BIZIM"); } catch (e) { wErr = codeOf(e); }
+  check("§9e warehouse-scope tanınmayan değer 400 OWNERSHIP_SCOPE_INVALID", wErr === "400:OWNERSHIP_SCOPE_INVALID", String(wErr));
+  // Uç kablolaması: kontrolcü `filter[mulkiyet]`i servise geçirir (geçirmezse §9e/§9f HTTP'de sessiz ALL olur).
+  const ctrl = new InventoryController();
+  const viaCtrl = async (q: Record<string, unknown>) => {
+    let body: unknown = null;
+    let err: unknown = null;
+    const res = { status: () => res, json: (b: unknown) => { body = b; return res; } } as unknown as Response;
+    await ctrl.getWarehouseScope(fakeReq(q), res, (e?: unknown) => { err = e; });
+    return { body: body as { data?: typeof wAll } | null, err };
+  };
+  const cC = await viaCtrl({ "filter[mulkiyet]": "CONSIGNED" });
+  const cBad = await viaCtrl({ "filter[mulkiyet]": "BIZIM" });
+  check("§9f uç: `filter[mulkiyet]` kontrolcüden servise geçer, tanınmayan 400", JSON.stringify(cC.body?.data) === JSON.stringify(wC) && codeOf(cBad.err) === "400:OWNERSHIP_SCOPE_INVALID",
+    `${JSON.stringify(cC.body?.data)} · ${codeOf(cBad.err)}`);
+  await setFlag(false);
+  const wOffC = await ws("CONSIGNED");
+  check("§9g emanet KAPALI: warehouse-scope süzgeci yine uygulanır (liste emsali)", JSON.stringify(wOffC) === JSON.stringify(wC) && wOffC.free.count < (await ws()).free.count,
+    `${wOffC.free.count}`);
+
+  // §9h okutma ucu sahip adını döner — Hızlı İE satır rozeti (T3).
+  // Okutma kodu büyük harfe normalize edilir (`normalizeScanCode`); fikstür barkodu küçük harf taşır → büyüt.
+  const bc = async (id: string) => {
+    const { barcode } = await prisma.roll.update({ where: { id }, data: { barcode: `T3${id.replace(/-/g, "").toUpperCase()}` }, select: { barcode: true } });
+    return (await inventory.findRollByBarcode(barcode!)).data as unknown as { ownerCustomer?: { id: string; name: string } | null };
+  };
+  const [bCons, bOwn] = [await bc(r.consWh), await bc(r.ownWh)];
+  check("§9h okutma: emanet topta ownerCustomer {id, ad}, bizim topta null", bCons.ownerCustomer?.id === custId && bCons.ownerCustomer?.name === `${TAG} Sahip` && bOwn.ownerCustomer === null,
+    JSON.stringify([bCons.ownerCustomer, bOwn.ownerCustomer]));
 }
 
 async function main(): Promise<void> {
@@ -344,6 +448,10 @@ async function main(): Promise<void> {
     await prisma.orderLine.updateMany({ where: { orderId: order2.id }, data: { quantity: 40 } });
     const uOn40 = await unc();
     check("§8c AÇIK: X siparişi 40 → tamamı emanetten, bizim siparişsiz 100 (incelemenin sondası: düzeltmesiz 60)", uOn40 === 100, String(uOn40));
+
+    // ── §9 tablet Depo (T3) ───────────────────────────────────────────────────
+    console.log("\n── §9 tablet Depo: sekme × mülkiyet ──");
+    await section9(item.id, cust.id, { ownWh, consWh }, setFlag);
   } finally {
     for (const oid of [ids.order, ids.order2].filter(Boolean)) {
       await prisma.orderLine.deleteMany({ where: { orderId: oid } });

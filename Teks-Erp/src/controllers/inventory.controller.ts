@@ -16,6 +16,7 @@ import { matchesPermission } from "../middlewares/rbac.middleware";
 import { SETTING_KEYS, readDokumaEnabled, resolveDokumaRollBirth } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
+import { parseQueryParams } from "../utils/query-parser";
 import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -560,9 +561,10 @@ export class InventoryController {
     }
   }
 
-  async getWarehouseScope(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getWarehouseScope(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getWarehouseScope();
+      // `filter[mulkiyet]` — liste/şeritle aynı okuyucu (tanınmayan 400); yoksa bugünkü sayılar.
+      const result = await this.service.getWarehouseScope(parseQueryParams(req).filters["mulkiyet"]);
       res.status(200).json(result);
     } catch (error) {
       next(error);

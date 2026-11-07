@@ -412,9 +412,17 @@ router.get(
  *     description: WAREHOUSE topları fiziksel yere göre ayırır. Yalnız "free" satılabilir serbest stoktur.
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: filter[mulkiyet]
+ *         required: false
+ *         schema: { type: string, enum: [ALL, OWN, CONSIGNED] }
+ *         description: Bizim stok / emanet kapsamı (top listesiyle aynı okuyucu); boş = ALL, tanınmayan 400 OWNERSHIP_SCOPE_INVALID.
  *     responses:
  *       200:
  *         description: "{ free, pool, planned } — her biri { count, qty }."
+ *       400:
+ *         description: Geçersiz mülkiyet süzgeci.
  */
 router.get(
   "/warehouse-scope",
