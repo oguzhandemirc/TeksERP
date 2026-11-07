@@ -60,7 +60,7 @@
       "bin/vacuumdb.exe",
       "bin/libpq.dll"
     ],
-    "uzantilar": ["pg_trgm"],
+    "uzantilar": ["pg_trgm", "pg_stat_statements"],
     "icu": true
   },
   "guncellemeSonrasi": []

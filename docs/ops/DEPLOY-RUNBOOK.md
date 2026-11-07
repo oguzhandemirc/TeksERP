@@ -821,7 +821,12 @@ Bellek/performans tuning (installer RAM'e göre ölçekliyordu):
 | `shared_buffers` | RAM %25 (min 128MB, tavan 8GB) |
 | `effective_cache_size` | RAM %60 (min 512MB) |
 | `work_mem` | `16MB` |
-| `maintenance_work_mem` | RAM %5 (64–512MB) |
+| `maintenance_work_mem` | RAM/16 (64–512MB) |
+| `random_page_cost` | `1.1` (SSD; dönen disk `4`) |
+
+Tek kaynak `deploy/pg/pg-ornegi.json` + `deploy/pg/postgresql.tekserp.conf.sablon`. Mevcut kuruluma (görünürlük:
+`pg_stat_statements`, `track_io_timing`, `log_min_duration_statement`) bakım adımı: `deploy\pg\pg-ayar.ps1` — önce
+KURU (fark tablosu), sonra `-Uygula`; `[RESTART]` işaretliler vardiya dışı `Restart-Service` ile etkinleşir.
 
 **Neden:** PostgreSQL default'ları (`shared_buffers=128MB`, `work_mem=4MB`) yüz
 binlerce satırlık üretim DB'sinde rapor aggregate'lerini diske taşırır; `50s`

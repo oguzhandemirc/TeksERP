@@ -9,9 +9,11 @@
 //   §1 sürüm kaydı iç tutarlılığı (pg-surumu.json)
 //   §2 örnek sözleşmesi (pg-ornegi.json): sanal hizmet hesabı, initdb (UTF8 + C + scram +
 //      checksum), roller süper değil, veri dizini ikili kökün dışında
-//   §3 şablon yasakları: yalnız 127.0.0.1 · yalnız scram-sha-256 · trust/md5/replication/
+//   §3 şablon yasakları (+ ön yüklenen kütüphane kayıtta zorunlu · effective_io_concurrency yalnız 0 ·
+//      hariciBakim ayarları şablonda): yalnız 127.0.0.1 · yalnız scram-sha-256 · trust/md5/replication/
 //      include yok · UTC · ASCII · yer tutucu kümesi formülle birebir
-//   §4 altın vektörler (bellek kâhini ilk-kurulum.ps1 · port kuralı · üretim özetleri)
+//   §4 altın vektörler (bellek + disk profili · port kuralı · üretim özetleri; PowerShell kâhini
+//      deploy/pg/pg-ayar.ps1 aynı vektörleri scripts/test_pg_ayar.mjs'te geçer)
 //   §5 formül özellikleri (tekdüze artan · shared_buffers ≤ %40 RAM · ecs ≤ RAM)
 //   §6 TEK KAYNAK: araçlar/CI kaydı yüklemden okur; sha256/url literal'i tüketicide yok
 //   §7 uzantı kapsaması: migration'ların CREATE EXTENSION ettiği her uzantı kayıtta zorunlu
@@ -34,7 +36,9 @@ import {
   SURUM_REL,
   VEKTOR_REL,
   bellekHesapla,
+  confAyristir,
   confYasaklari,
+  diskDegerleri,
   edbDosyaAdi,
   hbaYasaklari,
   jsonCoz,
@@ -142,10 +146,20 @@ function olc(d) {
   for (const x of confYasaklari(confSablon, { sablon: true })) k('§3', x);
   for (const x of hbaYasaklari(hbaSablon)) k('§3', x);
   const bellekAdlari = Object.keys(ornek.yapilandirma?.bellek ?? {});
-  const beklenenYer = ['PORT', ...bellekAdlari].sort();
+  const diskAdlari = Object.keys(ornek.yapilandirma?.disk?.ayarlar ?? {});
+  const beklenenYer = ['PORT', ...bellekAdlari, ...diskAdlari].sort();
   const confYer = yerTutuculari(confSablon).sort();
-  if (confYer.join() !== beklenenYer.join()) k('§3', `conf şablonu yer tutucuları [${confYer}] — beklenen [${beklenenYer}] (PORT + bellek formülü)`);
+  if (confYer.join() !== beklenenYer.join()) k('§3', `conf şablonu yer tutucuları [${confYer}] — beklenen [${beklenenYer}] (PORT + bellek formülü + disk profili)`);
   if (yerTutuculari(hbaSablon).length) k('§3', 'hba şablonu yer tutucu taşıyor (hba sabittir)');
+  // Ön yüklenen kütüphane pakette yoksa sunucu KALKMAZ: her biri pg-surumu.json zorunlu.uzantilar'da (ikili doğrulayıcı ölçer).
+  const confA = confAyristir(confSablon).ayarlar;
+  const onYukleme = (confA.get('shared_preload_libraries')?.deger ?? '').split(',').map((x) => x.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean);
+  const zorunluU = new Set((kayit?.zorunlu?.uzantilar ?? []).map((u) => u.toLowerCase()));
+  for (const u of onYukleme) if (!zorunluU.has(u.toLowerCase())) k('§3', `shared_preload_libraries "${u}" ${SURUM_REL} zorunlu.uzantilar'da yok — paket taşımazsa sunucu kalkmaz`);
+  for (const [ad, f] of Object.entries(ornek.yapilandirma?.disk?.ayarlar ?? {})) {
+    if (!new RegExp(`^${f}\\s*=\\s*\\{\\{${ad}\\}\\}\\s*$`, 'm').test(confSablon)) k('§3', `conf şablonunda "${f} = {{${ad}}}" satırı yok (disk profili ile ayar adı ayrıştı)`);
+  }
+  for (const a of ornek.yapilandirma?.hariciBakim?.ayarlar ?? []) if (!confA.has(a)) k('§3', `hariciBakim ayarı "${a}" conf şablonunda yok (pg-ayar.ps1 değeri şablondan okur)`);
   for (const [ad, f] of Object.entries(ornek.yapilandirma?.bellek ?? {})) {
     if (!new RegExp(`^${f.ayar}\\s*=\\s*\\{\\{${ad}\\}\\}\\s*$`, 'm').test(confSablon)) k('§3', `conf şablonunda "${f.ayar} = {{${ad}}}" satırı yok (formül ile ayar adı ayrıştı)`);
   }
@@ -161,17 +175,28 @@ function olc(d) {
         continue;
       }
       for (const [ad, deger] of Object.entries(v.beklenen)) {
-        if (gercek[ad] !== deger) k('§4', `bellek ${v.ramMB} MB ${ad} = ${gercek[ad]} — kâhin (ilk-kurulum.ps1) ${deger}`);
+        if (gercek[ad] !== deger) k('§4', `bellek ${v.ramMB} MB ${ad} = ${gercek[ad]} — vektör ${deger} (PowerShell kâhini pg-ayar.ps1 aynı vektörü geçer: test_pg_ayar)`);
       }
     }
     for (const v of vektor.port ?? []) {
       const r = portSec({ ...portGirdisi(v.girdi, ornek.port), aralik: ornek.port });
       if (v.beklenen.hata ? !r.hata : r.port !== v.beklenen.port) k('§4', `port "${v.ad}": ${r.hata ?? r.port} — beklenen ${v.beklenen.hata ? 'HATA' : v.beklenen.port}`);
     }
+    for (const v of vektor.disk ?? []) {
+      let gercek;
+      try {
+        gercek = diskDegerleri(ornek.yapilandirma.disk, v.disk);
+      } catch (e) {
+        if (!v.beklenen.hata) k('§4', `disk "${v.disk}": ${e.message}`);
+        continue;
+      }
+      if (v.beklenen.hata) k('§4', `disk "${v.disk}": HATA bekleniyordu, ${JSON.stringify(gercek)} döndü`);
+      else for (const [ad, deger] of Object.entries(v.beklenen)) if (gercek[ad] !== deger) k('§4', `disk "${v.disk}" ${ad} = ${gercek[ad]} — vektör ${deger}`);
+    }
     for (const v of vektor.uretim ?? []) {
       let c;
       try {
-        c = yapilandirmaUret({ ramMB: v.ramMB, port: v.port }, { ornek, confSablon, hbaSablon });
+        c = yapilandirmaUret({ ramMB: v.ramMB, port: v.port, disk: v.disk }, { ornek, confSablon, hbaSablon });
       } catch (e) {
         k('§4', `üretim ${v.ramMB} MB/${v.port}: ${e.message}`);
         continue;
@@ -183,7 +208,7 @@ function olc(d) {
       if (cs !== v.confSha256) k('§4', `üretim ${v.ramMB} MB/${v.port} tekserp.conf özeti ${cs} — vektör ${v.confSha256.slice(0, 16)}… (şablon değiştiyse vektörü BİLEREK güncelle)`);
       if (hs !== v.hbaSha256) k('§4', `üretim pg_hba.conf özeti ${hs} — vektör ${v.hbaSha256.slice(0, 16)}…`);
     }
-    if (!(vektor.bellek?.length && vektor.port?.length && vektor.uretim?.length)) k('§4', 'vektör kümelerinden biri boş (bellek/port/üretim) — boş küme yeşil sayılmaz');
+    if (!(vektor.bellek?.length && vektor.port?.length && vektor.uretim?.length && vektor.disk?.length)) k('§4', 'vektör kümelerinden biri boş (bellek/port/disk/üretim) — boş küme yeşil sayılmaz');
 
     // §5 — formül özellikleri
     const adlar = Object.keys(ornek.yapilandirma.bellek);
@@ -373,6 +398,13 @@ function sondalar(taban) {
     ['N39 backendEnAz başka ana sürümde → KIRMIZI (§1)', 'kirmizi', kayitta((o) => { o.backendEnAz = '15.9'; }), '§1'],
     ['N40 backendEnAz sabitlenen sürümden yeni → KIRMIZI (§1)', 'kirmizi', kayitta((o) => { o.backendEnAz = '16.99'; }), '§1'],
     ['N41 yayıncı kaydı yüklemden okumuyor → KIRMIZI (§6)', 'kirmizi', (d) => { d['deploy/backend-yayinla.mjs'] = d['deploy/backend-yayinla.mjs'].replace(/from '\.\/pg\/lib\/pg-ornegi\.mjs'/g, "from './pg/lib/baska.mjs'"); }, '§6'],
+    ['N42 ön yüklenen kütüphane kayıtta zorunlu değil → KIRMIZI (§3)', 'kirmizi', kayitta((o) => { o.zorunlu.uzantilar = o.zorunlu.uzantilar.filter((u) => u !== 'pg_stat_statements'); }), '§3'],
+    ['N43 effective_io_concurrency = 200 (Windows\'ta sunucu kalkmaz) → KIRMIZI (§3)', 'kirmizi', (d) => { d[CONF] += 'effective_io_concurrency = 200\n'; }, '§3'],
+    ['N44 4 GB vektörü bozuldu (shared_buffers 2GB) → KIRMIZI (§4)', 'kirmizi', vektorde((o) => { o.bellek.find((b) => b.ramMB === 4096).beklenen.SHARED_BUFFERS = '2GB'; }), '§4'],
+    ['N45 bakım belleği bölen 20, vektör değişmedi → KIRMIZI (§4)', 'kirmizi', ornekte((o) => { o.yapilandirma.bellek.MAINTENANCE_WORK_MEM.bolen = 20; }), '§4'],
+    ['N46 SSD profili random_page_cost 4, vektör değişmedi → KIRMIZI (§4)', 'kirmizi', ornekte((o) => { o.yapilandirma.disk.profiller.ssd.RANDOM_PAGE_COST = '4'; }), '§4'],
+    ['N47 uzantı uygulama DB\'sine kuruluyor → KIRMIZI (§2)', 'kirmizi', ornekte((o) => { o.yapilandirma.hariciBakim.uzantiVeritabani = 'tekserp'; }), '§2'],
+    ['N48 hariciBakim şablonda olmayan ayar → KIRMIZI (§3)', 'kirmizi', ornekte((o) => { o.yapilandirma.hariciBakim.ayarlar.push('jit'); }), '§3'],
     ['O1 kayıt bozuk JSON → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[SURUM_REL] = d[SURUM_REL].slice(0, 40); }],
     ['O2 hba şablonu okunamadı → ÖLÇÜLEMEDİ', 'olculemedi', (d) => { d[HBA] = undefined; }],
     ['O3 migration kökü boş → ÖLÇÜLEMEDİ (§7)', 'olculemedi', (d) => { for (const r of Object.keys(d)) if (r.startsWith(`${MIGRASYON_KOKU}/`)) delete d[r]; }, '§7'],

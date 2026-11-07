@@ -198,12 +198,22 @@ export function ornekHatalari(o) {
       if (!/^[A-Z_]+$/.test(ad)) h.push(`bellek anahtarı "${ad}" şablon yer tutucusu biçiminde değil`);
       if (!nesneMi(f) || typeof f.ayar !== 'string') h.push(`bellek.${ad}.ayar yok`);
       else {
-        if (!tamsayiMi(f.yuzde) || f.yuzde < 1 || f.yuzde > 100) h.push(`bellek.${ad}.yuzde 1..100 tamsayı değil`);
+        if ((f.yuzde === undefined) === (f.bolen === undefined)) h.push(`bellek.${ad} tam olarak biri olmalı: yuzde ya da bolen`);
+        else if (f.yuzde !== undefined && (!tamsayiMi(f.yuzde) || f.yuzde < 1 || f.yuzde > 100)) h.push(`bellek.${ad}.yuzde 1..100 tamsayı değil`);
+        else if (f.bolen !== undefined && (!tamsayiMi(f.bolen) || f.bolen < 2)) h.push(`bellek.${ad}.bolen ≥2 tamsayı değil`);
         if (!tamsayiMi(f.altMB) || f.altMB < 1) h.push(`bellek.${ad}.altMB pozitif tamsayı değil`);
         if (f.ustMB !== null && (!tamsayiMi(f.ustMB) || f.ustMB < f.altMB)) h.push(`bellek.${ad}.ustMB null ya da ≥ altMB tamsayı değil`);
       }
     }
     if (nesneMi(y.bellek?.SHARED_BUFFERS) && y.bellek.SHARED_BUFFERS.yuzde > 40) h.push('shared_buffers RAM\'in %40\'ını aşamaz (backend aynı makinede)');
+    for (const x of diskHatalari(y.disk)) h.push(x);
+    const hb = y.hariciBakim;
+    if (!nesneMi(hb) || !Array.isArray(hb.ayarlar) || !hb.ayarlar.length) h.push('yapilandirma.hariciBakim.ayarlar boş');
+    else {
+      if (!Array.isArray(hb.yenidenBaslatma) || hb.yenidenBaslatma.some((a) => !hb.ayarlar.includes(a))) h.push('hariciBakim.yenidenBaslatma ayarlar\'ın alt kümesi değil');
+      if (typeof hb.uzanti !== 'string' || !/^[a-z_]+$/.test(hb.uzanti)) h.push('hariciBakim.uzanti geçersiz');
+      if (hb.uzantiVeritabani !== 'postgres') h.push(`hariciBakim.uzantiVeritabani "${hb.uzantiVeritabani}" — yalnız 'postgres' (uygulama DB'sine kurulan uzantı dökümle taşınır, süper olmayan geri yükleme kırılır)`);
+    }
   }
   const r = o.roller;
   if (!nesneMi(r) || !nesneMi(r.uygulama) || !nesneMi(r.bakim)) h.push('roller.uygulama / roller.bakim yok');
@@ -239,12 +249,35 @@ export function bellekHesapla(ramMB, bellek) {
   if (!tamsayiMi(ramMB) || ramMB < 256) throw new Error(`RAM ${ramMB} MB — pozitif tamsayı (≥256) bekleniyor`);
   const sonuc = {};
   for (const [ad, f] of Object.entries(bellek)) {
-    let mb = Math.floor((ramMB * f.yuzde) / 100);
+    let mb = f.bolen !== undefined ? Math.floor(ramMB / f.bolen) : Math.floor((ramMB * f.yuzde) / 100);
     mb = Math.max(mb, f.altMB);
     if (f.ustMB !== null) mb = Math.min(mb, f.ustMB);
     sonuc[ad] = mbBicim(mb);
   }
   return sonuc;
+}
+
+/* ------------------------------------------------------------------ *
+ * Disk profili — random_page_cost (SSD varsayımı; dönen diskte hdd)
+ * ------------------------------------------------------------------ */
+
+function diskHatalari(disk) {
+  if (!nesneMi(disk) || !nesneMi(disk.ayarlar) || !nesneMi(disk.profiller)) return ['yapilandirma.disk bloğu yok (ayarlar + profiller)'];
+  const h = [];
+  const adlar = Object.keys(disk.ayarlar).sort().join();
+  if (!(disk.varsayilan in disk.profiller)) h.push(`disk.varsayilan "${disk.varsayilan}" profillerde yok`);
+  for (const [p, d] of Object.entries(disk.profiller)) {
+    if (!nesneMi(d) || Object.keys(d).sort().join() !== adlar) h.push(`disk.profiller.${p} anahtarları disk.ayarlar ile aynı değil`);
+    else for (const [ad, v] of Object.entries(d)) if (typeof v !== 'string' || !/^\d+(\.\d+)?$/.test(v)) h.push(`disk.profiller.${p}.${ad} "${v}" sayı metni değil`);
+  }
+  return h;
+}
+
+/** Bilinmeyen profil HATA (fail-closed: sessizce varsayılana düşülmez). */
+export function diskDegerleri(disk, profil) {
+  const ad = profil ?? disk.varsayilan;
+  if (!Object.hasOwn(disk.profiller, ad)) throw new Error(`disk profili "${ad}" tanınmıyor — ${Object.keys(disk.profiller).join(' | ')}`);
+  return { ...disk.profiller[ad] };
 }
 
 /* ------------------------------------------------------------------ *
@@ -287,9 +320,9 @@ export function sablonDoldur(metin, degerler) {
 }
 
 /** tekserp.conf + pg_hba.conf üretimi. Çıktı UTF-8 (şablon ASCII), LF satır sonu. */
-export function yapilandirmaUret({ ramMB, port }, { ornek, confSablon, hbaSablon }) {
+export function yapilandirmaUret({ ramMB, port, disk }, { ornek, confSablon, hbaSablon }) {
   if (!tamsayiMi(port) || port <= 1024 || port > 65535) throw new Error(`port ${port} 1025..65535 dışında`);
-  const degerler = { PORT: port, ...bellekHesapla(ramMB, ornek.yapilandirma.bellek) };
+  const degerler = { PORT: port, ...bellekHesapla(ramMB, ornek.yapilandirma.bellek), ...diskDegerleri(ornek.yapilandirma.disk, disk) };
   return { conf: sablonDoldur(confSablon, degerler), hba: sablonDoldur(hbaSablon, {}), degerler };
 }
 
@@ -360,6 +393,9 @@ export function confYasaklari(metin, { sablon }) {
     else if (a.deger !== beklenen) h.push(`tekserp.conf:${a.satir} ${ad} = '${a.deger}' — '${beklenen}' olmalı (${neden})`);
   }
   for (const ad of CONF_YASAK_AYAR) if (ayarlar.has(ad)) h.push(`tekserp.conf:${ayarlar.get(ad).satir} ${ad} YASAK (kimlik doğrulama/dosya yönlendirmesi)`);
+  // Windows'ta posix_fadvise yok: PG 16 sıfır dışı effective_io_concurrency'yi reddeder, sunucu KALKMAZ.
+  const eic = ayarlar.get('effective_io_concurrency');
+  if (eic && eic.deger !== '0') h.push(`tekserp.conf:${eic.satir} effective_io_concurrency = ${eic.deger} — Windows'ta yalnız 0 (posix_fadvise yok; sunucu kalkmaz)`);
   const port = ayarlar.get('port');
   if (!port) h.push('tekserp.conf port YOK');
   else if (sablon ? port.deger !== '{{PORT}}' : !/^\d+$/.test(port.deger) || +port.deger <= 1024 || +port.deger > 65535) {
