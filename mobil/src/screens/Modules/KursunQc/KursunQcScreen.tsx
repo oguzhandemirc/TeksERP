@@ -38,6 +38,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import {
   kursunQcService,
   type CompleteQc2Request,
@@ -183,6 +184,8 @@ export default function KursunQcScreen() {
   const device = useDeviceType();
   const compact = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
+  // Donanım okuyuculu cihazda kart okutma tuşla yapılır; kamera açan çipler gizlenir.
+  const hardware = useHardwareScanMode();
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
 
@@ -1217,6 +1220,7 @@ export default function KursunQcScreen() {
             // giriş bandındaki ikinci (pasif duran) kamera butonu kaldırıldı.
             // Telefonda header pill'i yok, kamera butonu burada kalır.
             onScan={compact ? () => drawerQueue.run(() => setScannerOpen(true)) : undefined}
+            hardwareListening
             onList={() => drawerQueue.run(() => setListModalOpen(true))}
             tone="green"
             listContainerColor={urgentCount > 0 ? '#fee2e2' : undefined}
@@ -1351,12 +1355,14 @@ export default function KursunQcScreen() {
         badge={<UrgentBadge count={urgentCount} />}
         fill
       />
-      <HeaderChip
-        icon="camera"
-        label="Tara"
-        onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-        fill
-      />
+      {!hardware && (
+        <HeaderChip
+          icon="camera"
+          label="Tara"
+          onPress={() => drawerQueue.run(() => setScannerOpen(true))}
+          fill
+        />
+      )}
       {docLookup.enabled && (
         <HeaderChip
           icon="file-document-outline"
@@ -1376,11 +1382,13 @@ export default function KursunQcScreen() {
           kalır, erişim 2. kattaki chip'ten (phoneSecondRow). */}
       {!compact && (
         <>
-          <HeaderChip
-            icon="camera"
-            label="Kart Okut"
-            onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-          />
+          {!hardware && (
+            <HeaderChip
+              icon="camera"
+              label="Kart Okut"
+              onPress={() => drawerQueue.run(() => setScannerOpen(true))}
+            />
+          )}
           <HeaderChip
             icon="format-list-bulleted"
             label="Liste"
@@ -1792,6 +1800,7 @@ export default function KursunQcScreen() {
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         title="Refakat Kartı QR Okut"
         onDismiss={() => setScannerOpen(false)}
         onScan={handleScannerResult}

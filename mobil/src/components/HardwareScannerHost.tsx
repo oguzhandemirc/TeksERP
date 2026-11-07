@@ -39,10 +39,14 @@ export default function HardwareScannerHost() {
       return;
     }
     // Hedefsiz okuma sessiz kalmaz: operatör "okudu ama bir şey olmadı" sanmasın.
-    setUnhandledScanListener(() => {
+    setUnhandledScanListener((_scan, reason) => {
       recordActivity();
       signalScan('reject');
-      Toast.show({ type: 'info', text1: 'Bu ekranda okutma beklenmiyor', visibilityTime: 1800 });
+      Toast.show({
+        type: 'info',
+        text1: reason === 'covered' ? 'Önce açık pencereyi kapatın' : 'Bu ekranda okutma beklenmiyor',
+        visibilityTime: 1800,
+      });
     });
     return () => setUnhandledScanListener(null);
   }, [method.kind]);

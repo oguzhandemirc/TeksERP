@@ -17,6 +17,8 @@ import {
   DOUBLE_DELIVERY_MS,
   __resetScanBusForTests,
   emitScan,
+  newScanOverlayId,
+  openScanOverlay,
   pushScanTarget,
   setUnhandledScanListener,
   type HardwareScan,
@@ -222,6 +224,41 @@ describe('boğaz: normalize · çift teslim · LIFO hedef', () => {
     expect(emitScan({ data: 'X9', source: 'wedge' }, 1)).toBe('no-target');
     expect(emitScan({ data: ' \r\n', source: 'wedge' }, 2)).toBe('empty');
     expect(lost).toEqual(['X9']);
+  });
+
+  it('açık pencere: kapsamadığı arka plan hedefini örter (covered); görünür ve kapsanan hedef alır', () => {
+    const got: string[] = [];
+    const lost: string[] = [];
+    setUnhandledScanListener((s, reason) => lost.push(`${reason}:${s.data}`));
+    const bg = { current: true };
+    pushScanTarget({ current: (s) => got.push(`ekran:${s.data}`) }, bg);
+    const dialog = newScanOverlayId();
+    const closeDialog = openScanOverlay(dialog);
+    expect(emitScan({ data: 'A1', source: 'wedge' }, 1000)).toBe('covered');
+    // Sıra değil kapsama: pencere açıkken bağlanan ekran dinleyicisi de örtülür.
+    const popLate = pushScanTarget({ current: (s) => got.push(`gec:${s.data}`) }, { current: true });
+    expect(emitScan({ data: 'A2', source: 'wedge' }, 2000)).toBe('covered');
+    popLate();
+    // Pencerenin İÇİNDEKİ arka plan dinleyicisi (sheet'in kapalı tarayıcısı) alır.
+    const popInner = pushScanTarget({ current: (s) => got.push(`ic:${s.data}`) }, { current: true }, [dialog]);
+    expect(emitScan({ data: 'A3', source: 'wedge' }, 3000)).toBe('delivered');
+    popInner();
+    // Aynı hedef görünür olunca (tarayıcı açıldı) pencere onu örtmez.
+    bg.current = false;
+    expect(emitScan({ data: 'A4', source: 'wedge' }, 4000)).toBe('delivered');
+    bg.current = true;
+    closeDialog();
+    expect(emitScan({ data: 'A5', source: 'wedge' }, 5000)).toBe('delivered');
+    expect(got).toEqual(['ic:A3', 'ekran:A4', 'ekran:A5']);
+    expect(lost).toEqual(['covered:A1', 'covered:A2']);
+  });
+
+  it('hedefsiz yığın pencere açıkken de no-target', () => {
+    const lost: string[] = [];
+    setUnhandledScanListener((_s, reason) => lost.push(reason));
+    openScanOverlay(newScanOverlayId());
+    expect(emitScan({ data: 'B1', source: 'wedge' }, 1000)).toBe('no-target');
+    expect(lost).toEqual(['no-target']);
   });
 
   it('GS1 iç ayırıcısı (GS) korunur', () => {
