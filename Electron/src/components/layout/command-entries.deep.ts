@@ -47,7 +47,7 @@ const kartelaTabEntries: CommandEntry[] = [
     description: "Kartela Takibi sekmesi",
     icon: t.Icon,
     to: `/operations/kartela?tab=${t.key}`,
-    permission: "kartela:read",
+    permission: t.permission ?? "kartela:read",
     keywords: "kartela fason sevk kabul swatch",
     deep: true,
   })),

@@ -1,7 +1,7 @@
 // Yeni Kartela Sevki — tablet "Kartela Sevk" ekranının panel eşi. `/dispatch` clientToken almaz
 // (bilinçli; sunucu aynı firma + aynı toplu açık sevki idempotent döndürür) → çift gönderime karşı
 // düğme kilidi + istek uçuştayken diyalog kapanmaz.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, ListChecks, Send, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,7 @@ import { toastServerSuccess } from "@/lib/serverNotes";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { kartelaService } from "./service";
-import { buildDispatchPayload, KARTELA_ROLL_SCOPE, refreshKartelaLists } from "./kartelaActions";
+import { buildDispatchPayload, KARTELA_PICKER_SCOPES, refreshKartelaLists, type KartelaPickedRoll } from "./kartelaActions";
 import { useDispatchDraft, type DispatchDraft } from "./useDispatchDraft";
 import { useKartelaFirmCategory } from "./useKartelaFirmCategory";
 import { useSingleFlight } from "./useSingleFlight";
@@ -26,13 +26,23 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Sevk oluştu → sayfa çeki diyaloğunu açar. */
   onCreated: (dispatchId: string) => void;
+  /** "Sevke ekle" ile gelen toplar — açılışta taslağa eklenir (mükerrer eklenmez). */
+  initialRolls?: readonly KartelaPickedRoll[] | null;
 }
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1, useGrouping: false });
 
-export function KartelaDispatchDialog({ open, onOpenChange, onCreated }: Props) {
+export function KartelaDispatchDialog({ open, onOpenChange, onCreated, initialRolls }: Props) {
   const qc = useQueryClient();
   const draft = useDispatchDraft();
+  // Aynı ön seçim bir kez uygulanır; taslak kapanışta korunduğu için yeni seçim ekleme yapar.
+  const seeded = useRef<readonly KartelaPickedRoll[] | null>(null);
+  const { addPicked } = draft;
+  useEffect(() => {
+    if (!open || !initialRolls?.length || seeded.current === initialRolls) return;
+    seeded.current = initialRolls;
+    addPicked(initialRolls);
+  }, [open, initialRolls, addPicked]);
   const once = useSingleFlight();
   const mut = useMutation({
     mutationFn: (body: ReturnType<typeof buildDispatchPayload>) => kartelaService.dispatch(body),
@@ -154,7 +164,7 @@ function RollsSection({ draft, disabled }: { draft: DispatchDraft; disabled: boo
         onOpenChange={setPickerOpen}
         title="Kartelalık Top Seç"
         description="Depodaki bitmiş toplar (çuvalda/sevkiyatta olanlar listelenmez)."
-        scopes={[KARTELA_ROLL_SCOPE]}
+        scopes={KARTELA_PICKER_SCOPES}
         excludeIds={draft.rolls.map((r) => r.id)}
         onConfirm={draft.addPicked}
       />

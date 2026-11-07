@@ -228,7 +228,7 @@ function narrowEntrySource(tab: RollStatusTabKey, defs: FilterDef[]): FilterDef[
 
 // Sadece "Bitmiş Depo" sekmesinde anlamlı: WAREHOUSE topu serbest mi yoksa bir
 // çuvala/sevkiyata rezerve mi? (backend filter[shipmentScope]=free|committed)
-const SHIPMENT_SCOPE_FILTER: FilterDef = {
+const SHIPMENT_SCOPE_FILTER: Extract<FilterDef, { kind: "select" }> = {
   kind: "select",
   key: "shipmentScope",
   label: "Sevkiyat",
@@ -237,6 +237,20 @@ const SHIPMENT_SCOPE_FILTER: FilterDef = {
     { value: "committed", label: "Çuval içinde" },
   ],
 };
+
+/** Yalnız "Bitmiş Depo": kartelalık işaretli toplar (araç satırındaki onay kutusu; backend
+ *  filter[markedForKartela]=true, liste · cursor · /rolls/stats aynı buildRollWhere). */
+export const KARTELA_MARKED_PARAM = "filter[markedForKartela]";
+
+/** Yalnız Bitmiş Depo'da çizilen süzgeç anahtarları — sekmeden çıkarken URL'den silinir. */
+const FINISHED_ONLY_FILTER_KEYS = [`filter[${SHIPMENT_SCOPE_FILTER.key}]`, KARTELA_MARKED_PARAM];
+
+/** Bitmiş Depo'ya özgü süzgeçleri `sp`den siler; bir şey sildiyse true. */
+export function dropFinishedOnlyFilters(sp: URLSearchParams): boolean {
+  const present = FINISHED_ONLY_FILTER_KEYS.filter((k) => sp.has(k));
+  for (const k of present) sp.delete(k);
+  return present.length > 0;
+}
 
 // Yalnız "Fasonda" sekmesi: aktif fason sevkine göre firma + işlem (kategori)
 // daraltması. Özet şeridi chip/kartları da AYNI filter anahtarlarına yazar —
