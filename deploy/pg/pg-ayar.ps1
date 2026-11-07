@@ -20,14 +20,20 @@
 #     icermeyen baska liste varsa ezilmez (elle komut ipucu); birlesim yalniz -Uygula -OnYuklemeBirlestir ile.
 #   - Sira: CREATE EXTENSION ALTER SYSTEM'den ONCE (kutuphane yuklenemiyorsa hicbir ayar yazilmadan durur).
 #     N. ALTER SYSTEM duserse oncekiler auto.conf'ta kalir, reload yapilmaz; nedeni duzeltip tekrar kos
-#     (ayni degerler TAMAM/BEKLIYOR gorunur, yalniz kalanlar yazilir). ERTELENDI satirlari restart sonrasi
-#     ikinci kosumda yazilir.
+#     (ayni degerler TAMAM/BEKLIYOR gorunur, yalniz kalanlar yazilir). ERTELENDI satirlarini restart sonrasi
+#     ikinci kosum dogrular; hedef PG varsayilaniyla ayniysa yazilmaz, TAMAM gorunur.
 #   - Uzanti ayari (pg_stat_statements.*) modul postmaster'da on yuklu degilken YAZILMAZ: PG 16 ALTER SYSTEM
-#     tanimsiz parametreyi reddeder (olculdu). Durum ERTELENDI; restart sonrasi betik yeniden kosulur.
+#     tanimsiz parametreyi reddeder (olculdu). Durum ERTELENDI; restart sonrasi ikinci kosum dogrular.
 #   - Kutuphane listeleri buyuk/kucuk harf DUYARSIZ karsilastirilir, yinelenen elenir (Windows'ta ayni DLL iki
 #     kez _PG_init -> FATAL olasi). postgresql.conf'ta restart bekleyen farkli liste varsa liste yazilmaz.
 #   - CREATE EXTENSION yalniz hariciBakim.uzantiVeritabani'nda (postgres) - uygulama DB'sinde DEGIL (dokume
 #     girer, super olmayan rolle geri yukleme kirilir); migration'a KONMAZ.
+#   - Windows paylasimli bellegi: -Uygula oncesi bos sanal bellek (Win32_OperatingSystem.FreeVirtualMemory ya da
+#     -BosSanalMB) hedef shared_buffers + 2 GB'tan azsa DURULUR (restart'ta PG kalkmaz); kuru kipte uyari.
+#   GERI ALMA (-Uygula sonunda gercek data_directory ile ekrana basilir):
+#     (a) PG ACILMAZSA: <data_directory>\postgresql.auto.conf dosyasindan shared_preload_libraries ve
+#         shared_buffers satirlarini sil -> Start-Service <hizmet>. data_directory'yi onceden not et.
+#     (b) PG acik, geri donulecekse: betigin yazdigi her ayar icin ALTER SYSTEM RESET <ad>; + restart.
 #   - Superuser ister (pg_file_settings + ALTER SYSTEM); degilse durur, kuru kipte de.
 #
 # CAGRI (yonetici PowerShell; dizinde pg-ornegi.json + postgresql.tekserp.conf.sablon bu betigin yaninda):
@@ -51,6 +57,8 @@ param(
   [switch]$Uygula,
   # auto.conf'ta uzantiyi icermeyen baska shared_preload_libraries listesi varsa "liste + uzanti" yaz.
   [switch]$OnYuklemeBirlestir,
+  # Bos sanal bellek (MB); verilmezse Win32_OperatingSystem.FreeVirtualMemory'den olculur.
+  [int]$BosSanalMB = 0,
   # Yalniz hedef degerleri JSON basar, PostgreSQL'e baglanmaz (bekci: diller arasi altin vektorler).
   [switch]$YalnizHedef
 )
@@ -236,6 +244,8 @@ if ($uzantiVar) {
   $yukle = Psql "postgres" "LOAD $(Lit $uzanti)"
   if ($yukle.kod -ne 0) { $uzantiVar = $false; $uzantiNeden = "kutuphane yuklenemedi (LOAD): $($yukle.cikti -creplace '\s+', ' ')" }
 }
+$veriDizini = (Psql "postgres" "SHOW data_directory").cikti
+if (-not $veriDizini) { $veriDizini = "<data_directory>" }
 $uzantiKurulu = (Psql $uzantiVt "SELECT count(*) FROM pg_extension WHERE extname = $(Lit $uzanti)").cikti -ceq "1"
 
 # On yukleme: var olan kutuphaneler korunur, uzanti sona eklenir. Taban: auto.conf (restart sonrasi gecerli olan)
@@ -310,7 +320,7 @@ foreach ($r in $satirlar) {
     }
     "ATLANDI"  { "$uzantiNeden - on yukleme yazilmaz" }
     "BEKLIYOR" { "yazili (postgresql.auto.conf), yeniden baslatma/yukleme bekliyor" }
-    "ERTELENDI" { "ERTELENDI: modul on yuklu degil (parametre tanimsiz) - on yukleme restart sonrasi etkinlesince yeniden kos; hedef PG varsayilaniyla ayni" }
+    "ERTELENDI" { "ERTELENDI: modul on yuklu degil (parametre tanimsiz) - restart sonrasi ikinci kosum dogrular; hedef PG varsayilaniyla ayniysa yazilmaz, TAMAM gorunur" }
     "CONFBEKLIYOR" { "ATLANDI: postgresql.conf'ta restart bekleyen farkli liste var ($($confBekleyen -join ', ')) - once restart ya da elle: ALTER SYSTEM SET shared_preload_libraries = $(ListeSql (ListeBirlesim $confBekleyen (ListeOku $r.hedef)))" }
     default    { $r.durum }
   }
@@ -323,6 +333,24 @@ Write-Host ("  {0,-30} {1,-22} {2,-22} {3}" -f "uzanti $uzanti", $(if ($uzantiKu
 
 $yazilacak = @($satirlar | Where-Object { $_.durum -ceq "YAZILACAK" })
 $bekleyen = @($satirlar | Where-Object { $_.restart -and $_.durum -ceq "BEKLIYOR" } | ForEach-Object { $_.ad })
+if (-not $Uygula.IsPresent) { $bekleyen += @($yazilacak | Where-Object { $_.restart } | ForEach-Object { $_.ad }) }
+
+# Windows paylasimli bellegi: shared_buffers buyurken bos sanal bellek yetmezse restart'ta PG kalkmaz.
+$sb = @($yazilacak | Where-Object { $_.ad -ceq "shared_buffers" })
+if ($sb.Count) {
+  $hedefSbMB = [long]((Normal "shared_buffers" $sb[0].hedef) -creplace 'kB$', '') / 1024
+  if ($BosSanalMB -le 0) {
+    try { $BosSanalMB = [int][math]::Floor((Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).FreeVirtualMemory / 1024) } catch { $BosSanalMB = 0 }
+  }
+  $gereken = $hedefSbMB + 2048
+  if ($BosSanalMB -le 0) { Uyar "bos sanal bellek OLCULEMEDI - shared_buffers $($sb[0].hedef) icin en az $gereken MB bos olmali (-BosSanalMB ile ver)" }
+  elseif ($BosSanalMB -lt $gereken) {
+    $oneri = [int](($BosSanalMB - 2048) * 4)
+    $m = "bos sanal bellek $BosSanalMB MB < shared_buffers $($sb[0].hedef) + 2 GB ($gereken MB) - restart'ta PG kalkmayabilir. Kucult: -RamMB $([math]::Max($oneri, 256))"
+    if ($Uygula.IsPresent) { Dur "$m  (HICBIR SEY YAZILMADI)" } else { Uyar "KURU: $m" }
+  }
+}
+$yazilanlar = @()
 
 # Yazan TEK dal: KURU kip (varsayilan) bu blok disinda yazan SQL calistirmaz (bekci N1 sondasi).
 if ($Uygula) {
@@ -339,6 +367,7 @@ if ($Uygula) {
     $a = Psql "postgres" "ALTER SYSTEM SET $($r.ad) = $deger"
     if ($a.kod -ne 0) { Dur "$($r.ad) yazilamadi: $($a.cikti)" }
     Ok "yazildi: $($r.ad) = $($r.hedef)  (onceki $($r.mevcut))"
+    $yazilanlar += $r.ad
     if ($r.restart) { $bekleyen += $r.ad }
   }
   $a = Psql "postgres" "SELECT pg_reload_conf()"
@@ -360,12 +389,19 @@ if ($bekleyen.Count) {
     $hs = @(Get-Service -Name "postgresql*", "TeksERP-PostgreSQL*" -ErrorAction Stop | Where-Object { $_.Status -eq "Running" })
     if ($hs.Count -eq 1) { $servis = $hs[0].Name }
   } catch { $servis = "<postgresql hizmeti>" }
-  $kip = if ($Uygula.IsPresent) { "etkin olmasi icin" } else { "-Uygula sonrasi" }
+  $kip = if ($Uygula.IsPresent) { "etkin olmasi icin" } else { "uygulanirsa" }
   Uyar "YENIDEN BASLATMA GEREKLI ($kip): $($bekleyen -join ', ')"
   Write-Host "    Vardiya disinda:  Restart-Service $servis   (bu betik yeniden BASLATMAZ; backend kisa sure baglanti kaybeder)"
 } elseif ($Uygula.IsPresent) {
   Ok "yeniden baslatma gerekmiyor"
 }
 $ertelenen = @($satirlar | Where-Object { $_.durum -ceq "ERTELENDI" } | ForEach-Object { $_.ad })
-if ($ertelenen.Count) { Uyar "ERTELENDI ($($ertelenen -join ', ')): on yukleme restart ile etkinlesince ayni komutu yeniden kos." }
+if ($ertelenen.Count) { Uyar "ERTELENDI ($($ertelenen -join ', ')): restart sonrasi ayni komutu yeniden kos - ikinci kosum dogrular; hedef PG varsayilaniyla ayniysa yazilmaz, TAMAM gorunur." }
+if ($Uygula.IsPresent -and $yazilanlar.Count) {
+  $sv = if ($bekleyen.Count -and $servis) { $servis } else { "<postgresql hizmeti>" }
+  Write-Host ""
+  Write-Host "  GERI ALMA (bu ciktiyi sakla):"
+  Write-Host "    (a) PG ACILMAZSA: $veriDizini\postgresql.auto.conf dosyasindan shared_preload_libraries ve shared_buffers satirlarini sil -> Start-Service $sv"
+  Write-Host "    (b) PG acik, geri donulecekse: $((@($yazilanlar | ForEach-Object { "ALTER SYSTEM RESET $_;" })) -join ' ')  -> Restart-Service $sv"
+}
 exit 0

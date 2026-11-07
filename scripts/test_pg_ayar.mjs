@@ -17,7 +17,9 @@
 //      EXTENSION yazılmaz ("kütüphane yüklenemedi"); CREATE EXTENSION ilk ALTER SYSTEM'den ÖNCE
 //   §9 liste: harf duyarsız (yineleme yok) · auto.conf boş liste başka liste değil · postgresql.conf'ta restart
 //      bekleyen farklı liste → yazılmaz + ipucu. §3 ⭐ ön yüklü olmayan uzantı.* → ERTELENDI (sahte psql PG 16 gibi
-//      tanımsız parametreyi reddeder), ikinci koşumda yazılır
+//      tanımsız parametreyi reddeder), ikinci koşum doğrular
+//   §10 boş sanal bellek < shared_buffers + 2 GB → -Uygula durur (yazma yok), kuru uyarır; §3 geri alma yolu
+//      gerçek data_directory ile + yazılanların RESET listesi; §2 kuru kipte "(uygulanirsa)" restart satırı
 //   §8 auto.conf'ta uzantısız başka liste: bayraksız ezilmez + uzantı ayarları atlanır (elle komut ipucu);
 //      -OnYuklemeBirlestir ile 'liste', 'pg_stat_statements' yazılır
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (pwsh yok).
@@ -66,6 +68,7 @@ else if (/pg_file_settings/.test(sql)) c = oku('oto');
 else if (/pg_available_extensions/.test(sql)) c = oku('uzanti') || '1';
 else if (/FROM pg_extension/.test(sql)) c = '0';
 else if (/pending_restart/.test(sql)) c = oku('bekleyen');
+else if (/SHOW data_directory/.test(sql)) c = oku('veri') || 'D:\\\\PostgreSQL\\\\data';
 else if (/^LOAD /.test(sql) && oku('load')) { process.stderr.write('ERROR:  could not load library "pg_stat_statements.dll": The specified module could not be found.'); process.exit(1); }
 process.stdout.write(c);
 `, { mode: 0o755 });
@@ -129,6 +132,7 @@ function olc(betikDizini, vektorYolu) {
   ok('§2', /work_mem.*ezilmedi/.test(kuru.cikti), 'work_mem (auto.conf 8MB) satırı "ezilmedi" demiyor');
   ok('§2', /shared_buffers.*\[RESTART\]/.test(kuru.cikti) && /shared_preload_libraries.*\[RESTART\]/.test(kuru.cikti), 'shared_buffers / shared_preload_libraries [RESTART] işaretli değil');
   ok('§2', /KURU: \d+ ayar yazilacak - HICBIR SEY YAZILMADI/.test(kuru.cikti), 'KURU özeti yok');
+  ok('§2', /YENIDEN BASLATMA GEREKLI \(uygulanirsa\):.*shared_buffers/.test(kuru.cikti), 'kuru kipte "YENIDEN BASLATMA GEREKLI (uygulanirsa)" yok');
 
   // §3 — -Uygula
   const uy = kos(betikDizini, [...BAG, '-Uygula'], { ...ADNAN, bekleyen: 'shared_buffers' });
@@ -137,7 +141,7 @@ function olc(betikDizini, vektorYolu) {
   ok('§3', alter.includes("ALTER SYSTEM SET shared_buffers = '8GB'") && alter.includes("ALTER SYSTEM SET random_page_cost = '1.1'") && alter.includes("ALTER SYSTEM SET log_line_prefix = '%m [%p] %q%u@%d '"), `beklenen ALTER SYSTEM yok: ${alter.join(' | ')}`);
   // ⭐ Adnan: ön yükleme boş → uzantı parametresi tanımsız; yazılmaz, ERTELENDI, döngü sonuna kadar gider.
   ok('§3', !alter.some((s) => /pg_stat_statements\./.test(s)) && /pg_stat_statements\.max.*ERTELENDI/.test(uy.cikti) && /pg_stat_statements\.track.*ERTELENDI/.test(uy.cikti), `⭐ ön yüklü olmayan uzantı ayarı ERTELENMEDİ: ${alter.filter((s) => /pg_stat_statements\./.test(s)).join(' | ')}`);
-  ok('§3', /ERTELENDI \(.*\): on yukleme restart ile etkinlesince ayni komutu yeniden kos/.test(uy.cikti), 'ertelenen için ikinci koşum ipucu yok');
+  ok('§3', /ERTELENDI \(.*\): restart sonrasi ayni komutu yeniden kos - ikinci kosum dogrular; hedef PG varsayilaniyla ayniysa yazilmaz/.test(uy.cikti), 'ertelenen için ikinci koşum ipucu yok');
   // Ön yükleme etkin (restart sonrası ikinci koşum): uzantı parametreleri pg_settings'te → yazılır.
   const ikinci = kos(betikDizini, [...BAG, '-Uygula'], { ...ADNAN, mevcut: ADNAN.mevcut.replace('shared_preload_libraries||', 'shared_preload_libraries|pg_stat_statements|') + '\npg_stat_statements.max|1000|postmaster\npg_stat_statements.track|all|superuser' });
   ok('§3', ikinci.kod === 0 && ikinci.gunluk.some((g) => g.sql === "ALTER SYSTEM SET pg_stat_statements.max = '5000'") && ikinci.gunluk.some((g) => g.sql === "ALTER SYSTEM SET pg_stat_statements.track = 'top'") && !ikinci.gunluk.some((g) => /SET shared_preload_libraries/.test(g.sql)), `ikinci koşum: ${ikinci.gunluk.filter((g) => /ALTER/.test(g.sql)).map((g) => g.sql).join(' | ')} (çıkış ${ikinci.kod})`);
@@ -160,6 +164,18 @@ function olc(betikDizini, vektorYolu) {
   // §5 — var olan ön yükleme korunur, ayrı literaller
   const on = kos(betikDizini, [...BAG, '-Uygula'], { ...ADNAN, mevcut: ADNAN.mevcut.replace('shared_preload_libraries||', 'shared_preload_libraries|auto_explain|') });
   ok('§5', on.gunluk.some((g) => g.sql === "ALTER SYSTEM SET shared_preload_libraries = 'auto_explain', 'pg_stat_statements'"), `ön yükleme listesi: ${on.gunluk.filter((g) => /preload/.test(g.sql)).map((g) => g.sql).join(' | ')}`);
+
+  // §3c — geri alma yolu gerçek data_directory ile, yazılan her ayar için RESET
+  ok('§3', /\(a\) PG ACILMAZSA: D:\\PostgreSQL\\data\\postgresql\.auto\.conf dosyasindan shared_preload_libraries ve shared_buffers/.test(uy.cikti), `geri alma (a) yok: ${uy.cikti.split('\n').filter((l) => /\(a\)/.test(l)).join(' / ')}`);
+  ok('§3', /\(b\) PG acik.*ALTER SYSTEM RESET shared_buffers;.*ALTER SYSTEM RESET shared_preload_libraries;.*ALTER SYSTEM RESET log_line_prefix;/.test(uy.cikti) && !/ALTER SYSTEM RESET work_mem;/.test(uy.cikti), 'geri alma (b) RESET listesi yazılanlarla aynı değil');
+
+  // §10 — Windows paylaşımlı belleği: boş sanal bellek < shared_buffers + 2 GB
+  const azU = kos(betikDizini, [...BAG, '-Uygula', '-BosSanalMB', '4000'], ADNAN);
+  ok('§10', azU.kod === 1 && !azU.gunluk.some((g) => YAZAN.test(g.sql)) && /Kucult: -RamMB \d+/.test(azU.cikti), `⭐ bellek yetmezken -Uygula durmadı / yazdı (çıkış ${azU.kod}): ${azU.gunluk.filter((g) => YAZAN.test(g.sql)).map((g) => g.sql).join(' | ')}`);
+  const azK = kos(betikDizini, [...BAG, '-BosSanalMB', '4000'], ADNAN);
+  ok('§10', azK.kod === 0 && /KURU: bos sanal bellek 4000 MB/.test(azK.cikti), 'kuru kipte bellek uyarısı yok');
+  const bolU = kos(betikDizini, [...BAG, '-Uygula', '-BosSanalMB', '20000'], ADNAN);
+  ok('§10', bolU.kod === 0 && bolU.gunluk.some((g) => g.sql === "ALTER SYSTEM SET shared_buffers = '8GB'"), 'bellek yeterliyken yazılmadı');
 
   // §3b — sıra: uzantı kurulumu ön yüklemeden ÖNCE (kütüphane yüklenemezse hiçbir ayar yazılmadan durulur)
   const iExt = uy.gunluk.findIndex((g) => /CREATE EXTENSION/.test(g.sql));
@@ -231,6 +247,7 @@ if (process.argv.includes('--sonda')) {
     ['N11 harf duyarsız birleşim söküldü → §9', (m) => m.replace('foreach ($k in @($ek)) { if ($l -notcontains $k)', 'foreach ($k in @($ek)) { if ($l -cnotcontains $k)').replace('return ((@($v -csplit \',\' | ForEach-Object { $_.Trim().Trim(\'"\').ToLowerInvariant() } | Where-Object { $_ }) | Sort-Object -Unique)', 'return ((@($v -csplit \',\' | ForEach-Object { $_.Trim().Trim(\'"\') } | Where-Object { $_ }) | Sort-Object)'), VEKTOR, '§9'],
     ['N12 auto.conf boş liste kuralı söküldü → §9', (m) => m.replace('$otoListe = $otoVar -and (@($onYukleme).Count -gt 0)', '$otoListe = $otoVar'), VEKTOR, '§9'],
     ['N13 postgresql.conf bekleyen liste denetimi söküldü → §9', (m) => m.replace('elseif ($ad -ceq "shared_preload_libraries" -and $null -ne $confBekleyen) {', 'elseif ($false) {'), VEKTOR, '§9'],
+    ['N14 paylaşımlı bellek kapısı söküldü → §10', (m) => m.replace('if ($Uygula.IsPresent) { Dur "$m  (HICBIR SEY YAZILMADI)" }', 'if ($false) { }'), VEKTOR, '§10'],
     ['N9 uzantı ALTER SYSTEM\'den sonra kuruluyor → §3', (m) => m.replace('  if ($uzantiYaz) {', '  if ($false) {').replace('  $a = Psql "postgres" "SELECT pg_reload_conf()"', '  if ($uzantiYaz) { [void](Psql $uzantiVt "CREATE EXTENSION IF NOT EXISTS $uzanti") }\n  $a = Psql "postgres" "SELECT pg_reload_conf()"'), VEKTOR, '§3'],
   ];
   let kaldi = 0;
@@ -248,5 +265,5 @@ if (process.argv.includes('--sonda')) {
 console.log('test_pg_ayar — deploy/pg/pg-ayar.ps1 (sahte psql, gerçek pwsh)\n');
 const k = olc(DIZIN, VEKTOR);
 for (const x of k) console.log(`❌ ${x}`);
-console.log(k.length ? `\n=== Sonuç: KIRMIZI (${k.length}) ===` : '✅ §1 kâhin · §2 KURU yazmaz · §3 uygula/ezilmez/uzantı postgres DB · §4 uzantısız atlar · §5 ön yükleme · §6 süper değil · §7 LOAD sondası · §8 auto.conf listesi · §9 liste kenarları · ERTELENDI\n\n=== Sonuç: yeşil ===');
+console.log(k.length ? `\n=== Sonuç: KIRMIZI (${k.length}) ===` : '✅ §1 kâhin · §2 KURU yazmaz · §3 uygula/ezilmez/uzantı postgres DB · §4 uzantısız atlar · §5 ön yükleme · §6 süper değil · §7 LOAD sondası · §8 auto.conf listesi · §9 liste kenarları · ERTELENDI · §10 paylaşımlı bellek · geri alma\n\n=== Sonuç: yeşil ===');
 process.exit(k.length ? 1 : 0);
