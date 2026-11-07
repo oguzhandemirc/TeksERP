@@ -8,13 +8,13 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { RowOpenItems, CopyMenuItem } from "@/components/data-table/row-menu-items";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useListToggles } from "@/hooks/useListToggles";
-import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { customerService } from "@/pages/Customers/service";
@@ -23,6 +23,7 @@ import { useTabsStore } from "@/store/tabs";
 import { workOrderColumns } from "./columns";
 import { workOrderService } from "./service";
 import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
+import { WorkOrdersFilterRow, workOrderPersistConfig } from "./WorkOrdersFilterRow";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
@@ -37,23 +38,20 @@ import {
   stripPlaceFilters,
 } from "./work-order-filters";
 
-// Yer seçicileri listenin o anki kapsamıyla kurulur (faceted sayım) → süzgeç dizisi kapsamdan.
-const buildFilters = (listScope: ListScope): FilterDef[] => [
-  {
-    kind: "multi-select",
-    key: "status",
-    label: "Durum",
-    options: [
-      { value: "PLANNED", label: "Planlandı" },
-      { value: "IN_PROGRESS", label: "Devam Ediyor" },
-      { value: "COMPLETED", label: "Tamamlandı" },
-      { value: "CANCELLED", label: "İptal" },
-    ],
-  },
-  // Durumun YANINDA ayrı süzgeç (en az bir topu fasonda) — durumla VE'lenir.
-  FASONDA_FILTER,
-  // Şu an hangi fasonda / hangi aşamada — top ŞU AN orada (plan değil); sayı seçenekte.
-  ...buildPlaceFilters((scope) => workOrderService.whereOptions(scope).then((r) => r.data), listScope),
+const STATUS_FILTER: FilterDef = {
+  kind: "multi-select",
+  key: "status",
+  label: "Durum",
+  options: [
+    { value: "PLANNED", label: "Planlandı" },
+    { value: "IN_PROGRESS", label: "Devam Ediyor" },
+    { value: "COMPLETED", label: "Tamamlandı" },
+    { value: "CANCELLED", label: "İptal" },
+  ],
+};
+
+// Kapsamdan bağımsız kutular (yer seçicileri aşağıda kapsamla kurulur; kayıt allowlist'i buradan).
+const STATIC_FILTERS: FilterDef[] = [
   {
     // TEKİL KALIR (bilinçli): `type` NOT NULL + iki değerli → ikisini seçmek
     // "filtre yok" demektir. Tek seçimdeki açık "Tümü (Tip)" seçeneği daha net.
@@ -87,7 +85,18 @@ const buildFilters = (listScope: ListScope): FilterDef[] => [
   },
 ];
 
+// Yer seçicileri listenin o anki kapsamıyla kurulur (faceted sayım) → süzgeç dizisi kapsamdan.
+const buildFilters = (listScope: ListScope): FilterDef[] => [
+  STATUS_FILTER,
+  // Durumun YANINDA ayrı süzgeç (en az bir topu fasonda) — durumla VE'lenir.
+  FASONDA_FILTER,
+  // Şu an hangi fasonda / hangi aşamada — top ŞU AN orada (plan değil); sayı seçenekte.
+  ...buildPlaceFilters((scope) => workOrderService.whereOptions(scope).then((r) => r.data), listScope),
+  ...STATIC_FILTERS,
+];
+
 const QUERY_KEY = "work-orders";
+const PERSIST = workOrderPersistConfig([STATUS_FILTER, FASONDA_FILTER, ...STATIC_FILTERS]);
 const NEW_PATH = "/operations/work-orders/new";
 
 
@@ -119,6 +128,7 @@ export function WorkOrdersPage() {
     columns: workOrderColumns,
     defaultPageSize: 50,
     forceFilters,
+    persistFilters: PERSIST,
     initialVisibility: {
       targetQuantity: targetQuantityEnabled,
     },
@@ -162,31 +172,22 @@ export function WorkOrdersPage() {
           </>
         }
       />
-      <DataTableToolbar
-        fetchAll={fetchAll}
+      <WorkOrdersFilterRow
+        filters={filterDefs}
         search={search}
         onSearchChange={setSearch}
         placeholder="İş emri, parti, kumaş, müşteri veya sipariş no ara..."
-        table={table}
-        exportName="İş Emirleri"
-        actions={
+        showCompleted={showCompleted}
+        setShowCompleted={setShowCompleted}
+        showCancelled={showCancelled}
+        setShowCancelled={setShowCancelled}
+        trailing={
           <>
-            <ToolbarToggle
-              checked={showCompleted}
-              onCheckedChange={setShowCompleted}
-              label="Tamamlananları göster"
-              title="Tamamlanmış iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
-            />
-            <ToolbarToggle
-              checked={showCancelled}
-              onCheckedChange={setShowCancelled}
-              label="İptalleri göster"
-              title="İptal edilmiş iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
-            />
+            <SavedViewsMenu compact />
+            <DataTableTools table={table} exportName="İş Emirleri" fetchAll={fetchAll} compact />
           </>
         }
       />
-      <FilterBar filters={filterDefs} defaultDateRangeDays={30} />
       <DataTable<WorkOrder>
         table={table}
         isLoading={query.isLoading}

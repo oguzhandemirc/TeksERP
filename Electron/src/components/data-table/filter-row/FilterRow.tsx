@@ -29,7 +29,7 @@ export interface FilterRowProps {
  * Bekçi: `FilterRow.test.tsx` (✕ · Temizle · + Filtre · tek satır sınıf sözleşmesi).
  */
 export const FILTER_ROW_CLASS = "flex shrink-0 flex-nowrap items-center gap-2 border-b px-3 py-2";
-export const FILTER_ROW_SCROLL_CLASS = "flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:thin]";
+export const FILTER_ROW_SCROLL_CLASS = "flex min-w-0 shrink flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:thin]";
 
 export function FilterRow({ search, onSearchChange, placeholder = "Ara...", primary, more = [], trailing }: FilterRowProps) {
   const [sp, setSp] = useSearchParams();
@@ -41,6 +41,10 @@ export function FilterRow({ search, onSearchChange, placeholder = "Ara...", prim
   const hidden = more.filter((f) => !visibleMore.includes(f));
   const all = [...primary, ...more];
   const anyActive = all.some((f) => isRowFilterActive(f, sp));
+  // Dar ekranda (lg altı) satırda yalnız etkin/eklenmiş kutular kalır; boş kalıcı kutular "+ Filtre"ye geçer
+  // ki etkin süzgeç kaymaya düşüp gizlenmesin.
+  const idlePrimary = primary.filter((f) => !isRowFilterActive(f, sp) && !pinned.includes(f.id));
+  const narrowOnly = new Set(idlePrimary.map((f) => f.id));
 
   const remove = (f: RowFilter) => {
     if (f.keys.length > 0) setSp(withoutKeys(sp, f.keys), { replace: true });
@@ -59,10 +63,10 @@ export function FilterRow({ search, onSearchChange, placeholder = "Ara...", prim
     setJustAdded(f.id);
   };
 
-  const chip = (f: RowFilter, extra: boolean) => {
+  const chip = (f: RowFilter, extra: boolean, narrowHide = false) => {
     const active = isRowFilterActive(f, sp);
     return (
-      <FilterChip key={f.id} id={f.id} label={f.label} active={active} removable={active || extra} onRemove={() => remove(f)}>
+      <FilterChip key={f.id} id={f.id} label={f.label} active={active} removable={active || extra} onRemove={() => remove(f)} className={narrowHide ? "hidden lg:inline-flex" : undefined}>
         {f.render({ autoOpen: justAdded === f.id })}
       </FilterChip>
     );
@@ -72,15 +76,16 @@ export function FilterRow({ search, onSearchChange, placeholder = "Ara...", prim
     <div data-testid="filter-row" className={FILTER_ROW_CLASS}>
       <RowSearch value={search} onChange={onSearchChange} placeholder={placeholder} />
       <div ref={scrollRef} data-testid="filter-row-scroll" className={cn(FILTER_ROW_SCROLL_CLASS, fadeClass(edges))}>
-        {primary.map((f) => chip(f, false))}
+        {primary.map((f) => chip(f, pinned.includes(f.id), narrowOnly.has(f.id)))}
         {visibleMore.map((f) => chip(f, true))}
-        <MoreFiltersMenu filters={hidden} onPick={add} />
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      {/* Kayan bölgenin DIŞINDA: dar ekranda kutular kaysa da ekleme düğmesi görünür kalır. */}
+      <MoreFiltersMenu filters={[...idlePrimary, ...hidden]} onPick={add} narrowOnly={narrowOnly} />
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {anyActive && (
-          <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={clearAll} title="Bütün filtreleri kaldır">
+          <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={clearAll} title="Bütün filtreleri kaldır" aria-label="Temizle">
             <X className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Temizle</span>
+            <span className="hidden 2xl:inline">Temizle</span>
           </Button>
         )}
         {trailing}
@@ -99,8 +104,8 @@ function fadeClass({ left, right }: { left: boolean; right: boolean }): string |
 
 function RowSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    // Dar ekranda ilk küçülen arama: taban 7rem, geniş ekranda 16rem.
-    <div className="relative w-28 min-w-[7rem] shrink sm:w-48 xl:w-64">
+    // Dar ekranda ilk küçülen arama: taban 7rem, 2xl altında 10rem, üstünde 16rem (etkin kutulara yer).
+    <div className="relative w-28 min-w-[7rem] shrink sm:w-40 2xl:w-64">
       <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} title={placeholder} aria-label="Ara" className="h-8 pl-8 text-sm" />
     </div>

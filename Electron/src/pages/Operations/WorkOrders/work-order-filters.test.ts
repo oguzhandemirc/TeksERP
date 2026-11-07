@@ -24,6 +24,6 @@ describe("Fasonda süzgeci", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "WorkOrdersPage.tsx"), "utf8");
-    expect(src).toMatch(/key: "status",[\s\S]*?\],\n {2}},\n {2}\/\/[^\n]*\n {2}FASONDA_FILTER,/);
+    expect(src).toMatch(/^ {2}STATUS_FILTER,\n {2}\/\/[^\n]*\n {2}FASONDA_FILTER,/m);
   });
 });

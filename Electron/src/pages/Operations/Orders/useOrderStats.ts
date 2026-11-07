@@ -15,7 +15,7 @@ import { orderService } from "./service";
  * `staleTime: 0` bilinçli: sayı bir karar verisi, bayatı gösterilmez. Sipariş
  * tablosu mütevazı ve sorgular indexli (`orders_active_createdAt_idx`).
  */
-export function useOrderStats(forceFilters: Record<string, string>) {
+export function useOrderStats(forceFilters: Record<string, string>, enabled = true) {
   const [searchParams] = useSearchParams();
   // Sayfa boyutu VERİLMEZ: `/orders/stats` sayfalamaz (groupBy + aggregate),
   // buradan yalnız filtre/arama/tarih okunuyor. `useRollStats` ikizinde duran
@@ -48,6 +48,7 @@ export function useOrderStats(forceFilters: Record<string, string>) {
         dateFrom: urlParams.dateFrom,
         dateTo: urlParams.dateTo,
       }),
+    enabled,
     staleTime: 0,
   });
 }

@@ -164,9 +164,9 @@ describe("400 INVALID_FILTER_VALUE", () => {
     expect(src).toMatch(
       / {2}FASONDA_FILTER,\n(?: {2}\/\/[^\n]*\n)* {2}\.\.\.buildPlaceFilters\(\(scope\) => workOrderService\.whereOptions\(scope\)\.then\(\(r\) => r\.data\), listScope\),/,
     );
-    // Süzgeç dizisi listenin kapsamından kurulur (useDataTable'ın listScope'u) ve FilterBar'a o gider.
+    // Süzgeç dizisi listenin kapsamından kurulur (useDataTable'ın listScope'u) ve tek satır çubuğa o gider.
     expect(src).toMatch(/useMemo\(\(\) => buildFilters\(listScope\), \[listScope\]\)/);
-    expect(src).toMatch(/<FilterBar filters=\{filterDefs\}/);
+    expect(src).toMatch(/<WorkOrdersFilterRow\s+filters=\{filterDefs\}/);
     expect(src).toMatch(/isInvalidFilterValueError\(query\.error\)[\s\S]{0,120}stripPlaceFilters\(searchParams\)/);
   });
 });

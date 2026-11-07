@@ -36,7 +36,7 @@ function Probe() {
   return <output data-testid="url">{decodeURIComponent(useLocation().search)}</output>;
 }
 
-function setup(initial = "/?cursor=abc&page=3", productionEnabled = true, showCancelled = false) {
+function setup(initial = "/?cursor=abc&page=3", productionEnabled = true, showCancelled = false, cancelledUrlKey?: string) {
   const setShowCancelled = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -50,6 +50,7 @@ function setup(initial = "/?cursor=abc&page=3", productionEnabled = true, showCa
           showCancelled={showCancelled}
           setShowCancelled={setShowCancelled}
           forceFilters={{ hideCancelled: "true" }}
+          cancelledUrlKey={cancelledUrlKey}
         />
         <Probe />
       </MemoryRouter>
@@ -60,7 +61,7 @@ function setup(initial = "/?cursor=abc&page=3", productionEnabled = true, showCa
 
 const openView = () => fireEvent.click(within(screen.getByTestId("filter-chip-nerede")).getByRole("button", { name: /Görünüm:/ }));
 const addFilter = (name: string) => {
-  fireEvent.click(screen.getByRole("button", { name: /Filtre$/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name }));
 };
 
@@ -116,7 +117,7 @@ describe("Görünüm — hızlı sekmeler tek açılırda", () => {
     expect(screen.queryByRole("option", { name: /Sevke hazır/ })).toBeNull();
     expect(screen.getByRole("option", { name: /Gecikenler/ })).toBeInTheDocument();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
-    fireEvent.click(screen.getByRole("button", { name: /Filtre$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));
     expect(menu.queryByRole("menuitem", { name: "Fason firma" })).toBeNull();
     expect(menu.queryByRole("menuitem", { name: "İş Emri" })).toBeNull();
@@ -233,5 +234,13 @@ describe("+ Filtre ve Temizle", () => {
     const { setShowCancelled } = setup("/");
     addFilter("İptaller dahil");
     expect(setShowCancelled).toHaveBeenCalledWith(true);
+  });
+
+  it("⭐ 'İptaller dahil' URL'deyse (filtre kaydına girer) Temizle onu da TEK URL yazımıyla siler", () => {
+    const { url, setShowCancelled } = setup("/?filter[customerId]=c1&showCancelled=1&search=x", true, true, "showCancelled");
+    expect(screen.getByTestId("filter-chip-iptal")).toHaveAttribute("data-active", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Temizle/ }));
+    expect(url()).toBe("?search=x");
+    expect(setShowCancelled).not.toHaveBeenCalled();
   });
 });

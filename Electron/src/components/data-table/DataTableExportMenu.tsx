@@ -70,11 +70,14 @@ export function DataTableExportMenu<T>({
   exportName = "Liste",
   fetchAll,
   extraExports,
+  compact,
 }: {
   table: Table<T>;
   exportName?: string;
   fetchAll?: TableFetchAll<T>;
   extraExports?: ExtraExportOption[];
+  /** 2xl altında yazı düşer (simge + ok kalır); indirme sürerken sayaç yine görünür. */
+  compact?: boolean;
 }) {
   const { busy, progress, runExport } = useTableExportRun(table, exportName, fetchAll);
 
@@ -96,9 +99,10 @@ export function DataTableExportMenu<T>({
             className="h-8 gap-1.5"
             disabled={busy !== null}
             title={`Listeyi dosyaya aktar (${scope}, ekrandaki sütunlar)`}
+            aria-label={compact && !busy ? "Dışa aktar" : undefined}
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {triggerLabel}
+            <span className={compact && !busy ? "hidden 2xl:inline" : undefined}>{triggerLabel}</span>
             <ChevronDown className="h-3.5 w-3.5 opacity-60" />
           </Button>
         </DropdownMenuTrigger>

@@ -18,10 +18,13 @@ const SAVE_DEBOUNCE_MS = 600;
 
 interface PreferencesContextValue {
   prefs: AppPreferences;
-  setPreference: (patch: Partial<AppPreferences>) => void;
+  /** Fonksiyon biçimi önbellekteki EN SON kopyayı alır — aynı tıkta iki yazar birbirini ezmesin. */
+  setPreference: (patch: PreferencePatch) => void;
   resetPreferences: () => void;
   ready: boolean;
 }
+
+export type PreferencePatch = Partial<AppPreferences> | ((current: AppPreferences) => Partial<AppPreferences>);
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 
@@ -87,9 +90,9 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   );
 
   const setPreference = useCallback(
-    (patch: Partial<AppPreferences>) => {
+    (patch: PreferencePatch) => {
       const current = queryClient.getQueryData<AppPreferences>(queryKey) ?? DEFAULT_PREFERENCES;
-      const next = { ...current, ...patch };
+      const next = { ...current, ...(typeof patch === "function" ? patch(current) : patch) };
       queryClient.setQueryData(queryKey, next); // anında UI + DOM (effect)
       if (!user) return;
       pendingRef.current = next;

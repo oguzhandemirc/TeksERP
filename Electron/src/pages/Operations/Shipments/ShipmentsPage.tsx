@@ -5,8 +5,9 @@ import { PanelRight, Award, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
+import type { FilterDef } from "@/components/data-table/FilterBar";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { RowOpenItems, CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -22,8 +23,8 @@ import { downloadDocsPdf, downloadDocsExcel, type DocTarget } from "./shipmentDo
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import type { PrintedDocType } from "@/services/printedDocumentService";
 import { useDataTable } from "@/hooks/useDataTable";
-import { useHideCancelled } from "@/hooks/useHideCancelled";
-import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
+import { useHideCancelledInUrl } from "@/hooks/useHideCancelled";
+import { ShipmentsFilterRow, shipmentPersistConfig } from "./ShipmentsFilterRow";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -36,7 +37,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 
 const QUERY_KEY = "shipments";
 
-// Tüm filtreler FilterBar'da (durum dahil — sekme yok). Durum çoklu-seçim (Sipariş
+// Tüm filtreler tek satır çubukta (durum dahil — sekme yok). Durum çoklu-seçim (Sipariş
 // paritesi). Şube SEÇİLEN MÜŞTERİYE bağlı (dependent-lookup): müşteri seçilmeden
 // pasif, seçilince yalnız o müşterinin şubeleri (global endpoint filter[customerId]
 // ile daraltılır). Tarih varsayılanı createdAt (indexli); Sevk opsiyonel.
@@ -128,6 +129,8 @@ const FILTERS: FilterDef[] = [
   },
 ];
 
+const PERSIST = shipmentPersistConfig(FILTERS);
+
 // Sevkiyat-türevli belgeler — hepsi sourceId = Shipment.id, generic görüntüleyicide açılır.
 const SHIPMENT_DOCS: { docType: PrintedDocType; label: string; title: string; icon: typeof Award }[] = [
   { docType: "QUALITY_CERTIFICATE", label: "Kalite Sertifikası", title: "Kalite Sertifikası", icon: Award },
@@ -158,7 +161,7 @@ export function ShipmentsPage() {
     return qs ? `${base}?${qs}` : base;
   };
 
-  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
+  const { setShowCancelled, forceFilters } = useHideCancelledInUrl();
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ShipmentListItem>({
     queryKey: QUERY_KEY,
@@ -167,6 +170,7 @@ export function ShipmentsPage() {
     defaultPageSize: 50,
     enableSelection: true,
     forceFilters,
+    persistFilters: PERSIST,
   });
 
   // Belge (irsaliye/fiş) YALNIZ sevk edilmiş (DISPATCHED) sevkiyatta var — donmuş.
@@ -198,23 +202,19 @@ export function ShipmentsPage() {
         title="Sevkiyatlar"
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
-      <DataTableToolbar
-        fetchAll={fetchAll}
+      <ShipmentsFilterRow
+        filters={FILTERS}
         search={search}
         onSearchChange={setSearch}
         placeholder="Sevkiyat no, firma, parti kodu / adı, çuval no ara…"
-        table={table}
-        exportName="Sevkiyatlar"
-        actions={
-          <ToolbarToggle
-            checked={showCancelled}
-            onCheckedChange={setShowCancelled}
-            label="İptalleri göster"
-            title="İptal edilmiş sevkiyatlar varsayılan olarak gizlidir."
-          />
+        setShowCancelled={setShowCancelled}
+        trailing={
+          <>
+            <SavedViewsMenu compact />
+            <DataTableTools table={table} exportName="Sevkiyatlar" fetchAll={fetchAll} compact />
+          </>
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<ShipmentListItem>
         table={table}
         isLoading={query.isLoading}
