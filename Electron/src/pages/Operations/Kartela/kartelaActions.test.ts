@@ -9,6 +9,10 @@ import {
   groupOutstanding,
   rollScanRejection,
   KARTELA_ROLL_SCOPE,
+  KARTELA_MARKED_ROLL_SCOPE,
+  KARTELA_MARKED_FILTERS,
+  KARTELA_PICKER_SCOPES,
+  rollToPicked,
 } from "./kartelaActions";
 import type { KartelaOutstandingItem } from "./service";
 
@@ -26,8 +30,18 @@ describe("sevk gövdesi", () => {
     expect(body).toEqual({ subcontractorId: "f1", rollIds: ["r1", "r2"], plateNumber: "34 AB 12", driverName: null, notes: null });
   });
 
-  it("seçici süzgeci tabletin RollPickerModal süzgeci (depoda + çuvalsız/sevkiyatsız)", () => {
-    expect(KARTELA_ROLL_SCOPE.filters).toEqual({ "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free" });
+  it("seçici kapsamları: varsayılan kartelalık toplar, ikincisi tüm bitmiş toplar (tablet süzgeci)", () => {
+    expect(KARTELA_PICKER_SCOPES[0]).toBe(KARTELA_MARKED_ROLL_SCOPE);
+    expect(KARTELA_MARKED_ROLL_SCOPE).toMatchObject({ label: "Kartelalık toplar", filters: {
+      "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free", "filter[markedForKartela]": "true" } });
+    expect(KARTELA_PICKER_SCOPES[1]).toBe(KARTELA_ROLL_SCOPE);
+    expect(KARTELA_ROLL_SCOPE).toMatchObject({ label: "Tüm bitmiş toplar", filters: { "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free" } });
+    expect(KARTELA_MARKED_FILTERS).toEqual({ status: "WAREHOUSE", shipmentScope: "free", markedForKartela: "true" });
+  });
+
+  it("top kaydı → sevk satırı", () => {
+    expect(rollToPicked({ id: "r1", barcode: "T1", currentQty: "12.5", item: { name: "Poplin" }, color: null }))
+      .toEqual({ id: "r1", barcode: "T1", itemName: "Poplin", colorName: null, qty: 12.5 });
   });
 
   it("okutma retleri: depoda değil · sevkiyatta · çuvalda; uygunsa null", () => {

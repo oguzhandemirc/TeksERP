@@ -23,7 +23,8 @@ import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { RollScanBar } from "./RollScanBar";
-import { RollsTableBody } from "./RollsTableBody";
+import { UrlFlagToggle } from "./UrlFlagToggle";
+import { RollsTableBody, dropFinishedOnlyFilters, KARTELA_MARKED_PARAM } from "./RollsTableBody";
 import { RollsKanban } from "./RollsKanban";
 import { RollsStats } from "./RollsStats";
 import { useRollStats } from "./useRollStats";
@@ -40,7 +41,7 @@ import {
   rollTabDefaultSortBy,
   type RollStatusTabKey,
 } from "./service";
-import { isRollTabKey, type RollTabKey } from "./tabs-config";
+import { isRollTabKey, orderRollTabsByGroup, type RollTabKey } from "./tabs-config";
 import { resolveRollTabs } from "./tabs-regime";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { downloadInventorySummary } from "./inventorySummary";
@@ -123,10 +124,13 @@ export function RollsPage() {
     if (!canOpenRollDetail(code, flags?.scanCustomerCodeLookupEnabled === true)) return;
     scanLookup.mutate(code);
   };
-  const orderedTabs = ordered.flatMap((k) => {
-    const t = TABS.find((x) => x.key === k);
-    return t ? [t] : [];
-  });
+  // Kayıtlı sıra grup içinde uygulanır; durum → ayraç → yer sırası sabit.
+  const orderedTabs = orderRollTabsByGroup(
+    ordered.flatMap((k) => {
+      const t = TABS.find((x) => x.key === k);
+      return t ? [t] : [];
+    }),
+  );
 
   // "Top/Metre" özeti — Üretim Akışı (KANBAN) sekmesinde rulo tablosu olmadığından
   // gizli (sorgu da kapalı). Artık sekme şeridinin sağında (Arşiv'in eski yeri).
@@ -242,6 +246,12 @@ export function RollsPage() {
         setSearchParams(sp, { replace: true });
       }
     }
+    // Bitmiş Depo'ya özgü süzgeçler (Sevkiyat · Kartelalık) başka sekmede görünmez;
+    // URL'de kalırsa listeyi sessizce daraltırdı.
+    if (tab === "FINISHED_STOCK" && next !== "FINISHED_STOCK") {
+      const sp = new URLSearchParams(searchParams);
+      if (dropFinishedOnlyFilters(sp)) setSearchParams(sp, { replace: true });
+    }
     if (tab === "SUBCONTRACTOR" && next !== "SUBCONTRACTOR") {
       const sp = new URLSearchParams(searchParams);
       if (sp.has("filter[subcontractorId]") || sp.has("filter[subcontractorCategoryId]")) {
@@ -330,6 +340,7 @@ export function RollsPage() {
           <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             <DataTableTools table={dataTable.table} hideExport />
             <SavedViewsMenu />
+            {tab === "FINISHED_STOCK" && <UrlFlagToggle param={KARTELA_MARKED_PARAM} label="Kartelalık" />}
             <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
               <Checkbox
                 checked={includeFire}

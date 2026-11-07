@@ -14,7 +14,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,8 @@ export interface ReorderableTab {
   key: string;
   label: string;
   Icon: LucideIcon;
+  /** Verilirse grup değişen yere ince dikey ayraç çizilir; sürükleme grup içinde kalır. */
+  group?: string;
 }
 
 // Sürüklemeyi yatay eksende tut: sekme dikey kaymaz → bırakma hedefi (over)
@@ -56,6 +58,8 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
     const oldI = keys.indexOf(active.id as string);
     const newI = keys.indexOf(over.id as string);
     if (oldI < 0 || newI < 0) return;
+    // Gruplar arası taşıma yok: ayraç sabit kalır, grup sırası çağıranın sözleşmesi.
+    if (tabs[oldI]?.group !== tabs[newI]?.group) return;
     onReorder(arrayMove(keys, oldI, newI));
   };
 
@@ -68,8 +72,11 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={tabs.map((t) => t.key)} strategy={horizontalListSortingStrategy}>
-          {tabs.map((t) => (
-            <SortableTab key={t.key} tab={t} active={activeKey === t.key} onSelect={() => onSelect(t.key)} />
+          {tabs.map((t, i) => (
+            <Fragment key={t.key}>
+              {i > 0 && t.group !== tabs[i - 1]?.group ? <GroupDivider /> : null}
+              <SortableTab tab={t} active={activeKey === t.key} onSelect={() => onSelect(t.key)} />
+            </Fragment>
           ))}
         </SortableContext>
       </DndContext>
@@ -77,7 +84,7 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
       {pinnedTab && (
         <>
           {/* Ayrım çizgisi — Arşiv nadir kullanılır, ana sekmelerden ayrık dursun. */}
-          <span className="mx-1 h-5 w-px shrink-0 self-center bg-border" aria-hidden />
+          <GroupDivider />
           <button
             type="button"
             onClick={() => onSelect(pinnedTab.key)}
@@ -96,6 +103,11 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
       {trailing && <div className="ml-auto flex shrink-0 items-center pb-1.5">{trailing}</div>}
     </div>
   );
+}
+
+/** 1px dikey ayraç — başlıksız; shrink-0 ile şeritle birlikte kayar, taşmaz. */
+function GroupDivider() {
+  return <span role="separator" aria-orientation="vertical" className="mx-1 h-5 w-px shrink-0 self-center bg-border" />;
 }
 
 function SortableTab({
