@@ -11,6 +11,8 @@ import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { signalScan } from '../../../services/scanFeedback';
@@ -39,6 +41,8 @@ export default function IadeGirisiScreen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const manualMode = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
+  // Donanım okuyucu: ekran hep dinler; seri modda kamera döngüsü yerine her tuş bir sonraki top.
+  const hardware = useHardwareScanMode();
   const returnGradingEnabled = useReturnGradingEnabled();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
 
@@ -216,7 +220,7 @@ export default function IadeGirisiScreen() {
       qc.invalidateQueries({ queryKey: ['rolls'] });
       if (seriMode) {
         setSeriCount((c) => c + 1);
-        setScannerOpen(true); // kamerayı hemen yeniden aç → sıradaki topu okut
+        if (!hardware) setScannerOpen(true); // kamerayı hemen yeniden aç → sıradaki topu okut
       }
     },
     onError: (err) => {
@@ -259,7 +263,11 @@ export default function IadeGirisiScreen() {
                 )}
               </View>
               <Text style={styles.seriHint}>
-                {seriMode ? 'Kayıttan sonra kamera otomatik açılır' : 'Arka arkaya top okutmak için aç'}
+                {seriMode
+                  ? hardware
+                    ? 'Kayıttan sonra okuyucu tuşuyla sıradaki top'
+                    : 'Kayıttan sonra kamera otomatik açılır'
+                  : 'Arka arkaya top okutmak için aç'}
               </Text>
             </View>
             <Switch value={seriMode} onValueChange={setSeriMode} color={ACCENT} />
@@ -455,17 +463,21 @@ export default function IadeGirisiScreen() {
               </TouchableRipple>
             </View>
             <View style={styles.barCellPrimary}>
-              <TouchableRipple
-                onPress={() => setScannerOpen(true)}
-                style={[styles.barBtn, styles.barBtnPrimaryFill]}
-                rippleColor="rgba(255,255,255,0.25)"
-                accessibilityLabel="Kamera ile okut"
-              >
-                <View style={styles.barBtnInner}>
-                  <Icon source="camera" size={30} color="#fff" />
-                  <Text style={[styles.barBtnText, { color: '#fff' }]}>Kamera ile Okut</Text>
-                </View>
-              </TouchableRipple>
+              {hardware ? (
+                <HardwareTriggerHint label="Tuşla okut" />
+              ) : (
+                <TouchableRipple
+                  onPress={() => setScannerOpen(true)}
+                  style={[styles.barBtn, styles.barBtnPrimaryFill]}
+                  rippleColor="rgba(255,255,255,0.25)"
+                  accessibilityLabel="Kamera ile okut"
+                >
+                  <View style={styles.barBtnInner}>
+                    <Icon source="camera" size={30} color="#fff" />
+                    <Text style={[styles.barBtnText, { color: '#fff' }]}>Kamera ile Okut</Text>
+                  </View>
+                </TouchableRipple>
+              )}
             </View>
 
             <View style={styles.barCellSide}>
@@ -494,6 +506,7 @@ export default function IadeGirisiScreen() {
 
       <BarcodeScannerModal
         visible={scannerOpen}
+        listenWhileHidden
         title="İade Edilecek Top QR Okut"
         notice={seriMode ? `Seri iade · ${seriCount} top alındı` : undefined}
         onDismiss={() => setScannerOpen(false)}

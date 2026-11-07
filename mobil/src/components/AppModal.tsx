@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   Pressable,
@@ -18,6 +18,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { newScanOverlayId, openScanOverlay } from '../services/hardwareScanner/scanBus';
+import { ScanOverlayContext } from '../hooks/useHardwareScanTarget';
 
 export type AppModalPosition = 'center' | 'bottom' | 'right';
 
@@ -38,6 +40,9 @@ export interface AppModalProps {
   /** Sürükleyerek kapatma (bottom/center=aşağı, right=sağa). Default true.
    *  `dismissable=false` ise zaten devre dışıdır. Kritik/zorunlu modallarda kapat. */
   swipeToDismiss?: boolean;
+  /** El terminali: açıkken alttaki ekranın arka plan okuma dinleyicisini ÖRTMESİN (yan panel gibi
+   *  ekranın parçası sayılan yüzeyler). Default false — açık pencere okumayı keser. */
+  scanPassThrough?: boolean;
 }
 
 // Sürükle-kapat eşikleri.
@@ -103,6 +108,7 @@ export default function AppModal({
   position = 'center',
   onHidden,
   swipeToDismiss = true,
+  scanPassThrough = false,
 }: AppModalProps) {
   // `rendered`: çıkış animasyonu bitene kadar Portal mount'ta kalır (yoksa içerik
   // anında kaybolur, kapanış animasyonu hiç oynamaz).
@@ -159,6 +165,16 @@ export default function AppModal({
     // progress/finishHide kararlı; sadece visible geçişinde çalışmalı.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  // "En üstteki açık pencere" kuralı: görünürken kapsamadığı kapalı tarayıcıların dinleyicisi susar;
+  // içerik bu pencerenin kimliğini bağlamdan alır (portal bağlamı taşımaz, sağlayıcı içeride).
+  const [overlayId] = useState(newScanOverlayId);
+  const parentOverlays = useContext(ScanOverlayContext);
+  const within = useMemo(() => [...parentOverlays, overlayId], [parentOverlays, overlayId]);
+  useEffect(() => {
+    if (!visible || scanPassThrough) return;
+    return openScanOverlay(overlayId);
+  }, [visible, scanPassThrough, overlayId]);
 
   // Android donanım geri tuşu — açıkken kapatır (dismissable ise).
   useEffect(() => {
@@ -363,7 +379,7 @@ export default function AppModal({
             }}
             style={[contentBase, contentAnimStyle, contentStyle]}
           >
-            {children}
+            <ScanOverlayContext.Provider value={within}>{children}</ScanOverlayContext.Provider>
           </Animated.View>
         </GestureDetector>
       </Animated.View>

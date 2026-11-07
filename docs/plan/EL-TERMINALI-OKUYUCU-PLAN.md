@@ -114,9 +114,14 @@ yayınları logcat'te, önceki mod 2'ye döner; logcat'te `CameraService`/`Scann
 - Tek amaçlı ekranlar (envanter 1–4, 13, 17, 21–23, 25–27, 32).
   Uygulanan (PR #603'ye bakın): modal `listenWhileHidden` (modal açılmadan tuş okur; gizli okumada `onModalHide`
   işleyici bitince çağrılır) + `ScannerEntryBar hardwareListening`; ekranlar: Hızlı İE adım ①, Depo, Kartela Sevk.
-  Kalan tek amaçlılar (Kurşun KK, Paketleme, Hızlı Sipariş, Cuvalsız sevk, Fason Kabul, İade, Muayene, İE'ye top
-  ekle, Gelen Belge irsaliye, giriş kartı, lisans/eşleme QR) modal paneliyle kamerasız çalışır; doğrudan dinleme
-  her ekranın OKUT görünürlük koşulu okunarak tek tek eklenir (koşulsuz dinleme hazır olmayan duruma okuma sokar).
+  D2b (ayrı PR): Muayene, Kurşun KK, İade (seri modda kamera döngüsü yerine ekran sürekli dinler; her tuş sıradaki
+  top, sayaç aynı), Paketleme (yükleme bitince), Hızlı Sipariş, Çuvalsız sevk (sonuç kartı alt barın üstünde), Fason
+  Kabul (tablet hep; telefonda kabul açılmamışken ya da el girişi bandında), İE'ye parti ekle (sheet içinde), Gelen
+  Belge irsaliye (kilitli değilken), giriş kartı (kart görünümünde, giriş sürmüyorken). Lisans/eşleme QR'ları
+  bilinçli modal-yalnız (seyrek, ayar ekranı): açılınca panel çıkar, kamera yok. Bekçi §7 listeyi kilitler.
+  "En üstteki açık pencere" kuralı (D3'ün de temeli): görünür AppModal, kendisini kapsamayan arka plan
+  dinleyicisini örter → ret sesi + "Önce açık pencereyi kapatın"; sıra değil KAPSAMA (bağlam) belirler, sheet
+  içindeki kapalı tarayıcı kendi sheet'i açıkken dinler. Yan panel (`RightPanelDrawer`) `scanPassThrough`.
 Kabul: jest (modal donanım modunda `BarcodeScannerView` render ETMEZ; StepRolls donanım modunda OKUT yok, tablo
 var; hedef adım değişince değişir) · cihaz: ekran görüntüleri 480×800, kamera logu yok, kullanıcı tetik listesi.
 

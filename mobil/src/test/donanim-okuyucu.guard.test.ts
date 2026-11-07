@@ -76,3 +76,35 @@ it('§6 donanım yüzleri kamera bileşeni içe aktarmaz; modal kamerayı yalnı
   const modal = fs.readFileSync(path.join(SRC, 'components/BarcodeScannerModal.tsx'), 'utf8');
   expect(modal).toMatch(/\{hardware \? \(\s*<HardwareScanPanel[\s\S]*?\) : \(\s*<View style=\{styles\.cameraLayer\}>\s*<BarcodeScannerView/);
 });
+
+// §7 (D2b) Tek amaçlı ekranlar: OKUT görünürken kapalı tarayıcı tuşu dinler (listenWhileHidden) ve donanımda
+// kamera düğmesi yerine tuş bandı/hardwareListening çizer. Liste dışı (bilinçli modal-yalnız): lisans/eşleme QR'ları.
+// Bakım hattı (Adnan 1.0.x): Muayene, Çuvalsız sevk ve Gelen Belge ekranları bu ağaçta yok, listeden çıktı.
+const SINGLE_PURPOSE = [
+  'screens/Modules/Depo/DepoScreen.tsx',
+  'screens/Modules/KartelaSevk/KartelaSevkScreen.tsx',
+  'screens/Modules/HizliIsEmri/NewWorkOrderView.tsx',
+  'screens/Modules/KursunQc/KursunQcScreen.tsx',
+  'screens/Modules/IadeGirisi/IadeGirisiScreen.tsx',
+  'screens/Modules/TartiPaket/PaketlemeScreen.tsx',
+  'screens/Modules/TartiPaket/HizliSiparisScreen.tsx',
+  'screens/Modules/FasonKabul/FasonKabulScreen.tsx',
+  'screens/Modules/HizliIsEmri/WorkOrderAddBatchSheet.tsx',
+  'screens/Auth/LoginScreen.tsx',
+];
+it('§7 tek amaçlı ekranlar kapalı tarayıcıyla tuşu dinler ve donanım dalı çizer', () => {
+  for (const rel of SINGLE_PURPOSE) {
+    const src = fs.readFileSync(path.join(SRC, rel), 'utf8');
+    expect({
+      rel,
+      listens: /<(BarcodeScannerModal|LooseScanner)\b(?:(?!\/>)[\s\S]){0,1500}?\blistenWhileHidden\b/.test(src),
+      hardwareBranch: /\buseHardwareScanMode\(\)|\bhardwareListening\b/.test(src),
+    }).toEqual({ rel, listens: true, hardwareBranch: true });
+  }
+});
+
+it('§7 AppModal açık pencere işaretini koyar ve içeriğine kapsama bağlamını verir (en üstteki pencere kuralı)', () => {
+  const modal = fs.readFileSync(path.join(SRC, 'components/AppModal.tsx'), 'utf8');
+  expect(modal).toMatch(/if \(!visible \|\| scanPassThrough\) return;\s*return openScanOverlay\(overlayId\);/);
+  expect(modal).toMatch(/<ScanOverlayContext\.Provider value=\{within\}>\{children\}<\/ScanOverlayContext\.Provider>/);
+});

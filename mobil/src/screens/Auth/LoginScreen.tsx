@@ -18,6 +18,8 @@ import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../hooks/useScanMethod';
+import HardwareTriggerHint from '../../components/HardwareTriggerHint';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
 import ServerAddressSheet from '../../components/ServerAddressSheet';
 import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
@@ -122,6 +124,8 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const [pickedMethod, setPickedMethod] = useState<LoginMethod | null>(null);
   const [methodPickerOpen, setMethodPickerOpen] = useState(false);
   const [cardScannerOpen, setCardScannerOpen] = useState(false);
+  // El terminali: kart görünümündeyken rozet tuşla okunur; kamera açılmaz.
+  const hardware = useHardwareScanMode();
   // Aktif görünüm: kullanıcı seçtiyse o; yoksa ayarın öncelikli yöntemi.
   const activeMethod: LoginMethod =
     pickedMethod && enabledMethods.includes(pickedMethod)
@@ -659,7 +663,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     setMethodPickerOpen(false);
     setPin('');
     setError('');
-    if (m === 'card') setCardScannerOpen(true);
+    if (m === 'card' && !hardware) setCardScannerOpen(true);
   };
   const methodSwitcher =
     otherMethods.length === 0 ? null : (
@@ -706,28 +710,38 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       <Icon source="card-account-details-outline" size={72} color={COLORS.accentLight} />
       <Text style={styles.cardTitle}>Personel Kartını Okut</Text>
       <Text style={styles.cardHint}>
-        Kartındaki QR'ı kameraya göster — kullanıcı seçme ve PIN gerekmez.
+        {hardware
+          ? 'Kartındaki QR\'ı okuyucuyla okut — kullanıcı seçme ve PIN gerekmez.'
+          : 'Kartındaki QR\'ı kameraya göster — kullanıcı seçme ve PIN gerekmez.'}
       </Text>
-      <TouchableRipple
-        onPress={() => {
-          setError('');
-          setCardScannerOpen(true);
-        }}
-        disabled={submitting}
-        rippleColor="rgba(255,255,255,0.2)"
-        style={styles.cardScanBtn}
-      >
-        <View style={styles.cardScanBtnInner}>
-          {submitting ? (
-            <ActivityIndicator size={22} color="#fff" />
-          ) : (
-            <Icon source="qrcode-scan" size={24} color="#fff" />
-          )}
-          <Text style={styles.cardScanBtnText}>
-            {submitting ? 'Giriş yapılıyor…' : 'Kartı Okut'}
-          </Text>
-        </View>
-      </TouchableRipple>
+      {hardware ? (
+        <HardwareTriggerHint
+          busy={submitting}
+          label={submitting ? 'Giriş yapılıyor…' : 'Okuyucu tuşuna basın'}
+          style={styles.cardScanBtn}
+        />
+      ) : (
+        <TouchableRipple
+          onPress={() => {
+            setError('');
+            setCardScannerOpen(true);
+          }}
+          disabled={submitting}
+          rippleColor="rgba(255,255,255,0.2)"
+          style={styles.cardScanBtn}
+        >
+          <View style={styles.cardScanBtnInner}>
+            {submitting ? (
+              <ActivityIndicator size={22} color="#fff" />
+            ) : (
+              <Icon source="qrcode-scan" size={24} color="#fff" />
+            )}
+            <Text style={styles.cardScanBtnText}>
+              {submitting ? 'Giriş yapılıyor…' : 'Kartı Okut'}
+            </Text>
+          </View>
+        </TouchableRipple>
+      )}
       {!!error && (
         <View style={styles.statusRow}>
           <Icon source="alert-circle" size={18} color={COLORS.error} />
@@ -900,6 +914,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
 
       <BarcodeScannerModal
         visible={cardScannerOpen}
+        listenWhileHidden={activeMethod === 'card' && !submitting}
         onDismiss={() => setCardScannerOpen(false)}
         onScan={(code) => {
           setCardScannerOpen(false);

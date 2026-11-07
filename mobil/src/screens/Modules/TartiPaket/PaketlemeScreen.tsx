@@ -24,6 +24,8 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { KartelaStockPickerModal } from './KartelaStockPickerModal';
 import { AnimatedEntrance, MarqueeText } from '../../../components/motion';
@@ -103,6 +105,8 @@ export default function PaketlemeScreen() {
   const { destination, chosen, needsPick } = resolveDestination({ lock: lockQ.data, picked });
 
   const [scanOpen, setScanOpen] = useState(false);
+  // El terminali: OKUT görünürken (yükleme bitti) ekran tuş okumasını doğrudan dinler.
+  const hardware = useHardwareScanMode();
   const [listOpen, setListOpen] = useState(false);
   const [kartelaOpen, setKartelaOpen] = useState(false);
   // Listeden eklenen toplar — picker'da gizle (açık picker snapshot'ı anlık güncellenmez).
@@ -870,17 +874,24 @@ export default function PaketlemeScreen() {
               >
                 Kartela
               </Button>
-              <Button
-                mode="contained"
-                icon="barcode-scan"
-                buttonColor={colors.brand}
-                onPress={() => setScanOpen(true)}
-                style={styles.scanBtnFlex}
-                contentStyle={styles.scanBtnContent}
-                labelStyle={styles.scanBtnLabel}
-              >
-                {activeLabel ? `Top Okut → ${activeLabel}` : 'Top Okut'}
-              </Button>
+              {hardware ? (
+                <HardwareTriggerHint
+                  label={activeLabel ? `Tuşla okut → ${activeLabel}` : 'Tuşla okut'}
+                  style={styles.scanBtnFlex}
+                />
+              ) : (
+                <Button
+                  mode="contained"
+                  icon="barcode-scan"
+                  buttonColor={colors.brand}
+                  onPress={() => setScanOpen(true)}
+                  style={styles.scanBtnFlex}
+                  contentStyle={styles.scanBtnContent}
+                  labelStyle={styles.scanBtnLabel}
+                >
+                  {activeLabel ? `Top Okut → ${activeLabel}` : 'Top Okut'}
+                </Button>
+              )}
             </View>
           </View>
         </>
@@ -888,6 +899,7 @@ export default function PaketlemeScreen() {
 
       <BarcodeScannerModal
         visible={scanOpen}
+        listenWhileHidden={!loadingReal}
         onDismiss={() => setScanOpen(false)}
         onScan={handleScan}
         title={activeLabel ? `${activeLabel}'e okut` : 'Depodan top okut'}

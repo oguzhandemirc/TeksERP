@@ -9,6 +9,8 @@ import * as capabilities from '../services/hardwareScanner/capabilities';
 import { pointMobileAdapter } from '../services/hardwareScanner/adapters';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import ScannerEntryBar from './ScannerEntryBar';
+import AppModal from './AppModal';
+import { Text } from 'react-native';
 
 jest.mock('./BarcodeScannerView', () => {
   const { Text } = jest.requireActual('react-native');
@@ -86,4 +88,63 @@ it('kapalıyken gelen okumada işleyici bitince onModalHide çağrılır ("kapan
   });
   // AppModal ilk bağlanışta da onHidden verebilir; sözleşme: okuma işlendikten SONRA bir kez daha.
   expect(order.slice(-2)).toEqual(['scan:TOP-5', 'hide']);
+});
+
+it('üstte açık AppModal varken kapalı tarayıcının dinleyicisi örtülür; yan panel (scanPassThrough) örtmez', () => {
+  const onScan = jest.fn();
+  const screen = (dialog: boolean, passThrough = false) => (
+    <>
+      <BarcodeScannerModal visible={false} onDismiss={() => {}} onScan={onScan} listenWhileHidden />
+      <AppModal visible={dialog} onDismiss={() => {}} scanPassThrough={passThrough}>
+        <Text>Onay</Text>
+      </AppModal>
+    </>
+  );
+  const r = renderWithPaper(screen(true));
+  let out: string | undefined;
+  act(() => {
+    out = emitScan({ data: 'TOP-5', symbology: null, source: 'pointmobile' });
+  });
+  expect(out).toBe('covered');
+  expect(onScan).not.toHaveBeenCalled();
+  r.rerender(screen(true, true));
+  scan('TOP-6');
+  r.rerender(screen(false));
+  scan('TOP-7');
+  expect(onScan.mock.calls.map((c) => c[0])).toEqual(['TOP-6', 'TOP-7']);
+});
+
+it('açık tarayıcı kendi penceresinin işaretiyle örtülmez', () => {
+  const onScan = jest.fn();
+  const r = renderWithPaper(<BarcodeScannerModal visible={false} onDismiss={() => {}} onScan={onScan} listenWhileHidden />);
+  r.rerender(<BarcodeScannerModal visible onDismiss={() => {}} onScan={onScan} listenWhileHidden />);
+  scan('TOP-8');
+  expect(onScan).toHaveBeenCalledWith('TOP-8');
+});
+
+it('sheet İÇİNDEKİ kapalı tarayıcı kendi sheet\'i açıkken dinler; sheet içinde açılan ikinci pencere onu örter', async () => {
+  const onScan = jest.fn();
+  const sheet = (inner: boolean) => (
+    <AppModal visible onDismiss={() => {}}>
+      <BarcodeScannerModal visible={false} onDismiss={() => {}} onScan={onScan} listenWhileHidden />
+      <AppModal visible={inner} onDismiss={() => {}}>
+        <Text>Seçici</Text>
+      </AppModal>
+    </AppModal>
+  );
+  const r = renderWithPaper(sheet(false));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  scan('TOP-9');
+  expect(onScan).toHaveBeenCalledWith('TOP-9');
+  r.rerender(sheet(true));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  let out: string | undefined;
+  act(() => {
+    out = emitScan({ data: 'TOP-10', symbology: null, source: 'pointmobile' });
+  });
+  expect(out).toBe('covered');
 });

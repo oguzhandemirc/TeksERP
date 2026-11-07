@@ -8,6 +8,10 @@ import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import RollPickerModal from '../../../components/RollPickerModal';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
+import { ScanFlashCard } from '../../../components/HardwareScanPanel';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import type { ScanFeedback } from '../../../hooks/useScanFeedback';
 import { workOrderBatchService } from '../../../services/workOrderBatch.service';
 import { generateClientUuid } from '../../../offline/barcode';
 import { addBatchPreview, serverRejects, slotAfterFailure, tokenFor, totalQty, type TokenSlot } from './addBatch';
@@ -25,6 +29,8 @@ export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props)
   const { rolls, take, onScan, remove, feedback } = useAddBatchRolls(lockedItemId);
   const [reason, setReason] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali: sheet açıkken tuş doğrudan top ekler; sonuç kartı sheet'te görünür.
+  const hardware = useHardwareScanMode();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [rejected, setRejected] = useState<{ barcode: string; reason: string }[]>([]);
   const slot = useRef<TokenSlot | null>(null);
@@ -53,7 +59,7 @@ export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props)
   const overlays = (
     <>
       <BarcodeScannerModal
-        visible={scannerOpen} onDismiss={() => setScannerOpen(false)} onScan={(b) => void onScan(b)}
+        visible={scannerOpen} listenWhileHidden onDismiss={() => setScannerOpen(false)} onScan={(b) => void onScan(b)}
         title="Stok Topu Okut" continuous trigger="tap" captureHaptic={false} barcodeTypes={['qr', 'code128']} flash={feedback.flash}
         footer={<ScannerRollStrip rolls={rolls} totalQty={totalQty(rolls)} onRemove={remove} rejects={feedback.rejects} onDismissReject={feedback.dismissReject} duplicateBarcode={feedback.duplicateBarcode} />}
       />
@@ -75,10 +81,7 @@ export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props)
       footer={<Footer onCancel={onDismiss} onSave={() => save.mutate()} busy={save.isPending} disabled={rolls.length === 0} label={`Parti Ekle (${rolls.length})`} />}
       overlays={overlays}
     >
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button mode="contained-tonal" icon="barcode-scan" onPress={() => setScannerOpen(true)}>Top Okut</Button>
-        <Button mode="outlined" icon="format-list-checkbox" onPress={() => setPickerOpen(true)}>Listeden Seç</Button>
-      </View>
+      <ScanRow hardware={hardware} flash={feedback.flash} onScan={() => setScannerOpen(true)} onPick={() => setPickerOpen(true)} />
       {rolls.length === 0 ? <Text style={sheet.hint}>Henüz top yok — okutun ya da listeden seçin.</Text> : null}
       {rolls.map((r) => (
         <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -91,5 +94,22 @@ export default function WorkOrderAddBatchSheet({ wo, onDismiss, onDone }: Props)
       <Text style={sheet.label}>Sebep (isteğe bağlı)</Text>
       <TextInput mode="outlined" value={reason} onChangeText={setReason} style={sheet.input} maxLength={300} placeholder="ör. ek sipariş, eksik kalan metraj" />
     </ModuleSheet>
+  );
+}
+
+/** Okut + Listeden Seç; el terminalinde düğme yerine tuş bandı ve okutma sonucu kartı. */
+function ScanRow({ hardware, flash, onScan, onPick }: { hardware: boolean; flash: ScanFeedback['flash']; onScan: () => void; onPick: () => void }) {
+  return (
+    <>
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        {hardware ? (
+          <HardwareTriggerHint label="Tuşla okut" style={{ flex: 1 }} />
+        ) : (
+          <Button mode="contained-tonal" icon="barcode-scan" onPress={onScan}>Top Okut</Button>
+        )}
+        <Button mode="outlined" icon="format-list-checkbox" onPress={onPick}>Listeden Seç</Button>
+      </View>
+      {hardware && flash ? <ScanFlashCard flash={flash} /> : null}
+    </>
   );
 }

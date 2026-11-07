@@ -70,6 +70,8 @@ import RemoteListSheet from '../../../components/RemoteListSheet';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useHardwareScanMode } from '../../../hooks/useScanMethod';
+import HardwareTriggerHint from '../../../components/HardwareTriggerHint';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useVisibleScreens } from '../../../hooks/useVisibleScreens';
@@ -366,6 +368,8 @@ export default function FasonKabulScreen() {
   const [detailReceiptId, setDetailReceiptId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // El terminali: kart okutma tuşla; kamera çipi/düğmesi yerine bant.
+  const hardware = useHardwareScanMode();
   const [groupLoading, setGroupLoading] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   // Telefon dikeyde Geçmiş Kabuller alt panelde değil, header butonundan
@@ -1429,7 +1433,7 @@ export default function FasonKabulScreen() {
               "Yenile" (en sağda, profilin solunda). Kamera çalışıyorken okutma
               buradaki chip'ten; kamera arızalı seçiliyse chip gizlenir, sağ
               kolonda HID/elle metin girişi açılır. */}
-          {!isPhone && !manualBarcodeEntry && (
+          {!isPhone && !manualBarcodeEntry && !hardware && (
             <HeaderChip
               icon="camera"
               label="Kamera ile Okut"
@@ -1471,6 +1475,7 @@ export default function FasonKabulScreen() {
               onResolve={() => handleResolveCard()}
               resolving={resolvingCard}
               tone="green"
+              hardwareListening
             />
           </View>
         )}
@@ -2353,6 +2358,7 @@ export default function FasonKabulScreen() {
                 onResolve={() => handleResolveCard()}
                 resolving={resolvingCard}
                 tone="green"
+                hardwareListening
               />
             </View>
           )}
@@ -2462,19 +2468,23 @@ export default function FasonKabulScreen() {
             </View>
 
             <View style={styles.bottomBarCellPrimary}>
-              <TouchableRipple
-                onPress={() => setScannerOpen(true)}
-                style={[styles.bottomBarBtn, styles.bottomBarBtnPrimaryFill]}
-                rippleColor="rgba(255,255,255,0.25)"
-                accessibilityLabel="Kamera ile okut"
-              >
-                <View style={styles.bottomBarBtnInner}>
-                  <Icon source="camera" size={30} color="#fff" />
-                  <Text style={[styles.bottomBarBtnText, { color: '#fff' }]}>
-                    Kamera ile Okut
-                  </Text>
-                </View>
-              </TouchableRipple>
+              {hardware ? (
+                <HardwareTriggerHint label="Tuşla okut" />
+              ) : (
+                <TouchableRipple
+                  onPress={() => setScannerOpen(true)}
+                  style={[styles.bottomBarBtn, styles.bottomBarBtnPrimaryFill]}
+                  rippleColor="rgba(255,255,255,0.25)"
+                  accessibilityLabel="Kamera ile okut"
+                >
+                  <View style={styles.bottomBarBtnInner}>
+                    <Icon source="camera" size={30} color="#fff" />
+                    <Text style={[styles.bottomBarBtnText, { color: '#fff' }]}>
+                      Kamera ile Okut
+                    </Text>
+                  </View>
+                </TouchableRipple>
+              )}
             </View>
 
             <View style={styles.bottomBarCellSide}>
@@ -2692,6 +2702,8 @@ export default function FasonKabulScreen() {
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
       <BarcodeScannerModal
         visible={scannerOpen}
+        // OKUT'un görünür olduğu koşul: tablette hep (çip/bant), telefonda kabul açılmamışken ya da el girişi bandında.
+        listenWhileHidden={!isPhone || !selectedGroup || manualBarcodeEntry}
         title="Refakat Kartı QR Okut"
         onDismiss={() => setScannerOpen(false)}
         onScan={(data) => {
