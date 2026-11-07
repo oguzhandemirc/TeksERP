@@ -74,6 +74,9 @@ export interface AppPreferences {
      *   genis    — + iş emri yok, bu hafta terminli, tutar
      */
     statsView?: "sade" | "onerilen" | "genis";
+    /** "Excel (stok kalemi bazında)" modalının son seçimi — şekli `stock-line-export/options.ts`
+     *  sahiplenir ve okurken süzer (bozuk/eski → varsayılan); burada bilerek `unknown`. */
+    stockLineExport?: unknown;
   };
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {

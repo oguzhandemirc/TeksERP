@@ -3,20 +3,22 @@ import { Search } from "lucide-react";
 import type { Table } from "@tanstack/react-table";
 import { Input } from "@/components/ui/input";
 import { SavedViewsMenu } from "./SavedViewsMenu";
-import { DataTableTools } from "./DataTableTools";
+import { DataTableTools, type ExtraExportOption } from "./DataTableTools";
 
 interface Props<T> {
   search: string;
   onSearchChange: (value: string) => void;
   placeholder?: string;
   actions?: ReactNode;
-  /** Verilirse "Sütunlar & CSV" araç menüsü gösterilir. */
+  /** Verilirse "Sütunlar" + "Dışa aktar ▾" düğmeleri gösterilir. */
   table?: Table<T>;
   exportName?: string;
   /** Verilirse indirme, ekrandaki yüklü satırları değil aktif filtreye uyan SUNUCUDAKİ
    *  TÜM kayıtları çeker (`useDataTable.fetchAll`). Sektör standardı: dışa aktarma =
    *  tüm liste; verilmezse kullanıcı EKSİK dosya indirdiğini fark etmez. */
   fetchAll?: (onProgress?: (loaded: number, total?: number) => void) => Promise<T[]>;
+  /** Ekranın ek dışa aktarma seçenekleri (ör. Siparişler "Excel (stok kalemi bazında)…"); yoksa menüde görünmez. */
+  extraExports?: ExtraExportOption[];
   /** Arama kutusunu gizle — arama dışarıdan (ör. sayfa üstündeki birleşik input) sürülüyor. */
   hideSearch?: boolean;
   /** Sola dayalı ek içerik (araç menüsünden ÖNCE) — ör. tarih aralığı filtresi. */
@@ -31,6 +33,7 @@ export function DataTableToolbar<T>({
   table,
   exportName,
   fetchAll,
+  extraExports,
   hideSearch = false,
   leading,
 }: Props<T>) {
@@ -50,7 +53,7 @@ export function DataTableToolbar<T>({
       {leading}
       <div className="ml-auto flex items-center gap-2">
         {table ? (
-          <DataTableTools table={table} exportName={exportName} fetchAll={fetchAll} />
+          <DataTableTools table={table} exportName={exportName} fetchAll={fetchAll} extraExports={extraExports} />
         ) : null}
         <SavedViewsMenu />
         {actions}

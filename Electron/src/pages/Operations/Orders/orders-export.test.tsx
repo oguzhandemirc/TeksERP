@@ -1,5 +1,5 @@
 // =============================================================================
-// Sipariş listesi dışa aktarımı — Kumaş/Renk BOŞ çıkmasın; kalem bazında Excel
+// Sipariş listesi dışa aktarımı — Kumaş/Renk BOŞ çıkmasın
 // =============================================================================
 // Saha (panel 1.3.7): liste Excel'inde Kumaş/Renk/Sevk boş, Kalem renk adı, tarih ham ISO çıkıyordu.
 // Burada GERÇEK tablo adaptörü (`buildCsv`) ve gerçek kolonlar ölçülür.
@@ -8,10 +8,8 @@ import { describe, it, expect } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { buildCsv } from "@/lib/table-export";
-import { buildListSheet } from "@/lib/list-export";
 import { buildOrderColumns } from "./columns";
 import { lineLabelsText } from "./order-cell-text";
-import { flattenOrderLines, orderLineExportColumns, lineOpenQty } from "./order-lines-export";
 import type { Order, OrderLine } from "./types";
 
 const line = (p: Partial<OrderLine>): OrderLine =>
@@ -181,61 +179,5 @@ describe("sipariş listesi dışa aktarımı", () => {
       expect(row[i], h).not.toBe("");
       expect(row[i], h).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     });
-  });
-});
-
-describe("kalem bazında Excel", () => {
-  it("her (iptal olmayan) kalem bir satır; sipariş başlığı her satırda", () => {
-    const rows = flattenOrderLines([
-      order(),
-      order({ id: "o2", orderNumber: "SP-002", lines: [line({ id: "x" }), line({ id: "y", cancelledAt: "2026-11-02T00:00:00Z" })] }),
-    ]);
-    expect(rows.map((r) => `${r.order.orderNumber}/${r.line.id}`)).toEqual(["SP-001/l1", "SP-001/l2", "SP-001/l3", "SP-002/x"]);
-  });
-
-  it("kalan = miktar − sevk; ölçülmeyen birimde boş", () => {
-    const o = order();
-    expect(lineOpenQty({ order: o, line: line({ shippedQty: 40 }) })).toBe(60);
-    expect(lineOpenQty({ order: o, line: line({ shippedQty: 140 }) })).toBe(0);
-    expect(lineOpenQty({ order: o, line: line({ unit: "KG" }) })).toBe("");
-  });
-
-  it("fiyat kolonları yalnız pricingEnabled ile; iş emri kolonu üretimle", () => {
-    const rows = flattenOrderLines([order()]);
-    const labels = (pricingEnabled: boolean, productionEnabled: boolean) =>
-      orderLineExportColumns(rows, { pricingEnabled, productionEnabled }).map((c) => c.label);
-    expect(labels(false, true)).not.toContain("Birim Fiyat");
-    expect(labels(false, true)).not.toContain("Para Birimi");
-    expect(labels(true, true)).toEqual(expect.arrayContaining(["Birim Fiyat", "Para Birimi", "İş Emri"]));
-    expect(labels(true, false)).not.toContain("İş Emri");
-  });
-
-  it("sayfa: istenen kolonlar dolu; tek birimde metraj toplanır, karışıkta toplanmaz", () => {
-    const rows = flattenOrderLines([order()]);
-    const sheet = buildListSheet(orderLineExportColumns(rows, { pricingEnabled: true, productionEnabled: true }), rows, "x");
-    const idx = (h: string) => `c${sheet.columns.findIndex((c) => c.header === h)}`;
-    const first = sheet.rows[0] ?? {};
-    expect(first[idx("Sipariş No")]).toBe("SP-001");
-    expect(first[idx("Müşteri")]).toBe("Acme Tekstil");
-    expect(first[idx("Şube")]).toBe("Merkez");
-    expect(first[idx("Kumaş")]).toBe("Saten");
-    expect(first[idx("Renk")]).toBe("Lacivert");
-    expect(first[idx("Özellikler")]).toBe("Yanmaz");
-    expect(first[idx("En (cm)")]).toBe("280");
-    expect(first[idx("Miktar")]).toBe(100);
-    expect(first[idx("Birim")]).toBe("m");
-    expect(first[idx("Birim Fiyat")]).toBe("10.5");
-    expect(first[idx("Para Birimi")]).toBe("TRY");
-    expect(first[idx("Sevk Edilen")]).toBe(40);
-    expect(first[idx("Kalan")]).toBe(60);
-    expect(first[idx("Termin")]).toBe("20.11.2026");
-    expect(first[idx("Sevk durumu")]).toBe("Bir kısmı gönderildi (40 / 300 m)");
-    expect(String(first[idx("İş Emri")])).toMatch(/^IE-7 \(/);
-    expect(first[idx("Kalem Notu")]).toBe("2 parça");
-    expect(sheet.totalRow?.[idx("Miktar")]).toBe(300);
-
-    const mixed = flattenOrderLines([order({ lines: [line({}), line({ id: "k", unit: "KG" })] })]);
-    const cols = orderLineExportColumns(mixed, { pricingEnabled: false, productionEnabled: true });
-    expect(cols.find((c) => c.label === "Miktar")?.summable).toBe(false);
   });
 });
