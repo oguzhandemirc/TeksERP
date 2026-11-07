@@ -1,6 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -37,7 +37,6 @@ export type LoginFormValues = z.infer<typeof schema>;
 
 export function useLoginFlow() {
   const navigate = useNavigate();
-  const location = useLocation();
   const setUser = useAuthStore((s) => s.setUser);
   const [submitting, setSubmitting] = useState(false);
   // 409 SESSION_EXISTS ('notify' politikası) — onay bekleyen çakışma bilgisi.
@@ -83,8 +82,8 @@ export function useLoginFlow() {
       // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
       // Bundan sonraki keşiflerde kimlik tutmazsa kullanıcıya sorulur.
       void pinServerIdentityAfterLogin();
-      const dest = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
-      navigate(dest, { replace: true });
+      // Her giriş Anasayfa'ya: eski "gidilmek istenen yol" sekme açmaz (kullanıcı kararı 2026-11-07).
+      void navigate("/", { replace: true });
     } catch (err) {
       // ── İkinci faktör dalları ────────────────────────────────────────────
       // ⚠️ SIRA: TOTP kontrolleri oturum-çakışması kontrolünden ÖNCE gelmeli.

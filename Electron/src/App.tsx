@@ -14,6 +14,7 @@ import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDi
 import { LiveReferencesDialog } from "@/components/LiveReferencesDialog";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
+import { bindTabsToSession } from "@/store/tabs";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
@@ -46,6 +47,9 @@ function AuthHydrator() {
   const setUser = useAuthStore((s) => s.setUser);
   const setHydrated = useAuthStore((s) => s.setHydrated);
   const refreshSystemAccount = useAuthStore((s) => s.refreshSystemAccount);
+
+  // Oturum sınırı sekmeleri sıfırlar (çıkış · 401 · yeni giriş); hidrasyondan ÖNCE bağlanır.
+  useEffect(() => bindTabsToSession(useAuthStore), []);
 
   useEffect(() => {
     void (async () => {

@@ -9,6 +9,7 @@ import {
 } from "@/components/layout/tabs/tab-routers";
 import { recallRoute } from "@/components/layout/tabs/route-memory";
 import { idsToClose, nextActiveAfterClose, type CloseScope } from "@/components/layout/tabs/tab-close";
+import { TABS_STORAGE_KEY, purgeTabsOnFreshLaunch, tabsStorage } from "./tabs-storage";
 
 export interface TabItem {
   /** Kararlı kimlik — router registry + React key. */
@@ -58,12 +59,10 @@ interface TabsState {
   /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
   updateTabTitle: (id: string, title: string) => void;
   /**
-   * TÜM sekmeleri kapat — çıkışta çağrılır (`store/auth.logout`).
+   * TÜM sekmeleri kapat — oturum sınırında çağrılır (`bindTabsToSession`).
    *
-   * ⚠️ Defter KALICI (`persist`): temizlenmezse bir sonraki kullanıcı, önceki
-   * kişinin açtığı sekmeleri (ve başlıklarındaki müşteri/sipariş adlarını)
-   * hazır bulurdu. Ortak kullanılan fabrika bilgisayarında bu hem karıştırıcı
-   * hem sızıntıdır. `set` ile boşaltmak persist'i de günceller.
+   * Temizlenmezse bir sonraki kullanıcı öncekinin sekmelerini (başlıklarındaki
+   * müşteri/sipariş adlarıyla) hazır bulurdu. `set` ile boşaltmak kalıcı kopyayı da günceller.
    */
   resetTabs: () => void;
 }
@@ -76,6 +75,9 @@ function newId(): string {
     return `tab-${Date.now()}-${counter++}`;
   }
 }
+
+// Yeni açılış (reload değil) önceki sekmeleri getirmez — store kurulmadan, hidrasyondan önce.
+purgeTabsOnFreshLaunch();
 
 export const useTabsStore = create<TabsState>()(
   persist(
@@ -227,13 +229,35 @@ export const useTabsStore = create<TabsState>()(
       },
     }),
     {
-      name: "teks.tabs",
-      // Yalnız sekme listesi + aktif sekme kalıcı; memory router'lar açılışta
-      // her sekme için yeniden kurulur (filtreler/scroll yeniden başlamaz).
+      name: TABS_STORAGE_KEY,
+      // Yalnız pencere ömrü (F5'te korunur); yeni oturum/açılış her zaman Anasayfa'dan başlar.
+      storage: tabsStorage,
+      // Yalnız sekme listesi + aktif sekme; memory router'lar yeniden kurulur.
       partialize: (s) => ({ tabs: s.tabs, activeId: s.activeId }),
     },
   ),
 );
+
+interface SessionSnapshot {
+  user: { userId: string } | null;
+  isHydrated: boolean;
+}
+
+/**
+ * OTURUM SINIRI = SEKME SIFIRI: kimlik değişince (çıkış, 401/oturum düşmesi, yeni giriş)
+ * defter boşalır; kabuk boş defterle bağlanınca tek sekme Anasayfa açılır. Açılıştaki
+ * hidrasyon (`isHydrated` henüz false) sınır değildir — F5 sekmeleri korur.
+ * Auth store parametre: tabs → auth statik bağı kurulmaz (testler auth'u mocklar).
+ */
+export function bindTabsToSession<S extends SessionSnapshot>(auth: {
+  subscribe: (listener: (state: S, prev: S) => void) => () => void;
+}): () => void {
+  return auth.subscribe((state, prev) => {
+    if (!prev.isHydrated || state.user === prev.user) return;
+    if (state.user && prev.user && state.user.userId === prev.user.userId) return;
+    useTabsStore.getState().resetTabs();
+  });
+}
 
 /** Aktif sekmenin pathname'i (sidebar/komut paleti aktif vurgusu için). */
 export const selectActivePath = (s: TabsState): string | null =>
