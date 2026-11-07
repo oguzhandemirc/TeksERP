@@ -11,7 +11,7 @@
 import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma, PrismaClient, WorkOrderEventType, WorkOrderStatus } from "@prisma/client";
 import { currentOrigin } from "../../lib/request-context";
-import { producedOutputWhere } from "./produced-output.helper";
+import { resolveProducedOutputWhere } from "./produced-output.helper";
 import { loadProducedBuckets } from "./roll-finalize.helper";
 import { computeWoInput } from "./coverage.helper";
 import type { WorkOrderEventCtx } from "./workorder-event.helper";
@@ -41,7 +41,7 @@ async function readCloseInputsTx(tx: Tx, workOrderId: string) {
   });
   const stepIds = steps.map((s) => s.id);
   const rolls = stepIds.length === 0 ? [] : await sequentialTx(tx).roll.findMany({
-    where: producedOutputWhere(stepIds),
+    where: await resolveProducedOutputWhere(tx, stepIds),
     select: {
       id: true, barcode: true, initialQty: true, currentQty: true, weightKg: true, width: true,
       colorId: true, qualityGrade: true, batchId: true, status: true, foldType: true,
