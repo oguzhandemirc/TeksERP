@@ -85,6 +85,9 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   FABRIC: "Kumaş",
   CONSUMABLE: "Sarf",
   SERVICE: "Hizmet",
+  // InvoiceLineType (D0 ürün/hizmet kartı ayrımı, 2026-11-08) — SERVICE yukarıda, ItemType ile ortak
+  PRODUCT: "Ürün",
+  TEXT: "Açıklama",
   MT: "Metre",
   KG: "Kilogram",
   ADET: "Adet",

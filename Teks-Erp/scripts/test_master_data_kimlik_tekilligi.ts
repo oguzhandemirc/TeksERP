@@ -25,6 +25,7 @@ import path from "path";
 import prisma, { pool } from "../src/lib/prisma";
 import { atlamaDefteri } from "./lib/atlama";
 import { fixtureHedefEngeli, hedefDbAdi } from "./lib/hedef-db-kapisi";
+import { foldCodeForCompare } from "../src/utils/code-format";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -118,6 +119,42 @@ async function main(): Promise<void> {
       adCakisan.length === 0 ? `${kartlar.length} kart × ${profiller.length} profil` : adCakisan.slice(0, 5).join(" · "));
     check("①b BAĞSIZ vergi no çakışması YOK", vergiCakisan.length === 0,
       vergiCakisan.length === 0 ? `${kartVergi.size} kartta VKN var` : vergiCakisan.slice(0, 5).join(" · "));
+  }
+
+  // ── ①ç ÜRÜN KARTI ↔ HİZMET KARTI (D1b, 2026-11-08) ─────────────────────
+  // İki tablo ayrıldı ama kod ve ad TEK kimlik uzayıdır (etiket/belge/arama). Yazım yolu
+  // `card-identity.helper` iki yönlü sorar; bu kol DB'deki gerçek durumu ölçer.
+  const kartCakismalari = (
+    urunler: Array<{ code: string; nameFold: string | null }>,
+    hizmetler: Array<{ code: string; nameFold: string | null }>,
+  ): { kod: string[]; ad: string[] } => {
+    const kodlar = new Map(urunler.map((u) => [foldCodeForCompare(u.code), u.code]));
+    const adlar = new Map(urunler.filter((u) => u.nameFold).map((u) => [u.nameFold!, u.code]));
+    const kod: string[] = [];
+    const ad: string[] = [];
+    for (const h of hizmetler) {
+      const k = kodlar.get(foldCodeForCompare(h.code));
+      if (k) kod.push(`${h.code} ↔ ${k}`);
+      const a = h.nameFold ? adlar.get(h.nameFold) : undefined;
+      if (a) ad.push(`${h.code} ↔ ${a} ("${h.nameFold}")`);
+    }
+    return { kod, ad };
+  };
+  // Körlük zemini: karşılaştırıcı bilinen çakışmayı (harf farkıyla kod + aynı ad) GÖRÜYOR.
+  const sonda = kartCakismalari([{ code: "Abc-1", nameFold: "KURSUN" }], [{ code: "ABC-1", nameFold: "KURSUN" }]);
+  check("①z körlük zemini: ürün↔hizmet karşılaştırıcısı harf farklı kodu ve aynı adı yakalıyor", sonda.kod.length === 1 && sonda.ad.length === 1);
+  const urunKartlari = await prisma.item.findMany({ where: { mergedIntoId: null }, select: { code: true, nameFold: true } });
+  const hizmetKartlari = await prisma.serviceItem.findMany({ where: { mergedIntoId: null }, select: { code: true, nameFold: true } });
+  if (urunKartlari.length === 0 || hizmetKartlari.length === 0) {
+    kollar.set("①ç", "olculemedi");
+    ATLAMA.atla("①ç ürün ↔ hizmet kartı kimliği",
+      `ÖLÇÜLEMEDİ: karşılaştırılacak popülasyon yok (${urunKartlari.length} ürün · ${hizmetKartlari.length} hizmet kartı)`, 2);
+  } else {
+    const c = kartCakismalari(urunKartlari, hizmetKartlari);
+    kollar.set("①ç", c.kod.length + c.ad.length === 0 ? "uyumlu" : "ihlal");
+    check("①ç KOD çakışması YOK (items.code ↔ service_items.code, harf duyarsız)", c.kod.length === 0,
+      c.kod.length === 0 ? `${urunKartlari.length} ürün × ${hizmetKartlari.length} hizmet` : c.kod.slice(0, 5).join(" · "));
+    check("①d AD çakışması YOK (`nameFold`, tombstone hariç)", c.ad.length === 0, c.ad.slice(0, 5).join(" · ") || "temiz");
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -218,7 +255,32 @@ async function main(): Promise<void> {
   const teklesenCiftler = [...new Set(kimlikCiftleri)];
   const beyansizCift = teklesenCiftler.filter((k) => !KIMLIK_CIFTI_BEYANLARI.has(k));
   const oluCiftBeyani = [...KIMLIK_CIFTI_BEYANLARI.keys()].filter((k) => !teklesenCiftler.includes(k));
-  kollar.set("②", beyansizCift.length === 0 && beyansizBag.length === 0 ? "uyumlu" : "ihlal");
+  // İKİ SINIF ÇİFTİ (D1b): satırın KONUSU iki AYRI varlık sınıfından biri (ürün ↔ hizmet kartı). Bu
+  // XOR "aynı nesnenin iki kimliği" DEĞİLDİR (MV-02 rol kuralı değil) — ama her çiftin tutarlılık CHECK'i
+  // beyanda yazılı olmalı; beyansız yeni çift KIRMIZI.
+  const ikiSinifCiftleri: string[] = [];
+  for (const m of modeller) {
+    const ops: Array<{ alan: string; tip: string }> = [];
+    for (const r of m.govde.matchAll(/@relation\([^)]*fields:\s*\[(\w+)\][^)]*\)/g)) {
+      const t = alanTipi(m.govde, r[1]);
+      if (t && t.opsiyonel && (t.tip === "Item" || t.tip === "ServiceItem")) ops.push({ alan: r[1], tip: t.tip });
+    }
+    for (const a of ops.filter((x) => x.tip === "Item")) {
+      for (const b of ops.filter((x) => x.tip === "ServiceItem")) ikiSinifCiftleri.push(`${m.ad}: ${a.alan}(Item) ↔ ${b.alan}(ServiceItem)`);
+    }
+  }
+  const IKI_SINIF_BEYANLARI = new Map<string, string>([
+    ["InvoiceLine: itemId(Item) ↔ serviceItemId(ServiceItem)", "iki-sınıf — `lineType` + `invoice_lines_line_type_ck` (PRODUCT⇔itemId, SERVICE⇔serviceItemId, TEXT⇔ikisi boş)"],
+    ["FabricPropertyValue: consumableItemId(Item) ↔ serviceItemId(ServiceItem)", "iki-rol — değer bir hizmet kartıyla faturalanır VE bir sarf kalemi tüketir; ikisi BİRLİKTE dolu olabilir, XOR değildir"],
+    ["ItemPrice: itemId(Item) ↔ serviceItemId(ServiceItem)", "iki-sınıf — `item_prices_subject_ck` num_nonnulls = 1; kademe yalnız hizmette (`item_prices_tier_service_ck`)"],
+  ]);
+  const beyansizIkiSinif = ikiSinifCiftleri.filter((k) => !IKI_SINIF_BEYANLARI.has(k));
+  const oluIkiSinif = [...IKI_SINIF_BEYANLARI.keys()].filter((k) => !ikiSinifCiftleri.includes(k));
+  check("②d ürün↔hizmet iki-sınıf FK çifti BEYANSIZ doğmamış", beyansizIkiSinif.length === 0,
+    beyansizIkiSinif.join(" · ") || `${ikiSinifCiftleri.length} çift, hepsi beyanlı`);
+  check("②e ÖLÜ iki-sınıf beyanı yok", oluIkiSinif.length === 0, oluIkiSinif.join(" · ") || "temiz");
+  check("②y körlük zemini: fatura satırı ve fiyat çifti GÖRÜLÜYOR", ikiSinifCiftleri.length >= 2, `${ikiSinifCiftleri.length} çift`);
+  kollar.set("②", beyansizCift.length === 0 && beyansizBag.length === 0 && beyansizIkiSinif.length === 0 && oluIkiSinif.length === 0 ? "uyumlu" : "ihlal");
   check("②a YENİ 1:1 kimlik bağı BEYANSIZ doğmamış", beyansizBag.length === 0,
     beyansizBag.join(" · ") || `${kimlikBaglari.length} bağ, hepsi beyanlı`);
   check("②b YENİ çift-master kimlik bağı BEYANSIZ doğmamış", beyansizCift.length === 0,

@@ -33,7 +33,6 @@ import {
   openDemandLineWhere,
 } from "./live-ref-where.helper";
 import { AuditService } from "../audit.service";
-import { ACTIVE_ITEM_PRICE } from "./item-price-validity.helper";
 import { TERIM } from "../../constants/terim";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
@@ -46,7 +45,7 @@ export const ITEM_DEAD_ROLL_STATUSES = DEAD_ROLL_STATUSES;
 export type ItemLiveRefKind =
   | "ROLL" | "WORK_ORDER" | "ORDER_LINE" | "PURCHASE_ORDER_LINE"
   | "WEAVING_ORDER" | "MACHINE_RUN" | "FASON_YARN_DISPATCH" | "YARN_STOCK" | "SWATCH"
-  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_CUSTOMER_PRICE" | "CONSUMABLE_NORM";
+  | "CONSUMABLE_NORM";
 
 export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: string }> = [
   { kind: "ROLL", label: "Canlı top" },
@@ -60,12 +59,8 @@ export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: 
   // Kullanıcı kararı S4 (2026-09-26): stoktaki/çuvaldaki/sevkiyattaki kartela canlı referanstır.
   // Göç D1 SQL'i bu karardan ÖNCE koştu; ikiz kıyası bu türü adıyla dışarıda tutar.
   { kind: "SWATCH", label: "Canlı kartela" },
-  // 1e kararı (2026-10-29, K2a): faturalama motoru eşlemeyi ve müşteri hizmet fiyatını HER sevkte okur — eşlenmiş
-  // hizmet kalemi pasife alınamaz. Göç D1 SQL'inden sonra eklendi; ikiz kıyası bu türleri adıyla dışarıda tutar.
-  { kind: "SERVICE_PROPERTY_MAP", label: "Hizmet eşlemesi (özellik)" },
-  { kind: "SERVICE_VALUE_MAP", label: "Hizmet eşlemesi (özellik değeri)" },
-  { kind: "SERVICE_CUSTOMER_PRICE", label: "Müşteri hizmet fiyatı" },
-  // D4-G1a: aktif sarf normu maliyet okuyucusunun girdisidir — hizmet ya da sarf kalemi pasife alınamaz.
+  // Hizmet kartı türleri (eşleme, müşteri hizmet fiyatı) `service-item-lifecycle.helper.ts`te (D1b ayrımı).
+  // D4-G1a: aktif sarf normu maliyet okuyucusunun girdisidir — sarf kalemi pasife alınamaz.
   { kind: "CONSUMABLE_NORM", label: "Aktif sarf normu" },
 ];
 
@@ -79,9 +74,6 @@ interface LiveRefWhere {
   FASON_YARN_DISPATCH: Prisma.SubcontractorDispatchItemWhereInput;
   YARN_STOCK: Prisma.YarnStockWhereInput;
   SWATCH: Prisma.SwatchWhereInput;
-  SERVICE_PROPERTY_MAP: Prisma.FabricPropertyWhereInput;
-  SERVICE_VALUE_MAP: Prisma.FabricPropertyValueWhereInput;
-  SERVICE_CUSTOMER_PRICE: Prisma.ItemPriceWhereInput;
   CONSUMABLE_NORM: Prisma.ServiceConsumableNormWhereInput;
 }
 
@@ -107,13 +99,8 @@ function liveRefWhere(itemId: string, db: Db): LiveRefWhere {
     },
     YARN_STOCK: { itemId, balanceKg: { not: 0 } },
     SWATCH: { itemId, ...LIVE_SWATCH },
-    // Eşleme pasif özellik/değerde de sayılır: çözücü `isActive`e bakmadan faturalar (fail-closed, fazla sayar).
-    SERVICE_PROPERTY_MAP: { serviceItemId: itemId },
-    SERVICE_VALUE_MAP: { serviceItemId: itemId },
-    // Yalnız HİZMET kartının müşteri fiyatı (`serviceItemId` kolonu): ürün fiyat istisnası tanımdır, canlı referans değildir (K1 emsali).
-    SERVICE_CUSTOMER_PRICE: { serviceItemId: itemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE },
     // `ACTIVE_COST_RATE` ile aynı yüklem; helper import edilmez (makine ücreti okuyucusunu kart router'ına bağlardı — maliyet rejim bekçisi).
-    CONSUMABLE_NORM: { OR: [{ serviceItemId: itemId }, { consumableItemId: itemId }], revokedAt: null },
+    CONSUMABLE_NORM: { consumableItemId: itemId, revokedAt: null },
   };
 }
 
@@ -133,9 +120,6 @@ export async function countItemLiveRefs(db: Db, itemId: string): Promise<ItemLiv
     FASON_YARN_DISPATCH: await db.subcontractorDispatchItem.count({ where: w.FASON_YARN_DISPATCH }),
     YARN_STOCK: await db.yarnStock.count({ where: w.YARN_STOCK }),
     SWATCH: await db.swatch.count({ where: w.SWATCH }),
-    SERVICE_PROPERTY_MAP: await db.fabricProperty.count({ where: w.SERVICE_PROPERTY_MAP }),
-    SERVICE_VALUE_MAP: await db.fabricPropertyValue.count({ where: w.SERVICE_VALUE_MAP }),
-    SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE } }),
     CONSUMABLE_NORM: await db.serviceConsumableNorm.count({ where: w.CONSUMABLE_NORM }),
   };
   return ITEM_LIVE_REF_KINDS.map(({ kind, label }) => ({ kind, label, count: counts[kind] }));
@@ -198,18 +182,6 @@ export async function listItemLiveRefs(
     SWATCH: (await db.swatch.findMany({
       where: w.SWATCH, take, orderBy: { cardNumber: "asc" }, select: { id: true, cardNumber: true, status: true },
     })).map((x) => ({ id: x.id, title: x.cardNumber, detail: x.status })),
-    SERVICE_PROPERTY_MAP: (await db.fabricProperty.findMany({
-      where: w.SERVICE_PROPERTY_MAP, take, orderBy: { code: "asc" }, select: { id: true, code: true, name: true, isActive: true },
-    })).map((x) => ({ id: x.id, title: x.name, detail: `${x.code}${x.isActive ? "" : " · pasif"} — eşlemeyi kaldırın` })),
-    SERVICE_VALUE_MAP: (await db.fabricPropertyValue.findMany({
-      where: w.SERVICE_VALUE_MAP, take, orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true, isActive: true, property: { select: { name: true } } },
-    })).map((x) => ({ id: x.id, title: `${x.property.name} · ${x.name}`, detail: `${x.code}${x.isActive ? "" : " · pasif"} — eşlemeyi kaldırın` })),
-    // Fiyat tutarı listeye girmez (müşteri ve kur yeter; tutar fiyat ekranında).
-    SERVICE_CUSTOMER_PRICE: (await db.itemPrice.findMany({
-      where: { ...w.SERVICE_CUSTOMER_PRICE, ...ACTIVE_ITEM_PRICE }, take, orderBy: { createdAt: "asc" },
-      select: { id: true, currency: true, customer: { select: { name: true } } },
-    })).map((x) => ({ id: x.id, title: x.customer?.name ?? "—", detail: `${x.currency} — müşteri fiyatını kaldırın` })),
     // Miktar listeye girmez (norm ekranında); çift adı + çıkış yolu yeter.
     CONSUMABLE_NORM: (await db.serviceConsumableNorm.findMany({
       where: w.CONSUMABLE_NORM, take, orderBy: { createdAt: "asc" },

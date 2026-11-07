@@ -98,6 +98,7 @@ function linkedCustomerSubtitle(customer: unknown): string | null {
 const ROW_MAPPERS: Record<SearchEntityKey, RowMapper> = {
   customer: (r) => ({ id: String(r.id), title: String(r.name), subtitle: null, code: str(r.code) }),
   item: (r) => ({ id: String(r.id), title: String(r.name), subtitle: null, code: str(r.code) }),
+  serviceItem: (r) => ({ id: String(r.id), title: String(r.name), subtitle: null, code: str(r.code) }),
   color: (r) => ({ id: String(r.id), title: String(r.name), subtitle: null, code: str(r.code) }),
   order: (r) => ({
     id: String(r.id),

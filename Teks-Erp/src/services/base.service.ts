@@ -54,7 +54,7 @@ import { baseWriteClosedFields } from "../constants/write-guard";
 const PROVENANCE_MODELS = new Set([
   "color", "customer", "customerBranch", "defectType", "fabricProperty", "fourPointRuleSet", "item",
   "machine", "order", "peripheralDevice", "productRecipe", "qualityGrade",
-  "returnReason", "route", "station", "machineStopCodeMap",
+  "returnReason", "route", "station", "machineStopCodeMap", "serviceItem",
 ]);
 
 export function withActor(
