@@ -169,14 +169,15 @@ async function main(): Promise<void> {
     check("⭐ §6 Controller dateField yokken createdAt'e düşüyor", /dateField:[\s\S]{0,240}?"createdAt"/.test(searchBlock));
 
     // ── §7 Electron aynası: panelin gönderdiği anahtarlar okunuyor mu ────────
-    const panelPath = resolve(__dirname, "../../Electron/src/pages/Operations/SackContentEdit/SacksListView.tsx");
+    // Süzgeç tanımları 2026-11-07 (panel filtre dalga 5) sayfadan `sack-filter-defs.ts`e ayrıldı.
+    const panelPath = resolve(__dirname, "../../Electron/src/pages/Operations/SackContentEdit/sack-filter-defs.ts");
     let panel = "";
     try {
       panel = readFileSync(panelPath, "utf-8");
     } catch {
       /* Electron yoksa aşağıda kırmızı */
     }
-    const filtersBlock = panel.slice(panel.indexOf("const SACK_FILTERS"), panel.indexOf("interface Props"));
+    const filtersBlock = panel.slice(panel.indexOf("const SACK_FILTERS"), panel.indexOf("export function sackFiltreleri"));
     const panelKeys = [...filtersBlock.matchAll(/key:\s*"([^"]+)"/g)].map((m) => m[1] as string);
     check("§7 Panel filtre bloğu okundu (en az 8 anahtar)", panelKeys.length >= 8, panelKeys.join(","));
     // numberRange `width` URL'e widthMin/widthMax yazar → controller'da o adlarla aranır.

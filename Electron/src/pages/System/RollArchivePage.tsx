@@ -33,7 +33,10 @@ import { PageShell } from "@/components/layout/PageShell";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
+import { DefFilterRow } from "@/components/data-table/filter-row/DefFilterRow";
+import { DATE_FILTER, useRollFilterDefs } from "@/pages/Operations/Rolls/roll-filter-defs";
+import { rollPersistConfig } from "@/pages/Operations/Rolls/RollsFilterRow";
 import { makeRollColumns } from "@/pages/Operations/Rolls/columns";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
@@ -44,6 +47,11 @@ import {
   rollTabDefaultSortBy,
 } from "@/pages/Operations/Rolls/service";
 import type { Roll } from "@/pages/Operations/Rolls/types";
+
+/** Kayıt `rolls:ARCHIVE` (Kumaş Stoğu sekmeleriyle aynı şema). */
+export const ARCHIVE_PERSIST = rollPersistConfig("ARCHIVE");
+/** Satırda: Tarih · Kayıt Türü · Kumaş · Renk; gerisi "+ Filtre"de. */
+export const ARCHIVE_PRIMARY = ["statusIn", "itemId", "colorId"];
 
 export default function RollArchivePage() {
   // KALİTE KATALOĞU — rozet rengi/kararı buradan (karar ①). Anahtar mevcut
@@ -68,6 +76,9 @@ export default function RollArchivePage() {
     [qualityGradesQuery.data],
   );
   const columns = useMemo(() => makeRollColumns(qualityGrades), [qualityGrades]);
+  const defs = useRollFilterDefs("ARCHIVE");
+  // Tarih kutusu tanım listesinde değil (Kumaş Stoğu satırı da önüne ekler) — eski çubuktaki gibi başta.
+  const filters = useMemo(() => [DATE_FILTER, ...defs], [defs]);
 
   const dataTable = useDataTable<Roll>({
     queryKey: "rolls:ARCHIVE",
@@ -87,6 +98,7 @@ export default function RollArchivePage() {
       updatedAt: true,
       createdAt: false,
     },
+    persistFilters: ARCHIVE_PERSIST,
   });
 
   // Arşiv salt-okunur ama DIŞA AKTARILABİLİR olmalı: emekli toplar denetim/analiz
@@ -105,14 +117,17 @@ export default function RollArchivePage() {
       />
       {/* Arama: barkod TAM eşleşir (unique index seek), kumaş/renk adı ve müşteri
           alias'ı `contains`. "Kayıt Türü" filtresiyle birlikte kullanılır. */}
-      <DataTableToolbar
+      <DefFilterRow
+        filters={filters}
+        primaryKeys={ARCHIVE_PRIMARY}
         search={dataTable.search}
         onSearchChange={dataTable.setSearch}
         placeholder="Barkod, kumaş veya renk ara..."
-        hideSearch={false}
+        trailing={<SavedViewsMenu compact />}
       />
       <RollsTableBody
         tab="ARCHIVE"
+        hideFilterBar
         table={dataTable.table}
         isLoading={dataTable.query.isLoading}
         pagination={dataTable.pagination}
