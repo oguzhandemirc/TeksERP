@@ -17,6 +17,40 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-07b",
+      "baslik": "Kartela sevki ve kabulü panelden",
+      "surumler": {
+        "panel": "1.3.13"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "\"Kartela Takibi\" sayfasında \"Yeni Sevk\" düğmesi var. Kartela firması seçilir, depodaki bitmiş toplar barkod okutularak ya da \"Listeden Seç\" ile eklenir, plaka, şoför ve not yazılır. \"Sevk Et\" deyince sevk kaydedilir ve çeki listesi açılır. Çuvala girmiş ya da sevkiyata okutulmuş toplar listede çıkmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yeni \"Bekleyen Kabul\" sekmesi kartela firmasından henüz dönmemiş sevkleri gösterir. \"Kabul Et\" ile her top için dönen kartela adedi girilir; adet girilen top tükenir, o kadar kartela doğar. İrsaliye numarası ve not da yazılabilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "\"Kabuller\" sekmesinde bir kabulün ayrıntısından \"Kabulü İptal Et\" seçilebilir. Önce geri alınacak kartelaların hepsi tek tek listelenir; iptal sebebi yazılınca kartelalar geri alınır ve tüketilen toplar yeniden \"Kartelada\" olur. Kabul belgesi silinmez. Kartelalardan biri sevkiyatta ya da çuvaldaysa iptal yapılmaz ve o kartelalar adıyla gösterilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "\"Sevkler\" sekmesinde henüz kabulü yapılmamış bir sevkin ayrıntısından \"Sevki İptal Et\" seçilebilir. İptal sebebi yazılır, toplar kartela firmasından depoya geri döner; sevk belgesi silinmez, iptal olarak kalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Bu düğmeler yalnız \"Kartela işlemi yapabilir\" yetkisi olan kullanıcılara görünür; yalnız görme yetkisi olan kullanıcı sayfayı eskisi gibi okur."
+        }
+      ]
+    },
+    {
       "id": "2026-11-07",
       "baslik": "Stok raporunda kalem bazında liste",
       "surumler": {
