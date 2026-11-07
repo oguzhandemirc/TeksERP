@@ -1,4 +1,5 @@
 import type { FilterDef } from "@/components/data-table/FilterBar";
+import { persistConfigOf } from "@/components/data-table/filter-row/def-row-filters";
 import { customerService } from "@/pages/Customers/service";
 import { branchLookupService } from "@/pages/Operations/Shipments/service";
 import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
@@ -75,3 +76,9 @@ export const ACCOUNTING_FILTERS: FilterDef[] = [
     ],
   },
 ];
+
+/** Kayıt allowlist'i; kayıt yokken son 30 gün (sevk tarihine göre) — eski `defaultDateRangeDays={30}`. */
+export const ACCOUNTING_PERSIST = persistConfigOf(ACCOUNTING_FILTERS, { defaultDate: { field: "dispatchedAt", preset: "last30" } });
+
+/** Satırda hep duranlar (tarih önde); Şube ve İade "+ Filtre"de. */
+export const ACCOUNTING_PRIMARY_KEYS = ["customerId", "invoiced", "destination"];

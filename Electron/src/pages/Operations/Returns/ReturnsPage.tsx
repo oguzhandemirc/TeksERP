@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { FilePlus2, Plus, Printer, PanelRight } from "lucide-react";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
@@ -10,15 +9,11 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { useDataTable } from "@/hooks/useDataTable";
 import { ScanField } from "@/components/scanner/ScanField";
 import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { cn } from "@/lib/utils";
-import { customerService } from "@/pages/Customers/service";
-import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { returnColumns } from "./returnsColumns";
 import { returnsService, type ReturnRow, type ReturnsCursorResponse } from "./service";
 import { ReturnsDetailSheet } from "./ReturnsDetailSheet";
@@ -26,59 +21,9 @@ import { ReturnEntryDialog } from "./ReturnEntryDialog";
 import { ReturnInvoiceDraft } from "./ReturnInvoiceDraft";
 import { canDraftReturnInvoice } from "./returnInvoice";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { ReturnsFilterRow, RETURN_PERSIST } from "./ReturnsFilterRow";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-
-const FILTERS: FilterDef[] = [
-  // ÇOKLU: ikisi de `ALLOWED_RETURN_FILTERS` → `buildWhereClause` yolundan
-  // geçiyor ve RollReturn'de gerçek skaler kolon → CSV zaten `in` oluyor.
-  // "Hangi nedenlerden iade geliyor" karşılaştırması tek sorguda yapılabilsin.
-  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
-  { kind: "multi-lookup", key: "reasonId", label: "Neden", service: returnReasonService, queryKey: "return-reasons" },
-  { kind: "dateRange", label: "Tarih", defaultField: "createdAt" },
-];
-
-// İptal durumu segment kontrolü. `filter[cancelled]` URL param'ı → useDataTable
-// → backend listReturns. Default "active" (param yok); iptal edilenler ayrı görünür.
-const STATUS_OPTIONS = [
-  // "Geçerli" = kayıt duruyor (mal iade rafında); "İptal edilen" = iade KAYDI iptal
-  // edildi, top yeniden sevk edilmiş sayılır. Eski etiket "Aktif" ne olduğunu söylemiyordu.
-  { value: "active", label: "Geçerli" },
-  { value: "cancelled", label: "İptal edilen" },
-  { value: "all", label: "Hepsi" },
-] as const;
-
-function ReturnsStatusFilter() {
-  const [sp, setSp] = useSearchParams();
-  const current = sp.get("filter[cancelled]") ?? "active";
-  const set = (value: string) =>
-    setSp(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (value === "active") next.delete("filter[cancelled]");
-        else next.set("filter[cancelled]", value);
-        return next;
-      },
-      { replace: true },
-    );
-
-  return (
-    <div className="inline-flex items-center gap-0.5 rounded-md border p-0.5">
-      {STATUS_OPTIONS.map((o) => (
-        <Button
-          key={o.value}
-          type="button"
-          size="sm"
-          variant={current === o.value ? "secondary" : "ghost"}
-          className={cn("h-6 px-2 text-xs", current !== o.value && "text-muted-foreground")}
-          onClick={() => set(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </div>
-  );
-}
 
 export function ReturnsPage() {
   const qc = useQueryClient();
@@ -98,12 +43,13 @@ export function ReturnsPage() {
   };
   // İade yazma izni yoksa okutulan kod pencere açmaz, aramaya düşer.
   const canWrite = useRoleAccess().hasPermission("return:write");
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ReturnRow>({
+  const { table, query, search, setSearch, pagination } = useDataTable<ReturnRow>({
     queryKey: "returns",
     fetchFn: returnsService.listCursor,
     columns: returnColumns,
     defaultPageSize: 50,
     enableSelection: false,
+    persistFilters: RETURN_PERSIST,
   });
 
   // Toplam (filtreli set) — ilk sayfada backend `summary` döndürür.
@@ -128,11 +74,7 @@ export function ReturnsPage() {
       {/* TEK KUTU (saha 2026-09-22: "iki input kötü"): arama + okutma aynı alanda. Okutulan
           kod top/çuval/sevkiyat kalıbındaysa İade Al penceresi o kodla açılır ve kutu
           temizlenir; değilse metin listeyi süzer (Paketleme ekranıyla aynı kalıp). */}
-      <DataTableToolbar
-        fetchAll={fetchAll}
-        search={search}
-        onSearchChange={setSearch}
-        hideSearch
+      <ReturnsFilterRow
         leading={
           <ScanField
             value={search}
@@ -148,12 +90,13 @@ export function ReturnsPage() {
             }}
             placeholder="Ara ya da kod okut (top · çuval · sevkiyat) → iade gir"
             expectPrefix={["ROLL", "SACK", "SHIPMENT"]}
-            widthClassName="w-96"
+            className="w-56 min-w-[10rem] shrink 2xl:w-96"
+            inputClassName="h-8 text-sm"
             clearable
           />
         }
+        trailing={<SavedViewsMenu compact />}
       />
-      <FilterBar filters={FILTERS} leading={<ReturnsStatusFilter />} />
       {summary && summary.count > 0 && (
         <div className="flex gap-6 border-b px-4 py-2 text-sm">
           <span>
