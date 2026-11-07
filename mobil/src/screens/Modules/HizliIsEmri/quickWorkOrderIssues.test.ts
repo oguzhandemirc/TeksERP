@@ -58,7 +58,7 @@ describe('collectQuickWoIssues — engeller', () => {
   it('⭐ ipucu yalnız görünen yolu önerir: liste kapalıysa "listeden seçin" demez', () => {
     const kapali = collectQuickWoIssues({ ...base, rollCount: 0 }).blocking[0].message;
     expect(kapali).not.toMatch(/listeden seçin/);
-    expect(kapali).toMatch(/Kamera arızalı/);
+    expect(kapali).toMatch(/Elle yazma alanlarını göster/);
     const acik = collectQuickWoIssues({ ...base, rollCount: 0, canPickFromList: true }).blocking[0].message;
     expect(acik).toMatch(/listeden seçin/);
   });

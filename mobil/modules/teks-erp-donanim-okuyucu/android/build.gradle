@@ -1,0 +1,21 @@
+// El terminali donanım okuyucusu — ince yerel katman (docs/plan/EL-TERMINALI-OKUYUCU-PLAN.md §1).
+// Depo içi yerel Expo modülü (mobil/modules/ otomatik bağlanır); yeni bağımlılık YOK. Marka/eylem/kod çözme JS'te.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.tekserp'
+version = '1.0.0'
+
+android {
+  namespace "com.tekserp.donanimokuyucu"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-android'
+}

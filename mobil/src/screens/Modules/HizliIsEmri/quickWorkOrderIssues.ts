@@ -71,7 +71,7 @@ export function collectQuickWoIssues(i: QuickWoIssueInput): {
       short: 'Top',
       message: i.canPickFromList
         ? 'En az bir top okutun veya listeden seçin.'
-        : 'En az bir top okutun. Kamera okumuyorsa Ayarlar → Kamera arızalı listeden seçimi açar.',
+        : 'En az bir top okutun. Okunmuyorsa Ayarlar → Elle yazma alanlarını göster listeden seçimi açar.',
     });
   }
   if (!i.routeTemplateId) {

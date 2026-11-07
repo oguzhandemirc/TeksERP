@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paket görünürlüğü (API 30+): yalnız okuyucu hizmet/ayar paketleri sorgulanır; QUERY_ALL_PACKAGES YOK. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <queries>
+    <package android:name="device.settings.scanner" />
+    <package android:name="com.symbol.datawedge" />
+    <package android:name="com.intermec.datacollectionservice" />
+  </queries>
+</manifest>
