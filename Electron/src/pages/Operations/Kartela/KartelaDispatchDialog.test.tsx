@@ -50,7 +50,22 @@ describe("Yeni Kartela Sevki", () => {
     setup();
     expect(pickerFilters).toHaveBeenLastCalledWith({ categoryId: "cat-k" });
     fireEvent.click(screen.getByRole("button", { name: /Listeden Seç/ }));
-    expect(rollScopes).toHaveBeenLastCalledWith([expect.objectContaining({ filters: { "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free" } })]);
+    expect(rollScopes).toHaveBeenLastCalledWith([
+      expect.objectContaining({ label: "Kartelalık toplar", filters: { "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free", "filter[markedForKartela]": "true" } }),
+      expect.objectContaining({ label: "Tüm bitmiş toplar", filters: { "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free" } }),
+    ]);
+  });
+
+  it("\"Sevke ekle\" ön seçimi: toplar listede hazır gelir, yeniden render mükerrer eklemez", () => {
+    const seed = [
+      { id: "r1", barcode: "T1", itemName: "Poplin", colorName: "Beyaz", qty: 40 },
+      { id: "r2", barcode: "T2", itemName: "Saten", colorName: null, qty: 12.5 },
+    ];
+    const { rerender } = renderWithProviders(<KartelaDispatchDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} initialRolls={seed} />);
+    expect(screen.getByText("Poplin · Beyaz")).toBeInTheDocument();
+    expect(screen.getByText("T2")).toBeInTheDocument();
+    rerender(<KartelaDispatchDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} initialRolls={seed} />);
+    expect(screen.getByRole("button", { name: /Sevk Et \(2 top\)/ })).toBeInTheDocument();
   });
 
   it("gövde tabletle birebir; uçuşta kilit + kapanmaz; başarıda çeki için id döner", async () => {
