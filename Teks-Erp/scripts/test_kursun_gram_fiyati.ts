@@ -17,6 +17,7 @@
 // Negatif sonda: `applyKursunGramPrices` çağrısı kaldırılınca §1/§2 kırmızı (PR gövdesinde).
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { ItemType, PriceKind, StationPropertyMode } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { fabricPropertyService } from "../src/routes/fabric-property.routes";
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
   const variantId = variant.id;
 
   const fabric = (await prisma.item.create({ data: { code: `${P}-KUM`.slice(0, 32), name: `TEST KGF kumaş ${STAMP}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } })).id;
-  const svc = (await prisma.item.create({ data: { code: `${P}-SVC`.slice(0, 32), name: `TEST KGF Kurşun ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id;
+  const svc = (await kartAc({ code: `${P}-SVC`.slice(0, 32), name: `TEST KGF Kurşun ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" })).id;
   fx.itemIds.push(fabric, svc);
   await itemPriceService.upsert({ itemId: svc, kind: PriceKind.SALE, currency: "TRY", price: 3 });
   // Gramaj başına kalem ZORUNLU DEĞİL: değerde kalem yok, çeşidin tek "Kurşun" kalemine düşülür (pickServiceItemId).
@@ -198,8 +199,8 @@ async function cleanup(): Promise<void> {
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) }));
+  await del("item", () => kartlariSil(fx.itemIds));
   await del("cari", () => prisma.cariAccount.deleteMany({ where: { id: { in: fx.cariIds } } }));
   await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: fx.customerIds } } }));
   const left = await prisma.roll.count({ where: { barcode: { startsWith: P } } });

@@ -36,6 +36,7 @@
 // K2a sondası (2026-10-29): `resolveOwnerFromReceiptTx`te `strict` kaldırılınca §6b + §6c sahipli+sahipsiz kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { Currency, FinishingBasis, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
@@ -99,9 +100,9 @@ async function main(): Promise<void> {
 
   // ── Fikstür ──────────────────────────────────────────────────────────────
   const mkItem = async (suffix: string, itemType: ItemType, price?: string) => {
-    const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST HZBT ${suffix} ${STAMP}`, itemType, unit: "MT" }, select: { id: true } });
+    const it = await kartAc({ code: `${P}-${suffix}`.slice(0, 32), name: `TEST HZBT ${suffix} ${STAMP}`, itemType, unit: "MT" });
     fx.itemIds.push(it.id);
-    if (price) await prisma.itemPrice.create({ data: { itemId: it.id, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price } });
+    if (price) await prisma.itemPrice.create({ data: { ...(itemType === ItemType.SERVICE ? { serviceItemId: it.id } : { itemId: it.id }), customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price } });
     return it.id;
   };
   const fabric = await mkItem("KUM", ItemType.FABRIC);
@@ -166,7 +167,7 @@ async function main(): Promise<void> {
     fx.shipmentIds.push(res.data.id);
     return res.data;
   };
-  const invoiceOf = async (shipmentId: string) => prisma.invoice.findFirst({ where: { shipmentId }, select: { id: true, lines: { select: { itemId: true, qty: true, unitPrice: true } } } });
+  const invoiceOf = async (shipmentId: string) => prisma.invoice.findFirst({ where: { shipmentId }, select: { id: true, lines: { select: { itemId: true, serviceItemId: true, qty: true, unitPrice: true } } } });
   const linksOf = (invoiceId: string) => prisma.serviceBillingLink.findMany({ where: { invoiceId, revokedAt: null }, select: { rollId: true, serviceItemId: true, billedMeters: true, meterBasis: true, readingId: true, workOrderStepId: true } });
   const settings = await loadServiceBillingSettings();
   const draft = (rollIds: string[], s = settings) => collectServiceBillingDraft({ rollIds, customerId: cust.id, currency: Currency.TRY, settings: s, dispatchedAt: null });
@@ -192,7 +193,7 @@ async function main(): Promise<void> {
   check("TAMBUR bağı çocukta, CUT 60 m", tb1?.rollId === C1 && tb1.meterBasis === "CUT" && eq(tb1.billedMeters, 60), JSON.stringify(tb1));
   check("ETEK bağı çocukta, CUT 60 m", et1?.rollId === C1 && et1.meterBasis === "CUT" && eq(et1.billedMeters, 60), JSON.stringify(et1));
   check("atada (P1) bağ yok", l1.every((l) => l.rollId !== P1), JSON.stringify(l1.map((l) => l.rollId)));
-  const tLine = inv1?.lines.find((l) => l.itemId === TAMBUR);
+  const tLine = inv1?.lines.find((l) => l.serviceItemId === TAMBUR);
   check("TAMBUR satırı 60 × 2 (kalem bayrak eşlemesinden)", eq(tLine?.qty, 60) && eq(tLine?.unitPrice, 2), JSON.stringify(inv1?.lines));
   check("emanet ürün satırı yok (yalnız hizmet)", (inv1?.lines ?? []).every((l) => l.itemId !== fabric), JSON.stringify(inv1?.lines));
 
@@ -574,8 +575,8 @@ async function cleanup(): Promise<void> {
   await del("finishingRate", () => prisma.finishingRate.deleteMany({ where: { id: { in: fx.rateIds } } }));
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) }));
+  await del("item", () => kartlariSil(fx.itemIds));
   if (fx.customerId) { const cid = fx.customerId; await del("customer", () => prisma.customer.deleteMany({ where: { id: cid } })); }
   if (fx.customer2Id) { const cid = fx.customer2Id; await del("customer2", () => prisma.customer.deleteMany({ where: { id: cid } })); }
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: [...fx.shipmentIds, ...invIds, ...ids, ...recIds, ...dispIds, ...fx.woIds] } } }));

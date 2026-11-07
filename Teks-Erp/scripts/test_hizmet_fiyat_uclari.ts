@@ -101,7 +101,7 @@ async function main(): Promise<void> {
   for (const k of FLAG_KEYS) saved.set(k, await prisma.systemSetting.findUnique({ where: { key: k }, select: { value: true } }));
   for (const k of FLAG_KEYS) await setFlag(k, true);
 
-  const svc = (await prisma.item.create({ data: { code: `${P}-S`.slice(0, 32), name: `TEST HFU Tambur ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id;
+  const svc = (await prisma.serviceItem.create({ data: { code: `${P}-S`.slice(0, 32), name: `TEST HFU Tambur ${STAMP}`, unit: "MT" }, select: { id: true } })).id;
   const fabric = (await prisma.item.create({ data: { code: `${P}-K`.slice(0, 32), name: `TEST HFU kumaş ${STAMP}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } })).id;
   fx.itemIds.push(svc, fabric);
   const prop = await prisma.fabricProperty.create({ data: { code: `${P}-P`.slice(0, 32), name: `TEST HFU tambur ${STAMP}`, valueType: "FLAG", serviceItemId: svc }, select: { id: true } });
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
   check("§2a price:write genel kademe fiyatı yazar", w1.status === 200 && typeof w1.data?.id === "string", `durum=${w1.status} kod=${w1.code}`);
   const w1b = await call(H.write, "POST", "/", { ...body, clientToken: t1 });
   check("§2b aynı token + aynı yük → aynı kayıt", w1b.status === 200 && w1b.data?.id === w1.data?.id && w1b.data?.created === false, `durum=${w1b.status}`);
-  const rowCount = await prisma.itemPrice.count({ where: { itemId: svc } });
+  const rowCount = await prisma.itemPrice.count({ where: { serviceItemId: svc } });
   check("§2c replay yeni satır yazmadı", rowCount === 1, `satır=${rowCount}`);
   const w1c = await call(H.write, "POST", "/", { ...body, price: 99, clientToken: t1 });
   check("§2d ⭐ aynı token + farklı fiyat → 409", w1c.status === 409, `durum=${w1c.status} kod=${w1c.code}`);
@@ -187,10 +187,11 @@ main()
         if (row === null) await prisma.systemSetting.deleteMany({ where: { key } });
         else await prisma.systemSetting.update({ where: { key }, data: { value: row.value as never } });
       }
-      await prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } });
+      await prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: fx.itemIds } }, { serviceItemId: { in: fx.itemIds } }] } });
       await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: fx.propIds } } });
       await prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } });
       await prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } });
+      await prisma.serviceItem.deleteMany({ where: { id: { in: fx.itemIds } } });
       await prisma.customer.deleteMany({ where: { id: { in: fx.customerIds } } });
       if (fx.userIds.length) {
         await prisma.userPermission.deleteMany({ where: { userId: { in: fx.userIds } } });

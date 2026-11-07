@@ -258,6 +258,10 @@ export class ItemService extends BaseService {
     // Oluşturan doğuşta yazılır (künye); BaseController `req.user?.userId` verir, eksikse 401.
     const actorId = requireActorId(userId, "Ürün kartı");
     const input = data as unknown as ItemCreateInput;
+    // Hizmet kartları ayrı tabloda (`service_items`); eski panelin SERVICE isteği CHECK 500'ü yerine anlamlı 400 alır.
+    if (input.itemType === "SERVICE") {
+      throw AppError.badRequest("Hizmet kartları Hizmet Kartları ekranından açılır; ürün kartı Hizmet türünde açılamaz.", { code: "ITEM_TYPE_SERVICE_MOVED" });
+    }
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
     const fabricStructure = await readFabricStructureFields(input.itemType, data);
 

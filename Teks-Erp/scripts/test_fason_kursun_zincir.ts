@@ -23,6 +23,7 @@
 //   · `collectServiceBillingDraft` boş taslak döndürünce §6 iş sayısı + satır kırmızı (21/2)
 // =============================================================================
 import { randomUUID, createHash } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import type { AddressInfo } from "node:net";
 import { Currency, ItemType, Prisma, PriceKind } from "@prisma/client";
 import app from "../src/app";
@@ -107,7 +108,7 @@ async function scenario(): Promise<void> {
   const cust = must<{ id: string }>(await api("POST", "/api/customers", { code: `${P}-C`.slice(0, 32), name: `TEST FKZ müşteri ${STAMP}` }), "müşteri");
   fx.customerId = cust.id;
   const mkItem = async (suffix: string, itemType: ItemType): Promise<string> => {
-    const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST FKZ ${suffix} ${STAMP}`, itemType, unit: "MT" }, select: { id: true } });
+    const it = await kartAc({ code: `${P}-${suffix}`.slice(0, 32), name: `TEST FKZ ${suffix} ${STAMP}`, itemType, unit: "MT" });
     fx.itemIds.push(it.id);
     return it.id;
   };
@@ -277,8 +278,8 @@ async function cleanup(): Promise<void> {
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) }));
+  await del("item", () => kartlariSil(fx.itemIds));
   await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: custIds } } }));
 }
 

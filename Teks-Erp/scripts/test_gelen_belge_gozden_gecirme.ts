@@ -30,6 +30,7 @@
 // Emsal: scripts/test_gelen_belge_onay.ts (app.listen(0) + ensureTestAdmin).
 // =============================================================================
 import type { AddressInfo } from "net";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import type { Server } from "http";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -340,7 +341,7 @@ async function section10(call: (method: string, p: string, body?: unknown) => Pr
   check("§10a saf: ürünsüz açık satır + kullanılabilir varsayılan → [] ve itemFallback; varsayılansız ITEM_UNRESOLVED; FAILED yalnız FAILED; girilmiş satıra fallback yok",
     same(lineProblems(p("PENDING", null), fb), []) && lineItemFallback(p("PENDING", null), fb) === fb && same(lineProblems(p("PENDING", null), null), ["ITEM_UNRESOLVED"])
       && same(lineProblems(p("FAILED", null), fb), ["FAILED"]) && lineItemFallback(p("ENTERED", null), fb) === null && lineItemFallback(p("PENDING", "i"), fb) === null);
-  const svc = await prisma.item.create({ data: { code: `${TAG}-HIZ`, name: `${TAG} kurşun hizmeti`, itemType: "SERVICE", unit: "MT" }, select: { id: true } });
+  const svc = await kartAc({ code: `${TAG}-HIZ`, name: `${TAG} kurşun hizmeti`, itemType: "SERVICE", unit: "MT" });
   made.items.push(svc.id);
   const mk = await prisma.item.create({ data: { code: `${TAG}-MK`, name: `${TAG} MÜŞTERİ KUMAŞI`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
   made.items.push(mk.id);
@@ -437,7 +438,7 @@ async function cleanup(): Promise<void> {
   await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.deliveryNoteAlias.deleteMany({ where: { targetId: { in: [...made.items, ...made.customers] } } });
-  await prisma.item.deleteMany({ where: { id: { in: made.items } } });
+  await kartlariSil(made.items);
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...made.notes, ...rollIds] } } });
 }

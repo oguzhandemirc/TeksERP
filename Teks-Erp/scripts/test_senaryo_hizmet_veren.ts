@@ -21,6 +21,7 @@
 // Negatif sondalar: bkz. BEKCI-HARITASI satırı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import type { AddressInfo } from "node:net";
 import { Currency, ItemType, Prisma, PriceKind } from "@prisma/client";
 import app from "../src/app";
@@ -152,7 +153,7 @@ async function scenario(): Promise<void> {
   const cust = must<{ id: string }>(await api("POST", "/api/customers", { code: `${P}-C`.slice(0, 32), name: `TEST SNHV müşteri ${STAMP}` }), "müşteri");
   fx.customerId = cust.id;
   const mkItem = async (suffix: string, itemType: ItemType): Promise<string> => {
-    const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST SNHV ${suffix} ${STAMP}`, itemType, unit: "MT" }, select: { id: true } });
+    const it = await kartAc({ code: `${P}-${suffix}`.slice(0, 32), name: `TEST SNHV ${suffix} ${STAMP}`, itemType, unit: "MT" });
     fx.itemIds.push(it.id);
     return it.id;
   };
@@ -318,7 +319,7 @@ async function scenario(): Promise<void> {
   fx.shipmentIds.push(sh1.id);
   const sh1Row = await prisma.shipment.findUniqueOrThrow({ where: { id: sh1.id }, select: { status: true } });
   check("sevk DISPATCHED (onay kapalı)", sh1Row.status === "DISPATCHED", sh1Row.status);
-  const inv1 = await prisma.invoice.findFirst({ where: { shipmentId: sh1.id }, select: { id: true, status: true, grandTotal: true, lines: { select: { itemId: true, qty: true, unitPrice: true, lineTotal: true } } } });
+  const inv1 = await prisma.invoice.findFirst({ where: { shipmentId: sh1.id }, select: { id: true, status: true, grandTotal: true, lines: { select: { itemId: true, serviceItemId: true, qty: true, unitPrice: true, lineTotal: true } } } });
   check("tek hizmet fatura taslağı (DRAFT)", inv1?.status === "DRAFT", inv1?.status ?? "yok");
   const links1 = inv1 ? await prisma.serviceBillingLink.findMany({ where: { invoiceId: inv1.id, revokedAt: null }, select: { rollId: true, serviceItemId: true, billedMeters: true, meterBasis: true, unitPrice: true, workOrderStepId: true } }) : [];
   const kL = links1.filter((l) => l.serviceItemId === K50);
@@ -327,8 +328,8 @@ async function scenario(): Promise<void> {
   check("kurşun billedMeters = OUT okuması (99,5 + 119,2), taban OUT", eq(kL.reduce((a, l) => a.plus(l.billedMeters), D(0)), 99.5 + 119.2) && kL.every((l) => l.meterBasis === "OUT"), JSON.stringify(kL.map((l) => [l.billedMeters.toString(), l.meterBasis])));
   check("kurşun unitPrice = müşterinin 50 gr fiyatı 7,5", kL.every((l) => eq(l.unitPrice, 7.5)), kL.map((l) => l.unitPrice.toString()).join(","));
   check("Tambur bağı = kesilen metre (60 + 40 + 120), taban CUT, adım = Tambur adımı", eq(tL.reduce((a, l) => a.plus(l.billedMeters), D(0)), 220) && tL.every((l) => l.meterBasis === "CUT" && l.workOrderStepId === STB), JSON.stringify(tL.map((l) => [l.billedMeters.toString(), l.meterBasis])));
-  const lk = inv1?.lines.find((l) => l.itemId === K50);
-  const lt = inv1?.lines.find((l) => l.itemId === KTB);
+  const lk = inv1?.lines.find((l) => l.serviceItemId === K50);
+  const lt = inv1?.lines.find((l) => l.serviceItemId === KTB);
   check("kurşun satırı: miktar 218,7 × 7,5 = 1640,25", !!lk && eq(lk.qty, 218.7) && eq(lk.unitPrice, 7.5) && eq(D(lk.qty).times(lk.unitPrice), 1640.25), JSON.stringify(lk));
   check("Tambur satırı: 220 × 2 = 440; emanet kumaş satırı yok; toplam 2 satır", !!lt && eq(lt.qty, 220) && eq(lt.unitPrice, 2) && eq(lt.lineTotal, 440) && inv1!.lines.length === 2 && inv1!.lines.every((l) => l.itemId !== FABRIC), JSON.stringify(inv1?.lines));
 
@@ -423,8 +424,8 @@ async function cleanup(): Promise<void> {
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
   await del("defaultItem", () => prisma.deliveryNoteCustomerDefault.deleteMany({ where: { customerId: { in: custIds } } }));
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) }));
+  await del("item", () => kartlariSil(fx.itemIds));
   await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: custIds } } }));
   const left = await prisma.roll.count({ where: { id: { in: ids } } });
   check("temizlik: senaryo topu kalmadı", left === 0, String(left));

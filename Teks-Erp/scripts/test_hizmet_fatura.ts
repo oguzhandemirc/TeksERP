@@ -137,8 +137,12 @@ async function main(): Promise<void> {
     select: { id: true },
   });
   fx.propIds.push(variant.id);
+  // Hizmet kartı ayrı tabloda (`service_items`); kumaş `items`'ta.
   const mkItem = async (suffix: string, itemType: ItemType) => {
-    const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST HZFT ${suffix} ${STAMP}`, itemType, unit: "MT" }, select: { id: true } });
+    const data = { code: `${P}-${suffix}`.slice(0, 32), name: `TEST HZFT ${suffix} ${STAMP}`, unit: "MT" as const };
+    const it = itemType === ItemType.SERVICE
+      ? await prisma.serviceItem.create({ data, select: { id: true } })
+      : await prisma.item.create({ data: { ...data, itemType }, select: { id: true } });
     fx.itemIds.push(it.id);
     return it.id;
   };
@@ -152,8 +156,8 @@ async function main(): Promise<void> {
   };
   const V2 = await mkVal("45", 20, K2);
   const V3 = await mkVal("90", 30, K3);
-  await prisma.itemPrice.create({ data: { itemId: K2, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "8.0000" } });
-  await prisma.itemPrice.create({ data: { itemId: K3, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "11.0000" } });
+  await prisma.itemPrice.create({ data: { serviceItemId: K2, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "8.0000" } });
+  await prisma.itemPrice.create({ data: { serviceItemId: K3, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "11.0000" } });
   const cust = await prisma.customer.create({ data: { code: `${P}-C`.slice(0, 32), name: `TEST HZFT müşteri ${STAMP}` }, select: { id: true } });
   fx.customerId = cust.id;
   const st = await prisma.station.create({ data: { code: `${P}-K`.slice(0, 32), name: `TEST HZFT kurşun ${STAMP}`, type: "INTERNAL", kind: "PROCESS_QC", appliesProperty: true }, select: { id: true } });
@@ -187,7 +191,7 @@ async function main(): Promise<void> {
     fx.shipmentIds.push(res.data.id);
     return res.data;
   };
-  const invoicesOf = (shipmentId: string) => prisma.invoice.findMany({ where: { shipmentId }, select: { id: true, docNo: true, status: true, grandTotal: true, notes: true, lines: { select: { itemId: true, qty: true, unitPrice: true } } }, orderBy: { createdAt: "asc" } });
+  const invoicesOf = (shipmentId: string) => prisma.invoice.findMany({ where: { shipmentId }, select: { id: true, docNo: true, status: true, grandTotal: true, notes: true, lines: { select: { itemId: true, serviceItemId: true, qty: true, unitPrice: true } } }, orderBy: { createdAt: "asc" } });
   const activeLinks = (invoiceId: string) => prisma.serviceBillingLink.findMany({ where: { invoiceId, revokedAt: null }, select: { id: true, rollId: true, billedMeters: true, readingId: true, serviceAt: true, meterBasis: true, workOrderStepId: true, serviceItemId: true } });
 
   // ── §2/§3 10 top ─────────────────────────────────────────────────────────
@@ -214,7 +218,7 @@ async function main(): Promise<void> {
   const sumLinks = links1.reduce((a, l) => a.plus(l.billedMeters), new Prisma.Decimal(0));
   check("10 bağ", links1.length === 10, String(links1.length));
   check("Σ billedMeters = Σ aktif OUT ±0,001", sumLinks.minus(activeOut._sum.meters ?? 0).abs().lte(0.001), `${sumLinks.toFixed(3)} vs ${activeOut._sum.meters?.toString()}`);
-  check("emanet ürün satırı yok; tek hizmet satırı (K2 × 8)", inv1.lines.length === 1 && inv1.lines[0]!.itemId === K2 && Number(inv1.lines[0]!.unitPrice) === 8 && new Prisma.Decimal(inv1.lines[0]!.qty).minus(sumLinks).abs().lte(0.001), JSON.stringify(inv1.lines));
+  check("emanet ürün satırı yok; tek hizmet satırı (K2 × 8)", inv1.lines.length === 1 && inv1.lines[0]!.serviceItemId === K2 && Number(inv1.lines[0]!.unitPrice) === 8 && new Prisma.Decimal(inv1.lines[0]!.qty).minus(sumLinks).abs().lte(0.001), JSON.stringify(inv1.lines));
   check("taslak notu sevk brütünü söyler", (inv1.notes ?? "").includes("Sevk brütü: 10 top"), inv1.notes ?? "");
   section("§3 düzeltme hizmet anını kaydırmaz");
   const l0 = links1.find((l) => l.rollId === r0);
@@ -299,7 +303,7 @@ async function main(): Promise<void> {
   const shC = await ship([sim]);
   const invC = await invoicesOf(shC.id);
   const linksC = await prisma.serviceBillingLink.count({ where: { rollId: sim } });
-  check("BLOCK_LINE: SIMULATED-only top ⇒ 0 bağ, taslak yok ya da hizmetsiz", linksC === 0 && invC.every((i) => i.lines.every((l) => l.itemId !== K2)), `${linksC} bağ, ${invC.length} fatura`);
+  check("BLOCK_LINE: SIMULATED-only top ⇒ 0 bağ, taslak yok ya da hizmetsiz", linksC === 0 && invC.every((i) => i.lines.every((l) => l.serviceItemId !== K2)), `${linksC} bağ, ${invC.length} fatura`);
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, "DECLARED_WITH_WARNING");
   const sim2 = await mkWorkedRoll(60, "2.5", MachineDataSource.SIMULATED);
   const shC2 = await ship([sim2]);
@@ -313,7 +317,7 @@ async function main(): Promise<void> {
   const pr = [await mkWorkedRoll(50, "49.5"), await mkWorkedRoll(51, "50.25")];
   const shP = await ship(pr);
   const hookDraft = (await invoicesOf(shP.id)).find((i) => i.status === InvoiceStatus.DRAFT)!;
-  const svcQty = new Prisma.Decimal(hookDraft.lines.find((l) => l.itemId === K2)!.qty);
+  const svcQty = new Prisma.Decimal(hookDraft.lines.find((l) => l.serviceItemId === K2)!.qty);
   await invoiceService.deleteDraft(hookDraft.id, actor);
   const panelInput = (lines: Array<{ itemId: string | null; qty: Prisma.Decimal.Value }>) => ({
     type: "SALES" as const, customerId: cust.id, shipmentId: shP.id, currency: Currency.TRY, clientToken: randomUUID(),
@@ -354,7 +358,7 @@ async function main(): Promise<void> {
   const s1 = await ship([pa], cust2.id);
   const s2 = await ship([pb], cust2.id);
   const hookInv = [...(await invoicesOf(s1.id)), ...(await invoicesOf(s2.id))];
-  check("PERIOD_END: sevk kancası hizmet satırı 0, bağ 0", hookInv.every((i) => i.lines.every((l) => l.itemId !== K2)) && (await linksOn([pa, pb])).length === 0, `${hookInv.length} taslak`);
+  check("PERIOD_END: sevk kancası hizmet satırı 0, bağ 0", hookInv.every((i) => i.lines.every((l) => l.serviceItemId !== K2)) && (await linksOn([pa, pb])).length === 0, `${hookInv.length} taslak`);
   const peLines = await collectShipmentInvoiceDraftLines(s1.id, cust2.id, Currency.TRY);
   check("PERIOD_END: panel sevk önizlemesi hizmet satırı 0 + neden uyarısı", (peLines.serviceLinks ?? []).length === 0 && peLines.lines.length === 0 && peLines.warnings.includes(PERIOD_END_SERVICE_WARNING), JSON.stringify(peLines.warnings));
 
@@ -363,14 +367,14 @@ async function main(): Promise<void> {
   check("önizleme: 2 sevk, 2 iş, 108,750 m, 870,00", dpv.shipmentCount === 2 && dpv.workCount === 2 && dpv.totalMeters === "108.750" && dpv.subtotal === "870.00" && dpv.periodClosed === null, JSON.stringify({ s: dpv.shipmentCount, w: dpv.workCount, m: dpv.totalMeters, t: dpv.subtotal }));
   const tok1 = randomUUID();
   const d1 = await createServicePeriodDraft({ cariId: cari2.id, period, clientToken: tok1 }, actor);
-  const pInv = await prisma.invoice.findUniqueOrThrow({ where: { id: d1.data!.id }, select: { shipmentId: true, status: true, withholdingTotal: true, lines: { select: { itemId: true, qty: true, vatRate: true, withholdingRate: true } } } });
+  const pInv = await prisma.invoice.findUniqueOrThrow({ where: { id: d1.data!.id }, select: { shipmentId: true, status: true, withholdingTotal: true, lines: { select: { serviceItemId: true, qty: true, vatRate: true, withholdingRate: true } } } });
   const generalVat = await readFinanceDefaultVatRate();
   check("V1k: ayar/müşteri değeri yok ⇒ satır KDV genel varsayılan, tevkifat 0 (bugünkü taslak)",
     pInv.lines.every((l) => Number(l.vatRate) === generalVat && Number(l.withholdingRate) === 0) && Number(pInv.withholdingTotal) === 0, JSON.stringify(pInv.lines));
   const pl = await linksOn([pa, pb]);
   check("1 taslak, 2 bağ aynı faturada, tek K2 satırı 108,75 m, shipmentId boş",
     pInv.shipmentId === null && pInv.status === InvoiceStatus.DRAFT && pl.length === 2 && pl.every((l) => l.invoiceId === d1.data!.id)
-    && pInv.lines.length === 1 && pInv.lines[0]!.itemId === K2 && Number(pInv.lines[0]!.qty) === 108.75, JSON.stringify(pInv.lines));
+    && pInv.lines.length === 1 && pInv.lines[0]!.serviceItemId === K2 && Number(pInv.lines[0]!.qty) === 108.75, JSON.stringify(pInv.lines));
 
   section("§15 token replay ⇒ aynı taslak");
   const cariInvCount = () => prisma.invoice.count({ where: { cariId: cari2.id } });
@@ -495,7 +499,7 @@ async function main(): Promise<void> {
   const qaInv = await invoicesOf(sqa.id);
   const qaLines = await collectShipmentInvoiceDraftLines(sqa.id, cust3.id, Currency.TRY);
   check("fabrika PER_SHIPMENT + müşteri PERIOD_END ⇒ sevkte hizmet satırı/bağı 0 + neden uyarısı",
-    qaInv.every((i) => i.lines.every((l) => l.itemId !== K2)) && (await linksOn([qa])).length === 0
+    qaInv.every((i) => i.lines.every((l) => l.serviceItemId !== K2)) && (await linksOn([qa])).length === 0
     && (qaLines.serviceLinks ?? []).length === 0 && qaLines.warnings.includes(PERIOD_END_SERVICE_WARNING), `${qaInv.length} taslak`);
   const qaPv = await previewServicePeriodDraft({ cariId: cari3.id, period });
   const qaD = await createServicePeriodDraft({ cariId: cari3.id, period, clientToken: randomUUID() }, actor);
@@ -550,8 +554,8 @@ async function main(): Promise<void> {
   const tA = new Date(nowMs - 20 * 60_000), tSwitch = new Date(nowMs - 15 * 60_000), tB = new Date(nowMs - 10 * 60_000);
   await prisma.shipment.update({ where: { id: sa.id }, data: { dispatchedAt: tA } });
   await prisma.shipment.update({ where: { id: sb.id }, data: { dispatchedAt: tB } });
-  await prisma.itemPrice.create({ data: { itemId: K2, customerId: cust4.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "5.0000", createdAt: new Date(nowMs - 60 * 60_000), revokedAt: tSwitch, revokeReason: "test fiyat değişimi" } });
-  await prisma.itemPrice.create({ data: { itemId: K2, customerId: cust4.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "7.0000", createdAt: tSwitch } });
+  await prisma.itemPrice.create({ data: { serviceItemId: K2, customerId: cust4.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "5.0000", createdAt: new Date(nowMs - 60 * 60_000), revokedAt: tSwitch, revokeReason: "test fiyat değişimi" } });
+  await prisma.itemPrice.create({ data: { serviceItemId: K2, customerId: cust4.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "7.0000", createdAt: tSwitch } });
   const dd = await previewServicePeriodDraft({ cariId: cari4.id, period });
   const ddPrices = dd.lines.map((l) => `${l.qty}@${l.unitPrice}`).sort();
   // Negatif sonda: dönemin son sevk anı herkese uygulanınca iki satır 50 m @7 olur ⇒ burada kırmızı.
@@ -678,13 +682,14 @@ async function main(): Promise<void> {
 
   section("§24 K3b: dönem taslağına elle emanet hizmet satırı eklenemez");
   const pd7 = await createServicePeriodDraft({ cariId: cari5.id, period, clientToken: randomUUID() }, actor);
-  const pdLines = async () => prisma.invoiceLine.findMany({ where: { invoiceId: pd7.data!.id }, select: { itemId: true, description: true, qty: true, unit: true, unitPrice: true }, orderBy: { lineNo: "asc" } });
-  const base7 = (await pdLines()).map((l) => ({ itemId: l.itemId, description: l.description, qty: Number(l.qty), unit: l.unit, unitPrice: Number(l.unitPrice) }));
+  const pdLines = async () => prisma.invoiceLine.findMany({ where: { invoiceId: pd7.data!.id }, select: { itemId: true, serviceItemId: true, description: true, qty: true, unit: true, unitPrice: true }, orderBy: { lineNo: "asc" } });
+  // Satır girdisinin `itemId`'si konu kimliğidir (ürün ya da hizmet kartı).
+  const base7 = (await pdLines()).map((l) => ({ itemId: l.itemId ?? l.serviceItemId, description: l.description, qty: Number(l.qty), unit: l.unit, unitPrice: Number(l.unitPrice) }));
   const links7 = await prisma.serviceBillingLink.count({ where: { invoiceId: pd7.data!.id, revokedAt: null } });
   const add7 = await errOf(() => invoiceService.updateDraft(pd7.data!.id, { lines: [...base7, { itemId: K3, description: "Elle K3", qty: 10, unit: "m", unitPrice: 11 }] }, actor));
   const after7 = await pdLines();
   check("§24a yeni emanet hizmet kalemi satırı ⇒ 409 SERVICE_LINE_UNLINKED (Türkçe), satır/bağ değişmez",
-    add7.status === 409 && add7.code === "SERVICE_LINE_UNLINKED" && after7.length === base7.length && !after7.some((l) => l.itemId === K3)
+    add7.status === 409 && add7.code === "SERVICE_LINE_UNLINKED" && after7.length === base7.length && !after7.some((l) => l.serviceItemId === K3)
     && (await prisma.serviceBillingLink.count({ where: { invoiceId: pd7.data!.id, revokedAt: null } })) === links7 && links7 > 0, JSON.stringify({ add7, n: after7.length, links7 }));
   const msg7 = await invoiceService.updateDraft(pd7.data!.id, { lines: [...base7, { itemId: K3, description: "Elle K3", qty: 10, unit: "m", unitPrice: 11 }] }, actor).then(() => "", (e: Error) => e.message);
   check("§24b mesaj: dönem ucunu yeniden çalıştırın", msg7.includes("Dönem faturasına emanet hizmet satırı elle eklenemez") && msg7.includes("yeniden çalıştırın"), msg7);
@@ -763,8 +768,9 @@ async function cleanup(): Promise<void> {
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: fx.itemIds } }, { serviceItemId: { in: fx.itemIds } }] } }));
   await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("serviceItem", () => prisma.serviceItem.deleteMany({ where: { id: { in: fx.itemIds } } }));
   await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: custIds } } }));
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: [...fx.shipmentIds, ...invIds] } } }));
   const left = await prisma.roll.count({ where: { id: { in: ids } } });

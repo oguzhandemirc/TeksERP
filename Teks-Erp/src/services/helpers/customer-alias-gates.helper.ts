@@ -4,19 +4,19 @@
 // Kumaş kapısı `assertAliasItem` — yaşam döngüsü `assertItemUsable(…, "DEFINITION")`ten.
 // =============================================================================
 
-import { ItemType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { assertItemUsable } from "./item-usage.helper";
 
 /** Müşteri ürün adı yalnız stok kalemine verilir: hizmet kalemi (H6) etikete/irsaliyeye mal olarak basılmaz. */
 export async function assertAliasItem(itemId: string): Promise<void> {
-  const item = await assertItemUsable(prisma, itemId, "DEFINITION");
-  if (item.itemType === ItemType.SERVICE) {
+  // Hizmet kartı ayrı tabloda (`service_items`): id oradaysa "bulunamadı" değil, neden reddedildiği söylenir.
+  if (await prisma.serviceItem.findUnique({ where: { id: itemId }, select: { id: true } })) {
     throw AppError.badRequest("Hizmet kalemine müşteri ürün adı verilemez; yalnız stok kalemi (kumaş, iplik, sarf) seçilebilir", {
       code: "ALIAS_ITEM_NOT_STOCK",
     });
   }
+  await assertItemUsable(prisma, itemId, "DEFINITION");
 }
 
 export async function assertCustomer(customerId: string): Promise<void> {

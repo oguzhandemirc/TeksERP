@@ -507,6 +507,7 @@ async function main(): Promise<void> {
               create: [
                 {
                   lineNo: 1,
+                  lineType: "TEXT",
                   description: LINES[0]!.description,
                   qty: LINES[0]!.qty,
                   unitPrice: LINES[0]!.unitPrice,
