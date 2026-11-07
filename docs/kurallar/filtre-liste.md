@@ -78,7 +78,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[PROFİL]** Dört ayrı filtre: "İstasyon" (currentStationId, yalnız üretim sekmeleri) · "Giriş İstasyonu" (entryStationId) · "Giriş Kaynağı" (entrySource) · "Ekleyen" (createdById).
 - **[ÇEKİRDEK]** Sayfa kökü `PageShell` (flex h-full min-h-0 flex-col); TEK kaydırıcı `PageBody`; başlık/toolbar/footer shrink-0, eylemler `PageFooter`da; DataTable sayfaları ayrı PageBody istemez.
 - **[PROFİL yüzey]** Liste filtre çubuğunu `components/data-table/filter-row/FilterRow` ile TEK SATIR kur: kutular `FilterControl chip`, hızlı sekmeler `ViewSelect` (faceted sayı, liste açıkken), tarih `DatePresetFilter` penceresi, az kullanılanlar "+ Filtre"; ✕ yalnız kendi anahtarlarını, Temizle hepsini siler (arama kalır); kök `flex-wrap` taşımaz.
-- **[ÇEKİRDEK]** Liste filtre kaydını `useDataTable({ persistFilters })` ile aç (sayfa başına opt-in, `prefs.tableFilters[queryKey]`); arama metni kaydedilmez, hazır tarih göreli saklanır, URL'deki süzgeç/arama/odak kaydı ezer ve yazmaz, kayıt yüklenmeden liste istek atmaz; süzgeç anahtarını URL dışında (yerel state) tutma.
+- **[ÇEKİRDEK]** Liste filtre kaydını `useDataTable({ persistFilters })` ile aç (sayfa başına opt-in, `prefs.tableFilters[queryKey]`); arama metni kaydedilmez, hazır tarih göreli saklanır, URL'deki süzgeç/arama/odak kaydı ezer ve yazmaz, kayıt yüklenmeden liste istek atmaz; sayfa varsayılanı (ör. son 30 gün) `defaultDate` ile verilir, FilterBar `defaultDateRangeDays` ile değil; satır kutuları `filter-row/def-row-filters` yardımcılarından kurulur.
 
 ### Kararlar
 
@@ -120,7 +120,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 Backend: `test_fatura_liste_suzgec`, `test_bare_filter_param`, `test_item_allowed_filter`, `test_fabric_property_hierarchy`, `test_filter_multi_select`, `test_workorder_location`
 
-İstemci: `Electron/src/components/forms/ItemPickerModal.test.tsx`, `Electron/src/pages/FabricProperties/hierarchy.test.tsx`, `Electron/src/components/data-table/filter-row/FilterRow.test.tsx`, `Electron/src/components/data-table/filter-row/date-preset.test.ts`, `Electron/src/pages/Operations/Orders/OrdersFilterRow.test.tsx`, `Electron/src/components/data-table/filter-row/filter-persist.test.ts`, `Electron/src/hooks/usePersistedTableFilters.test.tsx`
+İstemci: `Electron/src/components/forms/ItemPickerModal.test.tsx`, `Electron/src/pages/FabricProperties/hierarchy.test.tsx`, `Electron/src/components/data-table/filter-row/FilterRow.test.tsx`, `Electron/src/components/data-table/filter-row/date-preset.test.ts`, `Electron/src/pages/Operations/Orders/OrdersFilterRow.test.tsx`, `Electron/src/components/data-table/filter-row/filter-persist.test.ts`, `Electron/src/hooks/usePersistedTableFilters.test.tsx`, `Electron/src/pages/Operations/WorkOrders/WorkOrdersFilterRow.test.tsx`, `Electron/src/pages/Operations/Shipments/ShipmentsFilterRow.test.tsx`
 
 Kural maddelerinin bekçileri (ek): `mobil PickerModal.test.tsx`, `test_tambur_recent_output_filter`, `test_order_stats`, `test_order_line_scope_single_source`, `service.test.ts`, `test_tambur_over_quantity`, `test_emanet_sahip_suzgeci`, `test_client_policy`, `test_shipment_list_gross`, `test_tambur_cut_idempotency`, `history-depth.test.ts`, `PageHeader.test.tsx`, `rollHistoryFilter.test.ts`
 

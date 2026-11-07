@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { RowOpenItems, CopyMenuItem } from "@/components/data-table/row-menu-items";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useListToggles } from "@/hooks/useListToggles";
-import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { customerService } from "@/pages/Customers/service";
@@ -24,7 +24,7 @@ import { useTabsStore } from "@/store/tabs";
 import { workOrderColumns } from "./columns";
 import { workOrderService } from "./service";
 import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
-import { StatusLocationChips, StatusLocationFilter } from "./StatusLocationFilter";
+import { WorkOrdersFilterRow, workOrderPersistConfig } from "./WorkOrdersFilterRow";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
@@ -34,7 +34,7 @@ import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
 import { buildPlaceFilters, isInvalidFilterValueError, stripPlaceFilters } from "./work-order-filters";
 
-// "Durum" süzgeci FilterBar'ın `leading` yuvasında: Durum + Şu an nerede + Özel (StatusLocationFilter).
+// "Durum" kutusu (Durum + Şu an nerede + Özel) `WorkOrdersFilterRow`da.
 const FILTERS: FilterDef[] = [
   {
     // TEKİL KALIR (bilinçli): `type` NOT NULL + iki değerli → ikisini seçmek
@@ -71,6 +71,7 @@ const FILTERS: FilterDef[] = [
 ];
 
 const QUERY_KEY = "work-orders";
+const PERSIST = workOrderPersistConfig(FILTERS);
 const NEW_PATH = "/operations/work-orders/new";
 
 
@@ -102,6 +103,7 @@ export function WorkOrdersPage() {
     columns: workOrderColumns,
     defaultPageSize: 50,
     forceFilters,
+    persistFilters: PERSIST,
     initialVisibility: {
       targetQuantity: targetQuantityEnabled,
     },
@@ -153,32 +155,22 @@ export function WorkOrdersPage() {
           </>
         }
       />
-      <DataTableToolbar
-        fetchAll={fetchAll}
+      <WorkOrdersFilterRow
+        filters={filters}
         search={search}
         onSearchChange={setSearch}
         placeholder={`${TERIM.terbiyeIsEmri.cumleBasi.yalin}, parti, kumaş, müşteri, sipariş veya fiş/evrak no ara...`}
-        table={table}
-        exportName={TERIM.terbiyeIsEmri.cogul}
-        actions={
+        showCompleted={showCompleted}
+        setShowCompleted={setShowCompleted}
+        showCancelled={showCancelled}
+        setShowCancelled={setShowCancelled}
+        trailing={
           <>
-            <ToolbarToggle
-              checked={showCompleted}
-              onCheckedChange={setShowCompleted}
-              label="Tamamlananları göster"
-              title={`Tamamlanmış ${TERIM.terbiyeIsEmri.cogulKucuk} varsayılan olarak gizlidir. Seçimin hatırlanır.`}
-            />
-            <ToolbarToggle
-              checked={showCancelled}
-              onCheckedChange={setShowCancelled}
-              label="İptalleri göster"
-              title={`İptal edilmiş ${TERIM.terbiyeIsEmri.cogulKucuk} varsayılan olarak gizlidir. Seçimin hatırlanır.`}
-            />
+            <SavedViewsMenu compact />
+            <DataTableTools table={table} exportName={TERIM.terbiyeIsEmri.cogul} fetchAll={fetchAll} compact />
           </>
         }
       />
-      <FilterBar filters={filters} defaultDateRangeDays={30} leading={<StatusLocationFilter />} />
-      <StatusLocationChips />
       <DataTable<WorkOrder>
         table={table}
         isLoading={query.isLoading}

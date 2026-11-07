@@ -13,6 +13,8 @@ export interface TableFilterPersistConfig {
   filterKeys?: readonly string[];
   /** URL'de duran ek süzgeç anahtarları (ör. `showCancelled`). */
   extraKeys?: readonly string[];
+  /** Kayıt yokken uygulanan göreli tarih (bugünkü "son 30 gün" varsayılanı); "Tümü" seçimi o zaman `datePreset=all` saklanır. */
+  defaultDate?: { field: string; preset: DatePresetId };
 }
 
 export interface StoredTableFilter {
@@ -63,6 +65,8 @@ export function encodeForStore(sp: URLSearchParams, cfg: TableFilterPersistConfi
       sub.delete("dateTo");
       sub.set(DATE_PRESET_PARAM, st.id);
     }
+  } else if (cfg.defaultDate) {
+    sub.set(DATE_PRESET_PARAM, "all");
   }
   return sub.toString();
 }
@@ -95,6 +99,13 @@ export function decodeStored(raw: unknown, cfg: TableFilterPersistConfig, now: D
   } catch {
     return null;
   }
+}
+
+/** Kayıt yokken (ya da okunamazken) uygulanacak alt küme: yalnız varsayılan tarih, yoksa boş. */
+export function defaultSubset(cfg: TableFilterPersistConfig, now: Date = new Date()): URLSearchParams {
+  const d = cfg.defaultDate;
+  if (!d) return new URLSearchParams();
+  return persistedSubset(applyDatePreset(new URLSearchParams(), { id: d.preset, field: d.field, from: "", to: "" }, now), cfg);
 }
 
 /** Tercih haritasına tek tablonun kaydını yazar; boş sorgu kaydı siler (Temizle = sıfır). */

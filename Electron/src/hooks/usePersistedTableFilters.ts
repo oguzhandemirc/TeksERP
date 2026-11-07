@@ -3,6 +3,7 @@ import type { SetURLSearchParams } from "react-router-dom";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import {
   decodeStored,
+  defaultSubset,
   encodeForStore,
   isDeepLink,
   isPersistedKey,
@@ -31,6 +32,7 @@ interface Args {
  * - URL'de kaydedilen anahtar YOKSA tercih yüklenince kayıt TEK KEZ URL'ye yazılır; o ana dek
  *   `ready=false` → liste istek atmaz (ilk açılışta çift istek yok).
  * - URL'de kaydedilen anahtar, arama ya da odak VARSA (derin bağlantı) kayıt uygulanmaz ve kullanıcı değiştirene dek yazılmaz.
+ * - Kayıt yoksa `config.defaultDate` uygulanır (derin bağlantıda uygulanmaz).
  * - Arama metni, sayfa/cursor kaydedilmez. Config yoksa kanca etkisizdir (`ready=true`).
  */
 export function usePersistedTableFilters({ tableKey, config, searchParams, setSearchParams }: Args) {
@@ -62,8 +64,10 @@ export function usePersistedTableFilters({ tableKey, config, searchParams, setSe
   // Geri yükleme: tercih gelince TEK KEZ.
   useEffect(() => {
     if (phase !== "wait" || !prefsReady) return;
-    const restored = decodeStored(prefs.tableFilters?.[tableKey], cfg);
-    if (!restored || restored.toString() === "") {
+    const raw = prefs.tableFilters?.[tableKey];
+    // Kayıt yoksa ya da okunamıyorsa sayfanın varsayılanı (ör. son 30 gün); kayıtlı "Tümü" boş döner.
+    const restored = (raw === undefined ? null : decodeStored(raw, cfg)) ?? defaultSubset(cfg);
+    if (restored.toString() === "") {
       setPhase("done");
       return;
     }

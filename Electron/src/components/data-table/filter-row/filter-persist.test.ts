@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { addDaysToKey, factoryDayEndIso, factoryDayKey, factoryDayStartIso } from "@/lib/factory-time";
-import { decodeStored, encodeForStore, persistedSubset, storedQuery, withStoredEntry } from "./filter-persist";
+import { decodeStored, defaultSubset, encodeForStore, persistedSubset, storedQuery, withStoredEntry } from "./filter-persist";
 
 const CFG = { filterKeys: ["filter[status]", "filter[customerId]"], extraKeys: ["showCancelled"] };
 const DAY1 = new Date("2026-11-06T09:30:00Z");
@@ -80,5 +80,21 @@ describe("Filtre kaydı — tercih haritası", () => {
     expect(m).toEqual({ rolls: rec("b=2") });
     expect(withStoredEntry("bozuk", "orders", "filter%5Bstatus%5D=A", DAY1).orders?.query).toBe("filter%5Bstatus%5D=A");
     expect(storedQuery({ orders: { query: 1 } }, "orders")).toBe("");
+  });
+});
+
+describe("Filtre kaydı — sayfa varsayılan tarihi", () => {
+  const D = { ...CFG, defaultDate: { field: "createdAt", preset: "last30" as const } };
+
+  it("varsayılan tarihi olan sayfada tarihsiz seçim \"Tümü\" olarak saklanır; olmayanda saklanmaz", () => {
+    expect(encodeForStore(sp("filter[status]=A"), D, DAY1)).toBe("filter%5Bstatus%5D=A&datePreset=all");
+    expect(encodeForStore(sp("filter[status]=A"), CFG, DAY1)).toBe("filter%5Bstatus%5D=A");
+  });
+
+  it("\"Tümü\" kaydı tarihsiz döner (varsayılana düşmez); varsayılan alt küme son 30 fabrika günü", () => {
+    expect(decodeStored(rec("datePreset=all"), D, DAY1)!.toString()).toBe("");
+    const def = defaultSubset(D, DAY2);
+    expect(def.get("dateFrom")).toBe(factoryDayStartIso(addDaysToKey(factoryDayKey(DAY2), -29)));
+    expect(defaultSubset(CFG, DAY2).toString()).toBe("");
   });
 });

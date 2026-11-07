@@ -9,7 +9,7 @@ import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { TERIM } from "@/lib/terim";
 import { FASON_FIRMA_KEY, FASON_GUN_KEY, ORDER_SHIP_FILTER_OPTIONS, WHERE_FILTER_KEY } from "./order-where-text";
-import { filterKeysOf } from "@/components/data-table/filter-row/row-filter";
+import { persistConfigOf } from "@/components/data-table/filter-row/def-row-filters";
 import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 import { SHOW_CANCELLED_PARAM } from "@/hooks/useHideCancelled";
 
@@ -71,8 +71,5 @@ export const ORDER_FILTERS: FilterDef[] = [
 /** Filtre kaydı: yalnız bugün tanımlı kutuların anahtarları geri yüklenir (kaldırılmış süzgeç yok sayılır). */
 export function orderPersistConfig(filters: readonly FilterDef[], productionEnabled: boolean): TableFilterPersistConfig {
   const fason = productionEnabled ? [FASON_FIRMA_KEY, FASON_GUN_KEY] : [];
-  return {
-    filterKeys: [...filters.flatMap(filterKeysOf).filter((k) => k.startsWith("filter[")), WHERE_FILTER_KEY, ...fason],
-    extraKeys: [SHOW_CANCELLED_PARAM],
-  };
+  return persistConfigOf(filters, { extraFilterKeys: [WHERE_FILTER_KEY, ...fason], extraKeys: [SHOW_CANCELLED_PARAM] });
 }

@@ -16,6 +16,7 @@ import type { AppPreferences } from "@/types/preferences";
 import type { PreferencePatch } from "@/providers/PreferencesProvider";
 import { useDataTable } from "./useDataTable";
 import { usePersistedTableFilters } from "./usePersistedTableFilters";
+import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 
 // ── Sahte tercih deposu: `ready` ve içerik testten sürülür ──────────────────────
 let store: { prefs: AppPreferences; ready: boolean } = { prefs: {}, ready: true };
@@ -53,22 +54,22 @@ let setParams: ReturnType<typeof useSearchParams>[1] | null = null;
 let url = "";
 let api: ReturnType<typeof useDataTable<Row>> | null = null;
 
-function Probe({ persist = true }: { persist?: boolean }) {
+function Probe({ persist = true, cfg = CFG }: { persist?: boolean; cfg?: TableFilterPersistConfig }) {
   const [sp, set] = useSearchParams();
   setParams = set;
   url = sp.toString();
-  api = useDataTable<Row>({ queryKey: "orders", fetchFn, columns: [], persistFilters: persist ? CFG : undefined });
+  api = useDataTable<Row>({ queryKey: "orders", fetchFn, columns: [], persistFilters: persist ? cfg : undefined });
   return null;
 }
 
-function mount(initial = "/orders", persist = true) {
+function mount(initial = "/orders", persist = true, cfg: TableFilterPersistConfig = CFG) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrap = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[initial]}>{children}</MemoryRouter>
     </QueryClientProvider>
   );
-  return render(<Probe persist={persist} />, { wrapper: Wrap });
+  return render(<Probe persist={persist} cfg={cfg} />, { wrapper: Wrap });
 }
 
 const tick = (ms = 80) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
@@ -122,6 +123,52 @@ describe("Filtre kaydı — geri yükleme ve yarış", () => {
     });
     await tick(200);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("Filtre kaydı — sayfa varsayılan tarihi (İş Emirleri/Sevkiyat: son 30 gün)", () => {
+  const DCFG: TableFilterPersistConfig = { ...CFG, defaultDate: { field: "createdAt", preset: "last30" } };
+
+  it("⭐ kayıt yoksa varsayılan pencere uygulanır ve TEK istek onunla gider", async () => {
+    mount("/orders", true, DCFG);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const p = new URLSearchParams(url);
+    expect(p.get("dateField")).toBe("createdAt");
+    expect(p.get("dateFrom")).toBeTruthy();
+    await tick(500);
+    expect(calls).toHaveLength(1);
+    expect(stored()).toBe("dateField=createdAt&datePreset=last30");
+  });
+
+  it("⭐ kayıtlı \"Tümü\" (datePreset=all) korunur: varsayılan pencere UYGULANMAZ", async () => {
+    store.prefs = { tableFilters: rec("filter%5Bstatus%5D=OPEN&datePreset=all") };
+    mount("/orders", true, DCFG);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(url).toBe("filter%5Bstatus%5D=OPEN");
+    expect(calls[0]!.filters).not.toHaveProperty("dateFrom");
+  });
+
+  it("⭐ yalnız \"Tümü\" kaydı (başka süzgeç yok) da korunur: tarihsiz TEK istek", async () => {
+    store.prefs = { tableFilters: rec("datePreset=all") };
+    mount("/orders", true, DCFG);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await tick(300);
+    expect(url).toBe("");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("Temizle sonrası \"Tümü\" olarak saklanır (bir sonraki açılış gördüğün gibi)", async () => {
+    mount("/orders", true, DCFG);
+    await waitFor(() => expect(new URLSearchParams(url).get("dateFrom")).toBeTruthy());
+    await act(async () => setParams!(new URLSearchParams(), { replace: true }));
+    await tick(500);
+    expect(stored()).toBe("datePreset=all");
+  });
+
+  it("derin bağlantıda varsayılan pencere uygulanmaz (dashboard sayısı tutarlı kalsın)", async () => {
+    mount("/orders?filter%5Bstatus%5D=OPEN", true, DCFG);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(new URLSearchParams(url).has("dateFrom")).toBe(false);
   });
 });
 

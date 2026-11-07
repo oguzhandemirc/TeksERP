@@ -197,7 +197,7 @@ describe("400 INVALID_FILTER_VALUE", () => {
     // Seçenekler listenin O ANKİ kapsamıyla istenir (faceted sayım, 2026-11-04 E2E).
     expect(src).toMatch(/buildPlaceFilters\(\(scope\) => workOrderService\.whereOptions\(scope\)[^\n]*, listScope\)/);
     expect(src).toMatch(/\[listScope\]/);
-    expect(src).toMatch(/<FilterBar filters=\{filters\}/);
+    expect(src).toMatch(/<WorkOrdersFilterRow\s+filters=\{filters\}/);
     expect(src).toMatch(/isInvalidFilterValueError\(query\.error\)[\s\S]{0,120}stripPlaceFilters\(searchParams\)/);
   });
 });

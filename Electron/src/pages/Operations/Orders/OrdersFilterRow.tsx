@@ -1,8 +1,8 @@
 import { useMemo, type ReactNode } from "react";
-import { FilterControl, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
 import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
-import { DatePresetFilter } from "@/components/data-table/filter-row/DatePresetFilter";
-import { keysWithDependents, type RowFilter } from "@/components/data-table/filter-row/row-filter";
+import { dateRowFilter, defRowFilter, localToggleRowFilter, urlToggleRowFilter } from "@/components/data-table/filter-row/def-row-filters";
+import type { RowFilter } from "@/components/data-table/filter-row/row-filter";
 import { FASON_FIRMA_KEY, FASON_GUN_KEY, WHERE_FILTER_KEY } from "./order-where-text";
 import { FasonFirmaFilter, FasonGunFilter, OrdersViewSelect } from "./order-where-filters";
 
@@ -24,10 +24,6 @@ export interface OrdersFilterRowProps {
   trailing?: ReactNode;
 }
 
-function defFilter(def: Exclude<FilterDef, { kind: "dateRange" }>, all: FilterDef[]): RowFilter {
-  return { id: def.key, label: def.label, keys: keysWithDependents(def, all), render: ({ autoOpen }) => <FilterControl def={def} chip autoOpen={autoOpen} /> };
-}
-
 /**
  * Siparişler — TEK SATIR filtre çubuğu:
  * `[Ara][Görünüm][Termin][Müşteri][Sevk durumu][…][+ Filtre] … [Temizle][Kayıtlı][Sütunlar]`.
@@ -40,10 +36,10 @@ export function OrdersFilterRow(p: OrdersFilterRowProps) {
     const keyed = filters.filter((f): f is Exclude<FilterDef, { kind: "dateRange" }> => f.kind !== "dateRange");
     const head: RowFilter[] = [
       { id: "nerede", label: "Görünüm", keys: [WHERE_FILTER_KEY], render: ({ autoOpen }) => <OrdersViewSelect productionEnabled={productionEnabled} forceFilters={forceFilters} autoOpen={autoOpen} /> },
-      ...(date ? [{ id: "date", label: date.label, keys: ["dateField", "dateFrom", "dateTo"], render: ({ autoOpen }: { autoOpen: boolean }) => <DatePresetFilter def={date} past={{ field: "deadline", label: "Termini geçmiş" }} autoOpen={autoOpen} /> }] : []),
-      ...PRIMARY_KEYS.flatMap((k) => keyed.filter((d) => d.key === k).map((d) => defFilter(d, filters))),
+      ...(date ? [dateRowFilter(date, { field: "deadline", label: "Termini geçmiş" })] : []),
+      ...PRIMARY_KEYS.flatMap((k) => keyed.filter((d) => d.key === k).map((d) => defRowFilter(d, filters))),
     ];
-    const tail: RowFilter[] = keyed.filter((d) => !PRIMARY_KEYS.includes(d.key)).map((d) => defFilter(d, filters));
+    const tail: RowFilter[] = keyed.filter((d) => !PRIMARY_KEYS.includes(d.key)).map((d) => defRowFilter(d, filters));
     if (productionEnabled) {
       tail.push(
         { id: "fasonFirma", label: "Fason firma", keys: [FASON_FIRMA_KEY], render: ({ autoOpen }) => <FasonFirmaFilter autoOpen={autoOpen} /> },
@@ -51,8 +47,7 @@ export function OrdersFilterRow(p: OrdersFilterRowProps) {
       );
     }
     // Etkinken "İptaller dahil" kutusu, ✕ varsayılana (gizli) döndürür. URL'deyse ✕/Temizle anahtarı siler.
-    const iptalState = cancelledUrlKey ? { keys: [cancelledUrlKey] } : { keys: [], active: showCancelled, onClear: () => setShowCancelled(false) };
-    tail.push({ id: "iptal", label: "İptaller dahil", ...iptalState, onAdd: () => setShowCancelled(true), render: () => <span className="px-2 text-xs">İptaller dahil</span> });
+    tail.push(cancelledUrlKey ? urlToggleRowFilter("iptal", "İptaller dahil", cancelledUrlKey, setShowCancelled) : localToggleRowFilter("iptal", "İptaller dahil", showCancelled, setShowCancelled));
     return { primary: head, more: tail };
   }, [filters, productionEnabled, forceFilters, showCancelled, setShowCancelled, cancelledUrlKey]);
 
