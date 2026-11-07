@@ -10,7 +10,8 @@ import { rollService, buildRollForceFilters, type RollStatusTabKey } from "./ser
  * AYNI queryKey'i paylaşır → tek fetch + RefreshButton `["rolls"]` invalidate'i
  * ikisini birlikte tazeler. `tab=null` (KANBAN) iken sorgu kapalı.
  */
-export function useRollStats(tab: RollStatusTabKey | null) {
+/** `ready=false` → kayıtlı süzgeç henüz URL'de değil, sorgu bekler. */
+export function useRollStats(tab: RollStatusTabKey | null, ready = true) {
   const [searchParams] = useSearchParams();
   const urlParams = useMemo(
     () => parseUrlToQueryParams(searchParams.toString(), { pageSize: 100 }),
@@ -43,7 +44,7 @@ export function useRollStats(tab: RollStatusTabKey | null) {
         dateFrom: urlParams.dateFrom,
         dateTo: urlParams.dateTo,
       }),
-    enabled: tab !== null,
+    enabled: tab !== null && ready,
     staleTime: 0,
   });
 }

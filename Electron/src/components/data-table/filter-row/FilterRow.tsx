@@ -10,8 +10,10 @@ import { MoreFiltersMenu } from "./MoreFiltersMenu";
 import { clearAllKeys, isRowFilterActive, withoutKeys, type RowFilter } from "./row-filter";
 
 export interface FilterRowProps {
-  search: string;
-  onSearchChange: (v: string) => void;
+  search?: string;
+  onSearchChange?: (v: string) => void;
+  /** Arama kutusunun yerine (ör. barkod okutma alanı — o da `search` yazar). */
+  leading?: ReactNode;
   placeholder?: string;
   /** Her zaman görünen kutular (Görünüm, Termin, Müşteri, Durum…). */
   primary: readonly RowFilter[];
@@ -31,7 +33,7 @@ export interface FilterRowProps {
 export const FILTER_ROW_CLASS = "flex shrink-0 flex-nowrap items-center gap-2 border-b px-3 py-2";
 export const FILTER_ROW_SCROLL_CLASS = "flex min-w-0 shrink flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:thin]";
 
-export function FilterRow({ search, onSearchChange, placeholder = "Ara...", primary, more = [], trailing }: FilterRowProps) {
+export function FilterRow({ search = "", onSearchChange, leading, placeholder = "Ara...", primary, more = [], trailing }: FilterRowProps) {
   const [sp, setSp] = useSearchParams();
   const [pinned, setPinned] = useState<string[]>([]);
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function FilterRow({ search, onSearchChange, placeholder = "Ara...", prim
 
   return (
     <div data-testid="filter-row" className={FILTER_ROW_CLASS}>
-      <RowSearch value={search} onChange={onSearchChange} placeholder={placeholder} />
+      {leading ?? (onSearchChange && <RowSearch value={search} onChange={onSearchChange} placeholder={placeholder} />)}
       <div ref={scrollRef} data-testid="filter-row-scroll" className={cn(FILTER_ROW_SCROLL_CLASS, fadeClass(edges))}>
         {primary.map((f) => chip(f, pinned.includes(f.id), narrowOnly.has(f.id)))}
         {visibleMore.map((f) => chip(f, true))}

@@ -1,6 +1,9 @@
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
+import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
+import { persistConfigOf, splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
+import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 import { ScanField } from "@/components/scanner/ScanField";
 import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { useDataTable } from "@/hooks/useDataTable";
@@ -43,6 +46,44 @@ const RECEIPT_FILTERS: FilterDef[] = [
   { kind: "dateRange", label: "Tarih", defaultField: "receivedAt" },
 ];
 
+/** Kayıt allowlist'i (Sevkler / Kabuller ayrı anahtar: `kartela-dispatches` · `kartela-receipts`). */
+export const DISPATCH_PERSIST: TableFilterPersistConfig = persistConfigOf(DISPATCH_FILTERS);
+export const RECEIPT_PERSIST: TableFilterPersistConfig = persistConfigOf(RECEIPT_FILTERS);
+const PRIMARY_KEYS = ["status", "subcontractorId"];
+
+interface DocRowProps {
+  filters: FilterDef[];
+  search: string;
+  setSearch: (v: string) => void;
+  onScan: (code: string) => void;
+  busy: boolean;
+}
+
+/** TEK SATIR: `[Ara·okut][Tarih][Durum][Firma] … [Temizle][Kayıtlı]` (araçlar bugünkü gibi). */
+function KartelaDocFilterRow(p: DocRowProps) {
+  const { primary, more } = splitDefFilters(p.filters, PRIMARY_KEYS);
+  return (
+    <FilterRow
+      leading={
+        <ScanField
+          value={p.search}
+          onChange={p.setSearch}
+          onScan={p.onScan}
+          placeholder="Ara ya da barkod okut..."
+          expectPrefix={["SWATCH", "DISPATCH_DOC"]}
+          busy={p.busy}
+          className="w-44 min-w-[8rem] shrink 2xl:w-72"
+          inputClassName="h-8 text-sm"
+          clearable
+        />
+      }
+      primary={primary}
+      more={more}
+      trailing={<SavedViewsMenu compact />}
+    />
+  );
+}
+
 interface TabProps {
   onSelect: (s: KartelaSelection) => void;
   /** Okutulan kod bir kartela (KRT…) ise: liste araması yerine kartela detayını aç. */
@@ -51,8 +92,9 @@ interface TabProps {
 }
 
 export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: TabProps) {
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<KartelaDispatchListItem>({
+  const { table, query, search, setSearch, pagination } = useDataTable<KartelaDispatchListItem>({
     queryKey: "kartela-dispatches",
+    persistFilters: DISPATCH_PERSIST,
     fetchFn: kartelaService.listDispatchesCursor,
     columns: kartelaDispatchColumns,
     defaultPageSize: 50,
@@ -72,28 +114,7 @@ export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: T
 
   return (
     <>
-      <DataTableToolbar
-        fetchAll={fetchAll}
-        search={search}
-        onSearchChange={setSearch}
-        hideSearch
-        leading={
-          <>
-            <ScanField
-              value={search}
-              onChange={setSearch}
-              onScan={handleScan}
-              placeholder="Ara ya da barkod okut..."
-              expectPrefix={["SWATCH", "DISPATCH_DOC"]}
-              busy={swatchLookupPending}
-              widthClassName="w-72"
-              inputClassName="h-7 text-xs"
-              clearable
-            />
-            <FilterBar filters={DISPATCH_FILTERS} inline />
-          </>
-        }
-      />
+      <KartelaDocFilterRow filters={DISPATCH_FILTERS} search={search} setSearch={setSearch} onScan={handleScan} busy={swatchLookupPending} />
       <DataTable<KartelaDispatchListItem>
         table={table}
         isLoading={query.isLoading}
@@ -106,8 +127,9 @@ export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: T
 }
 
 export function ReceiptsTab({ onSelect, onScanSwatch, swatchLookupPending }: TabProps) {
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<KartelaReceiptListItem>({
+  const { table, query, search, setSearch, pagination } = useDataTable<KartelaReceiptListItem>({
     queryKey: "kartela-receipts",
+    persistFilters: RECEIPT_PERSIST,
     fetchFn: kartelaService.listReceiptsCursor,
     columns: kartelaReceiptColumns,
     defaultPageSize: 50,
@@ -125,28 +147,7 @@ export function ReceiptsTab({ onSelect, onScanSwatch, swatchLookupPending }: Tab
 
   return (
     <>
-      <DataTableToolbar
-        fetchAll={fetchAll}
-        search={search}
-        onSearchChange={setSearch}
-        hideSearch
-        leading={
-          <>
-            <ScanField
-              value={search}
-              onChange={setSearch}
-              onScan={handleScan}
-              placeholder="Ara ya da barkod okut..."
-              expectPrefix={["SWATCH", "DISPATCH_DOC"]}
-              busy={swatchLookupPending}
-              widthClassName="w-72"
-              inputClassName="h-7 text-xs"
-              clearable
-            />
-            <FilterBar filters={RECEIPT_FILTERS} inline />
-          </>
-        }
-      />
+      <KartelaDocFilterRow filters={RECEIPT_FILTERS} search={search} setSearch={setSearch} onScan={handleScan} busy={swatchLookupPending} />
       <DataTable<KartelaReceiptListItem>
         table={table}
         isLoading={query.isLoading}
