@@ -176,3 +176,9 @@ export function rootFromSql(p: RecordProjection): string {
   if (p.scope || p.retention) throw new Error(`Ek köklü projeksiyon kapsam/saklama taşıyamaz: ${p.name}`);
   return `(${rootTablesOf(p).map((t) => `SELECT "id", "createdAt" FROM "${t}"`).join(" UNION ALL ")})`;
 }
+
+/** Tel `urunId` = konu kartı: ürün (`itemId`) ya da hizmet kartı (`serviceItemId`, aynı UUID uzayı — bulut `urun`a bağlar). */
+export const subjectIdCol = (table: string): ColumnSpec => ({
+  ...col("urunId", "itemId"),
+  resolvedBy: { helper: "cloud-sync/derived subjectIdDerived: itemId ?? serviceItemId (hizmet kartı ayrımı 2026-11-08)", reads: [table] },
+});
