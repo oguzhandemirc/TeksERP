@@ -39,6 +39,7 @@
 //   §23 K3b önizleme kapısı toplayıcıyı fatura tx'inin istemcisiyle okur (tx'in commit'siz damgasını görür)
 //   §21 H8b DISPATCH_DAY dönem taslağı: her iş KENDİ sevk anının fiyatıyla (son sevk günü herkese uygulanmaz); ata
 //       işi en erken sevk edilen çocuğun anına (yayılım döngüsü kapatılınca 40 m @7 ⇒ kırmızı, 68/1; geri alındı)
+//   §26 D1c yarış: elle açık tx kart kilidini tutarken taslak hizmet satırı bekler; Pasif commit'i ⇒ 409, satır 0
 //   §25 D1c satır sözleşmesi: eski gövde itemId=<hizmet> ⇒ SERVICE · yeni gövde lineType/serviceItemId · TEXT ·
 //       ürün satırına hizmet id / bilinmeyen hizmet / şekil çelişkisi 400 · detay serviceItem + eski panel item aynası
 // Negatif sondalar (2026-10-29, BEKCI-HARITASI sonda sütunu): kısmi unique düşürülünce §9a kırmızı ·
@@ -54,6 +55,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, loadServiceBillingSettings, readFinanceDefaultVatRate, systemSettingService } from "../src/services/system-setting.service";
 import { PERIOD_END_SERVICE_WARNING, autoDraftInvoiceAfterDispatch, buildShipmentInvoiceDraftPreview, collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
+import { lockAgainstMergeTx } from "../src/services/helpers/master-data-live.helper";
 import { invoiceLineShapeError, normalizeInvoiceLines } from "../src/services/helpers/invoice-line-subject.helper";
 import { CUSTOMER_PER_SHIPMENT_PERIOD_WARNING, createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
@@ -709,6 +711,7 @@ async function main(): Promise<void> {
   await invoiceService.cancel(pd7.data!.id, "test iptal", actor);
 
   await section25(actor, cust.id, fabric, K3);
+  await section26(actor, cust.id);
 
   // ── §11 Kapalı ───────────────────────────────────────────────────────────
   section("§11 kapalıyken bugünkü davranış");
@@ -780,6 +783,34 @@ async function section25(actor: string, customerId: string, fabric: string, svc:
     && !!invoiceLineShapeError({ lineType: "SERVICE", itemId: fabric, serviceItemId: svc }) && !!invoiceLineShapeError({ lineType: "PRODUCT" }));
   await invoiceService.deleteDraft(legacy.data!.id, actor);
   await invoiceService.deleteDraft(fresh.data!.id, actor);
+}
+
+/**
+ * §26 D1c yarış: taslak hizmet satırı yazımı hizmet kartının Pasif'e geçişiyle SIRAYA girer. Elle açık tx yaşam
+ * döngüsü yazıcısının kilidini taklit eder (8030 SHARED → `service_items` FOR UPDATE) ve kartı Pasif'e alır; taslak
+ * yazımı (FOR SHARE) bekler, commit'ten sonra Pasif'i görür ⇒ 409 ITEM_INACTIVE, satır doğmaz.
+ */
+async function section26(actor: string, customerId: string): Promise<void> {
+  section("§26 D1c yarış: taslak hizmet satırı ↔ hizmet kartı Pasif'e geçişi sıraya girer");
+  const card = await prisma.serviceItem.create({ data: { code: `${P}-K26`.slice(0, 32), name: `TEST HZFT K26 ${STAMP}`, unit: "MT" }, select: { id: true } });
+  fx.itemIds.push(card.id);
+  const body = { type: "SALES" as const, customerId, currency: Currency.TRY, clientToken: randomUUID(),
+    lines: [{ lineType: "SERVICE" as const, serviceItemId: card.id, description: "yarış hizmeti", qty: 1, unit: "m", unitPrice: 3 }] };
+  let settled = false;
+  let draftResult: Promise<{ status: number; code: string | null }> | null = null;
+  await prisma.$transaction(async (tx) => {
+    await lockAgainstMergeTx(tx);
+    await tx.$queryRaw`SELECT id FROM service_items WHERE id = ${card.id}::uuid FOR UPDATE`;
+    draftResult = errOf(() => invoiceService.createDraft(body, actor)).then((r) => { settled = true; return r; });
+    await new Promise((r) => setTimeout(r, 400));
+    // Bekleme tek başına ayırt etmez (FK'nın KEY SHARE'i de bekler); kilidin kanıtı §26b — kilitsiz yazım Pasif'i görmez.
+    check("§26a kart kilidi açıkken taslak yazımı BEKLER", !settled, `settled=${settled}`);
+    await tx.serviceItem.update({ where: { id: card.id }, data: { lifecycleStatus: "ARCHIVED", isActive: false, lifecycleChangedAt: new Date(), lifecycleChangedById: actor, lifecycleReason: "§26 yarış" } });
+  }, { timeout: 20_000 });
+  const res = await draftResult!;
+  const lines = await prisma.invoiceLine.count({ where: { serviceItemId: card.id } });
+  check("§26b Pasif'e geçiş commit'inden sonra taslak ⇒ 409 ITEM_INACTIVE, hizmet satırı 0 (Pasif kartta canlı referans yok)",
+    res.status === 409 && res.code === "ITEM_INACTIVE" && lines === 0, JSON.stringify({ res, lines }));
 }
 
 async function cleanup(): Promise<void> {

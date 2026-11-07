@@ -277,8 +277,10 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/property-revoke.helper.ts",
   // F1: önizleme kapısı — taze bağların kalemini fatura satırıyla karşılaştırır (çözücü değil; toplayıcıyı çağırır).
   "services/helpers/service-preview-gate.helper.ts",
-  // K2a: ürün kartı canlı referans kataloğu — eşlenmiş kalemi pasife alma kapısı için sayar (çözücü değil).
-  "services/helpers/item-lifecycle.helper.ts",
+  // K2a → D1b: hizmet kartının canlı referans kataloğu ve yaşam döngüsü yazıcısı `service_items`e taşındı — eşleme/
+  // fiyat/norm/taslak satırını pasife alma kapısı için sayar (çözücü değil).
+  "services/helpers/service-item-lifecycle.helper.ts",
+  "services/service-item.service.ts",
   // K21: `PropertyValueInput` istemci sözleşmesi tipi servisten buraya taşındı (yalnız tip; çözücü değil).
   "services/helpers/fabric-property-input.helper.ts",
   // Hizmet fiyat tablosu (2026-11-06): kademe fiyatı yazım kapısı — değerin eşli kalemini `pickServiceItemId` ile
