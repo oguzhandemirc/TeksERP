@@ -14,10 +14,13 @@
 //   §4 ⭐ (c) `X-Request-Id`: üretilir · geçerli gelen değer korunur · bozuk değer yeniden üretilir
 //   §5 ⭐ (d) erişim satırı: 4xx'te code=<details.code>, 2xx'te code=-; süre + rid + uid; Authorization sızmaz
 //   §6 app.ts kablolaması: requestIdMiddleware morgan'dan ÖNCE, üretim biçimi PROD_ACCESS_LOG_FORMAT
+//   §7 ⭐ UYARI satırı hız sınırı: 25 yavaş → 20 satır + pencere kapanınca 1 özet (saat enjekte); halka etkilenmez
 //
 // NEGATİF SONDALAR (2026-11-07, ölçüldü; geri alındı):
 //   (1) `redactedQueryOf` içinde `redactSecretQueryParams(url)` → `url`: §1e + §3a + §3b = 3 KIRMIZI (21/3)
 //   (2) `SLOW_REQUEST_MS = 1_000`: §2a + §2b + §2c + §2d + §3a + §3b = 6 KIRMIZI (18/6)
+//   (3) hız sınırı sökük (`SLOW_LOG_MAX_PER_WINDOW = Infinity`): §7a + §7c + §7d = 3 KIRMIZI (26/3)
+//   (4) `quickpin` sır kümesinden sökük: §1h KIRMIZI (28/1)
 // =============================================================================
 import express, { type Request, type Response, type NextFunction } from "express";
 import http from "http";
@@ -35,7 +38,11 @@ import {
   latencySnapshot,
   resetLatencyStats,
   formatSlowRequestLine,
+  recordLatency,
+  setLatencyClockForTest,
   SLOW_REQUEST_MS,
+  SLOW_LOG_MAX_PER_WINDOW,
+  SLOW_LOG_WINDOW_MS,
 } from "../src/services/latency-stats.service";
 import { PROD_ACCESS_LOG_FORMAT, registerAccessLogTokens } from "../src/lib/access-log";
 import type { JwtPayload } from "../src/types/api.types";
@@ -69,6 +76,12 @@ function section1(): void {
     "§1e ⭐ redactedQueryOf: password/token MASKELİ, diğer parametre korunur",
     q === "password=***&token=***&status=OK",
     String(q),
+  );
+  const q2 = redactedQueryOf("/api/x?quickPin=1234&apiKey=AK1&otp=99&imza=IM&signature=SG&key=K1&code=TKS-001");
+  check(
+    "§1h ek sır adları maskeli (quickPin/apiKey büyük-küçük harften bağımsız); `code` iş verisi olarak KALIR",
+    q2 === "quickPin=***&apiKey=***&otp=***&imza=***&signature=***&key=***&code=TKS-001",
+    String(q2),
   );
   check("§1f sorgusuz URL → null", redactedQueryOf("/api/rolls") === null && redactedQueryOf("/api/rolls?") === null);
   const line = formatSlowRequestLine({
@@ -179,6 +192,36 @@ async function sections2to5(port: number): Promise<void> {
   check("§5d kullanıcısız istek uid=-; remote-user hep '-'", /rid=hizli-req-0001 uid=- /.test(c200) && /^\S+ - - \[/.test(c200), c200.trim());
 }
 
+// ─── §7 yavaş istek UYARI satırı hız sınırı (saat enjekte) ─────────────────
+function section7(): void {
+  const lines: string[] = [];
+  const asil = console.warn;
+  let t = 5_000_000;
+  setLatencyClockForTest(() => t);
+  resetLatencyStats();
+  console.warn = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+  try {
+    for (let i = 0; i < 25; i++) recordLatency("GET", "/api/sel", 200, 600 + i);
+    const tekil = lines.filter((l) => l.startsWith("UYARI [yavas-istek] ") && l.includes("/api/sel"));
+    check("§7a ⭐ 25 yavaş istek → pencerede 20 satır (tavan 20/60 sn)", tekil.length === 20 && SLOW_LOG_MAX_PER_WINDOW === 20 && SLOW_LOG_WINDOW_MS === 60_000, `${tekil.length}`);
+    check("§7b halka sınırsız beslenir (25 kayıt, tavan 50)", latencySnapshot().slowRequests.length === 25);
+    t += SLOW_LOG_WINDOW_MS + 1;
+    recordLatency("GET", "/api/hizli", 200, 5); // pencere kapanışı istek-güdümlü
+    const ozet = lines.filter((l) => l.includes("yavaş istek bastırıldı"));
+    check(
+      "§7c ⭐ pencere kapanınca TEK özet satırı: 5 bastırıldı",
+      ozet.length === 1 && /^UYARI \[yavas-istek\] 5 yavaş istek bastırıldı \(son 60 sn/.test(ozet[0]!) && lines.length === SLOW_LOG_MAX_PER_WINDOW + 1,
+      ozet.join(" ¶ "),
+    );
+    recordLatency("GET", "/api/sel", 200, 700);
+    check("§7d yeni pencerede sayaç sıfırlandı (satır yeniden basılır)", lines.length === SLOW_LOG_MAX_PER_WINDOW + 2);
+  } finally {
+    console.warn = asil;
+    setLatencyClockForTest(null);
+    resetLatencyStats();
+  }
+}
+
 // ─── §6 app.ts kablolaması ──────────────────────────────────────────────────
 function section6(): void {
   const src = readFileSync(path.resolve(__dirname, "../src/app.ts"), "utf8");
@@ -203,6 +246,7 @@ async function main(): Promise<void> {
     await new Promise<void>((r) => server.close(() => r()));
   }
   section6();
+  section7();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exitCode = fail > 0 ? 1 : 0;
 }

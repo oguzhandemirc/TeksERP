@@ -61,7 +61,7 @@
 - **[ÇEKİRDEK]** `licenseGate` app düzeyinde, `/api` altında, İLK router'dan önce; yöntem+yol ile; kapalı yolda KİMLİK önce (oturumsuz 401; kimliksiz uçta `LICENSE_GATE`); açık yollar `constants/license-routes.ts`.
 - **[ÇEKİRDEK]** Lisans kademeleri: KISITLI'da yazma, DURDURULMUŞ'ta her şey RED; gözlem kipinde sıfır fark; motor hazır değilse fail-open.
 - **[ÇEKİRDEK]** Lisans kapısı bekçileri: `scripts/test_lisans_kapisi.ts`, `scripts/test_middleware_order.ts`.
-- **[ÇEKİRDEK]** İstek kimliğini yalnız `request-id.middleware` (morgan'dan önce) üret ve `X-Request-Id`e yaz; audit kimliği hep sunucu UUID'si; erişim satırı `<ms>ms rid= uid= code=` biçimini ve yavaş istek (≥500 ms) halka künyesini koru, Authorization/sır parametresi loga girmez, yavaş istek DB'ye yazılmaz. · bekçi: `test_istek_log`
+- **[ÇEKİRDEK]** İstek kimliğini yalnız `request-id.middleware` (morgan'dan önce) üret ve `X-Request-Id`e yaz; audit kimliği hep sunucu UUID'si; erişim satırı `<ms>ms rid= uid= code=` biçimini ve yavaş istek (≥500 ms) halka künyesini ve UYARI satırı hız sınırını (60 sn'de 20 + tek özet) koru, Authorization/sır parametresi loga girmez, yavaş istek DB'ye yazılmaz; erişim ms'i ile halka ms'i birkaç ms ayrışabilir, eşleme `rid` iledir. · bekçi: `test_istek_log`
 
 ### Yasaklar
 

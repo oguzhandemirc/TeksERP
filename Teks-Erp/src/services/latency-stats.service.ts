@@ -85,6 +85,44 @@ export function formatSlowRequestLine(e: SlowRequestEntry): string {
   );
 }
 
+/** Yavaş istek UYARI satırı hız sınırı: PG duraklaması/GC'de yüzlerce istek birden eşiği aşar ve
+ *  backend-err.log'u sellerdi. Pencere başına tavan; fazlası sayılır, pencere kapanınca TEK özet satırı.
+ *  Zamanlayıcı yok (istek-güdümlü): özet, pencere bittikten sonraki ilk istekte basılır. Halka etkilenmez. */
+export const SLOW_LOG_WINDOW_MS = 60_000;
+export const SLOW_LOG_MAX_PER_WINDOW = 20;
+
+let clock: () => number = Date.now;
+/** Bekçi için saat enjeksiyonu; `null` gerçek saate döner. */
+export function setLatencyClockForTest(fn: (() => number) | null): void {
+  clock = fn ?? Date.now;
+}
+
+let slowLogWindowStart = 0;
+let slowLogCount = 0;
+let slowLogSuppressed = 0;
+
+function closeSlowLogWindowIfDue(t: number): void {
+  if (t - slowLogWindowStart < SLOW_LOG_WINDOW_MS) return;
+  if (slowLogSuppressed > 0) {
+    uyari(
+      "yavas-istek",
+      `${slowLogSuppressed} yavaş istek bastırıldı (son ${SLOW_LOG_WINDOW_MS / 1000} sn, tavan ${SLOW_LOG_MAX_PER_WINDOW}/pencere)`,
+    );
+  }
+  slowLogWindowStart = t;
+  slowLogCount = 0;
+  slowLogSuppressed = 0;
+}
+
+function logSlowRequest(entry: SlowRequestEntry): void {
+  if (slowLogCount < SLOW_LOG_MAX_PER_WINDOW) {
+    slowLogCount += 1;
+    uyari("yavas-istek", formatSlowRequestLine(entry));
+  } else {
+    slowLogSuppressed += 1;
+  }
+}
+
 const stats = new Map<string, RouteStat>();
 const slowRing: SlowRequestEntry[] = [];
 let statsSince = Date.now();
@@ -142,6 +180,8 @@ export interface LatencySample {
 
 /** Middleware'in tek giriş noktası — istek başına O(1). */
 export function recordLatencySample({ method, routeKey, status, ms, slowContext }: LatencySample): void {
+  const t = clock();
+  closeSlowLogWindowIfDue(t);
   const key = `${method} ${routeKey}`;
   let stat = stats.get(key);
   if (!stat) {
@@ -161,15 +201,15 @@ export function recordLatencySample({ method, routeKey, status, ms, slowContext 
   totalCount += 1;
   if (status >= 500) stat.errCount += 1;
   if (ms > stat.maxMs) stat.maxMs = ms;
-  stat.lastAt = Date.now();
+  stat.lastAt = t;
   stat.buckets[bucketIndex(ms)] += 1;
 
   if (ms >= SLOW_REQUEST_MS) {
     const ctx = slowContext ? slowContext() : EMPTY_SLOW_CONTEXT;
-    const entry: SlowRequestEntry = { at: Date.now(), method, route: routeKey, status, ms: Math.round(ms), ...ctx };
+    const entry: SlowRequestEntry = { at: t, method, route: routeKey, status, ms: Math.round(ms), ...ctx };
     slowRing.push(entry);
     if (slowRing.length > SLOW_RING_SIZE) slowRing.splice(0, slowRing.length - SLOW_RING_SIZE);
-    uyari("yavas-istek", formatSlowRequestLine(entry));
+    logSlowRequest(entry);
   }
 }
 
@@ -204,6 +244,9 @@ export function latencySnapshot(): {
 /** Sayaçları sıfırla (admin POST /perf/reset — audit'i route katmanı yazar). */
 export function resetLatencyStats(): void {
   stats.clear();
+  slowLogWindowStart = 0;
+  slowLogCount = 0;
+  slowLogSuppressed = 0;
   slowRing.length = 0;
   totalCount = 0;
   statsSince = Date.now();
