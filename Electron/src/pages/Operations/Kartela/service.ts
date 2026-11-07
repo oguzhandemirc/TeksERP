@@ -103,6 +103,73 @@ export interface KartelaReceiptDetail {
   }>;
 }
 
+// ---------------------------------------------------------------------------
+// Yazma uçları — gövdeler tablet `mobil/src/services/kartela.service.ts` ile
+// birebir (backend `kartela.controller.ts` zod şemaları sessiz allowlist).
+// ---------------------------------------------------------------------------
+
+export interface KartelaDispatchRequest {
+  subcontractorId: string;
+  rollIds: string[];
+  plateNumber: string | null;
+  driverName: string | null;
+  notes: string | null;
+}
+
+export interface KartelaReceiveReturn {
+  rollId: string;
+  count: number;
+  bulkLengthCm: number | null;
+  bulkWeightKg: number | null;
+  /** Tek-tek ölçüm — varsa uzunluğu `count`a eşit (backend doğrular). */
+  items?: Array<{ lengthCm: number | null; weightKg: number | null }>;
+}
+
+export interface KartelaReceiveRequest {
+  subcontractorId: string;
+  dispatchId: string | null;
+  manifestNo: string | null;
+  notes: string | null;
+  returns: KartelaReceiveReturn[];
+}
+
+/** Kabul worklist'i — firmadaki AT_KARTELA toplar (sevk kalemi bazlı). */
+export interface KartelaOutstandingItem {
+  dispatchedQty: number;
+  dispatchedWeight: number | null;
+  dispatch: {
+    id: string;
+    dispatchNo: string;
+    dispatchedAt: string;
+    subcontractor: { id: string; name: string };
+  };
+  roll: {
+    id: string;
+    barcode: string | null;
+    currentQty: number;
+    width: number | null;
+    weightKg: number | null;
+    qualityGrade: string;
+    markedForKartela: boolean;
+    item: { code: string; name: string };
+    color: { code: string; name: string } | null;
+    properties: { property: { id: string; name: string; color: string | null } }[];
+  };
+}
+
+export interface KartelaReceiptCancelPreview {
+  receiptNo: string;
+  cancellable: boolean;
+  swatches: Array<{
+    id: string;
+    cardNumber: string;
+    barcode: string;
+    item: { code: string; name: string };
+    blockingReasons: string[];
+    safeToCancel: boolean;
+  }>;
+}
+
 /**
  * useDataTable `CursorParams` → backend kartela list querystring.
  * Filtreler FilterBar'dan `filter[subcontractorId]` / `filter[status]` olarak
@@ -154,6 +221,43 @@ export const kartelaService = {
   getReceipt(id: string): Promise<ApiResponse<KartelaReceiptDetail>> {
     return apiClient
       .get<ApiResponse<KartelaReceiptDetail>>(`/api/kartela/receipts/${id}`)
+      .then((r) => r.data);
+  },
+
+  /** Yeni kartela sevki — yanıt `data.id` çeki diyaloğunu açar. */
+  dispatch(body: KartelaDispatchRequest): Promise<ApiResponse<{ id: string; dispatchNo: string }>> {
+    return apiClient
+      .post<ApiResponse<{ id: string; dispatchNo: string }>>("/api/kartela/dispatch", body)
+      .then((r) => r.data);
+  },
+
+  cancelDispatch(id: string, reason: string): Promise<ApiResponse<unknown>> {
+    return apiClient
+      .post<ApiResponse<unknown>>(`/api/kartela/dispatches/${id}/cancel`, { reason })
+      .then((r) => r.data);
+  },
+
+  outstanding(): Promise<ApiResponse<KartelaOutstandingItem[]>> {
+    return apiClient
+      .get<ApiResponse<KartelaOutstandingItem[]>>("/api/kartela/outstanding")
+      .then((r) => r.data);
+  },
+
+  receive(body: KartelaReceiveRequest): Promise<ApiResponse<{ id: string; receiptNo: string }>> {
+    return apiClient
+      .post<ApiResponse<{ id: string; receiptNo: string }>>("/api/kartela/receive", body)
+      .then((r) => r.data);
+  },
+
+  getReceiptCancelPreview(id: string): Promise<ApiResponse<KartelaReceiptCancelPreview>> {
+    return apiClient
+      .get<ApiResponse<KartelaReceiptCancelPreview>>(`/api/kartela/receipts/${id}/cancel-preview`)
+      .then((r) => r.data);
+  },
+
+  cancelReceipt(id: string, reason: string): Promise<ApiResponse<unknown>> {
+    return apiClient
+      .post<ApiResponse<unknown>>(`/api/kartela/receipts/${id}/cancel`, { reason })
       .then((r) => r.data);
   },
 };
