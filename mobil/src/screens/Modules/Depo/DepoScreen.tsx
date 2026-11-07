@@ -64,6 +64,7 @@ import { CustomerCodeMatchNote } from '../../../components/customerCode/Customer
 import { scanMatchOf } from '../../../components/customerCode/customerCodeLogic';
 import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import OwnerBadge from '../../../components/OwnerBadge';
+import { palette } from '../../../theme/tokens';
 import {
   OWNERSHIP_TABS,
   effectiveOwnershipScope,
@@ -664,7 +665,7 @@ export default function DepoScreen() {
                     testID={`depo-owner-${t.key}`}
                     style={[styles.statusChip, styles.ownerChip, active && styles.ownerChipActive]}
                   >
-                    <Text style={[styles.statusChipText, active && { color: '#fff' }]}>{t.label}</Text>
+                    <Text style={[styles.statusChipText, active && { color: palette.white }]}>{t.label}</Text>
                   </TouchableRipple>
                 );
               })}
@@ -1318,11 +1319,11 @@ const styles = StyleSheet.create({
   tabsScroll: { flex: 1 },
   tabsRowPhone: { flexDirection: 'column', alignItems: 'stretch' },
   ownerTabs: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  ownerTabsLabel: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  ownerTabsLabel: { fontSize: 12, fontWeight: '700', color: palette.slate[500] },
   ownerBadgeInline: { alignSelf: 'center' },
   // Saha dokunma hedefi ≥56dp (mobil/CLAUDE.md); mevcut sekme çipleri bu dilimde değişmez.
   ownerChip: { minHeight: 56, minWidth: 64, justifyContent: 'center', alignItems: 'center' },
-  ownerChipActive: { backgroundColor: '#0e7490', borderColor: '#0e7490' },
+  ownerChipActive: { backgroundColor: palette.cyan[700], borderColor: palette.cyan[700] },
 
   listContent: { padding: 4 },
   footerLoader: { paddingVertical: 16, alignItems: 'center' },
