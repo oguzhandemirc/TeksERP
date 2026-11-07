@@ -146,7 +146,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `Electron/src/pages/System/tile-route-permission.test.ts` | Sistem karolari ile route izinlerinin hizasi: karo `permission` tasiyorsa route AYNI kodu istemeli, tasimiyorsa hub varsayilani (admin:settings); ayri |  | ✓ |  |
 | `Electron/src/services/apiClient.test.ts` | apiClient interceptor sozlesmesi: onceden set edilmis Authorization EZILMEZ (logout revoke'u yakalanan token'la gider), Date header'dan sunucu saati o |  |  |  |
 | `Electron/src/store/auth.logout.test.ts` | Local-first cikis sozlesmesi: logout revoke istegini BEKLEMEZ (yerel temizlikle cozulur), revoke arka planda YAKALANMIS token'la gider, logout ASLA re |  |  |  |
-| `Electron/src/store/tabs.logout.test.ts` | Cikista kalici sekme defteri ('teks.tabs') temizlenir — yoksa cikan kisinin musteri/siparis basliklı sekmeleri sonraki kullanicida acilir (ortak fabri |  | ✓ |  |
+| `Electron/src/store/tabs.session.test.tsx` | Cikista kalici sekme defteri ('teks.tabs') temizlenir — yoksa cikan kisinin musteri/siparis basliklı sekmeleri sonraki kullanicida acilir (ortak fabri |  | ✓ |  |
 | `Electron/src/test/login-totp.test.ts` | Iki adimli dogrulama istemci sozlesmesi: TOTP_REQUIRED / ENROLLMENT_REQUIRED / INVALID uc durumu birbirine karismaz (backend uc ayri HTTP kodu verir,  |  | ✓ |  |
 | `Electron/src/types/auth.test.ts` | Izin eslesmesi backend rbac ile birebir: global `*` her seyi acar, tek seviye `admin:*` yalniz kendi domainini, `admin:users` TUM admin'i acmaz; hasAd |  | ✓ |  |
 | `Teks-Erp/scripts/test_admin_guard_race.ts` | Son aktif efektif admin'in pasifleştirilemez/silinemez olmasını ve çapraz eşzamanlı istekte advisory-lock ile TAM birinin geçmesini kilitler. | ✓ |  |  |
@@ -402,7 +402,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `Electron/src/pages/Operations/StockCounts/StockCountDetailPage.test.tsx` | Sayim kagidinin okutma/yazma yuzeyi: listede olmayan barkod sessiz gecmez ve satir isaretlemez, listedeki barkod tek okutmada 'bulundu', TASLAK olmaya |  | ✓ |  |
 | `Electron/src/services/api-path-prefix.test.ts` | Mekanik tarama: apiClient baseURL'i /api ICERMEZ, bu yuzden src/ altindaki her servis cagrisi yolu TAM yazmali (/api/...); onek unutmak derlemede/test |  | ✓ |  |
 | `Electron/src/store/tabs.back.test.ts` | Sekme defteri ↔ router senkronu ve 'geri': store'un router'a ne dedigi ve defteri nasil guncelledigi olculur (tab-routers mocklanir, gercek registry t |  |  |  |
-| `Electron/src/store/tabs.logout.test.ts` | Cikista kalici sekme defteri ('teks.tabs') temizlenir — yoksa cikan kisinin musteri/siparis basliklı sekmeleri sonraki kullanicida acilir (ortak fabri |  | ✓ |  |
+| `Electron/src/store/tabs.session.test.tsx` | Cikista kalici sekme defteri ('teks.tabs') temizlenir — yoksa cikan kisinin musteri/siparis basliklı sekmeleri sonraki kullanicida acilir (ortak fabri |  | ✓ |  |
 | `Electron/src/test/app-drag-region.test.ts` | OS pencere-surukleme bolgesi (-webkit-app-region): portal'lanan HER katman turu global no-drag kuralinda listeli olmali ve hicbir yuzey pencerenin TAM |  |  |  |
 | `Electron/src/test/boss-shell.test.ts` | Patron kabugu: App.tsx'in 'hangi kabuk' karari ile content-routes kaydi AYNI yoldan (BOSS_PATH) beslenir — ayrisirsa kabuk acilir ici bos kalir; hash  |  | ✓ |  |
 | `Electron/src/test/scrollbar-theme.test.ts` | Kaydirma cubugu global kurali postcss ile AYRISTIRILARAK olculur (metin aramaz): renk `--primary` token'indan beslenir, sonuk→belirgin (YOK→VAR degil) |  |  |  |
