@@ -11,12 +11,35 @@
 
 import { Request, Response, NextFunction } from "express";
 import {
-  recordLatency,
+  recordLatencySample,
   UNMATCHED_ROUTE_KEY,
   STATIC_ROUTE_KEY,
+  type SlowRequestContext,
 } from "../services/latency-stats.service";
 import { noteLatencyDelta } from "../services/latency-persist.service";
 import { isLongLivedNotificationPath } from "../constants/notification-stream";
+import { readClientLabelHeaders } from "../constants/client-info";
+import { redactSecretQueryParams } from "../utils/url-redaction";
+
+/** Yavaş istek kaydındaki sorgu dizgisi tavanı — uzun filtre listeleri satırı boğmasın. */
+const SLOW_QUERY_MAX = 300;
+
+/** `?` sonrası, sır parametreleri MASKELİ (`redactSecretQueryParams`); sorgu yoksa null. */
+export function redactedQueryOf(url: string): string | null {
+  const redacted = redactSecretQueryParams(url);
+  const q = redacted.indexOf("?");
+  if (q === -1 || q === redacted.length - 1) return null;
+  return redacted.slice(q + 1, q + 1 + SLOW_QUERY_MAX);
+}
+
+function slowContextOf(req: Request): SlowRequestContext {
+  return {
+    reqId: req.reqId ?? null,
+    userId: req.user?.userId ?? null,
+    clientType: readClientLabelHeaders(req.headers).kind ?? req.device?.kind ?? null,
+    query: redactedQueryOf(req.originalUrl ?? req.url ?? ""),
+  };
+}
 
 const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NUMERIC_SEGMENT = /^\d+$/;
@@ -108,7 +131,7 @@ export function latencyMiddleware(req: Request, res: Response, next: NextFunctio
     recorded = true;
     const ms = Number(process.hrtime.bigint() - startNs) / 1e6;
     const routeKey = resolveRouteKey(req, status);
-    recordLatency(req.method, routeKey, status, ms); // RAM (canlı snapshot)
+    recordLatencySample({ method: req.method, routeKey, status, ms, slowContext: () => slowContextOf(req) }); // RAM (canlı snapshot)
     noteLatencyDelta(req.method, routeKey, status, ms); // günlük özet delta'sı (Faz 3)
   };
   // finish = cevap tamamlandı; close = soket kapandı (abort'ta finish gelmez —

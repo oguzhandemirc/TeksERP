@@ -37,6 +37,10 @@ const PERF_SLOW_EXPORT_COLUMNS: ExportColumn<SlowRequest>[] = [
   { label: "Uç (endpoint)", value: (s) => s.route },
   { label: "Durum", value: (s) => (s.status === 499 ? "499 (istemci vazgeçti)" : s.status) },
   { label: "Süre (ms)", value: (s) => s.ms },
+  { label: "İstek kimliği", value: (s) => s.reqId ?? "" },
+  { label: "Kullanıcı kimliği", value: (s) => s.userId ?? "" },
+  { label: "İstemci", value: (s) => s.clientType ?? "" },
+  { label: "Sorgu", value: (s) => s.query ?? "" },
 ];
 
 /** Endpoint Performansı — Faz 2/3 gözlemlenebilirlik ekranı.
@@ -134,13 +138,14 @@ export function PerfPage() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">Yavaş İstek Defteri (≥1 sn, son 50)</CardTitle>
+            <CardTitle className="text-base">Yavaş İstek Defteri (≥0,5 sn, son 50)</CardTitle>
             <ListExportMenu
               name="Yavaş İstek Defteri"
               rows={snap?.slowRequests ?? []}
               columns={PERF_SLOW_EXPORT_COLUMNS}
               notes={[
-                "Yalnız ≥1 sn süren son 50 istek (en yenisi başta) — tüm istekler değil.",
+                "Yalnız ≥0,5 sn süren son 50 istek (en yenisi başta) — tüm istekler değil.",
+                "İstek kimliği sunucu erişim günlüğündeki rid= değeridir (günlükte aranabilir).",
                 "Defter süreç belleğindedir; sunucu yeniden başlarsa veya sayaçlar sıfırlanırsa boşalır.",
                 "Durum 499 = istemci yanıtı beklemekten vazgeçti (zaman aşımı / pencere kapandı).",
               ]}

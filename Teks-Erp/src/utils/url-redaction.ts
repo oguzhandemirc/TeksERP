@@ -19,6 +19,13 @@ export const SECRET_QUERY_PARAMS: ReadonlySet<string> = new Set([
   "totp",
   "secret",
   "sir",
+  // 2026-11-07: `code` BİLEREK yok — `?code=` iş verisidir (barkod/makine/maliyet kodu çözümü).
+  "quickpin",
+  "key",
+  "apikey",
+  "otp",
+  "imza",
+  "signature",
 ]);
 
 export const REDACTED_VALUE = "***";

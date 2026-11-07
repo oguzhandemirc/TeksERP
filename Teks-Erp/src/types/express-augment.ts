@@ -51,6 +51,14 @@ declare module "express-serve-static-core" {
     collector?: { id: string; name: string; machineIds: string[] };
     /** Kart yolunda ham istek gövdesi (imza ham bayta atılır) — `captureCollectorRawBody` doldurur. */
     collectorRawBody?: Buffer;
+    /** Log/başlık istek kimliği — `requestIdMiddleware` doldurur: süzgeçten geçen `x-request-id` ya da `serverRequestId`. */
+    reqId?: string;
+    /** Sunucunun ürettiği UUID — audit `requestId` / `request_traces.id` bu; istemci seçemez. */
+    serverRequestId?: string;
+  }
+  interface Locals {
+    /** 4xx/5xx yanıtın `details.code`u — `requestIdMiddleware`in `res.json` sarmalı yazar. */
+    errorCode?: string;
   }
 }
 

@@ -40,7 +40,8 @@ const storage = new AsyncLocalStorage<RequestContext>();
 
 /** İsteği bağlam içinde çalıştırır — middleware tarafından çağrılır. */
 export function runWithRequestContext(req: Request, fn: () => void): void {
-  storage.run({ req, requestId: randomUUID(), audit: { count: 0 } }, fn);
+  // Kimlik `requestIdMiddleware`in sunucu ürettiği UUID'dir (X-Request-Id ile aynı); yoksa burada üretilir.
+  storage.run({ req, requestId: req.serverRequestId ?? randomUUID(), audit: { count: 0 } }, fn);
 }
 
 /** İstek başlığı (`request-trace.middleware`) için kimlik + audit sayacı tutucusu; bağlam yoksa null. */

@@ -2,13 +2,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { SlowRequest } from "./perfService";
 import { factoryLocaleString } from "@/lib/factory-time";
 
-/** Yavaş istek defteri (≥1sn, son 50 — en yenisi başta). 499 = istemci bekledi
+/** Yavaş istek defteri (≥0,5 sn, son 50 — en yenisi başta). 499 = istemci bekledi
  *  ama vazgeçti (timeout/pencere kapandı) — çoğu zaman EN önemli satırlar. */
 export function SlowList({ items }: { items: SlowRequest[] }) {
   if (items.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        Yavaş istek yok (≥1sn eşiği) — güzel haber.
+        Yavaş istek yok (≥0,5 sn eşiği) — güzel haber.
       </p>
     );
   }
@@ -20,6 +20,7 @@ export function SlowList({ items }: { items: SlowRequest[] }) {
           <TableHead>Endpoint</TableHead>
           <TableHead className="text-right">Durum</TableHead>
           <TableHead className="text-right">Süre</TableHead>
+          <TableHead>İstek kimliği</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -36,6 +37,9 @@ export function SlowList({ items }: { items: SlowRequest[] }) {
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
               {(s.ms / 1000).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} sn
+            </TableCell>
+            <TableCell className="font-mono text-xs text-muted-foreground" title={s.query ? `?${s.query}` : undefined}>
+              {s.reqId ?? "—"}
             </TableCell>
           </TableRow>
         ))}

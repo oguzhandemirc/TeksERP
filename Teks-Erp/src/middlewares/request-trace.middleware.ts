@@ -3,7 +3,7 @@
 // =============================================================================
 // `runWithRequestContext`in hemen ARKASINA bağlanır: kimlik ALS'tan gelir, audit'in `requestId`siyle
 // aynıdır. `finish`te SENKRON anlık görüntü alınır ve kuyruğa bırakılır — istek yolunda await/DB yok.
-// GÖVDE/sorgu/başlık değeri saklanmaz; `res.json` sarmalı gövdeden YALNIZ `details.code`u okur.
+// GÖVDE/sorgu/başlık değeri saklanmaz; hata kodu `res.locals.errorCode`dan (`request-id.middleware`).
 // =============================================================================
 
 import type { Request, Response, NextFunction } from "express";
@@ -27,26 +27,12 @@ export function resolveTraceRouteKey(req: Request): string {
   return (key === "" ? "/" : key).slice(0, 160);
 }
 
-function readErrorCode(body: unknown): string | null {
-  if (!body || typeof body !== "object") return null;
-  const details = (body as { details?: unknown }).details;
-  if (!details || typeof details !== "object") return null;
-  const code = (details as { code?: unknown }).code;
-  return typeof code === "string" && code !== "" ? code.slice(0, 60) : null;
-}
-
 export function requestTraceMiddleware(req: Request, res: Response, next: NextFunction): void {
   const tc = currentTraceContext();
   if (!tc) return next();
-  res.setHeader("X-Request-Id", tc.requestId);
+  // `X-Request-Id` başlığı ve `details.code` yakalama `requestIdMiddleware`in (morgan'dan önce, tek sahip).
   const startedAt = new Date();
   const startNs = process.hrtime.bigint();
-  let errorCode: string | null = null;
-  const origJson = res.json.bind(res);
-  res.json = ((body?: unknown) => {
-    if (res.statusCode >= 400) errorCode = readErrorCode(body);
-    return origJson(body);
-  }) as Response["json"];
 
   res.on("finish", () => {
     try {
@@ -69,7 +55,7 @@ export function requestTraceMiddleware(req: Request, res: Response, next: NextFu
         routeKey,
         status,
         durationMs: Number(process.hrtime.bigint() - startNs) / 1e6,
-        errorCode,
+        errorCode: res.locals.errorCode ?? null,
         audit: tc.audit,
         createdAt: startedAt,
       });
