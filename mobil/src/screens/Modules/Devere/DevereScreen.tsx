@@ -8,7 +8,7 @@
 // Kuyruk YOK (online-only); çevrimdışıyken butonlar kilitli, sebebi ayrı yazılır.
 // Kalıp: ince kabuk + görünüm bileşenleri + ekran-hook + saf mantık (MOBIL.md).
 // =============================================================================
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +17,7 @@ import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { colors, spacing, typography } from '../../../theme';
 import { useDevereScreen } from './useDevereScreen';
-import BeamList from './BeamList';
+import BeamList, { type BeamTab } from './BeamList';
 import PlanModal from './PlanModal';
 import WindModal from './WindModal';
 import BeamActionModals from './BeamActionModals';
@@ -33,6 +33,8 @@ export default function DevereScreen() {
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
   const state = useDevereScreen();
+  // El terminali: tezgah sekmesinde tuş levent-tak bandına, diğer sekmelerde sar bandına gider (tek etkin bant).
+  const [tab, setTab] = useState<BeamTab>('planned');
   const station = useWindStation({ context: state.context.data, planned: state.planned, recent: state.todayWound, isOnline: state.isOnline });
 
   const bottomBar = (
@@ -56,7 +58,7 @@ export default function DevereScreen() {
     <ScreenChrome title="Levent Sarım" statusLine={state.context.data ? `${state.context.data.machines.length} devere makinesi` : undefined}>
       {compact ? (
         <View style={styles.root}>
-          <BeamList state={state} />
+          <BeamList state={state} tab={tab} onTab={setTab} />
           {bottomBar}
         </View>
       ) : (
@@ -65,9 +67,9 @@ export default function DevereScreen() {
             <WindStationForm station={station} context={state.context.data} isOnline={state.isOnline} busyBeams={state.physicalBusyBeams} knownBeams={[...state.planned, ...state.todayWound]} />
           </ScrollView>
           <View style={styles.rightCol}>
-            <WindScanColumn station={station} />
+            <WindScanColumn station={station} listening={!(tab === 'mounted' && state.mountTracking)} />
             <View style={styles.grow}>
-              <BeamList state={state} />
+              <BeamList state={state} tab={tab} onTab={setTab} />
             </View>
             {bottomBar}
             <NumpadHost style={styles.numpad} />

@@ -130,6 +130,20 @@ Envanter 5–12, 14–16, 18–20, 24, 28–31: adım/öncelik hedefleri (PlaceC
 doğrulama öncelikli, Tambur kart/kesme/çıkan top, CuvalDuzelt top→hedef, FasonSevk kart→top, Devere/Dokuma
 levent ekranları). Belirsiz ekran → kullanıcıya rapor (ekran görüntüsü).
 Kabul: ekran başına hedef testi (hangi adımda hangi işleyici) + cihaz tetik listesi.
+Uygulanan kural (ekran durumu yönlendirir; önek/biçim yönlendirmesi KULLANILMADI — sunucu çözer, yanlış tipi
+ekran reddeder). Varsayılan dinleyici kapalı tarayıcı; ikincil okutma düğmesi kendi görünür panelini açar ve üstte
+olduğu için okumayı o alır; açık AppModal arka planı örter (D2b kuralı).
+- Tambur: varsayılan refakat kartı; Kesme / Çıkan Toplar / Topu Buraya Al kendi paneli ("Tara" çipi okuyucu
+  paneli açar). Topu Buraya Al sheet'i açıkken tuş top barkodu (sheet `scanPassThrough`, dinleyici kardeş).
+- Fason Sevk: iş emri seçilmemişken kart; iş emri + adım seçiliyken top (sonuç kartı bandın altında); arada yok.
+- KK1: tezgah etiketi barı görünürken tezgah etiketi; etiket doğrulama kendi panelinden (plan "doğrulama
+  öncelikli" demişti — biçimle ayırmak yerine düğmeyle açılan panel seçildi, bekleyen sayacı düğmede).
+- Çuval Düzelt: varsayılan top bul; "Taşı" paneli açıkken hedef çuvaldaki top.
+- Levent Sarım: sekme üst bileşende; "Tezgahta" sekmesinde levent-tak bandı, diğerlerinde sar bandı (yalnız etkin
+  bant "tuşa basın" gösterir). Tak formu (sheet): tezgah etiketi (oturum makinesi yoksa). Dokuma levent bandı:
+  çevrimiçiyken.
+- Yer onayı: seçim görünümünde (yükleme/oturum açma sürmüyorken) makine QR'ı.
+- Dokunulmayanlar (zaten panelle kamerasız, açık eylem): Sevkiyat yük ekleme akışı, müşteri kodu bağlama sheet'i.
 
 ### D4 — Adnan Şahin teslim yolu (yalnız plan; uygulama kullanıcı kararıyla)
 Bulgular: Adnan tableti eski kanal (`com.teks.erp.mobil`, `runtimeVersion` 54.2, `deploy/kanallar.json`

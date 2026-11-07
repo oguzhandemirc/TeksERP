@@ -29,9 +29,9 @@ function BeamScanBand({ locked, onScanBeam, scanMessage }: Pick<Props, 'locked' 
   const [camera, setCamera] = useState(false);
   return (
     <View style={styles.scan}>
-      <ScannerEntryBar value={value} onChangeText={setValue} placeholder="Levent etiketi okut/yaz…" onResolve={() => { onScanBeam(value); setValue(''); }} onScan={() => setCamera(true)} scanCtaLabel="Levent etiketini okut → tak" tone="blue" inputDisabled={locked} />
+      <ScannerEntryBar value={value} onChangeText={setValue} placeholder="Levent etiketi okut/yaz…" onResolve={() => { onScanBeam(value); setValue(''); }} onScan={() => setCamera(true)} scanCtaLabel="Levent etiketini okut → tak" tone="blue" inputDisabled={locked} hardwareListening={!locked} />
       {scanMessage ? <Text style={styles.scanMessage}>{scanMessage}</Text> : null}
-      <BarcodeScannerModal visible={camera} title="Levent etiketini okut" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); onScanBeam(c); }} />
+      <BarcodeScannerModal visible={camera} listenWhileHidden={!locked} title="Levent etiketini okut" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); onScanBeam(c); }} />
     </View>
   );
 }

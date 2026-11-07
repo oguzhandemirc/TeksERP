@@ -23,9 +23,9 @@ export default function BeamMountBand({ mount, isOnline }: { mount: BeamMountSta
   };
   return (
     <View style={styles.root} testID="beam-mount-band">
-      <ScannerEntryBar value={value} onChangeText={setValue} placeholder="Levent etiketi okut/yaz…" onResolve={() => submit(value)} resolving={mount.lookup} onScan={() => setCamera(true)} scanCtaLabel="Levent tak — etiketi okut" tone="blue" inputDisabled={!isOnline} />
+      <ScannerEntryBar value={value} onChangeText={setValue} placeholder="Levent etiketi okut/yaz…" onResolve={() => submit(value)} resolving={mount.lookup} onScan={() => setCamera(true)} scanCtaLabel="Levent tak — etiketi okut" tone="blue" inputDisabled={!isOnline} hardwareListening={isOnline} />
       {mount.form.scanMessage ? <Text style={styles.message}>{mount.form.scanMessage}</Text> : null}
-      <BarcodeScannerModal visible={camera} title="Levent etiketini okut" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); submit(c); }} />
+      <BarcodeScannerModal visible={camera} listenWhileHidden={isOnline} title="Levent etiketini okut" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); submit(c); }} />
       <MountModal state={mount.form} loomMachines={mount.loomMachines} methodRequired={mount.methodRequired} isOnline={isOnline} />
     </View>
   );
