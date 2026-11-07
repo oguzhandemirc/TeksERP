@@ -24,6 +24,8 @@ import { useSubcontractorDefault } from '../../hooks/useSubcontractorDefault';
 import { kuruluVersionName, otaKimlik, paketEtiketi } from '../../services/appUpdate.service';
 import type { RootStackParamList } from '../../navigation/types';
 import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
+import { scanMenuSummary } from '../../services/hardwareScanner/resolveScanMethod';
+import { useScanMethod } from '../../hooks/useScanMethod';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -43,6 +45,7 @@ export default function SettingsScreen() {
   const baseUrl = useBaseUrlStore((s) => s.baseUrl);
   const customUrl = useBaseUrlStore((s) => s.customUrl);
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
+  const scanMethodKind = useScanMethod().method.kind;
   const scanSoundEnabled = useDeviceSettingsStore((s) => s.scanSoundEnabled);
   const paired = useDeviceStore((s) => s.paired);
   const active = useSessionStore((s) => s.active);
@@ -86,7 +89,7 @@ export default function SettingsScreen() {
       // Menü satırı sayfadaki AYARLARIN ÖZETİDİR — sayfaya ikinci bir anahtar
       // eklenince özet de büyümeli, yoksa "ses kapalı" durumu menüden görünmez.
       value: [
-        manualBarcodeEntry ? 'Elle barkod girişi açık' : 'Sadece kamera',
+        scanMenuSummary(scanMethodKind, manualBarcodeEntry),
         scanSoundEnabled ? 'ses açık' : 'ses kapalı',
       ].join(' · '),
       route: 'SettingsScanner',

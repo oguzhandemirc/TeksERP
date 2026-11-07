@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 import { storage } from '../utils/storage';
+import {
+  parseHardwareLink,
+  parseScanMethodPref,
+  type HardwareLink,
+  type ScanMethodPref,
+} from '../services/hardwareScanner/resolveScanMethod';
 
 // =============================================================================
 // Cihaz-bazlı operatör ayarları. Sunucudan bağımsız — kamera donanım sorunu
@@ -17,6 +23,8 @@ const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
 const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
 const CAMERA_FACING_KEY = 'device_camera_facing';
+const SCAN_METHOD_KEY = 'device_scan_method';
+const HARDWARE_LINK_KEY = 'device_hardware_link';
 // ⚠️ 2026-08-19: kısa kesim ayarı MERKEZE taşındı (feature-flags). Cihazda artık
 // "bayrak + eşik" değil, ÜÇ DURUMLU override yaşar. Eski anahtarlar
 // (`tambur_short_cut_a1_enabled` / `..._threshold`) sahaya HİÇ ÇIKMADI (APK
@@ -149,6 +157,13 @@ interface DeviceSettingsState {
   tamburShortCutA1Override: ShortCutOverrideMode;
   /** 'on' modunda geçerli eşik (metre). null = girilmemiş → kural inert. */
   tamburShortCutA1DeviceThresholdM: number | null;
+  /**
+   * Okutma yöntemi (el terminali, 2026-11-07): Otomatik (varsayılan) · Donanım okuyucu · Kamera. CİHAZDA:
+   * okuyucunun varlığı cihaza bağlıdır. Otomatik okuyucusuz cihazda kameradır = bugünkü davranış.
+   */
+  scanMethod: ScanMethodPref;
+  /** Donanım bağlantısı: Otomatik (tanınan okuyucu intent ile) · Klavye (yedek, wedge'e zorla). */
+  hardwareLink: HardwareLink;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -169,6 +184,8 @@ interface DeviceSettingsState {
   setCameraFacing: (v: CameraFacing) => Promise<void>;
   setTamburShortCutA1Override: (v: ShortCutOverrideMode) => Promise<void>;
   setTamburShortCutA1DeviceThresholdM: (v: number | null) => Promise<void>;
+  setScanMethod: (v: ScanMethodPref) => Promise<void>;
+  setHardwareLink: (v: HardwareLink) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -209,10 +226,12 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   cameraFacing: 'back',
   tamburShortCutA1Override: 'server',
   tamburShortCutA1DeviceThresholdM: null,
+  scanMethod: 'auto',
+  hardwareLink: 'auto',
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, scanMethod, hardwareLink] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -227,6 +246,8 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(CAMERA_FACING_KEY),
         storage.getItem(TAMBUR_SHORT_CUT_A1_OVERRIDE_KEY),
         storage.getItem(TAMBUR_SHORT_CUT_A1_DEVICE_THRESHOLD_KEY),
+        storage.getItem(SCAN_METHOD_KEY),
+        storage.getItem(HARDWARE_LINK_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -261,8 +282,21 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         const n = shortCutThreshold == null ? NaN : Number(shortCutThreshold);
         return Number.isFinite(n) && n > 0 ? n : null;
       })(),
+      // Bilinmeyen/bozuk kayıt → 'auto' (bugünkü davranış okuyucusuz cihazda kamera).
+      scanMethod: parseScanMethodPref(scanMethod),
+      hardwareLink: parseHardwareLink(hardwareLink),
       isLoaded: true,
     });
+  },
+
+  setScanMethod: async (v) => {
+    set({ scanMethod: v });
+    await storage.setItem(SCAN_METHOD_KEY, v);
+  },
+
+  setHardwareLink: async (v) => {
+    set({ hardwareLink: v });
+    await storage.setItem(HARDWARE_LINK_KEY, v);
   },
 
   setManualBarcodeEntry: async (v) => {

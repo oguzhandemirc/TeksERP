@@ -17,6 +17,7 @@ import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RootNavigator from './src/navigation/RootNavigator';
 import { NumpadProvider } from './src/components/NumpadProvider';
+import HardwareScannerHost from './src/components/HardwareScannerHost';
 import { SimplePortalHost, SimplePortalScope } from './src/components/SimplePortal';
 import { toastConfig } from './src/components/ToastConfig';
 import {
@@ -157,6 +158,8 @@ export default function App() {
                   Kayıt yokken hiçbir şey render etmez; her kayıt kendi absoluteFill
                   + box-none katmanında (paper PortalManager yerleşiminin aynısı). */}
               <SimplePortalHost />
+              {/* El terminali donanım okuyucusu (yerel adaptör ya da görünmez klavye kaması) — tek sahip. */}
+              <HardwareScannerHost />
             </PaperProvider>
             {/* Toast, PaperProvider'ın DIŞINDA ve ondan SONRA durur. Tüm modallar
                 (AppModal → SimplePortal) PaperProvider içindeki SimplePortalHost'a
