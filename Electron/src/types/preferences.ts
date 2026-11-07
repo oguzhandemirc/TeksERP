@@ -76,6 +76,9 @@ export interface AppPreferences {
      *   genis    — + iş emri yok, bu hafta terminli, tutar
      */
     statsView?: "sade" | "onerilen" | "genis";
+    /** "Excel (stok kalemi bazında)" modalının son seçimi — şekli `stock-line-export/options.ts`
+     *  sahiplenir ve okurken süzer (bozuk/eski → varsayılan); burada bilerek `unknown`. */
+    stockLineExport?: unknown;
   };
   /** Tezgah alarmı — kişisel tercih (aynı kişi başka bilgisayarda da aynı ayarı bulur). */
   loomAlarm?: {
