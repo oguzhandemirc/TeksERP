@@ -49,6 +49,18 @@ import { assertItemUsable } from "./helpers/item-usage.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 import { TERIM } from "../constants/terim";
+import { CARD_CODE_LOCK_SCOPE, assertCodeFreeInOtherKind, assertNameFreeInOtherKind, cardCodesWithPrefix } from "./helpers/card-identity.helper";
+import {
+  findLegacyServiceById,
+  findLegacyServiceList,
+  isServiceItemId,
+  legacyResponse,
+  serviceItemIdsOf,
+  wantsLegacyServiceList,
+} from "./helpers/legacy-service-item.helper";
+import { serviceItemService } from "./service-item.service";
+import type { PaginatedResponse } from "../types/api.types";
+import type { CursorPaginatedResponse } from "./base.service";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -104,7 +116,8 @@ const ITEM_CODE_TEXTS: CodeUniquenessTexts = {
   activeExactLead: "Bu kod ile aktif ürün zaten var",
   entityLabel: "ürün",
 };
-const ITEM_CODE_LOCK_SCOPE = "item";
+/** Hizmet kartı yolu aynı kapsamı kilitler (`card-identity.helper`) — kod uzayı iki tabloda ortak. */
+const ITEM_CODE_LOCK_SCOPE = CARD_CODE_LOCK_SCOPE;
 /** Yaşam döngüsü kolonları — genel PATCH gövdesinden yazılamaz (tek yazar). */
 const LIFECYCLE_COLUMNS = ["lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason"] as const;
 /** Kod çakışması araması: tüm ürünler tek select ile çekilir, katlama JS'te yapılır
@@ -147,16 +160,9 @@ async function nextItemCode(): Promise<string> {
   // `/^STK-\d{1,12}$/` idi ve ön ek panelden değişince BÜTÜN satırları eledi —
   // sayaç 1'den başladı, ikinci ürün P2002'ye çarptı, fabrika ürün açamadı.
   // Yüklem artık `nextSeriesNo`un ÇÖZDÜĞÜ biçimden gelir (ikinci okuma yok).
+  // D1b: yükleyici hizmet kartı kodlarını da görür — taşınan hizmetler STK- kodunu korudu (K2), sayaç onlara çarpmasın.
   return nextSeriesNo("item", async (prefix, fmt) =>
-    prisma.item
-      .findMany({
-        where: { code: { gte: prefix, startsWith: prefix } },
-        select: { code: true, createdAt: true },
-      })
-      .then((rows) =>
-        rows
-          .filter((r) => codeCountsForCounter(fmt, r.code))
-          .map((r) => ({ code: r.code, createdAt: r.createdAt }))), new Date());
+    (await cardCodesWithPrefix(prefix)).filter((r) => codeCountsForCounter(fmt, r.code)), new Date());
 }
 
 /** E4: `warpSpecId` yalnız KUMAŞ kartında ve aktif bir çözgü kartını göstermeli (400); `null` temizler, `undefined` dokunmaz. */
@@ -240,6 +246,26 @@ export class ItemService extends BaseService {
     return conds.length === 1 ? conds[0] : { AND: conds };
   }
 
+  /** Ad tekilliği: tablo içi (BaseService) + hizmet kartları (iki yönlü, MV-04). */
+  protected async assertNameNotDuplicate(data: Record<string, unknown>, excludeId?: string): Promise<void> {
+    await super.assertNameNotDuplicate(data, excludeId);
+    if (typeof data.name === "string") await assertNameFreeInOtherKind(prisma, "item", data.name);
+  }
+
+  /** Eski panel `filter[itemType]=SERVICE` → hizmet kartları eski şekilde (uyumluluk yolu, plan §5). */
+  async findAll(req: Request): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
+    if (wantsLegacyServiceList(req)) return (await findLegacyServiceList(req)) as PaginatedResponse<unknown>;
+    return super.findAll(req);
+  }
+
+  /** Ürün kartı yoksa ve id bir hizmet kartıysa eski şekilde döner (uyumluluk yolu). */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    const res = await super.findById(id);
+    if (res.success) return res;
+    const legacy = await findLegacyServiceById(id);
+    return legacy ? { success: true, data: legacy } : res;
+  }
+
   /**
    * Item create — sade CRUD. allowedColors/allowedProperties M:N replace.
    *
@@ -318,6 +344,8 @@ export class ItemService extends BaseService {
     // kendi adı hariç tutulur (`resolveReactivateTarget` yalnız PASİF eş döner —
     // aktif eşte zaten 409 fırlatmış olurdu).
     await this.assertNameNotDuplicate(data, existing ? existing.id : undefined);
+    // Kod uzayı hizmet kartlarıyla ortak (MV-04, iki yönlü); nihai karar tx içinde kilit altında yeniden.
+    if (manualCode) await assertCodeFreeInOtherKind(prisma, "item", manualCode);
 
     if (allowedColorIds.length > 0) {
       const colors = await prisma.color.findMany({
@@ -369,6 +397,7 @@ export class ItemService extends BaseService {
               manualCode,
               await tx.item.findMany({ select: ITEM_CODE_CANDIDATE_SELECT }),
             );
+            await assertCodeFreeInOtherKind(tx, "item", manualCode);
           }
           if (target) {
             // Diriltme bir DURUM GEÇİŞİDİR (Pasif → Aktif) ve tek yazardan geçer: atomik
@@ -514,6 +543,8 @@ export class ItemService extends BaseService {
     // `isActive` genel güncellemenin skaler geçişinden ÇIKAR (BaseController'da yeni
     // skaler = yazılabilir alan kuralı): false = "Pasif'e geç" (kapılı), true = yalnız Pasif
     // kartı Aktif'e döndürür — form her kayıtta true gönderir, Tükenene kadar kart değişmemeli.
+    // Uyumluluk yolu: eski panel hizmet kartını `/api/items/:id` ile düzenler → hizmet kartı servisi.
+    if (await isServiceItemId(id)) return legacyResponse(await serviceItemService.update(id, rawData ?? {}, userId));
     const { isActive, ...data } = (rawData ?? {}) as Record<string, unknown>;
     if (isActive !== undefined) {
       if (typeof isActive !== "boolean") throw AppError.badRequest("'isActive' true/false olmalı");
@@ -791,6 +822,8 @@ export class ItemService extends BaseService {
     reason: string | null,
     userId?: string,
   ): Promise<ApiResponse<unknown> & { idempotent?: boolean }> {
+    // Hizmet kartı id'si → hizmet kartı tek yazarı (eski panel + çağıranlar; ürün yazıcısı `items`ı arar, 404 verirdi).
+    if (await isServiceItemId(id)) return legacyResponse(await serviceItemService.transitionLifecycle(id, to, reason, userId));
     return this.runTransition({ itemId: id, to, reason, userId: userId ?? null });
   }
 
@@ -818,6 +851,7 @@ export class ItemService extends BaseService {
    * birleştirme asla otomatik değildir).
    */
   async lifecyclePreview(id: string, to: ItemLifecycleStatus): Promise<ApiResponse<unknown>> {
+    if (await isServiceItemId(id)) return serviceItemService.lifecyclePreview(id, to);
     const item = await prisma.item.findUnique({
       where: { id },
       select: { id: true, code: true, name: true, lifecycleStatus: true, mergedIntoId: true },
@@ -851,7 +885,9 @@ export class ItemService extends BaseService {
    */
   async lifecycleSummary(ids: string[]): Promise<ApiResponse<Array<{ id: string; liveTotal: number; rolls: number }>>> {
     const rows: Array<{ id: string; liveTotal: number; rolls: number }> = [];
-    for (const id of [...new Set(ids)]) {
+    const services = await serviceItemIdsOf([...new Set(ids)]);
+    if (services.size > 0) rows.push(...(await serviceItemService.lifecycleSummary([...services])).data);
+    for (const id of [...new Set(ids)].filter((x) => !services.has(x))) {
       const counts = await countItemLiveRefs(prisma, id);
       rows.push({ id, liveTotal: totalLiveRefs(counts), rolls: counts.find((c) => c.kind === "ROLL")?.count ?? 0 });
     }
