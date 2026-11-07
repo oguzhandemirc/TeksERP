@@ -113,7 +113,7 @@ function statik(): void {
   check("§0f ⭐ E2b: owner DOĞUM yolundan — warp-beam PATCH şeması `ownerCustomerId`'yi ÇIKARIR, lot PATCH almaz, roll'da yalnız `initialEntrySchema`",
     /createSchema\.omit\(\{ clientToken: true, ownerCustomerId: true \}\)/.test(wbRoute) && !/ownerCustomerId/.test(lotUpdate) && (invCtl.match(/ownerCustomerId/g) ?? []).length >= 2 && !/PATCH.*ownerCustomerId/.test(invCtl));
   const draft = readFileSync(path.join(ROOT, "src/services/helpers/shipment-auto-draft.helper.ts"), "utf8");
-  check("§0g E4b: fatura taslağı emanet topu `warnings`e yazar (409 değil)", /ownerCustomerId !== null/.test(draft) && /warnings\.push\(`\$\{emanet\.length\} top müşterinin EMANET/.test(draft));
+  check("§0g E4b: fatura taslağı emanet topu `warnings`e yazar (409 değil)", /rolls\.filter\(\(r\) => isConsignedRoll\(r\)\)/.test(draft) && /warnings\.push\(`\$\{emanet\.length\} top müşterinin EMANET/.test(draft));
   const merge = readFileSync(path.join(ROOT, "src/constants/merge-map.customer.ts"), "utf8");
   // Emanetin üç modeli (Roll · WarpBeam · YarnLot) + gelen belge taslağının sahibi (CustomerDeliveryNote, D2 2026-10-29).
   check("§0h MERGE_MAP: üç emanet modeli + gelen belge sahibi = 4 `ownerCustomerId` satırı", (merge.match(/column: "ownerCustomerId"/g) ?? []).length === 4);

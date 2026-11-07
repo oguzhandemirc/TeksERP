@@ -21,6 +21,8 @@ import { ApiResponse } from "../types/api.types";
 import { computeWoMaterial } from "./helpers/coverage.helper";
 import { ACTIVE_LINE, MEASURED_LINE } from "./helpers/order-line-scope.helper";
 import { readIdCondition } from "../utils/query-parser";
+import { readEmanetEnabled } from "./system-setting.service";
+import { isConsignedRoll } from "./helpers/stock-ownership.helper";
 
 const LIVE_WO: WorkOrderStatus[] = [
   WorkOrderStatus.PLANNED,
@@ -90,6 +92,8 @@ export interface BalanceSpecRow {
   uretimde: Prisma.Decimal;
   /** max(0, talep − depo − üretimde) → bu en için WO açılacak miktar. */
   uretilecek: Prisma.Decimal;
+  /** `depo`nun müşteri malı (emanet) kısmı — yalnız `emanet.enabled` açıkken (F1 kırılım; `depo` toplamı değişmez). */
+  depoEmanet?: Prisma.Decimal;
   lines: BalanceLine[];
   wos: BalanceWo[];
 }
@@ -124,6 +128,13 @@ export interface BalanceGroup {
   yariMamul: Prisma.Decimal;
   /** max(0, Σüretilecek − (ham + yariMamul)) → kumaş tedariki gereken kısım. */
   malzemeAcigi: Prisma.Decimal;
+  /**
+   * Emanet kırılımı (F1) — `depo` / `ham` / `yariMamul`un müşteri malı kısmı; yalnız `emanet.enabled` açıkken.
+   * Toplamlar ve açık hesabı DEĞİŞMEZ (bugünkü davranış); sahibe göre eşleme ayrı iş.
+   */
+  depoEmanet?: Prisma.Decimal;
+  hamEmanet?: Prisma.Decimal;
+  yariMamulEmanet?: Prisma.Decimal;
   specs: BalanceSpecRow[];
 }
 
@@ -272,9 +283,13 @@ export class ProductionBalanceService {
     //   Ham : EN-AGNOSTİK (ham kumaşın eni önemsiz) — (ürün, renk) GRUBU düzeyinde
     //         tek sayılır. Renksiz (color=null) ham, boyanacağı için aynı ürünün
     //         her rengine joker sayılır (mevcut davranış korunur).
+    // Emanet açıkken sahip de gruplanır (kırılım için); kapalıyken sorgu bugünküyle aynı.
+    const emanetOn = await readEmanetEnabled();
     const supply = await prisma.roll.groupBy({
       // `entrySource`: ham ↔ yarı mamul ayrımı statüden çıkmaz (ikisi de STOCK).
-      by: ["itemId", "colorId", "width", "status", "entrySource"],
+      by: emanetOn
+        ? ["itemId", "colorId", "width", "status", "entrySource", "ownerCustomerId"]
+        : ["itemId", "colorId", "width", "status", "entrySource"],
       where: {
         status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
         shipmentId: null,
@@ -337,15 +352,21 @@ export class ProductionBalanceService {
     //     specKey ile birebir Map (acc.key = specKey(itemId,colorId,width)).
     //   - STOCK: en-agnostik + renk-joker → item bazında listele, joker mantığı korunur.
     const warehouseByKey = new Map<string, Prisma.Decimal>();
+    const warehouseConsignedByKey = new Map<string, Prisma.Decimal>();
     const stockByItem = new Map<
       string,
-      { colorId: string | null; qty: Prisma.Decimal; semi: boolean }[]
+      { colorId: string | null; qty: Prisma.Decimal; semi: boolean; consigned: boolean }[]
     >();
     for (const g of supply) {
       const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
       if (qty.lessThanOrEqualTo(0)) continue;
+      // Sahip yalnız emanet açıkken gruplanır; kapalıyken her satır sahipsiz sayılır.
+      const consigned = emanetOn && isConsignedRoll({ ownerCustomerId: (g as { ownerCustomerId?: string | null }).ownerCustomerId ?? null });
       if (g.status === RollStatus.WAREHOUSE) {
-        warehouseByKey.set(specKey(g.itemId, g.colorId, g.width), qty);
+        // Sahip gruplanınca aynı spec birden çok satır olur → biriktir (set değil).
+        const k = specKey(g.itemId, g.colorId, g.width);
+        warehouseByKey.set(k, (warehouseByKey.get(k) ?? D0()).plus(qty));
+        if (consigned) warehouseConsignedByKey.set(k, (warehouseConsignedByKey.get(k) ?? D0()).plus(qty));
       } else if (g.status === RollStatus.STOCK) {
         let list = stockByItem.get(g.itemId);
         if (!list) {
@@ -356,6 +377,7 @@ export class ProductionBalanceService {
           colorId: g.colorId,
           qty,
           semi: g.entrySource === RollEntrySource.SEMI_FINISHED,
+          consigned,
         });
       }
     }
@@ -364,6 +386,7 @@ export class ProductionBalanceService {
     for (const acc of map.values()) {
       // Depo: birebir ürün+renk+en (acc.key = specKey(itemId,colorId,width)).
       acc.depo = acc.depo.plus(warehouseByKey.get(acc.key) ?? 0);
+      if (emanetOn) acc.depoEmanet = warehouseConsignedByKey.get(acc.key) ?? D0();
 
       acc.uretilecek = Prisma.Decimal.max(
         0,
@@ -404,6 +427,7 @@ export class ProductionBalanceService {
           ham: D0(),
           yariMamul: D0(),
           malzemeAcigi: D0(),
+          ...(emanetOn ? { depoEmanet: D0(), hamEmanet: D0(), yariMamulEmanet: D0() } : {}),
           specs: [],
         };
         groupMap.set(gKey, grp);
@@ -412,6 +436,7 @@ export class ProductionBalanceService {
       grp.depo = grp.depo.plus(row.depo);
       grp.uretimde = grp.uretimde.plus(row.uretimde);
       grp.uretilecek = grp.uretilecek.plus(row.uretilecek);
+      if (grp.depoEmanet && row.depoEmanet) grp.depoEmanet = grp.depoEmanet.plus(row.depoEmanet);
       grp.specs.push(row);
     }
 
@@ -424,6 +449,8 @@ export class ProductionBalanceService {
         if (!colorOk) continue;
         if (s.semi) grp.yariMamul = grp.yariMamul.plus(s.qty);
         else grp.ham = grp.ham.plus(s.qty);
+        if (s.consigned && s.semi && grp.yariMamulEmanet) grp.yariMamulEmanet = grp.yariMamulEmanet.plus(s.qty);
+        else if (s.consigned && !s.semi && grp.hamEmanet) grp.hamEmanet = grp.hamEmanet.plus(s.qty);
       }
       // ⚠️ AÇIK HESABINA İKİSİ BİRDEN GİRER. Yarı mamul dışarıdan alınmış olsa da
       // rafta duran, üretime sokulabilir maldır — arzdan düşmek "kumaş tedarik

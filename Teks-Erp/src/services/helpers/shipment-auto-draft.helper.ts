@@ -60,6 +60,7 @@ import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { collectShipmentServiceBilling, resolveCustomerServiceBillingTrigger, type ServiceBillingLinkInput } from "./service-billing.helper";
 import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./../system-setting.service";
+import { isConsignedRoll } from "./stock-ownership.helper";
 
 /**
  * Sevk edilmiş bir sevkiyattan SATIŞ faturası taslağı satırları.
@@ -230,14 +231,14 @@ async function collectProductDraftLines(
   });
   const grossRolls = [...liveRolls, ...(await collectReturnedRollsGross(shipmentId, new Set(liveRolls.map((r) => r.id))))];
   // H7: hizmet faturası açıkken emanet top ürün satırı OLMAZ (işçiliği hizmet satırı taşır).
-  const rolls = serviceBilling ? grossRolls.filter((r) => r.ownerCustomerId === null) : grossRolls;
+  const rolls = serviceBilling ? grossRolls.filter((r) => !isConsignedRoll(r)) : grossRolls;
   const shipmentGross = serviceBilling
     ? { rollCount: grossRolls.length, meters: grossRolls.reduce((a, r) => a.plus(r.currentQty), D0()).toFixed(2) }
     : undefined;
   if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [], ...(shipmentGross ? { shipmentGross } : {}) };
   const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);
   // G3 emanet (E4b): müşterinin kendi malı satılmaz — satır YİNE yazılır (fatura muhasebe kararı), uyarı basılır.
-  const emanet = rolls.filter((r) => r.ownerCustomerId !== null);
+  const emanet = rolls.filter((r) => isConsignedRoll(r));
   if (emanet.length > 0) warnings.push(`${emanet.length} top müşterinin EMANET malı (${emanet.map((r) => r.barcode).join(", ")}) — mal satışı değil işçilik faturalanır; taslak satırlarını elle düzeltin.`);
 
   // Gruplama anahtarı `itemId` + görünen ad. Ad TEK BAŞINA anahtar olamaz:
