@@ -1,7 +1,8 @@
-import { Cog, ServerCog, Settings2 } from "lucide-react";
+import { Send, Cog, ServerCog, Settings2 } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
+import { KARTELA_TABS, NEW_DISPATCH_ACTION } from "@/pages/Operations/Kartela/tabs-config";
 import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
@@ -37,6 +38,30 @@ const rollTabEntries: CommandEntry[] = ROLL_TABS.map((t) => ({
   keywords: "envanter top rulo stok sekme",
   deep: true,
 }));
+
+/** Kartela Takibi sekmeleri (`?tab=<key>`) + "Yeni Kartela Sevki" doğrudan diyaloğu açar. */
+const kartelaTabEntries: CommandEntry[] = [
+  ...KARTELA_TABS.map((t) => ({
+    key: `kartela-tab:${t.key}`,
+    label: `Kartela Takibi · ${t.label}`,
+    description: "Kartela Takibi sekmesi",
+    icon: t.Icon,
+    to: `/operations/kartela?tab=${t.key}`,
+    permission: "kartela:read",
+    keywords: "kartela fason sevk kabul swatch",
+    deep: true,
+  })),
+  {
+    key: "kartela-action:new-dispatch",
+    label: "Kartela Takibi · Yeni Kartela Sevki",
+    description: "Depodaki bitmiş topları kartela firmasına gönder (çeki listesi)",
+    icon: Send,
+    to: `/operations/kartela?tab=dispatches&action=${NEW_DISPATCH_ACTION}`,
+    permission: "kartela:write",
+    keywords: "kartela sevk gönder firma çeki yeni",
+    deep: true,
+  },
+];
 
 /** Etiketler sekmeleri — `/definitions/labels?tab=<key>`. */
 const labelTabEntries: CommandEntry[] = ETIKET_TABS.map((t) => ({
@@ -158,6 +183,7 @@ const orphanPageEntries: CommandEntry[] = [
 export const deepCommandSections: CommandSection[] = [
   { heading: "Sayfa İçi · Kumaş Stoğu", entries: rollTabEntries },
   { heading: "Sayfa İçi · Etiketler", entries: labelTabEntries },
+  { heading: "Sayfa İçi · Kartela Takibi", entries: kartelaTabEntries },
   { heading: "Ayar Satırları", entries: settingsFlagEntries },
   { heading: "Hub Bölümleri", entries: hubGroupEntries },
   { heading: "Diğer Sayfalar", entries: orphanPageEntries },

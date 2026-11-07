@@ -24,6 +24,7 @@ import {
 import { useKartelaMeasurementEnabled } from "@/hooks/usePricingEnabled";
 import { kartelaService } from "./service";
 import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
+import { DispatchCancelAction, ReceiptCancelAction } from "./KartelaDetailActions";
 
 export type KartelaSelection =
   | { kind: "dispatch"; id: string }
@@ -80,7 +81,7 @@ function DispatchDetail({ id }: { id: string }) {
         <SheetDescription>Çeki listesi — kartela firmasına gönderilen toplar</SheetDescription>
       </SheetHeader>
 
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button
           type="button"
           size="sm"
@@ -91,6 +92,7 @@ function DispatchDetail({ id }: { id: string }) {
         >
           <Printer className="h-4 w-4" /> Çeki Yazdır
         </Button>
+        {d && <DispatchCancelAction dispatch={d} />}
       </div>
       <KartelaCekiPrintDialog dispatchId={id} open={printOpen} onOpenChange={setPrintOpen} />
 
@@ -179,6 +181,7 @@ function ReceiptDetail({ id }: { id: string }) {
         <SheetTitle>Kartela Kabulü {r ? `· ${r.receiptNo}` : ""}</SheetTitle>
         <SheetDescription>Tüketilen toplar ve dönen kartelalar</SheetDescription>
       </SheetHeader>
+      {r && <ReceiptCancelAction receipt={r} />}
 
       <div className="mt-4 space-y-4">
         {query.isLoading || !r ? (
