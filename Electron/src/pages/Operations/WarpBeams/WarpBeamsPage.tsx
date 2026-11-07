@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
+import { DefFilterRow } from "@/components/data-table/filter-row/DefFilterRow";
+import { persistConfigOf } from "@/components/data-table/filter-row/def-row-filters";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useDevereMountTracking } from "@/hooks/usePricingEnabled";
@@ -33,7 +35,7 @@ import { WARP_BEAMS_QUERY_KEY, useWarpBeamMutations } from "./useWarpBeamMutatio
 import { toPlanPayload, usePageDialog, type BeamActionKind } from "./usePageActions";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUSES, WARP_BEAM_STATUS_META, type WarpBeam, type WarpBeamOrigin } from "./types";
 
-const FILTERS: FilterDef[] = [
+export const FILTERS: FilterDef[] = [
   { kind: "multi-select", key: "status", label: "Durum", options: WARP_BEAM_STATUSES.map((s) => ({ value: s, label: WARP_BEAM_STATUS_META[s].label })) },
   { kind: "select", key: "originKind", label: "Köken", options: (Object.keys(WARP_BEAM_ORIGIN_LABEL) as WarpBeamOrigin[]).map((k) => ({ value: k, label: WARP_BEAM_ORIGIN_LABEL[k] })) },
   { kind: "lookup", key: "warpSpecId", label: "Çözgü kartı", service: warpSpecService, queryKey: "warp-specs-beam-filter" },
@@ -41,18 +43,22 @@ const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "weavingOrderId", label: "Dokuma işi", service: weavingOrderPickerService, queryKey: "weaving-orders-beam-filter", getLabel: (w) => (w as unknown as WeavingOrder).weavingOrderNumber },
 ];
 
+export const PERSIST = persistConfigOf(FILTERS);
+export const PRIMARY = ["status", "warpSpecId", "weavingOrderId"];
+
 const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);
 
 export function WarpBeamsPage() {
   const { dialog, setDialog, actions } = usePageDialog();
   const { save, deleteDraft, wind, cancel, act } = useWarpBeamMutations(() => setDialog(null));
   const mountTracking = useDevereMountTracking();
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>({
+  const { table, query, search, setSearch, pagination } = useDataTable<WarpBeam>({
     queryKey: WARP_BEAMS_QUERY_KEY,
     fetchFn: warpBeamService.listCursor,
     columns: warpBeamColumns,
     defaultPageSize: 50,
     enableSelection: false,
+    persistFilters: PERSIST,
   });
   const formTarget = dialog?.kind === "new" ? null : dialog?.kind === "edit" ? dialog.target : undefined;
 
@@ -73,8 +79,7 @@ export function WarpBeamsPage() {
           </div>
         }
       />
-      <DataTableToolbar fetchAll={fetchAll} search={search} onSearchChange={setSearch} placeholder="Levent no, gövde no veya çözgü kartı ara..." />
-      <FilterBar filters={FILTERS} />
+      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} placeholder="Levent no, gövde no veya çözgü kartı ara..." trailing={<SavedViewsMenu compact />} />
       <DataTable<WarpBeam>
         table={table}
         isLoading={query.isLoading}

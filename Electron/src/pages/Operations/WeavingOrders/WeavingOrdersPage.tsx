@@ -22,8 +22,10 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
+import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
+import { DefFilterRow } from "@/components/data-table/filter-row/DefFilterRow";
+import { persistConfigOf } from "@/components/data-table/filter-row/def-row-filters";
 import { useDataTable } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
@@ -38,7 +40,7 @@ import { FasonSheet } from "./fason/FasonSheet";
 import { WEAVING_ORDERS_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
 
-const FILTERS: FilterDef[] = [
+export const FILTERS: FilterDef[] = [
   {
     kind: "multi-select",
     key: "status",
@@ -51,6 +53,9 @@ const FILTERS: FilterDef[] = [
   // Z2: bağlı sipariş — `filter[orderId]` (Z1 ucu). Etiket sipariş no (Order'da `name` yok).
   { kind: "lookup", key: "orderId", label: "Sipariş", service: orderService, queryKey: "orders-weaving-filter", getLabel: (o) => (o as unknown as Order).orderNumber },
 ];
+
+export const PERSIST = persistConfigOf(FILTERS);
+export const PRIMARY = ["status", "itemId", "subcontractorId"];
 
 /** Diyalog anahtarı: `null` kapalı · `"new"` oluştur · kayıt = düzenle. */
 type FormTarget = null | "new" | WeavingOrder;
@@ -67,12 +72,13 @@ export function WeavingOrdersPage() {
     setCancelling(null);
   };
   const { save, close, cancel } = useWeavingOrderMutations(closeAll);
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WeavingOrder>({
+  const { table, query, search, setSearch, pagination } = useDataTable<WeavingOrder>({
     queryKey: WEAVING_ORDERS_QUERY_KEY,
     fetchFn: weavingOrderService.listCursor,
     columns: weavingOrderColumns,
     defaultPageSize: 50,
     enableSelection: false,
+    persistFilters: PERSIST,
   });
   const openForEdit = (r: WeavingOrder) => WEAVING_STATUS_META[r.status].open && setFormTarget(r);
 
@@ -93,8 +99,7 @@ export function WeavingOrdersPage() {
           </div>
         }
       />
-      <DataTableToolbar fetchAll={fetchAll} search={search} onSearchChange={setSearch} placeholder="Dokuma no, kumaş veya fasoncu ara..." />
-      <FilterBar filters={FILTERS} />
+      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} placeholder="Dokuma no, kumaş veya fasoncu ara..." trailing={<SavedViewsMenu compact />} />
       <DataTable<WeavingOrder>
         table={table}
         isLoading={query.isLoading}
