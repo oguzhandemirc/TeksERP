@@ -19,7 +19,7 @@ import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { type FilterDef } from "@/components/data-table/FilterBar";
 import { OrdersFilterRow } from "./OrdersFilterRow";
 import { OrdersWhereBar } from "./OrdersWhereBar";
-import { OrderLinesExportButton } from "./OrderLinesExportButton";
+import { StockLineExportDialog } from "./stock-line-export/StockLineExportDialog";
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
@@ -124,6 +124,7 @@ export function OrdersPage() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [stockLineOpen, setStockLineOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
   // İdempotency anahtarı — create mantıksal deneme kimliği (kk1.md). Form create modunda
   // her açılışta, başarılı create'te ve kesin 4xx'te yenilenir; belirsiz hatada SABİT kalır
@@ -181,7 +182,7 @@ export function OrdersPage() {
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<Order>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<Order>({
     queryKey: QUERY_KEY,
     fetchFn: orderService.listCursor,
     columns,
@@ -329,13 +330,23 @@ export function OrdersPage() {
               label="İptalleri göster"
               title="İptal edilmiş siparişler varsayılan olarak gizlidir."
             />
-            <OrderLinesExportButton
-              fetchAll={fetchAll}
-              pricingEnabled={pricingEnabled}
-              productionEnabled={productionEnabled}
-            />
           </>
         }
+        extraExports={[
+          {
+            key: "stock-line",
+            label: "Excel (stok kalemi bazında)…",
+            title: "Kumaş + renk başına tek satır: sipariş, sevk, açık, üretimde, depoda hazır",
+            onSelect: () => setStockLineOpen(true),
+          },
+        ]}
+      />
+      <StockLineExportDialog
+        open={stockLineOpen}
+        onOpenChange={setStockLineOpen}
+        fetchAll={fetchAll}
+        listScope={listScope}
+        productionEnabled={productionEnabled}
       />
       {/* ⚠️ SIRA SÖZLEŞMESİ (2026-09-04): özet şerit FİLTRELERİN ÜSTÜNDE.
           Kullanıcı gerekçesi: şerit "hangi kümeyi süzüyorum"un cevabı; filtre
