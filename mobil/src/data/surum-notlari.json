@@ -18,7 +18,7 @@
   "yayinlar": [
     {
       "id": "2026-11-07b",
-      "baslik": "Kartela sevki ve kabulü panelden",
+      "baslik": "Kartela sevki ve kabulü panelden; listelerde Dışa aktar menüsü",
       "surumler": {
         "panel": "1.3.13"
       },
@@ -47,6 +47,16 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Bu düğmeler yalnız \"Kartela işlemi yapabilir\" yetkisi olan kullanıcılara görünür; yalnız görme yetkisi olan kullanıcı sayfayı eskisi gibi okur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Listelerin üstündeki \"Sütunlar\" düğmesi artık yalnız hangi sütunların görüneceğini seçer. İndirme ayrı \"Dışa aktar\" düğmesine taşındı: açılan menüden Excel, PDF ya da CSV seçilir. Dosyaya eskisi gibi ekrandaki sütunlar ve süzgece uyan kayıtlar iner."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Siparişler ekranının üstündeki kalem bazında Excel düğmesi kalktı; yerine \"Dışa aktar\" menüsünde \"Excel (stok kalemi bazında)…\" var. Açılan pencerede ekrandaki süzgece uyan siparişler kumaş ve renge göre tek satırda toplanır: sipariş miktarı, sevk edilen, açık, üretimde, depoda hazır ve üretilmesi gereken metre. \"Renk\" ve \"En\" ayrımı açılıp kapatılabilir; birim her zaman ayrı tutulur, metre ile kg toplanmaz. \"Yalnız açığı olanlar\" seçilebilir ve dosyaya girecek sütunlar işaretlenir. \"Excel oluştur\" deyince yapılan seçim kullanıcıya kaydedilir, pencere bir sonraki açılışta aynı seçimle gelir."
         }
       ]
     },

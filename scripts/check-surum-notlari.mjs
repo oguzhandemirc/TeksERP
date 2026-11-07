@@ -332,7 +332,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
   const KAYNAK_UZANTI = new Set([".ts", ".tsx"]);
   const EN_AZ_DOSYA = 500; // altına düşerse tarama BOZUK demektir, "hepsi bulunamadı" değil
   /** Kapalı küme: muafiyet ancak bu iki sınıftan biriyle yazılır. */
-  const MUAF_SINIFLARI = new Set(["ALAN_ADI", "RAPOR_BOLUMU", "ORNEK_METIN", "DINAMIK", "ALINTI"]);
+  const MUAF_SINIFLARI = new Set(["ALAN_ADI", "RAPOR_BOLUMU", "ORNEK_METIN", "DINAMIK", "ALINTI", "EMEKLI"]);
   /**
    * Beyanlı muafiyet — tırnak içinde olup da EKRAN ADI OLMAYAN dizeler.
    * Yeni satır, sınıfı ve gerekçesiyle gelir; ölü satır da kırmızıdır.
@@ -360,6 +360,8 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     { etiket: "bunun yerine pasife alın", sinif: "ALINTI", gerekce: "Onay penceresinin verdiği öğüdün özeti." },
     { etiket: "bunlar kalacak", sinif: "ALINTI", gerekce: "Geri sarma penceresindeki listenin konuşulan adı." },
     { etiket: "bu rakam neden böyle", sinif: "ALINTI", gerekce: "Sonradan bakan kişinin sorusu." },
+    // --- EMEKLI: eski sürüm notunun andığı, sonradan kalkan/adı değişen ekran adı (main'deki sınıfın aynısı)
+    { etiket: "Kalem bazında Excel", sinif: "EMEKLI", gerekce: "Panel 1.3.13'te (2026-11-07b) düğme kalktı, yerine \"Dışa aktar\" menüsünde \"Excel (stok kalemi bazında)…\" geldi — 2026-11-04 notu eski düğmeyi anıyor." },
   ];
 
   let dosyaSayisi = 0;
