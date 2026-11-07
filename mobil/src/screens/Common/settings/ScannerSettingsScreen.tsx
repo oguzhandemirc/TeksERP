@@ -1,9 +1,9 @@
 // =============================================================================
 // Ayarlar → Barkod ve Kamera
 // =============================================================================
-// Tek cihaz-yerel tercih: kamera arızalıysa barkod ekranlarındaki elle yazma
-// alanlarını aç. Kök ayarlar menüye dönüştüğünde (2026-07-30) kendi sayfasına
-// taşındı — uzun açıklama metni artık ana ekranı kalabalıklaştırmıyor.
+// Cihaz-yerel tercihler: okutma yöntemi (el terminali okuyucusu / kamera,
+// 2026-11-07), elle yazma alanları ve okutma sesi. Kök ayarlar menüye
+// dönüştüğünde (2026-07-30) kendi sayfasına taşındı.
 // =============================================================================
 
 import React from 'react';
@@ -12,6 +12,7 @@ import { Text, Icon, TouchableRipple, Switch } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
+import ScanMethodCard from './ScanMethodCard';
 
 export default function ScannerSettingsScreen() {
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
@@ -31,16 +32,18 @@ export default function ScannerSettingsScreen() {
 
   return (
     <SettingsPage title="Barkod ve Kamera">
+      <ScanMethodCard />
+
       <View style={settingsStyles.card}>
         <View style={settingsStyles.headRow}>
           <View style={settingsStyles.iconBox}>
-            <Icon source="barcode-scan" size={28} color={COLORS.accentLight} />
+            <Icon source="keyboard-outline" size={28} color={COLORS.accentLight} />
           </View>
           <View style={settingsStyles.headText}>
             <Text style={settingsStyles.title}>Elle Barkod Girişi</Text>
             <Text style={settingsStyles.subtitle}>
-              Kamera arızalıysa barkod ekranlarındaki elle yazma alanları açılır.
-              Varsayılan: kapalı (sadece kamera).
+              Barkod ekranlarında elle yazma alanları ve listeden seçme yolu açılır
+              (kamera arızalıysa ya da etiket okunmuyorsa). Varsayılan: kapalı.
             </Text>
           </View>
         </View>
@@ -52,9 +55,9 @@ export default function ScannerSettingsScreen() {
         >
           <View style={styles.toggleRowInner}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.toggleLabel}>Kamera arızalı</Text>
+              <Text style={styles.toggleLabel}>Elle yazma alanlarını göster</Text>
               <Text style={styles.toggleHint}>
-                Elle barkod yazma alanlarını göster
+                Okutma yönteminden bağımsız çalışır
               </Text>
             </View>
             <Switch
