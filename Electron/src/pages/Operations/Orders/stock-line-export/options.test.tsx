@@ -36,6 +36,12 @@ describe("readStockLineOptions", () => {
     });
     expect(readStockLineOptions({ columns: ["eski"] }).columns).toEqual(DEFAULT_STOCK_LINE_OPTIONS.columns);
   });
+
+  it("depoda (tümü): eski kayıtta yoksa kapalı, varsayılanda kapalı; kayıtlıysa korunur", () => {
+    expect(DEFAULT_STOCK_LINE_OPTIONS.columns).not.toContain("inStockAll");
+    expect(readStockLineOptions({ columns: ["open", "inStock"] }).columns).toEqual(["open", "inStock"]);
+    expect(readStockLineOptions({ columns: ["inStockAll", "inStock"] }).columns).toEqual(["inStock", "inStockAll"]);
+  });
 });
 
 describe("useStockLineExportPrefs", () => {
@@ -43,7 +49,7 @@ describe("useStockLineExportPrefs", () => {
     const first = renderHook(() => useStockLineExportPrefs());
     expect(first.result.current.options).toEqual(DEFAULT_STOCK_LINE_OPTIONS);
     act(() =>
-      first.result.current.save({ byColor: false, byWidth: true, onlyOpen: false, columns: ["toProduce", "ordered"] }),
+      first.result.current.save({ byColor: false, byWidth: true, onlyOpen: false, columns: ["toProduce", "inStockAll", "ordered"] }),
     );
     expect(prefs.orders?.statsView).toBe("genis");
     const second = renderHook(() => useStockLineExportPrefs());
@@ -51,7 +57,7 @@ describe("useStockLineExportPrefs", () => {
       byColor: false,
       byWidth: true,
       onlyOpen: false,
-      columns: ["ordered", "toProduce"],
+      columns: ["ordered", "inStockAll", "toProduce"],
     });
   });
 

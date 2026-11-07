@@ -8,7 +8,7 @@ import type { StockLineResult, StockLineRow, StockLineTotal } from "./aggregate"
 import { STOCK_LINE_COLUMNS, type StockLineColumn, type StockLineOptions } from "./options";
 
 const NUMERIC: ReadonlySet<StockLineColumn> = new Set([
-  "ordered", "shipped", "open", "inProduction", "inStock", "toProduce", "customerCount", "orderCount",
+  "ordered", "shipped", "open", "inProduction", "inStock", "inStockAll", "toProduce", "customerCount", "orderCount",
 ]);
 
 const label = (k: StockLineColumn) => STOCK_LINE_COLUMNS.find((c) => c.key === k)?.label ?? k;
@@ -102,8 +102,11 @@ export function stockLineNotes(options: StockLineOptions, sourceNotes: string[])
     "İptal kalemler ve iptal siparişler hariç. Sevk BRÜT; Açık = kalem başına (sipariş − sevk), 0'ın altına düşmez; elle kapatılan siparişte 0.",
     "kg/adet kalemlerde sevk ve açık ölçülmez (metre defteri) — hücre boş.",
     "Üretimde = bu kalemlere bağlı iş emirlerinde şu an üretimde/fasonda olan topların metresi (giriş metresi; çekme öncesi). Bir iş emri tek satırda sayılır.",
-    "Depoda hazır = bitmiş kumaş stoğu (depo + A1 stok; sevke/çuvala girmemiş), Stok & Ölü Stok raporuyla aynı tanım; kat ayrımı toplanır.",
-    "Üretilmesi gereken = Açık − Depoda hazır − Üretimde (0'ın altına düşmez).",
+    "Depoda hazır (serbest) = bitmiş kumaş stoğu (depo + A1 stok; sevke/çuvala girmemiş), Stok & Ölü Stok raporuyla aynı tanım; kat ayrımı toplanır.",
+    ...(options.columns.includes("inStockAll")
+      ? ["Depoda (tümü) = depodaki her bitmiş top (depo + A1 stok), çuvaldakiler ve sevkiyata ayrılmışlar DAHİL; henüz sevk edilmemiş mal."]
+      : []),
+    "Üretilmesi gereken = Açık − Depoda hazır (serbest) − Üretimde (0'ın altına düşmez).",
     ...sourceNotes,
   ];
 }
