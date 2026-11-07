@@ -9,8 +9,8 @@
 //    Doğrusu parametreyi kolonun tipine çevirmek: `= ANY(${dizi}::"EnumAdı"[])` · `<> ALL(...)` (NOT IN).
 //
 // NE ÖLÇER (AST — yalnız şablon/dizge sabitleri; yorumdaki bahisler SAYILMAZ):
-//   §1 `src/` altında `<ifade>::text [NOT] IN (` ve `<ifade>::text =|<> ANY|ALL (` YOK; şablonun
-//      `${…}` parçaları birleştirilerek ölçülür (desen parça sınırına bölünse de yakalanır)
+//   §1 `src/` altında `<ifade>::text [NOT] IN (` · `<ifade>::text =|<> ANY|ALL (` · tek değer
+//      `<ifade>::text = ${…}` YOK; şablonun `${…}` parçaları ` $X ` ile birleştirilerek ölçülür
 //   §2 BEYANLI İSTİSNALAR tam eşleşir: beyanlı dosyada sayı eşit; fazla = kırmızı, düşen/hayalet = kırmızı
 //   §3 KALICI SONDALAR (sentetik kaynak, her koşumda): ihlal biçimleri yakalanır, düzeltilmiş biçim
 //      ve yorum yakalanmaz — tarayıcının kendisi ölçülür (sessiz kapı olmasın)
@@ -38,11 +38,17 @@ const ISTISNALAR: Record<string, { adet: number; neden: string }> = {
   "src/services/helpers/expense-summary.helper.ts": { adet: 1, neden: "para birimi rapor hücresinden (cell.deger) gelir, doğrulanmaz" },
   "src/services/helpers/system-log-islem.helper.ts": { adet: 1, neden: "kategori süzgeci istemciden; geçersiz kategori boş liste vermeli" },
   "src/services/reports/wip-scorecard.report.service.ts": { adet: 1, neden: "uuid (enum değil) sahip id'leri CSV'den, uuid doğrulaması yok" },
+  "src/services/roll-owner.service.ts": { adet: 3, neden: "tek değer eşitliği CASE kovalarında — WHERE değil, index'le ilgisiz" },
+  "src/services/reports/finance-aging.report.ts": { adet: 5, neden: "tür/para birimi tek değer kullanıcı süzgeci; geçersiz değer boş sonuç vermeli" },
+  "src/services/reports/cash-book.report.ts": { adet: 1, neden: "hesap id'si (uuid) kullanıcı girdisi; geçersiz id boş sonuç vermeli" },
+  "src/services/packing-group.service.ts": { adet: 1, neden: "durum tek değer kullanıcı süzgeci; satırlar cari uuid'iyle daralır" },
+  "src/services/helpers/item-price-write.helper.ts": { adet: 2, neden: "FOR UPDATE kilit sorgusu itemId uuid ile daralır; enum eşitliği ikincil süzgeç" },
 };
 
 const DESENLER: RegExp[] = [
   /::\s*text\s+(?:not\s+)?in\s*\(/gi,
   /::\s*text\s*(?:=|<>|!=)\s*(?:any|all)\s*\(/gi,
+  /::\s*text\s*(?:=|<>|!=)\s*\$X\b/gi, // tek değer: `col::text = ${param}` (şablonda ` $X `)
 ];
 
 function tsDosyalari(dizin: string): string[] {
@@ -103,6 +109,7 @@ const SONDA_IHLAL = [
   "const d = Prisma.sql`NOT (r.status:: text <> all(${x}::text[]))`;",
   "const e = Prisma.sql`WHERE r.status::text ${Prisma.raw('')} IN (${Prisma.join(x)})`.length;",
   "const f = \"SELECT 1 FROM rolls WHERE status::text IN ('A')\";",
+  "const g = Prisma.sql`WHERE sh.status::text = ${ShipmentStatus.DISPATCHED}`;",
 ];
 SONDA_IHLAL.forEach((k, i) => {
   // e: `${…}` parça sınırında desen bölünür — birleştirme " $X " koyduğu için yakalanmaz; bu bilinçli
@@ -115,6 +122,7 @@ const SONDA_TEMIZ = [
   "const b = Prisma.sql`AND r.status <> ALL(${x}::\"RollStatus\"[])`;",
   "// eski biçim: r.status::text IN (...) — yorumda geçer\nconst c = 1;",
   "const d = Prisma.sql`SELECT r.status::text AS status, s.type::text IN_ALIAS FROM rolls r`;",
+  "const e = Prisma.sql`WHERE sh.status = ${ShipmentStatus.DISPATCHED}::\"ShipmentStatus\"`;",
 ];
 SONDA_TEMIZ.forEach((k, i) => check(`§3 sonda temiz #${i + 1} yakalanmaz`, ihlalSay(k) === 0, `bulunan ${ihlalSay(k)}`));
 

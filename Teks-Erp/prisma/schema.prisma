@@ -4373,10 +4373,6 @@ model Roll {
   /// Envanter "Tümü" sekmesi + kapsamsız createdAt sıralaması (perf 2026-11-07, migration 20261107120000):
   /// `(status, createdAt)` / `(entrySource, createdAt)` kapsamsız listeye ordering vermiyordu → Seq Scan + top-N.
   @@index([createdAt(sort: Desc), id(sort: Desc)], map: "rolls_createdAt_id_idx")
-  /// Tambur "son çıkan toplar" (`tambur/recent-output-rolls`, tablet 15 sn'de bir yoklar). DB'de PARTIAL:
-  /// `WHERE entrySource IN (TAMBUR_ENTRY_SOURCES) AND status NOT IN (K18_DEAD_STATUSES)` — Prisma predicate farkını
-  /// drift saymaz; envanteri `test_db_invariants` (predicate'i iki sabitten kurar, küme değişirse kırmızı).
-  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "rolls_tambur_createdAt_idx")
   @@map("rolls")
 }
 
