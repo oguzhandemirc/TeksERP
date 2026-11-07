@@ -62,6 +62,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 - **[ÇEKİRDEK]** "Geri gidilebilir mi"yi `location.key` ile çözme; tek kaynak `tabs/history-depth.ts` (PUSH +1 · POP −1 · REPLACE değişmez), sekme kimliği `useTabId()`; `PageHeader` sırası onBack > sekme geçmişi > breadcrumb.
 - **[ÇEKİRDEK]** Sekme kapatma (tek/toplu/kısayol/sağ tık) ve elle çıkış YALNIZ `tabs/dirty-close-guard.ts` kapısından geçer; "kirli sekme" tek kaynak `tabs/dirty-tabs.ts` (`useDirtyTab` beyanı + sekmedeki diyalog/sheet'e yazma); sayfa düzeyi editörün kendi kirlilik ölçüsü varsa `useDirtyTab(dirty)` bağlanır, seçici pencere `data-dirty-ignore` taşır.
+- **[ÇEKİRDEK]** Her yeni oturum (giriş · 401/oturum düşmesi · uygulamayı yeniden açma) TEK sekme Anasayfa ile başlar: sekme defteri yalnız `sessionStorage`da (`store/tabs-storage.ts`, reload olmayan açılışta silinir), kimlik değişimi `bindTabsToSession` ile defteri boşaltır, `TabHost` hash'ten ve giriş "from"undan yol açmaz; F5 oturum içinde sekmeleri korur. · bekçi: `Electron/src/store/tabs.session.test.tsx` <sub>(arşiv:2026-11-07)</sub>
 
 ### Yasaklar
 

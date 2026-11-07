@@ -27,8 +27,9 @@ export default function OrderLinkFooterButton({ count, onPress }: { count: numbe
 
 const styles = StyleSheet.create({
   btn: {
-    flex: 4,
-    minHeight: 56,
+    // İLERİ ile EŞİT genişlik ve yükseklik (NewWorkOrderView navBtnPrimary flex 7, minHeight 62) — 4:7 orantısız duruyordu.
+    flex: 7,
+    minHeight: 62,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.borderStrong,

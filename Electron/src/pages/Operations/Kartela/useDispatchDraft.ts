@@ -2,8 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { rollService } from "@/pages/Operations/Rolls/service";
-import type { PickedRoll } from "@/components/operations/roll-picker/pickable-rolls";
-import { rollScanRejection, type KartelaPickedRoll } from "./kartelaActions";
+import { rollScanRejection, rollToPicked, type KartelaPickedRoll } from "./kartelaActions";
 
 export function useDispatchDraft() {
   const [firmId, setFirmId] = useState<string | null>(null);
@@ -32,10 +31,7 @@ export function useDispatchDraft() {
         toast.error(reject);
         return;
       }
-      setRolls((prev) => (prev.some((r) => r.id === roll.id) ? prev : [...prev, {
-        id: roll.id, barcode: roll.barcode, itemName: roll.item?.name ?? "—",
-        colorName: roll.color?.name ?? null, qty: Number(roll.currentQty),
-      }]));
+      setRolls((prev) => (prev.some((r) => r.id === roll.id) ? prev : [...prev, rollToPicked(roll)]));
       setScan("");
     } catch {
       /* apiClient toast'ı yeterli */
@@ -44,14 +40,13 @@ export function useDispatchDraft() {
     }
   };
 
-  /** Seçiciden gelenler zaten WAREHOUSE + serbest süzgeçten geçti (tablet `addRollFromList`). */
-  const addPicked = (picked: PickedRoll[]) =>
-    setRolls((prev) => [
-      ...prev,
-      ...picked
-        .filter((p) => !prev.some((r) => r.id === p.id))
-        .map((p) => ({ id: p.id, barcode: p.barcode, itemName: p.itemName, colorName: p.colorName, qty: p.qty })),
-    ]);
+  /** Seçiciden / Kartelalık Stok'tan gelenler zaten WAREHOUSE + serbest süzgeçten geçti (tablet `addRollFromList`). */
+  const addPicked = (picked: readonly KartelaPickedRoll[]) =>
+    setRolls((prev) => {
+      const fresh = picked.filter((p) => !prev.some((r) => r.id === p.id));
+      if (fresh.length === 0) return prev;
+      return [...prev, ...fresh.map((p) => ({ id: p.id, barcode: p.barcode, itemName: p.itemName, colorName: p.colorName, qty: p.qty }))];
+    });
 
   const removeRoll = (id: string) => setRolls((prev) => prev.filter((r) => r.id !== id));
 

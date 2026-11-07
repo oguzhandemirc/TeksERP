@@ -4,7 +4,7 @@
 // =============================================================================
 // Taze cihazda rejim bilinmeden açılan sekme "Terbiye İş Emirleri" adını alıyor ve kalıcı defterde öyle kalıyordu
 // (komut kataloğu etiketi modül yüklenirken kopyalanıyordu). Bayrak ucu rejimi uygulayınca katalogdan çözülen başlık
-// tazelenir; sayfanın yazdığı özel başlığa dokunulmaz. Kurulum ayrıntıları `tabs.logout.test.ts` başlığında.
+// tazelenir; sayfanın yazdığı özel başlığa dokunulmaz. Kurulum ayrıntıları `tabs.session.test.tsx` başlığında.
 // =============================================================================
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
