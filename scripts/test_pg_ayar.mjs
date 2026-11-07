@@ -13,6 +13,10 @@
 //   §4 uzantı kümede yok: shared_preload_libraries + pg_stat_statements.* + CREATE EXTENSION yazılmaz
 //   §5 var olan ön yükleme korunur, liste her öğe AYRI literal ('a', 'b')
 //   §6 süper olmayan kullanıcı: çıkış 1, yazma yok
+//   §7 ⭐ .control var ama LOAD düşüyor (DLL yok/uyumsuz): kuru ve -Uygula'da ön yükleme + uzantı.* + CREATE
+//      EXTENSION yazılmaz ("kütüphane yüklenemedi"); CREATE EXTENSION ilk ALTER SYSTEM'den ÖNCE
+//   §8 auto.conf'ta uzantısız başka liste: bayraksız ezilmez + uzantı ayarları atlanır (elle komut ipucu);
+//      -OnYuklemeBirlestir ile 'liste', 'pg_stat_statements' yazılır
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (pwsh yok).
 //   node scripts/test_pg_ayar.mjs            # dinlenme
 //   node scripts/test_pg_ayar.mjs --sonda    # kalıcı negatif sondalar (betiğin / vektörün bozuk kopyası)
@@ -53,6 +57,7 @@ else if (/pg_file_settings/.test(sql)) c = oku('oto');
 else if (/pg_available_extensions/.test(sql)) c = oku('uzanti') || '1';
 else if (/FROM pg_extension/.test(sql)) c = '0';
 else if (/pending_restart/.test(sql)) c = oku('bekleyen');
+else if (/^LOAD /.test(sql) && oku('load')) { process.stderr.write('ERROR:  could not load library "pg_stat_statements.dll": The specified module could not be found.'); process.exit(1); }
 process.stdout.write(c);
 `, { mode: 0o755 });
 
@@ -141,6 +146,29 @@ function olc(betikDizini, vektorYolu) {
   const on = kos(betikDizini, [...BAG, '-Uygula'], { ...ADNAN, mevcut: ADNAN.mevcut.replace('shared_preload_libraries||', 'shared_preload_libraries|auto_explain|') });
   ok('§5', on.gunluk.some((g) => g.sql === "ALTER SYSTEM SET shared_preload_libraries = 'auto_explain', 'pg_stat_statements'"), `ön yükleme listesi: ${on.gunluk.filter((g) => /preload/.test(g.sql)).map((g) => g.sql).join(' | ')}`);
 
+  // §3b — sıra: uzantı kurulumu ön yüklemeden ÖNCE (kütüphane yüklenemezse hiçbir ayar yazılmadan durulur)
+  const iExt = uy.gunluk.findIndex((g) => /CREATE EXTENSION/.test(g.sql));
+  const iAlter = uy.gunluk.findIndex((g) => /ALTER SYSTEM/.test(g.sql));
+  ok('§3', iExt >= 0 && iAlter > iExt, `CREATE EXTENSION (${iExt}) ilk ALTER SYSTEM'den (${iAlter}) önce değil`);
+
+  // §7 — LOAD sondası
+  for (const [kip, arg] of [['kuru', BAG], ['uygula', [...BAG, '-Uygula']]]) {
+    const ld = kos(betikDizini, arg, { ...ADNAN, load: 'hata' });
+    const ldYazan = ld.gunluk.filter((g) => YAZAN.test(g.sql) && /shared_preload_libraries|pg_stat_statements\.|CREATE EXTENSION/.test(g.sql));
+    ok('§7', ld.kod === 0 && ldYazan.length === 0, `⭐ ${kip}: kütüphane yüklenemiyorken yazıldı: ${ldYazan.map((g) => g.sql).join(' | ')} (çıkış ${ld.kod})`);
+    ok('§7', /shared_preload_libraries.*kutuphane yuklenemedi/.test(ld.cikti), `${kip}: "kutuphane yuklenemedi" satırı yok`);
+    if (kip === 'uygula') ok('§7', ld.gunluk.some((g) => g.sql === "ALTER SYSTEM SET shared_buffers = '8GB'"), 'uzantı dışı ayarlar yine yazılmalı');
+  }
+
+  // §8 — auto.conf'ta uzantısız başka ön yükleme listesi
+  const otoAE = { ...ADNAN, oto: 'work_mem|8MB\nshared_preload_libraries|auto_explain' };
+  const ae = kos(betikDizini, [...BAG, '-Uygula'], otoAE);
+  const aeYazan = ae.gunluk.filter((g) => YAZAN.test(g.sql) && /shared_preload_libraries|pg_stat_statements\.|CREATE EXTENSION/.test(g.sql));
+  ok('§8', ae.kod === 0 && aeYazan.length === 0, `bayraksız: auto.conf listesi ezildi / uzantı ayarları yazıldı: ${aeYazan.map((g) => g.sql).join(' | ')}`);
+  ok('§8', /OnYuklemeBirlestir ya da elle: ALTER SYSTEM SET shared_preload_libraries = 'auto_explain', 'pg_stat_statements'/.test(ae.cikti), 'elle komut ipucu yok');
+  const aeB = kos(betikDizini, [...BAG, '-Uygula', '-OnYuklemeBirlestir'], otoAE);
+  ok('§8', aeB.gunluk.some((g) => g.sql === "ALTER SYSTEM SET shared_preload_libraries = 'auto_explain', 'pg_stat_statements'") && aeB.gunluk.some((g) => /pg_stat_statements\.max/.test(g.sql)), `-OnYuklemeBirlestir birleşimi yazmadı: ${aeB.gunluk.filter((g) => /ALTER/.test(g.sql)).map((g) => g.sql).join(' | ')}`);
+
   // §6 — süper değil
   const su = kos(betikDizini, [...BAG, '-Uygula'], { ...ADNAN, su: 'f' });
   ok('§6', su.kod === 1 && !su.gunluk.some((g) => YAZAN.test(g.sql)), `süper olmayan: çıkış ${su.kod}`);
@@ -169,10 +197,13 @@ if (process.argv.includes('--sonda')) {
   const S = [
     ['N1 KURU koruması söküldü (if ($Uygula) → if ($true)) → §2', (m) => m.replace('if ($Uygula) {', 'if ($true) {'), VEKTOR, '§2'],
     ['N2 "ezilmez" kuralı söküldü → §3', (m) => m.replace('elseif ($oto.ContainsKey($ad)) {', 'elseif ($false) {'), VEKTOR, '§3'],
-    ['N3 uzantı varlık denetimi söküldü → §4', (m) => m.replace('if (-not $uzantiVar -and (', 'if ($false -and ('), VEKTOR, '§4'],
+    ['N3 uzantı varlık denetimi söküldü → §4', (m) => m.replace('if (-not $uzantiVar -and $uzantiAyari) {', 'if ($false) {'), VEKTOR, '§4'],
     ['N4 ön yükleme tek literal → §5', (m) => m.replace(/\$deger = if \(\$r\.ad -ceq "shared_preload_libraries"\)/, '$deger = if ($false)'), VEKTOR, '§5'],
     ['N5 bakım belleği formülü sapmış (bölen yok sayıldı) → §1', (m) => m.replace('if ($null -ne $f.bolen)', 'if ($false)'), VEKTOR, '§1'],
     ['N6 8 GB vektörü bozuldu → §1', null, vBozuk, '§1'],
+    ['N7 LOAD sondası söküldü → §7', (m) => m.replace('if ($yukle.kod -ne 0) {', 'if ($false) {'), VEKTOR, '§7'],
+    ['N8 auto.conf ön yükleme engeli söküldü → §8', (m) => m.replace('-and -not $OnYuklemeBirlestir', '-and $false'), VEKTOR, '§8'],
+    ['N9 uzantı ALTER SYSTEM\'den sonra kuruluyor → §3', (m) => m.replace('  if ($uzantiYaz) {', '  if ($false) {').replace('  $a = Psql "postgres" "SELECT pg_reload_conf()"', '  if ($uzantiYaz) { [void](Psql $uzantiVt "CREATE EXTENSION IF NOT EXISTS $uzanti") }\n  $a = Psql "postgres" "SELECT pg_reload_conf()"'), VEKTOR, '§3'],
   ];
   let kaldi = 0;
   for (const [ad, mut, vek, iz] of S) {
@@ -189,5 +220,5 @@ if (process.argv.includes('--sonda')) {
 console.log('test_pg_ayar — deploy/pg/pg-ayar.ps1 (sahte psql, gerçek pwsh)\n');
 const k = olc(DIZIN, VEKTOR);
 for (const x of k) console.log(`❌ ${x}`);
-console.log(k.length ? `\n=== Sonuç: KIRMIZI (${k.length}) ===` : '✅ §1 kâhin · §2 KURU yazmaz · §3 uygula/ezilmez/uzantı postgres DB · §4 uzantısız atlar · §5 ön yükleme · §6 süper değil\n\n=== Sonuç: yeşil ===');
+console.log(k.length ? `\n=== Sonuç: KIRMIZI (${k.length}) ===` : '✅ §1 kâhin · §2 KURU yazmaz · §3 uygula/ezilmez/uzantı postgres DB · §4 uzantısız atlar · §5 ön yükleme · §6 süper değil · §7 LOAD sondası · §8 auto.conf listesi\n\n=== Sonuç: yeşil ===');
 process.exit(k.length ? 1 : 0);

@@ -14,8 +14,13 @@
 #
 # KURALLAR:
 #   - Onceden ALTER SYSTEM ile konmus (postgresql.auto.conf) FARKLI deger EZILMEZ; tabloda "ezilmedi".
-#   - shared_preload_libraries: uzanti kumede yoksa (pg_available_extensions) YAZILMAZ - eksik kutuphane
-#     on yuklemede sunucu KALKMAZ. Var olan baska kutuphane korunur, uzanti sona eklenir.
+#   - shared_preload_libraries: uzanti kumede yoksa (pg_available_extensions) YA DA oturumda LOAD sondasi
+#     duserse (DLL yok/uyumsuz) on yukleme + uzanti.* + CREATE EXTENSION YAZILMAZ - yuklenemeyen kutuphane on
+#     yuklemede sunucuyu KALDIRMAZ. Var olan baska kutuphane korunur, uzanti sona eklenir. auto.conf'ta uzantiyi
+#     icermeyen baska liste varsa ezilmez (elle komut ipucu); birlesim yalniz -Uygula -OnYuklemeBirlestir ile.
+#   - Sira: CREATE EXTENSION ALTER SYSTEM'den ONCE (kutuphane yuklenemiyorsa hicbir ayar yazilmadan durur).
+#     N. ALTER SYSTEM duserse oncekiler auto.conf'ta kalir, reload yapilmaz; nedeni duzeltip tekrar kos
+#     (ayni degerler TAMAM/BEKLIYOR gorunur, yalniz kalanlar yazilir).
 #   - CREATE EXTENSION yalniz hariciBakim.uzantiVeritabani'nda (postgres) - uygulama DB'sinde DEGIL (dokume
 #     girer, super olmayan rolle geri yukleme kirilir); migration'a KONMAZ.
 #   - Superuser ister (pg_file_settings + ALTER SYSTEM); degilse durur, kuru kipte de.
@@ -24,6 +29,8 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\pg-ayar.ps1 -PgBin "D:\PostgreSQL\16\bin" -Port 5432
 #   ... -Uygula                  (yazar; sonra soylenen Restart-Service vardiya disinda)
 #   ... -Disk HDD                (donen disk: random_page_cost profilden)
+#   ... -Uygula -OnYuklemeBirlestir  (auto.conf'taki baska on yukleme listesine uzantiyi ekler)
+#   -PgBin verilmezse calisan PostgreSQL hizmetinin yolundan (Win32_Service PathName) bulunur.
 #   ... -ParolaDosyasi C:\gecici\pg.txt   (etkilesimsiz; yoksa gizli sorulur)
 # CIKIS: 0 tamam (kuru kipte fark olsa da) - 1 hata/durdu.
 # Bekci: node scripts/test_pg_ayar.mjs (sahte psql ile kuru kip yazmaz, -Uygula yazar, vektorler).
@@ -37,6 +44,8 @@ param(
   [int]$RamMB = 0,
   [ValidateSet("SSD", "HDD")][string]$Disk = "SSD",
   [switch]$Uygula,
+  # auto.conf'ta uzantiyi icermeyen baska shared_preload_libraries listesi varsa "liste + uzanti" yaz.
+  [switch]$OnYuklemeBirlestir,
   # Yalniz hedef degerleri JSON basar, PostgreSQL'e baglanmaz (bekci: diller arasi altin vektorler).
   [switch]$YalnizHedef
 )
@@ -125,6 +134,21 @@ if ($YalnizHedef) {
 }
 
 # --- psql ---------------------------------------------------------------------
+# PgBin yoksa: calisan PostgreSQL hizmetinin ikili yolu (sunucunun KENDI bin'i; C:\TeksERP\pgsql yalniz istemci
+# kopyasi olabilir). Birden cok hizmet calisiyorsa tahmin edilmez, -PgBin istenir.
+if (-not $PgBin) {
+  $hizmetler = @()
+  try {
+    $hizmetler = @(Get-CimInstance Win32_Service -ErrorAction Stop | Where-Object { $_.State -eq "Running" -and ([string]$_.PathName) -cmatch '(?i)\\(pg_ctl|postgres)\.exe' })
+  } catch { $hizmetler = @() }
+  $yollar = @($hizmetler | ForEach-Object {
+    $yol = [string]$_.PathName
+    $exe = if ($yol -cmatch '^\s*"([^"]+)"') { $Matches[1] } elseif ($yol -cmatch '^\s*(\S+)') { $Matches[1] } else { "" }
+    if ($exe) { Split-Path -Parent $exe }
+  } | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ "psql.exe")) } | Sort-Object -Unique)
+  if ($yollar.Count -gt 1) { Dur "birden cok PostgreSQL hizmeti calisiyor ($($yollar -join ' ; ')) - hedefi -PgBin ve -Port ile ver." }
+  if ($yollar.Count -eq 1) { $PgBin = $yollar[0]; Write-Host "  PgBin hizmet yolundan: $PgBin" }
+}
 if (-not $PgBin) {
   $aday = @("C:\TeksERP\pgsql\bin") + @(Get-ChildItem -Path "C:\Program Files\PostgreSQL\*\bin" -Directory -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | ForEach-Object { $_.FullName })
   $PgBin = $aday | Where-Object { Test-Path -LiteralPath (Join-Path $_ "psql.exe") } | Select-Object -First 1
@@ -201,11 +225,24 @@ foreach ($s in (Satirlar (Psql "postgres" "SELECT lower(name) || '|' || coalesce
   $oto[$p[0]] = $p[1]
 }
 $uzantiVar = (Psql "postgres" "SELECT count(*) FROM pg_available_extensions WHERE name = $(Lit $uzanti)").cikti -ceq "1"
+$uzantiNeden = "$uzanti kumede yok (pg_available_extensions)"
+if ($uzantiVar) {
+  # .control var diye DLL yuklenir demek degil: LOAD yalniz bu oturuma, kalici iz birakmaz (kuru kipte de).
+  $yukle = Psql "postgres" "LOAD $(Lit $uzanti)"
+  if ($yukle.kod -ne 0) { $uzantiVar = $false; $uzantiNeden = "kutuphane yuklenemedi (LOAD): $($yukle.cikti -creplace '\s+', ' ')" }
+}
 $uzantiKurulu = (Psql $uzantiVt "SELECT count(*) FROM pg_extension WHERE extname = $(Lit $uzanti)").cikti -ceq "1"
 
-# On yukleme: var olan kutuphaneler korunur, uzanti sona eklenir.
+# On yukleme: var olan kutuphaneler korunur, uzanti sona eklenir. Taban: auto.conf (restart sonrasi gecerli olan)
+# varsa o, yoksa su anki deger. auto.conf listesi uzantiyi icermiyorsa ezilmez (yalniz -OnYuklemeBirlestir).
+function ListeOku([string]$v) { return @($v -csplit ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ }) }
 $onYukleme = @()
-if ($mevcut.ContainsKey("shared_preload_libraries")) { $onYukleme = @($mevcut["shared_preload_libraries"].deger -csplit ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ }) }
+$otoListe = $oto.ContainsKey("shared_preload_libraries")
+if ($otoListe) { $onYukleme = ListeOku $oto["shared_preload_libraries"] }
+elseif ($mevcut.ContainsKey("shared_preload_libraries")) { $onYukleme = ListeOku $mevcut["shared_preload_libraries"].deger }
+$onYuklemeEngel = $otoListe -and ($onYukleme -cnotcontains $uzanti) -and -not $OnYuklemeBirlestir
+$birlestir = $otoListe -and ($onYukleme -cnotcontains $uzanti) -and $OnYuklemeBirlestir
+if ($onYuklemeEngel) { $uzantiNeden = "auto.conf'taki on yukleme listesi uzantiyi icermiyor (ezilmedi) - uzanti ayarlari da atlandi" }
 if ($hedef.Contains("shared_preload_libraries")) {
   $istenen = @($hedef["shared_preload_libraries"] -csplit ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
   $liste = @($onYukleme)
@@ -219,7 +256,11 @@ foreach ($ad in $hedef.Keys) {
   $m = if ($mevcut.ContainsKey($ad)) { [string]$mevcut[$ad].deger } else { $null }
   $restart = ($yeniden -ccontains $ad) -or ($mevcut.ContainsKey($ad) -and $mevcut[$ad].baglam -ceq "postmaster")
   $durum = "YAZILACAK"
-  if (-not $uzantiVar -and ($ad -ceq "shared_preload_libraries" -or $ad.StartsWith("$uzanti."))) { $durum = "ATLANDI" }
+  $uzantiAyari = ($ad -ceq "shared_preload_libraries" -or $ad.StartsWith("$uzanti."))
+  if (-not $uzantiVar -and $uzantiAyari) { $durum = "ATLANDI" }
+  elseif ($ad -ceq "shared_preload_libraries" -and $onYuklemeEngel) { $durum = "EZILMEDI" }
+  elseif ($onYuklemeEngel -and $uzantiAyari) { $durum = "ATLANDI" }
+  elseif ($ad -ceq "shared_preload_libraries" -and $birlestir) { $durum = "YAZILACAK" }
   elseif ($oto.ContainsKey($ad)) {
     if ((Normal $ad $oto[$ad]) -ceq (Normal $ad $h)) { $durum = if ($null -ne $m -and (Normal $ad $m) -ceq (Normal $ad $h)) { "TAMAM" } else { "BEKLIYOR" } }
     else { $durum = "EZILMEDI" }
@@ -233,15 +274,20 @@ Write-Host ("  {0,-30} {1,-22} {2,-22} {3}" -f "ayar", "mevcut", "hedef", "durum
 Write-Host ("  {0,-30} {1,-22} {2,-22} {3}" -f "----", "------", "-----", "-----")
 foreach ($r in $satirlar) {
   $not = switch ($r.durum) {
-    "EZILMEDI" { "ALTER SYSTEM ile farkli deger var ($($oto[$r.ad])), ezilmedi" }
-    "ATLANDI"  { "$uzanti kumede yok (pg_available_extensions) - on yuklemede sunucu kalkmazdi" }
+    "EZILMEDI" {
+      $n = "ALTER SYSTEM ile farkli deger var ($($oto[$r.ad])), ezilmedi"
+      if ($r.ad -ceq "shared_preload_libraries") { $n += " - birlestirmek icin -Uygula -OnYuklemeBirlestir ya da elle: ALTER SYSTEM SET shared_preload_libraries = $((@($r.hedef -csplit ',' | ForEach-Object { Lit $_.Trim() })) -join ', ')" }
+      $n
+    }
+    "ATLANDI"  { "$uzantiNeden - on yukleme yazilmaz" }
     "BEKLIYOR" { "yazili (postgresql.auto.conf), yeniden baslatma/yukleme bekliyor" }
     default    { $r.durum }
   }
   if ($r.restart -and $r.durum -cne "TAMAM") { $not += "  [RESTART]" }
   Write-Host ("  {0,-30} {1,-22} {2,-22} {3}" -f $r.ad, $r.mevcut, $r.hedef, $not)
 }
-$uzNot = if (-not $uzantiVar) { "ATLANDI ($uzanti kumede yok)" } elseif ($uzantiKurulu) { "TAMAM" } else { "YAZILACAK (CREATE EXTENSION)" }
+$uzantiYaz = $uzantiVar -and -not $onYuklemeEngel -and -not $uzantiKurulu
+$uzNot = if (-not $uzantiVar -or $onYuklemeEngel) { "ATLANDI ($uzantiNeden)" } elseif ($uzantiKurulu) { "TAMAM" } else { "YAZILACAK (CREATE EXTENSION)" }
 Write-Host ("  {0,-30} {1,-22} {2,-22} {3}" -f "uzanti $uzanti", $(if ($uzantiKurulu) { "kurulu" } else { "yok" }), "kurulu ($uzantiVt DB)", $uzNot)
 
 $yazilacak = @($satirlar | Where-Object { $_.durum -ceq "YAZILACAK" })
@@ -250,6 +296,12 @@ $bekleyen = @($satirlar | Where-Object { $_.restart -and $_.durum -ceq "BEKLIYOR
 # Yazan TEK dal: KURU kip (varsayilan) bu blok disinda yazan SQL calistirmaz (bekci N1 sondasi).
 if ($Uygula) {
   Write-Host ""
+  # Uzanti ONCE: CREATE EXTENSION kutuphaneyi yukler; duserse hicbir ALTER SYSTEM yazilmadan durulur.
+  if ($uzantiYaz) {
+    $a = Psql $uzantiVt "CREATE EXTENSION IF NOT EXISTS $uzanti"
+    if ($a.kod -ne 0) { Dur "CREATE EXTENSION $uzanti ($uzantiVt) basarisiz - HICBIR AYAR YAZILMADI: $($a.cikti)" }
+    Ok "uzanti kuruldu: $uzanti ($uzantiVt veritabani; uygulama DB'sine DEGIL)"
+  }
   foreach ($r in $yazilacak) {
     # Liste ayari (on yukleme) her ogeyi AYRI literal ister: tek literal 'a, b' tek kutuphane adi sayilir.
     $deger = if ($r.ad -ceq "shared_preload_libraries") { (@($r.hedef -csplit ',' | ForEach-Object { Lit $_.Trim() })) -join ', ' } else { Lit $r.hedef }
@@ -257,11 +309,6 @@ if ($Uygula) {
     if ($a.kod -ne 0) { Dur "$($r.ad) yazilamadi: $($a.cikti)" }
     Ok "yazildi: $($r.ad) = $($r.hedef)  (onceki $($r.mevcut))"
     if ($r.restart) { $bekleyen += $r.ad }
-  }
-  if ($uzantiVar -and -not $uzantiKurulu) {
-    $a = Psql $uzantiVt "CREATE EXTENSION IF NOT EXISTS $uzanti"
-    if ($a.kod -ne 0) { Dur "CREATE EXTENSION $uzanti ($uzantiVt) basarisiz: $($a.cikti)" }
-    Ok "uzanti kuruldu: $uzanti ($uzantiVt veritabani; uygulama DB'sine DEGIL)"
   }
   $a = Psql "postgres" "SELECT pg_reload_conf()"
   if ($a.kod -ne 0) { Dur "pg_reload_conf basarisiz: $($a.cikti)" }
