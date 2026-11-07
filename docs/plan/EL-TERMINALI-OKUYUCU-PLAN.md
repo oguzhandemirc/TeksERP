@@ -112,6 +112,11 @@ yayınları logcat'te, önceki mod 2'ye döner; logcat'te `CameraService`/`Scann
 - Hızlı İE → Yeni İş Emri, 1. adım TOPLAR (`StepRolls`): OKUT düğmesi yok; "Sipariş Bağla" alt çubukta İLERİ'nin
   yanında; adım okutulan topları TABLO olarak gösterir (480×800 dikey birinci hedef; tablet düzeni bozulmaz).
 - Tek amaçlı ekranlar (envanter 1–4, 13, 17, 21–23, 25–27, 32).
+  Uygulanan (PR #602'ye bakın): modal `listenWhileHidden` (modal açılmadan tuş okur; gizli okumada `onModalHide`
+  işleyici bitince çağrılır) + `ScannerEntryBar hardwareListening`; ekranlar: Hızlı İE adım ①, Depo, Kartela Sevk.
+  Kalan tek amaçlılar (Kurşun KK, Paketleme, Hızlı Sipariş, Cuvalsız sevk, Fason Kabul, İade, Muayene, İE'ye top
+  ekle, Gelen Belge irsaliye, giriş kartı, lisans/eşleme QR) modal paneliyle kamerasız çalışır; doğrudan dinleme
+  her ekranın OKUT görünürlük koşulu okunarak tek tek eklenir (koşulsuz dinleme hazır olmayan duruma okuma sokar).
 Kabul: jest (modal donanım modunda `BarcodeScannerView` render ETMEZ; StepRolls donanım modunda OKUT yok, tablo
 var; hedef adım değişince değişir) · cihaz: ekran görüntüleri 480×800, kamera logu yok, kullanıcı tetik listesi.
 
@@ -135,6 +140,10 @@ Seçenekler (karar KULLANICIDA):
   JS'i ana daldan çok geride — wedge çekirdeğinin geri taşınması gerekir; yine dondurma istisnası.
 `minVersion`: gerekmez (sözleşme kırılmıyor; backend değişmiyor). Yeni native ⇒ ortak pakette `runtimeVersion`
 artışı + AAB (Play) — yayın turunda `yayinla:ortak:check` "NATIVE DEĞİŞTİ" der; rv artırımı o turun işi.
+
+**Yayın turu ZORUNLU maddesi (2026-11-07 cihaz bulgusu):** `runtimeVersion` artırılmadan çıkan APK/AAB, cihazda
+önbellekte duran aynı rv'li eski OTA paketini çalıştırabilir — PM68'de yeni APK kurulduğu hâlde eski JS açıldı
+(veri temizlenince yeni kod geldi). Yerel modül taşıyan bu sürüm rv artışı + AAB olmadan YAYINLANMAZ.
 
 ## 4. Açık noktalar
 - Hedefsiz okuma davranışı (S6) uyarı tonu mu, sessiz mi — D1'de uyarı + toast; kullanıcı aksini derse değişir.
