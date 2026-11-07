@@ -27,6 +27,8 @@ import { UNTAGGED_FILTER_VALUE } from "./types";
 import type { SackSearchRow } from "./types";
 
 const listSource = readFileSync(resolve(__dirname, "./SacksListView.tsx"), "utf-8");
+// Süzgeç tanımları 2026-11-07 (panel filtre dalga 5) sayfadan ayrıldı.
+const defsSource = readFileSync(resolve(__dirname, "./sack-filter-defs.ts"), "utf-8");
 const colSource = readFileSync(resolve(__dirname, "./sacksColumns.tsx"), "utf-8");
 const pickSource = readFileSync(resolve(__dirname, "./PickListPrintDialog.tsx"), "utf-8");
 const menuSource = readFileSync(resolve(__dirname, "./SackTagsBulkMenu.tsx"), "utf-8");
@@ -157,14 +159,14 @@ describe("§4 süzgeç sentineli", () => {
   it("⭐ 'İz' süzgeci multi-lookup + sentinelOption olarak KURULU", () => {
     // Filtre tanımı düşerse ya da sentinel unutulursa "izsiz çuvallar" kümesi
     // hiçbir yüzeyden süzülemez (müşterisiz kovasının aynı dersi).
-    expect(listSource).toMatch(/key:\s*"tagId"/);
-    expect(listSource).toContain("sackTagService");
-    expect(listSource).toContain("UNTAGGED_FILTER_VALUE");
-    expect(listSource).toMatch(/sentinelOption:\s*\{\s*value:\s*UNTAGGED_FILTER_VALUE/);
+    expect(defsSource).toMatch(/key:\s*"tagId"/);
+    expect(defsSource).toContain("sackTagService");
+    expect(defsSource).toContain("UNTAGGED_FILTER_VALUE");
+    expect(defsSource).toMatch(/sentinelOption:\s*\{\s*value:\s*UNTAGGED_FILTER_VALUE/);
   });
 
   it("çoklu seçim VEYA semantiği EKRANDA yazılı", () => {
-    expect(listSource).toContain("İz (VEYA)");
+    expect(defsSource).toContain("İz (VEYA)");
   });
 });
 
