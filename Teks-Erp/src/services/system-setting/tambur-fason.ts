@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP - System Setting / tambur-fason
 // =============================================================================
-// Tambur · fason · makine duruşu · mükerrer okuyucuları.
+// Tambur · fason · makine duruşu · mükerrer okuyucuları · emanet varsayılan deposu (F1b).
 // `system-setting.service.ts`ten kelimesi kelimesine taşındı (2026-11-08, davranış aynı);
 // dışa açık ad yalnız cepheden (`../system-setting.service`) okunur.
 // =============================================================================
@@ -383,4 +383,16 @@ export async function readTamburMeasureSourceRequired(tx?: Pick<typeof prisma, "
 /** D4-B5k: sayaç kalibrasyon kontrolü — satır yok / tanınmayan değer = KAPALI (bugünkü davranış). */
 export function readTamburCalibrationCheck(tx?: Pick<typeof prisma, "systemSetting">): Promise<TamburCalibrationCheck> {
   return readServiceEnum(SETTING_KEYS.TAMBUR_CALIBRATION_CHECK, TAMBUR_CALIBRATION_CHECK_MODES, DEFAULT_TAMBUR_CALIBRATION_CHECK, tx);
+}
+
+/** F1b emanet varsayılan deposu; kayıt yok / boş / UUID değil → null (bugünkü davranış: emanet top varsayılan depoya).
+ *  Geçerlilik (var mı · aktif mi) ve emanet kapısı okuyucuda DEĞİL, doğum boğazında (`emanet-warehouse.helper`). */
+export async function readEmanetDefaultWarehouseId(tx?: Pick<typeof prisma, "systemSetting">): Promise<string | null> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID },
+    select: { value: true },
+  });
+  const v = typeof setting?.value === "string" ? setting.value.trim() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
 }

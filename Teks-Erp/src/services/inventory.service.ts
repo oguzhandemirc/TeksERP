@@ -29,6 +29,7 @@ import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type"
 import { normalizeLabelBatchNo } from "./helpers/label-batch-no.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx, warehouseStampTx } from "./helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx } from "./helpers/emanet-warehouse.helper";
 import {
   postStockMove,
   qtyYazilabilir,
@@ -1550,9 +1551,9 @@ export class InventoryService {
         // tx dışında. İptal yolu yalnız doff satırını tutar, ABBA yok.
         await claimDoffForRollTx(tx, { doffEventId: linkedDoffEventId, entrySource, createdMachineId: machineId ?? null });
 
-        // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
-        // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
-        const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
+        // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa sahipli doğumda emanet deposu (F1b ayarı;
+        // boş/emanet kapalı = bugünkü), o da yoksa varsayılan. Fabrika yolları parametre vermez → davranış aynı.
+        const targetWarehouseId = await resolveBirthWarehouseIdTx(tx, opts?.warehouseId ?? null, opts?.ownerCustomerId ?? null);
         // G3 emanet: sahip verildiyse modül açık olmalı (403) — gövde kapısı tek yazıcıda, çağıran bazlı değil.
         await assertEmanetWritableTx(tx, opts?.ownerCustomerId ?? null, "top");
         // Onay sürerken konan kilit kalan satırları burada keser (precheck tx dışıdır).

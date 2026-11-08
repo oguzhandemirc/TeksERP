@@ -594,6 +594,12 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/WorkOrderDefaultItemSection.tsx",
       needle: "updateDefaultTargetItem",
     },
+    // Genel fason F1b (2026-11-08): ayar + doğrulamalı uç bu dilimde, panel yüzeyi P1'de — o güne kadar kanıt uçtaki Zod alanı.
+    EMANET_DEFAULT_WAREHOUSE_ID: {
+      why: "Depo kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/feature-flags/emanet-default-warehouse` (pasif/olmayan depo 400, ham ayar ucu reddeder); panel yüzeyi P1",
+      file: "Teks-Erp/src/routes/feature-flag.routes.ts",
+      needle: "EmanetDefaultWarehouseBody = z.strictObject(",
+    },
     GELEN_BELGE_DEFAULT_ITEM_ID: {
       why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/gelen-belge/ayarlar` (ham ayar ucu reddeder); panel Genel Ayarlar → Gelen Belge",
       file: "Electron/src/pages/GeneralSettings/GelenBelgeSettingsSection.tsx",
