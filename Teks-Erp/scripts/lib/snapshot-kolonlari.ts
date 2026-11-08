@@ -157,7 +157,7 @@ WHERE r.status = 'CANCELLED' AND r."preCancelStatus" IS NULL AND r."cancelledAt"
     model: "Roll",
     alan: "preTamburCloseQty",
     sinif: "GERI_ALMA_GIRDISI",
-    yazan: [SVC + "tambur.service.ts"],
+    yazan: [SVC + "tambur/finalize.ts", SVC + "tambur/open-fabric-finalize.ts", SVC + "tambur/warehouse-cut-finalize.ts", SVC + "tambur/warehouse-cut.ts"], // tambur.service bölmesi 2026-11-08
     tuketen: [SVC + "tambur-undo.service.ts"],
     neden: "kapanışta (parent TAMBUR_CONSUMED) YAZILIR, FULL/SINGLE_RESTORE geri almada OKUNUP null'lanır",
     sql: [
@@ -193,7 +193,7 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     model: "Roll",
     alan: "preTamburCloseStatus",
     sinif: "GERI_ALMA_GIRDISI",
-    yazan: [SVC + "tambur.service.ts"],
+    yazan: [SVC + "tambur/warehouse-cut-finalize.ts", SVC + "tambur/warehouse-cut.ts"], // tambur.service bölmesi 2026-11-08
     tuketen: [SVC + "tambur-undo.service.ts"],
     ayakOrtak: "Roll.preTamburCloseQty",
     neden: "yalnız depo kesimi kapanışında YAZILIR (üretim akışında kapanış öncesi hep IN_PRODUCTION), geri almada null'lanır",
@@ -287,7 +287,7 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     alan: "initialQty",
     sinif: "DONMUS_ILERI",
     adayDegil: "şerhi 'Initial measurement' — imza taşımıyor; kural top-duzeltme.md metraj satırında yaşar",
-    yazan: [SVC + "helpers/kursun-meter-stock.helper.ts", SVC + "inventory/initial-entry.ts", SVC + "inventory/kursun.ts", SVC + "inventory/manual-properties.ts", SVC + "inventory/open-fabric.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur-undo.service.ts", SVC + "tambur.service.ts"],
+    yazan: [SVC + "helpers/kursun-meter-stock.helper.ts", SVC + "inventory/initial-entry.ts", SVC + "inventory/kursun.ts", SVC + "inventory/manual-properties.ts", SVC + "inventory/open-fabric.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur-undo.service.ts", SVC + "tambur/finalize.ts", SVC + "tambur/open-fabric-cut.ts", SVC + "tambur/open-fabric-finalize.ts", SVC + "tambur/warehouse-cut-finalize.ts", SVC + "tambur/warehouse-cut.ts"],
     neden: "üretim anı giriş metrajı; yalnız AŞIM yönünde ve sapma defteri satırı eşliğinde büyür (tambur-undo restoreBumpTx; H1b kurşun APPLY artı yönü `initialQtyRaise` taşıyan OVERAGE ile, ters yolda geri iner)",
     bekci: [
       { dosya: "test_consistency.ts", bolum: "33", ne: "initialQty = giriş metrajı + Σ canlı TAMBUR aşımı" },
@@ -307,7 +307,11 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
       SVC + "return.service.ts",
       SVC + "subcontractor/direct-ship.ts",
       SVC + "subcontractor/receive.ts",
-      SVC + "tambur.service.ts",
+      SVC + "tambur/finalize.ts",
+      SVC + "tambur/open-fabric-cut.ts",
+      SVC + "tambur/open-fabric-finalize.ts",
+      SVC + "tambur/warehouse-cut-finalize.ts",
+      SVC + "tambur/warehouse-cut.ts",
       SVC + "workorder-manual-move.service.ts",
     ],
     neden: "kalite kararı anındaki katalog KODU; `qualityGradeId` canonical'ın yanında donmuş etiket — katalog yeniden adlandırılsa eski top bozulmaz; iade iptali prevQualityGrade'den geri koyar",
@@ -327,7 +331,7 @@ WHERE r."qualityGradeId" IS NOT NULL AND r."qualityGrade" IS NULL`,
     alan: "entryStationId",
     sinif: "DONMUS_ILERI",
     adayDegil: "imza ('donmuş belge mantığının aynısı') ilk cümlede değil",
-    yazan: [SVC + "inventory/initial-entry.ts", SVC + "inventory/open-fabric.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur.service.ts"],
+    yazan: [SVC + "inventory/initial-entry.ts", SVC + "inventory/open-fabric.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur/finalize.ts", SVC + "tambur/open-fabric-cut.ts", SVC + "tambur/open-fabric-finalize.ts", SVC + "tambur/warehouse-cut-finalize.ts", SVC + "tambur/warehouse-cut.ts"],
     neden: "giriş anında damgalanır, makine sonradan taşınsa da değişmez; hiçbir ters yol dokunmaz",
   },
   {

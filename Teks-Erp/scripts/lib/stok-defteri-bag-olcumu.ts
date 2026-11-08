@@ -166,7 +166,7 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
     ad: "takılı top kurtarma (IN_PRODUCTION → WAREHOUSE) — GİRİŞ",
   },
   {
-    dosya: "src/services/tambur.service.ts",
+    dosya: "src/services/tambur/open-fabric-cut.ts", // tambur.service bölmesi 2026-11-08
     // Gövde iç metotta; dış `cutOpenFabric` yalnız token boğazı sarmalayıcısı.
     fonksiyon: "cutOpenFabricInner",
     ad: "üretim kesimi çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
@@ -175,7 +175,7 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
     // §4h türetmesi buldu (2026-09-14): açık kumaş finalize çocuğu da WAREHOUSE doğuyordu,
     // klasik `finalize` PRODUCTION satırı yazarken bu kardeşi yazmıyordu. 01 aynı gün
     // bağladı (`bagli: true`); listede KALIR — silinirse kapı o yolu bir daha görmez.
-    dosya: "src/services/tambur.service.ts",
+    dosya: "src/services/tambur/open-fabric-finalize.ts", // tambur.service bölmesi 2026-11-08
     fonksiyon: "finalizeOpenFabric",
     ad: "açık kumaş finalize çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
   },

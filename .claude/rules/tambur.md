@@ -1,6 +1,7 @@
 ---
 paths:
   - "{Teks-Erp,Electron,mobil}/src/**/*{tambur,Tambur,finalize,roll-cut,RollCut,undo,roll-step,plan-gate}*"
+  - "Teks-Erp/src/services/tambur/**"
 ---
 
 **Tambur · finalize · kesim · geri alma** — öz. Tam metni baştan okuma; yalnız ilgili bölümü oku:

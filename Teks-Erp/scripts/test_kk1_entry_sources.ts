@@ -28,6 +28,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { KK1_ENTRY_SOURCES } from "../src/constants/kk1-entry-sources";
 import { TAMBUR_ENTRY_SOURCES } from "../src/constants/tambur-entry-sources";
+import { tamburServisMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -72,7 +73,8 @@ check("§3 backend'de KK1 kümesini elle kuran başka okuyucu yok", elle.length 
 // §4
 const tamburSet = new Set<string>(TAMBUR_ENTRY_SOURCES);
 check("§4 TAMBUR_ENTRY_SOURCES = {TAMBUR_SPLIT, TAMBUR_MANUAL}", tamburSet.size === 2 && tamburSet.has("TAMBUR_SPLIT") && tamburSet.has("TAMBUR_MANUAL"));
-const tambur = readFileSync(join(src, "services", "tambur.service.ts"), "utf8").replace(/^\s*\/\/.*$/gm, "");
+// Tambur servisi bölündü (2026-11-08): ailenin (cephe + `services/tambur/*.ts`) birleşik metni okunur.
+const tambur = tamburServisMetni().replace(/^\s*\/\/.*$/gm, "");
 check("§4 tambur.service Çıkanlar listesi sabitten okuyor", /entrySource:\s*\{\s*in:\s*\[\.\.\.TAMBUR_ENTRY_SOURCES\]\s*\}/.test(tambur));
 const elleTambur = walk(src).filter((f) => !f.endsWith("tambur-entry-sources.ts") && /RollEntrySource\.TAMBUR_(SPLIT|MANUAL)\s*,\s*RollEntrySource\.TAMBUR_(SPLIT|MANUAL)/.test(readFileSync(f, "utf8").replace(/^\s*(\/\/|--|\*).*$/gm, "")));
 check("§4 src'de TAMBUR kümesini elle kuran okuyucu yok", elleTambur.length === 0, elleTambur.map((f) => f.replace(src, "src")).join(","));

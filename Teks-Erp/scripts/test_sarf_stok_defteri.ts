@@ -29,6 +29,7 @@ import { revokeRollOperations } from "../src/services/helpers/roll-operation.hel
 import { consumableBalances, consumeForOperationTx } from "../src/services/helpers/consumable-stock.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { buildTargetValueNeedSunumu, targetValueNeedReport } from "../src/services/reports/target-value-need.report";
+import { tamburServisMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -218,7 +219,8 @@ async function main(): Promise<void> {
   await prisma.$transaction((tx) => applyKursunOperationTx(tx, { rollId: roll4, stepId: step.id, valueId: val("G1"), userId: adminId, warnings: sink }));
   check("§4b kurşun: eksi bakiye uyarısı çağıranın warnings toplayıcısına düşer", sink.some((m) => m.includes("eksiye düştü")), JSON.stringify(sink));
   // Tambur finalize ×2 ve QC2 uyarıyı yanıtın `warnings`ine taşır, kuşak metresi hareketin qtyIn'idir.
-  const tamburSrc = readFileSync(path.join(__dirname, "../src/services/tambur.service.ts"), "utf8");
+  // Tambur servisi bölündü (2026-11-08): ailenin (cephe + `services/tambur/*.ts`) birleşik metni okunur.
+  const tamburSrc = tamburServisMetni();
   const qcSrc = readFileSync(path.join(__dirname, "../src/services/kursun-qc.service.ts"), "utf8");
   check(
     "§4c tambur iki finalize qtyIn'i geçirir + uyarıyı yanıta taşır; QC2 toplayıcı bağlı",

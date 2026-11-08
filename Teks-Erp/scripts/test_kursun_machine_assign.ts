@@ -26,6 +26,7 @@ import { DEFAULT_KURSUN_MACHINE_ASSIGN_MODE, SETTING_KEYS, readKursunMachineAssi
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { testActorId } from "./fixture-test-user";
+import { tamburServisMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -216,7 +217,8 @@ async function main(): Promise<void> {
   check("controller açık kart + okutma uçlarına oturum makinesini geçirir",
     /listOpenCards\(stamp\?\.stationId \?\? null, q \?\? null, stamp\?\.machineId \?\? null[,)]/.test(ctrl) && /stamp\?\.stationId \?\? null,\s*stamp\?\.machineId \?\? null\)/.test(ctrl) &&
     /takeForeignMachine\(stepId, stamp\?\.machineId \?\? null/.test(src("controllers/kursun-foreign-machine.controller.ts")));
-  const others = ["services/kursun-bypass.service.ts", "services/tambur.service.ts"].filter((f) => /plannedMachineId:\s*sessionMachineId/.test(src(f)));
+  // Tambur servisi bölündü (2026-11-08): cephe anahtarı ailenin birleşik metnini okur.
+  const others = ["services/kursun-bypass.service.ts", "services/tambur.service.ts"].filter((f) => /plannedMachineId:\s*sessionMachineId/.test(f.includes("tambur") ? tamburServisMetni() : src(f)));
   check("başka serviste el yazımı makine süzgeci yok", others.length === 0, others.join(","));
 }
 

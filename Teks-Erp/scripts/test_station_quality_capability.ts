@@ -66,6 +66,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { AppError } from "../src/utils/app-error";
 import { testActorId } from "./fixture-test-user";
 import { ENVANTER_SERVIS_REL, envanterServisMetni } from "./lib/envanter-servis-kaynak";
+import { TAMBUR_SERVIS_REL, tamburServisDosyasiMi, tamburServisMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -116,7 +117,7 @@ const KALITE_KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
       "`kind !== TAMBUR` EKRAN AİLESİ kontrolüdür (Tambur ucu yalnız Tambur adımına yazar); " +
       "muayene sorusu hemen ardından kalite ikiziyle ayrıca sorulur.",
   },
-  "services/tambur.service.ts#getStep": {
+  "services/tambur/read.ts#getStep": { // tambur.service bölmesi 2026-11-08
     sayi: 1,
     gerekce:
       "`kind !== TAMBUR` EKRAN AİLESİ kontrolüdür (Tambur özeti yalnız Tambur adımını açar); " +
@@ -374,8 +375,8 @@ async function main() {
     const selectIhlal: string[] = [];
     for (const [tablo, ad] of [[AKIS_SELECT_TABANI, "STEP_FLOW_SELECT"], [KALITE_SELECT_TABANI, "STEP_QUALITY_SELECT"]] as const) {
       for (const [dosya, beklenen] of Object.entries(tablo)) {
-        // envanter servisi bölündü (2026-11-08): cephe anahtarı ailenin (cephe + `services/inventory/*.ts`) birleşik metnini sayar
-        const ham = dosya === ENVANTER_SERVIS_REL ? envanterServisMetni() : kaynaklar.get(dosya);
+        // envanter ve tambur servisleri bölündü (2026-11-08): cephe anahtarı ailenin (cephe + `services/<ad>/*.ts`) birleşik metnini sayar
+        const ham = dosya === ENVANTER_SERVIS_REL ? envanterServisMetni() : dosya === TAMBUR_SERVIS_REL ? tamburServisMetni() : kaynaklar.get(dosya);
         if (!ham) { selectIhlal.push(`${dosya}: DOSYA YOK (taban bayat)`); continue; }
         const bulunan = (yorumlariSok(ham).match(new RegExp(ad, "g")) ?? []).length;
         if (bulunan < beklenen) selectIhlal.push(`${dosya} ${ad}: ${beklenen} bekleniyor, ${bulunan} var`);
@@ -387,7 +388,8 @@ async function main() {
     const kaliteOkumayan: string[] = [];
     for (const [ad, ham] of kaynaklar) {
       if (ad.startsWith(HELPER)) continue;
-      const s = yorumlariSok(ham);
+      // tambur servisi bölündü (2026-11-08): aile üyesi bölme öncesindeki gibi ailenin birleşik metniyle ölçülür
+      const s = yorumlariSok(tamburServisDosyasiMi(ad) ? tamburServisMetni() : ham);
       if (s.includes("stepRunsStepFlow(") && !s.includes("STEP_FLOW_SELECT") && !/appliesQuality:\s*true/.test(s)) akisOkumayan.push(ad);
       if (/stepCanApplyQuality\(|stationCanInspect\(/.test(s) && !s.includes("STEP_QUALITY_SELECT") && !/inspectionEnabled:\s*true/.test(s)) kaliteOkumayan.push(ad);
     }

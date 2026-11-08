@@ -26,7 +26,6 @@
 // bağlanır (kod fabrikaya aittir, rol her kurulumda aynı).
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, type Dirent } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Prisma, RollStatus, StationKind } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -49,6 +48,7 @@ import {
 import { updateSchema } from "../src/routes/feature-flag.routes";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ayarServisDosyasiMi } from "./lib/ayar-servis-kaynak";
+import { tamburServisMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0, fail = 0;
 const ok = (c: boolean, m: string, d = "") => {
@@ -438,10 +438,8 @@ function identifierRefs(name: string): { scanned: number; refs: Map<string, stri
     // kapsamdadır (dışarı taşınırsa TS derlemez) → üçlü birlikte aranır.
     // `import.meta` KULLANILMAZ — kök tsconfig CommonJS derler (typecheck:scripts
     // geçidi TS1343 ile düşer). Yol repo kökünden çözülür.
-    const svcSrc = await readFile(
-      path.join(__dirname, "..", "src", "services", "tambur.service.ts"),
-      "utf-8",
-    );
+    // Tambur servisi bölündü (2026-11-08): ailenin (cephe + `services/tambur/*.ts`) birleşik metni okunur.
+    const svcSrc = tamburServisMetni();
     const ofCall = svcSrc.match(
       /recordPlanDeviationTx\(tx, \{[\s\S]{0,600}?source: "finalize-open-fabric"[\s\S]{0,120}?\}\);/,
     )?.[0] ?? "";
