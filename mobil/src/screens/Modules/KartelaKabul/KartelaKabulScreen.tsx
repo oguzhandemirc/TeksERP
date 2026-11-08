@@ -40,6 +40,7 @@ import Animated, {
 import ScreenChrome from '../../../components/ScreenChrome';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import AppModal from '../../../components/AppModal';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
@@ -599,7 +600,7 @@ export default function KartelaKabulScreen() {
                 <SkeletonList count={4} />
               </View>
             ) : filteredJobs.length === 0 ? (
-              <View style={styles.body}>
+              <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} contentContainerStyle={styles.body}>
                 <Surface style={styles.card} elevation={1}>
                   <Text variant="bodyMedium" style={styles.empty}>
                     {jobs.length === 0
@@ -607,11 +608,13 @@ export default function KartelaKabulScreen() {
                       : 'Aramayla eşleşen iş yok.'}
                   </Text>
                 </Surface>
-              </View>
+              </PullToRefreshView>
             ) : (
               <FlashList
                 data={filteredJobs}
                 keyExtractor={(j) => j.dispatchId}
+                refreshing={refresh.refreshing}
+                onRefresh={refresh.onRefresh}
                 contentContainerStyle={styles.listContent}
                 keyboardShouldPersistTaps="handled"
                 renderItem={({ item: j }) => <KartelaJobCard job={j} onPress={() => openJob(j)} />}

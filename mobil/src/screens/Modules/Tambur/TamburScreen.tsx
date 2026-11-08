@@ -65,6 +65,7 @@ import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenC
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
 import { readMeter } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import { labelService } from '../../../services/label.service';
 import { VARIANCE_MIN_REASON_TEXT } from '../../../constants/varianceReasons';
@@ -3300,21 +3301,23 @@ export default function TamburScreen() {
       {/* SY-F3: iş emrinin hedef değerleri ("Kuşak: ZEBRA") — salt-okunur; boşsa çizilmez. */}
       {activeJob && <TamburTargetValueChips targetValues={activeJob.stepSummary.targetValues} />}
       {!activeJob ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
           <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
-        </View>
+        </PullToRefreshView>
       ) : activeJob.stepSummary.rolls.length === 0 ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="check-circle-outline" size={48} color="#10b981" />
           <Text style={styles.paneEmptyText}>Tüm toplar finalize</Text>
           <Text style={styles.paneEmptyHint}>Sekmeyi kapatabilirsin</Text>
-        </View>
+        </PullToRefreshView>
       ) : (
         <BranchGroupedRollList
           rolls={activeJob.stepSummary.rolls}
           selectedRollId={activeJob.selectedRollId}
           onSelect={selectRoll}
+          refreshing={activeRefresh.refreshing}
+          onRefresh={activeRefresh.onRefresh}
         />
       )}
       {/* BU İŞTEN ÇIKANLAR (2026-08-09) — üstteki liste "işlenecek toplar"ı,
@@ -7071,6 +7074,8 @@ function CameraScanModal({
             <FlashList
               data={cards}
               keyExtractor={(c) => c.cardId}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               contentContainerStyle={{ padding: 10 }}
               renderItem={({ item }) => (
                 <Surface style={cameraStyles.row} elevation={1}>
@@ -7314,10 +7319,14 @@ function BranchGroupedRollList({
   rolls,
   selectedRollId,
   onSelect,
+  refreshing,
+  onRefresh,
 }: {
   rolls: TamburRollSummary[];
   selectedRollId: string | null;
   onSelect: (rollId: string) => void;
+  refreshing: boolean;
+  onRefresh: () => void;
 }) {
   const groups = useMemo(() => buildBranchGroups(rolls), [rolls]);
 
@@ -7327,6 +7336,8 @@ function BranchGroupedRollList({
       <FlashList
         data={rolls}
         keyExtractor={(r) => r.rollId}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         contentContainerStyle={{ padding: 8 }}
         renderItem={({ item, index }) => (
           <RollListItem
@@ -7345,6 +7356,8 @@ function BranchGroupedRollList({
     <FlashList
       data={groups}
       keyExtractor={(g) => g.key}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
       contentContainerStyle={{ padding: 8 }}
       renderItem={({ item: g }) => (
         <View style={[branchStyles.groupCard, { borderColor: g.palette.border }]}>

@@ -56,6 +56,8 @@ export default function LoomAlarmsScreen() {
       selectedId={compact ? null : detailId}
       onOpen={(alarmId) => (compact ? navigation.navigate('UyariDetay', { alarmId }) : setSelected(alarmId))}
       now={now}
+      refreshing={feed.isRefetching}
+      onRefresh={() => void feed.refetch()}
     />
   );
   return (

@@ -88,6 +88,7 @@ import { buildEntryWarningToast } from './entryWarnings';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { NumpadHost, useOptionalNumpadContext } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { LabelCopiesStepper } from '../../../components/labels/LabelCopiesStepper';
@@ -2399,27 +2400,33 @@ export default function KK1Screen() {
               {recentRollsQuery.isLoading ? (
                 <SkeletonList count={6} />
               ) : recentRollsQuery.isError ? (
-                <AnimatedEntrance direction="fade" style={styles.recentsEmpty}>
-                  <Text style={styles.recentsEmptyText}>Liste yüklenemedi</Text>
-                  <Text style={styles.recentsEmptyHint}>
-                    {(recentRollsQuery.error as Error).message}
-                  </Text>
-                  <Button mode="outlined" onPress={() => recentRollsQuery.refetch()} style={{ marginTop: 12 }}>
-                    Tekrar dene
-                  </Button>
-                </AnimatedEntrance>
+                <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
+                  <AnimatedEntrance direction="fade" style={styles.recentsEmpty}>
+                    <Text style={styles.recentsEmptyText}>Liste yüklenemedi</Text>
+                    <Text style={styles.recentsEmptyHint}>
+                      {(recentRollsQuery.error as Error).message}
+                    </Text>
+                    <Button mode="outlined" onPress={() => recentRollsQuery.refetch()} style={{ marginTop: 12 }}>
+                      Tekrar dene
+                    </Button>
+                  </AnimatedEntrance>
+                </PullToRefreshView>
               ) : recentRolls.length === 0 ? (
-                <AnimatedEntrance direction="fade" style={styles.recentsEmpty}>
-                  <Text style={styles.recentsEmptyText}>Henüz kayıt yok</Text>
-                  <Text style={styles.recentsEmptyHint}>
-                    Kaydedilen toplar burada görünecek
-                  </Text>
-                </AnimatedEntrance>
+                <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
+                  <AnimatedEntrance direction="fade" style={styles.recentsEmpty}>
+                    <Text style={styles.recentsEmptyText}>Henüz kayıt yok</Text>
+                    <Text style={styles.recentsEmptyHint}>
+                      Kaydedilen toplar burada görünecek
+                    </Text>
+                  </AnimatedEntrance>
+                </PullToRefreshView>
               ) : (
                 <FlashList
                   ref={recentsListRef}
                   data={recentRolls}
                   keyExtractor={(r) => r.id}
+                  refreshing={refresh.refreshing}
+                  onRefresh={refresh.onRefresh}
                   extraData={flashRollId}
                   // FlashList v2'de "görünür pozisyonu koru" VARSAYILAN AÇIK: yeni
                   // kayıt tepeye eklenince liste mevcut bakış yerini sabit tutup
@@ -2727,24 +2734,30 @@ function RecentsDrawer({
           {loading ? (
             <SkeletonList count={7} />
           ) : error ? (
-            <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
-              <Text style={drawerStyles.emptyText}>Liste yüklenemedi</Text>
-              <Text style={drawerStyles.emptyHint}>{error.message}</Text>
-              <Button mode="outlined" onPress={refresh.onRefresh} style={{ marginTop: 12 }}>
-                Tekrar dene
-              </Button>
-            </AnimatedEntrance>
+            <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
+              <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
+                <Text style={drawerStyles.emptyText}>Liste yüklenemedi</Text>
+                <Text style={drawerStyles.emptyHint}>{error.message}</Text>
+                <Button mode="outlined" onPress={refresh.onRefresh} style={{ marginTop: 12 }}>
+                  Tekrar dene
+                </Button>
+              </AnimatedEntrance>
+            </PullToRefreshView>
           ) : rolls.length === 0 ? (
-            <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
-              <Text style={drawerStyles.emptyText}>Henüz kayıt yok</Text>
-              <Text style={drawerStyles.emptyHint}>
-                Kaydedilen toplar burada görünecek
-              </Text>
-            </AnimatedEntrance>
+            <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
+              <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
+                <Text style={drawerStyles.emptyText}>Henüz kayıt yok</Text>
+                <Text style={drawerStyles.emptyHint}>
+                  Kaydedilen toplar burada görünecek
+                </Text>
+              </AnimatedEntrance>
+            </PullToRefreshView>
           ) : (
             <FlashList
               data={rolls}
               keyExtractor={(r) => r.id}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               renderItem={({ item }) => (
                 <RollListItem roll={item} onPrint={onPrint} onScrap={onScrap} compactLayout={true} />
               )}
@@ -3001,22 +3014,28 @@ function RollHistoryModal({
           {q.isLoading ? (
             <SkeletonList count={isPhone ? 8 : 10} />
           ) : q.isError ? (
-            <View style={historyStyles.empty}>
-              <Text style={historyStyles.emptyText}>Liste yüklenemedi</Text>
-              <Text style={historyStyles.emptyHint}>{(q.error as Error)?.message}</Text>
-              <Button mode="outlined" onPress={refresh.onRefresh} style={{ marginTop: 12 }}>
-                Tekrar dene
-              </Button>
-            </View>
+            <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
+              <View style={historyStyles.empty}>
+                <Text style={historyStyles.emptyText}>Liste yüklenemedi</Text>
+                <Text style={historyStyles.emptyHint}>{(q.error as Error)?.message}</Text>
+                <Button mode="outlined" onPress={refresh.onRefresh} style={{ marginTop: 12 }}>
+                  Tekrar dene
+                </Button>
+              </View>
+            </PullToRefreshView>
           ) : rolls.length === 0 ? (
-            <View style={historyStyles.empty}>
-              <Text style={historyStyles.emptyText}>Kayıt yok</Text>
-            </View>
+            <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
+              <View style={historyStyles.empty}>
+                <Text style={historyStyles.emptyText}>Kayıt yok</Text>
+              </View>
+            </PullToRefreshView>
           ) : (
             <FlashList
               ref={listRef}
               data={rolls}
               keyExtractor={(r) => r.id}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               // Kart kenarlığı liste sınırına YAPIŞMASIN — 2px nefes payı.
               contentContainerStyle={historyStyles.listContent}
               // FlashList v2'de maintainVisibleContentPosition VARSAYILAN AÇIK:

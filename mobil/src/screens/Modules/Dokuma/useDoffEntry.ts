@@ -51,7 +51,7 @@ function useRunPreselect(openRuns: readonly OpenMachineRun[], lineNo: number, pa
 
 /** Bugünkü indirmeler listesi (KK1 doğumlular dahil — sunucu listesi aynen). */
 function pickToday(l: ReturnType<typeof useDoffLists>) {
-  return { todayRows: l.todayRows, todayLoading: l.todayLoading, todayError: l.todayError, refreshToday: l.refreshToday };
+  return { todayRows: l.todayRows, todayLoading: l.todayLoading, todayError: l.todayError, todayRefreshing: l.todayRefreshing, refreshToday: l.refreshToday };
 }
 
 export function useDoffEntry() {

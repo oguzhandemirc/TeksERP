@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { destinationLockQueryKey, invalidateAfterShipment, resolveDestination } from './destinationDefault';
 import { DestinationLockRow } from './DestinationLockRow';
 import { PackingGroupChips } from './PackingGroupChips';
@@ -589,7 +589,11 @@ export default function PaketlemeScreen() {
         </View>
       ) : (
         <>
-          <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            style={styles.root}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={<RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} colors={[colors.brand]} tintColor={colors.brand} />}
+          >
             {/* ── Hero: müşteri + KPI + kapsam ── */}
             <AnimatedEntrance index={0}>
               <Surface style={styles.hero} elevation={0}>

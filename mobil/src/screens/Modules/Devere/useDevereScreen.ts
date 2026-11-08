@@ -77,6 +77,7 @@ export function useDevereScreen() {
     todayWound,
     physicalBusyBeams,
     readyLoading: ready.isLoading,
+    refreshing: planned.isRefetching || ready.isRefetching || live.isRefetching,
     refresh: () => {
       void planned.refetch();
       void ready.refetch();

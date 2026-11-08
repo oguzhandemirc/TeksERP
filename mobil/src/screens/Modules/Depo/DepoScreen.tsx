@@ -25,6 +25,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { roleOfCode, gradeColor, type QualityGradeLike } from '../../../utils/qualityRole';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import DetailSheet, {
   CollapsibleSection,
@@ -696,17 +697,19 @@ export default function DepoScreen() {
             <SkeletonList count={8} />
           ) : isSwatchMode ? (
             kartelaGroups.length === 0 ? (
-              <View style={styles.empty}>
+              <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} contentContainerStyle={styles.empty}>
                 <Icon source="card-text-outline" size={56} color="#cbd5e1" />
                 <Text style={styles.emptyText}>Kartela stoğu yok</Text>
                 <Text style={styles.emptyHint}>
                   {search ? `'${search}' için sonuç yok` : 'Depoda kartela bulunmuyor'}
                 </Text>
-              </View>
+              </PullToRefreshView>
             ) : (
               <FlashList
                 data={kartelaGroups}
                 keyExtractor={(g) => `${g.itemId}__${g.colorId ?? 'none'}`}
+                refreshing={refresh.refreshing}
+                onRefresh={refresh.onRefresh}
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => (
                   <KartelaGroupRow group={item} onPress={() => setReduceGroup(item)} />
@@ -714,17 +717,19 @@ export default function DepoScreen() {
               />
             )
           ) : rolls.length === 0 ? (
-            <View style={styles.empty}>
+            <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} contentContainerStyle={styles.empty}>
               <Icon source="package-variant-closed" size={56} color="#cbd5e1" />
               <Text style={styles.emptyText}>Kayıt yok</Text>
               <Text style={styles.emptyHint}>
                 {search ? `'${search}' için sonuç yok` : 'Filtreyi değiştirin'}
               </Text>
-            </View>
+            </PullToRefreshView>
           ) : (
             <FlashList
               data={rolls}
               keyExtractor={(r) => r.id}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               contentContainerStyle={styles.listContent}
               onEndReached={() => {
                 if (rollsQuery.hasNextPage && !rollsQuery.isFetchingNextPage) {

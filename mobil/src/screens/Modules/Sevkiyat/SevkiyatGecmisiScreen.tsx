@@ -226,6 +226,8 @@ export default function SevkiyatGecmisiScreen() {
         <FlashList
           data={filtered}
           keyExtractor={(s) => s.id}
+          refreshing={refresh.refreshing}
+          onRefresh={refresh.onRefresh}
           renderItem={renderItem}
           contentContainerStyle={styles.body}
           onEndReachedThreshold={0.5}

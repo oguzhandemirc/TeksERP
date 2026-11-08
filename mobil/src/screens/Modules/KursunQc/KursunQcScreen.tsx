@@ -32,6 +32,7 @@ import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -1296,24 +1297,26 @@ export default function KursunQcScreen() {
       )}
 
       {!activeJob ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
           <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
           <Text style={styles.paneEmptyHint}>
             Yukarıdan kart okutarak başlayın
           </Text>
-        </View>
+        </PullToRefreshView>
       ) : activeJob.stepSummary.rolls.length === 0 ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Text style={styles.paneEmptyText}>Bu adımda bekleyen top yok</Text>
           {!!activeJob.stepSummary.emptyStep && (
             <Text style={styles.paneEmptyHint}>{activeJob.stepSummary.emptyStep.message}</Text>
           )}
-        </View>
+        </PullToRefreshView>
       ) : (
         <FlashList
           data={activeJob.stepSummary.rolls}
           keyExtractor={(r) => r.rollId}
+          refreshing={activeRefresh.refreshing}
+          onRefresh={activeRefresh.onRefresh}
           // flex:1 — liste kalan alanı kaplar + KENDİ İÇİNDE kaydırır. Yoksa
           // (boş-durum panelleri flex:1 ama liste değildi) toplar çoğalınca liste
           // içeriği sağ paneli aşıp taşıyordu (satırların büyümesiyle görünür oldu).
@@ -1947,6 +1950,8 @@ function CameraScanModal({
               ref={listRef}
               data={cards}
               keyExtractor={(c) => c.cardId}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               contentContainerStyle={{ padding: 10 }}
               renderItem={({ item }) => (
                 <Surface

@@ -192,6 +192,8 @@ export default function SevkiyatScreen() {
         <FlashList
           data={items}
           keyExtractor={(s) => s.id}
+          refreshing={headerRefresh.refreshing}
+          onRefresh={headerRefresh.onRefresh}
           renderItem={renderCard}
           contentContainerStyle={styles.body}
           onEndReachedThreshold={0.5}

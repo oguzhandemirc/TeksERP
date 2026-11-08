@@ -33,6 +33,7 @@ export function useDoffLists(machineId: string | null, lineNo: number) {
     todayRows,
     todayLoading: todayQuery.isLoading,
     todayError: todayQuery.isError,
+    todayRefreshing: todayQuery.isRefetching,
     refreshToday: () => void todayQuery.refetch(),
   };
 }
