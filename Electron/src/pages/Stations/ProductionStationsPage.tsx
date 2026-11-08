@@ -343,8 +343,7 @@ export function ProductionStationsPage() {
       {/* Liste görünümü liste standardında (kenardan kenara, yapışkan başlık); kart ızgarası dolgulu gövdede kalır. */}
       {stations.length > 0 && viewMode === "list" ? (
         <>
-          {/* Panel açıkken liste sağdan boşluk bırakır — seçili satır panelin altında kalmasın (geniş ekran). */}
-          <ListBody className={selectedStation ? "xl:pr-[36rem]" : undefined}>
+          <ListBody>
             <StationListView items={listItems} selectedId={selectedStationId} onSelect={(st) => setSelectedStationId(st.id)} />
           </ListBody>
           <ListFooter loaded={listItems.length} label={`${stations.length} istasyon`} />

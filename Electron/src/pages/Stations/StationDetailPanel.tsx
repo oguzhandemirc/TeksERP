@@ -2,8 +2,8 @@
 // İstasyon PANELİ — liste görünümünde satıra tıklayınca sağda açılır (2026-11-08)
 // =============================================================================
 // İstasyonun TÜM işleri tek yerde: düzenle · pasife al/aktifleştir · kurşun ayarı (gramaj + varsayılan) ·
-// makineler (mevcut `MachineRowActions`) · özellik yeteneği. Karartmasız ve modal değil: liste görünür
-// kalır, başka satıra tıklamak paneli o istasyona çevirir; kapatma X / Esc ile.
+// makineler (mevcut `MachineRowActions`) · özellik yeteneği. Diğer detay panelleri (iş emri) gibi
+// karartmalı ve modal: dışarı tıklamak, X ya da Esc kapatır.
 // =============================================================================
 import { Pencil, Plus, Power, PowerOff, Sparkles, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -69,13 +69,9 @@ export function StationDetailPanel({ station: s, machines, peripheralsByMachine,
   const chips = s ? capabilityChips(s) : [];
   const showKursun = !!s && (canHaveKursun(s) || kursun?.enabled === true);
   return (
-    <Sheet open={!!s} onOpenChange={(o) => !o && onClose()} modal={false}>
+    <Sheet open={!!s} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
-        hideOverlay
         data-testid="station-detail-panel"
-        // Dış tıklama kapatmaz: listede başka satır seçmek paneli o istasyona çevirir, panelden açılan
-        // diyaloglar (makine formu, onaylar) paneli düşürmez.
-        onInteractOutside={(e) => e.preventDefault()}
         onOpenAutoFocus={(e) => e.preventDefault()}
         className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
       >
