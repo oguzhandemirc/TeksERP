@@ -52,8 +52,11 @@ async function assertKindChangeAllowed(id: string, data: Record<string, unknown>
   );
 }
 
-/** Kategori seçildiyse ve bayrak gönderilmediyse kategoriden tohumla. */
-async function seedCapabilityFromCategory(data: Record<string, unknown>): Promise<void> {
+/**
+ * Kategori seçildiyse ve bayrak gönderilmediyse kategoriden tohumla. Güncellemede (`stationId`) tohum yalnız AÇAR:
+ * istasyonun kendi açık yeteneği, yeteneksiz bir kategori (ör. iç istasyona süreç türü) atanınca sessizce kapanmaz.
+ */
+async function seedCapabilityFromCategory(data: Record<string, unknown>, stationId?: string): Promise<void> {
   const catId = data.defaultCategoryId;
   if (typeof catId !== "string" || catId.length === 0) return;
   const needColor = data.appliesColor === undefined;
@@ -65,8 +68,11 @@ async function seedCapabilityFromCategory(data: Record<string, unknown>): Promis
     select: { appliesColor: true, appliesProperty: true },
   });
   if (!cat) return; // FK doğrulaması BaseService/Prisma'da — burada sessiz geç
-  if (needColor) data.appliesColor = cat.appliesColor;
-  if (needProperty) data.appliesProperty = cat.appliesProperty;
+  const cur = stationId
+    ? await prisma.station.findUnique({ where: { id: stationId }, select: { appliesColor: true, appliesProperty: true } })
+    : null;
+  if (needColor) data.appliesColor = cat.appliesColor || cur?.appliesColor === true;
+  if (needProperty) data.appliesProperty = cat.appliesProperty || cur?.appliesProperty === true;
 }
 
 export class StationService extends BaseService {
@@ -103,7 +109,7 @@ export class StationService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     assertStationDefaultLabelCopies(data);
     await assertKindChangeAllowed(id, data);
-    await seedCapabilityFromCategory(data);
+    await seedCapabilityFromCategory(data, id);
     return withLayoutWarning(await super.update(id, data, userId));
   }
 }
