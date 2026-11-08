@@ -348,6 +348,7 @@ export function ProductionStationsPage() {
             <StationListView items={listItems} selectedId={selectedStationId} onSelect={(st) => setSelectedStationId(st.id)} />
           </ListBody>
           <ListFooter loaded={listItems.length} label={`${stations.length} istasyon`} />
+        </>
       ) : (
         <PageBody className="p-6">
           {loading && <Skeleton className="h-24 w-full" />}
