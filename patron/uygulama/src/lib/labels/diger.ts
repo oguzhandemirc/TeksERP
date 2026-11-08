@@ -76,6 +76,7 @@ export const NOTIFICATION_SKIP: Readonly<Record<string, string>> = {
 /** Dışa aktarma kümesi adları: bulut kataloğundaki her kök projeksiyon + bulutta doğan küme (`labels.test` §4 eşler). */
 export const EXPORT_DATASET_LABEL: Readonly<Record<string, string>> = {
   urun: "Ürünler",
+  hizmet: "Hizmetler",
   renk: "Renkler",
   depo: "Depolar",
   istasyon: "İstasyonlar",

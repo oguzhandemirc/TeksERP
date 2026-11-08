@@ -61,7 +61,7 @@ AuditService.log = async () => undefined;
 const TAG = `BLTS${Date.now().toString(36).toUpperCase()}`;
 const DAY_MS = 86_400_000;
 const MIGRATIONS_DIR = path.join(__dirname, "..", "prisma", "migrations");
-/** Silme tetikleyicisi kuran migration'lar: kök kurulum + sonradan eklenen kök tablolar (MAL-8 teklif/maliyet · `urun` ek kökü `service_items`). */
+/** Silme tetikleyicisi kuran migration'lar: kök kurulum + sonradan eklenen kök tablolar (MAL-8 teklif/maliyet · `hizmet` kökü `service_items`). */
 const MIGRATIONS = ["20260929152815_patron_bulut_esitleme", "20261026120000_bulut_silme_teklif", "20261107202906_service_items_split"].map((d) => path.join(MIGRATIONS_DIR, d, "migration.sql"));
 const ufkuGec = (): Promise<void> => new Promise((r) => setTimeout(r, HORIZON_BASE_MARGIN_MS + 600));
 
@@ -96,7 +96,7 @@ async function envanterBolumu(): Promise<void> {
   const sql = MIGRATIONS.map((f) => fs.readFileSync(f, "utf8")).join("\n");
   const migrasyon = new Set([...sql.matchAll(/CREATE TRIGGER "(\w+)_sync_deleted" AFTER DELETE ON "(\w+)" FOR EACH ROW EXECUTE FUNCTION sync_mark_deleted\(/g)].map((m) => (m[1] === m[2] ? m[1] : `UYUMSUZ:${m[1]}/${m[2]}`)));
   const kok = new Set(SYNC_ROOT_TABLES);
-  check("§1a körlük zemini: 28 kök tablo (ek kök `service_items` dahil), tekrar yok", SYNC_ROOT_TABLES.length === 28 && kok.size === 28, `${SYNC_ROOT_TABLES.length}/${kok.size}`);
+  check("§1a körlük zemini: 28 kök tablo (`hizmet` kökü `service_items` dahil), tekrar yok", SYNC_ROOT_TABLES.length === 28 && kok.size === 28, `${SYNC_ROOT_TABLES.length}/${kok.size}`);
   const eksik = [...kok].filter((t) => !migrasyon.has(t));
   const fazla = [...migrasyon].filter((t) => !kok.has(t));
   check("§1b ⭐ her kök tablonun migration'da silme tetikleyicisi var (ve fazlası yok)", eksik.length === 0 && fazla.length === 0,

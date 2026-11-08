@@ -82,6 +82,11 @@ rapor isteği işleyicisi (zil rapor + her turda yoklama)
 #### `urun` — BOYUT · kök `items` (Item) · izin `bulut:oturum` · silme **DAMGA**
 - Kolonlar (tel ← kaynak): `id`←id · `kod`←code · `ad`←name · `tur`←itemType · `birim`←unit · `yasamDurumu`←lifecycleStatus · `aktif`←isActive · `birlestigiKayit`←mergedIntoId
 - Değişiklik kaynakları: `items`.updatedAt (self)
+- Yalnız ürün kartı (katalog v2, hizmet kartı D3 2026-11-08): hizmet kartı `hizmet` boyutunda; v1'de buraya giden hizmet satırlarını TAM süpürmesi düşürür.
+
+#### `hizmet` — BOYUT · kök `service_items` (ServiceItem) · izin `bulut:oturum` · silme **DAMGA**
+- Kolonlar (tel ← kaynak): `id`←id · `kod`←code · `ad`←name · `birim`←unit · `yasamDurumu`←lifecycleStatus · `aktif`←isActive · `birlestigiKayit`←mergedIntoId
+- Değişiklik kaynakları: `service_items`.updatedAt (self)
 
 #### `renk` — BOYUT · kök `colors` (Color) · izin `bulut:oturum` · silme **YOK**
 - Kolonlar (tel ← kaynak): `id`←id · `kod`←code · `ad`←name · `hex`←hex · `aktif`←isActive · `birlestigiKayit`←mergedIntoId
@@ -173,7 +178,7 @@ rapor isteği işleyicisi (zil rapor + her turda yoklama)
 
 #### `fatura-kalemi` — OLGU · kök `invoice_lines` (InvoiceLine) · izin `bulut:fatura:oku` · modül `finance.enabled` · silme **KAPSAM_DISI**
 - Kapsam: üst fatura status <> 'DRAFT' (onaydan sonra kalem değişmez — ölç)
-- Kolonlar (tel ← kaynak): `id`←id · `faturaId`←invoiceId · `sira`←lineNo · `urunId`←itemId · `aciklama`←description · `miktar`←qty · `birim`←unit · `birimFiyat`←unitPrice ⟨FINANS⟩ · `iskontoOrani`←discountRate ⟨FINANS⟩ · `kdvOrani`←vatRate ⟨FINANS⟩ · `tevkifatOrani`←withholdingRate ⟨FINANS⟩ · `tutar`←lineTotal ⟨FINANS⟩ · `kdvTutari`←vatAmount ⟨FINANS⟩
+- Kolonlar (tel ← kaynak): `id`←id · `faturaId`←invoiceId · `sira`←lineNo · `satirTipi`←lineType · `urunId`←itemId (yalnız ürün) · `hizmetId`←serviceItemId · `aciklama`←description · `miktar`←qty · `birim`←unit · `birimFiyat`←unitPrice ⟨FINANS⟩ · `iskontoOrani`←discountRate ⟨FINANS⟩ · `kdvOrani`←vatRate ⟨FINANS⟩ · `tevkifatOrani`←withholdingRate ⟨FINANS⟩ · `tutar`←lineTotal ⟨FINANS⟩ · `kdvTutari`←vatAmount ⟨FINANS⟩
 - Değişiklik kaynakları: `invoices`.updatedAt (invoice_lines.invoiceId (kalem üst faturayla birlikte gider))
 
 #### `tahsilat-odeme` — OLGU · kök `payments` (Payment) · izin `bulut:tahsilat:oku` · modül `finance.enabled` · silme **YOK**
@@ -182,7 +187,7 @@ rapor isteği işleyicisi (zil rapor + her turda yoklama)
 - Değişiklik kaynakları: `payments`.updatedAt (self)
 
 #### `fiyat` — OLGU · kök `item_prices` (ItemPrice) · izin `bulut:fiyat:oku` · modül `finance.enabled` · silme **DAMGA**
-- Kolonlar (tel ← kaynak): `id`←id · `urunId`←itemId · `cariKartId`←customerId · `tur`←kind · `doviz`←currency · `fiyat`←price ⟨FINANS⟩ · `degisim`←updatedAt
+- Kolonlar (tel ← kaynak): `id`←id · `urunId`←itemId (yalnız ürün) · `hizmetId`←serviceItemId · `cariKartId`←customerId · `tur`←kind · `doviz`←currency · `fiyat`←price ⟨FINANS⟩ · `degisim`←updatedAt
 - Değişiklik kaynakları: `item_prices`.updatedAt (self)
 
 | Anlık | Kaynak (tek kaynak) | Sıklık | İzin | Modül | Okuduğu tablolar |
@@ -494,7 +499,7 @@ Portal ayarı `saklamaAy ∈ {3, 13, 25, null=tümü}` (varsayılan 13). Saklama
 
 | İzin | Açtığı projeksiyonlar |
 |---|---|
-| `bulut:oturum` (her hesap) | BOYUT: `urun`, `renk`, `depo`, `istasyon`, `cari-kart`, `sube`, `fason-firma`, `rapor-katalogu`, `tesis` |
+| `bulut:oturum` (her hesap) | BOYUT: `urun`, `hizmet`, `renk`, `depo`, `istasyon`, `cari-kart`, `sube`, `fason-firma`, `rapor-katalogu`, `tesis` |
 | `bulut:ozet:oku` | `ozet.*` bölümleri — her bölüm AYRICA kendi aile iznini ister (aşağıdaki satırlar) |
 | `bulut:siparis:oku` | `siparis`, `siparis-kalemi`, `acik-siparis-karsilama`, `ozet.siparis` |
 | `bulut:sevkiyat:oku` | `sevkiyat`, `dogrudan-sevk`, `cuval`, `ozet.sevkiyat` |

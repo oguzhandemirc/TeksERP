@@ -4,7 +4,7 @@
 // uzlaştırma onun kurulmadığı/düştüğü hâli (elle restore) yakalar.
 import prisma from "../lib/prisma";
 import { findRecordProjection } from "./projections";
-import { rootFromSql, type RecordProjection } from "./projection-types";
+import type { RecordProjection } from "./projection-types";
 import { MAX_RECONCILE_PENDING, RECONCILE_PARENTS } from "./wire";
 
 export interface MembershipBounds {
@@ -77,7 +77,7 @@ export async function membershipIds(p: RecordProjection, b: MembershipBounds): P
   const params: unknown[] = [];
   const where = memberWhere(p, b, params);
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT t."id"::text AS id FROM ${rootFromSql(p)} t WHERE ${where} ORDER BY t."id"`,
+    `SELECT t."id"::text AS id FROM "${p.root.table}" t WHERE ${where} ORDER BY t."id"`,
     ...params,
   );
   return rows.map((r) => r.id);
@@ -101,11 +101,11 @@ export async function membershipDigest(p: RecordProjection, b: MembershipBounds)
   const where = memberWhere(p, b, params);
   const pending = pendingWhere(p, b, params);
   const rows = await prisma.$queryRawUnsafe<Array<{ n: number; d: string }>>(
-    `SELECT count(*)::int AS n, md5(COALESCE(string_agg(t."id"::text, ',' ORDER BY t."id"), '')) AS d FROM ${rootFromSql(p)} t WHERE ${where} AND NOT ${pending}`,
+    `SELECT count(*)::int AS n, md5(COALESCE(string_agg(t."id"::text, ',' ORDER BY t."id"), '')) AS d FROM "${p.root.table}" t WHERE ${where} AND NOT ${pending}`,
     ...params,
   );
   const pendingRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT t."id"::text AS id FROM ${rootFromSql(p)} t WHERE ${where} AND ${pending} ORDER BY t."id" LIMIT ${MAX_RECONCILE_PENDING + 1}`,
+    `SELECT t."id"::text AS id FROM "${p.root.table}" t WHERE ${where} AND ${pending} ORDER BY t."id" LIMIT ${MAX_RECONCILE_PENDING + 1}`,
     ...params,
   );
   const r = rows[0];

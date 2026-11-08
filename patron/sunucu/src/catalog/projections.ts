@@ -62,6 +62,7 @@ const MALIYET_KOLONU: CloudPermission = "bulut:maliyet:oku";
 export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   // ---- BOYUT (sözlükler; her hesap) ----
   { name: "urun", kind: "BOYUT", permissions: OTURUM },
+  { name: "hizmet", kind: "BOYUT", permissions: OTURUM },
   { name: "renk", kind: "BOYUT", permissions: OTURUM },
   { name: "depo", kind: "BOYUT", permissions: OTURUM },
   { name: "istasyon", kind: "BOYUT", permissions: OTURUM },

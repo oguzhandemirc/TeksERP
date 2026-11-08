@@ -6,7 +6,7 @@
 // belge buna uyar. Kolon listesi OPT-IN'dir — burada yazmayan kolon GİTMEZ.
 // Adlar İngilizce; tel adları, projeksiyon adları ve kod değerleri Türkçe (sözleşme).
 // =============================================================================
-import { col, rootTablesOf, self, type Projection, type RecordProjection, type SnapshotProjection, type DataClass } from "./projection-types";
+import { col, self, type Projection, type RecordProjection, type SnapshotProjection, type DataClass } from "./projection-types";
 import { FACTS } from "./catalog-facts";
 import { TERIM } from "../constants/terim";
 
@@ -21,9 +21,14 @@ const DIMENSIONS: readonly RecordProjection[] = [
     name: "urun", kind: "KAYIT", role: "BOYUT", root: { table: "items", model: "Item" },
     columns: [col("id", "id"), col("kod", "code"), col("ad", "name"), col("tur", "itemType"), col("birim", "unit"),
       col("yasamDurumu", "lifecycleStatus"), col("aktif", "isActive"), col("birlestigiKayit", "mergedIntoId")],
-    derived: [], sources: [self("items"), self("service_items")], deletion: "DAMGA", permission: "bulut:oturum", catalogVersion: 1,
-    // Hizmet kartı ayrı tabloda, AYNI UUID ile (2026-11-08): bulut onu bugünkü gibi `tur: SERVICE` ürün satırı görür.
-    extraRoots: [{ table: "service_items", model: "ServiceItem", fixed: { itemType: "SERVICE" } }],
+    // v2 (hizmet kartı D3): yalnız ürün kartı — TAM süpürmesi v1'de giden hizmet satırlarını düşürür.
+    derived: [], sources: [self("items")], deletion: "DAMGA", permission: "bulut:oturum", catalogVersion: 2,
+  },
+  {
+    name: "hizmet", kind: "KAYIT", role: "BOYUT", root: { table: "service_items", model: "ServiceItem" },
+    columns: [col("id", "id"), col("kod", "code"), col("ad", "name"), col("birim", "unit"),
+      col("yasamDurumu", "lifecycleStatus"), col("aktif", "isActive"), col("birlestigiKayit", "mergedIntoId")],
+    derived: [], sources: [self("service_items")], deletion: "DAMGA", permission: "bulut:oturum", catalogVersion: 1,
   },
   {
     name: "renk", kind: "KAYIT", role: "BOYUT", root: { table: "colors", model: "Color" },
@@ -125,8 +130,8 @@ export const RECORD_PROJECTIONS: readonly RecordProjection[] = [...DIMENSIONS, .
 export const SNAPSHOT_PROJECTIONS: readonly SnapshotProjection[] = SNAPSHOTS;
 export const PROJECTIONS: readonly Projection[] = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS];
 
-/** Silme işaretinin kurulduğu kök tablolar (ek kökler dahil) — migration tetikleyicileri ile İKİ YÖNLÜ ölçülür. */
-export const SYNC_ROOT_TABLES: readonly string[] = RECORD_PROJECTIONS.flatMap((p) => rootTablesOf(p));
+/** Silme işaretinin kurulduğu kök tablolar — migration tetikleyicileri ile İKİ YÖNLÜ ölçülür. */
+export const SYNC_ROOT_TABLES: readonly string[] = RECORD_PROJECTIONS.map((p) => p.root.table);
 
 /** Alt satır izinleri (§3.1, §10): finans DIŞI projeksiyonun `.finans`ı `bulut:fiyat:oku`, finans projeksiyonununki kendi izni. */
 export function subRowPermission(p: RecordProjection, dataClass: Exclude<DataClass, "ISLEM">): string {

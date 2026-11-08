@@ -18,6 +18,7 @@ const KEY_LABEL: Readonly<Record<string, string>> = {
   vadesiGecti: "Vadesi geçti",
   gecerlilikBaslangici: "Yürürlük başlangıcı",
   gecerlilikBitisi: "Yürürlük bitişi",
+  satirTipi: "Satır tipi",
 };
 
 /** ASCII anahtar kelimesi → Türkçe yazımı (anahtarlar ASCII; ekranda "Doviz", "Siparis" yazılmaz). */

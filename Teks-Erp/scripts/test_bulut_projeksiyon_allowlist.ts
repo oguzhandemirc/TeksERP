@@ -131,7 +131,7 @@ function bicimBolumu(): void {
   console.log("\n§1 — katalog biçimi");
   const boyut = RECORD_PROJECTIONS.filter((p) => p.role === "BOYUT").length;
   const olgu = RECORD_PROJECTIONS.filter((p) => p.role === "OLGU").length;
-  check("§1a 27 KAYIT (7 BOYUT + 20 OLGU) + 10 ANLIK", RECORD_PROJECTIONS.length === 27 && boyut === 7 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 10,
+  check("§1a 28 KAYIT (8 BOYUT + 20 OLGU) + 10 ANLIK", RECORD_PROJECTIONS.length === 28 && boyut === 8 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 10,
     `${RECORD_PROJECTIONS.length} (${boyut}+${olgu}) + ${SNAPSHOT_PROJECTIONS.length}`);
   const adlar = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS].map((p) => p.name);
   check("§1b projeksiyon adları tekil ve tel biçiminde", new Set(adlar).size === adlar.length && adlar.every((a) => /^[a-z][a-z0-9-]*$/.test(a)));
@@ -170,7 +170,7 @@ async function turetilmisBolumu(): Promise<void> {
   console.log("\n§4 — türetilmiş alanlar");
   const t = turetilmisKapsamDenetimi(RECORD_PROJECTIONS);
   check("§4a ⭐ türetilmiş alanın okuduğu her tablonun değişikliği görülüyor; ⏱ alanın geçişi var", t.length === 0, t.join(" · ") || "tam");
-  // Türeticiden çözülen kolon da türetici ister (`fatura.cariHesapId`, `fiyat`/`fatura-kalemi` `urunId` — 2026-11-08).
+  // Türeticiden çözülen kolon da türetici ister (`fatura.cariHesapId`).
   const turetilen = RECORD_PROJECTIONS.filter((p) => p.derived.length > 0 || p.columns.some((c) => c.resolvedBy)).map((p) => p.name).sort();
   const turetici = Object.keys(DERIVERS).sort();
   check("§4b türetici kümesi ↔ türetilmiş alanı ya da çözülen kolonu olan projeksiyonlar birebir", JSON.stringify(turetilen) === JSON.stringify(turetici), `${turetilen.join(",")} ↔ ${turetici.join(",")}`);
