@@ -21,12 +21,14 @@ type Db = Prisma.TransactionClient | typeof prisma;
 export const SERVICE_ITEM_TABLE = "SERVICE_ITEM";
 
 export type ServiceItemLiveRefKind =
-  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_CUSTOMER_PRICE" | "CONSUMABLE_NORM" | "DRAFT_INVOICE_LINE";
+  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_PROCESS_MAP" | "SERVICE_CUSTOMER_PRICE" | "CONSUMABLE_NORM" | "DRAFT_INVOICE_LINE";
 
 export const SERVICE_ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ServiceItemLiveRefKind; label: string }> = [
   // Faturalama motoru eşlemeyi ve müşteri hizmet fiyatını HER sevkte okur (1e K2a, 2026-10-29).
   { kind: "SERVICE_PROPERTY_MAP", label: "Hizmet eşlemesi (özellik)" },
   { kind: "SERVICE_VALUE_MAP", label: "Hizmet eşlemesi (özellik değeri)" },
+  // F3: adım işi (ayar açıkken) süreç türü eşlemesini her sevkte okur.
+  { kind: "SERVICE_PROCESS_MAP", label: "Hizmet eşlemesi (süreç türü)" },
   { kind: "SERVICE_CUSTOMER_PRICE", label: "Müşteri hizmet fiyatı" },
   { kind: "CONSUMABLE_NORM", label: "Aktif sarf normu" },
   // Taslak fatura onaylanınca hizmeti satış defterine yazar (plan §3.7).
@@ -36,6 +38,7 @@ export const SERVICE_ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ServiceItemLiveR
 interface LiveRefWhere {
   SERVICE_PROPERTY_MAP: Prisma.FabricPropertyWhereInput;
   SERVICE_VALUE_MAP: Prisma.FabricPropertyValueWhereInput;
+  SERVICE_PROCESS_MAP: Prisma.ServiceItemProcessWhereInput;
   SERVICE_CUSTOMER_PRICE: Prisma.ItemPriceWhereInput;
   CONSUMABLE_NORM: Prisma.ServiceConsumableNormWhereInput;
   DRAFT_INVOICE_LINE: Prisma.InvoiceLineWhereInput;
@@ -47,6 +50,7 @@ function liveRefWhere(serviceItemId: string | { in: string[] }): LiveRefWhere {
     // Eşleme pasif özellik/değerde de sayılır: çözücü `isActive`e bakmadan faturalar (fail-closed).
     SERVICE_PROPERTY_MAP: { serviceItemId },
     SERVICE_VALUE_MAP: { serviceItemId },
+    SERVICE_PROCESS_MAP: { serviceItemId },
     // Kart varsayılan fiyatı (müşterisiz) TANIMDIR, canlı referans değildir.
     SERVICE_CUSTOMER_PRICE: { serviceItemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE },
     CONSUMABLE_NORM: { serviceItemId, revokedAt: null },
@@ -64,6 +68,7 @@ export async function countServiceItemLiveRefs(db: Db, serviceItemId: string): P
   const counts: Record<ServiceItemLiveRefKind, number> = {
     SERVICE_PROPERTY_MAP: await db.fabricProperty.count({ where: w.SERVICE_PROPERTY_MAP }),
     SERVICE_VALUE_MAP: await db.fabricPropertyValue.count({ where: w.SERVICE_VALUE_MAP }),
+    SERVICE_PROCESS_MAP: await db.serviceItemProcess.count({ where: w.SERVICE_PROCESS_MAP }),
     SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: w.SERVICE_CUSTOMER_PRICE }),
     CONSUMABLE_NORM: await db.serviceConsumableNorm.count({ where: w.CONSUMABLE_NORM }),
     DRAFT_INVOICE_LINE: await db.invoiceLine.count({ where: w.DRAFT_INVOICE_LINE }),
@@ -73,7 +78,7 @@ export async function countServiceItemLiveRefs(db: Db, serviceItemId: string): P
 
 export const totalServiceItemLiveRefs = (c: ServiceItemLiveRefCount[]): number => c.reduce((s, x) => s + x.count, 0);
 
-/** Liste rozeti için kart başına toplam canlı referans — kart sayısından bağımsız 5 sorgu (`groupBy`). */
+/** Liste rozeti için kart başına toplam canlı referans — kart sayısından bağımsız 6 sorgu (`groupBy`). */
 export async function countServiceItemLiveRefTotals(db: Db, ids: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>(ids.map((id) => [id, 0]));
   if (ids.length === 0) return out;
@@ -86,6 +91,8 @@ export async function countServiceItemLiveRefTotals(db: Db, ids: string[]): Prom
   add(props);
   const values = await db.fabricPropertyValue.groupBy({ by: ["serviceItemId"], where: w.SERVICE_VALUE_MAP, _count: { _all: true } });
   add(values);
+  const processes = await db.serviceItemProcess.groupBy({ by: ["serviceItemId"], where: w.SERVICE_PROCESS_MAP, _count: { _all: true } });
+  add(processes);
   const prices = await db.itemPrice.groupBy({ by: ["serviceItemId"], where: w.SERVICE_CUSTOMER_PRICE, _count: { _all: true } });
   add(prices);
   const norms = await db.serviceConsumableNorm.groupBy({ by: ["serviceItemId"], where: w.CONSUMABLE_NORM, _count: { _all: true } });
@@ -113,6 +120,10 @@ export async function listServiceItemLiveRefs(
       where: w.SERVICE_VALUE_MAP, take, orderBy: { code: "asc" },
       select: { id: true, code: true, name: true, isActive: true, property: { select: { name: true } } },
     })).map((x) => ({ id: x.id, title: `${x.property.name} · ${x.name}`, detail: `${x.code}${x.isActive ? "" : " · pasif"} — eşlemeyi kaldırın` })),
+    SERVICE_PROCESS_MAP: (await db.serviceItemProcess.findMany({
+      where: w.SERVICE_PROCESS_MAP, take, orderBy: { category: { name: "asc" } },
+      select: { id: true, category: { select: { code: true, name: true, isActive: true } } },
+    })).map((x) => ({ id: x.id, title: x.category.name, detail: `${x.category.code}${x.category.isActive ? "" : " · pasif"} — süreç türü eşlemesini kaldırın` })),
     SERVICE_CUSTOMER_PRICE: (await db.itemPrice.findMany({
       where: w.SERVICE_CUSTOMER_PRICE, take, orderBy: { createdAt: "asc" },
       select: { id: true, currency: true, customer: { select: { name: true } } },

@@ -303,6 +303,7 @@ export const updateSchema = z.strictObject({
   financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED"]).optional(),
   financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
   financeServiceBillingBrodeUnit: z.enum(["METER", "PIECE", "STITCH"]).optional(),
+  financeServiceBillingStepWorks: z.boolean().optional(),
   financeServiceBillingTrigger: z.enum(["PER_SHIPMENT", "PERIOD_END"]).optional(),
   // D4-I1a: cari kilidi — kapsam ön seçimi (boş olmayan alt küme, sabit sıra) + koyanın kendi kilidini açması.
   financeCariHoldDefaultScope: z

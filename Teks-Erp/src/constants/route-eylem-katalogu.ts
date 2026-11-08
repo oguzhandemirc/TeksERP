@@ -23,6 +23,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/service-items/:id": e("bir hizmet kartını düzenledi", "bir hizmet kartını düzenlemeye çalıştı"),
   "DELETE /api/service-items/:id": e("bir hizmet kartını pasife aldı", "bir hizmet kartını pasife almaya çalıştı"),
   "POST /api/service-items/:id/lifecycle": e("bir hizmet kartının durumunu değiştirdi", "bir hizmet kartının durumunu değiştirmeye çalıştı"),
+  "PUT /api/service-items/:id/processes": e("bir hizmet kartının süreç türü eşlemesini değiştirdi", "bir hizmet kartının süreç türü eşlemesini değiştirmeye çalıştı"),
   // ── Hizmet fiyat tablosu (2026-11-06)
   "POST /api/service-prices": e("bir hizmet kademe fiyatı kaydetti", "bir hizmet kademe fiyatı kaydetmeye çalıştı"),
   "POST /api/service-prices/:id/revoke": e("bir hizmet fiyatını kaldırdı", "bir hizmet fiyatını kaldırmaya çalıştı"),
