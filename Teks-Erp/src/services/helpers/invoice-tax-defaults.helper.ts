@@ -5,7 +5,8 @@
 // tevkifat 0). Yalnız ÖN DEĞERDİR: satır oranı doğuşta damgalanır, muhasebe taslakta değiştirir.
 // SATIŞ: müşteri cari geçersiz kılması ?? genel satış ayarı. ALIŞ (F7, fason planı FK4): KDV hep genel;
 // tevkifat = fason firma carisinin `purchaseWithholding*` geçersiz kılması ?? genel `finance.withholding.purchase.*`
-// (genel YALNIZ fason rolündeki tarafa — iplik/sarf tedarikçisine tevkifat uydurulmaz; taraf yoksa 0). Kapalı = bugünkü.
+// (genel YALNIZ fason rolü olan karta — saf iplik/sarf tedarikçisine uydurulmaz; taraf yoksa 0). Kart hem tedarikçi hem
+// fasonsa fatura içeriği ayrılmaz: iplik faturasında da önerilir, muhasebe satırda düzeltir (F6 kabul bağlamını taşır).
 // Bekçi `test_kdv_tevkifat_ayari` ikinci çözümleyiciyi AST'den yakalar: `readFinanceDefaultVatRate` ve
 // carinin vergi alanları bu dosya dışında (ayar servisi + cari CRUD hariç) okunmaz.
 // =============================================================================
@@ -144,7 +145,12 @@ const PURCHASE_PARTY_SELECT = {
   customer: { select: { isSubcontractorRole: true } },
 } as const satisfies Prisma.CariAccountSelect;
 
-/** Alış tarafı: cari (ya da kartın hesabı) + fason rolü. Kartsız eski fason hesabı (`kind` SUBCONTRACTOR) da fasondur. */
+/** Fason rolü TEK yüklemden (iki dal aynı cevabı verir): kart rolü ya da kartsız/eski fason hesabı (`kind` SUBCONTRACTOR). */
+export function isSubcontractorParty(p: { kind: string | null; isSubcontractorRole: boolean | null }): boolean {
+  return p.kind === "SUBCONTRACTOR" || p.isSubcontractorRole === true;
+}
+
+/** Alış tarafı: cari (ya da kartın hesabı) + fason rolü. */
 async function resolvePurchaseParty(
   input: { cariId?: string | null; customerId?: string | null },
   db: Pick<typeof prisma, "cariAccount" | "customer">,
@@ -152,13 +158,13 @@ async function resolvePurchaseParty(
   if (input.cariId) {
     const acc = await db.cariAccount.findUnique({ where: { id: input.cariId }, select: PURCHASE_PARTY_SELECT });
     if (!acc) return null;
-    return { override: acc, isSubcontractor: acc.kind === "SUBCONTRACTOR" || acc.customer?.isSubcontractorRole === true };
+    return { override: acc, isSubcontractor: isSubcontractorParty({ kind: acc.kind, isSubcontractorRole: acc.customer?.isSubcontractorRole ?? null }) };
   }
   if (input.customerId) {
     const card = await db.customer.findUnique({ where: { id: input.customerId }, select: { isSubcontractorRole: true } });
     if (!card) return null;
     const acc = await findCariAccountForCardTx(db, { customerId: input.customerId, subcontractorId: null }, PURCHASE_PARTY_SELECT);
-    return { override: acc, isSubcontractor: card.isSubcontractorRole };
+    return { override: acc, isSubcontractor: isSubcontractorParty({ kind: acc?.kind ?? null, isSubcontractorRole: card.isSubcontractorRole }) };
   }
   return null;
 }

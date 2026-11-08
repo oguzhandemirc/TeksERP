@@ -18,6 +18,7 @@
 // bitirici: dönem taslağına `readFinanceWithholdingEnabled()` / `flags.financeWithholdingEnabled` / `cari.vatRate` ⇒ §6 kırmızı.
 // F7 sondaları (2026-11-08): alış rol süzgeci silinince §7 4 ❌ · alış kolu bugünküne döndürülünce §7 3 ❌ ·
 // okuyucunun çöp düşmesi kapatılınca §7 "payda 200" ❌ · `invoice.service`e `readFinancePurchaseWithholdingFlags()` ⇒ §6 ❌.
+// İnceleme #630: `isSubcontractorParty` `kind` kolunu düşürünce §7 2 ❌ (yüklem + kartsız eski fason hesabı).
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -28,7 +29,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
-import { computeInvoiceTaxDefaults, resolveInvoiceTaxDefaults, taxLineFields } from "../src/services/helpers/invoice-tax-defaults.helper";
+import { computeInvoiceTaxDefaults, isSubcontractorParty, resolveInvoiceTaxDefaults, taxLineFields } from "../src/services/helpers/invoice-tax-defaults.helper";
 import { computeInvoiceTotals, ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import { cariService } from "../src/services/cari.service";
 import { testActorId } from "./fixture-test-user";
@@ -109,6 +110,9 @@ async function main(): Promise<void> {
   let cariId: string | null = null;
   let fasonCustomerId: string | null = null;
   let fasonCariId: string | null = null;
+  let legacySubId: string | null = null;
+  let legacyCariId: string | null = null;
+  let dualCustomerId: string | null = null;
   try {
     // ── §1 ──
     section("§1 saf çözüm zinciri");
@@ -291,6 +295,21 @@ async function main(): Promise<void> {
     await cariService.update(cariId, { purchaseWithholdingEnabled: true, purchaseWithholdingNumerator: 2, purchaseWithholdingDenominator: 10 }, actor);
     const q6 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId });
     check("fason rolü olmayan cari de açık geçersiz kılmayla tevkifat alır (cari > rol süzgeci) ⇒ 20", q6.withholdingRate === 20, JSON.stringify(q6));
+    // Rol yüklemi tek yardımcıda: kart rolü ya da kartsız eski fason hesabı (kind SUBCONTRACTOR).
+    check("isSubcontractorParty: kind SUBCONTRACTOR · kart rolü ⇒ fason; CUSTOMER rolsüz / bilinmeyen ⇒ değil",
+      isSubcontractorParty({ kind: "SUBCONTRACTOR", isSubcontractorRole: null }) && isSubcontractorParty({ kind: "CUSTOMER", isSubcontractorRole: true })
+      && isSubcontractorParty({ kind: null, isSubcontractorRole: true }) && !isSubcontractorParty({ kind: "CUSTOMER", isSubcontractorRole: false }) && !isSubcontractorParty({ kind: null, isSubcontractorRole: null }));
+    const ls = await prisma.subcontractor.create({ data: { code: `TKF${STAMP}`, name: `TEST KDV eski fason ${STAMP}` }, select: { id: true } });
+    legacySubId = ls.id;
+    legacyCariId = (await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: null, subcontractorId: ls.id }))).id;
+    const legacyKind = (await prisma.cariAccount.findUniqueOrThrow({ where: { id: legacyCariId }, select: { kind: true, customerId: true } }));
+    const q6l = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: legacyCariId });
+    check("kartsız eski fason hesabı (kind SUBCONTRACTOR) genel alış ayarını alır ⇒ 70", legacyKind.kind === "SUBCONTRACTOR" && legacyKind.customerId === null && q6l.withholdingRate === 70, JSON.stringify({ legacyKind, q6l }));
+    // BİLİNEN SINIR (inceleme #630): süzgeç kart düzeyinde — hem tedarikçi hem fason kartın iplik faturası da önerilir (satırda düzeltilir).
+    const dc = await prisma.customer.create({ data: { code: `TEST-KDVD-${STAMP}`, name: `TEST KDV çift rol ${STAMP}`, isSupplierRole: true, isSubcontractorRole: true }, select: { id: true } });
+    dualCustomerId = dc.id;
+    const q6d = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, customerId: dc.id });
+    check("çift rollü kart (tedarikçi + fason) ⇒ 70 önerilir (fatura içeriği ayrılmaz — bilinen sınır, F6)", q6d.withholdingRate === 70, JSON.stringify(q6d));
     const frow = (await cariService.findById(fasonCariId)).data!;
     check("cari satırı alış geçersiz kılmasını taşır", frow.purchaseWithholdingEnabled === false && frow.purchaseWithholdingNumerator === 5 && frow.purchaseWithholdingDenominator === 10, JSON.stringify(frow));
     // Çöp ayar (elle yazılmış pay > payda / metin bayrak) ⇒ okuyucu KAPALIYA düşer = bugünkü.
@@ -320,6 +339,9 @@ async function main(): Promise<void> {
     const ps2 = await errOf(() => systemSettingService.setFeatureFlags({ financeWithholdingNumerator: salesBefore === 3 ? 4 : 3, financePurchaseWithholdingNumerator: 11 }, actor));
     const salesAfter = (await systemSettingService.getFeatureFlags()).data!.financeWithholdingNumerator;
     check("geçersiz alış üçlülü gövde satış oranını da YAZMAZ", ps2.status === 400 && salesAfter === salesBefore, JSON.stringify({ ps2, salesBefore, salesAfter }));
+    // 400'ün alış üçlüsünden geldiği: satış kısmı tek başına geçerli; kod WITHHOLDING_SETTING_INVALID.
+    const ps2Sales = updateSchema.safeParse({ financeWithholdingNumerator: salesBefore === 3 ? 4 : 3 }).success;
+    check("ps2 400 kodu WITHHOLDING_SETTING_INVALID ve kaynağı alış üçlüsü (satış parçası tek başına geçerli)", ps2.code === "WITHHOLDING_SETTING_INVALID" && ps2Sales, JSON.stringify({ ps2, ps2Sales }));
     const pbads: Array<[string, Parameters<typeof cariService.update>[1]]> = [
       ["alış yalnız pay", { purchaseWithholdingNumerator: 5 }],
       ["alış pay > payda", { purchaseWithholdingNumerator: 11, purchaseWithholdingDenominator: 10 }],
@@ -337,12 +359,17 @@ async function main(): Promise<void> {
     }
     check("DB seddi alış pay > paydayı reddeder ve Türkçe mesajı var", psed === "cari_accounts_purchase_withholding_ck" && Boolean(checkConstraintMessage(psed)), String(psed));
   } finally {
-    for (const id of [fasonCariId]) {
+    for (const id of [fasonCariId, legacyCariId]) {
       if (!id) continue;
       await prisma.cariBalance.deleteMany({ where: { cariId: id } });
       await prisma.cariAccount.deleteMany({ where: { id } });
     }
     if (fasonCustomerId) await prisma.customer.deleteMany({ where: { id: fasonCustomerId } });
+    if (dualCustomerId) {
+      await prisma.cariAccount.deleteMany({ where: { customerId: dualCustomerId } });
+      await prisma.customer.deleteMany({ where: { id: dualCustomerId } });
+    }
+    if (legacySubId) await prisma.subcontractor.deleteMany({ where: { id: legacySubId } });
     if (cariId) {
       await prisma.cariBalance.deleteMany({ where: { cariId } });
       await prisma.cariAccount.deleteMany({ where: { id: cariId } });

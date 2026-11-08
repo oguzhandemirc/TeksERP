@@ -2315,7 +2315,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Fason firmanın bize kestiği alış faturasının yeni satırı bu tevkifat oranıyla açılır; farklı olan fason firmanın cari kartında değiştirilir.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Açıkken fason rolündeki firmanın (biz işi fasona verdik) alış faturası satırı KDV'nin aşağıdaki oranı kadar tevkifatla açılır (7/10: KDV'nin %70'ini biz alıcı olarak öderiz). Yalnız fason rolündeki tedarikçiye uygulanır; iplik/sarf tedarikçisine uygulanmaz. Oran sabit değildir — mali müşavirinizle teyit edip girin; önce payı girin, sonra açın. Fason firmanın cari kartındaki alış tevkifatı seçimi bu ayarı ezer; muhasebe faturada satır bazında yine değiştirebilir. Kapalıyken (varsayılan) alışta tevkifat uygulanmaz.",
+        desc: "Açıkken fason rolündeki firmanın (biz işi fasona verdik) alış faturası satırı KDV'nin aşağıdaki oranı kadar tevkifatla açılır (7/10: KDV'nin %70'ini biz alıcı olarak öderiz). Fason rolü olan cari kartına uygulanır; yalnız tedarikçi olan (fason rolü olmayan) iplik/sarf firmasına uygulanmaz. Kart hem tedarikçi hem fason ise fatura içeriği ayırt edilmez — o firmanın iplik/sarf faturasında da önerilir, satırda düzeltin. Oran sabit değildir — mali müşavirinizle teyit edip girin; önce payı girin, sonra açın. Fason firmanın cari kartındaki alış tevkifatı seçimi bu ayarı ezer; muhasebe faturada satır bazında yine değiştirebilir. Kapalıyken (varsayılan) alışta tevkifat uygulanmaz.",
         numberField: {
           numberKey: "financePurchaseWithholdingNumerator",
           label: "Alış tevkifat payı",

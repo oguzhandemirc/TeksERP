@@ -4,6 +4,8 @@
 // ⭐ Form ikinci kez açıldığında `tax-defaults` sorgusu React Query önbelleğindedir ve ilk render'da DOLU gelir.
 //    Uygulanan-değer tabanı satırların kurulduğu değer ({genel KDV, 0}) olmazsa ön değer hiç uygulanmaz,
 //    sonra seçilen müşterinin değeri de "elle değiştirilmiş" sayılıp atlanırdı (inceleme bulgusu, PR #359).
+// ⭐ F7 (#630): ALIŞTA da seçilen cari (`customerId`) sunucuya gider — fason firmanın alış tevkifatı ondan çözülür.
+//    Negatif sonda: `useInvoiceTaxDefaults` tarafı yalnız SALES'te gönderecek hâle dönünce ⭐ alış testi kırmızı.
 // =============================================================================
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
@@ -80,5 +82,20 @@ describe("yeni fatura — KDV/tevkifat ön değeri, önbellek dolu", () => {
     await waitFor(() => expect(numberValues()).toContain("70"));
     expect(numberValues()).toContain("10");
     expect(numberValues()).not.toContain("50");
+  });
+});
+
+describe("yeni ALIŞ faturası — taraf sunucuya gider (F7)", () => {
+  it("⭐ alışta cari seçilince tax-defaults PURCHASE + customerId ile sorulur ve satıra gelir", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+    render(<InvoiceFormDialog open onOpenChange={() => {}} onCreated={() => {}} prefill={{ type: "PURCHASE", lines: [] }} />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText("Cari seç (stub)"));
+    await waitFor(() => expect(getInvoiceTaxDefaults).toHaveBeenCalledWith("PURCHASE", "cus-1"));
+    await waitFor(() => expect(numberValues()).toContain("70"));
   });
 });
