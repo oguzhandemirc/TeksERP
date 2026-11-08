@@ -74,6 +74,8 @@ import { LastBatchBadge } from "./LastBatchBadge";
 import { TERIM } from "@/lib/terim";
 import { WorkOrderType } from "@/types/enums";
 import { WorkOrderKindSection } from "./WorkOrderKindSection";
+import { MaterialProvidedByField } from "./MaterialProvidedByField";
+import { materialFieldVisible } from "./materialProvidedByVisibility";
 
 /**
  * react-hook-form hata ağacından tüm mesajları toplar (toast özeti için). Her
@@ -815,6 +817,14 @@ export function WorkOrderFormView({
                       placeholder="—"
                       locked={false}
                       {...form.register("targetWeight")}
+                    />
+                  </FormField>
+                )}
+                {materialFieldVisible(docScan.noteId) && (
+                  <FormField label="Ana hammaddeyi kim verdi?" className="sm:col-span-2">
+                    <MaterialProvidedByField
+                      value={form.watch("materialProvidedBy") ?? null}
+                      onChange={(next) => form.setValue("materialProvidedBy", next, { shouldDirty: true })}
                     />
                   </FormField>
                 )}

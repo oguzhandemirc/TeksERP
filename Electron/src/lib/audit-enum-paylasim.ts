@@ -112,7 +112,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   IN_PROGRESS:
     "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma iş emri " +
     "IN_PROGRESS iken tezgah koşuyordur; WorkOrder'ınkiyle aynı cümle doğru (2026-09-13)",
-  CUSTOMER: "firma türü / mükerrer-varlık / cari — üçü de 'Müşteri'",
+  CUSTOMER:
+    "firma türü / mükerrer-varlık / cari — üçü de 'Müşteri'; MaterialProvider(ana hammaddeyi müşteri verdi) için YETMEZ — " +
+    "WORK_ORDER.materialProvidedBy override'ı ile ayrıldı (fason F7b, 2026-11-08)",
   PENDING: "sipariş/adım/cihaz — üçü de 'Bekliyor'",
   APPROVED: "sipariş ve cihaz — ikisi de 'Onaylandı'",
   COMPLETED: "yedi durum enum'u — hepsinde 'Tamamlandı'",

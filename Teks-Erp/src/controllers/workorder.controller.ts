@@ -11,6 +11,7 @@ import { workOrderRollDetachService } from "../services/workorder-roll-detach.se
 import { addBatch } from "../services/workorder-batch-add.service";
 import { workOrderFasonQuickService } from "../services/workorder-fason-quick.service";
 import { foldTypeSchema } from "../services/helpers/fold-type";
+import { MATERIAL_PROVIDERS } from "../constants/material-provider";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
 import { WorkOrderTimelineService } from "../services/workorder-timeline.service";
@@ -42,6 +43,9 @@ const workOrderStepFields = {
 /** İş emri türleri — Prisma `WorkOrderType` ile birebir (`satisfies` derlemede ölçer). */
 const WORK_ORDER_TYPES = ["ORDER_PRODUCTION", "STOCK_PRODUCTION", "CUSTOMER_GOODS_SERVICE"] as const satisfies readonly WorkOrderType[];
 
+/** Fason F7b: ana hammaddeyi kim verdi (bu fabrikanın bakışı); yok = dokunma, null = bilinmiyor. */
+const materialProvidedBySchema = z.enum(MATERIAL_PROVIDERS, "Malzemeyi veren: Müşteri, Bu fabrika ya da Karışık olmalı").nullable().optional();
+
 const workOrderCoreShape = {
   batchNumber:       z.string().trim().min(1).max(64, "Parti kodu en fazla 64 karakter olabilir").optional().nullable(),
   // İdempotency anahtarı — istemci form-oturumu başına üretir (UUID); timeout
@@ -62,6 +66,7 @@ const workOrderCoreShape = {
   targetColorId:     z.string().uuid().optional().nullable(),
   // Tambur planlama bilgisi — operatör override edebilir.
   foldType:          foldTypeSchema,
+  materialProvidedBy: materialProvidedBySchema,
   steps: z
     .array(z.object(workOrderStepFields))
     .optional(),
@@ -365,6 +370,7 @@ const updateWorkOrderSchema = z.object({
   targetItemId: z.string().uuid().nullable().optional(),
   targetColorId: z.string().uuid().nullable().optional(),
   foldType: foldTypeSchema,
+  materialProvidedBy: materialProvidedBySchema,
   // Renk değişikliğinde kısmi-boya onayı (409 `COLOR_PARTIAL_CONFIRM` sonrası tekrar).
   confirmPartial: z.boolean().optional(),
 });
@@ -387,6 +393,8 @@ const replaceWorkOrderSchema = z.object({
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
   foldType:          foldTypeSchema,
+  // PUT tam replace olsa da bu alan gönderilmezse KORUNUR (eski panel/tablet silmesin).
+  materialProvidedBy: materialProvidedBySchema,
   steps: z
     .array(z.object({
       // smart-merge için: mevcut step'i güncellemek istersen id gönder.

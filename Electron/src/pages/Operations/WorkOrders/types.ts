@@ -1,9 +1,4 @@
-import type {
-  RollStatus,
-  StepStatus,
-  WorkOrderStatus,
-  WorkOrderType,
-} from "@/types/enums";
+import type { MaterialProvider, RollStatus, StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type { WorkOrderLocation } from "./location";
 
@@ -166,6 +161,8 @@ export interface WorkOrder {
   targetColorId: string | null;
   /** Tambur planlama bilgisi — operatöre default olarak gelir. */
   foldType: string | null;
+  /** Fason F7b: ana hammaddeyi kim verdi (bu fabrikanın bakışı); NULL = bilinmiyor. Eski backend göndermez. */
+  materialProvidedBy?: MaterialProvider | null;
   /** K29 rotasız iş emri: adımlar sahada okutmayla eklenir. Eski backend göndermez. */
   scanRouted?: boolean;
   steps: WorkOrderStepLite[];

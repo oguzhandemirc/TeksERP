@@ -21,6 +21,7 @@ import { Request } from "express";
 import {
   WorkOrder,
   Prisma,
+  type MaterialProvider,
 } from "@prisma/client";
 import {
   type WorkOrderPlaceOptions,
@@ -584,6 +585,7 @@ export class WorkOrderService {
       targetItemId?: string | null;
       targetColorId?: string | null;
       foldType?: string | null;
+      materialProvidedBy?: MaterialProvider | null;
     },
     userId?: string,
     /** Renk değişikliğinde kısmi-boya onayı (409 `COLOR_PARTIAL_CONFIRM` sonrası tekrar). */

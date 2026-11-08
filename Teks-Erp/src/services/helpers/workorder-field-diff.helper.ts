@@ -6,7 +6,8 @@
 // =============================================================================
 
 import { sequentialTx } from "./tx-sequential-relations.helper";
-import { Prisma, WorkOrderType } from "@prisma/client";
+import { Prisma, WorkOrderType, type MaterialProvider } from "@prisma/client";
+import { MATERIAL_PROVIDER_LABEL } from "../../constants/material-provider";
 import { factoryDateTr } from "../../constants/time";
 import {
   WORK_ORDER_FIELD_KIND,
@@ -79,6 +80,7 @@ export async function labelChanges(tx: Tx, changes: (WorkOrderFieldChange & { fi
     if (kind === "date") return factoryDateTr(new Date(v));
     if (kind === "type") return WORK_ORDER_TYPE_LABEL[v as WorkOrderType] ?? null;
     if (kind === "flag") return v === "true" ? "Aktif" : "Arşivde";
+    if (kind === "material") return MATERIAL_PROVIDER_LABEL[v as MaterialProvider] ?? null;
     return null;
   };
   return changes.map((c) => ({ ...c, fromLabel: label(c.field, c.from), toLabel: label(c.field, c.to) }));

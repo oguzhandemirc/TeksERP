@@ -20,6 +20,12 @@ export function isOrderlessWorkOrderType(type: string | null | undefined): boole
   return type === WorkOrderType.STOCK_PRODUCTION || type === CUSTOMER_GOODS;
 }
 
+/** F7b: fason (müşteri malı) türünde "ana hammaddeyi bu fabrika verdi" çelişkili görünür — ENGEL DEĞİL, uyarı (yazan yol yalnız US yazarken çağırır). */
+export function customerGoodsMaterialWarning(type: string | null | undefined, material: string | null | undefined): string | null {
+  if (type !== CUSTOMER_GOODS || material !== "US") return null;
+  return `${TERIM_AD.fasonMusteriMali} ${TERIM.terbiyeIsEmri.tekilKucuk} için ana hammadde normalde müşteriden gelir; "Bu fabrika verdi" seçildi. Doğruysa sorun yok — satış faturasında tevkifat önerisi 0 olur.`;
+}
+
 /** Fason türünde sipariş kalemi 400 (1. tur; müşteri ↔ sipariş müşterisi uyuşması ayrı karar). */
 export function assertCustomerGoodsHasNoOrderLines(type: string | null | undefined, orderLineCount: number): void {
   if (type !== CUSTOMER_GOODS || orderLineCount === 0) return;

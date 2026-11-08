@@ -282,6 +282,15 @@ enum WorkOrderType {
   CUSTOMER_GOODS_SERVICE
 }
 
+/// Fason F7b: iş emrinde işlenen ANA HAMMADDEYİ kim verdi — BU FABRİKANIN (ERP'nin kurulu olduğu
+/// işletmenin) bakış açısından; giden fasondaki fasoncu bu kümede YOKTUR. Vergi niteliği (fason
+/// tevkifatı) mali müşavirde; değer yalnız bilgi + `invoice-tax-defaults` önerisine girdi.
+enum MaterialProvider {
+  CUSTOMER // İşin müşterisi verdi (emanet mal — gelen fason)
+  US // Bu fabrika verdi (kendi stoğumuz)
+  MIXED // Karışık: ana hammaddenin bir kısmı müşteriden, bir kısmı bizden
+}
+
 enum WorkOrderStatus {
   PLANNED
   IN_PROGRESS
@@ -4988,6 +4997,11 @@ model WorkOrder {
   /// Nullable: mevcut kayıtlar değişmez.
   customerId String?   @db.Uuid
   customer   Customer? @relation("WorkOrderCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
+  /// Fason F7b: ana hammaddeyi kim verdi (BU FABRİKANIN bakışı — bkz. `enum MaterialProvider`).
+  /// NULL = bilinmiyor = bugünkü davranış; tahminle DOLDURULMAZ (tür ne olursa olsun). Yazım
+  /// create/PUT/PATCH (PUT'ta gönderilmeyen alan KORUNUR — eski istemci silmez).
+  materialProvidedBy MaterialProvider?
 
   // Relations
   steps            WorkOrderStep[]

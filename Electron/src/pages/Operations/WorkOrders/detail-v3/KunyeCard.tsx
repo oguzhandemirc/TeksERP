@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { safeFormat } from "@/lib/format";
 import { fetchProcessSummary, processSummaryKey, useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { SCAN_ROUTE_NAME } from "../oie/nav";
-import { workOrderTypeLabels } from "@/types/enums";
+import { materialProviderLabels, workOrderTypeLabels } from "@/types/enums";
 import { useFoldLabel } from "@/hooks/useFoldValues";
 import type { WorkOrder } from "../types";
 
@@ -36,6 +36,7 @@ export function KunyeCard({ wo }: { wo: WorkOrder }) {
         )}
         <Field label="Kat Tipi">{wo.foldType ? foldLabel(wo.foldType) : "—"}</Field>
         <Field label="Tip">{workOrderTypeLabels[wo.type]}</Field>
+        <Field label="Ana Hammadde">{wo.materialProvidedBy ? materialProviderLabels[wo.materialProvidedBy] : "Bilinmiyor"}</Field>
         <Field label="Oluşturma">
           <span className="num">{safeFormat(wo.createdAt, "dd.MM.yyyy · HH:mm")}</span>
         </Field>

@@ -20,7 +20,7 @@ import { collectWorkOrderDecisionWarnings } from "../helpers/defect-decision.hel
 import { AuditService } from "../audit.service";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse } from "../../types/api.types";
-import { assertCustomerGoodsHasNoOrderLines, assertCustomerGoodsTypeFrozen, isOrderlessWorkOrderType } from "../helpers/workorder-customer-goods.helper";
+import { assertCustomerGoodsHasNoOrderLines, assertCustomerGoodsTypeFrozen, customerGoodsMaterialWarning, isOrderlessWorkOrderType } from "../helpers/workorder-customer-goods.helper";
 import {
   WorkOrder,
   WorkOrderStatus,
@@ -306,6 +306,8 @@ export async function replace(
     // ── targetProperties doğrulaması ─────────────────────────────────────────
     /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
     const replaceWarnings: string[] = [];
+    const materialWarning = customerGoodsMaterialWarning(type, data.materialProvidedBy);
+    if (materialWarning) replaceWarnings.push(materialWarning);
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     if (
       targetPropertyIds.length === 0 &&
@@ -766,6 +768,8 @@ export async function replace(
           targetItemId: resolvedTargetItemId,
           targetColorId: resolvedTargetColorId,
           foldType: data.foldType ?? null,
+          // Tam replace'in TEK istisnası: gönderilmeyen (eski istemci) alan silinmez; null açıkça temizler.
+          materialProvidedBy: data.materialProvidedBy,
         },
         include: {
           steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
@@ -807,6 +811,7 @@ export async function replace(
         allocationCount: allocations.length,
         targetItemId: updated.targetItemId,
         targetColorId: updated.targetColorId,
+        materialProvidedBy: updated.materialProvidedBy,
         targetPropertyIds,
       },
     });

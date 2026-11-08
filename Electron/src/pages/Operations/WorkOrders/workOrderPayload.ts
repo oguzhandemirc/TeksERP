@@ -1,4 +1,4 @@
-import { WorkOrderType } from "@/types/enums";
+import { WorkOrderType, type MaterialProvider } from "@/types/enums";
 import type { WorkOrderFormValues } from "./schema";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
@@ -57,6 +57,8 @@ export interface CreatePayload {
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   foldType: string | null;
+  /** Fason F7b — elle kurulan allowlist: alan burada yazılmazsa sunucuya hiç gitmez. null = bilinmiyor/temizle. */
+  materialProvidedBy: MaterialProvider | null;
 }
 
 export interface WorkOrderFormMeta {
@@ -128,5 +130,6 @@ export function buildPayload(
     plannedStartDate: dateOrNull(v.plannedStartDate),
     plannedEndDate: dateOrNull(v.plannedEndDate),
     foldType: trimOrNull(v.foldType),
+    materialProvidedBy: v.materialProvidedBy ?? null,
   };
 }

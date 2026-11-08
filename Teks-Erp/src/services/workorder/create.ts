@@ -15,7 +15,7 @@ import { collectWorkOrderDecisionWarnings } from "../helpers/defect-decision.hel
 import { AuditService } from "../audit.service";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse } from "../../types/api.types";
-import { assertCustomerGoodsHasNoOrderLines, isOrderlessWorkOrderType, resolveCreateCustomer } from "../helpers/workorder-customer-goods.helper";
+import { assertCustomerGoodsHasNoOrderLines, customerGoodsMaterialWarning, isOrderlessWorkOrderType, resolveCreateCustomer } from "../helpers/workorder-customer-goods.helper";
 import {
   WorkOrder,
   WorkOrderStatus,
@@ -404,6 +404,8 @@ export async function prepareCreate(this: WorkOrderServiceThis, data: WorkOrderC
     //    (simetrik kural — özellik asla uygulanmaz aksi halde).
     /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
     const routeWarnings: string[] = [...planWarnings];
+    const materialWarning = customerGoodsMaterialWarning(type, data.materialProvidedBy);
+    if (materialWarning) routeWarnings.push(materialWarning);
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     let targetValues = data.targetValues ?? [];
     if (
@@ -611,6 +613,7 @@ export async function insertPreparedTx(this: WorkOrderServiceThis, tx: Prisma.Tr
         targetItemId:      resolvedTargetItemId,
         targetColorId:     resolvedTargetColorId,
         foldType:          data.foldType          ?? null,
+        materialProvidedBy: data.materialProvidedBy ?? null,
         scanRouted:        data.scanRouted === true && finalSteps.length === 0,
         steps: {
           create: finalSteps.map((step, index) => ({
