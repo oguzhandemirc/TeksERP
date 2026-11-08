@@ -102,6 +102,7 @@ export async function collectServiceBillingDraft(params: {
       meterBasis: params.settings.meterBasis,
       missingMeter: params.settings.missingMeter,
       brodeUnit: params.settings.brodeUnit,
+      stepWorks: params.settings.stepWorks,
       priceAsOf: dispatchDay ? params.dispatchedAt ?? new Date() : undefined,
       priceAsOfByRoll: dispatchDay ? params.dispatchedAtByRoll : undefined,
       gramPriceBasis: params.settings.gramPriceBasis,

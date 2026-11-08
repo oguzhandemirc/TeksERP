@@ -304,6 +304,10 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "routes/finance.routes.ts",
   "services/helpers/shipment-auto-draft.helper.ts",
   "services/service-period-invoice.service.ts",
+  // F3 adım hizmeti: süreç türü → kart eşlemesi (`service_item_processes`) okuyucusu ve yazım servisi;
+  // çözücüye STEP kaynağı olarak girer — fiyat çözmez.
+  "services/helpers/service-step-work.helper.ts",
+  "services/service-item/processes.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.

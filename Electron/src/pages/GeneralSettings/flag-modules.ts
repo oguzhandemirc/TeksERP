@@ -192,6 +192,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeServiceBillingMeterBasis: "financeEnabled",
   financeServiceBillingMissingMeter: "financeEnabled",
   financeServiceBillingBrodeUnit: "financeEnabled",
+  financeServiceBillingStepWorks: "financeEnabled",
   financeServiceBillingTrigger: "financeEnabled",
   financeServiceBillingPriceDate: "financeEnabled",
   financeKursunGramPriceBasis: "financeEnabled",

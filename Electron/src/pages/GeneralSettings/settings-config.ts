@@ -2428,6 +2428,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci"],
         desc: "Açıkken sevk taslağında müşterinin kendi (emanet) kumaşı mal satırı olmaz; o toplara yapılan iş hizmet kalemi × metre olarak yazılır ve iş faturaya bağlanır (aynı iş iki kez faturalanmaz). Kapalıyken (varsayılan) taslak bugünkü gibidir. Otomatik taslak ayarı da açık olmalı.",
       },
+      {
+        // Fason F3 (2026-11-08): `defaultOn` backend `readFinanceServiceBillingStepWorks` kayıt-yok değeriyle birebir.
+        key: "financeServiceBillingStepWorks",
+        group: "Hizmet faturası",
+        title: "Boya, apre gibi adımları da faturala",
+        summary: "Hizmet kartına eşlenmiş süreç türündeki adım (ör. boya) hizmet satırı olarak girer.",
+        defaultOn: false,
+        audience: ["Muhasebeci"],
+        desc: "Açıkken emanet topun geçtiği adımın süreç türü bir hizmet kartına eşlenmişse o iş de faturalanır: iç adım tamamlanınca çıkış metresiyle, dış (fason) adım kabul edilince kabul metresiyle. Aynı adım zaten kurşun ya da özellik (tambur, brode) işi olarak faturalanıyorsa ikinci satır açılmaz; simüle ölçümlü adım faturaya girmez. Dikkat: açıldığı gün, henüz faturalanmamış toplardaki geçmiş adım işleri o topların ilk sevkinde toplu gelir. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
+      },
     ],
     enumFlags: [
       {

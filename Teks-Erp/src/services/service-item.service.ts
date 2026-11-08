@@ -13,6 +13,7 @@ import { AppError } from "../utils/app-error";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { validateCode, validateName } from "../lib/string-validators";
 import { AuditService } from "./audit.service";
+import { listServiceItemProcesses, listServiceProcessMap, replaceServiceItemProcesses, type ServiceProcessRow } from "./service-item/processes";
 import { BaseService, requireActorId, withActor } from "./base.service";
 import { nextSeriesNo } from "./number-series.service";
 import { codeCountsForCounter } from "./helpers/series-format.helper";
@@ -223,6 +224,22 @@ export class ServiceItemService extends BaseService {
   async lifecycleSummary(ids: string[]): Promise<ApiResponse<Array<{ id: string; liveTotal: number; rolls: number }>>> {
     const totals = await countServiceItemLiveRefTotals(prisma, [...new Set(ids)]);
     return { success: true, data: [...totals].map(([id, liveTotal]) => ({ id, liveTotal, rolls: 0 })) };
+  }
+
+  /** F3: bütün süreç türü → hizmet kartı eşlemeleri. */
+  async processMap(): Promise<ApiResponse<ServiceProcessRow[]>> {
+    return { success: true, data: await listServiceProcessMap() };
+  }
+
+  /** F3: kartın süreç türleri. */
+  async processes(id: string): Promise<ApiResponse<ServiceProcessRow[]>> {
+    return { success: true, data: await listServiceItemProcesses(id) };
+  }
+
+  /** F3: kartın süreç türü kümesini değiştir (pivot replace, audit'li). */
+  async replaceProcesses(id: string, categoryIds: string[], userId?: string): Promise<ApiResponse<ServiceProcessRow[]> & { changed: boolean }> {
+    const res = await replaceServiceItemProcesses(id, categoryIds, userId);
+    return { success: true, data: res.rows, changed: res.changed };
   }
 }
 
