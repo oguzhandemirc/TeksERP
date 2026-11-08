@@ -12,6 +12,7 @@ import { colors, radius, spacing, typography } from '../../../../theme';
 import { meterChoices, parseMeters } from '../approvalGate';
 import type { DocRow, WoRowsState } from './useWoRows';
 import { InlineField } from './InlineField';
+import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 
 interface MeterProps {
   row: DocRow;
@@ -76,6 +77,23 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
         onChange={(v) => wo.updateForm(row.noteId, { gramajValueId: v === f.gramajValueId ? null : v })}
         disabled={locked}
         testID={`belge-satir-gramaj-${no}`}
+      />
+    </InlineField>
+  );
+}
+
+/** Kat tipi — gramajın altında aynı satır biçimiyle (tambur adımının üretim bilgisi; kurşun gramajı gibi baştan sorulur). */
+export function FoldField(p: { values: readonly { code: string; name: string }[]; value: string | null; locked: boolean; onChange: (code: string) => void }) {
+  // Kat kataloğu boş (özellik pasif): seçilecek değer yok, kayıt engellenmez — yalnız bilgi.
+  if (p.values.length === 0) return <NoticeStrip tone="warn" text="Kat değeri tanımlı değil (seçmeden de kaydedilir) — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />;
+  return (
+    <InlineField label="Kat tipi" testID="ie-form-kat-satir">
+      <ChoiceChips
+        options={p.values.map((f) => ({ value: f.code, label: f.name, testID: `ie-form-kat-${f.code}` }))}
+        value={p.value}
+        onChange={(v) => v && p.onChange(v)}
+        disabled={p.locked}
+        testID="ie-form-kat"
       />
     </InlineField>
   );

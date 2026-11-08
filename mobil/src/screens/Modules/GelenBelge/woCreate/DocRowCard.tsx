@@ -24,7 +24,7 @@ import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
 import { bandTone, type IssueKey } from './woIssues';
 import type { PartyPlanCtx } from './partyPlan';
 
-export { GramajField } from './DocRowMeasures';
+export { FoldField, GramajField } from './DocRowMeasures';
 
 /** Alt çubuk hapından gelen "şu alanı aç" isteği; `seq` her basışta artar (aynı alana ikinci basış da açar). */
 export interface DocRowOpenRequest {
@@ -39,6 +39,8 @@ interface Props {
   customersLoading: boolean;
   /** Belge masası çok partide gramajı parti başına kendi plan bölümünde çizer. */
   hideGramaj?: boolean;
+  /** Gramajın hemen altına çizilen satır (tek formda kat tipi). */
+  afterGramaj?: React.ReactNode;
   /** `list` (vars.): toplu görünüm/masa kartı; `single`: tek İE formunun sol sütunu. */
   variant?: DocRowVariant;
   /** Tek formda "Yeniden okut" (belgesiz taslakta "Belge ekle"). */
@@ -58,7 +60,7 @@ type Picker = 'owner' | 'batch' | null;
 
 const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
 
-export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, manual = false, onDraftCancelled, openRequest, partyPlan, onPreview }: Props) {
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, afterGramaj, variant = 'list', onReread, manual = false, onDraftCancelled, openRequest, partyPlan, onPreview }: Props) {
   const { read, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
@@ -90,6 +92,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
             </>
           )}
           {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
+          {afterGramaj}
           {!single && !done && issueList.map((n) => <Text key={n.text} style={styles.note}>• {n.text}</Text>)}
         </>
       )}

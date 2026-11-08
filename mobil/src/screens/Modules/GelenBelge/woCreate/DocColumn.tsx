@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { colors, typography } from '../../../../theme';
 import { ScannerSection } from './DocBatchView';
-import DocRowCard, { type DocRowOpenRequest } from './DocRowCard';
+import DocRowCard, { FoldField, type DocRowOpenRequest } from './DocRowCard';
 import type { useUnifiedWoForm } from './useUnifiedWoForm';
 
 type FormModel = ReturnType<typeof useUnifiedWoForm>;
@@ -15,8 +15,12 @@ export default function DocColumn({ u, openRequest }: { u: FormModel; openReques
   if (row) {
     // Önizleme yalnız bu satırın notu bu cihazda okutulduysa (sayfaların yerel kopyası `done.sent`).
     const sent = scan.b.done?.note.id === row.noteId ? scan.b.done.sent : [];
+    // Kat tipi gramajın altında (üstte görünürse); gizlenmişse sağdaki "Diğer alanlar"da kalır.
+    const fold = u.hasTambur && fields.isTop('katTipi')
+      ? <FoldField values={u.foldValues} value={u.form.extras.foldType} locked={done || wo.saving} onChange={(v) => u.edit({ foldType: v })} />
+      : null;
     return (
-      <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj') || u.partyGramaj}
+      <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj') || u.partyGramaj} afterGramaj={fold}
         variant="single" onReread={u.manual ? u.addDoc : u.okut} manual={u.manual && wo.isManual(row.noteId)} onDraftCancelled={u.dropDoc} openRequest={openRequest} partyPlan={u.partyPlan}
         onPreview={sent.length > 0 ? () => scan.setSentIndex(0) : undefined} />
     );

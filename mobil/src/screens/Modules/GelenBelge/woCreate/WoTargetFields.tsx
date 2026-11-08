@@ -26,6 +26,8 @@ export interface TargetFieldsProps {
   showQuantity: boolean;
   targetDerived?: { value: string; derived: boolean };
   hasTambur: boolean;
+  /** Üst bölgede kat tipi sol sütunda (gramajın altında) çizilir; burada yalnız "Diğer alanlar"da. */
+  zone?: 'top' | 'other';
   foldValues: readonly FabricPropertyValue[];
   onPickItem: () => void;
   /** Hedef engellerinden (`bandTone`): sarı = sayı hatalı, kırmızı = kat tipi eksik. */
@@ -46,7 +48,7 @@ export function TargetFields(p: TargetFieldsProps) {
   const itemSug = state.suggestions.targetItem;
   const defaultHint = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
   const colorSug = state.suggestions.targetColor;
-  const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') };
+  const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') && p.zone === 'other' };
   const anyNumber = cols.en || cols.metraj || cols.kg || cols.kat;
   if (!show('hedefKumas') && !anyNumber && !show('hedefRenk')) return null;
   const itemName = itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null;
