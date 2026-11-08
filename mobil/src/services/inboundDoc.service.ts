@@ -194,6 +194,23 @@ export interface InboundNoteDetail {
   suggestions?: DocFormSuggestions | null;
   /** Okuma özetindekiyle aynı (toplar ayrı geldi). */
   docRolls?: DocRoll[];
+  /** Belge satırları (detay ucu hep gönderir; tablet yalnız parti önizlemesinde okur: top satırları + foto kutusu). */
+  lines?: InboundNoteLine[];
+}
+
+/** Detay satırının tabletin okuduğu alt kümesi; `sourceRects` taramanın okuma çerçevesindedir (piksel). */
+export interface InboundNoteLine {
+  id: string;
+  lineNo: number;
+  blockNo: number;
+  lineKind: string;
+  /** Onayda doğan parti kaydı (özet satırı); eski sunucu göndermez. */
+  summary?: boolean;
+  senderRollNo: string | null;
+  meters: string;
+  weightKg: string | null;
+  sourceRects: Record<string, { x: number; y: number; width: number; height: number }> | null;
+  scanId?: string | null;
 }
 
 /** Backend `PhotoRetentionMode` aynası (K28). */
@@ -205,6 +222,9 @@ export interface InboundNoteScan {
   sha256: string;
   status: string;
   mimeType: string;
+  /** Küçültülmüş fotoğrafta kutuların çerçevesi (okuma boyutu); tam fotoğrafta null/yok → görüntünün kendi boyutu. */
+  rectFrameWidth?: number | null;
+  rectFrameHeight?: number | null;
 }
 
 /** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */

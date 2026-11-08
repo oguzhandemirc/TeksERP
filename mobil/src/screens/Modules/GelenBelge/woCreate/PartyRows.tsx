@@ -13,6 +13,10 @@ import { MODE_LABELS, partyFacts, partyHeading, partyOutcome, partyResultSummary
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyPlanFields from './PartyPlanFields';
 import type { PartyPlanCtx } from './partyPlan';
+import type { NoteParty } from '../../../../services/inboundDoc.service';
+import { partyLock, partyTabs, showPartyTabs, STATUS_MARK } from './partyTabs';
+import { usePartyTabState } from './partyTabStore';
+import { PartyAllTable, PartyLockNote, PartyTabStrip } from './PartyTabBar';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
 export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): void {
@@ -29,45 +33,37 @@ export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): v
   }, [q.isSuccess, q.isError, q.data, row.noteId, setParties]);
 }
 
-/** `plan`: tek İE formunda "her parti ayrı" kipinde parti başına gramaj + makine (belge masası kendi plan bölümünde çizer). */
+/**
+ * `plan`: tek İE formunda "her parti ayrı" kipinde parti başına gramaj + makine (belge masası kendi plan bölümünde çizer).
+ * ≥2 partide sekmeler (2026-11-09): ortak satırlar (özet, kip, belge uyarıları, kilit notu) üstte; "Tümü" tablosu + parti
+ * başına sekme. Bütün parti panoları bağlı kalır (gizli olan `display:none`) — yazılmakta olan metre metni sekme geçişinde kaybolmaz.
+ */
 export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: WoRowsState; locked: boolean; plan?: PartyPlanCtx | null }) {
   const m = row.form?.multi;
   const view = row.parties;
+  const [tabState, select] = usePartyTabState(row.noteId);
   if (!m || !view) return null;
   const set = (next: MultiPartyDraft) => wo.setMulti(row.noteId, next);
   const setRow = (blockNo: number, patch: Partial<PartyRow>) => set({ ...m, rows: m.rows.map((r) => (r.blockNo === blockNo ? { ...r, ...patch } : r)) });
   const result = row.result?.kind === 'OPENED' ? row.result : null;
+  const outcome = (blockNo: number) => partyOutcome(result, blockNo);
+  const tabbed = showPartyTabs(m);
+  const tabs = partyTabs(m, tabState.visited, outcome);
+  const active = tabbed && tabs.some((t) => t.blockNo === tabState.active) ? tabState.active : 'all';
+  const pane = (r: PartyRow) => (
+    <PartyPane key={r.blockNo} r={r} p={view.parties.find((x) => x.blockNo === r.blockNo)} out={outcome(r.blockNo)} noteNo={row.noteNo} locked={locked} plan={plan}
+      problems={tabbed ? tabs.find((t) => t.blockNo === r.blockNo)?.problems ?? [] : []} hidden={tabbed && active !== r.blockNo} onChange={(patch) => setRow(r.blockNo, patch)} />
+  );
   return (
     <View style={styles.box} testID={`belge-partiler-${row.noteNo}`}>
       <Text style={styles.title}>{`Bu belgede ${m.rows.length} parti var`}</Text>
       <ResultSummary text={partyResultSummary(result, m.rows.map((r) => r.blockNo))} testID={`belge-parti-ozet-${row.noteNo}`} />
-      {m.rows.map((r) => {
-        const p = view.parties.find((x) => x.blockNo === r.blockNo);
-        const out = partyOutcome(result, r.blockNo);
-        // Açılan partinin İE'si yeniden gönderimde sunucuda yeniden açılmaz; alanları kilitlenir.
-        const partyLocked = locked || out?.kind === 'OPENED';
-        return (
-          <View key={r.blockNo} style={[styles.party, out?.kind === 'OPENED' && styles.partyOk, out?.kind === 'FAILED' && styles.partyFail]}
-            testID={`belge-parti-${row.noteNo}-${r.blockNo}`} accessibilityLabel={partyHeading(r.blockNo, p)}>
-            <Text style={styles.partyTitle}>{`${r.blockNo}. parti`}</Text>
-            <View style={styles.facts}>
-              {partyFacts(p).map((f) => (
-                <View key={f} style={styles.fact}>
-                  <Text style={styles.factText}>{f}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.row}>
-              <TextInput mode="outlined" label="Parti no" value={r.batchNo} disabled={partyLocked} style={styles.input}
-                onChangeText={(t) => setRow(r.blockNo, { batchNo: t })} testID={`belge-parti-no-${row.noteNo}-${r.blockNo}`} />
-              <MeterInput initial={r.meters} locked={partyLocked} onChange={(meters) => setRow(r.blockNo, { meters })} testID={`belge-parti-metre-${row.noteNo}-${r.blockNo}`} />
-            </View>
-            {plan && <PartyPlanFields ctx={plan} party={r} locked={partyLocked} noteNo={row.noteNo} onChange={(patch) => setRow(r.blockNo, patch)} />}
-            {p?.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
-            <OutcomeLine out={out} testID={`belge-parti-sonuc-${row.noteNo}-${r.blockNo}`} />
-          </View>
-        );
-      })}
+      {tabbed && <PartyLockNote locks={partyLock(tabs)} onSelect={select} testID={`belge-parti-kilit-${row.noteNo}`} />}
+      {tabbed && <PartyTabStrip tabs={tabs} active={active} onSelect={select} testID={`belge-parti-sekme-${row.noteNo}`} />}
+      {tabbed && active === 'all' && (
+        <PartyAllTable tabs={tabs} rows={m.rows} parties={view.parties} outcome={outcome} onSelect={select} testID={`belge-parti-tablo-${row.noteNo}`} />
+      )}
+      {m.rows.map(pane)}
       {view.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
       {showModeChoice(view) && (
         <View style={styles.chips}>
@@ -78,6 +74,47 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+interface PaneProps {
+  r: PartyRow;
+  p: NoteParty | undefined;
+  out: PartyOutcome;
+  noteNo: string;
+  locked: boolean;
+  plan?: PartyPlanCtx | null;
+  /** Sekmeli görünümde partiyi kilitleyen eksikler (⚠). */
+  problems: readonly string[];
+  hidden: boolean;
+  onChange: (patch: Partial<PartyRow>) => void;
+}
+
+/** Tek partinin alanları: künye (top, müşteri İE no…), parti no, gelen metre, plan, sunucu uyarıları (beyan ↔ okunan), sonuç. */
+function PartyPane({ r, p, out, noteNo, locked, plan, problems, hidden, onChange }: PaneProps) {
+  // Açılan partinin İE'si yeniden gönderimde sunucuda yeniden açılmaz; alanları kilitlenir.
+  const partyLocked = locked || out?.kind === 'OPENED';
+  return (
+    <View style={[styles.party, out?.kind === 'OPENED' && styles.partyOk, out?.kind === 'FAILED' && styles.partyFail, hidden && styles.hidden]}
+      testID={`belge-parti-${noteNo}-${r.blockNo}`} accessibilityLabel={partyHeading(r.blockNo, p)}>
+      <Text style={styles.partyTitle}>{`${r.blockNo}. parti`}</Text>
+      <View style={styles.facts}>
+        {partyFacts(p).map((f) => (
+          <View key={f} style={styles.fact}>
+            <Text style={styles.factText}>{f}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.row}>
+        <TextInput mode="outlined" label="Parti no" value={r.batchNo} disabled={partyLocked} style={styles.input}
+          onChangeText={(t) => onChange({ batchNo: t })} testID={`belge-parti-no-${noteNo}-${r.blockNo}`} />
+        <MeterInput initial={r.meters} locked={partyLocked} onChange={(meters) => onChange({ meters })} testID={`belge-parti-metre-${noteNo}-${r.blockNo}`} />
+      </View>
+      {problems.map((x) => <Text key={x} style={styles.problem} testID={`belge-parti-eksik-${noteNo}-${r.blockNo}`}>{`${STATUS_MARK.error} ${x}`}</Text>)}
+      {plan && <PartyPlanFields ctx={plan} party={r} locked={partyLocked} noteNo={noteNo} onChange={onChange} />}
+      {p?.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
+      <OutcomeLine out={out} testID={`belge-parti-sonuc-${noteNo}-${r.blockNo}`} />
     </View>
   );
 }
@@ -135,6 +172,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   input: { flex: 1, minWidth: 160 },
   warn: { fontSize: typography.size.sm, color: colors.warningText },
+  problem: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.warningText },
+  hidden: { display: 'none' },
   ok: { flex: 1, fontSize: typography.size.base, color: colors.successText, fontWeight: typography.weight.semibold },
   fail: { flex: 1, fontSize: typography.size.base, color: colors.dangerText, fontWeight: typography.weight.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

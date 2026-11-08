@@ -57,8 +57,8 @@ describe('parti taslağı (saf)', () => {
   it('eksik parti metresi engeller; tek partili formda parti kuralı yok', () => {
     const m = initialMultiParty(view())!;
     m.rows[1]!.meters = null;
-    expect(multiPartyIssues(m)).toEqual(['Parti metresi eksik: 2. parti.']);
-    expect(rowIssues({ ...initialRowForm(detail), multi: m })).toEqual(['Parti metresi eksik: 2. parti.']);
+    expect(multiPartyIssues(m)).toEqual(['Parti metresi eksik: P9918734.']);
+    expect(rowIssues({ ...initialRowForm(detail), multi: m })).toEqual(['Parti metresi eksik: P9918734.']);
     expect(buildCreateBody(initialRowForm(detail), { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: null }).parties).toBeUndefined();
   });
   it('openedWorkOrders: çok partide liste, eski sunucuda tek kayıt', () => {

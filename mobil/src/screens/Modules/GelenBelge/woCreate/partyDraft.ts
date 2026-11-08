@@ -2,6 +2,7 @@
 // satırın düzenlenebilir parti listesi + kip; kayıt kapısı ve gövde parçası. Kural sunucudadır (uyarılar oradan gelir).
 import { TERIM } from '../../../../lib/terim';
 import { fmtMeters } from '../../../../utils/meters';
+import { partyProblems, partyTabTitle } from './partyTabs';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../../../../services/inboundDoc.service';
 
 export interface PartyRow {
@@ -36,8 +37,9 @@ export function initialMultiParty(view: NotePartiesView | null | undefined): Mul
   };
 }
 
+/** Kilit sebebi sekme başlığıyla (parti no, yoksa "Parti N") — görevli hangi sekmeye bakacağını görür. */
 export function multiPartyIssues(m: MultiPartyDraft): string[] {
-  const missing = m.rows.filter((r) => r.meters === null || !(r.meters > 0)).map((r) => `${r.blockNo}. parti`);
+  const missing = m.rows.filter((r) => partyProblems(r).length > 0).map(partyTabTitle);
   return missing.length ? [`Parti metresi eksik: ${missing.join(', ')}.`] : [];
 }
 

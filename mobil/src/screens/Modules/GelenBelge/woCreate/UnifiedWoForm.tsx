@@ -21,6 +21,7 @@ import DocColumn from './DocColumn';
 import CreateBar from './CreateBar';
 import WoFormFields from './WoFormFields';
 import OwnerKindCard from './OwnerKindCard';
+import { usePartyScanReview } from './PartyScanSide';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
@@ -86,7 +87,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
       )}
       <CreateBar wo={wo} done={done} block={u.block} blockKey={u.blockKey} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
-      <ScanModals scan={scan} />
+      <ScanModals scan={scan} row={u.row} />
       <SameDocumentCard
         match={scan.b.sameDoc ?? wo.sameDoc}
         onClose={() => { scan.b.clearSameDoc(); wo.dismissSameDoc(); }}
@@ -177,7 +178,10 @@ function FormColumn({ u, fieldProps, onOtherLayout }: FormColumnProps) {
   );
 }
 
-function ScanModals({ scan }: { scan: DocScanFlow }) {
+function ScanModals({ scan, row }: { scan: DocScanFlow; row: FormModel['row'] }) {
+  const sent = scan.b.done?.sent ?? [];
+  // Çok partili belgede önizleme parti sekmeleriyle açılır; sekme fotoğrafı o partinin satırlarına odaklar.
+  const review = usePartyScanReview(row && scan.b.done?.note.id === row.noteId ? row : null, sent, scan.setSentIndex);
   return (
     <>
       <PagePreviewModal
@@ -189,12 +193,14 @@ function ScanModals({ scan }: { scan: DocScanFlow }) {
         onDismiss={() => scan.setPreviewIndex(null)}
       />
       <PagePreviewModal
-        pages={scan.b.done?.sent ?? []}
+        pages={sent}
         index={scan.sentIndex}
-        uploaded={new Set((scan.b.done?.sent ?? []).map((p) => p.sha256))}
+        uploaded={new Set(sent.map((p) => p.sha256))}
         onIndex={scan.setSentIndex}
         onDismiss={() => scan.setSentIndex(null)}
         testID="ie-belge-onizleme"
+        side={review?.side}
+        focus={review?.focus}
       />
       <MultiPageCameraModal {...scan.source.camera} onError={(m) => Toast.show({ type: 'error', text1: m })} />
       <PageCameraModal

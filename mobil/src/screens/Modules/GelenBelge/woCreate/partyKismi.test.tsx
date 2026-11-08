@@ -15,6 +15,8 @@ import { TERIM } from '../../../../lib/terim';
 import { useWoRows, type DocRow, type WoRowsState } from './useWoRows';
 import { isDone, isPartial } from './docRow';
 
+// Çok partide parti panoları sekmelidir (2026-11-09); gizli sekmenin içeriği de sınanır.
+const HIDDEN = { includeHiddenElements: true };
 const mockSettings = jest.fn();
 const mockCreate = jest.fn();
 const mockPrint = jest.fn();
@@ -83,19 +85,19 @@ describe('PartyRows (tablet)', () => {
   it('⭐ K1: PER_PARTY varsayılanında kip çipleri çizilmez; künye görünür', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(null)} wo={noop} locked={false} />);
     expect(ui.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
-    expect(ui.getByText('İşlem: KDK APRE')).toBeTruthy();
-    expect(ui.getByText('Müşteri İE 24749')).toBeTruthy();
+    expect(ui.getByText('İşlem: KDK APRE', HIDDEN)).toBeTruthy();
+    expect(ui.getByText('Müşteri İE 24749', HIDDEN)).toBeTruthy();
     expect(ui.queryByTestId('belge-parti-ozet-GB-1')).toBeNull();
     const single = renderWithPaper(<PartyRows row={rowOf(null, view({ defaultMode: 'SINGLE' }))} wo={noop} locked={false} />);
     expect(single.getByTestId('belge-parti-kip-GB-1-SINGLE')).toBeTruthy();
   });
   it('⭐ kısmi sonuç: açılan parti kilitli + İE no, düşen parti nedeniyle ve düzenlenebilir', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(openedResult(partial))} wo={noop} locked={false} />);
-    expect(ui.getByTestId('belge-parti-sonuc-GB-1-1')).toHaveTextContent(`${TERIM.terbiyeIsEmri.tekil} açıldı: IE-1`);
-    expect(ui.getByTestId('belge-parti-sonuc-GB-1-2')).toHaveTextContent('Açılamadı: Plan makinesi bulunamadı');
+    expect(ui.getByTestId('belge-parti-sonuc-GB-1-1', HIDDEN)).toHaveTextContent(`${TERIM.terbiyeIsEmri.tekil} açıldı: IE-1`);
+    expect(ui.getByTestId('belge-parti-sonuc-GB-1-2', HIDDEN)).toHaveTextContent('Açılamadı: Plan makinesi bulunamadı');
     expect(ui.getByTestId('belge-parti-ozet-GB-1')).toHaveTextContent(/1\/2 parti açıldı · 1 parti açılamadı/);
-    expect(ui.getByTestId('belge-parti-metre-GB-1-1').props.editable).toBe(false);
-    expect(ui.getByTestId('belge-parti-metre-GB-1-2').props.editable).toBe(true);
+    expect(ui.getByTestId('belge-parti-metre-GB-1-1', HIDDEN).props.editable).toBe(false);
+    expect(ui.getByTestId('belge-parti-metre-GB-1-2', HIDDEN).props.editable).toBe(true);
   });
 });
 
