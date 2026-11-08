@@ -10,6 +10,7 @@ import { partnerRoleText } from "@/lib/partnerRoles";
 import { isOverdue, toKurus } from "./Allocations/allocationMath";
 import { PICKER_MAX_PAGE_SIZE } from "@/lib/picker-loader";
 import type { InvoiceLineType } from "./invoiceLineSubject";
+import type { ServiceDraftWorkRow } from "./serviceWorks";
 
 export type Currency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
 export type InvoiceType = "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN";
@@ -648,6 +649,8 @@ export interface ShipmentInvoiceDraftLines {
   orderPriced: number;
   orderConflicts: number;
   currency: Currency;
+  /** F4: hizmet satırlarının iş kırılımı; eski backend yollamaz. */
+  serviceWorks?: ServiceDraftWorkRow[];
 }
 
 /**

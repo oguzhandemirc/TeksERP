@@ -112,6 +112,14 @@ describe("ShipmentInvoiceDraft", () => {
     expect(captured?.notice?.message).toContain("2 kalemde");
   });
 
+  it("⭐ F4 iş kırılımı (serviceWorks) forma geçer; eski backend yollamazsa alan yok", async () => {
+    const works = [{ source: "STEP", subjectKind: "ROLL", subjectId: "r1", subjectCode: "T1", serviceItemId: "s1", processLabel: "Boya", workOrderStepId: "st1", qty: "100", unit: "METER", meterBasis: "RECEIVED", unitPrice: "2", excludedReason: null }];
+    getShipmentInvoiceDraftLines.mockResolvedValue({ ...DTO, serviceWorks: works });
+    renderWithProviders(<ShipmentInvoiceDraft row={ROW} onClose={() => {}} onCreated={() => {}} />);
+    await screen.findByTestId("fatura-formu");
+    expect(captured?.serviceWorks).toEqual(works);
+  });
+
   it("⭐ FASONDAN DOĞRUDAN SEVKTE diyalog AÇILMAZ ve uç HİÇ çağrılmaz", async () => {
     const { container } = renderWithProviders(
       <ShipmentInvoiceDraft row={{ ...ROW, kind: "DIRECT" }} onClose={() => {}} onCreated={() => {}} />,

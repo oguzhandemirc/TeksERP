@@ -1,6 +1,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
+import { CategoryServiceCell } from "@/pages/Definitions/Services/ServiceProcessesCell";
+import { lastServiceProcessMap, serviceOfCategory } from "@/pages/Definitions/Services/serviceProcesses";
 import type { SubcontractorCategory } from "./types";
 
 export const subcontractorCategoryColumns: ColumnDef<SubcontractorCategory>[] = [
@@ -39,6 +41,13 @@ export const subcontractorCategoryColumns: ColumnDef<SubcontractorCategory>[] = 
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
+  },
+  {
+    // Fason F3: türün adım işini faturalayan hizmet kartı (eşleme Hizmet Kartları › Süreç türleri).
+    id: "serviceItem",
+    header: "Hizmet kartı",
+    meta: { exportValue: (r: SubcontractorCategory) => serviceOfCategory(r.id, lastServiceProcessMap())?.serviceItemName ?? "" },
+    cell: ({ row }) => <CategoryServiceCell categoryId={row.original.id} />,
   },
   {
     accessorKey: "description",
