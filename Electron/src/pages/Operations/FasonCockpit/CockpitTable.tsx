@@ -45,7 +45,7 @@ export function CockpitTable({ rows }: { rows: SubcontractorCockpitRow[] }) {
           <th className="px-3 py-2">Sevk no</th>
           <th className="px-3 py-2">Firma</th>
           <th className="px-3 py-2">Süreç türü</th>
-          <th className="px-3 py-2">İş emri</th>
+          <th className="px-3 py-2">Emir</th>
           <th className="px-3 py-2">Sevk</th>
           <th className="px-3 py-2">Termin</th>
           <th className="px-3 py-2 text-right">Giden</th>
