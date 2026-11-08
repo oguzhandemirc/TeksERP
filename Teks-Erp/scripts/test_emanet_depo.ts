@@ -15,18 +15,28 @@
 //      ön kontrolde 400 (başlık DRAFT kalır); GET `problem` taşır
 //   §6 okunamayan değer (çöp) → bugünkü varsayılan; emanet KAPALIYKEN ayar etkisiz (sahipli doğum 403 kalır, 400 değil)
 //   §7 temizleme (null) → bugünkü davranış
+//   Fason TERBİYE kabulü (`subcontractor/receive.ts`, makbuzdan doğan top sahibi kaynaktan kalıtır) aynı boğazdan: §1 boşken
+//   sahipli/sahipsiz varsayılanda · §3 doluyken sahipli emanet deposunda (defter `toWarehouseId` dahil), sahipsiz varsayılanda ·
+//   §5 depo pasif → sahipli kabul 400, makbuz/doğan top yok, kaynak top fasonda; ön kontrol iş emri kilidinden ÖNCE sorar
+//   (satır başka tx'te kilitliyken 400 beklemeden döner) · §6 emanet kapalı → kalıntı sahipli kaynak varsayılanda (400 değil).
+//   ARA ADIM (rota fason → iç istasyon, doğan top IN_PRODUCTION) da aynı boğazdan: §3 emanet deposu · §5 pasif → 400, yazımsız
 // Negatif sonda: `createInitialEntry`te `resolveBirthWarehouseIdTx` yerine `resolveTargetWarehouseId(tx, warehouseId)` → §3
-// kırmızı; helper'daki `readEmanetEnabled` dalı silinince §6 "emanet kapalı" kırmızı; arşiv kapısındaki ayar satırı silinince §4;
+// kırmızı; `receive.ts`te boğaz yerine `resolveTargetWarehouseId(tx)` → §3/§5 fason kolları kırmızı; `receive.ts` ön kontrolü
+// silinince §5 kilit kolu kırmızı; helper'daki `readEmanetEnabled` dalı silinince §6 "emanet kapalı" kırmızı; arşiv kapısındaki ayar satırı silinince §4;
 // `hardDelete`teki emanet sayımı silinince §4 kalıcı silme kolu; okuyucudaki `toLowerCase` kaldırılınca §4 büyük harf kolu.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
 import * as bcrypt from "bcryptjs";
+import { RollStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { InventoryService } from "../src/services/inventory.service";
+import { SubcontractorService } from "../src/services/subcontractor.service";
+import { TravelerCardService } from "../src/services/traveler-card.service";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { warehouseService } from "../src/services/warehouse.service";
 import { resolveEmanetBirthWarehouseIdTx } from "../src/services/helpers/emanet-warehouse.helper";
 import { resolveTargetWarehouseId } from "../src/services/helpers/warehouse.helper";
@@ -50,7 +60,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const TAG = `TEST-EMD${Date.now().toString(36).toUpperCase()}`;
 const inventory = new InventoryService();
-const made = { customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], scans: [] as string[], warehouses: [] as string[], rolls: [] as string[] };
+const made = { customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], scans: [] as string[], warehouses: [] as string[], rolls: [] as string[], wos: [] as string[], stations: [] as string[] };
 const SETTINGS = [
   SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_DEFAULT_ITEM_ID,
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
@@ -139,11 +149,69 @@ async function run(url: string): Promise<void> {
   };
   const allIn = (ws: Array<string | null>, wh: string) => ws.length > 0 && ws.every((w) => w === wh);
 
+  // Fason TERBİYE kabulü: tek adımlı fason iş emri, tek top fasonda; kabul makbuzdan top doğurur (son adım → WAREHOUSE).
+  const sub = await ensureTestDyeHouse();
+  const subSvc = new SubcontractorService();
+  const stFason = (await prisma.station.create({ data: { code: `${TAG}-FSN`.slice(0, 32), name: `${TAG} fason`, type: "EXTERNAL", kind: "SUBCONTRACTOR" }, select: { id: true } })).id;
+  made.stations.push(stFason);
+  const stIc = (await prisma.station.create({ data: { code: `${TAG}-IC`.slice(0, 32), name: `${TAG} iç`, type: "INTERNAL", kind: "PROCESS_QC" }, select: { id: true } })).id;
+  made.stations.push(stIc);
+  /** Sahibi `ownerCustomerId` olan bir top fasona gider (kaynak top açık depo seçimiyle doğar — ayar onu etkilemez). */
+  const fasonaGonder = async (suffix: string, ownerCustomerId: string | null, araAdim = false) => {
+    // `araAdim`: rota fason → iç istasyon; kabulde doğan top IN_PRODUCTION ve sonraki adıma bağlı (son adım değil).
+    const steps = [{ stationId: stFason, stepSequence: 1, status: "PENDING" as const }, ...(araAdim ? [{ stationId: stIc, stepSequence: 2, status: "PENDING" as const }] : [])];
+    const w = await prisma.workOrder.create({
+      data: { workOrderNumber: `${TAG}-${suffix}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetItemId: fabric, steps: { create: steps } },
+      select: { id: true, steps: { select: { id: true }, orderBy: { stepSequence: "asc" } } },
+    });
+    made.wos.push(w.id);
+    await prisma.$transaction((tx) => new TravelerCardService().createForWorkOrder(tx, w.id, admin.id));
+    const r = await inventory.createInitialEntry({ itemId: fabric, initialQty: 80, width: 150 }, admin.id, null, false, { gradeRequired: false, warehouseId: defaultWh });
+    made.rolls.push(r.data.id);
+    await prisma.roll.update({ where: { id: r.data.id }, data: { ownerCustomerId, status: RollStatus.STOCK } });
+    await subSvc.dispatch({ workOrderId: w.id, stepId: w.steps[0]!.id, subcontractorId: sub.id, rollIds: [r.data.id] }, admin.id);
+    return { woId: w.id, stepId: w.steps[0]!.id, rollId: r.data.id };
+  };
+  /** Kabul + doğan topların deposu ve defter `to` deposu; reddedilirse hata kodu. */
+  const fasonKabul = async (g: { woId: string; stepId: string; rollId: string }) => {
+    const res = await subSvc.receive({ workOrderId: g.woId, stepId: g.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: g.rollId }], newRolls: [{ qty: 75 }] }, admin.id)
+      .then(() => "geçti", (e: unknown) => codeOf(e instanceof AppError ? e : null));
+    const born = await prisma.roll.findMany({ where: { parentReceipt: { workOrderId: g.woId } }, select: { id: true, status: true, warehouseId: true, warehouseMovements: { select: { toWarehouseId: true } } } });
+    made.rolls.push(...born.map((b) => b.id));
+    const receipts = await prisma.subcontractorReceipt.count({ where: { workOrderId: g.woId } });
+    const src = await prisma.roll.findUniqueOrThrow({ where: { id: g.rollId }, select: { status: true } });
+    const ledger = born.flatMap((b) => b.warehouseMovements.map((m) => m.toWarehouseId));
+    return { res, receipts, srcStatus: src.status, warehouses: born.map((b) => b.warehouseId), statuses: born.map((b) => b.status), ledger };
+  };
+  /** Ön kontrol ölçümü: iş emri satırı başka tx'te kilitliyken kabul. Ön kontrol kilitten önceyse 400 beklemeden döner;
+   *  yoksa kabul `touchWorkOrderTx`te bekler (3 sn sonra "kilitte bekledi"), kilit bırakılınca tx içi 400 alır. */
+  const kilitliyken = async (g: { woId: string; stepId: string; rollId: string }) => {
+    let birak!: () => void;
+    const bekle = new Promise<void>((r) => { birak = r; });
+    let kilitlendi!: () => void;
+    const kilitli = new Promise<void>((r) => { kilitlendi = r; });
+    const tutucu = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM work_orders WHERE id = ${g.woId}::uuid FOR UPDATE`;
+      kilitlendi();
+      await bekle;
+    }, { timeout: 30_000 });
+    await kilitli;
+    const kabul = fasonKabul(g);
+    const ilk = await Promise.race([kabul.then((r) => r.res), new Promise<string>((r) => setTimeout(() => r("kilitte bekledi"), 3000))]);
+    birak();
+    await tutucu;
+    return { ilk, son: await kabul };
+  };
+
   console.log("§1 ayar boş = bugünkü davranış");
   check("§1 ⭐ KK1 sahipli giriş varsayılan depoda", (await kk1(owner)) === defaultWh);
   check("§1 KK1 sahipsiz giriş varsayılan depoda", (await kk1(null)) === defaultWh);
   const n1 = await approveNote("N1");
   check("§1 ⭐ gelen belge onayı topları varsayılan depoda", n1.a.status === 200 && n1.warehouses.length === 2 && allIn(n1.warehouses, defaultWh), `${n1.a.status} ${n1.a.code ?? ""} ${n1.warehouses.length}`);
+  const f1o = await fasonKabul(await fasonaGonder("F1O", owner));
+  check("§1 ⭐ fason terbiye kabulü: sahipli doğan top varsayılan depoda", f1o.res === "geçti" && allIn(f1o.warehouses, defaultWh) && allIn(f1o.ledger, defaultWh), JSON.stringify(f1o));
+  const f1n = await fasonKabul(await fasonaGonder("F1N", null));
+  check("§1 fason terbiye kabulü: sahipsiz doğan top varsayılan depoda", f1n.res === "geçti" && allIn(f1n.warehouses, defaultWh), JSON.stringify(f1n));
 
   console.log("§2 yazım sözleşmesi");
   const g0 = await call("GET", "/api/feature-flags/emanet-default-warehouse", tk);
@@ -173,6 +241,12 @@ async function run(url: string): Promise<void> {
   check("§3 açık depo seçimi kazanır (mal kabul emsali)", (await kk1(owner, explicitWh)) === explicitWh);
   const n3 = await approveNote("N3");
   check("§3 ⭐ gelen belge onayı topları emanet deposunda", n3.a.status === 200 && n3.warehouses.length === 2 && allIn(n3.warehouses, emanetWh), `${n3.a.status} ${n3.a.code ?? ""} ${n3.warehouses.length}`);
+  const f3o = await fasonKabul(await fasonaGonder("F3O", owner));
+  check("§3 ⭐ fason terbiye kabulü: sahipli doğan top emanet deposunda (defter girişi dahil)", f3o.res === "geçti" && allIn(f3o.warehouses, emanetWh) && allIn(f3o.ledger, emanetWh), JSON.stringify(f3o));
+  const f3n = await fasonKabul(await fasonaGonder("F3N", null));
+  const f3a = await fasonKabul(await fasonaGonder("F3A", owner, true));
+  check("§3 ⭐ ara adım fason kabulü (doğan top IN_PRODUCTION): sahipli top emanet deposunda", f3a.res === "geçti" && allIn(f3a.warehouses, emanetWh) && f3a.statuses.every((st) => st === RollStatus.IN_PRODUCTION), JSON.stringify(f3a));
+  check("§3 fason terbiye kabulü: sahipsiz doğan top varsayılan depoda (ayar yalnız emanete)", f3n.res === "geçti" && allIn(f3n.warehouses, defaultWh) && allIn(f3n.ledger, defaultWh), JSON.stringify(f3n));
 
   console.log("§4 arşiv kapısı");
   // Depodaki topları kapsam dışı tutmak için ayrı (boş) bir depoyu emanet deposu yapıp onu pasife almaya çalış.
@@ -203,6 +277,14 @@ async function run(url: string): Promise<void> {
   const e5 = await expectError(() => kk1(owner));
   check("§5 ⭐ sahipli KK1 400 EMANET_DEFAULT_WAREHOUSE_UNUSABLE, top doğmadı", codeOf(e5) === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && (await prisma.roll.count({ where: { ownerCustomerId: owner } })) === before, codeOf(e5));
   check("§5 sahipsiz KK1 etkilenmez (varsayılan)", (await kk1(null)) === defaultWh);
+  const f5o = await fasonKabul(await fasonaGonder("F5O", owner));
+  check("§5 ⭐ fason terbiye kabulü sahipli: 400 EMANET_DEFAULT_WAREHOUSE_UNUSABLE, makbuz yok, doğan top yok, kaynak top fasonda", f5o.res === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && f5o.receipts === 0 && f5o.warehouses.length === 0 && f5o.srcStatus === RollStatus.AT_SUBCONTRACTOR, JSON.stringify(f5o));
+  const f5a = await fasonKabul(await fasonaGonder("F5A", owner, true));
+  check("§5 ⭐ ara adım fason kabulü sahipli: 400, makbuz yok, doğan top yok, kaynak top fasonda", f5a.res === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && f5a.receipts === 0 && f5a.warehouses.length === 0 && f5a.srcStatus === RollStatus.AT_SUBCONTRACTOR, JSON.stringify(f5a));
+  const f5k = await kilitliyken(await fasonaGonder("F5K", owner));
+  check("§5 ⭐ ön kontrol iş emri kilidinden ÖNCE: satır kilitliyken 400 beklemeden döner, sonra da yazım yok", f5k.ilk === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && f5k.son.receipts === 0 && f5k.son.warehouses.length === 0, JSON.stringify({ ilk: f5k.ilk, son: f5k.son }));
+  const f5n = await fasonKabul(await fasonaGonder("F5N", null));
+  check("§5 fason terbiye kabulü sahipsiz etkilenmez (varsayılan)", f5n.res === "geçti" && allIn(f5n.warehouses, defaultWh), JSON.stringify(f5n));
   const n5 = await approveNote("N5");
   check("§5 ⭐ gelen belge onayı ön kontrolde 400, başlık DRAFT, top yok", n5.a.status === 400 && n5.a.code === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && n5.status === "DRAFT" && n5.warehouses.length === 0, `${n5.a.status} ${n5.a.code ?? ""} ${n5.status}`);
   const g5 = await call("GET", "/api/feature-flags/emanet-default-warehouse", tk);
@@ -213,10 +295,14 @@ async function run(url: string): Promise<void> {
   await setSetting(SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID, "çöp-değer");
   check("§6 çöp değer → bugünkü varsayılan", (await kk1(owner)) === defaultWh);
   await setSetting(SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID, passiveWh);
+  // Emanet açıkken fasona giden sahipli top: modül sonradan kapanınca kalıntı sahipli kaynak olarak döner.
+  const g6 = await fasonaGonder("F6O", owner);
   await setSetting(SETTING_KEYS.EMANET_ENABLED, false);
   const off = await resolveEmanetBirthWarehouseIdTx(prisma, owner).then((v) => ({ v, err: "" }), (e: unknown) => ({ v: "hata", err: codeOf(e instanceof AppError ? e : null) }));
   check("§6 ⭐ emanet kapalı: boğaz ayarı okumaz (null)", off.v === null, off.err);
   check("§6 emanet kapalı: sahipsiz KK1 varsayılanda", (await kk1(null)) === defaultWh);
+  const f6o = await fasonKabul(g6);
+  check("§6 ⭐ emanet kapalı: fason kabulü kalıntı sahipli kaynakla varsayılan depoda (pasif emanet deposu 400'ü değil)", f6o.res === "geçti" && allIn(f6o.warehouses, defaultWh), JSON.stringify(f6o));
   const e6 = await expectError(() => kk1(owner));
   check("§6 emanet kapalı: sahipli KK1 403 MODULE_DISABLED (pasif emanet deposu 400'ü değil)", codeOf(e6) === "MODULE_DISABLED", codeOf(e6));
   await setSetting(SETTING_KEYS.EMANET_ENABLED, true);
@@ -235,10 +321,21 @@ async function cleanup(): Promise<void> {
   await prisma.customerDeliveryNoteLine.updateMany({ where: { noteId: { in: made.notes } }, data: { scanId: null } }).catch(swallow);
   await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } }).catch(swallow);
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
+  const recIds = (await prisma.subcontractorReceipt.findMany({ where: { workOrderId: { in: made.wos } }, select: { id: true } })).map((r) => r.id);
+  const dispIds = (await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: made.wos } }, select: { id: true } })).map((d) => d.id);
+  await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: recIds } } });
+  await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispIds } } });
   for (const t of ["rollProperty", "rollOperation", "rollMovement", "rollVariance", "warehouseMovement"] as const) {
     await (prisma[t] as unknown as { deleteMany: (a: unknown) => Promise<unknown> }).deleteMany({ where: { rollId: { in: rollIds } } }).catch(swallow);
   }
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: recIds } } });
+  await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispIds } } });
+  await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: made.wos } } });
+  await prisma.batch.deleteMany({ where: { workOrderId: { in: made.wos } } });
+  await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: made.wos } } });
+  await prisma.workOrder.deleteMany({ where: { id: { in: made.wos } } });
+  await prisma.station.deleteMany({ where: { id: { in: made.stations } } });
   await prisma.warehouse.deleteMany({ where: { id: { in: made.warehouses } } });
   await prisma.item.deleteMany({ where: { id: { in: made.items } } }).catch(swallow);
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } }).catch(swallow);

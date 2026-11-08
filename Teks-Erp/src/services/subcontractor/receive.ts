@@ -15,7 +15,7 @@ import { AuditService } from "../audit.service";
 import { AppError } from "../../utils/app-error";
 import { withBarcodeRetry } from "../../utils/barcode-retry";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx, resolveEmanetBirthWarehouseIdTx } from "../helpers/emanet-warehouse.helper";
 import { postStockMoves } from "../helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { v4 as uuidv4 } from "uuid";
@@ -417,6 +417,7 @@ export async function receiveInner(
         currentQty: true,
         weightKg: true,
         batchId: true, // F74: kaynak parti (firma çapraz-kontrolü için)
+        ownerCustomerId: true, // F1b: emanet deposu ön kontrolü (aşağıda)
       },
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
@@ -499,6 +500,14 @@ export async function receiveInner(
           "Seçilen toplardan biri farklı bir fason firmasına ait — bu makbuza dahil edilemez. Firma başına ayrı kabul yapın.",
         );
       }
+    }
+
+    // F1b: emanet deposu ayarlı ama kullanılamıyorsa claim'den ÖNCE 400 (yazmaz); tx içindeki boğaz yeniden sorar.
+    // Yalnız tek sahipli kaynakta sorulur — karışık sahip tx içinde zaten 409 OWNER_MISMATCH.
+    const returnedOwners = new Set(returnedRolls.map((r) => r.ownerCustomerId));
+    const returnedOwner = returnedOwners.size === 1 ? [...returnedOwners][0] ?? null : null;
+    if (data.newRolls && data.newRolls.length > 0 && returnedOwner) {
+      await resolveEmanetBirthWarehouseIdTx(prisma, returnedOwner);
     }
 
     const allSteps = step.workOrder.steps;
@@ -941,18 +950,13 @@ export async function receiveInner(
           nextStep ? null : reservedBorn[i]!,
         );
 
-        // DEPO — fason dönüşünde TEKİL bir ebeveyn YOKTUR: orijinal rulolar
-        // emekliye ayrıldı, bu toplar MAKBUZDAN doğdu (N kaynak, tek çıktı kümesi).
-        // Miras alınacak tek bir depo olmadığı için varsayılan depoya yazılır.
-        // ⚠️ Çok depolu bir kurulumda fason kullanılırsa mal "geldiği depoya"
-        // değil varsayılana düşer — bilinçli sadeleştirme: ticaret kurulumunda
-        // fason akışı hiç kullanılmıyor, fabrikada ise tek depo var. Çok depolu
-        // fason gerçek bir ihtiyaç olursa doğru çözüm sevkin çıktığı depoyu
-        // `SubcontractorDispatch` üzerinde damgalamaktır.
-        const bornWarehouseId = await resolveTargetWarehouseId(tx);
         // EMANET: doğan top kaynak topların (makbuz kalemleri, yukarıda yazıldı) tek sahibini alır;
         // karışık sahip 409 OWNER_MISMATCH. Sahipsiz doğsa hizmet faturası ve sevk kapısı onu görmez (H10).
         const bornOwnerCustomerId = await resolveOwnerFromReceiptTx(tx, receipt.id);
+        // DEPO — tekil ebeveyn yok (N kaynak, makbuzdan doğum), açık seçim de yok: sahipli doğum emanet deposuna
+        // (F1b ayarı; boş/emanet kapalı = bugünkü), sahipsiz varsayılana — `createInitialEntry` ile aynı boğaz.
+        // Çok depolu fasonda "geldiği depo" ihtiyacı doğarsa sevkin çıktığı depo `SubcontractorDispatch`ta damgalanır.
+        const bornWarehouseId = await resolveBirthWarehouseIdTx(tx, null, bornOwnerCustomerId);
 
         await tx.roll.createMany({
           data: bornRollInputs.map(({ id, nr }, i) => ({
