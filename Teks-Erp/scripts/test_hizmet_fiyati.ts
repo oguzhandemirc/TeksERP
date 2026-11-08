@@ -307,6 +307,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/service-item/processes.ts",
   // Fason dalga-2 tel sözleşmesi (F4 taslak kırılımı `ServiceDraftWorkRow.serviceItemId`) — tip beyanı, çözücü değil.
   "services/service-billing/types.ts",
+  // PB1 patron `hizmet-geliri`: onaylı satış satırının KONU kolonunu yalnız kırılım anahtarı olarak GROUP BY'lar (çözücü değil).
+  "cloud-sync/snapshot-fason.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.

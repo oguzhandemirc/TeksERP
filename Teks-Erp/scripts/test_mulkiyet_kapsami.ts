@@ -98,6 +98,8 @@ const LEGACY: ReadonlySet<string> = new Set([
 const OTHER_MODEL: ReadonlySet<string> = new Set([
   "src/services/yarn-lot.service.ts",
   "src/services/workorder-scan-route.service.ts",
+  // PB1: emanet iplik lotu (`yarn_lots`) + levent (`warp_beams`) sahibi — top değil, ayrı modeller.
+  "src/services/helpers/consigned-material.helper.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
