@@ -609,6 +609,13 @@ export const updateSchema = z.strictObject({
   // Dış brode kabulünde hedef desen doğan topa (D4-D3, K8).
   fasonReceiptApplyTargetVariant: z.boolean({ message: "Fason kabulünde hedef desen açık/kapalı olmalı" }).optional(),
   fasonShrinkTolerancePct: z.number().min(0).max(100).nullable().optional(),
+  // F6: genel fason termin günü; 0 = termin yok (varsayılan).
+  fasonExpectedReturnDays: z
+    .number({ message: "Fason beklenen dönüş süresi sayı olmalı" })
+    .int({ message: "Fason beklenen dönüş süresi tam sayı olmalı" })
+    .min(0, { message: "Fason beklenen dönüş süresi 0 ile 365 gün arasında olmalı" })
+    .max(365, { message: "Fason beklenen dönüş süresi 0 ile 365 gün arasında olmalı" })
+    .optional(),
   // Mükerrer paneli (2026-08-22): bulanık ad eşleştirme bayrağı + eşik (yüzde).
   // `null` = eşiği temizle → fabrika varsayılanı (90). Alt sınır 50 (gürültü).
   demoModeEnabled: z.boolean().optional(),

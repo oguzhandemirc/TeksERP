@@ -400,8 +400,13 @@ async function main(): Promise<void> {
     check("satış + İE (US) ⇒ 0 + sebep (alan DB'den okunur)", sNone.withholdingRate === 50 && sUs.withholdingRate === 0 && sUs.withholdingOffReason === "PERFORMER_SUPPLIED_MATERIAL", JSON.stringify({ sNone, sUs }));
     const sCu = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woCustomer });
     const sNu = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woNull });
-    const sMissing = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: randomUUID() });
-    check("satış + İE (CUSTOMER / NULL / bulunamayan) ⇒ bayt-aynı bugünkü", [sCu, sNu, sMissing].every((x) => JSON.stringify(x) === JSON.stringify(sNone)), JSON.stringify({ sCu, sNu, sMissing }));
+    check("satış + İE (CUSTOMER / NULL) ⇒ bayt-aynı bugünkü", [sCu, sNu].every((x) => JSON.stringify(x) === JSON.stringify(sNone)), JSON.stringify({ sCu, sNu }));
+    // F6 (2026-11-08): bulunamayan İE sessizce "bağlamsız" okunmaz — 404 (her türde).
+    for (const type of [InvoiceType.SALES, InvoiceType.PURCHASE]) {
+      let code: unknown = null;
+      try { await resolveInvoiceTaxDefaults({ type, workOrderId: randomUUID() }); } catch (e) { code = (e as { details?: { code?: string } }).details?.code; }
+      check(`${type} + bulunamayan İE ⇒ 404 WORK_ORDER_NOT_FOUND`, code === "WORK_ORDER_NOT_FOUND", String(code));
+    }
     const sDirect = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woUs, materialProvidedBy: "CUSTOMER" });
     check("doğrudan değer İE alanını ezer (US İE + CUSTOMER ⇒ bugünkü)", JSON.stringify(sDirect) === JSON.stringify(sNone), JSON.stringify(sDirect));
     const pNoCtx = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });

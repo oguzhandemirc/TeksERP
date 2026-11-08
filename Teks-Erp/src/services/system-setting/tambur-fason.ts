@@ -277,6 +277,20 @@ export async function readFasonShrinkTolerancePct(
   return parsed;
 }
 
+/** F6: fason termin gün sayısının tavanı (firma/süreç türü kolonlarının CHECK'i ile aynı aralık). */
+export const FASON_EXPECTED_RETURN_DAYS_MAX = 365;
+
+/**
+ * F6: fason sevkinde beklenen dönüşün GENEL gün sayısı (firma/süreç türü ezer). Kayıt yok, `0` ya da aralık dışı
+ * → `0` = termin yok (bugünkü davranış). API `0` döner; çözücü `0`ı "ayar yok" okur.
+ */
+export async function readFasonExpectedReturnDays(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.FASON_EXPECTED_RETURN_DAYS }, select: { value: true } });
+  const parsed = asNumber(setting?.value);
+  if (parsed === null || !Number.isInteger(parsed) || parsed < 1 || parsed > FASON_EXPECTED_RETURN_DAYS_MAX) return 0;
+  return parsed;
+}
+
 /** Mükerrer paneli — bulanık ad eşleştirme (default TRUE; kayıt yoksa açık). */
 /**
  * Demo modu açık mı. KAYIT YOKSA **FALSE** — panel `defaultOn: false` ile

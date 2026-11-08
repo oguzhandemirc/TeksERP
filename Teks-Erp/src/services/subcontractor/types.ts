@@ -78,6 +78,7 @@ export interface SubcontractorCockpitRow {
   expectedReturnAt: string | null;
   /** Fabrika günü farkı; termin yoksa null, gecikmede pozitif. */
   overdueDays: number | null;
+  /** Belgenin brüt `totalQty`si: top + levent metresi (iplik kg girmez — `yarnOutstandingKg` ayrı). */
   dispatchedQty: string;
   /** Kısmi kabul sonrası fasonda kalan metre. */
   outstandingQty: string;

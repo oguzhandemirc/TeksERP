@@ -63,7 +63,7 @@ const YARN_ITEM_SELECT = {
 type YarnItemRow = Prisma.SubcontractorDispatchItemGetPayload<{ select: typeof YARN_ITEM_SELECT }>;
 
 /** Σ dönüş − Σ dönüş stornosu (kalem geneli). */
-function returnedNet(item: YarnItemRow): Prisma.Decimal {
+function returnedNet(item: { yarnMovements: Array<{ kind: YarnMovementKind; qtyKg: Prisma.Decimal }> }): Prisma.Decimal {
   return item.yarnMovements.reduce((acc, m) => {
     if (m.kind === YarnMovementKind.SUBCONTRACT_RETURN) return acc.plus(m.qtyKg);
     if (m.kind === YarnMovementKind.SUBCONTRACT_RETURN_CANCEL) return acc.minus(m.qtyKg);
@@ -326,4 +326,27 @@ export async function listYarnItems(client: Pick<typeof prisma, "subcontractorDi
     };
   });
   return { items, yarnTotalKg: Number(total) };
+}
+
+/**
+ * F10 kokpit: sevk başına fasonda kalan iplik kg'sı — `listYarnItems` ile AYNI formül (giden − net dönüş − açık sarım),
+ * sevk listesi için TEK sorguda (N+1 yok). Yalnız iplik kalemi olan sevkler haritada yer alır.
+ */
+export async function yarnOutstandingKgByDispatch(dispatchIds: string[]): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (dispatchIds.length === 0) return out;
+  const rows = await prisma.subcontractorDispatchItem.findMany({
+    where: { dispatchId: { in: dispatchIds }, kind: SubcontractorDispatchItemKind.YARN },
+    select: {
+      dispatchId: true, dispatchedQty: true,
+      yarnMovements: { select: { kind: true, qtyKg: true } },
+      warpBeamEvents: { where: { kind: "WOUND", reversal: null }, select: { theoreticalKg: true } },
+    },
+  });
+  for (const r of rows) {
+    const sar = r.warpBeamEvents.reduce((a, e) => a.plus(e.theoreticalKg ?? 0), D(0));
+    const rem = D(r.dispatchedQty).minus(returnedNet(r)).minus(sar);
+    out.set(r.dispatchId, (out.get(r.dispatchId) ?? D(0)).plus(rem));
+  }
+  return out;
 }

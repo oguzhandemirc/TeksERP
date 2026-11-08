@@ -357,6 +357,20 @@ function invoiceReplay(input: CreateInvoiceInput) {
   });
 }
 
+/**
+ * F6: fason kabulünden fatura — kabul satırı FOR SHARE (kabul iptalinin atomik claim'i FOR UPDATE ister) ve
+ * `cancelledAt` KİLİT ALTINDA yeniden okunur: eşzamanlı iptal ya önce biter (burada 409) ya da bu tx'in
+ * commit'ini bekleyip faturayı görür (`receipt-cancel` 409 `SUBCONTRACTOR_RECEIPT_INVOICED`).
+ */
+async function lockSubcontractorReceiptForInvoiceTx(tx: Prisma.TransactionClient, receiptId: string): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ cancelledAt: Date | null }>>`
+    SELECT "cancelledAt" FROM "subcontractor_receipts" WHERE id = ${receiptId}::uuid FOR SHARE`;
+  if (rows.length === 0) throw AppError.notFound("Fason kabul bulunamadı.");
+  if (rows[0]!.cancelledAt) {
+    throw AppError.conflict("Bu fason kabul iptal edilmiş — faturalanamaz.", { code: "SUBCONTRACTOR_RECEIPT_CANCELLED" });
+  }
+}
+
 export class InvoiceService {
   // ---------------------------------------------------------------------------
   // TASLAK
@@ -876,6 +890,7 @@ export class InvoiceService {
    * anlaşılmaz.
    */
   private async assertSourceFree(tx: Prisma.TransactionClient, input: CreateInvoiceInput): Promise<void> {
+    if (input.subcontractorReceiptId) await lockSubcontractorReceiptForInvoiceTx(tx, input.subcontractorReceiptId);
     const src: Array<[keyof CreateInvoiceInput, string, string]> = [
       ["shipmentId", "shipmentId", "Bu sevkiyat"],
       ["directShipmentId", "directShipmentId", "Bu doğrudan sevk"],
@@ -893,6 +908,8 @@ export class InvoiceService {
       if (dup) {
         throw AppError.conflict(
           `${label} için zaten bir fatura var: ${dup.docNo} (${dup.status === "DRAFT" ? "draft" : "onaylı"}). Yeni fatura için önce onu iptal edin.`,
+          // F6: fason kabul dalı sözleşmeli kodu taşır (istemci mesaj ayrıştırmasın); diğer kaynaklar bugünkü gibi kodsuz.
+          key === "subcontractorReceiptId" ? { code: "SUBCONTRACTOR_RECEIPT_ALREADY_INVOICED" } : undefined,
         );
       }
     }

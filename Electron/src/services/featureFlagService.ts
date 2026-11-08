@@ -654,6 +654,8 @@ export interface FeatureFlags {
   /** Çekme toleransı — YÜZDE (default 10). Altındaki fark uyarı üretmez.
    *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */
   fasonShrinkTolerancePct: number;
+  /** F6: fason termin genel gün sayısı; 0 = termin yok (varsayılan). */
+  fasonExpectedReturnDays: number;
   /** Mükerrer paneli — bulanık ad eşleştirme açık mı (true=default). Kapalıyken
    *  yalnız kesin ad + kimlik çakışması aday üretir. */
   /** Demo kurulumu mu — panelde DEMO rozeti + senaryo yardımcıları. */

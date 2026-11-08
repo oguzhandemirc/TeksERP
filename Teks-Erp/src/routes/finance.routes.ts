@@ -24,6 +24,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
+import { createSubcontractorPurchaseDraft, previewSubcontractorPurchaseDraft } from "../services/subcontractor-purchase-draft.service";
 import { invoiceListQuerySchema } from "./finance-invoice-list.query";
 import { resolveInvoiceTaxDefaults } from "../services/helpers/invoice-tax-defaults.helper";
 import { invoiceLineShapeError } from "../services/helpers/invoice-line-subject.helper";
@@ -38,6 +39,7 @@ import cariMergeRoutes from "./finance-cari-merge.routes";
 import kursunDefaultRoutes from "./finance-kursun-default.routes";
 import expenseAllocationRoutes, { allocationFieldsSchema } from "./finance-expense-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
+import { TERIM } from "../constants/terim";
 
 const router = Router();
 
@@ -593,17 +595,19 @@ router.get("/invoices", requirePermission("finance:read"), async (req, res, next
  *     parameters:
  *       - { in: query, name: type, required: true, schema: { type: string, enum: [SALES, PURCHASE] } }
  *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: workOrderId, schema: { type: string, format: uuid }, description: "F7b malzeme bağlamı (F6)" }
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{ vatRate, withholdingRate (KDV'nin %'si), withholdingRatio, source }" }
+ *       200: { description: "{ vatRate, withholdingRate (KDV'nin %'si), withholdingRatio, source, withholdingOffReason? }" }
+ *       404: { description: Bilinmeyen workOrderId (WORK_ORDER_NOT_FOUND) }
  */
 router.get("/invoices/tax-defaults", requirePermission("finance:read"), async (req, res, next) => {
   try {
     const q = z
-      .object({ type: z.enum(["SALES", "PURCHASE"], { message: "Fatura türü SALES ya da PURCHASE olmalı" }), customerId: z.string().uuid().optional() })
+      .object({ type: z.enum(["SALES", "PURCHASE"], { message: "Fatura türü SALES ya da PURCHASE olmalı" }), customerId: z.string().uuid().optional(), workOrderId: z.string().uuid(`${TERIM.terbiyeIsEmri.tekil} kimliği geçersiz`).optional() })
       .strict()
       .parse(req.query);
-    res.json({ success: true, data: await resolveInvoiceTaxDefaults({ type: q.type, customerId: q.customerId ?? null }) });
+    res.json({ success: true, data: await resolveInvoiceTaxDefaults({ type: q.type, customerId: q.customerId ?? null, workOrderId: q.workOrderId ?? null }) });
   } catch (e) {
     next(e);
   }
@@ -654,6 +658,59 @@ router.post("/invoices", requirePermission("finance:write"), async (req, res, ne
 router.post("/invoices/from-goods-receipt/:id", requirePermission("finance:write"), async (req, res, next) => {
   try {
     res.status(201).json(await invoiceService.createDraftFromGoodsReceipt(req.params.id as string, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/invoices/from-subcontractor-receipt/{receiptId}/preview:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Fason kabulünden alış faturası taslağı önizlemesi (F6, yazmaz)
+ *     description: >
+ *       Kalem = tarifenin hizmet kartı; miktar = tarife tabanına göre düşülen/doğan metre ya da sevk tartısı;
+ *       fiyat kaynak sevkin fabrika günündeki tarife sürümü. Eksik tarife/tartı `warnings` ile söylenir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: receiptId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ data: SubcontractorPurchaseDraftPreview }" }
+ *       404: { description: Kabul bulunamadı }
+ *       409: { description: SUBCONTRACTOR_RECEIPT_CANCELLED / SUBCONTRACTOR_RECEIPT_NOT_WORK_ORDER_BOUND }
+ */
+router.get("/invoices/from-subcontractor-receipt/:receiptId/preview", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const receiptId = req.params.receiptId as string;
+    assertValidUuid(receiptId, "Fason kabul");
+    res.json({ success: true, data: await previewSubcontractorPurchaseDraft(receiptId) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/invoices/from-subcontractor-receipt/{receiptId}:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Fason kabulünden alış faturası taslağı yarat (F6)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: receiptId, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { clientToken: { type: string, format: uuid } } }
+ *     responses:
+ *       201: { description: Taslak oluşturuldu (subcontractorReceiptId bağlı) }
+ *       409: { description: "SUBCONTRACTOR_RECEIPT_CANCELLED / SUBCONTRACTOR_RECEIPT_ALREADY_INVOICED / SUBCONTRACTOR_NOT_LINKED_TO_CARD / SUBCONTRACTOR_RECEIPT_NOT_WORK_ORDER_BOUND" }
+ */
+router.post("/invoices/from-subcontractor-receipt/:receiptId", requirePermission("finance:write"), async (req, res, next) => {
+  try {
+    const receiptId = req.params.receiptId as string;
+    assertValidUuid(receiptId, "Fason kabul");
+    const b = z.object({ clientToken: z.string().uuid("İstek anahtarı geçersiz").nullable().optional() }).strict().parse(req.body ?? {});
+    res.status(201).json(await createSubcontractorPurchaseDraft(receiptId, { clientToken: b.clientToken ?? null }, req.user?.userId));
   } catch (e) {
     next(e);
   }

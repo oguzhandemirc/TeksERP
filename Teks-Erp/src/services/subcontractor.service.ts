@@ -82,6 +82,8 @@ export class SubcontractorService {
        * bağımsız — iplik-yalnız sevk meşrudur. Kapı: iplik kapalıysa controller 403 + tek yazıcı 403.
        */
       yarnLines?: YarnDispatchLineInput[];
+      /** F6: beklenen dönüş (`YYYY-MM-DD` ya da ISO); `null` = termin yok; yok = varsayılan zinciri. */
+      expectedReturnAt?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -115,6 +117,8 @@ export class SubcontractorService {
       /** K11 çok-parti çözümü. MERGE → dispatch()'e iletilir (en eskide birleşir);
        *  SEPARATE → burada parti başına AYRI sevk döngüsü. */
       multiBatchStrategy?: "MERGE" | "SEPARATE";
+      /** F6: dispatch()'e iletilir. */
+      expectedReturnAt?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -568,6 +572,8 @@ export class SubcontractorService {
         rolls: string[];
         message: string | null;
       };
+      /** F6: iptal edilmemiş alış faturası varsa iptal 409 `SUBCONTRACTOR_RECEIPT_INVOICED`. */
+      invoiced: { blocked: boolean; docNo: string | null; message: string | null };
       allSafe: boolean;
       totalBornRolls: number;
     }>

@@ -17,7 +17,7 @@ import { AppError } from "../../utils/app-error";
 import { reverseLatestScopedStockMove } from "../helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { ApiResponse } from "../../types/api.types";
-import { Prisma, RollOperationType, RollStatus, ScanType } from "@prisma/client";
+import { InvoiceStatus, Prisma, RollOperationType, RollStatus, ScanType } from "@prisma/client";
 import { recomputeStepStatus } from "../helpers/roll-step.helper";
 import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { revokePlanDeviationsTx, findPlanDeviationConfirmationsTx } from "../helpers/tambur-plan-gate.helper";
@@ -34,6 +34,16 @@ import { TERIM } from "../../constants/terim";
 import { UNBARCODED_ROLL_LABEL } from "./shared";
 import { logTravelerScan } from "./receive";
 import type { SubcontractorServiceThis } from "./shared";
+
+/** F6: kabulün iptal edilmemiş alış faturası (taslak dahil) — önizleme, ön kontrol ve tx-içi kapı aynı sorgudan. */
+async function activeReceiptInvoice(db: Pick<Prisma.TransactionClient, "invoice">, receiptId: string): Promise<{ docNo: string } | null> {
+  return db.invoice.findFirst({ where: { subcontractorReceiptId: receiptId, status: { not: InvoiceStatus.CANCELLED } }, select: { docNo: true } });
+}
+const receiptInvoicedMessage = (docNo: string): string =>
+  `Bu kabulün alış faturası var (${docNo}). Kabul iptal edilemez — önce faturayı iptal edin.`;
+function throwReceiptInvoiced(docNo: string): never {
+  throw AppError.conflict(receiptInvoicedMessage(docNo), { code: "SUBCONTRACTOR_RECEIPT_INVOICED" });
+}
 
 // -----------------------------------------------------------------------------
 // Cascade cancel — receipt'ten doğan açık kumaş roll'larının iptal güvenlik kontrolü
@@ -264,6 +274,8 @@ export async function getCancelPreview(this: SubcontractorServiceThis, receiptId
         rolls: string[];
         message: string | null;
       };
+      /** F6: iptal edilmemiş alış faturası varsa iptal 409 `SUBCONTRACTOR_RECEIPT_INVOICED`. */
+      invoiced: { blocked: boolean; docNo: string | null; message: string | null };
       allSafe: boolean;
       totalBornRolls: number;
     }>
@@ -348,6 +360,7 @@ export async function getCancelPreview(this: SubcontractorServiceThis, receiptId
     });
 
     const kapananKalanlar = await this.findClosedRemainderItems(prisma, receiptId);
+    const invoice = await activeReceiptInvoice(prisma, receiptId);
 
     return {
       success: true,
@@ -374,13 +387,15 @@ export async function getCancelPreview(this: SubcontractorServiceThis, receiptId
                 "Kabul iptal edilemez — önce kalan kapamasını geri alın."
               : null,
         },
+        invoiced: { blocked: !!invoice, docNo: invoice?.docNo ?? null, message: invoice ? receiptInvoicedMessage(invoice.docNo) : null },
         // Önizleme bayat olabilir ama "güvenli" demeden önce bilinen TÜM
         // engelleri saymak zorunda.
         allSafe:
           bornRolls.every((b) => b.safeToCancel) &&
           mismatchItems.length === 0 &&
           laterReceipts.length === 0 &&
-          kapananKalanlar.length === 0,
+          kapananKalanlar.length === 0 &&
+          !invoice,
         totalBornRolls: bornRolls.length,
       },
     };
@@ -441,6 +456,8 @@ export async function cancelReceipt(
     if (rollIds.length === 0) {
       throw AppError.badRequest("Bu kabul belgesinde rulo yok");
     }
+    const preInvoice = await activeReceiptInvoice(prisma, receiptId);
+    if (preInvoice) throwReceiptInvoiced(preInvoice.docNo);
 
     // LIFO GUARD (kısmi teslimat, 2026-08-19): aynı topa dokunan DAHA SONRAKİ
     // aktif makbuz varken bu makbuz iptal edilemez — defter satırları iç içe
@@ -612,6 +629,10 @@ export async function cancelReceipt(
       if (receiptClaim.count === 0) {
         throw AppError.conflict("Bu mal kabul az önce başka bir kullanıcı tarafından iptal edilmiş.");
       }
+      // Claim kabul satırını kilitledi: taslak yaratımı aynı satırı FOR SHARE tutar (`invoice.service`
+      // `assertSourceFree`) ⇒ burada görünmeyen fatura artık doğamaz; doğmuş olan burada görünür.
+      const lockedInvoice = await activeReceiptInvoice(tx, receiptId);
+      if (lockedInvoice) throwReceiptInvoiced(lockedInvoice.docNo);
 
       // 2) Bu adım için kapatılmış RollMovement'ları geri aç (RETURNED_VIA_RECEIPT
       //    notuyla kapatılmıştı)
