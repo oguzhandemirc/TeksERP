@@ -205,7 +205,7 @@ export async function listFlagServiceWorks(
   const pieceBilled = new Set((await db.serviceBillingLink.findMany({
     where: { revokedAt: null, meterBasis: { in: [ServiceMeterBasis.CUT, ServiceMeterBasis.DECLARED] }, roll: { parentRollId: { in: chainIds } } },
     select: { serviceItemId: true, roll: { select: { parentRollId: true } } },
-  })).map((l) => `${l.roll.parentRollId}:${l.serviceItemId}`));
+  })).flatMap((l) => (l.roll === null ? [] : [`${l.roll.parentRollId}:${l.serviceItemId}`])));
 
   /** Topun kendisi + kümedeki ataları, yakından uzağa. */
   const chainOf = (id: string): string[] => {

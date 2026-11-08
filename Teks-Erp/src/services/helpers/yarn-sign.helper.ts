@@ -32,6 +32,11 @@ export function yarnMovementSign(kind: YarnMovementKind): 1 | -1 {
     case YarnMovementKind.SUBCONTRACT_OUT_CANCEL:
     case YarnMovementKind.SUBCONTRACT_RETURN:
       return 1;
+    // Genel fason F5: emanet ipliğin sahibine çıkışı DÜŞER, belge iptali ARTIRIR (yazıcısı F5).
+    case YarnMovementKind.CONSIGNMENT_OUT:
+      return -1;
+    case YarnMovementKind.CONSIGNMENT_OUT_CANCEL:
+      return 1;
   }
 }
 

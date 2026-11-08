@@ -126,8 +126,9 @@ describe('isSameLocalDay — "bugün sarılan" sekmesi', () => {
 });
 
 describe('STATUS_LABEL / beamActionsEnabled — fason F1: SHIPPED_OUT tablette görünür, dokunulmaz', () => {
-  it('yedi durumun rozeti var (Faz 3: MOUNTED · EXHAUSTED · SCRAPPED); SHIPPED_OUT "Fasonda", MOUNTED "Tezgahta"', () => {
-    expect(Object.keys(STATUS_LABEL).sort()).toEqual(['CANCELLED', 'EXHAUSTED', 'MOUNTED', 'PLANNED', 'READY', 'SCRAPPED', 'SHIPPED_OUT']);
+  it('sekiz durumun rozeti var (Faz 3: MOUNTED · EXHAUSTED · SCRAPPED · fason F5 SHIPPED_TO_OWNER); SHIPPED_OUT "Fasonda", MOUNTED "Tezgahta"', () => {
+    expect(Object.keys(STATUS_LABEL).sort()).toEqual(['CANCELLED', 'EXHAUSTED', 'MOUNTED', 'PLANNED', 'READY', 'SCRAPPED', 'SHIPPED_OUT', 'SHIPPED_TO_OWNER']);
+    expect(STATUS_LABEL.SHIPPED_TO_OWNER).toBe('Sahibine gönderildi');
     expect(STATUS_LABEL.SHIPPED_OUT).toBe('Fasonda');
     expect(STATUS_LABEL.MOUNTED).toBe('Tezgahta');
   });
@@ -135,6 +136,7 @@ describe('STATUS_LABEL / beamActionsEnabled — fason F1: SHIPPED_OUT tablette g
     expect(beamActionsEnabled('PLANNED')).toBe(true);
     expect(beamActionsEnabled('READY')).toBe(true);
     expect(beamActionsEnabled('SHIPPED_OUT')).toBe(false);
+    expect(beamActionsEnabled('SHIPPED_TO_OWNER')).toBe(false);
     expect(beamActionsEnabled('CANCELLED')).toBe(false);
     // Faz 3: tezgahtaki/terminal levent sarım ekranından dokunulmaz (E3 "Tezgahta" sekmesi ayrı eylem kümesi).
     expect(beamActionsEnabled('MOUNTED')).toBe(false);

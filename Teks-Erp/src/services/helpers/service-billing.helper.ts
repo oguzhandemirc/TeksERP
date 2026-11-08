@@ -71,7 +71,8 @@ async function loadBilledKeys(rollIds: string[], db: Db): Promise<Set<string>> {
     where: { rollId: { in: rollIds }, revokedAt: null },
     select: { rollId: true, serviceItemId: true, workOrderStepId: true },
   });
-  return new Set(rows.map(serviceWorkKey));
+  // `rollId IN` süzgeci levent öznesini (rollId NULL) zaten dışlar; daraltma yalnız tip içindir.
+  return new Set(rows.flatMap((r) => (r.rollId === null ? [] : [serviceWorkKey({ ...r, rollId: r.rollId })])));
 }
 
 /**

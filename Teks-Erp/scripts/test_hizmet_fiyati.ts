@@ -308,10 +308,14 @@ const SERVICE_ITEM_ID_FILES = new Set([
   // çözücüye STEP kaynağı olarak girer — fiyat çözmez.
   "services/helpers/service-step-work.helper.ts",
   "services/service-item/processes.ts",
+  // Fason dalga-2 tel sözleşmesi (F4 taslak kırılımı `ServiceDraftWorkRow.serviceItemId`) — tip beyanı, çözücü değil.
+  "services/service-billing/types.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
 const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
+  // Fason dalga-2 F6 tel sözleşmesi: kabulden ALIŞ faturası taslağı satırı (`FinishingRate.serviceItemId` köprüsü) — maliyet tarafı.
+  "services/subcontractor/types.ts",
   "services/consumable-norm.service.ts",
   "services/helpers/cost-rate-validity.helper.ts",
   "routes/cost.routes.ts",

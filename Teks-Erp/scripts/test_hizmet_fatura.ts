@@ -620,7 +620,7 @@ async function main(): Promise<void> {
     const writes = async () => ({ inv: (await invoicesOf(sh.id)).filter((i) => i.status !== InvoiceStatus.CANCELLED).length, links: (await linksOn(rs)).length });
     return { rs, sh, pv, body, writes };
   };
-  const linkShape = (l: { rollId: string; workOrderStepId: string | null; serviceItemId: string; readingId: string | null; billedMeters: Prisma.Decimal.Value; meterBasis: string; unitPrice: Prisma.Decimal.Value }) =>
+  const linkShape = (l: { rollId: string | null; workOrderStepId: string | null; serviceItemId: string; readingId: string | null; billedMeters: Prisma.Decimal.Value; meterBasis: string; unitPrice: Prisma.Decimal.Value }) =>
     `${l.rollId}|${l.workOrderStepId}|${l.serviceItemId}|${l.readingId}|${new Prisma.Decimal(l.billedMeters).toFixed(3)}|${l.meterBasis}|${new Prisma.Decimal(l.unitPrice).toFixed(4)}`;
 
   const n0 = await previewed(["21.000", "22.500"]);

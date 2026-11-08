@@ -56,6 +56,8 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // 2026-09-15 (fason G1) — fasona giden iplik kalemi (kind=YARN): referans bağ, tekillik yok;
     // `YarnMovement.itemId` ile aynı sınıf — birleştirme kimliği değiştirir, kg'yi değil.
     { kind: "MOVE", model: "SubcontractorDispatchItem", table: "subcontractor_dispatch_items", column: "yarnItemId", label: "Fason iplik kalemi" },
+    // Genel fason F5 (2026-11-08): emanet çıkış iplik kalemi — fason iplik kalemi ikizi, tekillik yok.
+    { kind: "MOVE", model: "ConsignmentDispatchItem", table: "consignment_dispatch_items", column: "yarnItemId", label: "Emanet çıkış iplik kalemi" },
     {
       kind: "CONFLICT",
       model: "ItemAllowedColor",

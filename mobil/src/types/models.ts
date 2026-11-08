@@ -130,7 +130,7 @@ export type MachineDataSource =
 // iki yönlü ölçer. CANCELLED terminaldir (PLANNED'a dönüş yok). SHIPPED_OUT (fason F1) terminal
 // DEĞİL: fasondan dönüşle READY'ye gelir — tablette "Fasonda" rozeti, eylemler kapalı.
 // Faz 3 (tezgah bağı): MOUNTED tezgahta (sök/tüket/bitir), EXHAUSTED · SCRAPPED terminal.
-export type WarpBeamStatus = 'PLANNED' | 'READY' | 'SHIPPED_OUT' | 'MOUNTED' | 'EXHAUSTED' | 'SCRAPPED' | 'CANCELLED';
+export type WarpBeamStatus = 'PLANNED' | 'READY' | 'SHIPPED_OUT' | 'MOUNTED' | 'EXHAUSTED' | 'SCRAPPED' | 'CANCELLED' | 'SHIPPED_TO_OWNER';
 export type WarpBeamOrigin = 'IN_HOUSE' | 'SUBCONTRACT' | 'PURCHASED' | 'CONSIGNED';
 export type WarpKgSource = 'WEIGHED' | 'THEORETICAL';
 // Backend `WarpBeamMountMethod` · `WarpLengthSource` aynası (devere Faz 3, DEVERE-LEVENT-TARAMASI §4.1).
