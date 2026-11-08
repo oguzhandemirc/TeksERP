@@ -64,7 +64,10 @@ export const PRICE_KIND_HINT: Record<PriceKind, string> = {
 
 export interface ItemPriceRow {
   id: string;
+  /** Konu kartı (ürün ya da hizmet) — sunucu iki kolondan doldurur; hizmette `serviceItemId` ile aynıdır. */
   itemId: string;
+  /** Doluysa satır bir HİZMET kartının fiyatıdır (`service_items`, D1a); eski sunucu göndermez. */
+  serviceItemId?: string | null;
   /** ⚠️ `null` = KART VARSAYILANI. "Müşterisi silinmiş satır" DEĞİL. */
   customerId: string | null;
   kind: PriceKind;

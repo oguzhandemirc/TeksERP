@@ -8,18 +8,18 @@ import type { DefinitionTile } from "../tile-config";
 export const catalogTiles: DefinitionTile[] = [
   {
     key: "items",
-    title: "Ürünler",
+    title: "Ürün Kartları",
     description: "Kumaş, iplik ve sarf tanımları",
     icon: Package,
     to: "/definitions/items",
     group: "catalog",
     permission: "item:read",
   },
-  // K3 (2026-11-06): hizmet kalemleri Ürünler listesinden ayrı; sade form.
+  // Hizmet kartları ayrı tabloda (`service_items`, D1b); sade form.
   {
     key: "services",
-    title: "Hizmetler",
-    description: "Faturalanan hizmet kalemleri (kurşun, tambur, brode...)",
+    title: "Hizmet Kartları",
+    description: "Faturalanan hizmetler (kurşun, tambur, brode...)",
     icon: Wrench,
     to: "/definitions/services",
     group: "catalog",

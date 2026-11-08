@@ -21,15 +21,17 @@ import {
   itemLifecycleOf,
   lifecycleChoices,
   lifecycleDialogVerb,
+  type CardLifecycleApi,
   type ItemLifecycleStatus,
   type LifecycleChoice,
 } from "@/lib/item-lifecycle";
-import { itemService } from "./service";
-import type { Item } from "./types";
+import { itemLifecycleApi } from "./itemLifecycleApi";
 
 interface Props {
-  item: Item;
+  item: { id: string; name: string; lifecycleStatus?: ItemLifecycleStatus | null; isActive?: boolean };
   onClose: () => void;
+  /** Hangi kart tablosu — verilmezse ürün kartı (`/api/items`); hizmet kartı `/api/service-items` verir. */
+  api?: CardLifecycleApi;
 }
 
 function ChoiceList(props: { choices: LifecycleChoice[]; value: ItemLifecycleStatus | null; onChange: (to: ItemLifecycleStatus) => void }) {
@@ -48,12 +50,12 @@ function ChoiceList(props: { choices: LifecycleChoice[]; value: ItemLifecycleSta
   );
 }
 
-export function ItemLifecycleDialog({ item, onClose }: Props) {
+export function ItemLifecycleDialog({ item, onClose, api = itemLifecycleApi }: Props) {
   const qc = useQueryClient();
   const current = itemLifecycleOf(item);
   const preview = useQuery({
-    queryKey: ["items", "lifecycle-preview", item.id],
-    queryFn: () => itemService.lifecyclePreview(item.id, "ARCHIVED"),
+    queryKey: [api.queryRoot, "lifecycle-preview", item.id],
+    queryFn: () => api.lifecyclePreview(item.id, "ARCHIVED"),
   });
   const p = preview.data?.data;
   const choices = p ? lifecycleChoices(current, p.liveTotal) : [];
@@ -64,10 +66,10 @@ export function ItemLifecycleDialog({ item, onClose }: Props) {
   }, [p, to, current]);
 
   const mut = useMutation({
-    mutationFn: (target: ItemLifecycleStatus) => itemService.transitionLifecycle(item.id, target, reason.trim() || null),
+    mutationFn: (target: ItemLifecycleStatus) => api.transitionLifecycle(item.id, target, reason.trim() || null),
     onSuccess: (res) => {
       toastServerSuccess(res, "Kartın durumu değişti");
-      void qc.invalidateQueries({ queryKey: ["items"] });
+      void qc.invalidateQueries({ queryKey: [api.queryRoot] });
       onClose();
     },
     onError: () => {

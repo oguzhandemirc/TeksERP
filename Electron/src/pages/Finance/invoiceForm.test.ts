@@ -28,7 +28,9 @@ import type { InvoiceDetail } from "./service";
 
 const line = (over: Partial<InvoiceFormLine> = {}): InvoiceFormLine => ({
   key: "k1",
+  lineType: "PRODUCT",
   itemId: null,
+  serviceItemId: null,
   description: "Kumaş",
   qty: 10,
   unit: "m",

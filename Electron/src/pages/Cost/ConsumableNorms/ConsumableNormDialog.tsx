@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
+import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorText } from "@/lib/api-error";
 import { decToInput, toDecimalText } from "../shared/format";
@@ -15,12 +16,30 @@ import { CONSUMABLE_NORM_NOTE_MAX } from "./schema";
 
 type Picked = { id: string; code: string; name: string; unit?: string };
 
+// Hizmet kartı ayrı tabloda (`/api/service-items`) — ürün seçicisi hizmet göstermez; kilitli normda konu değişmez.
+function ServiceField({ locked, value, onChange }: { locked: boolean; value: Picked | null; onChange: (p: Picked | null) => void }) {
+  if (locked) {
+    return (
+      <Button variant="outline" className="mt-1 w-full justify-start" disabled>
+        {value ? `${value.code} — ${value.name}` : "—"}
+      </Button>
+    );
+  }
+  return (
+    <ServiceItemSelect
+      value={value?.id ?? null}
+      onChange={(id, row) => onChange(id && row ? { id: row.id, code: row.code, name: row.name, unit: row.unit } : null)}
+      triggerClassName="mt-1"
+    />
+  );
+}
+
 export function ConsumableNormDialog({ onClose, current }: { onClose: () => void; current?: ConsumableNorm | null }) {
   const qc = useQueryClient();
   const attempt = useAttemptToken();
   const [service, setService] = useState<Picked | null>(current?.serviceItem ?? null);
   const [consumable, setConsumable] = useState<Picked | null>(current ? { ...current.consumableItem, unit: current.unit } : null);
-  const [picker, setPicker] = useState<"service" | "consumable" | null>(null);
+  const [pickConsumable, setPickConsumable] = useState(false);
   const [qty, setQty] = useState(decToInput(current?.qtyPerM));
   const [note, setNote] = useState("");
   const qtyText = toDecimalText(qty);
@@ -49,14 +68,12 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
         </DialogHeader>
         <div className="grid gap-3 text-sm">
           <div>
-            <span className="text-muted-foreground">Hizmet kalemi</span>
-            <Button variant="outline" className="mt-1 w-full justify-start" disabled={locked} onClick={() => setPicker("service")}>
-              {service ? `${service.code} — ${service.name}` : "Hizmet kalemi seç…"}
-            </Button>
+            <span className="text-muted-foreground">Hizmet kartı</span>
+            <ServiceField locked={locked} value={service} onChange={setService} />
           </div>
           <div>
             <span className="text-muted-foreground">Sarf kalemi</span>
-            <Button variant="outline" className="mt-1 w-full justify-start" disabled={locked} onClick={() => setPicker("consumable")}>
+            <Button variant="outline" className="mt-1 w-full justify-start" disabled={locked} onClick={() => setPickConsumable(true)}>
               {consumable ? `${consumable.code} — ${consumable.name}` : "Sarf kalemi seç…"}
             </Button>
           </div>
@@ -82,14 +99,12 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
         </DialogFooter>
       </DialogContent>
       <ItemPickerModal
-        open={picker !== null}
-        onOpenChange={(o) => !o && setPicker(null)}
-        allowedTypes={picker === "service" ? ["SERVICE"] : ["CONSUMABLE"]}
+        open={pickConsumable}
+        onOpenChange={setPickConsumable}
+        allowedTypes={["CONSUMABLE"]}
         onPick={(r) => {
-          const p = { id: r.id, code: r.code, name: r.name, unit: r.unit };
-          if (picker === "service") setService(p);
-          else setConsumable(p);
-          setPicker(null);
+          setConsumable({ id: r.id, code: r.code, name: r.name, unit: r.unit });
+          setPickConsumable(false);
         }}
       />
     </Dialog>

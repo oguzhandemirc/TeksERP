@@ -6,13 +6,21 @@ export const ItemType = {
   FABRIC: "FABRIC",
   YARN: "YARN",
   CONSUMABLE: "CONSUMABLE",
-  /** Müşteriye kesilen hizmet kalemi (H6) — top/stok seçicilerine girmez (`STOCK_ITEM_TYPES`). */
+  /** ESKİ değer: hizmet kartı artık ayrı tabloda (`service_items`, `/api/service-items`); backend enum'u eski istemci için tutar,
+   *  ürün kartı formu/süzgeci bunu SUNMAZ (`PRODUCT_ITEM_TYPES`). Kaldırma koşulu backend MV-05. */
   SERVICE: "SERVICE",
 } as const;
 export type ItemType = (typeof ItemType)[keyof typeof ItemType];
 /** Fiziksel stok kalemleri — hizmet (SERVICE) hariç; stok/kumaş seçicileri sunucuya bu kümeyi CSV gönderir. */
 export const STOCK_ITEM_TYPES: readonly ItemType[] = [ItemType.YARN, ItemType.FABRIC, ItemType.CONSUMABLE];
 /** Top doğurabilen türler — backend `ROLL_BEARING_ITEM_TYPES` aynası (yalnız kumaş); top/sevk seçicileri bunu CSV gönderir. */
+/** Ürün kartı formunun tür seçenekleri (hizmet ayrı tabloda) — `STOCK_ITEM_TYPES` ile aynı küme, form sırası. */
+export type ProductItemType = Exclude<ItemType, "SERVICE">;
+export const productItemTypeLabels: Record<ProductItemType, string> = {
+  FABRIC: "Kumaş",
+  YARN: "İplik",
+  CONSUMABLE: "Sarf Malzeme",
+};
 export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
 
 export const itemTypeLabels: Record<ItemType, string> = {

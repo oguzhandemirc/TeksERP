@@ -9,7 +9,7 @@ import type { FabricProperty } from "./types";
 import type { FabricPropertyFormValues } from "./schema";
 
 const getAll = vi.fn();
-vi.mock("@/pages/Items/service", () => ({ itemService: { getAll: (...a: unknown[]) => getAll(...a) } }));
+vi.mock("@/pages/Definitions/Services/service", () => ({ serviceItemService: { getAll: (...a: unknown[]) => getAll(...a) } }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true }) }));
 vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: () => null }));
 vi.mock("@/components/forms/PropertyStationsField", () => ({ PropertyStationsField: () => null }));
@@ -18,8 +18,8 @@ const { FabricPropertyFormDialog } = await import("./FabricPropertyFormDialog");
 const { buildFabricPropertyPayload } = await import("./payload");
 const { resolveServiceHint, serviceHintText } = await import("./serviceMapping");
 
-const K1 = { id: "s1", code: "KURSUN-K1", name: "Kurşun ≤30 g/m", itemType: "SERVICE", isActive: true };
-const K2 = { id: "s2", code: "KURSUN-K2", name: "Kurşun 30–60", itemType: "SERVICE", isActive: true };
+const K1 = { id: "s1", code: "KURSUN-K1", name: "Kurşun ≤30 g/m", unit: "MT", isActive: true };
+const K2 = { id: "s2", code: "KURSUN-K2", name: "Kurşun 30–60", unit: "MT", isActive: true };
 
 const prop = (p: Partial<FabricProperty> & Pick<FabricProperty, "id" | "name" | "valueType">): FabricProperty => ({
   code: p.id.toUpperCase(),
@@ -65,10 +65,11 @@ beforeEach(() => {
 });
 
 describe("H6b hizmet kalemi seçicisi + gövde", () => {
-  it("⭐ seçici yalnız aktif SERVICE kalemlerini ister ve listeler (doğrudan modal)", async () => {
+  it("⭐ seçici aktif hizmet kartlarını /api/service-items'tan ister ve listeler (doğrudan modal)", async () => {
     renderForm(GRAMAJ);
     await waitFor(() => expect(getAll).toHaveBeenCalled());
-    expect(getAll.mock.calls[0]![0]).toMatchObject({ filters: { isActive: "true", itemType: "SERVICE" } });
+    expect(getAll.mock.calls[0]![0]).toMatchObject({ filters: { isActive: "true" } });
+    expect(getAll.mock.calls[0]![0].filters).not.toHaveProperty("itemType");
     await userEvent.click(await screen.findByRole("button", { name: "Özelliğin hizmet kalemi" }));
     const dlg = await screen.findByRole("dialog", { name: "Hizmet kalemi" });
     const options = within(dlg).getAllByRole("option").map((o) => o.textContent);

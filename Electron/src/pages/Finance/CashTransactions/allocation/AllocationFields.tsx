@@ -1,13 +1,12 @@
 // Masraf bağı alanları (D4-H3): hedef türü + seçici (doğrudan modal) + pay %. Kasa formunda ve bağ diyaloğunda ortak.
-import { Briefcase, Cog, Wrench } from "lucide-react";
+import { Briefcase, Cog } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TERIM } from "@/lib/terim";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
+import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
 import { workOrderPickerService } from "./allocationApi";
 import { TARGET_TYPE_LABEL, shareHint, type AllocationDraft, type AllocationTargetType } from "./allocationRules";
@@ -36,11 +35,8 @@ function TargetPicker({ value, onChange }: Props) {
         title={`${TERIM.terbiyeIsEmri.tekil} seç`} placeholder={`${TERIM.terbiyeIsEmri.tekil} seç`} triggerClassName="w-full" />
     );
   }
-  return (
-    <EntityPickerModal<Item> value={value.targetId} onChange={set} service={itemService} queryKey="expense-alloc-service-items"
-      filters={{ itemType: "SERVICE" }} getLabel={(i) => i.name} getSubLabel={(i) => i.code} icon={Wrench}
-      title="Hizmet kalemi seç" placeholder="Hizmet kalemi seç" triggerClassName="w-full" />
-  );
+  // Hizmet kartı ayrı tabloda (`/api/service-items`); gövde yine `serviceItemId` (allocationRules).
+  return <ServiceItemSelect value={value.targetId} onChange={(id) => set(id)} placeholder="Hizmet kartı seç" triggerClassName="w-full" />;
 }
 
 export function AllocationFields({ value, onChange, remainingPct }: Props) {

@@ -18,7 +18,8 @@ import { useEntityPickerData } from "./useEntityPickerData";
 
 export interface EntityPickerModalProps<T extends { id: string }> {
   value: string | null | undefined;
-  onChange: (id: string | null) => void;
+  /** İkinci argüman seçilen satırın kendisi (birim/kod gibi alanı ayrıca sormamak için); "yok" seçiminde null. */
+  onChange: (id: string | null, item?: T | null) => void;
   service: CrudService<T>;
   /** React Query namespace — diğer kullanımlardan ayrışsın. */
   queryKey: string;
@@ -113,8 +114,8 @@ export function EntityPickerModal<T extends { id: string }>({
   });
   const selected = inList ?? selectedQ.data?.data ?? null;
 
-  const choose = (id: string | null) => {
-    onChange(id);
+  const choose = (id: string | null, item: T | null = null) => {
+    onChange(id, item);
     setOpen(false);
   };
   const showNone = nullable && !debouncedSearch.trim();
@@ -194,7 +195,7 @@ export function EntityPickerModal<T extends { id: string }>({
                   label={getLabel(item)}
                   subLabel={getSubLabel?.(item)}
                   leading={renderLeading?.(item)}
-                  onClick={() => choose(item.id)}
+                  onClick={() => choose(item.id, item)}
                 />
               ))}
               {isLoading && (

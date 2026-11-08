@@ -8,11 +8,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { InvoiceReceiptsSection } from "./InvoiceReceiptsSection";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
+import { InvoiceLineSubjectField } from "./InvoiceLineSubjectField";
+import { lineSubjectFrom, lineSubjectId, withLineType, type InvoiceLineType } from "./invoiceLineSubject";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useCustomerTerms } from "./useCustomerTerms";
 import { applyTaxDefaults, useInvoiceTaxDefaults } from "./useInvoiceTaxDefaults";
@@ -67,8 +66,11 @@ export interface InvoicePrefill {
     qty: number;
     unit: string;
     unitPrice?: number;
-    /** Kaynak belge kalemi biliyorsa taşır — fiyat önerisi de ondan çözülür. */
+    /** Kaynak belge kalemi biliyorsa taşır — fiyat önerisi de ondan çözülür. Hizmet satırı `lineType: SERVICE` +
+     *  `serviceItemId` taşır (D1c); `lineType`siz satır kartı varsa ürün, yoksa açıklama satırıdır. */
+    lineType?: InvoiceLineType;
     itemId?: string | null;
+    serviceItemId?: string | null;
   }>;
   /** Diyalog başlığının altında "Kaynak: SVK…" olarak gösterilir. */
   sourceLabel?: string;
@@ -113,7 +115,10 @@ type DraftLine = InvoiceFormLine;
  */
 const emptyLine = (vatRate: number = 20, withholdingRate: number = 0): DraftLine => ({
   key: crypto.randomUUID(),
+  // Yeni satır Ürün türünde açılır; kart seçilmezse açıklama satırı olarak gider (`lineSubjectPayload`).
+  lineType: "PRODUCT",
   itemId: null,
+  serviceItemId: null,
   description: "",
   qty: 1,
   unit: "m",
@@ -176,34 +181,20 @@ function InvoiceLineRow({
   const patchRef = useRef(onPatch);
   patchRef.current = onPatch;
 
-  // Kalem seçilince AÇIKLAMA boşsa kalem adıyla ön-dolar.
-  const itemQ = useQuery({
-    queryKey: ["invoice-line-item", line.itemId],
-    queryFn: () => itemService.getById(line.itemId as string),
-    enabled: Boolean(line.itemId),
-    staleTime: 5 * 60_000,
-  });
-  const itemName = line.itemId ? (itemQ.data?.data?.name ?? null) : null;
-  const descRef = useRef(line.description);
-  descRef.current = line.description;
+  // Kart (ürün ya da hizmet) seçilince AÇIKLAMA boşsa kart adıyla ön-dolar; kullanıcının yazdığı ezilmez.
   const lastDescRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!itemName) return;
-    if (
-      shouldApplySuggestion({
-        current: descRef.current,
-        lastApplied: lastDescRef.current,
-        resolved: itemName,
-        isBlank: isBlankText,
-      })
-    ) {
-      patchRef.current({ description: itemName });
-      lastDescRef.current = itemName;
+  const applyCardName = (name: string | null) => {
+    if (!name) return null;
+    if (shouldApplySuggestion({ current: line.description, lastApplied: lastDescRef.current, resolved: name, isBlank: isBlankText })) {
+      lastDescRef.current = name;
+      return name;
     }
-  }, [itemName]);
+    return null;
+  };
 
+  // Fiyat önerisi konu kimliğiyle (ürün ya da hizmet kartı — `/item-prices/resolve` iki tabloda çözer).
   const suggestion = useItemPriceSuggestion({
-    itemId: line.itemId,
+    itemId: lineSubjectId(line),
     kind: priceKind,
     currency,
     customerId: priceCustomerId,
@@ -219,19 +210,15 @@ function InvoiceLineRow({
 
   return (
     <div className="space-y-1">
-      <div className={`grid ${cols} items-center gap-2`}>
-        <div className="min-w-0">
-          <ReferenceSelect<Item>
-            value={line.itemId}
-            onChange={(v) => onPatch({ itemId: v })}
-            service={itemService}
-            queryKey="items"
-            getLabel={(it) => `${it.code} — ${it.name}`}
-            placeholder="Kalem (ops.)"
-            nullable
-            noneLabel="— (kalemsiz satır)"
-          />
-        </div>
+      <div className={`grid ${cols} items-end gap-2`}>
+        <InvoiceLineSubjectField
+          subject={line}
+          onTypeChange={(t) => onPatch(withLineType(line, t))}
+          onPick={(patch, name) => {
+            const desc = applyCardName(name);
+            onPatch(desc ? { ...patch, description: desc } : patch);
+          }}
+        />
         <Input
           placeholder="Ürün / hizmet açıklaması"
           value={line.description}
@@ -416,7 +403,7 @@ function InvoiceFormBody({
           ...emptyLine(defaultVatRate),
           ...l,
           unitPrice: l.unitPrice ?? 0,
-          itemId: l.itemId ?? null,
+          ...lineSubjectFrom(l),
         }))
       : [emptyLine(defaultVatRate)];
   });
@@ -577,7 +564,7 @@ function InvoiceFormBody({
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
   const cols =
-    "grid-cols-[minmax(0,190px)_minmax(0,1fr)_76px_56px_100px_64px_64px_64px_40px]";
+    "grid-cols-[minmax(0,210px)_minmax(0,1fr)_76px_56px_100px_64px_64px_64px_40px]";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -725,7 +712,7 @@ function InvoiceFormBody({
         {/* Dar ekranda kalem ızgarası kendi kabında yatay kayar (UX-3); diyalog taşmaz. */}
         <div className="overflow-x-auto rounded-md border">
           <div className={`grid min-w-[48rem] ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`}>
-            <span>Kalem</span>
+            <span>Tür / Kart</span>
             <span>Açıklama</span>
             <span>Miktar</span>
             <span>Birim</span>

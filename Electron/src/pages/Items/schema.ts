@@ -3,7 +3,8 @@ import { ItemType } from "@/types/enums";
 import { acceptNumberAsText } from "@/lib/decimal-form-text";
 
 const itemTypeEnum = z.enum(
-  [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE, ItemType.SERVICE],
+  // Hizmet kartı ayrı tabloda (`/api/service-items`) — ürün kartı formu SERVICE sunmaz.
+  [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE],
   { message: "Kumaş tipi seçilmeli" },
 );
 

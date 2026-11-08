@@ -1,30 +1,29 @@
-// Tanımlar › Hizmetler (K3, 2026-11-06): hizmet kalemleri Ürünler listesinden ayrıldı. Aynı `Item` tablosu,
-// `itemType = SERVICE` sunucuda süzülür; form sadedir. Fiyatlar Hizmet Fiyat Tablosu'nda (satırdaki bağlantı).
+// Tanımlar › Hizmet Kartları: hizmetler ürün kartlarından AYRI tabloda (`service_items`, `/api/service-items`).
+// Form sadedir; "Kullanımdan kaldır" yaşam döngüsü diyaloğu (canlı referans listesi). Fiyatlar Hizmet Fiyat Tablosu'nda.
 import { useState } from "react";
 import { CrudPage } from "@/components/layout/CrudPage";
-import { itemService } from "@/pages/Items/service";
 import { ItemLifecycleDialog } from "@/pages/Items/ItemLifecycleDialog";
-import type { Item } from "@/pages/Items/types";
 import { serviceColumns } from "./columns";
 import { ServiceFormDialog } from "./ServiceFormDialog";
 import { servicePayload } from "./schema";
+import { serviceItemLifecycleApi, serviceItemService } from "./service";
+import type { ServiceItem } from "./types";
 
-export const SERVICE_FILTERS = { itemType: "SERVICE" } as const;
+export const SERVICE_ITEMS_QUERY_KEY = "service-items";
 
 export function ServicesPage() {
-  const [lifecycleItem, setLifecycleItem] = useState<Item | null>(null);
+  const [lifecycleItem, setLifecycleItem] = useState<ServiceItem | null>(null);
   return (
     <>
-      <CrudPage<Item>
-        title="Hizmetler"
-        description="Faturalanan hizmetler (kurşun, tambur, brode...). Kademe fiyatları Hizmet Fiyat Tablosu'ndadır."
-        entityName="Hizmet"
-        queryKey="items"
-        service={itemService}
+      <CrudPage<ServiceItem>
+        title="Hizmet Kartları"
+        description="Faturalanan hizmetler (kurşun, tambur, brode...). Ürün kartlarından ayrıdır; kademe fiyatları Hizmet Fiyat Tablosu'ndadır."
+        entityName="Hizmet kartı"
+        queryKey={SERVICE_ITEMS_QUERY_KEY}
+        service={serviceItemService}
         columns={serviceColumns}
         writePermission="item:write"
         searchPlaceholder="Kod veya ad ara..."
-        extraFilters={SERVICE_FILTERS}
         onRemove={setLifecycleItem}
         removeLabel="Kullanımdan kaldır"
         onRestore={setLifecycleItem}
@@ -35,11 +34,13 @@ export function ServicesPage() {
             onOpenChange={onOpenChange}
             initial={initial}
             isSubmitting={isSubmitting}
-            onSubmit={(v) => onSubmit(servicePayload(v, initial !== null) as unknown as Partial<Item>)}
+            onSubmit={(v) => onSubmit(servicePayload(v, initial !== null) as unknown as Partial<ServiceItem>)}
           />
         )}
       />
-      {lifecycleItem && <ItemLifecycleDialog item={lifecycleItem} onClose={() => setLifecycleItem(null)} />}
+      {lifecycleItem && (
+        <ItemLifecycleDialog item={lifecycleItem} api={serviceItemLifecycleApi} onClose={() => setLifecycleItem(null)} />
+      )}
     </>
   );
 }

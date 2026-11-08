@@ -15,7 +15,7 @@ import { serviceItemLabel, type ServiceItemOption } from "./serviceMapping";
 interface Props {
   value: string | null;
   onChange: (next: string | null) => void;
-  /** Yalnız aktif SERVICE kalemleri (sayfa tek sorguyla yükler). */
+  /** Yalnız aktif hizmet kartları (`/api/service-items`; sayfa tek sorguyla yükler). */
   items: readonly ServiceItemOption[];
   /** Boş seçimin metni ("Eşleme yok" ya da "Özelliğe düşer"). */
   noneLabel: string;
@@ -54,8 +54,8 @@ export function ServiceItemPickerField({ value, onChange, items, noneLabel, clas
           <DialogHeader>
             <DialogTitle>Hizmet kalemi</DialogTitle>
             <DialogDescription>
-              Faturada bu işin hangi hizmet kalemiyle kesileceği. Yalnız aktif Hizmet türü kalemler
-              listelenir; fiyat Kalem Fiyatları ekranından girilir.
+              Faturada bu işin hangi hizmet kartıyla kesileceği. Yalnız aktif hizmet kartları
+              listelenir; fiyat Hizmet Fiyat Tablosu'ndan girilir.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-80 space-y-1 overflow-auto" role="listbox">
@@ -70,7 +70,7 @@ export function ServiceItemPickerField({ value, onChange, items, noneLabel, clas
             ))}
             {items.length === 0 && (
               <div className="px-2 py-4 text-sm text-muted-foreground">
-                Aktif hizmet kalemi yok. Ürünler ekranında Tür: Hizmet ile bir kalem açın.
+                Aktif hizmet kartı yok. Tanımlar › Hizmet Kartları ekranından bir hizmet kartı açın.
               </div>
             )}
           </div>

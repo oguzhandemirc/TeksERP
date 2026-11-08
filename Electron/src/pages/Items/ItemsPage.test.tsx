@@ -75,7 +75,8 @@ describe("itemsFilters (saf)", () => {
 
   it("Tür ve Birim URL süzgeçleri BACKEND kolon adıyla (itemType · unit); 'Tümü' = ALL başta; Tür listesi ürün seçiciyle ORTAK", () => {
     const byKey = (k: string) => ITEM_URL_FILTERS.find((d) => d.key === k)!;
-    expect(byKey("itemType").options.map((o) => o.value)).toEqual(["ALL", "YARN", "FABRIC", "CONSUMABLE", "SERVICE"]);
+    // D2: hizmet kartı ayrı tabloda — Tür listesinde "Hizmet" YOK.
+    expect(byKey("itemType").options.map((o) => o.value)).toEqual(["ALL", "YARN", "FABRIC", "CONSUMABLE"]);
     expect(byKey("unit").options.map((o) => o.value)).toEqual(["ALL", "MT", "KG", "ADET"]);
   });
 
@@ -99,33 +100,33 @@ describe("itemsFilters (saf)", () => {
     const tur = byKeyOptions("itemType");
     expect(labeledSelectText("Tür", "ALL", tur)).toBe("Tür: Tümü");
     expect(labeledSelectText("Tür", "YARN", tur)).toBe("Tür: İplik");
-    expect(labeledSelectText("Tür", "SERVICE", tur)).toBe("Tür: Hizmet");
   });
 
-  it("⭐ H6b 'Hizmet' yalnız Ürünler süzgecinde: stok seçicisinin varsayılan tür listesine sızmaz; renk/özellik ekseni kapanır", () => {
+  it("⭐ D2 'Hizmet' ne Ürün Kartları süzgecinde ne stok seçicisinde; kumaş dışı tür renk/özellik eksenini kapatır", () => {
     expect(itemTypeFilterOptions().map((o) => o.value)).not.toContain("SERVICE");
+    expect(ITEM_URL_FILTERS.find((d) => d.key === "itemType")!.options.map((o) => o.value)).not.toContain("SERVICE");
     const sp = new URLSearchParams("filter[allowedColorId]=c1");
-    expect(itemTypeChangeParams(sp, "SERVICE").has("filter[allowedColorId]")).toBe(false);
-    expect(itemTypeChangeParams(sp, "SERVICE").get("filter[itemType]")).toBe("SERVICE");
+    expect(itemTypeChangeParams(sp, "YARN").has("filter[allowedColorId]")).toBe(false);
+    expect(itemTypeChangeParams(sp, "YARN").get("filter[itemType]")).toBe("YARN");
   });
 });
 
-/** K3 (2026-11-06): Tür "Tümü" iken hizmetler listelenmez — stok türleri CSV olarak sunucuya gider. */
+/** Tür "Tümü" iken stok türleri CSV olarak sunucuya gider (istek bayt-aynı; hizmet kartı zaten ayrı tabloda). */
 const STOCK_TYPES = "YARN,FABRIC,CONSUMABLE";
 
-describe("ItemsPage — K3 hizmet ayrımı", () => {
-  it("⭐ K3 Tür 'Tümü' hizmetleri dışlar; Tür = Hizmet seçilince yalnız SERVICE gider", async () => {
-    renderPage("/definitions/items?filter[itemType]=SERVICE");
-    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "SERVICE" }));
+describe("ItemsPage — hizmet kartı ayrımı", () => {
+  it("⭐ Tür seçilince yalnız o tür gider; 'Tümü' varsayılanı stok türleri (SERVICE yok)", async () => {
+    renderPage("/definitions/items?filter[itemType]=YARN");
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
     expect(itemTypeDefaultFilter(new URLSearchParams()).itemType?.split(",")).not.toContain("SERVICE");
   });
 });
 
 describe("ItemsPage — ad + süzgeç şeridi", () => {
 
-  it("⭐ §1/§3 başlık 'Ürünler'; varsayılan istek isActive=true; 'Pasifleri göster' anahtarı YOK", async () => {
+  it("⭐ §1/§3 başlık 'Ürün Kartları'; varsayılan istek isActive=true; 'Pasifleri göster' anahtarı YOK", async () => {
     renderPage();
-    expect(screen.getByRole("heading", { name: "Ürünler" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ürün Kartları" })).toBeInTheDocument();
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     expect(screen.queryByText("Pasifleri göster")).toBeNull();
     expect(screen.getByRole("combobox", { name: "Durum" })).toHaveTextContent("Durum: Aktif");

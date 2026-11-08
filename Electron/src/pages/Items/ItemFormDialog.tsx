@@ -19,7 +19,7 @@ import { EnumSelect } from "@/components/forms/EnumSelect";
 import { cn } from "@/lib/utils";
 // `ItemType` DEĞER olarak da gerekli (denye alanı yalnız YARN'da çizilir),
 // bu yüzden `type` import'u değil.
-import { ItemType, itemTypeLabels, unitForItemType } from "@/types/enums";
+import { ItemType, itemTypeLabels, productItemTypeLabels, unitForItemType, type ProductItemType } from "@/types/enums";
 import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import type { Item, ItemCreatePayload } from "./types";
@@ -67,7 +67,8 @@ export function ItemFormDialog({
     ? {
         code: initial.code,
         name: initial.name,
-        itemType: initial.itemType,
+        // Hizmet kartı bu tabloda yaşamaz (`items_no_service_ck`); tip daraltması yalnız derleyici içindir.
+        itemType: initial.itemType as ProductItemType,
         unit: initial.unit,
         linearDensityDen: decimalToFormText(initial.linearDensityDen),
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
@@ -223,10 +224,10 @@ export function ItemFormDialog({
                 control={form.control}
                 name="itemType"
                 render={({ field }) => (
-                  <EnumSelect<ItemType>
+                  <EnumSelect<ProductItemType>
                     value={field.value}
                     onChange={field.onChange}
-                    labels={itemTypeLabels}
+                    labels={productItemTypeLabels}
                     disabled={isEdit}
                   />
                 )}

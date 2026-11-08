@@ -22,14 +22,15 @@
 import type { Currency, InvoiceDetail, InvoiceLineInput, InvoiceType, InvoiceGoodsReceiptRef } from "./service";
 import { sameIdSet } from "./invoiceReceipts";
 import { shouldApplySuggestion } from "@/hooks/useItemPriceSuggestion";
+import { lineSubjectFrom, lineSubjectPayload, type InvoiceLineSubject } from "./invoiceLineSubject";
 
 /** Hesabın bacağı — yalnız DÜZENLEMEDE anlamlı (eski fason kind'lı hesap salt-okunur çizilir); yeni fatura hep karta kesilir. */
 export type PartyKind = "CUSTOMER" | "SUBCONTRACTOR";
 
-/** Formdaki tek satır — `key` React kimliği (DB satırında satırın kendi id'si). */
-export interface InvoiceFormLine {
+/** Formdaki tek satır — `key` React kimliği (DB satırında satırın kendi id'si). Konu (`lineType` · `itemId` ·
+ *  `serviceItemId`) `invoiceLineSubject.ts` kurallarıyla okunur/yazılır. */
+export interface InvoiceFormLine extends InvoiceLineSubject {
   key: string;
-  itemId: string | null;
   description: string;
   qty: number;
   unit: string;
@@ -101,9 +102,10 @@ export function initialFromDetail(inv: InvoiceDetail): InvoiceFormInitial {
     goodsReceipts: inv.goodsReceipts ?? [],
     // Satır KİMLİĞİ DB satırının id'si: `crypto.randomUUID()` her render'da yeni
     // anahtar üretip alanların odağını kaybettirirdi.
+    // Konu `lineType`tan: hizmet satırının `item`ı eski-panel aynasıdır, ürün kartı sanılmaz.
     lines: inv.lines.map((l) => ({
       key: l.id,
-      itemId: l.item?.id ?? null,
+      ...lineSubjectFrom(l),
       description: l.description,
       qty: Number(l.qty),
       unit: l.unit,
@@ -130,7 +132,7 @@ export function payloadLines(lines: InvoiceFormLine[]): InvoiceLineInput[] {
   return lines
     .filter((l) => l.description.trim() && l.qty > 0)
     .map((l) => ({
-      itemId: l.itemId ?? null,
+      ...lineSubjectPayload(l),
       description: l.description.trim(),
       qty: l.qty,
       unit: l.unit,

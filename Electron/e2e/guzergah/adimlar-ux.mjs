@@ -17,7 +17,7 @@ import path from "node:path";
 
 const SAYFALAR = [
   "Anasayfa", "Operasyon", "Tanımlar", "Raporlar", "Yetkilendirme", "Sistem", "Maliyet & Teklif",
-  "Siparişler", "Sevkiyatlar", "Terbiye İş Emirleri", "Kumaş Stoğu", "Ürünler", "Cariler", "Faturalar",
+  "Siparişler", "Sevkiyatlar", "Terbiye İş Emirleri", "Kumaş Stoğu", "Ürün Kartları", "Cariler", "Faturalar",
   "Kasa & Banka", "Mal Kabul", "Teklifler", "Leventler", "Dokuma İş Emirleri", "Modüller",
 ];
 const GENISLIKLER = [390, 768];
@@ -119,9 +119,9 @@ export const UX_ADIMLARI = [
   },
   {
     id: "UX5", rol: "P",
-    yol: "Ürünler → pencere 390 px → Yeni → form diyaloğu sekme kabını tam kaplıyor → Esc", rota: "definitions/items",
+    yol: "Ürün Kartları → pencere 390 px → Yeni → form diyaloğu sekme kabını tam kaplıyor → Esc", rota: "definitions/items",
     async yap({ git, page }) {
-      await git("Ürünler");
+      await git("Ürün Kartları");
       olc.ux5 = await boyutla(page(), 390, async () => {
         const p = page();
         await p.locator(".tab-pane.z-10").getByRole("button", { name: "Yeni", exact: true }).click({ timeout: 10_000 });

@@ -3,7 +3,7 @@ import { Controller, type UseFormReturn } from "react-hook-form";
 import { FormField } from "@/components/forms/FormField";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { itemService } from "@/pages/Items/service";
+import { serviceItemService } from "@/pages/Definitions/Services/service";
 import { ServiceItemPickerField } from "./ServiceItemPickerField";
 import { SERVICE_ITEM_PICKER_FILTERS, propertyServiceHint, showServiceMapping, type ServiceItemOption } from "./serviceMapping";
 import type { ValueServiceContext } from "./PropertyValuesField";
@@ -17,9 +17,9 @@ export function useServiceItemOptions(enabled: boolean): readonly ServiceItemOpt
   // Kalem okuma izni yoksa istek atılmaz (403 toast'ı form açılışında çıkmasın).
   const { hasPermission } = useRoleAccess();
   const q = useQuery({
-    queryKey: ["items", "picker", "service"],
+    queryKey: ["service-items", "picker", "mapping"],
     queryFn: () =>
-      loadAllForPicker(itemService, { filters: { ...SERVICE_ITEM_PICKER_FILTERS }, sortBy: "code" }),
+      loadAllForPicker(serviceItemService, { filters: { ...SERVICE_ITEM_PICKER_FILTERS }, sortBy: "code" }),
     enabled: enabled && hasPermission("item:read"),
     staleTime: 60_000,
   });
