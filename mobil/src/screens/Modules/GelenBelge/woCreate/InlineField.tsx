@@ -32,7 +32,7 @@ export function InlineField({ label, aside, status, testID, children }: Props) {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // Soru olduğu belli olsun: yanındaki seçeneklerle aynı yükseklikte, sabit genişlikte kutu (satırlar hizalı).
-  head: { flexShrink: 0, width: 190, maxWidth: '40%', minHeight: 56, justifyContent: 'center', gap: 2, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.md, backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.brandContainer },
+  head: { flexShrink: 0, width: 240, maxWidth: '40%', minHeight: 56, justifyContent: 'center', gap: 2, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.md, backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.brandContainer },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   label: { flexShrink: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   aside: { fontSize: typography.size.xs, color: colors.textMuted },
