@@ -18,12 +18,14 @@ interface Props {
   testID?: string;
   /** Tek İE formunun belge satırı: yazısız kırmızı ikon (erişilebilirlik adı aynı). */
   iconOnly?: boolean;
+  /** `iconOnly` ikon boyu (vars. 24; tek İE formu üst satırı 28). */
+  iconSize?: number;
 }
 
 const messageOf = (e: unknown): string =>
   typeof (e as { message?: unknown })?.message === 'string' ? (e as { message: string }).message : 'Taslak iptal edilemedi.';
 
-export default function CancelDraftButton({ note, onCancelled, disabled, testID = 'belge-taslak-iptal', iconOnly = false }: Props) {
+export default function CancelDraftButton({ note, onCancelled, disabled, testID = 'belge-taslak-iptal', iconOnly = false, iconSize = 24 }: Props) {
   const canWrite = usePermissions().has('gelen-belge:write');
   const [open, setOpen] = useState(false);
   const preview = useQuery({
@@ -53,7 +55,7 @@ export default function CancelDraftButton({ note, onCancelled, disabled, testID 
         <IconButton
           icon="file-cancel-outline"
           iconColor={colors.dangerDark}
-          size={24}
+          size={iconSize}
           style={styles.icon}
           onPress={() => setOpen(true)}
           disabled={disabled}

@@ -182,6 +182,14 @@ function ScanModals({ scan }: { scan: DocScanFlow }) {
         onRemove={scan.removeFromPreview}
         onDismiss={() => scan.setPreviewIndex(null)}
       />
+      <PagePreviewModal
+        pages={scan.b.done?.sent ?? []}
+        index={scan.sentIndex}
+        uploaded={new Set((scan.b.done?.sent ?? []).map((p) => p.sha256))}
+        onIndex={scan.setSentIndex}
+        onDismiss={() => scan.setSentIndex(null)}
+        testID="ie-belge-onizleme"
+      />
       <MultiPageCameraModal {...scan.source.camera} onError={(m) => Toast.show({ type: 'error', text1: m })} />
       <PageCameraModal
         visible={scan.cameraOpen}

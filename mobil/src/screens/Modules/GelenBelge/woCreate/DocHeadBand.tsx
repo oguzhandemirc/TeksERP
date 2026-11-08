@@ -31,11 +31,16 @@ interface Props {
   /** "Taslağı iptal et" başarılı; verilmezse satır listeden kalkar. */
   onDraftCancelled?: () => void;
   customers: readonly PickerOption[];
+  /** Tek formda "Belgeyi önizle": okutulan sayfalar tam ekran (yalnız bu cihazda çekilmiş sayfalar varken). */
+  onPreview?: () => void;
 }
 
 const PILL_COLOR: Record<PillTone, string> = {
   ok: colors.successText, warn: colors.warningText, missing: colors.dangerText, idle: colors.textSecondary, info: colors.textSecondary, busy: colors.textSecondary,
 };
+
+/** Tek form üst satırı ikonları: dokunma hedefi 56dp (`styles.icon`), ikon 28. */
+const ICON = 28;
 
 const BAND_TONE: Record<PillTone, BandTone> = { ok: 'ok', warn: 'warn', missing: 'missing', idle: 'idle', info: 'idle', busy: 'idle' };
 
@@ -45,7 +50,7 @@ const formFilled = (row: DocRow) => {
   return !!f && !!(f.ownerCustomerId || f.ownerSuggested || f.customerBatchNo || f.ourBatchNo || f.meters != null || f.multi || f.rolls);
 };
 
-export default function DocHeadBand({ row, wo, read, detailFailed, variant, onReread, manual = false, onDraftCancelled, customers }: Props) {
+export default function DocHeadBand({ row, wo, read, detailFailed, variant, onReread, manual = false, onDraftCancelled, customers, onPreview }: Props) {
   const single = variant === 'single';
   const no = row.noteNo;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
@@ -75,12 +80,16 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           <TemplateName entry={teach} />
           <View style={styles.flex} />
           <TemplateUpdateButton entry={teach} />
+          {onPreview && (
+            <IconButton icon="file-eye-outline" size={ICON} iconColor={colors.brand} onPress={onPreview} style={styles.icon}
+              accessibilityLabel="Belgeyi önizle" testID="ie-belge-onizle" />
+          )}
           {onReread && !done && (
-            <IconButton icon={manual ? 'camera-plus-outline' : 'camera-retake-outline'} size={24} iconColor={colors.brand} onPress={onReread} disabled={wo.saving} style={styles.icon}
+            <IconButton icon={manual ? 'camera-plus-outline' : 'camera-retake-outline'} size={ICON} iconColor={colors.brand} onPress={onReread} disabled={wo.saving} style={styles.icon}
               accessibilityLabel={manual ? 'Belge ekle' : 'Yeniden okut'} testID={manual ? 'ie-belge-ekle' : 'ie-belge-yeniden-okut'} />
           )}
           {cancellable && (
-            <CancelDraftButton iconOnly note={{ id: row.noteId, noteNo: no }} onCancelled={onDraftCancelled ?? (() => wo.removeRow(row.noteId))} disabled={wo.saving} testID="ie-belge-taslak-iptal" />
+            <CancelDraftButton iconOnly iconSize={ICON} note={{ id: row.noteId, noteNo: no }} onCancelled={onDraftCancelled ?? (() => wo.removeRow(row.noteId))} disabled={wo.saving} testID="ie-belge-taslak-iptal" />
           )}
         </View>
       ) : (

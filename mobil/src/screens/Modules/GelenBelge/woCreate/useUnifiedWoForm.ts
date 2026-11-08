@@ -269,6 +269,8 @@ function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote'], onNote
   const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip oluşturun.' });
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  // Okutulmuş belgenin sayfaları ("Belgeyi önizle"): gönderilen sayfaların yerel kopyası, salt görüntü.
+  const [sentIndex, setSentIndex] = useState<number | null>(null);
   const onPages = (ps: ScanPage[]) => {
     const next = b.captureMany(ps);
     if (next) void b.send(next);
@@ -297,6 +299,8 @@ function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote'], onNote
     closeCamera: () => setCameraOpen(false),
     previewIndex,
     setPreviewIndex,
+    sentIndex,
+    setSentIndex,
     remove,
     removeFromPreview,
   };

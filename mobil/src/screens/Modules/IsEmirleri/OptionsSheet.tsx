@@ -1,5 +1,6 @@
 // İş Emirleri — "Seçenekler" (CİHAZ ayarları, onay kutulu ModuleSheet): alttaki tuşlar (biri hep açık) · formda hangi mal
-// sahipleri seçilebilsin (iki tür açıksa formda "Malın sahibi" kartı; biri açıksa tuşlarda etiket) · rota tuşta mı.
+// sahipleri seçilebilsin (iki tür açıksa formda "Malın sahibi" kartı; biri açıksa tuşlarda etiket) · rota tuşta mı ·
+// form başlığında son parti numarası.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -16,6 +17,8 @@ interface Props {
   onRouteOnButton: (v: boolean) => void;
   buttons: WoButtons;
   onButtons: (v: WoButtons) => void;
+  lastBatchHint: boolean;
+  onLastBatchHint: (v: boolean) => void;
   onDismiss: () => void;
 }
 
@@ -52,7 +55,7 @@ function CheckRow({ on, locked, label, hint, onPress, testID }: { on: boolean; l
   );
 }
 
-export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, onRouteOnButton, buttons, onButtons, onDismiss }: Props) {
+export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, onRouteOnButton, buttons, onButtons, lastBatchHint, onLastBatchHint, onDismiss }: Props) {
   const scanOn = buttons !== 'manual';
   const manualOn = buttons !== 'scan';
   return (
@@ -82,6 +85,9 @@ export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, 
           <CheckRow on={routeOnButton} label="Rota seçimini Belge Okut tuşunda göster" hint="Kapalıyken rota formda kart rotasından gelir, yoksa sahada belirlenir." onPress={() => onRouteOnButton(!routeOnButton)} testID="ie-secenek-rota-tusta" />
         </>
       )}
+
+      <Text style={styles.section}>Form başlığı</Text>
+      <CheckRow on={lastBatchHint} label="Son parti numarasını göster" hint="İş emri formunun başlığında son kullanılan parti numarası görünür (kısa numara açıksa)." onPress={() => onLastBatchHint(!lastBatchHint)} testID="ie-secenek-son-parti" />
     </ModuleSheet>
   );
 }

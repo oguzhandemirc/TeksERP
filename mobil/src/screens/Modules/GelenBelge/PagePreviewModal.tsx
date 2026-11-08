@@ -10,13 +10,16 @@ import { colors, palette, spacing, typography } from '../../../theme';
 import type { ScanPage } from './docScan';
 
 interface Props {
-  pages: readonly ScanPage[];
+  /** Yalnız görüntü alanları okunur (okutulmuş belgenin `done.sent` kopyası da verilebilir). */
+  pages: readonly Pick<ScanPage, 'sha256' | 'uri'>[];
   /** Açık sayfanın sırası; null → kapalı. */
   index: number | null;
   uploaded: ReadonlySet<string>;
   onIndex: (index: number) => void;
-  onRemove: (index: number) => void;
+  /** Verilmezse "Sil" çizilmez (salt önizleme). */
+  onRemove?: (index: number) => void;
   onDismiss: () => void;
+  testID?: string;
 }
 
 const MAX_SCALE = 5;
@@ -87,7 +90,7 @@ function ZoomableImage({ uri }: { uri: string }) {
   );
 }
 
-export default function PagePreviewModal({ pages, index, uploaded, onIndex, onRemove, onDismiss }: Props) {
+export default function PagePreviewModal({ pages, index, uploaded, onIndex, onRemove, onDismiss, testID = 'belge-tara-onizleme' }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const page = index !== null ? pages[index] : undefined;
@@ -98,14 +101,14 @@ export default function PagePreviewModal({ pages, index, uploaded, onIndex, onRe
   return (
     // Sağa kaydırıp kapatma kapalı: yakınken kaydırma (pan) ile çakışırdı; kapat düğmesi + geri tuşu var.
     <AppModal visible={visible} onDismiss={onDismiss} position="right" contentStyle={{ width, height }} swipeToDismiss={false}>
-      <View style={[styles.page, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.sm }]} testID="belge-tara-onizleme">
+      <View style={[styles.page, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.sm }]} testID={testID}>
         <View style={styles.header}>
           <Text style={styles.title} testID="belge-tara-onizleme-baslik">
             Sayfa {i + 1} / {total}
             {page && uploaded.has(page.sha256) ? ' ✓' : ''}
           </Text>
           <View style={styles.flex1} />
-          {page && !uploaded.has(page.sha256) && (
+          {page && onRemove && !uploaded.has(page.sha256) && (
             <Button
               mode="text"
               icon="delete-outline"

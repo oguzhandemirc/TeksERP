@@ -3,10 +3,12 @@ import { View, StyleSheet } from 'react-native';
 import { Text, Icon } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 
-import { colors } from '../../../../theme';
-import { batchService } from '../../../../services/batch.service';
+import { colors } from '../theme';
+import { batchService } from '../services/batch.service';
 
 /**
+ * Ortak (2026-11-08): hızlı İE sihirbazı + İş Emirleri oluşturma başlığı (cihaz ayarı `woLastBatchHint`).
+ *
  * "Son parti: P47" — adım ①'in alt çubuğunda, düğmelerin hemen üstünde tek satır (2026-11-07: üstte tablo/okutma
  * alanıyla yarışıyordu; el terminalinde kullanıcı aşağıda istedi).
  *

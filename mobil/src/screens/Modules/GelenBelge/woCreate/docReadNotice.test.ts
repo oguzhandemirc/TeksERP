@@ -16,6 +16,13 @@ const all = (w: ReadWatch | null, extra: { formFilled?: boolean; detailFailed?: 
 };
 
 describe('docReadNotice', () => {
+  it('⭐ şablonda olup bulunamayan alanlar formda sarı iletiyle listelenir (ara "Belge okundu" kartı yok)', () => {
+    const tf = [{ key: 'musteri', label: 'Müşteri', value: null, required: true }, { key: 'ieNo', label: 'İş Emri No', value: '12', required: false }, { key: 'tasima', label: 'Taşıma tipi', value: '  ', required: false }];
+    const r = all(done({ ownerCustomerId: 'c1', templateFields: tf }));
+    expect(r.notices).toEqual([{ key: 'eksik-alan', tone: 'warn', text: 'Belgede bulunamadı: Müşteri, Taşıma tipi — formda kontrol edin.' }]);
+    expect(all(done({ ownerCustomerId: 'c1', templateFields: [tf[1]] })).notices).toEqual([]);
+  });
+
   it('⭐ Gülkesim: READ + satır 0 + müşteri/metre dolu → ileti YOK, hap "Okundu"', () => {
     const r = all(done({ ownerCustomerId: 'c1', kursunMeters: '241' }));
     expect(r.notices).toEqual([]);

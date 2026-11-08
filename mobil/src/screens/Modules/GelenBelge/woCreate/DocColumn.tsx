@@ -13,9 +13,12 @@ type FormModel = ReturnType<typeof useUnifiedWoForm>;
 export default function DocColumn({ u, openRequest }: { u: FormModel; openRequest: DocRowOpenRequest | null }) {
   const { wo, row, scan, done, fields } = u;
   if (row) {
+    // Önizleme yalnız bu satırın notu bu cihazda okutulduysa (sayfaların yerel kopyası `done.sent`).
+    const sent = scan.b.done?.note.id === row.noteId ? scan.b.done.sent : [];
     return (
       <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj') || u.partyGramaj}
-        variant="single" onReread={u.manual ? u.addDoc : u.okut} manual={u.manual && wo.isManual(row.noteId)} onDraftCancelled={u.dropDoc} openRequest={openRequest} partyPlan={u.partyPlan} />
+        variant="single" onReread={u.manual ? u.addDoc : u.okut} manual={u.manual && wo.isManual(row.noteId)} onDraftCancelled={u.dropDoc} openRequest={openRequest} partyPlan={u.partyPlan}
+        onPreview={sent.length > 0 ? () => scan.setSentIndex(0) : undefined} />
     );
   }
   return (

@@ -59,6 +59,11 @@ const STATE_NOTICE: Partial<Record<ReadSummary['state'], DocNotice>> = {
   NO_PAGES: { key: 'sayfa-yok', tone: 'info', text: 'Belgede okunacak fotoğraf yok; bilgileri elle girin.' },
 };
 
+/** Şablonda tanımlı olup okumada değeri çıkmayan alanların etiketleri (GENEL şablonda / eski sunucuda boş). */
+export function missingTemplateFields(s: ReadSummary): string[] {
+  return (s.templateFields ?? []).filter((f) => !has(f.value)).map((f) => f.label);
+}
+
 /** Belge şeridi altındaki iletiler (§2c tablosu); "panel" geçen metin yok — eleman paneli görmez. */
 export function docReadNotices(i: DocReadInput): DocNotice[] {
   const out: DocNotice[] = [];
@@ -70,6 +75,9 @@ export function docReadNotices(i: DocReadInput): DocNotice[] {
     const byState = STATE_NOTICE[s.state];
     if (byState) out.push(byState);
     else if (emptyRead(s, i)) out.push({ key: 'bos', tone: 'warn', text: 'Belgeden bilgi çıkmadı. Tekrar okutun ya da elle doldurun.', action: 'reread' });
+    // Şablonda olup okunamayan alanlar (eski "Belge okundu" kartının kırmızı karoları) formda sarı iletiyle kalır.
+    const missing = missingTemplateFields(s);
+    if (missing.length > 0) out.push({ key: 'eksik-alan', tone: 'warn', text: `Belgede bulunamadı: ${missing.join(', ')} — formda kontrol edin.` });
   }
   if (i.detailFailed) out.push({ key: 'detay', tone: 'info', text: 'Belge ayrıntısı alınamadı; özet bilgilerle dolduruldu.' });
   return out;

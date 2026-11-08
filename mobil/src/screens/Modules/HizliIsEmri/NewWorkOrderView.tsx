@@ -24,7 +24,7 @@ import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { useHardwareScanMode } from '../../../hooks/useScanMethod';
 import { useEmanetEnabled } from '../../../hooks/useFeatureFlags';
 import OrderLinkFooterButton from './wizard/OrderLinkFooterButton';
-import LastBatchHint from './wizard/LastBatchHint';
+import LastBatchHint from '../../../components/LastBatchHint';
 import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 
