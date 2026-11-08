@@ -131,7 +131,7 @@
 - Kip `kapali` · `sahte` · `gercek` (`BILDIRIM_VAPID_KONU` zorunlu), gerçek gönderim yerelde DENENMEZ; ayar `resolveSettings`; gönderim `FOR UPDATE SKIP LOCKED`, ağ tx dışında, sonuç yalnız kendi claim'imiz duruyorsa; VAPID `ANAHTAR_DIZINI/patron-vapid.json` üstüne yazılmaz; SSRF `push/targets.ts`.
 - `cari-kilit` (`notification-cari-lock.ts`): anahtar `cari-kilit:<kilitId>`/`…:acildi`, sebep/kişi gitmez, budanmaz. `is-emri.sevkeHazir`: fabrikada `computeReadyWorks`, tel `durum` + hazır top/metre, değişimde `sync_marks` KIRLI.
 - `ozet-masraf` (`getExpenseSummary`, kategori METNİ + TL, `bulut:kasa:oku`) · `karlilik-ozet` (`computeProfitability`, sıralama fabrikada, `bulut:maliyet:oku`); uygulama yalnız etiketler.
-- Fason/emanet anlıklarını yalnız fabrika tek kaynaklarından kur: `emanet-bakiye` (`getConsignedWorkSummary` + `consignedMaterialByOwner`, emanet kapalıyken üretme) · `fason-acik` (F10 `getSubcontractorCockpit` özeti; termin çözücüsünü yeniden kurma) · `hizmet-geliri` (onaylı satış faturasının hizmet satırı, TL fabrikada); `ozet.stok.emanet` karnenin emanet toplamıdır.
+- Fason/emanet anlıklarını yalnız fabrika tek kaynaklarından kur: `emanet-bakiye` (`getConsignedWorkSummary` + `consignedMaterialByOwner`, emanet kapalıyken üretme) · `fason-acik` (F10 `getSubcontractorCockpit` özeti; termin çözücüsünü yeniden kurma) · `hizmet-geliri` (onaylı satış faturasının hizmet satırı, TL fabrikada); `ozet.stok.emanet` karnenin emanet toplamıdır; bunları OLGU değil ANLIK kur (OLGU fabrika migration'ı ister) ve sırayla dağıt: önce bulut, sonra fabrika, sonra uygulama (eski bulut bilinmeyen anlığı `PROJEKSIYON_BILINMIYOR` ile reddeder) <sub>(arşiv:2026-11-08 PB1)</sub>.
 
 ## Uygulama (`patron/uygulama`)
 
