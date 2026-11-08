@@ -177,6 +177,7 @@ function astSection(): void {
 
   // Envanter: `normalizeScanCode(` gerçek çağrısı olan her dosya (uygulama yerleri hariç) helper başlığında anılır.
   const header = readFileSync(join(SRC, HELPER), "utf8").split("// ====")[2] ?? "";
+  const ilkSutun = (l: string): string | undefined => /^\/\/\s+(\S+?\.ts)(?::\d+(?:-\d+)?)?\s/.exec(l)?.[1];
   // Uygulama yerleri + tanım + bağlama yazarı (kodu YAZARKEN normalize eder, okutma çözmez).
   const applied = new Set(["services/inventory.service.ts", "services/shipping.service.ts", "services/search.service.ts", "utils/code-format.ts", "services/roll-customer-code.service.ts"]);
   const missing: string[] = [];
@@ -185,11 +186,12 @@ function astSection(): void {
     if (rel === HELPER) continue;
     const text = readFileSync(file, "utf8");
     if (!/normalizeScanCode\(/.test(text)) continue;
-    // tambur servisi bölündü (2026-11-08): aile üyesi başlıkta cephe adıyla (`tambur.service.ts:`) anılır
-    const short = tamburServisEtiketi(rel).replace(/^services\//, "");
-    const tagged = header.split("\n").some((l) => l.includes(`${short}:`) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
+    // Servis bölündü (2026-11-08): aile üyesi başlıkta kendi yoluyla (`tambur/read.ts`, satır no isteğe bağlı)
+    // ya da eski cephe adıyla (`tambur.service.ts:`) anılır.
+    const adlar = [rel.replace(/^services\//, ""), tamburServisEtiketi(rel).replace(/^services\//, "")];
+    const tagged = header.split("\n").some((l) => adlar.some((a) => l.includes(`${a}:`) || ilkSutun(l) === a) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
     if (!applied.has(envanterServisEtiketi(sevkiyatServisEtiketi(rel))) && !tagged) missing.push(rel); // sevkiyat + envanter servisi bölündü (2026-11-08): aile cephe etiketine katlanır
-    if (envanterServisDosyasiMi(rel) && !header.includes("inventory.service.ts:")) missing.push(rel);
+    if (envanterServisDosyasiMi(rel) && !tagged) missing.push(rel); // uygulama yeri ailesi olsa da okutan üye başlıkta anılır
   }
   check("§AST kalan okutma çağrıları helper başlığında etiketli", missing.length === 0, missing.join(", "));
 

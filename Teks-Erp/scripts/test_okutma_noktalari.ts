@@ -78,7 +78,7 @@ function functionText(rel: string, fn: string): string | null {
 function astSection(): void {
   const header = readFileSync(join(SRC, HELPER), "utf8").split("// ====")[2] ?? "";
   const opened = header.split("\n")
-    .map((l) => /^\/\/\s+(\S+\.ts):\d+(?:-\d+)?\s+(\w+)\b.*\[AÇIK\]/.exec(l))
+    .map((l) => /^\/\/\s+(\S+?\.ts)(?::\d+(?:-\d+)?)?\s+(\w+)\b.*\[AÇIK\]/.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({ rel: `services/${m[1]}`, fn: m[2]! }));
   check("§AST başlıkta [AÇIK] noktalar beyanlı (≥7)", opened.length >= 7, String(opened.length));
