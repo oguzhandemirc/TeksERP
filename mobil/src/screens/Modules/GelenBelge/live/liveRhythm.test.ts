@@ -18,11 +18,11 @@ describe('liveRhythm', () => {
     expect(canSend(IDLE_RHYTHM, 0)).toBe(true);
   });
 
-  it('readyToCapture: üç koşul birden', () => {
+  it('readyToCapture: kilit + netlik; elde titreme (still=false) çekimi engellemez', () => {
     const good = { still: true, sharpness: LIVE_MIN_SHARPNESS };
     expect(readyToCapture(true, good)).toBe(true);
     expect(readyToCapture(false, good)).toBe(false);
-    expect(readyToCapture(true, { ...good, still: false })).toBe(false);
+    expect(readyToCapture(true, { ...good, still: false })).toBe(true);
     expect(readyToCapture(true, { still: true, sharpness: LIVE_MIN_SHARPNESS - 0.01 })).toBe(false);
     expect(readyToCapture(true, null)).toBe(false);
   });

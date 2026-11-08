@@ -1,6 +1,6 @@
 // Canlı okuma (L3) ekran durumu. Kare gelir → (ritim izin verirse) sunucuya TEK istek → yanıt oylamaya. Açılış/kapanış
 // nesil sayacını artırır: geç gelen yanıt/çekim atılır. Tüm form alanları kilitli + kamera sabit + net → "Kıpırdatmayın"
-// halkası → bir kez çekim (`useLiveCapture`). "Şimdi çek" aynı çekimi elle başlatır.
+// halkası → bir kez çekim (`useLiveCapture`). "Çek ve bitir" aynı çekimi elle başlatır.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { liveReadService } from '../../../../services/liveRead.service';
 import type { LiveCameraError, LiveStability, LiveTextFrame } from '../../../../services/liveCamera';

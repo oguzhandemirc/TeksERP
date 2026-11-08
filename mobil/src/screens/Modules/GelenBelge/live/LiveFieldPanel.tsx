@@ -49,6 +49,7 @@ export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
         icon="text-box-search-outline"
         tone={total > 0 && locked === total ? 'ok' : 'idle'}
         aside={total ? `${locked}/${total} kilitli` : null}
+        style={styles.band}
         testID="canli-alan-baslik"
       />
       {vote.fields.length === 0 ? (
@@ -108,6 +109,8 @@ function FieldRow({ field, onPress }: { field: LiveField; onPress: () => void })
 }
 
 const styles = StyleSheet.create({
+  // Şerit modal kartının sağ üst köşesine oturur: yalnız o köşe yuvarlak, diğerleri düz.
+  band: { borderRadius: 0, borderTopRightRadius: radius.lg },
   panel: { flex: 1, backgroundColor: colors.surface, gap: spacing.sm, paddingBottom: spacing.sm },
   empty: { padding: spacing.lg, fontSize: 14, color: colors.textSecondary },
   list: { gap: spacing.sm, paddingHorizontal: spacing.sm },

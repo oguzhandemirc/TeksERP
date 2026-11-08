@@ -1,6 +1,6 @@
 // Bekçi: canlı okuma ekranı (native kamera, iyileştirme ve sunucu mock'lu). Açılışta "Belge aranıyor…" + tarama çizgisi
-// + hep görünen "Şimdi çek"; uçuşta TEK istek; yanıt belge adını ve alanları gösterir; üç aynı okuma kilitler; kilitli +
-// sabit + net → halka → tek çekim → onDone + kilitler fotoğrafa; "Şimdi çek" elle bitirir; iyileştirme yoksa ekran açık
+// + hep görünen "Çek ve bitir"; uçuşta TEK istek; yanıt belge adını ve alanları gösterir; üç aynı okuma kilitler; kilitli +
+// sabit + net → halka → tek çekim → onDone + kilitler fotoğrafa; "Çek ve bitir" elle bitirir; iyileştirme yoksa ekran açık
 // kalır; kapandıktan sonra gelen yanıt atılır; müşteri yalnız bilgi; `live` bağlaması bu ekranı açar.
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
@@ -74,7 +74,7 @@ async function sendFrame(result: unknown) {
 }
 
 describe('LiveReadModal', () => {
-  it('⭐ açılış: "Belge aranıyor…", tarama çizgisi, "Şimdi çek" hep görünür, panel boş', () => {
+  it('⭐ açılış: "Belge aranıyor…", tarama çizgisi, "Çek ve bitir" hep görünür, panel boş', () => {
     const { r } = setup();
     expect(r.getByTestId('canli-durum')).toHaveTextContent(new RegExp(LIVE_SEARCHING));
     expect(r.getByTestId('canli-tarama-cizgisi')).toBeTruthy();
@@ -117,12 +117,12 @@ describe('LiveReadModal', () => {
     expect(liveLocksFor('not-1')).toEqual({ hedefMetraj: '1.250' });
   });
 
-  it('kamera kıpırdarsa halka sıfırlanır, çekim olmaz', async () => {
+  it('görüntü bulanıklaşır/kararırsa halka sıfırlanır, çekim olmaz', async () => {
     const { r, onDone } = setup();
     for (let i = 0; i < 3; i++) await sendFrame(reading('1.250'));
     await act(async () => mockCam.props?.onStability?.({ still: true, sharpness: LIVE_MIN_SHARPNESS }));
     now += LIVE_HOLD_MS;
-    await act(async () => mockCam.props?.onStability?.({ still: false, sharpness: LIVE_MIN_SHARPNESS }));
+    await act(async () => mockCam.props?.onStability?.({ still: true, sharpness: LIVE_MIN_SHARPNESS - 1 }));
     expect(r.queryByTestId('canli-halka')).toBeNull();
     expect(onDone).not.toHaveBeenCalled();
   });
@@ -130,7 +130,7 @@ describe('LiveReadModal', () => {
 });
 
 describe('LiveReadModal — elle bitiş, düzeltme, kapanış', () => {
-  it('⭐ "Şimdi çek" kilit olmadan da bitirir', async () => {
+  it('⭐ "Çek ve bitir" kilit olmadan da bitirir', async () => {
     const { r, onDone } = setup();
     fireEvent.press(r.getByTestId('canli-simdi-cek'));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));

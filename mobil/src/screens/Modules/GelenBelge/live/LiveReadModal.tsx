@@ -2,7 +2,7 @@
 // Canlı okuma (L3) ekranı — kamera açıkken alanları okur, sağ panele doldurur
 // =============================================================================
 // Solda canlı kamera (~%65) + görülen kelimelere sarı kutular; belge türü bulunana dek tarama çizgisi; sol üstte kapat +
-// durum hapı. Sağda alan paneli. Hepsi kilitlenince "Kıpırdatmayın" halkası → tek fotoğraf; "Şimdi çek" her an elle bitirir.
+// durum hapı. Sağda alan paneli. Hepsi kilitlenince "Kıpırdatmayın" halkası → tek fotoğraf; "Çek ve bitir" her an elle bitirir.
 // Fotoğraf bugünkü yükleme yoluna gider (`onDone`); kilitli değerler forma `applyLiveLocks` ile girer. Durum `useLiveRead`.
 // =============================================================================
 import React, { useEffect, useRef, useState } from 'react';
@@ -69,7 +69,7 @@ export default function LiveReadModal({ visible, onDone, onDismiss }: MultiCamer
               labelStyle={styles.shootLabel}
               testID="canli-simdi-cek"
             >
-              Şimdi çek
+              Çek ve bitir
             </Button>
           </View>
         </View>

@@ -25,9 +25,13 @@ export function markSettled(s: RhythmState): RhythmState {
   return { ...s, inFlight: false };
 }
 
-/** Otomatik çekim koşulu: tüm alanlar kilitli + kamera kıpırtısız + orta bölge yeterince net. */
+/**
+ * Otomatik çekim koşulu: tüm alanlar kilitli + orta bölge yeterince net. "Kıpırtısız" şartı aranmaz: elde tutulan
+ * tablette titreme kare farkını eşiğin üstünde tutuyor, her şey okunduğu halde çekim hiç gelmiyordu; bulanıklığı
+ * netlik eşiği zaten eler (siyah/karanlık kare de net sayılmaz → boş fotoğraf çekilmez).
+ */
 export function readyToCapture(allLocked: boolean, stability: { still: boolean; sharpness: number } | null): boolean {
-  return allLocked && !!stability && stability.still && stability.sharpness >= LIVE_MIN_SHARPNESS;
+  return allLocked && !!stability && stability.sharpness >= LIVE_MIN_SHARPNESS;
 }
 
 export interface HoldState {
