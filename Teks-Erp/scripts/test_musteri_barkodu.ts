@@ -35,6 +35,7 @@ import { classifyScannedCode } from "../src/services/helpers/series-classifier.h
 import { SETTING_KEYS, invalidateFeatureFlagsCache, systemSettingService } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
+import { sevkiyatServisEtiketi, sevkiyatServisTanimDosyasi } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -170,7 +171,7 @@ function astSection(): void {
     return found;
   };
   check("§AST uygulama yerleri boğazı çağırır (findRollByBarcode · scanIntoSack · resolveExact)",
-    uses("services/inventory.service.ts", "findRollByBarcode") && uses("services/shipping.service.ts", "scanIntoSack") && uses("services/search.service.ts", "resolveExact"));
+    uses("services/inventory.service.ts", "findRollByBarcode") && uses(relative(SRC, sevkiyatServisTanimDosyasi("scanIntoSack")).split("\\").join("/"), "scanIntoSack") && uses("services/search.service.ts", "resolveExact"));
 
   // Envanter: `normalizeScanCode(` gerçek çağrısı olan her dosya (uygulama yerleri hariç) helper başlığında anılır.
   const header = readFileSync(join(SRC, HELPER), "utf8").split("// ====")[2] ?? "";
@@ -184,7 +185,7 @@ function astSection(): void {
     if (!/normalizeScanCode\(/.test(text)) continue;
     const short = rel.replace(/^services\//, "");
     const tagged = header.split("\n").some((l) => l.includes(`${short}:`) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
-    if (!applied.has(rel) && !tagged) missing.push(rel);
+    if (!applied.has(sevkiyatServisEtiketi(rel)) && !tagged) missing.push(rel); // sevkiyat servisi bölündü (2026-11-08): aile cephe etiketine katlanır
     if (rel === "services/inventory.service.ts" && !header.includes("inventory.service.ts:")) missing.push(rel);
   }
   check("§AST kalan okutma çağrıları helper başlığında etiketli", missing.length === 0, missing.join(", "));

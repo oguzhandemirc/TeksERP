@@ -49,6 +49,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -349,8 +350,8 @@ async function main(): Promise<void> {
 
   // ═══ §3 — protokol sırası (metin) ═══
   console.log("\n=== §3: kalem kilidi kapasite okumasından ÖNCE mi ===");
-  const src = readFileSync(join(__dirname, "../src/services/shipping.service.ts"), "utf8");
-  const basla = src.indexOf("private async writeShipmentAllocationsTx");
+  const src = sevkiyatServisUyeMetni("writeShipmentAllocationsTx"); // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövde (cephe delegasyonu değil)
+  const basla = src.indexOf("async function writeShipmentAllocationsTx");
   const bitis = basla >= 0 ? src.indexOf("\n  }", basla) : -1;
   // KÖRLÜK ZEMİNİ: fonksiyon bulunamazsa "ihlal yok" ile "hiçbir şeye bakılmadı"
   // aynı yeşile çıkardı. Yeniden adlandırılırsa bu kontrol KIRMIZI vermeli.

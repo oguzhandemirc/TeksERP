@@ -49,6 +49,7 @@ import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
 import { fasonServisUyeMetni } from "./lib/fason-servis-kaynak";
+import { sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -102,9 +103,8 @@ function statik(): void {
     /"emanet\.enabled": "emanetEnabled"/.test(profiles) && /"emanet\.enabled": "Emanet/.test(profiles) &&
     /EMANET_ENABLED: "emanet\.enabled"/.test(svc) && /export async function readEmanetEnabled\(/.test(svc) && /hasOwnProperty\.call\(input, "emanetEnabled"\)/.test(svc) &&
     /emanetEnabled: z\.boolean\(\)\.optional\(\)/.test(route));
-  const ship = readFileSync(path.join(ROOT, "src/services/shipping.service.ts"), "utf8");
-
-  const dispatchGovde = ship.slice(ship.indexOf("private async performDispatchTx("), ship.indexOf("private async performDispatchTx(") + 6000);
+  // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövde (cephe delegasyonu değil)
+  const dispatchGovde = sevkiyatServisUyeMetni("performDispatchTx").slice(0, 6000);
   const directGovde = fasonServisUyeMetni("executeDirectShip").slice(0, 20000);
   check("§0e ⭐ E4c: malın çıktığı İKİ yol `assertOwnerMatchesTx` çağırır — `performDispatchTx` (üç sevk yolunun boğazı) ve `executeDirectShip`",
     /await assertOwnerMatchesTx\(tx, \{ rollIds: shipmentRollIds/.test(dispatchGovde) && /await assertOwnerMatchesTx\(tx, \{ rollIds: effectiveShipRollIds/.test(directGovde));

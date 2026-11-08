@@ -33,6 +33,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Prisma, RollStatus, RollEntrySource, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
 import {
   touchWarehouseSackTx,
   touchShipmentPlannedTx,
@@ -166,7 +167,7 @@ async function run(): Promise<void> {
     readFileSync(join(__dirname, "..", "src", "services", f), "utf8");
   const say = (src: string, ad: string): number =>
     (src.match(new RegExp(`await\\s+${ad}\\s*\\(`, "g")) ?? []).length;
-  const shippingSrc = oku("shipping.service.ts");
+  const shippingSrc = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   const invSrc = oku("inventory.service.ts");
   const nWh = say(shippingSrc, "touchWarehouseSackTx");
   const nInv = say(invSrc, "touchWarehouseSackTx");

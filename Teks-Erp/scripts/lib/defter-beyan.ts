@@ -417,8 +417,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/helpers/workorder-event.helper.ts"]),
 
   D("SackWeighing", "çuval tartı ölçümü", { tur: "KARSI_OLAY", enumAdi: "SackWeighingKind", ciftler: [["WEIGHED", "CLEARED"], ["REWEIGHED", "CLEARED"]] },
-    [{ dosya: "src/services/shipping.service.ts", sembol: "markSackContentChangedTx" }],
-    ["src/services/shipping.service.ts"]),
+    [{ dosya: "src/services/shipping/sack-content.ts", sembol: "markSackContentChangedTx" }],
+    ["src/services/shipping/sack-content.ts", "src/services/shipping/sack-weigh.ts"]), // sevkiyat servisi bölündü (2026-11-08)
 
   D("ImportRunLine", "içe aktarım geri sarmasının TEK kaynağı", { tur: "DAMGA", kolon: "revertedAt" },
     [{ dosya: "src/services/import/import-revert.branches.ts", sembol: "stampReverted" }],
@@ -461,7 +461,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri; damga clearedAt/clearedById, adres clearedShipmentId",
     { tur: "DAMGA", kolon: "clearedAt" },
     [{ dosya: "src/services/helpers/sack-allocation.helper.ts", sembol: "clearShipmentAllocationsTx" }],
-    ["src/services/shipping.service.ts"]),
+    ["src/services/shipping/allocation.ts"]), // sevkiyat servisi bölündü (2026-11-08)
 
   // ⚠️ ESKİ BORÇ KAPANDI (2026-09-13) — ÖNCÜLÜ YANLIŞTI, koşulu sağlandığı için değil.
   // Not "aynı ilişki iki rejimle kapanıyor: deleteMany ve isActive:false" diyordu.
@@ -478,9 +478,9 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // olabilir; asıl soru sevk sonrası değişimin bir deftere yazılıp yazılmadığı.
   D("ShipmentOrder", "sevkiyat ↔ sipariş bağı; isActive = shipment.status PLANNED denormu",
     { tur: "DAMGA", kolon: "isActive" },
-    [{ dosya: "src/services/shipping.service.ts", sembol: "undoDispatch" }],
-    ["src/services/shipping.service.ts"],
-    { silen: ["src/services/shipping.service.ts"] }),
+    [{ dosya: "src/services/shipping/undo-dispatch.ts", sembol: "undoDispatch" }],
+    ["src/services/shipping/allocation.ts"], // sevkiyat servisi bölündü (2026-11-08)
+    { silen: ["src/services/shipping/allocation.ts"] }),
 
   // BORÇ KAPANDI (2026-09-14): elle kaldırma da soft — `applyTagsTx` remove/removeAll
   // `clearedAt`+`clearedById` damgalar (`clearedShipmentId` NULL = elle; sevk temizliği
@@ -809,7 +809,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   RETURN_CANCEL: { tur: "TERS_KODU", ileri: "CUSTOMER_RETURN" },
   TRANSFER: { tur: "BAGLI_TERS", kod: "TRANSFER_CANCEL", tersYazan: [{ dosya: "src/services/warehouse-transfer.service.ts", sembol: "cancel" }] },
   TRANSFER_CANCEL: { tur: "TERS_KODU", ileri: "TRANSFER" },
-  SHIPMENT_DISPATCH: { tur: "BAGLI_TERS", kod: "SHIPMENT_CANCEL", tersYazan: [{ dosya: "src/services/shipping.service.ts", sembol: "writeUndoDispatchLedgerTx" }] },
+  SHIPMENT_DISPATCH: { tur: "BAGLI_TERS", kod: "SHIPMENT_CANCEL", tersYazan: [{ dosya: "src/services/shipping/undo-dispatch.ts", sembol: "writeUndoDispatchLedgerTx" }] },
   SHIPMENT_CANCEL: { tur: "TERS_KODU", ileri: "SHIPMENT_DISPATCH" },
   KARTELA_DISPATCH: { tur: "BAGLI_TERS", kod: "KARTELA_CANCEL", tersYazan: [{ dosya: "src/services/kartela.service.ts", sembol: "cancelDispatch" }] },
   KARTELA_CANCEL: { tur: "TERS_KODU", ileri: "KARTELA_DISPATCH" },
@@ -953,7 +953,7 @@ export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
   { dosya: "src/services/helpers/swatch-event.helper.ts", fonksiyon: "transitionSwatchesTx", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "swatch_events (REDUCED satırı ve ona bağlı REDUCTION_REVERSED satırı)",
     gerekce: "kolon kartelanın ŞU ANKİ düşülmüş/iptal hâlidir (status REDUCED/VOIDED iken dolu); düşüm, stornosu, kim ve neden kartela olay defterinde (kullanıcı kararı S2, 2026-09-26)" },
-  { dosya: "src/services/shipping.service.ts", fonksiyon: "markSackContentChangedTx", alan: "weighedAt", adet: 1, sinif: "DURUM_KOLONU",
+  { dosya: "src/services/shipping/sack-content.ts", fonksiyon: "markSackContentChangedTx", alan: "weighedAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "SackWeighing (CLEARED olayı; önceki kg ile)",
     gerekce: "kolon çuvalın ŞU ANKİ tartısıdır; her tartı ve sıfırlama tartı defterinde (kullanıcı kararı 2026-09-26: ayrı defteri olan damga durum kolonudur)" },
   { dosya: "src/services/subcontractor/remainder.ts", fonksiyon: "reopenRemainder", alan: "remainderClosedAt", adet: 1, sinif: "DURUM_KOLONU",

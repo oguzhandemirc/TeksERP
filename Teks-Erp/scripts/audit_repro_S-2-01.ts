@@ -48,6 +48,7 @@ import { RollStatus, OrderStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { OrderService } from "../src/services/order.service";
+import { sevkiyatServisMetni, sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 const ship = new ShippingService();
 const orderSvc = new OrderService({ modelName: "order", tableName: "ORDER" });
@@ -251,14 +252,8 @@ async function main(): Promise<void> {
   // ── KOL C: KAYNAK SONDASI — kilit sonrası taze doğrulama var mı? ──
   console.log("\n--- KOL C (kaynak sondası): kilit ALINDIKTAN sonra tahsis yeniden doğrulanıyor mu? ---");
   {
-    const src = fs.readFileSync(
-      path.join(__dirname, "..", "src", "services", "shipping.service.ts"),
-      "utf8",
-    );
-    const dispatchBody = src.slice(
-      src.indexOf("private async performDispatchTx"),
-      src.indexOf("async dispatchShipment("),
-    );
+    const src = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni
+    const dispatchBody = sevkiyatServisUyeMetni("performDispatchTx");
     const revalidates =
       dispatchBody.includes("cancelledAt") ||
       dispatchBody.includes("ACTIVE_LINE") ||

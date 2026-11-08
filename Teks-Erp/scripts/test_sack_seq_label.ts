@@ -17,6 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatSackSeqLabel, POOL_PACKAGE_NO_LOCK_NS } from "../src/services/helpers/sack-seq.helper";
+import { sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
 import {
   sanitizeSackSeqPrefix,
   SHIPPING_SACK_SEQ_PREFIX_RE,
@@ -30,7 +31,7 @@ function check(label: string, ok: boolean, extra = "") {
 }
 const SRC = join(__dirname, "../src");
 
-const ship = readFileSync(join(SRC, "services/shipping.service.ts"), "utf-8");
+const ship = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni
 const helper = readFileSync(join(SRC, "services/helpers/sack-seq.helper.ts"), "utf-8");
 
 // §1

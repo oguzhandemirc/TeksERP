@@ -31,6 +31,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { ShippingService } from "../src/services/shipping.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -250,7 +251,7 @@ async function main(): Promise<void> {
 
   // ── §7 AST — damga null'lama KALMADI ─────────────────────────────────────
   {
-    const src = readFileSync(join(__dirname, "..", "src", "services", "shipping.service.ts"), "utf8");
+    const src = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni
     check(
       "§7 ⭐ `dispatchedAt: null` yazan kod KALMADI (ileri damga silinmez)",
       !/dispatchedAt:\s*null/.test(src),

@@ -36,6 +36,7 @@ import { invoiceService } from "../src/services/invoice.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { createDeliveryNote, getDeliveryNote } from "../src/services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
+import { sevkiyatServisUyeMetni, sevkiyatServisEtiketi } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -93,10 +94,10 @@ function statik(): void {
   check("§0c inventory doğum tx'i: emanet kapısının yanında INTAKE kapısı (bayrakla)", /assertEmanetWritableTx\(tx, opts\?\.ownerCustomerId \?\? null, "top"\);\s*\n\s*\/\/[^\n]*\n\s*if \(opts\?\.cariHoldIntakeGate && opts\.ownerCustomerId\) await assertCariNotHeldTx\(tx, opts\.ownerCustomerId, "INTAKE"\)/.test(inv));
   check("§0d sipariş: prepareOrderCreate INTAKE kapısı", /assertCariNotHeldTx\(prisma, data\.customerId as string, "INTAKE"\)/.test(govde(oku("services/order.service.ts"), "async prepareOrderCreate(", 3000)));
   check("§0d' sipariş güncellemesi: müşteri değişiminde INTAKE kapısı", /assertCariNotHeldTx\(prisma, finalCustomerId, "INTAKE"\)/.test(oku("services/order.service.ts")));
-  const ship = oku("services/shipping.service.ts");
-  const core = govde(ship, "private async createShipmentCoreTx(", 4000);
+  // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövdeler (cephe delegasyonu değil; pencere yerine tam gövde)
+  const core = sevkiyatServisUyeMetni("createShipmentCoreTx");
   check("§0e createShipmentCoreTx: kapı yazımdan (shipment.create) ÖNCE", core.includes("assertShipmentNotHeldTx(tx, p.customerId") && core.indexOf("assertShipmentNotHeldTx(") < core.indexOf("tx.shipment.create("));
-  const disp = govde(ship, "private async performDispatchTx(", 3000);
+  const disp = sevkiyatServisUyeMetni("performDispatchTx");
   check("§0f ⭐ performDispatchTx: kapı claim'den (shipment.updateMany) ÖNCE", disp.includes("assertShipmentNotHeldTx(tx,") && disp.indexOf("assertShipmentNotHeldTx(") < disp.indexOf("tx.shipment.updateMany("));
   const conf = govde(oku("services/invoice.service.ts"), "  async confirm(id: string", 12000);
   check("§0g confirm: SALES'te INVOICE kapısı risk guard'ının yanında", /assertRiskLimitTx\(tx,[\s\S]{0,700}if \(inv\.type === InvoiceType\.SALES\)[\s\S]{0,300}assertCariNotHeldTx\(tx, card, "INVOICE"\)/.test(conf));
@@ -125,7 +126,8 @@ function statik(): void {
     });
   const importers = bul(SRC)
     .filter((f) => /from "[^"]*cari-hold\.helper"/.test(readFileSync(f, "utf8")))
-    .map((f) => path.relative(SRC, f))
+    .map((f) => sevkiyatServisEtiketi(path.relative(SRC, f))) // sevkiyat servisi ailesi tek etiket
+    .filter((r, i, a) => a.indexOf(r) === i)
     .sort();
   check("§0h kapı helper'ını import eden küme SABİT (muaf yollar çağırmaz)", JSON.stringify(importers) === JSON.stringify(BEKLENEN), importers.join(", "));
 }

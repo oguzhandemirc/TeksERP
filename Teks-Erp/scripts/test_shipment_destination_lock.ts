@@ -48,6 +48,7 @@ import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import type { ShipmentDestination } from "@prisma/client";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { sevkiyatServisMetni, sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -300,19 +301,19 @@ async function main() {
   check("11 şube yönü değişti → planlı sevkiyat hâlâ EXPORT (donmuş)", (await sevkYonu(r10.data.id)) === "EXPORT");
 
   // 12) tek yazar — ilk seçim claim'i kaynakta tek tanım, iki çağrı (kurulum + setDestination)
-  const src = readFileSync(join(__dirname, "../src/services/shipping.service.ts"), "utf8");
-  const tanim = src.match(/private async claimFirstDestinationTx\(/g)?.length ?? 0;
-  const govde = (ad: string) => { const i = src.indexOf(ad); const j = src.indexOf("\n  }\n", i); return i < 0 ? "" : src.slice(i, j); };
-  const cagiranlar = ["private async decideShipmentDestinationTx(", "async setDestination("].filter((ad) => govde(ad).includes("this.claimFirstDestinationTx("));
+  const src = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni; gövdeler alan modüllerinde
+  const tanim = src.match(/export async function claimFirstDestinationTx\(/g)?.length ?? 0;
+  const govde = (ad: string) => sevkiyatServisUyeMetni(ad);
+  const cagiranlar = ["decideShipmentDestinationTx", "setDestination"].filter((ad) => govde(ad).includes("this.claimFirstDestinationTx("));
   // Yalnız WHERE içindeki koşul sayılır (audit `oldData`sı değil): updateMany({ where: { …defaultDestination: null
   const CLAIM = /updateMany\(\{\s*where: \{[^}]*defaultDestination: null/g;
   const claimYeri = [...src.matchAll(CLAIM)].length;
   check("12a claimFirstDestinationTx tek tanım", tanim === 1, String(tanim));
   check("12b iki yol da aynı yazarı çağırır", cagiranlar.length === 2, cagiranlar.join(", "));
-  check("12d açık-niyet koşulu YAZARIN içinde", govde("private async claimFirstDestinationTx(").includes("if (!p.chosen)"));
-  const kosulluCagiran = ["private async decideShipmentDestinationTx(", "async setDestination("].filter((ad) => /if\s*\([^)]*[cC]hosen/.test(govde(ad)));
+  check("12d açık-niyet koşulu YAZARIN içinde", govde("claimFirstDestinationTx").includes("if (!p.chosen)"));
+  const kosulluCagiran = ["decideShipmentDestinationTx", "setDestination"].filter((ad) => /if\s*\([^)]*[cC]hosen/.test(govde(ad)));
   check("12e çağıranlar niyeti SÜZMEZ, yazara geçirir", kosulluCagiran.length === 0, kosulluCagiran.join(", "));
-  check("12c claim WHERE'i yalnız yazarın içinde (2 = şube + cari)", claimYeri === 2 && [...govde("private async claimFirstDestinationTx(").matchAll(CLAIM)].length === 2, String(claimYeri));
+  check("12c claim WHERE'i yalnız yazarın içinde (2 = şube + cari)", claimYeri === 2 && [...govde("claimFirstDestinationTx").matchAll(CLAIM)].length === 2, String(claimYeri));
 
   // 13) ESKİ İSTEMCİ TAKLİDİ — 2026-09-23 öncesi panel/tablet yönü ÖNCEDEN SEÇİLİ DOMESTIC gönderir,
   //     `destinationChosen` göndermez ⇒ değer yalnız sevkiyata, kart BOŞ, uyarı yok.

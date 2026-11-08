@@ -33,6 +33,7 @@ import { printedDocumentService } from "../src/services/printed-document.service
 import { shippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -242,7 +243,7 @@ async function main() {
   {
     const fs = require("fs") as typeof import("fs");
     const path = require("path") as typeof import("path");
-    const svc = fs.readFileSync(path.join(__dirname, "../src/services/shipping.service.ts"), "utf8");
+    const svc = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni
     const at = svc.indexOf("const attachTotals =");
     const attach = at === -1 ? "" : svc.slice(at, at + 1500);
     check("attachTotals gövdesi çözülebildi", attach.length > 300);

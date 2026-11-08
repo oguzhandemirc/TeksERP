@@ -83,6 +83,17 @@ function cozYol(kaynak: string, spec: string): string | null {
   return null;
 }
 
+/**
+ * Bölünmüş servis cephesinden (`services/<ad>.service.ts`) kendi alan dizinine (`services/<ad>/`) giden
+ * kenar DERİNLİK SAYMAZ: gövdeler bölmeden önce cephedeydi (2026-11-08 bölmeleri); sayılsaydı derinlik
+ * tavanı bir sekme erken dolar ve tarama sessizce daralırdı.
+ */
+function cepheKenari(kaynak: string, hedef: string): boolean {
+  if (!kaynak.endsWith(".service.ts")) return false;
+  const dizin = kaynak.slice(0, -".service.ts".length) + path.sep;
+  return hedef.startsWith(dizin);
+}
+
 /** Dosyanın YEREL import ettiği modüller (mutlak yol). */
 function yerelImportlar(dosya: string): string[] {
   const sf = oku(dosya);
@@ -190,7 +201,7 @@ export function rejimTaramasiKur(g: RejimTaramaGirdisi): RejimTarama {
         kuyruk = kuyruk.concat(
           yerelImportlar(f)
             .filter((x) => !x.endsWith(".routes.ts"))
-            .map((x) => ({ f: x, d: d + 1 })),
+            .map((x) => ({ f: x, d: cepheKenari(f, x) ? d : d + 1 })),
         );
       }
     }

@@ -152,7 +152,7 @@ const DEPO_SIRA: TekSiraKurali = {
   artanBeyan: {
     "src/services/kartela.service.ts#cancelDispatch":
       "kartela sevk iptali: topun bu sevk için TEK açık EXTERNAL satırı olur; birden çoksa en ESKİsi (FIFO) terslenir",
-    "src/services/shipping.service.ts#writeUndoDispatchLedgerTx":
+    "src/services/shipping/undo-dispatch.ts#writeUndoDispatchLedgerTx": // sevkiyat servisi bölündü (2026-11-08)
       "sevk stornosu: topun bu sevkiyatta TEK açık SHIPMENT satırı olur; birden çoksa en ESKİsi (FIFO) terslenir",
   },
 };

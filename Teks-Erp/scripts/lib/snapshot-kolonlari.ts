@@ -102,8 +102,8 @@ export const SNAPSHOT_KOLONLARI: readonly SnapshotBeyan[] = [
     alan: "preShipStatus",
     sinif: "GERI_ALMA_GIRDISI",
     adayDegil: "imza şerhin ilk cümlesinde değil ('SEVK ÖNCESİ statü — …'); emsal atfı sonraki cümlede",
-    yazan: [SVC + "shipping.service.ts"],
-    tuketen: [SVC + "shipping.service.ts"],
+    yazan: [SVC + "shipping/dispatch.ts"], // sevkiyat servisi bölündü (2026-11-08)
+    tuketen: [SVC + "shipping/undo-dispatch.ts"],
     neden: "sevkte YAZILIR (raf), sevk geri almada OKUNUP null'lanır; iade yolu dokunmaz (RollReturn kendi snapshot'ını taşır)",
     sql: [
       {
@@ -273,7 +273,7 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     model: "Shipment",
     alan: "sackSeqPrefix",
     sinif: "DONMUS_ILERI",
-    yazan: [SVC + "shipping.service.ts"],
+    yazan: [SVC + "shipping/create.ts"], // sevkiyat servisi bölündü (2026-11-08)
     neden:
       "sevk anındaki çuval sırası ÖN EKİ; belge ile program ekranı aynı stringi göstersin diye sevkiyata donar " +
       "(ayar sonradan değişse bile eski irsaliye bayt-bayt aynı basılır). `shipping.sackSeqPrefixLive` açıkken " +
