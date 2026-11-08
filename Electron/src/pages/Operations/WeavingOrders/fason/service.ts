@@ -26,6 +26,8 @@ export interface FasonDispatchBody {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+  /** F6: yok = sunucu varsayılanı (firma > süreç türü > ayar), null = termin yok. */
+  expectedReturnAt?: string | null;
 }
 export interface FasonYarnReturnBody {
   qtyKg: number;

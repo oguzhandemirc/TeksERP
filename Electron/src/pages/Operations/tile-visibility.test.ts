@@ -237,6 +237,8 @@ describe("karo bağlantıları", () => {
       "allocation-repair",
       // 2026-10-25 E7: e-İrsaliye kayıtları — modül anahtarı YOK (E-IRS P1); izin `eirsaliye:read`.
       "e-irsaliye",
+      // 2026-11-08 F10: Fason Kokpiti — fason modül anahtarı YOK (`planlanan:fason`); izin subcontractor/workorder:read.
+      "fason-kokpiti",
       "kartela",
       "orders",
       "relabel-station",

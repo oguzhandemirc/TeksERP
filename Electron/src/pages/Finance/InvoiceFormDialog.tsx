@@ -43,6 +43,8 @@ import {
   type InvoiceFormLine,
 } from "./invoiceForm";
 import { factoryDayKey } from "@/lib/factory-time";
+import { ServiceWorksBreakdown } from "./ServiceWorksBreakdown";
+import type { ServiceDraftWorkRow } from "./serviceWorks";
 
 /**
  * Bir kaynak belgeden (sevkiyat / mal kabul) ön-doldurulmuş taslak.
@@ -82,6 +84,8 @@ export interface InvoicePrefill {
    * kaybolmuş olur. Diyalog kapanana kadar ekranda durur.
    */
   notice?: { tone: "warn" | "info"; message: string } | null;
+  /** F4: sevk taslağındaki hizmet satırlarının iş kırılımı (yalnız bilgi; satırlar `lines`ta). */
+  serviceWorks?: ServiceDraftWorkRow[];
 }
 
 interface Props {
@@ -604,6 +608,7 @@ function InvoiceFormBody({
             {prefill.notice.message}
           </p>
         )}
+        <ServiceWorksBreakdown rows={prefill?.serviceWorks} currency={prefill?.currency ?? "TRY"} />
 
         {/* ⚠️ DÜZENLEMEDE ÜÇ ALAN KİLİTLİ (tür · cari · para birimi): PATCH
             gövdesi onları taşımıyor (`.strict()`), yani düzenlenebilir çizmek

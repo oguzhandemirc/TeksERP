@@ -11,6 +11,7 @@ import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { getCariByCustomer, money } from "./service";
+import { ServiceWorksBreakdown } from "./ServiceWorksBreakdown";
 import { createServicePeriodDraft, previewServicePeriodDraft, type ServicePeriodPreview } from "./servicePeriodApi";
 import { canCreateServicePeriodDraft, defaultServicePeriod, isValidServicePeriod, recentServicePeriods, servicePeriodLabel } from "./servicePeriodDraft";
 
@@ -138,6 +139,7 @@ function PreviewBody({ preview }: { preview: ServicePeriodPreview }) {
           </table>
         </div>
       )}
+      <ServiceWorksBreakdown rows={preview.serviceWorks} currency={preview.currency} />
       {preview.alreadyBilledWorkCount > 0 && (
         <p className="text-muted-foreground">{preview.alreadyBilledWorkCount} iş zaten bir faturada (sevk ya da önceki dönem taslağı) — tekrar alınmaz.</p>
       )}

@@ -1,6 +1,7 @@
 // H8 dönem sonu hizmet faturası — API (yollar TAM, `apiClient` tek geçit).
 import apiClient from "@/services/apiClient";
 import type { Currency } from "./service";
+import type { ServiceDraftWorkRow } from "./serviceWorks";
 
 /** H8 dönem sonu hizmet faturası önizlemesi — sunucu tipinin aynası (`service-period-invoice.service.ts`). */
 export interface ServicePeriodPreview {
@@ -21,6 +22,8 @@ export interface ServicePeriodPreview {
   subtotal: string;
   periodClosed: string | null;
   warnings: string[];
+  /** F4: iş kırılımı (adım · levent sarımı · dokuma …); eski backend yollamaz. */
+  serviceWorks?: ServiceDraftWorkRow[];
 }
 
 /** `GET /api/finance/invoices/service-period-draft/preview` — yazmaz. */

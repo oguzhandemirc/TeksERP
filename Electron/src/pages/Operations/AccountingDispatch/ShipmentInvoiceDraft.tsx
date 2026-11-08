@@ -62,6 +62,7 @@ export function ShipmentInvoiceDraft({ row, onClose, onCreated }: Props) {
     lines: toPrefillLines(dto),
     sourceLabel: row.shipmentNo,
     notice: draftPriceNotice(dto),
+    serviceWorks: dto.serviceWorks,
   };
 
   return (

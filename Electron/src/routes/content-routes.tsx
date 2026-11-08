@@ -216,6 +216,7 @@ import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPa
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunDagitimPage } from "@/pages/Operations/KursunDagitim/KursunDagitimPage";
 import { MeterDeviationsPage } from "@/pages/Operations/KursunMeterDeviations/MeterDeviationsPage";
+import { FasonCockpitPage } from "@/pages/Operations/FasonCockpit/FasonCockpitPage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { ShipmentDetailPage } from "@/pages/Operations/Shipments/detail/ShipmentDetailPage";
@@ -1475,6 +1476,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="kursun:meter-approve">
         <MeterDeviationsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // F10: fason kokpiti — karo ile aynı liste (backend `requireAnyPermission("subcontractor:read", "workorder:read")`).
+    path: "operations/fason-kokpiti",
+    element: (
+      <ProtectedRoute requireAnyPermission={["subcontractor:read", "workorder:read"]}>
+        <FasonCockpitPage />
       </ProtectedRoute>
     ),
   },
