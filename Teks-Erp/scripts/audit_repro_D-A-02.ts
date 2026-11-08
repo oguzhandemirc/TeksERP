@@ -1,6 +1,6 @@
 // =============================================================================
 // AUDIT REPRO — D-A-02: `recomputeOrderStatusTx`u `touchOrderLinesTx` OLMADAN çağıran
-// yollar (order.service.ts:2537 `update`, :3411 `reopen`) eşzamanlı sevk onayının
+// yollar (`order/lifecycle.ts` `update`, `order/status.ts` `reopen`) eşzamanlı sevk onayının
 // yazdığı `shippedQty`yi SESSİZCE SIFIRLIYOR (lost update).
 // Ortam: SADECE dev DB. Prod/uzak hedefte çalışmayı REDDEDER.
 // Beklenen (sağlıklı sistem): iki yol da helper'ın KİLİT PROTOKOLÜNÜ uygular

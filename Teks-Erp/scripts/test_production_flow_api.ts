@@ -187,7 +187,7 @@ async function main(): Promise<void> {
 
     // HOP2: KK1 — ham giriş (kalite ZORUNLU, yalnız bu HTTP yolunda)
     // Kalite zorunluluğu BAYRAĞA bağlı (`quality.gradeRequiredEnabled` +
-    // `opts.gradeRequired`, inventory.service.ts:978). Bekçi bayrağı DEĞİŞTİRMEZ —
+    // `opts.gradeRequired`, `inventory/initial-entry.ts` createInitialEntry). Bekçi bayrağı DEĞİŞTİRMEZ —
     // ölçtüğü rejimi OKUR ve o rejimin doğru cevabını iddia eder; aksi hâlde
     // "400 bekliyorum" cümlesi bayrağı kapalı bir kurulumda yalan olurdu.
     const gradeFlag = await prisma.systemSetting.findUnique({ where: { key: "quality.gradeRequiredEnabled" }, select: { value: true } });
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
     });
     check("HOP3 POST /api/work-orders/quick-start → 201", wo.status === 201, `status=${wo.status} ${JSON.stringify(wo.body.details ?? wo.body.message ?? "")}`);
     // Yanıt şekli `data: { workOrder, attached, errors, dispatch, batch }`
-    // (workorder.service.ts:245) — `data.id` DEĞİL.
+    // (`workorder/quick-start.ts`) — `data.id` DEĞİL.
     const woId = String(((veri(wo) as { workOrder?: { id?: string } }).workOrder ?? {}).id ?? "");
     if (!woId) { console.error("\n❌ İş emri kurulamadı — zincir burada durur.\n"); fail++; return; }
     olusturulan.wo.push(woId);

@@ -12,15 +12,15 @@
 //   ② Kalan kapatıldıktan sonra o topa ait KISMİ makbuzun iptal önizlemesi
 //      (`getCancelPreview`) engeli GÖSTERMELİ (`allSafe:false`) — LIFO ve
 //      parti-uyuşmazlığı engelleri için zaten böyle yapılıyor
-//      (`subcontractor.service.ts:4661-4694`: laterReceipts + batchMismatch).
+//      (`subcontractor/receipt-cancel.ts` getCancelPreview: laterReceipts + batchMismatch).
 //
 // Gözlenen: (çalıştırınca doldur — log audit/repro/S-4-02.log)
 //
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_S-4-02.ts
 //
 // MEKANİZMA (kod kanıtı):
-//   • `closeRemainder` (`subcontractor.service.ts:3346`) topu
-//     SUBCONTRACTOR_CONSUMED'a çeker (`:3419-3427`).
+//   • `closeRemainder` (`subcontractor/remainder.ts`) topu
+//     SUBCONTRACTOR_CONSUMED'a çeker.
 //   • `cancelReceipt`ın KISMİ dalı (`:4930-4944`) `updateMany where { id,
 //     status: AT_SUBCONTRACTOR, currentStepId }` ister → kapamadan sonra
 //     count=0 → 409 ("kalan kapatılmış olabilir"), ve `closeRemainder`ın

@@ -16,7 +16,7 @@
 //   §3 ⭐ Kapsam boşalınca üretilen kod VAR OLANLARIN üstünden ATLAR — aynı gün
 //        biçim değiştirilip geri alınırsa `@unique` P2002 verir ve
 //        `withBarcodeRetry` bunu DETERMİNİSTİK tekrarlayıp 409'la biter
-//        (`shipping.service.ts:230` bu davranışı yazılı beyan ediyor)
+//        (`shipping/create.ts` nextShipmentNo bu davranışı yazılı beyan ediyor)
 //   (§4 KALDIRILDI — ölçeceği vaka kalmadı: 52 serinin hepsi kapsam damgasında)
 //   §5 `updateSeriesFormat` damgayı GERÇEKTEN yazar
 //   §6 ⭐ C0b — OKUTULAN serinin biçimi, saha Faz B'yi taşımadan değiştirilemez;
