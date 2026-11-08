@@ -1,5 +1,5 @@
-// Tek İE formunun sol sütun başı: başlıksız iki seçenek — Bizim mal (STANDARD, mavi) | Müşteri malı (fason, turuncu). Seçim
-// yokken kırmızı çerçeve + kısa uyarı ve oluşturma kapalı (çağıran engeller); ön seçimde kısa neden yazılır.
+// Tek İE formunun sol sütun başı: başlıksız iki seçenek — Kendi Üretimimiz (STANDARD, mavi) | Fason Üretim (turuncu). Kartta
+// hata çerçevesi/yazısı yok: seçim eksikse alt çubukta hap olur (çağıran); ön seçimde kısa neden yazılır.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -14,14 +14,13 @@ interface Props {
 }
 
 const OPTIONS: { kind: WoCreateKind; label: string; icon: string; tone: { fg: string; bg: string } }[] = [
-  { kind: 'STANDARD', label: 'Bizim mal', icon: 'factory', tone: { fg: colors.infoDark, bg: colors.infoContainer } },
-  { kind: 'CUSTOMER_GOODS', label: 'Müşteri malı (fason)', icon: 'account-arrow-down-outline', tone: { fg: colors.warningDark, bg: colors.warningContainer } },
+  { kind: 'STANDARD', label: 'Kendi Üretimimiz', icon: 'factory', tone: { fg: colors.infoDark, bg: colors.infoContainer } },
+  { kind: 'CUSTOMER_GOODS', label: 'Fason Üretim', icon: 'account-arrow-down-outline', tone: { fg: colors.warningDark, bg: colors.warningContainer } },
 ];
 
 export default function OwnerKindCard({ value, reason, locked, onChange }: Props) {
-  const missing = value === null;
   return (
-    <View style={[styles.card, missing && styles.missing]} testID="ie-mal-sahibi" accessibilityLabel="Malın sahibi">
+    <View style={styles.card} testID="ie-mal-sahibi" accessibilityLabel="Malın sahibi">
       <View style={styles.row}>
         {OPTIONS.map((o) => {
           const on = value === o.kind;
@@ -44,22 +43,16 @@ export default function OwnerKindCard({ value, reason, locked, onChange }: Props
           );
         })}
       </View>
-      {missing ? (
-        <Text style={styles.need} testID="ie-mal-sahibi-sec">Seçin — oluşturmadan önce gerekli.</Text>
-      ) : reason ? (
-        <Text style={styles.reason} testID="ie-mal-sahibi-neden">{reason}</Text>
-      ) : null}
+      {value !== null && reason ? <Text style={styles.reason} testID="ie-mal-sahibi-neden">{reason}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: { gap: spacing.xs },
-  missing: { padding: spacing.xs, borderRadius: radius.lg, borderWidth: 2, borderColor: colors.danger },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   opt: { flexGrow: 1, flexBasis: 150, minHeight: 56, borderRadius: radius.md, borderWidth: 2, justifyContent: 'center', overflow: 'hidden' },
   optInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   optLabel: { flexShrink: 1, fontSize: typography.size.base, fontWeight: typography.weight.bold },
-  need: { fontSize: typography.size.sm, color: colors.dangerText, paddingHorizontal: spacing.xs },
   reason: { fontSize: typography.size.sm, color: colors.textSecondary },
 });

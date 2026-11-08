@@ -22,6 +22,8 @@ export interface NumpadInputProps
    * klavyesini açar. Telefon ekranında daha doğal; tablette default false.
    */
   useNativeKeyboard?: boolean;
+  /** Odak (native klavye) ya da numpad hedefi bu kutuya geçti/çıktı — çağıran çerçevesini vurgular. */
+  onFocusChange?: (focused: boolean) => void;
 }
 
 const ACTIVE_COLOR = '#4f46e5';
@@ -42,6 +44,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
     numpadMaxLength,
     autoActivate = false,
     useNativeKeyboard = false,
+    onFocusChange,
     ...rest
   },
   ref
@@ -74,6 +77,13 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
 
   const id = useId();
   const isActive = target?.id === id;
+
+  const focusRef = useRef(onFocusChange);
+  focusRef.current = onFocusChange;
+  // Numpad kipinde "odak" = numpad hedefi bu kutu.
+  useEffect(() => {
+    if (!nativeMode) focusRef.current?.(isActive);
+  }, [isActive, nativeMode]);
 
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -127,6 +137,8 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
         ref={ref as React.ComponentProps<typeof TextInput>['ref']}
         value={value}
         onChangeText={handleNativeChange}
+        onFocus={() => focusRef.current?.(true)}
+        onBlur={(e) => { focusRef.current?.(false); rest.onBlur?.(e); }}
         keyboardType={allowDecimal ? 'decimal-pad' : 'number-pad'}
         maxLength={numpadMaxLength}
       />

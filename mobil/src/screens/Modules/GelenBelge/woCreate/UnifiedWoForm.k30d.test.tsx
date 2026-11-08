@@ -110,8 +110,8 @@ const body = () => mockOpts?.extraBody?.(mockRows[0]) ?? {};
 /** Düz karo: rota seçilmedi → seçiciden r1 seçilir (adımlar düzenlenebilir). */
 async function openFree() {
   const s = renderWithPaper(<UnifiedWoForm initialRoute={null} routeLocked={false} onNew={jest.fn()} />);
-  fireEvent.press(s.getByText('Rota seç'));
-  fireEvent.press(await s.findByTestId('secim-Rota-r1'));
+  fireEvent.press(s.getByText('Üretim Rotası seç'));
+  fireEvent.press(await s.findByTestId('secim-Üretim Rotası-r1'));
   await s.findByTestId('ie-rota-adimlari');
   return s;
 }
@@ -194,6 +194,37 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
     expect(body().orderLineIds).toEqual(['l1']);
     expect(body()).not.toHaveProperty('type');
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
+  });
+
+  it('⭐ "Kendi Üretimimiz" seçiliyken kalemsiz kayıt açıkça Stoğa gider; kalem bağlanınca type gitmez; Fason bugünkü gibi', async () => {
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={['STANDARD', 'CUSTOMER_GOODS']} />);
+    fireEvent.press(await s.findByTestId('ie-mal-sahibi-STANDARD'));
+    expect(body().type).toBe('STOCK_PRODUCTION');
+    fireEvent.press(s.getByTestId('mock-siparis-bagla'));
+    expect(body().orderLineIds).toEqual(['l1']);
+    expect(body()).not.toHaveProperty('type');
+    fireEvent.press(s.getByTestId('ie-mal-sahibi-CUSTOMER_GOODS'));
+    expect(body().type).toBe('CUSTOMER_GOODS_SERVICE');
+  });
+
+  it('⭐ malın sahibi: adlar "Kendi Üretimimiz" / "Fason Üretim"; kartta hata çerçevesi/yazısı yok, eksik alt çubukta hap', async () => {
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={['STANDARD', 'CUSTOMER_GOODS']} />);
+    const card = await s.findByTestId('ie-mal-sahibi');
+    const framed = () => JSON.stringify(s.getByTestId('ie-mal-sahibi').props.style).includes('borderColor');
+    expect(card).toHaveTextContent(/Kendi Üretimimiz/);
+    expect(card).toHaveTextContent(/Fason Üretim/);
+    expect(s.queryByTestId('ie-mal-sahibi-sec')).toBeNull();
+    expect(framed()).toBe(false);
+    expect(s.getByTestId('ie-eksik-malSahibi')).toHaveTextContent(/Kendi Üretimimiz \/ Fason Üretim seçin/);
+    // Hap zaten söylüyor: ikinci satır çizilmez; oluşturma kapalı (diğer zorunlu alanlarla aynı kalıp).
+    expect(s.queryByTestId('ie-form-ipucu')).toBeNull();
+    expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
+    fireEvent.press(s.getByTestId('ie-mal-sahibi-STANDARD'));
+    expect(s.queryByTestId('ie-eksik-malSahibi')).toBeNull();
+    expect(framed()).toBe(false);
+    expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
+    fireEvent.press(s.getByTestId('ie-form-olustur'));
+    expect(mockSaveAll).toHaveBeenCalledTimes(1);
   });
 
   it('⭐ hedef özellik: varsayılan (BAYRAK) seçili görünür ve gitmez; çipe dokununca tüm küme targetPropertyIds olarak gider', async () => {

@@ -75,8 +75,6 @@ export function TargetFields(p: TargetFieldsProps) {
         </>
       )}
 
-      {anyNumber && <TargetNumbers {...p} cols={cols} />}
-
       {show('hedefRenk') && (
         <>
           <ColorSelectField
@@ -90,6 +88,8 @@ export function TargetFields(p: TargetFieldsProps) {
           <Suggest kind="renk" docText={state.docText.renk} name={colorSug?.name ?? null} accepted={!colorSug || e.targetColorId === colorSug.id} locked={locked} onAccept={() => colorSug && edit({ targetColorId: colorSug.id })} withDocLine />
         </>
       )}
+
+      {anyNumber && <TargetNumbers {...p} cols={cols} />}
     </>
   );
 }
@@ -107,13 +107,14 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
       {(cols.en || cols.metraj || cols.kg || cols.kat) && (
         <View style={styles.numbers} testID="ie-hedef-sayilar">
           {cols.en && (
-            <DocFilled k="width" state={state}>
-              <CompactNumberField label="En" unit="cm" value={e.width} onChangeText={(t) => edit({ width: t })} fromDoc={docOn('width')} placeholder="150" disabled={locked} testID="ie-form-en" />
+            <DocFilled k="width" state={state} grow>
+              <CompactNumberField grow label="En" unit="cm" value={e.width} onChangeText={(t) => edit({ width: t })} fromDoc={docOn('width')} placeholder="150" disabled={locked} testID="ie-form-en" />
             </DocFilled>
           )}
           {cols.metraj && (
-            <DocFilled k="targetQuantity" state={state}>
+            <DocFilled k="targetQuantity" state={state} grow>
               <CompactNumberField
+                grow
                 label="Metraj"
                 unit="m"
                 value={p.targetDerived?.derived ? p.targetDerived.value : e.targetQuantity}
@@ -122,15 +123,14 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
                 derivedNote={qtyDerived ? 'gelen metre' : null}
                 derivedTestID="gelen-metreden-targetQuantity"
                 placeholder="—"
-                width={170}
                 disabled={locked}
                 testID="ie-form-hedef-metraj"
               />
             </DocFilled>
           )}
           {cols.kg && (
-            <DocFilled k="targetWeight" state={state}>
-              <CompactNumberField label="Kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder="—" disabled={locked} testID="ie-form-hedef-kg" />
+            <DocFilled k="targetWeight" state={state} grow>
+              <CompactNumberField grow label="Kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder="—" disabled={locked} testID="ie-form-hedef-kg" />
             </DocFilled>
           )}
           {cols.kat && p.foldValues.length > 0 && (
@@ -186,10 +186,10 @@ function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: stri
 
 /** Belgeden dolan değerin işareti (`belgeden-<k>`); `highlight` → sarı vurgu sarmalayıcıda (sayı kutuları vurguyu kendi çizer).
  *  `fromDoc` edit'te düştüğü için elle değişince kalkar. */
-export function DocFilled({ k, state, children, highlight }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode; highlight?: boolean }) {
+export function DocFilled({ k, state, children, highlight, grow }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode; highlight?: boolean; grow?: boolean }) {
   const on = state.fromDoc.includes(k);
   return (
-    <View testID={on ? `belgeden-${k}` : undefined}>
+    <View testID={on ? `belgeden-${k}` : undefined} style={grow ? styles.cell : undefined}>
       {highlight ? <DocHighlight active={on} style={styles.hl}>{children}</DocHighlight> : children}
     </View>
   );
@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
   hl: { padding: 2 },
   grow: { flex: 1 },
+  cell: { flex: 1, minWidth: 100 },
   suggest: { minHeight: 56, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brand, backgroundColor: colors.brandSoft, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, justifyContent: 'center' },
   suggestRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   suggestText: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },

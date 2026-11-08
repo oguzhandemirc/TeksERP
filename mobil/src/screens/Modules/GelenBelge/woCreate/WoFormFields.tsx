@@ -74,8 +74,8 @@ export default function WoFormFields(props: Props) {
           {/* Adım yolu seçicinin ikincil satırında; "sahada belirlenir" rotasında açıklama satırı yok (ad kendini anlatır). */}
           {!p.routeLocked && (
             <SelectButton
-              label="Rota seç"
-              caption="Rota"
+              label="Üretim Rotası seç"
+              caption="Üretim Rotası"
               value={p.route ? p.route.name : null}
               hint={p.route && !isScanRoute(p.route) && stepPath.length > 0 ? stepPath.join(' › ') : null}
               icon="map-marker-path"
@@ -153,7 +153,7 @@ function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => voi
     <>
       <PickerModal
         visible={picker === 'route'}
-        title="Rota"
+        title="Üretim Rotası"
         options={routeOptions}
         selectedValue={p.route?.id ?? null}
         loading={p.routesLoading}

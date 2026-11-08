@@ -41,7 +41,7 @@ export default function IsEmirleriScreen() {
   const woButtons = useDeviceSettingsStore((s) => s.woButtons);
   const setWoButtons = useDeviceSettingsStore((s) => s.setWoButtons);
   // Tek mal sahibi açıksa formda sorulmaz; hangi türle açılacağı tuşlarda etiketle görünür.
-  const kindTag = kinds.length === 1 ? (kinds[0] === 'CUSTOMER_GOODS' ? { label: 'Müşteri malı', fason: true } : { label: 'Bizim mal', fason: false }) : null;
+  const kindTag = kinds.length === 1 ? (kinds[0] === 'CUSTOMER_GOODS' ? { label: 'Fason', fason: true } : { label: 'Kendi üretim', fason: false }) : null;
   const scan = useScanAction(routeOnButton);
   // Ayar kapalıyken tuştaki rota forma (ve yüke) HİÇ geçmez; kart rotası formda çözülür.
   const open = (manual: boolean) => setStage({ route: initialFormRoute({ buttonRoute: buttonRouteFor(routeOnButton, scan.type), cardRoute: null, scanMode: scan.scanMode === true }), manual, n: Date.now() });

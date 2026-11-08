@@ -4,7 +4,6 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../components/ModuleSheet';
-import { TERIM_AD } from '../../../lib/terim';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { toggleWoCreateKind, type WoCreateKind } from '../../../store/woCreateKinds';
 import type { WoButtons } from '../../../store/deviceSettingsStore';
@@ -26,10 +25,10 @@ function toggleButton(cur: WoButtons, which: 'scan' | 'manual'): WoButtons {
   return cur === which ? cur : 'both';
 }
 
-const LABEL: Record<WoCreateKind, string> = { STANDARD: 'Bizim mal', CUSTOMER_GOODS: 'Müşteri malı (fason)' };
+const LABEL: Record<WoCreateKind, string> = { STANDARD: 'Kendi Üretimimiz', CUSTOMER_GOODS: 'Fason Üretim' };
 const HINT: Record<WoCreateKind, string> = {
   STANDARD: 'Stok ya da sipariş işi.',
-  CUSTOMER_GOODS: `${TERIM_AD.fasonMusteriMali}: müşteri işin üstünde, sipariş gerekmez.`,
+  CUSTOMER_GOODS: 'Müşteri malı işlenir: müşteri işin üstünde, sipariş gerekmez.',
 };
 
 function CheckRow({ on, locked, label, hint, onPress, testID }: { on: boolean; locked?: boolean; label: string; hint: string; onPress: () => void; testID: string }) {

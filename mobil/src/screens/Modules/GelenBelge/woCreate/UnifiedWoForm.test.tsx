@@ -197,10 +197,10 @@ describe('UnifiedWoForm', () => {
     expect(s.getByTestId('gelen-metreden-targetQuantity')).toBeTruthy();
   });
 
-  it('düz karo (rota seçilmedi): belge okunsa da "Rotayı seçin." ile kapalı', async () => {
+  it('düz karo (rota seçilmedi): belge okunsa da "Üretim Rotasını seçin." ile kapalı', async () => {
     mockRows = [row()];
     const s = renderWithPaper(ui(null));
-    await waitFor(() => expect(s.getByTestId('ie-form-ipucu').props.children).toBe('Rotayı seçin.'));
+    await waitFor(() => expect(s.getByTestId('ie-form-ipucu').props.children).toBe('Üretim Rotasını seçin.'));
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
   });
 });

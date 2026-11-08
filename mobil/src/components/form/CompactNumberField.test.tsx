@@ -28,4 +28,15 @@ describe('CompactNumberField', () => {
     expect(bg('m-kutu')).toBe(colors.dangerContainer);
     expect(screen.queryByTestId('d')).toBeNull();
   });
+  it('odakta çerçeve ana renkte ve kalın; odak gidince eski hâl; grow → flex 1', () => {
+    render(<CompactNumberField label="En" unit="cm" value="" onChangeText={() => {}} grow testID="en" />);
+    const box = () => StyleSheet.flatten(screen.getByTestId('en-kutu').props.style);
+    expect(box().flex).toBe(1);
+    expect(box().borderColor).toBe(colors.borderStrong);
+    fireEvent(screen.getByTestId('en'), 'focus');
+    expect(box().borderColor).toBe(colors.brand);
+    expect(box().borderWidth).toBe(2.5);
+    fireEvent(screen.getByTestId('en'), 'blur');
+    expect(box().borderColor).toBe(colors.borderStrong);
+  });
 });

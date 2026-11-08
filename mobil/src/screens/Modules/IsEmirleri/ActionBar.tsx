@@ -25,7 +25,7 @@ interface Props {
   onManual: () => void;
   /** Seçeneklerdeki "Alttaki tuşlar": ikisi ya da yalnız biri. */
   buttons: WoButtons;
-  /** Cihazda tek mal sahibi açıksa tuşlarda gösterilen etiket ("Bizim mal" / "Müşteri malı"); ikisi açıksa null. */
+  /** Cihazda tek mal sahibi açıksa tuşlarda gösterilen etiket ("Kendi üretim" / "Fason"); ikisi açıksa null. */
   kindTag: { label: string; fason: boolean } | null;
 }
 
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   off: { opacity: 0.5 },
   manual: { minHeight: 64, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceMuted, justifyContent: 'center' },
   manualLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text },
-  // "Malın sahibi" kartıyla aynı tonlar: bizim mal mavi, müşteri malı turuncu.
+  // "Malın sahibi" kartıyla aynı tonlar: kendi üretim mavi, fason turuncu.
   tag: { borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   tagOwn: { backgroundColor: colors.infoContainer },
   tagFason: { backgroundColor: colors.warningContainer },

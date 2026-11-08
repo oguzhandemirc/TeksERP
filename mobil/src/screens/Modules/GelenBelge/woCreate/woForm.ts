@@ -204,7 +204,7 @@ export interface ExtrasCtx {
 export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): FormIssue[] {
   const out: FormIssue[] = [];
   const push = (key: WoFieldKey, msg: string) => out.push({ key, text: c.inOther?.(key) ? `${msg} (alan altta "Diğer alanlar" bölümünde)` : msg });
-  if (!c.routeChosen) out.push({ key: 'rota', text: 'Rotayı seçin.' });
+  if (!c.routeChosen) out.push({ key: 'rota', text: 'Üretim Rotasını seçin.' });
   const bad = (t: string) => t.trim() !== '' && parseFormNumber(t) === null;
   if (bad(e.width)) push('en', "En 0'dan büyük olmalı.");
   if (!c.perParty && bad(e.targetQuantity)) push('hedefMetraj', "Hedef metraj 0'dan büyük olmalı.");
@@ -252,7 +252,7 @@ export function derivedTargetQuantity(e: WoFormExtras, incomingMeters: number | 
 }
 
 /** Form ucunun ek alanları: yalnız dolu olanlar gider (anahtarsız = sunucuda bugünkü türetme). */
-export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null }): ExtraBody {
+export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null; ownGoods?: boolean }): ExtraBody {
   const out: ExtraBody = {};
   if (e.targetItemId) out.targetItemId = e.targetItemId;
   if (e.targetColorId) out.targetColorId = e.targetColorId;
@@ -270,7 +270,9 @@ export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perPart
   if (e.orderLineIds.length) out.orderLineIds = [...e.orderLineIds];
   const note = e.note.trim();
   if (note) out.notes = note;
+  // Tür bağın aynası: kalem bağlıysa gönderilmez (sunucu Siparişe türetir); "Kendi Üretimimiz" + kalemsiz → açıkça Stoğa.
   if (e.woType) out.type = e.woType;
+  else if (c.ownGoods && e.orderLineIds.length === 0) out.type = 'STOCK_PRODUCTION';
   if (e.propertyIds !== null) out.targetPropertyIds = [...e.propertyIds];
   Object.assign(out, planBody(e, c));
   return out;

@@ -3,7 +3,7 @@
 import type { BandTone } from '../../../../components/form/tone';
 import type { WoFieldKey } from './woFieldCatalog';
 
-export type IssueKey = WoFieldKey | 'belge' | 'metreDogrula';
+export type IssueKey = WoFieldKey | 'belge' | 'metreDogrula' | 'malSahibi';
 
 export interface FormIssue {
   key: IssueKey;
@@ -17,10 +17,11 @@ export interface MissingChip {
 
 const SHORT: Partial<Record<IssueKey, string>> = {
   belge: 'Belge okutulmadı',
+  malSahibi: 'Kendi Üretimimiz / Fason Üretim seçin',
   musteri: 'Müşteri seçilmedi',
   kursunMetresi: 'Metre yok',
   metreDogrula: 'Metreyi doğrulayın',
-  rota: 'Rota seçilmedi',
+  rota: 'Üretim Rotası seçilmedi',
   rotaAdimlari: 'Rota adımı yok',
   katTipi: 'Kat tipi',
   en: 'En hatalı',

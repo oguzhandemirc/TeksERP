@@ -16,16 +16,21 @@ interface Props {
   wo: WoRowsState;
   done: boolean;
   block: string | null;
+  /** Engel cümlesinin kaynağı olan hap; müşteri / mal sahibi hapında cümle hapı tekrarladığı için çizilmez. */
+  blockKey?: IssueKey | null;
   missing: readonly MissingChip[];
   onMissing: (key: IssueKey) => void;
   onNew: () => void;
   pad: number;
 }
 
-export default function CreateBar({ wo, done, block, missing, onMissing, onNew, pad }: Props) {
+const ECHO_KEYS: readonly IssueKey[] = ['musteri', 'malSahibi'];
+
+export default function CreateBar({ wo, done, block, blockKey = null, missing, onMissing, onNew, pad }: Props) {
   const ready = !done && block === null;
   const shown = missing.slice(0, MAX_CHIPS);
   const more = missing.length - shown.length;
+  const echo = !done && blockKey !== null && ECHO_KEYS.includes(blockKey) && shown.some((m) => m.key === blockKey);
   const hint = done ? `${TERIM.terbiyeIsEmri.tekil} kaydedildi.` : block ?? 'Hazır — kontrol edip oluşturun';
   return (
     <View style={[styles.bar, { paddingHorizontal: pad }]}>
@@ -45,10 +50,12 @@ export default function CreateBar({ wo, done, block, missing, onMissing, onNew, 
             {more > 0 ? <Text style={styles.more} testID="ie-eksik-fazla">{`+${more}`}</Text> : null}
           </View>
         )}
+        {!echo && (
         <View style={styles.hintRow}>
           {ready ? <MaterialCommunityIcons name="check-circle" size={22} color={colors.success} /> : null}
           <Text style={[styles.hint, ready && styles.readyText]} numberOfLines={2} testID="ie-form-ipucu">{hint}</Text>
         </View>
+        )}
       </View>
       {done ? (
         <Button mode="contained" icon="plus" onPress={onNew} contentStyle={styles.btn} style={styles.main} testID="ie-form-yeni">

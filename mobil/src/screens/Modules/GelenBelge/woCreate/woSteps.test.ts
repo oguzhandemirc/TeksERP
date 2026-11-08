@@ -124,6 +124,13 @@ describe('K30-D ek gövde (buildExtraBody)', () => {
     expect(buildExtraBody(extras({ machineId: 'm2' }), { hasTambur: true, route, perParty: true })).not.toHaveProperty('stepPlanning');
   });
 
+  it('⭐ tür gövdesi: bağ yoksa ve "Kendi Üretimimiz" açıkça seçiliyse STOCK; kalem varsa type yok; kart yoksa type yok; Fason aynen', () => {
+    expect(buildExtraBody(extras(), { hasTambur: false, ownGoods: true }).type).toBe('STOCK_PRODUCTION');
+    expect(buildExtraBody(extras({ orderLineIds: ['l1'] }), { hasTambur: false, ownGoods: true })).not.toHaveProperty('type');
+    expect(buildExtraBody(extras(), { hasTambur: false })).not.toHaveProperty('type');
+    expect(buildExtraBody(extras({ woType: 'CUSTOMER_GOODS_SERVICE' }), { hasTambur: false, ownGoods: false }).type).toBe('CUSTOMER_GOODS_SERVICE');
+  });
+
   it('⭐ ORDER + sipariş kalemsiz → engel; kalem varken ya da otomatikte engel yok; boş adım listesi engel', () => {
     const ctx = { routeChosen: true, hasTambur: false };
     expect(extrasIssues(extras({ woType: 'ORDER_PRODUCTION' }), ctx).map((i) => i.text).join(' ')).toMatch(/sipariş kalemi seçin/);

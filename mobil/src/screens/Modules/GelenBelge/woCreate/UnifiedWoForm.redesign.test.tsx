@@ -192,7 +192,8 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 2 (alt çubuk)', () => {
     setRow({ ownerCustomerId: null });
     const s = ui();
     expect(await s.findByTestId('ie-eksik-musteri')).toHaveTextContent(/Müşteri seçilmedi/);
-    expect(s.getByTestId('ie-form-ipucu')).toHaveTextContent('Müşteriyi seçin.');
+    // Hap zaten söylüyor: "Müşteriyi seçin." ikinci satırı çizilmez.
+    expect(s.queryByTestId('ie-form-ipucu')).toBeNull();
     expect(s.getByTestId('ie-form-olustur').props.accessibilityState).toMatchObject({ disabled: true });
     expect(s.getByTestId('mock-acma-istegi')).toHaveTextContent('-');
     fireEvent.press(s.getByTestId('ie-eksik-musteri'));

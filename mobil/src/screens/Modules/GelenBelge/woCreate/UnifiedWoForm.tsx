@@ -82,7 +82,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
           </>
         )}
       </KeyboardAwareScrollView>
-      <CreateBar wo={wo} done={done} block={u.block} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
+      <CreateBar wo={wo} done={done} block={u.block} blockKey={u.blockKey} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
       <SameDocumentCard
@@ -131,6 +131,7 @@ function useMissingJump(u: FormModel, twoCol: boolean, external: DocRowOpenReque
   const go = (key: IssueKey) => {
     const f = u.row?.form;
     if (key === 'musteri') return open('owner');
+    if (key === 'malSahibi') return scroll(0);
     if (METER_KEYS.includes(key)) {
       if (f && !f.multi && !f.rolls) return open('meter');
       return scroll(twoCol ? y('columns') : y('doc'));

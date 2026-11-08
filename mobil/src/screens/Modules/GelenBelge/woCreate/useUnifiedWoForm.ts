@@ -96,9 +96,12 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const hasTambur = useMemo(() => (eff?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'), [eff]);
   const fold = useFoldDefault(hasTambur, setForm);
 
+  const owner = useOwnerKind(ownerKinds, extras.woType, setForm);
+  // "Kendi Üretimimiz" kartta açıkça seçildiyse kalemsiz kayıt türü açıkça Stoğa gider (sunucunun "tür seçilmedi" uyarısı susar).
+  const ownGoods = owner.visible && owner.value === 'STANDARD';
   const extraBody = useCallback(
-    (r: DocRow) => buildExtraBody(extras, { hasTambur, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null }),
-    [extras, hasTambur, route],
+    (r: DocRow) => buildExtraBody(extras, { hasTambur, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods }),
+    [extras, hasTambur, route, ownGoods],
   );
   // Rota seçilmeden kayıt `extrasIssues` ile kapalıdır; kanca bir rota ister → yer tutucu.
   const wo = useWoRows(eff ?? SCAN_ROUTE, { extraBody });
@@ -109,7 +112,6 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const scan = useDocScanFlow(wo.addNote, onNote);
   const draft = useManualDraft(manual, (note) => { wo.markManual(note.id); scan.b.openNote(note); });
   useAutoScan(autoScan, scan.source.add);
-  const owner = useOwnerKind(ownerKinds, extras.woType, setForm);
   const cardRoute = useCardRoute(ownerKinds !== undefined && !routeLocked, row?.form?.ownerCustomerId ?? null, routesQ.data?.data ?? []);
   useEffect(() => {
     if (shouldApplyCardRoute(route, routeTouched, cardRoute)) applyRoute(cardRoute!);
@@ -146,22 +148,26 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
   const done = !!row && isDone(row);
   // Sıra = göz akışı: sol sütun (belgeden gelenler) önce, sonra sağ sütun (üretim kararı).
+  // Malın sahibi seçimi eksikse diğer zorunlu alanlar gibi alt çubuk hapı (kartta hata çerçevesi yok).
+  const ownerIssue: FormIssue[] = owner.visible && owner.value === null ? [{ key: 'malSahibi', text: 'Kendi Üretimimiz / Fason Üretim seçin.' }] : [];
   const issues: FormIssue[] = [
+    ...ownerIssue,
     ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssueList(row.form) : []),
     ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty, inOther: fields.isOther }),
   ];
   const reading = !!row && (!row.form || !row.detail);
-  const ownerBlock = owner.visible && owner.value === null ? 'Malın sahibini seçin' : null;
-  const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues }) ?? ownerBlock;
+  const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues });
   // Kaydedilen / taslak bırakılan / sayfa eklenen belgesiz taslak çıkışta silinmez.
   if (manual && row && (row.result || (scan.b.done?.pages ?? 0) > 0)) draft.keep();
   const addDoc = () => { scan.b.addToNote(); scan.source.add(); };
   // Alt çubuk hapları: belge yokken / okunurken hap yok (çubuk tek cümle söyler).
   const missing = done || !row || reading ? [] : missingChips(issues);
+  // Engel cümlesi bir hapı aynen tekrarlıyorsa (yalnız müşteri) çubukta ikinci satır çizilmez.
+  const blockKey = missing.length > 0 && block === issues[0]?.text ? issues[0].key : null;
   const { okut, dropDoc } = docSlotActions(wo, row, scan, setForm);
   return {
     owner, routeWarning, manual, draft, addDoc,
-    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, dropDoc, customers, edit,
+    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
