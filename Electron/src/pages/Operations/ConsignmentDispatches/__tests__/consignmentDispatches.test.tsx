@@ -30,8 +30,6 @@ vi.mock("@/hooks/usePricingEnabled", () => ({
   useDevereEnabled: () => true,
   useFeatureFlags: () => ({ data: { data: { iplikEnabled: true } } }),
 }));
-const perms = { set: new Set(["warpbeam:read", "warehouse:read"]) };
-vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.set.has(p) }) }));
 vi.mock("@/components/forms/CustomerPickerField", () => ({
   CustomerPickerField: ({
     value,
@@ -122,7 +120,6 @@ const preview = (blocked: boolean): ConsignmentDispatchPreview => ({
 
 beforeEach(() => {
   Object.values(svc).forEach((f) => f.mockReset());
-  perms.set = new Set(["warpbeam:read", "warehouse:read"]);
   svc.list.mockResolvedValue(LIST);
 });
 
@@ -219,17 +216,6 @@ describe("Yeni emanet çıkışı", () => {
       lotId: "l1",
       qtyKg: "12.5",
     });
-  });
-});
-
-describe("Yeni emanet çıkışı — yetki", () => {
-  it("levent listesi izni yoksa düğme pasif ve nedeni yazılı (403 'liste yok' sanılmaz)", () => {
-    perms.set = new Set(["warehouse:read"]);
-    renderWithProviders(<ConsignmentDispatchFormDialog open onOpenChange={() => {}} onCreated={() => {}} />);
-    fireEvent.click(screen.getByTestId("pick-customer"));
-    expect(screen.getByRole("button", { name: /Levent ekle/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /İplik lotu ekle/ })).toBeEnabled();
-    expect(screen.getByText(/görme yetkiniz yok/)).toBeInTheDocument();
   });
 });
 

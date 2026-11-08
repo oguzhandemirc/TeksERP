@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { useDevereEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { BeamPicker } from "./BeamPicker";
 import { YarnLinePicker } from "./YarnLinePicker";
 import { DraftItemsTable } from "./DraftItemsTable";
@@ -29,6 +28,7 @@ export function ConsignmentDispatchFormDialog({ open, onOpenChange, onCreated }:
   const d = useConsignmentDraft(open, onCreated);
   const [picker, setPicker] = useState<"beam" | "yarn" | null>(null);
   const owner = d.ownerCustomerId;
+  const taken = new Set(d.items.map((x) => x.key));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col">
@@ -58,8 +58,8 @@ export function ConsignmentDispatchFormDialog({ open, onOpenChange, onCreated }:
         <FormFooter d={d} onClose={() => onOpenChange(false)} />
         {owner && (
           <>
-            <BeamPicker open={picker === "beam"} onOpenChange={(o) => setPicker(o ? "beam" : null)} ownerCustomerId={owner} takenKeys={new Set(d.items.map((x) => x.key))} onPick={d.addItem} />
-            <YarnLinePicker open={picker === "yarn"} onOpenChange={(o) => setPicker(o ? "yarn" : null)} ownerCustomerId={owner} onPick={d.addItem} />
+            <BeamPicker open={picker === "beam"} onOpenChange={(o) => setPicker(o ? "beam" : null)} ownerCustomerId={owner} takenKeys={taken} onPick={d.addItem} />
+            <YarnLinePicker open={picker === "yarn"} onOpenChange={(o) => setPicker(o ? "yarn" : null)} ownerCustomerId={owner} takenKeys={taken} onPick={d.addItem} />
           </>
         )}
       </DialogContent>
@@ -68,32 +68,26 @@ export function ConsignmentDispatchFormDialog({ open, onOpenChange, onCreated }:
 }
 
 /**
- * Kalem türü düğmeleri yalnız modülü açıkken (levent = Devere, iplik = İplik; sunucu ikinci hatta 403 verir). Seçici
- * listeleri mevcut uçlardan okunur (`warpbeam:read` · `warehouse:read`); izin yoksa düğme nedeniyle pasif (403 yutulmaz).
+ * Kalem türü düğmeleri yalnız modülü açıkken (levent = Devere, iplik = İplik; sunucu ikinci hatta 403 verir). Seçiciler
+ * aday ucundan okur (`consignment:write ∨ mobile:depo`) — levent/depo listesi izni gerekmez (Depo rolü de seçer).
  */
 function AddItemButtons({ hasOwner, onPick }: { hasOwner: boolean; onPick: (k: "beam" | "yarn") => void }) {
   const devereOn = useDevereEnabled();
   const iplikOn = useFeatureFlags().data?.data?.iplikEnabled ?? false;
-  const { hasPermission } = useRoleAccess();
   if (!devereOn && !iplikOn) return <p className="text-sm text-muted-foreground">Levent (Devere) ve İplik modülleri kapalı — çıkacak kalem türü yok.</p>;
-  const beamPerm = hasPermission("warpbeam:read");
-  const lotPerm = hasPermission("warehouse:read");
   return (
     <div className="flex flex-wrap items-center gap-2">
       {devereOn && (
-        <Button type="button" variant="outline" disabled={!hasOwner || !beamPerm} title={beamPerm ? undefined : "Levent listesini görme yetkiniz yok"} onClick={() => onPick("beam")}>
+        <Button type="button" variant="outline" disabled={!hasOwner} onClick={() => onPick("beam")}>
           <Cylinder className="mr-1 h-4 w-4" />Levent ekle
         </Button>
       )}
       {iplikOn && (
-        <Button type="button" variant="outline" disabled={!hasOwner || !lotPerm} title={lotPerm ? undefined : "İplik lotlarını görme yetkiniz yok"} onClick={() => onPick("yarn")}>
+        <Button type="button" variant="outline" disabled={!hasOwner} onClick={() => onPick("yarn")}>
           <Boxes className="mr-1 h-4 w-4" />İplik lotu ekle
         </Button>
       )}
       {!hasOwner && <p className="text-xs text-muted-foreground">Önce müşteriyi seçin.</p>}
-      {hasOwner && ((devereOn && !beamPerm) || (iplikOn && !lotPerm)) && (
-        <p className="text-xs text-amber-700 dark:text-amber-400">Bazı kalem türlerinin listesini görme yetkiniz yok — yöneticiden levent/depo görüntüleme izni isteyin.</p>
-      )}
     </div>
   );
 }

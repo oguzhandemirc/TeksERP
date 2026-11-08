@@ -100,7 +100,7 @@ export async function assertLotMatchesItemTx(tx: Prisma.TransactionClient, lotId
 }
 
 /** SQL'de işaret: giriş türleri tek kaynaktan (`yarnInboundKinds`), elle liste YOK. */
-function signedQtySql(): Prisma.Sql {
+export function signedQtySql(): Prisma.Sql {
   const inbound = yarnInboundKinds().map((k) => Prisma.sql`${k}::"YarnMovementKind"`);
   return Prisma.sql`CASE WHEN "kind" IN (${Prisma.join(inbound)}) THEN "qtyKg" ELSE -"qtyKg" END`;
 }

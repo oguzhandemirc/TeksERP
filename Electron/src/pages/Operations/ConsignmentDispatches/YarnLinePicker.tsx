@@ -1,5 +1,5 @@
-// İplik kalemi: önce lot seçici (doğrudan modal), sonra depo + kg. YARN kaleminde lot ZORUNLU (sözleşme + DB CHECK);
-// bakiye lot × depo düzeyinde sunucu önizlemesinde ölçülür (yetmezse satır engelli işaretlenir).
+// İplik kalemi: aday ucundan lot × depo satırı (doğrudan modal), sonra kg. YARN kaleminde lot ZORUNLU (sözleşme +
+// DB CHECK); depo adayın kendisinde — bakiye lot × depo düzeyinde, sunucu önizlemesi yine ölçer.
 import { useState } from "react";
 import {
   Dialog,
@@ -12,62 +12,54 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useDefaultWarehouse, useMultiWarehouse } from "@/hooks/useWarehouses";
-import { listYarnLots, type YarnLotRow } from "@/pages/Operations/Yarn/service";
 import { cn } from "@/lib/utils";
-import type { Warehouse } from "@/pages/Warehouses/types";
-import { OwnedPickerDialog } from "./OwnedPickerDialog";
-import { fmtNum, parseKg } from "./consignmentText";
+import { CandidatePickerDialog } from "./CandidatePickerDialog";
+import { blockedReasonText, fmtNum, parseKg } from "./consignmentText";
 import type { DraftItem } from "./draft";
+import type { ConsignmentYarnCandidate } from "./types";
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   ownerCustomerId: string;
+  takenKeys: ReadonlySet<string>;
   onPick: (item: DraftItem) => void;
 }
 
-export function lotDisabledReason(l: YarnLotRow, ownerCustomerId: string): string | null {
-  if (!l.ownerCustomerId) return "Bizim lot — emanet değil, sahibine çıkışı olmaz";
-  if (l.ownerCustomerId !== ownerCustomerId) return `Sahibi başka müşteri: ${l.ownerCustomer?.name ?? "—"}`;
-  if (!(l.balanceKg > 0)) return "Lotun bakiyesi yok";
-  return null;
+export const yarnKey = (y: Pick<ConsignmentYarnCandidate, "lotId" | "warehouseId">): string => `yarn:${y.lotId}:${y.warehouseId}`;
+
+export function lotDisabledReason(y: ConsignmentYarnCandidate, taken: ReadonlySet<string>): string | null {
+  if (taken.has(yarnKey(y))) return "Belgede zaten var — miktarı satırdan değiştirin";
+  return blockedReasonText(y.blockedReason);
 }
 
-export function YarnLinePicker({ open, onOpenChange, ownerCustomerId, onPick }: Props) {
-  const [lot, setLot] = useState<YarnLotRow | null>(null);
+export function YarnLinePicker({ open, onOpenChange, ownerCustomerId, takenKeys, onPick }: Props) {
+  const [lot, setLot] = useState<ConsignmentYarnCandidate | null>(null);
   const close = () => {
     setLot(null);
     onOpenChange(false);
   };
   return (
     <>
-      <OwnedPickerDialog<YarnLotRow>
+      <CandidatePickerDialog<ConsignmentYarnCandidate>
         open={open && !lot}
         onOpenChange={(o) => !o && close()}
         title="İplik lotu seç"
-        description="Emanet iplik lotları. Yalnız seçili müşterinin lotu seçilebilir; sonra depo ve kg girilir."
-        queryKey={["yarn", "lots", "consignment-picker"]}
-        fetchPage={async (cursor, search) => {
-          const r = await listYarnLots({
-            limit: 50,
-            cursor: cursor ?? undefined,
-            search: search || undefined,
-            isActive: true,
-          });
-          return { rows: r.data, nextCursor: r.pagination.nextCursor };
-        }}
-        renderRow={(l) => (
+        description="Seçili müşterinin depoda bakiyesi olan emanet lotları (lot × depo). Sonra kg girilir."
+        ownerCustomerId={ownerCustomerId}
+        pick={(d) => ({ rows: d.yarns, truncated: d.truncated.yarns, moduleOn: d.modules.iplik })}
+        rowKey={yarnKey}
+        renderRow={(y) => (
           <>
-            <span className="font-medium">Lot {l.lotNo}</span>
+            <span className="font-medium">Lot {y.lotNo}</span>
             <span className="text-xs text-muted-foreground">
-              {l.item.name} · {fmtNum(l.balanceKg)} kg · {l.ownerCustomer?.name ?? "Bizim"}
+              {y.itemName} · {y.warehouseName} · {fmtNum(y.balanceKg)} kg
             </span>
           </>
         )}
-        disabledReason={(l) => lotDisabledReason(l, ownerCustomerId)}
+        disabledReason={(y) => lotDisabledReason(y, takenKeys)}
         onPick={setLot}
-        emptyText="Aktif iplik lotu yok."
+        emptyText="Bu müşterinin depoda bakiyeli emanet lotu yok."
       />
       {lot && (
         <QtyDialog
@@ -83,32 +75,18 @@ export function YarnLinePicker({ open, onOpenChange, ownerCustomerId, onPick }: 
   );
 }
 
-function QtyDialog({
-  lot,
-  onCancel,
-  onDone,
-}: {
-  lot: YarnLotRow;
-  onCancel: () => void;
-  onDone: (it: DraftItem) => void;
-}) {
-  const { multiWarehouse, warehouses } = useMultiWarehouse();
-  const fallback = useDefaultWarehouse();
-  const [warehouseId, setWarehouseId] = useState<string | null>(null);
-  const [kgRaw, setKgRaw] = useState(String(lot.balanceKg).replace(".", ","));
-  const wh = warehouses.find((w) => w.id === (warehouseId ?? (multiWarehouse ? null : fallback?.id))) ?? null;
+function QtyDialog({ lot, onCancel, onDone }: { lot: ConsignmentYarnCandidate; onCancel: () => void; onDone: (it: DraftItem) => void }) {
+  const [kgRaw, setKgRaw] = useState(lot.balanceKg.replace(/\.?0+$/, "").replace(".", ","));
   const kg = parseKg(kgRaw);
-  const ok = wh !== null && kg !== null;
   return (
     <Dialog open onOpenChange={(o) => !o && onCancel()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Lot {lot.lotNo} — çıkış miktarı</DialogTitle>
           <DialogDescription>
-            {lot.item.name} · lot bakiyesi {fmtNum(lot.balanceKg)} kg (tüm depolar)
+            {lot.itemName} · {lot.warehouseName} deposundaki bakiye {fmtNum(lot.balanceKg)} kg
           </DialogDescription>
         </DialogHeader>
-        {multiWarehouse && <WarehouseChoice warehouses={warehouses} selectedId={wh?.id ?? null} onSelect={setWarehouseId} />}
         <div className="space-y-1">
           <Label htmlFor="consignment-kg">Miktar (kg)</Label>
           <Input
@@ -118,24 +96,21 @@ function QtyDialog({
             onChange={(e) => setKgRaw(e.target.value)}
             className={cn(kg === null && "border-destructive")}
           />
-          {kg === null && (
-            <p className="text-xs text-destructive">0'dan büyük bir kg girin (en çok 3 ondalık).</p>
-          )}
+          {kg === null && <p className="text-xs text-destructive">0'dan büyük bir kg girin (en çok 3 ondalık).</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>
             Lotu değiştir
           </Button>
           <Button
-            disabled={!ok}
+            disabled={kg === null}
             onClick={() =>
-              wh &&
               kg &&
               onDone({
-                key: `yarn:${lot.id}:${wh.id}`,
-                input: { kind: "YARN", yarnItemId: lot.itemId, warehouseId: wh.id, lotId: lot.id, qtyKg: kg },
+                key: yarnKey(lot),
+                input: { kind: "YARN", yarnItemId: lot.yarnItemId, warehouseId: lot.warehouseId, lotId: lot.lotId, qtyKg: kg },
                 label: `İplik lot ${lot.lotNo}`,
-                sub: `${lot.item.name} · ${fmtNum(kg)} kg · ${wh.name}`,
+                sub: `${lot.itemName} · ${fmtNum(kg)} kg · ${lot.warehouseName}`,
               })
             }
           >
@@ -144,20 +119,5 @@ function QtyDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function WarehouseChoice({ warehouses, selectedId, onSelect }: { warehouses: Warehouse[]; selectedId: string | null; onSelect: (id: string) => void }) {
-  return (
-    <div className="space-y-1">
-      <Label>Çıkacağı depo</Label>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Depo">
-        {warehouses.map((w) => (
-          <Button key={w.id} type="button" size="sm" role="radio" aria-checked={selectedId === w.id} variant={selectedId === w.id ? "default" : "outline"} onClick={() => onSelect(w.id)}>
-            {w.name}
-          </Button>
-        ))}
-      </div>
-    </div>
   );
 }
