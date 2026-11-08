@@ -12,14 +12,17 @@
 //   §1 Ayar varsayılanı KAPALI (kayıt yok → okuyucu, ayar paketi, bayrak yükü false)
 //   §2 Kapalı ayarda bayt-aynı: eşleme VARKEN taslak = adım kaynağı hiç yokmuş gibi (JSON eşit)
 //   §3 Boya (iç adım, istasyon varsayılan türü) → tek STEP satırı, metre OUT okuması, kalem eşlenen kart
-//   §4 Bayrak önceliği: aynı adım bayrak işi verdi (okumalı) → tek satır (bayrak); okumasız (adımsız) bayrak da bastırır
+//   §4 Bayrak önceliği: aynı adım bayrak işi verdi (okumalı) → tek satır (bayrak); okumasız (adımsız) bayrak da bastırır;
+//      öncelik TOP BAŞINA — aynı sevkte bayraklı A + bayraksız B → B'nin adım işi kalır
 //   §5 SIMULATED okuma girmez: adımın yalnız simüle okuması → iş yok + uyarı
 //   §6 Dış (fason) adım: kabulsüz iş yok · doğan top RECEIVED = kabul metresi · iptal makbuz sayılmaz ·
 //      makbuzdan kendisi dönen top (NULL kalem) topun metresi bir kez
-//   §7 Atlanan adım, geri alınmış hareket, eşlenmemiş tür → iş yok; okumasız kapalı hareket → qtyOut DECLARED
+//   §7 Atlanan adım, geri alınmış hareket, eşlenmemiş tür → iş yok; okumasız kapalı hareket → qtyOut DECLARED;
+//      bölünmüş ana top (mevcut 0, qtyOut boş) → giriş metresi; hiç metre yoksa iş yok + uyarı (sessiz düşmez)
 //   §8 Faturalı iş tekrar toplanmaz (bağ anahtarı top:kart:adım)
 //   §9 Eşleme ucu: küme değişimi + audit · başka karta eşli tür 409 SERVICE_PROCESS_TAKEN · bilinmeyen tür 400 ·
-//      pasif karta yeni eşleme 409 ITEM_INACTIVE · eşleme kartın canlı referansı (pasife alma 409)
+//      pasif karta yeni eşleme 409 ITEM_INACTIVE · eşleme kartın canlı referansı (pasife alma 409) ·
+//      kart satırı FOR UPDATE: elle açık tutulan kilit altında PUT bekler (eşzamanlı iki PUT birbirini ezmez)
 // Negatif sondalar (2026-11-08) harita satırında.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -29,7 +32,7 @@ import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { testActorId } from "./fixture-test-user";
-import { resolveServiceItemsForRolls, simulatedStepWarning, type ServiceResolveOptions } from "../src/services/helpers/service-pricing.helper";
+import { resolveServiceItemsForRolls, simulatedStepWarning, zeroMeterStepWarning, type ServiceResolveOptions } from "../src/services/helpers/service-pricing.helper";
 import { collectServiceBillingDraft } from "../src/services/helpers/service-billing.helper";
 import { SETTING_KEYS, loadServiceBillingSettings, readFinanceServiceBillingStepWorks, systemSettingService } from "../src/services/system-setting.service";
 import { serviceItemService } from "../src/services/service-item.service";
@@ -134,9 +137,9 @@ async function main(): Promise<void> {
     fx.rollIds.push(r.id);
     return r.id;
   };
-  const move = (rollId: string, stepId: string, qtyOut: number | null, opts: { open?: boolean; revoked?: boolean } = {}) => prisma.rollMovement.create({
+  const move = (rollId: string, stepId: string, qtyOut: number | null, opts: { open?: boolean; revoked?: boolean; qtyIn?: number } = {}) => prisma.rollMovement.create({
     data: {
-      rollId, workOrderStepId: stepId, qtyIn: 100, qtyOut: opts.open ? null : qtyOut, exitedAt: opts.open ? null : new Date(),
+      rollId, workOrderStepId: stepId, qtyIn: opts.qtyIn ?? 100, qtyOut: opts.open ? null : qtyOut, exitedAt: opts.open ? null : new Date(),
       ...(opts.revoked ? { revokedAt: new Date(), revokeReason: "TEST" } : {}),
     },
   });
@@ -196,6 +199,10 @@ async function main(): Promise<void> {
   await move(rNoFlag, S2, 70);
   const r4c = await steps([rNoFlag]);
   check("bayraksız top aynı adımda: APRE adım işi (qtyOut, DECLARED)", r4c.works.length === 1 && r4c.works[0]!.source === "STEP" && r4c.works[0]!.serviceItemId === APRE && r4c.works[0]!.meterBasis === "DECLARED" && eq(r4c.works[0]!.meters, 70), JSON.stringify(r4c.works));
+  const r4d = await steps([rFlag, rNoFlag]);
+  check("AYNI sevkte bayraklı A + bayraksız B: A'da yalnız bayrak, B'nin APRE adım işi KALIR (öncelik top başına)",
+    r4d.works.some((w) => w.rollId === rNoFlag && w.source === "STEP" && w.serviceItemId === APRE) && !r4d.works.some((w) => w.rollId === rFlag && w.source === "STEP"),
+    JSON.stringify(r4d.works.map((w) => [w.rollId === rNoFlag ? "B" : "A", w.source, w.workOrderStepId])));
 
   // ── §5 SIMULATED ─────────────────────────────────────────────────────────
   section("§5 simüle okuma faturaya girmez");
@@ -254,6 +261,14 @@ async function main(): Promise<void> {
   const rOpen = await mkRoll(100);
   await move(rOpen, S1, null, { open: true });
   check("iç adımda açık (bitmemiş) hareket → iş yok", (await steps([rOpen])).works.length === 0);
+  const rSplit = await mkRoll(100, { currentQty: 0 });
+  await move(rSplit, S1, null, { qtyIn: 90 });
+  const r7s = await steps([rSplit]);
+  check("bölünmüş ana top (mevcut 0, qtyOut boş): giriş metresi 90 DECLARED", r7s.works.length === 1 && r7s.works[0]!.meterBasis === "DECLARED" && eq(r7s.works[0]!.meters, 90), JSON.stringify(r7s.works));
+  const rZero = await mkRoll(100, { currentQty: 0 });
+  await move(rZero, S1, null, { qtyIn: 0 });
+  const r7z = await steps([rZero]);
+  check("hiç metre yok: iş yok AMA uyarı var (sessiz düşmez)", r7z.works.length === 0 && r7z.warnings.includes(zeroMeterStepWarning(1)), JSON.stringify(r7z));
 
   // ── §8 faturalı iş ───────────────────────────────────────────────────────
   section("§8 faturalı iş tekrar toplanmaz");
@@ -288,6 +303,22 @@ async function main(): Promise<void> {
   check("pasif karta YENİ tür → 409 ITEM_INACTIVE", inact.status === 409 && inact.code === "ITEM_INACTIVE", JSON.stringify(inact));
   const shrink = await errOf(() => serviceItemService.replaceProcesses(APRE, [], actor));
   check("pasif karttan tür ÇIKARMAK serbest (200) ve satırlar gider", shrink.status === 200 && (await prisma.serviceItemProcess.count({ where: { serviceItemId: APRE } })) === 0, JSON.stringify(shrink));
+  // Yarış: kart satırı elle açık tx'te FOR UPDATE tutulurken PUT beklemeli (kilitsiz olsa "önce" kümesi bayat okunur).
+  const holder = await pool.connect();
+  let settled = false;
+  try {
+    await holder.query("BEGIN");
+    await holder.query(`SELECT id FROM "service_items" WHERE id = $1::uuid FOR UPDATE`, [BOYA]);
+    const pending = serviceItemService.replaceProcesses(BOYA, [catBoya], actor).finally(() => { settled = true; });
+    await new Promise((r) => setTimeout(r, 800));
+    check("kart satırı kilitliyken eşleme PUT'u BEKLER (FOR UPDATE)", !settled);
+    await holder.query("COMMIT");
+    const done = await pending;
+    check("kilit bırakılınca PUT tamamlanır, küme korunur", settled && done.data.length === 1 && done.data[0]!.categoryId === catBoya, JSON.stringify(done.data));
+  } finally {
+    if (!settled) await holder.query("ROLLBACK").catch(() => undefined);
+    holder.release();
+  }
 }
 
 async function cleanup(): Promise<void> {

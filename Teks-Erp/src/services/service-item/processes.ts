@@ -4,7 +4,7 @@
 // Saf yapılandırma pivotu: yazım kart başına KÜME DEĞİŞİMİDİR (çıkan satır hard delete — serbest sınıf),
 // iz audit'te (tx dışında, kart kaydına `processCategoryIds` eski/yeni). Bir süreç türü tek karta eşlenir
 // (`categoryId` UNIQUE) — başka kartın türü 409 `SERVICE_PROCESS_TAKEN`. Yeni eşleme TANIMDIR:
-// `assertServiceItemUsableTx(DEFINITION)` (8030 SHARED → kart FOR SHARE) altında yazılır; pasif karta
+// `assertServiceItemUsableTx(DEFINITION)` altında yazılır (8030 SHARED → kart FOR UPDATE → FOR SHARE); pasif karta
 // yeni tür eklenemez, yalnız çıkarılabilir.
 // =============================================================================
 import { Prisma } from "@prisma/client";
@@ -75,8 +75,10 @@ export async function replaceServiceItemProcesses(serviceItemId: string, categor
   let before: string[] = [];
   try {
     await prisma.$transaction(async (tx) => {
-      // İlk ifade advisory kilit (8030 SHARED); yeni eşleme ayrıca kart kullanım kapısından (FOR SHARE) geçer.
+      // Kilit sırası: 8030 SHARED → kart satırı FOR UPDATE (aynı karta eşzamanlı iki PUT sıraya girer, "önce"
+      // kümesi taze okunur; pasife alma da aynı sırayla kilitler) → yeni eşlemede kullanım kapısı (FOR SHARE).
       await lockAgainstMergeTx(tx);
+      await tx.$queryRaw`SELECT id FROM "service_items" WHERE id = ${serviceItemId}::uuid FOR UPDATE`;
       const current = await tx.serviceItemProcess.findMany({ where: { serviceItemId }, select: { categoryId: true } });
       before = current.map((r) => r.categoryId).sort();
       const added = want.filter((id) => !before.includes(id));

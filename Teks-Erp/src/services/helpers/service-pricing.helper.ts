@@ -182,6 +182,11 @@ function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions,
   return block ? works.filter((w) => !unmeasured.includes(w)) : works;
 }
 
+/** Metresi bulunamayan adım işi (okuma, çıkış/giriş ve top metresi 0) — sessiz düşmez. */
+export function zeroMeterStepWarning(count: number): string {
+  return `${count} adım işinin metresi bulunamadı (okuma ve top metresi 0) — faturaya alınmadı, topu kontrol edin.`;
+}
+
 /** F3 uyarı metni — bekçi aynı cümleyi arar. */
 export function simulatedStepWarning(count: number): string {
   return `${count} adım işinin metresi yalnız simüle ölçüm — süpervizör düzeltmesi gerekli; faturaya alınmadı.`;
@@ -208,9 +213,11 @@ async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED"
 
 /** F3 adım işleri iş satırına (metre birimi, kademesiz); kurşun/bayrak işinin adımı ve adımsız bayrak özelliği önceliklidir. */
 async function loadStepWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { claimed: ServiceRollWork[]; flagClaims: Array<{ rollId: string; propertyId: string }>; db: Db; warnings: string[] }): Promise<ServiceRollWork[]> {
-  const claimedStepIds = new Set(ctx.claimed.map((w) => w.workOrderStepId).filter((v): v is string => v !== null));
-  const step = await listStepServiceWorks(rollIds, basis, { db: ctx.db, claimedStepIds, flagClaims: ctx.flagClaims });
+  // Öncelik top başına (top:adım) — aynı sevkteki başka topun bayrağı bu topun adım işini bastırmaz.
+  const claimedWorks = ctx.claimed.flatMap((w) => (w.workOrderStepId ? [{ rollId: w.rollId, workOrderStepId: w.workOrderStepId }] : []));
+  const step = await listStepServiceWorks(rollIds, basis, { db: ctx.db, claimedWorks, flagClaims: ctx.flagClaims });
   if (step.simulatedCount > 0) ctx.warnings.push(simulatedStepWarning(step.simulatedCount));
+  if (step.zeroMeterCount > 0) ctx.warnings.push(zeroMeterStepWarning(step.zeroMeterCount));
   return step.works.map((s): ServiceRollWork => ({
     rollId: s.rollId, workOrderStepId: s.workOrderStepId, source: "STEP", valueId: null, valueName: s.categoryName, gramajFrom: "NONE",
     serviceItemId: s.serviceItemId, meters: s.meters, meterBasis: s.meterBasis, readingId: s.readingId, serviceAt: s.serviceAt, unitPrice: null,
