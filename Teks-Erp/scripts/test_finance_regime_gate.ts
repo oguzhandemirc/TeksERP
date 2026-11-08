@@ -220,6 +220,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "Router hiçbir ticaret tablosuna yazmaz.",
   },
   {
+    dosya: "routes/e-irsaliye.routes.ts",
+    neden:
+      "E-İRSALİYE sevkin belge yüzüdür, ön muhasebeye bağlanamaz → rejim kapısı KONULAMAZ. `cariAccount` izi tek daldan gelir: " +
+      "`e-irsaliye.service` `export { generate } from \"./e-irsaliye-generate.helper\"` → `helpers/finance.helper` " +
+      "(`findCariAccountForCardTx`) alıcının vergi dairesini SALT-OKUMA sorar; hesap yoksa `taxOffice` null düşer. Router hiçbir ticaret " +
+      "tablosuna yazmaz. Kenar 2026-11-08'e dek görünmüyordu: tarayıcı `export … from` yeniden dışa aktarımını izlemiyordu.",
+  },
+  {
     dosya: "routes/return.routes.ts",
     neden:
       "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +
