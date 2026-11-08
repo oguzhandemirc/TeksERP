@@ -17,6 +17,7 @@ import { loadServiceTierItemsAtMany, pickServicePrice, tierMissingWarning } from
 import { priceUnitMatches, SERVICE_QTY_UNIT_LABEL } from "./service-quantity.helper";
 import { loadProcessMap } from "./service-step-work.helper";
 import { processOfMachines } from "./service-weaving-work.helper";
+import { listActiveShipToOwnerBeams } from "./consignment-beam.helper";
 import type { ServiceBillingDraft, ServiceBillingLinkInput } from "./service-billing.helper";
 import type { ServiceDraftWorkRow } from "../service-billing/types";
 
@@ -24,11 +25,6 @@ type Db = Prisma.TransactionClient | typeof prisma;
 
 /** Sarım işinin süreç etiketi (`ServiceDraftWorkRow.processLabel`, sözleşme). */
 export const WINDING_PROCESS_LABEL = "Sarım";
-
-/** Aktif sahibine-çıkış olayı yüklemi — ters olayı yok, belgesi iptal edilmemiş (liste ve fatura tx kapısı ortak). */
-export function activeShipToOwnerWhere(extra: Prisma.ConsignmentDispatchWhereInput = {}): Prisma.WarpBeamEventWhereInput {
-  return { kind: "SHIP_TO_OWNER", reversal: { is: null }, consignmentItem: { is: { dispatch: { is: { cancelledAt: null, ...extra } } } } };
-}
 
 /** Leventin sarım metresi — WOUND (+) ve WOUND_CANCEL (−) toplamı; TEK okuyucu. Sarımı olmayan levent haritada YOK. */
 export async function windingMetersByBeam(db: Db, beamIds: string[]): Promise<Map<string, Prisma.Decimal>> {
@@ -61,13 +57,10 @@ export interface WindingWorkList {
 export async function listWindingServiceWorks(p: { customerId: string; from: Date; to: Date; db?: Db }): Promise<WindingWorkList> {
   const db = p.db ?? prisma;
   const out: WindingWorkList = { works: [], unmappedCount: 0, zeroMeterCount: 0 };
-  const ships = await db.warpBeamEvent.findMany({
-    where: activeShipToOwnerWhere({ ownerCustomerId: p.customerId, dispatchedAt: { gte: p.from, lte: p.to } }),
-    select: { beamId: true, beam: { select: { beamNo: true } }, consignmentItem: { select: { dispatch: { select: { dispatchedAt: true } } } } },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-  });
+  // Aktif çıkış okuyucusu TEK: F5 arayüzü (`consignment-beam.helper`); levent sırası çıkış olayı sırası.
+  const ships = await listActiveShipToOwnerBeams(db, { ownerCustomerId: p.customerId, from: p.from, to: p.to });
   if (ships.length === 0) return out;
-  const beamIds = [...new Set(ships.map((s) => s.beamId))];
+  const beamIds = [...new Set(ships.map((s) => s.warpBeamId))];
   const wound = await db.warpBeamEvent.findMany({ where: { beamId: { in: beamIds }, kind: "WOUND" }, select: { beamId: true, machineId: true } });
   const machineOf = new Map(wound.map((w) => [w.beamId, w.machineId]));
   const processMap = await loadProcessMap(db);
@@ -75,15 +68,15 @@ export async function listWindingServiceWorks(p: { customerId: string; from: Dat
   const meters = await windingMetersByBeam(db, beamIds);
   const seen = new Set<string>(); // levent tek sarım işi: birden çok aktif çıkışta ilki
   for (const s of ships) {
-    if (seen.has(s.beamId)) continue;
-    seen.add(s.beamId);
-    const machineId = machineOf.get(s.beamId) ?? null;
+    if (seen.has(s.warpBeamId)) continue;
+    seen.add(s.warpBeamId);
+    const machineId = machineOf.get(s.warpBeamId) ?? null;
     if (!machineId) continue; // bizde sarılmamış: hizmet işi değil, uyarı da değil
     const proc = byMachine.get(machineId);
     if (!proc) { out.unmappedCount++; continue; }
-    const m = meters.get(s.beamId) ?? new Prisma.Decimal(0);
+    const m = meters.get(s.warpBeamId) ?? new Prisma.Decimal(0);
     if (m.lte(0)) { out.zeroMeterCount++; continue; }
-    out.works.push({ warpBeamId: s.beamId, beamNo: s.beam.beamNo, serviceItemId: proc.serviceItemId, meters: m, serviceAt: s.consignmentItem!.dispatch.dispatchedAt });
+    out.works.push({ warpBeamId: s.warpBeamId, beamNo: s.beamNo, serviceItemId: proc.serviceItemId, meters: m, serviceAt: s.dispatchedAt });
   }
   return out;
 }

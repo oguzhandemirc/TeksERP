@@ -7,7 +7,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { reconcileServiceLinksWithLines } from "./service-billing.helper";
-import { CONSIGNMENT_CANCEL_REVOKE_REASON } from "./service-winding-link.helper";
+import { CONSIGNMENT_CANCEL_REVOKE_REASON } from "./consignment-beam.helper";
 
 type Tx = Prisma.TransactionClient;
 

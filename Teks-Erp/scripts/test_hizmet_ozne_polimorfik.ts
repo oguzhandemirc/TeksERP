@@ -23,12 +23,12 @@
 //   §5 ek: bizde sarılmamış levent uyarısız; bizde sarılıp eşlenmemiş ve 0 metre uyarılı; hepsi faturalıyken 409 ALREADY_BILLED
 //   §6 ek: iptal → yeniden çıkış yeni bağ doğurur, eski taslak onayı yine 409 · kart değişince levent ikinci kez faturalanmaz
 //   §7 Kilit: levent satırı F5 claim aynasıyla (UPDATE) tutulurken dönem taslağı BEKLER · kârlılık okuyucusu levent bağını sahibiyle okur ·
-//      eşzamanlı iki dönem POST'u → tek taslak · gün içi fiyat değişiminde her çıkış kendi anının fiyatı
+//      eşzamanlı iki dönem POST'u → tek taslak · F5 iptali damga/okuma için TEK helper'ı çağırır (AST) · gün içi fiyat değişiminde her çıkış kendi anının fiyatı
 // Negatif sondalar (2026-11-08) harita satırında.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Currency, ItemType, PriceKind, Prisma, ServiceBillingSubject, ServiceMeterBasis, StationKind } from "@prisma/client";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
@@ -38,7 +38,8 @@ import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pri
 import { weavingUnmappedWarning } from "../src/services/helpers/service-weaving-work.helper";
 import { collectPeriodServiceBilling, collectServiceBillingDraft } from "../src/services/helpers/service-billing.helper";
 import { windingUnmappedWarning, windingZeroMeterWarning } from "../src/services/helpers/service-winding-work.helper";
-import { CONSIGNMENT_CANCEL_REVOKE_REASON, listWindingLinksForBeams, revokeWindingLinksForConsignmentTx } from "../src/services/helpers/service-winding-link.helper";
+import { listWindingLinksForBeams, revokeWindingLinksForConsignmentTx } from "../src/services/helpers/service-winding-link.helper";
+import { CONSIGNMENT_CANCEL_REVOKE_REASON } from "../src/services/helpers/consignment-beam.helper";
 import { createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
 import { invoiceService } from "../src/services/invoice.service";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
@@ -264,6 +265,13 @@ async function main(): Promise<void> {
   await cancelDispatch(bZero.id, bZero.dispatch!);
   const autoDraftSrc = readFileSync(path.join(__dirname, "../src/services/helpers/shipment-auto-draft.helper.ts"), "utf8");
   check("sevk taslağı kaynağı sarım helper'ını ithal etmez (levent satırı sevk taslağına çıkmaz)", !/service-winding/.test(autoDraftSrc));
+  // Tek kaynak: CONSIGNMENT_CANCEL damgasını YALNIZ `service-winding-link.helper` yazar (F5 iptali onu çağırır).
+  const srcRoot = path.join(__dirname, "../src");
+  const stampWriters = readdirSync(srcRoot, { recursive: true, encoding: "utf8" })
+    .filter((f) => f.endsWith(".ts") && /data:\s*\{[^}]*revokeReason:\s*CONSIGNMENT_CANCEL_REVOKE_REASON/.test(readFileSync(path.join(srcRoot, f), "utf8")));
+  check("CONSIGNMENT_CANCEL damga yazarı TEK (service-winding-link.helper)", stampWriters.length === 1 && stampWriters[0]!.endsWith("service-winding-link.helper.ts"), JSON.stringify(stampWriters));
+  const cancelSrc = readFileSync(path.join(srcRoot, "services/consignment-dispatch/cancel.ts"), "utf8");
+  check("F5 iptali ve önizlemesi tek helper'ı çağırır", /revokeWindingLinksForConsignmentTx\(/.test(cancelSrc) && /listWindingLinksForBeams\(/.test(cancelSrc) && !/serviceBillingLink\./.test(cancelSrc));
   const d1 = await createServicePeriodDraft({ cariId: cari.id, period, clientToken: randomUUID() }, actor);
   const d1Id = d1.data!.id;
   const link1 = await prisma.serviceBillingLink.findFirst({ where: { invoiceId: d1Id, warpBeamId: b1.id }, select: { id: true, subjectKind: true, rollId: true, meterBasis: true, billedMeters: true, workOrderStepId: true } });
