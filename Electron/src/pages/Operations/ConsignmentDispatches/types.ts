@@ -132,8 +132,38 @@ export type ConsignmentDispatchErrorCode =
   | "CONSIGNMENT_OWNER_MISMATCH"
   | "CONSIGNMENT_BEAM_NOT_READY"
   | "CONSIGNMENT_YARN_INSUFFICIENT"
+  | "YARN_LOT_INACTIVE"
   | "CONSIGNMENT_DISPATCH_CANCELLED"
   | "CONSIGNMENT_DISPATCH_CHANGED"
   | "CONSIGNMENT_BEAM_MOVED_AFTER"
   | "CONSIGNMENT_BEAM_INVOICED"
-  | "CLIENT_TOKEN_CONFLICT";
+  | "CLIENT_TOKEN_COLLISION";
+
+/** `GET /api/consignment-dispatches/candidates` — backend `candidate-types.ts` aynası. Dolu `blockedReason` seçilemez. */
+export interface ConsignmentBeamCandidate {
+  warpBeamId: string;
+  beamNo: string;
+  warpSpecName: string | null;
+  remainingM: string;
+  blockedReason: ConsignmentDispatchErrorCode | null;
+}
+
+export interface ConsignmentYarnCandidate {
+  lotId: string;
+  lotNo: string;
+  yarnItemId: string;
+  itemCode: string;
+  itemName: string;
+  warehouseId: string;
+  warehouseName: string;
+  balanceKg: string;
+  blockedReason: ConsignmentDispatchErrorCode | null;
+}
+
+export interface ConsignmentCandidates {
+  ownerCustomer: { id: string; name: string };
+  modules: { devere: boolean; iplik: boolean };
+  beams: ConsignmentBeamCandidate[];
+  yarns: ConsignmentYarnCandidate[];
+  truncated: { beams: boolean; yarns: boolean };
+}

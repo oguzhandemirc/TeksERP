@@ -28,7 +28,7 @@ jest.mock('../../../services/api', () => ({
   isWorkSessionLost: () => false,
 }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
-jest.mock('../../../components/ScreenChrome', () => ({ __esModule: true, default: ({ children }: { children: ReactNode }) => children }));
+jest.mock('../../../components/ScreenChrome', () => ({ __esModule: true, default: ({ children, headerExtras }: { children: ReactNode; headerExtras?: ReactNode }) => <>{headerExtras}{children}</> }));
 jest.mock('../../../components/BarcodeScannerModal', () => ({ BarcodeScannerModal: () => null }));
 jest.mock('../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 jest.mock('../../../hooks/useScanSeries', () => ({
@@ -53,6 +53,7 @@ beforeEach(() => {
   mockGet.mockImplementation(async (url: string) => {
     if (url.startsWith('/rolls/stats')) return { data: { success: true, data: { totalCount: 2, totalQty: 80, totalWeight: 0, byStatus: {}, byQuality: {} } } };
     if (url.startsWith('/rolls/warehouse-scope')) return { data: { success: true, data: { free: { count: 2, qty: 80 }, pool: { count: 0, qty: 0 }, planned: { count: 0, qty: 0 } } } };
+    if (url.startsWith('/consignment-dispatches/owners')) return { data: { success: true, data: { owners: [{ id: 'c1', code: 'AKN', name: 'Akın Tekstil' }], truncated: false } } };
     if (url.startsWith('/rolls?') || url === '/rolls') return { data: { success: true, data: ROWS, pagination: { hasMore: false, nextCursor: null } } };
     return { data: { success: true, data: [], meta: { total: 0, page: 1, pageSize: 50, totalPages: 0 }, pagination: { hasMore: false, nextCursor: null } } };
   });
@@ -66,6 +67,7 @@ it('emanet KAPALI: süzgeç ve rozet yok, istekler mulkiyet taşımaz (bugünkü
   expect(await screen.findByText('T2')).toBeTruthy();
   expect(screen.queryByTestId('depo-owner-filter')).toBeNull();
   expect(screen.queryByTestId('owner-badge')).toBeNull();
+  expect(screen.queryByTestId('depo-emanet-cikis')).toBeNull();
   expect(mockGet.mock.calls.some((c) => /mulkiyet/.test(decodeURIComponent(c[0] as string)))).toBe(false);
   expect(urls('/rolls/warehouse-scope')).toEqual(expect.arrayContaining(['/rolls/warehouse-scope']));
 });
@@ -76,6 +78,7 @@ it('emanet AÇIK: sahipli satırda rozet; "Emanet" seçimi liste + şerit + kaps
   expect(await screen.findByText('Akın Tekstil')).toBeTruthy();
   expect(screen.getAllByTestId('owner-badge')).toHaveLength(1);
   expect(screen.getByTestId('depo-owner-filter')).toBeTruthy();
+  expect(screen.getByTestId('depo-emanet-cikis')).toBeTruthy();
   // Varsayılan Tümü: henüz mulkiyet yok.
   expect(mockGet.mock.calls.some((c) => /mulkiyet/.test(decodeURIComponent(c[0] as string)))).toBe(false);
 
@@ -122,4 +125,22 @@ it('Sahip çipleri ≥56dp dokunma hedefi', async () => {
     const flat = Object.assign({}, ...[screen.getByTestId(`depo-owner-${k}`).props.style].flat(Infinity).filter(Boolean));
     expect(flat.minHeight).toBeGreaterThanOrEqual(56);
   }
+});
+
+it('emanet AÇIK: "Emanet Çıkış" kartı açılır; sahip seçilmeden okut/seç ve kaydet kapalı', async () => {
+  mockEmanet = true;
+  renderWithPaper(<DepoScreen />);
+  fireEvent.press(await screen.findByTestId('depo-emanet-cikis'));
+  expect(await screen.findByText('Önce malın sahibini seçin.')).toBeTruthy();
+  expect(screen.getByTestId('emanet-okut')).toBeDisabled();
+  expect(screen.getByTestId('emanet-kaydet')).toBeDisabled();
+});
+
+it('emanet çıkış sahip seçicisi müşteri kartını değil emanet sahip ucunu okur (en az yetki)', async () => {
+  mockEmanet = true;
+  renderWithPaper(<DepoScreen />);
+  fireEvent.press(await screen.findByTestId('depo-emanet-cikis'));
+  fireEvent.press(await screen.findByText('Müşteri seç…'));
+  await waitFor(() => expect(urls('/consignment-dispatches/owners').length).toBeGreaterThan(0));
+  expect(urls('/customers')).toEqual([]);
 });

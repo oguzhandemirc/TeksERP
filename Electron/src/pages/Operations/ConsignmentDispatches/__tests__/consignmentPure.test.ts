@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { buildBody, previewLineFor, upsertItem, type DraftItem } from "../draft";
 import { blockedReasonText, parseKg } from "../consignmentText";
 import { beamDisabledReason } from "../BeamPicker";
-import { lotDisabledReason } from "../YarnLinePicker";
-import type { WarpBeam } from "@/pages/Operations/WarpBeams/types";
-import type { YarnLotRow } from "@/pages/Operations/Yarn/service";
+import { lotDisabledReason, yarnKey } from "../YarnLinePicker";
+import type { ConsignmentBeamCandidate, ConsignmentYarnCandidate } from "../types";
 
 const yarn = (kg: string): DraftItem => ({
   key: "yarn:l1:w1",
@@ -80,24 +79,21 @@ describe("metin", () => {
   });
 });
 
-describe("sahip yüklemleri (görüntü; asıl kapı sunucu önizlemesi)", () => {
-  const b = (owner: string | null) =>
-    ({
-      id: "b1",
-      ownerCustomerId: owner,
-      ownerCustomer: owner ? { id: owner, name: "X" } : null,
-    }) as WarpBeam;
-  it("levent: bizim / başka sahip / zaten ekli seçilemez", () => {
-    expect(beamDisabledReason(b("cA"), "cA", new Set())).toBeNull();
-    expect(beamDisabledReason(b(null), "cA", new Set())).toMatch(/Bizim/);
-    expect(beamDisabledReason(b("cB"), "cA", new Set())).toMatch(/başka müşteri/);
-    expect(beamDisabledReason(b("cA"), "cA", new Set(["beam:b1"]))).toMatch(/zaten/);
+describe("aday satırı seçilebilirliği (engel SUNUCUDAN; istemci yalnız 'belgede var'ı ekler)", () => {
+  const b = (blocked: ConsignmentBeamCandidate["blockedReason"]): ConsignmentBeamCandidate => ({
+    warpBeamId: "b1", beamNo: "LV1", warpSpecName: null, remainingM: "10.000", blockedReason: blocked,
   });
-  it("lot: bakiyesiz lot seçilemez", () => {
-    const l = (owner: string | null, kg: number) =>
-      ({ ownerCustomerId: owner, ownerCustomer: null, balanceKg: kg }) as unknown as YarnLotRow;
-    expect(lotDisabledReason(l("cA", 3), "cA")).toBeNull();
-    expect(lotDisabledReason(l("cA", 0), "cA")).toMatch(/bakiyesi yok/);
-    expect(lotDisabledReason(l("cB", 3), "cA")).toMatch(/başka müşteri/);
+  const y = (blocked: ConsignmentYarnCandidate["blockedReason"]): ConsignmentYarnCandidate => ({
+    lotId: "l1", lotNo: "77", yarnItemId: "i", itemCode: "IP", itemName: "İplik", warehouseId: "w1", warehouseName: "Ana", balanceKg: "3.000", blockedReason: blocked,
+  });
+  it("levent: engelsiz seçilir · sunucu engeli Türkçe · belgede olan seçilemez", () => {
+    expect(beamDisabledReason(b(null), new Set())).toBeNull();
+    expect(beamDisabledReason(b("CONSIGNMENT_BEAM_NOT_READY"), new Set())).toBe("Levent hazır (boşta) değil");
+    expect(beamDisabledReason(b(null), new Set(["beam:b1"]))).toMatch(/zaten/);
+  });
+  it("lot: pasif lot engeli Türkçe · aynı lot × depo ikinci kez seçilemez", () => {
+    expect(lotDisabledReason(y(null), new Set())).toBeNull();
+    expect(lotDisabledReason(y("YARN_LOT_INACTIVE"), new Set())).toMatch(/pasif/);
+    expect(lotDisabledReason(y(null), new Set([yarnKey(y(null))]))).toMatch(/zaten/);
   });
 });

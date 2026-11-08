@@ -6,11 +6,12 @@ const REASON: Record<ConsignmentDispatchErrorCode, string> = {
   CONSIGNMENT_OWNER_MISMATCH: "Sahibi bu müşteri değil",
   CONSIGNMENT_BEAM_NOT_READY: "Levent hazır (boşta) değil",
   CONSIGNMENT_YARN_INSUFFICIENT: "Lotun bu depodaki bakiyesi yetmiyor",
+  YARN_LOT_INACTIVE: "Lot pasif — pasif lottan çıkış yapılamaz",
   CONSIGNMENT_DISPATCH_CANCELLED: "Belge zaten iptal",
   CONSIGNMENT_DISPATCH_CHANGED: "Belge önizlemeden sonra değişti — yeniden açın",
   CONSIGNMENT_BEAM_MOVED_AFTER: "Levent çıkıştan sonra başka işlem görmüş",
   CONSIGNMENT_BEAM_INVOICED: "Leventin sarım işi taslak olmayan faturada — önce faturayı iptal edin",
-  CLIENT_TOKEN_CONFLICT: "Aynı deneme farklı içerikle gönderildi — formu yeniden açın",
+  CLIENT_TOKEN_COLLISION: "Aynı deneme farklı içerikle gönderildi — formu yeniden açın",
 };
 
 /** Tanınmayan kod (yeni sunucu) ham basılmaz; genel cümleye düşer. */

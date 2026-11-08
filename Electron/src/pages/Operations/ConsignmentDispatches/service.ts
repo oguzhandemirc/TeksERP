@@ -2,6 +2,7 @@
 // Kapı sırası sunucuda: oturum → emanet modülü (403 MODULE_DISABLED) → `consignment:*` izni.
 import apiClient from "@/services/apiClient";
 import type {
+  ConsignmentCandidates,
   ConsignmentDispatchCancelPreview,
   ConsignmentDispatchCreateInput,
   ConsignmentDispatchDto,
@@ -67,5 +68,13 @@ export async function getConsignmentCancelPreview(id: string): Promise<Consignme
 
 export async function cancelConsignmentDispatch(id: string, reason: string): Promise<ConsignmentDispatchDto> {
   const r = await apiClient.post<{ data: ConsignmentDispatchDto }>(`${BASE}/${id}/cancel`, { reason });
+  return r.data.data;
+}
+
+/** Sahibin çıkabilecek leventleri + lot × depo bakiyeleri. Sahip süzgeci ve tavan sunucuda; izin `consignment:write`. */
+export async function listConsignmentCandidates(ownerCustomerId: string, search: string): Promise<ConsignmentCandidates> {
+  const params: Record<string, string> = { ownerCustomerId };
+  if (search.trim()) params.search = search.trim();
+  const r = await apiClient.get<{ data: ConsignmentCandidates }>(`${BASE}/candidates`, { params });
   return r.data.data;
 }

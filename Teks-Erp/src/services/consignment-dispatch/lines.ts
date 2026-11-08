@@ -2,7 +2,7 @@
 // EMANET ÇIKIŞ BELGESİ — satır çözücü (önizleme ve oluşturun ORTAK yüklemi)
 // =============================================================================
 // Önizleme `blockedReason` doldurur, oluştur aynı çözücüyü kilitli koşup ilk engelde 409 verir — "önizleme geçer
-// derken oluştur 409" ayrışması tek yüklemle kapanır. Sahip kapısı `isConsignedTo` (emanet-owner.helper).
+// derken oluştur 409" ayrışması tek yüklemle kapanır. Seçilebilirlik `eligibility.ts` (aday ucuyla ortak).
 // Kilit sırası (oluştur): kod kapsamı (8029) → `warp_beams` id sırasıyla → `yarn_stocks` (itemId, warehouseId) sırasıyla.
 // =============================================================================
 import { Prisma, WarpBeamStatus } from "@prisma/client";
@@ -11,7 +11,7 @@ import { AppError } from "../../utils/app-error";
 import { SETTING_KEYS, readDevereEnabled, readIplikEnabled } from "../system-setting.service";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { settingScreenPath } from "../../constants/panel-ayar-yolu";
-import { isConsignedTo } from "../helpers/emanet-owner.helper";
+import { beamBlockedReason, yarnBlockedReason } from "./eligibility";
 import { yarnLotWarehouseBalancesTx } from "../helpers/yarn-lot.helper";
 import type { ConsignmentDispatchCreateInput, ConsignmentDispatchErrorCode } from "./types";
 
@@ -141,11 +141,7 @@ export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: 
       const b = byId.get(id);
       if (!b) throw AppError.notFound(`Levent bulunamadı: ${id}`, { code: "WARP_BEAM_NOT_FOUND", warpBeamId: id });
       const remainingM = await opts.remainingOf(id);
-      const blockedReason: ConsignmentDispatchErrorCode | null = !isConsignedTo(b.ownerCustomerId, owner.id)
-        ? "CONSIGNMENT_OWNER_MISMATCH"
-        : b.status !== WarpBeamStatus.READY || remainingM.lte(0)
-          ? "CONSIGNMENT_BEAM_NOT_READY"
-          : null;
+      const blockedReason = beamBlockedReason({ ownerCustomerId: b.ownerCustomerId, status: b.status, remainingM }, owner.id);
       beams.push({ warpBeamId: id, beamNo: b.beamNo, warpSpecName: b.warpSpec?.name ?? null, ownerCustomerId: b.ownerCustomerId, status: b.status, remainingM, blockedReason });
     }
   }
@@ -176,14 +172,7 @@ export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: 
         throw AppError.badRequest(`"${lot.lotNo}" lotu seçilen iplik kalemine ait değil.`, { code: "YARN_LOT_ITEM_MISMATCH", lotId: y.lotId, yarnItemId: y.yarnItemId });
       }
       const balanceKg = balances.get(`${y.lotId}|${y.warehouseId}`) ?? D(0);
-      const blockedReason: ConsignmentDispatchErrorCode | null = !isConsignedTo(lot.ownerCustomerId, owner.id)
-        ? "CONSIGNMENT_OWNER_MISMATCH"
-        // Pasif lot yazarda 400 alırdı; önizleme = işlem olsun diye burada satır engeli (patron kararı 2026-11-08).
-        : !lot.isActive
-          ? "YARN_LOT_INACTIVE"
-        : balanceKg.lt(y.qtyKg)
-          ? "CONSIGNMENT_YARN_INSUFFICIENT"
-          : null;
+      const blockedReason = yarnBlockedReason({ ownerCustomerId: lot.ownerCustomerId, isActive: lot.isActive, balanceKg }, owner.id, y.qtyKg);
       yarns.push({ ...y, itemCode: item.code, itemName: item.name, warehouseName: wh.name, lotNo: lot.lotNo, ownerCustomerId: lot.ownerCustomerId, balanceKg, blockedReason });
     }
   }
