@@ -152,11 +152,11 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 1 (sağ sütun)', () => {
     expect(mockOpts?.extraBody?.(mockRows[0])?.stepPlanning).toEqual([{ sequence: 1, plannedMachineId: 'm10' }]);
   });
 
-  it('⭐ hedef kumaş tek seçici düğmesi: belgedeki yazı altında; basınca "Hedef kumaş" seçicisi açılır', async () => {
+  it('⭐ hedef kumaş tek seçici düğmesi: altında uzun açıklama yok; basınca "Hedef kumaş" seçicisi açılır', async () => {
     const s = ui();
     const btn = await s.findByTestId('ie-form-hedef-kumas');
     expect(btn).toHaveTextContent(/Hedef kumaş seç/);
-    await waitFor(() => expect(s.getByTestId('ie-form-hedef-kumas')).toHaveTextContent(/Belgede: DSN-7/));
+    expect(s.getByTestId('ie-form-hedef-kumas')).not.toHaveTextContent(/Belgede:|Boş bırakılırsa/);
     expect(s.queryByTestId('secici-Hedef kumaş')).toBeNull();
     fireEvent.press(s.getByTestId('ie-form-hedef-kumas'));
     expect(s.getByTestId('secici-Hedef kumaş')).toBeTruthy();

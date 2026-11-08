@@ -34,7 +34,7 @@ export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; 
       {fromDoc ? (
         <View style={styles.pick}>
           <SelectButton
-            label={candidates.length > 1 ? `Seçin (${candidates.length} aday)` : 'Bizim parti: otomatik'}
+            label={candidates.length > 1 ? `Bizim parti no seçin (${candidates.length} aday)` : 'Bizim parti no: otomatik'}
             caption="Bizim parti"
             value={f.ourBatchNo}
             onPress={onPick}

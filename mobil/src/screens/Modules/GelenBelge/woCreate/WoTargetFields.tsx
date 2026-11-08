@@ -46,15 +46,17 @@ export function TargetFields(p: TargetFieldsProps) {
   const e = state.extras;
   const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
   const itemSug = state.suggestions.targetItem;
-  const defaultHint = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
+  const def = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
   const colorSug = state.suggestions.targetColor;
   const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') && p.zone === 'other' };
   const anyNumber = cols.en || cols.metraj || cols.kg || cols.kat;
   if (!show('hedefKumas') && !anyNumber && !show('hedefRenk')) return null;
   const itemName = itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null;
   const itemAsk = !!itemSug && e.targetItemId !== itemSug.id;
-  const docHint = !itemAsk && state.docText.desen ? `Belgede: ${state.docText.desen}` : null;
-  const itemHint = [docHint, !e.targetItemId && !itemAsk ? defaultHint : null].filter(Boolean).join(' · ') || null;
+  // Hedef boşsa sunucu varsayılanı uygular: kutuda doğrudan o kumaş + "varsayılan" (uzun açıklama yok).
+  const defUsable = !e.targetItemId && !!def && !def.problem;
+  const itemValue = e.targetItemLabel ?? (defUsable ? `${def!.name} (varsayılan)` : null);
+  const itemHint = !e.targetItemId && def?.problem ? `Varsayılan kart kullanılamıyor (${def.name}) — hedef kumaş seçin` : null;
   return (
     <>
       {/* Bölüm şeridi yok; hedefte sorun varsa tek satır uyarı (sayı hatalı / kat tipi eksik). */}
@@ -66,7 +68,7 @@ export function TargetFields(p: TargetFieldsProps) {
           <SelectButton
             label="Hedef kumaş seç"
             caption="Hedef kumaş"
-            value={e.targetItemLabel}
+            value={itemValue}
             hint={itemHint}
             optional
             onPress={p.onPickItem}

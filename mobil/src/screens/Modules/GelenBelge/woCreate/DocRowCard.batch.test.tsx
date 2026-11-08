@@ -91,7 +91,7 @@ describe('DocRowCard — müşteri parti no ayrı, elle yazılabilir alan', () =
   it('belgeden kipinde bizim parti no aday seçicisi (bugünkü davranış)', () => {
     const ui = renderWithPaper(<Harness batchSource="DOCUMENT" />);
     expect(ui.queryByTestId('belge-satir-bizim-parti-GB-1')).toBeNull();
-    expect(ui.getByText('Seçin (2 aday)')).toBeTruthy();
+    expect(ui.getByText('Bizim parti no seçin (2 aday)')).toBeTruthy();
   });
 });
 
