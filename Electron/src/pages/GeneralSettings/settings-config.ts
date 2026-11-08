@@ -2083,10 +2083,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "warehouse",
     label: "Mal Kabul & Alış",
     icon: Warehouse,
-    description: "Mal kabul ve alış siparişi katılık ayarları.",
+    description: "Mal kabul ve alış siparişi katılık ayarları; emanet (müşteri malı) varsayılan deposu.",
     keywords:
       "depo ambar mal kabul giriş irsaliye alış satın alma sipariş tedarikçi fazla kabul tolerans " +
-      "birim fiyat zorunlu maliyet ticaret",
+      "birim fiyat zorunlu maliyet ticaret emanet deposu müşteri malı",
     kind: "flags",
     section: "trade",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:warehouse"],

@@ -11,7 +11,7 @@ import type { RollStatusTabKey } from "./service";
 export const INCLUDE_FIRE_PARAM = "filter[includeFire]";
 
 /** Satırda hep duranlar (tarih önde, sekmede varsa); geri kalanı "+ Filtre"de. */
-const PRIMARY_KEYS = ["itemId", "colorId", "shipmentScope", "subcontractorId", "subcontractorCategoryId", "currentStationId", "statusIn"];
+const PRIMARY_KEYS = ["mulkiyet", "itemId", "colorId", "shipmentScope", "subcontractorId", "subcontractorCategoryId", "currentStationId", "statusIn"];
 
 /**
  * Kayıt allowlist'i SEKME BAŞINA (anahtar `rolls:<sekme>`): sekmenin bütün tanımları + Fire; Bitmiş
