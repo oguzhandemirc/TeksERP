@@ -1,4 +1,4 @@
-import { Package, Ruler, type LucideIcon } from "lucide-react";
+import { Handshake, Package, Ruler, type LucideIcon } from "lucide-react";
 import type { RollStats } from "./service";
 
 const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
@@ -31,7 +31,38 @@ export function RollsStats({
       <Stat icon={Package} value={NUM_FMT.format(data.totalCount)} unit="top" />
       <Divider />
       <Stat icon={Ruler} value={DEC_FMT.format(data.totalQty)} unit="m" />
+      <ConsignedShare data={data} />
     </div>
+  );
+}
+
+/**
+ * "Bunun X m'si emanet" — toplamın müşteri malı kısmı (aynı where ∧ emanet; sunucu yalnız emanet açıkken yollar).
+ * Emanet yoksa çizilmez; toplamın tamamı emanetse (Mülkiyet: Emanet) "tamamı emanet" der.
+ */
+export function ConsignedShare({ data }: { data: RollStats }) {
+  const c = data.consigned;
+  if (!c || c.count === 0) return null;
+  const all = c.count === data.totalCount;
+  return (
+    <>
+      <Divider />
+      <span
+        className="flex items-center gap-1 text-[11px] text-muted-foreground"
+        title={`Bu toplamın ${NUM_FMT.format(c.count)} topu / ${DEC_FMT.format(c.qty)} m'si müşterinin malı (emanet); fabrikanın stoğu değildir.`}
+        data-testid="rolls-stats-consigned"
+      >
+        <Handshake className="h-3.5 w-3.5 text-amber-600" />
+        {all ? (
+          <span>tamamı emanet</span>
+        ) : (
+          <span>
+            bunun <b className="font-semibold text-foreground tabular-nums">{DEC_FMT.format(c.qty)}</b> m'si emanet
+            <span className="tabular-nums"> ({NUM_FMT.format(c.count)} top)</span>
+          </span>
+        )}
+      </span>
+    </>
   );
 }
 
