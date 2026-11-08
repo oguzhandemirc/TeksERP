@@ -10,7 +10,7 @@ import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse } from "../../types/api.types";
-import { isOrderlessWorkOrderType } from "../helpers/workorder-customer-goods.helper";
+import { customerGoodsMaterialWarning, isOrderlessWorkOrderType } from "../helpers/workorder-customer-goods.helper";
 import {
   WorkOrderStatus,
   type MaterialProvider,
@@ -100,6 +100,8 @@ export async function update(
       data.targetColorId !== undefined &&
       (wo.targetColorId ?? null) !== (data.targetColorId ?? null);
     const colorWarnings: string[] = [];
+    const materialWarning = customerGoodsMaterialWarning(wo.type, data.materialProvidedBy);
+    if (materialWarning) colorWarnings.push(materialWarning);
 
     // Kat katalog doğrulaması — kilit karşılaştırmalarından ÖNCE kanonikleştir.
     // Sonra yapılsaydı "tüp" gönderen istemci, WO'da "TÜP" dururken alanı

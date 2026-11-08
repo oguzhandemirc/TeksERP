@@ -10,16 +10,22 @@
 //   §5 gövde sözleşmesi: create · PATCH · PUT Zod şemalarının üçü de alanı TANIR (istemci gövdesi sessiz
 //      allowlist; tanımayan şema alanı siler) ve aynı enum şemasını kullanır
 //   §6 Zod enum şeması geçersiz değeri reddeder, üç değeri + null'ı kabul eder
+//   §7 parti ayırma (NEW_COLOR → yeni İE, `cloneWorkOrderTx`) alanı kaynaktan KOPYALAR (inceleme ORTA-1)
+//   §8 quickStart (top okutarak açılan İE) alanı yazar
+//   §9 Fason (müşteri malı) türüne US yazılınca `warnings`te Türkçe uyarı — ENGEL DEĞİL; diğer değer/türde uyarı yok
 // NEGATİF SONDALAR (2026-11-08): replace yazımı `data.materialProvidedBy ?? null` yapılınca §2 ❌ ·
 // update yazımından alan silinince §4 ❌ · PUT şemasından alan silinince §5 ❌ ·
-// izlenen alan kümesinden (`WORK_ORDER_TRACKED_FIELDS`) çıkarılınca §3/§4 defter ❌.
+// izlenen alan kümesinden (`WORK_ORDER_TRACKED_FIELDS`) çıkarılınca §3/§4 defter ❌ ·
+// klon yazımından `materialProvidedBy: src.materialProvidedBy` silinince §7 ❌ · uyarı helper'ı hep null dönünce §9 ❌.
 // =============================================================================
 
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import prisma, { pool } from "../src/lib/prisma";
+import { RollStatus } from "@prisma/client";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { roleGrade } from "./fixture-quality-grade";
 import { MATERIAL_PROVIDERS } from "../src/constants/material-provider";
 import { ensureTestAdmin } from "./fixture-test-user";
 
@@ -32,8 +38,10 @@ function check(label: string, cond: boolean, extra = ""): void {
   else { fail++; console.log(`  ✗ FAIL: ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
-let ITEM = "", ADMIN = "", ST_FASON = "", ST_TAMBUR = "";
+let ITEM = "", ADMIN = "", ST_FASON = "", ST_TAMBUR = "", CAT_BOYA = "", COLOR = "", COLOR2 = "";
 const woIds: string[] = [];
+const rollBarcodes: string[] = [];
+const customerIds: string[] = [];
 
 async function fikstur(): Promise<void> {
   const need = <T,>(v: T | null, label: string): T => {
@@ -44,6 +52,16 @@ async function fikstur(): Promise<void> {
   ADMIN = (await ensureTestAdmin()).id;
   ST_FASON = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON").id;
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1").id;
+  CAT_BOYA = need(await prisma.subcontractorCategory.findFirst({ where: { code: "BOYA" }, select: { id: true } }), "kategori BOYA").id;
+  COLOR = need(await prisma.color.findFirst({ where: { code: "MAVI" }, select: { id: true } }), "renk MAVI").id;
+  COLOR2 = need(await prisma.color.findFirst({ where: { code: { not: "MAVI" }, isActive: true }, orderBy: { code: "asc" }, select: { id: true } }), "ikinci renk").id;
+}
+
+async function yeniTop(gradeId: string, gradeCode: string): Promise<string> {
+  const barcode = `${TAG}-R${rollBarcodes.length + 1}`;
+  await prisma.roll.create({ data: { barcode, itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: gradeCode, qualityGradeId: gradeId, width: 180, createdById: ADMIN } });
+  rollBarcodes.push(barcode);
+  return barcode;
 }
 
 const STEPS = () => [{ stationId: ST_FASON }, { stationId: ST_TAMBUR }];
@@ -137,6 +155,49 @@ async function main(): Promise<void> {
     check("§6 geçersiz değer reddedilir ('SUPPLIER', 'us')", !sema.safeParse("SUPPLIER").success && !sema.safeParse("us").success);
     check("§6 üç değer + null + yok kabul", ["CUSTOMER", "US", "MIXED", null, undefined].every((v) => sema.safeParse(v).success));
     check("§6 kontrolcü şeması aynı listeden kurulur", /z\.enum\(MATERIAL_PROVIDERS\b/.test(ctrl));
+
+    // §7 — parti ayırma: boyanıp Tambur'a gelmiş partinin yarısı farklı renge yeni İE'ye.
+    const g = await roleGrade("FIRST");
+    const src = await prisma.workOrder.create({
+      data: {
+        workOrderNumber: `${TAG}-SPL`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", width: 180, targetQuantity: 1000,
+        targetItemId: ITEM, targetColorId: COLOR, materialProvidedBy: "US",
+        steps: { create: [{ stationId: ST_FASON, stepSequence: 1, status: "PENDING", requiredCategoryId: CAT_BOYA }, { stationId: ST_TAMBUR, stepSequence: 2, status: "PENDING" }] },
+      },
+      include: { steps: { orderBy: { stepSequence: "asc" }, select: { id: true } } },
+    });
+    woIds.push(src.id);
+    await prisma.travelerCard.create({ data: { cardNumber: src.workOrderNumber, barcode: src.workOrderNumber, workOrderId: src.id, version: 1, status: "ACTIVE" } });
+    const bcs = [await yeniTop(g.id, g.code), await yeniTop(g.id, g.code), await yeniTop(g.id, g.code), await yeniTop(g.id, g.code)];
+    const batchId = (await svc.attachRolls(src.id, bcs, ADMIN)).data!.batch!.id;
+    await prisma.roll.updateMany({ where: { batchId }, data: { currentStepId: src.steps[1].id, colorId: COLOR, status: RollStatus.IN_PRODUCTION } });
+    const half = (await prisma.roll.findMany({ where: { batchId }, orderBy: { barcode: "asc" }, select: { id: true } })).slice(0, 2).map((r) => r.id);
+    const split = (await svc.splitBranch(src.id, { batchId, mode: "NEW_COLOR", newColorId: COLOR2, rollIds: half, reason: "TEST F7b" }, ADMIN)).data as { newWorkOrderId: string };
+    woIds.push(split.newWorkOrderId);
+    check("§7 parti ayırmanın yeni İE'si kaynağın değerini taşır (US)", (await deger(split.newWorkOrderId)) === "US", String(await deger(split.newWorkOrderId)));
+
+    // §8 — quickStart (top okutarak).
+    const qs = await svc.quickStart({ type: "STOCK_PRODUCTION", targetItemId: ITEM, width: 180, steps: STEPS(), rollBarcodes: [await yeniTop(g.id, g.code)], materialProvidedBy: "CUSTOMER" } as never, ADMIN);
+    const qsWo = (qs.data as { workOrder: { id: string } }).workOrder.id;
+    woIds.push(qsWo);
+    check("§8 quickStart alanı yazar (CUSTOMER)", (await deger(qsWo)) === "CUSTOMER", String(await deger(qsWo)));
+
+    // §9 — Fason (müşteri malı) + US ⇒ uyarı, engel yok.
+    const cust = await prisma.customer.create({ data: { code: `TWM${Date.now().toString().slice(-8)}`, name: `TEST-WOMAT ${TAG}`, isCustomerRole: true }, select: { id: true } });
+    customerIds.push(cust.id);
+    const uyariVar = (w: unknown) => Array.isArray(w) && w.some((x) => typeof x === "string" && x.includes("Bu fabrika verdi"));
+    const cg = await svc.create({ type: "CUSTOMER_GOODS_SERVICE", targetItemId: ITEM, width: 180, steps: STEPS(), customerId: cust.id, materialProvidedBy: "US" }, ADMIN);
+    const cgId = (cg.data as { id: string }).id;
+    woIds.push(cgId);
+    check("§9 create Fason + US ⇒ yazılır + uyarı", (await deger(cgId)) === "US" && uyariVar(cg.warnings), JSON.stringify(cg.warnings));
+    const cgPatch = await svc.update(cgId, { materialProvidedBy: "US" }, ADMIN);
+    check("§9 PATCH Fason + US ⇒ uyarı", uyariVar(cgPatch.warnings), JSON.stringify(cgPatch.warnings));
+    const cgPut = await svc.replace(cgId, { type: "CUSTOMER_GOODS_SERVICE", targetItemId: ITEM, width: 180, steps: STEPS(), customerId: cust.id, materialProvidedBy: "US" } as ReplaceInput, ADMIN);
+    check("§9 PUT Fason + US ⇒ uyarı", uyariVar(cgPut.warnings), JSON.stringify(cgPut.warnings));
+    const cgCust = await svc.update(cgId, { materialProvidedBy: "CUSTOMER" }, ADMIN);
+    const stUs = await svc.create({ type: "STOCK_PRODUCTION", targetItemId: ITEM, width: 180, steps: STEPS(), materialProvidedBy: "US" }, ADMIN);
+    woIds.push((stUs.data as { id: string }).id);
+    check("§9 Fason + CUSTOMER ve Stok + US ⇒ uyarı YOK", !uyariVar(cgCust.warnings) && !uyariVar(stUs.warnings), JSON.stringify([cgCust.warnings, stUs.warnings]));
   } finally {
     await temizle();
   }
@@ -147,6 +208,15 @@ async function main(): Promise<void> {
 }
 
 async function temizle(): Promise<void> {
+  // Ayırma klonları kaynağa splitFromId ile bağlı; toplar/partiler/hareketler İE'lerden önce.
+  const batchIds = (await prisma.batch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })).map((b) => b.id);
+  const rollIds = (await prisma.roll.findMany({ where: { OR: [{ batchId: { in: batchIds } }, { barcode: { in: rollBarcodes } }] }, select: { id: true } })).map((r) => r.id);
+  await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  await prisma.batch.deleteMany({ where: { id: { in: batchIds }, splitFromId: { not: null } } });
+  await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...batchIds] } } });
   const cards = await prisma.travelerCard.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } });
   const cardIds = cards.map((c) => c.id);
   const stepIds = (await prisma.workOrderStep.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })).map((x) => x.id);
@@ -154,7 +224,9 @@ async function temizle(): Promise<void> {
   await prisma.travelerCard.deleteMany({ where: { id: { in: cardIds } } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...woIds, ...stepIds] } } });
   await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
+  await prisma.workOrder.deleteMany({ where: { id: { in: woIds }, splitFromId: { not: null } } });
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
+  await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
 }
 
 main().catch(async (e) => {
