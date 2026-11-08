@@ -14,6 +14,7 @@ import { AuditService } from "../audit.service";
 import { assertServiceItemUsableTx } from "../helpers/item-usage.helper";
 import { lockAgainstMergeTx } from "../helpers/master-data-live.helper";
 import { SERVICE_ITEM_TABLE } from "../helpers/service-item-lifecycle.helper";
+import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 
 export interface ServiceProcessRow {
   categoryId: string;
@@ -80,7 +81,7 @@ export async function replaceServiceItemProcesses(serviceItemId: string, categor
       before = current.map((r) => r.categoryId).sort();
       const added = want.filter((id) => !before.includes(id));
       if (added.length > 0) await assertServiceItemUsableTx(tx, serviceItemId, "DEFINITION");
-      const taken = added.length === 0 ? [] : await tx.serviceItemProcess.findMany({
+      const taken = added.length === 0 ? [] : await sequentialTx(tx).serviceItemProcess.findMany({
         where: { categoryId: { in: added }, serviceItemId: { not: serviceItemId } },
         select: { categoryId: true, category: { select: { name: true } }, serviceItem: { select: { name: true } } },
       });
