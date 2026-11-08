@@ -3,7 +3,7 @@
 // iki istek → idempotent "cached makbuz" yerine YANILTICI 409
 // ("Barkod üretimi 5 denemede başarısız oldu") + 5 boşa tx.
 //
-// Kök: token kontrolü (`subcontractor.service.ts:2350`) tx DIŞINDA (havuz);
+// Kök: token kontrolü (`subcontractor/receive.ts` receive) tx DIŞINDA (havuz);
 // `subcontractorReceipt.create` (clientToken @unique) roll claim'lerinden ÖNCE;
 // tüm gövde `withBarcodeRetry` içinde ve o helper'a HİÇBİR çağrı yerinde
 // `isRetryable` predicate'i verilmiyor (28/28) → kalıcı iş-anahtarı P2002'si
