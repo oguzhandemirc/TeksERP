@@ -84,7 +84,7 @@ rapor isteği işleyicisi (zil rapor + her turda yoklama)
 - Değişiklik kaynakları: `items`.updatedAt (self)
 - Yalnız ürün kartı (katalog v2, hizmet kartı D3 2026-11-08): hizmet kartı `hizmet` boyutunda; v1'de buraya giden hizmet satırlarını TAM süpürmesi düşürür.
 
-#### `hizmet` — BOYUT · kök `service_items` (ServiceItem) · izin `bulut:oturum` · silme **DAMGA**
+#### `hizmet` — BOYUT · kök `service_items` (ServiceItem) · izin `bulut:oturum` · silme **YOK** (yaşam döngüsü pasife alır; tetikleyici kurulu)
 - Kolonlar (tel ← kaynak): `id`←id · `kod`←code · `ad`←name · `birim`←unit · `yasamDurumu`←lifecycleStatus · `aktif`←isActive · `birlestigiKayit`←mergedIntoId
 - Değişiklik kaynakları: `service_items`.updatedAt (self)
 

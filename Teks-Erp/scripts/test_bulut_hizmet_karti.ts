@@ -8,7 +8,8 @@
 //      ürün kartı `urun`da bugünkü gibi
 //   §2 ⭐ `fiyat` / `fatura-kalemi`: hizmet satırında `hizmetId = serviceItemId`, `urunId = null`; ürün satırında (eski
 //      satır, serviceItemId NULL) `urunId = itemId`, `hizmetId = null`, `satirTipi = PRODUCT`; açıklama satırı ikisi boş
-//   §3 silme işareti: `service_items` silmesi `hizmet`te SILINDI; `urun` `service_items` işaretini görmez
+//   §3 silme işareti: `service_items` silmesi (kodda yolu yok → katalog `YOK`; tetik kurulu) `hizmet`te SILINDI;
+//      `urun` `service_items` işaretini görmez
 //   §4 uzlaştırma kümeleri ayrık: `urun` yalnız ürün, `hizmet` yalnız hizmet
 //   §5 migration: `items` SERVICE silmesi tetik KAPALIYKEN (buluta mezar yazmaz); iki tetik etkin
 //   §6 ⭐ hizmet kartı ad değişikliği ve pasife alma → `hizmet` kirli (SILINDI değil, mezar yok), `urun` kirli DEĞİL
@@ -141,7 +142,7 @@ async function main(): Promise<void> {
     const uu = urows.find((r) => r.id === ids.item);
     check("§1d ürün kartı `urun`da bugünkü gibi (tur FABRIC)", uu?.tur === "FABRIC" && uu?.ad === `TST BHK KUMAS ${D}`, JSON.stringify(uu));
     check("§1e `urun` kaynakları `service_items` İÇERMEZ; `hizmet` kökü `service_items`",
-      !urun.sources.some((x) => x.table === "service_items") && hizmet.root.table === "service_items" && hizmet.permission === "bulut:oturum" && hizmet.deletion === "DAMGA");
+      !urun.sources.some((x) => x.table === "service_items") && hizmet.root.table === "service_items" && hizmet.permission === "bulut:oturum" && hizmet.deletion === "YOK");
 
     console.log("\n── §2 fiyat / fatura kalemi ──");
     const f = await buildRecords(proj("fiyat"), [ids.svcPrice, ids.itemPrice], Date.now());

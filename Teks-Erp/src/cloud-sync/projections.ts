@@ -28,7 +28,8 @@ const DIMENSIONS: readonly RecordProjection[] = [
     name: "hizmet", kind: "KAYIT", role: "BOYUT", root: { table: "service_items", model: "ServiceItem" },
     columns: [col("id", "id"), col("kod", "code"), col("ad", "name"), col("birim", "unit"),
       col("yasamDurumu", "lifecycleStatus"), col("aktif", "isActive"), col("birlestigiKayit", "mergedIntoId")],
-    derived: [], sources: [self("service_items")], deletion: "DAMGA", permission: "bulut:oturum", catalogVersion: 1,
+    // Hizmet kartı hard delete edilmez (yaşam döngüsü pasife alır); tetikleyici yine kurulu (`service_items_sync_deleted`).
+    derived: [], sources: [self("service_items")], deletion: "YOK", permission: "bulut:oturum", catalogVersion: 1,
   },
   {
     name: "renk", kind: "KAYIT", role: "BOYUT", root: { table: "colors", model: "Color" },

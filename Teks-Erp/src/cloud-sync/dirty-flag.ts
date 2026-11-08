@@ -24,8 +24,6 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   machine_cost_rates: "MachineCostRate",
   payment_allocations: "PaymentAllocation",
   roll_movements: "RollMovement",
-  // `urun`un ek kökü (hizmet kartı, aynı UUID uzayı) — değişiklik kaynağı olarak beyanlı.
-  service_items: "ServiceItem",
   roll_returns: "RollReturn",
   rolls: "Roll",
   service_billing_links: "ServiceBillingLink",
