@@ -47,5 +47,5 @@ export function ServiceProcessesCell({ item }: { item: ServiceItem }) {
 export function CategoryServiceCell({ categoryId }: { categoryId: string }) {
   const map = useProcessMap();
   const row = serviceOfCategory(categoryId, map.data ?? []);
-  return row ? <span className="text-sm">{row.serviceItemName}</span> : <span className="text-muted-foreground">—</span>;
+  return row ? <span className="whitespace-nowrap text-sm">{row.serviceItemName}</span> : <span className="text-muted-foreground">—</span>;
 }

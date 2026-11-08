@@ -69,10 +69,17 @@ export function CockpitTable({ rows }: { rows: SubcontractorCockpitRow[] }) {
                   <Badge variant="outline" className={cn("text-[10px]", TONE_BADGE[tone])}>{dueText(r)}</Badge>
                 </div>
               </td>
-              <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">{fmtQty(r.dispatchedQty)} m</td>
+              {/* İplik/levent sevkinde kumaş metresi yoktur — "0 m · 0 top" yerine boş geçilir. */}
+              <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">{Number(r.dispatchedQty) > 0 ? `${fmtQty(r.dispatchedQty)} m` : "—"}</td>
               <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                {fmtQty(r.outstandingQty)} m
-                <span className="block text-xs text-muted-foreground">{r.outstandingRollCount} top</span>
+                {Number(r.dispatchedQty) > 0 ? (
+                  <>
+                    {fmtQty(r.outstandingQty)} m
+                    <span className="block text-xs text-muted-foreground">{r.outstandingRollCount} top</span>
+                  </>
+                ) : (
+                  "—"
+                )}
               </td>
               <td className="px-3 py-2 text-xs"><ExtraBalance r={r} /></td>
             </tr>

@@ -15,7 +15,7 @@ export function ServiceWorksBreakdown({ rows, currency }: { rows: readonly Servi
   if (!rows || rows.length === 0) return null;
   const sum = summarizeServiceWorks(rows);
   return (
-    <div className="rounded-md border text-xs">
+    <div className="border-t text-xs">
       <button
         type="button"
         className="flex w-full items-center gap-1 px-3 py-2 text-left font-medium hover:bg-muted/50"

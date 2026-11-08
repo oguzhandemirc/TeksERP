@@ -1,6 +1,6 @@
 // Özet şeridi + firma şeridi: sunucu özeti listeyle AYNI where'den; firma çipi tıklanınca firma süzgeci olur.
 import { cn } from "@/lib/utils";
-import { fmtQty } from "./cockpit-labels";
+import { balanceText, fmtQty } from "./cockpit-labels";
 import type { SubcontractorCockpitResult } from "./types";
 
 type Summary = SubcontractorCockpitResult["summary"];
@@ -42,7 +42,7 @@ export function CockpitFirmStrip({ summary, selectedId, onSelect }: { summary: S
             className={cn("shrink-0 rounded-md border px-2.5 py-1 text-left text-xs transition-colors hover:bg-muted/50", active && "border-primary bg-primary/5")}
           >
             <span className="font-medium">{f.subcontractor.name}</span>
-            <span className="ml-1.5 tabular-nums text-muted-foreground">{f.openDispatchCount} sevk · {fmtQty(f.outstandingQty)} m</span>
+            <span className="ml-1.5 tabular-nums text-muted-foreground">{f.openDispatchCount} sevk · {balanceText(f)}</span>
             {f.overdueCount > 0 && <span className="ml-1.5 font-medium text-destructive">{f.overdueCount} geciken</span>}
           </button>
         );

@@ -20,7 +20,7 @@ vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => ge
 
 const { FasonCockpitPage, FASON_COCKPIT_PATH, FASON_COCKPIT_PERMISSIONS } = await import("../FasonCockpitPage");
 const { cockpitParams } = await import("../service");
-const { dueTone, dueText } = await import("../cockpit-labels");
+const { balanceText, dueTone, dueText } = await import("../cockpit-labels");
 const { operationsTiles } = await import("../../tile-config");
 
 const row = (o: Record<string, unknown>) => ({
@@ -89,5 +89,11 @@ describe("Fason Kokpiti", () => {
     expect(routes).toMatch(/path: "operations\/fason-kokpiti",[\s\S]{0,120}requireAnyPermission=\{\["subcontractor:read", "workorder:read"\]\}/);
     const katalog = readFileSync(resolve(process.cwd(), "../Teks-Erp/src/constants/screen-catalog.ts"), "utf8");
     expect(katalog).toContain('key: "operations/fason-kokpiti", app: "desktop", modul: "planlanan:fason", title: "Fason Kokpiti", requires: ["subcontractor:read", "workorder:read"]');
+  });
+
+  it("bakiye metni: yalnız iplik/levent bakiyeli firmada \"0 m\" yazılmaz", () => {
+    expect(balanceText({ outstandingQty: "0", yarnOutstandingKg: "12.5", beamOutstandingCount: 1 })).toBe("12,5 kg iplik · 1 levent");
+    expect(balanceText({ outstandingQty: "400", yarnOutstandingKg: "0", beamOutstandingCount: 0 })).toBe("400 m");
+    expect(balanceText({ outstandingQty: "0", yarnOutstandingKg: "0", beamOutstandingCount: 0 })).toBe("0 m");
   });
 });

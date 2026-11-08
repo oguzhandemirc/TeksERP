@@ -28,3 +28,12 @@ export function dueText(r: Pick<SubcontractorCockpitRow, "overdueDays">): string
 
 export const fmtQty = (v: string | number, digits = 0): string =>
   Number(v).toLocaleString("tr-TR", { maximumFractionDigits: digits });
+
+/** Firma/satır bakiyesi tek metin: kumaş metresi; yalnız iplik/levent bakiyesi varsa "0 m" yerine onlar yazılır. */
+export function balanceText(b: { outstandingQty: string; yarnOutstandingKg: string; beamOutstandingCount: number }): string {
+  const parts: string[] = [];
+  if (Number(b.outstandingQty) > 0) parts.push(`${fmtQty(b.outstandingQty)} m`);
+  if (Number(b.yarnOutstandingKg) > 0) parts.push(`${fmtQty(b.yarnOutstandingKg, 1)} kg iplik`);
+  if (b.beamOutstandingCount > 0) parts.push(`${b.beamOutstandingCount} levent`);
+  return parts.length > 0 ? parts.join(" · ") : "0 m";
+}
