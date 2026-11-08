@@ -24,7 +24,7 @@ type Db = Prisma.TransactionClient;
 const ITEM_SELECT = {
   id: true, kind: true, warpBeamId: true, lengthM: true, yarnItemId: true, warehouseId: true, lotId: true, qtyKg: true,
   warpBeam: { select: { beamNo: true, status: true } },
-  yarnItem: { select: { code: true } },
+  yarnItem: { select: { code: true, name: true } },
   warehouse: { select: { name: true } },
   lot: { select: { lotNo: true } },
   warpBeamEvents: { where: { kind: "SHIP_TO_OWNER" }, select: { id: true, lengthM: true } },
@@ -76,7 +76,8 @@ async function inspectCancel(db: Db, id: string, opts: { lock: boolean }): Promi
       }
     } else {
       yarnItems.push(it);
-      affected.push({ kind: "YARN", refId: it.lotId ?? it.id, label: `${it.yarnItem?.code ?? "?"} · lot ${it.lot?.lotNo ?? "?"} · ${it.warehouse?.name ?? "?"}`, qty: (it.qtyKg ?? new Prisma.Decimal(0)).toFixed(3), unit: "KG" });
+      // Etiket belge detayı ve formla aynı biçim (lot · iplik adı · depo) — iptal onayında aynı kalem tanınsın.
+      affected.push({ kind: "YARN", refId: it.lotId ?? it.id, label: `Lot ${it.lot?.lotNo ?? "?"} · ${it.yarnItem?.name ?? it.yarnItem?.code ?? "?"} · ${it.warehouse?.name ?? "?"}`, qty: (it.qtyKg ?? new Prisma.Decimal(0)).toFixed(3), unit: "KG" });
     }
   }
   // F4 bağ okuyucusu TEK (`service-winding-link.helper`): önizleme ve iptal aynı listeyi görür.
