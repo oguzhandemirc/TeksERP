@@ -198,8 +198,9 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
   }
   await assertWindingLinksLiveTx(tx, links);
   for (const l of links) {
-    const subject = l.warpBeamId ? { warpBeamId: l.warpBeamId } : { rollId: l.rollId };
-    const prior = await findActiveBillingTx(tx, { ...subject, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId });
+    // Levent TEK sarım işidir: anahtar yalnız levent (süreç türü/kart değişse de ikinci kez faturalanmaz; levent kilit altında).
+    const key = l.warpBeamId ? { warpBeamId: l.warpBeamId } : { rollId: l.rollId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId };
+    const prior = await findActiveBillingTx(tx, key);
     if (prior) throw alreadyBilled(prior.docNo);
   }
   try {

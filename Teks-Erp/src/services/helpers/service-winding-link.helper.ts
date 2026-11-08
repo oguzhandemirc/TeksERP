@@ -10,6 +10,7 @@ import { InvoiceStatus, Prisma, ServiceBillingSubject } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { activeShipToOwnerWhere } from "./service-winding-work.helper";
+import { reconcileServiceLinksWithLines } from "./service-billing.helper";
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | typeof prisma;
@@ -80,22 +81,23 @@ export async function revokeWindingLinksForConsignmentTx(tx: Tx, p: { warpBeamId
 }
 
 /**
- * Onay kapısı: emanet çıkış iptaliyle bağı düşen hizmet kartının satırı taslakta kaldıysa (Σ satır ≠ Σ aktif bağ)
- * 409 `SERVICE_LINES_MISMATCH` — iptal edilen çıkışın sarımı müşteriye kesilmesin.
+ * Onay kapısı: emanet çıkış iptaliyle bağı düşen hizmet kartının satırı taslakta kaldıysa (Σ satır ≠ Σ aktif bağ,
+ * ortak `reconcileServiceLinksWithLines` payıyla) 409 `SERVICE_LINES_MISMATCH` — iptal edilen çıkışın sarımı
+ * müşteriye kesilmesin. Yalnız damgalı kartlar ölçülür.
  */
 export async function assertNoConsignmentRevokedLinesTx(tx: Tx, invoiceId: string): Promise<void> {
   const revoked = await tx.serviceBillingLink.findMany({ where: { invoiceId, revokeReason: CONSIGNMENT_CANCEL_REVOKE_REASON }, select: { serviceItemId: true }, distinct: ["serviceItemId"] });
   if (revoked.length === 0) return;
-  for (const { serviceItemId } of revoked) {
-    const lines = await tx.invoiceLine.aggregate({ where: { invoiceId, serviceItemId }, _sum: { qty: true } });
-    const active = await tx.serviceBillingLink.aggregate({ where: { invoiceId, serviceItemId, revokedAt: null }, _sum: { billedMeters: true } });
-    const lineQty = lines._sum.qty ?? new Prisma.Decimal(0);
-    const linkQty = active._sum.billedMeters ?? new Prisma.Decimal(0);
-    if (lineQty.minus(linkQty).abs().gt(new Prisma.Decimal(0.01))) {
-      throw AppError.conflict(
-        `Sarım işi emanet çıkış iptaliyle faturadan düştü ama satırı taslakta duruyor (${lineQty.toFixed(3)} m ≠ ${linkQty.toFixed(3)} m) — satırı düzeltin ya da çıkarın.`,
-        { code: "SERVICE_LINES_MISMATCH", serviceItemId },
-      );
-    }
+  const itemIds = revoked.map((r) => r.serviceItemId);
+  const lines = await tx.invoiceLine.findMany({ where: { invoiceId, serviceItemId: { in: itemIds } }, select: { serviceItemId: true, qty: true, description: true } });
+  const active = await tx.serviceBillingLink.findMany({ where: { invoiceId, serviceItemId: { in: itemIds }, revokedAt: null }, select: { serviceItemId: true, billedMeters: true, billedQty: true } });
+  // Kartın bütün bağları düştüyse satırı hiç kalmamalı (reconcile bağsız kartı ölçmez).
+  const orphan = lines.find((l) => !active.some((a) => a.serviceItemId === l.serviceItemId) && new Prisma.Decimal(l.qty).gt(0));
+  if (orphan) {
+    throw AppError.conflict(
+      `"${orphan.description ?? "Sarım"}" satırının işi emanet çıkış iptaliyle faturadan düştü ama satır taslakta duruyor — satırı çıkarın.`,
+      { code: "SERVICE_LINES_MISMATCH", serviceItemId: orphan.serviceItemId },
+    );
   }
+  reconcileServiceLinksWithLines(lines, active);
 }

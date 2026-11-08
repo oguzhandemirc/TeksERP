@@ -7,9 +7,11 @@
 // (WARP_BEAM, adımsız); yalnız DÖNEM taslağında görünür (top sevk taslağı bu dosyayı çağırmaz).
 // Metre: sarım metresi (`windingMetersByBeam`, WOUND ± WOUND_CANCEL — tek okuyucu); hizmet anı = belge
 // `dispatchedAt`; kart: WOUND makinesinin istasyonunun süreç türü → `service_item_processes` (F3 ile tek kaynak).
-// Bizde sarılmamış (fason/satın alma, makinesiz) levent iş değildir — sayılır, çağıran uyarır.
+// Bizde sarılmamış (fason/satın alma, makinesiz) levent iş değildir — uyarısız; yalnız BİZİM sardığımız ama süreç
+// türü eşlenmemiş levent sayılır (çağıran uyarır). Levent TEK sarım işidir: faturalı anahtarı yalnız levent (kart değil).
 // =============================================================================
 import { Currency, InvoiceLineType, PriceKind, Prisma, ServiceMeterBasis } from "@prisma/client";
+import { factoryYmd } from "../../constants/time";
 import prisma from "../../lib/prisma";
 import { resolveItemPricesFor } from "../item-price.service";
 import { loadServiceTierPrices, pickServicePrice, tierMissingWarning } from "./service-price-pick.helper";
@@ -51,7 +53,7 @@ export interface WindingWork {
 
 export interface WindingWorkList {
   works: WindingWork[];
-  /** Bizde sarılmamış (makinesiz WOUND) ya da süreç türü eşlenmemiş leventler. */
+  /** Bizim makinemizde sarılmış ama devere istasyonunun süreç türü eşlenmemiş leventler (makinesiz levent sayılmaz). */
   unmappedCount: number;
   zeroMeterCount: number;
 }
@@ -72,9 +74,13 @@ export async function listWindingServiceWorks(p: { customerId: string; from: Dat
   const processMap = await loadProcessMap(db);
   const byMachine = await processOfMachines(db, [...new Set(wound.map((w) => w.machineId).filter((v): v is string => v !== null))], processMap);
   const meters = await windingMetersByBeam(db, beamIds);
+  const seen = new Set<string>(); // levent tek sarım işi: birden çok aktif çıkışta ilki
   for (const s of ships) {
+    if (seen.has(s.beamId)) continue;
+    seen.add(s.beamId);
     const machineId = machineOf.get(s.beamId) ?? null;
-    const proc = machineId ? byMachine.get(machineId) : undefined;
+    if (!machineId) continue; // bizde sarılmamış: hizmet işi değil, uyarı da değil
+    const proc = byMachine.get(machineId);
     if (!proc) { out.unmappedCount++; continue; }
     const m = meters.get(s.beamId) ?? new Prisma.Decimal(0);
     if (m.lte(0)) { out.zeroMeterCount++; continue; }
@@ -85,14 +91,14 @@ export async function listWindingServiceWorks(p: { customerId: string; from: Dat
 
 /** Uyarı metinleri — bekçi aynı cümleyi arar. */
 export function windingUnmappedWarning(count: number): string {
-  return `${count} leventin sarımı bizde yapılmamış ya da devere istasyonunun süreç türü hizmet kartına eşlenmemiş — sarım işi faturaya alınmadı.`;
+  return `${count} leventin devere istasyonunun süreç türü hizmet kartına eşlenmemiş — sarım işi faturaya alınmadı.`;
 }
 export function windingZeroMeterWarning(count: number): string {
   return `${count} leventin sarım metresi bulunamadı — sarım işi faturaya alınmadı, leventi kontrol edin.`;
 }
 
 /**
- * Dönem taslağının levent kolu: sarım işleri → aktif bağı olan düşer → fiyat `pickServicePrice` sırasıyla (levent
+ * Dönem taslağının levent kolu: sarım işleri → aktif bağı olan levent düşer (kart değişse de: levent tek iş) → fiyat `pickServicePrice` sırasıyla (levent
  * işinde kademe/gram adayı yok; kartın kademe tablosu varsa fiyatsız + uyarı) → kart başına satır + bağ + kırılım.
  */
 export async function collectWindingServiceBilling(p: { customerId: string; currency: Currency; from: Date; to: Date; db?: Db }): Promise<ServiceBillingDraft & { billedCount: number; billedDocNo: string | null }> {
@@ -102,18 +108,20 @@ export async function collectWindingServiceBilling(p: { customerId: string; curr
   if (list.unmappedCount > 0) warnings.push(windingUnmappedWarning(list.unmappedCount));
   if (list.zeroMeterCount > 0) warnings.push(windingZeroMeterWarning(list.zeroMeterCount));
   const ids = [...new Set(list.works.map((w) => w.warpBeamId))];
-  const billed = ids.length === 0 ? [] : await db.serviceBillingLink.findMany({ where: { warpBeamId: { in: ids }, revokedAt: null }, select: { warpBeamId: true, serviceItemId: true, invoice: { select: { docNo: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  const billed = ids.length === 0 ? [] : await db.serviceBillingLink.findMany({ where: { warpBeamId: { in: ids }, revokedAt: null }, select: { warpBeamId: true, invoice: { select: { docNo: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
   const billedDocNo = billed[0]?.invoice.docNo ?? null;
-  const billedKeys = new Set(billed.map((b) => `${b.warpBeamId}:${b.serviceItemId}`));
-  const works = list.works.filter((w) => !billedKeys.has(`${w.warpBeamId}:${w.serviceItemId}`));
+  const billedBeams = new Set(billed.map((b) => b.warpBeamId));
+  const works = list.works.filter((w) => !billedBeams.has(w.warpBeamId));
   if (works.length === 0) return { lines: [], links: [], warnings, works: [], billedCount: billed.length, billedDocNo };
   const items = new Map((await db.serviceItem.findMany({ where: { id: { in: [...new Set(works.map((w) => w.serviceItemId))] } }, select: { id: true, code: true, name: true } })).map((i) => [i.id, i]));
-  const byAt = new Map<number, WindingWork[]>();
-  for (const w of works) byAt.set(w.serviceAt.getTime(), [...(byAt.get(w.serviceAt.getTime()) ?? []), w]);
+  // Fiyat günü (SERVICE_DAY = çıkış günü): fabrika günü başına TEK sorgu çifti; an = o günün son çıkışı (belirlenimli).
+  const byDay = new Map<string, WindingWork[]>();
+  for (const w of works) byDay.set(factoryYmd(w.serviceAt), [...(byDay.get(factoryYmd(w.serviceAt)) ?? []), w]);
   const price = new Map<WindingWork, Prisma.Decimal | null>();
   const tierMissing = new Map<string, number>();
-  for (const [at, group] of byAt) {
-    const itemIds = group.map((w) => w.serviceItemId);
+  for (const group of byDay.values()) {
+    const at = Math.max(...group.map((w) => w.serviceAt.getTime()));
+    const itemIds = [...new Set(group.map((w) => w.serviceItemId))];
     const prices = await resolveItemPricesFor({ itemIds, kind: PriceKind.SALE, currency: p.currency, customerId: p.customerId, asOf: new Date(at), db });
     const tiers = await loadServiceTierPrices({ itemIds, currency: p.currency, customerId: p.customerId, at: new Date(at), db });
     for (const w of group) {

@@ -20,7 +20,10 @@
 //      sevk taslağı kaynağı (`shipment-auto-draft`) sarım helper'ını ithal etmez
 //   §6 İptal: `cancel-preview` bağı listeler · iptal damgalar (silmez, sebep CONSIGNMENT_CANCEL) · damgalı satır kalan taslak onayı 409 ·
 //      onaylı faturadaki bağ → 409 CONSIGNMENT_BEAM_INVOICED (bağ yerinde) · önizlemeden sonra iptal edilen çıkış → 409 SERVICE_PREVIEW_STALE
-//   §7 Kilit: levent satırı F5 claim aynasıyla (UPDATE) tutulurken dönem taslağı BEKLER · kârlılık okuyucusu levent bağını sahibiyle okur
+//   §5 ek: bizde sarılmamış levent uyarısız; bizde sarılıp eşlenmemiş ve 0 metre uyarılı; hepsi faturalıyken 409 ALREADY_BILLED
+//   §6 ek: iptal → yeniden çıkış yeni bağ doğurur, eski taslak onayı yine 409 · kart değişince levent ikinci kez faturalanmaz
+//   §7 Kilit: levent satırı F5 claim aynasıyla (UPDATE) tutulurken dönem taslağı BEKLER · kârlılık okuyucusu levent bağını sahibiyle okur ·
+//      eşzamanlı iki dönem POST'u → tek taslak
 // Negatif sondalar (2026-11-08) harita satırında.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -34,7 +37,7 @@ import { testActorId } from "./fixture-test-user";
 import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pricing.helper";
 import { weavingUnmappedWarning } from "../src/services/helpers/service-weaving-work.helper";
 import { collectPeriodServiceBilling, collectServiceBillingDraft } from "../src/services/helpers/service-billing.helper";
-import { windingUnmappedWarning } from "../src/services/helpers/service-winding-work.helper";
+import { windingUnmappedWarning, windingZeroMeterWarning } from "../src/services/helpers/service-winding-work.helper";
 import { CONSIGNMENT_CANCEL_REVOKE_REASON, listWindingLinksForBeams, revokeWindingLinksForConsignmentTx } from "../src/services/helpers/service-winding-link.helper";
 import { createServicePeriodDraft, previewServicePeriodDraft } from "../src/services/service-period-invoice.service";
 import { invoiceService } from "../src/services/invoice.service";
@@ -243,13 +246,24 @@ async function main(): Promise<void> {
   section("§5 levent sarım işi — yalnız dönem taslağı");
   await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_WEAVING_WORKS, true);
   const bForeign = await mkBeam(200, { machineId: null, ship: true });
+  // Bizim makinemizde sarılmış ama devere türü eşlenmemiş levent + sarımı geri alınmış (0 m) levent → uyarılı düşer.
+  const devereBos = await mkStation("DEV2", StationKind.WARPING, null, { producesWarpBeam: true, allowAsWorkOrderStep: false });
+  const bUnm = await mkBeam(150, { machineId: devereBos.machineId, ship: true });
+  const bZero = await mkBeam(120, { machineId: devere.machineId, ship: true });
+  const woundZero = await prisma.warpBeamEvent.findFirstOrThrow({ where: { beamId: bZero.id, kind: "WOUND" }, select: { id: true } });
+  await prisma.warpBeamEvent.create({ data: { beamId: bZero.id, kind: "WOUND_CANCEL", fromStatus: "READY", toStatus: "READY", lengthM: 120, reversesEventId: woundZero.id } });
   const pv = await previewServicePeriodDraft({ cariId: cari.id, period });
   const beamLine = pv.lines.find((l) => l.serviceItemId === SARIM);
   check("önizleme: sarım satırı '(1 levent)', 500 m × 0,5", !!beamLine && /\(1 levent\)/.test(beamLine.description) && beamLine.qty === "500.000" && eq(beamLine.unitPrice, 0.5), JSON.stringify(pv.lines));
   const wrow = pv.serviceWorks?.find((w) => w.source === "WINDING");
   check("kırılım: WINDING · WARP_BEAM · levent no · WOUND · adımsız", !!wrow && wrow.subjectKind === "WARP_BEAM" && wrow.subjectId === b1.id && wrow.subjectCode === b1.beamNo && wrow.meterBasis === "WOUND" && wrow.workOrderStepId === null, JSON.stringify(wrow));
   check("çıkışı olmayan levent iş değil", !pv.serviceWorks?.some((w) => w.subjectId === bReady.id));
-  check("bizde sarılmamış (makinesiz) levent düşer + uyarı", !pv.serviceWorks?.some((w) => w.subjectId === bForeign.id) && pv.warnings.includes(windingUnmappedWarning(1)), JSON.stringify(pv.warnings));
+  check("bizde sarılmamış (makinesiz) levent iş değil ve UYARISIZ", !pv.serviceWorks?.some((w) => w.subjectId === bForeign.id) && !pv.warnings.includes(windingUnmappedWarning(2)), JSON.stringify(pv.warnings));
+  check("bizde sarılıp türü eşlenmemiş levent düşer + uyarı (1)", !pv.serviceWorks?.some((w) => w.subjectId === bUnm.id) && pv.warnings.includes(windingUnmappedWarning(1)), JSON.stringify(pv.warnings));
+  check("sarım metresi 0 olan levent düşer + uyarı", !pv.serviceWorks?.some((w) => w.subjectId === bZero.id) && pv.warnings.includes(windingZeroMeterWarning(1)), JSON.stringify(pv.warnings));
+  // Uyarı kaynaklarını kapat (çıkışlarını iptal) — "hepsi faturalı" ölçümü uyarısız zeminde.
+  await cancelDispatch(bUnm.id, bUnm.dispatch!);
+  await cancelDispatch(bZero.id, bZero.dispatch!);
   const autoDraftSrc = readFileSync(path.join(__dirname, "../src/services/helpers/shipment-auto-draft.helper.ts"), "utf8");
   check("sevk taslağı kaynağı sarım helper'ını ithal etmez (levent satırı sevk taslağına çıkmaz)", !/service-winding/.test(autoDraftSrc));
   const d1 = await createServicePeriodDraft({ cariId: cari.id, period, clientToken: randomUUID() }, actor);
@@ -259,6 +273,8 @@ async function main(): Promise<void> {
     !!link1 && link1.subjectKind === "WARP_BEAM" && link1.rollId === null && link1.meterBasis === "WOUND" && eq(link1.billedMeters, 500) && link1.workOrderStepId === null, JSON.stringify(link1));
   const pv2 = await previewServicePeriodDraft({ cariId: cari.id, period });
   check("faturalı levent tekrar toplanmaz (alreadyBilled ≥1, sarım satırı yok)", !pv2.lines.some((l) => l.serviceItemId === SARIM) && pv2.alreadyBilledWorkCount >= 1, JSON.stringify({ l: pv2.lines, a: pv2.alreadyBilledWorkCount }));
+  const again = await errOf(() => createServicePeriodDraft({ cariId: cari.id, period, clientToken: randomUUID() }, actor));
+  check("hepsi faturalı + yalnız makinesiz levent kaldı → 409 SERVICE_ALREADY_BILLED (400 EMPTY değil)", again.status === 409 && again.code === "SERVICE_ALREADY_BILLED", JSON.stringify(again));
 
   // ── §6 ───────────────────────────────────────────────────────────────────
   section("§6 çıkış iptali — damga, onay kapısı, faturalı engeli, bayat önizleme");
@@ -272,7 +288,30 @@ async function main(): Promise<void> {
   check("onay reddi taslağı DRAFT bırakır", (await prisma.invoice.findUnique({ where: { id: d1Id }, select: { status: true } }))?.status === "DRAFT");
   const pv3 = await previewServicePeriodDraft({ cariId: cari.id, period });
   check("iptal edilen çıkışın leventi iş değil", !pv3.serviceWorks?.some((w) => w.subjectId === b1.id));
+  // İptal → yeniden çıkış: yeni bağ doğar; eski taslak hâlâ onaylanamaz.
+  await shipToOwner(b1.id, 500);
+  const d1b = await createServicePeriodDraft({ cariId: cari.id, period, clientToken: randomUUID() }, actor);
+  const b1Links = await prisma.serviceBillingLink.findMany({ where: { warpBeamId: b1.id }, select: { invoiceId: true, revokedAt: true } });
+  check("yeniden çıkış → yeni taslakta yeni aktif bağ; eski bağ damgalı kalır",
+    b1Links.length === 2 && b1Links.some((l) => l.invoiceId === d1b.data!.id && l.revokedAt === null) && b1Links.some((l) => l.invoiceId === d1Id && l.revokedAt !== null), JSON.stringify(b1Links));
+  const conf2 = await errOf(() => invoiceService.confirm(d1Id, actor));
+  check("eski taslağın onayı yeniden çıkıştan sonra da 409 SERVICE_LINES_MISMATCH", conf2.status === 409 && conf2.code === "SERVICE_LINES_MISMATCH", JSON.stringify(conf2));
+  // Süreç türü / kart değişimi: levent TEK sarım işidir — başka kartla ikinci kez faturalanmaz.
+  const SARIM2 = await mkItem("SARIM2", ItemType.SERVICE, "0.7000");
+  const catSarim2 = await mkCat("SARIM2");
+  await serviceItemService.replaceProcesses(SARIM2, [catSarim2], actor);
+  await prisma.station.update({ where: { id: devere.stationId }, data: { defaultCategoryId: catSarim2 } });
+  const pvCard = await previewServicePeriodDraft({ cariId: cari.id, period });
+  check("kart değişti → faturalı levent yeniden toplanmaz (SARIM2 satırı yok)", !pvCard.lines.some((l) => l.serviceItemId === SARIM2) && !pvCard.serviceWorks?.some((w) => w.subjectId === b1.id), JSON.stringify(pvCard.lines));
+  const twice = await errOf(() => invoiceService.createDraft({
+    type: "SALES", customerId: cust.id, currency: Currency.TRY, clientToken: randomUUID(),
+    serviceLinks: [{ rollId: null, warpBeamId: b1.id, workOrderStepId: null, serviceItemId: SARIM2, readingId: null, billedMeters: new Prisma.Decimal(500), billedQty: null, billedUnit: null, meterBasis: "WOUND", unitPrice: new Prisma.Decimal(0.7), currency: Currency.TRY, serviceAt: new Date() }],
+    lines: [{ lineType: "SERVICE", itemId: null, serviceItemId: SARIM2, description: "Sarım 2", qty: 500, unit: "m", unitPrice: 0.7 }] as never,
+  }, actor));
+  check("aynı levent başka kartla doğrudan → 409 SERVICE_ALREADY_BILLED (anahtar yalnız levent)", twice.status === 409 && twice.code === "SERVICE_ALREADY_BILLED", JSON.stringify(twice));
+  await prisma.station.update({ where: { id: devere.stationId }, data: { defaultCategoryId: catSarim } });
   await invoiceService.deleteDraft(d1Id, actor);
+  await invoiceService.deleteDraft(d1b.data!.id, actor);
   // Onaylı faturadaki bağ: iptal 409, bağ yerinde.
   const b2 = await mkBeam(400, { machineId: devere.machineId, ship: true });
   const d2 = await createServicePeriodDraft({ cariId: cari.id, period, clientToken: randomUUID() }, actor);
@@ -318,6 +357,15 @@ async function main(): Promise<void> {
   const rev = await readServiceRevenueInvoices(new Date(Date.now() - 86400_000), new Date(Date.now() + 86400_000));
   const beamRow = rev.find((i) => i.id === d4Id)?.links.find((l) => l.warpBeamId === b4.id);
   check("kârlılık okuyucusu levent bağını okur (rollId null, sahip = leventin sahibi)", !!beamRow && beamRow.rollId === null && beamRow.ownerCustomerId === cust.id && eq(beamRow.billedMeters, 600), JSON.stringify(beamRow));
+  // Eşzamanlı iki dönem POST'u (ayrı token): levent satır kilidi + kilit altı kapı → tek taslak, tek aktif bağ.
+  const b5 = await mkBeam(350, { machineId: devere.machineId, ship: true });
+  const race = await Promise.allSettled([1, 2].map(() => createServicePeriodDraft({ cariId: cari.id, period, clientToken: randomUUID() }, actor)));
+  const won = race.filter((r) => r.status === "fulfilled").length;
+  const lost = race.flatMap((r) => (r.status === "rejected" ? [r.reason as { statusCode?: number; details?: { code?: string } }] : []));
+  const b5Active = await prisma.serviceBillingLink.count({ where: { warpBeamId: b5.id, revokedAt: null } });
+  check("eşzamanlı iki dönem taslağı → 1 başarılı, diğeri 409 SERVICE_ALREADY_BILLED; levent tek aktif bağ",
+    won === 1 && lost.length === 1 && lost[0]!.statusCode === 409 && lost[0]!.details?.code === "SERVICE_ALREADY_BILLED" && b5Active === 1,
+    JSON.stringify({ won, lost: lost.map((e) => [e.statusCode, e.details?.code]), b5Active }));
 }
 
 async function cleanup(): Promise<void> {
