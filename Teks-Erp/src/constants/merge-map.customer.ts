@@ -69,6 +69,8 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     },
     { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "ownerCustomerId", label: "Levent (emanet sahibi)" },
     { kind: "MOVE", model: "YarnLot", table: "yarn_lots", column: "ownerCustomerId", label: "İplik lotu (emanet sahibi)" },
+    // Genel fason F5 (2026-11-08): emanet çıkış belgesinin sahibi — referans bağ, tekillik yok (levent/lot sahibi ikizi).
+    { kind: "MOVE", model: "ConsignmentDispatch", table: "consignment_dispatches", column: "ownerCustomerId", label: "Emanet çıkış belgesi (sahip)" },
     { kind: "MOVE", model: "Route", table: "routes", column: "customerId", label: "Rota şablonu" },
     {
       kind: "CONFLICT",

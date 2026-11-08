@@ -308,6 +308,12 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // MaterialProvider (fason F7b — iş emrinde ana hammaddeyi kim verdi; CUSTOMER override'da; ek dosya satır tavanında)
   US: "Bu fabrika verdi",
   MIXED: "Karışık (müşteri + bu fabrika)",
+  // Genel fason dalga-2 (2026-11-08; ek dosya satır tavanında): emanet çıkış defteri + hizmet metre tabanları.
+  CONSIGNMENT_OUT: "Emanet iplik sahibine çıkış",
+  CONSIGNMENT_OUT_CANCEL: "Emanet iplik çıkışı iptali",
+  SHIPPED_TO_OWNER: "Sahibine gönderildi",
+  WOUND: "Sarım metresi",
+  WOVEN: "Dokuma metresi",
 
   // DocumentScanContentState (K28 fotoğraf saklama) — REDUCED/PURGED çakışır, DOCUMENT_SCAN.contentState override'ı
   FULL: "Tam",

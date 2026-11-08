@@ -268,11 +268,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/helpers/cash-ledger.helper.ts"], { yari: true }),
 
   D("YarnMovement", "iplik stok defteri; devere 1b çiftleri: çözgü çıkışı ↔ tersi · dip iadesi ↔ tersi (brüt çıkış + ayrı iade, §3.7); fason G1 çiftleri: fasona çıkış ↔ iptali · fasondan dönüş ↔ iptali (kalem bağı `dispatchItemId`, fasondaki bakiye TÜRETİLİR)",
-    { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"], ["WARP_ISSUE", "WARP_ISSUE_REVERSAL"], ["WARP_RETURN", "WARP_RETURN_REVERSAL"], ["SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL"], ["SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"]] },
+    { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"], ["WARP_ISSUE", "WARP_ISSUE_REVERSAL"], ["WARP_RETURN", "WARP_RETURN_REVERSAL"], ["SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL"], ["SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"], ["CONSIGNMENT_OUT", "CONSIGNMENT_OUT_CANCEL"]] },
     [{ dosya: "src/services/yarn.service.ts", sembol: "applyYarnMovementTx" }],
     ["src/services/yarn.service.ts"]),
 
-  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü)",
+  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü) · genel fason F5: SHIP_TO_OWNER↔SHIP_TO_OWNER_CANCEL (emanet çıkış belgesi iptali; `consignmentItemId`, CHECK iki yönlü)",
     { tur: "TERS_BAG", kolon: "reversesEventId" },
     [
       { dosya: "src/services/warp-beam-wind.service.ts", sembol: "cancelWound" },
@@ -605,6 +605,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   SATIR("MergeOperationSource", "MergeOperation", "birleştirmenin kaynak kaydı"),
   SATIR("MergeOperationRef", "MergeOperation", "taşınan satırın kimlik fotoğrafı"),
   SATIR("InvoiceLine", "Invoice", "fatura satırı; düzenleme sil-yaz ama ATOMİK CLAIM `status: DRAFT` arkasında ⇒ hard-delete sınıf ④ (deftere hiç yazmamış taslak), \"bağımsız sil-yaz\" ile KARIŞTIRILMAZ — fark claim'dir"),
+  SATIR("ConsignmentDispatchItem", "ConsignmentDispatch", "emanet çıkış kalemi (genel fason F5) — polimorfik (WARP_BEAM | YARN); defteri WarpBeamEvent SHIP_TO_OWNER / YarnMovement CONSIGNMENT_OUT (kaleme bağlı); iptal başlıkta damgalanır, kalem değişmez"),
   SATIR("SubcontractorDispatchItem", "SubcontractorDispatch", "fason sevk kalemi ⚠️ SINIRDA: 5 bağımsız yazım, 0 silme — bağımsız düzenlenebilir tarafa yakın (ölçüldü 2026-09-13); F1: polimorfik (ROLL | WARP_BEAM), levent kaleminin defteri WarpBeamEvent (SHIP_OUT kaleme bağlı), kabul makbuzuna girmez"),
   SATIR("SubcontractorReceiptItem", "SubcontractorReceipt", "fason kabul kalemi"),
   SATIR("SubcontractorDirectShipAllocation", "SubcontractorDispatch", "açık-sevk tahsisi"),

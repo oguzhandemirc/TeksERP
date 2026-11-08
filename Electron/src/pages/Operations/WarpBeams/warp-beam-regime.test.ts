@@ -15,8 +15,9 @@ describe("rejim", () => {
 });
 
 describe("sözlük ve formül", () => {
-  it("yedi durum — Faz 1b üçlüsü + F1 SHIPPED_OUT + Faz 3 MOUNTED/EXHAUSTED/SCRAPPED; rozet sözlüğü birebir", () => {
-    expect([...WARP_BEAM_STATUSES].sort()).toEqual(["CANCELLED", "EXHAUSTED", "MOUNTED", "PLANNED", "READY", "SCRAPPED", "SHIPPED_OUT"]);
+  it("sekiz durum — Faz 1b üçlüsü + F1 SHIPPED_OUT + Faz 3 MOUNTED/EXHAUSTED/SCRAPPED + fason F5 SHIPPED_TO_OWNER; rozet sözlüğü birebir", () => {
+    expect([...WARP_BEAM_STATUSES].sort()).toEqual(["CANCELLED", "EXHAUSTED", "MOUNTED", "PLANNED", "READY", "SCRAPPED", "SHIPPED_OUT", "SHIPPED_TO_OWNER"]);
+    expect(WARP_BEAM_STATUS_META.SHIPPED_TO_OWNER.label).toBe("Sahibine gönderildi");
     expect(Object.keys(WARP_BEAM_STATUS_META).sort()).toEqual([...WARP_BEAM_STATUSES].sort());
   });
   it("⭐ nominal kg = tel × denye × m / 9.000.000 (belge fixture'ı: 3500 × 300 × 7000 → 816,667)", () => {

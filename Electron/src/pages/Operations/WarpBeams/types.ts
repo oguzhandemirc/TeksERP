@@ -7,7 +7,7 @@
 // Kalan metre sunucuda türetilir (kolon yok). Köken her leventte SEÇİLİR (§3.9).
 // =============================================================================
 
-export type WarpBeamStatus = "PLANNED" | "READY" | "SHIPPED_OUT" | "MOUNTED" | "EXHAUSTED" | "SCRAPPED" | "CANCELLED";
+export type WarpBeamStatus = "PLANNED" | "READY" | "SHIPPED_OUT" | "MOUNTED" | "EXHAUSTED" | "SCRAPPED" | "CANCELLED" | "SHIPPED_TO_OWNER";
 export type WarpBeamOrigin = "IN_HOUSE" | "SUBCONTRACT" | "PURCHASED" | "CONSIGNED";
 export type WarpKgSource = "WEIGHED" | "THEORETICAL";
 export type WarpBeamMountMethod = "TYING_IN" | "DRAWING_IN" | "HARNESS_CHANGE";
@@ -86,7 +86,7 @@ export interface CancelWoundPreview {
   returnReversals: Array<{ warehouse: { id: string; name: string }; lot: { id: string; lotNo: string } | null; reasonCode: string; qtyKg: number }>;
 }
 
-export const WARP_BEAM_STATUSES: WarpBeamStatus[] = ["PLANNED", "READY", "MOUNTED", "SHIPPED_OUT", "EXHAUSTED", "SCRAPPED", "CANCELLED"];
+export const WARP_BEAM_STATUSES: WarpBeamStatus[] = ["PLANNED", "READY", "MOUNTED", "SHIPPED_OUT", "SHIPPED_TO_OWNER", "EXHAUSTED", "SCRAPPED", "CANCELLED"];
 
 export const WARP_BEAM_STATUS_META: Record<WarpBeamStatus, { label: string; badgeClass: string }> = {
   PLANNED: { label: "Planlandı", badgeClass: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200" },
@@ -96,6 +96,7 @@ export const WARP_BEAM_STATUS_META: Record<WarpBeamStatus, { label: string; badg
   EXHAUSTED: { label: "Bitti", badgeClass: "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300" },
   SCRAPPED: { label: "Hurda", badgeClass: "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200" },
   CANCELLED: { label: "İptal", badgeClass: "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300" },
+  SHIPPED_TO_OWNER: { label: "Sahibine gönderildi", badgeClass: "bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200" },
 };
 
 export const WARP_MOUNT_METHOD_LABEL: Record<WarpBeamMountMethod, string> = { TYING_IN: "Düğüm (tying-in)", DRAWING_IN: "Tahar", HARNESS_CHANGE: "Takım değişimi" };

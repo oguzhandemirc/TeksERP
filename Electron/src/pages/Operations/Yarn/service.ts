@@ -33,7 +33,7 @@ import type { YarnLotQualityStatus } from "./yarnLotQuality";
 import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Backend `YarnMovementKind` enum'unun aynası (Electron backend'i import edemez). */
-export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL" | "SUBCONTRACT_OUT" | "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL";
+export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL" | "SUBCONTRACT_OUT" | "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL" | "CONSIGNMENT_OUT" | "CONSIGNMENT_OUT_CANCEL";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir (dosya başlığı). */
 export type DecimalLike = number | string;
@@ -207,6 +207,8 @@ export const YARN_KIND_META: Record<YarnMovementKind, YarnKindMeta> = {
   SUBCONTRACT_OUT_CANCEL: { label: "Fasona çıkış iptali (+)", short: "Fason iptal (+)", sign: 1, adjustment: false, hint: "Fason sevkinin iptali — iplik depoya döner." },
   SUBCONTRACT_RETURN: { label: "Fasondan iplik dönüşü (+)", short: "Fason dönüş (+)", sign: 1, adjustment: false, hint: "Fasondan dönen iplik (kısmi olabilir); sebep kodu zorunlu." },
   SUBCONTRACT_RETURN_CANCEL: { label: "Fason dönüşü iptali (−)", short: "Dönüş iptal (−)", sign: -1, adjustment: false, hint: "Dönüşün tersi." },
+  CONSIGNMENT_OUT: { label: "Sahibine çıkış (−)", short: "Sahibine (−)", sign: -1, adjustment: false, hint: "Emanet iplik sahibine çıkış belgesiyle verildi." },
+  CONSIGNMENT_OUT_CANCEL: { label: "Sahibine çıkış iptali (+)", short: "Sahibine iptal (+)", sign: 1, adjustment: false, hint: "Emanet çıkışının tersi." },
 };
 
 /** Bu ekrandan YAZILABİLEN türler — WARP_* yalnız levent yazıcısından doğar. */
