@@ -35,6 +35,10 @@ export default function IsEmirleriScreen() {
   const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
   const routeOnButton = useDeviceSettingsStore((s) => s.woRouteOnButton);
   const setRouteOnButton = useDeviceSettingsStore((s) => s.setWoRouteOnButton);
+  const woButtons = useDeviceSettingsStore((s) => s.woButtons);
+  const setWoButtons = useDeviceSettingsStore((s) => s.setWoButtons);
+  // Tek mal sahibi açıksa formda sorulmaz; hangi türle açılacağı tuşlarda etiketle görünür.
+  const kindTag = kinds.length === 1 ? (kinds[0] === 'CUSTOMER_GOODS' ? { label: 'Müşteri malı', fason: true } : { label: 'Bizim mal', fason: false }) : null;
   const scan = useScanAction(routeOnButton);
   // Ayar kapalıyken tuştaki rota forma (ve yüke) HİÇ geçmez; kart rotası formda çözülür.
   const open = (manual: boolean) => setStage({ route: initialFormRoute({ buttonRoute: buttonRouteFor(routeOnButton, scan.type), cardRoute: null, scanMode: scan.scanMode === true }), manual, n: Date.now() });
@@ -83,8 +87,8 @@ export default function IsEmirleriScreen() {
           onOpen={setOpenId}
           onEmptyAction={(a) => setFilters(a === 'clearFilters' ? DEFAULT_FILTERS : { ...filters, status: 'ALL' })}
         />
-        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} showRoute={routeOnButton} onScan={() => open(false)} onManual={() => open(true)} />}
-        <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} routeOnButton={routeOnButton} onRouteOnButton={(v) => void setRouteOnButton(v)} onDismiss={() => setOptionsOpen(false)} />
+        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} showRoute={routeOnButton} onScan={() => open(false)} onManual={() => open(true)} buttons={woButtons} kindTag={kindTag} />}
+        <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} routeOnButton={routeOnButton} onRouteOnButton={(v) => void setRouteOnButton(v)} buttons={woButtons} onButtons={(v) => void setWoButtons(v)} onDismiss={() => setOptionsOpen(false)} />
       </View>
       <ColumnsSheet visible={columnsOpen} columns={cols.visible} onToggle={cols.toggle} onDismiss={() => setColumnsOpen(false)} />
       <WorkOrderDetailSheet workOrderId={openId} onClose={() => setOpenId(null)} onChanged={() => void list.refetch()} />

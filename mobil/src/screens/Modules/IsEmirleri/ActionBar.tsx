@@ -3,7 +3,7 @@
 // Rota seçici iki grup: "Özel" + "Hazır rotalar" (görünümü RoutePickerModal'da; burada yalnız açılış yeri).
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RoutePickerModal, { type RouteChoice } from './RoutePickerModal';
 import { routeButtonTitle, routeStepsLine } from './routePickerView';
@@ -12,6 +12,7 @@ import { TERIM } from '../../../lib/terim';
 import { colors, palette, radius, shadow, spacing, typography } from '../../../theme';
 import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
 import type { TypeGroups } from './scanFlow';
+import type { WoButtons } from '../../../store/deviceSettingsStore';
 
 interface Props {
   groups: TypeGroups;
@@ -22,12 +23,16 @@ interface Props {
   showRoute: boolean;
   onScan: () => void;
   onManual: () => void;
+  /** Seçeneklerdeki "Alttaki tuşlar": ikisi ya da yalnız biri. */
+  buttons: WoButtons;
+  /** Cihazda tek mal sahibi açıksa tuşlarda gösterilen etiket ("Bizim mal" / "Müşteri malı"); ikisi açıksa null. */
+  kindTag: { label: string; fason: boolean } | null;
 }
 
 const option = (r: ProductionRoute): RouteChoice => ({ id: r.id, title: routeButtonTitle(r.name), steps: routeStepsLine(r) });
 const PHONE_MAX = 600;
 
-export default function ActionBar({ groups, type, loading, onSelect, showRoute, onScan, onManual }: Props) {
+export default function ActionBar({ groups, type, loading, onSelect, showRoute, onScan, onManual, buttons, kindTag }: Props) {
   const [open, setOpen] = useState(false);
   const bottomInset = useSafeAreaInsets().bottom;
   const narrow = useWindowDimensions().width < PHONE_MAX;
@@ -39,11 +44,13 @@ export default function ActionBar({ groups, type, loading, onSelect, showRoute, 
     // ScreenChrome alt inset'i boşluk olarak bırakır; şerit o boşluğa uzanıp ekranın alt kenarına değer.
     <View style={[styles.bar, { marginBottom: -bottomInset, paddingBottom: spacing.md + bottomInset }]}>
       <View style={[styles.row, narrow && styles.column]}>
+        {buttons !== 'manual' && (
         <View style={[styles.scan, !narrow && styles.grow]}>
           <TouchableRipple onPress={onScan} rippleColor="rgba(255,255,255,0.2)" style={styles.scanMain} testID="ie-okut" accessibilityRole="button" accessibilityLabel="Belge Okut">
             <View style={styles.scanInner}>
               <Icon source="camera-outline" size={26} color={colors.textOnDark} />
               <Text style={styles.scanLabel}>Belge Okut</Text>
+              {kindTag && <KindTag tag={kindTag} />}
             </View>
           </TouchableRipple>
           {showRoute && (
@@ -57,9 +64,16 @@ export default function ActionBar({ groups, type, loading, onSelect, showRoute, 
             </TouchableRipple>
           )}
         </View>
-        <Button mode="contained-tonal" icon="pencil-outline" buttonColor={colors.surfaceMuted} textColor={colors.text} onPress={onManual} style={[styles.manual, !narrow && styles.grow]} contentStyle={styles.btn} labelStyle={styles.manualLabel} testID="ie-elle-olustur">
-          Elle Oluştur
-        </Button>
+        )}
+        {buttons !== 'scan' && (
+          <TouchableRipple onPress={onManual} rippleColor="rgba(15,23,42,0.08)" style={[styles.manual, !narrow && styles.grow]} testID="ie-elle-olustur" accessibilityRole="button" accessibilityLabel="Elle Oluştur">
+            <View style={styles.scanInner}>
+              <Icon source="pencil-outline" size={24} color={colors.text} />
+              <Text style={styles.manualLabel}>Elle Oluştur</Text>
+              {kindTag && <KindTag tag={kindTag} />}
+            </View>
+          </TouchableRipple>
+        )}
       </View>
       <RoutePickerModal
         visible={open}
@@ -72,6 +86,14 @@ export default function ActionBar({ groups, type, loading, onSelect, showRoute, 
         onSelect={(v) => { onSelect(v); setOpen(false); }}
         onDismiss={() => setOpen(false)}
       />
+    </View>
+  );
+}
+
+function KindTag({ tag }: { tag: { label: string; fason: boolean } }) {
+  return (
+    <View style={[styles.tag, tag.fason ? styles.tagFason : styles.tagOwn]}>
+      <Text style={[styles.tagText, { color: tag.fason ? colors.warningDark : colors.infoDark }]}>{tag.label}</Text>
     </View>
   );
 }
@@ -92,7 +114,11 @@ const styles = StyleSheet.create({
   chevron: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
   routeText: { flexShrink: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.textOnDark },
   off: { opacity: 0.5 },
-  manual: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
-  btn: { minHeight: 64 },
-  manualLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold },
+  manual: { minHeight: 64, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceMuted, justifyContent: 'center' },
+  manualLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text },
+  // "Malın sahibi" kartıyla aynı tonlar: bizim mal mavi, müşteri malı turuncu.
+  tag: { borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  tagOwn: { backgroundColor: colors.infoContainer },
+  tagFason: { backgroundColor: colors.warningContainer },
+  tagText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.text },
 });

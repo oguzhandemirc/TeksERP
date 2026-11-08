@@ -30,6 +30,8 @@ const DOC_SCAN_ENGINE_KEY = 'device_doc_scan_engine';
 const DOC_DESK_FRAME_MS_KEY = 'device_doc_desk_frame_ms';
 const WO_CREATE_KINDS_KEY = 'device_wo_create_kinds';
 const WO_ROUTE_ON_BUTTON_KEY = 'device_wo_route_on_button';
+export type WoButtons = 'both' | 'scan' | 'manual';
+const WO_BUTTONS_KEY = 'device_wo_buttons';
 const SCAN_METHOD_KEY = 'device_scan_method';
 const HARDWARE_LINK_KEY = 'device_hardware_link';
 // ⚠️ 2026-08-19: kısa kesim ayarı MERKEZE taşındı (feature-flags). Cihazda artık
@@ -203,6 +205,8 @@ interface DeviceSettingsState {
   woCreateKinds: WoCreateKind[];
   /** "Rota seçimini Belge Okut tuşunda göster" (CİHAZDA). Varsayılan AÇIK = bugünkü rota seçici; kapalıyken saklı rota kullanılmaz. */
   woRouteOnButton: boolean;
+  /** İş Emirleri alt tuşları (Seçenekler; CİHAZDA): ikisi ya da yalnız biri — ikisi birden kapanamaz. Varsayılan ikisi. */
+  woButtons: WoButtons;
   /**
    * Okutma yöntemi (el terminali, 2026-11-07): Otomatik (varsayılan) · Donanım okuyucu · Kamera. CİHAZDA:
    * okuyucunun varlığı cihaza bağlıdır. Otomatik okuyucusuz cihazda kameradır = bugünkü davranış.
@@ -238,6 +242,7 @@ interface DeviceSettingsState {
   setDocScanEngine: (v: DocScanEngine) => Promise<void>;
   setWoCreateKinds: (v: WoCreateKind[]) => Promise<void>;
   setWoRouteOnButton: (v: boolean) => Promise<void>;
+  setWoButtons: (v: WoButtons) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -284,12 +289,13 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   docScanEngine: 'camera',
   woCreateKinds: [...WO_CREATE_KINDS_DEFAULT],
   woRouteOnButton: true,
+  woButtons: 'both',
   scanMethod: 'auto',
   hardwareLink: 'auto',
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, scanMethod, hardwareLink] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -310,6 +316,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(DOC_SCAN_ENGINE_KEY),
         storage.getItem(WO_CREATE_KINDS_KEY),
         storage.getItem(WO_ROUTE_ON_BUTTON_KEY),
+        storage.getItem(WO_BUTTONS_KEY),
         storage.getItem(SCAN_METHOD_KEY),
         storage.getItem(HARDWARE_LINK_KEY),
       ]);
@@ -354,6 +361,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       woCreateKinds: parseWoCreateKinds(woKinds),
       // Varsayılan AÇIK: yalnız birebir 'false' kapatır.
       woRouteOnButton: woRouteOnBtn !== 'false',
+      woButtons: woBtns === 'scan' || woBtns === 'manual' ? woBtns : 'both',
       // Bilinmeyen/bozuk kayıt → 'auto' (bugünkü davranış okuyucusuz cihazda kamera).
       scanMethod: parseScanMethodPref(scanMethod),
       hardwareLink: parseHardwareLink(hardwareLink),
@@ -467,6 +475,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setWoRouteOnButton: async (v) => {
     set({ woRouteOnButton: v });
     await storage.setItem(WO_ROUTE_ON_BUTTON_KEY, v ? 'true' : 'false');
+  },
+
+  setWoButtons: async (v) => {
+    set({ woButtons: v });
+    await storage.setItem(WO_BUTTONS_KEY, v);
   },
 
   setDocDeskDevice: async (v) => {
