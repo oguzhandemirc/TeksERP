@@ -16,6 +16,9 @@ vi.mock("electron", () => ({
   ipcMain: { handle: vi.fn() },
   net: { fetch: (...a: unknown[]) => fetchMock(...a) },
 }));
+// trusted-ipc → electron-log/main gerçek `electron`u CJS require eder; CI ikilisiz koşar
+// (ELECTRON_SKIP_BINARY_DOWNLOAD) ve require anında indirme denemesi ağa bağlı kırmızı verir.
+vi.mock("electron-log/main.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 const { relayLicenseRequest } = await import("../../../electron/ipc/license.ipc");
 
 const ZARF = "eyJ2IjoxLCJpc3RlayI6ImEiLCJnb3ZkZSI6ImIifQ";
