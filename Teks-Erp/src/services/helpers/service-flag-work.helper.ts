@@ -26,6 +26,7 @@ import prisma from "../../lib/prisma";
 type Db = Prisma.TransactionClient | typeof prisma;
 import { ACTIVE_ROLL_PROPERTY, loadVariantValueItems } from "./property-revoke.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
+import { loadOurFaultStepIds } from "./rework-billing.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 import { loadPatternStitchCounts } from "./service-quantity.helper";
 
@@ -198,6 +199,8 @@ export async function listFlagServiceWorks(
     select: { id: true, rollId: true, workOrderStepId: true, phase: true, meters: true, pieceCount: true, machineId: true, createdAt: true, step: { select: { stationId: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
+  // F9: faturasız (bizim hatamız) yeniden işlem adımındaki okuma, ücretli eski okumayı yutmasın.
+  const ourFault = await loadOurFaultStepIds(readings.map((r) => r.workOrderStepId), db);
   const receivedOf = await loadReceivedResolver(byId, allStations, db);
   const cutOf = await loadActiveCutReadings(leaves, db);
   const simulatedCut = new Set<string>();
@@ -222,9 +225,13 @@ export async function listFlagServiceWorks(
     let work: FlagWork | null = null;
     for (const rid of chainOf(leaf.id)) {
       if (rid !== leaf.id && pieceBilled.has(`${rid}:${base.serviceItemId}`)) break;
-      // ① okuma: seçilen faz sırasıyla (OUT tabanında OUT → IN), adımın en son aktif okuması.
+      // ① okuma: seçilen faz sırasıyla (OUT tabanında OUT → IN), adımın en son aktif okuması;
+      // faturasız yeniden işlem okuması yalnız ücretli kanıt (① ya da ②) yoksa seçilir.
+      let faultHit: (typeof readings)[number] | undefined;
       for (const phase of phases) {
-        const hit = readings.filter((r) => r.rollId === rid && r.phase === phase && stations.has(r.step.stationId)).at(-1);
+        const cands = readings.filter((r) => r.rollId === rid && r.phase === phase && stations.has(r.step.stationId));
+        const hit = cands.filter((r) => !ourFault.has(r.workOrderStepId)).at(-1);
+        faultHit ??= cands.at(-1);
         if (hit) { work = { ...base, rollId: rid, workOrderStepId: hit.workOrderStepId, meters: hit.meters, meterBasis: phase, readingId: hit.id, machineId: hit.machineId, serviceAt: hit.createdAt, pieceCount: hit.pieceCount }; break; }
       }
       if (work) break;
@@ -232,6 +239,10 @@ export async function listFlagServiceWorks(
       const rcv = receivedOf(rid, stations);
       if (rcv) {
         work = { ...base, rollId: rid, workOrderStepId: rcv.stepId, meters: rcv.meters, meterBasis: "RECEIVED", readingId: null, machineId: null, serviceAt: rcv.at };
+        break;
+      }
+      if (faultHit) {
+        work = { ...base, rollId: rid, workOrderStepId: faultHit.workOrderStepId, meters: faultHit.meters, meterBasis: faultHit.phase, readingId: faultHit.id, machineId: faultHit.machineId, serviceAt: faultHit.createdAt, pieceCount: faultHit.pieceCount };
         break;
       }
     }

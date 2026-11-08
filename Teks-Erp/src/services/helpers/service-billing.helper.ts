@@ -37,6 +37,8 @@ export interface ServiceBillingLinkInput {
   unitPrice: Prisma.Decimal;
   currency: Currency;
   serviceAt: Date;
+  /** F9: iç adım işi (F3) — kanıtı kapanmış hareket; bağ insert'inde hareket FOR SHARE kilitlenir ve canlı olmalı. */
+  stepMovementGuard?: boolean;
 }
 
 export interface ServiceBillingDraft {
@@ -134,6 +136,7 @@ export async function collectServiceBillingDraft(params: {
       unitPrice: new Prisma.Decimal(w.unitPrice ?? 0),
       currency: params.currency,
       serviceAt: w.serviceAt,
+      ...(w.source === "STEP" && w.meterBasis !== "RECEIVED" ? { stepMovementGuard: true } : {}),
     }));
   return { lines, links, warnings: res.warnings };
 }
@@ -175,6 +178,27 @@ export async function lockServiceReadingsTx(tx: Tx, links: ServiceBillingLinkInp
   await tx.$queryRaw`SELECT id FROM roll_meter_readings WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE`;
 }
 
+/**
+ * F9 (F3 açığı): iç adım işinin kanıtı kapanmış AKTİF harekettir. Bağ yazılmadan önce hareket FOR SHARE kilitlenir;
+ * geri alma (`revokeRollMovements` / `reopenClosedMovementsTx`) satırı güncelleyip bağı SONRA sorar → iki sıra da
+ * serileşir: önce geri alan kazanırsa burada 409, önce fatura kazanırsa geri almada 409 SERVICE_ALREADY_BILLED.
+ */
+async function lockStepMovementsTx(tx: Tx, links: ServiceBillingLinkInput[]): Promise<void> {
+  const guarded = links.filter((l) => l.stepMovementGuard && l.workOrderStepId !== null);
+  if (guarded.length === 0) return;
+  const rollIds = [...new Set(guarded.map((l) => l.rollId))];
+  const stepIds = [...new Set(guarded.map((l) => l.workOrderStepId!))];
+  const rows = await tx.$queryRaw<Array<{ rollId: string; workOrderStepId: string }>>`
+    SELECT "rollId", "workOrderStepId" FROM roll_movements
+    WHERE "rollId" = ANY(${rollIds}::uuid[]) AND "workOrderStepId" = ANY(${stepIds}::uuid[])
+      AND "revokedAt" IS NULL AND "exitedAt" IS NOT NULL
+    ORDER BY id FOR SHARE`;
+  const live = new Set(rows.map((r) => `${r.rollId}:${r.workOrderStepId}`));
+  if (guarded.some((l) => !live.has(`${l.rollId}:${l.workOrderStepId}`))) {
+    throw AppError.conflict("Adım hareketi taslak hazırlanırken geri alındı — taslağı yeniden oluşturun", { code: "SERVICE_READING_CHANGED" });
+  }
+}
+
 /** Kilit sırası ③: bağ insert'i (okuma hâlâ aktif olmalı; aynı iş iki faturaya giremez → 409). */
 export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: ServiceBillingLinkInput[]): Promise<number> {
   if (links.length === 0) return 0;
@@ -185,6 +209,7 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
       throw AppError.conflict("Metre okuması taslak hazırlanırken düzeltildi — taslağı yeniden oluşturun", { code: "SERVICE_READING_CHANGED" });
     }
   }
+  await lockStepMovementsTx(tx, links);
   for (const l of links) {
     const prior = await findActiveBillingTx(tx, { rollId: l.rollId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId });
     if (prior) throw alreadyBilled(prior.docNo);
