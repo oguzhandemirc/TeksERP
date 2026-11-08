@@ -18,11 +18,17 @@ export default function DocColumn({ u, openRequest }: { u: FormModel; openReques
   if (row) {
     return (
       <DocRowCard row={row} wo={wo} customers={u.customers} customersLoading={u.customersLoading} hideGramaj={fields.isOther('gramaj') || u.partyGramaj}
-        variant="single" onReread={u.okut} onDraftCancelled={u.dropDoc} openRequest={openRequest} partyPlan={u.partyPlan} />
+        variant="single" onReread={u.manual ? u.addDoc : u.okut} manual={u.manual && wo.isManual(row.noteId)} onDraftCancelled={u.dropDoc} openRequest={openRequest} partyPlan={u.partyPlan} />
     );
   }
   return (
     <>
+      {u.manual && !done && (
+        <Button mode="outlined" icon="pencil-outline" onPress={u.draft.start} loading={u.draft.busy} disabled={u.draft.busy || wo.saving}
+          contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belgesiz-baslat">
+          {u.draft.busy ? 'Belgesiz form hazırlanıyor…' : 'Belgesiz devam et'}
+        </Button>
+      )}
       {!done && (
         <Button mode="contained" icon="file-document-outline" onPress={u.okut} disabled={wo.saving || scan.b.sending || scan.source.busy}
           contentStyle={styles.bigBtn} labelStyle={styles.bigLabel} testID="ie-belge-okut">

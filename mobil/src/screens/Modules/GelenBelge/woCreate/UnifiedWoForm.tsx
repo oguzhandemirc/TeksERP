@@ -3,7 +3,7 @@
 // Müşteri / parti / kurşun metresi / gramaj / çok parti bugünkü satır kartından (DocRowCard) gelir; üretim + plan
 // inputları WoFormFields'ta (K30-D adımlar/makine/tür/özellik WoPlanFields). Durum `useUnifiedWoForm`; kayıt `useWoRows`
 // + satır başına ek gövde alanlarıyla (S16a sözleşmesi).
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 // Klavye düzenlenen alanı örtmesin (prova 2026-11-06): odaktaki girdi klavyenin üstüne kayar; özel numpad (NumpadHost) etkilenmez.
 import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
@@ -20,6 +20,8 @@ import { GramajField, type DocRowOpenRequest } from './DocRowCard';
 import DocColumn from './DocColumn';
 import CreateBar from './CreateBar';
 import WoFormFields from './WoFormFields';
+import OwnerKindCard from './OwnerKindCard';
+import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
 import { woFormLayout } from './woLayout';
@@ -50,11 +52,12 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const win = useWindowDimensions();
   const layout = woFormLayout(win.width, win.height);
   const twoCol = layout.columns === 2;
-  const jump = useMissingJump(u, twoCol);
+  const jump = useMissingJump(u, twoCol, props.openRequest ?? null);
   return (
     <>
       <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
         {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
+        {u.owner.visible && <OwnerKindCard value={u.owner.value} reason={u.owner.reason} locked={done || wo.saving} onChange={u.owner.choose} />}
         {twoCol ? (
           <View style={[styles.columns, { gap: layout.pad }]} onLayout={jump.at('columns')} testID="ie-form-iki-sutun">
             <View style={styles.col} testID="ie-form-sol">
@@ -104,7 +107,7 @@ const METER_KEYS: readonly IssueKey[] = ['kursunMetresi', 'metreDogrula'];
  * Alt çubuk hapı → alan: müşteri seçiciyi, tek parçalı metrede metre sayfasını açar; diğerlerinde ilgili sütuna (kapalı
  * "Diğer alanlar"daysa önce açıp oraya) kaydırır. Konumlar `onLayout`tan; iç içe kutularda üst kutunun y'si eklenir.
  */
-function useMissingJump(u: FormModel, twoCol: boolean) {
+function useMissingJump(u: FormModel, twoCol: boolean, external: DocRowOpenRequest | null) {
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const spots = useRef<Partial<Record<Spot, number>>>({});
   const [request, setRequest] = useState<DocRowOpenRequest | null>(null);
@@ -115,6 +118,12 @@ function useMissingJump(u: FormModel, twoCol: boolean) {
   const formTop = () => (twoCol ? y('columns') : 0) + y('form');
   const scroll = (to: number) => scrollRef.current?.scrollTo({ y: Math.max(0, to - spacing.md), animated: true });
   const open = (kind: DocRowOpenRequest['kind']) => setRequest((r) => ({ kind, seq: (r?.seq ?? 0) + 1 }));
+  // Dışarıdan istek (okutma önizlemesinin "Müşteri seç"i): aynı kanaldan, sırası artarak.
+  const extSeq = external?.seq;
+  const extKind = external?.kind;
+  useEffect(() => {
+    if (extSeq !== undefined && extKind) setRequest((r) => ({ kind: extKind, seq: (r?.seq ?? 0) + 1 }));
+  }, [extSeq, extKind]);
   const go = (key: IssueKey) => {
     const f = u.row?.form;
     if (key === 'musteri') return open('owner');
@@ -142,6 +151,7 @@ function FormColumn({ u, fieldProps, onOtherLayout }: FormColumnProps) {
   const { wo, row, done, fields } = u;
   return (
     <>
+      {u.routeWarning && <NoticeStrip tone="warn" text={u.routeWarning} testID="ie-rota-celiski" />}
       <WoFormFields {...fieldProps} show={fields.isTop} />
       <OtherFields onLayout={onOtherLayout} count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
         {row?.form && fields.isOther('gramaj') && !u.partyGramaj && <GramajField row={row} wo={wo} locked={done || wo.saving} />}

@@ -74,3 +74,31 @@ export function taughtRow(r: DocRow, f: Record<string, string | null>, ownerCust
   }
   return { ...r, detail: { ...r.detail, formFields: ff }, form, taught: { seq: (r.taught?.seq ?? 0) + 1, ...tpl } };
 }
+
+/**
+ * Belgesiz (elle) açılan taslağa sonradan belge eklendi: okuma yalnız BOŞ alanları önerir, elle yazılan ASLA ezilmez.
+ * Çok parti / ayrı top yalnız ikisi de boşken okumadan gelir.
+ */
+export function fillEmptyRowForm(form: RowForm, read: RowForm): RowForm {
+  const next: RowForm = { ...form };
+  if (!form.ownerCustomerId) {
+    next.ownerCustomerId = read.ownerCustomerId;
+    next.ownerSuggested = read.ownerSuggested;
+    next.ownerAsk = form.ownerAsk ?? read.ownerAsk;
+  }
+  if (!form.ourBatchNo) {
+    next.ourBatchNo = read.ourBatchNo;
+    next.ourBatchNoKey = read.ourBatchNoKey;
+  }
+  if (!form.customerBatchNo && read.customerBatchNo) {
+    next.customerBatchNo = read.customerBatchNo;
+    next.customerBatchNoFromDoc = read.customerBatchNoFromDoc;
+  }
+  if (form.meters == null && read.meters != null) {
+    next.meters = read.meters;
+    next.metersReview = read.metersReview;
+  }
+  if (!form.gramajValueId) next.gramajValueId = read.gramajValueId;
+  if (!form.multi && !form.rolls && read.multi) next.multi = read.multi;
+  return next;
+}
