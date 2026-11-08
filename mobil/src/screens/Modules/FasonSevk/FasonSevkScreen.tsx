@@ -64,6 +64,7 @@ import {
   type MultiBatchDetails,
 } from '../../../services/subcontractor.service';
 import MultiBatchSheet from './MultiBatchSheet';
+import ExpectedReturnChips, { expectedReturnPayload } from './ExpectedReturnChips';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useFasonNoteMobileEntry } from '../../../hooks/useFeatureFlags';
 import SyncStatusChip from '../../../components/SyncStatusChip';
@@ -180,6 +181,8 @@ export default function FasonSevkScreen() {
   const [plateNumber, setPlateNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [notes, setNotes] = useState('');
+  // F6/T2: beklenen dönüş günü; null = alan gönderilmez (backend varsayılan zinciri).
+  const [expectedReturnDays, setExpectedReturnDays] = useState<number | null>(null);
   // Fason adım talimatı — sevk notundan ayrı. Operatör girişi yalnızca flag
   // açıkken (Electron ayarı, default kapalı); kapalıyken talimat adımın notundan gelir.
   const [instruction, setInstruction] = useState('');
@@ -268,6 +271,7 @@ export default function FasonSevkScreen() {
             if (typeof d.driverName === 'string' && d.driverName) setDriverName(d.driverName);
             if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
             if (typeof d.instruction === 'string' && d.instruction) setInstruction(d.instruction);
+            if (typeof d.expectedReturnDays === 'number') setExpectedReturnDays(d.expectedReturnDays);
           } else {
             AsyncStorage.removeItem(DRAFT_KEY);
           }
@@ -293,12 +297,12 @@ export default function FasonSevkScreen() {
         savedAt: Date.now(),
         workOrderId, workOrderLabel, stepId,
         subcontractorId, subcontractorLabel, plannedSubId,
-        scannedRolls, plateNumber, driverName, notes, instruction,
+        scannedRolls, plateNumber, driverName, notes, instruction, expectedReturnDays,
       }));
     }, 600);
     return () => clearTimeout(t);
   }, [workOrderId, workOrderLabel, stepId, subcontractorId, subcontractorLabel,
-      plannedSubId, scannedRolls, plateNumber, driverName, notes, instruction]);
+      plannedSubId, scannedRolls, plateNumber, driverName, notes, instruction, expectedReturnDays]);
 
   // ── Fason Kabul'den yönlendirme: iş emri seçili gel ──
   // Kabul ekranı "mal henüz sevk edilmemiş" (NEEDS_DISPATCH) teşhisini koyduğunda
@@ -716,6 +720,7 @@ export default function FasonSevkScreen() {
       setDriverName('');
       setNotes('');
       setInstruction('');
+      setExpectedReturnDays(null);
       setDetailsCollapsed(true);
       AsyncStorage.removeItem(DRAFT_KEY);
       // Listeleri tazele (yeni dispatch, WO statüsü). ['rolls'] de invalide edilir:
@@ -971,6 +976,7 @@ export default function FasonSevkScreen() {
       driverName: driverName.trim() || undefined,
       notes: notes.trim() || undefined,
       instruction: instruction.trim() || undefined,
+      expectedReturnAt: expectedReturnPayload(expectedReturnDays),
       allowItemOverride: hasItemMismatch || undefined,
     });
   };
@@ -989,6 +995,7 @@ export default function FasonSevkScreen() {
     setDriverName('');
     setNotes('');
     setInstruction('');
+    setExpectedReturnDays(null);
     AsyncStorage.removeItem(DRAFT_KEY);
     snapTo(SHEET_COLLAPSED_H);
   };
@@ -997,6 +1004,7 @@ export default function FasonSevkScreen() {
     plateNumber.trim() || null,
     driverName.trim() || null,
     notes.trim() ? 'not' : null,
+    expectedReturnDays != null ? `dönüş ${expectedReturnDays} gün` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -1288,7 +1296,7 @@ export default function FasonSevkScreen() {
                     <Text style={styles.sectionTitle}>Sevk Bilgileri (opsiyonel)</Text>
                     {!shippingOpen && (
                       <Text style={styles.sectionSub} numberOfLines={1}>
-                        {shippingSummary || 'Plaka · Sürücü · Not'}
+                        {shippingSummary || 'Plaka · Sürücü · Not · Dönüş'}
                       </Text>
                     )}
                   </View>
@@ -1333,6 +1341,7 @@ export default function FasonSevkScreen() {
                     dense
                     style={styles.input}
                   />
+                  <ExpectedReturnChips days={expectedReturnDays} onChange={setExpectedReturnDays} />
                 </View>
               )}
             </Surface>

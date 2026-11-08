@@ -18,6 +18,7 @@
 // varsa 409, LIFO); makbuz → `cancelledAt` üçlüsü, yalnız doğan topların HEPSİ
 // `CANCELLED` ise (topun ters yolu `ROLL_CANCEL` kendi kapısından, önizlemeli).
 // =============================================================================
+import { resolveExpectedReturn } from "./helpers/fason-expected-return.helper";
 import { Prisma, RollEntrySource, RollStatus, WeavingExecutionKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { tokenReplay } from "./helpers/token-replay.helper";
@@ -45,6 +46,8 @@ export interface WeavingDispatchInput {
   plateNumber?: string | null;
   driverName?: string | null;
   notes?: string | null;
+  /** F6: beklenen dönüş — undefined ⇒ varsayılan zinciri (dokumada süreç türü yok), null ⇒ termin yok. */
+  expectedReturnAt?: string | null;
 }
 
 export interface WeavingReceiptRollInput {
@@ -122,6 +125,8 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
   const created = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
     const now = new Date();
+    // F6: fasoncu claim'den sonra kesinleşir; çözücü salt okur (dokuma sevkinde süreç türü yok).
+    const termin = await resolveExpectedReturn({ body: input.expectedReturnAt, subcontractorId: wo.subcontractorId, categoryId: null, dispatchedAt: now }, tx);
     const dispatchNo = await nextSubcontractorDocNoTx(tx, "subcontractorDispatch", now);
     const dispatch = await tx.subcontractorDispatch.create({
       data: {
@@ -133,8 +138,9 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
         notes: input.notes ?? null,
         dispatchedById: userId ?? null,
         totalQty: 0,
+        expectedReturnAt: termin.at,
       },
-      select: { id: true, dispatchNo: true, weavingOrderId: true, subcontractorId: true, dispatchedAt: true },
+      select: { id: true, dispatchNo: true, weavingOrderId: true, subcontractorId: true, dispatchedAt: true, expectedReturnAt: true },
     });
     const beams = warpBeamIds.length > 0
       ? await dispatchWarpBeamItemsTx(tx, { dispatchId: dispatch.id, warpBeamIds, userId })
@@ -142,7 +148,7 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
     // totalQty = Σ kalem (`test_consistency §19`); levent kalemi metre taşır (F1 ile aynı); iplik kg GİRMEZ (H1).
     if (beams.lines.length > 0) await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: beams.totalM } });
     const yarn = yarnLines.length > 0 ? await dispatchYarnItemsTx(tx, { dispatchId: dispatch.id, lines: yarnLines, userId }) : null;
-    return { dispatch, beams, yarn, weavingOrderNumber: wo.weavingOrderNumber };
+    return { dispatch: { ...dispatch, expectedReturnSource: termin.source }, beams, yarn, weavingOrderNumber: wo.weavingOrderNumber };
   });
   await AuditService.log({
     userId,

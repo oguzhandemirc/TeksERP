@@ -21,7 +21,7 @@ type Db = Prisma.TransactionClient | typeof prisma;
 export const SERVICE_ITEM_TABLE = "SERVICE_ITEM";
 
 export type ServiceItemLiveRefKind =
-  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_PROCESS_MAP" | "SERVICE_CUSTOMER_PRICE" | "CONSUMABLE_NORM" | "DRAFT_INVOICE_LINE";
+  | "SERVICE_PROPERTY_MAP" | "SERVICE_VALUE_MAP" | "SERVICE_PROCESS_MAP" | "SERVICE_CUSTOMER_PRICE" | "CONSUMABLE_NORM" | "DRAFT_INVOICE_LINE" | "FINISHING_RATE_MAP";
 
 export const SERVICE_ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ServiceItemLiveRefKind; label: string }> = [
   // Faturalama motoru eşlemeyi ve müşteri hizmet fiyatını HER sevkte okur (1e K2a, 2026-10-29).
@@ -33,6 +33,8 @@ export const SERVICE_ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ServiceItemLiveR
   { kind: "CONSUMABLE_NORM", label: "Aktif sarf normu" },
   // Taslak fatura onaylanınca hizmeti satış defterine yazar (plan §3.7).
   { kind: "DRAFT_INVOICE_LINE", label: "Taslak fatura satırı" },
+  // F6: fason kabulünden alış taslağı aktif tarife sürümünün köprüsünü okur.
+  { kind: "FINISHING_RATE_MAP", label: "Fason tarifesi köprüsü" },
 ];
 
 interface LiveRefWhere {
@@ -42,6 +44,7 @@ interface LiveRefWhere {
   SERVICE_CUSTOMER_PRICE: Prisma.ItemPriceWhereInput;
   CONSUMABLE_NORM: Prisma.ServiceConsumableNormWhereInput;
   DRAFT_INVOICE_LINE: Prisma.InvoiceLineWhereInput;
+  FINISHING_RATE_MAP: Prisma.FinishingRateWhereInput;
 }
 
 /** Tek kart (`string`) ya da toplu sayım (`{ in }`) — aynı yüklem iki yolda (tek kaynak). */
@@ -55,6 +58,8 @@ function liveRefWhere(serviceItemId: string | { in: string[] }): LiveRefWhere {
     SERVICE_CUSTOMER_PRICE: { serviceItemId, customerId: { not: null }, ...ACTIVE_ITEM_PRICE },
     CONSUMABLE_NORM: { serviceItemId, revokedAt: null },
     DRAFT_INVOICE_LINE: { serviceItemId, invoice: { status: InvoiceStatus.DRAFT } },
+    // Yalnız aktif sürüm: damgalı geçmiş sürüm tarihçedir, taslağa fiyat vermez.
+    FINISHING_RATE_MAP: { serviceItemId, revokedAt: null },
   };
 }
 
@@ -72,13 +77,14 @@ export async function countServiceItemLiveRefs(db: Db, serviceItemId: string): P
     SERVICE_CUSTOMER_PRICE: await db.itemPrice.count({ where: w.SERVICE_CUSTOMER_PRICE }),
     CONSUMABLE_NORM: await db.serviceConsumableNorm.count({ where: w.CONSUMABLE_NORM }),
     DRAFT_INVOICE_LINE: await db.invoiceLine.count({ where: w.DRAFT_INVOICE_LINE }),
+    FINISHING_RATE_MAP: await db.finishingRate.count({ where: w.FINISHING_RATE_MAP }),
   };
   return SERVICE_ITEM_LIVE_REF_KINDS.map(({ kind, label }) => ({ kind, label, count: counts[kind] }));
 }
 
 export const totalServiceItemLiveRefs = (c: ServiceItemLiveRefCount[]): number => c.reduce((s, x) => s + x.count, 0);
 
-/** Liste rozeti için kart başına toplam canlı referans — kart sayısından bağımsız 6 sorgu (`groupBy`). */
+/** Liste rozeti için kart başına toplam canlı referans — kart sayısından bağımsız 7 sorgu (`groupBy`). */
 export async function countServiceItemLiveRefTotals(db: Db, ids: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>(ids.map((id) => [id, 0]));
   if (ids.length === 0) return out;
@@ -99,6 +105,8 @@ export async function countServiceItemLiveRefTotals(db: Db, ids: string[]): Prom
   add(norms);
   const lines = await db.invoiceLine.groupBy({ by: ["serviceItemId"], where: w.DRAFT_INVOICE_LINE, _count: { _all: true } });
   add(lines);
+  const rates = await db.finishingRate.groupBy({ by: ["serviceItemId"], where: w.FINISHING_RATE_MAP, _count: { _all: true } });
+  add(rates);
   return out;
 }
 
@@ -136,6 +144,9 @@ export async function listServiceItemLiveRefs(
       where: w.DRAFT_INVOICE_LINE, take, orderBy: { createdAt: "asc" },
       select: { id: true, invoice: { select: { docNo: true } } },
     })).map((x) => ({ id: x.id, title: x.invoice.docNo, detail: "taslak faturayı onaylayın ya da satırı kaldırın" })),
+    FINISHING_RATE_MAP: (await db.finishingRate.findMany({
+      where: w.FINISHING_RATE_MAP, take, orderBy: { code: "asc" }, select: { id: true, code: true, name: true },
+    })).map((x) => ({ id: x.id, title: x.name, detail: `${x.code} — tarifenin hizmet kartı köprüsünü kaldırın` })),
   };
   return counts.map((c) => ({ ...c, records: rec[c.kind] }));
 }

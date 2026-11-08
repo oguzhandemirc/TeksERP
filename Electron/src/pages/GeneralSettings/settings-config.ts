@@ -1792,6 +1792,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
     numberFlags: [
       {
+        // F6: backend `readFasonExpectedReturnDays` (kayıt yok = 0 = termin yok) ile birebir.
+        key: "fasonExpectedReturnDays",
+        group: "Fason",
+        title: "Fason sevkte beklenen dönüş (gün)",
+        desc: "Fason sevk açılırken beklenen dönüş tarihi sevk gününe bu kadar gün eklenerek önerilir; fason firma kartındaki ya da süreç türündeki gün sayısı bunu ezer, sevk ekranında elle değiştirilebilir. Gecikme Fason Kokpiti'nde bu tarihe göre sayılır. 0 (varsayılan) = termin önerilmez.",
+        min: 0,
+        max: 365,
+        fallback: 0,
+        unit: "gün",
+        step: 1,
+        audience: ["Planlamacı", "Operatör"],
+      },
+      {
         key: "tamburPlanGateWidthToleranceCm",
         group: "Tambur",
         title: "Tambur en eşiği (cm)",

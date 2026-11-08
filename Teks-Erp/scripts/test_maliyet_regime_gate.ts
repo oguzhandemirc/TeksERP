@@ -127,6 +127,16 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "machineCostRate",
     neden: "Sarf stoğu zinciri cost-rate-validity.helper modülünden YALNIZ consumableNormsValidAt çağırır; machineCostRate aynı modüldeki komşu fonksiyondur (tarayıcı dosya düzeyinde), okunmaz. Pencere yüklemi o dosyada tek kaynak kalmalı (test_makine_ucreti_sarf_normu §7) — bölünmez.",
   },
+  {
+    dosya: "routes/finance.routes.ts",
+    model: "finishingRate",
+    neden: "F6 fason alış taslağı (from-subcontractor-receipt; uç zaten requireFinanceEnabled arkasında): fason tarifesini ve kumaşın tarife kodunu yalnız OKUR (subcontractor-purchase-draft → resolveRateCodes/pickFinishingRateAtDispatch, sevk kg kontrolüyle aynı çözüm). Maliyet kapalıyken tarife yoksa satır fiyat 0 + uyarıyla döner; maliyet tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/finance.routes.ts",
+    model: "costStructure",
+    neden: "F6 fason alış taslağı (from-subcontractor-receipt; uç zaten requireFinanceEnabled arkasında): fason tarifesini ve kumaşın tarife kodunu yalnız OKUR (subcontractor-purchase-draft → resolveRateCodes/pickFinishingRateAtDispatch, sevk kg kontrolüyle aynı çözüm). Maliyet kapalıyken tarife yoksa satır fiyat 0 + uyarıyla döner; maliyet tablosuna yazmaz.",
+  },
 ];
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [

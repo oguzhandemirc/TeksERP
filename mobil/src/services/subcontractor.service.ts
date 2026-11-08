@@ -52,6 +52,8 @@ export interface DispatchRequest {
   /** Fason adım talimatı — genel sevk notundan ayrı. Boş gönderilirse backend
    *  adımın notes'unu default kullanır. */
   instruction?: string;
+  /** F6/T2 beklenen dönüş — fabrika günü `YYYY-MM-DD`; yoksa backend firma > süreç türü > ayar varsayılanı. */
+  expectedReturnAt?: string;
   /**
    * WO ürünü ile rulo ürünü uyuşmazlığını bilinçli onayla. Frontend
    * mismatch modal'da onayladıktan sonra true gönderir.

@@ -52,6 +52,8 @@ const dispatchSchema = z
     plateNumber: z.string().trim().max(32).nullish(),
     driverName: z.string().trim().max(120).nullish(),
     notes: z.string().trim().max(500).nullish(),
+    /** F6: beklenen dönüş; yok ⇒ firma > ayar varsayılanı, null ⇒ termin yok. */
+    expectedReturnAt: z.string().max(40, "Beklenen dönüş tarihi geçersiz").nullable().optional(),
   })
   .strict();
 

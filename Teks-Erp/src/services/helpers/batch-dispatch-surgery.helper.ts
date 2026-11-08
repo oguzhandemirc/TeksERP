@@ -150,7 +150,7 @@ export async function performDispatchSurgeryTx(
       instruction: true,
       notes: true,
       dispatchedAt: true,
-      dispatchedById: true,
+      dispatchedById: true, expectedReturnAt: true,
       subcontractor: { select: { name: true } },
       step: { select: { station: { select: { name: true } } } },
       items: {
@@ -343,6 +343,7 @@ export async function performDispatchSurgeryTx(
           instruction: d.instruction,
           dispatchedAt: d.dispatchedAt,
           dispatchedById: d.dispatchedById,
+          expectedReturnAt: d.expectedReturnAt, // F6: termin plandır; kopyalanmazsa bölünen malın gecikmesi kaybolur
           notes: d.notes ? `${d.notes} | ${splitNote}` : splitNote,
           totalQty: new Prisma.Decimal(0), // aşağıda kalem toplamından
         },

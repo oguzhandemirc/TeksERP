@@ -328,6 +328,8 @@ export class SubcontractorCategoryService {
       description?: string;
       appliesColor?: boolean;
       appliesProperty?: boolean;
+      /** F6: varsayılan fason termini (gün); `null` = yok. */
+      expectedReturnDays?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -389,13 +391,15 @@ export class SubcontractorCategoryService {
       isActive?: boolean;
       appliesColor?: boolean;
       appliesProperty?: boolean;
+      /** F6: varsayılan fason termini (gün); `null` = yok. */
+      expectedReturnDays?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
     const before = await prisma.subcontractorCategory.findUnique({
       where: { id },
-      select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true },
+      select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true, expectedReturnDays: true },
     });
     // Ad-mükerrer kontrolü yalnız ad gerçekten değişirken (tarihsel mükerrer
     // kayıt düzenlenebilir kalsın). Kayıt yoksa atla — 409 yerine not-found dönsün.
@@ -620,6 +624,8 @@ export class SubcontractorManagementService {
       categoryIds?: string[];
       /** Bağlı cari (fason = carinin rolü); verilmezse/null → bağsız fason. */
       customerId?: string | null;
+      /** F6: varsayılan fason termini (gün); kategori ve genel ayarın önünde. */
+      expectedReturnDays?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -633,6 +639,7 @@ export class SubcontractorManagementService {
       address?: string | null;
       isFavorite?: boolean;
       customerId?: string | null;
+      expectedReturnDays?: number | null;
       // Ad BÜYÜK normalize edilir (2026-08-19) — mükerrer kontrolü aynı
       // katlamayı kullanıyor; depolanan biçim ondan ayrışırsa kontrol kendi
       // yazdığı kaydı bulamaz.
@@ -656,6 +663,7 @@ export class SubcontractorManagementService {
     if (address !== undefined) payload.address = address;
     if (typeof rest.isFavorite === "boolean") payload.isFavorite = rest.isFavorite;
     if (rest.customerId !== undefined) payload.customerId = rest.customerId;
+    if (rest.expectedReturnDays !== undefined) payload.expectedReturnDays = rest.expectedReturnDays;
 
     // §18: kod tekilliği harf-duyarsız. TAM eşleşmeli aktif kayıt → 409; TAM
     // eşleşmeli pasif kayıt → diriltme; YALNIZ harf farkıyla eşleşme → 409
@@ -758,6 +766,8 @@ export class SubcontractorManagementService {
       categoryIds?: string[]; // verilirse mevcut kategoriler tamamen değişir
       /** Bağlı cari: uuid = bağla/değiştir · null = bağı kaldır · undefined = dokunma. */
       customerId?: string | null;
+      /** F6: varsayılan fason termini (gün); `null` = kaldır · undefined = dokunma. */
+      expectedReturnDays?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -766,7 +776,7 @@ export class SubcontractorManagementService {
     // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
     const before = await prisma.subcontractor.findUnique({
       where: { id },
-      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true, customerId: true },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true, customerId: true, expectedReturnDays: true },
     });
 
     // Update'te her alan tamamen optional. Gönderilmemişse undefined kalır

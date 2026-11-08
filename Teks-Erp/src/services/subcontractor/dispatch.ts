@@ -36,6 +36,7 @@ import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { resolveStepWorkInstructions, resolveStepDyeColor } from "../helpers/fason-work-instructions.helper";
 import { OPEN_OUTSTANDING } from "../helpers/fason-open-dispatch.helper";
 import { assertWorkOrderBound } from "../helpers/dispatch-header.helper";
+import { resolveExpectedReturn } from "../helpers/fason-expected-return.helper";
 import { uyari } from "../../lib/logger";
 import { TERIM } from "../../constants/terim";
 import { nextSubcontractorDocNoTx } from "./shared";
@@ -82,6 +83,8 @@ export async function dispatch(
        * bağımsız — iplik-yalnız sevk meşrudur. Kapı: iplik kapalıysa controller 403 + tek yazıcı 403.
        */
       yarnLines?: YarnDispatchLineInput[];
+      /** F6: beklenen dönüş — undefined ⇒ varsayılan zinciri (firma > süreç türü > ayar > NULL), null ⇒ termin yok. */
+      expectedReturnAt?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -188,6 +191,13 @@ export async function dispatch(
     if (!subcontractor) throw AppError.notFound("Fason firma bulunamadı");
     // Soft-delete guard: pasife alınmış firmaya yeni sevk açılamaz.
     if (!subcontractor.isActive) throw AppError.badRequest("Fason firma pasif durumda");
+    // F6: termin tx'ten ÖNCE çözülür (salt okuma); SEPARATE'te her parti sevki aynı termini taşır.
+    const termin = await resolveExpectedReturn({
+      body: data.expectedReturnAt,
+      subcontractorId: data.subcontractorId,
+      categoryId: step.requiredCategoryId ?? null,
+      dispatchedAt: new Date(),
+    });
 
     // Adımın hizmet kategorisi tanımlıysa, seçilen fason firmanın bu kategoride
     // hizmet veriyor olması zorunlu (SubcontractorToCategory eşleşmesi).
@@ -690,6 +700,7 @@ export async function dispatch(
           // (WorkOrderStep.notes) default kopyalanır → o adımın çeki listesine basılır.
           instruction: (data.instruction?.trim() || step.notes) ?? null,
           totalQty,
+          expectedReturnAt: termin.at,
           items: {
             create: rolls.map((r) => ({
               rollId: r.id,
@@ -864,7 +875,7 @@ export async function dispatch(
         });
       }
 
-      return { dispatch, remainderBatches, beamLines, yarnItems };
+      return { dispatch: { ...dispatch, expectedReturnSource: termin.source }, remainderBatches, beamLines, yarnItems };
     };
     const whole: DispatchGroup = { rolls, autoAttachIds, existingBatchIds, totalQty, warpBeamIds, yarnLines };
 
@@ -980,6 +991,8 @@ export async function bulkDispatchStep(this: SubcontractorServiceThis,
       /** K11 çok-parti çözümü. MERGE → dispatch()'e iletilir (en eskide birleşir);
        *  SEPARATE → burada parti başına AYRI sevk döngüsü. */
       multiBatchStrategy?: "MERGE" | "SEPARATE";
+      /** F6: dispatch()'e aynen iletilir. */
+      expectedReturnAt?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -1040,6 +1053,7 @@ export async function bulkDispatchStep(this: SubcontractorServiceThis,
         plateNumber: data.plateNumber,
         driverName: data.driverName,
         multiBatchStrategy: data.multiBatchStrategy,
+        expectedReturnAt: data.expectedReturnAt,
       },
       userId
     );

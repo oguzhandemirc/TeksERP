@@ -22,6 +22,7 @@
 //     bayraklanmaz; survivor'ın kendi topu bayraklanmaz. + splitBatch tüketilmiş
 //     tarihçe topunu bölmede reddeder (savunma).
 //  g) split'te "TÜM toplar seçilemez" kuralı fasondayken de sürer.
+// NEGATİF SONDA — 2026-11-08: cerrahide doğan sevke `expectedReturnAt` kopyası silinince a2b ❌; geri alındı.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { PrintedDocStatus, PrintedDocType, RollStatus, StationKind, StationType, WorkOrderStatus } from "@prisma/client";
@@ -147,7 +148,9 @@ async function main() {
     // dispatchedAt'i geçmişe çek — K16 doğan sevkin "fiziksel gerçek" tarihi
     // (orijinal sevkin günü) kalıttığı ayırt edilebilir olsun.
     const pastA = new Date(Date.now() - 36 * 3600 * 1000);
-    await prisma.subcontractorDispatch.update({ where: { id: dispA }, data: { dispatchedAt: pastA } });
+    // F6: termin de geçmişe çekilir (gecikmiş sevk) — bölünen sevk aynı termini taşımalı.
+    const dueA = new Date(Date.now() - 12 * 3600 * 1000);
+    await prisma.subcontractorDispatch.update({ where: { id: dispA }, data: { dispatchedAt: pastA, expectedReturnAt: dueA } });
     const dANo = (await prisma.subcontractorDispatch.findUnique({ where: { id: dispA }, select: { dispatchNo: true } }))!.dispatchNo;
 
     const splitA = await splitBatch({ batchId: bA.id, rollIds: [ra1.id, ra2.id], userId: admin.id });
@@ -169,7 +172,7 @@ async function main() {
       where: { batchId: splitA.newBatchId },
       select: {
         dispatchNo: true, stepId: true, subcontractorId: true, plateNumber: true, driverName: true,
-        instruction: true, notes: true, dispatchedAt: true, cancelledAt: true, totalQty: true,
+        instruction: true, notes: true, dispatchedAt: true, cancelledAt: true, totalQty: true, expectedReturnAt: true,
         items: { select: { rollId: true } },
       },
     });
@@ -179,6 +182,11 @@ async function main() {
         bornA.plateNumber === "06 K16 123" && bornA.driverName === "K16 Şoför" && bornA.instruction === "K16 talimatı" &&
         bornA.dispatchedAt.getTime() === pastA.getTime() && bornA.dispatchNo !== dANo && bornA.dispatchNo.startsWith("FS"),
       bornA?.dispatchNo,
+    );
+    check(
+      "a2b: yeni sevk orijinalin terminini (expectedReturnAt) kopyalar — gecikme kokpitte kaybolmaz",
+      bornA?.expectedReturnAt?.getTime() === dueA.getTime(),
+      bornA?.expectedReturnAt?.toISOString(),
     );
     check(
       "a3: yeni sevkin notes'u orijinal notu taşır + K16 bölünme izi APPEND",
