@@ -38,6 +38,7 @@ import {
   touchWarehouseSackTx,
   touchShipmentPlannedTx,
 } from "../src/services/helpers/shipment-locks.helper";
+import { envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 const TS = Date.now();
 const P = `TEST-STG-${TS}`;
@@ -168,7 +169,7 @@ async function run(): Promise<void> {
   const say = (src: string, ad: string): number =>
     (src.match(new RegExp(`await\\s+${ad}\\s*\\(`, "g")) ?? []).length;
   const shippingSrc = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
-  const invSrc = oku("inventory.service.ts");
+  const invSrc = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   const nWh = say(shippingSrc, "touchWarehouseSackTx");
   const nInv = say(invSrc, "touchWarehouseSackTx");
   const nPl = say(shippingSrc, "touchShipmentPlannedTx");

@@ -33,6 +33,7 @@ import {
   resolveDefaultDefectTypeTx,
   setDefaultDefectTypeTx,
 } from "../src/services/helpers/default-defect-type.helper";
+import { envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -140,7 +141,7 @@ async function main(): Promise<void> {
 
   // §4 — statik
   // KQ-D7: üç yazar (kursunFinish dahil) tek boğazdan yazar — çözüm orada, yazımdan ÖNCE.
-  const inv = readFileSync(join(__dirname, "..", "src", "services", "inventory.service.ts"), "utf8");
+  const inv = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   const gw = readFileSync(join(__dirname, "..", "src", "services", "helpers", "roll-defect.helper.ts"), "utf8");
   const iRes = gw.indexOf("resolveDefaultDefectTypeTx(tx, input.defects)");
   const iWrite = gw.indexOf("tx.rollError.create");

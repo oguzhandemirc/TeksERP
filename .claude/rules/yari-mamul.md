@@ -1,6 +1,7 @@
 ---
 paths:
   - "{Teks-Erp,Electron,mobil}/src/**/*{semi-finished,SemiFinished,inventory,Inventory}*"
+  - "Teks-Erp/src/services/inventory/**"
   - "{Teks-Erp,Electron,mobil}/src/**/{Rolls,Depo}/**"
 ---
 

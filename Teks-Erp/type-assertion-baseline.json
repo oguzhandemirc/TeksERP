@@ -4,8 +4,8 @@
   "_B": "scripts/ — örneği nesne tipine genişletme ((x as unknown as {…}))",
   "A": {
     "src/services/import/import.service.ts::object": 3,
-    "src/services/inventory.service.ts::Roll }": 1,
-    "src/services/inventory.service.ts::Roll": 1,
+    "src/services/inventory/detail.ts::Roll }": 1,
+    "src/services/inventory/detail.ts::Roll": 1,
     "src/services/label-template.service.ts::LabelTemplate": 1,
     "src/services/label-template.service.ts::LabelTemplateVariant": 1,
     "src/services/label.service.ts::Parameters<typeof buildRollLabelHtml>[0][\"template\"": 1,

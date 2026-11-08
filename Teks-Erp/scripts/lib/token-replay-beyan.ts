@@ -180,8 +180,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // (yazar/okuyucu değil): elle top (a′) bağlı-topta `replayIfAny` erken yolu, kartsız top tepede `run`.
   // D4c (ertelendi): hızlı iş emri telafisi `hardDelete(…, { releaseToken })` token'ı bırakır — D4b'li istemciler sahada
   // yaygınlaşınca kalkar (telafi token'ı tutar, 409 QUICK_START_ROLLED_BACK); plan §4.
-  [`${S}inventory.service.ts::createInitialEntryFresh`]: { giris: { [`${S}inventory.service.ts::createInitialEntry`]: "R" } },
-  [`${S}inventory.service.ts::createOpenFabricFresh`]: { giris: { [`${S}inventory.service.ts::createOpenFabric`]: "R", [`${S}inventory.service.ts::createOpenFabricFresh`]: "K′" } },
+  [`${S}inventory/initial-entry.ts::createInitialEntryFresh`]: { giris: { [`${S}inventory/initial-entry.ts::createInitialEntry`]: "R" } },
+  [`${S}inventory/open-fabric.ts::createOpenFabricFresh`]: { giris: { [`${S}inventory/open-fabric.ts::createOpenFabric`]: "R", [`${S}inventory/open-fabric.ts::createOpenFabricFresh`]: "K′" } },
   [`${S}helpers/manifest-number.helper.ts::recordSackPickList`]: { helper: "çeki listesi yazarı (içerik tekilliği iş kuralı); replay printPickList'in boğazında" },
 
   // ── Borç: D5 (4. durum eksikleri · ham P2002 · predicate'siz retry · boğaza taşıma) ─────
@@ -251,8 +251,8 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}cheque.service.ts::chequeReplay`]: ["kind", "amount", "dueDate", "taraf", "docType", "currency", "serialNo", "exchangeRate", "issueDate", "postingDate"],
   [`${S}gelen-belge-ozel-sablon.service.ts::createUserTemplate`]: ["code"],
   [`${S}goods-receipt.service.ts::receiptReplay`]: ["warehouseId", "purchaseOrderId", "deliveryNoteNo", "rawStockEntry", "currency", "taraf"],
-  [`${S}inventory.service.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
-  [`${S}inventory.service.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],
+  [`${S}inventory/initial-entry.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
+  [`${S}inventory/open-fabric.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],
   [`${S}invoice.service.ts::invoiceReplay`]: ["type", "taraf", "currency", "satırlar"],
   [`${S}service-period-invoice.service.ts::servicePeriodReplay`]: ["type", "cariId", "period"],
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],

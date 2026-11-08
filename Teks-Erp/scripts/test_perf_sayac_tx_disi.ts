@@ -30,6 +30,7 @@ import * as path from "node:path";
 import ts from "typescript";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
+import { envanterServisEtiketi } from "./lib/envanter-servis-kaynak";
 
 const SRC = path.join(__dirname, "..", "src");
 const HELPER_FILES = new Set(["services/helpers/roll-barcode.helper.ts", "services/helpers/series-counter-store.helper.ts"]);
@@ -145,7 +146,9 @@ function main(): void {
     if (!/RollBarcode|reserveRollBarcodes|reserveSeriesNo|reserveDoffCode/.test(src)) continue;
     const t = tara(src, rel);
     toplamCagri += t.toplam;
-    if (t.txIci.length) bulunan[rel] = t.txIci;
+    // envanter servisi bölündü (2026-11-08): aile (cephe + `services/inventory/*.ts`) cephe etiketinde toplanır → §2 kapsamı daralmaz
+    const anahtar = envanterServisEtiketi(rel);
+    if (t.txIci.length) bulunan[anahtar] = [...(bulunan[anahtar] ?? []), ...t.txIci];
   }
   if (SONDA === "ihlal") {
     const t = tara(`async function f(){ await prisma.$transaction(async (tx) => { await generateRollBarcodeTx(tx, "H"); }); }`, "sonda.ts");

@@ -93,7 +93,7 @@ const BEYAN: Record<string, { sinif: Sinif; kanal: Kanal[] }> = {
   "routes/color.routes.ts#<modül>": { sinif: "ARAMA", kanal: ["iliski"] },
   "routes/item.routes.ts#<modül>": { sinif: "ARAMA", kanal: ["iliski"] },
   "routes/order.routes.ts#<modül>": { sinif: "ARAMA", kanal: ["iliski"] },
-  "services/inventory.service.ts#buildRollWhere": { sinif: "ARAMA", kanal: ["iliski"] },
+  "services/inventory/list.ts#buildRollWhere": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/tambur.service.ts#listRecentOutputRolls": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/order/available.ts#findAvailableForWorkOrder": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/order/available.ts#findAvailableOrderLines": { sinif: "ARAMA", kanal: ["iliski"] },

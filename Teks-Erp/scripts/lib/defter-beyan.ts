@@ -289,7 +289,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      { dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "reopenClosedMovementsTx" }],
     [
       "src/services/helpers/roll-movement.helper.ts",
-      "src/services/helpers/roll-step.helper.ts", "src/services/inventory.service.ts",
+      "src/services/helpers/roll-step.helper.ts", "src/services/inventory/open-fabric.ts",
       "src/services/kursun-bypass.service.ts", "src/services/kursun-qc.service.ts",
       "src/services/subcontractor/receive.ts", "src/services/subcontractor/dispatch.ts",
       "src/services/subcontractor/direct-ship.ts", "src/services/tambur-manual.service.ts",
@@ -304,7 +304,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeRollOperations" },
      { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeWidthTracedStepOperationsTx" },
      { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "restoreMeasuredWidthsTx" }],
-    ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
+    ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory/kursun.ts",
      "src/services/kursun-qc.service.ts", "src/services/subcontractor/receive.ts", "src/services/subcontractor/dispatch.ts",
      "src/services/subcontractor/direct-ship.ts", "src/services/tambur.service.ts"]),
 
@@ -626,7 +626,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "setRollPropertyValueTx" },
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "applyRollFlagSetTx" }],
     // `3c53deaf` (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
-    ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
+    ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory/initial-entry.ts", "src/services/inventory/open-fabric.ts",
       "src/services/subcontractor/receive.ts", "src/services/workorder/target-planning.ts",
       "src/services/tambur-undo.service.ts"]),
   // ③a ticari pivot → DEFTER (2026-09-14, WOTOL-BAG-DAMGA-PLAN): bağ silinmez, `unlinkedAt`
@@ -802,8 +802,8 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   TAMBUR_CUT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
   TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "TAMBUR_CUT", "CUT_SPLIT", "CUT_DISCARD", "SCRAP", "OVERAGE"] },
   ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok",
-    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "cancelRollRecordTx" }] },
-  ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE", tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "restoreCancelledRoll" }] },
+    tersYazan: [{ dosya: "src/services/inventory/cancel.ts", sembol: "cancelRollRecordTx" }] },
+  ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE", tersYazan: [{ dosya: "src/services/inventory/restore.ts", sembol: "restoreCancelledRoll" }] },
   CANCEL_RESTORE: { tur: "TERS_KODU", ileri: "ROLL_CANCEL" },
   CUSTOMER_RETURN: { tur: "BAGLI_TERS", kod: "RETURN_CANCEL", tersYazan: [{ dosya: "src/services/return.service.ts", sembol: "cancelReturn" }] },
   RETURN_CANCEL: { tur: "TERS_KODU", ileri: "CUSTOMER_RETURN" },
@@ -886,20 +886,20 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // SATIRI VAR — sınıfı belirlenemiyor" ÇÜRÜDÜ: main'de yazar yoktu çünkü katalog kodu ÖLÜYDÜ;
   // ea'nın test hedefindeki 24 satır tek seferlik bir koşum iziydi (fabrika kopyasında 0). "Sahibi
   // bulunamadı" da düştü: `roll:manual-adjust` SoD üçlüsü → top-düzeltme alanı (6e).
-  // Yazıcı artık VAR: `adjustRollQty` (inventory.service.ts) `postStockMove` ile ADJUST yazar —
+  // Yazıcı artık VAR: `adjustRollQty` (inventory/qty-adjust.ts) `postStockMove` ile ADJUST yazar —
   // düşükse `from` −fark, yüksekse `to` +fark — ve `rollVarianceId` ile sapma satırına BAĞLI.
   // Ters yolu DAMGA ya da bağlı ters DEĞİL: geri alma ucu yok; ters yönde ikinci elle düzeltme
   // yeni bir OLGUDUR ⇒ karşı olay KENDİSİ (aynı kod, ters işaret, sapma defterinde karşı satır).
   // §13d simetri kendine döner (KARSI_OLAY ⇄ kendisi); §13f çapa yazıcının kendisi.
   MANUAL_ADJUST: { tur: "KARSI_OLAY", kod: "MANUAL_ADJUST", gerekce: "elle metraj düzeltmesinin tersi ters yönde ikinci bir elle düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok ve olmamalı (operatör kararı, damga değil olgu)",
-    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "adjustRollQty" }] },
+    tersYazan: [{ dosya: "src/services/inventory/qty-adjust.ts", sembol: "adjustRollQty" }] },
   // ENTRY_CORRECTION — giriş ölçümü düzeltmesi (6e 2026-09-14, 1e ② a): `applyManualProperties`
   // bütün topta currentQty = initialQty = m yazarken ADJUST satırı (düşükse from −fark, yüksekse
   // to +fark, `rollVarianceId` ENTRY_QTY_CORRECTION sapmasına bağlı, goodsReceiptId'li). Kabul-anı
   // okuyucuları (`RECEIPT_QTY_REASONS`) ENTRY ile birlikte işaretli toplar. Tersi MANUAL_ADJUST
   // emsali: geri alma ucu yok, ters yönde ikinci düzeltme yeni olgudur ⇒ karşı olay KENDİSİ.
   ENTRY_CORRECTION: { tur: "KARSI_OLAY", kod: "ENTRY_CORRECTION", gerekce: "giriş ölçümü düzeltmesinin tersi ters yönde ikinci bir düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok (operatör kararı, damga değil olgu)",
-    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "applyManualProperties" }] },
+    tersYazan: [{ dosya: "src/services/inventory/manual-properties.ts", sembol: "applyManualProperties" }] },
   // KURSUN_METER_ADJUST — H1b (2026-10-29): APPLY kipinde etkin kurşun çıkış okuması depo stoğundaki topun metrajını
   // düzeltirken ADJUST (`rollVarianceId` KURSUN_EXIT_MEASURE sapmasına bağlı). Okuma damgalanınca aynı helper ters
   // yönde aynı kodla ikinci satırı yazar (üretimdeki top satır almaz; giriş son adım kapanışında güncel metrajla).
@@ -938,10 +938,10 @@ export interface DamgaNullBeyani {
 }
 
 export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
-  { dosya: "src/services/inventory.service.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
+  { dosya: "src/services/inventory/restore.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "roll_status_events (DB trigger'ı; CANCELLED → önceki durum satırı)",
     gerekce: "kolon topun ŞU ANKİ iptal hâlidir; iptalin ve geri alınmasının tarihçesi durum defterinde. \"Kim geri aldı\" bugün hiçbir iş kararına/rapora girmiyor — rapor ihtiyacı doğarsa şemalı ayrı dilim (restoredById)" },
-  { dosya: "src/services/inventory.service.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledById", adet: 1, sinif: "DURUM_KOLONU",
+  { dosya: "src/services/inventory/restore.ts", fonksiyon: "restoreCancelledRoll", alan: "cancelledById", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "roll_status_events (iptal satırının actorId'si bu kolondan donmuştur)",
     gerekce: "cancelledAt ile aynı — iptalin aktörü iptal satırında kalıcı; kolon şu anki hâl" },
   { dosya: "src/services/stock-count-reversal.service.ts", fonksiyon: "reverseTx", alan: "cancelledAt", adet: 1, sinif: "DURUM_KOLONU",

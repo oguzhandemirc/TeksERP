@@ -26,6 +26,7 @@ import { SETTING_KEYS, readProductionCancelReasonRequired, resolveCancelReasonRe
 import { CANCEL_REASON_REQUIRED_CODE, hasCancelReason } from "../src/services/helpers/cancel-reason.helper";
 import { AppError } from "../src/utils/app-error";
 import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
+import { envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -65,7 +66,7 @@ function statik(): void {
   check("§0a ÖLÇÜM: beş üretim iptal ucunda sebep Zod ile ZATEN zorunlu (bayrak onlara dokunmaz)", eksik.length === 0, eksik.join(", ") || "beşi de zorunlu");
   const invCtrl = oku("src/controllers/inventory.controller.ts");
   check("§0b top iptali sebebi OPSİYONEL alır (query `reason`/`reasonCode`) — bayrağın tek yolu", /const reason = typeof req\.query\.reason === "string" \? req\.query\.reason : undefined;/.test(invCtrl));
-  const inv = oku("src/services/inventory.service.ts");
+  const inv = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   check("§0c kapı TEK helper: `softDelete`te `assertCancelReasonTx` yalnız iptalde (`!isScrap`), `existing` okunmadan ÖNCE; elle kopya yok", /if \(!isScrap\) await assertCancelReasonTx\(prisma, \{ reason: opts\?\.reason, reasonCode: opts\?\.reasonCode \}, "Top iptali"\);\n\s*const existing = await prisma\.roll\.findUnique/.test(inv) && (inv.match(/assertCancelReasonTx\(/g) ?? []).length === 1 && !/code: "CANCEL_REASON_REQUIRED"/.test(inv));
   const sys = ayarServisMetni();
   const govde = sys.slice(sys.indexOf("export async function resolveCancelReasonRequired"), sys.indexOf("export async function resolveCancelReasonRequired") + 300);

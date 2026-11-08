@@ -105,7 +105,7 @@
     "Teks-Erp/src/services/helpers/master-data-live.helper.ts::Istemci",
     "Teks-Erp/src/services/helpers/shipment-coverage.helper.ts::KAPSAMA_TOLERANS_M",
     "Teks-Erp/src/services/helpers/shipping-weigh-gate.helper.ts::liste",
-    "Teks-Erp/src/services/inventory.service.ts::taze",
+    "Teks-Erp/src/services/inventory/manual-properties.ts::taze",
     "Teks-Erp/src/services/mobile-update.service.ts::DosyaBilgi",
     "Teks-Erp/src/services/mobile-update.service.ts::dosyaBilgi",
     "Teks-Erp/src/services/mobile-update.service.ts::dosyaYolu",
