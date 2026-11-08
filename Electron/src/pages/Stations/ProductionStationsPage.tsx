@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -15,7 +15,7 @@ import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import type { ExportColumn } from "@/lib/list-export";
-import { stationKindLabel, stationTypeLabels } from "@/types/enums";
+import { stationTypeLabels } from "@/types/enums";
 
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
@@ -37,10 +37,13 @@ import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types";
 import { CapabilitiesEditSheet } from "@/pages/StationCapabilities/CapabilitiesEditSheet";
 import { peripheralService } from "@/pages/PeripheralDevices/service";
-import { peripheralKindLabels, type PeripheralDevice } from "@/pages/PeripheralDevices/types";
+import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { foldSearchText } from "@/lib/search-fold";
 import { isVisibleStationKind } from "./visibleStationKinds";
-import { buildStationMachineRows, type StationMachineRow } from "./stationMachineRows";
+import { buildStationListItems, canHaveKursun, kursunInfoFromDto, type StationKursunInfo, type StationListItem } from "./stationListItems";
+import { fetchKursunStation, kursunStationKey, type KursunStationDto } from "./kursun-station";
+import { plainStationKindLabel } from "./stationPlainLabels";
+import { StationDetailPanel } from "./StationDetailPanel";
 import { useStationsViewMode } from "./stationsViewMode";
 import { StationsViewToggle } from "./StationsViewToggle";
 import { StationListView } from "./StationListView";
@@ -49,37 +52,27 @@ import { StationListView } from "./StationListView";
 // StationCard'ın React.memo'sunu bozardı).
 const EMPTY_MACHINES: Machine[] = [];
 
-// Dışa aktarım ve LİSTE görünümü aynı düz satırlardan (`stationMachineRows.ts`): bir satır = bir MAKİNE,
-// makinesiz istasyon `machine: null` ile tek satır.
-type StationMachineExportRow = StationMachineRow;
-
-// İstasyon düzeyindeki sayılar (özellik yeteneği) satır başına tekrarlandığı için
-// `summable` DEĞİL — çok makineli istasyonda TOPLAM satırı onları kaç kez sayardı.
-// Cihaz sayısı makineye özgüdür (her satırda bir kez) → toplanabilir.
-const STATION_EXPORT_COLUMNS: ExportColumn<StationMachineExportRow>[] = [
+// Dışa aktarım ve LİSTE görünümü aynı öğelerden (`stationListItems.ts`): bir satır = bir İSTASYON.
+const yesNo = (b: boolean | undefined) => (b ? "Evet" : "Hayır");
+const STATION_EXPORT_COLUMNS: ExportColumn<StationListItem>[] = [
   { label: "İstasyon Kodu", value: (r) => r.station.code },
   { label: "İstasyon", value: (r) => r.station.name },
-  { label: "Görev Türü", value: (r) => stationKindLabel(r.station.kind) },
+  { label: "Görev Türü", value: (r) => plainStationKindLabel(r.station.kind) },
+  { label: "Süreç Türü", value: (r) => r.station.defaultCategory?.name ?? "" },
   { label: "Tip", value: (r) => stationTypeLabels[r.station.type] },
   { label: "Departman", value: (r) => r.station.department ?? "" },
-  { label: "İstasyon Durumu", value: (r) => (r.station.isActive ? "Aktif" : "Pasif") },
-  { label: "Renk Uygular", value: (r) => (r.station.appliesColor ? "Evet" : "Hayır") },
-  { label: "Özellik Uygular", value: (r) => (r.station.appliesProperty ? "Evet" : "Hayır") },
-  { label: "Kalite Muayenesi", value: (r) => (r.station.inspectionEnabled ? "Evet" : "Hayır") },
-  { label: "Ara İstasyon Kart Akışı", value: (r) => (r.station.appliesQuality ? "Evet" : "Hayır") },
-  { label: "En Ölçer", value: (r) => (r.station.capturesWidth ? "Evet" : "Hayır") },
-  { label: "İstasyon Özellik Sayısı", value: (r) => r.propertyCount ?? "" },
-  { label: "Makine Kodu", value: (r) => r.machine?.code ?? "" },
-  { label: "Makine", value: (r) => r.machine?.name ?? "" },
-  {
-    label: "Makine Durumu",
-    value: (r) => (r.machine ? (r.machine.isActive !== false ? "Aktif" : "Pasif") : "Makine yok"),
-  },
-  { label: "Cihaz Sayısı", value: (r) => (r.machine ? r.devices.length : ""), summable: true },
-  {
-    label: "Cihazlar",
-    value: (r) => r.devices.map((d) => `${d.name} (${peripheralKindLabels[d.kind]})`).join(", "),
-  },
+  { label: "Durum", value: (r) => (r.station.isActive ? "Aktif" : "Pasif") },
+  { label: "Kurşun Uygular", value: (r) => (r.kursun ? yesNo(r.kursun.enabled) : "") },
+  { label: "Varsayılan Gramaj", value: (r) => (r.kursun?.enabled ? (r.kursun.defaultGramaj ?? "") : "") },
+  { label: "Renk Uygular", value: (r) => yesNo(r.station.appliesColor) },
+  { label: "Özellik Uygular", value: (r) => yesNo(r.station.appliesProperty) },
+  { label: "Kalite Muayenesi", value: (r) => yesNo(r.station.inspectionEnabled) },
+  { label: "Ara İstasyon Kart Akışı", value: (r) => yesNo(r.station.appliesQuality) },
+  { label: "En Ölçer", value: (r) => yesNo(r.station.capturesWidth) },
+  { label: "Özellik Sayısı", value: (r) => r.propertyCount ?? "" },
+  { label: "Makine Sayısı", value: (r) => r.machines.length, summable: true },
+  { label: "Makineler", value: (r) => r.machines.map((m) => m.name).join(", ") },
+  { label: "Cihaz Sayısı", value: (r) => r.deviceCount, summable: true },
 ];
 
 const buildMachinePayload = (v: MachineFormValues, initial: Machine | null): Partial<Machine> => ({
@@ -101,7 +94,11 @@ export function ProductionStationsPage() {
   const [stationId, setStationId] = useState("__all__");
   const [machinePresence, setMachinePresence] = useState<MachinePresence>("all");
 
-  const stationsQ = useQuery({ queryKey: ["stations", "card"], queryFn: () => loadAllForPicker(stationService) });
+  // showInactive → pasif istasyonlar da gelir (istasyon panelindeki "Aktifleştir" ancak böyle erişilir).
+  const stationsQ = useQuery({
+    queryKey: ["stations", "card", showInactive],
+    queryFn: () => loadAllForPicker(stationService, showInactive ? { filters: {} } : undefined),
+  });
   // showInactive → filtresiz yükle (pasif makineler de gelsin); aksi halde yalnız aktif.
   const machinesQ = useQuery({
     queryKey: ["machines", "card", showInactive],
@@ -126,6 +123,9 @@ export function ProductionStationsPage() {
   const [labelMachine, setLabelMachine] = useState<Machine | null>(null);
   const [deleteMachine, setDeleteMachine] = useState<Machine | null>(null);
   const [deactivateMachine, setDeactivateMachine] = useState<Machine | null>(null);
+  const [deactivateStation, setDeactivateStation] = useState<Station | null>(null);
+  // Liste görünümünde sağ panelde açık istasyon (kimlik — veri tazelenince panel güncel kaydı gösterir).
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
 
   // Perf: StationCard React.memo'lu — kart grid'i arama tuşuna basıldıkça yeniden
   // render OLMASIN diye handler prop'ları kararlı referans olmalı. (Diğer prop'lar
@@ -171,6 +171,26 @@ export function ProductionStationsPage() {
     return map;
   }, [machinesQ.data]);
 
+  // Kurşun özeti — yalnız kurşun açılabilen istasyonlar; anahtar `StationKursunSection` ile ORTAK, panelde
+  // kaydedilen ayar listeye ayrı istek olmadan yansır.
+  const kursunCandidates = useMemo(() => allStations.filter(canHaveKursun), [allStations]);
+  // combine kararlı referans: aksi hâlde her render yeni Map → liste öğeleri boşuna yeniden kurulur.
+  const combineKursun = useCallback(
+    (results: Array<{ data?: KursunStationDto }>) => {
+      const map = new Map<string, StationKursunInfo>();
+      results.forEach((r, i) => {
+        const st = kursunCandidates[i];
+        if (st && r.data) map.set(st.id, kursunInfoFromDto(r.data));
+      });
+      return map;
+    },
+    [kursunCandidates],
+  );
+  const kursunByStation = useQueries({
+    queries: kursunCandidates.map((s) => ({ queryKey: kursunStationKey(s.id), queryFn: () => fetchKursunStation(s.id), staleTime: 60_000 })),
+    combine: combineKursun,
+  });
+
   // İstemci-tarafı filtre — tüm veri zaten yüklü (loadAllForPicker). AND (boyutlar
   // arası) + OR (Tür chip'leri içinde). showInactive filtre DEĞİL, makine yüklemesini sürer.
   const stations = useMemo(() => {
@@ -185,7 +205,7 @@ export function ProductionStationsPage() {
 
       if (q) {
         const hay = foldSearchText(
-          [s.name, s.code, s.department ?? "", ...sm.flatMap((m) => [m.name, m.code])].join(" "),
+          [s.name, s.code, s.department ?? "", s.defaultCategory?.name ?? "", ...sm.flatMap((m) => [m.name, m.code])].join(" "),
         );
         if (!hay.includes(q)) return false;
       }
@@ -193,12 +213,12 @@ export function ProductionStationsPage() {
     });
   }, [allStations, stationId, machinePresence, debouncedSearch, machinesByStation]);
 
-  // Düz satırlar — EKRANDA GÖRÜNEN istasyon kümesinden (filtre sonrası); liste görünümü VE dışa
-  // aktarım bu tek kümeden çizilir (görünümden bağımsız dosya). Makinesiz istasyon tek satır.
-  const exportRows = useMemo<StationMachineExportRow[]>(
-    () => buildStationMachineRows(stations, machinesByStation, peripheralsByMachine, capByStation),
-    [stations, machinesByStation, peripheralsByMachine, capByStation],
+  // İstasyon öğeleri — EKRANDA GÖRÜNEN küme (filtre sonrası); liste görünümü VE dışa aktarım bundan.
+  const listItems = useMemo<StationListItem[]>(
+    () => buildStationListItems(stations, machinesByStation, peripheralsByMachine, capByStation, kursunByStation),
+    [stations, machinesByStation, peripheralsByMachine, capByStation, kursunByStation],
   );
+  const selectedStation = selectedStationId ? (allStations.find((s) => s.id === selectedStationId) ?? null) : null;
   // Görünüm tercihi (kart ⇄ liste) — varsayılan liste, cihaza kayıtlı (`stationsViewMode.ts`).
   const [viewMode, setViewMode] = useStationsViewMode();
 
@@ -249,6 +269,20 @@ export function ProductionStationsPage() {
       });
   };
 
+  const handleStationToggleActive = (st: Station) => {
+    if (st.isActive) setDeactivateStation(st);
+    else stationMut.restoreMutation.mutate(st.id);
+  };
+  const handleStationDeactivate = () => {
+    if (!deactivateStation) return;
+    const id = deactivateStation.id;
+    void stationMut.removeMutation.mutateAsync(id).then(() => {
+      setDeactivateStation(null);
+      // Pasifler gizliyken istasyon listeden düşer — panel boşta kalmasın.
+      if (!showInactive && selectedStationId === id) setSelectedStationId(null);
+    });
+  };
+
   const handleMachineDeactivate = () => {
     if (!deactivateMachine) return;
     void machineMut.removeMutation.mutateAsync(deactivateMachine.id).then(() => setDeactivateMachine(null));
@@ -265,18 +299,18 @@ export function ProductionStationsPage() {
             <StationsViewToggle mode={viewMode} onChange={setViewMode} />
             <ListExportMenu
               name="Üretim İstasyonları"
-              rows={exportRows}
+              rows={listItems}
               columns={STATION_EXPORT_COLUMNS}
               // undefined → ListExportMenu kendi "İndirilecek kayıt yok" ipucunu verir.
-              title={exportRows.length > 0 ? "Ekrandaki istasyon + makine listesini indir" : undefined}
+              title={listItems.length > 0 ? "Ekrandaki istasyon listesini indir" : undefined}
               notes={[
                 `Ekranda görünen ${stations.length} istasyon (toplam ${allStations.length}) — filtreler uygulanmış hâliyle.`,
-                "Satır başına bir MAKİNE; istasyon sütunları tekrarlanır. Makinesi olmayan istasyon tek satırla gelir (makine sütunları boş, durum \"Makine yok\").",
+                "Satır başına bir İSTASYON; makineler \"Makine Sayısı\" ve \"Makineler\" sütunlarında.",
                 showInactive
-                  ? "Pasif makineler de listede."
-                  : "Yalnız AKTİF makineler — pasifler listede gizli (\"Pasifleri göster\" ile açılır).",
+                  ? "Pasif istasyon ve makineler de listede."
+                  : "Yalnız AKTİF istasyon ve makineler — pasifler gizli (\"Pasifleri göster\" ile açılır).",
                 "Formda seçilebilen her görev türü listede (dokuma tezgahı yalnız dokuma modülü açıkken); liste ve kart görünümü aynı kümeyi verir.",
-                "\"İstasyon Özellik Sayısı\" istasyon düzeyindedir (her makine satırında tekrarlanır) — TOPLAM satırına girmez.",
+                "\"Kurşun Uygular\" yalnız kurşun açılabilen (ara istasyon / kart akışlı) istasyonlarda dolu.",
                 "Cihaz sütunları yalnız AKTİF donanım kayıtlarını sayar.",
               ]}
             />
@@ -309,17 +343,11 @@ export function ProductionStationsPage() {
       {/* Liste görünümü liste standardında (kenardan kenara, yapışkan başlık); kart ızgarası dolgulu gövdede kalır. */}
       {stations.length > 0 && viewMode === "list" ? (
         <>
-          <ListBody>
-            <StationListView
-              rows={exportRows}
-              canWrite={canWrite}
-              onEditStation={onEditStation}
-              onAddMachine={onAddMachine}
-              machine={{ onEdit: onEditMachine, onQr: setQrMachine, onPrintLabel: setLabelMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
-            />
+          {/* Panel açıkken liste sağdan boşluk bırakır — seçili satır panelin altında kalmasın (geniş ekran). */}
+          <ListBody className={selectedStation ? "xl:pr-[36rem]" : undefined}>
+            <StationListView items={listItems} selectedId={selectedStationId} onSelect={(st) => setSelectedStationId(st.id)} />
           </ListBody>
-          <ListFooter loaded={exportRows.length} label={`${stations.length} istasyon · ${exportRows.length} satır`} />
-        </>
+          <ListFooter loaded={listItems.length} label={`${stations.length} istasyon`} />
       ) : (
         <PageBody className="p-6">
           {loading && <Skeleton className="h-24 w-full" />}
@@ -364,7 +392,24 @@ export function ProductionStationsPage() {
         initial={stationDlg.initial}
         onSubmit={handleStationSubmit}
         isSubmitting={stationMut.createMutation.isPending || stationMut.updateMutation.isPending}
+        hideKursun={viewMode === "list"}
       />
+      {viewMode === "list" && (
+        <StationDetailPanel
+          station={selectedStation}
+          machines={selectedStation ? (machinesByStation.get(selectedStation.id) ?? EMPTY_MACHINES) : EMPTY_MACHINES}
+          peripheralsByMachine={peripheralsByMachine}
+          cap={selectedStation ? capByStation.get(selectedStation.id) : undefined}
+          kursun={selectedStation ? (kursunByStation.get(selectedStation.id) ?? null) : null}
+          canWrite={canWrite}
+          onClose={() => setSelectedStationId(null)}
+          onEdit={onEditStation}
+          onToggleActive={handleStationToggleActive}
+          onAddMachine={onAddMachine}
+          onEditCap={setCapStation}
+          machine={{ onEdit: onEditMachine, onQr: setQrMachine, onPrintLabel: setLabelMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
+        />
+      )}
       <MachineFormDialog
         open={machineDlg.open}
         onOpenChange={(o) => !o && setMachineDlg({ open: false, initial: null })}
@@ -392,6 +437,21 @@ export function ProductionStationsPage() {
         onConfirm={handleMachineDelete}
         isPending={machineMut.hardRemoveMutation.isPending}
         confirmDisabled={deletePreviewQ.isLoading || !preview?.deletable}
+      />
+
+      <ConfirmDialog
+        open={!!deactivateStation}
+        onOpenChange={(o) => !o && setDeactivateStation(null)}
+        title="İstasyonu pasife al"
+        description={
+          deactivateStation
+            ? `"${deactivateStation.name}" istasyonu pasife alınacak — geçmiş kayıtlar korunur, yeni işlerde seçilemez. ` +
+              `"Pasifleri göster" ile listeleyip "Aktifleştir" ile geri getirebilirsiniz.`
+            : undefined
+        }
+        confirmLabel="Pasife al"
+        onConfirm={handleStationDeactivate}
+        isPending={stationMut.removeMutation.isPending}
       />
 
       <ConfirmDialog
