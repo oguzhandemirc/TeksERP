@@ -1,7 +1,7 @@
 // =============================================================================
 // Gelen belge GÖNDEREN ŞABLONU (E2): motor şablonu (dosya) ↔ `SenderTemplate` satırı (DB) bağı
 // =============================================================================
-// Motor şablonları dosyadadır (`lib/gelen-belge/motor/templates/*.json`); DB satırı yalnız fabrikaya özgü
+// Motor şablonları dosyadadır (`lib/gelen-belge/motor/templates/*.json`; pakette yalnız GENEL); DB satırı yalnız fabrikaya özgü
 // bağı tutar (gönderen cari, varsayılan sahip, aktiflik, isabet sayısı) ve şablon KODU (`code @unique`) ile
 // dosyaya bağlanır. Satır yoksa İDEMPOTENT doğar (P2002 → yeniden oku; iki paralel okuma tek satır).
 // GENEL yedek sözlük gönderene özgü değildir → bağlanmaz, listelenmez. GET uçları YAZMAZ.
@@ -108,17 +108,17 @@ function view(t: { code: string; name: string; version: number; inFile: boolean 
   };
 }
 
-/** Liste: dosyadaki motor şablonları + DB satırları, kodla birleşik (satırı olmayan şablon da listelenir). Salt okunur. */
+/** Liste: dosyadaki motor şablonları + kullanıcı şablonları, kodla birleşik (satırı olmayan dosya şablonu da listelenir). Salt okunur. */
 export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
   const rows = await prisma.senderTemplate.findMany({ select: ROW_SELECT, orderBy: { code: "asc" } });
   const byCode = new Map(rows.map((r) => [r.code, r]));
   const out = bindableTemplates().map((t) => view({ code: t.id, name: t.name, version: t.version, inFile: true }, byCode.get(t.id)));
   const fileCodes = new Set(out.map((v) => v.code));
   for (const r of rows) {
-    if (fileCodes.has(r.code)) continue;
-    const user = r.code.startsWith(USER_TEMPLATE_PREFIX);
+    // Dosyası kalmamış yerleşik şablonun satırı (2026-11-09 paketten çıkanlar) zararsız kalıntıdır; listelenmez.
+    if (fileCodes.has(r.code) || !r.code.startsWith(USER_TEMPLATE_PREFIX)) continue;
     // Kullanıcı şablonu motordadır (aktifken); adı kendi JSON'undan.
-    out.push(view({ code: r.code, name: user ? templateName(r.template, r.code) : r.code, version: r.version, inFile: false }, r));
+    out.push(view({ code: r.code, name: templateName(r.template, r.code), version: r.version, inFile: false }, r));
   }
   return out;
 }

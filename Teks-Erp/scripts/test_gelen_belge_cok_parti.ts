@@ -43,6 +43,10 @@ import { cokPartiSayim } from "./lib/gelen-belge-cok-parti-sayim";
 import { cokPartiKagitNo } from "./lib/gelen-belge-cok-parti-kagit-no";
 import { StationCapabilityService } from "../src/services/station-capability.service";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const engel = hedefDbEngeli();
 if (engel) {

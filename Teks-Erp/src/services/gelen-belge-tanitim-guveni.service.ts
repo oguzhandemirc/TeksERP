@@ -20,13 +20,14 @@ export type IntroState = { durum: "TANITILDI" | "SISTEM"; sablonKodu: string } |
 
 /**
  * Saf: bölgelerin şablon kodlarından tanıtım durumu. Herhangi bir bölge kullanıcı şablonuyla → TANITILDI (ilk `u-`);
- * hiçbir bölge şablon tutmadıysa (GENEL/null, en az bir bölge) → TANITILMAMIS; hazır şablon tuttuysa SISTEM; bölge yoksa null.
+ * hiçbir bölge şablon tutmadıysa (GENEL/null/bilinmeyen kod, en az bir bölge) → TANITILMAMIS; hazır şablon tuttuysa SISTEM; bölge yoksa null.
  */
 export function introStateOf(templateIds: ReadonlyArray<string | null | undefined>): IntroState {
   const user = templateIds.find((c): c is string => typeof c === "string" && c.startsWith(USER_TEMPLATE_PREFIX));
   if (user) return { durum: "TANITILDI", sablonKodu: user };
   if (templateIds.length === 0) return null;
-  const system = templateIds.find((c): c is string => !!c && c !== FALLBACK_TEMPLATE_CODE);
+  // Yalnız motorda HÂLÂ olan dosya şablonu SISTEM'dir; kaldırılmış yerleşik kodu (eski kayıt) tanıtılmamış sayılır.
+  const system = templateIds.find((c): c is string => !!c && c !== FALLBACK_TEMPLATE_CODE && templateByCode(c) !== undefined);
   return system ? { durum: "SISTEM", sablonKodu: system } : { durum: "TANITILMAMIS" };
 }
 

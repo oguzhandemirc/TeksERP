@@ -17,6 +17,10 @@ import { loadTemplates, type DocumentTemplate } from "../src/lib/gelen-belge/mot
 import { setUserTemplates } from "../src/lib/gelen-belge/sablon-bul";
 import { getReadSummary } from "../src/services/gelen-belge-okuma-ozeti.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 let pass = 0;
 let fail = 0;

@@ -5,20 +5,24 @@
  */
 import { BATCH_NO_CANDIDATE_KINDS, TABLE_TOTAL_SOURCE, type DocumentTemplate } from "../types";
 import genel from "./genel.json";
-import cekiListesiA from "./ceki-listesi-a.json";
-import cikisCekiListesi from "./cikis-ceki-listesi.json";
-import urunSevkFisi from "./urun-sevk-fisi.json";
-import kesimTakipFormu from "./kesim-takip-formu.json";
-import kumasIrsaliyesi from "./kumas-irsaliyesi.json";
 
 const FIELD_TYPES = new Set(["text", "alnum", "integer", "decimal", "date", "enum", "code"]);
 const STRATEGY_KINDS = new Set(["anchor", "regex", "roi"]);
 const DIRECTIONS = new Set(["right", "below", "sameLine", "rightOrBelow"]);
 const POST_PROCESS = new Set(["upper", "stripSpaces", "digitsOnly", "trimPunct", "collapseSpaces"]);
 
-/** Başlangıç şablonları: 5 gönderen taslağı + GENEL yedek (SONDA; classifyWithFallback puanlamaya sokmaz). Şablon VERİDİR, D8 DB'ye taşır. */
+// Pakette yalnız GENEL yedek gelir; her fabrika belgesini kendisi tanıtır (`u-…`, kullanıcı kararı 2026-11-09).
+// Gönderene özgü dosya şablonları yalnız bekçi malzemesidir (`__tests__/sablonlar/`, `scripts/lib/gelen-belge-test-sablonlar.ts`).
+let fixtureTemplates: readonly DocumentTemplate[] = [];
+
+/** Dosya şablonları: [bekçi fikstürleri…] + GENEL yedek (SONDA; classifyWithFallback puanlamaya sokmaz). Üretimde yalnız GENEL. */
 export function loadTemplates(): DocumentTemplate[] {
-  return [cekiListesiA, cikisCekiListesi, urunSevkFisi, kesimTakipFormu, kumasIrsaliyesi, genel].map((t) => t as unknown as DocumentTemplate);
+  return [...fixtureTemplates, genel as unknown as DocumentTemplate];
+}
+
+/** YALNIZ BEKÇİ: süreç içi fikstür dosya şablonu kaydı (üretim kodu çağırmaz; `test_gelen_belge_motor` §0 ölçer). */
+export function registerFixtureTemplates(list: readonly DocumentTemplate[]): void {
+  fixtureTemplates = list.filter((t) => t.id !== "genel");
 }
 
 const TABLE_COLUMN_TYPES = new Set(["integer", "decimal", "alnum", "text"]);

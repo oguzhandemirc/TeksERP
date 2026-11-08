@@ -48,6 +48,10 @@ import { claimNextScan, processClaimedScan } from "../src/services/gelen-belge-o
 import { aliasKey, suggestCustomer, suggestForNote } from "../src/services/gelen-belge-eslestirme.service";
 import { FALLBACK_TEMPLATE_CODE, ensureSenderTemplate } from "../src/services/gelen-belge-sablon.service";
 import bcrypt from "bcryptjs";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const engel = hedefDbEngeli();
 if (engel) {

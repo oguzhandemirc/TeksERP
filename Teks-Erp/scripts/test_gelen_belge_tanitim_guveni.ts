@@ -9,7 +9,7 @@
 //      ayar sonradan değişince ESKİ belgenin kolonu değişmez; sistem şablonu tutan belge `tanitim: SISTEM` taşır
 //   §4 (c) ⭐ SORMA + tanıtılmamış (sentetik GENEL zarfı): form alanı / müşteri / parti adayı YOK (SOR'da hepsi var); TANITILMAMIS
 //   §5 (d) ⭐ öneri ucu `benzerSablonlar`: eşik üstü kullanıcı şablonları skor azalan; güncellenen şablon (base) listede yok
-//   §6 saf `introStateOf` / `trustModeOf` / `applyTrust`
+//   §6 saf `introStateOf` / `trustModeOf` / `applyTrust`; kaldırılmış yerleşik kod → TANITILMAMIS (2026-11-09)
 // Negatif sonda (2026-11-04, ölçüldü): `applyTrust` TRUSTED dalı `return d` → §3 parti/kolon + §6 kırmızı (4);
 // `noteFormFields` BLIND dalı silinince → §4 formFields kırmızı (1).
 // İnceleme turu (2026-11-04, ölçüldü): TRUSTED `review: false` koşulsuz → §6 çelişki kırmızı (1); `u-` koşulu silinince →
@@ -33,6 +33,10 @@ import { extractDocument, type OcrResult } from "../src/lib/gelen-belge/motor";
 import { templateByCode } from "../src/lib/gelen-belge/sablon-bul";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const blocked = hedefDbEngeli();
 if (blocked) {
@@ -239,6 +243,10 @@ async function run(url: string): Promise<void> {
   check("§6 introStateOf: u- → TANITILDI (ilk u-); genel/null → TANITILMAMIS; sistem şablonu → SISTEM; bölgesiz → null",
     JSON.stringify(introStateOf(["genel", "u-x", "u-y"])) === JSON.stringify({ durum: "TANITILDI", sablonKodu: "u-x" }) && introStateOf(["genel", null])?.durum === "TANITILMAMIS" &&
     JSON.stringify(introStateOf(["ceki-listesi-a"])) === JSON.stringify({ durum: "SISTEM", sablonKodu: "ceki-listesi-a" }) && introStateOf(["genel", "ceki-listesi-a"])?.durum === "SISTEM" && introStateOf([]) === null);
+  // Paketten çıkarılmış yerleşik şablonun eski kayıttaki kodu (2026-11-09): motorda yok → TANITILMAMIS (SISTEM değil, çökmez).
+  check("§6 kaldırılmış yerleşik kod (motorda yok) → TANITILMAMIS; bilinen dosya şablonuyla birlikteyse SISTEM o şablon",
+    JSON.stringify(introStateOf(["kaldirilmis-yerlesik"])) === JSON.stringify({ durum: "TANITILMAMIS" }) &&
+    JSON.stringify(introStateOf(["kaldirilmis-yerlesik", "ceki-listesi-a"])) === JSON.stringify({ durum: "SISTEM", sablonKodu: "ceki-listesi-a" }));
   const tan = { durum: "TANITILDI" as const, sablonKodu: "u-x" };
   const un = { durum: "TANITILMAMIS" as const };
   check("§6 trustModeOf: SOR → NORMAL; SORMA + TANITILDI → TRUSTED, + TANITILMAMIS → BLIND, + sistem → NORMAL",

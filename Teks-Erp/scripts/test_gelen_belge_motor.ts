@@ -45,6 +45,7 @@ import {
   type OcrResult,
 } from "../src/lib/gelen-belge/motor";
 import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
 import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
 import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
@@ -66,7 +67,10 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 const FIKSTUR = join(__dirname, "..", "src", "lib", "gelen-belge", "motor", "__tests__", "fikstur");
 const gercek = (ad: string): OcrResult => JSON.parse(readFileSync(join(FIKSTUR, "gercek", `${ad}.json`), "utf8")) as OcrResult;
-const sablonlar = loadTemplates();
+// §0 ürün paketi yalnız GENEL taşır (gönderen şablonları bekçi fikstürü, 2026-11-09) — kayıttan ÖNCE ölçülür.
+const urunSablonlari = loadTemplates().map((t) => t.id);
+const sablonlar = testSablonlariniKaydet();
+check("§0 ürün `loadTemplates()` yalnız GENEL döner (yerleşik gönderen şablonu pakette yok)", urunSablonlari.join(",") === "genel", urunSablonlari.join(","));
 
 function kutu(text: string, x: number, y: number, w: number, h: number, angle: number | null = 0): OcrLine {
   return { text, rect: { x, y, width: w, height: h }, confidence: 0.99, angle, elements: [{ text, rect: { x, y, width: w, height: h }, confidence: 0.99 }] };
@@ -74,7 +78,7 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
 
 // ── §1 Vendor + şablonlar ────────────────────────────────────────────────────
 {
-  check("§1a 6 başlangıç şablonu (5 gönderen taslağı + GENEL) yüklendi", sablonlar.length === 6, sablonlar.map((t) => t.id).join(","));
+  check("§1a 6 şablon (5 fikstür gönderen şablonu + GENEL) yüklendi", sablonlar.length === 6, sablonlar.map((t) => t.id).join(","));
   const hatalar = sablonlar.flatMap((t) => validateTemplate(t).errors.map((e) => `${t.id}: ${e}`));
   check("§1b her şablon validateTemplate'ten geçiyor (tables/grid dahil)", hatalar.length === 0, hatalar.join(" | "));
   check("§1c GENEL şablon listenin SONUNDA (yedek; puanlamaya girmez)", sablonlar[sablonlar.length - 1]!.id === "genel");

@@ -4,9 +4,10 @@
 // HTTP + gerçek DB + gerçek motor. Panelin Aktif/Pasif anahtarı (`PATCH /api/gelen-belge/sablonlar/:code`) yerleşik
 // (dosya) şablonu pasife alınca belge o şablonla TANINMAZ: GENEL yedeğe düşer, okuma özeti `tanitim` TANITILMAMIS.
 // Yeniden aktif → yine o şablon. Sınanan:
-//   §1 başlangıç: 0243 kesim-takip-formu şablonuyla okunur, `tanitim` yok (sistem şablonu)
+//   §1 başlangıç: 0243 kesim-takip-formu şablonuyla okunur, `tanitim` SISTEM (hazır şablon, "Yeniden tanıt")
 //   §2 ⭐ pasif: `engineTemplates` kodu içermez, GENEL içerir; 0243 bölgesi GENEL; `tanitim` TANITILMAMIS; liste inEngine false, inFile true
 //   §3 ⭐ yeniden aktif: motor kümesinde, 0243 yine kesim-takip-formu; liste inEngine true
+//   §0 dosyası kalmamış yerleşik kodun satırı `GET /sablonlar` listesinde yok (2026-11-09)
 // Negatif sonda (2026-11-04, ölçüldü): `engineTemplates` süzgeci (`!off.has`) kaldırılınca §2 kırmızı.
 // Koşum tekil (run-all-tests seri); şablon satırının ilk hâli finally'de geri yüklenir.
 // =============================================================================
@@ -24,6 +25,10 @@ import { buildDraft, fillBoundDraftTx } from "../src/services/gelen-belge-taslak
 import type { OcrResult } from "../src/lib/gelen-belge/motor";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const blocked = hedefDbEngeli();
 if (blocked) {
@@ -41,6 +46,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const FIXTURES = join(__dirname, "..", "src", "lib", "gelen-belge", "motor", "__tests__", "fikstur", "gercek");
 const OCR = JSON.parse(readFileSync(join(FIXTURES, "0243-kesim-takip-formu.json"), "utf8")) as OcrResult;
 const CODE = "kesim-takip-formu";
+const ORPHAN = `test-kaldirilmis-${Date.now()}`;
 const TAG = `TEST-GPS${Date.now().toString(36).toUpperCase()}`;
 const made = { notes: [] as string[], scans: [] as string[] };
 const SETTINGS = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI];
@@ -66,7 +72,7 @@ async function run(url: string): Promise<void> {
   };
 
   /** Okuma anı (okuma işinin yazdığı kolonlar): boş MANUAL taslak → buildDraft → tarama bağla. Bölge şablonları + özet `tanitim`. */
-  const read = async (): Promise<{ regions: Array<string | null>; tanitim: { durum?: string } | undefined; status: number }> => {
+  const read = async (): Promise<{ regions: Array<string | null>; tanitim: { durum?: string; sablonKodu?: string } | undefined; status: number }> => {
     const n = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderText: `${TAG} GÖNDEREN` });
     const id = (n.data as { id?: string } | undefined)?.id ?? "";
     made.notes.push(id);
@@ -80,7 +86,7 @@ async function run(url: string): Promise<void> {
     await prisma.$transaction((tx) => fillBoundDraftTx(tx, id, { id: s.id, pageNo: 1 }, built));
     const sum = await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`);
     const regions = ((built.envelope as { regions?: Array<{ templateId?: string | null }> }).regions ?? []).map((r) => r.templateId ?? null);
-    return { regions, tanitim: (sum.data as { tanitim?: { durum?: string } } | undefined)?.tanitim, status: sum.status };
+    return { regions, tanitim: (sum.data as { tanitim?: { durum?: string; sablonKodu?: string } } | undefined)?.tanitim, status: sum.status };
   };
   const listed = async () => {
     const l = await call("GET", "/api/gelen-belge/sablonlar");
@@ -88,10 +94,16 @@ async function run(url: string): Promise<void> {
   };
   const engineIds = async () => (await engineTemplates()).map((t) => t.id);
 
+  console.log("§0 dosyası kalmamış yerleşik şablon satırı (2026-11-09 kalıntısı) listede yok");
+  await prisma.senderTemplate.create({ data: { code: ORPHAN, version: 1, template: { id: ORPHAN, name: "Kaldırılmış" }, isActive: false } });
+  const l0 = await call("GET", "/api/gelen-belge/sablonlar");
+  const codes0 = ((l0.data ?? []) as Array<{ code: string }>).map((x) => x.code);
+  check("§0 ⭐ dosyasız yerleşik kod listelenmez; dosya şablonu listelenir", l0.status === 200 && !codes0.includes(ORPHAN) && codes0.includes(CODE), JSON.stringify(codes0));
+
   console.log("§1 başlangıç (aktif)");
   await call("PATCH", `/api/gelen-belge/sablonlar/${CODE}`, { isActive: true });
   const a = await read();
-  check("§1 0243 kesim-takip-formu şablonuyla okunur; `tanitim` yok", a.regions.length > 0 && a.regions.every((r) => r === CODE) && a.tanitim === undefined, JSON.stringify(a));
+  check("§1 0243 kesim-takip-formu şablonuyla okunur; `tanitim` SISTEM", a.regions.length > 0 && a.regions.every((r) => r === CODE) && a.tanitim?.durum === "SISTEM" && a.tanitim.sablonKodu === CODE, JSON.stringify(a));
 
   console.log("§2 pasif");
   const off = await call("PATCH", `/api/gelen-belge/sablonlar/${CODE}`, { isActive: false });
@@ -108,7 +120,7 @@ async function run(url: string): Promise<void> {
   check("§3 PATCH isActive=true 200", on.status === 200, `${on.status} ${on.code ?? ""}`);
   check("§3 ⭐ motor kümesinde yeniden var", (await engineIds()).includes(CODE));
   const c = await read();
-  check("§3 ⭐ 0243 yine kesim-takip-formu; `tanitim` yok", c.regions.length > 0 && c.regions.every((r) => r === CODE) && c.tanitim === undefined, JSON.stringify(c));
+  check("§3 ⭐ 0243 yine kesim-takip-formu; `tanitim` SISTEM", c.regions.length > 0 && c.regions.every((r) => r === CODE) && c.tanitim?.durum === "SISTEM" && c.tanitim.sablonKodu === CODE, JSON.stringify(c));
   const lc = await listed();
   check("§3 liste: isActive true, inEngine true, inFile true", lc?.isActive === true && lc.inEngine === true && lc.inFile === true, JSON.stringify(lc));
 }
@@ -136,6 +148,7 @@ async function main(): Promise<void> {
     await prisma.documentScan.deleteMany({ where: { id: { in: made.scans } } }).catch(swallow);
     await prisma.customerDeliveryNoteLine.deleteMany({ where: { noteId: { in: made.notes } } }).catch(swallow);
     await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } }).catch(swallow);
+    await prisma.senderTemplate.deleteMany({ where: { code: ORPHAN } }).catch(swallow);
     // Şablon satırı ilk hâline: yoksa PATCH'in doğurduğu satır kalkar (yapılandırma), varsa aktiflik geri yazılır.
     if (!priorRow) await prisma.senderTemplate.deleteMany({ where: { code: CODE } }).catch(swallow);
     else await prisma.senderTemplate.updateMany({ where: { id: priorRow.id }, data: { isActive: priorRow.isActive } }).catch(swallow);
