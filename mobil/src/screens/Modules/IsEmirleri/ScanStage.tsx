@@ -1,4 +1,5 @@
-// İş Emirleri — "Okut": DocBatchView (tek belge, tarayıcı hemen açılır) + okuma bitince önizleme kartı.
+// İş Emirleri — oluşturma: tek İE formu (UnifiedWoForm; "Belge Okut" = tarayıcı hemen açılır, "Elle Oluştur" = belgesiz)
+// + okuma bitince önizleme kartı. Malın sahibi kartı ve rota alanı iki yolda da formdadır.
 // Önizleme kaydırmasız tek ekran: büyük karolar; bulunan alan yeşil + onay ikonu, şablonda olup bulunamayan kırmızı +
 // uyarı ikonu (renk tek taşıyıcı değil). "Devam et" kartı kapatır (form altta dolu), "Vazgeç" listeye döner.
 import React, { useMemo, useState } from 'react';
@@ -7,14 +8,14 @@ import { Button, Icon, Text } from 'react-native-paper';
 import ModuleSheet, { moduleSheetWidth } from '../../../components/ModuleSheet';
 import type { ProductionRoute } from '../../../services/route.service';
 import { colors, radius, spacing, typography } from '../../../theme';
-import DocBatchView from '../GelenBelge/woCreate/DocBatchView';
+import UnifiedWoForm from '../GelenBelge/woCreate/UnifiedWoForm';
 import { useReadResult } from '../GelenBelge/useReadResult';
 import type { DocRowOpenRequest } from '../GelenBelge/woCreate/DocRowCard';
 import type { WoCreateKind } from '../../../store/woCreateKinds';
 import { useQuery } from '@tanstack/react-query';
 import { INBOUND_DOC_CONTEXT_KEY } from '../GelenBelge/DocHeader';
 import { inboundDocService } from '../../../services/inboundDoc.service';
-import { customerGoodsTiles, customerTileMissing, previewTiles, scanWoType, tileLayout, type PreviewTile } from './scanFlow';
+import { customerGoodsTiles, customerTileMissing, previewTiles, tileLayout, type PreviewTile } from './scanFlow';
 
 const TILE_TONE = {
   found: { bg: colors.successContainer, border: colors.success, fg: colors.successText, icon: 'check-circle' },
@@ -22,11 +23,22 @@ const TILE_TONE = {
   unknown: { bg: colors.surfaceMuted, border: colors.border, fg: colors.textSecondary, icon: 'minus-circle-outline' },
 } as const;
 
-export default function ScanStage({ route, kind, onCancel }: { route: ProductionRoute; kind: WoCreateKind; onCancel: () => void }) {
+interface StageProps {
+  /** Formun ön seçili rotası (null = formda seçilir). */
+  route: ProductionRoute | null;
+  kinds: readonly WoCreateKind[];
+  manual: boolean;
+  onCancel: () => void;
+  /** Kaydedildikten sonra "Yeni iş emri". */
+  onNew: () => void;
+}
+
+export default function ScanStage({ route, kinds, manual, onCancel, onNew }: StageProps) {
   const [note, setNote] = useState<{ id: string; run: number } | null>(null);
   // Fason: müşteri bulunamadıysa "Müşteri seç" kartı kapatır ve formun müşteri seçicisini (PickerModal) açar.
   const [ownerReq, setOwnerReq] = useState<DocRowOpenRequest | null>(null);
-  const customerGoods = kind === 'CUSTOMER_GOODS';
+  // Önizlemede müşteri büyük karo: cihaz yalnız Fason türündeyse (tür kartı yoksa tek bilinen tür).
+  const customerGoods = kinds.length === 1 && kinds[0] === 'CUSTOMER_GOODS';
   const [dismissedRun, setDismissedRun] = useState<number | null>(null);
   const { watch } = useReadResult(note?.id ?? null, note?.run ?? 0);
   const summary = watch?.phase === 'done' ? watch.summary : null;
@@ -38,7 +50,16 @@ export default function ScanStage({ route, kind, onCancel }: { route: Production
 
   return (
     <View style={styles.fill}>
-      <DocBatchView route={route} multi={false} autoStart woType={scanWoType(kind)} openRequest={ownerReq} onNote={(n, run) => setNote({ id: n.id, run })} />
+      <UnifiedWoForm
+        initialRoute={route}
+        routeLocked={false}
+        onNew={onNew}
+        ownerKinds={kinds}
+        autoScan={!manual}
+        manual={manual}
+        openRequest={ownerReq}
+        onNote={manual ? undefined : (n, run) => setNote({ id: n.id, run })}
+      />
       {summary && (
         <PreviewSheet
           visible={open}

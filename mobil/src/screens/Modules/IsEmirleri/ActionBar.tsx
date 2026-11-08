@@ -1,7 +1,8 @@
-// İş Emirleri — altta sabit büyük düğmeler: "İş Emri Rotası" (seçili rota düğmede yazar) + tür başına okut düğmesi ("Belge Okut",
-// "Fason Belge Okut"; cihazın Seçenekler'inden) — her biri doğrudan okutmaya gider. Rota seçici iki grup: "Özel" + "Hazır rotalar".
+// İş Emirleri — altta iki büyük tuş: [Belge Okut] (dolu, birincil; ayar açıksa ikinci satırda "Rota: <ad> ▾" — ▾ bölgesi
+// rota seçicisini açar, tuşun geri kalanı okutmayı başlatır) + [Elle Oluştur] (çerçeveli; belgesiz form). Telefonda alt alta.
+// Rota seçici iki grup: "Özel" + "Hazır rotalar" (görünümü RoutePickerModal'da; burada yalnız açılış yeri).
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import RoutePickerModal, { type RouteChoice } from './RoutePickerModal';
 import { routeButtonTitle, routeStepsLine } from './routePickerView';
@@ -9,48 +10,51 @@ import type { ProductionRoute } from '../../../services/route.service';
 import { TERIM } from '../../../lib/terim';
 import { colors, radius, shadow, spacing, typography } from '../../../theme';
 import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
-import type { WoCreateKind } from '../../../store/woCreateKinds';
-import { KIND_BUTTON, type TypeGroups } from './scanFlow';
+import type { TypeGroups } from './scanFlow';
 
 interface Props {
   groups: TypeGroups;
   type: ProductionRoute | null;
   loading: boolean;
   onSelect: (id: string) => void;
-  kinds: readonly WoCreateKind[];
-  onScan: (kind: WoCreateKind) => void;
+  /** "Rota seçimini Belge Okut tuşunda göster" (cihaz ayarı). */
+  showRoute: boolean;
+  onScan: () => void;
+  onManual: () => void;
 }
 
 const option = (r: ProductionRoute): RouteChoice => ({ id: r.id, title: routeButtonTitle(r.name), steps: routeStepsLine(r) });
+const PHONE_MAX = 600;
 
-export default function ActionBar({ groups, type, loading, onSelect, kinds, onScan }: Props) {
+export default function ActionBar({ groups, type, loading, onSelect, showRoute, onScan, onManual }: Props) {
   const [open, setOpen] = useState(false);
+  const narrow = useWindowDimensions().width < PHONE_MAX;
   const special = useMemo(() => groups.special.map(option), [groups.special]);
   const ready = useMemo(() => groups.ready.map(option), [groups.ready]);
   const routeOff = loading || special.length + ready.length === 0;
-  const typeLabel = type ? shortcutTitle(type) : loading ? 'Yükleniyor…' : 'Tür yok';
+  const typeLabel = type ? shortcutTitle(type) : loading ? 'Yükleniyor…' : 'Rota yok';
   return (
     <View style={styles.bar}>
-      {!type && !loading && (
-        <Text style={styles.hint} testID="ie-tur-yok">Okutmak için yönetim panelinde en az bir rota tanımlanmalı; şimdilik yalnız liste açık.</Text>
-      )}
-      <View style={styles.row}>
-        {/* İki satırlı kutu: ad üstte, seçim altta — üç düğmeli çubukta da seçim kesilmeden okunur. */}
-        <TouchableRipple onPress={() => setOpen(true)} disabled={routeOff} rippleColor={colors.brandSoft} style={[styles.grow, styles.route, routeOff && styles.routeOff]} testID="ie-tur-sec" accessibilityRole="button" accessibilityLabel={`${TERIM.terbiyeIsEmri.tekil} rotası: ${typeLabel}`}>
-          <View style={styles.routeInner}>
-            <Icon source="shape-outline" size={24} color={colors.brand} />
-            <View style={styles.routeText}>
-              <Text style={styles.routeCaption} numberOfLines={1}>{`${TERIM.terbiyeIsEmri.tekil} Rotası`}</Text>
-              <Text style={styles.routeValue} numberOfLines={2}>{typeLabel}</Text>
+      <View style={[styles.row, narrow && styles.column]}>
+        <View style={[styles.scan, !narrow && styles.grow]}>
+          <TouchableRipple onPress={onScan} rippleColor="rgba(255,255,255,0.2)" style={styles.scanMain} testID="ie-okut" accessibilityRole="button" accessibilityLabel="Belge Okut">
+            <View style={styles.scanInner}>
+              <Icon source="camera-outline" size={26} color={colors.textOnDark} />
+              <Text style={styles.scanLabel}>Belge Okut</Text>
             </View>
-            <Icon source="chevron-up" size={22} color={colors.textSecondary} />
-          </View>
-        </TouchableRipple>
-        {kinds.map((k) => (
-          <Button key={k} mode="contained" icon={k === 'CUSTOMER_GOODS' ? 'account-arrow-down-outline' : 'file-document-outline'} onPress={() => onScan(k)} disabled={!type} style={styles.grow} contentStyle={styles.btn} labelStyle={styles.scanLabel} testID={k === 'STANDARD' ? 'ie-okut' : 'ie-okut-fason'}>
-            {KIND_BUTTON[k]}
-          </Button>
-        ))}
+          </TouchableRipple>
+          {showRoute && (
+            <TouchableRipple onPress={() => setOpen(true)} disabled={routeOff} rippleColor="rgba(255,255,255,0.2)" style={[styles.routePart, routeOff && styles.off]} testID="ie-tur-sec" accessibilityRole="button" accessibilityLabel={`Rota: ${typeLabel}`}>
+              <View style={styles.routeInner}>
+                <Text style={styles.routeText} numberOfLines={2}>{`Rota: ${typeLabel}`}</Text>
+                <Icon source="menu-down" size={26} color={colors.textOnDark} />
+              </View>
+            </TouchableRipple>
+          )}
+        </View>
+        <Button mode="outlined" icon="pencil-outline" onPress={onManual} style={[styles.manual, !narrow && styles.grow]} contentStyle={styles.btn} labelStyle={styles.manualLabel} testID="ie-elle-olustur">
+          Elle Oluştur
+        </Button>
       </View>
       <RoutePickerModal
         visible={open}
@@ -68,17 +72,20 @@ export default function ActionBar({ groups, type, loading, onSelect, kinds, onSc
 }
 
 const styles = StyleSheet.create({
-  bar: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, ...shadow.md },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  // Telefon dikeyde dört düğme sığmazsa alt satıra sarar (kesik etiket yok).
-  grow: { flexGrow: 1, flexBasis: 180 },
+  bar: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, ...shadow.md },
+  row: { flexDirection: 'row', gap: spacing.md, alignItems: 'stretch' },
+  // Telefon (dar ekran): iki tuş alt alta, tam genişlik.
+  column: { flexDirection: 'column' },
+  grow: { flex: 1 },
+  scan: { borderRadius: radius.lg, backgroundColor: colors.brand, overflow: 'hidden' },
+  scanMain: { minHeight: 56, justifyContent: 'center' },
+  scanInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  scanLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.textOnDark },
+  routePart: { minHeight: 48, justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.3)' },
+  routeInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  routeText: { flexShrink: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.textOnDark },
+  off: { opacity: 0.5 },
+  manual: { borderRadius: radius.lg, borderWidth: 2, borderColor: colors.brand, justifyContent: 'center' },
   btn: { minHeight: 64 },
-  route: { minHeight: 64, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.borderStrong, backgroundColor: colors.surface, justifyContent: 'center', overflow: 'hidden' },
-  routeOff: { opacity: 0.5 },
-  routeInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  routeText: { flex: 1 },
-  routeCaption: { fontSize: typography.size.sm, color: colors.textMuted },
-  routeValue: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
-  scanLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold },
-  hint: { fontSize: typography.size.sm, color: colors.warningText },
+  manualLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold },
 });

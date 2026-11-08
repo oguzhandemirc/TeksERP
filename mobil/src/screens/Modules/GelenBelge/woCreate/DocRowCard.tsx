@@ -41,8 +41,10 @@ interface Props {
   hideGramaj?: boolean;
   /** `list` (vars.): toplu görünüm/masa kartı; `single`: tek İE formunun sol sütunu. */
   variant?: DocRowVariant;
-  /** Tek formda "Yeniden okut". */
+  /** Tek formda "Yeniden okut" (belgesiz taslakta "Belge ekle"). */
   onReread?: () => void;
+  /** Belgesiz (elle) taslak: sayfa yokken okuma iletileri susar, düğme "Belge ekle". */
+  manual?: boolean;
   /** "Taslağı iptal et" başarılı; verilmezse satır listeden kalkar. */
   onDraftCancelled?: () => void;
   openRequest?: DocRowOpenRequest | null;
@@ -54,7 +56,7 @@ type Picker = 'owner' | 'batch' | null;
 
 const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
 
-export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, onDraftCancelled, openRequest, partyPlan }: Props) {
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, manual = false, onDraftCancelled, openRequest, partyPlan }: Props) {
   const { read, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
@@ -73,7 +75,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
 
   return (
     <View style={boxStyle} testID={`belge-satir-${row.noteNo}`}>
-      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} onDraftCancelled={onDraftCancelled} customers={customers} />
+      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} manual={manual} onDraftCancelled={onDraftCancelled} customers={customers} />
       {f && (
         <>
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />

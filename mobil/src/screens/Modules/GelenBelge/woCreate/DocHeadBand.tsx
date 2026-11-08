@@ -26,6 +26,8 @@ interface Props {
   variant: DocRowVariant;
   /** Tek formda "Yeniden okut": satır kalkar, tarayıcı yeniden açılır. */
   onReread?: () => void;
+  /** Belgesiz taslak: sayfa yokken "Belgesiz — elle giriş", iletiler susar, düğme "Belge ekle" (aynı taslağa sayfa). */
+  manual?: boolean;
   /** "Taslağı iptal et" başarılı; verilmezse satır listeden kalkar. */
   onDraftCancelled?: () => void;
   customers: readonly PickerOption[];
@@ -39,7 +41,7 @@ const formFilled = (row: DocRow) => {
   return !!f && !!(f.ownerCustomerId || f.ownerSuggested || f.customerBatchNo || f.ourBatchNo || f.meters != null || f.multi || f.rolls);
 };
 
-export default function DocHeadBand({ row, wo, read, detailFailed, variant, onReread, onDraftCancelled, customers }: Props) {
+export default function DocHeadBand({ row, wo, read, detailFailed, variant, onReread, manual = false, onDraftCancelled, customers }: Props) {
   const single = variant === 'single';
   const no = row.noteNo;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
@@ -47,8 +49,9 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   const cancellable = row.result?.kind !== 'OPENED';
   const w = read.watch;
   const input = { watch: w, formFilled: formFilled(row), detailFailed };
-  const pill = docReadPill(input);
-  const notices = done ? [] : docReadNotices(input);
+  const noPages = manual && w?.phase === 'done' && w.summary.state === 'NO_PAGES';
+  const pill = noPages ? { tone: 'idle' as PillTone, icon: 'information-outline' as const, text: 'Belgesiz — elle giriş' } : docReadPill(input);
+  const notices = done || noPages ? [] : docReadNotices(input);
   const teach = useTeachEntry({ row, wo, tanitim: w?.phase === 'done' ? w.summary.tanitim : undefined, customers });
   const act = (n: DocNotice) => {
     if (n.action === 'recheck') return { label: 'Yeniden bak', icon: 'refresh' as const, onPress: read.recheck };
@@ -70,8 +73,8 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
         <TemplateName entry={teach} />
         <View style={styles.flex} />
         {single && onReread && !done && (
-          <Button mode="outlined" icon="camera-retake-outline" onPress={onReread} disabled={wo.saving} contentStyle={styles.btn} testID="ie-belge-yeniden-okut">
-            Yeniden okut
+          <Button mode="outlined" icon={manual ? 'camera-plus-outline' : 'camera-retake-outline'} onPress={onReread} disabled={wo.saving} contentStyle={styles.btn} testID={manual ? 'ie-belge-ekle' : 'ie-belge-yeniden-okut'}>
+            {manual ? 'Belge ekle' : 'Yeniden okut'}
           </Button>
         )}
         <TemplateUpdateButton entry={teach} />

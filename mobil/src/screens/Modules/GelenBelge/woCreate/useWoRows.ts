@@ -13,7 +13,7 @@ import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../Duplicat
 import type { MultiPartyDraft } from './partyDraft';
 import { mergeExtra } from './woSteps';
 import { sameDocOnSave } from './sameDocOnSave';
-import { applyMulti, applyParties, isDone, isPartial, keptResult, taughtRow, type DocRow, type SavedRow } from './docRow';
+import { applyMulti, applyParties, fillEmptyRowForm, isDone, isPartial, keptResult, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import { applyLiveLocks, liveLocksFor } from '../live/liveLocks';
 import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
@@ -128,7 +128,7 @@ function rowCounts(rows: DocRow[], ready: number) {
 }
 
 /** Satır düzenleyicileri (okuma → form, kullanıcı düzenlemesi, parti listesi); kayıt döngüsünden ayrı. */
-function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor) {
+function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor, manual: ReadonlySet<string>) {
   const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
     setRows((rs) =>
       rs.some((r) => r.noteId === note.id)
@@ -141,9 +141,11 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
     (noteId: string, detail: InboundNoteDetail) => {
       // Canlı okumanın kilitli değerleri okumayı ezer (operatör değeri) — forma giriş sınırı burası.
       const d = applyLiveLocks(detail, liveLocksFor(noteId));
-      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail: d, form: r.form ?? initialRowForm(d, gramajFor) } : r)));
+      // Belgesiz taslağa sonradan belge eklendiyse okuma yalnız boş alanlara düşer (elle yazılan ezilmez).
+      const formFor = (r: DocRow) => (!r.form ? initialRowForm(d, gramajFor) : manual.has(noteId) ? fillEmptyRowForm(r.form, initialRowForm(d, gramajFor)) : r.form);
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail: d, form: formFor(r) } : r)));
     },
-    [setRows, gramajFor],
+    [setRows, gramajFor, manual],
   );
 
   const updateForm = useCallback(
@@ -198,7 +200,14 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   useGramajReseed(setRows, gramajFor);
 
-  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught } = useRowMutators(setRows, gramajFor);
+  // Belgesiz (elle) açılan taslaklar: sonradan eklenen belgenin okuması yalnız boş alanları doldurur.
+  const manualRef = useRef(new Set<string>());
+  const [manualIds, setManualIds] = useState<ReadonlySet<string>>(manualRef.current);
+  const markManual = useCallback((noteId: string) => {
+    manualRef.current = new Set(manualRef.current).add(noteId);
+    setManualIds(manualRef.current);
+  }, []);
+  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught } = useRowMutators(setRows, gramajFor, manualIds);
   const setResult = (noteId: string, result: RowResult) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, result } : r)));
 
   const printFor = async (noteId: string, workOrderId: string) => {
@@ -262,7 +271,8 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
     /** İE partisinin numara kaynağı (ayar okunamadı/eski sunucu → null = "otomatik" gösterilir). */
     batchSource: settings.data?.batchNumberSource ?? null,
-    addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll,
+    addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll, markManual,
+    isManual: (noteId: string) => manualIds.has(noteId),
     duplicate,
     dismissDuplicate: () => setDuplicate(null),
     sameDoc,

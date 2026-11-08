@@ -41,7 +41,10 @@ import { rollsTotal } from './rollDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
-import { defaultWoTypeFor } from '../../../../store/woCreateKinds';
+import { defaultWoTypeFor, type WoCreateKind } from '../../../../store/woCreateKinds';
+import type { DocRowOpenRequest } from './DocRowCard';
+import { useManualDraft } from './useManualDraft';
+import { ownerKindCard, ownerKindForWoType, routeConflict, shouldApplyCardRoute, woTypeForOwnerKind } from '../../IsEmirleri/createEntry';
 
 export interface UnifiedWoFormProps {
   /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
@@ -52,24 +55,41 @@ export interface UnifiedWoFormProps {
   /** Verilirse ⚙ alan seçici açıklığı dışarıdan yönetilir ve gövdedeki "Alanlar" tuşu çizilmez. */
   fieldsOpen?: boolean;
   onFieldsOpenChange?: (open: boolean) => void;
+  /** İş Emirleri girişi: cihazın İE türleri → "Malın sahibi" kartı (iki tür) + kart rotası önerisi; yoksa bugünkü form. */
+  ownerKinds?: readonly WoCreateKind[];
+  /** "Belge Okut": tarayıcı ek dokunuşsuz açılır. */
+  autoScan?: boolean;
+  /** "Elle Oluştur": belgesiz (sayfasız taslak) açılır; "Belge ekle" sonradan aynı taslağa sayfa ekler. */
+  manual?: boolean;
+  /** Gönderilen belge (okutma önizlemesi izler). */
+  onNote?: (note: { id: string; noteNo: string }, runKey: number) => void;
+  /** Satırın seçicisini dışarıdan aç (önizlemenin "Müşteri seç"i). */
+  openRequest?: DocRowOpenRequest | null;
 }
 
 /** Formun durumu: rota, ek alanlar, satır (tek belge), tarayıcı; belgeden doldurma ve "oluştur" engeli. */
-export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFieldsOpenChange }: UnifiedWoFormProps) {
+export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFieldsOpenChange, ownerKinds, autoScan = false, manual = false, onNote }: UnifiedWoFormProps) {
   const [route, setRouteState] = useState<ProductionRoute | null>(initialRoute);
   // Cihaz varsayılan türü (Seçenekler'de yalnız Fason açıksa Fason) — açılışta bir kez okunur.
   const [form, setForm] = useState<WoFormState>(() => initialFormState(defaultWoTypeFor(useDeviceSettingsStore.getState().woCreateKinds)));
-  const setRoute = useCallback((r: ProductionRoute) => {
+  const [routeTouched, setRouteTouched] = useState(false);
+  const applyRoute = useCallback((r: ProductionRoute) => {
     setRouteState(r);
     setForm(resetForRoute);
   }, []);
+  // Kullanıcının seçtiği rota: kart rotası artık kendiliğinden uygulanmaz.
+  const setRoute = useCallback((r: ProductionRoute) => {
+    setRouteTouched(true);
+    applyRoute(r);
+  }, [applyRoute]);
   const scanMode = useScanRouteMode();
   const showQuantity = useFeatureFlags().data?.targetQuantityEnabled === true;
   const routesQ = useQuery({
     queryKey: ['routes', 'wo-picker'],
     queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
     staleTime: 10 * 60 * 1000,
-    enabled: initialRoute === null,
+    // Rota formda değiştirilebilir (İş Emirleri girişi ön seçimli açar): kilitli değilse liste gerekir.
+    enabled: !routeLocked,
   });
   const extras = form.extras;
   const eff = useMemo(() => (route && !isScanRoute(route) ? effectiveRoute(route, extras.steps) : route), [route, extras.steps]);
@@ -86,7 +106,15 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const perParty = row?.form?.multi?.mode === 'PER_PARTY';
   const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000 });
   const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
-  const scan = useDocScanFlow(wo.addNote);
+  const scan = useDocScanFlow(wo.addNote, onNote);
+  const draft = useManualDraft(manual, (note) => { wo.markManual(note.id); scan.b.openNote(note); });
+  useAutoScan(autoScan, scan.source.add);
+  const owner = useOwnerKind(ownerKinds, extras.woType, setForm);
+  const cardRoute = useCardRoute(ownerKinds !== undefined && !routeLocked, row?.form?.ownerCustomerId ?? null, routesQ.data?.data ?? []);
+  useEffect(() => {
+    if (shouldApplyCardRoute(route, routeTouched, cardRoute)) applyRoute(cardRoute!);
+  }, [route, routeTouched, cardRoute, applyRoute]);
+  const routeWarning = ownerKinds ? routeConflict(cardRoute, route) : null;
   useDocReadToForm(row, setForm);
   const edit = useCallback((patch: Partial<WoFormExtras>) => setForm((s) => editExtras(s, patch)), []);
   const hasRouteSteps = !!route && !isScanRoute(route) && (route.steps?.length ?? 0) > 0;
@@ -96,6 +124,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     stationRoutes: routesQ.data?.data ?? [],
     stationRoutesLoading: routesQ.isLoading,
     customerId: row?.form?.ownerCustomerId ?? null,
+    onOwnerKind: owner.visible ? owner.sync : undefined,
   });
   const partyPlan = usePartyPlan({ row, wo, route: eff, allMachines: ctx.data?.data.kursunMachines ?? NO_MACHINES, stepsEdited: plan.stepsEdited });
   // Her parti ayrı + gramaj parti kartında: ortak gramaj alanı çizilmez (parti seçimi yoksa yine o gider).
@@ -123,11 +152,16 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty, inOther: fields.isOther }),
   ];
   const reading = !!row && (!row.form || !row.detail);
-  const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues });
+  const ownerBlock = owner.visible && owner.value === null ? 'Malın sahibini seçin' : null;
+  const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues }) ?? ownerBlock;
+  // Kaydedilen / taslak bırakılan / sayfa eklenen belgesiz taslak çıkışta silinmez.
+  if (manual && row && (row.result || (scan.b.done?.pages ?? 0) > 0)) draft.keep();
+  const addDoc = () => { scan.b.addToNote(); scan.source.add(); };
   // Alt çubuk hapları: belge yokken / okunurken hap yok (çubuk tek cümle söyler).
   const missing = done || !row || reading ? [] : missingChips(issues);
   const { okut, dropDoc } = docSlotActions(wo, row, scan, setForm);
   return {
+    owner, routeWarning, manual, draft, addDoc,
     route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
@@ -171,6 +205,8 @@ interface PlanInput {
   stationRoutes: ProductionRoute[];
   stationRoutesLoading: boolean;
   customerId: string | null;
+  /** Tür seçici "Malın sahibi" kartını izletir. */
+  onOwnerKind?: (k: WoCreateKind) => void;
 }
 
 /** K30-D plan bölümünün (adımlar, makine, tür, hedef özellik) bağlamı; PER_PARTY'de makine parti başına masada seçilir. */
@@ -197,7 +233,7 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     customerId: p.customerId,
     woType: extras.woType,
     orderLineIds: extras.orderLineIds,
-    onWoType: (woType) => edit({ woType }),
+    onWoType: (woType) => { edit({ woType }); p.onOwnerKind?.(ownerKindForWoType(woType)); },
     propertyIds: extras.propertyIds,
     onProperties: (propertyIds) => edit({ propertyIds }),
   };
@@ -229,7 +265,7 @@ function useDocReadToForm(row: DocRow | null, setForm: React.Dispatch<React.SetS
 export type DocScanFlow = ReturnType<typeof useDocScanFlow>;
 
 /** Tarayıcı akışı (DocBatchView kalıbı): sayfalar gelince yükleme + okuma kendiliğinden; biten belge satır olur. */
-function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote']) {
+function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote'], onNote?: (note: { id: string; noteNo: string }, runKey: number) => void) {
   const b = useDocScan({ successHint: 'Okuma bitince form dolar; kontrol edip oluşturun.' });
   const [cameraOpen, setCameraOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -240,8 +276,12 @@ function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote']) {
   const source = usePageSource(b.pages.length, onPages);
   const doneNote = b.done?.note;
   const doneRun = b.done?.runKey ?? 0;
+  const onNoteRef = React.useRef(onNote);
+  onNoteRef.current = onNote;
   useEffect(() => {
-    if (doneNote) addNote(doneNote, doneRun);
+    if (!doneNote) return;
+    addNote(doneNote, doneRun);
+    onNoteRef.current?.(doneNote, doneRun);
   }, [doneNote, doneRun, addNote]);
   const remove = (i: number) => b.setPages(removePage(b.pages, i));
   const removeFromPreview = (i: number) => {
@@ -260,4 +300,41 @@ function useDocScanFlow(addNote: ReturnType<typeof useWoRows>['addNote']) {
     remove,
     removeFromPreview,
   };
+}
+
+/** "Belge Okut" girişi: tarayıcı bir kez kendiliğinden açılır (DocBatchView `autoStart` kalıbı). */
+function useAutoScan(enabled: boolean, add: () => void) {
+  const started = React.useRef(false);
+  useEffect(() => {
+    if (!enabled || started.current) return;
+    started.current = true;
+    add();
+  }, [enabled, add]);
+}
+
+/** "Malın sahibi" kartı: iki tür açık cihazda görünür ve seçim zorunlu; tek türde gizli, tür sabit (bugünkü). */
+function useOwnerKind(kinds: readonly WoCreateKind[] | undefined, woType: WoFormExtras['woType'], setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
+  // Fason müşterisi rolü sistemde yok → ön seçim adı null (kart boş gelir); rol eklenince burası beslenir.
+  const [init] = useState(() => ownerKindCard(kinds ?? [], null));
+  const [value, setValue] = useState<WoCreateKind | null>(init.value);
+  const visible = kinds !== undefined && init.visible;
+  const choose = useCallback((k: WoCreateKind) => {
+    setValue(k);
+    setForm((s) => ({ ...s, extras: { ...s.extras, woType: woTypeForOwnerKind(k, s.extras.woType) } }));
+  }, [setForm]);
+  return { visible, value, reason: value !== null ? init.reason : null, choose, sync: setValue, woType };
+}
+
+/** Müşterinin rota kartı (`rota-onerisi` CUSTOMER_ROUTE); yoksa / eski sunucu → null. */
+function useCardRoute(enabled: boolean, ownerId: string | null, routes: readonly ProductionRoute[]): ProductionRoute | null {
+  const q = useQuery({
+    queryKey: ['gelen-belge', 'rota-onerisi', ownerId],
+    queryFn: () => inboundDocService.routeSuggestion(ownerId),
+    enabled: enabled && !!ownerId,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const s = q.data;
+  if (!enabled || !ownerId || !s || s.source !== 'CUSTOMER_ROUTE' || !s.routeTemplateId) return null;
+  return routes.find((r) => r.id === s.routeTemplateId) ?? null;
 }

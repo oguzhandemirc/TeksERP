@@ -15,12 +15,10 @@ import WorkOrderTable from './WorkOrderTable';
 import ActionBar from './ActionBar';
 import ScanStage from './ScanStage';
 import OptionsSheet from './OptionsSheet';
-import { KIND_BUTTON } from './scanFlow';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
-import type { WoCreateKind } from '../../../store/woCreateKinds';
 import { useScanAction } from './useScanAction';
-import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
 import type { ProductionRoute } from '../../../services/route.service';
+import { buttonRouteFor, initialFormRoute } from './createEntry';
 import { useColumnPrefs, useLocationStations, useWorkOrderList } from './useWorkOrderList';
 import { DEFAULT_FILTERS, emptyStateFor, type ListFilters } from './workOrderRow';
 import IsEmriTuruAnahtari from './dokuma/IsEmriTuruAnahtari';
@@ -31,11 +29,15 @@ export default function IsEmirleriScreen() {
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [scanRoute, setScanRoute] = useState<{ route: ProductionRoute; kind: WoCreateKind } | null>(null);
+  const [stage, setStage] = useState<{ route: ProductionRoute | null; manual: boolean; n: number } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const kinds = useDeviceSettingsStore((s) => s.woCreateKinds);
   const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
-  const scan = useScanAction();
+  const routeOnButton = useDeviceSettingsStore((s) => s.woRouteOnButton);
+  const setRouteOnButton = useDeviceSettingsStore((s) => s.setWoRouteOnButton);
+  const scan = useScanAction(routeOnButton);
+  // Ayar kapalıyken tuştaki rota forma (ve yüke) HİÇ geçmez; kart rotası formda çözülür.
+  const open = (manual: boolean) => setStage({ route: initialFormRoute({ buttonRoute: buttonRouteFor(routeOnButton, scan.type), cardRoute: null, scanMode: scan.scanMode === true }), manual, n: Date.now() });
   const list = useWorkOrderList(filters);
   const refresh = useManualRefresh(() => list.refetch(), 'İş emirleri güncellendi');
   const { stations, loading: stationsLoading } = useLocationStations();
@@ -44,12 +46,12 @@ export default function IsEmirleriScreen() {
   const tur = useIsEmriTuru();
   const anahtar = tur.gorunur ? <IsEmriTuruAnahtari etkin={tur.etkin} onSec={tur.sec} /> : undefined;
 
-  if (scanRoute) {
-    // Okutma: DocBatchView akışı (BELGE kipinde de); geri → liste (kaydedilen İE listede görünsün diye tazelenir).
-    const back = () => { setScanRoute(null); void list.refreshAll(); };
+  if (stage) {
+    // Oluşturma formu; geri → liste (kaydedilen İE listede görünsün diye tazelenir).
+    const back = () => { setStage(null); void list.refreshAll(); };
     return (
-      <ScreenChrome title={`${KIND_BUTTON[scanRoute.kind]} · ${shortcutTitle(scanRoute.route)}`} onStepBack={back}>
-        <ScanStage route={scanRoute.route} kind={scanRoute.kind} onCancel={back} />
+      <ScreenChrome title={stage.manual ? `${TERIM.terbiyeIsEmri.tekil} · Elle oluştur` : `${TERIM.terbiyeIsEmri.tekil} · Belge okut`} onStepBack={back}>
+        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onCancel={back} onNew={() => setStage({ ...stage, n: stage.n + 1 })} />
       </ScreenChrome>
     );
   }
@@ -81,8 +83,8 @@ export default function IsEmirleriScreen() {
           onOpen={setOpenId}
           onEmptyAction={(a) => setFilters(a === 'clearFilters' ? DEFAULT_FILTERS : { ...filters, status: 'ALL' })}
         />
-        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} kinds={kinds} onScan={(kind) => scan.type && setScanRoute({ route: scan.type, kind })} />}
-      <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} onDismiss={() => setOptionsOpen(false)} />
+        {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} showRoute={routeOnButton} onScan={() => open(false)} onManual={() => open(true)} />}
+        <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} routeOnButton={routeOnButton} onRouteOnButton={(v) => void setRouteOnButton(v)} onDismiss={() => setOptionsOpen(false)} />
       </View>
       <ColumnsSheet visible={columnsOpen} columns={cols.visible} onToggle={cols.toggle} onDismiss={() => setColumnsOpen(false)} />
       <WorkOrderDetailSheet workOrderId={openId} onClose={() => setOpenId(null)} onChanged={() => void list.refetch()} />
