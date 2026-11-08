@@ -165,6 +165,12 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   SUBCONTRACT_RETURN: "Fasondan iplik dönüşü",
   SUBCONTRACT_RETURN_CANCEL: "Fasondan iplik dönüşü iptali",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebebi",
+  // Genel fason dalga-2 şema öncüsü (2026-11-08): emanet çıkış defteri + hizmet metre tabanları (yazıcıları F4/F5).
+  CONSIGNMENT_OUT: "Emanet iplik sahibine çıkış",
+  CONSIGNMENT_OUT_CANCEL: "Emanet iplik çıkışı iptali",
+  SHIPPED_TO_OWNER: "Sahibine verildi",
+  WOUND: "Sarım metresi",
+  WOVEN: "Dokuma metresi",
   get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebebi`; },
   INSPECTION_VOID: "Muayene iptal sebebi",
   // ───────────────────────────────────────────────────────────────────────

@@ -517,6 +517,21 @@ const PARTIAL_INDEXES: Array<{
     predicate: `(kind = 'SUBCONTRACT_OUT'::"YarnMovementKind")`,
     why: "kalem başına TEK fason iplik çıkışı — yarış/replay ikinci çıkışı DB'de düşer",
   },
+  // Genel fason F5 (2026-11-08, migration 20261108101550): emanet çıkış kalemi bir kez çıkar (ship_out_item_uq ikizi).
+  {
+    table: "warp_beam_events",
+    index: "warp_beam_events_ship_to_owner_item_uq",
+    uniq: true,
+    predicate: `((kind)::text = 'SHIP_TO_OWNER'::text)`,
+    why: "emanet çıkış kalemi başına TEK SHIP_TO_OWNER — aynı levent aynı belgeden iki kez çıkamaz",
+  },
+  {
+    table: "yarn_movements",
+    index: "yarn_movements_consignment_out_uq",
+    uniq: true,
+    predicate: `(kind = 'CONSIGNMENT_OUT'::"YarnMovementKind")`,
+    why: "emanet çıkış kalemi başına TEK iplik çıkışı — yarış/replay ikinci çıkışı DB'de düşer",
+  },
   // Faz 3 (2026-09-14, migration 20260914180200): bir yuvada tek BAĞLI levent; yüklem yalnız MOUNTED
   // (sökülen levent yuvayı bırakır, kolonlar NULL'lanır — `warp_beams_mounted_ck` ikiliyi bağlar).
   {
@@ -778,6 +793,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },
   // G1 fason iplik (2026-09-15): SUBCONTRACT_* ⇔ kalem bağı (warp_link ikizi) · dönüşte sebep zorunlu.
   { table: "yarn_movements", name: "yarn_movements_fason_link_ck" },
+  // Genel fason dalga-2 şema öncüsü (migration 20261108101550): emanet çıkış defter bağları.
+  { table: "yarn_movements", name: "yarn_movements_consignment_link_ck" },
+  { table: "warp_beam_events", name: "warp_beam_events_consignment_item_ck" },
+  { table: "consignment_dispatches", name: "consignment_dispatches_cancel_ck" },
+  { table: "consignment_dispatch_items", name: "consignment_dispatch_items_kind_ref_ck" },
+  { table: "consignment_dispatch_items", name: "consignment_dispatch_items_qty_ck" },
   { table: "yarn_movements", name: "yarn_movements_fason_return_reason_ck" },
   // Devere Faz 2 (lot): bobin adedi bilgi alanı, null ya da pozitif.
   { table: "yarn_movements", name: "yarn_movements_bobbin_positive" },
@@ -946,6 +967,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "service_billing_links", name: "service_billing_links_meters_ck" },
   { table: "service_billing_links", name: "service_billing_links_revoke_ck" },
   { table: "service_billing_links", name: "service_billing_links_billed_qty_ck" },
+  // F4 (20261108101550): özne türü ⇔ tam bir özne FK'sı (ROLL ⇒ rollId · WARP_BEAM ⇒ warpBeamId).
+  { table: "service_billing_links", name: "service_billing_links_subject_ck" },
+  // F6/F9 (20261108101550): beklenen dönüş gün sayısı 1..365 · yeniden işlem sınıfı yalnız WORK_ORDER_REWORK.
+  { table: "subcontractors", name: "subcontractors_expected_return_days_ck" },
+  { table: "subcontractor_categories", name: "subcontractor_categories_expected_return_days_ck" },
+  { table: "reason_presets", name: "reason_presets_billable_ck" },
   { table: "roll_meter_readings", name: "roll_meter_readings_piece_count_ck" },
   { table: "fabric_property_values", name: "fabric_property_values_stitch_count_ck" },
   // H8b (migration 20261029180000): müşteri hizmet faturası tetiği yalnız fabrika ayarının değerleri. Bekçi `test_hizmet_fatura` §20.
@@ -2217,7 +2244,7 @@ async function main(): Promise<void> {
     // D2b (migration 20261031210300): anahtar özellik kapsamını (propertyId) da taşır; kapsamsız (NULL) satır da tekil.
     { table: "delivery_note_aliases", index: "delivery_note_aliases_scope_senderCustomerId_propertyId_raw_key", why: "sözlük anahtarı NULL gönderen/kapsamda da tek satır (bekçi test_gelen_belge_onay §16)" },
     // Kısmi (WHERE) canlı-tekillik indeksleri: NULL kolonlu anahtar (adımsız iş · tezgahsız eşleme · kişisiz/izinsiz kural) da tek canlı satır.
-    { table: "service_billing_links", index: "service_billing_links_active_uq", why: "adımsız (workOrderStepId NULL) iş başına tek aktif hizmet bağı (H7, 20261029140000)" },
+    { table: "service_billing_links", index: "service_billing_links_active_uq", why: "adımsız (workOrderStepId NULL) iş başına tek aktif hizmet bağı (H7, 20261029140000; F4 levent kolonuyla yeniden kuruldu 20261108101550)" },
     { table: "loom_alarm_tier_rules", index: "loom_alarm_tier_rules_live_uq", why: "userId/permissionCode NULL kuralda da tek canlı satır (20261011200000)" },
     { table: "machine_stop_code_maps", index: "machine_stop_code_maps_live_uq", why: "tezgahsız (machineId NULL) kart tipi geneli eşleme de tekil (20261012140000)" },
   ];

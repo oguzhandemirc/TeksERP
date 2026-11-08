@@ -155,6 +155,9 @@ export const PERMISSION_CATALOG = [
   { code: "certificate:write", module: "QUALITY", category: "web", description: "Sertifika ekleme/yenileme/iptal" },
   { code: "subcontractor:read", module: "SUBCONTRACTOR", category: "web", description: "Fason firma listesi/detay görüntüleme" },
   { code: "subcontractor:write", module: "SUBCONTRACTOR", category: "web", description: "Fason firma oluşturma/düzenleme" },
+  // Genel fason F5 (şema öncüsü 2026-11-08): emanet levent/ipliği SAHİBİNE çıkış belgesi — modül `emanet.enabled`.
+  { code: "consignment:read", module: "PRODUCTION", category: "web", description: "Emanet çıkış belgelerini (sahibine verilen levent/iplik) görüntüleme" },
+  { code: "consignment:write", module: "PRODUCTION", category: "web", description: "Emanet levent/ipliği sahibine çıkış belgesi oluşturma ve iptal etme" },
   { code: "kartela:read", module: "KARTELA", category: "web", description: "Kartela sevk/kabul takibi" },
   { code: "kartela:write", module: "KARTELA", category: "web", description: "Kartela sevk/kabul + iptal" },
   { code: "customer-alias:read", module: "SALES", category: "web", description: "Müşteriye özel renk/isim eşlemesini görüntüleme" },

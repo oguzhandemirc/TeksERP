@@ -173,6 +173,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // SoD gereği Muhasebe/Süpervizör'de. Görünürlüğün gerçek kapısı `gelenBelge.enabled` (varsayılan kapalı).
       "gelen-belge:read",
       "gelen-belge:write",
+      // Genel fason F5: emanet levent/ipliği sahibine depo çıkarır (görünürlük kapısı `emanet.enabled`).
+      "consignment:read",
+      "consignment:write",
       // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
       // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
       // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
