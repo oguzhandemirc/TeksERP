@@ -17,14 +17,16 @@
 //   §3 Katalog sonradan değişince geçmiş İE ve onun taslağı DEĞİŞMEZ
 //   §4 Taslak: BIZIM_HATA (false) İE'nin adım işi → satır/bağ yok + uyarı (sessiz düşmez); müşteri talebi → satır;
 //      sınıfsız → satır ve `excludedWorks` anahtarı yok (bayt-aynı); adımsız bayrak işi (DECLARED) işin anındaki
-//      hareketin İE'sinden; kurşun biçimli adımlı iş (çözücü düzeyi) aynı İE'den
+//      hareketin İE'sinden; kurşun biçimli adımlı iş (çözücü düzeyi) aynı İE'den; bayrak işinin kanıtı sınıfa
+//      duyarlı: ücretli İE okuması + sonraki bizim-hata İE okuması → ücretli okuma faturada (yutulmaz)
 //   §5 Geri alma kapısı: faturalı adım işinin hareketi geri alınırsa / yeniden açılırsa 409 SERVICE_ALREADY_BILLED;
 //      faturasız iş serbest; bağ insert'i geri alınmış harekete 409 SERVICE_READING_CHANGED;
-//      yarış: hareket FOR SHARE + bağ (açık tx) tutulurken geri alma BEKLER, commit sonrası 409
-// Negatif sondalar harita satırında (`docs/bekci-harita/finans.md`).
+//      yarış: hareket FOR SHARE + bağ (açık tx) tutulurken geri alma BEKLER, commit sonrası 409;
+//      kapı yalnız ADIM bağında: faturalı bayrak/kurşun bağlı topun hareketi bugünkü gibi geri alınır
+// Negatif sondalar harita satırında (`docs/bekci-harita/maliyet.md`).
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { Currency, ItemType, PriceKind, Prisma, ReasonPresetKind } from "@prisma/client";
+import { Currency, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, ReasonPresetKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -111,8 +113,8 @@ async function main(): Promise<void> {
   const cust = await prisma.customer.create({ data: { code: `${P}-C`.slice(0, 32), name: `TEST HYI müşteri ${STAMP}` }, select: { id: true } });
   fx.customerIds.push(cust.id);
 
-  const mkWo = async (parameters: Record<string, unknown> | null) => {
-    const wo = unwrap<{ id: string }>(await wos.create({ type: "STOCK_PRODUCTION", targetItemId: fabric, parameters, steps: [{ stationId: st.id, notes: null }] } as never));
+  const mkWo = async (parameters: Record<string, unknown> | null, stationId = st.id) => {
+    const wo = unwrap<{ id: string }>(await wos.create({ type: "STOCK_PRODUCTION", targetItemId: fabric, parameters, steps: [{ stationId, notes: null }] } as never));
     fx.woIds.push(wo.id);
     const row = await prisma.workOrder.findUniqueOrThrow({ where: { id: wo.id }, select: { reworkBillable: true, steps: { select: { id: true } } } });
     return { id: wo.id, stepId: row.steps[0]!.id, reworkBillable: row.reworkBillable };
@@ -187,6 +189,31 @@ async function main(): Promise<void> {
     { rollId: rTheirs, workOrderStepId: woOurs.stepId, serviceAt: new Date(), source: "TABLET" },
     { rollId: rTheirs, workOrderStepId: woTheirs.stepId, serviceAt: new Date(), source: "TABLET" },
   ]);
+  // Bayrak işi top×özellik başına TEK iştir: kanıt seçimi faturasız okumayı ücretli okumaya tercih etmemeli.
+  const stBr = await prisma.station.create({ data: { code: `${P}-SB`.slice(0, 32), name: `TEST HYI brode ${STAMP}`, type: "INTERNAL", kind: "OTHER" }, select: { id: true } });
+  fx.stationIds.push(stBr.id);
+  await prisma.stationProperty.create({ data: { stationId: stBr.id, propertyId: br.id } });
+  const woBrPaid = await mkWo(null, stBr.id);
+  const woBrOurs = await mkWo(rework(ours.code), stBr.id);
+  const reading = (rollId: string, stepId: string, meters: string, at: Date) => prisma.rollMeterReading.create({
+    data: { rollId, workOrderStepId: stepId, phase: MeterPhase.OUT, meters, source: MachineDataSource.OPERATOR, basis: MeterVarianceBasis.DECLARED_IN, approvalMode: MeterApprovalMode.NONE, clientToken: randomUUID(), createdById: actor, createdAt: at },
+    select: { id: true },
+  });
+  const rBr = await mkRoll(66);
+  await prisma.rollProperty.create({ data: { rollId: rBr, propertyId: br.id } });
+  await reading(rBr, woBrPaid.stepId, "65.000", new Date(Date.now() - 120_000));
+  await reading(rBr, woBrOurs.stepId, "64.000", new Date(Date.now() - 30_000));
+  const r4f = await resolve([rBr]);
+  const brWork = r4f.works.find((w) => w.rollId === rBr && w.serviceItemId === BRODE);
+  check("bayrak: ücretli İE okuması + sonraki bizim-hata okuması → ücretli okuma faturada (65, ücretli adım), dışlanan yok",
+    brWork?.workOrderStepId === woBrPaid.stepId && r4f.lines.some((l) => l.serviceItemId === BRODE && Number(l.quantity) === 65) && !r4f.excludedWorks,
+    JSON.stringify({ step: brWork?.workOrderStepId === woBrPaid.stepId, lines: r4f.lines.map((l) => [l.serviceItemId === BRODE, l.quantity]), ex: r4f.excludedWorks?.length }));
+  const rBr2 = await mkRoll(55);
+  await prisma.rollProperty.create({ data: { rollId: rBr2, propertyId: br.id } });
+  await reading(rBr2, woBrOurs.stepId, "54.000", new Date(Date.now() - 30_000));
+  const r4g = await resolve([rBr2]);
+  check("bayrak: yalnız bizim-hata okuması → iş dışlanır, satır yok",
+    !r4g.lines.some((l) => l.serviceItemId === BRODE) && r4g.excludedWorks?.some((w) => w.rollId === rBr2 && w.workOrderStepId === woBrOurs.stepId) === true);
   check("kurşun biçimli (adımlı) iş: adımın İE'si belirler", split.excluded.length === 1 && split.excluded[0]!.workOrderStepId === woOurs.stepId && split.billable.length === 1);
 
   // ── §3 katalog değişimi geçmişi etkilemez ───────────────────────────────
@@ -221,6 +248,17 @@ async function main(): Promise<void> {
   const stale = await errOf(() => prisma.$transaction((tx) => insertServiceLinksTx(tx, inv.id, staleLinks)));
   check("geri alınmış harekete bağ yazılamaz → 409 SERVICE_READING_CHANGED", stale.status === 409 && stale.code === "SERVICE_READING_CHANGED", JSON.stringify(stale));
 
+  // Daraltma (patron kararı): kapı yalnız ADIM bağında; faturalı bayrak/kurşun bağı geri almayı bugünkü gibi bırakır.
+  const KUR = await mkItem("KUR", ItemType.SERVICE, "3.0000");
+  const rNonStep = await mkRoll(45);
+  await move(rNonStep, woTheirs.stepId, 45);
+  for (const item of [BRODE, KUR]) {
+    await prisma.serviceBillingLink.create({ data: { invoiceId: inv.id, rollId: rNonStep, workOrderStepId: woTheirs.stepId, serviceItemId: item, billedMeters: 45, meterBasis: "OUT", unitPrice: 3, currency: Currency.TRY, serviceAt: new Date() } });
+  }
+  const nonStepUndo = await errOf(() => prisma.$transaction((tx) => revokeRollMovements(tx, { rollIds: [rNonStep], reason: "TEST bayrak/kurşun bağı" })));
+  check("faturalı bayrak + kurşun bağlı topun hareketi geri alınır (kapı yalnız adım bağında)",
+    nonStepUndo.status === 200 && (await prisma.rollMovement.count({ where: { rollId: rNonStep, revokedAt: null } })) === 0, JSON.stringify(nonStepUndo));
+
   // Yarış: fatura tarafı hareketi FOR SHARE kilitleyip bağı yazar (commit etmeden); geri alma beklemeli ve sonra 409.
   const rRace = await mkRoll(50);
   const mv = await move(rRace, woTheirs.stepId, 50);
@@ -254,6 +292,8 @@ async function cleanup(): Promise<void> {
   const ids = fx.rollIds;
   await del("billingLink", () => prisma.serviceBillingLink.deleteMany({ where: { invoiceId: { in: fx.invoiceIds } } }));
   await del("invoice", () => prisma.invoice.deleteMany({ where: { id: { in: fx.invoiceIds } } }));
+  await del("meterReading", () => prisma.rollMeterReading.deleteMany({ where: { rollId: { in: ids } } }));
+  await del("stationProperty", () => prisma.stationProperty.deleteMany({ where: { stationId: { in: fx.stationIds } } }));
   await del("rollProperty", () => prisma.rollProperty.deleteMany({ where: { rollId: { in: ids } } }));
   await del("rollMovement", () => prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } }));
   await del("roll", () => prisma.roll.deleteMany({ where: { id: { in: ids } } }));

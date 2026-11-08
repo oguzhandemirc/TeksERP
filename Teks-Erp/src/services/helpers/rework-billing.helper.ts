@@ -45,6 +45,17 @@ export function reworkOurFaultWarning(count: number): string {
   return `${count} iş bizim hatamızdan yeniden işlem — faturaya alınmadı.`;
 }
 
+/**
+ * Verilen adımlardan İE'si DONMUŞ `reworkBillable = false` olanlar. Kanıt seçen okuyucular (bayrak işi)
+ * bununla ücretli kanıtı öne alır: faturasız yeniden işlem okuması ücretli eski işi yutmamalı.
+ */
+export async function loadOurFaultStepIds(stepIds: (string | null)[], db: Db = prisma): Promise<Set<string>> {
+  const ids = [...new Set(stepIds.filter((v): v is string => v !== null))];
+  if (ids.length === 0) return new Set();
+  const rows = await db.workOrderStep.findMany({ where: { id: { in: ids }, workOrder: { reworkBillable: false } }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+}
+
 type WorkRef = { rollId: string; workOrderStepId: string | null; serviceAt: Date };
 
 /**
@@ -53,11 +64,7 @@ type WorkRef = { rollId: string; workOrderStepId: string | null; serviceAt: Date
  */
 export async function splitReworkOurFaultWorks<T extends WorkRef>(works: T[], db: Db = prisma): Promise<{ billable: T[]; excluded: T[] }> {
   if (works.length === 0) return { billable: works, excluded: [] };
-  const stepIds = [...new Set(works.map((w) => w.workOrderStepId).filter((v): v is string => v !== null))];
-  const freeSteps = new Set(stepIds.length === 0 ? [] : (await db.workOrderStep.findMany({
-    where: { id: { in: stepIds }, workOrder: { reworkBillable: false } },
-    select: { id: true },
-  })).map((s) => s.id));
+  const freeSteps = await loadOurFaultStepIds(works.map((w) => w.workOrderStepId), db);
 
   const stepless = works.filter((w) => w.workOrderStepId === null);
   const freeStepless = new Set<T>();
@@ -73,8 +80,10 @@ export async function splitReworkOurFaultWorks<T extends WorkRef>(works: T[], db
       where: { id: { in: rollIds } },
       select: { id: true, createdAt: true, producedInStep: { select: { workOrder: { select: { reworkBillable: true } } } } },
     })).map((r) => [r.id, r]));
+    const movesOf = new Map<string, typeof moves>();
+    for (const m of moves) movesOf.set(m.rollId, [...(movesOf.get(m.rollId) ?? []), m]);
     for (const w of stepless) {
-      const hit = moves.filter((m) => m.rollId === w.rollId && m.enteredAt <= w.serviceAt).at(-1);
+      const hit = (movesOf.get(w.rollId) ?? []).filter((m) => m.enteredAt <= w.serviceAt).at(-1);
       const roll = born.get(w.rollId);
       const flag = hit ? hit.step.workOrder.reworkBillable
         : roll && roll.createdAt <= w.serviceAt ? roll.producedInStep?.workOrder.reworkBillable ?? null : null;

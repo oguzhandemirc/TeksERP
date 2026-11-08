@@ -5,10 +5,11 @@
 // bağlı mı?" Yazmaz; ön muhasebe kapalı kurulumda tablo boştur (0 satır). Hafif
 // tutulur (yalnız prisma) — üretim helper'larına ağır fiyat zinciri taşınmasın.
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
+import { loadProcessMap, stepCategoryOf } from "./service-process-map.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -39,19 +40,32 @@ export async function assertWorkNotBilledTx(tx: Db, work: { rollIds: string[]; w
 }
 
 /**
- * Hareket geri alma kapısı (F9, F3 açığı): geri alınan/yeniden açılan KAPANMIŞ hareketin (top × adım) aktif hizmet
- * bağı varsa 409 `SERVICE_ALREADY_BILLED` — faturadaki adım işinin kanıtı sessizce silinmesin. Çağıran satırı
- * güncelledikten SONRA sorar (fatura tarafı hareketi FOR SHARE kilitler; iki sıra serileşir).
+ * Hareket geri alma kapısı (F9, F3 açığı): geri alınan/yeniden açılan KAPANMIŞ hareketin (top × adım) aktif ADIM
+ * hizmeti bağı varsa 409 `SERVICE_ALREADY_BILLED` — faturadaki adım işinin kanıtı sessizce silinmesin. Yalnız STEP
+ * kaynaklı bağ (iç adım, kart = adımın süreç türü eşlemesi); kurşun/bayrak/dış kabul bağı bugünkü gibi geçer (patron
+ * kararı). Çağıran satırı güncelledikten SONRA sorar (fatura tarafı hareketi FOR SHARE kilitler; iki sıra serileşir).
  */
 export async function assertMovementWorksNotBilledTx(tx: Db, pairs: Array<{ rollId: string; workOrderStepId: string }>): Promise<void> {
   if (pairs.length === 0) return;
   const keys = new Set(pairs.map((p) => `${p.rollId}:${p.workOrderStepId}`));
-  const rows = await tx.serviceBillingLink.findMany({
-    where: { revokedAt: null, rollId: { in: [...new Set(pairs.map((p) => p.rollId))] }, workOrderStepId: { in: [...new Set(pairs.map((p) => p.workOrderStepId))] } },
-    select: { rollId: true, workOrderStepId: true, invoice: { select: { docNo: true } } },
+  const rows = (await tx.serviceBillingLink.findMany({
+    where: {
+      revokedAt: null, meterBasis: { not: ServiceMeterBasis.RECEIVED },
+      rollId: { in: [...new Set(pairs.map((p) => p.rollId))] }, workOrderStepId: { in: [...new Set(pairs.map((p) => p.workOrderStepId))] },
+    },
+    select: {
+      rollId: true, workOrderStepId: true, serviceItemId: true, invoice: { select: { docNo: true } },
+      step: { select: { requiredCategoryId: true, station: { select: { defaultCategoryId: true } } } },
+    },
     orderBy: { id: "asc" },
+  })).filter((r) => keys.has(`${r.rollId}:${r.workOrderStepId}`));
+  if (rows.length === 0) return;
+  const categoryOf = (r: (typeof rows)[number]) => (r.step ? stepCategoryOf(r.step) : null);
+  const processMap = await loadProcessMap(tx, [...new Set(rows.map(categoryOf).filter((v): v is string => v !== null))]);
+  const hit = rows.find((r) => {
+    const cat = categoryOf(r);
+    return cat !== null && processMap.get(cat)?.serviceItemId === r.serviceItemId;
   });
-  const hit = rows.find((r) => keys.has(`${r.rollId}:${r.workOrderStepId}`));
   if (hit) throw alreadyBilled(hit.invoice.docNo);
 }
 
