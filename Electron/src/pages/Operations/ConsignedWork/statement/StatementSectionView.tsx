@@ -1,6 +1,7 @@
 // Ekstre bölümü (top · iplik lotu · levent): özet sayıları → konu kırılımı → hareketler. Ekranda hareket listesi
 // SCREEN_LINE_CAP satırla sınırlı (çizim maliyeti); dosya (Excel/PDF) HER satırı taşır ve bu ekranda yazılıdır.
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { reportCellText } from "@/lib/number-format";
 import { lowerTr } from "@/lib/tr-case";
@@ -47,7 +48,8 @@ export function StatementSectionView({ section: s }: { section: StatementSection
       {s.lines.length > 0 && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 px-1">
-            <Button type="button" variant="ghost" size="sm" className="h-7" aria-expanded={showLines} onClick={() => setShowLines((v) => !v)}>
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1" aria-expanded={showLines} onClick={() => setShowLines((v) => !v)}>
+              {showLines ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               {showLines ? "Hareketleri gizle" : `Hareketleri göster (${s.lines.length})`}
             </Button>
             {showLines && s.lines.length > SCREEN_LINE_CAP && (

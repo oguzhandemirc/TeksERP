@@ -49,6 +49,7 @@ export function EmanetDefaultWarehouseSection({ writePermissions = [SETTINGS_ADM
           label={EMANET_DEFAULT_WAREHOUSE_TITLE}
           desc="Müşterinin malı (emanet) depo söylenmeden doğunca — gelen belge onayı, sahibi seçilmiş top girişi, emanet fason dönüşü — bu depoya girer. Boş (varsayılan) = bugünkü davranış: varsayılan depo. Mal kabulde açıkça seçilen depo her zaman kazanır. Kayıtlı depo pasife alınamaz."
         />
+        <p className="mt-0.5 text-xs text-muted-foreground">Müşteri malı depo söylenmeden doğunca bu depoya girer. Boş = varsayılan depo (bugünkü davranış).</p>
         <div id="emanet-default-warehouse" className="mt-2 flex flex-wrap items-center gap-2">
           <div className="w-72 max-w-full">
             <EntityPickerModal<Warehouse>

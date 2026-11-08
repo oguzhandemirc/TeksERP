@@ -119,11 +119,11 @@ function StatementControls({ customerId, from, to, periodBad, set, buildSpec, ex
               countLabel="müşteri"
             />
           </div>
-          <div className="w-36">
+          <div className="w-44">
             <div className="mb-1 text-xs text-muted-foreground">Başlangıç</div>
             <DatePickerInput value={from} onChange={(v) => set(STATEMENT_PARAMS.from, v)} aria-label="Ekstre başlangıç günü" invalid={periodBad} max={to} />
           </div>
-          <div className="w-36">
+          <div className="w-44">
             <div className="mb-1 text-xs text-muted-foreground">Bitiş</div>
             <DatePickerInput value={to} onChange={(v) => set(STATEMENT_PARAMS.to, v)} aria-label="Ekstre bitiş günü" invalid={periodBad} min={from} />
           </div>

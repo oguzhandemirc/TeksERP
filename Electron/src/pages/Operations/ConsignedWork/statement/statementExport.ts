@@ -73,7 +73,6 @@ export function lineColumns(s: StatementSection): ReportColumn[] {
     { header: `Miktar (${s.unit})`, key: "qty", width: 13, ...qtyCol(s.unit), align: "right" },
     { header: `Kalana etkisi (${s.unit})`, key: "effect", width: 15, ...qtyCol(s.unit), align: "right" },
     { header: "Belge", key: "documentText", width: 22 },
-    { header: "Kod", key: "code", width: 18 },
   ];
 }
 
@@ -87,7 +86,6 @@ export function lineRow(s: StatementSection, l: StatementLine): Record<string, u
     qty: l.qty,
     effect: l.effect,
     documentText: doc,
-    code: l.code,
   };
 }
 
