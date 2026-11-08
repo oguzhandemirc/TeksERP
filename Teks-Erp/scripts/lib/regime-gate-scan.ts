@@ -32,6 +32,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
+import { aileCephesi, aileUyeleri } from "./servis-aile";
 
 export interface RejimTaramaGirdisi {
   /** `src` kökü (mutlak yol). */
@@ -84,39 +85,9 @@ function cozYol(kaynak: string, spec: string): string | null {
   return null;
 }
 
-/**
- * Bölünmüş servis AİLESİ: `<ad>.service.ts` cephesi + yanındaki `<ad>/` dizininin tüm modülleri. Bölmeden
- * (2026-11-08) önce bunlar TEK dosyaydı; tarama aileyi TEK DÜĞÜM sayar (aile içi kenar derinlik saymaz),
- * yoksa derinlik tavanı bölme yüzünden erken dolar ve tarama sessizce daralır (`test_regime_gate_scan_aile`).
- */
-export function aileCephesi(dosya: string, src: string): string | null {
-  if (dosya.endsWith(".service.ts") && dizinMi(dosya.slice(0, -".service.ts".length))) return dosya;
-  let bulunan: string | null = null;
-  const kok = path.resolve(src);
-  // En DIŞ ata kazanır: `<ad>/` altındaki bir alt dizin kendi başına yeni aile açmaz.
-  for (let d = path.dirname(dosya); d.startsWith(kok + path.sep); d = path.dirname(d)) {
-    if (fs.existsSync(`${d}.service.ts`)) bulunan = `${d}.service.ts`;
-  }
-  return bulunan;
-}
-
-function dizinMi(p: string): boolean {
-  return fs.existsSync(p) && fs.statSync(p).isDirectory();
-}
-
-/** Ailenin bütün üyeleri (cephe + `<ad>/**` altındaki `.ts`). */
-function aileUyeleri(cephe: string): string[] {
-  const cikti = [cephe];
-  const yuru = (dir: string): void => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const tam = path.join(dir, e.name);
-      if (e.isDirectory()) yuru(tam);
-      else if (e.name.endsWith(".ts") && !e.name.endsWith(".routes.ts")) cikti.push(tam);
-    }
-  };
-  yuru(cephe.slice(0, -".service.ts".length));
-  return cikti.sort();
-}
+// Bölünmüş servis AİLESİ tek kaynaktan (`servis-aile.ts`): tarama aileyi TEK DÜĞÜM sayar (aile içi kenar
+// derinlik saymaz), yoksa derinlik tavanı bölme yüzünden erken dolar ve tarama sessizce daralır.
+export { aileCephesi };
 
 /**
  * Dosyanın YEREL import ettiği modüller (mutlak yol). `export * from` / `export { x } from` yeniden

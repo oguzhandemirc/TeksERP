@@ -125,7 +125,7 @@ check(
 console.log(
   "   ⚠️ code-format.ts:33-35 bu yasağı YALNIZ parti no için yazmış; ROLL/WO/Sevkiyat sıralanabilir alanlarında uygulanmıyor",
 );
-console.log("      (src/services/workorder.service.ts:34 WO_SORTABLE_FIELDS, shipping.service.ts:2346 SORTABLE).");
+console.log("      (src/services/workorder/list.ts WO_SORTABLE_FIELDS, shipping/list.ts listShipments SORTABLE).");
 
 // ── (4) Parti no P99 → P01 körlemesine sarma ─────────────────────────────────
 console.log("");
