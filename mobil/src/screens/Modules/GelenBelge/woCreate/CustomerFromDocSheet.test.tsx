@@ -78,7 +78,7 @@ describe('CustomerFromDocOffer — teklif varyantları', () => {
   it('⭐ b) tek benzer de olsa "Bunu mu demek istediniz?" listesi (ad + kod); dokununca seçilir, kayıt yok', async () => {
     const { ui, onPicked } = await setup(oneSimilar);
     expect(ui.getByText('Bunu mu demek istediniz?')).toBeTruthy();
-    expect(ui.getByTestId('musteri-ekle-aday-c1')).toHaveTextContent('Kod: M-001', { exact: false });
+    expect(ui.getByTestId('musteri-ekle-aday-c1')).toHaveTextContent('M-001', { exact: false });
     expect(ui.queryByTestId('musteri-ekle-evet')).toBeNull();
     fireEvent.press(ui.getByTestId('musteri-ekle-aday-c1'));
     await flush();
@@ -97,7 +97,7 @@ describe('CustomerFromDocOffer — teklif varyantları', () => {
   it('⭐ b) Hiçbiri → yeni kayıt modalı, okunan ad ön dolu', async () => {
     mockQuickCreate.mockResolvedValue({ success: true, data: { id: 'n2', name: 'MAVIDERE BOYAHNE' } });
     const { ui, onPicked } = await setup(oneSimilar);
-    expect(ui.getByTestId('musteri-ekle-hayir')).toHaveTextContent('Hiçbiri — “MAVIDERE BOYAHNE” adıyla yeni kaydet');
+    expect(ui.getByTestId('musteri-ekle-hayir')).toHaveTextContent('Hiçbiri, yeni kaydet');
     fireEvent.press(ui.getByTestId('musteri-ekle-hayir'));
     await flush();
     expect(ui.getByTestId('musteri-ekle-ad').props.value).toBe('MAVIDERE BOYAHNE');

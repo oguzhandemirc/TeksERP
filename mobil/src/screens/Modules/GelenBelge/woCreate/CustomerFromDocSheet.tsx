@@ -3,7 +3,7 @@
 // önce "Bunu mu demek istediniz?". Kapatılırsa satırdaki "öneriyi aç" bağlantısı yeniden açar.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text, TouchableRipple } from 'react-native-paper';
+import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet, { sheet } from '../../../../components/ModuleSheet';
 import ModalTextInput from '../../../../components/ModalTextInput';
 import TruncatedText from '../../../../components/TruncatedText';
@@ -38,7 +38,7 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
       <ModuleSheet
         visible={c.step === 'ask'}
         onDismiss={c.close}
-        size="sm"
+        size="md"
         title="Bunu mu demek istediniz?"
         subtitle={`Belgede “${unmatched.text}” yazıyor`}
         footer={
@@ -48,7 +48,7 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
             </View>
             <Button mode="contained-tonal" onPress={fromList} buttonColor={colors.surfaceSunken} textColor={colors.text} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
             <Button mode="contained" onPress={c.decline} buttonColor={colors.successDark} contentStyle={TOUCH} testID="musteri-ekle-hayir">
-              {`Hiçbiri — “${unmatched.text}” adıyla yeni kaydet`}
+              Hiçbiri, yeni kaydet
             </Button>
           </>
         }
@@ -57,10 +57,12 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
           <Text style={sheet.label}>Benzer adlı kayıtlı müşteriler — doğru olana dokunun</Text>
           {unmatched.candidates.map((x) => (
             <TouchableRipple key={x.customerId} onPress={() => c.pick(x.customerId, x.name)} style={styles.option}
-              accessibilityRole="button" testID={`musteri-ekle-aday-${x.customerId}`}>
-              <View>
-                <TruncatedText style={styles.name}>{x.name}</TruncatedText>
-                {x.code ? <Text style={styles.code}>{`Kod: ${x.code}`}</Text> : null}
+              rippleColor="rgba(15,23,42,0.08)" accessibilityRole="button" accessibilityLabel={`${x.name} seç`} testID={`musteri-ekle-aday-${x.customerId}`}>
+              <View style={styles.optionRow}>
+                <Icon source="account-outline" size={22} color={colors.brand} />
+                <View style={styles.optionName}><TruncatedText style={styles.name}>{x.name}</TruncatedText></View>
+                {x.code ? <Text style={styles.code}>{x.code}</Text> : null}
+                <Icon source="chevron-right" size={24} color={colors.textSecondary} />
               </View>
             </TouchableRipple>
           ))}
@@ -69,7 +71,7 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
       <ModuleSheet
         visible={c.step === 'create'}
         onDismiss={c.close}
-        size="sm"
+        size="md"
         title="Yeni müşteri kaydedilsin mi?"
         footer={
           <>
@@ -104,7 +106,10 @@ const styles = StyleSheet.create({
   list: { gap: spacing.sm },
   body: { fontSize: typography.size.base, color: colors.text, marginBottom: spacing.sm },
   bold: { fontWeight: typography.weight.bold },
-  option: { minHeight: 56, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  // Aday satırı dokunulabilir kart: dolu zemin + belirgin kenar + sağda ok; ad solda, kod sağda.
+  option: { minHeight: 64, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.borderStrong, backgroundColor: colors.surfaceMuted },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  optionName: { flex: 1, minWidth: 0 },
   name: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  code: { fontSize: typography.size.sm, color: colors.textSecondary },
+  code: { fontSize: typography.size.sm, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
 });
