@@ -21,14 +21,14 @@ import { assertPeriodsOpenTx, periodDayKey } from "./period-guard.helper";
 import { recordKursunGramPriceVersionTx } from "./kursun-gram-price-version.helper";
 
 /** İki hesapta FARKLI dolu ise birleştirme DURUR (K3a kuralı); hedefte boşsa kaynaktan taşınır. */
-const TERM_FIELDS = ["paymentTermDays", "taxOffice", "riskLimit", "serviceBillingTrigger", "notes", "vatRate", "withholdingEnabled", "withholdingNumerator", "withholdingDenominator", "kursunGramPrice", "kursunGramCurrency", "kursunDefaultValueId"] as const;
+const TERM_FIELDS = ["paymentTermDays", "taxOffice", "riskLimit", "serviceBillingTrigger", "notes", "vatRate", "withholdingEnabled", "withholdingNumerator", "withholdingDenominator", "purchaseWithholdingEnabled", "purchaseWithholdingNumerator", "purchaseWithholdingDenominator", "kursunGramPrice", "kursunGramCurrency", "kursunDefaultValueId"] as const;
 /** Sonuçlanmamış çek: hâlâ cariye hareket yazabilir (tahsil/karşılıksız/iade) → birleştirme DURUR. */
 const OPEN_CHEQUE_STATUSES: ChequeStatus[] = [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK, ChequeStatus.ENDORSED, ChequeStatus.ISSUED];
 
 const ACCOUNT_SELECT = {
   id: true, isActive: true, mergedIntoId: true, customerId: true, subcontractorId: true, defaultCurrency: true,
   paymentTermDays: true, taxOffice: true, riskLimit: true, serviceBillingTrigger: true, notes: true,
-  vatRate: true, withholdingEnabled: true, withholdingNumerator: true, withholdingDenominator: true, kursunGramPrice: true, kursunGramCurrency: true, kursunDefaultValueId: true,
+  vatRate: true, withholdingEnabled: true, withholdingNumerator: true, withholdingDenominator: true, purchaseWithholdingEnabled: true, purchaseWithholdingNumerator: true, purchaseWithholdingDenominator: true, kursunGramPrice: true, kursunGramCurrency: true, kursunDefaultValueId: true,
   customer: { select: { code: true, name: true, mergedIntoId: true } },
   subcontractor: { select: { code: true, name: true, customerId: true } },
 } as const;

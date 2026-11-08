@@ -56,6 +56,10 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeWithholdingEnabled: A(true),
   financeWithholdingNumerator: A(5),
   financeWithholdingDenominator: A(10),
+  // F7: fason alış tevkifatı açık profilde 7/10 (kural devrede); açıkken oran zorunlu → üçü birlikte.
+  financePurchaseWithholdingEnabled: A(true),
+  financePurchaseWithholdingNumerator: A(7),
+  financePurchaseWithholdingDenominator: A(10),
   financeInvoiceMatchTolerance: A(true),
   financeInvoiceQtyTolerancePct: A(5),
   financeInvoicePriceTolerancePct: A(5),

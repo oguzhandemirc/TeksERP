@@ -271,6 +271,10 @@ export const updateSchema = z.strictObject({
   financeWithholdingEnabled: z.boolean().optional(),
   financeWithholdingNumerator: z.number().int({ message: "Tevkifat payı tam sayı olmalı" }).min(0).max(99).optional(),
   financeWithholdingDenominator: z.number().int({ message: "Tevkifat paydası tam sayı olmalı" }).min(1).max(99).optional(),
+  // F7: fason alış tevkifatı üçlüsü — satışınkiyle aynı aralık; üçlü tutarlılığı serviste (WITHHOLDING_SETTING_INVALID).
+  financePurchaseWithholdingEnabled: z.boolean().optional(),
+  financePurchaseWithholdingNumerator: z.number().int({ message: "Tevkifat payı tam sayı olmalı" }).min(0).max(99).optional(),
+  financePurchaseWithholdingDenominator: z.number().int({ message: "Tevkifat paydası tam sayı olmalı" }).min(1).max(99).optional(),
   // n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (default false = kontrol yok) + iki eşik (null = varsayılan 0).
   financeInvoiceMatchTolerance: z.boolean().optional(),
   financeInvoiceQtyTolerancePct: z.number().min(0).max(100).nullable().optional(),

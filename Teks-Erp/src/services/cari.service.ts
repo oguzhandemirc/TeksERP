@@ -73,6 +73,10 @@ export interface CariListRow {
   withholdingEnabled: boolean | null;
   withholdingNumerator: number | null;
   withholdingDenominator: number | null;
+  /** F7: ALIŞ tevkifatı geçersiz kılması (fason firma); null = genel alış ayarı. */
+  purchaseWithholdingEnabled: boolean | null;
+  purchaseWithholdingNumerator: number | null;
+  purchaseWithholdingDenominator: number | null;
   /** Kartın rolleri (rol modeli) — kartsız eski fason hesabında null; panel rozeti buradan yazar. */
   roles: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;

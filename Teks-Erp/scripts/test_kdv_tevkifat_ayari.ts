@@ -9,10 +9,16 @@
 //   §5 cari kapısı: KDV aralığı, yarım oran, pay > payda, pay 0 ⇒ 400 CARI_TAX_OVERRIDE_INVALID; kolon değişmez
 //   §6 AST TEK ÇÖZÜMLEYİCİ: KDV/tevkifat ayar okuyucuları (ince okuyucular dahil), getFeatureFlags'in finance*
 //      alanları, carinin tevkifat alanları ve `cari.vatRate` yalnız beyanlı dosyalarda; üç taslak yolu `resolveInvoiceTaxDefaults` çağırır
+//   §7 ALIŞ KOLU (F7, fason planı FK4): kapalı ⇒ 0 = bugünkü (satır şekli bayt-aynı); açık ⇒ yalnız fason rolüne;
+//      fason carisi > genel; "uygulanmaz" genel açığı ezer; tarafsız/fason olmayan ⇒ 0; çöp ayar ⇒ bugünküne düşer;
+//      ayar + cari kapısı (Zod/servis/DB seddi) satış üçlüsünün ikizi
 // Dönem taslağı uçtan ucu (müşteri %10 + 5/10 ⇒ satır) `test_hizmet_fatura` §14/§19v'de.
 // Negatif sondalar (2026-10-31): `computeInvoiceTaxDefaults` geçersiz kılmayı yok sayınca §1/§2 kırmızı ·
 // `service-period-invoice.service`e ikinci `readFinanceDefaultVatRate()` yazılınca §6 kırmızı (geri alındı) ·
 // bitirici: dönem taslağına `readFinanceWithholdingEnabled()` / `flags.financeWithholdingEnabled` / `cari.vatRate` ⇒ §6 kırmızı.
+// F7 sondaları (2026-11-08): alış rol süzgeci silinince §7 4 ❌ · alış kolu bugünküne döndürülünce §7 3 ❌ ·
+// okuyucunun çöp düşmesi kapatılınca §7 "payda 200" ❌ · `invoice.service`e `readFinancePurchaseWithholdingFlags()` ⇒ §6 ❌.
+// İnceleme #630: `isSubcontractorParty` `kind` kolunu düşürünce §7 2 ❌ (yüklem + kartsız eski fason hesabı).
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -23,7 +29,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
-import { computeInvoiceTaxDefaults, resolveInvoiceTaxDefaults, taxLineFields } from "../src/services/helpers/invoice-tax-defaults.helper";
+import { computeInvoiceTaxDefaults, isSubcontractorParty, resolveInvoiceTaxDefaults, taxLineFields } from "../src/services/helpers/invoice-tax-defaults.helper";
 import { computeInvoiceTotals, ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import { cariService } from "../src/services/cari.service";
 import { testActorId } from "./fixture-test-user";
@@ -60,12 +66,22 @@ const SETTING_READERS = new Set([
   "readFinanceWithholdingEnabled",
   "readFinanceWithholdingNumerator",
   "readFinanceWithholdingDenominator",
+  "readFinancePurchaseWithholdingFlags",
+  "readFinancePurchaseWithholdingEnabled",
+  "readFinancePurchaseWithholdingNumerator",
+  "readFinancePurchaseWithholdingDenominator",
 ]);
 // getFeatureFlags() sonucundaki ayar alanları da bir okuma kapısıdır: beyanlı dosya (okuyucu · sözleşme · çözümleyici) dışında okunmaz.
-const FLAG_FIELDS = new Set(["financeDefaultVatRate", "financeWithholdingEnabled", "financeWithholdingNumerator", "financeWithholdingDenominator"]);
+const FLAG_FIELDS = new Set([
+  "financeDefaultVatRate", "financeWithholdingEnabled", "financeWithholdingNumerator", "financeWithholdingDenominator",
+  "financePurchaseWithholdingEnabled", "financePurchaseWithholdingNumerator", "financePurchaseWithholdingDenominator",
+]);
 const FLAG_FIELD_FILES = new Set(["services/system-setting.service.ts", "routes/feature-flag.routes.ts", RESOLVER]);
 const SETTING_READER_FILES = new Set(["services/system-setting.service.ts", RESOLVER]);
-const CARI_FIELDS = new Set(["withholdingEnabled", "withholdingNumerator", "withholdingDenominator"]);
+const CARI_FIELDS = new Set([
+  "withholdingEnabled", "withholdingNumerator", "withholdingDenominator",
+  "purchaseWithholdingEnabled", "purchaseWithholdingNumerator", "purchaseWithholdingDenominator",
+]);
 // Cari geçersiz kılmasını YAZAN (doğrulama) ve sözleşmeyi taşıyan (Zod) yüzeyler; okuyup karar veren yalnız RESOLVER.
 // cari-merge.helper (D4-K3d): birleştirmede kaynak terimini boş hedefe KOPYALAR (çatışmada durur) — çözümlemez.
 const CARI_FIELD_FILES = new Set([RESOLVER, "services/helpers/cari-tax-override.helper.ts", "routes/finance.routes.ts", "services/helpers/cari-merge.helper.ts"]);
@@ -80,7 +96,8 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const KEYS = [SETTING_KEYS.FINANCE_DEFAULT_VAT_RATE, SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR];
+const PURCHASE_KEYS = [SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_ENABLED, SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_NUMERATOR, SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR];
+const KEYS = [SETTING_KEYS.FINANCE_DEFAULT_VAT_RATE, SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR, ...PURCHASE_KEYS];
 
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
@@ -91,6 +108,11 @@ async function main(): Promise<void> {
   const STAMP = randomUUID().slice(0, 8);
   let customerId: string | null = null;
   let cariId: string | null = null;
+  let fasonCustomerId: string | null = null;
+  let fasonCariId: string | null = null;
+  let legacySubId: string | null = null;
+  let legacyCariId: string | null = null;
+  let dualCustomerId: string | null = null;
   try {
     // ── §1 ──
     section("§1 saf çözüm zinciri");
@@ -220,7 +242,134 @@ async function main(): Promise<void> {
     check("ikinci çözümleyici yok (ayar okuyucusu / cari tevkifat alanı beyanlı dosya dışında okunmaz)", offenders.length === 0, offenders.join(" · "));
     const missing = DRAFT_PATHS.filter((p) => !draftCalls.has(p));
     check("üç taslak yolu (sevk · dönem · mal kabul) çözümleyiciyi çağırır", missing.length === 0, missing.join(", "));
+
+    // ── §7 ──
+    section("§7 ALIŞ kolu — saf çözüm");
+    const pOff = { ...gOn, financePurchaseWithholdingEnabled: false, financePurchaseWithholdingNumerator: 0, financePurchaseWithholdingDenominator: 10 };
+    const pOn = { ...gOn, financePurchaseWithholdingEnabled: true, financePurchaseWithholdingNumerator: 7, financePurchaseWithholdingDenominator: 10 };
+    const pNone = { purchaseWithholdingEnabled: null, purchaseWithholdingNumerator: null, purchaseWithholdingDenominator: null };
+    const fason = { override: pNone, isSubcontractor: true };
+    const p1 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOff, fason);
+    check("alış kapalı + fason ⇒ tevkifat 0 (bugünkü)", p1.withholdingRate === 0 && p1.vatRate === 20, JSON.stringify(p1));
+    const p2 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, fason);
+    check("alış genel 7/10 + fason ⇒ 70, kaynak GENERAL", p2.withholdingRate === 70 && p2.source.withholding === "GENERAL", JSON.stringify(p2));
+    const p3 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, { override: pNone, isSubcontractor: false });
+    check("alış genel açık ama taraf fason DEĞİL ⇒ 0 (iplik tedarikçisine uydurulmaz)", p3.withholdingRate === 0, JSON.stringify(p3));
+    const p4 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, null);
+    check("alış genel açık ama taraf yok ⇒ 0", p4.withholdingRate === 0, JSON.stringify(p4));
+    const p5 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, { override: { purchaseWithholdingEnabled: null, purchaseWithholdingNumerator: 5, purchaseWithholdingDenominator: 10 }, isSubcontractor: true });
+    check("fason carisi 5/10 genel 7/10'u ezer ⇒ 50, kaynak CARI", p5.withholdingRate === 50 && p5.source.withholding === "CARI", JSON.stringify(p5));
+    const p6 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, { override: { ...pNone, purchaseWithholdingEnabled: false }, isSubcontractor: true });
+    check("fason carisi 'uygulanmaz' genel açığı ezer ⇒ 0", p6.withholdingRate === 0, JSON.stringify(p6));
+    const p7 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOff, { override: { ...pNone, purchaseWithholdingEnabled: true }, isSubcontractor: false });
+    check("cari 'uygulanır' ama oran hiçbir yerde yok ⇒ UYDURULMAZ (0)", p7.withholdingRate === 0, JSON.stringify(p7));
+    const p8 = computeInvoiceTaxDefaults(InvoiceType.PURCHASE, cust, gOn, fason);
+    check("alış satış geçersiz kılmasını ve satış genel tevkifatını OKUMAZ (alış üçlüsü yok ⇒ 0, KDV genel)", p8.withholdingRate === 0 && p8.vatRate === 20, JSON.stringify(p8));
+
+    section("§7 ALIŞ kolu — DB çözümü");
+    for (const k of PURCHASE_KEYS) await prisma.systemSetting.deleteMany({ where: { key: k } });
+    const fc = await prisma.customer.create({ data: { code: `TEST-KDVF-${STAMP}`, name: `TEST KDV fason ${STAMP}`, isSubcontractorRole: true }, select: { id: true } });
+    fasonCustomerId = fc.id;
+    fasonCariId = (await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: fc.id, subcontractorId: null }))).id;
+    const genVat = (await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId: null })).vatRate;
+    const q0 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    check("alış ayar satırı yok + fason ⇒ satır alanları bayt-aynı { vatRate }", JSON.stringify(taxLineFields(q0)) === JSON.stringify({ vatRate: genVat }), JSON.stringify(taxLineFields(q0)));
+    const flags0 = (await systemSettingService.getFeatureFlags()).data!;
+    check("getFeatureFlags: alış üçlüsü varsayılanı KAPALI · 0 · 10", flags0.financePurchaseWithholdingEnabled === false && flags0.financePurchaseWithholdingNumerator === 0 && flags0.financePurchaseWithholdingDenominator === 10, JSON.stringify({ e: flags0.financePurchaseWithholdingEnabled, n: flags0.financePurchaseWithholdingNumerator, d: flags0.financePurchaseWithholdingDenominator }));
+    await systemSettingService.setFeatureFlags({ financePurchaseWithholdingEnabled: true, financePurchaseWithholdingNumerator: 7, financePurchaseWithholdingDenominator: 10 }, actor);
+    const q1 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    const q1Card = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, customerId: fc.id });
+    check("alış genel 7/10 ⇒ fason taslağı 70 (cariId ve kart yolu aynı)", q1.withholdingRate === 70 && JSON.stringify(q1) === JSON.stringify(q1Card), JSON.stringify({ q1, q1Card }));
+    const q2 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, customerId: cu.id });
+    check("fason rolü olmayan kart ⇒ alışta 0", q2.withholdingRate === 0, JSON.stringify(q2));
+    const q3 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE });
+    check("tarafsız alış (mal kabul taslağı) ⇒ 0 = bugünkü", q3.withholdingRate === 0 && !("withholdingRate" in taxLineFields(q3)), JSON.stringify(q3));
+    await cariService.update(fasonCariId, { purchaseWithholdingNumerator: 5, purchaseWithholdingDenominator: 10 }, actor);
+    const q4 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    check("fason carisi 5/10 > genel 7/10 ⇒ 50, kaynak CARI", q4.withholdingRate === 50 && q4.source.withholding === "CARI", JSON.stringify(q4));
+    const q4s = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, cariId: fasonCariId });
+    check("alış geçersiz kılması SATIŞ çözümüne sızmaz", q4s.source.withholding === "GENERAL", JSON.stringify(q4s));
+    await cariService.update(fasonCariId, { purchaseWithholdingEnabled: false }, actor);
+    const q5 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    check("fason carisi 'uygulanmaz' ⇒ 0", q5.withholdingRate === 0, JSON.stringify(q5));
+    await cariService.update(cariId, { purchaseWithholdingEnabled: true, purchaseWithholdingNumerator: 2, purchaseWithholdingDenominator: 10 }, actor);
+    const q6 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId });
+    check("fason rolü olmayan cari de açık geçersiz kılmayla tevkifat alır (cari > rol süzgeci) ⇒ 20", q6.withholdingRate === 20, JSON.stringify(q6));
+    // Rol yüklemi tek yardımcıda: kart rolü ya da kartsız eski fason hesabı (kind SUBCONTRACTOR).
+    check("isSubcontractorParty: kind SUBCONTRACTOR · kart rolü ⇒ fason; CUSTOMER rolsüz / bilinmeyen ⇒ değil",
+      isSubcontractorParty({ kind: "SUBCONTRACTOR", isSubcontractorRole: null }) && isSubcontractorParty({ kind: "CUSTOMER", isSubcontractorRole: true })
+      && isSubcontractorParty({ kind: null, isSubcontractorRole: true }) && !isSubcontractorParty({ kind: "CUSTOMER", isSubcontractorRole: false }) && !isSubcontractorParty({ kind: null, isSubcontractorRole: null }));
+    const ls = await prisma.subcontractor.create({ data: { code: `TKF${STAMP}`, name: `TEST KDV eski fason ${STAMP}` }, select: { id: true } });
+    legacySubId = ls.id;
+    legacyCariId = (await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: null, subcontractorId: ls.id }))).id;
+    const legacyKind = (await prisma.cariAccount.findUniqueOrThrow({ where: { id: legacyCariId }, select: { kind: true, customerId: true } }));
+    const q6l = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: legacyCariId });
+    check("kartsız eski fason hesabı (kind SUBCONTRACTOR) genel alış ayarını alır ⇒ 70", legacyKind.kind === "SUBCONTRACTOR" && legacyKind.customerId === null && q6l.withholdingRate === 70, JSON.stringify({ legacyKind, q6l }));
+    // BİLİNEN SINIR (inceleme #630): süzgeç kart düzeyinde — hem tedarikçi hem fason kartın iplik faturası da önerilir (satırda düzeltilir).
+    const dc = await prisma.customer.create({ data: { code: `TEST-KDVD-${STAMP}`, name: `TEST KDV çift rol ${STAMP}`, isSupplierRole: true, isSubcontractorRole: true }, select: { id: true } });
+    dualCustomerId = dc.id;
+    const q6d = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, customerId: dc.id });
+    check("çift rollü kart (tedarikçi + fason) ⇒ 70 önerilir (fatura içeriği ayrılmaz — bilinen sınır, F6)", q6d.withholdingRate === 70, JSON.stringify(q6d));
+    const frow = (await cariService.findById(fasonCariId)).data!;
+    check("cari satırı alış geçersiz kılmasını taşır", frow.purchaseWithholdingEnabled === false && frow.purchaseWithholdingNumerator === 5 && frow.purchaseWithholdingDenominator === 10, JSON.stringify(frow));
+    // Çöp ayar (elle yazılmış pay > payda / metin bayrak) ⇒ okuyucu KAPALIYA düşer = bugünkü.
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_NUMERATOR }, data: { value: 15 } });
+    await cariService.update(fasonCariId, { purchaseWithholdingEnabled: null, purchaseWithholdingNumerator: null, purchaseWithholdingDenominator: null }, actor);
+    const q7 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    check("çöp genel ayar (pay 15 > payda 10) ⇒ 0 = bugünkü", q7.withholdingRate === 0, JSON.stringify(q7));
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_NUMERATOR }, data: { value: 7 } });
+    // Payda 200 (> 99 tavanı) saf çözümün pay ≤ payda sigortasını GEÇER — yalnız okuyucunun kapalıya düşmesi yakalar.
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR }, data: { value: 200 } });
+    const q7b = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    check("çöp genel ayar (payda 200 > tavan 99) ⇒ 0 = bugünkü", q7b.withholdingRate === 0, JSON.stringify(q7b));
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR }, data: { value: 10 } });
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_ENABLED }, data: { value: "evet" } });
+    const q8 = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    check("çöp açık/kapalı ('evet') ⇒ 0 = bugünkü", q8.withholdingRate === 0, JSON.stringify(q8));
+
+    section("§7 ALIŞ kolu — ayar + cari kapısı");
+    check("Zod: alış pay 1.5 RED", !updateSchema.safeParse({ financePurchaseWithholdingNumerator: 1.5 }).success);
+    check("Zod: alış payda 0 RED", !updateSchema.safeParse({ financePurchaseWithholdingDenominator: 0 }).success);
+    check("Zod: alış açık/kapalı 'evet' RED", !updateSchema.safeParse({ financePurchaseWithholdingEnabled: "evet" }).success);
+    check("Zod: geçerli alış üçlüsü kabul", updateSchema.safeParse({ financePurchaseWithholdingEnabled: true, financePurchaseWithholdingNumerator: 7, financePurchaseWithholdingDenominator: 10 }).success);
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_ENABLED }, data: { value: true } });
+    const ps1 = await errOf(() => systemSettingService.setFeatureFlags({ financePurchaseWithholdingNumerator: 0 }, actor));
+    check("servis: alış açıkken pay 0 ⇒ 400 WITHHOLDING_SETTING_INVALID", ps1.status === 400 && ps1.code === "WITHHOLDING_SETTING_INVALID", JSON.stringify(ps1));
+    const salesBefore = (await systemSettingService.getFeatureFlags()).data!.financeWithholdingNumerator;
+    const ps2 = await errOf(() => systemSettingService.setFeatureFlags({ financeWithholdingNumerator: salesBefore === 3 ? 4 : 3, financePurchaseWithholdingNumerator: 11 }, actor));
+    const salesAfter = (await systemSettingService.getFeatureFlags()).data!.financeWithholdingNumerator;
+    check("geçersiz alış üçlülü gövde satış oranını da YAZMAZ", ps2.status === 400 && salesAfter === salesBefore, JSON.stringify({ ps2, salesBefore, salesAfter }));
+    // 400'ün alış üçlüsünden geldiği: satış kısmı tek başına geçerli; kod WITHHOLDING_SETTING_INVALID.
+    const ps2Sales = updateSchema.safeParse({ financeWithholdingNumerator: salesBefore === 3 ? 4 : 3 }).success;
+    check("ps2 400 kodu WITHHOLDING_SETTING_INVALID ve kaynağı alış üçlüsü (satış parçası tek başına geçerli)", ps2.code === "WITHHOLDING_SETTING_INVALID" && ps2Sales, JSON.stringify({ ps2, ps2Sales }));
+    const pbads: Array<[string, Parameters<typeof cariService.update>[1]]> = [
+      ["alış yalnız pay", { purchaseWithholdingNumerator: 5 }],
+      ["alış pay > payda", { purchaseWithholdingNumerator: 11, purchaseWithholdingDenominator: 10 }],
+      ["alış pay 0", { purchaseWithholdingNumerator: 0, purchaseWithholdingDenominator: 10 }],
+    ];
+    for (const [label, input] of pbads) {
+      const r = await errOf(() => cariService.update(fasonCariId as string, input, actor));
+      check(`${label} ⇒ 400 CARI_TAX_OVERRIDE_INVALID`, r.status === 400 && r.code === "CARI_TAX_OVERRIDE_INVALID", JSON.stringify(r));
+    }
+    let psed: string | null = null;
+    try {
+      await prisma.cariAccount.update({ where: { id: fasonCariId }, data: { purchaseWithholdingNumerator: 9, purchaseWithholdingDenominator: 3 } });
+    } catch (e) {
+      psed = extractCheckConstraint(e);
+    }
+    check("DB seddi alış pay > paydayı reddeder ve Türkçe mesajı var", psed === "cari_accounts_purchase_withholding_ck" && Boolean(checkConstraintMessage(psed)), String(psed));
   } finally {
+    for (const id of [fasonCariId, legacyCariId]) {
+      if (!id) continue;
+      await prisma.cariBalance.deleteMany({ where: { cariId: id } });
+      await prisma.cariAccount.deleteMany({ where: { id } });
+    }
+    if (fasonCustomerId) await prisma.customer.deleteMany({ where: { id: fasonCustomerId } });
+    if (dualCustomerId) {
+      await prisma.cariAccount.deleteMany({ where: { customerId: dualCustomerId } });
+      await prisma.customer.deleteMany({ where: { id: dualCustomerId } });
+    }
+    if (legacySubId) await prisma.subcontractor.deleteMany({ where: { id: legacySubId } });
     if (cariId) {
       await prisma.cariBalance.deleteMany({ where: { cariId } });
       await prisma.cariAccount.deleteMany({ where: { id: cariId } });

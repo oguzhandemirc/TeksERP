@@ -266,6 +266,10 @@ export interface FeatureFlags {
   financeWithholdingEnabled: boolean;
   financeWithholdingNumerator: number;
   financeWithholdingDenominator: number;
+  /** F7: fason alış taslağında genel tevkifat (varsayılan KAPALI); yalnız fason rolündeki tedarikçiye. */
+  financePurchaseWithholdingEnabled: boolean;
+  financePurchaseWithholdingNumerator: number;
+  financePurchaseWithholdingDenominator: number;
   /** n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (varsayılan kapalı = kontrol yok) + iki eşik (%; varsayılan 0). */
   financeInvoiceMatchTolerance: boolean;
   financeInvoiceQtyTolerancePct: number;

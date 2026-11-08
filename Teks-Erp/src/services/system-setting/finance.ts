@@ -102,14 +102,51 @@ export type WithholdingFlags = Pick<FeatureFlags, "financeWithholdingEnabled" | 
 export type WithholdingInput = { financeWithholdingEnabled?: boolean; financeWithholdingNumerator?: number | null; financeWithholdingDenominator?: number | null };
 
 export function withholdingSettingProblem(v: WithholdingFlags): string | null {
-  const num = v.financeWithholdingNumerator;
-  const den = v.financeWithholdingDenominator;
-  if (typeof v.financeWithholdingEnabled !== "boolean") return "Genel tevkifat açık/kapalı (true/false) olmalı";
+  return withholdingTripleProblem(v.financeWithholdingEnabled, v.financeWithholdingNumerator, v.financeWithholdingDenominator, "Genel tevkifat");
+}
+
+/** Satış ve alış üçlüsünün ORTAK yüklemi (tek kaynak); `label` yalnız cümlenin öznesi. */
+function withholdingTripleProblem(enabled: unknown, num: number, den: number, label: string): string | null {
+  if (typeof enabled !== "boolean") return `${label} açık/kapalı (true/false) olmalı`;
   if (!Number.isInteger(num) || num < 0 || num > WITHHOLDING_MAX_DENOMINATOR) return `Tevkifat payı 0–${WITHHOLDING_MAX_DENOMINATOR} arasında tam sayı olmalı`;
   if (!Number.isInteger(den) || den < 1 || den > WITHHOLDING_MAX_DENOMINATOR) return `Tevkifat paydası 1–${WITHHOLDING_MAX_DENOMINATOR} arasında tam sayı olmalı`;
   if (num > den) return "Tevkifat payı paydadan büyük olamaz (ör. 5/10)";
-  if (v.financeWithholdingEnabled && num < 1) return "Genel tevkifat açıkken oran girilmeli (ör. 5/10)";
+  if (enabled && num < 1) return `${label} açıkken oran girilmeli (ör. 5/10)`;
   return null;
+}
+
+/** F7: fason ALIŞ taslağının genel tevkifatı (satış üçlüsünün ikizi, ayrı anahtarlar). */
+export type PurchaseWithholdingFlags = Pick<FeatureFlags, "financePurchaseWithholdingEnabled" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator">;
+export type PurchaseWithholdingInput = { financePurchaseWithholdingEnabled?: boolean; financePurchaseWithholdingNumerator?: number | null; financePurchaseWithholdingDenominator?: number | null };
+
+export function purchaseWithholdingSettingProblem(v: PurchaseWithholdingFlags): string | null {
+  return withholdingTripleProblem(v.financePurchaseWithholdingEnabled, v.financePurchaseWithholdingNumerator, v.financePurchaseWithholdingDenominator, "Fason alış tevkifatı");
+}
+
+/** Satır yoksa KAPALI · pay 0 · payda 10 (bugünkü: alışta tevkifat yok). Bozuk/çöp kayıt kapalıya düşer. */
+export async function readFinancePurchaseWithholdingFlags(tx?: Pick<typeof prisma, "systemSetting">): Promise<PurchaseWithholdingFlags> {
+  const client = tx ?? prisma;
+  const read = async (key: string) => (await client.systemSetting.findUnique({ where: { key }, select: { value: true } }))?.value;
+  const flags: PurchaseWithholdingFlags = {
+    financePurchaseWithholdingEnabled: asBoolean(await read(SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_ENABLED)),
+    financePurchaseWithholdingNumerator: asNumber(await read(SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_NUMERATOR)) ?? 0,
+    financePurchaseWithholdingDenominator: asNumber(await read(SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR)) ?? DEFAULT_WITHHOLDING_DENOMINATOR,
+  };
+  return purchaseWithholdingSettingProblem(flags)
+    ? { financePurchaseWithholdingEnabled: false, financePurchaseWithholdingNumerator: 0, financePurchaseWithholdingDenominator: DEFAULT_WITHHOLDING_DENOMINATOR }
+    : flags;
+}
+export async function readFinancePurchaseWithholdingEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  // Anahtar SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_ENABLED — üçlüyle birlikte doğrulanmış değer.
+  return (await readFinancePurchaseWithholdingFlags(tx)).financePurchaseWithholdingEnabled;
+}
+export async function readFinancePurchaseWithholdingNumerator(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  // Anahtar SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_NUMERATOR — üçlüyle birlikte doğrulanmış değer.
+  return (await readFinancePurchaseWithholdingFlags(tx)).financePurchaseWithholdingNumerator;
+}
+export async function readFinancePurchaseWithholdingDenominator(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  // Anahtar SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR — üçlüyle birlikte doğrulanmış değer.
+  return (await readFinancePurchaseWithholdingFlags(tx)).financePurchaseWithholdingDenominator;
 }
 
 /** Genel tevkifat ayarı; satır yoksa KAPALI · pay 0 · payda 10 (bugünkü davranış: tevkifat yok). Bozuk kayıt kapalıya düşer. */

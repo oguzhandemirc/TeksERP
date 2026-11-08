@@ -219,7 +219,7 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -236,6 +236,9 @@ export async function setFeatureFlags(
       /** null = girilmemiş (pay 0) / varsayılan payda (10). */
       financeWithholdingNumerator?: number | null;
       financeWithholdingDenominator?: number | null;
+      /** F7: null = girilmemiş (pay 0) / varsayılan payda (10). */
+      financePurchaseWithholdingNumerator?: number | null;
+      financePurchaseWithholdingDenominator?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
       shippingAllocWidthToleranceCm?: number | null;
       /** null = fabrika varsayılanına dön (%2); `0` geçerli. */

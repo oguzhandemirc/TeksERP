@@ -88,6 +88,10 @@ const cariCreateSchema = z
     withholdingEnabled: z.boolean().nullable().optional(),
     withholdingNumerator: z.number().int().nullable().optional(),
     withholdingDenominator: z.number().int().nullable().optional(),
+    // F7: ALIŞ tevkifatı geçersiz kılması (fason firma; null = genel alış ayarı); doğrulama serviste Türkçe 400.
+    purchaseWithholdingEnabled: z.boolean().nullable().optional(),
+    purchaseWithholdingNumerator: z.number().int().nullable().optional(),
+    purchaseWithholdingDenominator: z.number().int().nullable().optional(),
     // oie-a: müşteriye özel kurşun gram fiyatı (1 gr/m başına metre fiyatı); null = istasyonunki. Para birimiyle birlikte.
     kursunGramPrice: z.union([z.string().max(20), z.number()]).nullable().optional(),
     kursunGramCurrency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).nullable().optional(),

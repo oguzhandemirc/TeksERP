@@ -173,6 +173,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeWithholdingEnabled: "financeEnabled",
   financeWithholdingNumerator: "financeEnabled",
   financeWithholdingDenominator: "financeEnabled",
+  financePurchaseWithholdingEnabled: "financeEnabled",
+  financePurchaseWithholdingNumerator: "financeEnabled",
+  financePurchaseWithholdingDenominator: "financeEnabled",
   // n irsaliye → 1 fatura (2026-09-18): fatura onayı tolerans kontrolü muhasebe modülünün davranış bayrağı + iki eşik.
   financeInvoiceMatchTolerance: "financeEnabled",
   financeInvoiceQtyTolerancePct: "financeEnabled",

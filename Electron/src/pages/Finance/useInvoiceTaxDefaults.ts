@@ -1,7 +1,7 @@
 // =============================================================================
 // FATURA FORMU KDV / TEVKİFAT ÖN DEĞERİ (D4-V1k) — sunucunun TEK çözümleyicisinden
 // =============================================================================
-// Panel kuralı kendisi hesaplamaz: `GET /api/finance/invoices/tax-defaults` (müşteri cari ?? genel ayar ?? bugünkü).
+// Panel kuralı kendisi hesaplamaz: `GET /api/finance/invoices/tax-defaults` (cari ?? genel ayar ?? bugünkü; satış ve alış).
 // Yalnız YENİ faturada (düzenlemede satırların damgalı oranı esastır) ve yalnız SALES/PURCHASE'ta sorulur;
 // iade türleri ve eski backend (uç yok → hata) genel KDV ile açılır — bugünkü davranış.
 // Kullanıcının elle değiştirdiği satıra DOKUNULMAZ: yalnız hâlâ önceki ön değeri taşıyan satır güncellenir.
@@ -14,7 +14,8 @@ import type { InvoiceFormLine } from "./invoiceForm";
 export function useInvoiceTaxDefaults(type: InvoiceType, customerId: string | null, enabled: boolean): InvoiceTaxDefaults | null {
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   const askable = type === "SALES" || type === "PURCHASE";
-  const party = type === "SALES" ? customerId : null;
+  // F7: ALIŞTA da taraf gönderilir — fason firma carisinin alış tevkifatı + genel alış ayarı (yalnız fason rolü) sunucuda çözülür.
+  const party = customerId;
   const q = useQuery({
     queryKey: ["finance", "invoice-tax-defaults", type, party],
     queryFn: () => getInvoiceTaxDefaults(type as "SALES" | "PURCHASE", party),
