@@ -80,7 +80,7 @@ function statik(): void {
   check("§0b kapı kümesi TAM: OUT · WARP_ISSUE · SUBCONTRACT_OUT (3 tür, giriş/iade/storno dışarıda)", YARN_LOT_QUALITY_GATED_KINDS.size === 3 && [YarnMovementKind.OUT, YarnMovementKind.WARP_ISSUE, YarnMovementKind.SUBCONTRACT_OUT].every((k) => YARN_LOT_QUALITY_GATED_KINDS.has(k)));
   check("§0c kapı bayrağı yalnız resolver'dan okur (`resolveYarnQualityHoldEnabled`), ham okuyucu helper'da YOK", /resolveYarnQualityHoldEnabled\(tx\)/.test(helper) && !/readGoodsReceiptYarnQualityHoldEnabled/.test(helper));
   const yarnSvc = readFileSync(path.join(ROOT, "src/services/yarn.service.ts"), "utf8");
-  const kimlik = yarnSvc.indexOf("await assertLotMatchesItemTx(tx, input.lotId, input.itemId)");
+  const kimlik = yarnSvc.indexOf("await assertLotMatchesItemTx(tx, input.lotId, input.itemId");
   const kapi = yarnSvc.indexOf("await assertLotQualityReleasedTx(tx, input.lotId, input.kind)");
   const yazim = yarnSvc.indexOf("tx.yarnMovement.create({");
   check("§0d kapı TEK YAZARIN içinde, kimlikten SONRA ve yazımdan ÖNCE (yeni çağıran kapısız doğamaz)", kimlik > 0 && kapi > kimlik && yazim > kapi, `${kimlik}<${kapi}<${yazim}`);

@@ -7,6 +7,7 @@
 // Belge iptali aynı tx'te F4 bağını damgalar (`consignment-dispatch/cancel.ts`, sebep `CONSIGNMENT_CANCEL`).
 // =============================================================================
 import { Prisma } from "@prisma/client";
+import { sequentialTx } from "./tx-sequential-relations.helper";
 
 /** F4 bağının iptaldeki damga sebebi (sözleşme). */
 export const CONSIGNMENT_CANCEL_REVOKE_REASON = "CONSIGNMENT_CANCEL";
@@ -51,7 +52,8 @@ export async function listActiveShipToOwnerBeams(
     ...(filter.ownerCustomerId ? { ownerCustomerId: filter.ownerCustomerId } : {}),
     ...(filter.from || filter.to ? { dispatchedAt: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lte: filter.to } : {}) } } : {}),
   };
-  const rows = await db.warpBeamEvent.findMany({
+  // İki ilişki (levent + kalem→belge): tx içinden çağrılırsa eşzamanlı sorgu uyarısı — sıralı istemci.
+  const rows = await sequentialTx(db).warpBeamEvent.findMany({
     where: {
       kind: ACTIVE_SHIP_TO_OWNER_WHERE.kind,
       reversal: { is: null },

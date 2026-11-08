@@ -13,6 +13,7 @@ import { tokenReplay } from "../helpers/token-replay.helper";
 import { lockCodeScopeTx } from "../helpers/code-unique.helper";
 import { nextSeriesNo, resolveSeriesFormat, seriesPrefix } from "../number-series.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "../helpers/warp-beam-event.helper";
+import { readRemainingM, remainingMTx } from "../helpers/warp-beam-ledger.helper";
 import { applyYarnMovementTx } from "../yarn.service";
 import {
   assertLineModules, assertNoBlockedLines, dispatchLineSignature, normalizeDispatchInput, previewDb, resolveDispatchLines,
@@ -28,7 +29,7 @@ const CODE_SCOPE = "consignmentDispatch";
 export async function previewConsignmentDispatch(input: ConsignmentDispatchCreateInput): Promise<ConsignmentDispatchPreview> {
   const n = normalizeDispatchInput(input);
   await assertLineModules(prisma, n);
-  const r = await resolveDispatchLines(previewDb, n, { lock: false });
+  const r = await resolveDispatchLines(previewDb, n, { lock: false, remainingOf: (id) => readRemainingM(previewDb, id) });
   let beamLengthM = D(0);
   let yarnKg = D(0);
   const lines: ConsignmentDispatchPreview["lines"] = [];
@@ -105,7 +106,7 @@ export async function createConsignmentDispatch(input: ConsignmentDispatchCreate
       // Biçim BİR KEZ okunur; kapsam kilidi tx'in İLK ifadesi (`nextBeamNoTx` emsali, 8029).
       const fmt = resolveSeriesFormat(CODE_SCOPE);
       await lockCodeScopeTx(tx, CODE_SCOPE, seriesPrefix(fmt, now));
-      const r = await resolveDispatchLines(tx, n, { lock: true });
+      const r = await resolveDispatchLines(tx, n, { lock: true, remainingOf: (id) => remainingMTx(tx, id) });
       assertNoBlockedLines(r);
       const dispatchNo = await nextSeriesNo(CODE_SCOPE, async (prefix) =>
         tx.consignmentDispatch
