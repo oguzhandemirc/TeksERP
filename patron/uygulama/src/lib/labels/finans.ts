@@ -60,6 +60,13 @@ export const INVOICE_TYPE: Readonly<Record<string, string>> = {
   PURCHASE_RETURN: "Alış iadesi",
 };
 
+/** Fatura satırı konusu (`InvoiceLineType`, hizmet kartı ayrımı D3); eski fabrika satırında alan yok. */
+export const INVOICE_LINE_TYPE: Readonly<Record<string, string>> = {
+  PRODUCT: "Ürün",
+  SERVICE: "Hizmet",
+  TEXT: "Açıklama",
+};
+
 /** Fatura durumu (`fatura.durum`; taslak buluta girmez). */
 export const INVOICE_STATUS: Readonly<Record<string, StatusEntry>> = {
   CONFIRMED: { label: "Onaylı", tone: "iyi" },
@@ -103,6 +110,7 @@ export const RECORD_ENUMS: Readonly<Record<string, Readonly<Record<string, Reado
   teklif: { durum: labelsOf(QUOTE_STATUS) },
   "standart-maliyet": { durum: labelsOf(STANDARD_COST_STATUS) },
   fatura: { tur: INVOICE_TYPE, durum: labelsOf(INVOICE_STATUS) },
+  "fatura-kalemi": { satirTipi: INVOICE_LINE_TYPE },
   "cek-senet": { tur: CHEQUE_KIND, belgeTuru: CHEQUE_DOC_TYPE, durum: labelsOf(CHEQUE_STATUS) },
   "kasa-hareketi": { tur: CASH_TXN_KIND, durum: labelsOf(PAYMENT_STATUS) },
   "tahsilat-odeme": {

@@ -30,6 +30,13 @@
       ]
     },
     {
+      "name": "hizmet",
+      "kind": "BOYUT",
+      "permissions": [
+        "bulut:oturum"
+      ]
+    },
+    {
       "name": "renk",
       "kind": "BOYUT",
       "permissions": [
@@ -564,6 +571,9 @@
   ],
   "PROJECTION_PERMISSIONS": {
     "urun": [
+      "bulut:oturum"
+    ],
+    "hizmet": [
       "bulut:oturum"
     ],
     "renk": [

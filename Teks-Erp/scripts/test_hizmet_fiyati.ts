@@ -327,8 +327,6 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/profitability-allocation.helper.ts",
   // Sarf stoğu (kurşun şeridi): değer/özellik kalemini `pickServiceItemId` ile seçip norm sorgusuna verir (çözücü değil).
   "services/helpers/consumable-stock.helper.ts",
-  // Patron bulutu (hizmet kartı ayrımı 2026-11-08): fiyat/fatura satırının tel `urunId`si = itemId ?? serviceItemId (çözücü değil).
-  "cloud-sync/derived.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
