@@ -12,6 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ExpectedReturnField } from "@/components/fason/ExpectedReturnField";
+import { DEFAULT_EXPECTED_RETURN, expectedReturnBody, isPastExpectedReturn, type ExpectedReturnChoice } from "@/components/fason/expectedReturn";
 import type { StepRollItem } from "./types";
 
 interface Props {
@@ -26,7 +28,8 @@ interface Props {
   destinationName: string;
   confirmLabel: string;
   isPending: boolean;
-  onConfirm: (rollIds: string[]) => void;
+  /** dispatch kipinde ikinci argüman beklenen dönüş gövde parçasıdır (F6; boş = sunucu varsayılanı). */
+  onConfirm: (rollIds: string[], extra: { expectedReturnAt?: string | null }) => void;
 }
 
 /**
@@ -46,11 +49,15 @@ export function FasonStepRollSelectModal({
   onConfirm,
 }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expectedReturn, setExpectedReturn] = useState<ExpectedReturnChoice>(DEFAULT_EXPECTED_RETURN);
   const rollIdsKey = rolls.map((r) => r.id).join(",");
 
   // Açılışta (veya top kümesi değişince) tümünü seç.
   useEffect(() => {
-    if (open) setSelected(new Set(rolls.map((r) => r.id)));
+    if (open) {
+      setSelected(new Set(rolls.map((r) => r.id)));
+      setExpectedReturn(DEFAULT_EXPECTED_RETURN);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, rollIdsKey]);
 
@@ -135,6 +142,7 @@ export function FasonStepRollSelectModal({
               );
             })}
           </ul>
+          {mode === "dispatch" && <ExpectedReturnField value={expectedReturn} onChange={setExpectedReturn} />}
         </div>
 
         <DialogFooter className="shrink-0 items-center justify-between border-t bg-background px-5 py-3 sm:justify-between">
@@ -147,8 +155,8 @@ export function FasonStepRollSelectModal({
             </Button>
             <Button
               type="button"
-              disabled={selectedCount === 0 || isPending}
-              onClick={() => onConfirm([...selected])}
+              disabled={selectedCount === 0 || isPending || (mode === "dispatch" && isPastExpectedReturn(expectedReturn))}
+              onClick={() => onConfirm([...selected], mode === "dispatch" ? expectedReturnBody(expectedReturn) : {})}
             >
               {isPending ? "..." : `${confirmLabel} (${selectedCount})`}
             </Button>

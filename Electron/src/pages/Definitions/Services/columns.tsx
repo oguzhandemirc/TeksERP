@@ -5,6 +5,8 @@ import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { unitLabel } from "@/lib/item-unit";
 import { ItemLifecycleBadge, itemLifecycleExportText } from "@/pages/Items/ItemLifecycleBadge";
 import { serviceItemLifecycleApi } from "./service";
+import { ServiceProcessesCell } from "./ServiceProcessesCell";
+import { lastServiceProcessMap, processesOf } from "./serviceProcesses";
 import type { ServiceItem } from "./types";
 
 /** Satırdan fiyat tablosuna geçiş (`?item=` ile hizmet seçili açılır). */
@@ -27,6 +29,13 @@ export const serviceColumns: ColumnDef<ServiceItem>[] = [
     header: () => <SortableHeader field="isActive" label="Durum" />,
     meta: { exportValue: itemLifecycleExportText },
     cell: ({ row }) => <ItemLifecycleBadge item={row.original} api={serviceItemLifecycleApi} />,
+  },
+  {
+    // Fason F3: kartın eşlendiği süreç türleri; tık eşleme modalını açar (item:write).
+    id: "processes",
+    header: "Süreç türleri",
+    meta: { exportValue: (r: ServiceItem) => processesOf(r.id, lastServiceProcessMap()).map((p) => p.categoryName).join(", ") },
+    cell: ({ row }) => <ServiceProcessesCell item={row.original} />,
   },
   {
     id: "prices",

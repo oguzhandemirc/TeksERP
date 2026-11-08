@@ -548,6 +548,8 @@ export const workOrderService = {
     instruction?: string;
     plateNumber?: string;
     driverName?: string;
+    /** F6: yok = sunucu varsayılanı (firma > süreç türü > ayar), null = termin yok. */
+    expectedReturnAt?: string | null;
   }) =>
     apiClient
       // suppressErrorToast: ROUTE_SKIP'i bileşen kendi uyarı diyaloğuyla yönetir;

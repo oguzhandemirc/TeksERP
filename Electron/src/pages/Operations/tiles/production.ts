@@ -1,5 +1,5 @@
 // Operasyon › Üretim & Fason karoları (sıra = hub sırası).
-import { Factory, FilePlus2, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -160,5 +160,16 @@ export const productionTiles: OperationsTile[] = [
     permission: "kursun:meter-approve",
     visibleWhen: isMeterDeviationsVisible,
     offHint: flagOffHint("productionEnabled"),
+  },
+  {
+    // F10 (2026-11-08): firmalar arası açık fason sevkleri, termin/gecikme. İzin route ve backend ile birebir; fason
+    // modül bayrağı henüz yok (`planlanan:fason`) ⇒ karo bayraksız.
+    key: "fason-kokpiti",
+    title: "Fason Kokpiti",
+    description: "Fasondaki açık sevkler: termin, gecikme, fasonda kalan metre",
+    icon: Gauge,
+    to: "/operations/fason-kokpiti",
+    group: "production",
+    permissionAny: ["subcontractor:read", "workorder:read"],
   },
 ];
