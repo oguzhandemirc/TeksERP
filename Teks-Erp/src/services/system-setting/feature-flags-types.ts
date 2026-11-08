@@ -51,6 +51,10 @@ export interface FeatureFlags {
   financeWithholdingEnabled: boolean;
   financeWithholdingNumerator: number;
   financeWithholdingDenominator: number;
+  /** F7: fason alış taslağında genel tevkifat (varsayılan KAPALI); yalnız fason rolündeki tedarikçiye. Pay 0 = girilmemiş. */
+  financePurchaseWithholdingEnabled: boolean;
+  financePurchaseWithholdingNumerator: number;
+  financePurchaseWithholdingDenominator: number;
   /** Fatura onayında bağlı mal kabul fişleriyle miktar/tutar toleransı ölçülsün mü (varsayılan KAPALI = kontrol yok). HAM; etkin `finance && bayrak`. */
   financeInvoiceMatchTolerance: boolean;
   /** Miktar / tutar sapma üst sınırı (%; 0 = fark kabul edilmez). Yalnız bayrak açıkken anlamlı. */

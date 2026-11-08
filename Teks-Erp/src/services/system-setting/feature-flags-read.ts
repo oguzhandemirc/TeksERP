@@ -14,7 +14,7 @@ import { readConsumableStockEnabled, readCostFinishingKgBasis, readCostPresentat
 import { readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readTrustedDeviceDays, readWebTotpPolicy } from "./device-auth";
 import { readCompanyLegalIdentity, readCompanyLetterhead, readDocumentsConfig, readEIrsaliyeConfig } from "./documents";
 import { withLicenseBlock, type CachedFeatureFlags, type FeatureFlags } from "./feature-flags-types";
-import { readFinanceAutoDraftFromShipmentEnabled, readFinanceBlockNegativeCashEnabled, readFinanceCariHoldDefaultScope, readFinanceChequeNoteMovementEnabled, readFinanceDefaultVatRate, readFinanceEnabledRaw, readFinanceExpenseAllocationClosedWorkOrder, readFinanceExpenseAllocationField, readFinanceExpenseCategorySuggestions, readFinanceInvoiceMatchTolerance, readFinanceInvoicePriceTolerancePct, readFinanceInvoiceQtyTolerancePct, readFinanceKursunGramPriceBasis, readFinanceRiskLimitBlockEnabled, readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceServiceBillingBrodeUnit, readFinanceServiceBillingEnabled, readFinanceServiceBillingMeterBasis, readFinanceServiceBillingMissingMeter, readFinanceServiceBillingPriceDate, readFinanceServiceBillingTrigger, readFinanceWithholdingDenominator, readFinanceWithholdingEnabled, readFinanceWithholdingNumerator, readPricingEnabled } from "./finance";
+import { readFinanceAutoDraftFromShipmentEnabled, readFinanceBlockNegativeCashEnabled, readFinanceCariHoldDefaultScope, readFinanceChequeNoteMovementEnabled, readFinanceDefaultVatRate, readFinanceEnabledRaw, readFinanceExpenseAllocationClosedWorkOrder, readFinanceExpenseAllocationField, readFinanceExpenseCategorySuggestions, readFinanceInvoiceMatchTolerance, readFinanceInvoicePriceTolerancePct, readFinanceInvoiceQtyTolerancePct, readFinanceKursunGramPriceBasis, readFinanceRiskLimitBlockEnabled, readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceServiceBillingBrodeUnit, readFinanceServiceBillingEnabled, readFinanceServiceBillingMeterBasis, readFinanceServiceBillingMissingMeter, readFinanceServiceBillingPriceDate, readFinanceServiceBillingTrigger, readFinanceWithholdingDenominator, readFinanceWithholdingEnabled, readFinanceWithholdingNumerator, readFinancePurchaseWithholdingDenominator, readFinancePurchaseWithholdingEnabled, readFinancePurchaseWithholdingNumerator, readPricingEnabled } from "./finance";
 import { publicTimezoneWarning, readCompanyName, readFactoryTimezonePeriods } from "./general";
 import { SETTING_KEYS } from "./keys";
 import { readBatchAutoCreateEnabled, readBatchLastNumberHintEnabled, readBatchShortNumberEnabled, readKursunBypassEnabled, readKursunMachineAssignMode, readKursunMeterCapture, readKursunMeterStockMode, readKursunMeterVarianceApproval, readKursunMeterVarianceBasis, readKursunMeterVarianceThresholdM, readKursunMeterVarianceThresholdPct, readKursunSimulatedMeterEnabled, readProductionRouteMode, readProductionScanRouteStations, readQualityGradeRequiredEnabled, readScanCustomerCodeLookupEnabled } from "./kursun-batch";
@@ -97,11 +97,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     const cacheClient = {
       systemSetting: {
         findUnique: (args: { where: { key: string } }) =>
-          Promise.resolve(
-            valueByKey.has(args.where.key)
-              ? { value: valueByKey.get(args.where.key) }
-              : null,
-          ),
+          Promise.resolve(valueByKey.has(args.where.key) ? { value: valueByKey.get(args.where.key) } : null),
       },
     } as unknown as Pick<typeof prisma, "systemSetting">;
 
@@ -120,6 +116,9 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       financeWithholdingEnabled: await readFinanceWithholdingEnabled(cacheClient),
       financeWithholdingNumerator: await readFinanceWithholdingNumerator(cacheClient),
       financeWithholdingDenominator: await readFinanceWithholdingDenominator(cacheClient),
+      financePurchaseWithholdingEnabled: await readFinancePurchaseWithholdingEnabled(cacheClient),
+      financePurchaseWithholdingNumerator: await readFinancePurchaseWithholdingNumerator(cacheClient),
+      financePurchaseWithholdingDenominator: await readFinancePurchaseWithholdingDenominator(cacheClient),
       financeInvoiceMatchTolerance: await readFinanceInvoiceMatchTolerance(cacheClient),
       financeInvoiceQtyTolerancePct: await readFinanceInvoiceQtyTolerancePct(cacheClient),
       financeInvoicePriceTolerancePct: await readFinanceInvoicePriceTolerancePct(cacheClient),

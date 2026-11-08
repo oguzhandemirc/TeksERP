@@ -938,6 +938,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "cari_accounts", name: "cari_accounts_merged_inactive_ck" },
   { table: "cari_accounts", name: "cari_accounts_vat_override_ck" },
   { table: "cari_accounts", name: "cari_accounts_withholding_ck" },
+  // F7 (2026-11-08): ALIŞ tevkifatı geçersiz kılması — satış seddinin ikizi (pay/payda birlikte, 1 ≤ pay ≤ payda).
+  { table: "cari_accounts", name: "cari_accounts_purchase_withholding_ck" },
   { table: "delivery_note_aliases", name: "delivery_note_aliases_property_scope_ck" },
   { table: "peripheral_devices", name: "peripheral_devices_calibration_ck" },
   { table: "customer_barcode_series", name: "customer_barcode_series_shape_ck" },

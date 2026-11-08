@@ -99,6 +99,8 @@ export {
   readShippingToleranceMeters, readPricingEnabled, readFinanceEnabledRaw, readFinanceEnabled, readFinanceBlockNegativeCashEnabled,
   WITHHOLDING_MAX_DENOMINATOR, DEFAULT_WITHHOLDING_DENOMINATOR, withholdingSettingProblem, readFinanceWithholdingFlags,
   readFinanceWithholdingEnabled, readFinanceWithholdingNumerator, readFinanceWithholdingDenominator, readFinanceDefaultVatRate,
+  purchaseWithholdingSettingProblem, readFinancePurchaseWithholdingFlags, readFinancePurchaseWithholdingEnabled,
+  readFinancePurchaseWithholdingNumerator, readFinancePurchaseWithholdingDenominator,
   readFinanceChequeNoteMovementEnabled, readFinanceInvoiceMatchTolerance, DEFAULT_INVOICE_TOLERANCE_PCT,
   readFinanceInvoiceQtyTolerancePct, readFinanceInvoicePriceTolerancePct, readFinanceRiskLimitBlockEnabled,
   readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceAutoDraftFromShipmentEnabled,
@@ -108,7 +110,7 @@ export {
   readFinanceExpenseAllocationClosedWorkOrder, readFinanceExpenseCategorySuggestions, readFinanceCariHoldDefaultScope,
 } from "./finance";
 export type {
-  WithholdingFlags,
+  WithholdingFlags, PurchaseWithholdingFlags,
 } from "./finance";
 export {
   readCompanyName, readFactoryTimezonePeriods, readOrderDefaultDeadlineDays, readWorkOrderDefaultPlanDurationDays,

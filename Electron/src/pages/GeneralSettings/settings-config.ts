@@ -2250,6 +2250,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci"],
       },
       {
+        key: "financePurchaseWithholdingDenominator",
+        title: "Fason alış tevkifat oranı — payda",
+        desc: "Fason alış tevkifat oranının paydası (7/10 için 10). Yalnız “Fason alış faturasında genel tevkifat” açıkken kullanılır; oranı mali müşavirinizle teyit edin.",
+        min: 1,
+        max: 99,
+        fallback: 10,
+        audience: ["Muhasebeci"],
+      },
+      {
         key: "financeInvoicePriceTolerancePct",
         title: "Fatura ↔ mal kabul tutar toleransı",
         desc: "“Fatura onayında mal kabul fişleriyle karşılaştır” açıkken fatura tutarı ile fiş tutarı arasındaki sapma bu yüzdeyi aşarsa onay reddedilir. 0 = hiç fark kabul edilmez.",
@@ -2291,6 +2300,25 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         numberField: {
           numberKey: "financeWithholdingNumerator",
           label: "Tevkifat payı",
+          unit: "/ payda",
+          min: 0,
+          max: 99,
+          emptyWarning: "Boş ya da 0 iken tevkifat açılamaz (sunucu reddeder).",
+          showWhenOff: true,
+        },
+      },
+      {
+        key: "financePurchaseWithholdingEnabled",
+        group: "Fatura",
+        title: "Fason alış faturasında genel tevkifat",
+        summary:
+          "Fason firmanın bize kestiği alış faturasının yeni satırı bu tevkifat oranıyla açılır; farklı olan fason firmanın cari kartında değiştirilir.",
+        defaultOn: false,
+        audience: ["Muhasebeci"],
+        desc: "Açıkken fason rolündeki firmanın (biz işi fasona verdik) alış faturası satırı KDV'nin aşağıdaki oranı kadar tevkifatla açılır (7/10: KDV'nin %70'ini biz alıcı olarak öderiz). Yalnız fason rolündeki tedarikçiye uygulanır; iplik/sarf tedarikçisine uygulanmaz. Oran sabit değildir — mali müşavirinizle teyit edip girin; önce payı girin, sonra açın. Fason firmanın cari kartındaki alış tevkifatı seçimi bu ayarı ezer; muhasebe faturada satır bazında yine değiştirebilir. Kapalıyken (varsayılan) alışta tevkifat uygulanmaz.",
+        numberField: {
+          numberKey: "financePurchaseWithholdingNumerator",
+          label: "Alış tevkifat payı",
           unit: "/ payda",
           min: 0,
           max: 99,

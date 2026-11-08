@@ -11090,6 +11090,12 @@ model CariAccount {
   /// Tevkifat oranı pay/payda (ör. 5/10) — NULL = genel ayar.
   withholdingNumerator   Int?     @db.SmallInt
   withholdingDenominator Int?     @db.SmallInt
+  /// F7 (fason planı FK4, 2026-11-08): ALIŞ faturası tevkifat geçersiz kılması — bu cari bize fatura kesince
+  /// (fason firma). NULL = genel ayar `finance.withholding.purchase.*`; false = uygulanmaz. Satış alanlarından
+  /// ayrı: aynı kart hem müşteri hem fason firma olabilir. CHECK `cari_accounts_purchase_withholding_ck`.
+  purchaseWithholdingEnabled     Boolean?
+  purchaseWithholdingNumerator   Int?     @db.SmallInt
+  purchaseWithholdingDenominator Int?     @db.SmallInt
 
   /// BİRLEŞTİRİLDİ (K3d): çift hesabın bakiyesi virmanla aktarıldığı SURVIVOR hesap. Dolu ⇒ `isActive=false`
   /// (CHECK `cari_accounts_merged_inactive_ck`); kendini gösteremez (CHECK `cari_accounts_merged_self_ck`).

@@ -17,7 +17,7 @@ import { LOGO_DATAURL_RE, LOGO_MAX_CHARS, readDocumentsLogo, type DocumentsLogo 
 import { getFeatureFlags as getFeatureFlagsImpl, invalidateFeatureFlagsCache } from "./system-setting/feature-flags-read";
 import { MODULE_SETTING_KEY_BY_FLAG, type FeatureFlags } from "./system-setting/feature-flags-types";
 import { assertModuleDependencies as assertModuleDependenciesImpl, assertModuleWritesLicensed as assertModuleWritesLicensedImpl, assertTezgahAlarmShiftRequirement as assertTezgahAlarmShiftRequirementImpl, assertTezgahAlarmUnclassifiedRequirement as assertTezgahAlarmUnclassifiedRequirementImpl, effectiveModuleValue as effectiveModuleValueImpl, setFeatureFlags as setFeatureFlagsImpl, type SystemSettingServiceThis } from "./system-setting/feature-flags-write";
-import { DEFAULT_WITHHOLDING_DENOMINATOR, readFinanceWithholdingFlags, withholdingSettingProblem, type WithholdingFlags, type WithholdingInput } from "./system-setting/finance";
+import { DEFAULT_WITHHOLDING_DENOMINATOR, purchaseWithholdingSettingProblem, readFinancePurchaseWithholdingFlags, readFinanceWithholdingFlags, withholdingSettingProblem, type PurchaseWithholdingFlags, type PurchaseWithholdingInput, type WithholdingFlags, type WithholdingInput } from "./system-setting/finance";
 import { SETTING_KEYS } from "./system-setting/keys";
 
 export type { CompanyLegalIdentity, EIrsaliyeConfig } from "./e-irsaliye/e-irsaliye-settings";
@@ -247,7 +247,17 @@ export class SystemSettingService {
 
   /** D4-V1k: genel tevkifat — üç anahtar birlikte doğrulanır (girdi ?? kayıtlı); açıkken oran ZORUNLU (fail-closed 400).
    *  Doğrulama setFeatureFlags'in başında, HİÇBİR yazmadan önce koşar (aksi hâlde KDV yazılıp 400 dönerdi). */
-  private async resolveWithholdingWrite(input: WithholdingInput, userId?: string): Promise<(() => Promise<void>) | null> {
+  private async resolveWithholdingWrite(input: WithholdingInput & PurchaseWithholdingInput, userId?: string): Promise<(() => Promise<void>) | null> {
+    const sales = await this.resolveSalesWithholdingWrite(input, userId);
+    const purchase = await this.resolvePurchaseWithholdingWrite(input, userId);
+    if (!sales && !purchase) return null;
+    return async () => {
+      if (sales) await sales();
+      if (purchase) await purchase();
+    };
+  }
+
+  private async resolveSalesWithholdingWrite(input: WithholdingInput, userId?: string): Promise<(() => Promise<void>) | null> {
     const hasEnabled = Object.prototype.hasOwnProperty.call(input, "financeWithholdingEnabled");
     const hasNumerator = Object.prototype.hasOwnProperty.call(input, "financeWithholdingNumerator");
     const hasDenominator = Object.prototype.hasOwnProperty.call(input, "financeWithholdingDenominator");
@@ -265,6 +275,27 @@ export class SystemSettingService {
       if (hasEnabled) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, next.financeWithholdingEnabled, "Satış faturası taslağında genel tevkifat", userId);
       if (hasNumerator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, next.financeWithholdingNumerator, "Genel tevkifat oranı — pay", userId);
       if (hasDenominator) await this.set(SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR, next.financeWithholdingDenominator, "Genel tevkifat oranı — payda", userId);
+    };
+  }
+
+  /** F7: fason ALIŞ tevkifatı üçlüsü — satış üçlüsüyle aynı kalıp (girdi ?? kayıtlı, açıkken oran zorunlu, 400 yazmadan önce). */
+  private async resolvePurchaseWithholdingWrite(input: PurchaseWithholdingInput, userId?: string): Promise<(() => Promise<void>) | null> {
+    const hasEnabled = Object.prototype.hasOwnProperty.call(input, "financePurchaseWithholdingEnabled");
+    const hasNumerator = Object.prototype.hasOwnProperty.call(input, "financePurchaseWithholdingNumerator");
+    const hasDenominator = Object.prototype.hasOwnProperty.call(input, "financePurchaseWithholdingDenominator");
+    if (!hasEnabled && !hasNumerator && !hasDenominator) return null;
+    const parsed: Partial<PurchaseWithholdingFlags> = {
+      ...(hasEnabled ? { financePurchaseWithholdingEnabled: input.financePurchaseWithholdingEnabled } : {}),
+      ...(hasNumerator ? { financePurchaseWithholdingNumerator: input.financePurchaseWithholdingNumerator ?? 0 } : {}),
+      ...(hasDenominator ? { financePurchaseWithholdingDenominator: input.financePurchaseWithholdingDenominator ?? DEFAULT_WITHHOLDING_DENOMINATOR } : {}),
+    };
+    const next = { ...(await readFinancePurchaseWithholdingFlags()), ...parsed };
+    const problem = purchaseWithholdingSettingProblem(next);
+    if (problem) throw AppError.badRequest(problem, { code: "WITHHOLDING_SETTING_INVALID" });
+    return async () => {
+      if (hasEnabled) await this.set(SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_ENABLED, next.financePurchaseWithholdingEnabled, "Fason alış faturası taslağında genel tevkifat", userId);
+      if (hasNumerator) await this.set(SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_NUMERATOR, next.financePurchaseWithholdingNumerator, "Fason alış tevkifat oranı — pay", userId);
+      if (hasDenominator) await this.set(SETTING_KEYS.FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR, next.financePurchaseWithholdingDenominator, "Fason alış tevkifat oranı — payda", userId);
     };
   }
 
@@ -291,7 +322,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -308,6 +339,9 @@ export class SystemSettingService {
       /** null = girilmemiş (pay 0) / varsayılan payda (10). */
       financeWithholdingNumerator?: number | null;
       financeWithholdingDenominator?: number | null;
+      /** F7: null = girilmemiş (pay 0) / varsayılan payda (10). */
+      financePurchaseWithholdingNumerator?: number | null;
+      financePurchaseWithholdingDenominator?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
       shippingAllocWidthToleranceCm?: number | null;
       /** null = fabrika varsayılanına dön (%2); `0` geçerli. */

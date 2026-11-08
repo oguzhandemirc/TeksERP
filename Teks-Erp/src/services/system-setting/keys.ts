@@ -37,6 +37,13 @@ export const SETTING_KEYS = {
   FINANCE_WITHHOLDING_ENABLED: "finance.withholding.enabled",
   FINANCE_WITHHOLDING_NUMERATOR: "finance.withholding.numerator",
   FINANCE_WITHHOLDING_DENOMINATOR: "finance.withholding.denominator",
+  /** F7 (fason planı FK4, 2026-11-08): ALIŞ faturası taslağının genel tevkifatı — yalnız FASON rolündeki
+   *  tedarikçiye (biz fasona verdik, fasoncu bize keser). Varsayılan KAPALI = bugünkü (alışta tevkifat 0).
+   *  Fason firma cari hesabında `purchaseWithholding*` ile geçersiz kılınır; çözüm aynı tek yerde
+   *  (`resolveInvoiceTaxDefaults`). Oran SABİT KODLANMAZ (mali müşavir girer). */
+  FINANCE_PURCHASE_WITHHOLDING_ENABLED: "finance.withholding.purchase.enabled",
+  FINANCE_PURCHASE_WITHHOLDING_NUMERATOR: "finance.withholding.purchase.numerator",
+  FINANCE_PURCHASE_WITHHOLDING_DENOMINATOR: "finance.withholding.purchase.denominator",
   /** n irsaliye → 1 fatura (2026-09-18): fatura ↔ bağlı fişler tolerans kontrolü (ONAY anı). Varsayılan KAPALI = kontrol yok. */
   FINANCE_INVOICE_MATCH_TOLERANCE: "finance.invoiceMatchTolerance",
   FINANCE_INVOICE_QTY_TOLERANCE_PCT: "finance.invoiceQtyTolerancePct",
