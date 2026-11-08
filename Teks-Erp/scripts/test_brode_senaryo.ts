@@ -175,9 +175,9 @@ async function run(): Promise<void> {
   const owner = await prisma.customer.create({ data: { code: `${TAG}-OWN`, name: `${TAG} sahip` }, select: { id: true } });
   made.customers.push(owner.id);
   await prisma.itemPrice.createMany({ data: [
-    { itemId: HZB, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "5.0000" },
-    { itemId: HZB, customerId: owner.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "6.0000" },
-    { itemId: HZA, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "7.0000" },
+    { serviceItemId: HZB, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "5.0000" },
+    { serviceItemId: HZB, customerId: owner.id, kind: PriceKind.SALE, currency: Currency.TRY, price: "6.0000" },
+    { serviceItemId: HZA, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "7.0000" },
   ] });
   const fabric = await prisma.item.create({ data: { code: `${TAG}-KUM`, name: `${TAG} perde`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
   made.items.push(fabric.id);
@@ -237,7 +237,7 @@ async function run(): Promise<void> {
   const patternOnRolls = await prisma.rollProperty.findMany({ where: { rollId: { in: innerKids }, propertyId: BRD, revokedAt: null }, select: { valueId: true } });
   check("§2 ⭐ Tambur-2 çocukları deseni taşır (her çocukta bir desen satırı)", patternOnRolls.length === innerKids.length && innerKids.length === 6, `${patternOnRolls.length}/${innerKids.length}`);
   const d2 = await draft(innerKids);
-  const lineA = d2.lines.find((l) => l.itemId === HZA), lineB = d2.lines.find((l) => l.itemId === HZB);
+  const lineA = d2.lines.find((l) => l.serviceItemId === HZA), lineB = d2.lines.find((l) => l.serviceItemId === HZB);
   check("§2 ⭐ desen Lale → desen kalemi, 220 m × 7 (CUT)", eq(lineA?.qty, 220) && eq(lineA?.unitPrice, 7), JSON.stringify(lineA));
   check("§2 ⭐ desen Papatya (kalemsiz) → brode kalemi, 80 m × 6 (müşteri fiyatı)", eq(lineB?.qty, 80) && eq(lineB?.unitPrice, 6), JSON.stringify(lineB));
   check("§2 bağlar çocuklarda, taban CUT, iki kalemden başka satır yok", d2.links.length === 6 && d2.links.every((l) => l.meterBasis === "CUT" && innerKids.includes(l.rollId)) && d2.lines.length === 2,
@@ -267,7 +267,7 @@ async function run(): Promise<void> {
   const t3 = await tamburCut(born[0]!.id, [100, 47]);
   check("§3 doğan top Tambur-2 bekleyen listesinde (T2 süzgeci)", t3.listed, JSON.stringify(born[0]));
   const d3 = await draft(t3.kids);
-  const l3 = d3.lines.find((l) => l.itemId === HZA);
+  const l3 = d3.lines.find((l) => l.serviceItemId === HZA);
   check("§3 ⭐ dış brode: desen kalemi, metre = kabul edilen 147 (RECEIVED, doğan topta)", eq(l3?.qty, 147) && eq(l3?.unitPrice, 7) && d3.links.some((l) => l.meterBasis === "RECEIVED" && l.rollId === born[0]!.id),
     JSON.stringify({ lines: d3.lines, links: d3.links.map((l) => `${l.meterBasis}:${l.billedMeters}:${l.rollId === born[0]!.id ? "doğan" : "?"}`) }));
   check("§3 ⭐ tutar el hesabı: 147 × 7 = 1029, brode kalemi satırı yok", d3.lines.length === 1 && eq(new Prisma.Decimal(l3?.qty ?? 0).times(l3?.unitPrice ?? 0), 1029), JSON.stringify(d3.lines));
@@ -305,8 +305,10 @@ async function cleanup(): Promise<void> {
   await prisma.deliveryNoteAlias.deleteMany({ where: { targetId: { in: [...made.items, ...made.customers, ...valueIds] } } }).catch(swallow);
   await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: made.props } } }).catch(swallow);
   await prisma.fabricProperty.deleteMany({ where: { id: { in: [...made.props].reverse() } } }).catch(swallow);
-  await prisma.itemPrice.deleteMany({ where: { itemId: { in: made.items } } }).catch(swallow);
+  // D1a/D1c: hizmet kartı `service_items`te, fiyatı `serviceItemId`de — iki konu birlikte temizlenir.
+  await prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: made.items } }, { serviceItemId: { in: made.items } }] } }).catch(swallow);
   await prisma.item.deleteMany({ where: { id: { in: made.items } } }).catch(swallow);
+  await prisma.serviceItem.deleteMany({ where: { id: { in: made.items } } }).catch(swallow);
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } }).catch(swallow);
 }
 

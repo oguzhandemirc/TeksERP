@@ -20,7 +20,7 @@ import { importKey } from "./import-key";
 /** Desteklenen lookup varlıkları → Prisma delegate + alanlar. */
 interface LookupSource {
   /** Prisma model anahtarı. */
-  model: "item" | "color" | "station" | "machine" | "fabricProperty" | "customer" | "subcontractor" | "subcontractorCategory" | "qualityGrade" | "route" | "defectType" | "returnReason" | "branch" | "user";
+  model: "item" | "serviceItem" | "color" | "station" | "machine" | "fabricProperty" | "customer" | "subcontractor" | "subcontractorCategory" | "qualityGrade" | "route" | "defectType" | "returnReason" | "branch" | "user";
   /** Kod kolonu (yoksa null → yalnız ad ile eşleşir). */
   codeField: string | null;
   nameField: string;
@@ -43,6 +43,7 @@ interface LookupSource {
  */
 export const LOOKUP_SOURCES: Record<string, LookupSource> = {
   item: { model: "item", codeField: "code", nameField: "name", foldField: "nameFold", label: "kumaş" },
+  serviceItem: { model: "serviceItem", codeField: "code", nameField: "name", foldField: "nameFold", label: "hizmet kalemi" },
   color: { model: "color", codeField: "code", nameField: "name", foldField: "nameFold", label: "renk" },
   station: { model: "station", codeField: "code", nameField: "name", foldField: "nameFold", label: "istasyon" },
   fabricProperty: { model: "fabricProperty", codeField: "code", nameField: "name", foldField: "nameFold", label: "özellik" },

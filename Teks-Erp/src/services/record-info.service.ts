@@ -73,6 +73,7 @@ export interface RecordInfo {
 const PROVENANCE_TABLES = {
   CUSTOMER: () => prisma.customer,
   ITEM: () => prisma.item,
+  SERVICE_ITEM: () => prisma.serviceItem,
   ORDER: () => prisma.order,
   COLOR: () => prisma.color,
   STATION: () => prisma.station,

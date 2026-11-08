@@ -126,6 +126,20 @@ const TICARET_MODELLERI = new Set([
 
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/service-item.routes.ts",
+    neden:
+      "HİZMET KARTI (çekirdek, 2026-11-07 service_items ayrımı). Finans dokunuşu SALT-OKUMADIR: Pasif'e geçiş kapısı ve " +
+      "yaşam döngüsü önizlemesi (`service-item-lifecycle.helper`) karta bağlı TASLAK fatura satırını canlı referans olarak SAYAR. " +
+      "Ön muhasebe kapalı kurulumda `invoice_lines` boştur, sayı 0 döner; router fatura tablosuna yazmaz (`item.routes` emsali).",
+  },
+  {
+    dosya: "routes/item.routes.ts",
+    neden:
+      "ÜRÜN KARTI (çekirdek). Finans dokunuşu SALT-OKUMA ve GEÇİŞLİDİR: hizmet id'siyle gelen eski istemci çağrısı " +
+      "`legacy-service-item.helper` üzerinden hizmet kartı yaşam döngüsüne yönlenir, o da taslak fatura satırını canlı referans olarak SAYAR. " +
+      "Ön muhasebe kapalıyken tablo boştur, sayı 0; router fatura tablosuna yazmaz.",
+  },
+  {
     dosya: "routes/demo.routes.ts",
     neden:
       "DEMO verisi (yalnız demo kipinde) — finans dokunuşu SALT-OKUMADIR ve geçişlidir (H10, 2026-10-29): " +

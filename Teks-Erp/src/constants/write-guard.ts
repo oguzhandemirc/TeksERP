@@ -14,6 +14,11 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   station: ["kursunGramPrice", "kursunGramCurrency"],
   // İdempotency anahtarı yalnız hızlı kayıt boğazından (`customer-quick-create.service.ts` `quickCreate`, tokenReplay); genel gövde yazamaz.
   customer: ["clientToken"],
+  // Hizmet kartı: genel gövde yalnız ad + birim yazar (servis allowlist'iyle aynı); kod doğuşta, durum yaşam döngüsü ucundan, birleştirme kendi boğazından.
+  serviceItem: [
+    "code", "isActive", "lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason",
+    "mergedIntoId", "mergedAt", "mergedById", "createdById", "updatedById",
+  ],
 };
 
 export function baseWriteClosedFields(modelName: string): readonly string[] {

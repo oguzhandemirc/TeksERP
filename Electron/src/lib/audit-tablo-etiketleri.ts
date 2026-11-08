@@ -28,6 +28,7 @@ export const TABLE_LABELS: Record<string, string> = {
   REPORT_PRESET: "Rapor Ön Ayarı",
   REPORT_SHARE: "Rapor Paylaşımı",
   ITEM: "Kumaş / Stok Kalemi",
+  SERVICE_ITEM: "Hizmet Kartı",
   CUSTOMER: "Müşteri",
   CUSTOMER_BRANCH: "Müşteri Şubesi",
   CUSTOMER_ITEM_ALIAS: "Müşteri Kumaş Kodu",

@@ -85,11 +85,23 @@ export interface TimeCrossing {
   readonly sql: string;
 }
 
+/**
+ * Aynı UUID uzayını paylaşan EK kök tablo (hizmet kartı ayrımı 2026-11-08: `service_items` → `urun`). Kimlik ana
+ * kökte yoksa burada aranır; ana kökte olmayan kolon `fixed`ten sabit değerle dolar (tel şekli bayt-aynı kalır).
+ * Ek köklü projeksiyon kapsam/saklama taşımaz (küme özeti iki tablonun birleşimidir).
+ */
+export interface ExtraRoot {
+  readonly table: string;
+  readonly model: string;
+  readonly fixed: Readonly<Record<string, string>>;
+}
+
 export interface RecordProjection {
   readonly name: string;
   readonly kind: "KAYIT";
   readonly role: ProjectionRole;
   readonly root: { readonly table: string; readonly model: string };
+  readonly extraRoots?: readonly ExtraRoot[];
   readonly scope?: ScopeSpec;
   readonly columns: readonly ColumnSpec[];
   readonly derived: readonly DerivedSpec[];
@@ -154,3 +166,19 @@ export const derived = (
   reads: readonly string[],
   opts: { timeBound?: boolean; dataClass?: DataClass } = {},
 ): DerivedSpec => ({ wire, helper, reads, timeBound: opts.timeBound ?? false, dataClass: opts.dataClass ?? "ISLEM" });
+
+/** Projeksiyonun bütün kök tabloları (ana + ek) — silme işareti, birleştirme ve küme özeti hepsini sayar. */
+export const rootTablesOf = (p: RecordProjection): string[] => [p.root.table, ...(p.extraRoots ?? []).map((r) => r.table)];
+
+/** Küme sorgularının `FROM` kaynağı (`t` takma adıyla kullanılır): tek kök tablo ya da ek köklerle birleşim. */
+export function rootFromSql(p: RecordProjection): string {
+  if (!p.extraRoots?.length) return `"${p.root.table}"`;
+  if (p.scope || p.retention) throw new Error(`Ek köklü projeksiyon kapsam/saklama taşıyamaz: ${p.name}`);
+  return `(${rootTablesOf(p).map((t) => `SELECT "id", "createdAt" FROM "${t}"`).join(" UNION ALL ")})`;
+}
+
+/** Tel `urunId` = konu kartı: ürün (`itemId`) ya da hizmet kartı (`serviceItemId`, aynı UUID uzayı — bulut `urun`a bağlar). */
+export const subjectIdResolver = (table: string): NonNullable<ColumnSpec["resolvedBy"]> => ({
+  helper: "cloud-sync/derived subjectIdDerived: itemId ?? serviceItemId (hizmet kartı ayrımı 2026-11-08)",
+  reads: [table],
+});

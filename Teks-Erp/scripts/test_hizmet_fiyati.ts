@@ -23,6 +23,7 @@
 // değer eşlemesi okunmayınca (özellik önce) §2 kırmızı — PR #253 gövdesinde.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
@@ -60,7 +61,7 @@ const P = `TEST-HZF-${STAMP}`;
 const fx = { itemIds: [] as string[], propIds: [] as string[], valueIds: [] as string[], woIds: [] as string[], rollIds: [] as string[], stationIds: [] as string[], machineIds: [] as string[], customerIds: [] as string[], kursunCreated: null as string | null };
 
 async function mkItem(suffix: string, itemType: ItemType): Promise<string> {
-  const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST HZF ${suffix} ${STAMP}`, itemType, unit: "MT" }, select: { id: true } });
+  const it = await kartAc({ code: `${P}-${suffix}`.slice(0, 32), name: `TEST HZF ${suffix} ${STAMP}`, itemType, unit: "MT" });
   fx.itemIds.push(it.id);
   return it.id;
 }
@@ -132,7 +133,7 @@ async function main(): Promise<void> {
   // §1b (K1): pasif (ARCHIVED) hizmet kalemine YENİ eşleme yazılamaz (item-usage DEFINITION → 409 ITEM_INACTIVE);
   // kaydın zaten taşıdığı eşleme (kalem sonradan pasife alınmış) başka alanı düzenlemeyi kilitlemez.
   const pas = await mkItem("PAS", ItemType.SERVICE);
-  await prisma.item.update({ where: { id: pas }, data: { lifecycleStatus: "ARCHIVED", isActive: false } });
+  await prisma.serviceItem.update({ where: { id: pas }, data: { lifecycleStatus: "ARCHIVED", isActive: false } });
   const pasProp = await errOf(() => fabricPropertyService.update(variant!.id, { serviceItemId: pas }, actor));
   check("⭐ §1b özellik → PASİF hizmet kalemi eşlemesi 409 ITEM_INACTIVE", pasProp.status === 409 && pasProp.code === "ITEM_INACTIVE", JSON.stringify(pasProp));
   const v3row = await prisma.fabricPropertyValue.findUniqueOrThrow({ where: { id: V.k3 }, select: { code: true, name: true } });
@@ -248,10 +249,11 @@ async function main(): Promise<void> {
   check("SERVICE kalemiyle top doğumu 400 + 0 top", birth.status === 400 && (await prisma.roll.count({ where: { itemId: K1 } })) === before, JSON.stringify(birth));
   const issues = await collectReceiptLineIssues([{ itemId: K1, initialQty: 10 }]);
   const mpv = await MasterDataMergeService.preview("item", K1, [fabric]);
-  check("SERVICE ← KUMAŞ birleştirme önizlemesi IDENTITY_ITEMTYPE ile bloklu", !mpv.canMerge && mpv.blockers.some((b) => b.key === "IDENTITY_ITEMTYPE"), mpv.blockers.map((b) => b.key).join(","));
+  // D1a: hizmet kartı ayrı tabloda — ürün birleştirmesi hizmet kimliğini hiç bulamaz (tablolar arası birleştirme YOK).
+  check("SERVICE ← KUMAŞ ürün birleştirmesi hizmeti bulamaz (ayrı tablo) → bloklu", !mpv.canMerge && mpv.blockers.some((b) => b.key === "SURVIVOR_NOT_FOUND"), mpv.blockers.map((b) => b.key).join(","));
   const mpv2 = await MasterDataMergeService.preview("item", fabric, [K1]);
-  check("KUMAŞ ← SERVICE birleştirme önizlemesi IDENTITY_ITEMTYPE ile bloklu", !mpv2.canMerge && mpv2.blockers.some((b) => b.key === "IDENTITY_ITEMTYPE"), mpv2.blockers.map((b) => b.key).join(","));
-  check("mal kabul ön kontrolü SERVICE → ITEM_TYPE_NOT_ALLOWED", issues.some((i) => i.code === "ITEM_TYPE_NOT_ALLOWED"), JSON.stringify(issues.map((i) => i.code)));
+  check("KUMAŞ ← SERVICE ürün birleştirmesi hizmeti bulamaz (ayrı tablo) → bloklu", !mpv2.canMerge && mpv2.blockers.some((b) => b.key === "SOURCE_NOT_FOUND"), mpv2.blockers.map((b) => b.key).join(","));
+  check("mal kabul ön kontrolü hizmet kartı → ITEM_NOT_FOUND (ürün kartı değil)", issues.some((i) => i.code === "ITEM_NOT_FOUND"), JSON.stringify(issues.map((i) => i.code)));
 
   astChecks();
 }
@@ -275,8 +277,10 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/property-revoke.helper.ts",
   // F1: önizleme kapısı — taze bağların kalemini fatura satırıyla karşılaştırır (çözücü değil; toplayıcıyı çağırır).
   "services/helpers/service-preview-gate.helper.ts",
-  // K2a: ürün kartı canlı referans kataloğu — eşlenmiş kalemi pasife alma kapısı için sayar (çözücü değil).
-  "services/helpers/item-lifecycle.helper.ts",
+  // K2a → D1b: hizmet kartının canlı referans kataloğu ve yaşam döngüsü yazıcısı `service_items`e taşındı — eşleme/
+  // fiyat/norm/taslak satırını pasife alma kapısı için sayar (çözücü değil).
+  "services/helpers/service-item-lifecycle.helper.ts",
+  "services/service-item.service.ts",
   // K21: `PropertyValueInput` istemci sözleşmesi tipi servisten buraya taşındı (yalnız tip; çözücü değil).
   "services/helpers/fabric-property-input.helper.ts",
   // Hizmet fiyat tablosu (2026-11-06): kademe fiyatı yazım kapısı — değerin eşli kalemini `pickServiceItemId` ile
@@ -285,6 +289,21 @@ const SERVICE_ITEM_ID_FILES = new Set([
   // Hizmet fiyat tablosu ucu: hizmete eşli kademeleri LİSTELER (değer→özellik→ana bayrak DB süzgeci);
   // `mapped` bayrağı `pickServiceItemId`ten, etkin fiyat `pickServicePrice`ten — çözücü değil, projeksiyon.
   "services/service-price.service.ts",
+  // D1a ürün/hizmet kartı ayrımı: fiyat KONUSU kolonu (`item_prices.serviceItemId`) — anahtar/okuma/denetim izi,
+  // kademe satırı süzgeci ve hizmet fiyat listesi içe aktarımı; çözüm sırası değil (çözücü `pickServicePrice`).
+  "services/item-price.service.ts",
+  "services/helpers/item-price-audit.helper.ts",
+  "services/helpers/service-price-pick.helper.ts",
+  "services/import/adapters/customer-service-price.adapter.ts",
+  // D1a: fatura satırı konusu (`lineType` + `serviceItemId`) yazımda sınıflanır — çözücü değil.
+  "services/helpers/invoice-line-subject.helper.ts",
+  // D1a: hizmet kartı kullanım kapısı (`service_items` satırı) — çözücü değil.
+  "services/helpers/item-usage.helper.ts",
+  // D1c: fatura satırı sözleşmesi (`lineType` + `serviceItemId` gövde alanı, detay `serviceItem`, önizleme eski
+  // panel aynası) — satırın KONU kolonu taşınır; hizmet kalemi çözümü değil (çözücü `pickServiceItemId`).
+  "routes/finance.routes.ts",
+  "services/helpers/shipment-auto-draft.helper.ts",
+  "services/service-period-invoice.service.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
@@ -308,6 +327,8 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/profitability-allocation.helper.ts",
   // Sarf stoğu (kurşun şeridi): değer/özellik kalemini `pickServiceItemId` ile seçip norm sorgusuna verir (çözücü değil).
   "services/helpers/consumable-stock.helper.ts",
+  // Patron bulutu (hizmet kartı ayrımı 2026-11-08): fiyat/fatura satırının tel `urunId`si = itemId ?? serviceItemId (çözücü değil).
+  "cloud-sync/derived.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");
@@ -382,8 +403,8 @@ async function cleanup(): Promise<void> {
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) }));
+  await del("item", () => kartlariSil(fx.itemIds));
   await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: fx.customerIds } } }));
   const left = await prisma.roll.count({ where: { barcode: { startsWith: P } } });
   check("temizlik: TEST-HZF top kalıntısı yok", left === 0, String(left));

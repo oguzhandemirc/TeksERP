@@ -68,6 +68,7 @@ import { routeService } from "../src/routes/route.routes";
 import { customerService } from "../src/routes/customer.routes";
 import { fabricPropertyService } from "../src/routes/fabric-property.routes";
 import { itemService } from "../src/routes/item.routes";
+import { serviceItemService } from "../src/services/service-item.service";
 import {
   SubcontractorCategoryService,
   SubcontractorManagementService,
@@ -608,6 +609,11 @@ const L2_YOLU: Record<string, L2Yolu> = {
     not: "itemService.create: ad + tür (itemType).",
     yarat: async (damga) => msCreate(itemService, { name: `${damga} E3 stok ${++msSayac}`, itemType: "FABRIC" }),
     sil: async (id) => { await prisma.item.deleteMany({ where: { id } }); },
+  },
+  serviceItem: {
+    not: "serviceItemService.create: ad (+ isteğe bağlı birim); kod HZM- serisinden.",
+    yarat: async (damga) => msCreate(serviceItemService, { name: `${damga} E3 hizmet ${++msSayac}` }),
+    sil: async (id) => { await prisma.serviceItem.deleteMany({ where: { id } }); },
   },
   subcontractor: {
     not: "SubcontractorManagementService.create: yalnız ad.",

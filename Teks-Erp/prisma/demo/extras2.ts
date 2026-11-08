@@ -253,6 +253,7 @@ export async function fiyatKur(): Promise<void> {
   });
   const kart = new Map<string, { alis?: { id: string; v: number }; satis?: { id: string; v: number } }>();
   for (const row of tumKartlar) {
+    if (!row.itemId) continue; // hizmet kartı fiyatı (`serviceItemId`) bu marj onarımına girmez
     const g = kart.get(row.itemId) ?? {};
     if (row.kind === "PURCHASE") g.alis = { id: row.id, v: Number(row.price) };
     if (row.kind === "SALE") g.satis = { id: row.id, v: Number(row.price) };
@@ -282,6 +283,7 @@ export async function fiyatKur(): Promise<void> {
     select: { id: true, itemId: true, price: true },
   });
   for (const ist of istisnalar) {
+    if (!ist.itemId) continue;
     const g = kart.get(ist.itemId);
     if (!g?.alis || !g.satis) continue;
     const v = Number(ist.price);

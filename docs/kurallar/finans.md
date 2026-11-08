@@ -83,8 +83,9 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Hizmet kalemi yalnız `pickServiceItemId` (`helpers/service-item-pick.helper.ts`): çeşit değeri → özellik → ana bayrak; `.serviceItemId ?? ifade` zinciri başka dosyada yazılmaz.
 - **[ÇEKİRDEK]** Miktar yalnız `helpers/service-quantity.helper.ts` (`serviceWorkQuantity`, `linkBilledQty`); `finance.serviceBilling.brodeUnit` ([PROFİL] METER) yalnız `BRODE_PROPERTY_CODE`; `ItemPrice.priceUnit` uyuşmazsa fiyat yok; eksik adet/vuruş girmez; `billedMeters` miktar değil.
 - **[ÇEKİRDEK]** Brode adedi tablette çıkış okumasında (`meterOut.pieceCount`); sayaç OFF iken PIECE/STITCH ↔ OFF iki yönde 400 `BRODE_UNIT_NEEDS_METER_CAPTURE`.
-- **[ÇEKİRDEK]** Yeni özellik/değer → hizmet kalemi eşlemesi `assertItemUsable(DEFINITION)`den geçer (409 `ITEM_INACTIVE`); yalnız aynı kaydın taşıdığı eşleme yeniden doğrulanmaz.
-- **[ÇEKİRDEK]** Eşleme ve müşterili aktif `ItemPrice` hizmet kaleminin canlı referansıdır (`ITEM_LIVE_REF_KINDS` `SERVICE_*`): pasife alma 409 `ITEM_HAS_LIVE_REFERENCES` + liste; yazım `assertItemUsableTx(DEFINITION)`, `withServiceMapping` → `withServiceItemLocks` (FOR SHARE).
+- **[ÇEKİRDEK]** Yeni özellik/değer → hizmet kartı eşlemesi `assertServiceItemUsable(DEFINITION)`den geçer (409 `ITEM_INACTIVE`); yalnız aynı kaydın taşıdığı eşleme yeniden doğrulanmaz.
+- **[ÇEKİRDEK]** Eşleme, müşterili aktif `ItemPrice`, aktif sarf normu ve taslak fatura satırı hizmet kartının canlı referansıdır (`SERVICE_ITEM_LIVE_REF_KINDS`, `helpers/service-item-lifecycle.helper.ts`): pasife alma 409 `ITEM_HAS_LIVE_REFERENCES` + liste; yazım `assertServiceItemUsableTx(DEFINITION)`, `withServiceMapping` → `withServiceItemLocks` (8030 SHARED → `service_items` FOR SHARE).
+- **[ÇEKİRDEK]** Hizmet kartı yalnız `service_items`'ta yaşar (`items_no_service_ck`); fatura satırı konusu `lineType` ile seçilir (PRODUCT→`itemId`, SERVICE→`serviceItemId`, TEXT→ikisi boş; `invoice_lines` CHECK), `lineType`siz eski gövdeyi yalnız `helpers/invoice-line-subject.helper.ts` (`classify`) çözer.
 - **[ÇEKİRDEK]** `CariHold`ı (tek aktif, `releasedAt IS NULL`) yalnız `cari-hold.service` koyar/açar (damga, claim, silinmez, deftere girmez); soru yalnız `helpers/cari-hold.helper.ts` (`activeHoldByCari` · `activeHoldByCustomer` · `assertCariNotHeldTx` → 409 `CARI_HOLD`); finans import etmez.
 - **[ÇEKİRDEK]** Aynı kartın iki hareketli hesabını yalnız virmanla birleştir (`helpers/cari-merge.helper.ts`; bugün tarihli `CARI_TRANSFER` çiftleri, kur dönüşümü yok, kaynak pasif + `mergedIntoId`; engel 409 `CARI_MERGE_BLOCKED`); geri alma yalnız `revertCariMerge`; birleşmiş hesabı çözücü seçmez.
 - **[ÇEKİRDEK]** Panel birleştirme `planCariMerge`/`applyCariMerge` çağırır; `cariMergePlanStamp` değiştiyse 409 `CARI_MERGE_STALE`; `clientToken` virman grubu kimliği; birleşmiş hesap alan kaynak olamaz; izin `finance:cari-merge` (SoD).
@@ -119,4 +120,4 @@ Backend: `test_fatura_liste_suzgec`, `test_brode_fiyat_birimi`, `test_masraf_oze
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-`CLAUDE-NOT-ARSIVI.md:53-61` (2026-08-02 brüt liste) · `arsiv/2026-09.md` (09-23 İki saat) · `arsiv/2026-10.md` (10-29 Gülkesim H7, H8, H8b, D4-H1, F1, K3b).
+`CLAUDE-NOT-ARSIVI.md:53-61` (2026-08-02 brüt liste) · `arsiv/2026-09.md` (09-23 İki saat) · `arsiv/2026-10.md` (10-29 Gülkesim H7, H8, H8b, D4-H1, F1, K3b) · `arsiv/2026-11.md` (11-08 hizmet kartı `service_items` ayrımı).

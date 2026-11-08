@@ -2,7 +2,7 @@
 // `projections.ts` üzerinden dışa açılır; tasarım `docs/design/PATRON-BULUTU-ESITLEME.md` §3.2.
 import { factoryDaySql } from "../constants/time";
 import { ITEM_PRICE_CLOUD_SCOPE, ITEM_PRICE_WINDOW_CROSSING } from "../services/helpers/item-price-validity.helper";
-import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
+import { col, derived, lookup, self, subjectIdResolver, via, type RecordProjection } from "./projection-types";
 import { MERGED_INVOICE_RESOLVER, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ export const FACTS: readonly RecordProjection[] = [
       prismaWhere: { invoice: { status: { not: "DRAFT" } } },
       sql: `EXISTS (SELECT 1 FROM "invoices" i WHERE i."id" = t."invoiceId" AND i."status" <> 'DRAFT')`,
     },
-    columns: [col("id", "id"), col("faturaId", "invoiceId"), col("sira", "lineNo"), col("urunId", "itemId"),
+    columns: [col("id", "id"), col("faturaId", "invoiceId"), col("sira", "lineNo"), { ...col("urunId", "itemId"), resolvedBy: subjectIdResolver("invoice_lines") },
       col("aciklama", "description"), col("miktar", "qty"), col("birim", "unit"), col("birimFiyat", "unitPrice", "FINANS"),
       col("iskontoOrani", "discountRate", "FINANS"), col("kdvOrani", "vatRate", "FINANS"),
       col("tevkifatOrani", "withholdingRate", "FINANS"), col("tutar", "lineTotal", "FINANS"), col("kdvTutari", "vatAmount", "FINANS")],
@@ -265,7 +265,7 @@ export const FACTS: readonly RecordProjection[] = [
   },
   {
     name: "fiyat", kind: "KAYIT", role: "OLGU", root: { table: "item_prices", model: "ItemPrice" },
-    columns: [col("id", "id"), col("urunId", "itemId"), col("cariKartId", "customerId"), col("tur", "kind"), col("doviz", "currency"),
+    columns: [col("id", "id"), { ...col("urunId", "itemId"), resolvedBy: subjectIdResolver("item_prices") }, col("cariKartId", "customerId"), col("tur", "kind"), col("doviz", "currency"),
       col("fiyat", "price", "FINANS"), col("degisim", "updatedAt"), col("kademeId", "propertyValueId"),
       col("gecerlilikBaslangici", "validFrom"), col("gecerlilikBitisi", "revokedAt")],
     // v2: yalnız şu an yürürlükteki sürüm; pencere sınırı geçişle yeniden kurulur (ikiz + geçiş helper'da).

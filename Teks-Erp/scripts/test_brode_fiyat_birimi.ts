@@ -23,6 +23,7 @@
 // dönünce §4 kırmızı · `allocateRevenue` `billedMeters` payına dönünce §6/§9 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Currency, ItemType, MachineDataSource, MeterApprovalMode, MeterPhase, MeterVarianceBasis, PriceKind, Prisma, RollStatus } from "@prisma/client";
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
   if (!wh) throw new Error("Varsayılan depo yok");
 
   const fabric = (await prisma.item.create({ data: { code: `${P}-K`.slice(0, 32), name: `TEST BFB kumaş ${STAMP}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } })).id;
-  const svc = (await prisma.item.create({ data: { code: `${P}-S`.slice(0, 32), name: `TEST BFB brode ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id;
+  const svc = (await kartAc({ code: `${P}-S`.slice(0, 32), name: `TEST BFB brode ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" })).id;
   fx.itemIds.push(fabric, svc);
   // BRODE bayrağı kodla tanınır (tek kaynak `BRODE_PROPERTY_CODE`): yoksa bekçi açar ve sonda siler; varsa çeşidi kullanılır.
   let flag = await prisma.fabricProperty.findUnique({ where: { code: BRODE_PROPERTY_CODE }, select: { id: true, variant: { select: { id: true } } } });
@@ -178,9 +179,9 @@ async function main(): Promise<void> {
   const total = amount(tl);
   check("iki iş tek satır: 42 adet × 3 = 126", two.lines.length === 1 && eq(tl.qty, 42) && eq(total, 126), JSON.stringify(two.lines));
   let rec409 = false;
-  try { reconcileServiceLinksWithLines([{ itemId: svc, qty: "100", description: "x" }], two.links); } catch { rec409 = true; }
+  try { reconcileServiceLinksWithLines([{ serviceItemId: svc, qty: "100", description: "x" }], two.links); } catch { rec409 = true; }
   let recOk = true;
-  try { reconcileServiceLinksWithLines([{ itemId: svc, qty: tl.qty, description: "x" }], two.links); } catch { recOk = false; }
+  try { reconcileServiceLinksWithLines([{ serviceItemId: svc, qty: tl.qty, description: "x" }], two.links); } catch { recOk = false; }
   check("bağ tutarlılığı adetle tutar; metre toplamıyla (100) 409", recOk && rec409, `ok=${recOk} 409=${rec409}`);
   const shares = allocateRevenue(total, two.links as unknown as RevenueLinkRow[]);
   const byRoll = new Map(two.links.map((l, i) => [l.rollId, shares[i]!]));
@@ -308,8 +309,8 @@ async function cleanup(): Promise<void> {
   await prisma.fabricPropertyValue.deleteMany({ where: { id: { in: fx.valueIds } } });
   await prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } });
   await prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } });
-  await prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } });
-  await prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } });
+  await prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) });
+  await kartlariSil(fx.itemIds);
   if (fx.customerId) await prisma.customer.deleteMany({ where: { id: fx.customerId } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids, ...fx.itemIds] } } });
   const key = SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT;

@@ -434,6 +434,9 @@ const PARTIAL_INDEXES: Array<{
   // sinyali (çözüm: mükerrerleri birleştir → migration dosyasını yeniden koş). Dev/CI temiz.
   { table: "customers", index: "customers_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
   { table: "items", index: "items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
+  // Hizmet kartı ayrımı (20261107202906_service_items_split): items emsali, taşınan mezar taşları hariç.
+  { table: "service_items", index: "service_items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "hizmet adı mükerreri DB seddi — tombstone hariç" },
+  { table: "service_items", index: "service_items_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (taşınan birleşme soyu seyrek)" },
   { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
   // quality_grades — üretim rolü seddi (2026-09-13, karar ①, migration
   // 20260913120000). PREDICATE'te `isActive` VAR: pasif satır rolünü TARİH
@@ -1096,6 +1099,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Ürün yaşam döngüsü (URUN-YASAM-DONGUSU.md §3.1 D3) — migration 20260925100000_urun_yasam_dongusu:
   // isActive = (lifecycleStatus <> ARCHIVED); çift yüklem seddi, tek yazar item-lifecycle.helper.
   { table: "items", name: "items_lifecycle_isactive_ck" },
+  // Hizmet kartı ayrımı (20261107202906_service_items_split): hizmet ayrı tabloda; satır/fiyat konusu tipli.
+  { table: "service_items", name: "service_items_lifecycle_isactive_ck" },
+  { table: "items", name: "items_no_service_ck" },
+  { table: "invoice_lines", name: "invoice_lines_line_type_ck" },
+  { table: "item_prices", name: "item_prices_subject_ck" },
+  { table: "item_prices", name: "item_prices_tier_service_ck" },
   // İş emri hareket defteri (D1, migration 20260926000000): kanal kapalı küme, doğuş
   // satırının önceki değeri yok, doğuş dışı her satır bir alana aittir.
   { table: "work_order_events", name: "work_order_events_channel_known" },
@@ -1246,6 +1255,13 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     why: "kumaş kodu harf-duyarsız tekil; tombstone hariç (ön koşul: scripts/fix_kumas_kod_cakismasi.ts)",
   },
   {
+    table: "service_items",
+    index: "service_items_code_fold_key",
+    expr: "upper(code)",
+    predicate: `("mergedIntoId" IS NULL)`,
+    why: "hizmet kodu harf-duyarsız tekil (items_code_fold_key emsali); tombstone hariç",
+  },
+  {
     // Vardiya karnesi sebep kırılımı (dokuma raporları Dilim 1, 2026-09-14, migration
     // 20260914130000). KARIŞIK indeks: ("statId","sealGeneration", COALESCE("reasonCode",''),
     // "beamSlotNull") — sınıflandırılmamış kova `reasonCode` NULL'dur ve PG'nin NULLS DISTINCT
@@ -1275,17 +1291,17 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
   },
   {
     // Hizmet fiyat tablosu (20261106120000): kademe (propertyValueId) ekseni; ileri tarihli
-    // fiyat (validFrom) zamanlanmış damgayla tekilliğe GİRMEZ. NULL sıfır-UUID'ye düşer → bugünkü satırlar eski anahtarla tekil (MAL-0b damgalı geçmiş girmez).
+    // fiyat (validFrom) zamanlanmış damgayla tekilliğe GİRMEZ. Konu COALESCE(itemId, serviceItemId) (service_items_split). NULL sıfır-UUID'ye düşer → bugünkü satırlar eski anahtarla tekil (MAL-0b damgalı geçmiş girmez).
     table: "item_prices",
     index: "item_price_default_uq",
-    expr: `COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    expr: `COALESCE("itemId", "serviceItemId"), COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
     predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
     why: "kalem+kademe+yön+para birimi başına TEK AKTİF kart varsayılanı",
   },
   {
     table: "item_prices",
     index: "item_price_customer_uq",
-    expr: `COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    expr: `COALESCE("itemId", "serviceItemId"), COALESCE("propertyValueId", '00000000-0000-0000-0000-000000000000'::uuid)`,
     predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
     why: "kalem+müşteri+kademe+yön+para birimi başına TEK AKTİF istisna",
   },
