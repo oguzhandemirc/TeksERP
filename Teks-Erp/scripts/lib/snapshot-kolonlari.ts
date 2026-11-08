@@ -204,7 +204,7 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     model: "Order",
     alan: "destination",
     sinif: "DONMUS_ILERI",
-    yazan: [SVC + "order.service.ts"],
+    yazan: [SVC + "order.service.ts", SVC + "order/create.ts"], // sipariş servisi bölündü (2026-11-08): update cephede, create modülde
     neden:
       "sipariş AÇILIRKEN şube → cari zincirinden donan yön (2026-09-23 kullanıcı kararı); kart sonradan değişse de " +
       "değişmez, sipariş raporları buradan okur. Tek yazar `OrderService.create` ve siparişin AÇIKÇA başka cariye/şubeye " +

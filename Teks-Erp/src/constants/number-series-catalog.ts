@@ -241,7 +241,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "manifest", scopedCounter: { durum: "hazir", get not() { return `Üreteç \`nextSeriesNo\` yolundan geçiyor (\`nextManifestNo\`, iki kaynak — ${TERIM.terbiyeIsEmri.tekilKucuk} dökümü + çuval çeki listesi — tek üreteç): kod listesi \`formatChangedAt\` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23).`; }, uretec: "services/helpers/manifest-number.helper.ts" }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   {
     key: "order",
-    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor; kapsam damgası + çakışma atlaması tek yerde, advisory kilit numara üretiminden ÖNCE alınıyor (E2 üretim dilimi, 2026-09-23).", uretec: "services/order.service.ts" },
+    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor; kapsam damgası + çakışma atlaması tek yerde, advisory kilit numara üretiminden ÖNCE alınıyor (E2 üretim dilimi, 2026-09-23).", uretec: "services/order/create.ts" },
     panelGroup: "depo-ticaret",
     countTable: { model: "order", field: "orderNumber", birim: "belge" },
     manualEntry: { path: "services/order.service.ts", not: "Sipariş açılırken `data.orderNumber` gelirse o kullanılır (uzunluk ≤ 40); bu seri OKUTULMUYOR." },

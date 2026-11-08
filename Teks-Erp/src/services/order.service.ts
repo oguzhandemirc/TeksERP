@@ -5,191 +5,84 @@
 //   - create: auto-generates orderNumber as SIP+GGAAYY+NNNN
 //   - softDelete: sets status = CANCELLED (Order has no isActive field)
 //                 + iş emri bağlarını güvenli şekilde çözer (R1)
+// Bölme (2026-11-08, davranış aynı): bu dosya CEPHEDİR — sınıf, dışa açık adlar ve
+// metot imzaları burada; gövdeler `services/order/*.ts` alan modüllerinde
+// kelimesi kelimesine durur (cephe metodu modül fonksiyonunu `this` bağlamıyla çağırır).
+// Çağıranlar yalnız bu yoldan import eder; alan modülleri cepheyi yalnız TİP olarak okur.
 // =============================================================================
 
-import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import prisma from "../lib/prisma";
-import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
 import type { ItemUnit } from "@prisma/client";
-import { followAsCreatorTx } from "./helpers/record-follow.helper";
 import { AuditService } from "./audit.service";
-import { BaseService, BaseServiceConfig, CursorPaginatedResponse, withActor } from "./base.service";
+import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
-import {
-  decodeDynamicCursor,
-  dynamicCursorWhere,
-  buildNextDynamicCursor,
-} from "../utils/cursor";
 import { AppError } from "../utils/app-error";
-import { assertOrderReplayAlive, tokenReplay, type TokenReplay } from "./helpers/token-replay.helper";
+import { type TokenReplay } from "./helpers/token-replay.helper";
 import { resolveShipmentDestination } from "./helpers/shipment-destination.helper";
 import {
   OrderStatus,
   Prisma,
   ReasonPresetKind,
-  RollEntrySource,
   RollStatus,
   ShipmentStatus,
   WorkOrderStatus,
   WorkOrderType,
 } from "@prisma/client";
-import { withBarcodeRetry } from "../utils/barcode-retry";
 import { resolveReasonCode } from "./reason-preset.service";
-import { isMeasuredLine, openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
-import { isClientTokenP2002 } from "../utils/p2002";
-import { validate as isUuidString } from "uuid";
-import { nextSeriesNo, resolveSeriesFormat } from "./number-series.service";
-
-// MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
-// body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
-// manualClosedById, orderNumber, orderId) istemciden YAZILAMAZ. Statü
-// geçişleri yalnız özel endpoint'lerden (cancel, manual-close) ve
-// recomputeOrderStatusTx'tan akar (şemadaki "tek yazma noktası" notları).
-export const ORDER_HEADER_WRITABLE: ReadonlySet<string> = new Set([
-  "customerId",
-  "branchId",
-  "currency",
-  "totalAmount",
-  "deadline",
-  "orderDate",
-]);
-export const ORDER_LINE_WRITABLE: ReadonlySet<string> = new Set([
-  "itemId",
-  "colorId",
-  "quantity",
-  // Satır birimi (MT/KG/ADET) — gönderilmezse kalem kartından kopyalanır
-  // (`resolveLineUnit`); gönderilirse enum'a karşı doğrulanır.
-  "unit",
-  "unitPrice",
-  "width",
-  "pieceLengthM",
-  "cutNote",
-  "customerItemName",
-  "customerColorName",
-  // Varyant (SY-K1k): `prepareOrderLineRecipes` normalize eder ve ürüne aitliğini sınar.
-  "recipeId",
-]);
-import { readOrderDefaultDeadlineDays } from "./system-setting.service";
-import { CURRENCIES } from "../config/currencies";
 import {
   recomputeOrderStatusTx,
-  touchOrderLinesTx,
-  unmeasuredLineWarnings,
 } from "./helpers/order-status.helper";
-import { isItemUnit } from "../constants/item-unit";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
-import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
-import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
-import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { CustomerAliasService } from "./customer-alias.service";
-import { colorScopeOf, loadCustomerColorIndex, resolveName } from "./helpers/customer-name.helper";
 import {
-  applyDateRange,
-  buildOrderByClause,
-  buildPagination,
-  buildTextSearch,
-  buildWhereClause,
   assertNoBareFilterParams,
-  parseQueryParams,
-  readIdCondition,
 } from "../utils/query-parser";
 import {
-  WO_ROLLUP_ACTIVE,
-  deriveOrderWhere,
-  factoryDaysSince,
-  loadWorkOrderFacts,
   withOrderWhere,
-  type WoFacts,
 } from "./helpers/order-where.helper";
 import {
   ORDER_WHERE_FILTER_KEYS,
-  needsProduction,
-  orderWhereFilterParts,
-  readOrderWhereFilters,
 } from "./helpers/order-where-filter.helper";
-import { readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
-import { licenseModuleError } from "../lib/license/module-ceiling";
 import { Request } from "express";
-import { hata } from "../lib/logger";
 import { diffFields } from "./helpers/audit-diff.helper";
-import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
-import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
-import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
-import { prepareOrderLineRecipes } from "./helpers/line-recipe.helper";
+import { runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
 import {
   lineTargetValuesNestedCreate,
   preparedTargetValues,
-  prepareLineTargetValues,
   targetSetChanged,
 } from "./helpers/order-line-target-value.helper";
 import { TERIM } from "../constants/terim";
+import { gateOrderWhereFilters as gateOrderWhereFiltersImpl, extraWhere as extraWhereImpl, getOrderStats as getOrderStatsImpl } from "./order/list";
+import { getOrderWhereDetail as getOrderWhereDetailImpl } from "./order/where-detail";
+import { loadLineForCancel as loadLineForCancelImpl, getLineCancelPreview as getLineCancelPreviewImpl, cancelOrderLine as cancelOrderLineImpl } from "./order/line-cancel";
+import { promoteCustomerAliases as promoteCustomerAliasesImpl, kumasaOzelRenkCiftleri as kumasaOzelRenkCiftleriImpl } from "./order/aliases";
+import { validateLines as validateLinesImpl, validateLineColors as validateLineColorsImpl, validateLineItems as validateLineItemsImpl, prepareLineVariants as prepareLineVariantsImpl, assertLineRefsLive as assertLineRefsLiveImpl, resolveLineUnit as resolveLineUnitImpl, withUnitWarnings as withUnitWarningsImpl, validateBranch as validateBranchImpl, validateCustomer as validateCustomerImpl, assertValidCurrency as assertValidCurrencyImpl, assertDeadlineNotBeforeOrderDate as assertDeadlineNotBeforeOrderDateImpl } from "./order/validation";
+import { findAvailableForWorkOrder as findAvailableForWorkOrderImpl, findAvailableOrderLines as findAvailableOrderLinesImpl, computeInProdBySpec as computeInProdBySpecImpl } from "./order/available";
+import { getCoverageForLines as getCoverageForLinesImpl, getSpecAvailability as getSpecAvailabilityImpl } from "./order/coverage";
+import { withResolvedColorNames as withResolvedColorNamesImpl, getOrderShipments as getOrderShipmentsImpl } from "./order/detail";
+import { create as createImpl, finishOrderCreate as finishOrderCreateImpl, prepareOrderCreate as prepareOrderCreateImpl, insertPreparedOrder as insertPreparedOrderImpl, insertPreparedOrderTx as insertPreparedOrderTxImpl, nextOrderNumber as nextOrderNumberImpl, insertOrderTx as insertOrderTxImpl, findOrderByToken as findOrderByTokenImpl, orderReplay as orderReplayImpl } from "./order/create";
+import { quickOrderFromRolls as quickOrderFromRollsImpl, quickOrderTx as quickOrderTxImpl, quickOrderReplay as quickOrderReplayImpl } from "./order/quick-order";
+import { changeLineColor as changeLineColorImpl } from "./order/line-color";
+import { getActiveShipmentLinks as getActiveShipmentLinksImpl, assertNoActiveShipments as assertNoActiveShipmentsImpl, hardDelete as hardDeleteImpl, softDelete as softDeleteImpl } from "./order/lifecycle";
+import { getCancelPreview as getCancelPreviewImpl } from "./order/cancel";
+import { manualComplete as manualCompleteImpl, reopen as reopenImpl } from "./order/status";
+import type { OrderStats } from "./order/list";
+import type { OrderShipmentsResult } from "./order/detail";
+import type { OrderActor, PreparedOrderCreate } from "./order/create";
+import { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE, computeAllowedActions, computeTotalAmount, pickDefaultAction, withExtraWarnings, type CancelAction, type OrderServiceThis, type OrderWithLines } from "./order/shared";
 
-// ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
-//
-// Operatör sipariş iptal ederken, etkilenecek her WO için üç olası aksiyon:
-//   - UNLINK_ONLY     : sadece order-WO join'ini sil, WO yaşamaya devam
-//   - CONVERT_TO_STOCK: join sil + WO.type = STOCK_PRODUCTION (kalan üretim
-//                       stoğa düşer; ORDER_PRODUCTION'dı, müşteri iptal etti)
-//   - CANCEL_WO       : WorkOrderService.softDelete (rolls STOCK'a, traveler
-//                       VOID, fason kayıtlar sil vb. tam kaskat)
-//
-// İzin matrisi WO.status + tek/çoklu sipariş durumuna göre değişir.
-// "Tek-sipariş" = bu WO'ya bağlı tek sipariş bu — diğer order link yok.
+export type { OrderStats } from "./order/list";
+export type { OrderShipmentRow, OrderShipmentsResult } from "./order/detail";
+export type { PreparedOrderCreate, OrderActor } from "./order/create";
+export { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE } from "./order/shared";
+export type { CancelAction } from "./order/shared";
 
-export type CancelAction = "UNLINK_ONLY" | "CONVERT_TO_STOCK" | "CANCEL_WO";
-
-function computeAllowedActions(
-  woStatus: string,
-  isSoleOrder: boolean
-): CancelAction[] {
-  if (woStatus === "PLANNED") {
-    // Üretim başlamadı; CONVERT/CANCEL anlamsız.
-    return ["UNLINK_ONLY"];
-  }
-  if (woStatus === "COMPLETED") {
-    // Üretim bitti, rulolar var. CANCEL_WO yasak (workorder.service zaten
-    // reddeder). Tek-sipariş ise CONVERT açık (müşteri kaydı silinir).
-    return isSoleOrder ? ["UNLINK_ONLY", "CONVERT_TO_STOCK"] : ["UNLINK_ONLY"];
-  }
-  if (woStatus === "IN_PROGRESS") {
-    return isSoleOrder
-      ? ["UNLINK_ONLY", "CONVERT_TO_STOCK", "CANCEL_WO"]
-      : ["UNLINK_ONLY"];
-  }
-  // CANCELLED WO bağı zaten anlamsız — gelmemesi gerek ama defansif.
-  return ["UNLINK_ONLY"];
-}
-
-/**
- * Varsayılan aksiyon — İZİNLİ LİSTEDEN TÜRETİLİR, ayrı yazılmaz.
- *
- * ⚠️ Bu iki fonksiyon eskiden BAĞIMSIZDI ve sessizce ayrıştılar (BULGU-T2-005):
- * İPTAL EDİLMİŞ iş emrine bağlı tek-siparişli bir siparişte izinli liste
- * `["UNLINK_ONLY"]` iken varsayılan `CONVERT_TO_STOCK` dönüyordu. Arayüz izinli
- * aksiyon tek olduğu için seçim kutusunu ÇİZMİYOR, dolayısıyla istemci bir şey
- * göndermiyor, sunucu da varsayılana düşüyordu → "CONVERT_TO_STOCK geçersiz"
- * 400'ü. Yenilemek işe yaramıyordu: sipariş HİÇBİR yoldan iptal edilemiyordu ve
- * sonsuza dek "açık talep" sayılıyordu (prod'da 2 canlı sipariş bu durumdaydı;
- * tek çıkış DB'ye elle müdahaleydi).
- *
- * Tercih hâlâ ifade edilir ("en sık vaka: malı stoğa al") ama izinli değilse
- * listenin ilkine düşer — yani ayrışma YAPISAL OLARAK imkânsız.
- */
-function pickDefaultAction(
-  woStatus: string,
-  isSoleOrder: boolean
-): CancelAction {
-  const allowed = computeAllowedActions(woStatus, isSoleOrder);
-  const tercih: CancelAction =
-    woStatus === "PLANNED" ? "UNLINK_ONLY" : isSoleOrder ? "CONVERT_TO_STOCK" : "UNLINK_ONLY";
-  return allowed.includes(tercih) ? tercih : allowed[0];
-}
 
 /**
  * Bekçi ihracı — bu iki saf fonksiyonun AYRIŞAMAZLIĞI ölçülebilir olmalı
@@ -198,195 +91,6 @@ function pickDefaultAction(
  * gerçekten koşturur.
  */
 export const __test__ = { computeAllowedActions, pickDefaultAction };
-
-/**
- * Lines üzerinden totalAmount hesaplar. unitPrice null olan satırlar toplama
- * dahil edilmez (kasıtlı: "fiyatlandırılmamış" kalemleri 0 saymak yanıltıcı).
- * Hiç satırın fiyatı yoksa null döner — sipariş "fiyatsız" sayılır.
- */
-function computeTotalAmount(
-  lines: Array<{ quantity?: number; unitPrice?: number | null | string }>
-): number | null {
-  // Fiyatlandırma Decimal aritmetik ile — float drift faturada kuruş kayması yaratmasın.
-  let total = new Prisma.Decimal(0);
-  let any = false;
-  for (const l of lines) {
-    if (l.unitPrice == null) continue;
-    const qtyRaw = Number(l.quantity ?? 0);
-    const priceRaw =
-      typeof l.unitPrice === "string" ? Number(l.unitPrice) : l.unitPrice;
-    if (!Number.isFinite(qtyRaw) || !Number.isFinite(priceRaw)) continue;
-    total = total.plus(new Prisma.Decimal(qtyRaw).times(priceRaw as number));
-    any = true;
-  }
-  return any ? Number(total.toFixed(2)) : null;
-}
-
-// ── "İş Emri" rollup filtresi (filter[woState]) ──────────────────────────────
-// Semantik Electron `work-order-rollup.ts` (deriveWoRollup) ile BİREBİR aynı
-// olmalı — rozet ne gösteriyorsa filtre onu bulmalı. Aktif küme CANCELLED +
-// SUPERSEDED hariçtir; PLANNED+COMPLETED karışımı (IN_PROGRESS yokken) rozette
-// "Üretimde" sayılır. Durumlar bu tanımla karşılıklı münhasırdır; çoklu seçim
-// OR'lanır. Varlık sorgusu (some) distinct-WO ayrımına duyarsızdır → frontend'in
-// distinct kümesiyle aynı sonucu verir.
-// Aktif küme `WO_ROLLUP_ACTIVE` "Nerede?" türetmesiyle ortaktır → `order-where.helper`da tek tanım.
-
-/** "Siparişin herhangi bir kalemi, verilen durumlardan bir WO'ya bağlı" koşulu. */
-function hasWoLink(statuses: WorkOrderStatus[]): Record<string, unknown> {
-  return {
-    lines: {
-      some: { workOrderLinks: { some: { ...ACTIVE_ORDER_LINK, workOrder: { status: { in: statuses } } } } },
-    },
-  } satisfies Prisma.OrderWhereInput;
-}
-
-const WO_STATE_WHERE: Record<string, Record<string, unknown>> = {
-  NONE: { NOT: hasWoLink(WO_ROLLUP_ACTIVE) },
-  PLANNED: {
-    AND: [
-      hasWoLink([WorkOrderStatus.PLANNED]),
-      { NOT: hasWoLink([WorkOrderStatus.IN_PROGRESS]) },
-      { NOT: hasWoLink([WorkOrderStatus.COMPLETED]) },
-    ],
-  },
-  IN_PROGRESS: {
-    OR: [
-      hasWoLink([WorkOrderStatus.IN_PROGRESS]),
-      { AND: [hasWoLink([WorkOrderStatus.PLANNED]), hasWoLink([WorkOrderStatus.COMPLETED])] },
-    ],
-  },
-  COMPLETED: {
-    AND: [
-      hasWoLink([WorkOrderStatus.COMPLETED]),
-      { NOT: hasWoLink([WorkOrderStatus.PLANNED]) },
-      { NOT: hasWoLink([WorkOrderStatus.IN_PROGRESS]) },
-    ],
-  },
-};
-
-/** filter[woState] (CSV) → Prisma where. Geçersiz/boş değerler sessizce düşer. */
-function buildWoStateWhere(
-  raw: string | string[] | undefined
-): Record<string, unknown> | undefined {
-  const values = (Array.isArray(raw) ? raw : (raw ?? "").split(","))
-    .map((v) => v.trim())
-    .filter((v) => v in WO_STATE_WHERE);
-  if (values.length === 0) return undefined;
-  const conds = [...new Set(values)].map((v) => WO_STATE_WHERE[v]);
-  return conds.length === 1 ? conds[0] : { OR: conds };
-}
-
-/**
- * Sipariş listesi özet şeridinin verisi (`getOrderStats`).
- * Kapsam ayrımı için o metodun başlığına bak: ADET listenin aynası, METRAJ
- * iptalleri her zaman dışlar.
- */
-export interface OrderStats {
-  /** Filtreye uyan sipariş adedi — listenin satır sayısıyla BİREBİR. */
-  totalCount: number;
-  /** `OrderStatus` → adet. Yalnız kümede geçen durumlar anahtar taşır. */
-  byStatus: Record<string, number>;
-  /** Kalemlerden toplanan istenen metraj (m). İptaller hariç. */
-  totalOrderedQty: number;
-  /** Sevk edilen metraj (m) — `OrderLine.shippedQty` defter denormu. İptaller hariç. */
-  totalShippedQty: number;
-  /** Açık metraj (m) = istenen − sevk (0'da kırpılı). */
-  totalOpenQty: number;
-  /** Termini geçmiş ve hâlâ açık sipariş adedi. */
-  overdueCount: number;
-  /** Önümüzdeki 7 gün içinde termini dolan açık sipariş adedi. */
-  dueThisWeekCount: number;
-  /** Hiçbir kalemi aktif iş emrine bağlı olmayan sipariş adedi (`woState=NONE`). */
-  noWorkOrderCount: number;
-  /** Para birimi → toplam tutar. Fiyat girilmemişse boş obje. */
-  amountByCurrency: Record<string, number>;
-}
-
-// ── Sipariş → sevkiyat drill-down (getOrderShipments) ────────────────────────
-/** İç toplama kovası — çuval sevki ve fason direkt sevk aynı şekle indirgenir. */
-interface ShipmentAgg {
-  shipmentId: string;
-  shipmentNo: string;
-  status: ShipmentStatus;
-  kind: "SHIPMENT" | "DIRECT";
-  date: Date | null;
-  qty: Prisma.Decimal;
-  sacks: Set<string>;
-  branchName: string | null;
-}
-
-export interface OrderShipmentRow {
-  /** DIRECT legacy toplu satırında boş (tıklanamaz). */
-  shipmentId: string;
-  shipmentNo: string;
-  status: ShipmentStatus;
-  kind: "SHIPMENT" | "DIRECT";
-  /** ISO; PLANNED çuval-sevkinde/DIRECT-legacy'de null olabilir. */
-  date: string | null;
-  qty: number;
-  sackCount: number;
-  branchName: string | null;
-}
-
-export interface OrderShipmentsResult {
-  /** DISPATCHED çuval + fason direkt — order.shippedQty ile mutabık. */
-  dispatchedTotal: number;
-  /** PLANNED çuval (bekleyen, henüz sevk edilmemiş). */
-  plannedTotal: number;
-  shipments: OrderShipmentRow[];
-}
-
-/** Kart kullanım uyarılarını (ör. "Tükenene kadar" A2) yanıtın `warnings`ine ekler. */
-/** `create`in tx dışı yarısının çıktısı — hızlı sipariş aynı kapılardan geçip kendi tx'inde yazsın diye. */
-export interface PreparedOrderCreate {
-  prismaData: Record<string, unknown>;
-  /** Oluşturan — insert (`createdById`) ve audit AYNI alandan okur; doğuş yolu başına bir kez verilir. */
-  actorUserId: string | undefined;
-  lineCheck: { checks: ItemUsageCheck[]; warnings: string[] };
-  destination: Awaited<ReturnType<typeof resolveShipmentDestination>>["destination"];
-  manualOrderNumber: string | null;
-  today: Date;
-  fmt: ReturnType<typeof resolveSeriesFormat>;
-}
-
-/** Sipariş doğuşunun aktörü: her doğuş yolu (uç · hızlı sipariş · gelen kutusu · içe aktarma) AÇIKÇA verir. */
-export interface OrderActor {
-  userId: string | undefined;
-}
-
-/** İdempotency anahtarı (Roll emsali) — route-level zod yok (BaseController ham body), burada doğrulanır. */
-function parseOrderClientToken(raw: unknown): string | null {
-  const token = typeof raw === "string" && raw.trim() ? raw.trim() : null;
-  if (token && !isUuidString(token)) throw AppError.badRequest("Geçersiz istemci anahtarı");
-  return token;
-}
-
-const parseManualOrderNumber = (raw: unknown): string | null =>
-  typeof raw === "string" && raw.trim() ? raw.trim() : null;
-
-function withExtraWarnings<T>(res: ApiResponse<T>, extra: string[]): ApiResponse<T> {
-  if (extra.length === 0) return res;
-  return { ...res, warnings: [...(res.warnings ?? []), ...extra] };
-}
-
-type SiparisSatiri = { itemId: unknown; colorId?: unknown; width?: unknown; quantity: unknown };
-/** Sipariş replay'inin satır izi (create + hızlı sipariş TEK kaynak): ürün · renk · en · miktar, Decimal 3 hane, sırasız. */
-function siparisSatirIzi(satirlar: ReadonlyArray<SiparisSatiri>): string {
-  const d3 = (v: unknown) => (v == null || v === "" ? "" : new Prisma.Decimal(v as Prisma.Decimal.Value).toFixed(3));
-  return satirlar.map((l) => `${l.itemId}|${l.colorId ?? ""}|${d3(l.width)}|${d3(l.quantity)}`).sort().join(";");
-}
-
-/** Detay yanıtının renk adı çözümüne giren parçası (defaultInclude şekli). */
-type OrderWithLines = {
-  customerId: string;
-  lines?: Array<{
-    itemId: string;
-    colorId: string | null;
-    customerColorName: string | null;
-    resolvedCustomerColorName?: string | null;
-    colorNameScope?: string | null;
-  }>;
-};
 
 /**
  * Sipariş düzenlemesinin kalem özeti (audit `changes` satırı): eklenen / çıkarılan / miktar-kalem
@@ -454,12 +158,7 @@ export class OrderService extends BaseService {
 
   /** Üretim kapalıyken üretim-türevi süzgeç 403 MODULE_DISABLED; dönüş = üretim açık mı. */
   private async gateOrderWhereFilters(req: Request): Promise<boolean> {
-    const enabled = await readProductionEnabled();
-    if (!enabled && needsProduction(readOrderWhereFilters(parseQueryParams(req).filters))) {
-      throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim")
-        ?? AppError.forbidden("Üretim modülü kapalı; bu süzgeç kullanılamaz.", { code: "MODULE_DISABLED", modul: "production" });
-    }
-    return enabled;
+    return gateOrderWhereFiltersImpl(req);
   }
 
   /**
@@ -481,122 +180,11 @@ export class OrderService extends BaseService {
    * Sabit sorgu: sipariş+İE+adımlar tek Prisma okuması + `loadWorkOrderFacts` (2).
    */
   async getOrderWhereDetail(orderId: string): Promise<ApiResponse<unknown>> {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        status: true,
-        deadline: true,
-        lines: {
-          select: {
-            workOrderLinks: {
-              where: ACTIVE_ORDER_LINK,
-              select: {
-                workOrder: {
-                  select: {
-                    id: true,
-                    workOrderNumber: true,
-                    status: true,
-                    targetQuantity: true,
-                    targetItem: { select: { name: true } },
-                    targetColor: { select: { name: true } },
-                    steps: {
-                      where: { status: { not: "SKIPPED" } },
-                      orderBy: { stepSequence: "asc" },
-                      select: { id: true, stepSequence: true, status: true, station: { select: { id: true, name: true } } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    if (!order) throw AppError.notFound("Sipariş bulunamadı");
-    const wos = new Map<string, NonNullable<(typeof order.lines)[number]["workOrderLinks"][number]["workOrder"]>>();
-    for (const l of order.lines) for (const k of l.workOrderLinks) if (k.workOrder) wos.set(k.workOrder.id, k.workOrder);
-    const active = [...wos.values()].filter((w) => WO_ROLLUP_ACTIVE.includes(w.status));
-    const facts = await loadWorkOrderFacts(active.map((w) => w.id));
-    const now = new Date();
-    const nerede = deriveOrderWhere({ status: order.status, deadline: order.deadline, workOrders: [...wos.values()] }, facts, now);
-    const isEmirleri = active
-      .sort((a, b) => a.workOrderNumber.localeCompare(b.workOrderNumber, "tr"))
-      .map((w) => {
-        const f = facts.get(w.id) as WoFacts;
-        const liveByStep = new Map<string, { top: number; metre: number; fasonTop: number }>();
-        for (const g of f.live) {
-          const e = liveByStep.get(g.stepId) ?? { top: 0, metre: 0, fasonTop: 0 };
-          e.top += g.count;
-          e.metre += g.qty;
-          if (g.status === "AT_SUBCONTRACTOR") e.fasonTop += g.count;
-          liveByStep.set(g.stepId, e);
-        }
-        const liveSeqs = w.steps.filter((s) => liveByStep.has(s.id)).map((s) => s.stepSequence);
-        const maxLive = liveSeqs.length ? Math.max(...liveSeqs) : null;
-        const finished = maxLive === null && f.hazir.count + f.gitti.count > 0;
-        return {
-          id: w.id,
-          no: w.workOrderNumber,
-          durum: w.status,
-          kumas: w.targetItem?.name ?? null,
-          renk: w.targetColor?.name ?? null,
-          hedefMetre: w.targetQuantity != null ? Number(w.targetQuantity) : null,
-          adimlar: w.steps.map((s) => {
-            const live = liveByStep.get(s.id);
-            const asama = live
-              ? "BURADA"
-              : finished || s.status === "COMPLETED" || (maxLive !== null && s.stepSequence < maxLive)
-                ? "GECTI"
-                : "SIRADA";
-            return {
-              id: s.id,
-              ad: s.station.name,
-              asama,
-              topSayisi: live?.top ?? 0,
-              metre: live ? Math.round(live.metre * 10) / 10 : 0,
-              fasonTop: live?.fasonTop ?? 0,
-            };
-          }),
-          fason: f.fason.map((g) => ({
-            firmaId: g.firmaId,
-            firmaAd: g.firmaAd,
-            topSayisi: g.count,
-            metre: Math.round(g.qty * 10) / 10,
-            gun: factoryDaysSince(g.enEski, now),
-          })),
-          hazir: { topSayisi: f.hazir.count, metre: Math.round(f.hazir.qty * 10) / 10 },
-          gitti: { topSayisi: f.gitti.count, metre: Math.round(f.gitti.qty * 10) / 10 },
-          sonHareket: f.sonHareket ? f.sonHareket.toISOString() : null,
-        };
-      });
-    return { success: true, data: { orderId: order.id, nerede, isEmirleri } };
+    return getOrderWhereDetailImpl(orderId);
   }
 
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
-    const { filters } = parseQueryParams(req);
-    const conds: Record<string, unknown>[] = [];
-
-    const lineCond: Record<string, unknown> = {};
-    const itemCond = readIdCondition(filters.itemId);
-    if (itemCond) lineCond.itemId = itemCond;
-    const colorCond = readIdCondition(filters.colorId);
-    if (colorCond) lineCond.colorId = colorCond;
-    if (Object.keys(lineCond).length > 0) conds.push({ lines: { some: lineCond } });
-
-    const woCond = buildWoStateWhere(filters.woState);
-    if (woCond) conds.push(woCond);
-
-    // "Nerede?" sekmeleri + fason firma/gün (tek where: liste + cursor + özet). Bozuk değer 400.
-    conds.push(...(orderWhereFilterParts(readOrderWhereFilters(filters), new Date()) as Record<string, unknown>[]));
-
-    // İptal edilmiş siparişleri gizle (panel varsayılanı). `safeFilters` bu
-    // anahtarı skaler süzgeçte düşürür — burada ham filters'tan okunur.
-    const hideCancelled = buildHideCancelledWhere(filters, [OrderStatus.CANCELLED]);
-    if (hideCancelled) conds.push(hideCancelled);
-
-    if (conds.length === 0) return undefined;
-    return conds.length === 1 ? conds[0] : { AND: conds };
+    return extraWhereImpl(req);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -616,39 +204,7 @@ export class OrderService extends BaseService {
 
   /** Kalem iptalinde etkilenecek iş emri. */
   private async loadLineForCancel(orderId: string, lineId: string) {
-    const line = await prisma.orderLine.findUnique({
-      where: { id: lineId },
-      select: {
-        id: true,
-        orderId: true,
-        quantity: true,
-        shippedQty: true,
-        cancelledAt: true,
-        width: true,
-        item: { select: { name: true } },
-        color: { select: { name: true } },
-        order: { select: { id: true, orderNumber: true, status: true } },
-        workOrderLinks: {
-          where: ACTIVE_ORDER_LINK,
-          select: {
-            workOrder: {
-              select: {
-                id: true,
-                workOrderNumber: true,
-                status: true,
-                type: true,
-                targetItemId: true,
-                _count: { select: { orderLinks: { where: ACTIVE_ORDER_LINK } } },
-              },
-            },
-          },
-        },
-      },
-    });
-    if (!line || line.orderId !== orderId) {
-      throw AppError.notFound("Sipariş kalemi bulunamadı.");
-    }
-    return line;
+    return loadLineForCancelImpl(orderId, lineId);
   }
 
   /**
@@ -657,83 +213,7 @@ export class OrderService extends BaseService {
    * "3 kayıt etkilenecek" gibi soyut sayı yetmez.
    */
   async getLineCancelPreview(orderId: string, lineId: string): Promise<ApiResponse<unknown>> {
-    const line = await this.loadLineForCancel(orderId, lineId);
-    const requested = new Prisma.Decimal(line.quantity);
-    const shipped = new Prisma.Decimal(line.shippedQty);
-    const remaining = Prisma.Decimal.max(0, requested.minus(shipped));
-
-    const blockers: string[] = [];
-    if (line.cancelledAt !== null) blockers.push("Bu kalem zaten iptal edilmiş.");
-    if (line.order.status === OrderStatus.CANCELLED) {
-      blockers.push("Siparişin tamamı zaten iptal edilmiş.");
-    }
-    if (remaining.lessThanOrEqualTo(0)) {
-      blockers.push(
-        "Kalemin tamamı sevk edilmiş — iptal edilecek bir şey kalmadı. " +
-          "Mal geri geldiyse iade yolunu kullanın.",
-      );
-    }
-
-    // Aktif WO bağları — CANCELLED/SUPERSEDED sayılmaz (zaten ölü).
-    const affectedWorkOrders = line.workOrderLinks
-      .map((l) => l.workOrder)
-      .filter((w) => w.status !== WorkOrderStatus.CANCELLED && w.status !== "SUPERSEDED")
-      .map((w) => {
-        // Bu kalem WO'nun SON bağıysa iş emri stok üretimine döner
-        // ("tip = bağın aynası" kuralı, 2026-08-21).
-        const willBecomeStock = w.type === WorkOrderType.ORDER_PRODUCTION && w._count.orderLinks === 1;
-        // TEK SERT ENGEL: hedef kumaşı olmayan WO stok üretimine DÖNEMEZ.
-        // Sessizce bağlı bırakmak "tip = bağın aynası" invariantını bozardı.
-        const blockedNoTargetItem = willBecomeStock && !w.targetItemId;
-        if (blockedNoTargetItem) {
-          blockers.push(
-            `${w.workOrderNumber} bu kalemin son bağı ve hedef kumaşı tanımlı değil — ` +
-              `stok üretimine dönemez. Önce ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} hedef kumaşı seçin.`,
-          );
-        }
-        return {
-          id: w.id,
-          workOrderNumber: w.workOrderNumber,
-          status: w.status,
-          willBecomeStock,
-          blockedNoTargetItem,
-        };
-      });
-
-    // Bu kalem iptal edilince siparişte aktif kalem kalıyor mu?
-    const otherActive = await prisma.orderLine.count({
-      where: { orderId, cancelledAt: null, id: { not: lineId } },
-    });
-    const isLastActiveLine = otherActive === 0 && line.cancelledAt === null;
-    const orderShipped = new Prisma.Decimal(
-      (await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { shippedQty: true } }))
-        .shippedQty,
-    );
-
-    return {
-      success: true,
-      data: {
-        lineId: line.id,
-        orderNumber: line.order.orderNumber,
-        itemName: line.item.name,
-        colorName: line.color?.name ?? null,
-        width: line.width == null ? null : Number(line.width),
-        requestedQty: Number(requested),
-        shippedQty: Number(shipped),
-        /** İptal edilecek metraj — sevk edilen DÜŞMEZ, "kalanı iptal". */
-        remainingQty: Number(remaining),
-        affectedWorkOrders,
-        isLastActiveLine,
-        /** Son kalemse siparişin düşeceği statü (kullanıcı kuralı). */
-        resultingOrderStatus: isLastActiveLine
-          ? orderShipped.greaterThan(0)
-            ? OrderStatus.COMPLETED
-            : OrderStatus.CANCELLED
-          : null,
-        blockers,
-        canCancel: blockers.length === 0,
-      },
-    };
+    return getLineCancelPreviewImpl.call(this as unknown as OrderServiceThis, orderId, lineId);
   }
 
   /**
@@ -746,85 +226,7 @@ export class OrderService extends BaseService {
     userId?: string,
     reason?: { reasonCode?: string | null; reasonText?: string | null },
   ): Promise<ApiResponse<unknown>> {
-    const preview = (await this.getLineCancelPreview(orderId, lineId)).data as {
-      canCancel: boolean;
-      blockers: string[];
-      affectedWorkOrders: Array<{ id: string; willBecomeStock: boolean }>;
-    };
-    if (!preview.canCancel) {
-      throw AppError.badRequest(preview.blockers.join(" "));
-    }
-
-    // Sebep çözümü TX DIŞINDA (top/sipariş iptalindeki kural): önbellek okuması
-    // + olası tazeleme kilidi uzatmasın; geçersiz kod iptali hiç başlatmadan durdurur.
-    const { code: cancelReasonCode, text: cancelReasonText } = reason
-      ? await resolveReasonCode(ReasonPresetKind.ORDER_CANCEL, reason)
-      : { code: null, text: null };
-
-    const affectedWoIds = preview.affectedWorkOrders.map((w) => w.id);
-
-    await prisma.$transaction(async (tx) => {
-      // ATOMİK CLAIM: iki paralel iptal isteğinde ikincisi 409 almalı
-      // (check-then-act YASAK — CLAUDE.md durum geçişi kuralı).
-      const claim = await tx.orderLine.updateMany({
-        where: { id: lineId, cancelledAt: null },
-        data: {
-          cancelledAt: new Date(),
-          cancelReason: cancelReasonText,
-          cancelReasonCode,
-          cancelledById: userId ?? null,
-        },
-      });
-      if (claim.count === 0) {
-        throw AppError.conflict("Bu kalem bu sırada iptal edildi. Sayfayı yenileyin.");
-      }
-
-      // Bağları kopar + gerekiyorsa WO'yu stok üretimine çevir.
-      for (const woId of affectedWoIds) {
-        // Bağ SİLİNMEZ, damgalanır (③a, 2026-09-14) — kalem iptali izi satırda durur.
-        await unlinkOrderLinesTx(tx, { workOrderId: woId, orderLineId: lineId, reason: "ORDER_LINE_CANCEL", userId: userId ?? null });
-        // Taze AÇIK sayım: yarışta araya yeni bağ girdiyse tip ORDER kalmalı
-        // (`unlinkOrderLine` ile aynı atomik desen).
-        const remaining = await activeOrderLinkCount(tx, woId);
-        if (remaining === 0) {
-          await setWorkOrderTypeTx(tx, woId, WorkOrderType.STOCK_PRODUCTION, {
-            ctx: { trigger: "ORDER_LINE_CANCEL", userId, refType: "ORDER_LINE", refId: lineId },
-          });
-        }
-        await markTravelerCardDirtyTx(tx, woId);
-      }
-
-      // Karşılanma + statü tek yazma noktasından (son-kalem kuralı orada).
-      const lineIds = (
-        await tx.orderLine.findMany({ where: { orderId }, select: { id: true } })
-      ).map((l) => l.id);
-      await touchOrderLinesTx(tx, lineIds);
-      await recomputeOrderStatusTx(tx, orderId);
-    });
-
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "ORDER_LINE",
-      recordId: lineId,
-      newData: {
-        cancelled: true,
-        orderId,
-        cancelReasonCode,
-        cancelReason: cancelReasonText,
-        unlinkedWorkOrderIds: affectedWoIds,
-      },
-    }).catch(() => undefined);
-
-    const fresh = await this.findById(orderId);
-    return {
-      success: true,
-      data: fresh.data,
-      message:
-        affectedWoIds.length > 0
-          ? `Kalem iptal edildi. ${affectedWoIds.length} ${TERIM.terbiyeIsEmri.tekilKucuk} bağı koparıldı.`
-          : "Kalem iptal edildi.",
-    };
+    return cancelOrderLineImpl.call(this as unknown as OrderServiceThis, orderId, lineId, userId, reason);
   }
 
   /**
@@ -852,79 +254,7 @@ export class OrderService extends BaseService {
    * metraj basmasın (gösterim koruması; muhasebe defteri değil).
    */
   async getOrderStats(req: Request): Promise<ApiResponse<OrderStats>> {
-    await this.gateOrderWhereFilters(req);
-    const params = parseQueryParams(req);
-    const where = this.buildListWhere(params, req) as Prisma.OrderWhereInput;
-
-    /** Liste where'i + ek koşul. */
-    const and = (extra: Prisma.OrderWhereInput): Prisma.OrderWhereInput => ({
-      AND: [where, extra],
-    });
-    /** Terminal olmayan (hâlâ çıkış bekleyen) siparişler. */
-    const openStatuses: Prisma.OrderWhereInput = {
-      status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
-    };
-    const now = new Date();
-    // tz-ok: "termini geçti mi" / "7 gün içinde mi" iki AN arasındaki farktır,
-    // takvim günü sorusu değil → fabrika saat diliminden bağımsız.
-    const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-    const [grouped, lineAgg, overdueCount, dueThisWeekCount, noWorkOrderCount, amountGroups] =
-      await Promise.all([
-        prisma.order.groupBy({ where, by: ["status"], _count: { _all: true } }),
-        prisma.orderLine.aggregate({
-          where: { order: and({ status: { not: OrderStatus.CANCELLED } }) },
-          _sum: { quantity: true, shippedQty: true },
-        }),
-        prisma.order.count({ where: and({ AND: [openStatuses, { deadline: { lt: now } }] }) }),
-        prisma.order.count({
-          where: and({ AND: [openStatuses, { deadline: { gte: now, lte: weekAhead } }] }),
-        }),
-        // En ağır sorgu (NOT EXISTS → order_lines ⋈ work_order_to_order_lines ⋈
-        // work_orders). `woState=NONE` filtresiyle AYNI ifade — rozet ne sayıyorsa
-        // filtre onu bulmalı.
-        prisma.order.count({ where: and(WO_STATE_WHERE.NONE as Prisma.OrderWhereInput) }),
-        prisma.order.groupBy({
-          where: and({ totalAmount: { not: null } }),
-          by: ["currency"],
-          _sum: { totalAmount: true },
-        }),
-      ]);
-
-    let totalCount = 0;
-    const byStatus: Record<string, number> = {};
-    for (const row of grouped) {
-      totalCount += row._count._all;
-      byStatus[row.status] = row._count._all;
-    }
-
-    // Decimal ile biriktir — ondalık metrajda JS float drift yapar.
-    const ordered = new Prisma.Decimal(lineAgg._sum.quantity ?? 0);
-    const shipped = new Prisma.Decimal(lineAgg._sum.shippedQty ?? 0);
-    const open = ordered.minus(shipped);
-
-    const amountByCurrency: Record<string, number> = {};
-    for (const row of amountGroups) {
-      const sum = row._sum.totalAmount;
-      // Para birimi KARIŞIK olabilir (Order.currency satır bazlı) → tek toplam
-      // basmak yanlış olurdu; kırılım aynen döner, gösterimi istemci seçer.
-      if (sum != null) amountByCurrency[row.currency] = Number(sum);
-    }
-
-    return {
-      success: true,
-      data: {
-        totalCount,
-        byStatus,
-        totalOrderedQty: Number(ordered),
-        totalShippedQty: Number(shipped),
-        totalOpenQty: open.isNegative() ? 0 : Number(open),
-        overdueCount,
-        dueThisWeekCount,
-        noWorkOrderCount,
-        amountByCurrency,
-      },
-    };
+    return getOrderStatsImpl.call(this as unknown as OrderServiceThis, req);
   }
 
   /**
@@ -954,91 +284,7 @@ export class OrderService extends BaseService {
     lines: Array<Record<string, unknown>> | null | undefined,
     userId?: string
   ): Promise<void> {
-    if (!customerId || !Array.isArray(lines) || lines.length === 0) return;
-
-    // Aynı sipariş içinde aynı ürün/renk birden fazla satırda geçerse tek terfi
-    // yeter (ilk dolu ad master olur). PERF: satır-bazlı 2N findUnique yerine
-    // benzersiz item/color için TEK varlık-okuması (2 findMany) + yalnız EKSİK
-    // olanları upsert. Davranış birebir: yalnız HİÇ alias-satırı olmayan (assigned
-    // dahil) item/color terfi edilir; mevcut satır korunur, ilk-dolu-ad kazanır.
-    const itemNameById = new Map<string, string>();
-    const colorNameById = new Map<string, string>();
-    // Varlık okuması yalnız renk adı taşıyan satırlar için; okunamazsa yalnız RENK
-    // terfisi atlanır (null), kumaş adı terfisi bundan etkilenmez.
-    const renkAdayi = lines.filter((l) => typeof l.customerColorName === "string" && l.customerColorName.trim().length > 0);
-    let kumasaOzel: Set<string> | null = new Set();
-    if (renkAdayi.length > 0) {
-      try {
-        kumasaOzel = await this.kumasaOzelRenkCiftleri(customerId, renkAdayi);
-      } catch (e) {
-        hata("order", "kumaşa özel renk adı varlık-okuması başarısız, renk terfisi atlandı:", e);
-        kumasaOzel = null;
-      }
-    }
-    for (const line of lines) {
-      const itemId = typeof line.itemId === "string" ? line.itemId : null;
-      const colorId = typeof line.colorId === "string" ? line.colorId : null;
-      const itemName =
-        typeof line.customerItemName === "string" ? line.customerItemName.trim() : "";
-      const colorName =
-        typeof line.customerColorName === "string" ? line.customerColorName.trim() : "";
-      if (itemId && itemName.length > 0 && !itemNameById.has(itemId)) {
-        itemNameById.set(itemId, itemName);
-      }
-      const ozel = itemId && colorId && kumasaOzel?.has(`${itemId}|${colorId}`);
-      if (kumasaOzel && colorId && colorName.length > 0 && !ozel && !colorNameById.has(colorId)) {
-        colorNameById.set(colorId, colorName);
-      }
-    }
-    if (itemNameById.size === 0 && colorNameById.size === 0) return;
-
-    const itemIds = [...itemNameById.keys()];
-    const colorIds = [...colorNameById.keys()];
-    let existingItems = new Set<string>();
-    let existingColors = new Set<string>();
-    try {
-      if (itemIds.length > 0) {
-        existingItems = new Set(
-          (
-            await prisma.customerItemAlias.findMany({
-              where: { customerId, itemId: { in: itemIds } },
-              select: { itemId: true },
-            })
-          ).map((r) => r.itemId)
-        );
-      }
-      if (colorIds.length > 0) {
-        existingColors = new Set(
-          (
-            await prisma.customerColorAlias.findMany({
-              where: { customerId, colorId: { in: colorIds } },
-              select: { colorId: true },
-            })
-          ).map((r) => r.colorId)
-        );
-      }
-    } catch (e) {
-      // best-effort: varlık okunamazsa terfi atlanır, sipariş etkilenmez.
-      hata("order", "müşteri alias varlık-okuması başarısız:", e);
-      return;
-    }
-
-    for (const [itemId, itemName] of itemNameById) {
-      if (existingItems.has(itemId)) continue;
-      try {
-        await this.aliasService.upsertItemAlias(customerId, itemId, itemName, userId);
-      } catch (e) {
-        hata("order", "müşteri-ürün alias terfisi başarısız:", e);
-      }
-    }
-    for (const [colorId, colorName] of colorNameById) {
-      if (existingColors.has(colorId)) continue;
-      try {
-        await this.aliasService.upsertColorAlias(customerId, colorId, colorName, userId);
-      } catch (e) {
-        hata("order", "müşteri-renk alias terfisi başarısız:", e);
-      }
-    }
+    return promoteCustomerAliasesImpl.call(this as unknown as OrderServiceThis, customerId, lines, userId);
   }
 
   /** Satırlardaki (kumaş, renk) çiftlerinden bu müşteri için KUMAŞA ÖZEL renk adı olanlar. */
@@ -1046,15 +292,7 @@ export class OrderService extends BaseService {
     customerId: string,
     lines: Array<Record<string, unknown>>,
   ): Promise<Set<string>> {
-    const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
-    const itemIds = [...new Set(lines.map((l) => str(l.itemId)).filter((x): x is string => !!x))];
-    const colorIds = [...new Set(lines.map((l) => str(l.colorId)).filter((x): x is string => !!x))];
-    if (itemIds.length === 0 || colorIds.length === 0) return new Set();
-    const rows = await prisma.customerItemColorAlias.findMany({
-      where: { customerId, itemId: { in: itemIds }, colorId: { in: colorIds } },
-      select: { itemId: true, colorId: true },
-    });
-    return new Set(rows.map((r) => `${r.itemId}|${r.colorId}`));
+    return kumasaOzelRenkCiftleriImpl(customerId, lines);
   }
 
   /**
@@ -1066,48 +304,7 @@ export class OrderService extends BaseService {
    * mevcut validateBranch / assertValidCurrency deseniyle uyumlu).
    */
   private validateLines(lines: unknown): void {
-    if (!Array.isArray(lines)) return;
-    lines.forEach((rawLine, idx) => {
-      if (rawLine == null || typeof rawLine !== "object") return;
-      const line = rawLine as Record<string, unknown>;
-      const qty = Number(line.quantity);
-      if (!Number.isFinite(qty) || qty <= 0) {
-        throw AppError.badRequest(
-          `Sipariş kalemi #${idx + 1}: miktar pozitif olmalı (0'dan büyük).`
-        );
-      }
-      // Decimal(12,3) tavanı — aşımda DB'de P2020 yerine alan-düzeyinde net hata.
-      if (qty > 999_999_999) {
-        throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: miktar çok büyük.`);
-      }
-      // En (width) opsiyonel; verildiyse pozitif + makul üst sınır (0/negatif/
-      // aşırı-büyük en üretim spec'ini bozar — miktar deseniyle aynı hijyen).
-      if (line.width != null) {
-        const w = Number(line.width);
-        if (!Number.isFinite(w) || w <= 0) {
-          throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: en pozitif olmalı (0'dan büyük).`);
-        }
-        if (w > 100_000) {
-          throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: en çok büyük.`);
-        }
-      }
-      if (line.unitPrice != null) {
-        const price =
-          typeof line.unitPrice === "string"
-            ? Number(line.unitPrice)
-            : (line.unitPrice as number);
-        if (!Number.isFinite(price) || price < 0) {
-          throw AppError.badRequest(
-            `Sipariş kalemi #${idx + 1}: birim fiyat negatif olamaz.`
-          );
-        }
-        if (price > 999_999_999) {
-          throw AppError.badRequest(
-            `Sipariş kalemi #${idx + 1}: birim fiyat çok büyük.`
-          );
-        }
-      }
-    });
+    return validateLinesImpl(lines);
   }
 
   /**
@@ -1119,15 +316,7 @@ export class OrderService extends BaseService {
     lines: unknown,
     customerId: string | null | undefined,
   ): Promise<void> {
-    if (!Array.isArray(lines)) return;
-    const colorIds = lines.map((l) => {
-      if (l && typeof l === "object") {
-        const c = (l as Record<string, unknown>).colorId;
-        if (typeof c === "string") return c;
-      }
-      return null;
-    });
-    await assertColorsAssignableToCustomer(colorIds, customerId);
+    return validateLineColorsImpl(lines, customerId);
   }
 
   /**
@@ -1154,83 +343,7 @@ export class OrderService extends BaseService {
       current?: ReadonlyArray<{ id: string; itemId: string; quantity: Prisma.Decimal | number }>;
     } = {},
   ): Promise<{ unitByItem: Map<string, ItemUnit>; checks: ItemUsageCheck[]; warnings: string[] }> {
-    const unitByItem = new Map<string, ItemUnit>();
-    const checks: ItemUsageCheck[] = [];
-    if (!Array.isArray(lines)) return { unitByItem, checks, warnings: [] };
-    const currentById = new Map((ctx.current ?? []).map((l) => [l.id, l]));
-
-    const itemIds = new Set<string>();
-    const propertyIds = new Set<string>();
-    const colorIds = new Set<string>();
-    const pairs: Array<{ itemId: string; colorId: string | null; propIds: string[] }> = [];
-    for (const raw of lines) {
-      if (!raw || typeof raw !== "object") continue;
-      const line = raw as Record<string, unknown>;
-      const itemId = typeof line.itemId === "string" && line.itemId ? line.itemId : null;
-      const colorId = typeof line.colorId === "string" && line.colorId ? line.colorId : null;
-      const propIds = Array.isArray(line.requiredPropertyIds)
-        ? (line.requiredPropertyIds as unknown[]).filter(
-            (p): p is string => typeof p === "string" && p.length > 0,
-          )
-        : [];
-      if (itemId) {
-        itemIds.add(itemId);
-        pairs.push({ itemId, colorId, propIds });
-        const prev = typeof line.id === "string" ? currentById.get(line.id) : undefined;
-        if (!prev || prev.itemId !== itemId) {
-          checks.push({ itemId, usage: "NEW_ORDER", opts: { fromScannedRolls: ctx.fromScannedRolls === true } });
-        } else if (Number(prev.quantity) !== Number(line.quantity)) {
-          checks.push({ itemId, usage: "LINE_QTY", opts: { oldQty: Number(prev.quantity), newQty: Number(line.quantity) } });
-        } // değişmeyen satır yeni referans doğurmaz — kontrol yok (iptal satırı Pasif kartta kalabilir)
-      }
-      if (colorId) colorIds.add(colorId);
-      for (const p of propIds) propertyIds.add(p);
-    }
-
-    if (itemIds.size > 0) {
-      // M-24: Item.allowedColors/allowedProperties kuralı (dolu = bu listeden;
-      // boş = sınırsız) artık SİPARİŞ satırında da enforce edilir — KK1'in
-      // zaten uyguladığı kuralın simetriği. Yoksa üretilemez renkte satır MRP
-      // talebi yaratıyor, hata ancak KK1/üretimde patlıyordu.
-      const live = await prisma.item.findMany({
-        where: { id: { in: [...itemIds] } },
-        select: {
-          id: true,
-          name: true,
-          unit: true,
-          allowedColors: { select: { colorId: true } },
-          allowedProperties: { select: { propertyId: true } },
-        },
-      });
-      if (live.length !== itemIds.size) {
-        throw AppError.badRequest("Sipariş kaleminde bulunmayan ürün var");
-      }
-      const itemById = new Map(live.map((i) => [i.id, i]));
-      for (const i of live) unitByItem.set(i.id, i.unit);
-      for (const pair of pairs) {
-        const item = itemById.get(pair.itemId);
-        if (!item) continue;
-        const allowedColorSet = new Set(item.allowedColors.map((c) => c.colorId));
-        if (pair.colorId && allowedColorSet.size > 0 && !allowedColorSet.has(pair.colorId)) {
-          throw AppError.badRequest(
-            `Seçilen renk '${item.name}' ürününün izinli renk listesinde değil`,
-          );
-        }
-        const allowedPropSet = new Set(item.allowedProperties.map((p) => p.propertyId));
-        if (allowedPropSet.size > 0) {
-          const outside = pair.propIds.find((p) => !allowedPropSet.has(p));
-          if (outside) {
-            throw AppError.badRequest(
-              `Seçilen özelliklerden biri '${item.name}' ürününün izinli özellik listesinde değil`,
-            );
-          }
-        }
-      }
-    }
-
-    const warnings = await runItemUsageChecks(prisma, checks);
-    await this.assertLineRefsLive(colorIds, propertyIds);
-    return { unitByItem, checks, warnings };
+    return validateLineItemsImpl.call(this as unknown as OrderServiceThis, lines, ctx);
   }
 
   /**
@@ -1246,42 +359,12 @@ export class OrderService extends BaseService {
       targetValues?: ReadonlyArray<{ propertyId: string; valueId: string }>;
     }> = [],
   ): Promise<void> {
-    await prepareOrderLineRecipes(prisma, lines, current);
-    await prepareLineTargetValues(
-      prisma,
-      lines,
-      current.map((l) => ({ id: l.id, targetValues: l.targetValues ?? [] })),
-    );
+    return prepareLineVariantsImpl(lines, current);
   }
 
   /** Satırın renk/özellik referansları var ve aktif mi (M-23 / denetim Q2). */
   private async assertLineRefsLive(colorIds: Set<string>, propertyIds: Set<string>): Promise<void> {
-    // M-23: satır rengi varlık + isActive (item/property gibi — pasif renk
-    // canlı sipariş satırına yazılamaz; assertColorsAssignableToCustomer
-    // yalnız atama kuralına bakar, aktifliğe bakmaz).
-    if (colorIds.size > 0) {
-      const liveColors = await prisma.color.findMany({
-        where: { id: { in: [...colorIds] }, isActive: true },
-        select: { id: true },
-      });
-      if (liveColors.length !== colorIds.size) {
-        throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif renk var");
-      }
-    }
-
-    if (propertyIds.size > 0) {
-      const live = await prisma.fabricProperty.findMany({
-        where: { id: { in: [...propertyIds] }, isActive: true },
-        select: { id: true },
-      });
-      if (live.length !== propertyIds.size) {
-        throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif özellik var");
-      }
-      // SEÇİM tipli özellik sipariş şartı olamaz (denetim Q2): "müşteri GRAMAJ
-      // istiyor" hangi gramaj olduğunu söylemez; iş emri kalıtımıyla hedef
-      // listeye ve oradan doğan toplara değersiz satır olarak yayılırdı.
-      await assertTargetablePropertyIds([...propertyIds], "sipariş kalemi özelliği");
-    }
+    return assertLineRefsLiveImpl(colorIds, propertyIds);
   }
 
   /**
@@ -1293,25 +376,12 @@ export class OrderService extends BaseService {
     raw: Record<string, unknown>,
     unitByItem: Map<string, ItemUnit>,
   ): ItemUnit {
-    if (raw.unit != null && raw.unit !== "") {
-      if (!isItemUnit(raw.unit)) {
-        throw AppError.badRequest(`Geçersiz kalem birimi: ${String(raw.unit)} (MT, KG veya ADET).`);
-      }
-      return raw.unit;
-    }
-    const fromItem = typeof raw.itemId === "string" ? unitByItem.get(raw.itemId) : undefined;
-    if (!fromItem) {
-      throw AppError.badRequest("Sipariş kaleminin birimi çözülemedi — ürün seçilmemiş.");
-    }
-    return fromItem;
+    return resolveLineUnitImpl(raw, unitByItem);
   }
 
   /** Yanıta MT-dışı satır uyarılarını ekler (engel değil, `warnings`). */
   private withUnitWarnings<T>(res: ApiResponse<T>): ApiResponse<T> {
-    const lines = (res.data as { lines?: unknown } | null)?.lines;
-    if (!Array.isArray(lines)) return res;
-    const warnings = unmeasuredLineWarnings(lines as Parameters<typeof unmeasuredLineWarnings>[0]);
-    return warnings.length > 0 ? { ...res, warnings } : res;
+    return withUnitWarningsImpl(res);
   }
 
   /**
@@ -1321,15 +391,7 @@ export class OrderService extends BaseService {
     branchId: string,
     customerId: string
   ): Promise<void> {
-    const branch = await prisma.customerBranch.findUnique({
-      where: { id: branchId },
-      select: { id: true, customerId: true, isActive: true },
-    });
-    if (!branch) throw AppError.notFound("Şube bulunamadı");
-    if (branch.customerId !== customerId) {
-      throw AppError.badRequest("Şube bu müşteriye ait değil");
-    }
-    if (!branch.isActive) throw AppError.badRequest("Şube pasif durumda");
+    return validateBranchImpl(branchId, customerId);
   }
 
   /**
@@ -1338,37 +400,17 @@ export class OrderService extends BaseService {
    * diye iş kuralı seviyesinde reddedilir.
    */
   private async validateCustomer(customerId: string): Promise<void> {
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { id: true, isActive: true },
-    });
-    if (!customer) throw AppError.notFound("Müşteri bulunamadı");
-    if (!customer.isActive) {
-      throw AppError.badRequest(
-        "Müşteri pasif durumda. Aktif olmayan müşteriye sipariş açılamaz."
-      );
-    }
+    return validateCustomerImpl(customerId);
   }
 
   /** F148: para birimi ISO 4217 kataloğunda mı (create/update simetrik). null=opsiyonel. */
   private assertValidCurrency(currency: unknown): void {
-    if (currency == null) return; // opsiyonel; şema default TRY
-    const code = String(currency);
-    if (!CURRENCIES.some((c) => c.code === code)) {
-      throw AppError.badRequest(`Geçersiz para birimi: ${code}`);
-    }
+    return assertValidCurrencyImpl(currency);
   }
 
   /** F148: termin >= sipariş tarihi (verilmezse referans = now). create/update ortak. */
   private assertDeadlineNotBeforeOrderDate(deadline: unknown, orderDate: unknown): void {
-    if (deadline == null) return;
-    const d = new Date(deadline as string);
-    if (Number.isNaN(d.getTime())) throw AppError.badRequest("Termin tarihi geçersiz");
-    const ref = orderDate != null ? new Date(orderDate as string) : new Date();
-    if (Number.isNaN(ref.getTime())) throw AppError.badRequest("Sipariş tarihi geçersiz");
-    if (d.getTime() < ref.getTime()) {
-      throw AppError.badRequest("Termin tarihi sipariş tarihinden önce olamaz");
-    }
+    return assertDeadlineNotBeforeOrderDateImpl(deadline, orderDate);
   }
 
   /**
@@ -1385,109 +427,7 @@ export class OrderService extends BaseService {
   async findAvailableForWorkOrder(
     req: Request
   ): Promise<PaginatedResponse<unknown>> {
-    const params = parseQueryParams(req);
-    // Search'i `buildWhereClause`'a vermiyoruz; picker'da arama relation'lara
-    // (müşteri adı, kalem ürün adı) genişletiliyor — kendi OR'umuzu kuruyoruz.
-    const baseWhere = buildWhereClause(
-      params.filters,
-      this.config.searchFields
-    );
-    applyDateRange(baseWhere, params, this.config.dateFields ?? []);
-
-    const search = params.search?.trim();
-    if (search) {
-      baseWhere.OR = buildTextSearch<Prisma.OrderWhereInput>(search, {
-        text: [
-          "customer.name",
-          "lines.some.item.name",
-          "lines.some.customerItemName",
-          "lines.some.item.customerAliases.some.alias",
-        ],
-        code: ["orderNumber"],
-      });
-    }
-
-    // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
-    //   Açık = quantity − sevk (OrderLine.shippedQty). WO bağı açığı ETKİLEMEZ —
-    //   sipariş ancak sevk edilince kapanır, üretime girince değil (gevşek model).
-    // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
-    // F147: açık-satır koşulunu WHERE'e taşı → 500-tavanı yalnız açık siparişlere
-    // harcanır (memory filtresi `lines.length>0` zaten kapalıları eliyordu; özdeş).
-    // F150: filter[status] (buildWhereClause → baseWhere.status) notIn ile EZİLMESİN —
-    // AND ile birleştir (picker daima iptal/tamamlanmışı eler; ek statü onu daraltır).
-    const { status: filterStatus, ...restBase } = baseWhere;
-    const where: Prisma.OrderWhereInput = {
-      ...restBase,
-      status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
-      // Aktif + açık kalem — tek kaynak (iptal edilmiş kalem talep sayılmaz).
-      ...someOpenLine(prisma.orderLine.fields),
-      ...(filterStatus !== undefined
-        ? { AND: [{ status: filterStatus as Prisma.OrderWhereInput["status"] }] }
-        : {}),
-    };
-
-    // sortBy güvenlik süzgeci (BaseService) — bilinmeyen kolon 500'ünü engeller.
-    const orderBy = buildOrderByClause(
-      this.safeSortBy(params.sortBy || "createdAt"),
-      params.sortOrder
-    );
-
-    // Aday açık siparişleri display include + satır tahsisleriyle çek (picker tavanı 500).
-    const orders = await prisma.order.findMany({
-      where,
-      orderBy,
-      take: 500,
-      include: {
-        customer: true,
-        branch: { select: { id: true, name: true, code: true, city: true, district: true } },
-        lines: {
-          include: {
-            // item.allowedProperties picker sonucunda KULLANILMIYOR (TargetPropertyPicker
-            // ayrı item sorgusundan alır) — over-fetch'i kaldır. requiredProperties
-            // ise OrderPickerDialog'da gösteriliyor → kalır.
-            item: true,
-            color: true,
-            requiredProperties: { include: { property: true } },
-          },
-        },
-      },
-    });
-
-    // Kapsama (yalnız sevk) — tüm aday satırlar için tek hesap.
-    const allLineIds = orders.flatMap((o) => o.lines.map((l) => l.id));
-    const covMap = await computeLineCoverage(prisma, allLineIds);
-
-    // Her sipariş için Açık>0 satırları süz + kovaları satıra ekle (UI'da göster).
-    const enriched = orders
-      .map((order) => {
-        const lines = order.lines
-          .map((line) => {
-            const cov = covMap.get(line.id);
-            const shipped = cov?.shipped ?? new Prisma.Decimal(0);
-            // KG/ADET satırda açık metraj ÖLÇÜLMEZ (null) — satır yine üretime alınabilir.
-            const measured = isMeasuredLine(line);
-            const openQty = measured ? new Prisma.Decimal(line.quantity).minus(shipped) : null;
-            return { ...line, shippedQty: shipped, openQty, measured };
-          })
-          .filter((line) => line.openQty === null || line.openQty.greaterThan(0));
-        return { ...order, lines };
-      })
-      .filter((order) => order.lines.length > 0);
-
-    const total = enriched.length;
-    const { skip, take } = buildPagination(params.page, params.pageSize);
-    const data = enriched.slice(skip, skip + take);
-
-    return {
-      success: true,
-      data,
-      pagination: {
-        page: params.page,
-        pageSize: params.pageSize,
-        total,
-        totalPages: Math.ceil(total / params.pageSize),
-      },
-    };
+    return findAvailableForWorkOrderImpl.call(this as unknown as OrderServiceThis, req);
   }
 
   /**
@@ -1522,255 +462,7 @@ export class OrderService extends BaseService {
      */
     specOfLineId?: string | null;
   }): Promise<ApiResponse<unknown> | CursorPaginatedResponse<unknown>> {
-    // Ortak WHERE — itemId artık OPSİYONEL (cursor modda sipariş-önce için).
-    const orderWhere: Prisma.OrderWhereInput = {
-      status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
-    };
-    if (params.customerId) orderWhere.customerId = params.customerId;
-    const baseWhere: Prisma.OrderLineWhereInput = { order: orderWhere };
-
-    // Spec çapası varsa kumaş/renk/en'i O BELİRLER (istemciden geleni ezer).
-    let resolvedItemId: string | null = params.itemId ?? null;
-    if (params.specOfLineId) {
-      const anchor = await prisma.orderLine.findUnique({
-        where: { id: params.specOfLineId },
-        select: { itemId: true, colorId: true, width: true },
-      });
-      if (!anchor) throw AppError.badRequest("Referans sipariş kalemi bulunamadı");
-      // NULL'lar BİLEREK aynen yazılır: renksiz çapa yalnız renksiz kalemleri,
-      // ensiz çapa yalnız ensiz kalemleri getirsin.
-      baseWhere.itemId = anchor.itemId;
-      baseWhere.colorId = anchor.colorId;
-      baseWhere.width = anchor.width;
-      resolvedItemId = anchor.itemId;
-    } else {
-      if (params.itemId) baseWhere.itemId = params.itemId;
-      if (params.colorId) baseWhere.colorId = params.colorId;
-      if (params.width != null) baseWhere.width = params.width;
-    }
-    const term = params.search?.trim();
-    if (term) {
-      baseWhere.OR = buildTextSearch<Prisma.OrderLineWhereInput>(term, {
-        text: [
-          "order.customer.name",
-          "item.name",
-          "customerItemName",
-          "item.customerAliases.some.alias",
-        ],
-        code: ["order.orderNumber"],
-      });
-    }
-
-    // ── CURSOR MOD (limit verildi): itemId opsiyonel, "sipariş-önce" aramalı liste.
-    //    E1: açık>0 SQL'de (keyset-safe; openQty = quantity − shippedQty). withInProduction
-    //    broad modda (itemId yok) hesaplanmaz; openQty doğrudan shippedQty'den türetilir.
-    if (params.limit != null) {
-      const limit = Math.min(Math.max(1, params.limit), 50);
-      const whereOpen: Prisma.OrderLineWhereInput = {
-        ...baseWhere,
-        ...openLineWhere(prisma.orderLine.fields),
-      };
-      // EN YENİ SİPARİŞ ÖNCE (desc). Saha gerekçesi: picker'ı açan kişi genelde
-      // az önce girilen siparişi arıyor; artan sırada o kalem sayfalar sonundaydı.
-      // Keyset tie-break de desc olmalı — `dynamicCursorWhere` "lt" üretir.
-      const cur = decodeDynamicCursor(params.cursor ?? undefined);
-      const where = cur
-        ? { AND: [whereOpen, dynamicCursorWhere(cur, "createdAt", "desc")] }
-        : whereOpen;
-      const rows = await prisma.orderLine.findMany({
-        where,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: limit + 1,
-        select: {
-          id: true,
-          itemId: true,
-          quantity: true,
-          shippedQty: true,
-          unit: true,
-          width: true,
-          colorId: true,
-          customerItemName: true,
-          customerColorName: true,
-          createdAt: true,
-          order: {
-            select: {
-              id: true,
-              orderNumber: true,
-              deadline: true,
-              customer: { select: { id: true, name: true } },
-              branch: { select: { id: true, name: true } },
-            },
-          },
-          item: { select: { code: true, name: true } },
-          color: { select: { code: true, name: true } },
-        },
-      });
-      const totalEstimate = params.withTotal
-        ? await prisma.orderLine.count({ where: whereOpen })
-        : undefined;
-      const hasMore = rows.length > limit;
-      const page = hasMore ? rows.slice(0, limit) : rows;
-      const last = page[page.length - 1] as Record<string, unknown> | undefined;
-      const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
-      // F152: cursor mod da withInProduction'ı hesaplasın (eskiden 0 hardcode idi).
-      // Yalnız itemId sabitlendiğinde anlamlı (spec-havuz item bazlı); broad modda atlanır.
-      let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
-      if (params.withInProduction && resolvedItemId) {
-        inProdBySpec = await this.computeInProdBySpec(resolvedItemId);
-      }
-      // "Bu kaleme iş emri açılmış mı" — SATIR bazlı gerçek bağ (pivot).
-      // `inProduction`'dan FARKLIDIR: o spec-havuz (kumaş|renk|en) bazında hesaplanır,
-      // yani aynı spec'teki BAŞKA bir kalem üretimdeyse de dolu gelir. Rozet satırın
-      // kendi bağını göstermeli. İptal/devredilmiş WO sayılmaz (mal o emirde değil).
-      const woLinked = new Set<string>();
-      if (page.length > 0) {
-        const links = await prisma.workOrderToOrderLine.findMany({
-          where: {
-            ...ACTIVE_ORDER_LINK,
-            orderLineId: { in: page.map((l) => l.id) },
-            workOrder: {
-              status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
-            },
-          },
-          select: { orderLineId: true },
-          distinct: ["orderLineId"],
-        });
-        for (const l of links) woLinked.add(l.orderLineId);
-      }
-      const data = page.map((l) => {
-        // Açık = quantity − sevk (rezerv yok; düşüş yalnız sevkte). KG/ADET satırda
-        // ÖLÇÜLMEZ (null): shippedQty hiç yazılmaz, metre açığı yalan olurdu.
-        const measured = isMeasuredLine(l);
-        const openQty = measured ? new Prisma.Decimal(l.quantity).minus(l.shippedQty) : null;
-        const inProduction =
-          inProdBySpec?.get(
-            `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : new Prisma.Decimal(l.width).toString()}`,
-          ) ?? new Prisma.Decimal(0);
-        const netOpenQty = openQty === null ? null : Prisma.Decimal.max(0, openQty.minus(inProduction));
-        return {
-          lineId: l.id,
-          itemId: l.itemId,
-          orderId: l.order.id,
-          orderNumber: l.order.orderNumber,
-          deadline: l.order.deadline,
-          customerId: l.order.customer.id,
-          customerName: l.order.customer.name,
-          branchName: l.order.branch?.name ?? null,
-          itemCode: l.item.code,
-          itemName: l.item.name,
-          customerItemName: l.customerItemName,
-          colorId: l.colorId,
-          colorCode: l.color?.code ?? null,
-          colorName: l.color?.name ?? null,
-          customerColorName: l.customerColorName,
-          width: l.width,
-          quantity: l.quantity,
-          openQty,
-          inProduction,
-          netOpenQty,
-          measured,
-          hasWorkOrder: woLinked.has(l.id),
-        };
-      });
-      return {
-        success: true,
-        data,
-        pagination: {
-          nextCursor,
-          hasMore,
-          limit,
-          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
-        },
-      };
-    }
-
-    // ── LEGACY MOD (limit yok): itemId ZORUNLU — Tambur/etiket picker'ı. DAVRANIŞ BİREBİR.
-    const itemId = params.itemId;
-    if (!itemId) throw AppError.badRequest("itemId gerekli");
-
-    const lines = await prisma.orderLine.findMany({
-      // F146: legacy mod da cursor moddaki açık-satır süzgecini uygular (200-tavanı
-      // açık satırlara harcanır). Bellek süzgeci (openQty>0) defansif kalır — özdeş.
-      where: { ...baseWhere, ...openLineWhere(prisma.orderLine.fields) },
-      take: 200,
-      orderBy: { createdAt: "asc" },
-      select: {
-        id: true,
-        itemId: true,
-        quantity: true,
-        unit: true,
-        width: true,
-        colorId: true,
-        customerItemName: true,
-        customerColorName: true,
-        order: {
-          select: {
-            id: true,
-            orderNumber: true,
-            deadline: true,
-            customer: { select: { id: true, name: true } },
-            branch: { select: { id: true, name: true } },
-          },
-        },
-        item: { select: { code: true, name: true } },
-        color: { select: { code: true, name: true } },
-      },
-    });
-
-    const lineIds = lines.map((l) => l.id);
-    const covMap = await computeLineCoverage(prisma, lineIds);
-
-    // Opsiyonel: üretimdeki (canlı WO committed − finished) spec-havuz bazında.
-    // getCoverageForLines ile aynı mantık; yalnız bu itemId için hesaplanır.
-    const specKey = (
-      colorId: string | null,
-      width: Prisma.Decimal | number | null,
-    ): string =>
-      `${itemId}|${colorId ?? ""}|${width == null ? "" : new Prisma.Decimal(width).toString()}`;
-    // F152: üretimdeki hesabı computeInProdBySpec'e çıkarıldı (cursor mod da kullanır).
-    let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
-    if (params.withInProduction) inProdBySpec = await this.computeInProdBySpec(itemId);
-
-    const data = lines
-      .map((l) => {
-        const cov = covMap.get(l.id);
-        // Açık = quantity − kapsama (sevk + çuvallanmış rezerv). KG/ADET satırda
-        // ÖLÇÜLMEZ (null) — satır listede kalır, rakam yerine "ölçülmüyor".
-        const measured = isMeasuredLine(l);
-        const openQty = measured
-          ? new Prisma.Decimal(l.quantity).minus(cov?.coverage ?? new Prisma.Decimal(0))
-          : null;
-        const inProduction =
-          inProdBySpec?.get(specKey(l.colorId, l.width)) ?? new Prisma.Decimal(0);
-        // Net açık = açık − üretimdeki (0'ın altına inmez). Yalnız withInProduction'da anlamlı.
-        const netOpenQty = openQty === null ? null : Prisma.Decimal.max(0, openQty.minus(inProduction));
-        return {
-          lineId: l.id,
-          itemId: l.itemId,
-          orderId: l.order.id,
-          orderNumber: l.order.orderNumber,
-          deadline: l.order.deadline,
-          customerId: l.order.customer.id,
-          customerName: l.order.customer.name,
-          branchName: l.order.branch?.name ?? null,
-          itemCode: l.item.code,
-          itemName: l.item.name,
-          customerItemName: l.customerItemName,
-          colorId: l.colorId,
-          colorCode: l.color?.code ?? null,
-          colorName: l.color?.name ?? null,
-          customerColorName: l.customerColorName,
-          width: l.width,
-          quantity: l.quantity,
-          openQty,
-          inProduction,
-          netOpenQty,
-          measured,
-        };
-      })
-      .filter((l) => l.openQty === null || l.openQty.greaterThan(0));
-
-    return { success: true, data };
+    return findAvailableOrderLinesImpl.call(this as unknown as OrderServiceThis, params);
   }
 
   /**
@@ -1781,32 +473,7 @@ export class OrderService extends BaseService {
   private async computeInProdBySpec(
     itemId: string,
   ): Promise<Map<string, Prisma.Decimal>> {
-    const liveWos = await prisma.workOrder.findMany({
-      where: {
-        status: {
-          in: [
-            WorkOrderStatus.PLANNED,
-            WorkOrderStatus.IN_PROGRESS,
-          ],
-        },
-        isActive: true,
-        targetItemId: itemId,
-      },
-      select: { id: true, targetColorId: true, width: true },
-    });
-    const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
-    const map = new Map<string, Prisma.Decimal>();
-    for (const w of liveWos) {
-      const mat = woMat.get(w.id);
-      const inFlight = Prisma.Decimal.max(
-        0,
-        (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
-      );
-      if (inFlight.lessThanOrEqualTo(0)) continue;
-      const key = `${itemId}|${w.targetColorId ?? ""}|${w.width == null ? "" : new Prisma.Decimal(w.width).toString()}`;
-      map.set(key, (map.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
-    }
-    return map;
+    return computeInProdBySpecImpl(itemId);
   }
 
   /**
@@ -1826,157 +493,7 @@ export class OrderService extends BaseService {
     lineIds: string[];
     excludeWorkOrderId?: string;
   }): Promise<ApiResponse<unknown>> {
-    const lineIds = [...new Set(params.lineIds)];
-    if (lineIds.length === 0) return { success: true, data: [] };
-
-    const lines = await prisma.orderLine.findMany({
-      where: { id: { in: lineIds } },
-      select: {
-        id: true,
-        itemId: true,
-        colorId: true,
-        width: true,
-        quantity: true,
-        shippedQty: true,
-        item: { select: { id: true, code: true, name: true } },
-        color: { select: { id: true, code: true, name: true } },
-      },
-    });
-
-    const specKey = (
-      itemId: string,
-      colorId: string | null,
-      width: Prisma.Decimal | number | null,
-    ): string => {
-      const w = width == null ? "" : new Prisma.Decimal(width).toString();
-      return `${itemId}|${colorId ?? ""}|${w}`;
-    };
-
-    // En eşleşmesi: Depo (bitmiş) birebir; Ham EN-AGNOSTİK (ham kumaşın eni
-    // önemsiz, fasonda işlenir) — Ürün Dengesi ile aynı.
-    const widthEqual = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
-      a == null || b == null ? a == null && b == null : new Prisma.Decimal(a).equals(b);
-
-    // Serbest stok — spec bazında grupla; hiçbir çuvala/sevkiyata girmemiş (shipmentId=null
-    // + sackId=null) WAREHOUSE + STOCK toplar (fungible havuz). sackId:null: çuvaldaki
-    // (bekleyen) mal serbest stok sayılmaz.
-    const itemIds = [...new Set(lines.map((l) => l.itemId))];
-    const freeGrouped = await prisma.roll.groupBy({
-      // `entrySource`: ham ↔ yarı mamul ayrımı statüden çıkmaz (ikisi de STOCK).
-      by: ["itemId", "colorId", "width", "status", "entrySource"],
-      where: {
-        shipmentId: null,
-        sackId: null,
-        itemId: { in: itemIds },
-        status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
-      },
-      _sum: { currentQty: true },
-    });
-
-    // Serbest stok eşleştirme (item kesin):
-    //  - Depo (WAREHOUSE, bitmiş/boyalı): renk + en BİREBİR (renk + en zaten sabit).
-    //  - Ham (STOCK, işlenecek): renksiz (null) ham JOKER — boyahanede istenen renge
-    //    boyanır, renkli talebe de sayılır; en AGNOSTİK (eni önemsiz). (Ürün Dengesi ile aynı.)
-    /**
-     * `semi`: yalnız STOCK dalında anlamlı — `true` yarı mamul, `false` gerçek ham,
-     * `undefined` ikisi birden. Ayrım GÖSTERİM içindir; `netGap` zaten ham havuzunu
-     * hiç saymıyor (işlenmemiş girdi, mamul değil).
-     */
-    const matchFree = (
-      line: (typeof lines)[number],
-      status: RollStatus,
-      semi?: boolean,
-    ): Prisma.Decimal =>
-      freeGrouped.reduce((sum, g) => {
-        if (g.status !== status) return sum;
-        if (g.itemId !== line.itemId) return sum;
-        if (semi !== undefined && (g.entrySource === RollEntrySource.SEMI_FINISHED) !== semi) {
-          return sum;
-        }
-        if (status === RollStatus.WAREHOUSE) {
-          if ((g.colorId ?? null) !== (line.colorId ?? null)) return sum;
-          if (!widthEqual(g.width, line.width)) return sum;
-        } else {
-          const colorOk =
-            g.colorId == null || line.colorId == null || g.colorId === line.colorId;
-          if (!colorOk) return sum;
-          // Ham en-agnostik: en kontrolü yok.
-        }
-        return sum.plus(g._sum.currentQty ?? 0);
-      }, new Prisma.Decimal(0));
-
-    // Üretimde — canlı WO'ların hedef-spec başına in-flight (committed − finished).
-    // Düzenlenen WO hariç (kendi üretimini açığa saymamak için).
-    const liveWos = await prisma.workOrder.findMany({
-      where: {
-        status: {
-          in: [
-            WorkOrderStatus.PLANNED,
-            WorkOrderStatus.IN_PROGRESS,
-          ],
-        },
-        isActive: true,
-        targetItemId: { in: itemIds },
-        ...(params.excludeWorkOrderId ? { id: { not: params.excludeWorkOrderId } } : {}),
-      },
-      select: {
-        id: true,
-        targetItemId: true,
-        targetColorId: true,
-        width: true,
-      },
-    });
-    const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
-    const inProdBySpec = new Map<string, Prisma.Decimal>();
-    for (const w of liveWos) {
-      if (!w.targetItemId) continue;
-      const mat = woMat.get(w.id);
-      const inFlight = Prisma.Decimal.max(
-        0,
-        (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
-      );
-      if (inFlight.lessThanOrEqualTo(0)) continue;
-      const key = specKey(w.targetItemId, w.targetColorId, w.width);
-      inProdBySpec.set(key, (inProdBySpec.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
-    }
-
-    const data = lines.map((l) => {
-      const shipped = new Prisma.Decimal(l.shippedQty);
-      const packed = new Prisma.Decimal(0); // rezerv yok — geriye uyum için 0
-      const inProduction =
-        inProdBySpec.get(specKey(l.itemId, l.colorId, l.width)) ?? new Prisma.Decimal(0);
-      const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
-      // Ham ↔ yarı mamul AYRI raporlanır (2026-08-27): ikisi de "işlenecek girdi"
-      // ama farklı stok türü ve envanterde ayrı sekmelerde duruyor. Toplamları
-      // eskisiyle aynı; değişen tek şey rakamın ikiye bölünmesi.
-      const freeStock = matchFree(l, RollStatus.STOCK, false);
-      const freeSemiFinished = matchFree(l, RollStatus.STOCK, true);
-      const requested = new Prisma.Decimal(l.quantity);
-      // Net açık = bitmiş/üretimdeki ürün açığı. Rezerv/çuvallanmış (packed) KALKTI —
-      // packed hep 0 (yanıt şekli için tutulur). freeWarehouse havuz malını içermez (§4).
-      // Ham (freeStock) HARİÇ — işlenmemiş girdi, mamul değil (yalnız bilgi).
-      const netGap = requested
-        .minus(shipped)
-        .minus(packed)
-        .minus(freeWarehouse)
-        .minus(inProduction);
-      return {
-        lineId: l.id,
-        item: l.item,
-        color: l.color,
-        width: l.width,
-        requested,
-        shipped,
-        packed,
-        inProduction,
-        freeWarehouse,
-        freeStock,
-        freeSemiFinished,
-        netGap,
-      };
-    });
-
-    return { success: true, data };
+    return getCoverageForLinesImpl(params);
   }
 
   /**
@@ -2003,64 +520,7 @@ export class OrderService extends BaseService {
       freeSemiFinished: number;
     }>
   > {
-    const colorId = params.colorId ?? null;
-    const width = params.width == null ? null : new Prisma.Decimal(params.width);
-
-    // Serbest stok — hiçbir çuvala/sevkiyata girmemiş WAREHOUSE + STOCK (fungible havuz).
-    const freeGrouped = await prisma.roll.groupBy({
-      // `entrySource`: ham ↔ yarı mamul statüden ayrılmaz (ikisi de STOCK).
-      by: ["colorId", "width", "status", "entrySource"],
-      where: {
-        shipmentId: null,
-        sackId: null,
-        itemId: params.itemId,
-        status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
-      },
-      _sum: { currentQty: true },
-    });
-
-    // En eşleşmesi: Depo birebir; Ham en-agnostik (getCoverageForLines ile aynı kural).
-    const widthEqual = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
-      a == null || b == null ? a == null && b == null : new Prisma.Decimal(a).equals(b);
-
-    let freeWarehouse = new Prisma.Decimal(0);
-    let freeStock = new Prisma.Decimal(0);
-    let freeSemiFinished = new Prisma.Decimal(0);
-    for (const g of freeGrouped) {
-      const qty = g._sum.currentQty ?? new Prisma.Decimal(0);
-      if (g.status === RollStatus.WAREHOUSE) {
-        // Depo: renk + en BİREBİR.
-        if ((g.colorId ?? null) !== colorId) continue;
-        if (!widthEqual(g.width, width)) continue;
-        freeWarehouse = freeWarehouse.plus(qty);
-      } else {
-        // Ham: renksiz joker (renkli talebe de sayılır), en-agnostik.
-        const colorOk = g.colorId == null || colorId == null || g.colorId === colorId;
-        if (!colorOk) continue;
-        // Ham ↔ yarı mamul AYRI kovada; toplamları eskisiyle aynı, değişen yalnız
-        // rakamın ikiye bölünmesi (ikisi de gerçek arz — hiçbiri düşülmüyor).
-        if (g.entrySource === RollEntrySource.SEMI_FINISHED) {
-          freeSemiFinished = freeSemiFinished.plus(qty);
-        } else {
-          freeStock = freeStock.plus(qty);
-        }
-      }
-    }
-
-    // Üretimde — hazır spec-havuz hesabı; anahtar computeInProdBySpec ile aynı format.
-    const inProdBySpec = await this.computeInProdBySpec(params.itemId);
-    const key = `${params.itemId}|${colorId ?? ""}|${width == null ? "" : width.toString()}`;
-    const inProduction = inProdBySpec.get(key) ?? new Prisma.Decimal(0);
-
-    return {
-      success: true,
-      data: {
-        freeWarehouse: freeWarehouse.toNumber(),
-        inProduction: inProduction.toNumber(),
-        freeStock: freeStock.toNumber(),
-        freeSemiFinished: freeSemiFinished.toNumber(),
-      },
-    };
+    return getSpecAvailabilityImpl.call(this as unknown as OrderServiceThis, params);
   }
 
   /**
@@ -2088,174 +548,15 @@ export class OrderService extends BaseService {
 
   /** Satır adı → kumaşa özel → genel; `DEFAULT`a düşerse null (bizim ad dönmez). */
   private async withResolvedColorNames(order: OrderWithLines, withMaster: boolean): Promise<void> {
-    const lines = order.lines ?? [];
-    const colors = withMaster
-      ? await loadCustomerColorIndex(prisma, {
-          customerIds: [order.customerId],
-          itemIds: lines.map((l) => l.itemId),
-          colorIds: lines.map((l) => l.colorId),
-        })
-      : null;
-    for (const l of lines) {
-      const master = colors?.master(order.customerId, l.itemId, l.colorId) ?? null;
-      const r = resolveName(l.customerColorName, master?.alias, "");
-      l.resolvedCustomerColorName = r.source === "DEFAULT" ? null : r.name;
-      l.colorNameScope = colorScopeOf(r, master);
-    }
+    return withResolvedColorNamesImpl(order, withMaster);
   }
 
   async getOrderShipments(orderId: string): Promise<ApiResponse<OrderShipmentsResult>> {
-    // ── Kaynak A: çuval sevkiyatı ──
-    const sackAllocs = await prisma.sackAllocation.findMany({
-      where: {
-        orderLine: { orderId },
-        sack: { shipment: { status: { not: ShipmentStatus.CANCELLED } } },
-        ...ACTIVE_SACK_ALLOCATION,
-      },
-      select: {
-        qty: true,
-        sackId: true,
-        sack: {
-          select: {
-            shipment: {
-              select: {
-                id: true,
-                shipmentNo: true,
-                status: true,
-                dispatchedAt: true,
-                branch: { select: { name: true } },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const byShipment = new Map<string, ShipmentAgg>();
-    for (const a of sackAllocs) {
-      const s = a.sack.shipment;
-      if (!s) continue;
-      let agg = byShipment.get(s.id);
-      if (!agg) {
-        agg = {
-          shipmentId: s.id,
-          shipmentNo: s.shipmentNo,
-          status: s.status,
-          kind: "SHIPMENT",
-          date: s.dispatchedAt,
-          qty: new Prisma.Decimal(0),
-          sacks: new Set<string>(),
-          branchName: s.branch?.name ?? null,
-        };
-        byShipment.set(s.id, agg);
-      }
-      agg.qty = agg.qty.plus(a.qty);
-      agg.sacks.add(a.sackId);
-    }
-
-    // ── Kaynak B: fason direkt sevk ──
-    const directAllocs = await prisma.subcontractorDirectShipAllocation.findMany({
-      where: { orderLine: { orderId } },
-      select: {
-        qty: true,
-        directShipmentId: true,
-        directShipment: {
-          select: {
-            id: true,
-            shipmentNo: true,
-            shippedAt: true,
-            branch: { select: { name: true } },
-          },
-        },
-      },
-    });
-
-    const byDirect = new Map<string, ShipmentAgg>();
-    let legacyDirectQty = new Prisma.Decimal(0);
-    for (const a of directAllocs) {
-      const d = a.directShipment;
-      if (!d || !a.directShipmentId) {
-        legacyDirectQty = legacyDirectQty.plus(a.qty);
-        continue;
-      }
-      let agg = byDirect.get(d.id);
-      if (!agg) {
-        agg = {
-          shipmentId: d.id,
-          shipmentNo: d.shipmentNo,
-          status: ShipmentStatus.DISPATCHED, // direkt sevk terminal
-          kind: "DIRECT",
-          date: d.shippedAt,
-          qty: new Prisma.Decimal(0),
-          sacks: new Set<string>(),
-          branchName: d.branch?.name ?? null,
-        };
-        byDirect.set(d.id, agg);
-      }
-      agg.qty = agg.qty.plus(a.qty);
-    }
-
-    // ── Totaller (mutabakat: dispatchedTotal = order.shippedQty) ──
-    let dispatchedTotal = new Prisma.Decimal(0);
-    let plannedTotal = new Prisma.Decimal(0);
-    for (const agg of byShipment.values()) {
-      if (agg.status === ShipmentStatus.DISPATCHED) dispatchedTotal = dispatchedTotal.plus(agg.qty);
-      else if (agg.status === ShipmentStatus.PLANNED) plannedTotal = plannedTotal.plus(agg.qty);
-    }
-    for (const agg of byDirect.values()) dispatchedTotal = dispatchedTotal.plus(agg.qty);
-    dispatchedTotal = dispatchedTotal.plus(legacyDirectQty);
-
-    // ── Satırlar: PLANNED üstte (bekliyor), sonra tarih desc ──
-    const rows = [...byShipment.values(), ...byDirect.values()].map((a) => ({
-      shipmentId: a.shipmentId,
-      shipmentNo: a.shipmentNo,
-      status: a.status,
-      kind: a.kind,
-      date: a.date ? a.date.toISOString() : null,
-      qty: a.qty.toNumber(),
-      sackCount: a.sacks.size,
-      branchName: a.branchName,
-    }));
-    if (legacyDirectQty.greaterThan(0)) {
-      rows.push({
-        shipmentId: "",
-        shipmentNo: "Fason direkt sevk (eski)",
-        status: ShipmentStatus.DISPATCHED,
-        kind: "DIRECT",
-        date: null,
-        qty: legacyDirectQty.toNumber(),
-        sackCount: 0,
-        branchName: null,
-      });
-    }
-    rows.sort((a, b) => {
-      const ap = a.status === ShipmentStatus.PLANNED ? 0 : 1;
-      const bp = b.status === ShipmentStatus.PLANNED ? 0 : 1;
-      if (ap !== bp) return ap - bp;
-      const ad = a.date ? Date.parse(a.date) : 0;
-      const bd = b.date ? Date.parse(b.date) : 0;
-      return bd - ad;
-    });
-
-    return {
-      success: true,
-      data: {
-        dispatchedTotal: dispatchedTotal.toNumber(),
-        plannedTotal: plannedTotal.toNumber(),
-        shipments: rows,
-      },
-    };
+    return getOrderShipmentsImpl(orderId);
   }
 
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    const clientToken = parseOrderClientToken(data.clientToken);
-    // R: token HER iş kuralından (elle numara çakışması dahil) ÖNCE okunur ve iş hangi hatayla düşerse
-    // düşsün yeniden okunur — sıralı tekrar da eşzamanlı kaybeden de önceki siparişi alır.
-    return this.orderReplay(data).run(clientToken, async () => {
-      const prepared = await this.prepareOrderCreate(data, clientToken, { userId });
-      const record = await this.insertPreparedOrder(prepared);
-      return this.finishOrderCreate(record, data, prepared);
-    });
+    return createImpl.call(this as unknown as OrderServiceThis, data, userId);
   }
 
   /**
@@ -2269,27 +570,7 @@ export class OrderService extends BaseService {
     prepared: PreparedOrderCreate,
     opts?: { auditExtra?: Record<string, unknown> },
   ): Promise<ApiResponse<unknown>> {
-    const userId = prepared.actorUserId;
-    const auditExtra = opts?.auditExtra;
-    const orderNumber = record.orderNumber as string;
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: this.config.tableName,
-      recordId: record.id as string,
-      newData: { ...data, orderNumber, ...(auditExtra ?? {}) },
-    });
-    await this.promoteCustomerAliases(
-      data.customerId as string | undefined,
-      Array.isArray(data.lines)
-        ? (data.lines as Array<Record<string, unknown>>)
-        : null,
-      userId
-    );
-    return withExtraWarnings(
-      this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
-      prepared.lineCheck.warnings,
-    );
+    return finishOrderCreateImpl.call(this as unknown as OrderServiceThis, record, data, prepared, opts);
   }
 
   /**
@@ -2303,139 +584,7 @@ export class OrderService extends BaseService {
     /** Yalnız hızlı sipariş: satırlar okutulan toplardan doğdu — gövdeden GELMEZ. */
     opts?: { fromScannedRolls?: boolean },
   ): Promise<PreparedOrderCreate> {
-    // F154: satırsız sipariş = ölü kayıt (coverage/MRP işleyemez, wo-picker düşürür).
-    if (!Array.isArray(data.lines) || data.lines.length === 0) {
-      throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
-    }
-    this.validateLines(data.lines);
-    await this.prepareLineVariants(data.lines);
-    const lineCheck = await this.validateLineItems(data.lines, { fromScannedRolls: opts?.fromScannedRolls });
-    const unitByItem = lineCheck.unitByItem;
-
-    if (data.customerId) {
-      await this.validateCustomer(data.customerId as string);
-      // Cari kilidi (D4-I1, INTAKE): yeni sipariş = yeni iş kabulü; uç + hızlı sipariş + patron gelen kutusu bu boğazdan.
-      await assertCariNotHeldTx(prisma, data.customerId as string, "INTAKE");
-      // Risk limiti (D4-I2, finance.riskLimitBlock.intake) — kilit kapısının yanında.
-      await assertCustomerRiskLimitTx(prisma, data.customerId as string, "INTAKE");
-    }
-
-    if (data.branchId && data.customerId) {
-      await this.validateBranch(
-        data.branchId as string,
-        data.customerId as string
-      );
-    }
-
-    await this.validateLineColors(
-      data.lines,
-      data.customerId as string | null | undefined,
-    );
-
-    // F148: para birimi kataloğa karşı doğrula (create/update simetrik).
-    this.assertValidCurrency(data.currency);
-
-    // totalAmount: gönderilmediyse lines'tan otomatik hesapla. Gönderilmiş ise
-    // (planlamacı override etmiş — KDV/indirim gibi) olduğu gibi bırak.
-    if (
-      data.totalAmount == null &&
-      Array.isArray(data.lines) &&
-      data.lines.length > 0
-    ) {
-      const computed = computeTotalAmount(
-        data.lines as Array<{ quantity?: number; unitPrice?: number | null | string }>
-      );
-      if (computed !== null) data.totalAmount = computed;
-    }
-
-    // Termin (deadline) default: sipariş tarihinden N gün sonra. N tanımlardan
-    // (`order.defaultDeadlineDays`) okunur; yoksa 7. orderDate verilmediyse
-    // şema default'u (now()) baz alınır.
-    if (data.deadline == null) {
-      const baseDate = data.orderDate
-        ? new Date(data.orderDate as string)
-        : new Date();
-      const days = await readOrderDefaultDeadlineDays();
-      const deadline = new Date(baseDate);
-      deadline.setDate(deadline.getDate() + days);
-      data.deadline = deadline;
-    } else {
-      // F148: İş kuralı deadline >= orderDate (helper — update ile simetrik).
-      this.assertDeadlineNotBeforeOrderDate(data.deadline, data.orderDate);
-    }
-
-    // Sipariş no: SIP + GGAAYY + NNNN (örn SIP1207260001) — tek tip kod kalıbı.
-    const today = new Date();
-    const fmt = resolveSeriesFormat("order");
-
-    // HEADER + SATIR WHITELIST (M-3): orderNumber/status/shippedQty gibi
-    // muhasebe alanları istemciden yazılamaz; bilinmeyen anahtarlar atılır.
-    const prismaData: Record<string, unknown> = {
-      // Sipariş oluşturulur oluşturulmaz üretime/sevke açık olsun;
-      // ayrı bir "onay" adımı kullanılmıyor.
-      status: OrderStatus.APPROVED,
-    };
-    for (const key of Object.keys(data)) {
-      if (ORDER_HEADER_WRITABLE.has(key)) prismaData[key] = data[key];
-    }
-    // SİPARİŞ YÖNÜ DOĞUŞTA DONAR (sevkiyatın donmuş yönüyle aynı zincir): şube → cari; zincir boşsa
-    // NULL ("yön belirsiz"). Kart sonradan değişse de sipariş değişmez; gövdeden yazılamaz (whitelist dışı).
-    const destination = data.customerId
-      ? (await resolveShipmentDestination(prisma, {
-          customerId: data.customerId as string,
-          branchId: (data.branchId as string | null | undefined) ?? null,
-        })).destination
-      : null;
-
-    // Lines: whitelist + requiredPropertyIds → { create: [...] } formatı.
-    if (Array.isArray(data.lines)) {
-      prismaData.lines = (data.lines as Record<string, unknown>[]).map((rawLine) => {
-        const line: Record<string, unknown> = {};
-        for (const key of Object.keys(rawLine)) {
-          if (ORDER_LINE_WRITABLE.has(key)) line[key] = rawLine[key];
-        }
-        line.unit = this.resolveLineUnit(rawLine, unitByItem);
-        const ids = Array.isArray(rawLine.requiredPropertyIds)
-          ? [...new Set((rawLine.requiredPropertyIds as string[]).filter(Boolean))]
-          : [];
-        if (ids.length > 0) {
-          line.requiredProperties = {
-            create: ids.map((propertyId) => ({ propertyId })),
-          };
-        }
-        Object.assign(line, lineTargetValuesNestedCreate(preparedTargetValues(rawLine)));
-        return line;
-      });
-    }
-
-    if (this.config.nestedCreateFields) {
-      for (const field of this.config.nestedCreateFields) {
-        if (Array.isArray(prismaData[field])) {
-          prismaData[field] = { create: prismaData[field] };
-        }
-      }
-    }
-
-    if (clientToken) prismaData.clientToken = clientToken;
-
-    // Saha #16: kullanıcı sipariş numarasını ELLE verebilir (override) —
-    // whitelist'ten BİLEREK ayrı işlenir (mass-assignment koruması korunur;
-    // yalnız bu alan kontrollü kabul edilir). Boş/verilmemiş → otomatik üretim.
-    const manualOrderNumber = parseManualOrderNumber(data.orderNumber);
-    assertManualNumberAllowed("order", manualOrderNumber);
-    if (manualOrderNumber) {
-      if (manualOrderNumber.length > 40) {
-        throw AppError.badRequest("Sipariş numarası en fazla 40 karakter olabilir");
-      }
-      const clash = await prisma.order.findUnique({
-        where: { orderNumber: manualOrderNumber },
-        select: { id: true },
-      });
-      if (clash) {
-        throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
-      }
-    }
-    return { prismaData, actorUserId: actor.userId, lineCheck, destination, manualOrderNumber, today, fmt };
+    return prepareOrderCreateImpl.call(this as unknown as OrderServiceThis, data, clientToken, actor, opts);
   }
 
   /**
@@ -2445,18 +594,7 @@ export class OrderService extends BaseService {
    * retry EDİLMEZ (her deneme aynı token'ı yazar); çağıran onu replay'e çevirir.
    */
   private insertPreparedOrder(p: PreparedOrderCreate): Promise<Record<string, unknown>> {
-    return withBarcodeRetry(async () => {
-      if (p.manualOrderNumber) {
-        const stillFree = await prisma.order.findUnique({
-          where: { orderNumber: p.manualOrderNumber },
-          select: { id: true },
-        });
-        if (stillFree) {
-          throw AppError.conflict(`'${p.manualOrderNumber}' numaralı sipariş zaten var`);
-        }
-      }
-      return prisma.$transaction((tx) => this.insertPreparedOrderTx(tx, p));
-    }, undefined, (err) => !isClientTokenP2002(err)) as Promise<Record<string, unknown>>;
+    return insertPreparedOrderImpl.call(this as unknown as OrderServiceThis, p);
   }
 
   /**
@@ -2465,12 +603,7 @@ export class OrderService extends BaseService {
    * sipariş ile aynı sıra). Sıra no kilitlerin ARKASINDA okunur; çakışmayı çağıranın `withBarcodeRetry`si çözer.
    */
   async insertPreparedOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate): Promise<Record<string, unknown>> {
-    await runItemUsageChecksTx(tx, p.lineCheck.checks);
-    const orderNumber = p.manualOrderNumber ?? (await this.nextOrderNumber(tx, p));
-    const created = await this.insertOrderTx(tx, p, orderNumber);
-    // Oluşturan otomatik takipçi (bildirim §5.3); dönüş aynen.
-    await followAsCreatorTx(tx, p.actorUserId, { orderId: created.id as string });
-    return created;
+    return insertPreparedOrderTxImpl.call(this as unknown as OrderServiceThis, tx, p);
   }
 
   /**
@@ -2480,18 +613,7 @@ export class OrderService extends BaseService {
    * `fmt` olarak geçirilir ("iki okuma" sınıfı).
    */
   private nextOrderNumber(db: Pick<Prisma.TransactionClient, "order">, p: PreparedOrderCreate): Promise<string> {
-    return nextSeriesNo(
-      "order",
-      async (fullPrefix) =>
-        db.order
-          .findMany({
-            where: { orderNumber: { gte: fullPrefix, startsWith: fullPrefix } },
-            select: { orderNumber: true, createdAt: true },
-          })
-          .then((rows) => rows.map((r) => ({ code: r.orderNumber, createdAt: r.createdAt }))),
-      p.today,
-      p.fmt,
-    );
+    return nextOrderNumberImpl(db, p);
   }
 
   /**
@@ -2499,21 +621,11 @@ export class OrderService extends BaseService {
    * Künye (`createdById`/`updatedById`) BaseService ile aynı yazıcıdan: `withActor` (`test_record_provenance` ölçer).
    */
   private insertOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate, orderNumber: string): Promise<Record<string, unknown>> {
-    return sequentialTx(tx).order.create({
-      data: {
-        ...withActor(p.prismaData, p.actorUserId, "CREATE", "order"),
-        orderNumber,
-        destination: p.destination,
-      } as Prisma.OrderUncheckedCreateInput,
-      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
-    }) as Promise<Record<string, unknown>>;
+    return insertOrderTxImpl.call(this as unknown as OrderServiceThis, tx, p, orderNumber);
   }
 
   private findOrderByToken(db: Prisma.TransactionClient, clientToken: string): Promise<Record<string, unknown> | null> {
-    return db.order.findUnique({
-      where: { clientToken },
-      ...(this.config.defaultInclude ? { include: this.config.defaultInclude as Prisma.OrderInclude } : {}),
-    }) as Promise<Record<string, unknown> | null>;
+    return findOrderByTokenImpl.call(this as unknown as OrderServiceThis, db, clientToken);
   }
 
   /**
@@ -2523,21 +635,7 @@ export class OrderService extends BaseService {
    * siparişi "oluşturuldu" diye döndürüp düzeltmeyi yutardı.
    */
   private orderReplay(data: Record<string, unknown>) {
-    const manualOrderNumber = parseManualOrderNumber(data.orderNumber);
-    return tokenReplay<Record<string, unknown>, ApiResponse<unknown>>({
-      find: (db, clientToken) => this.findOrderByToken(db, clientToken),
-      alive: (p) => assertOrderReplayAlive({ id: String(p.id), status: p.status as OrderStatus, orderNumber: (p.orderNumber as string | null) ?? null }),
-      identity: (p) => [
-        { ad: "customerId", mevcut: p.customerId, gelen: data.customerId },
-        { ad: "branchId", mevcut: p.branchId, gelen: data.branchId },
-        { ad: "satırlar", mevcut: siparisSatirIzi(Array.isArray(p.lines) ? (p.lines as SiparisSatiri[]) : []), gelen: siparisSatirIzi(Array.isArray(data.lines) ? (data.lines as SiparisSatiri[]) : []) },
-        { ad: "orderNumber", mevcut: manualOrderNumber === null ? null : p.orderNumber, gelen: manualOrderNumber },
-      ],
-      collision: (p) => `Bu form daha önce kaydedilmiş: ${p.orderNumber}. Yeni sipariş için formu kapatıp yeniden açın.`,
-      collisionEk: (p) => ({ orderNumber: p.orderNumber }),
-      // Audit + alias terfisi yalnız gerçek create yolunda (ilk çağrıda yazıldı).
-      respond: (p) => this.withUnitWarnings({ success: true, data: p, message: `Sipariş zaten oluşturulmuş (idempotent retry): ${p.orderNumber}` }),
-    });
+    return orderReplayImpl.call(this as unknown as OrderServiceThis, data);
   }
 
   /**
@@ -2557,85 +655,7 @@ export class OrderService extends BaseService {
     data: { customerId: string; branchId?: string | null; rollIds: string[]; clientToken?: string | null },
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    const rollIds = [...new Set(data.rollIds)];
-    if (rollIds.length === 0) throw AppError.badRequest("En az bir top okutulmalı");
-
-    const rolls = await prisma.roll.findMany({
-      where: { id: { in: rollIds } },
-      select: {
-        id: true,
-        barcode: true,
-        itemId: true,
-        colorId: true,
-        width: true,
-        currentQty: true,
-        status: true,
-        shipmentId: true,
-        sackId: true,
-        currentStepId: true,
-      },
-    });
-    if (rolls.length !== rollIds.length) throw AppError.notFound("Bazı toplar bulunamadı");
-
-    // Spec (ürün+renk+en) bazında grupla → satır metrajı = grup currentQty toplamı.
-    const groups = new Map<
-      string,
-      { itemId: string; colorId: string | null; width: number | null; quantity: Prisma.Decimal }
-    >();
-    for (const r of rolls) {
-      const key = `${r.itemId}|${r.colorId ?? ""}|${r.width == null ? "" : Number(r.width)}`;
-      const g =
-        groups.get(key) ??
-        { itemId: r.itemId, colorId: r.colorId, width: r.width != null ? Number(r.width) : null, quantity: new Prisma.Decimal(0) };
-      g.quantity = g.quantity.plus(r.currentQty);
-      groups.set(key, g);
-    }
-    const lines = [...groups.values()].map((g) => ({
-      itemId: g.itemId,
-      colorId: g.colorId,
-      width: g.width,
-      quantity: Number(g.quantity),
-    }));
-
-    // clientToken ZORUNLU (route): tümü-WAREHOUSE yolunda claim atlanır ve TEK koruma token'dır.
-    // Sıralı tekrar (zaman aşımı sonrası) top kurallarından ÖNCE replay alır (hız yolu; kapı tx'teki K).
-    const clientToken = data.clientToken || null;
-    const replay = this.quickOrderReplay(data, lines, rolls.length);
-    if (clientToken) {
-      const once = await replay.replayIfAny(clientToken);
-      if (once) return once;
-    }
-
-    const outcome = await this.quickOrderTx({ data, rolls, lines, clientToken, replay, userId });
-    if ("replayed" in outcome) return outcome.replayed;
-    const order = outcome.order as { id: string; orderNumber: string };
-    const stockRollIds = outcome.stockRollIds;
-
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: this.config.tableName,
-      recordId: order.id,
-      newData: { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken, orderNumber: order.orderNumber },
-    });
-    // Roll hareketini denetle (best-effort, tx DIŞI).
-    if (stockRollIds.length > 0) {
-      await AuditService.log({
-        userId,
-        action: "UPDATE",
-        tableName: "ROLL",
-        // F153: tableName=ROLL ise recordId bir ROLL olmalı (order.id değil) — audit
-        // tutarlılığı; sipariş bağı newData.orderNumber/rollIds ile korunur.
-        recordId: stockRollIds[0],
-        newData: { kind: "QUICK_ORDER_RAW_TO_WAREHOUSE", rollIds: stockRollIds, orderNumber: order.orderNumber },
-      });
-    }
-
-    return {
-      success: true,
-      data: { order, lineCount: lines.length, rollCount: rolls.length, preparedToWarehouse: stockRollIds.length },
-      message: `Hızlı sipariş açıldı: ${order.orderNumber} (${lines.length} satır, ${rolls.length} top)`,
-    };
+    return quickOrderFromRollsImpl.call(this as unknown as OrderServiceThis, data, userId);
   }
 
   /** Hızlı siparişin yazan yarısı: token kilidi (8036) + token → kart kilitleri (8030) → top claim'i → sipariş. */
@@ -2647,58 +667,7 @@ export class OrderService extends BaseService {
     replay: TokenReplay<ApiResponse<unknown>>;
     userId: string | undefined;
   }): Promise<{ replayed: ApiResponse<unknown> } | { order: Record<string, unknown>; stockRollIds: string[] }> {
-    // Her top serbest + satılabilir statüde olmalı (STOCK ham veya WAREHOUSE, çuvalsız).
-    for (const r of rolls) {
-      if (r.shipmentId) throw AppError.conflict(`Top bir sevkiyatta: ${r.barcode ?? r.id}`);
-      if (r.sackId) throw AppError.conflict(`Top bir çuvalda: ${r.barcode ?? r.id}`);
-      if (r.currentStepId) throw AppError.conflict(`Top bir ${TERIM.terbiyeIsEmri.tekilKucuk} adımında: ${r.barcode ?? r.id}`);
-      if (r.status !== RollStatus.STOCK && r.status !== RollStatus.WAREHOUSE) {
-        throw AppError.badRequest(`Top satışa uygun değil (${r.status}): ${r.barcode ?? r.id}`);
-      }
-    }
-    // Sipariş kapıları (müşteri/şube + ürün/renk-atanabilirlik) `create` ile AYNI yerden.
-    const prepared = await this.prepareOrderCreate(
-      { customerId: data.customerId, branchId: data.branchId ?? null, lines, clientToken },
-      clientToken,
-      { userId },
-      { fromScannedRolls: true },
-    );
-    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
-    return withBarcodeRetry(
-      () =>
-        prisma.$transaction(async (tx) => {
-          if (clientToken) {
-            const replayed = await replay.inTx(tx, clientToken);
-            if (replayed) return { replayed };
-          }
-          await runItemUsageChecksTx(tx, prepared.lineCheck.checks);
-          if (stockRollIds.length > 0) {
-            const claimed = await tx.roll.updateMany({
-              where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
-              data: { status: RollStatus.WAREHOUSE },
-            });
-            // Depoya GİRİŞ yazan her yolun ortak damgası (bkz. `warehouseStampManyTx`).
-            await warehouseStampManyTx(tx, stockRollIds);
-            if (claimed.count !== stockRollIds.length) {
-              const escaped = await tx.roll.findMany({
-                where: {
-                  id: { in: stockRollIds },
-                  NOT: { status: RollStatus.WAREHOUSE, shipmentId: null, currentStepId: null },
-                },
-                select: { id: true, barcode: true },
-              });
-              const list = escaped.map((r) => r.barcode ?? r.id).join(", ");
-              throw AppError.conflict(
-                `Şu toplar işlem sırasında başka bir akışta tüketildi; hızlı sipariş açılmadı, lütfen tekrar okutup deneyin: ${list}`,
-              );
-            }
-          }
-          const orderNumber = await this.nextOrderNumber(tx, prepared);
-          return { order: await this.insertOrderTx(tx, prepared, orderNumber), stockRollIds };
-        }),
-      undefined,
-      (err) => !isClientTokenP2002(err),
-    );
+    return quickOrderTxImpl.call(this as unknown as OrderServiceThis, { data, rolls, lines, clientToken, replay, userId });
   }
 
   /**
@@ -2710,22 +679,7 @@ export class OrderService extends BaseService {
     lines: Array<{ itemId: string; colorId: string | null; width: number | null; quantity: number }>,
     rollCount: number,
   ): TokenReplay<ApiResponse<unknown>> {
-    return tokenReplay<Record<string, unknown>, ApiResponse<unknown>>({
-      find: (db, clientToken) => this.findOrderByToken(db, clientToken),
-      alive: (p) => assertOrderReplayAlive({ id: String(p.id), status: p.status as OrderStatus, orderNumber: (p.orderNumber as string | null) ?? null }),
-      identity: (p) => [
-        { ad: "customerId", mevcut: p.customerId, gelen: data.customerId },
-        { ad: "branchId", mevcut: p.branchId, gelen: data.branchId },
-        { ad: "lines", mevcut: siparisSatirIzi(Array.isArray(p.lines) ? (p.lines as SiparisSatiri[]) : []), gelen: siparisSatirIzi(lines) },
-      ],
-      collision: (p) => `Bu okutma daha önce ${p.orderNumber} siparişi olarak kaydedilmiş — yeni sipariş için ekranı kapatıp yeniden açın.`,
-      collisionEk: (p) => ({ orderNumber: p.orderNumber }),
-      respond: (p) => ({
-        success: true,
-        data: { order: p, lineCount: Array.isArray(p.lines) ? p.lines.length : 0, rollCount, preparedToWarehouse: 0 },
-        message: `Hızlı sipariş zaten açılmış (yeniden gönderim): ${p.orderNumber}`,
-      }),
-    });
+    return quickOrderReplayImpl.call(this as unknown as OrderServiceThis, data, lines, rollCount);
   }
 
   /**
@@ -3196,31 +1150,14 @@ export class OrderService extends BaseService {
   private async getActiveShipmentLinks(
     orderId: string
   ): Promise<Array<{ id: string; shipmentNo: string; status: ShipmentStatus }>> {
-    // ÇUVAL HAVUZU: "aktif" = donmuş tahsisli sevkiyat (PLANNED). Rezerv YOK
-    // (packedQty/rebalance kalktı) — açık miktar sevkte düşer; iptal serbest bırakır.
-    const links = await prisma.shipmentOrder.findMany({
-      where: {
-        orderId,
-        shipment: {
-          status: ShipmentStatus.PLANNED,
-        },
-      },
-      select: {
-        shipment: { select: { id: true, shipmentNo: true, status: true } },
-      },
-    });
-    return links.map((l) => l.shipment);
+    return getActiveShipmentLinksImpl(orderId);
   }
 
   private assertNoActiveShipments(
     activeShipments: Array<{ shipmentNo: string; status: ShipmentStatus }>,
     eylem: string
   ): void {
-    if (activeShipments.length === 0) return;
-    const list = activeShipments.map((s) => `${s.shipmentNo} (${s.status})`).join(", ");
-    throw AppError.conflict(
-      `Sipariş aktif sevkiyat(lar)a bağlı: ${list}. ${eylem} için önce siparişi sevkiyattan çıkarın veya sevkiyatı tamamlayın/iptal edin.`
-    );
+    return assertNoActiveShipmentsImpl(activeShipments, eylem);
   }
 
   /**
@@ -3252,225 +1189,18 @@ export class OrderService extends BaseService {
     reason: string,
     userId?: string,
   ): Promise<ApiResponse<{ lineId: string; previousColorId: string | null; colorId: string | null }>> {
-    const trimmed = (reason ?? "").trim();
-    if (trimmed.length < 3) {
-      throw AppError.badRequest("Renk değişikliği için sebep yazmalısınız.");
-    }
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        customerId: true,
-        lines: { where: { id: lineId }, select: { id: true, colorId: true, itemId: true } },
-      },
-    });
-    if (!order) throw AppError.notFound("Sipariş bulunamadı");
-    if (order.status === "CANCELLED" || order.status === "COMPLETED") {
-      throw AppError.conflict(
-        `${order.orderNumber} ${order.status === "CANCELLED" ? "iptal edilmiş" : "tamamlanmış"} — kalem rengi değiştirilemez.`,
-      );
-    }
-    const line = order.lines[0];
-    if (!line) throw AppError.notFound("Sipariş kalemi bulunamadı");
-    if ((line.colorId ?? null) === colorId) {
-      throw AppError.badRequest("Sipariş kalemi zaten bu renkte.");
-    }
-
-    let colorName: string | null = null;
-    if (colorId) {
-      const color = await prisma.color.findUnique({
-        where: { id: colorId },
-        select: { name: true, isActive: true },
-      });
-      if (!color || !color.isActive) throw AppError.badRequest("Renk bulunamadı veya pasif.");
-      colorName = color.name;
-      await assertColorsAssignableToCustomer([colorId], order.customerId);
-      const item = await prisma.item.findUnique({
-        where: { id: line.itemId },
-        select: { allowedColors: { select: { colorId: true } } },
-      });
-      const allowed = new Set((item?.allowedColors ?? []).map((c) => c.colorId));
-      if (allowed.size > 0 && !allowed.has(colorId)) {
-        throw AppError.badRequest("Renk bu kumaşın izinli renk listesinde değil.");
-      }
-    }
-
-    // Atomik: eşzamanlı başka bir düzeltme kalemi değiştirdiyse sessizce ezme.
-    const claim = await prisma.orderLine.updateMany({
-      where: { id: lineId, orderId, colorId: line.colorId },
-      data: { colorId },
-    });
-    if (claim.count === 0) {
-      throw AppError.conflict("Sipariş kalemi bu sırada değişti — yenileyip tekrar deneyin.");
-    }
-
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "ORDER",
-      recordId: orderId,
-      oldData: { lineId, colorId: line.colorId },
-      newData: { event: "ORDER_LINE_COLOR_CHANGED", lineId, colorId, colorName, reason: trimmed },
-    });
-
-    return {
-      success: true,
-      data: { lineId, previousColorId: line.colorId, colorId },
-      message: `Sipariş kalemi rengi "${colorName ?? "renksiz"}" olarak güncellendi.`,
-    };
+    return changeLineColorImpl(orderId, lineId, colorId, reason, userId);
   }
 
   async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
-    return this.softDelete(id, userId);
+    return hardDeleteImpl.call(this as unknown as OrderServiceThis, id, userId);
   }
 
   async softDelete(
     id: string,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    this.assertNoActiveShipments(await this.getActiveShipmentLinks(id), "İptal");
-    const oldRecord = await prisma.order.findUnique({
-      where: { id },
-      include: {
-        lines: {
-          include: {
-            workOrderLinks: {
-              where: ACTIVE_ORDER_LINK,
-              include: { workOrder: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!oldRecord) {
-      return { success: false, data: null, message: "Sipariş bulunamadı" };
-    }
-
-    const allLinks = oldRecord.lines.flatMap((line) => line.workOrderLinks);
-    const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
-    const blockingWOs = allLinks
-      .map((l) => l.workOrder)
-      .filter((wo) => blockingStatuses.has(wo.status));
-
-    if (blockingWOs.length > 0) {
-      const workOrderNumbers = [...new Set(blockingWOs.map((w) => w.workOrderNumber))].join(", ");
-      throw AppError.conflict(
-        `Bu siparişe bağlı aktif/tamamlanmış ${TERIM.terbiyeIsEmri.cogulKucuk} var: ${workOrderNumbers}. Önce onları iptal edin.`
-      );
-    }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // F142: atomik claim ÖNCE — çift-paralel iptal ve araya giren COMPLETED
-      // (manualComplete/recompute) koşulsuz CANCELLED ezmesini kapat.
-      const cancelClaim = await tx.order.updateMany({
-        where: { id, status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
-        // `cancelledAt` HER iptal yolunda damgalanır (bu generic yol dahil):
-        // "dönemde kaç iptal" sorusu `orderDate`e sorulamaz ve damgasız satır
-        // rapordan sessizce düşerdi. SEBEP yalnız operatörün seçtiği yolda
-        // (`cancelWithActions`) dolar — burada uydurulmaz.
-        data: { status: OrderStatus.CANCELLED, cancelledAt: new Date() },
-      });
-      if (cancelClaim.count === 0) {
-        const fresh = await tx.order.findUnique({ where: { id }, select: { status: true } });
-        throw AppError.conflict(
-          `Sipariş bu sırada ${
-            fresh?.status === OrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
-          }, tekrar iptal edilemez. Sayfayı yenileyin.`,
-        );
-      }
-
-
-      // BU siparişin satır bağlarını TAZE oku (orderLineId scope — shared WO'nun
-      // başka sipariş bağları korunur). Linkli WO satırlarını sıralı kilitle
-      // (workorder softDelete deseniyle simetrik) → eşzamanlı WO status geçişi serileşir.
-      const myLinks = await tx.workOrderToOrderLine.findMany({
-        where: { orderLine: { orderId: id }, ...ACTIVE_ORDER_LINK },
-        select: { workOrderId: true, orderLineId: true },
-      });
-      const woIds = [...new Set(myLinks.map((l) => l.workOrderId))].sort();
-      for (const wid of woIds) await touchWorkOrderTx(tx, wid); // döngü — Promise.all(tx.*) YASAK
-      const woRows = await tx.workOrder.findMany({
-        where: { id: { in: woIds } },
-        select: { id: true, status: true, workOrderNumber: true },
-      });
-      const woById = new Map(woRows.map((w) => [w.id, w]));
-      const blocking = woRows.filter((w) => blockingStatuses.has(w.status));
-      if (blocking.length > 0) {
-        const workOrderNumbers = [...new Set(blocking.map((w) => w.workOrderNumber))].join(", ");
-        throw AppError.conflict(
-          `Bu siparişe bağlı aktif/tamamlanmış ${TERIM.terbiyeIsEmri.cogulKucuk} var: ${workOrderNumbers}. Önce onları iptal edin.`,
-        );
-      }
-      // BU siparişin bağlarını TERMİNAL OLMAYAN her iş emrinden kopar (2026-08-21).
-      // Eskiden yalnız `status === "PLANNED"` çiftleri koparılıyordu; kardeş yol
-      // `cancelWithActions` ise UNLINK/CONVERT/CANCEL üçünde de bağı siliyor. İki
-      // yolun aynı cümleyi kurması gerekir: **iptal edilmiş siparişin bağı hiçbir
-      // canlı/bitmiş iş emrinde kalmasın.** CANCELLED/SUPERSEDED iş emirleri kapsam
-      // DIŞI — onlar tarihçedir, bağları da tarihsel izdir (silmek geçmişi bozar).
-      // ⚠️ Bugün küme fiilen PLANNED'a eşittir: yukarıdaki `blocking` guard'ı
-      // IN_PROGRESS/COMPLETED bağlı siparişi zaten 409 ile reddediyor. Kural yine de
-      // kanonik yazıldı — guard gevşerse davranış sessizce eskiye dönmesin.
-      const livePairs = myLinks.filter((l) => {
-        const st = woById.get(l.workOrderId)?.status;
-        return st !== undefined && st !== WorkOrderStatus.CANCELLED && st !== WorkOrderStatus.SUPERSEDED;
-      });
-      const typeChangedWorkOrderIds: string[] = [];
-      if (livePairs.length > 0) {
-        // Bağ SİLİNMEZ, damgalanır (③a, 2026-09-14): sipariş silinse de "bu iş emri o
-        // sipariş için açılmıştı" izi durur (K5 şerhinin uygulama katmanı yarısı).
-        await unlinkOrderLinesTx(tx, { pairs: livePairs, reason: "ORDER_DELETE", userId: userId ?? null });
-        // Bağı kopan HER iş emri için (döngü — Promise.all(tx.*) YASAK):
-        //   ① refakat kartı bayat — kartta sipariş bloğu + tip basılı,
-        //   ② son bağı kalktıysa tip STOK'a döner (TİP = BAĞIN AYNASI;
-        //      `cancelWithActions` UNLINK_ONLY dalı + `unlinkOrderLine` emsali).
-        for (const wid of [...new Set(livePairs.map((l) => l.workOrderId))].sort()) {
-          await markTravelerCardDirtyTx(tx, wid);
-          const remaining = await activeOrderLinkCount(tx, wid);
-          if (remaining > 0) continue;
-          // Atomik: `updateMany WHERE type=ORDER_PRODUCTION` — zaten STOK'sa dokunmaz,
-          // iptal/devredilmiş atlanır. `targetItemId: { not: null }` STOK'un değişmezi:
-          // hedef kumaşı olmayan iş emri çevrilemez (sessizce ORDER kalır, count=0).
-          const flipped = await setWorkOrderTypeTx(tx, wid, WorkOrderType.STOCK_PRODUCTION, {
-            where: {
-              status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
-              targetItemId: { not: null },
-            },
-            ctx: { trigger: "ORDER_DELETE", userId, refType: "ORDER", refId: id },
-          });
-          if (flipped === "CHANGED") typeChangedWorkOrderIds.push(wid);
-        }
-      }
-      const order = await tx.order.findUnique({ where: { id } });
-      return { order: order!, unlinkedCount: livePairs.length, typeChangedWorkOrderIds };
-    });
-
-    await AuditService.log({
-      userId,
-      action: "DELETE",
-      tableName: this.config.tableName,
-      recordId: id,
-      oldData: oldRecord as unknown as Record<string, unknown>,
-      newData: {
-        status: "CANCELLED",
-        unlinkedWorkOrderCount: updated.unlinkedCount,
-        typeChangedWorkOrderIds: updated.typeChangedWorkOrderIds,
-      },
-    });
-
-    return {
-      success: true,
-      data: updated.order,
-      message:
-        updated.unlinkedCount > 0
-          ? `Sipariş iptal edildi. ${updated.unlinkedCount} ${TERIM.terbiyeIsEmri.tekilKucuk} bağlantısı koparıldı.` +
-            (updated.typeChangedWorkOrderIds.length > 0
-              ? ` ${updated.typeChangedWorkOrderIds.length} ${TERIM.terbiyeIsEmri.tekilKucuk} stok üretimine döndü.`
-              : "")
-          : "Sipariş iptal edildi",
-    };
+    return softDeleteImpl.call(this as unknown as OrderServiceThis, id, userId);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -3494,173 +1224,7 @@ export class OrderService extends BaseService {
    * tek noktadan default'u alabilsin.
    */
   async getCancelPreview(orderId: string): Promise<ApiResponse<unknown>> {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        lines: {
-          select: {
-            id: true,
-            workOrderLinks: {
-              where: ACTIVE_ORDER_LINK,
-              select: {
-                workOrder: {
-                  select: {
-                    id: true,
-                    workOrderNumber: true,
-                    status: true,
-                    type: true,
-                    targetQuantity: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!order) throw AppError.notFound("Sipariş bulunamadı");
-
-    if (
-      order.status === OrderStatus.CANCELLED ||
-      order.status === OrderStatus.COMPLETED
-    ) {
-      throw AppError.conflict(
-        `Sipariş ${order.status === "CANCELLED" ? "zaten iptal" : "tamamlanmış"} — iptal edilemez`
-      );
-    }
-
-    // WO bazında grupla — bir WO'ya birden fazla satırdan bağ olabilir.
-    const woMap = new Map<
-      string,
-      {
-        id: string;
-        workOrderNumber: string;
-        status: string;
-        /** WO'nun hedef üretim metrajı (link-only model: per-sipariş tahsis yok). */
-        targetQuantity: Prisma.Decimal | null;
-      }
-    >();
-    for (const line of order.lines) {
-      for (const link of line.workOrderLinks) {
-        const wo = link.workOrder;
-        if (woMap.has(wo.id)) continue;
-        woMap.set(wo.id, {
-          id: wo.id,
-          workOrderNumber: wo.workOrderNumber,
-          status: wo.status,
-          targetQuantity:
-            wo.targetQuantity != null ? new Prisma.Decimal(wo.targetQuantity) : null,
-        });
-      }
-    }
-
-    // PERF (N+1 giderildi): eskiden her WO için 2 ayrı sorgu (order.findMany +
-    // roll.count) `Promise.all(map(async))` içinde dönüyordu → paylaşımlı siparişte
-    // 2N round-trip + havuz baskısı. Artık WO sayısından bağımsız 3 sınırlı sorgu:
-    //   (a) bu siparişin DIŞINDA bu WO'lara bağlı diğer siparişler,
-    //   (b) bu WO'ların step'leri, (c) o step'lerde üretilmiş rulo sayısı (groupBy).
-    // woId başına sonuçlar bellekte toplanır.
-    const woIds = Array.from(woMap.keys());
-
-    // (a) Diğer siparişler — hangi WO'ya bağlı olduklarını da çekip woId→Set kur.
-    const otherOrderRows =
-      woIds.length === 0
-        ? []
-        : await prisma.order.findMany({
-            where: {
-              id: { not: orderId },
-              lines: {
-                some: { workOrderLinks: { some: { ...ACTIVE_ORDER_LINK, workOrderId: { in: woIds } } } },
-              },
-            },
-            select: {
-              orderNumber: true,
-              lines: {
-                where: { workOrderLinks: { some: { ...ACTIVE_ORDER_LINK, workOrderId: { in: woIds } } } },
-                select: { workOrderLinks: { where: ACTIVE_ORDER_LINK, select: { workOrderId: true } } },
-              },
-            },
-          });
-    const otherOrdersByWo = new Map<string, Set<string>>();
-    for (const ord of otherOrderRows) {
-      for (const line of ord.lines) {
-        for (const link of line.workOrderLinks) {
-          if (!woMap.has(link.workOrderId)) continue;
-          let set = otherOrdersByWo.get(link.workOrderId);
-          if (!set) {
-            set = new Set<string>();
-            otherOrdersByWo.set(link.workOrderId, set);
-          }
-          set.add(ord.orderNumber);
-        }
-      }
-    }
-
-    // (b+c) WO başına üretilmiş rulo sayısı: step'leri çek, roll.groupBy ile
-    //       producedInStepId üzerinden say ([producedInStepId,status] index'li).
-    const steps =
-      woIds.length === 0
-        ? []
-        : await prisma.workOrderStep.findMany({
-            where: { workOrderId: { in: woIds } },
-            select: { id: true, workOrderId: true },
-          });
-    const stepToWo = new Map<string, string>();
-    for (const s of steps) stepToWo.set(s.id, s.workOrderId);
-
-    const rollGroups =
-      steps.length === 0
-        ? []
-        : await prisma.roll.groupBy({
-            by: ["producedInStepId"],
-            where: { producedInStepId: { in: steps.map((s) => s.id) } },
-            _count: { _all: true },
-          });
-    const rollCountByWo = new Map<string, number>();
-    for (const g of rollGroups) {
-      const wid = g.producedInStepId ? stepToWo.get(g.producedInStepId) : undefined;
-      if (!wid) continue;
-      rollCountByWo.set(wid, (rollCountByWo.get(wid) ?? 0) + g._count._all);
-    }
-
-    const affectedWorkOrders = Array.from(woMap.values()).map((wo) => {
-      const otherOrderNumbers = Array.from(otherOrdersByWo.get(wo.id) ?? []);
-      const isSoleOrder = otherOrderNumbers.length === 0;
-      const allowedActions = computeAllowedActions(wo.status, isSoleOrder);
-      const defaultAction = pickDefaultAction(wo.status, isSoleOrder);
-
-      return {
-        id: wo.id,
-        workOrderNumber: wo.workOrderNumber,
-        status: wo.status,
-        targetQuantity: wo.targetQuantity,
-        isSoleOrder,
-        otherOrdersCount: otherOrderNumbers.length,
-        otherOrderNumbers,
-        producedRollCount: rollCountByWo.get(wo.id) ?? 0,
-        allowedActions,
-        defaultAction,
-      };
-    });
-
-    // Aktif sevkiyat bağları — somut listele (uygulamada cancelWithActions/
-    // softDelete bu bağ varken 409 ile bloklar; preview operatöre nedeni gösterir).
-    const activeShipments = await this.getActiveShipmentLinks(orderId);
-
-    return {
-      success: true,
-      data: {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        affectedWorkOrders,
-        activeShipments,
-        canCancel: activeShipments.length === 0,
-      },
-    };
+    return getCancelPreviewImpl.call(this as unknown as OrderServiceThis, orderId);
   }
 
   /**
@@ -3900,74 +1464,7 @@ export class OrderService extends BaseService {
     reason: string,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    if (!userId) throw AppError.unauthorized();
-    if (!reason.trim()) throw AppError.badRequest("Tamamlama sebebi gerekli");
-
-    const order = await prisma.order.findUnique({
-      where: { id },
-      select: { id: true, orderNumber: true, status: true, completedAt: true, customerId: true },
-    });
-    if (!order) throw AppError.notFound("Sipariş bulunamadı");
-    this.assertNoActiveShipments(
-      await this.getActiveShipmentLinks(id),
-      "Manuel kapatma"
-    );
-    if (order.status === OrderStatus.COMPLETED) {
-      throw AppError.badRequest("Sipariş zaten tamamlanmış");
-    }
-    if (order.status === OrderStatus.CANCELLED) {
-      throw AppError.badRequest("İptal edilmiş sipariş kapatılamaz");
-    }
-    if (order.status === OrderStatus.PENDING) {
-      throw AppError.badRequest("Onaysız sipariş manuel tamamlanamaz");
-    }
-
-    // ATOMİK CLAIM (check-then-act DEĞİL — kardeş cancelWithActions ile parite):
-    // terminal/PENDING reddini yazmanın WHERE'ine koy. Eşzamanlı cancelWithActions
-    // ile yarışta manualComplete bayat non-terminal okuyup CANCELLED siparişi
-    // sessizce COMPLETED'a ezemesin (yıkıcı iptalin geri alınması engellenir).
-    await prisma.$transaction(async (tx) => {
-      const claim = await tx.order.updateMany({
-        where: {
-          id,
-          status: {
-            notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.PENDING],
-          },
-        },
-        data: {
-          status: OrderStatus.COMPLETED,
-          completedAt: order.completedAt ?? new Date(),
-          manualClosedById: userId,
-          manualCloseReason: reason.trim(),
-        },
-      });
-      if (claim.count === 0) {
-        const fresh = await tx.order.findUnique({ where: { id }, select: { status: true } });
-        throw AppError.conflict(
-          `Sipariş bu sırada ${fresh?.status} durumuna geçti — manuel tamamlanamadı. Sayfayı yenileyin.`
-        );
-      }
-    });
-    const updated = await prisma.order.findUnique({ where: { id } });
-
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: this.config.tableName,
-      recordId: id,
-      oldData: { status: order.status },
-      newData: {
-        status: updated!.status,
-        manualClosedById: userId,
-        manualCloseReason: updated!.manualCloseReason,
-      },
-    });
-
-    return {
-      success: true,
-      data: updated!,
-      message: `Sipariş manuel tamamlandı: ${order.orderNumber}`,
-    };
+    return manualCompleteImpl.call(this as unknown as OrderServiceThis, id, reason, userId);
   }
 
   /**
@@ -3980,66 +1477,6 @@ export class OrderService extends BaseService {
     reason: string,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    if (!userId) throw AppError.unauthorized();
-
-    const order = await prisma.order.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        manualClosedById: true,
-      },
-    });
-    if (!order) throw AppError.notFound("Sipariş bulunamadı");
-    if (!order.manualClosedById) {
-      throw AppError.badRequest(
-        "Bu sipariş manuel kapatılmamış — yeniden açma uygulanamaz"
-      );
-    }
-
-    // Manuel iz silinir; sonra recomputeOrderStatusTx sevk sayaçlarına göre
-    // status (APPROVED/PARTIAL_SHIPPED) ve shippedQty'yi senkronize eder.
-    const updated = await prisma.$transaction(async (tx) => {
-      // ATOMİK CLAIM (check-then-act DEĞİL — manualComplete/cancelWithActions paritesi):
-      // yalnız HÂLÂ manuel-kapalı sipariş yeniden açılır. tx-dışı manualClosedById
-      // okuması UX; iki paralel reopen yarışında biri count===0 → 409 (çift audit/
-      // koşulsuz APPROVED yazımı engellenir).
-      const claim = await tx.order.updateMany({
-        where: { id, manualClosedById: { not: null } },
-        data: {
-          manualClosedById: null,
-          manualCloseReason: null,
-          completedAt: null,
-          status: OrderStatus.APPROVED,
-        },
-      });
-      if (claim.count === 0) {
-        throw AppError.conflict(
-          "Sipariş bu sırada durum değiştirdi — yeniden açılamadı, sayfayı yenileyin"
-        );
-      }
-      await recomputeOrderStatusTx(tx, id);
-      return tx.order.findUniqueOrThrow({ where: { id } });
-    });
-
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: this.config.tableName,
-      recordId: id,
-      oldData: { status: order.status, manualClosedById: order.manualClosedById },
-      newData: {
-        status: updated.status,
-        manualClosedById: null,
-        reopenReason: reason.trim() || null,
-      },
-    });
-
-    return {
-      success: true,
-      data: updated,
-      message: `Sipariş yeniden açıldı: ${order.orderNumber}`,
-    };
+    return reopenImpl.call(this as unknown as OrderServiceThis, id, reason, userId);
   }
 }
