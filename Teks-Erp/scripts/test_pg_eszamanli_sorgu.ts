@@ -173,7 +173,7 @@ const DUZELTILEN: Array<[string, string]> = [
   ["src/services/helpers/workorder-close-snapshot.helper.ts", "sequentialTx(tx).roll.findMany"],
   ["src/services/subcontractor/dispatch.ts", "sequentialTx(tx).subcontractorDispatch.create"],
   ["src/services/subcontractor/receive.ts", "sequentialTx(tx).subcontractorReceipt.findUnique"],
-  ["src/services/order.service.ts", "sequentialTx(tx).order.create"],
+  ["src/services/order/create.ts", "sequentialTx(tx).order.create"], // order.service bölmesi 2026-11-08
   ["src/services/weaving-order.service.ts", "sequentialTx(tx).weavingOrder.findUniqueOrThrow"],
   ["src/services/inventory.service.ts", "sequentialTx(tx).roll.create"],
   ["src/services/batch.service.ts", "sequentialTx(tx).subcontractorDispatch.findMany"],

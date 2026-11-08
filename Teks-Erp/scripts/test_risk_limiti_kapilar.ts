@@ -38,6 +38,7 @@ import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
 import { assertCustomerRiskLimitTx } from "../src/services/helpers/risk-exposure.helper";
 import { sevkiyatServisUyeMetni, sevkiyatServisEtiketi } from "./lib/sevkiyat-servis-kaynak";
+import { siparisServisEtiketi, siparisServisMetni } from "./lib/siparis-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -147,14 +148,14 @@ function statik(): void {
   check("§0e fatura guard'ı çekirdeği çağırır (ek = fatura tutarı) + details.code", /riskExposureTx\(tx, ref\.cariId, ref\.currency, ref\.amount\)/.test(guard) && /code: "RISK_LIMIT_EXCEEDED"/.test(guard));
   const pre = govde(oku("services/gelen-belge-onay.service.ts"), "async function precheck(", 2500);
   check("§0f gelen belge precheck: kilit kapısından SONRA risk kapısı", pre.indexOf('assertCustomerRiskLimitTx(prisma, note.ownerCustomerId, "INTAKE")') > pre.indexOf("assertCariNotHeldTx(prisma"));
-  const ord = oku("services/order.service.ts");
+  const ord = siparisServisMetni(); // sipariş servisi bölündü (2026-11-08): aile metni (yaratma modülde, müşteri değişimi cephede)
   check("§0g sipariş yaratma + müşteri değişimi INTAKE risk kapısı", /assertCustomerRiskLimitTx\(prisma, data\.customerId as string, "INTAKE"\)/.test(ord) && /assertCustomerRiskLimitTx\(prisma, finalCustomerId, "INTAKE"\)/.test(ord));
   // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövdeler (cephe delegasyonu değil; pencere yerine tam gövde)
   const core = sevkiyatServisUyeMetni("createShipmentCoreTx");
   check("§0h createShipmentCoreTx: risk kapısı yazımdan ÖNCE, emanet yüklemiyle", /assertCustomerRiskLimitTx\(tx, p\.customerId, "SHIPMENT", emanetRelease\)/.test(core) && /const emanetRelease = \(\) => \(?(?:emanetMemo \?\?= )?emanetShipmentReleaseTx\(/.test(core) && core.indexOf("assertCustomerRiskLimitTx(") < core.indexOf("tx.shipment.create("));
   const disp = sevkiyatServisUyeMetni("performDispatchTx");
   check("§0i ⭐ performDispatchTx: risk kapısı claim'den (updateMany) ÖNCE", disp.includes('assertCustomerRiskLimitTx(tx, holdHeader.customerId, "SHIPMENT", emanetRelease)') && disp.indexOf("assertCustomerRiskLimitTx(") < disp.indexOf("tx.shipment.updateMany("));
-  const importers = tumTs(SRC).filter((f) => /from "[^"]*risk-exposure\.helper"/.test(readFileSync(f, "utf8"))).map((f) => sevkiyatServisEtiketi(path.relative(SRC, f))).filter((r, i, a) => a.indexOf(r) === i).sort(); // sevkiyat servisi ailesi tek etiket
+  const importers = tumTs(SRC).filter((f) => /from "[^"]*risk-exposure\.helper"/.test(readFileSync(f, "utf8"))).map((f) => siparisServisEtiketi(sevkiyatServisEtiketi(path.relative(SRC, f)))).filter((r, i, a) => a.indexOf(r) === i).sort(); // sevkiyat + sipariş servisi aileleri tek etiket
   // D4-I5: bildirim koşul kaynağı çekirdeği OKUR (yazmaz, kapı değil) — `cari.risk-limiti-asildi`.
   const BEKLENEN = ["services/gelen-belge-onay.service.ts", "services/invoice.service.ts", "services/notification-sources/cari.ts", "services/order.service.ts", "services/shipping.service.ts"];
   check("§0j helper'ı import eden küme SABİT (taslak/iade/storno/tahsilat yolları çağırmaz)", JSON.stringify(importers) === JSON.stringify(BEKLENEN), importers.join(", "));

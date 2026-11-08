@@ -21,6 +21,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { createWeavingOrder } from "../src/services/weaving-order.service";
 import { followAsCreatorTx } from "../src/services/helpers/record-follow.helper";
 import { BildirimFikstur } from "./lib/bildirim-http-fikstur";
+import { siparisServisUyeMetni } from "./lib/siparis-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -50,8 +51,8 @@ const unwrap = <T>(r: unknown): T => ((r as { data?: T }).data ?? (r as T));
 function statik(): void {
   console.log("=== §2 dönüş bayt-eşit (statik) ===");
   const src = (f: string) => readFileSync(join(__dirname, "..", "src", f), "utf8");
-  const order = src("services/order.service.ts");
-  const ins = order.slice(order.indexOf("async insertPreparedOrderTx("), order.indexOf("private nextOrderNumber("));
+  // sipariş servisi bölündü (2026-11-08): asıl gövde ailedan (cephe delegasyonu değil)
+  const ins = siparisServisUyeMetni("insertPreparedOrderTx");
   check(
     "§2a sipariş: insertOrderTx sonucu takip yazıldıktan sonra AYNEN döner",
     /const created = await this\.insertOrderTx\(tx, p, orderNumber\);[\s\S]*followAsCreatorTx\(tx, p\.actorUserId, \{ orderId: created\.id as string \}\);\s*return created;/.test(ins),

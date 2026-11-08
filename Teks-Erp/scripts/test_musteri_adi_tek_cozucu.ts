@@ -25,7 +25,7 @@
 // NEGATİF SONDALAR (ölçüldü, md5 ile geri alındı):
 //   ① label.service#getRollLabel'e doğrudan `customerColorAlias.findUnique` eklenir → kırmızı
 //   ② sack-content-mismatch#loadLookups kendi `customerColorAlias.findMany`ine döndürülür → kırmızı
-//   ③ POZİTİF: beyanlı bir okuyucu (order.service#kumasaOzelRenkCiftleri) kaldırılır → ölü beyan kırmızısı
+//   ③ POZİTİF: beyanlı bir okuyucu (order/aliases#kumasaOzelRenkCiftleri) kaldırılır → ölü beyan kırmızısı
 //   ④ ① kanalı eski "yalnız find*/count zinciri" biçimine döndürülür → takma ad sondası + künye beyanı kırmızı
 // =============================================================================
 import * as fs from "node:fs";
@@ -83,8 +83,8 @@ const BEYAN: Record<string, { sinif: Sinif; kanal: Kanal[] }> = {
   "services/import/adapters/customer-item-color-alias.adapter.ts#findExisting": { sinif: "DISA_AKTARIM", kanal: ["model"] },
   "services/import/adapters/customer-item-color-alias.adapter.ts#exportRows": { sinif: "DISA_AKTARIM", kanal: ["model"] },
   "services/import/adapters/alias-pivot-exists.ts#aliasPivotExists": { sinif: "DISA_AKTARIM", kanal: ["model"] },
-  "services/order.service.ts#promoteCustomerAliases": { sinif: "TERFI", kanal: ["model"] },
-  "services/order.service.ts#kumasaOzelRenkCiftleri": { sinif: "TERFI", kanal: ["model"] },
+  "services/order/aliases.ts#promoteCustomerAliases": { sinif: "TERFI", kanal: ["model"] },
+  "services/order/aliases.ts#kumasaOzelRenkCiftleri": { sinif: "TERFI", kanal: ["model"] },
   "services/helpers/merge-shadowing.helper.ts#describeItemColorShadowing": { sinif: "BIRLESTIRME", kanal: ["model"] },
   "constants/merge-map.customer.ts#<modül>": { sinif: "BIRLESTIRME", kanal: ["tablo"] },
   "constants/merge-map.color.ts#<modül>": { sinif: "BIRLESTIRME", kanal: ["tablo"] },
@@ -95,8 +95,8 @@ const BEYAN: Record<string, { sinif: Sinif; kanal: Kanal[] }> = {
   "routes/order.routes.ts#<modül>": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/inventory.service.ts#buildRollWhere": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/tambur.service.ts#listRecentOutputRolls": { sinif: "ARAMA", kanal: ["iliski"] },
-  "services/order.service.ts#findAvailableForWorkOrder": { sinif: "ARAMA", kanal: ["iliski"] },
-  "services/order.service.ts#findAvailableOrderLines": { sinif: "ARAMA", kanal: ["iliski"] },
+  "services/order/available.ts#findAvailableForWorkOrder": { sinif: "ARAMA", kanal: ["iliski"] },
+  "services/order/available.ts#findAvailableOrderLines": { sinif: "ARAMA", kanal: ["iliski"] },
   "services/record-info.service.ts#CUSTOMER_COLOR_ALIAS": { sinif: "KUNYE", kanal: ["model"] },
   "services/record-info.service.ts#CUSTOMER_ITEM_COLOR_ALIAS": { sinif: "KUNYE", kanal: ["model"] },
 };
