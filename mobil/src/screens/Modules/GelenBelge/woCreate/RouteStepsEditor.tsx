@@ -11,7 +11,6 @@ import type { DeskKursunMachine } from '../../../../services/inboundDoc.service'
 import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import { FieldCaption } from './FieldCaption';
 import { MachineChips } from '../desk/DeskReview';
 import { addStep, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
@@ -48,21 +47,19 @@ export default function RouteStepsEditor(p: Props) {
 
   return (
     <View style={styles.root} testID="ie-rota-adimlari">
-      <View style={styles.head}>
-        <View style={styles.grow}>
-          <FieldCaption label="Rota adımları" testID="ie-serit-adimlar" />
-        </View>
-        {p.edited && can && (
-          <Button mode="text" onPress={() => p.onChange(null)} contentStyle={styles.btn} testID="ie-adim-sablona-don">
-            Şablona dön
-          </Button>
-        )}
-      </View>
-      {/* Değişmemiş şablonda açıklama yok (sade form); değiştirilince bunun kayda gideceği söylenir. */}
+      {/* Ayrı başlık yok (adımlar "1. Kurşun" diye kendini anlatır); değişmemiş şablonda açıklama da yok. Değiştirilince
+          bunun kayda gideceği ve "Şablona dön" tek satırda. */}
       {p.edited && (
-        <Text style={styles.hint} testID="ie-adim-ipucu">
-          {`Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`}
-        </Text>
+        <View style={styles.head}>
+          <Text style={[styles.hint, styles.grow]} testID="ie-adim-ipucu">
+            {`Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`}
+          </Text>
+          {can && (
+            <Button mode="text" onPress={() => p.onChange(null)} contentStyle={styles.btn} testID="ie-adim-sablona-don">
+              Şablona dön
+            </Button>
+          )}
+        </View>
       )}
       {p.steps.map((s, i) => (
         <View key={s.key} style={styles.step} testID={`ie-adim-${i + 1}`}>
@@ -83,7 +80,7 @@ export default function RouteStepsEditor(p: Props) {
             <Text style={styles.hint}>{s.notes}</Text>
           ) : null}
           {s.key === kursunKey && p.machine && (
-            <MachineChips list={p.machine.list} value={p.machine.value} locked={p.locked} label="Makine seç" testID="ie-form-makine" onChange={p.machine.onChange} />
+            <MachineChips list={p.machine.list} value={p.machine.value} locked={p.locked} label="Makine seç" inline testID="ie-form-makine" onChange={p.machine.onChange} />
           )}
         </View>
       ))}

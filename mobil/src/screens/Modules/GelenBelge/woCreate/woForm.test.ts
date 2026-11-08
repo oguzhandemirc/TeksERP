@@ -132,9 +132,9 @@ describe('docShown (belgeden dolan alanın yeri) / applyOrderLine özellik kural
 
   it('engel gizli alandaysa ipucu yerini söyler', () => {
     const e = extras({ woType: 'ORDER_PRODUCTION', steps: [] });
-    const c = { routeChosen: true, hasTambur: false, inOther: (k: string) => k === 'isEmriTuru' };
+    const c = { routeChosen: true, hasTambur: false, inOther: (k: string) => k === 'siparis' };
     const out = extrasIssues(e, c);
-    expect(out[0]).toEqual({ key: 'isEmriTuru', text: expect.stringMatching(/Siparişe üretim.*"Diğer alanlar" bölümünde/) });
+    expect(out[0]).toEqual({ key: 'siparis', text: expect.stringMatching(/Siparişe üretim.*"Diğer alanlar" bölümünde/) });
     expect(out[1]).toEqual({ key: 'rotaAdimlari', text: 'Rotada en az bir adım kalmalı.' });
   });
 });

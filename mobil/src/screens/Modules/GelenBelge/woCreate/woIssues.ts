@@ -27,7 +27,7 @@ const SHORT: Partial<Record<IssueKey, string>> = {
   hedefMetraj: 'Metraj hatalı',
   hedefKg: 'Kg hatalı',
   planBitis: 'Plan tarihi',
-  isEmriTuru: 'Sipariş kalemi',
+  siparis: 'Sipariş kalemi',
 };
 
 /** Alt çubuk hapları: anahtar başına bir hap (ilk engel sırası korunur). */

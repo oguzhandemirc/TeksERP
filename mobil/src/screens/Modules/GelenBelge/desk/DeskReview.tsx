@@ -132,9 +132,22 @@ function PlanSection({ row, wo, route, machines, locked }: PlanProps) {
 
 /** Kurşun makinesi çipleri ("Sonra seçilsin" + istasyonun makineleri); K30-D tek form da kullanır.
  *  Ortak önek başlık satırının sağında, çipte yalnız ayırt edici kısım. */
-export function MachineChips(p: { list: readonly DeskKursunMachine[]; value: string | null; locked: boolean; testID: string; onChange: (id: string | null) => void; label?: string }) {
+export function MachineChips(p: { list: readonly DeskKursunMachine[]; value: string | null; locked: boolean; testID: string; onChange: (id: string | null) => void; label?: string; /** Etiket solda, çipler aynı satırda (tek İE formu). */ inline?: boolean }) {
   const { list, value, locked, testID, onChange } = p;
   const mc = machineChoice(list, testID);
+  if (p.inline) {
+    return (
+      <View style={styles.inline}>
+        <View style={styles.inlineHead}>
+          <Text style={styles.label}>{p.label ?? 'Kurşun makinesi'}</Text>
+          {mc.prefix ? <Text style={styles.inlinePrefix} testID={`${testID}-onek`}>{mc.prefix}</Text> : null}
+        </View>
+        <View style={styles.inlineBody}>
+          <ChoiceChips options={mc.options} value={value} onChange={onChange} disabled={locked} size={mc.square ? 'square' : 'md'} testID={testID} />
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.party}>
       <View style={styles.labelRow}>
@@ -172,6 +185,10 @@ const styles = StyleSheet.create({
   title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  inlineHead: { flexShrink: 0, maxWidth: '40%', gap: 2 },
+  inlineBody: { flex: 1, minWidth: 0 },
+  inlinePrefix: { fontSize: typography.size.xs, color: colors.textMuted },
   labelRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   prefix: { fontSize: typography.size.sm, color: colors.textMuted, fontWeight: typography.weight.semibold },
   chip: { minHeight: 56, justifyContent: 'center' },

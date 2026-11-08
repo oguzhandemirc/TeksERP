@@ -1,5 +1,5 @@
-// K30-D dilim 2: rota adımları (ekle/çıkar/sırala, kilitli rotada salt okunur), makine önerisi, iş emri türü kapısı ve
-// hedef özellikler. Kural: kullanıcının dokunmadığı alan form ucunun gövdesine GİTMEZ (sunucu bugünkü yolu türetir).
+// K30-D dilim 2: rota adımları (ekle/çıkar/sırala, kilitli rotada salt okunur), makine önerisi, iş emri türünün bağdan
+// türemesi ve hedef özellikler. Kural: kullanıcının dokunmadığı alan form ucunun gövdesine GİTMEZ (sunucu bugünkü yolu türetir).
 import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
@@ -97,7 +97,10 @@ jest.mock('../../../../hooks/useFeatureFlags', () => ({
   useScanRouteMode: () => false,
   usePickableLifecycle: () => ['ACTIVE'],
 }));
-jest.mock('../../HizliIsEmri/OrderLinkPicker', () => ({ __esModule: true, default: () => null }));
+jest.mock('../../HizliIsEmri/OrderLinkPicker', () => {
+  const { Pressable } = jest.requireActual('react-native');
+  return { __esModule: true, default: (p: { onChange: (ids: string[]) => void }) => <Pressable testID="mock-siparis-bagla" onPress={() => p.onChange(['l1'])} /> };
+});
 jest.mock('../../../../components/ColorSelectField', () => ({ __esModule: true, default: () => null }));
 
 const form = { ownerCustomerId: 'cu1', ownerSuggested: null, ourBatchNo: 'P-1', meters: 100, metersReview: false, multi: null };
@@ -179,19 +182,18 @@ describe('UnifiedWoForm — rota adımları (K30-D)', () => {
 });
 
 describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () => {
-  it('⭐ tür: dokunulmazsa gitmez (otomatik = Stoğa); Siparişe + kalemsiz → oluştur kapalı + ipucu; Stoğa → type gider', async () => {
+  it('⭐ tür formda sorulmaz: bağ yoksa type gitmez (sunucu Stoğa türetir); sipariş bağlanınca yalnız orderLineIds gider (sunucu Siparişe)', async () => {
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    expect(await s.findByTestId('ie-form-tur')).toHaveTextContent(/Otomatik/);
+    await s.findByTestId('ie-form-siparis');
+    expect(s.queryByTestId('ie-form-tur')).toBeNull();
+    expect(s.queryByText('Siparişe üretim')).toBeNull();
+    expect(s.queryByText('Stoğa üretim')).toBeNull();
     expect(body()).not.toHaveProperty('type');
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
-    fireEvent.press(s.getByTestId('ie-form-tur-ORDER_PRODUCTION'));
-    expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
-    expect(s.getByTestId('ie-form-ipucu').props.children).toMatch(/Siparişe üretim için sipariş kalemi seçin/);
-    fireEvent.press(s.getByTestId('ie-form-tur-STOCK_PRODUCTION'));
-    expect(body().type).toBe('STOCK_PRODUCTION');
-    expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
-    fireEvent.press(s.getByTestId('ie-form-tur-otomatik'));
+    fireEvent.press(s.getByTestId('mock-siparis-bagla'));
+    expect(body().orderLineIds).toEqual(['l1']);
     expect(body()).not.toHaveProperty('type');
+    expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
   });
 
   it('⭐ hedef özellik: varsayılan (BAYRAK) seçili görünür ve gitmez; çipe dokununca tüm küme targetPropertyIds olarak gider', async () => {
@@ -211,9 +213,9 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
   it('⚙ ile rota adımları kapatılınca editör çizilmez, makine önerisi tek başına kalır', async () => {
     mockBlob = { tabletIeForm: { gizli: ['rotaAdimlari', 'isEmriTuru', 'hedefOzellik'] } };
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (3)'));
+    // Eski tercihteki 'isEmriTuru' tanınmaz → sayılmaz.
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (2)'));
     expect(s.queryByTestId('ie-rota-adimlari')).toBeNull();
-    expect(s.queryByTestId('ie-form-tur')).toBeNull();
     expect(s.queryByTestId('ie-form-ozellik')).toBeNull();
     expect(await s.findByTestId('ie-form-makine')).toBeTruthy();
   });
@@ -232,18 +234,17 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
 describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D düzeltme)', () => {
   it('⭐ dokunulmuş alan ⚙ ile gizlenirse "Diğer alanlar" başlığı dolu olduğunu söyler; engel ipucu yerini gösterir', async () => {
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-    fireEvent.press(await s.findByTestId('ie-form-tur-ORDER_PRODUCTION'));
+    fireEvent.changeText(await s.findByTestId('ie-form-en'), '0');
     fireEvent.press(s.getByTestId('ie-alanlar'));
-    fireEvent.press(await s.findByTestId('ie-alan-isEmriTuru'));
+    fireEvent.press(await s.findByTestId('ie-alan-en'));
     fireEvent.press(s.getByTestId('ie-alanlar-tamam'));
-    await waitFor(() => expect(s.queryByTestId('ie-form-tur')).toBeNull());
-    expect(s.getByTestId('ie-diger-alanlar-dolu')).toHaveTextContent(`Dolu, kayda girecek: ${TERIM.terbiyeIsEmri.cumleBasi.yalin} türü`);
-    expect(body().type).toBe('ORDER_PRODUCTION');
+    await waitFor(() => expect(s.queryByTestId('ie-form-en')).toBeNull());
+    expect(s.getByTestId('ie-diger-alanlar-dolu')).toHaveTextContent('Dolu, kayda girecek: En (cm)');
     expect(s.getByTestId('ie-form-olustur')).toBeDisabled();
     expect(s.getByTestId('ie-form-ipucu').props.children).toMatch(/"Diğer alanlar" bölümünde/);
-    // Dokunulmamış gizli alan "dolu" sayılmaz.
+    // Dokunulmamış (boşaltılmış) gizli alan "dolu" sayılmaz.
     fireEvent.press(s.getByTestId('ie-diger-alanlar'));
-    fireEvent.press(s.getByTestId('ie-form-tur-otomatik'));
+    fireEvent.changeText(await s.findByTestId('ie-form-en'), '');
     expect(s.queryByTestId('ie-diger-alanlar-dolu')).toBeNull();
   });
 

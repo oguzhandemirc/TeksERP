@@ -1,4 +1,4 @@
-// "Toplar ayrı geldi" anahtarı (Gülkesim fason): kapalıyken gövde bugünkü tek parça; açılınca docRolls'tan dolar, top
+// "Kumaş nasıl geldi?" (Toplar halinde / Tek parça) (Gülkesim fason): kapalıyken gövde bugünkü tek parça; açılınca docRolls'tan dolar, top
 // eklenir/silinir, gelen metre toplamı izler, gövde SEPARATE + rolls + toplam. Çok partide anahtar çizilmez.
 // Negatif sonda: RollRows `set` içindeki `meters: total` kaldırılınca "gelen metre toplamı izler" vakası kırmızı.
 import React, { useState } from 'react';
@@ -28,9 +28,9 @@ function Harness({ detail, form = baseForm }: { detail: Partial<InboundNoteDetai
 describe('RollRows — toplar ayrı geldi', () => {
   it('⭐ anahtar varsayılan KAPALI: satır yok, gövde bugünkü (rollMode/rolls yok)', () => {
     const ui = renderWithPaper(<Harness detail={{}} />);
-    expect(ui.getByTestId('belge-ayri-top-GB-1')).toBeTruthy();
-    expect(ui.getByTestId('belge-ayri-top-GB-1').props.accessibilityRole).toBe('switch');
-    expect(ui.getByTestId('belge-ayri-top-GB-1').props.accessibilityState).toMatchObject({ checked: false });
+    expect(ui.getByTestId('belge-ayri-top-GB-1')).toHaveTextContent(/Kumaş nasıl geldi\?/);
+    expect(ui.getByTestId('belge-ayri-top-GB-1-tek').props.accessibilityState).toMatchObject({ selected: true });
+    expect(ui.getByTestId('belge-ayri-top-GB-1-toplar').props.accessibilityState).toMatchObject({ selected: false });
     expect(ui.queryByTestId('belge-toplar-GB-1')).toBeNull();
     const b = buildCreateBody(current.form!, opts);
     expect(b.kursunMeters).toBe('300');
@@ -39,8 +39,11 @@ describe('RollRows — toplar ayrı geldi', () => {
 
   it('⭐ açılınca docRolls dolar; gelen metre toplamı izler; gövde SEPARATE + rolls + toplam; kapatınca eski gövde', () => {
     const ui = renderWithPaper(<Harness detail={{ docRolls: [{ lineNo: 1, meters: 100, weightKg: 25, senderRollNo: 'T1' }, { lineNo: 2, meters: 50, weightKg: null, senderRollNo: null }] }} />);
-    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1')));
-    expect(ui.getByTestId('belge-ayri-top-GB-1').props.accessibilityState).toMatchObject({ checked: true });
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-toplar')));
+    expect(ui.getByTestId('belge-ayri-top-GB-1-toplar').props.accessibilityState).toMatchObject({ selected: true });
+    // Seçili seçeneğe yeniden basmak durumu bozmaz.
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-toplar')));
+    expect(current.form!.rolls).toHaveLength(2);
     expect(ui.getByTestId('belge-top-GB-1-2')).toBeTruthy();
     expect(current.form!.meters).toBe(150);
     expect(current.form!.metersReview).toBe(false);
@@ -59,8 +62,8 @@ describe('RollRows — toplar ayrı geldi', () => {
     act(() => fireEvent.press(ui.getByTestId('belge-top-sil-GB-1-2')));
     expect(current.form!.rolls).toHaveLength(2);
     expect(current.form!.meters).toBe(130.5);
-    // Kapat → rollMode/rolls gitmez.
-    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1')));
+    // Tek parça → rollMode/rolls gitmez.
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-tek')));
     expect(ui.queryByTestId('belge-toplar-GB-1')).toBeNull();
     const off = buildCreateBody(current.form!, opts);
     expect('rollMode' in off || 'rolls' in off).toBe(false);
@@ -68,7 +71,7 @@ describe('RollRows — toplar ayrı geldi', () => {
 
   it('docRolls yok (eski sunucu) → 1 boş satır; tek satır silinemez', () => {
     const ui = renderWithPaper(<Harness detail={{}} />);
-    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1')));
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-toplar')));
     expect(current.form!.rolls).toHaveLength(1);
     expect(current.form!.meters).toBeNull();
     expect(ui.getByTestId('belge-top-sil-GB-1-1')).toBeDisabled();

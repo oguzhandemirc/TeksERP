@@ -20,6 +20,8 @@ interface Props {
   onLabelResolved?: (label: string | null) => void;
   /** "Temizle" kısayolu gösterilsin mi (kilitliyken zaten gizlenir). */
   showClear?: boolean;
+  /** Tetiği dışarıda çiz (ör. etiketi içinde taşıyan seçici satırı); verilirse "Temizle" seçicinin başında durur. */
+  renderTrigger?: (t: { label: string | null; open: () => void }) => React.ReactNode;
 }
 
 /**
@@ -39,6 +41,7 @@ export default function ColorSelectField({
   labelOverride,
   onLabelResolved,
   showClear = true,
+  renderTrigger,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -87,6 +90,7 @@ export default function ColorSelectField({
 
   return (
     <>
+      {renderTrigger ? renderTrigger({ label: effectiveLabel, open: () => setPickerOpen(true) }) : (
       <View style={styles.row}>
         <TouchableRipple
           onPress={() => setPickerOpen(true)}
@@ -105,14 +109,16 @@ export default function ColorSelectField({
           </TouchableRipple>
         ) : null}
       </View>
+      )}
 
       <PickerModal
         visible={pickerOpen}
         title="Hedef Renk Seç"
         options={colorOptions}
         selectedValue={value}
+        pinnedOptions={renderTrigger && value && showClear ? [{ value: '', label: 'Temizle (renksiz / ham)' }] : undefined}
         loading={colorsQuery.isLoading}
-        onSelect={(v) => onChange(v)}
+        onSelect={(v) => onChange(v || null)}
         onDismiss={() => setPickerOpen(false)}
         onRefresh={() => colorsQuery.refetch()}
         emptyText="Renk bulunamadı"

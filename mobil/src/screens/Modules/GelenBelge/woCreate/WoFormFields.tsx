@@ -1,11 +1,10 @@
 // S16b tek form — panel klasik formunun üretim/plan inputları: Rota (+ adım yolu), Sipariş bağı, Hedef bölümü (WoTargetFields),
 // Planlı başlangıç/bitiş, Not. K30-D: `show` ile yalnız seçilen alanlar çizilir; gizlenenler aynı bileşenle altta "Diğer alanlar"da
-// (zone="other"). Rota adımları / makine / tür / hedef özellikler `plan` ile WoPlanFields'tan.
+// (zone="other"). Rota adımları / makine / hedef özellikler `plan` ile WoPlanFields'tan; iş emri türü sorulmaz (bağdan türer).
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import { SheetField } from '../../../../components/ModuleSheet';
 import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
@@ -23,7 +22,7 @@ import type { AvailableOrderLine } from '../../../../services/order.service';
 import { SCAN_ROUTE, isScanRoute } from './woFromDoc';
 import { plannedDayOptions, type WoFormExtras, type WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
-import { RouteStepsBlock, TargetPropsBlock, WoTypeBlock, type WoPlanCtx } from './WoPlanFields';
+import { RouteStepsBlock, TargetPropsBlock, type WoPlanCtx } from './WoPlanFields';
 import { DocFilled, TargetFields } from './WoTargetFields';
 
 interface Props {
@@ -49,7 +48,7 @@ interface Props {
   show?: (k: WoFieldKey) => boolean;
   /** 'other' = altta "Diğer alanlar" bölümü (bölüm başlığı "Üretim" çizilmez). */
   zone?: 'top' | 'other';
-  /** K30-D: rota adımları + makine, iş emri türü, hedef özellikler; yoksa çizilmez. */
+  /** K30-D: rota adımları + makine, hedef özellikler; yoksa çizilmez. */
   plan?: WoPlanCtx;
   /** Hedef şeridinin tonu (engellerden). */
   targetTone?: BandTone;
@@ -93,11 +92,10 @@ export default function WoFormFields(props: Props) {
         </>
       )}
       {p.plan && <RouteStepsBlock plan={p.plan} show={show} locked={locked} />}
-      {p.plan && <WoTypeBlock plan={p.plan} show={show} locked={locked} />}
 
       {show('siparis') && (
         <View pointerEvents={locked ? 'none' : 'auto'} testID="ie-form-siparis">
-          <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} emptyHint="İsteğe bağlı" />
+          <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} optionalInline />
         </View>
       )}
 
@@ -119,12 +117,12 @@ function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
         <View style={styles.row}>
           {plan.start && (
             <View style={styles.col}>
-              <SheetField label="Planlı başlangıç" value={p.state.extras.plannedStart ? fmtDayKey(p.state.extras.plannedStart) : ''} placeholder="Seçilmedi" onPress={() => p.onPick('start')} disabled={p.locked} />
+              <SelectButton label="Planlı başlangıç" caption="Planlı başlangıç" value={p.state.extras.plannedStart ? fmtDayKey(p.state.extras.plannedStart) : null} icon="calendar-start" quiet onPress={() => p.onPick('start')} disabled={p.locked} testID="ie-form-plan-baslangic" />
             </View>
           )}
           {plan.end && (
             <View style={styles.col}>
-              <SheetField label="Planlı bitiş" value={p.state.extras.plannedEnd ? fmtDayKey(p.state.extras.plannedEnd) : ''} placeholder="Seçilmedi" onPress={() => p.onPick('end')} disabled={p.locked} />
+              <SelectButton label="Planlı bitiş" caption="Planlı bitiş" value={p.state.extras.plannedEnd ? fmtDayKey(p.state.extras.plannedEnd) : null} icon="calendar-end" quiet onPress={() => p.onPick('end')} disabled={p.locked} testID="ie-form-plan-bitis" />
             </View>
           )}
         </View>
@@ -199,7 +197,7 @@ function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => voi
 const styles = StyleSheet.create({
   root: { gap: spacing.md },
   path: { minHeight: 32, textAlignVertical: 'center', fontSize: typography.size.base, color: colors.textSecondary },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
-  col: { flex: 1, minWidth: 200 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  col: { flex: 1, minWidth: 180 },
   input: { backgroundColor: colors.surface },
 });

@@ -55,7 +55,7 @@ export interface WoFormExtras {
   plannedEnd: string | null;
   note: string;
   // K30-D: null / anahtarsız = kullanıcı dokunmadı → gövdeye GİTMEZ (sunucu bugünkü gibi türetir).
-  /** İş emri türü; null = otomatik (sipariş kalemi varsa siparişe, yoksa stoğa). */
+  /** İş emri türü; null = sunucu sipariş bağından türetir (kalem varsa siparişe, yoksa stoğa); Fason "Malın sahibi" kartından. */
   woType: WoType | null;
   /** Hedef özellikler (BAYRAK) açık kümesi; null = rota varsayılanları. */
   propertyIds: string[] | null;
@@ -211,7 +211,8 @@ export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): FormIssue[] {
   if (!c.perParty && bad(e.targetWeight)) push('hedefKg', "Hedef kg 0'dan büyük olmalı.");
   if (c.hasTambur && !e.foldType) push('katTipi', 'Kat tipini seçin.');
   if (e.plannedStart && e.plannedEnd && e.plannedEnd < e.plannedStart) push('planBitis', 'Planlı bitiş başlangıçtan önce olamaz.');
-  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) push('isEmriTuru', 'Siparişe üretim için sipariş kalemi seçin ya da "Stoğa üretim" seçin.');
+  // Formda tür seçici yok (woType yalnız null ya da Fason); savunma: Siparişe üretim kalemsiz gönderilmez.
+  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) push('siparis', 'Siparişe üretim için sipariş kalemi seçin.');
   if (e.steps && e.steps.length === 0) push('rotaAdimlari', 'Rotada en az bir adım kalmalı.');
   return out;
 }

@@ -1,4 +1,4 @@
-// İE formu "Hedef" bölümü — hedef kumaş seçici, tek satırda en/metraj/kg (+ kat tipi), hedef renk.
+// İE formu "Hedef" bölümü — hedef kumaş seçici, tek satırda en/metraj/kg (+ kat tipi), hedef renk seçici satırı.
 // Belgeden dolan değer sarı vurgulu (elle değişince kalkar); desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -79,8 +79,14 @@ export function TargetFields(p: TargetFieldsProps) {
 
       {show('hedefRenk') && (
         <>
-          <FieldLabel label="Hedef renk" />
-          <ColorSelectField value={e.targetColorId} onChange={(id) => edit({ targetColorId: id })} disabled={locked} />
+          <ColorSelectField
+            value={e.targetColorId}
+            onChange={(id) => edit({ targetColorId: id })}
+            disabled={locked}
+            renderTrigger={({ label, open }) => (
+              <SelectButton label="Hedef renk" caption="Hedef renk" value={label} icon="palette-outline" quiet onPress={open} disabled={locked} testID="ie-form-hedef-renk" />
+            )}
+          />
           <Suggest kind="renk" docText={state.docText.renk} name={colorSug?.name ?? null} accepted={!colorSug || e.targetColorId === colorSug.id} locked={locked} onAccept={() => colorSug && edit({ targetColorId: colorSug.id })} withDocLine />
         </>
       )}
@@ -178,10 +184,6 @@ function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: stri
   return null;
 }
 
-export function FieldLabel({ label }: { label: string }) {
-  return <Text style={[styles.label, styles.labelGap]}>{label}</Text>;
-}
-
 /** Belgeden dolan değerin işareti (`belgeden-<k>`); `highlight` → sarı vurgu sarmalayıcıda (sayı kutuları vurguyu kendi çizer).
  *  `fromDoc` edit'te düştüğü için elle değişince kalkar. */
 export function DocFilled({ k, state, children, highlight }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode; highlight?: boolean }) {
@@ -197,7 +199,6 @@ const styles = StyleSheet.create({
   numbers: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, alignItems: 'flex-end' },
   fold: { gap: spacing.xs },
   label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
-  labelGap: { marginTop: spacing.xs },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
   hl: { padding: 2 },
   grow: { flex: 1 },

@@ -1,14 +1,16 @@
-// Toplar ayrı geldi (Gülkesim fason): anahtar açıkken top top metre + isteğe bağlı kg + gönderen top no girilir; tek iş
-// emri açılır, her satır ayrı top doğar. Anahtar kapalıyken gövde bugünkü tek parçadır. Çok partili belgede çizilmez.
+// "Kumaş nasıl geldi?" (Gülkesim fason): "Toplar halinde" seçiliyken top top metre + isteğe bağlı kg + gönderen top no girilir; tek iş
+// emri açılır, her satır ayrı top doğar. "Tek parça" (varsayılan) gövde bugünkü tek parçadır. Çok partili belgede çizilmez.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Switch, Text, TextInput, TouchableRipple } from 'react-native-paper';
+import { Button, Text, TextInput } from 'react-native-paper';
+import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import NumpadInput from '../../../../components/NumpadInput';
 import { colors, spacing, typography } from '../../../../theme';
 import { parseMeters } from '../approvalGate';
 import { fmtKursunMeters } from '../readResult';
 import { emptyRoll, initialRolls, ROLLS_MAX, rollsTotal, type RollRow } from './rollDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
+import { InlineField } from './InlineField';
 
 export default function RollRows({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
   const f = row.form;
@@ -19,20 +21,26 @@ export default function RollRows({ row, wo, locked }: { row: DocRow; wo: WoRowsS
     const total = rollsTotal(next);
     wo.updateForm(row.noteId, { rolls: next, meters: total > 0 ? total : null, metersReview: false });
   };
-  const toggle = () => (rolls ? wo.updateForm(row.noteId, { rolls: null }) : set(initialRolls(row.detail?.docRolls)));
+  const choose = (v: string | null) => {
+    if (v === 'toplar' && !rolls) set(initialRolls(row.detail?.docRolls));
+    else if (v === 'tek' && rolls) wo.updateForm(row.noteId, { rolls: null });
+  };
   const setRow = (key: string, patch: Partial<RollRow>) => rolls && set(rolls.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const no = row.noteNo;
   return (
     <View style={styles.box}>
-      <TouchableRipple onPress={toggle} disabled={locked} accessibilityRole="switch" accessibilityState={{ checked: !!rolls, disabled: locked }}
-        accessibilityLabel="Toplar ayrı geldi" style={[styles.switchRow, locked && styles.disabled]} testID={`belge-ayri-top-${row.noteNo}`}>
-        <View style={styles.switchInner}>
-          <Text style={styles.switchText}>Toplar ayrı geldi</Text>
-          {/* Dokunuşu satır alır; anahtar yalnız göstergedir (çift tetik olmasın). */}
-          <View pointerEvents="none">
-            <Switch value={!!rolls} disabled={locked} />
-          </View>
-        </View>
-      </TouchableRipple>
+      <InlineField label="Kumaş nasıl geldi?" testID={`belge-ayri-top-${no}`}>
+        <ChoiceChips
+          options={[
+            { value: 'toplar', label: 'Toplar halinde', testID: `belge-ayri-top-${no}-toplar` },
+            { value: 'tek', label: 'Tek parça', testID: `belge-ayri-top-${no}-tek` },
+          ]}
+          value={rolls ? 'toplar' : 'tek'}
+          onChange={choose}
+          disabled={locked}
+          testID={`belge-ayri-top-${no}-secim`}
+        />
+      </InlineField>
       {rolls && (
         <View style={styles.box} testID={`belge-toplar-${row.noteNo}`}>
           {rolls.map((r, i) => (
@@ -83,9 +91,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   input: { flex: 1, minWidth: 140 },
   total: { flex: 1, minWidth: 160, fontSize: typography.size.xl, fontWeight: typography.weight.semibold, color: colors.text },
-  switchRow: { minHeight: 56, justifyContent: 'center', alignSelf: 'flex-start', paddingHorizontal: spacing.sm, borderRadius: 8 },
-  switchInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  switchText: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
-  disabled: { opacity: 0.5 },
   btn: { minHeight: 56 },
 });

@@ -44,7 +44,7 @@ import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import { defaultWoTypeFor, type WoCreateKind } from '../../../../store/woCreateKinds';
 import type { DocRowOpenRequest } from './DocRowCard';
 import { useManualDraft } from './useManualDraft';
-import { ownerKindCard, ownerKindForWoType, routeConflict, shouldApplyCardRoute, woTypeForOwnerKind } from '../../IsEmirleri/createEntry';
+import { ownerKindCard, routeConflict, shouldApplyCardRoute, woTypeForOwnerKind } from '../../IsEmirleri/createEntry';
 
 export interface UnifiedWoFormProps {
   /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
@@ -124,7 +124,6 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     stationRoutes: routesQ.data?.data ?? [],
     stationRoutesLoading: routesQ.isLoading,
     customerId: row?.form?.ownerCustomerId ?? null,
-    onOwnerKind: owner.visible ? owner.sync : undefined,
   });
   const partyPlan = usePartyPlan({ row, wo, route: eff, allMachines: ctx.data?.data.kursunMachines ?? NO_MACHINES, stepsEdited: plan.stepsEdited });
   // Her parti ayrı + gramaj parti kartında: ortak gramaj alanı çizilmez (parti seçimi yoksa yine o gider).
@@ -205,11 +204,9 @@ interface PlanInput {
   stationRoutes: ProductionRoute[];
   stationRoutesLoading: boolean;
   customerId: string | null;
-  /** Tür seçici "Malın sahibi" kartını izletir. */
-  onOwnerKind?: (k: WoCreateKind) => void;
 }
 
-/** K30-D plan bölümünün (adımlar, makine, tür, hedef özellik) bağlamı; PER_PARTY'de makine parti başına masada seçilir. */
+/** K30-D plan bölümünün (adımlar, makine, hedef özellik) bağlamı; PER_PARTY'de makine parti başına masada seçilir. */
 function buildPlanCtx(p: PlanInput): WoPlanCtx {
   const { route, eff, extras, edit } = p;
   const stepsEdited = extras.steps !== null && !sameAsRoute(extras.steps, route);
@@ -231,10 +228,6 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     machineValue: extras.machineId !== undefined ? extras.machineId : routeDefaultMachineId(eff, p.allMachines) ?? null,
     onMachine: (machineId) => edit({ machineId }),
     customerId: p.customerId,
-    woType: extras.woType,
-    orderLineIds: extras.orderLineIds,
-    onWoType: (woType) => { edit({ woType }); p.onOwnerKind?.(ownerKindForWoType(woType)); },
-    ownerCard: !!p.onOwnerKind,
     propertyIds: extras.propertyIds,
     onProperties: (propertyIds) => edit({ propertyIds }),
   };
@@ -323,7 +316,7 @@ function useOwnerKind(kinds: readonly WoCreateKind[] | undefined, woType: WoForm
     setValue(k);
     setForm((s) => ({ ...s, extras: { ...s.extras, woType: woTypeForOwnerKind(k, s.extras.woType) } }));
   }, [setForm]);
-  return { visible, value, reason: value !== null ? init.reason : null, choose, sync: setValue, woType };
+  return { visible, value, reason: value !== null ? init.reason : null, choose, woType };
 }
 
 /** Müşterinin rota kartı (`rota-onerisi` CUSTOMER_ROUTE); yoksa / eski sunucu → null. */

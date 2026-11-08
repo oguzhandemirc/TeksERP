@@ -25,9 +25,10 @@ describe('woFieldCatalog', () => {
     expect(new Set(WO_FIELDS.map((f) => f.key)).size).toBe(WO_FIELDS.length);
   });
 
-  it('dilim 2 alanları (adımlar, makine, tür, hedef özellik) artık ⚙ listesinde', () => {
+  it('dilim 2 alanları (adımlar, makine, hedef özellik) ⚙ listesinde; iş emri türü formda sorulmaz (bağdan türer)', () => {
     const listed = selectorSections().flatMap((s) => s.fields.map((f) => f.key));
-    for (const k of ['hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'] as const) {
+    expect(listed).not.toContain('isEmriTuru');
+    for (const k of ['hedefOzellik', 'makine', 'rotaAdimlari'] as const) {
       expect(WO_FIELDS.find((f) => f.key === k)?.planned).toBeUndefined();
       expect(listed).toContain(k);
     }
@@ -78,7 +79,6 @@ describe('woFieldCatalog', () => {
       expect(fieldApplicable(k, ctx)).toBe(true);
     }
     expect(fieldApplicable('en', off)).toBe(true);
-    expect(fieldApplicable('isEmriTuru', off)).toBe(true);
     // Makine kurşun adımından değil, o istasyonda makine olmasından: kurşun var + makine yok → çizilmez.
     expect(fieldApplicable('makine', { ...ctx, hasMachine: false })).toBe(false);
     // "Diğer alanlar (n)": koşulu tutmayan ve belgeden dolan gizli alan sayılmaz.
@@ -91,7 +91,7 @@ describe('woFieldCatalog', () => {
     expect(valuedFields(e, { stepsEdited: false })).toEqual([]);
     expect(valuedFields({ ...e, foldType: 'A' }, { stepsEdited: false })).toEqual([]);
     expect(
-      valuedFields({ ...e, woType: 'STOCK_PRODUCTION', propertyIds: [], machineId: null, width: '150', note: ' ' }, { stepsEdited: true }).sort(),
-    ).toEqual(['en', 'hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'].sort());
+      valuedFields({ ...e, woType: 'CUSTOMER_GOODS_SERVICE', propertyIds: [], machineId: null, width: '150', note: ' ' }, { stepsEdited: true }).sort(),
+    ).toEqual(['en', 'hedefOzellik', 'makine', 'rotaAdimlari'].sort());
   });
 });
