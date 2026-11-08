@@ -24,7 +24,8 @@
 // TÜKETİCİLER: test_finance_regime_gate · test_ticaret_regime_gate ·
 // test_iplik_regime_gate · test_depo_multi_regime_gate ·
 // test_production_regime_gate · test_module_flag_off · test_module_flags ·
-// test_module_grandfathering (son üçü dosyanın SONUNDAKİ "modül kapısı özel
+// test_module_grandfathering · test_maliyet_regime_gate · test_regime_gate_scan_aile
+// (module_* üçlüsü dosyanın SONUNDAKİ "modül kapısı özel
 // yardımcıları" bölümünü kullanır — AST gövde/önbellek/`forbidden` analizi ve
 // migration damga ayrıştırıcısı).
 // =============================================================================
@@ -84,22 +85,52 @@ function cozYol(kaynak: string, spec: string): string | null {
 }
 
 /**
- * Bölünmüş servis cephesinden (`services/<ad>.service.ts`) kendi alan dizinine (`services/<ad>/`) giden
- * kenar DERİNLİK SAYMAZ: gövdeler bölmeden önce cephedeydi (2026-11-08 bölmeleri); sayılsaydı derinlik
- * tavanı bir sekme erken dolar ve tarama sessizce daralırdı.
+ * Bölünmüş servis AİLESİ: `<ad>.service.ts` cephesi + yanındaki `<ad>/` dizininin tüm modülleri. Bölmeden
+ * (2026-11-08) önce bunlar TEK dosyaydı; tarama aileyi TEK DÜĞÜM sayar (aile içi kenar derinlik saymaz),
+ * yoksa derinlik tavanı bölme yüzünden erken dolar ve tarama sessizce daralır (`test_regime_gate_scan_aile`).
  */
-function cepheKenari(kaynak: string, hedef: string): boolean {
-  if (!kaynak.endsWith(".service.ts")) return false;
-  const dizin = kaynak.slice(0, -".service.ts".length) + path.sep;
-  return hedef.startsWith(dizin);
+export function aileCephesi(dosya: string, src: string): string | null {
+  if (dosya.endsWith(".service.ts") && dizinMi(dosya.slice(0, -".service.ts".length))) return dosya;
+  let bulunan: string | null = null;
+  const kok = path.resolve(src);
+  // En DIŞ ata kazanır: `<ad>/` altındaki bir alt dizin kendi başına yeni aile açmaz.
+  for (let d = path.dirname(dosya); d.startsWith(kok + path.sep); d = path.dirname(d)) {
+    if (fs.existsSync(`${d}.service.ts`)) bulunan = `${d}.service.ts`;
+  }
+  return bulunan;
 }
 
-/** Dosyanın YEREL import ettiği modüller (mutlak yol). */
-function yerelImportlar(dosya: string): string[] {
+function dizinMi(p: string): boolean {
+  return fs.existsSync(p) && fs.statSync(p).isDirectory();
+}
+
+/** Ailenin bütün üyeleri (cephe + `<ad>/**` altındaki `.ts`). */
+function aileUyeleri(cephe: string): string[] {
+  const cikti = [cephe];
+  const yuru = (dir: string): void => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const tam = path.join(dir, e.name);
+      if (e.isDirectory()) yuru(tam);
+      else if (e.name.endsWith(".ts") && !e.name.endsWith(".routes.ts")) cikti.push(tam);
+    }
+  };
+  yuru(cephe.slice(0, -".service.ts".length));
+  return cikti.sort();
+}
+
+/**
+ * Dosyanın YEREL import ettiği modüller (mutlak yol). `export * from` / `export { x } from` yeniden
+ * dışa aktarımı da kenardır: cephe gövdeyi böyle taşır, izlenmezse taşınan kod taramadan düşer.
+ */
+export function yerelImportlar(dosya: string): string[] {
   const sf = oku(dosya);
   const cikti: string[] = [];
   const gez = (n: ts.Node): void => {
-    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier)) {
+    if (
+      (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
+      n.moduleSpecifier &&
+      ts.isStringLiteral(n.moduleSpecifier)
+    ) {
       const h = cozYol(dosya, n.moduleSpecifier.text);
       if (h) cikti.push(h);
     }
@@ -107,6 +138,41 @@ function yerelImportlar(dosya: string): string[] {
   };
   gez(sf);
   return cikti;
+}
+
+/**
+ * Router'dan `derinlik` sekmeye kadar ulaşılan dosyalar → en KÜÇÜK derinlik. Alt router'lar (`.routes.ts`)
+ * izlenmez. 0-1 BFS: aile içi kenar 0, diğer kenar 1 maliyet; deque önü/arkası derinlik sırasını korur,
+ * böylece bir düğüm önce uzun yoldan işaretlenip kısa yolu gölgeleyemez.
+ */
+export function ulasilanDosyalar(
+  giris: string,
+  derinlik: number,
+  src: string,
+  importlar: (f: string) => string[] = yerelImportlar,
+): Map<string, number> {
+  const mesafe = new Map<string, number>([[giris, 0]]);
+  const islenen = new Set<string>();
+  const deque: Array<{ f: string; d: number }> = [{ f: giris, d: 0 }];
+  const ekle = (f: string, d: number, maliyet: 0 | 1): void => {
+    if (d > derinlik || (mesafe.get(f) ?? Infinity) <= d) return;
+    mesafe.set(f, d);
+    if (maliyet === 0) deque.unshift({ f, d });
+    else deque.push({ f, d });
+  };
+  while (deque.length) {
+    const { f, d } = deque.shift() as { f: string; d: number };
+    if (islenen.has(f) || mesafe.get(f) !== d) continue;
+    islenen.add(f);
+    const aile = aileCephesi(f, src);
+    if (aile) for (const u of aileUyeleri(aile)) ekle(u, d, 0);
+    for (const x of importlar(f)) {
+      if (x.endsWith(".routes.ts")) continue;
+      const ayniAile = aile !== null && aileCephesi(x, src) === aile;
+      ekle(x, ayniAile ? d : d + 1, ayniAile ? 0 : 1);
+    }
+  }
+  return mesafe;
 }
 
 /** `A.use(..., B)` kenarları — mount grafiği. */
@@ -188,22 +254,24 @@ export function rejimTaramasiKur(g: RejimTaramaGirdisi): RejimTarama {
    * üretim/kalite/stok raporlarını da rejime bağlardı. Doğru yer alt
    * router'ın KENDİSİDİR; her router bağımsız bir birim olarak değerlendirilir.
    */
+  const importOnbellek = new Map<string, string[]>();
+  const importlar = (f: string): string[] => {
+    let v = importOnbellek.get(f);
+    if (!v) importOnbellek.set(f, (v = yerelImportlar(f)));
+    return v;
+  };
+  const modelOnbellek = new Map<string, string | null>();
+  const modelKullaniyorOnbellekli = (f: string): string | null => {
+    if (!modelOnbellek.has(f)) modelOnbellek.set(f, modelKullaniyor(f));
+    return modelOnbellek.get(f) ?? null;
+  };
   const modelDokunusu = (giris: string): string | null => {
-    const gorulen = new Set<string>();
-    let kuyruk: Array<{ f: string; d: number }> = [{ f: giris, d: 0 }];
-    while (kuyruk.length) {
-      const { f, d } = kuyruk.shift() as { f: string; d: number };
-      if (gorulen.has(f)) continue;
-      gorulen.add(f);
-      const m = modelKullaniyor(f);
+    const ulasilan = [...ulasilanDosyalar(giris, derinlik, SRC, importlar)].sort(
+      (a, b) => a[1] - b[1] || a[0].localeCompare(b[0]),
+    );
+    for (const [f] of ulasilan) {
+      const m = modelKullaniyorOnbellekli(f);
       if (m) return m;
-      if (d < derinlik) {
-        kuyruk = kuyruk.concat(
-          yerelImportlar(f)
-            .filter((x) => !x.endsWith(".routes.ts"))
-            .map((x) => ({ f: x, d: cepheKenari(f, x) ? d : d + 1 })),
-        );
-      }
     }
     return null;
   };
