@@ -8,7 +8,12 @@
 import type { Prisma } from "@prisma/client";
 
 export type StatementKind = "ROLL" | "YARN_LOT" | "WARP_BEAM";
-/** Giren · Çıkan (BRÜT) · Fasondan doğrudan sevk · Fire/düzeltme. */
+/**
+ * Kolonlar — anlamı bölüme göre değişir, etiketi `StatementSection.columnLabels`ten okunur:
+ * IN giren (top: giriş + giriş ölçümü düzeltmesi + müşteri iadesi) · OUT kalandan çıkış (top: müşteriye BRÜT
+ * sevk; iplik: çözgüye/fasona çıkış — sevk DEĞİL; levent: tüketim/fasona çıkış) · DSK fasondan doğrudan sevk ·
+ * SCRAP fire / kayıt düzeltmesi / sayım farkı.
+ */
 export type StatementColumn = "IN" | "OUT" | "DSK" | "SCRAP";
 
 export interface StatementDocument {
@@ -59,6 +64,8 @@ export interface StatementSection {
   unit: "m" | "kg";
   /** Kalanın kapsamı — her bölüm kendi modülünün tek-kaynak bakiye tanımını kullanır. */
   scope: string;
+  /** Kolon başlıkları (Türkçe, bölüme özgü) — panel ve belge bu etiketi basar. */
+  columnLabels: Record<StatementColumn, string>;
   totals: StatementTotals;
   subjects: StatementSubject[];
   lines: StatementLine[];
@@ -82,6 +89,18 @@ export interface ConsignedStatement {
   omitted: Array<{ kind: StatementKind; reason: "MODULE_DISABLED" | "PERMISSION_DENIED" }>;
   /** Yalnız dönem bugünü kapsıyorsa (geçmiş dönemde canlı durum ekstreyle kıyaslanmaz). */
   reconciliation: { rolls: StatementReconciliation } | null;
+}
+
+/** İç açılış bakiyesi — konu başına `fromAt` öncesi defter toplamı (DB'de toplanır, olaylar belleğe alınmaz). */
+export interface OpeningBalance {
+  subjectId: string;
+  qty: Prisma.Decimal;
+}
+
+/** Konu etiketi — yalnız açılışı olup dönemde hareketi olmayan konular için ayrıca okunur. */
+export interface SubjectLabel {
+  label: string | null;
+  itemName: string | null;
 }
 
 /** İç olay — defter satırından türetilmiş, kalana etkisi işaretli. */

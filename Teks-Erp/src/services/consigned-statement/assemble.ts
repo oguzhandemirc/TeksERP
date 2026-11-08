@@ -1,12 +1,14 @@
 // =============================================================================
-// EMANET EKSTRESİ — saf montaj: olaylar → açılış / dönem satırları / kapanış
+// EMANET EKSTRESİ — saf montaj: açılış bakiyeleri + dönem olayları → konu/toplam/satır
 // =============================================================================
-// As-of: açılış = `fromAt` öncesi olayların toplamı; satırlar [fromAt, toAt] (sorgu zaten ≤ toAt getirir).
+// As-of: açılış = `fromAt` öncesi defter toplamı (okuyucu DB'de toplar); satırlar [fromAt, toAt] olaylarıdır.
 // Storno kendi anında ayrı satırdır; geçmiş dönem yeni kayıtla değişmez (defter-öncelikli).
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import { factoryYmd } from "../../constants/time";
-import type { LedgerEvent, StatementColumn, StatementKind, StatementLine, StatementSection, StatementSubject, StatementTotals } from "./types";
+import type {
+  LedgerEvent, OpeningBalance, StatementColumn, StatementKind, StatementLine, StatementSection, StatementSubject, StatementTotals, SubjectLabel,
+} from "./types";
 
 const ZERO = new Prisma.Decimal(0);
 const num = (d: Prisma.Decimal): number => Number(d.toFixed(3));
@@ -37,32 +39,47 @@ export function compareEvents(a: LedgerEvent, b: LedgerEvent): number {
   return t !== 0 ? t : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-export function assembleSection(
-  meta: { kind: StatementKind; unit: "m" | "kg"; scope: string },
-  events: readonly LedgerEvent[],
-  fromAt: Date,
-): StatementSection {
-  const { kind, unit, scope } = meta;
-  const sorted = [...events].sort(compareEvents);
-  const bySubject = new Map<string, { acc: Acc; label: string | null; itemName: string | null; touched: boolean }>();
+export interface SectionMeta {
+  kind: StatementKind;
+  unit: "m" | "kg";
+  scope: string;
+  columnLabels: Record<StatementColumn, string>;
+}
+
+export interface SectionInput {
+  /** `fromAt` öncesi konu bakiyeleri (sıfırlar dahil olabilir — süzülür). */
+  opening: readonly OpeningBalance[];
+  /** Yalnız [fromAt, toAt] olayları. */
+  events: readonly LedgerEvent[];
+  /** Açılışı olup dönemde olayı olmayan konuların etiketleri. */
+  labels: ReadonlyMap<string, SubjectLabel>;
+}
+
+export function assembleSection(meta: SectionMeta, input: SectionInput): StatementSection {
+  const bySubject = new Map<string, { acc: Acc; label: string | null; itemName: string | null }>();
   const total = emptyAcc();
-  const lines: StatementLine[] = [];
-  for (const e of sorted) {
-    let s = bySubject.get(e.subjectId);
+  const subjectOf = (id: string, fallback?: SubjectLabel) => {
+    let s = bySubject.get(id);
     if (!s) {
-      s = { acc: emptyAcc(), label: e.subjectLabel, itemName: e.itemName, touched: false };
-      bySubject.set(e.subjectId, s);
+      const l = input.labels.get(id) ?? fallback ?? { label: null, itemName: null };
+      s = { acc: emptyAcc(), label: l.label, itemName: l.itemName };
+      bySubject.set(id, s);
     }
-    if (e.at < fromAt) {
-      s.acc.opening = s.acc.opening.plus(e.effect);
-      total.opening = total.opening.plus(e.effect);
-      continue;
-    }
+    return s;
+  };
+  for (const o of input.opening) {
+    if (o.qty.isZero()) continue;
+    const s = subjectOf(o.subjectId);
+    s.acc.opening = s.acc.opening.plus(o.qty);
+    total.opening = total.opening.plus(o.qty);
+  }
+  const lines: StatementLine[] = [];
+  for (const e of [...input.events].sort(compareEvents)) {
+    const s = subjectOf(e.subjectId, { label: e.subjectLabel, itemName: e.itemName });
     const key = COLUMN_KEY[e.column];
     const q = columnQty(e.column, e.effect);
     s.acc[key] = s.acc[key].plus(q);
     total[key] = total[key].plus(q);
-    s.touched = true;
     lines.push({
       at: e.at.toISOString(),
       day: factoryYmd(e.at),
@@ -76,12 +93,15 @@ export function assembleSection(
       document: e.document,
     });
   }
-  const subjects: StatementSubject[] = [];
-  for (const [id, s] of bySubject) {
-    // Dönemde hareketi olmayan ve açılışı sıfır konu ekstreye girmez (geçmişte gelip gitmiş top).
-    if (!s.touched && s.acc.opening.isZero()) continue;
-    subjects.push({ id, label: s.label, itemName: s.itemName, ...totalsOf(s.acc) });
-  }
+  // Konu: açılışı sıfırdan farklı ya da dönemde hareketi olan (geçmişte gelip gitmiş top ekstreye girmez).
+  const subjects: StatementSubject[] = [...bySubject].map(([id, s]) => ({ id, label: s.label, itemName: s.itemName, ...totalsOf(s.acc) }));
   subjects.sort((a, b) => (a.label ?? "￿").localeCompare(b.label ?? "￿", "tr") || (a.id < b.id ? -1 : 1));
-  return { kind, unit, scope, totals: totalsOf(total), subjects, lines };
+  return { ...meta, totals: totalsOf(total), subjects, lines };
+}
+
+/** Konu başına işaretli toplamları birleştirir (aynı konu birden çok gruptan gelebilir). */
+export function mergeOpening(parts: ReadonlyArray<{ subjectId: string; qty: Prisma.Decimal }>): OpeningBalance[] {
+  const m = new Map<string, Prisma.Decimal>();
+  for (const p of parts) m.set(p.subjectId, (m.get(p.subjectId) ?? ZERO).plus(p.qty));
+  return [...m].map(([subjectId, qty]) => ({ subjectId, qty }));
 }

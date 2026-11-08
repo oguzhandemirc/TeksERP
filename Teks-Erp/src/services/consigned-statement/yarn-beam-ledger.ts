@@ -8,7 +8,9 @@ import { Prisma, YarnMovementKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { yarnMovementSign } from "../helpers/yarn-sign.helper";
 import { warpBeamLengthSign, type WarpBeamEventKind } from "../../constants/warp-beam";
-import type { LedgerEvent, StatementColumn, StatementDocument } from "./types";
+import { mergeOpening } from "./assemble";
+import { capRows, type LedgerRead } from "./ledger-read";
+import type { LedgerEvent, StatementColumn, StatementDocument, SubjectLabel } from "./types";
 
 /** İplik türü → kolon. ADJUST_* belge bağına göre çözülür (fiş/fatura iptalinin net tersi giriş/çıkış stornosudur). */
 const YARN_COLUMN: Record<YarnMovementKind, StatementColumn | "ADJUST"> = {
@@ -32,9 +34,12 @@ const YARN_REVERSAL = new Set<YarnMovementKind>([
   YarnMovementKind.SUBCONTRACT_RETURN_CANCEL,
 ]);
 
-export async function readYarnLotEvents(customerId: string, toAt: Date): Promise<LedgerEvent[]> {
-  const rows = await prisma.yarnMovement.findMany({
-    where: { lot: { ownerCustomerId: customerId }, createdAt: { lte: toAt } },
+export async function readYarnLotLedger(customerId: string, fromAt: Date, toAt: Date, limit: number): Promise<LedgerRead> {
+  const owner = { lot: { ownerCustomerId: customerId } };
+  const grouped = await prisma.yarnMovement.groupBy({ by: ["lotId", "kind"], where: { ...owner, createdAt: { lt: fromAt } }, _sum: { qtyKg: true } });
+  const opening = mergeOpening(grouped.map((g) => ({ subjectId: g.lotId!, qty: new Prisma.Decimal(g._sum.qtyKg ?? 0).mul(yarnMovementSign(g.kind)) })));
+  const rows = capRows(await prisma.yarnMovement.findMany({
+    where: { ...owner, createdAt: { gte: fromAt, lte: toAt } },
     select: {
       id: true, kind: true, qtyKg: true, createdAt: true, lotId: true, goodsReceiptId: true, invoiceId: true,
       lot: { select: { lotNo: true, item: { select: { name: true } } } },
@@ -45,8 +50,9 @@ export async function readYarnLotEvents(customerId: string, toAt: Date): Promise
       dispatchItem: { select: { dispatch: { select: { id: true, dispatchNo: true } } } },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-  });
-  return rows.map((r) => {
+    take: limit + 1,
+  }), limit);
+  const events = rows.map((r): LedgerEvent => {
     const mapped = YARN_COLUMN[r.kind];
     const column: StatementColumn = mapped !== "ADJUST" ? mapped : r.goodsReceiptId ? "IN" : r.invoiceId ? "OUT" : "SCRAP";
     const reversal = YARN_REVERSAL.has(r.kind) || (mapped === "ADJUST" && (r.goodsReceiptId !== null || r.invoiceId !== null));
@@ -74,6 +80,13 @@ export async function readYarnLotEvents(customerId: string, toAt: Date): Promise
       document,
     };
   });
+  return { opening, events };
+}
+
+export async function readYarnLotLabels(ids: readonly string[]): Promise<Map<string, SubjectLabel>> {
+  if (ids.length === 0) return new Map();
+  const rows = await prisma.yarnLot.findMany({ where: { id: { in: [...ids] } }, select: { id: true, lotNo: true, item: { select: { name: true } } } });
+  return new Map(rows.map((r) => [r.id, { label: r.lotNo, itemName: r.item.name }]));
 }
 
 /** Levent türü → kolon; bağlama/söküm metre taşımaz (işaret 0) ve okunmaz. */
@@ -84,16 +97,20 @@ const BEAM_COLUMN: Record<WarpBeamEventKind, StatementColumn> = {
   MOUNTED: "OUT", MOUNT_CANCEL: "OUT", DISMOUNTED: "OUT", DISMOUNT_CANCEL: "OUT",
 };
 
-export async function readWarpBeamEvents(customerId: string, toAt: Date): Promise<LedgerEvent[]> {
-  const rows = await prisma.warpBeamEvent.findMany({
-    where: { beam: { ownerCustomerId: customerId }, createdAt: { lte: toAt }, lengthM: { not: null } },
+export async function readWarpBeamLedger(customerId: string, fromAt: Date, toAt: Date, limit: number): Promise<LedgerRead> {
+  const base = { beam: { ownerCustomerId: customerId }, lengthM: { not: null } };
+  const grouped = await prisma.warpBeamEvent.groupBy({ by: ["beamId", "kind"], where: { ...base, createdAt: { lt: fromAt } }, _sum: { lengthM: true } });
+  const opening = mergeOpening(grouped.map((g) => ({ subjectId: g.beamId, qty: new Prisma.Decimal(g._sum.lengthM ?? 0).mul(warpBeamLengthSign(g.kind as WarpBeamEventKind)) })));
+  const rows = capRows(await prisma.warpBeamEvent.findMany({
+    where: { ...base, createdAt: { gte: fromAt, lte: toAt } },
     select: {
       id: true, kind: true, lengthM: true, createdAt: true, beamId: true, reversesEventId: true,
       beam: { select: { beamNo: true, warpSpec: { select: { name: true } } } },
       dispatchItem: { select: { dispatch: { select: { id: true, dispatchNo: true } } } },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-  });
+    take: limit + 1,
+  }), limit);
   const out: LedgerEvent[] = [];
   for (const r of rows) {
     const kind = r.kind as WarpBeamEventKind;
@@ -112,5 +129,11 @@ export async function readWarpBeamEvents(customerId: string, toAt: Date): Promis
       document: r.dispatchItem ? { type: "SUBCONTRACTOR_DISPATCH", id: r.dispatchItem.dispatch.id, no: r.dispatchItem.dispatch.dispatchNo } : null,
     });
   }
-  return out;
+  return { opening, events: out };
+}
+
+export async function readWarpBeamLabels(ids: readonly string[]): Promise<Map<string, SubjectLabel>> {
+  if (ids.length === 0) return new Map();
+  const rows = await prisma.warpBeam.findMany({ where: { id: { in: [...ids] } }, select: { id: true, beamNo: true, warpSpec: { select: { name: true } } } });
+  return new Map(rows.map((r) => [r.id, { label: r.beamNo, itemName: r.warpSpec.name }]));
 }

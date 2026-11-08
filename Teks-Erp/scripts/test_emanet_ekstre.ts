@@ -14,12 +14,15 @@
 //   §5 HTTP — 200 sözleşmesi (fabrika günü sınırı) · fail-closed 400 (tanınmayan parametre, bozuk/takvim dışı
 //      gün, ters dönem, uuid olmayan müşteri, 366+ gün) · 404 · emanet kapalı 403 MODULE_DISABLED · `roll:read`
 //      yoksa 403 · bölüm izni yoksa / modül kapalıysa `omitted` (veri gövdeye girmez)
+//   §6 ⭐ HER FİZİKSEL OLAY TAM BİR SATIR (inceleme #639, 2026-11-08): giriş ölçümü düzeltmesi (sapma + bağlı ENTRY_CORRECTION
+//      stok satırı) ve sayım düşümü (bağsız CANCEL `stockCountId` + RECORD_CORRECTION sapması) ve sayım stornosu
+//      (CANCEL_REVERSAL + `reversedAt`) — her biri tek satır, kalan = canlı · açılışı DB'de toplanan konu etiketli
 //
 // NEGATİF SONDALAR (kırmızı görülerek, 2026-11-08):
-//   · storno satırı ayrı yazılmayıp yalnız toplama netlenince (assemble `if (e.reversal) continue`) §3a–§3e/§4a/§5c ❌
-//   · sapmaya bağlı ADJUST satırı da okununca (`rollWarehouseLedgerWhere` kolu ADJUST'u süzgeçsiz alınca) §1a/§2c/§5b ❌
-//     (çift sayım; bugün sapmaya bağlı satırların hepsi ADJUST — CANCEL kolundaki `rollVarianceId: null` savunmadır)
-//   · stok defteri sorgusundan `createdAt ≤ toAt` düşünce §2a ❌ (as-of)
+//   · CANCEL kolundan `stockCountId: null` düşünce §6a/§6b/§6c ❌ (26/3 — sayım çift)
+//   · ENTRY_CORRECTION giriş listesine dönüp `rollVarianceId: null` düşünce §6a/§6b/§6c ❌ (26/3 — düzeltme çift)
+//   · storno satırı yalnız toplama netlenince (assemble `if (e.reversal) continue`) §3a–§3e/§4a/§5c/§6c/§6d ❌ (21/8)
+//   · stok defteri dönem satırlarının alt sınırı (`gte: fromAt`) düşünce §2c/§3b/§6c/§6e ❌ (25/4 — açılışla çift)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Sapma terslemesi `reversedAt` damgasıyla fikstürdür (okuyucu
 // testi; ters yolların kendisi tambur/fason bekçilerinde ölçülür).
 // =============================================================================
@@ -39,10 +42,10 @@ import { TravelerCardService } from "../src/services/traveler-card.service";
 import { YarnLotService } from "../src/services/yarn-lot.service";
 import { createWarpBeam } from "../src/services/warp-beam.service";
 import { cancelWound, windWarpBeam } from "../src/services/warp-beam-wind.service";
-import { buildRollSection } from "../src/services/consigned-statement.service";
+import { buildRollSection, buildWarpBeamSection, buildYarnLotSection } from "../src/services/consigned-statement.service";
 import type { StatementSection } from "../src/services/consigned-statement.service";
-import { assembleSection } from "../src/services/consigned-statement/assemble";
-import { readWarpBeamEvents, readYarnLotEvents } from "../src/services/consigned-statement/yarn-beam-ledger";
+import { StockCountService } from "../src/services/stock-count.service";
+import { StockCountReversalService } from "../src/services/stock-count-reversal.service";
 import { factoryDayStartOfKey, factoryYmd } from "../src/constants/time";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
@@ -65,6 +68,7 @@ const inventory = new InventoryService();
 const made = {
   customers: [] as string[], users: [] as string[], items: [] as string[], rolls: [] as string[], shipments: [] as string[],
   lots: [] as string[], beams: [] as string[], specs: [] as string[], machines: [] as string[], stations: [] as string[], wos: [] as string[],
+  counts: [] as string[], warehouses: [] as string[],
 };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const setSetting = (key: string, v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
@@ -73,8 +77,8 @@ interface Sections { rolls: StatementSection; yarn: StatementSection; beam: Stat
 async function sections(customerId: string, fromAt: Date, toAt: Date): Promise<Sections> {
   return {
     rolls: await buildRollSection(customerId, fromAt, toAt),
-    yarn: assembleSection({ kind: "YARN_LOT", unit: "kg", scope: "-" }, await readYarnLotEvents(customerId, toAt), fromAt),
-    beam: assembleSection({ kind: "WARP_BEAM", unit: "m", scope: "-" }, await readWarpBeamEvents(customerId, toAt), fromAt),
+    yarn: await buildYarnLotSection(customerId, fromAt, toAt),
+    beam: await buildWarpBeamSection(customerId, fromAt, toAt),
   };
 }
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -207,6 +211,53 @@ async function run(base: string): Promise<void> {
   check("§3f her storno satırının katkısı negatif, ileri satırların pozitif (aynı satırda netlenmez)",
     [...L, ...S2.yarn.lines, ...S2.beam.lines].every((l) => (l.reversal ? l.qty < 0 : l.qty > 0)));
 
+  console.log("\n── §6 her fiziksel olay TAM BİR satır — giriş ölçümü düzeltmesi + sayım (iki defter yazar) ──");
+  const custC = (await prisma.customer.create({ data: { code: `${TAG}-C`, name: `${TAG} Müşteri C` }, select: { id: true } })).id;
+  made.customers.push(custC);
+  // Sayım deposun BÜTÜN toplarını sayar → kendi deposu (başka bekçinin topuna dokunmaz).
+  const whC = (await prisma.warehouse.create({ data: { code: `${TAG}-WC`.slice(0, 32), name: `${TAG} sayım deposu` }, select: { id: true } })).id;
+  made.warehouses.push(whC);
+  const kkC = async (qty: number): Promise<string> => {
+    const r = await inventory.createInitialEntry({ itemId: fabric, initialQty: qty, width: 150 }, admin.id, null, false, { ownerCustomerId: custC, gradeRequired: false, warehouseId: whC, forcedStatus: RollStatus.WAREHOUSE });
+    made.rolls.push(r.data.id);
+    return r.data.id;
+  };
+  await wait(5);
+  const T0c = new Date();
+  const cA = await kkC(100);
+  const cB = await kkC(40);
+  const cC = await kkC(30);
+  // Giriş ölçümü düzeltmesi (Düzelt diyaloğu): sapma + bağlı ENTRY_CORRECTION stok satırı — TEK satır olmalı.
+  await inventory.applyManualProperties(cA, { colorId: null, currentQty: 90, reason: `${TAG} giriş ölçümü` }, admin.id);
+  const scs = new StockCountService();
+  const count = (await scs.create({ warehouseId: whC }, admin.id)).data as { id: string };
+  made.counts.push(count.id);
+  const cLines = await prisma.stockCountLine.findMany({ where: { stockCountId: count.id }, select: { id: true, rollId: true } });
+  for (const l of cLines) await scs.markLine({ stockCountId: count.id, lineId: l.id, found: l.rollId !== cB }, admin.id);
+  // Sayım: bağsız CANCEL (stockCountId) + RECORD_CORRECTION sapması — TEK satır olmalı.
+  await scs.complete(count.id, admin.id);
+  const liveC = async () => Number((await prisma.roll.aggregate({ where: { ownerCustomerId: custC, status: { notIn: [RollStatus.CANCELLED] } }, _sum: { currentQty: true } }))._sum.currentQty ?? 0);
+  const C1 = await buildRollSection(custC, T0c, new Date());
+  check("§6a ⭐ giriş düzeltmesi + sayım düşümü: giren 170−10=160 · fire 40 · kalan 120 = canlı (çift sayım yok)",
+    tot(C1) === JSON.stringify({ opening: 0, in: 160, out: 0, dsk: 0, scrap: 40, closing: 120 }) && (await liveC()) === 120, `${tot(C1)} canlı=${await liveC()}`);
+  const ecLines = C1.lines.filter((l) => l.subjectId === cA && l.code === "ENTRY_CORRECTION");
+  const scLines = C1.lines.filter((l) => l.subjectId === cB && l.column === "SCRAP");
+  check("§6b giriş düzeltmesi TEK satır (giren kolonunda −10) · sayım düşümü TEK satır (fire 40, belge sayım)",
+    ecLines.length === 1 && ecLines[0]!.column === "IN" && ecLines[0]!.qty === -10 && scLines.length === 1 && scLines[0]!.qty === 40 && scLines[0]!.document?.type === "STOCK_COUNT",
+    JSON.stringify(C1.lines.map((l) => [l.column, l.code, l.qty])));
+  await wait(5);
+  const T1c = new Date();
+  await wait(5);
+  await new StockCountReversalService().reverse(count.id, `${TAG} sayım stornosu`, admin.id);
+  const C2 = await buildRollSection(custC, new Date(T1c.getTime() + 1), new Date());
+  const scRev = C2.lines.filter((l) => l.subjectId === cB);
+  check("§6c ⭐ sayım stornosu TEK storno satırı (fire −40, reversal) · kalan 160 = canlı",
+    scRev.length === 1 && scRev[0]!.qty === -40 && scRev[0]!.reversal && C2.totals.closing === 160 && (await liveC()) === 160,
+    `${tot(C2)} ${JSON.stringify(scRev.map((l) => [l.column, l.code, l.qty]))} canlı=${await liveC()}`);
+  const cCsub = C2.subjects.find((x) => x.id === cC);
+  check("§6e yalnız açılışı olan konu (dönemde hareketsiz 30 m top) etiketiyle listelenir — açılış DB'de toplandı", !!cCsub && cCsub.opening === 30 && cCsub.closing === 30 && !!cCsub.label, JSON.stringify(cCsub));
+  check("§6d değişmezler (iki bölüm) + as-of: [T0c,T1c] storno sonrası aynı", [C1, C2].every((x) => invariants(x) === null) && tot(await buildRollSection(custC, T0c, T1c)) === tot(C1), [C1, C2].map(invariants).filter(Boolean).join(" | "));
+
   console.log("\n── §4 değişmezler ──");
   const bad = [S1.rolls, S1.yarn, S1.beam, S2.rolls, S2.yarn, S2.beam].map(invariants).filter(Boolean);
   check("§4a ⭐ açılış + Σ satır etkisi = kalan · Σ konu = toplam · Σ kolon satırı = kolon toplamı (altı bölüm)", bad.length === 0, bad.join(" | "));
@@ -299,11 +350,14 @@ async function cleanup(): Promise<void> {
   for (const t of ["rollProperty", "rollOperation", "rollMovement", "warehouseMovement", "rollVariance", "rollStatusEvent"] as const) {
     await (prisma[t] as unknown as { deleteMany: (a: unknown) => Promise<unknown> }).deleteMany({ where: { rollId: { in: rollIds } } }).catch(swallow);
   }
+  await prisma.stockCountLine.deleteMany({ where: { stockCountId: { in: made.counts } } }).catch(swallow);
   await prisma.subcontractorReceiptItem.deleteMany({ where: { receipt: { workOrderId: { in: made.wos } } } }).catch(swallow);
   await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispIds } } }).catch(swallow);
   await prisma.roll.updateMany({ where: { parentRollId: { in: rollIds } }, data: { parentRollId: null } }).catch(swallow);
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.directShipment.deleteMany({ where: { id: { in: dsIds } } }).catch(swallow);
+  await prisma.stockCount.deleteMany({ where: { id: { in: made.counts } } });
+  await prisma.warehouse.deleteMany({ where: { id: { in: made.warehouses } } });
   await prisma.subcontractorReceipt.deleteMany({ where: { workOrderId: { in: made.wos } } }).catch(swallow);
   await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispIds } } }).catch(swallow);
   await prisma.shipmentEvent.deleteMany({ where: { shipmentId: { in: shipIds } } }).catch(swallow);

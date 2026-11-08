@@ -72,8 +72,8 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
     dosya: "routes/consigned-work.routes.ts",
     neden:
       "EMANET EKSTRESİ (genel fason F2, 2026-11-08). Kendi modül kapısını taşır (`requireEmanetEnabled`); iplik dokunuşu SALT OKUMA " +
-      "(lot bölümü `readYarnLotEvents`). Route kapısı KONULAMAZ: top bölümü iplik modülü olmadan meşrudur. Kapı SERVİSTE bölüm başına: " +
-      "ticaret+iplik kapalıysa `yarnLots: null` + `omitted MODULE_DISABLED` (veri gövdeye girmez; ölçen `test_emanet_ekstre` §5h).",
+      "(lot bölümü `readYarnLotLedger`). Route kapısı KONULAMAZ: top bölümü iplik modülü olmadan meşrudur. Kapı SERVİSTE bölüm başına: " +
+      "`readIplikSurfaceEnabled` kapalıysa `yarnLots: null` + `omitted MODULE_DISABLED` (veri gövdeye girmez; ölçen `test_emanet_ekstre` §5h).",
   },
   {
     dosya: "routes/gelen-belge.routes.ts",

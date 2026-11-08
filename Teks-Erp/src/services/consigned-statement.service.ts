@@ -12,19 +12,19 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { factoryDayEndOfKey, factoryDayStartOfKey, factoryYmd } from "../constants/time";
 import { ledgerHorizonStart } from "../constants/ledger-horizon";
-import { readDevereEnabled, readIplikEnabled, readTicaretEnabled } from "./system-setting/modules";
+import { readDevereEnabled, readIplikSurfaceEnabled } from "./system-setting.service";
 import { NOT_INSIDE_STATUSES } from "./roll-owner.service";
-import { assembleSection } from "./consigned-statement/assemble";
-import { readRollEvents } from "./consigned-statement/roll-ledger";
-import { readWarpBeamEvents, readYarnLotEvents } from "./consigned-statement/yarn-beam-ledger";
-import type { ConsignedStatement, StatementSection } from "./consigned-statement/types";
+import { assembleSection, type SectionMeta } from "./consigned-statement/assemble";
+import { STATEMENT_MAX_LINES, tooLarge, type LedgerRead } from "./consigned-statement/ledger-read";
+import { readRollLabels, readRollLedger } from "./consigned-statement/roll-ledger";
+import { readWarpBeamLabels, readWarpBeamLedger, readYarnLotLabels, readYarnLotLedger } from "./consigned-statement/yarn-beam-ledger";
+import type { ConsignedStatement, StatementSection, SubjectLabel } from "./consigned-statement/types";
 
 export type * from "./consigned-statement/types";
+export { STATEMENT_MAX_LINES };
 
 /** Dönem tavanı (gün) — rapor uçlarının ortak sınırı (`temel/_day-range.ts`). */
 export const STATEMENT_MAX_DAYS = 366;
-/** Dönem satırı tavanı: belge kesilmez (eksik ekstre sessiz yanlıştır) — aşımda 400, dönem daraltılır. */
-export const STATEMENT_MAX_LINES = 20_000;
 
 export interface ConsignedStatementQuery {
   customerId: string;
@@ -58,9 +58,39 @@ export function resolveStatementPeriod(from: string, to: string): { fromAt: Date
   return { fromAt, toAt };
 }
 
-/** Saf montaj + ham olaylar — bekçi as-of'u anlık sınırlarla ölçebilsin diye dışa açık. */
+const ROLL_META: SectionMeta = {
+  kind: "ROLL", unit: "m", scope: "İçerideki emanet top (depo + üretim + fasonda)",
+  columnLabels: { IN: "Giren", OUT: "Sevk (BRÜT)", DSK: "Fasondan doğrudan sevk", SCRAP: "Fire / düzeltme" },
+};
+const YARN_META: SectionMeta = {
+  kind: "YARN_LOT", unit: "kg", scope: "Depodaki emanet iplik (lot bakiyesi)",
+  columnLabels: { IN: "Giren", OUT: "Çözgüye / fasona çıkış", DSK: "—", SCRAP: "Sayım / düzeltme" },
+};
+const BEAM_META: SectionMeta = {
+  kind: "WARP_BEAM", unit: "m", scope: "Fabrikadaki emanet levent (kalan metre)",
+  columnLabels: { IN: "Sarılan", OUT: "Tüketim / fasona çıkış", DSK: "—", SCRAP: "Biten / hurda / düzeltme" },
+};
+
+/** Okuma + etiket tamamlama + montaj; açılışı olup dönemde olayı olmayan konunun etiketi ayrıca okunur. */
+async function buildSection(
+  meta: SectionMeta,
+  read: LedgerRead,
+  readLabels: (ids: readonly string[]) => Promise<Map<string, SubjectLabel>>,
+): Promise<StatementSection> {
+  const seen = new Set(read.events.map((e) => e.subjectId));
+  const missing = read.opening.filter((o) => !o.qty.isZero() && !seen.has(o.subjectId)).map((o) => o.subjectId);
+  return assembleSection(meta, { opening: read.opening, events: read.events, labels: await readLabels(missing) });
+}
+
+/** Top bölümü — bekçi as-of'u anlık sınırlarla ölçebilsin diye dışa açık. */
 export async function buildRollSection(customerId: string, fromAt: Date, toAt: Date): Promise<StatementSection> {
-  return assembleSection({ kind: "ROLL", unit: "m", scope: "İçerideki emanet top (depo + üretim + fasonda)" }, await readRollEvents(customerId, toAt), fromAt);
+  return buildSection(ROLL_META, await readRollLedger(customerId, fromAt, toAt, STATEMENT_MAX_LINES), readRollLabels);
+}
+export async function buildYarnLotSection(customerId: string, fromAt: Date, toAt: Date): Promise<StatementSection> {
+  return buildSection(YARN_META, await readYarnLotLedger(customerId, fromAt, toAt, STATEMENT_MAX_LINES), readYarnLotLabels);
+}
+export async function buildWarpBeamSection(customerId: string, fromAt: Date, toAt: Date): Promise<StatementSection> {
+  return buildSection(BEAM_META, await readWarpBeamLedger(customerId, fromAt, toAt, STATEMENT_MAX_LINES), readWarpBeamLabels);
 }
 
 export async function getConsignedStatement(q: ConsignedStatementQuery): Promise<ApiResponse<ConsignedStatement>> {
@@ -71,21 +101,20 @@ export async function getConsignedStatement(q: ConsignedStatementQuery): Promise
   const omitted: ConsignedStatement["omitted"] = [];
   const rolls = await buildRollSection(customer.id, fromAt, toAt);
 
-  // İplik bölümü iplik modülünün kapısıyla (ticaret bağımlılığı dahil); kapalı modülün verisi gövdeye girmez.
+  // İplik bölümü iplik yüzeyinin kapısıyla (ticaret zinciri tek kaynakta); kapalı modülün verisi gövdeye girmez.
   let yarnLots: StatementSection | null = null;
-  if (!((await readTicaretEnabled()) && (await readIplikEnabled()))) omitted.push({ kind: "YARN_LOT", reason: "MODULE_DISABLED" });
+  if (!(await readIplikSurfaceEnabled())) omitted.push({ kind: "YARN_LOT", reason: "MODULE_DISABLED" });
   else if (!q.access.yarn) omitted.push({ kind: "YARN_LOT", reason: "PERMISSION_DENIED" });
-  else yarnLots = assembleSection({ kind: "YARN_LOT", unit: "kg", scope: "Depodaki emanet iplik (lot bakiyesi)" }, await readYarnLotEvents(customer.id, toAt), fromAt);
+  else yarnLots = await buildYarnLotSection(customer.id, fromAt, toAt);
 
+  // Devere bağımsızdır (`MODULE_DEPENDENCIES`: hazır/fason levent iplik tüketmez).
   let warpBeams: StatementSection | null = null;
   if (!(await readDevereEnabled())) omitted.push({ kind: "WARP_BEAM", reason: "MODULE_DISABLED" });
   else if (!q.access.beam) omitted.push({ kind: "WARP_BEAM", reason: "PERMISSION_DENIED" });
-  else warpBeams = assembleSection({ kind: "WARP_BEAM", unit: "m", scope: "Fabrikadaki emanet levent (kalan metre)" }, await readWarpBeamEvents(customer.id, toAt), fromAt);
+  else warpBeams = await buildWarpBeamSection(customer.id, fromAt, toAt);
 
   const lineCount = rolls.lines.length + (yarnLots?.lines.length ?? 0) + (warpBeams?.lines.length ?? 0);
-  if (lineCount > STATEMENT_MAX_LINES) {
-    throw AppError.badRequest(`Ekstre ${lineCount} satır — en fazla ${STATEMENT_MAX_LINES}; dönemi daraltın.`, { code: "CONSIGNED_STATEMENT_TOO_LARGE" });
-  }
+  if (lineCount > STATEMENT_MAX_LINES) throw tooLarge(lineCount);
 
   const warnings: string[] = [];
   const now = q.now ?? new Date();
