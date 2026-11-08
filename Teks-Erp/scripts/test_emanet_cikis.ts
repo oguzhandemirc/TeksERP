@@ -11,7 +11,7 @@
 //      iplik CONSIGNMENT_OUT (lot bakiyesi düştü) · F4 arayüzü leventi aktif listeler
 //   §5 replay dört durum — ①ilk ②aynı gövde 200 aynı belge ③farklı gövde 409 CLIENT_TOKEN_COLLISION ④iptal sonrası 409
 //   §6 levent durum claim — çıkmış levent ikinci belgeye 409 · eşzamanlı iki belge aynı levent: TEK kazanan
-//   §7 iptal — önizleme her satırı listeler · bayat damga 409 CHANGED · ters çift (SHIP_TO_OWNER_CANCEL reversesEventId,
+//   §7 iptal — önizleme her satırı listeler (iplik etiketi lot · ad · depo) · bayat damga 409 CHANGED · ters çift (SHIP_TO_OWNER_CANCEL reversesEventId,
 //      CONSIGNMENT_OUT_CANCEL aynı kg) · levent READY · lot bakiyesi geri · ikinci iptal 409 · F4 listesi boşaldı
 //   §8 liste — sahip süzgeci + özet şeridi aynı where
 //   §9 iptal engelleri — CONFIRMED faturalı levent bağı 409 CONSIGNMENT_BEAM_INVOICED (belge iptal değil, bağ damgasız;
@@ -230,6 +230,9 @@ async function main(): Promise<void> {
     const cp = await cancelPreviewConsignmentDispatch(d1.id);
     check("§7a önizleme: canCancel, etkilenen HER satır (levent 500 m + iplik 10 kg), fatura bağı yok",
       cp.canCancel && cp.affected.length === 2 && cp.affected.some((a) => a.kind === "WARP_BEAM" && a.refId === bA1 && a.qty === "500.000") && cp.affected.some((a) => a.kind === "YARN" && a.qty === "10.000") && cp.billingLinks.length === 0);
+    const y7 = cp.affected.find((a) => a.kind === "YARN");
+    check("§7a2 iplik satırı etiketi belge detayıyla aynı biçim: `Lot <no> · <iplik adı> · <depo>` (kod değil ad)",
+      !!y7 && y7.label.startsWith(`Lot ${TAG}`) && y7.label.includes(`${TAG} iplik`) && !y7.label.includes(`${TAG}-IP ·`), y7?.label ?? "");
     const e7b = await beklenenHata(() => cancelConsignmentDispatch(d1.id, { reason: "test", expectedUpdatedAt: new Date(Date.parse(d1.updatedAt) - 1000).toISOString() }, admin.id));
     check("§7b bayat damga → 409 CONSIGNMENT_DISPATCH_CHANGED, belge iptal edilmedi", kod(e7b) === "CONSIGNMENT_DISPATCH_CHANGED" && (await prisma.consignmentDispatch.findUniqueOrThrow({ where: { id: d1.id }, select: { cancelledAt: true } })).cancelledAt === null);
     const cancelled = await cancelConsignmentDispatch(d1.id, { reason: `${TAG} yanlış çıkış`, expectedUpdatedAt: d1.updatedAt }, admin.id);
