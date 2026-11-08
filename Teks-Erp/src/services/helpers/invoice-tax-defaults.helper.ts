@@ -19,6 +19,7 @@ import prisma from "../../lib/prisma";
 import { readFinanceDefaultVatRate, readFinancePurchaseWithholdingFlags, readFinanceWithholdingFlags, type PurchaseWithholdingFlags, type WithholdingFlags } from "../system-setting.service";
 import { AppError } from "../../utils/app-error";
 import { findCariAccountForCardTx } from "./finance.helper";
+import { TERIM } from "../../constants/terim";
 
 /** Carinin geçersiz kılması (NULL = genel ayar). */
 export interface CariTaxOverride {
@@ -184,7 +185,7 @@ async function resolveMaterialContext(
   if (input.materialProvidedBy !== undefined) return input.materialProvidedBy;
   if (!input.workOrderId) return null;
   const wo = await db.workOrder.findUnique({ where: { id: input.workOrderId }, select: { materialProvidedBy: true } });
-  if (!wo) throw AppError.notFound("İş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.tekil} bulunamadı.`, { code: "WORK_ORDER_NOT_FOUND" });
   return wo.materialProvidedBy ?? null;
 }
 

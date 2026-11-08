@@ -264,6 +264,34 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "SİLİNMELİDİR — o gün ölçüm zaten 'kapılı' diyecektir). Mal kabulün kapısı ADLA, " +
       "ticaret bekçisinde pozitif kontrol olarak ölçülür.",
   },
+  {
+    dosya: "routes/subcontractor.routes.ts",
+    neden:
+      "FASON KABUL İPTALİ (çekirdek, F6 inceleme 2026-11-08). Finans dokunuşu SALT-OKUMADIR: kabul iptali ve önizlemesi " +
+      "(`subcontractor/receipt-cancel` → SubcontractorService) kabulün iptal edilmemiş alış faturasını ENGEL olarak SORAR (409 " +
+      "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/subcontractor-weaving.routes.ts",
+    neden:
+      "FASON KABUL İPTALİ (çekirdek, F6 inceleme 2026-11-08). Finans dokunuşu SALT-OKUMADIR: kabul iptali ve önizlemesi " +
+      "(`subcontractor/receipt-cancel` → SubcontractorService) kabulün iptal edilmemiş alış faturasını ENGEL olarak SORAR (409 " +
+      "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/workorder.routes.ts",
+    neden:
+      "FASON KABUL İPTALİ (çekirdek, F6 inceleme 2026-11-08). Finans dokunuşu SALT-OKUMADIR: kabul iptali ve önizlemesi " +
+      "(`subcontractor/receipt-cancel` → SubcontractorService) kabulün iptal edilmemiş alış faturasını ENGEL olarak SORAR (409 " +
+      "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/production-proposal.routes.ts",
+    neden:
+      "FASON KABUL İPTALİ (çekirdek, F6 inceleme 2026-11-08). Finans dokunuşu SALT-OKUMADIR: kabul iptali ve önizlemesi " +
+      "(`subcontractor/receipt-cancel` → SubcontractorService) kabulün iptal edilmemiş alış faturasını ENGEL olarak SORAR (409 " +
+      "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
+  },
 ];
 
 // ⚠️ AST yardımcıları (`oku` · `yerelImportlar` · `mountEdilenler` ·

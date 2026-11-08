@@ -60,6 +60,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   get "POST /api/orders/:id/production-proposal/apply"() { return e(`siparişten dokuma/${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} oluşturdu`, `siparişten dokuma/${TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} oluşturmaya çalıştı`); },
   // ── Finans: dönem sonu hizmet faturası (H8)
   "POST /api/finance/invoices/service-period-draft": e("dönem sonu hizmet faturası taslağı oluşturdu", "dönem sonu hizmet faturası taslağı oluşturmaya çalıştı"),
+  "POST /api/finance/invoices/from-subcontractor-receipt/:receiptId": e("fason kabulünden alış faturası taslağı oluşturdu", "fason kabulünden alış faturası taslağı oluşturmaya çalıştı"),
   // ── Terbiye iş emri
   get "POST /api/work-orders"() { return e(`${TERIM.terbiyeIsEmri.tekilKucuk} açtı`, `${TERIM.terbiyeIsEmri.tekilKucuk} açmaya çalıştı`); },
   get "PATCH /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenlemeye çalıştı`); },

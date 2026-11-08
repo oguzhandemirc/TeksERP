@@ -20,6 +20,7 @@ import { resolveInvoiceTaxDefaults, taxLineFields } from "./helpers/invoice-tax-
 import { deriveInvoiceDueDate, findCariAccountForCardTx } from "./helpers/finance.helper";
 import { invoiceService } from "./invoice.service";
 import type { SubcontractorPurchaseDraftLine, SubcontractorPurchaseDraftPreview } from "./subcontractor/types";
+import { TERIM } from "../constants/terim";
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -126,7 +127,7 @@ async function loadReceipt(receiptId: string): Promise<BoundReceipt> {
     throw AppError.conflict(`${r.receiptNo} kabulü iptal edilmiş — faturası çıkarılamaz.`, { code: "SUBCONTRACTOR_RECEIPT_CANCELLED" });
   }
   if (!r.workOrderId || !r.workOrder) {
-    throw AppError.conflict(`${r.receiptNo} bir iş emrine bağlı değil (dokuma fason kabulü) — bu yoldan faturalanmaz.`, {
+    throw AppError.conflict(`${r.receiptNo} bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı değil (dokuma fason kabulü) — bu yoldan faturalanmaz.`, {
       code: "SUBCONTRACTOR_RECEIPT_NOT_WORK_ORDER_BOUND",
     });
   }
@@ -138,7 +139,7 @@ async function loadRateVersions(r: BoundReceipt, warnings: string[]): Promise<{ 
   const codes = await resolveRateCodes({ items: r.items.map((i) => ({ roll: { itemId: i.newRoll.itemId } })), workOrder: r.workOrder });
   const picked = pickDispatchRateCode(codes);
   if (picked === "AMBIGUOUS") {
-    warnings.push("İş emrinin satırları farklı terbiye tarifelerine işaret ediyor — fiyat önerilemedi, satırı elle fiyatlayın.");
+    warnings.push(`${TERIM.terbiyeIsEmri.cumleBasi.ilgi} satırları farklı terbiye tarifelerine işaret ediyor — fiyat önerilemedi, satırı elle fiyatlayın.`);
     return { picked: null, versions: [] };
   }
   if (!picked) {
