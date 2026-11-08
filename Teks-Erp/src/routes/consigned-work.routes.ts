@@ -1,5 +1,5 @@
 // =============================================================================
-// TeksERP — İÇERİDEKİ İŞLER (emanet; ister 3.2) — salt okuma
+// TeksERP — İÇERİDEKİ İŞLER (emanet; ister 3.2) + EMANET EKSTRESİ (genel fason F2) — salt okuma
 // =============================================================================
 // Kapı sırası: `verifyToken` → `requireEmanetEnabled` → `roll:read` (yeni izin YOK; envanterin okuma izni).
 // =============================================================================
@@ -7,9 +7,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireEmanetEnabled } from "../middlewares/module.middleware";
 import { getConsignedWorkSummary } from "../services/roll-owner.service";
+import { getConsignedStatement } from "../services/consigned-statement.service";
 
 const router = Router();
 router.use(verifyToken, requireEmanetEnabled);
@@ -45,6 +46,63 @@ router.get("/", async (req, res, next) => {
       throw AppError.badRequest("Geçersiz süzgeç: yalnız onlyReady=true|false kabul edilir.", { code: "CONSIGNED_WORK_FILTER_INVALID" });
     }
     res.json(await getConsignedWorkSummary({ onlyReady: parsed.data.onlyReady === "true" }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/consigned-work/{customerId}/statement:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Emanet ekstresi — müşteri malının dönem mutabakatı (açılış · giren · çıkan BRÜT · DSK · fire · kalan)
+ *     description: |
+ *       Defterden as-of türetilir (geçmiş dönem yeni kayıtla değişmez; storno ayrı satır). Bölümler: top (m) · iplik
+ *       lotu (kg; iplik modülü + warehouse:read) · levent (m; devere + warpbeam:read) — yetkisiz/kapalı bölüm null + `omitted`.
+ *       Dönem fabrika günüdür. Değişmez: opening + Σ lines.effect = closing; Σ subjects = totals.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: customerId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema: { type: string, example: "2026-11-01" }
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema: { type: string, example: "2026-11-30" }
+ *     responses:
+ *       200: { description: Ekstre (customer · period · rolls · yarnLots · warpBeams · omitted · reconciliation) }
+ *       400: { description: Tanınmayan/bozuk parametre ya da çok uzun dönem (CONSIGNED_STATEMENT_PARAM_INVALID · CONSIGNED_STATEMENT_TOO_LARGE) }
+ *       403: { description: Emanet modülü kapalı (MODULE_DISABLED) ya da roll:read yok }
+ *       404: { description: Müşteri yok (CUSTOMER_NOT_FOUND) }
+ */
+const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** Fail-closed: iki uç zorunlu, tanınmayan parametre 400 (sessiz varsayılan dönem kurulmaz). */
+const statementQuerySchema = z.object({ from: YMD, to: YMD }).strict();
+const statementParamsSchema = z.object({ customerId: z.string().uuid() });
+
+router.get("/:customerId/statement", async (req, res, next) => {
+  try {
+    const params = statementParamsSchema.safeParse(req.params);
+    const query = statementQuerySchema.safeParse(req.query);
+    if (!params.success || !query.success) {
+      throw AppError.badRequest("Geçersiz ekstre isteği: müşteri kimliği UUID, from/to YYYY-MM-DD olmalı; başka parametre kabul edilmez.", {
+        code: "CONSIGNED_STATEMENT_PARAM_INVALID",
+      });
+    }
+    const perms = req.user!.permissions;
+    const r = await getConsignedStatement({
+      customerId: params.data.customerId,
+      from: query.data.from,
+      to: query.data.to,
+      access: { yarn: matchesPermission(perms, "warehouse:read"), beam: matchesPermission(perms, "warpbeam:read") },
+    });
+    res.json(r);
   } catch (e) {
     next(e);
   }

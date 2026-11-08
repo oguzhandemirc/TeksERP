@@ -102,6 +102,13 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
 // Geçişli dokunuş (InventoryService) orada da burada da AYNI olgudur.
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/consigned-work.routes.ts",
+    neden:
+      "EMANET EKSTRESİ (fason F2, 2026-11-08). Ticaret dokunuşu SALT-OKUMADIR: ekstre satırının belge etiketi " +
+      "sayım numarasını (`stock_counts.countNo`) çözer. Router sayıma yazmaz; ticaret kapalı kurulumda sayım satırı " +
+      "doğmaz, etiket boş kalır. Kapı KONULAMAZ: emanet/fason ticaret modülü olmadan meşrudur.",
+  },
+  {
     dosya: "routes/service-item.routes.ts",
     neden:
       "HİZMET KARTI (çekirdek, 2026-11-07 service_items ayrımı). Ticaret dokunuşu SALT-OKUMADIR: Pasif'e geçiş kapısı " +

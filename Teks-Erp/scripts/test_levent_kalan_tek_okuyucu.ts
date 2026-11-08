@@ -44,6 +44,8 @@ const TOPLAYICI_BEYANI = new Set([
   "src/services/helpers/warp-beam.helper.ts::warpBeamRemainingM",
   "src/services/helpers/warp-beam.helper.ts::remainingByBeam",
   "src/services/warp-beam.service.ts::getWarpBeam",
+  // Emanet ekstresi (F2): levent olaylarını işaretiyle okur — salt gösterim, deftere yazmaz.
+  "src/services/consigned-statement/yarn-beam-ledger.ts::readWarpBeamLedger",
 ]);
 
 /** Kalanı defter yazımına sokan yazarlar — ADIYLA (§4). Yeni yazar eklenirse buraya da girer. */
