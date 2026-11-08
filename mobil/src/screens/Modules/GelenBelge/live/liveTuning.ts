@@ -12,9 +12,10 @@ export const LIVE_REQUEST_INTERVAL_MS = 1000;
 /**
  * Otomatik çekim için en düşük netlik (`onStability.sharpness`, parlaklık birimi 0–255). `LiveTuning.kt` netliği yalnız
  * ÖLÇER (`SHARPNESS_STEP`), eşik tanımlamaz; eşik bu JS sabitidir. Native'e eşik eklenirse aynı değer olmalı (bekçi
- * `liveRhythm.test.ts`). GEÇİCİ değer: tablette ölçülecek (L4); düşük tutuldu, kaçan çekim "Çek ve bitir"le alınır.
+ * `liveRhythm.test.ts`). Tablette ölçüldü (2026-11-08, çıkış çeki listesi, elde): sabit + net kare 1,75–2,45,
+ * kıpırdayan kare 1,1–1,4 → 1,6. Eski 3 hiç geçilmiyordu (hepsi kilitli iken otomatik çekim gelmiyordu).
  */
-export const LIVE_MIN_SHARPNESS = 3;
+export const LIVE_MIN_SHARPNESS = 1.6;
 
 /** "Kıpırdatmayın" halkasının süresi: koşullar bu kadar kesintisiz sürerse fotoğraf çekilir. */
 export const LIVE_HOLD_MS = 1500;
