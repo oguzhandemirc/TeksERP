@@ -23,7 +23,7 @@ export interface SubcontractorPurchaseDraftLine {
   serviceItemId: string | null;
   description: string;
   qty: string;
-  unit: "M" | "KG";
+  unit: "METER" | "KG";
   unitPrice: string;
   currency: string;
   /** Fiyatın geldiği tarife (sevk tarihindeki `pickFinishingRateAtDispatch`); yoksa null + uyarı. */

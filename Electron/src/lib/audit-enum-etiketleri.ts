@@ -311,7 +311,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // Genel fason dalga-2 (2026-11-08; ek dosya satır tavanında): emanet çıkış defteri + hizmet metre tabanları.
   CONSIGNMENT_OUT: "Emanet iplik sahibine çıkış",
   CONSIGNMENT_OUT_CANCEL: "Emanet iplik çıkışı iptali",
-  SHIPPED_TO_OWNER: "Sahibine verildi",
+  SHIPPED_TO_OWNER: "Sahibine gönderildi",
   WOUND: "Sarım metresi",
   WOVEN: "Dokuma metresi",
 

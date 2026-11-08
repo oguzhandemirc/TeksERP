@@ -6,8 +6,8 @@
 // eski panel tanımadığı alanı yok sayar; mevcut alanların anlamı değişmez.
 // =============================================================================
 
-/** Hizmet işinin kaynağı: kurşun · bayrak (tambur/etek/brode) · adım (F3) · levent sarımı (F4) · dokuma (F4). */
-export type ServiceWorkSource = "KURSUN" | "FLAG" | "STEP" | "WINDING" | "WEAVING";
+/** Hizmet işinin kaynağı: kurşun (LEAD; "KURSUN" literali `quality-station.helper` tekelinde) · bayrak (tambur/etek/brode) · adım (F3) · levent sarımı (F4) · dokuma (F4). */
+export type ServiceWorkSource = "LEAD" | "FLAG" | "STEP" | "WINDING" | "WEAVING";
 
 /** Hizmet bağının öznesi (DB `ServiceBillingSubject`). */
 export type ServiceSubjectKindWire = "ROLL" | "WARP_BEAM";
@@ -32,10 +32,14 @@ export interface ServiceDraftWorkRow {
   processLabel: string;
   workOrderStepId: string | null;
   qty: string;
-  unit: "M" | "PIECE" | "STITCH";
+  /** DB `ServiceQtyUnit` ile aynı değerler. */
+  unit: "METER" | "PIECE" | "STITCH";
   meterBasis: ServiceMeterBasisWire;
   unitPrice: string;
-  /** F9: yeniden işlem sınıfı "bizim hatamız" olan adım işi taslağa GİRMEZ; listede yalnız bilgi satırı. */
+  /**
+   * F9: işin bağlı olduğu İE'nin DONMUŞ `WorkOrder.reworkBillable`ı false ise (adım · bayrak · kurşun, hepsi)
+   * iş taslağa GİRMEZ; listede yalnız bilgi satırı. Canlı katalog okunmaz.
+   */
   excludedReason: "REWORK_OUR_FAULT" | null;
 }
 
@@ -45,11 +49,27 @@ export interface ServiceDraftExtras {
 }
 
 /**
+ * F4 levent sarım işi (source=WINDING, subjectKind=WARP_BEAM): faturalanabilir an = leventin AKTİF
+ * `SHIP_TO_OWNER` olayı (F5 emanet çıkışı, READY→SHIPPED_TO_OWNER); `serviceAt` = çıkış anı, qty = sarım
+ * metresi (meterBasis WOUND). YALNIZ dönem taslağında (`service-period-draft`) görünür; top sevk taslağında
+ * (`invoice-draft-lines`) levent satırı ÇIKMAZ. Çıkış iptalinde bağ damgalanır (revokedAt), silinmez.
+ */
+export type WindingBillingMoment = "SHIP_TO_OWNER";
+
+/**
  * F9: yeniden işlem sebebinin sınıfı — `ReasonPreset.billable` (yalnız `WORK_ORDER_REWORK`).
  * null = sınıfsız ⇒ ücretli (bugünkü) · true = müşteri talebi · false = bizim hatamız (faturasız).
  * `GET /api/reason-presets` satırına EK alan; `PATCH /api/reason-presets/:id` gövdesine opsiyonel alan.
  */
 export type ReasonBillableWire = boolean | null;
+
+/**
+ * F9 donma: yeniden işlem İE'si YARATILIRKEN (`parameters.rework.reasonCode`) sebebin `billable`ı
+ * `WorkOrder.reworkBillable`a kopyalanır; sonradan katalog değişse geçmiş İE değişmez. İE DTO'larına EK alan.
+ */
+export interface WorkOrderReworkBillableExtras {
+  reworkBillable?: ReasonBillableWire;
+}
 
 /**
  * F6: `GET /api/finance/invoices/tax-defaults` sorgusuna opsiyonel `workOrderId` (İE bağlamı, F7b

@@ -39,7 +39,7 @@ export const WARP_BEAM_EVENT_KIND_LABEL: Record<WarpBeamEventKind, string> = {
   EXHAUST_CANCEL: "Bitiş iptali",
   SCRAPPED: "Hurdaya ayrıldı",
   SCRAP_CANCEL: "Hurda iptali",
-  SHIP_TO_OWNER: "Sahibine verildi",
+  SHIP_TO_OWNER: "Sahibine gönderildi",
   SHIP_TO_OWNER_CANCEL: "Sahibine çıkış iptali",
 };
 

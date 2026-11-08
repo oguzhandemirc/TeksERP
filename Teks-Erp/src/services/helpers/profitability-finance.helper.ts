@@ -83,8 +83,6 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
       cari: { select: { customerId: true } },
       lines: { select: { serviceItemId: true, lineTotal: true } },
       serviceBillingLinks: {
-        // F4 şema öncüsü: levent öznesi (WARP_BEAM) kârlılık eksenine F4'te bağlanır; bugün yalnız top bağı vardır.
-        where: { subjectKind: ServiceBillingSubject.ROLL },
         select: {
           id: true, rollId: true, workOrderStepId: true, serviceItemId: true, billedMeters: true, billedQty: true, meterBasis: true, serviceAt: true, revokedAt: true,
           reading: {
@@ -96,6 +94,8 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
           roll: { select: { ownerCustomerId: true } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        // F4 şema öncüsü: levent öznesi (WARP_BEAM) kârlılık eksenine F4'te bağlanır; bugün yalnız top bağı vardır.
+        where: { subjectKind: ServiceBillingSubject.ROLL },
       },
     },
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
