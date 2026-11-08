@@ -1,9 +1,8 @@
-// Levent seçici: yalnız READY (boşta, hazır) leventler sunucudan aranır; sahibi seçili müşteri olmayan satır seçilemez.
-import { listWarpBeams } from "@/pages/Operations/WarpBeams/service";
-import type { WarpBeam } from "@/pages/Operations/WarpBeams/types";
-import { OwnedPickerDialog } from "./OwnedPickerDialog";
-import { fmtNum } from "./consignmentText";
+// Levent seçici: sahibin READY leventleri aday ucundan (sahip süzgeci + engel sunucuda); belgede olan seçilemez.
+import { CandidatePickerDialog } from "./CandidatePickerDialog";
+import { blockedReasonText, fmtNum } from "./consignmentText";
 import type { DraftItem } from "./draft";
+import type { ConsignmentBeamCandidate } from "./types";
 
 interface Props {
   open: boolean;
@@ -13,53 +12,40 @@ interface Props {
   onPick: (item: DraftItem) => void;
 }
 
-export function beamDisabledReason(
-  b: WarpBeam,
-  ownerCustomerId: string,
-  taken: ReadonlySet<string>,
-): string | null {
-  if (taken.has(`beam:${b.id}`)) return "Belgede zaten var";
-  if (!b.ownerCustomerId) return "Bizim levent — emanet değil, sahibine çıkışı olmaz";
-  if (b.ownerCustomerId !== ownerCustomerId) return `Sahibi başka müşteri: ${b.ownerCustomer?.name ?? "—"}`;
-  return null;
+export function beamDisabledReason(b: ConsignmentBeamCandidate, taken: ReadonlySet<string>): string | null {
+  if (taken.has(`beam:${b.warpBeamId}`)) return "Belgede zaten var";
+  return blockedReasonText(b.blockedReason);
 }
 
 export function BeamPicker({ open, onOpenChange, ownerCustomerId, takenKeys, onPick }: Props) {
   return (
-    <OwnedPickerDialog<WarpBeam>
+    <CandidatePickerDialog<ConsignmentBeamCandidate>
       open={open}
       onOpenChange={onOpenChange}
       title="Levent seç"
-      description="Hazır (tezgaha takılmamış) leventler. Yalnız seçili müşterinin emaneti seçilebilir."
-      queryKey={["warp-beams", "consignment-picker"]}
-      fetchPage={async (cursor, search) => {
-        const r = await listWarpBeams({
-          limit: 50,
-          cursor,
-          search: search || undefined,
-          filters: { status: "READY" },
-        });
-        return { rows: r.data, nextCursor: r.pagination.nextCursor };
-      }}
+      description="Seçili müşterinin hazır (tezgaha takılmamış) emanet leventleri."
+      ownerCustomerId={ownerCustomerId}
+      pick={(d) => ({ rows: d.beams, truncated: d.truncated.beams, moduleOn: d.modules.devere })}
+      rowKey={(b) => b.warpBeamId}
       renderRow={(b) => (
         <>
           <span className="font-mono font-medium">{b.beamNo}</span>
           <span className="text-xs text-muted-foreground">
-            {b.warpSpec.name} · {fmtNum(b.remainingM)} m · {b.ownerCustomer?.name ?? "Bizim"}
+            {b.warpSpecName ?? "—"} · {fmtNum(b.remainingM)} m
           </span>
         </>
       )}
-      disabledReason={(b) => beamDisabledReason(b, ownerCustomerId, takenKeys)}
+      disabledReason={(b) => beamDisabledReason(b, takenKeys)}
       onPick={(b) => {
         onPick({
-          key: `beam:${b.id}`,
-          input: { kind: "WARP_BEAM", warpBeamId: b.id },
+          key: `beam:${b.warpBeamId}`,
+          input: { kind: "WARP_BEAM", warpBeamId: b.warpBeamId },
           label: `Levent ${b.beamNo}`,
-          sub: `${b.warpSpec.name} · ${fmtNum(b.remainingM)} m`,
+          sub: `${b.warpSpecName ?? "—"} · ${fmtNum(b.remainingM)} m`,
         });
         onOpenChange(false);
       }}
-      emptyText="Hazır levent yok."
+      emptyText="Bu müşterinin hazır emanet leventi yok."
     />
   );
 }
