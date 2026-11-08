@@ -60,14 +60,14 @@ export const ROLL_ERROR_KAPSAM_BEYANI: readonly RollErrorKapsamBeyani[] = [
     gerekce: "Klon adım referansı taşıması aynı topta kalır; kökenden bağımsız taşınmazsa eski adıma FK kalır ve rapor kaynak iş emrine atfeder.",
   },
   {
-    dosya: "services/workorder.service.ts",
+    dosya: "services/workorder/replace.ts",
     sembol: "replace",
     erisim: "iliski.detectedErrors",
     sinif: "GUARD",
     gerekce: "Adım silme koruması `_count`u: muayene satırı da adıma FK ile bağlıdır, sayılmazsa ham P2003 sızar.",
   },
   {
-    dosya: "services/workorder.service.ts",
+    dosya: "services/workorder/replace.ts",
     sembol: "replace",
     erisim: "iliski.processedErrors",
     sinif: "GUARD",

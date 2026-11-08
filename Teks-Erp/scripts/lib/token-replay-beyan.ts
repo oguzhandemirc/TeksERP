@@ -149,7 +149,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
   // #12: quickStart create'i çağırır (iç boğaz) ve kendi boğazıyla sarar; kimlikte top kümesi YOK (kısmi bağlama).
   // SY-M1: yaratma çekirdeği tx gövdesine ayrıldı; üretim önerisi türetilmiş token'ı 8036 kilidinin ARKASINDA okur.
-  [`${S}workorder.service.ts::insertPreparedTx`]: { giris: { [`${S}workorder.service.ts::create`]: "R", [`${S}production-proposal.service.ts::readReplaySetTx`]: "K′" } },
+  [`${S}workorder/create.ts::insertPreparedTx`]: { giris: { [`${S}workorder/create.ts::create`]: "R", [`${S}production-proposal.service.ts::readReplaySetTx`]: "K′" } },
   // #13/#14 K′ HIZ YOLUDUR, kapı değil: kaldırılınca R yedeği aynı yarışı kapatır (sonda 2026-09-26) — kaybeden
   // kilitte bekleyip replay'i doğrudan alır, iş kuralını boşa koşmaz.
   [`${S}workorder-batch-add.service.ts::addBatch`]: { giris: { [`${S}workorder-batch-add.service.ts::addBatch`]: "K′" } },
@@ -319,7 +319,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warp-beam.service.ts::warpBeamReplay`]: ["warpSpecId", "originKind", "plannedLengthM", "subcontractorId", "supplierId", "ownerCustomerId", "weavingOrderId", "physicalBeamNo"],
   [`${S}helpers/weaving-order-replay.helper.ts::weavingOrderReplay`]: ["itemId", "executionKind", "subcontractorId", "plannedM", "colorId", "sipariş satırları", "warpSpecId", "weftSpecId", "weaveDesignId", "recipeId"],
   [`${S}workorder-batch-add.service.ts::batchReplay`]: ["workOrderId", "missingRolls"],
-  [`${S}workorder.service.ts::quickStartReplay`]: ["targetItemId", "orderLines"],
-  [`${S}workorder.service.ts::woReplay`]: ["orderLines", "targetItemId", "type"],
+  [`${S}workorder/quick-start.ts::quickStartReplay`]: ["targetItemId", "orderLines"],
+  [`${S}workorder/create.ts::woReplay`]: ["orderLines", "targetItemId", "type"],
   [`${S}service-price.service.ts::writeReplay`]: ["itemId", "customerId", "propertyValueId", "currency", "price", "validFrom"],
 };

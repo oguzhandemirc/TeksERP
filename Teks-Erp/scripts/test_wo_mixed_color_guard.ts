@@ -19,6 +19,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import ts from "typescript";
+import { isEmriServisDosyalari, isEmriServisTanimDosyasi } from "./lib/is-emri-servis-kaynak";
 import prisma, { pool } from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { workOrderLinkService } from "../src/services/workorder-link.service";
@@ -76,20 +77,21 @@ function methodCalls(file: string, methodName: string, callee: string): boolean 
 function section0(): void {
   console.log("\n§0 AST — tek kapı");
   const root = join(__dirname, "..", "src", "services");
-  const woFile = join(root, "workorder.service.ts");
+  // İş emri servisi bölündü (2026-11-08): her metot ASIL gövdesinin bulunduğu aile dosyasında aranır.
+  const woFile = (method: string): string => isEmriServisTanimDosyasi(method);
   const linkFile = join(root, "workorder-link.service.ts");
   // create (quickStart + üretim önerisi de) → createFresh → prepareCreate → kapı.
-  check("create() → createFresh", methodCalls(woFile, "create", "createFresh"));
-  check("createFresh() → prepareCreate", methodCalls(woFile, "createFresh", "prepareCreate"));
-  check("quickStartFresh() → create", methodCalls(woFile, "quickStartFresh", "create"));
-  for (const [file, method] of [[woFile, "prepareCreate"], [woFile, "replace"], [linkFile, "assertLinkSetSingleSpec"]] as const) {
+  check("create() → createFresh", methodCalls(woFile("create"), "create", "createFresh"));
+  check("createFresh() → prepareCreate", methodCalls(woFile("createFresh"), "createFresh", "prepareCreate"));
+  check("quickStartFresh() → create", methodCalls(woFile("quickStartFresh"), "quickStartFresh", "create"));
+  for (const [file, method] of [[woFile("prepareCreate"), "prepareCreate"], [woFile("replace"), "replace"], [linkFile, "assertLinkSetSingleSpec"]] as const) {
     check(`${method}() → assertWorkOrderLinesSingleSpec çağırır`, methodCalls(file, method, "assertWorkOrderLinesSingleSpec"));
   }
   for (const method of ["linkOrderLines", "linkOrderLineWithOverride"]) {
     check(`${method}() → assertLinkSetSingleSpec çağırır`, methodCalls(linkFile, method, "assertLinkSetSingleSpec"));
   }
   // Kod sabitinin literal'i yalnız helper'da — ikinci bir yerel "karışık renk" kapısı doğmasın.
-  for (const f of [woFile, linkFile]) {
+  for (const f of [...isEmriServisDosyalari(), linkFile]) {
     const txt = readFileSync(f, "utf8");
     check(`${f.split("/").pop()} WO_LINES_MIXED_* literal'i taşımaz`, !/"WO_LINES_MIXED_(COLOR|ITEM)"/.test(txt));
   }

@@ -26,6 +26,7 @@ import {
 } from "../src/services/helpers/fason-step-target-note.helper";
 import { replaceWorkOrderTargetValues } from "../src/services/workorder-target-value.service";
 import { assertGelistirmeVeritabani } from "./db-guard";
+import { isEmriServisDosyalari, isEmriServisEtiketi } from "./lib/is-emri-servis-kaynak";
 
 let pass = 0,
   fail = 0;
@@ -187,9 +188,10 @@ async function main(): Promise<void> {
   const srcRoot = path.join(__dirname, "..", "src");
   const callers = sourceFiles(srcRoot).flatMap((f) => {
     const n = (readFileSync(f, "utf8").match(/appendTargetNotesToExternalSteps\(/g) ?? []).length;
-    return f.endsWith("fason-step-target-note.helper.ts") || n === 0 ? [] : [`${path.relative(srcRoot, f)}×${n}`];
+    // İş emri servisi bölündü (2026-11-08): aile dosyaları cephe etiketine katlanır (çağıran sayısı aynı ölçülür).
+    return f.endsWith("fason-step-target-note.helper.ts") || n === 0 ? [] : [`${isEmriServisEtiketi(path.relative(srcRoot, f))}×${n}`];
   });
-  const sites = enclosingCallers(path.join(srcRoot, "services", "workorder.service.ts"), "appendTargetNotesToExternalSteps");
+  const sites = isEmriServisDosyalari().flatMap((f) => enclosingCallers(f, "appendTargetNotesToExternalSteps"));
   // SY-M1: createFresh'in tx öncesi hazırlığı `prepareCreate`e ayrıldı (tek ve çok kayıtlı doğuş aynı yoldan).
   const inCreateFresh = sites.length === 1 && sites[0]!.fn === "prepareCreate" && !sites[0]!.inTx;
   check("§6b ⭐ birleştiricinin TEK çağıranı prepareCreate (doğuş öncesi; sevk/düzenleme yolu notu yeniden yazmaz)", callers.join(",") === "services/workorder.service.ts×1" && inCreateFresh, `${callers.join(",")} ${JSON.stringify(sites)}`);

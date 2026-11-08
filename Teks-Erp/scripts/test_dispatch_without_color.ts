@@ -24,6 +24,7 @@
 import fs from "fs";
 import path from "path";
 import prisma from "../src/lib/prisma";
+import { isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { resolveStepDyeColor } from "../src/services/helpers/fason-work-instructions.helper";
 
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
     check(`controller: ${i + 1}. \`stepPlanning\` bloğu ${FIELD} kabul ediyor`, b.includes(FIELD)),
   );
 
-  const woSvc = read("src/services/workorder.service.ts");
+  const woSvc = isEmriServisMetni(); // cephe + `services/workorder/*.ts` (2026-11-08 bölmesi)
   // Prisma'ya adım yazan HER nokta: nested steps.create + replace update/create.
   // "Adım yazan nokta" = WorkOrderStep satırını Prisma'ya YAZAN üç gövde
   // (create nested steps.create · replace update · replace create). Hepsi

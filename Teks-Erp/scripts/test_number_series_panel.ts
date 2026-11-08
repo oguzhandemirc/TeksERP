@@ -123,6 +123,7 @@ import {
   seriesExhaustionWarnings,
 } from "../src/services/helpers/series-exhaustion.helper";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { isEmriServisDosyasiMi, isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -1203,7 +1204,11 @@ async function main(): Promise<void> {
     const bagsiz: string[] = [];
     for (const e of NUMBER_SERIES_CATALOG) {
       if (!e.manualEntry) continue;
-      const govde = readFileSync(join(__dirname, "..", "src", e.manualEntry.path), "utf-8");
+      // İş emri servisi bölündü (2026-11-08): beyan yolu cephe ise ailenin birleşik metni okunur
+      // (beyan yolu API'de `manualPath` olarak döner — cephe yolu çağıranların import yoludur, değişmez).
+      const govde = isEmriServisDosyasiMi(e.manualEntry.path)
+        ? isEmriServisMetni()
+        : readFileSync(join(__dirname, "..", "src", e.manualEntry.path), "utf-8");
       if (!govde.includes(`assertManualNumberAllowed("${e.key}"`)) bagsiz.push(e.key);
     }
     check("§9e ⭐ beyan edilen her elle yolu kapıyı GERÇEKTEN çağırıyor",

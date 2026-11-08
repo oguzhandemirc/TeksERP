@@ -31,6 +31,7 @@ import { SETTING_KEYS, readIncomingDocDefaultRouteId, readRouteSuggestionPriorit
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -83,7 +84,7 @@ async function run(): Promise<void> {
   check("§0 plan servisi `suggestRoute` çağırır, kendi iş emri sorgusu yok", /suggestRoute\(\{ ownerCustomerId: note\.ownerCustomerId \}\)/.test(planSrc) && !/prisma\.workOrder\.findFirst/.test(planSrc));
   const autoSrc = src("services/gelen-belge-oto-is-emri.service.ts");
   check("§0 otomatik iş emri rotayı planın önerisinden alır", autoSrc.includes("plan.suggestedRouteTemplateId") && !autoSrc.includes("prisma."));
-  const woSrc = src("services/workorder.service.ts");
+  const woSrc = isEmriServisMetni(); // iş emri servisi ailesi (2026-11-08 bölmesi)
   check("§0 create kapıları `routeTemplateProblem`dan (literal kural kopyası yok)", (woSrc.match(/routeTemplateProblem\(/g) ?? []).length === 2 && !woSrc.includes('"Pasif bir rota şablonu kullanılamaz"'));
   check("§0 iki yeni anahtar ham ayar ucuna kapalı", INCOMING_DOC_DEDICATED_SETTING_KEYS.has(SETTING_KEYS.GELEN_BELGE_DEFAULT_ROUTE_ID) && INCOMING_DOC_DEDICATED_SETTING_KEYS.has(SETTING_KEYS.GELEN_BELGE_ROUTE_PRIORITY));
   const gbRoutes = src("routes/gelen-belge.routes.ts");

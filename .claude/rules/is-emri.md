@@ -2,6 +2,7 @@
 paths:
   - "{Teks-Erp,Electron,mobil}/src/**/*{workorder,work-order,WorkOrder,quickStart,HizliIsEmri,production-balance}*"
   - "{Teks-Erp,Electron,mobil}/src/**/*{order.,Order.,orders.,Orders,OrderLine,order-line}*"
+  - "Teks-Erp/src/services/workorder/**"
 ---
 
 **İş emri · sipariş bağı** — öz. Tam metni baştan okuma; yalnız ilgili bölümü oku:

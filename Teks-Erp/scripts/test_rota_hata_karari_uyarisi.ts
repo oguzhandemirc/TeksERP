@@ -9,6 +9,7 @@ import { StationKind, StepStatus } from "@prisma/client";
 import { routeService } from "../src/routes/route.routes";
 import { stationService } from "../src/routes/station.routes";
 import { collectWorkOrderDecisionWarnings } from "../src/services/helpers/defect-decision.helper";
+import { isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 import {
   findDefectDecisionGap,
   INSPECTION_LAYOUT_MIN_TABLET,
@@ -98,7 +99,7 @@ async function main(): Promise<void> {
   await prisma.workOrderStep.updateMany({ where: { workOrderId: woId, stationId: TB }, data: { status: StepStatus.PENDING } });
   const w2 = await collectWorkOrderDecisionWarnings(woId);
   check("§3 bekleyen Tambur karar verir → uyarı yok", w2.length === 0, JSON.stringify(w2));
-  const src = fs.readFileSync(path.join(__dirname, "../src/services/workorder.service.ts"), "utf8");
+  const src = isEmriServisMetni(); // cephe + `services/workorder/*.ts` (2026-11-08 bölmesi)
   check("§3 workorder.service create + replace aynı helper'ı çağırır (2 çağrı)", (src.match(/collectWorkOrderDecisionWarnings\(/g) ?? []).length === 2);
 
   console.log("\n§4 İstasyon formu — varsayılan dışı muayene düzeni");
