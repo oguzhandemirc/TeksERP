@@ -11,7 +11,7 @@ export type StatementKind = "ROLL" | "YARN_LOT" | "WARP_BEAM";
 /**
  * Kolonlar — anlamı bölüme göre değişir, etiketi `StatementSection.columnLabels`ten okunur:
  * IN giren (top: giriş + giriş ölçümü düzeltmesi + müşteri iadesi) · OUT kalandan çıkış (top: müşteriye BRÜT
- * sevk; iplik: çözgüye/fasona çıkış — sevk DEĞİL; levent: tüketim/fasona çıkış) · DSK fasondan doğrudan sevk ·
+ * sevk; iplik: çözgüye/fasona/sahibine çıkış — sevk DEĞİL; levent: tüketim/fasona/sahibine çıkış) · DSK fasondan doğrudan sevk ·
  * SCRAP fire / kayıt düzeltmesi / sayım farkı.
  */
 export type StatementColumn = "IN" | "OUT" | "DSK" | "SCRAP";

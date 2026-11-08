@@ -64,11 +64,11 @@ const ROLL_META: SectionMeta = {
 };
 const YARN_META: SectionMeta = {
   kind: "YARN_LOT", unit: "kg", scope: "Depodaki emanet iplik (lot bakiyesi)",
-  columnLabels: { IN: "Giren", OUT: "Çözgüye / fasona çıkış", DSK: "—", SCRAP: "Sayım / düzeltme" },
+  columnLabels: { IN: "Giren", OUT: "Çözgüye / fasona / sahibine çıkış", DSK: "—", SCRAP: "Sayım / düzeltme" },
 };
 const BEAM_META: SectionMeta = {
   kind: "WARP_BEAM", unit: "m", scope: "Fabrikadaki emanet levent (kalan metre)",
-  columnLabels: { IN: "Sarılan", OUT: "Tüketim / fasona çıkış", DSK: "—", SCRAP: "Biten / hurda / düzeltme" },
+  columnLabels: { IN: "Sarılan", OUT: "Tüketim / fasona / sahibine çıkış", DSK: "—", SCRAP: "Biten / hurda / düzeltme" },
 };
 
 /** Okuma + etiket tamamlama + montaj; açılışı olup dönemde olayı olmayan konunun etiketi ayrıca okunur. */

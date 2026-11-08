@@ -24,6 +24,8 @@ const YARN_COLUMN: Record<YarnMovementKind, StatementColumn | "ADJUST"> = {
   SUBCONTRACT_OUT_CANCEL: "OUT",
   SUBCONTRACT_RETURN: "OUT",
   SUBCONTRACT_RETURN_CANCEL: "OUT",
+  CONSIGNMENT_OUT: "OUT",
+  CONSIGNMENT_OUT_CANCEL: "OUT",
   ADJUST_IN: "ADJUST",
   ADJUST_OUT: "ADJUST",
 };
@@ -32,6 +34,7 @@ const YARN_REVERSAL = new Set<YarnMovementKind>([
   YarnMovementKind.WARP_RETURN_REVERSAL,
   YarnMovementKind.SUBCONTRACT_OUT_CANCEL,
   YarnMovementKind.SUBCONTRACT_RETURN_CANCEL,
+  YarnMovementKind.CONSIGNMENT_OUT_CANCEL,
 ]);
 
 export async function readYarnLotLedger(customerId: string, fromAt: Date, toAt: Date, limit: number): Promise<LedgerRead> {
@@ -93,6 +96,7 @@ export async function readYarnLotLabels(ids: readonly string[]): Promise<Map<str
 const BEAM_COLUMN: Record<WarpBeamEventKind, StatementColumn> = {
   WOUND: "IN", WOUND_CANCEL: "IN",
   CONSUMED: "OUT", CONSUMED_CANCEL: "OUT", SHIP_OUT: "OUT", SHIP_OUT_CANCEL: "OUT", RETURNED_IN: "OUT", RETURNED_IN_CANCEL: "OUT",
+  SHIP_TO_OWNER: "OUT", SHIP_TO_OWNER_CANCEL: "OUT",
   EXHAUSTED: "SCRAP", EXHAUST_CANCEL: "SCRAP", SCRAPPED: "SCRAP", SCRAP_CANCEL: "SCRAP", ADJUST_IN: "SCRAP", ADJUST_OUT: "SCRAP",
   MOUNTED: "OUT", MOUNT_CANCEL: "OUT", DISMOUNTED: "OUT", DISMOUNT_CANCEL: "OUT",
 };
