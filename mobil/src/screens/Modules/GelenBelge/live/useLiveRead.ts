@@ -74,6 +74,7 @@ export function useLiveRead({ visible, onDone }: Options) {
   const onStability = useCallback(
     (s: LiveStability) => {
       if (capturingRef.current) return;
+      console.log('[OLCUM-CANLI]', JSON.stringify({ still: s.still, sharp: s.sharpness, locked: liveFormLocked(voteRef.current.fields) }));
       const step = stepHold(hold.current, readyToCapture(liveFormLocked(voteRef.current.fields), s), Date.now());
       hold.current = step.hold;
       setHoldProgress(step.hold.since === null ? null : step.progress);
