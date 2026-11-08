@@ -38,6 +38,8 @@ const kindSchema = z.nativeEnum(ReasonPresetKind, { error: "Bilinmeyen sebep tü
 const stopLossClassSchema = z.nativeEnum(MachineStopLossClass).optional().nullable();
 /** Hedef süre (dk) — yalnız MACHINE_STOP ve plan dışı olmayan sınıfta (serviste); null = süre izlenmez. */
 const targetMinutesSchema = z.number().int().min(1).max(1440).optional().nullable();
+/** F9 yeniden işlem sınıfı — yalnız WORK_ORDER_REWORK (serviste, 400 REASON_BILLABLE_KIND); null = sınıfsız (ücretli). */
+const billableSchema = z.boolean().optional().nullable();
 
 const createSchema = z.object({
   kind: kindSchema,
@@ -46,6 +48,7 @@ const createSchema = z.object({
   requiresText: z.boolean().optional(),
   stopLossClass: stopLossClassSchema,
   targetMinutes: targetMinutesSchema,
+  billable: billableSchema,
 });
 
 const updateSchema = z.object({
@@ -55,6 +58,7 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
   stopLossClass: stopLossClassSchema,
   targetMinutes: targetMinutesSchema,
+  billable: billableSchema,
 });
 
 const duplicateSchema = z.object({

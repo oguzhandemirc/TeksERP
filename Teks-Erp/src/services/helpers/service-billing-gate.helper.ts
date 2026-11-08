@@ -38,6 +38,23 @@ export async function assertWorkNotBilledTx(tx: Db, work: { rollIds: string[]; w
   if (prior) throw alreadyBilled(prior.docNo);
 }
 
+/**
+ * Hareket geri alma kapısı (F9, F3 açığı): geri alınan/yeniden açılan KAPANMIŞ hareketin (top × adım) aktif hizmet
+ * bağı varsa 409 `SERVICE_ALREADY_BILLED` — faturadaki adım işinin kanıtı sessizce silinmesin. Çağıran satırı
+ * güncelledikten SONRA sorar (fatura tarafı hareketi FOR SHARE kilitler; iki sıra serileşir).
+ */
+export async function assertMovementWorksNotBilledTx(tx: Db, pairs: Array<{ rollId: string; workOrderStepId: string }>): Promise<void> {
+  if (pairs.length === 0) return;
+  const keys = new Set(pairs.map((p) => `${p.rollId}:${p.workOrderStepId}`));
+  const rows = await tx.serviceBillingLink.findMany({
+    where: { revokedAt: null, rollId: { in: [...new Set(pairs.map((p) => p.rollId))] }, workOrderStepId: { in: [...new Set(pairs.map((p) => p.workOrderStepId))] } },
+    select: { rollId: true, workOrderStepId: true, invoice: { select: { docNo: true } } },
+    orderBy: { id: "asc" },
+  });
+  const hit = rows.find((r) => keys.has(`${r.rollId}:${r.workOrderStepId}`));
+  if (hit) throw alreadyBilled(hit.invoice.docNo);
+}
+
 /** Ata zinciri (kendisi dahil) — Tambur bölmesi `parentRollId` ile; derinlik tavanı döngüye karşı sigorta. */
 export async function collectRollLineage(rollIds: string[], db: Db = prisma): Promise<string[]> {
   const seen = new Set(rollIds);

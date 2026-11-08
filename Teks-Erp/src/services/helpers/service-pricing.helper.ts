@@ -20,6 +20,7 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { listStepServiceWorks } from "./service-step-work.helper";
+import { reworkOurFaultWarning, splitReworkOurFaultWorks } from "./rework-billing.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 import { gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEnteredLaterWarning, kursunGramLineLabel, kursunTierLineLabel, loadKursunGramCandidates } from "./kursun-gram-price.helper";
 import { loadServiceTierPrices, pickServicePrice, tierKey, tierMissingWarning } from "./service-price-pick.helper";
@@ -79,6 +80,8 @@ export interface ServiceResolution {
   lines: ServiceLine[];
   works: ServiceRollWork[];
   warnings: string[];
+  /** F9: İE'si donmuş `reworkBillable=false` olan (bizim hatamız) işler — satıra/bağa girmez; yalnız varsa anahtar var (bayt-aynı). */
+  excludedWorks?: ServiceRollWork[];
 }
 
 /** Gramaj değerinden hizmet kalemi: önce değer, sonra özellik, sonra ana bayrak. */
@@ -344,7 +347,10 @@ export async function resolveServiceItemsForRolls(params: {
   });
   const flag = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
   const stepWorks = opt.stepWorks ? await loadStepWorks(rollIds, basis, { claimed: [...allWorks, ...flag.works], flagClaims: flag.claims, db, warnings }) : [];
-  const billable = filterBillableWorks([...allWorks, ...flag.works, ...stepWorks], opt, basis, warnings);
+  // F9: bizim hatamızdan yeniden işlem İE'sinin işi (adım · bayrak · kurşun) faturaya girmez, uyarıyla görünür.
+  const rework = await splitReworkOurFaultWorks([...allWorks, ...flag.works, ...stepWorks], db);
+  if (rework.excluded.length > 0) warnings.push(reworkOurFaultWarning(rework.excluded.length));
+  const billable = filterBillableWorks(rework.billable, opt, basis, warnings);
   // Adet/vuruşu eksik iş faturaya alınmaz (uydurma miktar yok); birim başına tek uyarı.
   const unknown = billable.filter((w) => w.serviceItemId && w.quantity === null);
   for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
@@ -380,5 +386,5 @@ export async function resolveServiceItemsForRolls(params: {
     .sort((x, y) => x.code.localeCompare(y.code, "tr") || (x.unitPrice ?? "").localeCompare(y.unitPrice ?? ""));
   for (const [name, n] of tierMissingByName) warnings.push(tierMissingWarning(name, n));
   for (const l of lines) if (l.manualMeterRollCount > 0) warnings.push(manualMeterWarning(l.name, l.manualMeterRollCount));
-  return { lines, works, warnings: [...new Set(warnings)] };
+  return { lines, works, warnings: [...new Set(warnings)], ...(rework.excluded.length > 0 ? { excludedWorks: rework.excluded } : {}) };
 }
