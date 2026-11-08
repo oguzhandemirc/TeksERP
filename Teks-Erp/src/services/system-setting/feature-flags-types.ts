@@ -88,6 +88,8 @@ export interface FeatureFlags {
   financeServiceBillingBrodeUnit: ServiceBillingBrodeUnit;
   /** Fason F3: süreç türü eşlemeli adım işi hizmet satırı (default false = bugünkü çıktı). */
   financeServiceBillingStepWorks: boolean;
+  /** Fason F4: dokuma (doğan top) + levent sarımı hizmet işi (default false = bugünkü çıktı). */
+  financeServiceBillingWeavingWorks: boolean;
   /** H7/H8: tetik (default `PER_SHIPMENT`; `PERIOD_END` → dönem sonu taslağı). */
   financeServiceBillingTrigger: ServiceBillingTrigger;
   /** H7: fiyat tarihi (default `SERVICE_DAY`). */

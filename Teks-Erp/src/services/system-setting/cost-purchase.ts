@@ -11,7 +11,7 @@ import { FINISHING_KG_BASES, type FinishingKgBasis } from "../helpers/fabric-cos
 import { Prisma } from "@prisma/client";
 import { asBoolean } from "./core";
 import { CARI_HOLD_EMANET_SHIPMENT_MODES, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, COST_PRESENTATION_CURRENCIES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, DEFAULT_COST_FINISHING_KG_BASIS, DEFAULT_COST_PRESENTATION_CURRENCY, DEFAULT_ORDER_PRODUCTION_PROPOSAL, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, DEFAULT_PROFIT_MACHINE_TIME_MODE, DEFAULT_PROFIT_OVERHEAD_KEY, DEFAULT_PROFIT_SUBCONTRACT_SOURCE, DEFAULT_RISK_LIMIT_CURRENCY_MODE, DEFAULT_WEAVING_STANDARD_METHOD, ORDER_PRODUCTION_PROPOSAL_MODES, PROFIT_CATEGORY_CLASSES, PROFIT_CATEGORY_CLASS_MAX_ENTRIES, PROFIT_CATEGORY_CLASS_MAX_KEY, PROFIT_CONSUMABLE_PRICE_SOURCES, PROFIT_MACHINE_TIME_MODES, PROFIT_OVERHEAD_KEYS, PROFIT_SUBCONTRACT_SOURCES, RISK_LIMIT_CURRENCY_MODES, WEAVING_STANDARD_METHODS, type CariHoldEmanetShipment, type CariHoldReleaseBySamePerson, type CostPresentationCurrency, type KursunGramPriceBasis, type OrderProductionProposalMode, type ProfitCategoryClass, type ProfitCategoryClassMap, type ProfitConsumablePriceSource, type ProfitMachineTimeMode, type ProfitOverheadKey, type ProfitSubcontractSource, type RiskLimitCurrencyMode, type ServiceBillingBrodeUnit, type ServiceBillingMeterBasis, type ServiceBillingMissingMeter, type ServiceBillingPriceDate, type ServiceBillingTrigger, type WeavingStandardMethod } from "./defaults";
-import { readFinanceEnabled, readFinanceKursunGramPriceBasis, readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceServiceBillingBrodeUnit, readFinanceServiceBillingStepWorks, readFinanceServiceBillingEnabled, readFinanceServiceBillingMeterBasis, readFinanceServiceBillingMissingMeter, readFinanceServiceBillingPriceDate, readFinanceServiceBillingTrigger, readServiceEnum } from "./finance";
+import { readFinanceEnabled, readFinanceKursunGramPriceBasis, readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceServiceBillingBrodeUnit, readFinanceServiceBillingStepWorks, readFinanceServiceBillingWeavingWorks, readFinanceServiceBillingEnabled, readFinanceServiceBillingMeterBasis, readFinanceServiceBillingMissingMeter, readFinanceServiceBillingPriceDate, readFinanceServiceBillingTrigger, readServiceEnum } from "./finance";
 import { SETTING_KEYS } from "./keys";
 import { readTicaretEnabled } from "./modules";
 
@@ -129,6 +129,8 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
   brodeUnit: ServiceBillingBrodeUnit;
   /** Fason F3: adım işi kaynağı (`STEP`) açık mı. */
   stepWorks: boolean;
+  /** Fason F4: dokuma (`WEAVING`) ve levent sarımı (`WINDING`) işi açık mı. */
+  weavingWorks: boolean;
   trigger: ServiceBillingTrigger;
   priceDate: ServiceBillingPriceDate;
   gramPriceBasis: KursunGramPriceBasis;
@@ -139,6 +141,7 @@ export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "syste
     missingMeter: await readFinanceServiceBillingMissingMeter(tx),
     brodeUnit: await readFinanceServiceBillingBrodeUnit(tx),
     stepWorks: await readFinanceServiceBillingStepWorks(tx),
+    weavingWorks: await readFinanceServiceBillingWeavingWorks(tx),
     trigger: await readFinanceServiceBillingTrigger(tx),
     priceDate: await readFinanceServiceBillingPriceDate(tx),
     gramPriceBasis: await readFinanceKursunGramPriceBasis(tx),

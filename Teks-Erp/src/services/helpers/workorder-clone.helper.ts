@@ -100,6 +100,7 @@ export async function cloneWorkOrderTx(
       targetItemId: true,
       foldType: true,
       materialProvidedBy: true,
+      reworkBillable: true,
       steps: {
         orderBy: { stepSequence: "asc" },
         select: {
@@ -148,6 +149,8 @@ export async function cloneWorkOrderTx(
       foldType: src.foldType,
       // Ana hammadde fiziksel olarak aynı mal: kip (stok/keep) ne olursa olsun kaynaktan kopyalanır (F7b).
       materialProvidedBy: src.materialProvidedBy,
+      // F9: donmuş ücret sınıfı aynı işin parçasıyla taşınır — katalog yeniden okunmaz.
+      reworkBillable: src.reworkBillable,
       // Soy bağı: eski refakat kartı okutulunca Fason Kabul bu WO'yu da bulur
       // (listPendingReturns BFS); kaynak WO'nun ayrılma izi buradan okunur.
       splitFromId: src.id,

@@ -133,6 +133,8 @@ export interface YarnMovementTxInput {
   bobbinCount?: number | null;
   /** G1: SUBCONTRACT_* türlerinde ZORUNLU (CHECK `yarn_movements_fason_link_ck`), diğerlerinde YAZILMAZ. */
   dispatchItemId?: string | null;
+  /** F5: CONSIGNMENT_OUT(_CANCEL) türlerinde ZORUNLU (CHECK `yarn_movements_consignment_link_ck`), diğerlerinde YAZILMAZ. */
+  consignmentItemId?: string | null;
 }
 
 export interface YarnMovementTxResult {
@@ -196,7 +198,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
   // gerekçe helper başlığında). Muafiyet: `ADJUST_OUT` = sayım düzeltmesi +
   // belge stornosu; guard oraya GENİŞLETİLMEZ (test_yarn_stock §10).
   // Lot beyanı varsa önce KİMLİK: lot bu kalemin mi, aktif mi (çapraz-tablo CHECK yok).
-  if (input.lotId) await assertLotMatchesItemTx(tx, input.lotId, input.itemId);
+  if (input.lotId) await assertLotMatchesItemTx(tx, input.lotId, input.itemId, input.kind);
   // Kimlikten sonra KALİTE: bekletmedeki/bloke lottan çıkış yok (yalnız çıkış türleri, bayrak etkinse).
   if (input.lotId) await assertLotQualityReleasedTx(tx, input.lotId, input.kind);
   await assertYarnBalanceCoversTx(tx, {
@@ -223,6 +225,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       warpBeamId: input.warpBeamId ?? null, reasonCode: input.reasonCode ?? null,
       lotId: input.lotId ?? null, bobbinCount: input.bobbinCount ?? null,
       dispatchItemId: input.dispatchItemId ?? null,
+      consignmentItemId: input.consignmentItemId ?? null,
     },
     select: { id: true },
   });

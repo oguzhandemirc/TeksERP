@@ -69,6 +69,19 @@ const IPLIK_MODELLERI = new Set(["yarnStock", "yarnMovement"]);
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/consignment-dispatch.routes.ts",
+    neden:
+      "EMANET ÇIKIŞ BELGESİ (genel fason F5, 2026-11-08). Kendi modül kapısını taşır (`requireEmanetEnabled`); belge levent-yalnız da olabilir — " +
+      "route kapısı iplik kapalı kurulumda levent iadesini keserdi. İplik satırı servis kapısında (`assertLineModules` 403) + motorun İÇİNDE (§4d).",
+  },
+  {
+    dosya: "routes/consigned-work.routes.ts",
+    neden:
+      "EMANET EKSTRESİ (genel fason F2, 2026-11-08). Kendi modül kapısını taşır (`requireEmanetEnabled`); iplik dokunuşu SALT OKUMA " +
+      "(lot bölümü `readYarnLotLedger`). Route kapısı KONULAMAZ: top bölümü iplik modülü olmadan meşrudur. Kapı SERVİSTE bölüm başına: " +
+      "`readIplikSurfaceEnabled` kapalıysa `yarnLots: null` + `omitted MODULE_DISABLED` (veri gövdeye girmez; ölçen `test_emanet_ekstre` §5h).",
+  },
+  {
     dosya: "routes/gelen-belge.routes.ts",
     neden:
       "GELEN BELGE (Gülkesim D4, 2026-10-29). Kendi modül kapısını taşır (`requireGelenBelgeEnabled`, emanete bağlı); " +
@@ -199,6 +212,8 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
  * — o an "bu yüzeyin iplik kapısı ne" sorusu sorulmak ZORUNDA kalır.
  */
 const DEFTER_YAZARLARI: ReadonlyArray<{ dosya: string; neden: string }> = [
+  { dosya: "services/consignment-dispatch/create.ts", neden: "F5 emanet çıkışı → CONSIGNMENT_OUT. Emanet kapılı route; iplik satırı `assertLineModules` 403 + motorun İÇİNDE (§4d)." },
+  { dosya: "services/consignment-dispatch/cancel.ts", neden: "F5 emanet çıkış iptali → CONSIGNMENT_OUT_CANCEL. Emanet kapılı route; iplik kapısı motorun İÇİNDE (§4d)." },
   { dosya: "services/yarn.service.ts", neden: "MOTORUN KENDİSİ (tek yazar) — uçları `requireIplikEnabled` kapılı." },
   { dosya: "services/goods-receipt.service.ts", neden: "Mal kabul YARN kalemi → IN. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d)." },
   { dosya: "services/helpers/yarn-receipt-reversal.helper.ts", neden: "Mal kabul iplik kaleminin GERİ SARIMI (ADJUST_OUT, lot kopyalı) — goods-receipt.service'ten taşındı; kapısı çağıranınki: ticaret kapılı, iplik kapısı motorun İÇİNDE (§4d)." },

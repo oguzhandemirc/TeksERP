@@ -240,7 +240,7 @@ async function run(): Promise<void> {
   const lineA = d2.lines.find((l) => l.serviceItemId === HZA), lineB = d2.lines.find((l) => l.serviceItemId === HZB);
   check("§2 ⭐ desen Lale → desen kalemi, 220 m × 7 (CUT)", eq(lineA?.qty, 220) && eq(lineA?.unitPrice, 7), JSON.stringify(lineA));
   check("§2 ⭐ desen Papatya (kalemsiz) → brode kalemi, 80 m × 6 (müşteri fiyatı)", eq(lineB?.qty, 80) && eq(lineB?.unitPrice, 6), JSON.stringify(lineB));
-  check("§2 bağlar çocuklarda, taban CUT, iki kalemden başka satır yok", d2.links.length === 6 && d2.links.every((l) => l.meterBasis === "CUT" && innerKids.includes(l.rollId)) && d2.lines.length === 2,
+  check("§2 bağlar çocuklarda, taban CUT, iki kalemden başka satır yok", d2.links.length === 6 && d2.links.every((l) => l.meterBasis === "CUT" && innerKids.includes(l.rollId ?? "")) && d2.lines.length === 2,
     d2.links.map((l) => `${l.meterBasis}:${l.billedMeters}`).join(","));
   const total2 = d2.lines.reduce((s, l) => s.plus(new Prisma.Decimal(l.qty).times(l.unitPrice)), new Prisma.Decimal(0));
   check("§2 ⭐ tutar el hesabı: 220×7 + 80×6 = 2020", eq(total2, 2020), total2.toString());

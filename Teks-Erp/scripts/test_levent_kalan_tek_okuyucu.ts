@@ -44,6 +44,8 @@ const TOPLAYICI_BEYANI = new Set([
   "src/services/helpers/warp-beam.helper.ts::warpBeamRemainingM",
   "src/services/helpers/warp-beam.helper.ts::remainingByBeam",
   "src/services/warp-beam.service.ts::getWarpBeam",
+  // Emanet ekstresi (F2): levent olaylarını işaretiyle okur — salt gösterim, deftere yazmaz.
+  "src/services/consigned-statement/yarn-beam-ledger.ts::readWarpBeamLedger",
 ]);
 
 /** Kalanı defter yazımına sokan yazarlar — ADIYLA (§4). Yeni yazar eklenirse buraya da girer. */
@@ -55,6 +57,7 @@ const KALAN_OKUYAN_YAZARLAR = new Set([
   "src/services/warp-beam-auto-consume.service.ts::autoConsumeForRollTx",
   "src/services/subcontractor-beam.service.ts::dispatchWarpBeamItemsTx",
   "src/services/warp-beam-mount.service.ts::mountBeamFresh",
+  "src/services/consignment-dispatch/create.ts::createConsignmentDispatch",
 ]);
 
 type Birim = { anahtar: string; ad: string; dugum: ts.Node; cagrilar: Array<{ ad: string; satir: number; yanit: boolean }>; elleToplama: number[] };

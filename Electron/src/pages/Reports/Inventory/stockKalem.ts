@@ -5,6 +5,7 @@
 import apiClient from "@/services/apiClient";
 import type { ReportExportSpec } from "../_components/reportExport";
 import type { ReportResponse } from "../_services/types";
+import { fmtInt, fmtNum } from "../_components/formatters";
 
 export interface StockKalemHamRow {
   key: string;
@@ -29,6 +30,8 @@ export interface StockKalemBitmisRow {
 
 export interface StockKalem {
   totals: { hamCount: number; hamQty: number; bitmisCount: number; bitmisQty: number };
+  /** Emanet toplamları (F1) — yalnız emanet açıkken; o zaman `totals` + satırlar bizim stok. */
+  consignedTotals?: { hamCount: number; hamQty: number; bitmisCount: number; bitmisQty: number };
   ham: StockKalemHamRow[];
   bitmis: StockKalemBitmisRow[];
 }
@@ -41,6 +44,11 @@ export const stockKalemApi = {
   },
 };
 
+/** Emanet cümlesi — ekran şeridi ve çıktı meta satırı AYNI metni basar (emanet kapalıyken hiç basılmaz). */
+export function consignedKalemText(c: NonNullable<StockKalem["consignedTotals"]>): string {
+  return `Emanet (müşteri malı) bu tablolara DAHİL DEĞİL: ham ${fmtNum(c.hamQty)} m (${fmtInt(c.hamCount)} top), bitmiş ${fmtNum(c.bitmisQty)} m (${fmtInt(c.bitmisCount)} top).`;
+}
+
 /** En metni — ekran ve çıktı aynı metni basar. */
 export const widthText = (w: number | null): string => (w === null ? "—" : `${w} cm`);
 
@@ -51,6 +59,7 @@ export function buildStockKalemExport(k: StockKalem, warnings: string[] = []): R
     meta: [
       "Ham: kumaş başına; dışarıdan alınan yarı mamul dahil değil. Bitmiş: kumaş + en + renk + kat başına (depo + A1 stok).",
       "Sevkiyata okutulmuş / çuvala girmiş toplar raf sayılmaz. Toplamlar Stok & Ölü Stok kutularıyla aynıdır.",
+      ...(k.consignedTotals ? [consignedKalemText(k.consignedTotals)] : []),
       ...warnings,
     ],
     tables: [

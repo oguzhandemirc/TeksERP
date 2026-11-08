@@ -71,6 +71,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeAutoDraftFromShipmentEnabled: A(true),
   financeServiceBillingEnabled: A(true),
   financeServiceBillingStepWorks: A(true),
+  financeServiceBillingWeavingWorks: A(true),
   financeServiceBillingMeterBasis: V("metre tabanı; üç değer de geçerli, varsayılan OUT okuma yolunu işletir"),
   financeServiceBillingBrodeUnit: V("brode fiyat birimi; METER bugünkü yol, ADET/VURUŞ adet girişi ister (bekçi test_brode_fiyat_birimi ölçer)"),
   financeServiceBillingMissingMeter: V("eksik ölçüm davranışı; varsayılan satırı uyarıyla yazar (yolu işletir)"),

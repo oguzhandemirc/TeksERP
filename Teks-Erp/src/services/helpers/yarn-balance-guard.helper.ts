@@ -114,6 +114,8 @@ export interface YarnOutflowRef {
 const GATED_KINDS = new Set<YarnMovementKind>([
   YarnMovementKind.OUT, YarnMovementKind.WARP_ISSUE, YarnMovementKind.WARP_RETURN_REVERSAL,
   YarnMovementKind.SUBCONTRACT_OUT, YarnMovementKind.SUBCONTRACT_RETURN_CANCEL,
+  // F5: emanet ipliğin sahibine çıkışı — iptali (CONSIGNMENT_OUT_CANCEL) bakiyeyi artırır, muaf.
+  YarnMovementKind.CONSIGNMENT_OUT,
 ]);
 
 export async function assertYarnBalanceCoversTx(

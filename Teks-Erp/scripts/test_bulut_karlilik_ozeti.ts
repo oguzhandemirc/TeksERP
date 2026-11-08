@@ -157,7 +157,7 @@ function row(customerId: string, contribution: number | null, month: string, i: 
   const revenue = D(1000);
   const cost = contribution === null ? null : revenue.minus(contribution);
   return {
-    month, kind: "INVOICED", invoiceId: `INV-${i}`, docNo: `GIZLI-FATURA-${i}`, linkId: `L-${i}`, customerId, rollId: `GIZLI-TOP-${i}`,
+    month, kind: "INVOICED", invoiceId: `INV-${i}`, docNo: `GIZLI-FATURA-${i}`, linkId: `L-${i}`, customerId, rollId: `GIZLI-TOP-${i}`, warpBeamId: null,
     serviceItemId: "S-KURSUN", workOrderStepId: null, machineId: null, meterBasis: ServiceMeterBasis.OUT, meters: D(100),
     revenueTry: revenue, consumableTry: cost, subcontractTry: contribution === null ? null : D(0), subcontractEstimated: false,
     machineAttributed: false, machineHours: null, machineTry: contribution === null ? null : D(0),

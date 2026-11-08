@@ -20,6 +20,8 @@ import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
 import { listStepServiceWorks } from "./service-step-work.helper";
+import { loadWeavingRollWorks } from "./service-weaving-work.helper";
+import { reworkOurFaultWarning, splitReworkOurFaultWorks } from "./rework-billing.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 import { gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEnteredLaterWarning, kursunGramLineLabel, kursunTierLineLabel, loadKursunGramCandidates } from "./kursun-gram-price.helper";
 import { loadServiceTierPrices, pickServicePrice, tierKey, tierMissingWarning } from "./service-price-pick.helper";
@@ -29,7 +31,7 @@ import { readFinanceKursunGramPriceBasis, type KursunGramPriceBasis } from "../s
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
 const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
 
-export type ServiceMeterBasis = "OUT" | "IN" | "DECLARED" | "CUT" | "RECEIVED";
+export type ServiceMeterBasis = "OUT" | "IN" | "DECLARED" | "CUT" | "RECEIVED" | "WOVEN";
 export type ServiceGramajSource = "APPLIED" | "WO_TARGET" | "NONE";
 
 /** Tek iş (top × adım) — fatura bağı (H7) bu satırdan doğar. */
@@ -37,8 +39,8 @@ export interface ServiceRollWork {
   rollId: string;
   /** Bayrak işinde adım bilinmeyebilir (kesim depoda, ölçümsüz iş) — bağ anahtarı NULLS NOT DISTINCT. */
   workOrderStepId: string | null;
-  /** PROPERTY = kurşun dışı bayrak işi (H10) · STEP = süreç türü eşlemeli adım işi (F3). */
-  source: KursunApplication["source"] | "PROPERTY" | "STEP";
+  /** PROPERTY = kurşun dışı bayrak işi (H10) · STEP = süreç türü eşlemeli adım işi (F3) · WEAVING = doğan top (F4). */
+  source: KursunApplication["source"] | "PROPERTY" | "STEP" | "WEAVING";
   valueId: string | null;
   valueName: string;
   gramajFrom: ServiceGramajSource;
@@ -79,6 +81,8 @@ export interface ServiceResolution {
   lines: ServiceLine[];
   works: ServiceRollWork[];
   warnings: string[];
+  /** F9: İE'si donmuş `reworkBillable=false` olan (bizim hatamız) işler — satıra/bağa girmez; yalnız varsa anahtar var (bayt-aynı). */
+  excludedWorks?: ServiceRollWork[];
 }
 
 /** Gramaj değerinden hizmet kalemi: önce değer, sonra özellik, sonra ana bayrak. */
@@ -144,6 +148,8 @@ export interface ServiceResolveOptions {
   brodeUnit?: ServiceQtyUnit;
   /** F3 `finance.serviceBilling.stepWorks`: adım işi kaynağı; verilmezse kapalı (bugünkü çıktı bayt-aynı). */
   stepWorks?: boolean;
+  /** F4 `finance.serviceBilling.weavingWorks`: dokuma işi kaynağı (doğan top); verilmezse kapalı (bayt-aynı). */
+  weavingWorks?: boolean;
 }
 
 /** Bağ anahtarı — kısmi unique (rollId, serviceItemId, workOrderStepId) ile aynı üçlü. */
@@ -344,7 +350,11 @@ export async function resolveServiceItemsForRolls(params: {
   });
   const flag = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
   const stepWorks = opt.stepWorks ? await loadStepWorks(rollIds, basis, { claimed: [...allWorks, ...flag.works], flagClaims: flag.claims, db, warnings }) : [];
-  const billable = filterBillableWorks([...allWorks, ...flag.works, ...stepWorks], opt, basis, warnings);
+  const weavingWorks = opt.weavingWorks ? await loadWeavingRollWorks(rollIds, { keyOf: serviceWorkKey, claimed: [...allWorks, ...flag.works, ...stepWorks], db, warnings }) : [];
+  // F9: bizim hatamızdan yeniden işlem İE'sinin işi (adım · bayrak · kurşun) faturaya girmez, uyarıyla görünür.
+  const rework = await splitReworkOurFaultWorks([...allWorks, ...flag.works, ...stepWorks], db);
+  if (rework.excluded.length > 0) warnings.push(reworkOurFaultWarning(rework.excluded.length));
+  const billable = filterBillableWorks([...rework.billable, ...weavingWorks], opt, basis, warnings);
   // Adet/vuruşu eksik iş faturaya alınmaz (uydurma miktar yok); birim başına tek uyarı.
   const unknown = billable.filter((w) => w.serviceItemId && w.quantity === null);
   for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
@@ -380,5 +390,5 @@ export async function resolveServiceItemsForRolls(params: {
     .sort((x, y) => x.code.localeCompare(y.code, "tr") || (x.unitPrice ?? "").localeCompare(y.unitPrice ?? ""));
   for (const [name, n] of tierMissingByName) warnings.push(tierMissingWarning(name, n));
   for (const l of lines) if (l.manualMeterRollCount > 0) warnings.push(manualMeterWarning(l.name, l.manualMeterRollCount));
-  return { lines, works, warnings: [...new Set(warnings)] };
+  return { lines, works, warnings: [...new Set(warnings)], ...(rework.excluded.length > 0 ? { excludedWorks: rework.excluded } : {}) };
 }

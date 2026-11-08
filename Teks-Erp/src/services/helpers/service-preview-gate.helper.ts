@@ -113,6 +113,8 @@ export async function assertNoUnlinkedPeriodServiceLinesTx(
   const mapped = new Set([
     ...(await tx.fabricProperty.findMany({ where: { serviceItemId: { in: rest } }, select: { serviceItemId: true } })).map((r) => r.serviceItemId),
     ...(await tx.fabricPropertyValue.findMany({ where: { serviceItemId: { in: rest } }, select: { serviceItemId: true } })).map((r) => r.serviceItemId),
+    // F3/F4: süreç türü eşlemesi (adım · dokuma · sarım) de emanet hizmet kartıdır.
+    ...(await tx.serviceItemProcess.findMany({ where: { serviceItemId: { in: rest } }, select: { serviceItemId: true } })).map((r) => r.serviceItemId),
   ]);
   const hit = rest.find((id) => mapped.has(id));
   if (!hit) return;

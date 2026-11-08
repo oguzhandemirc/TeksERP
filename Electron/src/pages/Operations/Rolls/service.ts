@@ -91,6 +91,8 @@ export interface RollStats {
   totalWeight: number;
   byStatus: Record<string, number>;
   byQuality: Record<string, number>;
+  /** Toplamın emanet (müşteri malı) kısmı — yalnız emanet açıkken döner; toplamı değiştirmez (F1). */
+  consigned?: { count: number; qty: number; weight: number };
 }
 
 // --- Fasonda özet şeridi (Envanter → Fasonda sekmesi) -----------------------

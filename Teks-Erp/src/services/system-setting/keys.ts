@@ -95,6 +95,7 @@ export const SETTING_KEYS = {
   FINANCE_SERVICE_BILLING_BRODE_UNIT: "finance.serviceBilling.brodeUnit",
   /** Fason F3: süreç türü eşlemeli adım işi (boya/apre/çözgü) hizmet satırı — varsayılan KAPALI (bugünkü çıktı bayt-aynı). */
   FINANCE_SERVICE_BILLING_STEP_WORKS: "finance.serviceBilling.stepWorks",
+  FINANCE_SERVICE_BILLING_WEAVING_WORKS: "finance.serviceBilling.weavingWorks",
   /** H7/H8: tetik — `PER_SHIPMENT` (bugün); `PERIOD_END` sevk taslağı hizmet satırı üretmez, iş dönem sonu taslağına kalır. */
   FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
   /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */

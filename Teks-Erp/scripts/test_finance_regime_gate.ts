@@ -159,6 +159,22 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "D4-I2 (2026-10-30): sevk risk kapısı (`helpers/risk-exposure.helper`) `cariAccount` + `cari_balances`ı SALT-OKUMA sorar (`order.routes` emsali).",
   },
   {
+    dosya: "routes/consignment-dispatch.routes.ts",
+    neden:
+      "EMANET ÇIKIŞ belgesi emanet modülünün akışıdır (finansa bağlı değil) → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek " +
+      "daldan gelir (F5, 2026-11-08): iptal, levent sarım bağlarını okur (DRAFT dışı faturalı bağ 409) ve DRAFT bağları " +
+      "`helpers/service-winding-link.helper` (`revokeWindingLinksForConsignmentTx`, F4 ile TEK yol) ile yalnız DAMGALAR (revokedAt). Yeni bağ, fatura ya da " +
+      "cari satırı yazmaz; ön muhasebe kapalı kurulumda tablo boştur, okuma 0 satır, damga 0 satır (`tambur.routes` emsali).",
+  },
+  {
+    dosya: "routes/reports/production.routes.ts",
+    neden:
+      "ÜRETİM RAPORLARI fabrikanın ana yüzeyidir → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek daldan gelir (F9, 2026-11-08): " +
+      "`helpers/roll-movement.helper` (`revokeRollMovements`/`reopenClosedMovementsTx`) → `helpers/service-billing-gate.helper` " +
+      "(`assertMovementWorksNotBilledTx`: faturalı ADIM işinin hareketi geri alınamaz, 409) — 'bu hareketin adım işi faturalı mı' sorusunu " +
+      "SALT-OKUMA sorar. Ön muhasebe kapalı kurulumda tablo boştur, sorgu 0 satır döner; router hiçbir ticaret tablosuna yazmaz (`tambur.routes` emsali).",
+  },
+  {
     dosya: "routes/tambur.routes.ts",
     neden:
       "TAMBUR üretimin ana akışıdır → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek daldan gelir (D4-B2, 2026-10-30): " +
