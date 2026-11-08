@@ -274,7 +274,7 @@ const MODULLER: ModulTanimi[] = [
     middleware: "requireEmanetEnabled",
     okuyucu: "readEmanetEnabled",
     modulKodu: "emanet",
-    routeDosyalari: ["routes/consigned-work.routes.ts"],
+    routeDosyalari: ["routes/consigned-work.routes.ts", "routes/consignment-dispatch.routes.ts"],
     sondalar: modulUclari("emanetEnabled"),
   },
   {
@@ -410,6 +410,8 @@ const SONDA_IZINLERI = [
   "cost:read",
   // İçerideki İşler sondası (`/api/consigned-work`) — aynı gerekçe (P1a; ölçüldü: izinsiz AÇIK tur 403).
   "roll:read",
+  // Emanet çıkış belgesi sondası (`/api/consignment-dispatches`, F5) — aynı gerekçe.
+  "consignment:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;

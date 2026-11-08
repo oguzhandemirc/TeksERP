@@ -55,7 +55,7 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
   { model: "KursunGramPriceVersion", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "K14 gram fiyatı sürümünü `helpers/kursun-gram-price-version.helper` yazar (kolonla aynı tx); audit çağıran eylemde (`kursun-station.service` STATION_KURSUN · `cari.service` CARI_ACCOUNT · `cari-merge.helper` CARI_MERGE copiedTerms)" },
   { model: "ServiceBillingLink", sinif: "EBEVEYN_EYLEMDE",
-    gerekce: "H7 hizmet işi ↔ fatura bağını `helpers/service-billing.helper` yazar/damgalar (fatura tx'i içinde); audit fatura eyleminde (`invoice.service` CREATE `serviceLinkCount` · iptal `serviceLinksRevoked`; fiyat yükte yok)" },
+    gerekce: "H7 hizmet işi ↔ fatura bağını `helpers/service-billing.helper` yazar/damgalar (fatura tx'i içinde); audit fatura eyleminde (`invoice.service` CREATE `serviceLinkCount` · iptal `serviceLinksRevoked`; fiyat yükte yok); F5 emanet çıkış iptali levent bağını `helpers/consignment-beam.helper` damgalar, audit belge iptalinde (`revokedBillingLinkIds`)" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "sevkiyat olay defteri satırını `helpers/shipment-event.helper` yazar; audit sevk eyleminde (`shipping.service`)" },
   { model: "EIrsaliyeEvent", sinif: "EBEVEYN_EYLEMDE",

@@ -281,6 +281,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/warp-beam-mount.service.ts", sembol: "cancelStatusEvent" },
       { dosya: "src/services/warp-beam-consume.service.ts", sembol: "cancelConsumed" },
       { dosya: "src/services/warp-beam-auto-consume.service.ts", sembol: "cancelConsumedForRollTx" },
+      { dosya: "src/services/consignment-dispatch/cancel.ts", sembol: "cancelConsignmentDispatch" },
     ],
     ["src/services/helpers/warp-beam-event.helper.ts"]),
 

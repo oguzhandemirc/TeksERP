@@ -86,11 +86,17 @@ export async function assertLotQualityReleasedTx(tx: Prisma.TransactionClient, l
  * Lot bu kaleme mi ait ve aktif mi — hareket yazılmadan ÖNCE sorulur. DB'de çapraz-tablo
  * CHECK kurulamaz (lot.itemId ↔ movement.itemId); tek kapı burası, mutabakat §40 ikinci hat.
  */
-export async function assertLotMatchesItemTx(tx: Prisma.TransactionClient, lotId: string, itemId: string): Promise<void> {
+/**
+ * Pasif lota yazılabilen hareket türleri — YALNIZ ileri kaydı geri çeviren ters tipler, açık beyanla.
+ * Emanet çıkış iptali çıkan kg'yı aynı lota iade eder; lot o arada pasife alındıysa iptal kilitlenmemeli (patron 2026-11-08).
+ */
+export const YARN_KINDS_ALLOWED_ON_INACTIVE_LOT: ReadonlySet<YarnMovementKind> = new Set<YarnMovementKind>([YarnMovementKind.CONSIGNMENT_OUT_CANCEL]);
+
+export async function assertLotMatchesItemTx(tx: Prisma.TransactionClient, lotId: string, itemId: string, kind?: YarnMovementKind): Promise<void> {
   const lot = await tx.yarnLot.findUnique({ where: { id: lotId }, select: { itemId: true, lotNo: true, isActive: true } });
   if (!lot) throw AppError.badRequest("İplik lotu bulunamadı", { code: "YARN_LOT_NOT_FOUND", lotId });
   if (lot.itemId !== itemId) throw AppError.badRequest(`"${lot.lotNo}" lotu başka bir iplik kalemine ait — hareket kalemiyle lot kalemi aynı olmalı.`, { code: "YARN_LOT_ITEM_MISMATCH", lotId });
-  if (!lot.isActive) throw AppError.badRequest(`"${lot.lotNo}" lotu pasif — pasif lota hareket yazılamaz.`, { code: "YARN_LOT_INACTIVE", lotId });
+  if (!lot.isActive && !(kind && YARN_KINDS_ALLOWED_ON_INACTIVE_LOT.has(kind))) throw AppError.badRequest(`"${lot.lotNo}" lotu pasif — pasif lota hareket yazılamaz.`, { code: "YARN_LOT_INACTIVE", lotId });
 }
 
 /** SQL'de işaret: giriş türleri tek kaynaktan (`yarnInboundKinds`), elle liste YOK. */
@@ -115,6 +121,23 @@ export async function yarnLotBalanceTx(
       ${warehouseId ? Prisma.sql`AND "warehouseId" = ${warehouseId}::uuid` : Prisma.empty}
   `;
   return new Prisma.Decimal(String(rows[0]?.balance ?? 0));
+}
+
+/** Lot × depo bakiyeleri tek sorguda (anahtar `${lotId}|${warehouseId}`) — çok satırlı çıkış belgesinin N+1'siz okuması. */
+export async function yarnLotWarehouseBalancesTx(
+  tx: { $queryRaw: Prisma.TransactionClient["$queryRaw"] },
+  lotIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (lotIds.length === 0) return out;
+  const rows = await tx.$queryRaw<Array<{ lotId: string; warehouseId: string; balance: string | number | Prisma.Decimal | null }>>`
+    SELECT "lotId", "warehouseId", COALESCE(SUM(${signedQtySql()}), 0) AS balance
+    FROM "yarn_movements"
+    WHERE "lotId" IN (${Prisma.join(lotIds.map((id) => Prisma.sql`${id}::uuid`))})
+    GROUP BY "lotId", "warehouseId"
+  `;
+  for (const r of rows) out.set(`${r.lotId}|${r.warehouseId}`, new Prisma.Decimal(String(r.balance ?? 0)));
+  return out;
 }
 
 /** Birden çok lotun toplam bakiyesi (liste ekranı, tek sorgu). */

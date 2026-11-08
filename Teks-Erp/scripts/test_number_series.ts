@@ -151,6 +151,7 @@ const BEKLENEN: Record<string, string> = {
   noteIssued: `${buildDailyCode("SNV", 1, AT)}`,
   chequeDeliveryNote: `${buildDailyCode("BRD", 1, AT)}`,
   labTest: `${buildDailyCode("LAB", 1, AT)}`,
+  consignmentDispatch: `${buildDailyCode("EC", 1, AT)}`,
   reconciliationLetter: `${buildDailyCode("MBT", 1, AT)}`,
   customer: `${buildDailyCode("MUS", 1, AT)}`,
   subcontractor: `${buildDailyCode("FSN", 1, AT)}`,

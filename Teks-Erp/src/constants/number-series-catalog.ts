@@ -92,8 +92,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     label: "Çuval no",
     seedPrefix: "CV",
     seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
+    seedDigits: 4, seedSeparator: "",
     kind: "SACK",
     scopedCounter: { durum: "hazir", not: "`shipping.service.nextSackNo` zengin biçime geçirildi (kod + createdAt)." },
   },
@@ -332,6 +331,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "noteIssued", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; anahtar PARAMETREDEN geldiği için üreteç dosyası beyanlı (E2 finans dilimi, 2026-09-23).", uretec: "services/cheque.service.ts" }, panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Verilen senet no", seedPrefix: "SNV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "chequeDeliveryNote", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 finans dilimi, 2026-09-23).", uretec: "services/cheque-delivery-note.service.ts" }, panelGroup: "finans", countTable: { model: "chequeDeliveryNote", field: "docNo", birim: "belge" }, label: "Çek teslim bordro no", seedPrefix: "BRD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "labTest", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor (K4P-LAB, 2026-10-25).", uretec: "services/lab-test.service.ts" }, panelGroup: "uretim", countTable: { model: "labTest", field: "testNo", birim: "belge" }, label: "Lab test no", seedPrefix: "LAB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  // Emanet çıkış belgesi (genel fason F5, 2026-11-08): okutulmaz — kağıt yalnız sahibine teslim belgesidir.
+  { key: "consignmentDispatch", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi (F5, 2026-11-08).", uretec: "services/consignment-dispatch/create.ts" }, panelGroup: "fason-kartela", countTable: { model: "consignmentDispatch", field: "dispatchNo", birim: "belge" }, label: "Emanet çıkış belge no", seedPrefix: "EC", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "reconciliationLetter", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 finans dilimi, 2026-09-23).", uretec: "services/reconciliation-letter.service.ts" }, panelGroup: "finans", countTable: { model: "reconciliationLetter", field: "docNo", birim: "belge" }, label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Master data kodları ────────────────────────────────────────────────────
