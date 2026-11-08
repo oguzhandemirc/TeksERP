@@ -109,3 +109,13 @@ export function submitBlock(a: { online: boolean; hasOwner: boolean; lineCount: 
   if (a.canCreate === false) return 'Engelli kalemleri çıkarın.';
   return null;
 }
+
+/**
+ * Kayıt hatasının operatör cümlesi. Çakışma: aynı token önceden BAŞKA yükle yazılmış — o deneme kaydolmuş olabilir;
+ * yük değişince token tazelendiği için beklenmez, olursa liste kontrol ettirilir. Engel 409'unda sunucunun somut cümlesi kalır.
+ */
+export function createErrorText(err: unknown): string | null {
+  const code = (err as { details?: { code?: unknown } } | null)?.details?.code;
+  if (code === 'CLIENT_TOKEN_COLLISION') return 'Bu deneme daha önce farklı kalemlerle kaydedilmiş olabilir — panelde Emanet Çıkış listesini kontrol edin.';
+  return null;
+}

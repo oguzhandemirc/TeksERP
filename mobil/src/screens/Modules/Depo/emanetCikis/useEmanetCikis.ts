@@ -17,7 +17,7 @@ import {
 } from '../../../../offline/entryAttempt';
 import { useIsOnline } from '../../../../offline/hooks';
 import { showScreenError } from '../../../../lib/screenToast';
-import { buildBody, submitBlock, type DraftLine } from './emanetCikisLogic';
+import { buildBody, createErrorText, submitBlock, type DraftLine } from './emanetCikisLogic';
 
 // =============================================================================
 // Emanet çıkış (tablet T1) — sahip + kalemler + sunucu önizlemesi + kaydet.
@@ -72,7 +72,7 @@ export function useEmanetCikis(visible: boolean) {
     },
     onError: (err: Error, vars) => {
       setAttempt((s) => (isAmbiguousFailure(err) ? onAttemptFailed(s, vars.clientToken) : IDLE_ATTEMPT));
-      showScreenError(err, 'Emanet çıkışı kaydedilemedi');
+      showScreenError(err, 'Emanet çıkışı kaydedilemedi', createErrorText(err) ?? undefined);
       // Kesin ret (409 bakiye/durum) sonrası engeller yeniden ölçülür.
       if (!isAmbiguousFailure(err)) void previewQ.refetch();
     },

@@ -1,7 +1,7 @@
 // Emanet çıkış (T1) saf kuralları: okutma eşleşmesi, kg biçimi, engel metni, gövde, önizleme bağı, kayıt kapısı.
 // Negatif sonda: matchScan büyük/küçük harf katlamasız ya da çok depolu lotta tek sonuç dönerse kırmızı.
 import type { BeamCandidate, ConsignmentCandidates, ConsignmentPreview, YarnCandidate } from '../../../../services/consignment.service';
-import { beamLine, blockedText, buildBody, lineBlock, matchScan, parseKg, previewBlockFor, submitBlock, yarnKey, yarnLine } from './emanetCikisLogic';
+import { beamLine, blockedText, createErrorText, buildBody, lineBlock, matchScan, parseKg, previewBlockFor, submitBlock, yarnKey, yarnLine } from './emanetCikisLogic';
 
 const beam = (x: Partial<BeamCandidate> = {}): BeamCandidate => ({ warpBeamId: 'b1', beamNo: 'LV0001', warpSpecName: 'Tül 280', remainingM: '1200.00', blockedReason: null, ...x });
 const yarn = (x: Partial<YarnCandidate> = {}): YarnCandidate => ({ lotId: 'l1', lotNo: 'L-55', yarnItemId: 'y1', itemCode: 'IP1', itemName: 'Polyester 75D', warehouseId: 'w1', warehouseName: 'Ana Depo', balanceKg: '120.500', blockedReason: null, ...x });
@@ -76,5 +76,15 @@ describe('submitBlock', () => {
     expect(submitBlock({ ...ok, canCreate: false })).toBe('Engelli kalemleri çıkarın.');
     expect(submitBlock(ok)).toBeNull();
     expect(submitBlock({ ...ok, canCreate: undefined })).toBeNull();
+  });
+});
+
+describe('createErrorText', () => {
+  const e = (code?: string) => Object.assign(new Error('sunucu'), { status: 409, details: code ? { code } : undefined });
+  it('⭐ CLIENT_TOKEN_COLLISION Türkçe; engel kodu (somut sunucu cümlesi) ve tanınmayan kod sunucuya bırakılır', () => {
+    expect(createErrorText(e('CLIENT_TOKEN_COLLISION'))).toMatch(/farklı kalemlerle kaydedilmiş olabilir/);
+    expect(createErrorText(e('YARN_LOT_INACTIVE'))).toBeNull();
+    expect(createErrorText(e('BILINMEYEN'))).toBeNull();
+    expect(createErrorText(e())).toBeNull();
   });
 });
