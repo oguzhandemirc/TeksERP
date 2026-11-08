@@ -62,7 +62,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "workOrder",
-    scopedCounter: { durum: "hazir", get not() { return `İKİ üreteç de \`nextSeriesNo\` yolundan geçiyor (${TERIM.terbiyeIsEmri.tekilKucuk} açılışı + klon/split); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).`; }, uretec: ["services/workorder.service.ts", "services/helpers/workorder-clone.helper.ts"] },
+    scopedCounter: { durum: "hazir", get not() { return `İKİ üreteç de \`nextSeriesNo\` yolundan geçiyor (${TERIM.terbiyeIsEmri.tekilKucuk} açılışı + klon/split); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).`; }, uretec: ["services/workorder/create.ts", "services/helpers/workorder-clone.helper.ts"] },
     manualEntry: { path: "services/workorder.service.ts", get not() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılırken KÖPRÜ alan \`batchNumber\` ile gelir (Zod adı sonraki fazda değişir); TARANAN seri (TRAVELER_CARD) — refakat kartının barkodu aynı koddur.`; } },
     panelGroup: "uretim",
     countTable: { model: "workOrder", field: "workOrderNumber", birim: "kayıt" },

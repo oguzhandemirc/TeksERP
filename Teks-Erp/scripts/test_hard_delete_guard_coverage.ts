@@ -30,6 +30,7 @@
 import fs from "fs";
 import path from "path";
 import { yorumlariSok } from "./lib/regime-gate-scan";
+import { isEmriServisDosyasiMi, isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 
 const ROOT = path.resolve(__dirname, "..");
 const ROUTES_DIR = path.join(ROOT, "src/routes");
@@ -364,8 +365,11 @@ function checkTombstoneAnchors(): void {
   for (const key of tombstones) {
     const anchor = TOMBSTONE_ANCHORS[key];
     if (!anchor) continue;
+    // İş emri servisi bölündü (2026-11-08): çapa cephe ise ailenin birleşik metni taranır.
     const src = yorumlariSok(
-      fs.readFileSync(path.join(ROOT, "src/services", anchor.service), "utf8"),
+      isEmriServisDosyasiMi(`services/${anchor.service}`)
+        ? isEmriServisMetni()
+        : fs.readFileSync(path.join(ROOT, "src/services", anchor.service), "utf8"),
     );
     const physical = new RegExp(`(prisma|tx)\\.${anchor.model}\\.delete(Many)?\\(`).test(src);
     check(

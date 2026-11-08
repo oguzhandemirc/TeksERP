@@ -145,7 +145,7 @@
     "Teks-Erp/src/services/warehouse-transfer.service.ts::izMevcut",
     "Teks-Erp/src/services/workorder-link.service.ts::tazeWo",
     "Teks-Erp/src/services/workorder-manual-move.service.ts::tazeBlok",
-    "Teks-Erp/src/services/workorder.service.ts::kalanlar",
+    "Teks-Erp/src/services/workorder/cancel-impact.ts::kalanlar",
     "mobil/src/components/SurumNotuGate.tsx::SurumNotuGate",
     "mobil/src/components/SurumNotuGate.tsx::SurumNotuYayini",
     "mobil/src/components/SurumNotuGate.tsx::isaret",

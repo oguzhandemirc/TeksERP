@@ -69,11 +69,13 @@ const propSvc = new FabricPropertyService({
 async function main() {
   const ts = Date.now();
 
-  // ── 1) KAYNAK TARAMASI — 9 kapı, 6 dosya ──────────────────────────────────
+  // ── 1) KAYNAK TARAMASI — 9 kapı, 8 dosya ──────────────────────────────────
   // Import satırı sayılmaz; yalnız `await assertTargetablePropertyIds(` çağrıları.
   // Körlük zemini: dosya okunamazsa/boşsa "0 çağrı" ile kırmızıya düşer.
   const GATES: Record<string, number> = {
-    "workorder.service.ts": 3, // create + replace + updateTargetProperties
+    "workorder/create.ts": 1, // create (workorder.service bölmesi 2026-11-08)
+    "workorder/replace.ts": 1, // replace
+    "workorder/target-planning.ts": 1, // updateTargetProperties
     "inventory.service.ts": 1, // KK1 createInitialEntry
     "order.service.ts": 1,     // sipariş kalemi özellikleri
     "route.service.ts": 1,     // rota adımı plannedPropertyIds

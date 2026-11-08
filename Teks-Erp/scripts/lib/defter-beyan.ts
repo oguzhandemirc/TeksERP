@@ -627,7 +627,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "applyRollFlagSetTx" }],
     // `3c53deaf` (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
     ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
-      "src/services/subcontractor/receive.ts", "src/services/workorder.service.ts",
+      "src/services/subcontractor/receive.ts", "src/services/workorder/target-planning.ts",
       "src/services/tambur-undo.service.ts"]),
   // ③a ticari pivot → DEFTER (2026-09-14, WOTOL-BAG-DAMGA-PLAN): bağ silinmez, `unlinkedAt`
   // damgalanır; yeniden bağlama YENİ satır (un-unlink yok) — ters yazan `linkOrderLines`.
@@ -637,12 +637,13 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     { tur: "DAMGA", kolon: "unlinkedAt" },
     // Ters yazan = DAMGAYI yazan helper (RollProperty emsali); yeniden bağlama ileri satırdır (47 K3).
     [{ dosya: "src/services/helpers/order-link.helper.ts", sembol: "unlinkOrderLinesTx" }],
-    ["src/services/workorder-link.service.ts", "src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"],
+    ["src/services/workorder-link.service.ts", "src/services/helpers/workorder-clone.helper.ts", "src/services/workorder/create.ts", "src/services/workorder/replace.ts"],
     { yari: true }),
   D("WorkOrderTargetProperty", "iş emrinin hedef özelliği — topun özelliğiyle aynı sınıf (2026-09-11 kararı); replace/updateTargetProperties FARK bazlı, çıkan damgalanır (WO_REPLACE · WO_TARGET_UPDATE)",
     { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeTargetProperties" }],
-    ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"]),
+    ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder/create.ts", "src/services/workorder/replace.ts",
+      "src/services/workorder/target-planning.ts"]),
   D("WorkOrderTargetValue", "iş emrinin HEDEF çeşit değeri (KQ-D6 hedef kurşun gramajı) — İE plan alanı; toplara yayılmaz, sapma türetilir. Değişim FARK bazlı: eski satır damgalanır, yenisi yazılır",
     { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/workorder-target-value.helper.ts", sembol: "revokeTargetValueTx" }],
@@ -782,7 +783,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // "Top çıkarıldı" diye basar. Dispozisyon · kurtarma bağsız karşı yön kalır.
   PRODUCTION_ISSUE: { tur: "BAGLI_TERS", kod: ["ROLL_DETACH", "PRODUCTION_ISSUE_TRANSFER"], tersYazan: [
     { dosya: "src/services/workorder-roll-detach.service.ts", sembol: "detachTx" },
-    { dosya: "src/services/workorder.service.ts", sembol: "returnRawRollsOnCancelTx" },
+    { dosya: "src/services/workorder/cancel.ts", sembol: "returnRawRollsOnCancelTx" },
     { dosya: "src/services/helpers/production-issue-ledger.helper.ts", sembol: "rebindProductionIssuesTx" },
   ] },
   ROLL_DETACH: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },

@@ -36,6 +36,7 @@ import { join } from "path";
 import prisma from "../src/lib/prisma";
 import { withBarcodeRetry } from "../src/utils/barcode-retry";
 import { fasonServisMetni } from "./lib/fason-servis-kaynak";
+import { isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 
 const STAMP = `AUDITREPRO-D-B-03-${randomUUID().slice(0, 6).toUpperCase()}`;
 let fail = 0;
@@ -95,7 +96,7 @@ async function main(): Promise<void> {
   // Karşılaştırma: doğru deseni uygulayan üç çağrı yeri
   const shipping = readFileSync(join(__dirname, "../src/services/shipping.service.ts"), "utf8");
   const order = readFileSync(join(__dirname, "../src/services/order.service.ts"), "utf8");
-  const wo = readFileSync(join(__dirname, "../src/services/workorder.service.ts"), "utf8");
+  const wo = isEmriServisMetni(); // iş emri servisi bölündü (2026-11-08): aile metni
   info(`referans desen — shipping p2002Mentions(/clientToken/) ×${(shipping.match(/p2002Mentions\(err, \/clientToken\/i\)/g) ?? []).length}, ` +
     `order isClientTokenP2002 ×${(order.match(/isClientTokenP2002/g) ?? []).length}, workorder ×${(wo.match(/isClientTokenP2002/g) ?? []).length}`);
 

@@ -50,6 +50,7 @@ import { middlewareGovdeAnalizi, yorumlariSok } from "./lib/regime-gate-scan";
 import { createManualMoveFixture } from "./fixture-manual-move";
 import { ayarServisTanimDosyasi } from "./lib/ayar-servis-kaynak";
 import { fasonServisRelYollari } from "./lib/fason-servis-kaynak";
+import { isEmriServisDosyasiMi, isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -100,6 +101,8 @@ async function bekle<T>(fn: () => Promise<T>): Promise<ReturnType<typeof errInfo
 }
 
 function oku(rel: string): string {
+  // İş emri servisi bölündü (2026-11-08): cephe yolu ailenin (cephe + `services/workorder/*.ts`) birleşik metnini okur.
+  if (isEmriServisDosyasiMi(rel)) return yorumlariSok(isEmriServisMetni());
   return yorumlariSok(fs.readFileSync(path.join(SRC, rel), "utf8"));
 }
 
