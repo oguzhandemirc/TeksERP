@@ -106,7 +106,7 @@ function extractValues(data: Record<string, unknown>): PropertyValueInput[] | un
  * durumda istasyon ADI ile Türkçe 400 — "bazıları geçersiz" mesajı operatöre
  * hangisini düzelteceğini söylemiyor.
  */
-async function assertStationsCanApplyProperty(stationIds: string[]): Promise<void> {
+async function assertStationsCanApplyProperty(stationIds: string[], alreadyLinked: ReadonlySet<string> = new Set()): Promise<void> {
   if (stationIds.length === 0) {
     throw AppError.badRequest(
       `Özelliği uygulayacak en az bir istasyon seçilmeli — istasyonsuz özellik hiçbir ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} seçilemez`,
@@ -129,11 +129,14 @@ async function assertStationsCanApplyProperty(stationIds: string[]): Promise<voi
   if (stations.length !== stationIds.length) {
     throw AppError.badRequest("Seçilen istasyonlardan bazıları bulunamadı");
   }
-  const inactive = stations.find((s) => !s.isActive);
+  // Kayıtta ZATEN bağlı istasyon sonradan pasife alınmış / yeteneği değişmiş olabilir: o bağ geçmiştir, özelliğin başka
+  // alanını (değer listesi, aktiflik) düzenlemeyi kilitlemez. Kapı yalnız YENİ eklenen istasyona uygulanır.
+  const added = stations.filter((s) => !alreadyLinked.has(s.id));
+  const inactive = added.find((s) => !s.isActive);
   if (inactive) {
     throw AppError.badRequest(`'${inactive.name}' istasyonu pasif durumda`);
   }
-  const incapable = stations.find((s) => !deriveCapabilityFlags(s).canApplyProperty);
+  const incapable = added.find((s) => !deriveCapabilityFlags(s).canApplyProperty);
   if (incapable) {
     throw AppError.badRequest(
       `'${incapable.name}' istasyonu özellik kazandıramaz — atanmış kategorisi 'özellik veren' (appliesProperty=true) değil`,
@@ -302,7 +305,10 @@ export class FabricPropertyService extends BaseService {
       return super.update(id, data, userId);
     }
 
-    if (stationIds !== undefined) await assertStationsCanApplyProperty(stationIds);
+    if (stationIds !== undefined) {
+      const linked = await prisma.stationProperty.findMany({ where: { propertyId: id }, select: { stationId: true } });
+      await assertStationsCanApplyProperty(stationIds, new Set(linked.map((l) => l.stationId)));
+    }
 
     // Etkin tip: gövde tipi değiştiriyorsa o, değilse mevcut kayıttaki.
     const current = await prisma.fabricProperty.findUnique({
