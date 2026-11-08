@@ -3,11 +3,12 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
-import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import RoutePickerModal, { type RouteChoice } from './RoutePickerModal';
+import { routeButtonTitle, routeStepsLine } from './routePickerView';
 import type { ProductionRoute } from '../../../services/route.service';
 import { TERIM } from '../../../lib/terim';
 import { colors, radius, shadow, spacing, typography } from '../../../theme';
-import { shortcutSub, shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
+import { shortcutTitle } from '../GelenBelge/woCreate/woFromDoc';
 import type { WoCreateKind } from '../../../store/woCreateKinds';
 import { KIND_BUTTON, type TypeGroups } from './scanFlow';
 
@@ -20,12 +21,12 @@ interface Props {
   onScan: (kind: WoCreateKind) => void;
 }
 
-const option = (r: ProductionRoute, group: string): PickerOption => ({ value: r.id, label: shortcutTitle(r), sublabel: shortcutSub(r) ?? group });
+const option = (r: ProductionRoute): RouteChoice => ({ id: r.id, title: routeButtonTitle(r.name), steps: routeStepsLine(r) });
 
 export default function ActionBar({ groups, type, loading, onSelect, kinds, onScan }: Props) {
   const [open, setOpen] = useState(false);
-  const special = useMemo(() => groups.special.map((r) => option(r, 'Özel')), [groups.special]);
-  const ready = useMemo(() => groups.ready.map((r) => option(r, 'Hazır rota')), [groups.ready]);
+  const special = useMemo(() => groups.special.map(option), [groups.special]);
+  const ready = useMemo(() => groups.ready.map(option), [groups.ready]);
   const routeOff = loading || special.length + ready.length === 0;
   const typeLabel = type ? shortcutTitle(type) : loading ? 'Yükleniyor…' : 'Tür yok';
   return (
@@ -51,18 +52,16 @@ export default function ActionBar({ groups, type, loading, onSelect, kinds, onSc
           </Button>
         ))}
       </View>
-      <PickerModal
+      <RoutePickerModal
         visible={open}
         title={`${TERIM.terbiyeIsEmri.tekil} Rotası`}
-        pinnedOptions={special}
-        pinnedLabel={`Özel ${TERIM.terbiyeIsEmri.cogulKucuk}`}
-        options={ready}
-        selectedValue={type?.id ?? null}
-        emptyText="Hazır rota yok."
+        special={special}
+        ready={ready}
+        specialLabel={`Özel ${TERIM.terbiyeIsEmri.cogulKucuk}`}
+        readyLabel="Hazır rotalar"
+        selectedId={type?.id ?? null}
         onSelect={(v) => { onSelect(v); setOpen(false); }}
         onDismiss={() => setOpen(false)}
-        disableSort
-        numColumns={2}
       />
     </View>
   );
