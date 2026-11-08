@@ -33,6 +33,13 @@ export interface YarnCandidate {
   blockedReason: string | null;
 }
 
+/** Sahip seçici — yalnız emaneti olan müşteriler, yalnız kimlik alanları (müşteri kartı okunmaz). */
+export interface ConsignmentOwner {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface ConsignmentCandidates {
   ownerCustomer: { id: string; name: string };
   modules: { devere: boolean; iplik: boolean };
@@ -77,6 +84,13 @@ export interface CreatedConsignmentDispatch {
 }
 
 export const consignmentService = {
+  owners: (search: string): Promise<{ owners: ConsignmentOwner[]; truncated: boolean }> =>
+    apiClient
+      .get<ApiResponse<{ owners: ConsignmentOwner[]; truncated: boolean }>>('/consignment-dispatches/owners', {
+        params: search.trim() ? { search: search.trim() } : {},
+      })
+      .then((r) => r.data.data),
+
   candidates: (ownerCustomerId: string, search: string): Promise<ConsignmentCandidates> =>
     apiClient
       .get<ApiResponse<ConsignmentCandidates>>('/consignment-dispatches/candidates', {

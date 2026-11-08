@@ -9,11 +9,16 @@
 //   §2 sahip süzgeci + seçilebilirlik — A'nın READY leventi + bakiyeli lotu var; B'nin ve sahipsiz lot yok; sıfır
 //      bakiyeli lot yok; pasif lot YARN_LOT_INACTIVE ile listede · her adayın engeli önizlemeyle AYNI
 //   §3 tavan + arama · §4 kapalı modülün listesi boş (`modules`)
+//   §5 sahip seçici `GET /owners` — yalnız `{id, code, name}` (iletişim/vergi yok) · yalnız emaneti olan müşteri ·
+//      strict 400 · tavan · `mobile:depo` geçer, `/api/customers` (liste + kart) 403 — en az yetki
 //
 // NEGATİF SONDALAR (cp + geri al, 2026-11-08):
 //   S1 candidates.ts iplik `blockedReason` → null sabit ⇒ §2f (önizlemeyle aynı engel) ❌
 //   S2 candidates.ts `HAVING ... > 0` kaldırıldı ⇒ §2d (sıfır bakiyeli lot listede değil) ❌
 //   S3 route `CandidatesQuery` `.strict()` kaldırıldı ⇒ §1a (tanınmayan parametre 400) ❌
+//   S4 owners.ts `select` → tüm kolonlar ⇒ §5a (yanıtta iletişim alanı yok) ❌
+//   S5 owners.ts emanet süzgeci (`OR: [...]`) kaldırıldı ⇒ §5b (emanetsiz müşteri listede değil) ❌
+//   S6 customer.routes `MOBILE_CUSTOMER_READ`e `mobile:depo` eklendi ⇒ §5e (müşteri listesi 403) ❌
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döndürülür.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -30,6 +35,8 @@ import { applyYarnMovementTx } from "../src/services/yarn.service";
 import { previewConsignmentDispatch } from "../src/services/consignment-dispatch/create";
 import type { ConsignmentCandidates } from "../src/services/consignment-dispatch/candidate-types";
 import router from "../src/routes/consignment-dispatch.routes";
+import customerRouter from "../src/routes/customer.routes";
+import type { ConsignmentOwners } from "../src/services/consignment-dispatch/owners";
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -50,6 +57,9 @@ function statik(): void {
   console.log("── §0 Statik ──");
   const route = readFileSync(path.join(ROOT, "src/routes/consignment-dispatch.routes.ts"), "utf8");
   const aday = route.indexOf('router.get("/candidates"');
+  const sahip = route.indexOf('router.get("/owners"');
+  check("§0f sahip rotası `/:id`ten ÖNCE, aynı anahtar-kapsamlı guard", sahip > 0 && sahip < route.indexOf('router.get("/:id"') &&
+    /router\.get\("\/owners", requireAnyPermission\("consignment:write", "mobile:depo"\)/.test(route));
   check("§0a aday rotası `/:id`ten ÖNCE (yoksa kimlik diye okunur)", aday > 0 && aday < route.indexOf('router.get("/:id"'));
   check("§0b guard anahtar-kapsamlı: `requireAnyPermission(\"consignment:write\", \"mobile:depo\")`",
     /router\.get\("\/candidates", requireAnyPermission\("consignment:write", "mobile:depo"\)/.test(route));
@@ -63,24 +73,35 @@ function statik(): void {
   check("§0e satır tavanı sorgunun içinde (`take: q.limit + 1` · `LIMIT ${q.limit + 1}`)", cand.includes("take: q.limit + 1") && cand.includes("LIMIT ${q.limit + 1}"));
 }
 
-type RouteLayer = { route?: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (req: Request, res: Response, next: NextFunction) => unknown }> } };
+type RouteLayer = { route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string; handle: (req: Request, res: Response, next: NextFunction) => unknown }> } };
 
 /** Router yığınındaki `/candidates` GET katmanını gerçek middleware'leriyle koşar (verifyToken/emanet kapısı hariç). */
 async function call(query: Record<string, string>, permissions: string[]): Promise<{ status: number; code?: string; data?: ConsignmentCandidates }> {
-  const layer = (router as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === "/candidates" && l.route.methods.get);
+  return callRoute<ConsignmentCandidates>(router, "/candidates", query, permissions);
+}
+
+/** Bir router'daki GET katmanını koşar; kimlik doğrulama (`verifyToken`) atlanır, izin guard'ı koşar. */
+async function callRoute<T>(r: unknown, routePath: string, query: Record<string, string>, permissions: string[]): Promise<{ status: number; code?: string; data?: T }> {
+  const layer = (r as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === routePath && l.route.methods.get);
   if (!layer?.route) return { status: -1, code: "ROUTE_YOK" };
-  const req = { query, user: { userId: "x", username: "x", permissions } } as unknown as Request;
-  let out: { status: number; body?: { data?: ConsignmentCandidates } } | null = null;
+  const req = { query, params: { id: "00000000-0000-4000-8000-000000000000" }, user: { userId: "x", username: "x", permissions } } as unknown as Request;
+  let out: { status: number; body?: { data?: T } } | null = null;
   let err: unknown = null;
-  const res = { status(s: number) { return { json(b: { data?: ConsignmentCandidates }) { out = { status: s, body: b }; } }; } } as unknown as Response;
+  const res = { status(s: number) { return { json(b: { data?: T }) { out = { status: s, body: b }; } }; } } as unknown as Response;
   for (const h of layer.route.stack) {
+    if (h.name === "verifyToken") continue;
     let nexted = false;
-    await h.handle(req, res, (e?: unknown) => { nexted = true; err = e ?? null; });
+    try {
+      await h.handle(req, res, (e?: unknown) => { nexted = true; err = e ?? null; });
+    } catch (e) {
+      // Guard'ı geçip sahte yanıtla işleyicide düşmek de "erişti" demektir — 403 değil.
+      return { status: 0, code: `GUARD_GECTI: ${(e as Error).message}` };
+    }
     if (err || !nexted) break;
   }
   if (err instanceof AppError) return { status: err.statusCode, code: String((err.details as { code?: string } | undefined)?.code ?? "") };
   if (err) throw err;
-  const o = out as { status: number; body?: { data?: ConsignmentCandidates } } | null;
+  const o = out as { status: number; body?: { data?: T } } | null;
   return { status: o?.status ?? 0, data: o?.body?.data };
 }
 
@@ -106,9 +127,10 @@ async function main(): Promise<void> {
   try {
     console.log("\n── fikstür ──");
     for (const f of FLAGS) await setFlag(f, true);
-    const custA = await prisma.customer.create({ data: { code: `${TAG}-A`, name: `${TAG} Müşteri A` }, select: { id: true } });
+    const custA = await prisma.customer.create({ data: { code: `${TAG}-A`, name: `${TAG} Müşteri A`, email: "a@ornek.test", address: "Gizli adres", taxNumber: "1234567890" }, select: { id: true } });
     const custB = await prisma.customer.create({ data: { code: `${TAG}-B`, name: `${TAG} Müşteri B` }, select: { id: true } });
-    ids.custs.push(custA.id, custB.id);
+    const custC = await prisma.customer.create({ data: { code: `${TAG}-C`, name: `${TAG} Müşteri C (emanetsiz)` }, select: { id: true } });
+    ids.custs.push(custA.id, custB.id, custC.id);
     const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
     ids.yarn = yarn.id;
     const spec = await prisma.warpSpec.create({ data: { code: `${TAG}-CK`, name: `${TAG} çözgü`, yarnItemId: yarn.id, endsCount: 3000 }, select: { id: true } });
@@ -196,6 +218,21 @@ async function main(): Promise<void> {
     await setFlag(SETTING_KEYS.IPLIK_ENABLED, false);
     const r4b = await call({ ownerCustomerId: custA.id, search: TAG }, W);
     check("§4b iplik kapalı → lot listesi boş, modules.iplik=false", r4b.data!.yarns.length === 0 && !r4b.data!.modules.iplik && r4b.data!.beams.length > 0);
+
+    console.log("\n── §5 Sahip seçici (en az yetki) ──");
+    const owners = (q: Record<string, string>, p: string[]) => callRoute<ConsignmentOwners>(router, "/owners", q, p);
+    const r5 = await owners({ search: TAG }, ["mobile:depo"]);
+    const oA = r5.data?.owners.find((o) => o.id === custA.id);
+    check("§5a ⭐ yanıt yalnız {id, code, name} — e-posta/adres/vergi no YOK", r5.status === 200 && !!oA && Object.keys(oA).sort().join(",") === "code,id,name", JSON.stringify(oA));
+    const oIds = new Set(r5.data?.owners.map((o) => o.id));
+    check("§5b ⭐ yalnız emaneti olan müşteriler (A, B var; emanetsiz C yok)", oIds.has(custA.id) && oIds.has(custB.id) && !oIds.has(custC.id), JSON.stringify([...oIds]));
+    const r5c = await owners({ search: TAG, x: "1" }, W);
+    check("§5c tanınmayan parametre → 400", r5c.status === 400 && r5c.code === "VALIDATION_ERROR", `${r5c.status} ${r5c.code}`);
+    const r5d = await owners({ search: TAG, limit: "1" }, W);
+    check("§5d limit=1 → 1 satır + truncated; izinsiz 403", r5d.data?.owners.length === 1 && r5d.data.truncated && (await owners({}, ["warehouse:read"])).status === 403);
+    const c1 = await callRoute(customerRouter, "/", {}, ["mobile:depo"]);
+    const c2 = await callRoute(customerRouter, "/:id", {}, ["mobile:depo"]);
+    check("§5e ⭐ `mobile:depo` müşteri listesini ve kartını OKUYAMAZ (403)", c1.status === 403 && c2.status === 403, `${c1.status} ${c2.status}`);
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: ids.beams } } });
     if (ids.yarn) {

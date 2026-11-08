@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import ModuleSheet, { sheet } from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
-import { customerService } from '../../../../services/customer.service';
 import { consignmentService, type BeamCandidate, type YarnCandidate } from '../../../../services/consignment.service';
 import { useDebouncedValue } from '../../../../hooks/useDebouncedValue';
 import { emptyOrProblemText } from '../../../../utils/queryState';
@@ -31,13 +30,14 @@ export function useCandidates(ownerId: string | null, search: string, enabled: b
 export function OwnerPicker({ visible, selectedId, onSelect, onDismiss }: { visible: boolean; selectedId: string | null; onSelect: (id: string, name: string) => void; onDismiss: () => void }) {
   const [search, setSearch] = useState('');
   const debounced = useDebouncedValue(search, 300);
+  // Emanet sahip seçicisi: müşteri kartı (iletişim/vergi) okunmaz; yalnız emaneti olan müşteriler gelir.
   const q = useQuery({
-    queryKey: ['customers', 'emanet-cikis', debounced],
-    queryFn: () => customerService.getAll({ page: 1, pageSize: 50, sortBy: 'name', sortOrder: 'asc', search: debounced || undefined }),
+    queryKey: ['consignment-owners', debounced],
+    queryFn: () => consignmentService.owners(debounced),
     enabled: visible,
   });
-  // Pasif müşteriye de iade edilir (malı onundur) — süzgeç yok; sunucu da yalnız varlığı sorar.
-  const options = useMemo<PickerOption[]>(() => (q.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code })), [q.data]);
+  const options = useMemo<PickerOption[]>(() => (q.data?.owners ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code })), [q.data]);
+  const empty = 'Emanet malı olan müşteri bulunamadı';
   return (
     <PickerModal
       visible={visible}
@@ -45,7 +45,8 @@ export function OwnerPicker({ visible, selectedId, onSelect, onDismiss }: { visi
       options={options}
       selectedValue={selectedId}
       loading={q.isLoading}
-      emptyText={emptyOrProblemText(q, 'Müşteri bulunamadı')}
+      emptyText={emptyOrProblemText(q, empty)}
+      quickAddSlot={<TruncatedHint on={!!q.data?.truncated} />}
       onRefresh={() => void q.refetch()}
       paginated
       searchValue={search}
@@ -54,6 +55,11 @@ export function OwnerPicker({ visible, selectedId, onSelect, onDismiss }: { visi
       onDismiss={onDismiss}
     />
   );
+}
+
+/** Satır tavanı doldu: liste kesildi, aradığı yoksa operatör aramayı daraltır. */
+function TruncatedHint({ on }: { on: boolean }) {
+  return on ? <Text style={sheet.hint} testID="emanet-liste-kesik">Liste uzun, ilk satırlar gösteriliyor — aramayı daraltın.</Text> : null;
 }
 
 const BLOCKED_BADGE = colors.warningText;
@@ -97,7 +103,8 @@ export function CandidatePicker({ kind, ownerId, taken, yarnSubset, onBlocked, o
       title={kind === 'beam' ? 'Levent seç' : yarnSubset ? 'Lotun deposunu seç' : 'İplik lotu seç'}
       options={options}
       loading={q.isLoading && !yarnSubset}
-      emptyText={emptyOrProblemText(q, truncated ? `${empty} — aramayı daraltın` : empty)}
+      emptyText={emptyOrProblemText(q, empty)}
+      quickAddSlot={<TruncatedHint on={!!truncated && !yarnSubset} />}
       onRefresh={() => void q.refetch()}
       paginated
       searchValue={search}

@@ -15,6 +15,7 @@ import { createConsignmentDispatch, previewConsignmentDispatch } from "../servic
 import { cancelConsignmentDispatch, cancelPreviewConsignmentDispatch } from "../services/consignment-dispatch/cancel";
 import { getConsignmentDispatch, listConsignmentDispatches } from "../services/consignment-dispatch/read";
 import { CANDIDATE_DEFAULT_LIMIT, CANDIDATE_MAX_LIMIT, listConsignmentCandidates } from "../services/consignment-dispatch/candidates";
+import { OWNER_DEFAULT_LIMIT, OWNER_MAX_LIMIT, listConsignmentOwners } from "../services/consignment-dispatch/owners";
 
 const router = Router();
 router.use(verifyToken, requireEmanetEnabled);
@@ -55,6 +56,10 @@ const CandidatesQuery = z.object({
   ownerCustomerId: Id,
   search: z.string().max(64, "Arama en çok 64 karakter").optional(),
   limit: z.coerce.number().int().min(1).max(CANDIDATE_MAX_LIMIT).default(CANDIDATE_DEFAULT_LIMIT),
+}).strict();
+const OwnersQuery = z.object({
+  search: z.string().max(64, "Arama en çok 64 karakter").optional(),
+  limit: z.coerce.number().int().min(1).max(OWNER_MAX_LIMIT).default(OWNER_DEFAULT_LIMIT),
 }).strict();
 const STATUSES = ["ACTIVE", "CANCELLED", "ALL"] as const;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -187,6 +192,27 @@ router.post("/preview", requireAnyPermission("consignment:write", "mobile:depo")
 router.get("/candidates", requireAnyPermission("consignment:write", "mobile:depo"), wrap(async (req) => {
   const q = parse(CandidatesQuery, req.query);
   return { status: 200, body: { success: true, data: await listConsignmentCandidates({ ownerCustomerId: q.ownerCustomerId, search: q.search?.trim() || undefined, limit: q.limit }) } };
+}));
+
+/**
+ * @openapi
+ * /api/consignment-dispatches/owners:
+ *   get:
+ *     tags: [Consignment]
+ *     summary: Emaneti olan müşteriler (sahip seçici) — yalnız id/kod/ad; müşteri kartı okunmaz
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: search, schema: { type: string, maxLength: 64 }, description: "Müşteri adı / kodu" }
+ *       - { in: query, name: limit, schema: { type: integer, maximum: 100, default: 50 } }
+ *     responses:
+ *       200: { description: "{ success, data: { owners: [{ id, code, name }], truncated } }" }
+ *       400: { description: Tanınmayan/geçersiz parametre (VALIDATION_ERROR) }
+ *       403: { description: Emanet kapalı (MODULE_DISABLED) ya da consignment:write / mobile:depo yok }
+ */
+// `/:id`ten ÖNCE kalmalı. Depo rolü `/api/customers` okumaz (iletişim/vergi alanları) — sahibi buradan seçer.
+router.get("/owners", requireAnyPermission("consignment:write", "mobile:depo"), wrap(async (req) => {
+  const q = parse(OwnersQuery, req.query);
+  return { status: 200, body: { success: true, data: await listConsignmentOwners({ search: q.search?.trim() || undefined, limit: q.limit }) } };
 }));
 
 /**

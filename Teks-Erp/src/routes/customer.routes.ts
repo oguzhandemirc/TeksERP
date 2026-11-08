@@ -14,8 +14,7 @@ import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 
-// `mobile:depo` (2026-11-08, T1): tablet emanet çıkışı malın sahibini seçer — aday ucu sahip kimliği ister.
-const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:tambur", "mobile:siparis", "mobile:hizli-is-emri", "mobile:depo"] as const;
+const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:tambur", "mobile:siparis", "mobile:hizli-is-emri"] as const;
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";

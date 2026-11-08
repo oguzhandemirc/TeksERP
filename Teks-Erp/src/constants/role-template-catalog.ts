@@ -652,7 +652,7 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     mode: "list",
     codes: ["mobile:tambur", "label:edit", "customer-alias:write", "roll:customer-code"],
   },
-  { code: "MOBILE_DEPO", name: "Mobil — Depo Operatörü", description: "Depo ekranı (salt-okunur)", mode: "list", codes: ["mobile:depo"] },
+  { code: "MOBILE_DEPO", name: "Mobil — Depo Operatörü", description: "Depo ekranı (stok görüntüleme) + emanet levent/ipliği sahibine çıkış belgesi oluşturma", mode: "list", codes: ["mobile:depo"] },
   { code: "MOBILE_FASON_SEVK", name: "Mobil — Fason Sevk Operatörü", description: "Fason firmaya sevk ekranı", mode: "list", codes: ["mobile:fason-sevk"] },
   { code: "MOBILE_FASON_KABUL", name: "Mobil — Fason Kabul Operatörü", description: "Fason firmadan mal kabul ekranı", mode: "list", codes: ["mobile:fason-kabul"] },
   { code: "MOBILE_KARTELA_SEVK", name: "Mobil — Kartela Sevk Operatörü", description: "Kartela firmaya sevk ekranı", mode: "list", codes: ["mobile:kartela-sevk"] },
