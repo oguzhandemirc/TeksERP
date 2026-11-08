@@ -53,6 +53,7 @@ import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceipt
 import { ConsumableStockPage } from "@/pages/Operations/ConsumableStock/ConsumableStockPage";
 import { IncomingDocumentsPage } from "@/pages/Operations/GelenBelgeler/GelenBelgelerPage";
 import { ConsignedWorkPage } from "@/pages/Operations/ConsignedWork/ConsignedWorkPage";
+import { ConsignmentDispatchesPage } from "@/pages/Operations/ConsignmentDispatches/ConsignmentDispatchesPage";
 import { ReadyWorksPage } from "@/pages/Operations/ReadyWorks/ReadyWorksPage";
 import { IncomingDocumentDetailPage } from "@/pages/Operations/GelenBelgeler/GelenBelgeDetailPage";
 import { SenderTemplatesPage } from "@/pages/Operations/GelenBelgeler/GonderenSablonlariPage";
@@ -564,6 +565,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="roll:read">
         <ConsignedWorkPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Emanet Çıkış (F5/P3) — modül kapısı `ROUTE_MODULE` (`emanetEnabled`); karo ile AYNI izin.
+  {
+    path: "operations/emanet-cikis",
+    element: (
+      <ProtectedRoute requirePermission="consignment:read">
+        <ConsignmentDispatchesPage />
       </ProtectedRoute>
     ),
   },
