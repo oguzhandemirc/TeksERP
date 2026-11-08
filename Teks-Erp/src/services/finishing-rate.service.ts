@@ -74,11 +74,16 @@ export async function resolveActiveFinishingRate(code: string): Promise<Finishin
 /** SY-E1: KG tabanında fiyat kilo başınadır (kolon adı `pricePerM` korunur). */
 const priceLabel = (b: FinishingBasis): string => (b === "KG" ? "Kilo fiyatı" : "Metre fiyatı");
 
-/** TARİFE YAZ/DEĞİŞTİR — aynı değerler no-op; farklıysa eski aktif sürüm damgalanır + yeni satır. */
-export async function changeFinishingRate(
-  input: FinishingRateChangeInput,
-  userId?: string,
-): Promise<{ row: FinishingRateRow; wrote: boolean; previousId: string | null }> {
+interface ParsedRate {
+  code: string;
+  name: string;
+  price: Prisma.Decimal;
+  shrink: Prisma.Decimal | null;
+  note: string | null;
+  subcontractorId: string | null;
+}
+
+async function parseRateInput(input: FinishingRateChangeInput): Promise<ParsedRate> {
   const code = normalizeFinishingRateCode(input.code);
   const name = parseTextField(input.name, "Tarife adı", 100);
   if (!name) throw AppError.badRequest("Tarife adı zorunludur.");
@@ -92,67 +97,87 @@ export async function changeFinishingRate(
     if (!sub) throw AppError.badRequest("Fason firma bulunamadı.");
     if (!sub.isActive) throw AppError.badRequest(`"${sub.name}" pasif durumda — tarifeye bağlanamaz.`);
   }
+  return { code, name, price, shrink, note, subcontractorId };
+}
 
-  const at = new Date();
-  // Köprü kartı kilidi tx'in İLK ifadesi (8030 SHARED → kart FOR SHARE); pasif/bulunamayan kart gövde hatasıdır → 400.
-  const lockServiceItem = async (tx: Prisma.TransactionClient, id: string): Promise<void> => {
-    try {
-      await assertServiceItemUsableTx(tx, id, "DEFINITION");
-    } catch (e) {
-      if (e instanceof AppError && e.statusCode === 409) throw AppError.badRequest(e.message, e.details);
-      throw e;
-    }
-  };
-  type Prev = { id: string; pricePerM: Prisma.Decimal; currency: Currency };
-  let outcome: { id: string; wrote: boolean; previous: Prev | null };
+/** Köprü kartı kilidi (8030 SHARED → kart FOR SHARE); pasif/bulunamayan kart gövde hatasıdır → 400. */
+async function lockServiceItem(tx: Prisma.TransactionClient, id: string): Promise<void> {
   try {
-    outcome = await prisma.$transaction(async (tx) => {
-      if (input.serviceItemId) await lockServiceItem(tx, input.serviceItemId);
-      const current = await tx.finishingRate.findFirst({
-        where: { code, ...ACTIVE_FINISHING_RATE },
-        select: { id: true, name: true, subcontractorId: true, basis: true, currency: true, pricePerM: true, typicalShrinkPct: true, note: true, serviceItemId: true },
-      });
-      // undefined = mevcut köprü taşınır (eski panel alanı göndermez; fiyat değişimi köprüyü düşürmez).
-      const serviceItemId = input.serviceItemId === undefined ? (current?.serviceItemId ?? null) : input.serviceItemId;
-      const same =
-        current &&
-        current.name === name &&
-        current.subcontractorId === subcontractorId &&
-        current.basis === input.basis &&
-        current.currency === input.currency &&
-        current.pricePerM.equals(price) &&
-        (current.typicalShrinkPct === null ? shrink === null : shrink !== null && current.typicalShrinkPct.equals(shrink)) &&
-        current.note === note &&
-        current.serviceItemId === serviceItemId;
-      if (current && same) return { id: current.id, wrote: false, previous: current };
-      if (current) {
-        const claim = await tx.finishingRate.updateMany({
-          where: { id: current.id, ...ACTIVE_FINISHING_RATE },
-          data: { revokedAt: at, revokedById: userId ?? null, revokeReason: COST_PRICE_REVOKE_REASON.CHANGED },
-        });
-        if (claim.count === 0) throw AppError.conflict("Tarife aynı anda başka bir işlemle değişti — listeyi yenileyip tekrar deneyin.");
-      }
-      const created = await tx.finishingRate.create({
-        data: {
-          code,
-          name,
-          subcontractorId,
-          basis: input.basis,
-          currency: input.currency,
-          pricePerM: price,
-          typicalShrinkPct: shrink,
-          note,
-          serviceItemId,
-          createdAt: at,
-          createdById: userId ?? null,
-        },
-        select: { id: true },
-      });
-      return { id: created.id, wrote: true, previous: current };
+    await assertServiceItemUsableTx(tx, id, "DEFINITION");
+  } catch (e) {
+    if (e instanceof AppError && e.statusCode === 409) throw AppError.badRequest(e.message, e.details);
+    throw e;
+  }
+}
+
+const RATE_CURRENT_SELECT = {
+  id: true, name: true, subcontractorId: true, basis: true, currency: true, pricePerM: true, typicalShrinkPct: true, note: true, serviceItemId: true,
+} satisfies Prisma.FinishingRateSelect;
+type RateCurrent = Prisma.FinishingRateGetPayload<{ select: typeof RATE_CURRENT_SELECT }>;
+
+function sameRate(cur: RateCurrent, r: ParsedRate, input: FinishingRateChangeInput, serviceItemId: string | null): boolean {
+  return cur.name === r.name &&
+    cur.subcontractorId === r.subcontractorId &&
+    cur.basis === input.basis &&
+    cur.currency === input.currency &&
+    cur.pricePerM.equals(r.price) &&
+    (cur.typicalShrinkPct === null ? r.shrink === null : r.shrink !== null && cur.typicalShrinkPct.equals(r.shrink)) &&
+    cur.note === r.note &&
+    cur.serviceItemId === serviceItemId;
+}
+
+type RateOutcome = { id: string; wrote: boolean; previous: RateCurrent | null };
+
+async function writeRateTx(
+  tx: Prisma.TransactionClient,
+  args: { r: ParsedRate; input: FinishingRateChangeInput; carryHint: string | null; at: Date; userId?: string },
+): Promise<RateOutcome> {
+  const { r, input, carryHint, at, userId } = args;
+  // Kilit tx'in İLK ifadesi: yeni köprü ya da (alan gönderilmediyse) yeni sürüme TAŞINACAK köprü — taşınan kart
+  // arşivlenmişse/aynı anda arşivleniyorsa canlı referans sayımıyla yarışmasın.
+  const lockId = input.serviceItemId === undefined ? carryHint : input.serviceItemId;
+  if (lockId) await lockServiceItem(tx, lockId);
+  const current = await tx.finishingRate.findFirst({ where: { code: r.code, ...ACTIVE_FINISHING_RATE }, select: RATE_CURRENT_SELECT });
+  // undefined = mevcut köprü taşınır (eski panel alanı göndermez; fiyat değişimi köprüyü düşürmez).
+  const serviceItemId = input.serviceItemId === undefined ? (current?.serviceItemId ?? null) : input.serviceItemId;
+  if (input.serviceItemId === undefined && serviceItemId !== carryHint) {
+    throw AppError.conflict("Tarife aynı anda başka bir işlemle değişti — listeyi yenileyip tekrar deneyin.");
+  }
+  if (current && sameRate(current, r, input, serviceItemId)) return { id: current.id, wrote: false, previous: current };
+  if (current) {
+    const claim = await tx.finishingRate.updateMany({
+      where: { id: current.id, ...ACTIVE_FINISHING_RATE },
+      data: { revokedAt: at, revokedById: userId ?? null, revokeReason: COST_PRICE_REVOKE_REASON.CHANGED },
     });
+    if (claim.count === 0) throw AppError.conflict("Tarife aynı anda başka bir işlemle değişti — listeyi yenileyip tekrar deneyin.");
+  }
+  const created = await tx.finishingRate.create({
+    data: {
+      code: r.code, name: r.name, subcontractorId: r.subcontractorId, basis: input.basis, currency: input.currency,
+      pricePerM: r.price, typicalShrinkPct: r.shrink, note: r.note, serviceItemId, createdAt: at, createdById: userId ?? null,
+    },
+    select: { id: true },
+  });
+  return { id: created.id, wrote: true, previous: current };
+}
+
+/** TARİFE YAZ/DEĞİŞTİR — aynı değerler no-op; farklıysa eski aktif sürüm damgalanır + yeni satır. */
+export async function changeFinishingRate(
+  input: FinishingRateChangeInput,
+  userId?: string,
+): Promise<{ row: FinishingRateRow; wrote: boolean; previousId: string | null }> {
+  const r = await parseRateInput(input);
+  const at = new Date();
+  // Taşınacak köprünün ön okuması (kilit tx'in ilk ifadesi olsun diye); tx içinde değişmişse 409.
+  const carryHint = input.serviceItemId === undefined
+    ? ((await prisma.finishingRate.findFirst({ where: { code: r.code, ...ACTIVE_FINISHING_RATE }, select: { serviceItemId: true } }))?.serviceItemId ?? null)
+    : null;
+  let outcome: RateOutcome;
+  try {
+    outcome = await prisma.$transaction((tx) => writeRateTx(tx, { r, input, carryHint, at, userId }));
   } catch (e) {
     if (isUniqueViolation(e)) {
-      throw AppError.conflict(`"${code}" tarifesi aynı anda başka bir işlemle yazıldı — listeyi yenileyip tekrar deneyin.`, { code: "COST_PRICE_CONFLICT" });
+      throw AppError.conflict(`"${r.code}" tarifesi aynı anda başka bir işlemle yazıldı — listeyi yenileyip tekrar deneyin.`, { code: "COST_PRICE_CONFLICT" });
     }
     throw e;
   }

@@ -11,6 +11,7 @@
 //   §5 özet = liste ile AYNI where: sayaçlar ve metre toplamı tüm sayfaların toplamına eşit; firma şeridi
 //   §6 cursor: sayfalar örtüşmez, uç sayfada `nextCursor` null
 //   §7 fail-closed: tanınmayan durum / bozuk uuid / limit 0·201 / bozuk cursor / çoklu durum → 400 COCKPIT_FILTER_INVALID
+//   §9 ⭐ metrik SQL ikizi (`outstandingRollTotalsByDispatch`) = `outstandingItemOfOpenDispatch` (kısmi / iptal / aktif kabul, kalan kapama)
 //   §8 statik: route `/cockpit` izin çifti `subcontractor:read` · `workorder:read`, route prisma'ya dokunmaz
 // Kısmi kabul `currentQty`yi atomik düşürür (`subcontractor/receive.ts`); bekçi bu durumu doğrudan kurar — kabul
 // akışının kendisi `test_fason_partial_receive`'in işidir.
@@ -19,7 +20,8 @@
 //   silinince §1c ❌; (c) `OPEN_BEAM_ITEM`den `warpBeamEvents.none` silinince §1d2 ❌; (d) metrikte `roll.currentQty`
 //   yerine `dispatchedQty` → §2a ❌; (e) iplik helper'ında sarım düşümü silinince §2c ❌; (f) `categoryWhere`in istasyon
 //   kolu silinince §4b ❌; (g) özet `all` yerine `page` üzerinden → §5a ❌; (h) `readState` allowlist'i kaldırılınca
-//   §7a ❌. Hepsi geri alındı.
+//   §7a ❌; (i) SQL ikizinde `isPartial = false` · (j) `rc."cancelledAt" IS NULL` · (k) `remainderClosedAt IS NULL` kolu silinince
+//   §9a/§9b ❌. Hepsi geri alındı.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -34,7 +36,8 @@ import { returnWarpBeam } from "../src/services/subcontractor-beam.service";
 import { returnYarn } from "../src/services/subcontractor-yarn.service";
 import { applyYarnMovementTx } from "../src/services/yarn.service";
 import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
-import { getSubcontractorCockpit, type CockpitQueryInput } from "../src/services/subcontractor-cockpit.service";
+import { getSubcontractorCockpit, outstandingRollTotalsByDispatch, type CockpitQueryInput } from "../src/services/subcontractor-cockpit.service";
+import { outstandingItemOfOpenDispatch } from "../src/services/helpers/fason-open-dispatch.helper";
 import { addDaysToDayKey } from "../src/services/helpers/fason-expected-return.helper";
 import { factoryDayEndOfKey, factoryYmd } from "../src/constants/time";
 import type { SubcontractorCockpitRow } from "../src/services/subcontractor/types";
@@ -62,9 +65,11 @@ const codeOf = async (fn: () => Promise<unknown>): Promise<string> => {
 const TAG = `TST-FKP-${Date.now().toString(36).toUpperCase()}`;
 const ROOT = path.resolve(__dirname, "..");
 
+const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
+
 interface Ids {
   st: string; yarn: string; lot: string; spec: string; weaving: string;
-  beamIds: string[]; woIds: string[]; rollIds: string[]; dispatchIds: string[];
+  beamIds: string[]; woIds: string[]; rollIds: string[]; dispatchIds: string[]; receiptIds: string[];
 }
 
 /** Firma süzgeçli TÜM sayfalar (paylaşılan fixture firmasında başka bekçilerin sevkleri olabilir — kendi satırlarımıza bakılır). */
@@ -101,7 +106,7 @@ async function main(): Promise<void> {
   const dye = await ensureTestDyeHouse();
   const iplikFoto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, select: { value: true } });
   const devereFoto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, select: { value: true } });
-  const ids: Ids = { st: "", yarn: "", lot: "", spec: "", weaving: "", beamIds: [], woIds: [], rollIds: [], dispatchIds: [] };
+  const ids: Ids = { st: "", yarn: "", lot: "", spec: "", weaving: "", beamIds: [], woIds: [], rollIds: [], dispatchIds: [], receiptIds: [] };
   try {
     await senaryo(dye, ids);
   } finally {
@@ -261,6 +266,32 @@ async function senaryo(dye: { id: string; categoryId: string }, ids: Ids): Promi
   check("§1f top kalemi kapanıp levent dönünce sevk düşer (yalnız iplik kalanı kokpite girmez — beyanlı açık)", !m.has(d1));
   check("§1g dokuma işi COMPLETED → belge düşer", !m.has(dW));
 
+  // ── §9 SQL ikizi: metrik toplamı DB'de; Prisma tek kaynak yüklemiyle kalem kalem eşit
+  const w5 = await mkWo("5", boya.id, dye.categoryId);
+  const [rA, rB, rC, rD] = [await mkRoll("5A", 10), await mkRoll("5B", 20), await mkRoll("5C", 30), await mkRoll("5D", 40)];
+  const d5 = reg(await svc.dispatch({ workOrderId: w5.woId, stepId: w5.stepId, subcontractorId: dye.id, rollIds: [rA, rB, rC, rD] }, actor));
+  const it5 = new Map((await prisma.subcontractorDispatchItem.findMany({ where: { dispatchId: d5 }, select: { id: true, rollId: true } })).map((i) => [i.rollId!, i.id]));
+  const mkReceipt = async (n: string, rollId: string, isPartial: boolean, cancelled: boolean) => {
+    const rc = await prisma.subcontractorReceipt.create({ data: { receiptNo: `${TAG}-SR${n}`, subcontractorId: dye.id, workOrderId: w5.woId, stepId: w5.stepId, cancelledAt: cancelled ? new Date() : null }, select: { id: true } });
+    ids.receiptIds.push(rc.id);
+    await prisma.subcontractorReceiptItem.create({ data: { receiptId: rc.id, newRollId: rollId, sourceDispatchItemId: it5.get(rollId)!, receivedQty: 5, isPartial } });
+  };
+  await mkReceipt("A", rA, false, false); // aktif TAM kabul → kapalı
+  await mkReceipt("B", rB, true, false); // kısmi kabul → açık
+  await mkReceipt("C", rC, false, true); // iptal TAM kabul → açık
+  await prisma.subcontractorDispatchItem.update({ where: { id: it5.get(rD)! }, data: { remainderClosedAt: new Date() } }); // kalan kapandı
+  const viaSql = new Map((await outstandingRollTotalsByDispatch(ids.dispatchIds)).map((r) => [r.dispatchId, `${D(r.qty).toFixed(3)}/${r.cnt}`]));
+  const viaPrisma = new Map<string, { qty: Prisma.Decimal; cnt: number }>();
+  for (const it of await prisma.subcontractorDispatchItem.findMany({ where: outstandingItemOfOpenDispatch({ id: { in: ids.dispatchIds } }), select: { dispatchId: true, roll: { select: { currentQty: true } } } })) {
+    const g = viaPrisma.get(it.dispatchId) ?? { qty: D(0), cnt: 0 };
+    viaPrisma.set(it.dispatchId, { qty: g.qty.plus(it.roll?.currentQty ?? 0), cnt: g.cnt + 1 });
+  }
+  const prismaStr = new Map([...viaPrisma].map(([k, v]) => [k, `${v.qty.toFixed(3)}/${v.cnt}`]));
+  check("§9a ⭐ d5: yalnız kısmi (B) + iptal kabullü (C) açık → 50 m · 2 top", viaSql.get(d5) === "50.000/2", viaSql.get(d5));
+  check("§9b ⭐ SQL ikizi = Prisma tek kaynak (tüm fikstür sevkleri)", viaSql.size === prismaStr.size && [...prismaStr].every(([k, v]) => viaSql.get(k) === v), `${JSON.stringify([...viaSql])} vs ${JSON.stringify([...prismaStr])}`);
+  m = await mine();
+  check("§9c kokpit satırı ikizden okur", m.get(d5)?.outstandingQty === "50.000" && m.get(d5)?.outstandingRollCount === 2, JSON.stringify(m.get(d5)));
+
   // ── §7 fail-closed
   const bad = (x: CockpitQueryInput) => codeOf(() => getSubcontractorCockpit({ ...q, ...x }));
   const E = "400:COCKPIT_FILTER_INVALID";
@@ -279,6 +310,8 @@ async function temizle(ids: Ids): Promise<void> {
     await prisma.yarnMovement.deleteMany({ where: { itemId: ids.yarn } });
     await prisma.yarnStock.deleteMany({ where: { itemId: ids.yarn } });
   }
+  await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: ids.receiptIds } } });
+  await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: ids.receiptIds } } });
   await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: ids.dispatchIds } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids.rollIds } } });
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids.rollIds } } });

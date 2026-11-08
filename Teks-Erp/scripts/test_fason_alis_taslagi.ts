@@ -9,13 +9,17 @@
 //   §5 fiyatsız durumlar SESSİZ DEĞİL: başka firmanın tarifesi / tarife yok → fiyat 0 + uyarı
 //   §6 yaratım: kabul başına TEK aktif fatura (409 SUBCONTRACTOR_RECEIPT_ALREADY_INVOICED), token replay aynı fatura,
 //      iptal faturadan sonra yeniden; bağsız kart / iptal kabul / İE'siz kabul 409 kodlarıyla
+//   §8 kabul iptali faturalı kabulde 409; taslak yaratımı kabul satırını FOR SHARE tutar (eşzamanlı iptal yarışı)
 //   §7 vergi: fason kabul bağlamı çift rollü (fason rolü işaretsiz) kartta da alış tevkifatını önerir;
 //      bilinmeyen İE 404 (tax-defaults `workOrderId`)
 // Koşum: DATABASE_URL=<test DB> npx tsx scripts/test_fason_alis_taslagi.ts
 // NEGATİF SONDA — 2026-11-08: (a) `shareOf`ta `item.receivedQty ?? …` yerine hep `newRoll.currentQty` → §2a ❌;
 //   (b) `pickFinishingRateAtDispatch(versions, new Date())` (aktif tarife) → §3a ❌; (c) `assertSourceFree`in fason
 //   kodu kaldırılınca §6b2 ❌; (d) `purchaseContext` dalı kaldırılınca §7a ❌; (e) `changeFinishingRate`te köprü
-//   taşıma (`input.serviceItemId === undefined ? current…`) kaldırılınca §1b ❌. Hepsi geri alındı.
+//   taşıma (`input.serviceItemId === undefined ? current…`) kaldırılınca §1b ❌; (f) canlı ref listesinden
+//   `FINISHING_RATE_MAP` sayımı 0'a çekilince §1d ❌; (g) taşınan köprünün kilidi (`lockId` carryHint) kaldırılınca §1e ❌;
+//   (h) `receipt-cancel` ön kontrolü + tx-içi fatura kapısı kaldırılınca §8b ❌; (i) `assertSourceFree`teki kabul
+//   FOR SHARE kilidi kaldırılınca §8c ❌; (j) `RECEIPT_SELECT.bornRolls` iptal süzgeci kaldırılınca §4a ❌. Hepsi geri alındı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { InvoiceStatus, InvoiceType, Prisma } from "@prisma/client";
@@ -25,10 +29,12 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { changeFinishingRate } from "../src/services/finishing-rate.service";
 import { createSubcontractorPurchaseDraft, previewSubcontractorPurchaseDraft } from "../src/services/subcontractor-purchase-draft.service";
 import { resolveInvoiceTaxDefaults } from "../src/services/helpers/invoice-tax-defaults.helper";
+import { countServiceItemLiveRefs, transitionServiceItemLifecycleTx } from "../src/services/helpers/service-item-lifecycle.helper";
 import { altinYapiYaz, fiksturKur, fiksturSil } from "./lib/maliyet-fikstur";
 import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { assertGelistirmeVeritabani } from "./db-guard";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { SubcontractorService } from "../src/services/subcontractor.service";
 
 let pass = 0;
 let fail = 0;
@@ -90,6 +96,19 @@ async function main(): Promise<void> {
     const w2 = await changeFinishingRate({ ...base, pricePerM: "18" });
     check("§1b ⭐ alan verilmeden aynı değerler → no-op (köprü taşındı, düşmedi)", !w2.wrote && w2.row.serviceItemId === svc);
     check("§1c pasif hizmet kartı → 400", (await codeOf(() => changeFinishingRate({ ...base, serviceItemId: svcOff }))).startsWith("400"));
+    const refs = (await countServiceItemLiveRefs(prisma, svc)).find((c) => c.kind === "FINISHING_RATE_MAP");
+    check("§1d ⭐ aktif tarife köprüsü canlı referanstır (1) → kart arşivlenemez", refs?.count === 1 &&
+      (await codeOf(() => prisma.$transaction((tx) => transitionServiceItemLifecycleTx(tx, { serviceItemId: svc, to: "ARCHIVED" })))).endsWith("ITEM_HAS_LIVE_REFERENCES"));
+    // Eski (köprü canlı ref sayılmadan önce) arşivlenmiş kart: alansız fiyat değişimi köprüyü yeni sürüme TAŞIYAMAZ.
+    const svcLegacy = (await prisma.serviceItem.create({ data: { code: `${f.tag}-SL`.slice(0, 32), name: `${f.tag} Eski hizmet` }, select: { id: true } })).id;
+    ids.services.push(svcLegacy);
+    const legacyCode = `${f.rateCode}-L`;
+    ids.codes.push(legacyCode);
+    await changeFinishingRate({ ...base, code: legacyCode, serviceItemId: svcLegacy });
+    await prisma.serviceItem.update({ where: { id: svcLegacy }, data: { lifecycleStatus: "ARCHIVED", isActive: false } });
+    check("§1e ⭐ taşınan köprü kilitlenir: arşivli kart → 400, yeni sürüm yazılmaz",
+      (await codeOf(() => changeFinishingRate({ ...base, code: legacyCode, pricePerM: "20" }))).startsWith("400") &&
+        (await prisma.finishingRate.count({ where: { code: legacyCode } })) === 1);
     // v1'i geçmişe çek: as-of kolu tarihli geçmiş ister.
     await prisma.finishingRate.updateMany({ where: { code: f.rateCode }, data: { createdAt: new Date(Date.now() - 10 * DAY) } });
     await prisma.finishingRate.deleteMany({ where: { code: f.rateCode, revokedAt: { not: null } } });
@@ -132,7 +151,8 @@ async function main(): Promise<void> {
     // Doğan toplar (çekmeli): 95 + 38 + 97 = 230 m (düşülen 240 m).
     await roll("B1", 95, { parentReceiptId: rec, status: "IN_PRODUCTION" });
     await roll("B2", 38, { parentReceiptId: rec, status: "IN_PRODUCTION" });
-    await roll("B3", 97, { parentReceiptId: rec, status: "IN_PRODUCTION" });
+    await roll("B3", 97, { parentReceiptId: rec, status: "TAMBUR_CONSUMED", currentQty: D(0) }); // sonraki adımda tüketildi: yine sayılır
+    await roll("B4", 50, { parentReceiptId: rec, status: "CANCELLED" }); // iptal doğan top: sayılmaz
 
     // ── §2 RAW_M (tek sürüm) ──────────────────────────────────────────────────
     const p2 = await previewSubcontractorPurchaseDraft(rec);
@@ -160,7 +180,7 @@ async function main(): Promise<void> {
     await prisma.finishingRate.create({ data: { code: kg, name: `${f.tag} kilo`, basis: "KG", currency: "USD", pricePerM: D(2), createdAt: old } });
     await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { finishingRateCode: fin } });
     const p4 = await previewSubcontractorPurchaseDraft(rec);
-    check("§4a FINISHED_M miktar = doğan topların metresi 230", p4.lines.length === 1 && p4.lines[0]?.qty === "230.000" && p4.subtotal === "2300.00", JSON.stringify(p4.lines));
+    check("§4a ⭐ FINISHED_M miktar = doğan topların metresi 230 (tüketilen initialQty ile, iptal B4 hariç)", p4.lines.length === 1 && p4.lines[0]?.qty === "230.000" && p4.subtotal === "2300.00", JSON.stringify(p4.lines));
     await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { finishingRateCode: kg } });
     const p5 = await previewSubcontractorPurchaseDraft(rec);
     const kl = p5.lines[0];
@@ -201,6 +221,30 @@ async function main(): Promise<void> {
     await prisma.invoice.update({ where: { id: c1.data!.id }, data: { status: InvoiceStatus.CANCELLED, cancelledAt: new Date() } });
     const c2 = await createSubcontractorPurchaseDraft(rec, {});
     check("§6e iptal faturadan sonra yeni taslak açılır", !!c2.data?.id && c2.data.id !== c1.data!.id);
+
+    // ── §8 kabul iptali ↔ fatura (patron kararı 2026-11-08) ──────────────────
+    const svcSub = new SubcontractorService();
+    const cp = (await svcSub.getCancelPreview(rec)).data;
+    check("§8a önizleme: aktif taslak fatura → invoiced.blocked + allSafe false", cp?.invoiced.blocked === true && cp.invoiced.docNo !== null && cp.allSafe === false, JSON.stringify(cp?.invoiced));
+    check("§8b ⭐ aktif faturalı kabul iptali → 409 SUBCONTRACTOR_RECEIPT_INVOICED",
+      (await codeOf(() => svcSub.cancelReceipt(rec, "TEST iptal", undefined, []))) === "409:SUBCONTRACTOR_RECEIPT_INVOICED");
+    await prisma.invoice.update({ where: { id: c2.data!.id }, data: { status: InvoiceStatus.CANCELLED, cancelledAt: new Date() } });
+    // Yarış: kabul iptalinin claim'i satırı tutarken taslak açılır; taslak kilitte bekler, commit sonrası iptali görür.
+    let racer: Promise<string> | null = null;
+    let pendingDuringLock = false;
+    await prisma.$transaction(async (tx) => {
+      await tx.subcontractorReceipt.updateMany({ where: { id: rec, cancelledAt: null }, data: { cancelledAt: new Date() } });
+      let settled = false;
+      racer = codeOf(() => createSubcontractorPurchaseDraft(rec, {})).finally(() => { settled = true; });
+      await new Promise((r) => setTimeout(r, 800));
+      pendingDuringLock = !settled;
+    }, { timeout: 15000 });
+    const raceCode = await racer!;
+    check("§8c ⭐ eşzamanlı iptal: taslak kilitte bekler, commit sonrası 409 SUBCONTRACTOR_RECEIPT_CANCELLED", pendingDuringLock && raceCode === "409:SUBCONTRACTOR_RECEIPT_CANCELLED", `${pendingDuringLock} ${raceCode}`);
+    await prisma.subcontractorReceipt.update({ where: { id: rec }, data: { cancelledAt: null } });
+    const c3 = await createSubcontractorPurchaseDraft(rec, {});
+    check("§8d iptal geri alınınca taslak yine açılır (kilit kalıcı engel değil)", !!c3.data?.id);
+    await prisma.invoice.update({ where: { id: c3.data!.id }, data: { status: InvoiceStatus.CANCELLED, cancelledAt: new Date() } });
 
     await prisma.subcontractor.update({ where: { id: dye.id }, data: { customerId: null } });
     check("§6f bağsız fason profili → 409 SUBCONTRACTOR_NOT_LINKED_TO_CARD", (await codeOf(() => createSubcontractorPurchaseDraft(rec, {}))) === "409:SUBCONTRACTOR_NOT_LINKED_TO_CARD");

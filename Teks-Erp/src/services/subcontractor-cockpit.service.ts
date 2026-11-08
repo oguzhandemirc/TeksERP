@@ -12,7 +12,7 @@ import { AppError } from "../utils/app-error";
 import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
 import { readFilterList } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
-import { OPEN_BEAM_DISPATCH, OPEN_BEAM_ITEM, OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { OPEN_BEAM_DISPATCH, OPEN_BEAM_ITEM, OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { expectedReturnStateOf, expectedReturnStateWhere, overdueDaysOf } from "./helpers/fason-expected-return.helper";
 import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
 import { yarnOutstandingKgByDispatch } from "./subcontractor-yarn.service";
@@ -117,6 +117,30 @@ interface DispatchMetrics {
 }
 
 /** Sevk kümesi için fasonda kalan — üç toplu sorgu; satır ve özet AYNI fonksiyondan. */
+/**
+ * Açık sevklerin DIŞARIDAKİ top metresi/sayısı DB'de toplanır (sevk başına satır, kalem başına değil).
+ * `outstandingItemOfOpenDispatch` (fason-open-dispatch.helper) yükleminin SQL İKİZİ: kolları birebir aynıdır
+ * (sevk iptal/doğrudan-sevk değil · kalan kapanmamış · topu doğrudan sevk edilmemiş · aktif TAM makbuz yok);
+ * eşdeğerlik `test_fason_kokpit` §9'da Prisma yüklemiyle ölçülür.
+ */
+export async function outstandingRollTotalsByDispatch(dispatchIds: string[]): Promise<Array<{ dispatchId: string; qty: string; cnt: number }>> {
+  if (dispatchIds.length === 0) return [];
+  return prisma.$queryRaw<Array<{ dispatchId: string; qty: string; cnt: number }>>`
+    SELECT i."dispatchId"::text AS "dispatchId", SUM(r."currentQty")::text AS qty, COUNT(*)::int AS cnt
+    FROM "subcontractor_dispatch_items" i
+    JOIN "subcontractor_dispatches" d ON d.id = i."dispatchId"
+    JOIN "rolls" r ON r.id = i."rollId"
+    WHERE i."dispatchId" = ANY(${dispatchIds}::uuid[])
+      AND d."cancelledAt" IS NULL AND d."directShippedAt" IS NULL
+      AND i."remainderClosedAt" IS NULL
+      AND r."directShipmentId" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "subcontractor_receipt_items" ri
+        JOIN "subcontractor_receipts" rc ON rc.id = ri."receiptId"
+        WHERE ri."sourceDispatchItemId" = i.id AND ri."isPartial" = false AND rc."cancelledAt" IS NULL)
+    GROUP BY i."dispatchId"`;
+}
+
 async function metricsOf(dispatchIds: string[]): Promise<Map<string, DispatchMetrics>> {
   const map = new Map<string, DispatchMetrics>();
   if (dispatchIds.length === 0) return map;
@@ -125,14 +149,10 @@ async function metricsOf(dispatchIds: string[]): Promise<Map<string, DispatchMet
     map.set(id, m);
     return m;
   };
-  const rollItems = await prisma.subcontractorDispatchItem.findMany({
-    where: outstandingItemOfOpenDispatch({ id: { in: dispatchIds } }),
-    select: { dispatchId: true, roll: { select: { currentQty: true } } },
-  });
-  for (const it of rollItems) {
-    const m = get(it.dispatchId);
-    m.outstandingQty = m.outstandingQty.plus(it.roll?.currentQty ?? 0);
-    m.outstandingRollCount += 1;
+  for (const r of await outstandingRollTotalsByDispatch(dispatchIds)) {
+    const m = get(r.dispatchId);
+    m.outstandingQty = new Prisma.Decimal(r.qty);
+    m.outstandingRollCount = r.cnt;
   }
   const beams = await prisma.subcontractorDispatchItem.groupBy({
     by: ["dispatchId"],

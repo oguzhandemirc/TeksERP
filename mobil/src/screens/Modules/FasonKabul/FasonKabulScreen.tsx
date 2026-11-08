@@ -20,6 +20,7 @@
 // ============================================================================
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { colors } from '../../../theme/tokens';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
@@ -752,6 +753,10 @@ export default function FasonKabulScreen() {
         text2: 'Panelden partileri birleştirin, sonra iptali tekrar deneyin',
         visibilityTime: 6000,
       });
+      return;
+    }
+    if (cancelPreview?.invoiced?.blocked) {
+      Toast.show({ type: 'error', text1: 'Kabul faturalanmış', text2: cancelPreview.invoiced.message ?? 'Önce alış faturasını iptal edin', visibilityTime: 6000 });
       return;
     }
     if (cancelPreview && !cancelPreview.allSafe) {
@@ -2979,6 +2984,17 @@ function CancelReceiptModal({
             <View style={cancelStyles.errorBox}>
               <Icon source="alert" size={16} color="#dc2626" />
               <Text style={cancelStyles.errorText}>{previewError}</Text>
+            </View>
+          )}
+
+          {/* F6: faturalanmış kabul iptal edilemez — sebep açıkça yazılır (buton neden kilitli). */}
+          {preview?.invoiced?.blocked && (
+            <View style={cancelStyles.mismatchBox}>
+              <View style={cancelStyles.bornHeader}>
+                <Icon source="file-document-outline" size={18} color={colors.danger} />
+                <Text style={cancelStyles.mismatchTitle}>Kabul faturalanmış — iptal edilemez</Text>
+              </View>
+              <Text style={cancelStyles.mismatchRollMeta}>{preview.invoiced.message}</Text>
             </View>
           )}
 

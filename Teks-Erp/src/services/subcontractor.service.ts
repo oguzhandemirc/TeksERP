@@ -572,6 +572,8 @@ export class SubcontractorService {
         rolls: string[];
         message: string | null;
       };
+      /** F6: iptal edilmemiş alış faturası varsa iptal 409 `SUBCONTRACTOR_RECEIPT_INVOICED`. */
+      invoiced: { blocked: boolean; docNo: string | null; message: string | null };
       allSafe: boolean;
       totalBornRolls: number;
     }>

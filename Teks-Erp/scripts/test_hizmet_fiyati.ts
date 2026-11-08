@@ -277,9 +277,6 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/property-revoke.helper.ts",
   // F1: önizleme kapısı — taze bağların kalemini fatura satırıyla karşılaştırır (çözücü değil; toplayıcıyı çağırır).
   "services/helpers/service-preview-gate.helper.ts",
-  // K2a → D1b: hizmet kartının canlı referans kataloğu ve yaşam döngüsü yazıcısı `service_items`e taşındı — eşleme/
-  // fiyat/norm/taslak satırını pasife alma kapısı için sayar (çözücü değil).
-  "services/helpers/service-item-lifecycle.helper.ts",
   "services/service-item.service.ts",
   // K21: `PropertyValueInput` istemci sözleşmesi tipi servisten buraya taşındı (yalnız tip; çözücü değil).
   "services/helpers/fabric-property-input.helper.ts",
@@ -335,6 +332,13 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/profitability-allocation.helper.ts",
   // Sarf stoğu (kurşun şeridi): değer/özellik kalemini `pickServiceItemId` ile seçip norm sorgusuna verir (çözücü değil).
   "services/helpers/consumable-stock.helper.ts",
+  // K2a → D1b: hizmet kartının canlı referans kataloğu ve yaşam döngüsü yazıcısı — eşleme/fiyat/norm/taslak satırını
+  // pasife alma kapısı için sayar (çözücü değil); F6 sonrası aktif fason tarifesi köprüsünü (`FINISHING_RATE_MAP`)
+  // da sayar, bu yüzden FinishingRate yasağının dışında.
+  "services/helpers/service-item-lifecycle.helper.ts",
+  // Fason dalga-2 F6: tarife ↔ hizmet kartı köprüsünün yazıcısı ve kabulden ALIŞ faturası taslağı — maliyet tarafı.
+  "services/finishing-rate.service.ts",
+  "services/subcontractor-purchase-draft.service.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

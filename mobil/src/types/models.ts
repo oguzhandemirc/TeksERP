@@ -794,6 +794,8 @@ export interface ReceiptCancelPreview {
     /** Guard'ın basacağı metnin birebir aynısı (null = engel yok). */
     message: string | null;
   };
+  /** F6: kabulün alış faturası varsa iptal 409 — eski backend'de alan YOK → guard'lı oku. */
+  invoiced?: { blocked: boolean; docNo: string | null; message: string | null };
   /** Tüm bornRoll'ları cascade iptal güvenli mi (K14 dahil). False ise iptal butonu disabled. */
   allSafe: boolean;
   totalBornRolls: number;

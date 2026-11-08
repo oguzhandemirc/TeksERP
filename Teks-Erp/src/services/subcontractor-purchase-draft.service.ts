@@ -9,7 +9,7 @@
 // Bulunamayan tarife/tartı SESSİZ DÜŞMEZ: satır fiyatsız kalır ve `warnings` söyler. Yazım `invoiceService.createDraft`
 // (kabul başına tek aktif fatura: `assertSourceFree` + kısmi unique). Vergi ön değeri fason bağlamıyla (F7 çift rol).
 // =============================================================================
-import { Currency, FinishingBasis, InvoiceLineType, InvoiceStatus, InvoiceType, Prisma } from "@prisma/client";
+import { Currency, FinishingBasis, InvoiceLineType, InvoiceStatus, InvoiceType, Prisma, RollStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
@@ -51,7 +51,9 @@ const RECEIPT_SELECT = {
       },
     },
   },
-  bornRolls: { select: { initialQty: true, currentQty: true } },
+  // İptal edilen doğan top üretilmemiş sayılır (fazla ödeme); `*_CONSUMED` top sonraki adımda tüketilmiş ama
+  // fasonun ürettiği maldır — K18 kümesinin tamamı DIŞLANMAZ, ölçü `initialQty`den gelir.
+  bornRolls: { where: { status: { not: RollStatus.CANCELLED } }, select: { initialQty: true, currentQty: true } },
 } satisfies Prisma.SubcontractorReceiptSelect;
 
 type ReceiptRow = Prisma.SubcontractorReceiptGetPayload<{ select: typeof RECEIPT_SELECT }>;
