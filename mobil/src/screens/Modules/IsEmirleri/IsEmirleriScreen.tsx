@@ -4,6 +4,7 @@
 // =============================================================================
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { TERIM } from '../../../lib/terim';
 import { colors } from '../../../theme';
@@ -36,6 +37,7 @@ export default function IsEmirleriScreen() {
   const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
   const scan = useScanAction();
   const list = useWorkOrderList(filters);
+  const refresh = useManualRefresh(() => list.refetch(), 'İş emirleri güncellendi');
   const { stations, loading: stationsLoading } = useLocationStations();
   const cols = useColumnPrefs();
   // Terbiye | Dokuma: dokuma rejimi kapalıysa (ya da okuma izni yoksa) anahtar yok, başlık bugünkü düz metin.
@@ -71,10 +73,10 @@ export default function IsEmirleriScreen() {
           loading={list.loading}
           problem={list.problem}
           empty={emptyStateFor(filters)}
-          refreshing={list.refreshing}
+          refreshing={refresh.refreshing}
           fetchingMore={list.fetchingMore}
           onEndReached={list.loadMore}
-          onRefresh={() => void list.refetch()}
+          onRefresh={refresh.onRefresh}
           onRetry={() => void list.refetch()}
           onOpen={setOpenId}
           onEmptyAction={(a) => setFilters(a === 'clearFilters' ? DEFAULT_FILTERS : { ...filters, status: 'ALL' })}

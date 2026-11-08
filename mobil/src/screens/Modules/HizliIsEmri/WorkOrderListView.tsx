@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TextInput, TouchableRipple, ActivityIndicator, Icon } from 'react-native-paper';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import PullToRefreshView from '../../../components/PullToRefreshView';
 
 import { workOrderService } from '../../../services/workOrder.service';
@@ -63,7 +64,8 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
 
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
   const total = q.data?.pages[0]?.pagination.totalEstimate;
-  const pulling = q.isRefetching && !q.isFetchingNextPage;
+  const refresh = useManualRefresh(() => q.refetch(), TERIM.terbiyeIsEmri.cogul + ' güncellendi');
+  const pulling = refresh.refreshing;
 
   // Tazeleme sonrası BAŞA sar. `keepPreviousData` yüzünden liste anahtar
   // değişince unmount OLMAZ (eski veriyle çizili kalır) — yani kaydırma konumu
@@ -163,7 +165,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
       ) : items.length === 0 ? (
-        <PullToRefreshView refreshing={pulling} onRefresh={() => void q.refetch()} contentContainerStyle={styles.center}>
+        <PullToRefreshView refreshing={pulling} onRefresh={refresh.onRefresh} contentContainerStyle={styles.center}>
           <Icon source="clipboard-text-outline" size={48} color={colors.textMuted} />
           <Text style={styles.empty}>{TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı</Text>
         </PullToRefreshView>
@@ -173,7 +175,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
           data={items}
           keyExtractor={(w) => w.id}
           refreshing={pulling}
-          onRefresh={() => void q.refetch()}
+          onRefresh={refresh.onRefresh}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           onEndReachedThreshold={0.6}

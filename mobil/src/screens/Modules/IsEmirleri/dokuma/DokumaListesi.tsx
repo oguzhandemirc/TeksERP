@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, TextInput, TouchableRipple } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import { useManualRefresh, type ManualRefresh } from '../../../../hooks/useManualRefresh';
 import PickerModal from '../../../../components/PickerModal';
 import TruncatedText from '../../../../components/TruncatedText';
 import { TERIM } from '../../../../lib/terim';
@@ -38,6 +39,7 @@ export default function DokumaListesi() {
   const [durumAcik, setDurumAcik] = useState(false);
   const [acik, setAcik] = useState<WeavingOrderListRow | null>(null);
   const list = useDokumaListesi(f);
+  const refresh = useManualRefresh(() => list.refetch(), 'Dokuma iş emirleri güncellendi');
   const wide = useWindowDimensions().width >= WIDE_MIN;
   const bos = dokumaBosDurum(f);
   const durumEtiket = DOKUMA_DURUM_SECENEKLERI.find((o) => o.value === f.durum)?.label.replace(/ \(.*\)$/, '') ?? 'Durum';
@@ -73,7 +75,7 @@ export default function DokumaListesi() {
         {kisaArama ? ` · aramak için en az ${DOKUMA_MIN_ARAMA} harf` : ''}
       </Text>
 
-      <ListBody list={list} wide={wide} bos={bos} onBosEylem={(a) => setF(a === 'clearFilters' ? { ...f, search: '' } : { ...f, durum: 'ALL' })} onOpen={setAcik} />
+      <ListBody list={list} refresh={refresh} wide={wide} bos={bos} onBosEylem={(a) => setF(a === 'clearFilters' ? { ...f, search: '' } : { ...f, durum: 'ALL' })} onOpen={setAcik} />
 
       <PickerModal
         visible={durumAcik}
@@ -93,7 +95,7 @@ type ListState = ReturnType<typeof useDokumaListesi>;
 type EmptyState = ReturnType<typeof dokumaBosDurum>;
 
 /** Yükleniyor · sorun (çevrimdışı/hata) · boş (çıkış eylemiyle) · tablo. */
-function ListBody({ list, wide, bos, onBosEylem, onOpen }: { list: ListState; wide: boolean; bos: EmptyState; onBosEylem: (a: Exclude<EmptyState['action'], null>) => void; onOpen: (r: WeavingOrderListRow) => void }) {
+function ListBody({ list, refresh, wide, bos, onBosEylem, onOpen }: { list: ListState; refresh: ManualRefresh; wide: boolean; bos: EmptyState; onBosEylem: (a: Exclude<EmptyState['action'], null>) => void; onOpen: (r: WeavingOrderListRow) => void }) {
   return (
     <>
       {list.loading ? (
@@ -133,8 +135,8 @@ function ListBody({ list, wide, bos, onBosEylem, onOpen }: { list: ListState; wi
             renderItem={({ item }) => <OrderRow row={item} wide={wide} onOpen={onOpen} />}
             onEndReachedThreshold={0.6}
             onEndReached={list.loadMore}
-            refreshing={list.refreshing}
-            onRefresh={() => void list.refetch()}
+            refreshing={refresh.refreshing}
+            onRefresh={refresh.onRefresh}
             contentContainerStyle={styles.listContent}
             ListFooterComponent={list.fetchingMore ? <ActivityIndicator style={styles.more} color={colors.brand} /> : null}
           />

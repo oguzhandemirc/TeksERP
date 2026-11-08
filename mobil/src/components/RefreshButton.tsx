@@ -83,9 +83,7 @@ export default function RefreshButton({
         });
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        if (successMessage) {
-          Toast.show({ type: 'success', text1: successMessage });
-        }
+        // Başarı toast'ı useManualRefresh'te (çekme + buton tek yol); burada yalnız haptic.
       }
     }
     prevRefreshing.current = refreshing;
