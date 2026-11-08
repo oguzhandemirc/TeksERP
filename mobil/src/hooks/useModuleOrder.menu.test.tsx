@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { MOBILE_SCREENS } from '../types/permissions';
-import { anyOnMenu, filterMenuHidden } from './menuHidden';
+import { anyOnMenu, filterHomeGridHidden, filterMenuHidden } from './menuHidden';
 import { MENU_LAYOUT_REFRESH_MS, useModuleOrder } from './useModuleOrder';
 
 // =============================================================================
@@ -81,5 +81,30 @@ describe('useModuleOrder — K19 süzgeci', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('ana sayfa ızgarası — sabit gizli karolar (kullanıcı kararı 2026-11-08)', () => {
+  const IE = MOBILE_SCREENS.filter((s) => ['HizliIsEmri', 'GelenBelge', 'IsEmirleri'].includes(s.key));
+  const ONLY_HIDDEN = MOBILE_SCREENS.filter((s) => ['HizliIsEmri', 'GelenBelge'].includes(s.key));
+  beforeEach(() => {
+    mockMenu = () => Promise.resolve({ hiddenScreens: [] });
+  });
+  it('⭐ izinli olsalar da HizliIsEmri ve GelenBelge ızgarada yok, IsEmirleri var', async () => {
+    mockVisible = [...SCREENS, ...IE];
+    const { result } = renderHook(() => useModuleOrder(), { wrapper });
+    await waitFor(() => expect(keysOf(result)).toContain('IsEmirleri'));
+    expect(keysOf(result)).not.toContain('HizliIsEmri');
+    expect(keysOf(result)).not.toContain('GelenBelge');
+  });
+  it('⭐ yalnız bu iki ekrana izni olan rolde ızgara boş kalmaz', async () => {
+    expect(ONLY_HIDDEN).toHaveLength(2);
+    expect(filterHomeGridHidden(ONLY_HIDDEN)).toBe(ONLY_HIDDEN);
+    mockVisible = ONLY_HIDDEN;
+    const { result } = renderHook(() => useModuleOrder(), { wrapper });
+    await waitFor(() => expect(keysOf(result).length).toBe(2));
+  });
+  it('anyOnMenu etkilenmez (yan yüzeyler K19 + izne bakar)', () => {
+    expect(anyOnMenu(IE, [], ['HizliIsEmri'])).toBe(true);
   });
 });
