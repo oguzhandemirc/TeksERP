@@ -162,7 +162,7 @@ import type { ReasonPreset } from '../../../services/reasonPreset.service';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
-import { useFoldValues } from '../../../hooks/useFoldValues';
+import { preferredFoldCode, useFoldValues } from '../../../hooks/useFoldValues';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import type {
   TamburStepSummary,
@@ -1033,7 +1033,7 @@ export default function TamburScreen() {
     const known = planned && foldValues.some((v) => v.code === planned) ? planned : null;
     // Plan katalogda yoksa (silinmiş/pasif değer) yine de PLANI KORU: iş emrinin
     // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
-    const defaultFold: TamburFoldType | null = known ?? planned ?? foldValues[0]?.code ?? null;
+    const defaultFold: TamburFoldType | null = known ?? planned ?? preferredFoldCode(foldValues);
     setWork({ ...EMPTY_WORK, foldType: defaultFold });
     redecideOwnerTarget();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sıfırlayıcı ref temizler, tetik değildir

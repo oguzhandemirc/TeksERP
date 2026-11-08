@@ -38,6 +38,7 @@ export const buildFabricPropertyPayload = (
             name: x.name.trim(),
             sortOrder: (i + 1) * 10,
             isActive: x.isActive,
+            isDefault: x.isActive && x.isDefault === true,
             // H6 sözleşmesi: alan yoksa eşleme korunur — yalnız değişen satır taşır.
             ...valueServiceItemPatch(initial, x.code.trim(), x.serviceItemId ?? null),
             ...valueStitchPatch(initial, x.code.trim(), x.stitchCount ?? null),

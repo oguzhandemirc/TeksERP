@@ -11,7 +11,7 @@ import { workOrderService, type QuickStartRequest } from '../../../services/work
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
 import { signalScan } from '../../../services/scanFeedback';
 import { useScanFeedback } from '../../../hooks/useScanFeedback';
-import { useFoldValues } from '../../../hooks/useFoldValues';
+import { preferredFoldCode, useFoldValues } from '../../../hooks/useFoldValues';
 import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { useAttemptToken } from '../../../offline/attemptToken';
@@ -330,8 +330,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       return;
     }
     if (foldType) return;
-    const first = foldValues[0];
-    if (first) setFoldType(first.code);
+    const preferred = preferredFoldCode(foldValues);
+    if (preferred) setFoldType(preferred);
   }, [hasTambur, foldValues, foldType]);
 
   /** Rota adım şeridi ("KK1 → Boyahane → Tambur") — ⓘ açmadan ne olacağı görünsün. */

@@ -17,7 +17,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react-native';
 
-import { useFoldValues } from './useFoldValues';
+import { preferredFoldCode, useFoldValues } from './useFoldValues';
 
 jest.mock('../services/fabricProperty.service', () => ({
   fabricPropertyService: {
@@ -46,5 +46,14 @@ describe('useFoldValues — çevrimdışı kimlik kararlılığı', () => {
     // ⚠️ Saha çökmesinin kilidi: yeni dizi dönseydi effect bağımlılıkları her
     // render'da "değişir" ve tüketici sonsuz döngüye girerdi.
     expect(result.current.values).toBe(ilk);
+  });
+});
+
+describe('preferredFoldCode', () => {
+  const v = (code: string, isDefault?: boolean) => ({ code, name: code, sortOrder: 0, isActive: true, isDefault });
+  it('★ işaretli değeri seçer, yoksa ilkini, boşsa null', () => {
+    expect(preferredFoldCode([v('2-KAT'), v('4-KAT', true)])).toBe('4-KAT');
+    expect(preferredFoldCode([v('2-KAT'), v('4-KAT')])).toBe('2-KAT');
+    expect(preferredFoldCode([])).toBeNull();
   });
 });

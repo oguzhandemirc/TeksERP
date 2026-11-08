@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ServiceItemPickerField } from "./ServiceItemPickerField";
@@ -11,6 +11,8 @@ export interface PropertyValueRow {
   isActive: boolean;
   serviceItemId?: string | null;
   stitchCount?: number | null;
+  /** ★ Varsayılan: sahada ön seçili gelen değer (en fazla bir tane; pasif değer olamaz). */
+  isDefault?: boolean;
 }
 
 /** Hizmet kalemi eşlemesi (H6b) — verilmezse satırlar bugünkü gibi çizilir. */
@@ -46,7 +48,10 @@ export function PropertyValuesField({ value, onChange, existingCodes, service, s
   const saved = new Set(existingCodes.map((c) => c.toUpperCase()));
 
   const patch = (i: number, next: Partial<PropertyValueRow>) =>
-    onChange(value.map((r, idx) => (idx === i ? { ...r, ...next } : r)));
+    onChange(value.map((r, idx) => (idx === i ? { ...r, ...next, ...(next.isActive === false ? { isDefault: false } : {}) } : r)));
+  // Tek varsayılan: birini işaretlemek diğerlerini söndürür; işaretliye tekrar basmak kaldırır.
+  const toggleDefault = (i: number) =>
+    onChange(value.map((r, idx) => ({ ...r, isDefault: idx === i ? !r.isDefault : false })));
 
   return (
     <div className="space-y-2">
@@ -79,6 +84,19 @@ export function PropertyValuesField({ value, onChange, existingCodes, service, s
                 onChange={(e) => patch(i, { name: e.target.value })}
               />
               {showStitch && <StitchCountInput row={row} onChange={(stitchCount) => patch(i, { stitchCount })} />}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                disabled={!row.isActive}
+                onClick={() => toggleDefault(i)}
+                aria-pressed={!!row.isDefault}
+                aria-label={`${row.code || "Yeni değer"} varsayılan`}
+                title={row.isDefault ? "Varsayılan — sahada ön seçili gelir (kaldırmak için tıklayın)" : "Varsayılan yap — sahada ön seçili gelsin"}
+              >
+                <Star className={row.isDefault ? "h-4 w-4 fill-amber-400 text-amber-500" : "h-4 w-4 text-muted-foreground"} />
+              </Button>
               <label className="flex shrink-0 items-center gap-1 text-xs sm:w-20">
                 <input
                   type="checkbox"
@@ -115,7 +133,7 @@ export function PropertyValuesField({ value, onChange, existingCodes, service, s
         type="button"
         variant="outline"
         size="sm"
-        onClick={() => onChange([...value, { code: "", name: "", isActive: true, serviceItemId: null, stitchCount: null }])}
+        onClick={() => onChange([...value, { code: "", name: "", isActive: true, serviceItemId: null, stitchCount: null, isDefault: false }])}
       >
         <Plus className="mr-1 h-4 w-4" /> Değer Ekle
       </Button>

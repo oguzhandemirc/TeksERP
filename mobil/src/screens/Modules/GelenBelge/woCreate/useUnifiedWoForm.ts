@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { PickerOption } from '../../../../components/PickerModal';
 import { useFeatureFlags, useScanRouteMode } from '../../../../hooks/useFeatureFlags';
-import { useFoldValues } from '../../../../hooks/useFoldValues';
+import { preferredFoldCode, useFoldValues } from '../../../../hooks/useFoldValues';
 import { inboundDocService, type DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { AvailableOrderLine } from '../../../../services/order.service';
 import { routeService, type ProductionRoute } from '../../../../services/route.service';
@@ -94,7 +94,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const extras = form.extras;
   const eff = useMemo(() => (route && !isScanRoute(route) ? effectiveRoute(route, extras.steps) : route), [route, extras.steps]);
   const hasTambur = useMemo(() => (eff?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'), [eff]);
-  const fold = useFoldDefault(hasTambur, setForm);
+  const fold = useFoldDefault(hasTambur, !!route && isScanRoute(route), setForm);
   // Rotasızda tambura gidip gitmeyeceği bilinmez → kat tipi gramaj gibi görünür ama zorunlu değildir; katalog boşsa
   // (Kat özelliği pasif) seçilecek değer yoktur → engel de yoktur (sunucu kat tipini zorunlu tutmaz, istasyon varsayılanı).
   const askFold = hasTambur || (!!route && isScanRoute(route) && fold.values.length > 0);
@@ -243,13 +243,13 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
   };
 }
 
-/** Kat yalnız tamburlu rotada sorulur; ilk katalog değeri ön seçilir (Hızlı İE ile aynı). */
-function useFoldDefault(hasTambur: boolean, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
+/** Tamburlu rotada ★'lı (yoksa ilk) kat ön seçilir (Hızlı İE ile aynı); rotasızda yalnız ★'lı değer gelir. */
+function useFoldDefault(hasTambur: boolean, scanRoute: boolean, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
   const fold = useFoldValues();
-  const firstFold = fold.values[0]?.code ?? null;
+  const pick = hasTambur ? preferredFoldCode(fold.values) : scanRoute ? (fold.values.find((v) => v.isDefault)?.code ?? null) : null;
   useEffect(() => {
-    if (hasTambur && firstFold) setForm((s) => (s.extras.foldType ? s : { ...s, extras: { ...s.extras, foldType: firstFold } }));
-  }, [hasTambur, firstFold, setForm]);
+    if (pick) setForm((s) => (s.extras.foldType ? s : { ...s, extras: { ...s.extras, foldType: pick } }));
+  }, [pick, setForm]);
   return fold;
 }
 
