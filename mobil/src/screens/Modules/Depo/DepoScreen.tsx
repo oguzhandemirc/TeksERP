@@ -52,6 +52,7 @@ import {
 import type { Roll } from '../../../types/models';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { KartelaStockReduceModal } from './KartelaStockReduceModal';
+import EmanetCikisSheet from './emanetCikis/EmanetCikisSheet';
 import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
@@ -148,6 +149,7 @@ export default function DepoScreen() {
   const [mode, setMode] = useState<ModeFilter>('ALL');
   // Sahip süzgeci (T3) — yalnız emanet açıkken çizilir; kapalıyken etkin kapsam ALL (istek bayt-aynı).
   const emanetOn = useEmanetEnabled();
+  const [emanetCikisOpen, setEmanetCikisOpen] = useState(false);
   const [ownershipPick, setOwnershipPick] = useState<OwnershipScope>('ALL');
   const ownership = effectiveOwnershipScope(emanetOn, ownershipPick);
   // Modül kapanınca seçim de sıfırlanır — yeniden açıldığında eski "Emanet" seçimi sessizce geri gelmesin.
@@ -550,15 +552,29 @@ export default function DepoScreen() {
     <ScreenChrome
       title="Depo"
       headerExtras={
-        <RefreshButton
-          headerStyle
-          label="Yenile"
-          onPress={refresh.onRefresh}
-          refreshing={refresh.refreshing}
-          isError={refresh.isError}
-          errorMessage={refresh.errorMessage}
-          successMessage={refresh.successMessage}
-        />
+        <View style={styles.headerActions}>
+          {/* Emanet çıkış (T1): yalnız emanet modülü açıkken; kalem türü kapısı sunucuda (devere/iplik). */}
+          {emanetOn ? (
+            <Button
+              mode="contained-tonal"
+              icon="truck-delivery-outline"
+              compact={isPhone}
+              onPress={() => setEmanetCikisOpen(true)}
+              testID="depo-emanet-cikis"
+            >
+              {isPhone ? 'Emanet' : 'Emanet Çıkış'}
+            </Button>
+          ) : null}
+          <RefreshButton
+            headerStyle
+            label="Yenile"
+            onPress={refresh.onRefresh}
+            refreshing={refresh.refreshing}
+            isError={refresh.isError}
+            errorMessage={refresh.errorMessage}
+            successMessage={refresh.successMessage}
+          />
+        </View>
       }
     >
       <View style={styles.container}>
@@ -786,6 +802,8 @@ export default function DepoScreen() {
           qc.invalidateQueries({ queryKey: ['rolls', 'warehouse-scope'] });
         }}
       />
+
+      <EmanetCikisSheet visible={emanetCikisOpen} onDismiss={() => setEmanetCikisOpen(false)} />
 
       {/* Kartela stoğunu elle düşürme — kayıp/hasar/sayım düzeltmesi */}
       <KartelaStockReduceModal
@@ -1261,6 +1279,7 @@ function RollDetailModal({
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   container: { flex: 1, backgroundColor: '#f8fafc', padding: 12, gap: 10 },
 
   statsCard: {
