@@ -14,7 +14,7 @@ interface Props {
   state: TeachState;
   words: readonly ScanWord[];
   onChange: (fn: (s: TeachState) => TeachState) => void;
-  /** 'Şablonu güncelle' kipinde eski şablon (korunacakları gösterir). */
+  /** 'Tanımı düzenle' kipinde eski şablon (korunacakları gösterir). */
   old?: TemplateJson | null;
 }
 

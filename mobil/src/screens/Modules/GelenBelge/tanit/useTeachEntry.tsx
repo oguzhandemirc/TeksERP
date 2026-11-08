@@ -23,7 +23,8 @@ export interface TeachEntryInput {
 
 export interface TeachEntry {
   /** null = giriş çizilmez (izin yok / eski sunucu / kayıtlı / detay yok). */
-  kind: 'untaught' | 'taught' | null;
+  /** system = hazır şablonla tanındı: "Yeniden tanıt" yeni tip açar (hazır şablon düzenlenmez). */
+  kind: 'untaught' | 'taught' | 'system' | null;
   templateName: string | null;
   noPhoto: boolean;
   open: () => void;
@@ -70,8 +71,8 @@ export function useTeachEntry({ row, wo, tanitim: served, customers }: TeachEntr
 
   const noPhoto = pages.length === 0;
   return {
-    kind: tanitim.durum === 'TANITILMAMIS' ? 'untaught' : 'taught',
-    templateName: tanitim.durum === 'TANITILDI' ? tanitim.sablonAdi : null,
+    kind: tanitim.durum === 'TANITILMAMIS' ? 'untaught' : tanitim.durum === 'SISTEM' ? 'system' : 'taught',
+    templateName: tanitim.durum === 'TANITILMAMIS' ? null : tanitim.sablonAdi,
     noPhoto,
     open: () => setOpen(true),
     modal: noPhoto ? null : <TeachModal visible={open} pages={pages} code={code} onDismiss={() => setOpen(false)} onSaved={(r) => void refill(r)} />,

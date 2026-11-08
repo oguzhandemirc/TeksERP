@@ -6,7 +6,7 @@
 //   §1 (e) ayar: varsayılan SOR, tanınmayan değer 400, geçerli SORMA yazılır; ham ayar ucuna kapalı
 //   §2 (a) SOR + kullanıcı şablonu (u-) = bugünkü: iki parti adayı (DOC + BATCH), parti no seçilmez; `tanitim` TANITILDI
 //   §3 (b) ⭐ SORMA + u-: müşteri tek eşleşmede kesin (OWNER_TEXT), parti yalnız parti alanı (kolon da), metre doğrulamasız;
-//      ayar sonradan değişince ESKİ belgenin kolonu değişmez; sistem şablonu tutan belge `tanitim` taşımaz
+//      ayar sonradan değişince ESKİ belgenin kolonu değişmez; sistem şablonu tutan belge `tanitim: SISTEM` taşır
 //   §4 (c) ⭐ SORMA + tanıtılmamış (sentetik GENEL zarfı): form alanı / müşteri / parti adayı YOK (SOR'da hepsi var); TANITILMAMIS
 //   §5 (d) ⭐ öneri ucu `benzerSablonlar`: eşik üstü kullanıcı şablonları skor azalan; güncellenen şablon (base) listede yok
 //   §6 saf `introStateOf` / `trustModeOf` / `applyTrust`
@@ -189,7 +189,7 @@ async function run(url: string): Promise<void> {
   check("§3 SORMA'da eski (SOR'da okunmuş) belgenin kolonu değişmez; canlı adaylar tekleşir", (await column(noteA))?.ourBatchNo === null && aStill.batch.length === 1, brief(aStill));
   const sys = await readNote(fixture("0244-kumas-irsaliyesi"));
   const sysS = await summary(sys);
-  check("§3 sistem şablonu tutan belge: `tanitim` yok, adaylar NORMAL", sysS.status === 200 && sysS.tanitim === undefined, brief(sysS));
+  check("§3 sistem şablonu tutan belge: `tanitim` SISTEM (şablon adıyla), adaylar NORMAL", sysS.status === 200 && sysS.tanitim?.durum === "SISTEM" && typeof sysS.tanitim?.sablonAdi === "string", brief(sysS));
   await setSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, null);
   const bAfter = await column(noteB);
   check("§3 ⭐ ayar SOR'a dönünce SORMA'da yazılan kolon değişmez", bAfter?.ourBatchNo === "P9918733" && (await summary(noteB)).batch.length === 2, JSON.stringify(bAfter));
@@ -236,13 +236,13 @@ async function run(url: string): Promise<void> {
   check("§5 eşik altı belge: A/B listede yok", other.status === 200 && Array.isArray(other.data?.benzerSablonlar) && !list3.some((x) => x.kod === codeA || x.kod === codeB), `${other.status} ${JSON.stringify(list3)}`);
 
   console.log("§6 saf yardımcılar");
-  check("§6 introStateOf: u- → TANITILDI (ilk u-); genel/null → TANITILMAMIS; sistem şablonu / bölgesiz → null",
+  check("§6 introStateOf: u- → TANITILDI (ilk u-); genel/null → TANITILMAMIS; sistem şablonu → SISTEM; bölgesiz → null",
     JSON.stringify(introStateOf(["genel", "u-x", "u-y"])) === JSON.stringify({ durum: "TANITILDI", sablonKodu: "u-x" }) && introStateOf(["genel", null])?.durum === "TANITILMAMIS" &&
-    introStateOf(["ceki-listesi-a"]) === null && introStateOf(["ceki-listesi-a", "genel"]) === null && introStateOf([]) === null);
+    JSON.stringify(introStateOf(["ceki-listesi-a"])) === JSON.stringify({ durum: "SISTEM", sablonKodu: "ceki-listesi-a" }) && introStateOf(["genel", "ceki-listesi-a"])?.durum === "SISTEM" && introStateOf([]) === null);
   const tan = { durum: "TANITILDI" as const, sablonKodu: "u-x" };
   const un = { durum: "TANITILMAMIS" as const };
   check("§6 trustModeOf: SOR → NORMAL; SORMA + TANITILDI → TRUSTED, + TANITILMAMIS → BLIND, + sistem → NORMAL",
-    trustModeOf("SOR", tan) === "NORMAL" && trustModeOf("SOR", un) === "NORMAL" && trustModeOf("SORMA", tan) === "TRUSTED" && trustModeOf("SORMA", un) === "BLIND" && trustModeOf("SORMA", null) === "NORMAL");
+    trustModeOf("SOR", tan) === "NORMAL" && trustModeOf("SOR", un) === "NORMAL" && trustModeOf("SORMA", tan) === "TRUSTED" && trustModeOf("SORMA", un) === "BLIND" && trustModeOf("SORMA", null) === "NORMAL" && trustModeOf("SORMA", { durum: "SISTEM", sablonKodu: "ceki-listesi-a" }) === "NORMAL");
   const input: BatchAndMeters = {
     batchNoCandidates: [{ key: "evrakNo", kind: "DOC", label: "Evrak", value: "914279" }, { key: "partiNo", kind: "BATCH", label: "Parti", value: "P1" }] as BatchAndMeters["batchNoCandidates"],
     kursun: { meters: "100", source: "TOTAL", review: true, candidates: { output: null, total: "100", input: null, lineSum: "100" } },

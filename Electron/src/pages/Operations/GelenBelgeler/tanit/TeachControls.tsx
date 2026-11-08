@@ -53,7 +53,7 @@ export function TeachControls({ t, existing, advanced, onAdvanced, nav, dispatch
           </Button>
         )}
         <Button onClick={() => void t.save()} disabled={!t.canSave} data-testid="teach-save">
-          <Save className="mr-1 h-4 w-4" /> {t.saving ? "Kaydediliyor…" : existing ? "Şablonu güncelle" : "Belge tipini kaydet"}
+          <Save className="mr-1 h-4 w-4" /> {t.saving ? "Kaydediliyor…" : existing ? "Tanımı kaydet" : "Belge tipini kaydet"}
         </Button>
       </div>
       <SimilarDialog similar={t.similar} currentName={existing?.name ?? null} onSame={(kod) => void t.save({ same: kod })} onNew={() => void t.save("new")} onDismiss={t.closeSimilar} />

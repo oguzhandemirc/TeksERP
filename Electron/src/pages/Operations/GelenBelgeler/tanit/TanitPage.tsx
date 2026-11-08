@@ -40,7 +40,7 @@ export function TeachTemplatePage() {
     if (r.teach !== t.state) t.setState(() => r.teach);
   };
   const n = note.data;
-  const title = existing.data ? `Şablonu güncelle — ${existing.data.name}` : "Bu belgeyi tanıt";
+  const title = existing.data ? `Tanımı düzenle — ${existing.data.name}` : "Bu belgeyi tanıt";
   return (
     <PageShell>
       <PageHeader

@@ -10,11 +10,11 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { p2002OnField } from "../utils/p2002";
-import { loadTemplates, type DocumentTemplate } from "../lib/gelen-belge/motor";
+import { loadTemplates, USER_TEMPLATE_ID_PREFIX, type DocumentTemplate } from "../lib/gelen-belge/motor";
 import { AuditService } from "./audit.service";
 
 /** Kullanıcı şablonu kod öneki — tek kaynak (gelen-belge-ozel-sablon.service yeniden dışa verir). */
-export const USER_TEMPLATE_PREFIX = "u-";
+export const USER_TEMPLATE_PREFIX = USER_TEMPLATE_ID_PREFIX;
 
 /** Motorun yedek sözlüğü (classifyWithFallback) — tek kaynak; okuma işi `extractDocument`e bunu verir. */
 export const FALLBACK_TEMPLATE_CODE = "genel";

@@ -124,7 +124,7 @@ describe('tablet sayfa eşleme', () => {
   });
 });
 
-// Gülkesim 2026-11-04: "Şablonu güncelle"de yalnız Başlık ✓ görünüyordu — eski şablonun alanları taslağa hiç girmiyordu.
+// Gülkesim 2026-11-04: "Tanımı düzenle"de yalnız Başlık ✓ görünüyordu — eski şablonun alanları taslağa hiç girmiyordu.
 describe('güncelle kipi — kayıtlı alanlar (kept)', () => {
   const OLD = { fields: [{ key: 'musteri' }, { key: 'partiNo', strategies: [{ kind: 'anchor', maxWords: 1, valueShape: '^\\p{L}+\\d+$' }] }, { key: 'toplamMetre' }, { key: 'bilinmez' }] };
   const open = () => initialTeach(SCAN, 'kömürhan', [], { kept: templateFieldKeys(OLD) });
@@ -186,7 +186,7 @@ describe('çok blok tanıtma kapıları', () => {
     expect(suggestBody({ ...s, sectionStart: 'Sipariş No' }, X, 's1').assignments).toEqual([expect.objectContaining({ field: 'islem', section: true })]);
   });
 
-  it('⭐ tekrar eden bölüm Metre sütunu ister ("Şablonu güncelle" eski tabloyu taşıyorsa istemez)', () => {
+  it('⭐ tekrar eden bölüm Metre sütunu ister ("Tanımı düzenle" eski tabloyu taşıyorsa istemez)', () => {
     const s = { ...setRepeats(initialTeach(CB, 'Çeki'), true), sectionStart: 'Sipariş No' };
     const msg = 'Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.';
     const withId = assignField(toggleWord(s, 2), X, 'siparisNo');

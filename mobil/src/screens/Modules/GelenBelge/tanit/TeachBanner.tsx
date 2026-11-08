@@ -1,5 +1,5 @@
 // K30-A1: tek form / toplu satır / masa satırında tanıtma girişi. Okuma özeti `tanitim` TANITILMAMIS → amber şerit
-// "Bu belge tanınmadı … [Tanıt]"; TANITILDI → "Şablon: <ad>" satırı + "Şablonu güncelle" düğmesi. Alan yoksa (eski sunucu /
+// "Bu belge tanınmadı … [Tanıt]"; TANITILDI → "Şablon: <ad>" satırı + "Tanımı düzenle" düğmesi. Alan yoksa (eski sunucu /
 // yerleşik şablon) çizilmez. Parçalar ayrı: tek formda Belge şeridi (`DocHeadBand`) düğmeyi kendi satırına koyar.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -27,22 +27,22 @@ export function TeachStrip({ entry }: { entry: TeachEntry }) {
   );
 }
 
-/** TANITILDI + foto varken ikincil "Şablonu güncelle" düğmesi (şablon düzeltmek bir okuma düzeltmesidir). */
+/** Tanınmış + foto varken ikincil düğme: kendi tipimiz "Tanımı düzenle", hazır şablon "Yeniden tanıt" (yeni tip açar). */
 export function TemplateUpdateButton({ entry }: { entry: TeachEntry }) {
-  if (entry.kind !== 'taught' || entry.noPhoto) return null;
+  if ((entry.kind !== 'taught' && entry.kind !== 'system') || entry.noPhoto) return null;
   return (
     <Button mode="outlined" icon="file-replace-outline" onPress={entry.open} contentStyle={styles.btn} testID="tanit-serit-guncelle">
-      Şablonu güncelle
+      {entry.kind === 'system' ? 'Yeniden tanıt' : 'Tanımı düzenle'}
     </Button>
   );
 }
 
 /** "Şablon: <ad>" satırı (TANITILDI). */
 export function TemplateName({ entry }: { entry: TeachEntry }) {
-  if (entry.kind !== 'taught' || !entry.templateName) return null;
+  if ((entry.kind !== 'taught' && entry.kind !== 'system') || !entry.templateName) return null;
   return (
     <View style={styles.nameRow} testID="tanit-sablon">
-      <Text style={styles.name}>Şablon:</Text>
+      <Text style={styles.name}>{entry.kind === 'system' ? 'Hazır şablon:' : 'Şablon:'}</Text>
       <View style={styles.flex}>
         <TruncatedText style={styles.name}>{entry.templateName}</TruncatedText>
       </View>
@@ -57,7 +57,7 @@ export default function TeachBanner(props: TeachEntryInput) {
   return (
     <>
       <TeachStrip entry={entry} />
-      {entry.kind === 'taught' && (
+      {(entry.kind === 'taught' || entry.kind === 'system') && (
         <View style={styles.row}>
           <TemplateName entry={entry} />
           <TemplateUpdateButton entry={entry} />

@@ -159,7 +159,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
     },
     { auto: !advanced },
   );
-  const title = t.existing ? `Şablonu güncelle — ${t.existing.name}` : 'Bu belgeyi tanıt';
+  const title = t.existing ? `Tanımı düzenle — ${t.existing.name}` : 'Bu belgeyi tanıt';
   // Bölme oranla (flex 58/42) değil ölçüyle: tablette fotoğraf bölmesi tüm alanı yutup paneli 32 px'e sıkıştırıyordu (2026-11-05 cihaz ölçümü).
   const paneSize: ViewStyle = layout.mode === 'side' ? { width: layout.imageWidth - spacing.md } : { height: layout.imageHeight };
   const words = t.words.data?.words ?? [];
@@ -272,7 +272,7 @@ function SaveBar({ t, nav }: { t: TeachModalState; nav: GuidedNav }) {
           </Button>
         )}
         <Button mode="contained" icon="content-save" onPress={() => void t.save()} disabled={!t.canSave} loading={t.busy === 'save'} contentStyle={styles.btn} testID="tanit-kaydet">
-          {t.existing ? 'Şablonu güncelle' : 'Belge tipini kaydet'}
+          {t.existing ? 'Tanımı kaydet' : 'Belge tipini kaydet'}
         </Button>
       </View>
     </View>

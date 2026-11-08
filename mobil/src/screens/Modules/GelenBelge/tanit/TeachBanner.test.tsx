@@ -1,4 +1,4 @@
-// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → "Şablon: <ad>" satırı + "Şablonu güncelle" düğmesi;
+// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → "Şablon: <ad>" satırı + "Tanımı düzenle" düğmesi;
 // izin / tanıtım alanı / yerel fotoğraf yoksa ya da satır sonuçlandıysa çizilmez. Kayıt sonrası belge yeniden okutulur
 // (başarılı → onay detayı atılır + rereadRow); sunucu reddederse (409 satırlı taslak) önizleme değerleri applyTaught ile dolar.
 import React from 'react';
@@ -114,7 +114,7 @@ describe('TeachBanner — görünürlük', () => {
   it('⭐ yerelde tanıtılmış satır (yeniden okutulamadı) → sunucu özeti TANITILMAMIS dese de şerit yok, güncelle bağlantısı', () => {
     const s = draw(NOT_TAUGHT, row({ taught: { seq: 1, code: 'u-gulecsoy', name: 'Güleçsoy' } }));
     expect(s.queryByTestId('tanit-serit')).toBeNull();
-    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle$/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Tanımı düzenle$/);
     expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
   });
 
@@ -125,14 +125,14 @@ describe('TeachBanner — görünürlük', () => {
     expect(s.queryByTestId('tanit-serit-guncelle')).toBeNull();
   });
 
-  it('TANITILDI → şerit yok, şablon satırı + "Şablonu güncelle"; modal güncelle kipinde açılır', async () => {
+  it('TANITILDI → şerit yok, şablon satırı + "Tanımı düzenle"; modal güncelle kipinde açılır', async () => {
     const s = draw(TAUGHT);
     expect(s.queryByTestId('tanit-serit')).toBeNull();
-    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Şablonu güncelle$/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Tanımı düzenle$/);
     expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
     await settle();
     await press(s.getByTestId('tanit-serit-guncelle'));
-    await waitFor(() => expect(s.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle — Güleçsoy/));
+    await waitFor(() => expect(s.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle — Güleçsoy/));
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
   });
 

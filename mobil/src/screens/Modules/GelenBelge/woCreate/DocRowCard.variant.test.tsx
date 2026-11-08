@@ -90,7 +90,7 @@ describe('DocRowCard — list / single', () => {
     expect(onReread).toHaveBeenCalledTimes(1);
   });
 
-  it('⭐ TANITILDI: "Şablonu güncelle" belge satırında, şablon adıyla aynı satır', () => {
+  it('⭐ TANITILDI: "Tanımı düzenle" belge satırında, şablon adıyla aynı satır', () => {
     rememberLocalPages([{ sha256: 'aa', uri: 'file:///1.jpg' }]);
     mockWatch = done({ durum: 'TANITILDI', sablonKodu: 'u-g', sablonAdi: 'Güleçsoy' });
     const { ui } = draw({ variant: 'single', onReread: jest.fn() });

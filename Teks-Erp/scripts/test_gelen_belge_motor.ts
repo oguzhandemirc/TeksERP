@@ -30,6 +30,7 @@ import { join } from "node:path";
 import {
   buildRowsTilted,
   classifyDocument,
+  classifyWithFallback,
   computeNoteTotals,
   extractDocument,
   extractFields,
@@ -398,6 +399,16 @@ cokBlok(check, gercek, sablonlar);
 cokBlokSahipsiz(check, gercek, sablonlar);
 cokBlokTanit(check, gercek, sablonlar);
 cokBlokBirlesikToplam(check, gercek, sablonlar);
+
+// ── §17 tanıtılmış (u-) şablon eşiği geçince hazır şablonun önüne geçer; geçmezse hazır şablon tutar ──
+{
+  const hazir = sablonlar.find((t) => t.id === "ceki-listesi-a")!;
+  const ocr = gercek("0245-ceki-listesi-a");
+  const own = { ...hazir, id: "u-tanitilan" } as DocumentTemplate;
+  check("§17 ⭐ aynı belgeye uyan tanıtılmış şablon hazır şablonu geçer", classifyWithFallback(ocr, [hazir, own], "genel").templateId === "u-tanitilan");
+  const yabanci = { ...hazir, id: "u-yabanci", identifiers: { keywords: ["BU YAZI BELGEDE YOK QX"] } } as unknown as DocumentTemplate;
+  check("§17 eşiği geçmeyen tanıtılmış şablon hazır şablonu ezmez", classifyWithFallback(ocr, [hazir, yabanci], "genel").templateId === "ceki-listesi-a");
+}
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

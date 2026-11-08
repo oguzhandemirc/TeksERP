@@ -25,7 +25,7 @@ function TanitimStrip({ scan, tanitim }: { scan: FormDocScan; tanitim: Tanitim }
     return (
       <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="wo-doc-tanitildi">
         Belge “{tanitim.sablonAdi}” tipiyle okundu.
-        {can && <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => openTab(teachPath(noteId, tanitim.sablonKodu))} data-testid="wo-doc-sablon-guncelle">Şablonu güncelle</Button>}
+        {can && <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => openTab(teachPath(noteId, tanitim.sablonKodu))} data-testid="wo-doc-sablon-guncelle">Tanımı düzenle</Button>}
       </p>
     );
   }
@@ -55,7 +55,7 @@ export function FormDocCard({ scan, disabled }: { scan: FormDocScan; disabled?: 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <FromDocBadge />
         <span>Belge <b>{n?.noteNo ?? "…"}</b></span>
-        {/* Tanıtım bilgisi yoksa (eski sunucu) bugünkü "Bu belgeyi tanıt / Şablonu güncelle" düğmesi. */}
+        {/* Tanıtım bilgisi yoksa (eski sunucu) bugünkü "Bu belgeyi tanıt / Tanımı düzenle" düğmesi. */}
         {n && scan.stage !== "READING" && scan.summary && !scan.summary.tanitim && <TeachButton note={n} go={(p) => openTab(p)} />}
       </div>
       {scan.noteError && <p className="text-sm text-destructive">Belge yüklenemedi.</p>}

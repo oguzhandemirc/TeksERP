@@ -202,11 +202,11 @@ describe('TeachModal — deneme token\'ı', () => {
 });
 
 describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
-  it('kullanıcı şablonuyla okunmuş belge → "Şablonu güncelle": eski kimlik hazır seçili, önizleme base ile, PUT önizlenen şablonu aynen gönderir', async () => {
+  it('kullanıcı şablonuyla okunmuş belge → "Tanımı düzenle": eski kimlik hazır seçili, önizleme base ile, PUT önizlenen şablonu aynen gönderir', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
     await flush();
     expect(r.queryByTestId('tanit-taninmadi')).toBeNull();
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     await openNew(r);
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
     expect(r.getByTestId('tanit-surum')).toHaveTextContent('v2 → 3');
@@ -231,7 +231,7 @@ describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
   it('eski tablo/bölüm varsayılan korunur; kutu kaldırılınca önizleme gövdesinin keep listesinden düşer', async () => {
     mockApi.getUserTemplate.mockResolvedValue({ ...USER_T, template: { ...USER_T.template, tables: [{ key: 'toplar' }], sections: { startLabels: ['X'], fields: ['tarih'] } }, versions: [] });
     const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     await openNew(r);
     expect(r.getByTestId('tanit-eski-tables')).toBeTruthy();
     await press(r.getByTestId('tanit-eski-sections'));
@@ -252,9 +252,9 @@ describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
     });
     const r = renderWithPaper(<QueryClientProvider client={qc}><TeachEntry detail={detail('t-u1')} localPages={LOCAL} /></QueryClientProvider>);
     const round = async () => {
-      await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+      await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
       await openNew(r);
-      expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle/);
+      expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle/);
       await press(r.getByTestId('tanit-kutu-6'));
       await press(r.getByTestId('tanit-alan-partiNo'));
       await press(r.getByTestId('tanit-onizle'));
@@ -278,7 +278,7 @@ describe('TeachEntry + TeachModal — giriş ve görünürlük', () => {
     await press(await r.findByText('Güleçsoy'));
     expect(await r.findByTestId('tanit-kutu-6')).toBeTruthy();
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
-    expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle — Güleçsoy/);
+    expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle — Güleçsoy/);
   });
 
   it('izinsizde ve eski sunucuda (tarama yok) giriş çizilmez; cihaz tipinden bağımsız (K30-A: telefonda da açılır)', async () => {

@@ -52,9 +52,9 @@ export interface TeachState {
   repeats: boolean;
   sectionStart: string;
   sectionFields: FieldKey[];
-  /** "Şablonu güncelle": yeni öneride yoksa eski şablondan taşınacak yapılar (sunucu birleştirir; önizleme = kaydedilen). */
+  /** "Tanımı düzenle": yeni öneride yoksa eski şablondan taşınacak yapılar (sunucu birleştirir; önizleme = kaydedilen). */
   keepOld: OldPart[];
-  /** "Şablonu güncelle": eski şablonda kayıtlı alanlar. Yeniden atanmayan aynen korunur (sunucu birleştirir), gövdeye ATAMA olarak gitmez. */
+  /** "Tanımı düzenle": eski şablonda kayıtlı alanlar. Yeniden atanmayan aynen korunur (sunucu birleştirir), gövdeye ATAMA olarak gitmez. */
   kept: FieldKey[];
 }
 
@@ -216,7 +216,7 @@ export function teachProblems(s: TeachState, words?: readonly ScanWord[]): strin
   if (!s.identifiers.some((d) => d.on)) p.push("En az bir kimlik yazısı işaretleyin (başlık, firma adı).");
   if (s.repeats && !s.sectionStart.trim()) p.push("Tekrar eden bölümün başlangıç yazısını seçin.");
   if (s.repeats && s.sectionFields.length === 0) p.push("Tekrar eden bölümde en az bir alan bölüm başına okunmalı.");
-  // Çok blok: her bölümün satırları ve metresi tablodan okunur ("Şablonu güncelle" eski tabloyu taşıyabilir).
+  // Çok blok: her bölümün satırları ve metresi tablodan okunur ("Tanımı düzenle" eski tabloyu taşıyabilir).
   if (s.repeats && !s.columns.m?.length && !s.keepOld.includes("tables")) p.push("Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.");
   if (words && meterOnCountRow(s, words)) p.push('"Gelen metre" adet satırına atanmış (T.Adet\'in sağındaki sayı top adedidir) — tablonun Metre sütununu işaretleyin, "Gelen metre"yi kaldırın.');
   return p;

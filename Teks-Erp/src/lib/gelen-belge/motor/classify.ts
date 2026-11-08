@@ -58,6 +58,9 @@ export function templatesOverThreshold(ocr: OcrResult, templates: readonly Docum
     .sort((a, b) => b.score - a.score || a.template.id.localeCompare(b.template.id));
 }
 
+/** Kullanıcı (tanıtılmış) şablon kimliğinin öneki — servis katmanı da buradan okur. */
+export const USER_TEMPLATE_ID_PREFIX = "u-";
+
 export function classifyDocument(ocr: OcrResult, templates: DocumentTemplate[]): ClassificationResult {
   const text = readingOrderText(ocr);
   const normText = normalizeForMatch(text);
@@ -78,6 +81,9 @@ export function classifyDocument(ocr: OcrResult, templates: DocumentTemplate[]):
  */
 export function classifyWithFallback(ocr: OcrResult, templates: DocumentTemplate[], fallbackId: string | null): ClassificationResult {
   const candidates = templates.filter((t) => t.id !== fallbackId);
+  // Kullanıcının tanıttığı tip eşiği geçtiyse hazır şablonun önüne geçer (yeniden tanıtma hazır şablonu pasifleştirmeden işler).
+  const own = classifyDocument(ocr, candidates.filter((t) => t.id.startsWith(USER_TEMPLATE_ID_PREFIX)));
+  if (own.templateId !== null) return { ...own, scores: classifyDocument(ocr, candidates).scores };
   const r = classifyDocument(ocr, candidates);
   if (r.templateId !== null || fallbackId === null) return r;
   if (!templates.some((t) => t.id === fallbackId)) return r;

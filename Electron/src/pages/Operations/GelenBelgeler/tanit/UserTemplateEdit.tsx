@@ -1,5 +1,5 @@
 // Tanıtılan belge tipini düzenle (S1b, Gönderen Şablonları): ad + kimlik yazıları (sürümlü PUT; araya giren kayıt 409).
-// Alan yerleri fotoğraf üstünde değişir → "Şablonu güncelle" bir gelen belgenin detayından açılır.
+// Alan yerleri fotoğraf üstünde değişir → "Tanımı düzenle" bir gelen belgenin detayından açılır.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -72,7 +72,7 @@ function EditBody({ detail, onDone }: { detail: UserTemplateDetail; onDone: () =
             <Button type="button" variant="outline" onClick={add}>Ekle</Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Alanlar: {templateSummary(detail.template)}. Alan yerlerini değiştirmek için bir gelen belgenin detayında "Şablonu güncelle".</p>
+        <p className="text-xs text-muted-foreground">Alanlar: {templateSummary(detail.template)}. Alan yerlerini değiştirmek için bir gelen belgenin detayında "Tanımı düzenle".</p>
         <div className="text-xs text-muted-foreground" data-testid="user-template-versions">
           Sürümler: {detail.versions.map((v) => `${v.version} (${formatFactory(v.createdAt, "dd.MM.yyyy HH:mm")})`).join(" · ")}
         </div>

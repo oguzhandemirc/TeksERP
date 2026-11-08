@@ -26,7 +26,7 @@ describe("çok blok tanıtma kapıları", () => {
     expect(suggestBody({ ...s, sectionStart: "Sipariş No" }, X, "s1").assignments).toEqual([expect.objectContaining({ field: "islem", section: true })]);
   });
 
-  it("⭐ tekrar eden bölüm Metre sütunu ister (\"Şablonu güncelle\" eski tabloyu taşıyorsa istemez)", () => {
+  it("⭐ tekrar eden bölüm Metre sütunu ister (\"Tanımı düzenle\" eski tabloyu taşıyorsa istemez)", () => {
     const s = { ...setRepeats(initialTeach(CB, "Çeki"), true), sectionStart: "Sipariş No" };
     const msg = "Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.";
     const withId = assignField(toggleWord(s, 2), X, "siparisNo");

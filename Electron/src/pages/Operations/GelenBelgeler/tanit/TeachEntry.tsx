@@ -1,4 +1,4 @@
-// Tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Şablonu güncelle" düğmesi ve belge tanınmadıysa "Bu belge hangi tip?" şeridi + diyaloğu.
+// Tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Tanımı düzenle" düğmesi ve belge tanınmadıysa "Bu belge hangi tip?" şeridi + diyaloğu.
 // Yalnız `gelen-belge:template` izniyle çizilir; okunmuş fotoğrafı olmayan belgede çizilmez.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -54,7 +54,7 @@ export function TeachButton({ note, go: goProp }: Props) {
   return (
     <Button variant="outline" onClick={() => go(teachPath(note.id, own))} data-testid="note-teach">
       <Sparkles className="mr-1 h-4 w-4" />
-      {own ? "Şablonu güncelle" : "Bu belgeyi tanıt"}
+      {own ? "Tanımı düzenle" : note.templateId ? "Yeniden tanıt" : "Bu belgeyi tanıt"}
     </Button>
   );
 }

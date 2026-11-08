@@ -123,7 +123,8 @@ export interface ReadSummary {
   templateFields?: { key: string; label: string; value: string | null; required: boolean }[];
 }
 
-export type ReadTanitim = { durum: 'TANITILDI'; sablonKodu: string; sablonAdi: string } | { durum: 'TANITILMAMIS' };
+/** `SISTEM`: hazır şablonla tanındı (yeni sunucu) — "Yeniden tanıt" sunulur, düzenlenecek kullanıcı şablonu yok. */
+export type ReadTanitim = { durum: 'TANITILDI' | 'SISTEM'; sablonKodu: string; sablonAdi: string } | { durum: 'TANITILMAMIS' };
 
 /** S16a sözleşme 3: belgeden okunan form değerleri (sayılar sunucuda TR biçiminden çözülür; string de kabul). */
 export interface DocFormFields {

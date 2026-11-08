@@ -222,7 +222,7 @@ describe('TeachModal — benzer şablon sorusu', () => {
   });
 });
 
-// Gülkesim 2026-11-04 cihaz: "Şablonu güncelle"de yalnız Başlık ✓; Müşteri/Parti no/Gelen metre işaretsiz, Kaydet pasif.
+// Gülkesim 2026-11-04 cihaz: "Tanımı düzenle"de yalnız Başlık ✓; Müşteri/Parti no/Gelen metre işaretsiz, Kaydet pasif.
 describe('TeachModal — şablonu güncelle (kayıtlı alanlar)', () => {
   const OLD_T = {
     ...USER_T,
@@ -240,7 +240,7 @@ describe('TeachModal — şablonu güncelle (kayıtlı alanlar)', () => {
     mockApi.getUserTemplate.mockResolvedValue({ ...OLD_T, versions: [] });
     mockApi.suggestTemplate.mockResolvedValue(MERGED);
     const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     await openGuided(r);
     await waitFor(() => expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(1));
     expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({ assignments: [], base: { code: 'u-gulecsoy', keep: [] } });
