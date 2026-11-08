@@ -7,6 +7,7 @@ import { SubcontractorController } from "../controllers/subcontractor.controller
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
+import { getSubcontractorCockpit } from "../services/subcontractor-cockpit.service";
 
 const MOBILE_FASON_READ = ["mobile:fason-sevk", "mobile:fason-kabul"] as const;
 
@@ -387,6 +388,47 @@ router.get(
   verifyToken,
   requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.pendingReturnDetail
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/cockpit:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: Fason kokpiti — firmalar arası açık sevkler, termin gecikmesi, fasonda kalan (F10)
+ *     description: |
+ *       Açık sevk = top kalemi dönmemiş (`OPEN_OUTSTANDING`) · haşıl leventi dönmemiş · dokuma işi açık.
+ *       Liste, cursor ve özet şeridi aynı süzgeçten; gecikme fabrika günüyle. Tanınmayan değer 400 `COCKPIT_FILTER_INVALID`.
+ *       Açık sevk sayısı özet tavanını aşarsa `warnings` döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: "filter[subcontractorId]", schema: { type: string }, description: "uuid; virgülle çoklu" }
+ *       - { in: query, name: "filter[categoryId]", schema: { type: string }, description: "uuid; virgülle çoklu (adım süreç türü, yoksa istasyon varsayılanı)" }
+ *       - { in: query, name: "filter[state]", schema: { type: string, enum: [ALL, OVERDUE, DUE_SOON, NO_DUE_DATE] } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+ *     responses:
+ *       200: { description: "SubcontractorCockpitResult (data + nextCursor + summary)" }
+ *       400: { description: Geçersiz süzgeç (COCKPIT_FILTER_INVALID) }
+ */
+router.get(
+  "/cockpit",
+  verifyToken,
+  requireAnyPermission("subcontractor:read", "workorder:read"),
+  async (req, res, next) => {
+    try {
+      const q = req.query as Record<string, string | string[] | undefined>;
+      res.json(await getSubcontractorCockpit({
+        subcontractorId: q["filter[subcontractorId]"],
+        categoryId: q["filter[categoryId]"],
+        state: q["filter[state]"],
+        cursor: q.cursor,
+        limit: q.limit,
+      }));
+    } catch (e) {
+      next(e);
+    }
+  }
 );
 
 router.get(

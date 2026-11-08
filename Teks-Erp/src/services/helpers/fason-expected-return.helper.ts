@@ -81,6 +81,14 @@ export function overdueDaysOf(expectedReturnAt: Date | null, now: Date = new Dat
   return expectedReturnAt ? dayKeyDiff(factoryYmd(expectedReturnAt), factoryYmd(now)) : null;
 }
 
+/** `expectedReturnStateWhere`in bellek-içi İKİZİ (özet sayaçları): aynı fabrika günü sınırları; ileri termin null. */
+export function expectedReturnStateOf(expectedReturnAt: Date | null, now: Date = new Date()): "OVERDUE" | "DUE_SOON" | "NO_DUE_DATE" | null {
+  const d = overdueDaysOf(expectedReturnAt, now);
+  if (d === null) return "NO_DUE_DATE";
+  if (d > 0) return "OVERDUE";
+  return d >= -COCKPIT_DUE_SOON_DAYS ? "DUE_SOON" : null;
+}
+
 /** Kokpit durum süzgeçleri — liste, özet ve satır hesabı (`overdueDaysOf`) aynı fabrika günü sınırlarından. */
 export function expectedReturnStateWhere(state: "OVERDUE" | "DUE_SOON" | "NO_DUE_DATE", now: Date = new Date()): Prisma.SubcontractorDispatchWhereInput {
   const todayStart = factoryDayStart(now);

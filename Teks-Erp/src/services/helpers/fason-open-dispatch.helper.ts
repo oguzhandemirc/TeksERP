@@ -83,3 +83,20 @@ export function outstandingItemOfOpenDispatch(
     dispatch: { cancelledAt: null, directShippedAt: null, ...(extra ?? {}) },
   };
 }
+
+/**
+ * F10: fasonda DURAN levent kalemi — leventi hâlâ `SHIPPED_OUT` ve bu kaleme bağlı açık (storno edilmemiş)
+ * `RETURNED_IN` yok. Statü şartı ŞART: fasonda tüketilen/hurdalanan levent dönmez ama "dışarıda" da değildir.
+ */
+export const OPEN_BEAM_ITEM: Prisma.SubcontractorDispatchItemWhereInput = {
+  kind: "WARP_BEAM",
+  warpBeam: { status: "SHIPPED_OUT" },
+  warpBeamEvents: { none: { kind: "RETURNED_IN", reversal: null } },
+};
+
+/** F10: açık levent kalemi olan, iptal/doğrudan-sevk edilmemiş sevk (top kalemsiz haşıl sevki `OPEN_OUTSTANDING`e girmez). */
+export const OPEN_BEAM_DISPATCH: Prisma.SubcontractorDispatchWhereInput = {
+  cancelledAt: null,
+  directShippedAt: null,
+  items: { some: OPEN_BEAM_ITEM },
+};
