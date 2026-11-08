@@ -17,6 +17,20 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-11-09a",
+      "baslik": "Deneme güncellemesi",
+      "surumler": {
+        "tablet": "1.0.14"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Deneme güncellemesi: uzaktan güncelleme kanalı sınanıyor, işleyişte değişiklik yok."
+        }
+      ]
+    },
+    {
       "id": "2026-11-07d",
       "baslik": "El terminali (tepesinde barkod okuyucu olan cihaz) desteği: okuyucu tuşuyla okutma, kamera açılmaz",
       "surumler": {
