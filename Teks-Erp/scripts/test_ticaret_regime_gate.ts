@@ -102,6 +102,13 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
 // Geçişli dokunuş (InventoryService) orada da burada da AYNI olgudur.
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/service-item.routes.ts",
+    neden:
+      "HİZMET KARTI (çekirdek, 2026-11-07 service_items ayrımı). Ticaret dokunuşu SALT-OKUMADIR: Pasif'e geçiş kapısı " +
+      "(`service-item-lifecycle.helper`) karta bağlı aktif müşteri fiyatını (`item_prices`) canlı referans olarak SAYAR. " +
+      "Ticaret kapalı kurulumda fiyat doğamaz, sayı 0; router fiyat tablosuna yazmaz (`item.routes` emsali).",
+  },
+  {
     dosya: "routes/gelen-belge.routes.ts",
     neden:
       "GELEN BELGE (Gülkesim D4, 2026-10-29). Kendi modül kapısını taşır (`requireGelenBelgeEnabled`, emanete bağlı); " +

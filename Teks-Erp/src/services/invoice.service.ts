@@ -37,6 +37,7 @@ import {
   type ServiceBillingLinkInput,
 } from "./helpers/service-billing.helper";
 import { resolveShipmentServiceLinksTx, syncDraftServiceLinksTx } from "./helpers/service-preview-gate.helper";
+import { lineSubjectData, lockInvoiceServiceItemsTx, normalizeInvoiceLines, type InvoiceLineSubjectInput } from "./helpers/invoice-line-subject.helper";
 import { resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -111,8 +112,8 @@ import { unitLabel } from "../constants/item-unit";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 
-export interface InvoiceLineInput {
-  itemId?: string | null;
+/** Konu alanları (`lineType`/`itemId`/`serviceItemId`) `normalizeInvoiceLines`'ta kanonik hâle gelir (D1c). */
+export interface InvoiceLineInput extends InvoiceLineSubjectInput {
   description: string;
   qty: Prisma.Decimal.Value;
   /** Zorunlu — birim miktarın kaynağını izler, sessiz "m" fallback'i yok. */
@@ -277,7 +278,10 @@ const DETAIL_SELECT = {
       withholdingRate: true,
       lineTotal: true,
       vatAmount: true,
+      // D1c: satır tipi + hizmet kartı; `item` hizmet satırında eski panel için hizmetin aynasıdır (findById).
+      lineType: true,
       item: { select: { id: true, code: true, name: true } },
+      serviceItem: { select: { id: true, code: true, name: true, unit: true } },
     },
   },
 } as const;
@@ -401,7 +405,9 @@ export class InvoiceService {
     return links;
   }
 
-  private async createDraftFresh(input: CreateInvoiceInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+  private async createDraftFresh(rawInput: CreateInvoiceInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    // D1c: satır konusu tx'ten ÖNCE kanonikleşir — bağ eşleşmesi (H7/F1) ve yazım `serviceItemId`'den okur.
+    const input: CreateInvoiceInput = { ...rawInput, lines: await normalizeInvoiceLines(prisma, rawInput.lines) };
 
     const issueDate = input.issueDate ?? new Date();
     const currency = input.currency ?? Currency.TRY;
@@ -457,6 +463,7 @@ export class InvoiceService {
         await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
       }
 
+      await lockInvoiceServiceItemsTx(tx, input.lines);
       const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
       const totals = computeInvoiceTotals(input.lines);
 
@@ -490,7 +497,7 @@ export class InvoiceService {
               const a = computeLineAmounts(l);
               return {
                 lineNo: i + 1,
-                itemId: l.itemId ?? null,
+                ...lineSubjectData(l),
                 description: l.description,
                 qty: D(l.qty),
                 unit: l.unit,
@@ -904,7 +911,7 @@ export class InvoiceService {
    */
   async updateDraft(
     id: string,
-    input: {
+    rawInput: {
       lines?: InvoiceLineInput[];
       dueDate?: Date | null;
       externalNo?: string | null;
@@ -915,6 +922,8 @@ export class InvoiceService {
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
+    // D1c: satır konusu tx'ten ÖNCE kanonikleşir (bağ eşitlemesi `serviceItemId`'den okur).
+    const input = { ...rawInput, lines: rawInput.lines ? await normalizeInvoiceLines(prisma, rawInput.lines) : undefined };
     const serviceLinksRevoked = await prisma.$transaction(async (tx) => {
       // No-op yazım (`status: DRAFT` → DRAFT) bilinçli: `updateMany` satır
       // kilidini alır ve WHERE yüklemi statüyü ATOMİK doğrular — `findUnique →
@@ -949,14 +958,14 @@ export class InvoiceService {
       const revoked = input.lines ? await syncDraftServiceLinksTx(tx, { invoiceId: id, ...existing, lines: input.lines, userId: userId ?? null }) : 0;
       if (input.lines) {
         if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
-        await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
+        await lockInvoiceServiceItemsTx(tx, input.lines).then(() => tx.invoiceLine.deleteMany({ where: { invoiceId: id } }));
         for (const [i, l] of input.lines.entries()) {
           const a = computeLineAmounts(l);
           await tx.invoiceLine.create({
             data: {
               invoiceId: id,
               lineNo: i + 1,
-              itemId: l.itemId ?? null,
+              ...lineSubjectData(l),
               description: l.description,
               qty: D(l.qty),
               unit: l.unit,
@@ -1778,11 +1787,14 @@ export class InvoiceService {
       select: DETAIL_SELECT,
     });
     if (!row) throw AppError.notFound("Fatura bulunamadı.");
-    const { goodsReceiptLinks, ...rest } = row;
+    const { goodsReceiptLinks, lines, ...rest } = row;
     const receiptIds = goodsReceiptLinks.map((l) => l.goodsReceipt.id);
     // Tolerans karşılaştırması BİLGİ olarak (taslakta sarı uyarı); kapı ONAY'da (`assertReceiptMatchTx`).
-    const receiptMatch = await receiptMatchTx(prisma, { receiptIds, lines: row.lines });
-    return { success: true, data: { ...rest, goodsReceipts: goodsReceiptLinks.map(toInvoiceReceiptDto), receiptMatch } };
+    const receiptMatch = await receiptMatchTx(prisma, { receiptIds, lines });
+    // Eski panel taslağı `item?.id` ile yeniden yollar (`invoiceForm.ts`); hizmet satırında null dönseydi bağ koparı
+    // (satır TEXT'e düşer, H7 bağı damgalanırdı). Ayna: hizmetin {id, code, name}'i — normalize SERVICE'e çevirir.
+    const shaped = lines.map((l) => ({ ...l, item: l.item ?? (l.serviceItem ? { id: l.serviceItem.id, code: l.serviceItem.code, name: l.serviceItem.name } : null) }));
+    return { success: true, data: { ...rest, lines: shaped, goodsReceipts: goodsReceiptLinks.map(toInvoiceReceiptDto), receiptMatch } };
   }
 }
 

@@ -311,7 +311,7 @@ export async function resolveServiceItemsForRolls(params: {
 
   const tierMissing = await applyServicePrices(works, { opt, currency: params.currency, customerId: params.customerId, db, warnings });
 
-  const items = await db.item.findMany({
+  const items = await db.serviceItem.findMany({
     where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
     select: { id: true, code: true, name: true },
   });

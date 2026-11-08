@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   const variantId = variant.id;
 
   const fabric = (await prisma.item.create({ data: { code: `${P}-KUM`.slice(0, 32), name: `TEST HFT kumaş ${STAMP}`, itemType: ItemType.FABRIC, unit: "MT" }, select: { id: true } })).id;
-  const svc = (await prisma.item.create({ data: { code: `${P}-SVC`.slice(0, 32), name: `TEST HFT Kurşun ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id;
+  const svc = (await prisma.serviceItem.create({ data: { code: `${P}-SVC`.slice(0, 32), name: `TEST HFT Kurşun ${STAMP}`, unit: "MT" }, select: { id: true } })).id;
   fx.itemIds.push(fabric, svc);
   await itemPriceService.upsert({ itemId: svc, kind: PriceKind.SALE, currency: "TRY", price: 3 });
   // Gramaj başına kalem ZORUNLU DEĞİL: değerde kalem yok, çeşidin tek "Kurşun" kalemine düşülür (pickServiceItemId).
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   const rNA = await mkPressed(200, VNA);
   const r40b = await mkPressed(300, V40);
   const r50 = await mkPressed(100, V50);
-  const other = (await prisma.item.create({ data: { code: `${P}-SV2`.slice(0, 32), name: `TEST HFT başka ${STAMP}`, itemType: ItemType.SERVICE, unit: "MT" }, select: { id: true } })).id;
+  const other = (await prisma.serviceItem.create({ data: { code: `${P}-SV2`.slice(0, 32), name: `TEST HFT başka ${STAMP}`, unit: "MT" }, select: { id: true } })).id;
   fx.itemIds.push(other);
 
 
@@ -192,13 +192,14 @@ async function cleanup(): Promise<void> {
   await del("gramSürüm", () => prisma.kursunGramPriceVersion.deleteMany({ where: { OR: [{ stationId: { in: fx.stationIds } }, { cariAccountId: { in: fx.cariIds } }] } }));
   await del("station", () => prisma.station.deleteMany({ where: { id: { in: fx.stationIds } } }));
   // Kademe fiyat satırı değere RESTRICT FK'lıdır: önce fiyat.
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: fx.itemIds } }, { serviceItemId: { in: fx.itemIds } }] } }));
   await del("value", () => prisma.fabricPropertyValue.deleteMany({ where: { OR: [{ id: { in: fx.valueIds } }, { propertyId: { in: fx.propIds } }] } }));
   if (fx.variantRestore) { const r = fx.variantRestore; await del("variant geri", () => prisma.fabricProperty.update({ where: { id: r.id }, data: { serviceItemId: r.serviceItemId } })); }
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
   if (fx.kursunCreated) { const k = fx.kursunCreated; await del("KURSUN", () => prisma.fabricProperty.deleteMany({ where: { id: k } })); }
   await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("serviceItem", () => prisma.serviceItem.deleteMany({ where: { id: { in: fx.itemIds } } }));
   await del("cari", () => prisma.cariAccount.deleteMany({ where: { id: { in: fx.cariIds } } }));
   await del("customer", () => prisma.customer.deleteMany({ where: { id: { in: fx.customerIds } } }));
   const left = await prisma.roll.count({ where: { barcode: { startsWith: P } } });

@@ -239,7 +239,7 @@ async function toRows(rows: ExpenseAllocation[]): Promise<ExpenseAllocationRow[]
   const userIds = uniq(rows.flatMap((r) => [r.createdById, r.revokedById]));
   const machines = machineIds.length ? await prisma.machine.findMany({ where: { id: { in: machineIds } }, select: { id: true, code: true, name: true } }) : [];
   const wos = woIds.length ? await prisma.workOrder.findMany({ where: { id: { in: woIds } }, select: { id: true, workOrderNumber: true } }) : [];
-  const items = itemIds.length ? await prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, code: true, name: true } }) : [];
+  const items = itemIds.length ? await prisma.serviceItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, code: true, name: true } }) : [];
   const users = userIds.length ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true, username: true } }) : [];
   const label = new Map<string, string>([
     ...machines.map((m) => [m.id, `Makine: ${m.code} — ${m.name}`] as const),

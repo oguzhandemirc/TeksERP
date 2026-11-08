@@ -184,6 +184,27 @@ async function decide(row: Row | null, usage: ItemUsage, opts: ItemUsageOpts, db
   }
 }
 
+/** Hizmet kartı (`service_items`) aynı kural motorundan geçer; tür sabit SERVICE. */
+async function readServiceRow(db: Db, serviceItemId: string, lock: boolean): Promise<Row | null> {
+  if (lock) await (db as Prisma.TransactionClient).$queryRaw`SELECT id FROM "service_items" WHERE id = ${serviceItemId}::uuid FOR SHARE`;
+  const r = await db.serviceItem.findUnique({
+    where: { id: serviceItemId },
+    select: { id: true, code: true, name: true, lifecycleStatus: true, mergedIntoId: true, mergedInto: { select: { name: true } } },
+  });
+  return r ? { ...r, itemType: ItemType.SERVICE, survivorName: r.mergedInto?.name ?? null } : null;
+}
+
+/** Hizmet kartı kullanımı — ön kontrol (kilitsiz). Kart yoksa 400 `ITEM_NOT_FOUND`. */
+export async function assertServiceItemUsable(db: Db, serviceItemId: string, usage: ItemUsage, opts: ItemUsageOpts = {}): Promise<ItemUsageResult> {
+  return decide(await readServiceRow(db, serviceItemId, false), usage, opts, db);
+}
+
+/** Hizmet kartı kullanımı — referans yazan tx'te: 8030 SHARED → `service_items` FOR SHARE → karar. */
+export async function assertServiceItemUsableTx(tx: Prisma.TransactionClient, serviceItemId: string, usage: ItemUsage, opts: ItemUsageOpts = {}): Promise<ItemUsageResult> {
+  await lockAgainstMergeTx(tx);
+  return decide(await readServiceRow(tx, serviceItemId, true), usage, opts, tx);
+}
+
 /** Ön kontrol / D1'e sayılmayan yazım (B) — kilit YOK. */
 export async function assertItemUsable(
   db: Db,

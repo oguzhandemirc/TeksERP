@@ -507,6 +507,7 @@ async function main(): Promise<void> {
               create: [
                 {
                   lineNo: 1,
+                  lineType: "TEXT",
                   description: LINES[0]!.description,
                   qty: LINES[0]!.qty,
                   unitPrice: LINES[0]!.unitPrice,
@@ -609,10 +610,10 @@ async function main(): Promise<void> {
     );
     const line0 = (data.lines as Array<Record<string, unknown>>)[0];
     check(
-      "§13d satır anahtarları sabit (invoiceId/itemId çıplak FK'leri yok; item ilişki olarak var)",
+      "§13d satır anahtarları sabit (invoiceId/itemId/serviceItemId çıplak FK'leri yok; item + serviceItem ilişki, lineType D1c)",
       Boolean(line0) &&
         JSON.stringify(Object.keys(line0 as object).sort()) ===
-          JSON.stringify(["description", "discountRate", "id", "item", "lineNo", "lineTotal", "qty", "unit", "unitPrice", "vatAmount", "vatRate", "withholdingRate"]),
+          JSON.stringify(["description", "discountRate", "id", "item", "lineNo", "lineTotal", "lineType", "qty", "serviceItem", "unit", "unitPrice", "vatAmount", "vatRate", "withholdingRate"]),
       line0 ? Object.keys(line0).join(",") : "(satır yok)",
     );
     const cariDet = data.cari as { taxOffice?: unknown; customer?: { taxNumber?: unknown } | null };

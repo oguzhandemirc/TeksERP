@@ -36,6 +36,7 @@ const TABLE_PERMISSIONS: Readonly<Record<string, string>> = {
   SACK: "shipping:read",
   CUSTOMER: "customer:read",
   ITEM: "item:read",
+  SERVICE_ITEM: "item:read",
   SUBCONTRACTOR_DISPATCH: "subcontractor:read",
   SUBCONTRACTOR_RECEIPT: "subcontractor:read",
   // Kumaşa özel müşteri renk adı — künye paneli (MUSTERI-KUMAS-RENK-ADI §4 "Künye").

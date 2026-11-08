@@ -170,9 +170,10 @@ async function turetilmisBolumu(): Promise<void> {
   console.log("\n§4 — türetilmiş alanlar");
   const t = turetilmisKapsamDenetimi(RECORD_PROJECTIONS);
   check("§4a ⭐ türetilmiş alanın okuduğu her tablonun değişikliği görülüyor; ⏱ alanın geçişi var", t.length === 0, t.join(" · ") || "tam");
-  const turetilen = RECORD_PROJECTIONS.filter((p) => p.derived.length > 0).map((p) => p.name).sort();
+  // Türeticiden çözülen kolon da türetici ister (`fatura.cariHesapId`, `fiyat`/`fatura-kalemi` `urunId` — 2026-11-08).
+  const turetilen = RECORD_PROJECTIONS.filter((p) => p.derived.length > 0 || p.columns.some((c) => c.resolvedBy)).map((p) => p.name).sort();
   const turetici = Object.keys(DERIVERS).sort();
-  check("§4b türetici kümesi ↔ türetilmiş alanı olan projeksiyonlar birebir", JSON.stringify(turetilen) === JSON.stringify(turetici), `${turetilen.join(",")} ↔ ${turetici.join(",")}`);
+  check("§4b türetici kümesi ↔ türetilmiş alanı ya da çözülen kolonu olan projeksiyonlar birebir", JSON.stringify(turetilen) === JSON.stringify(turetici), `${turetilen.join(",")} ↔ ${turetici.join(",")}`);
 }
 
 interface Fikstur { musteri: string; cari: string; kasa: string; faturalar: string[]; odeme: string; cek: string; urun: string; renk: string; siparis: string; kalemler: string[]; sevk: string }
@@ -219,7 +220,7 @@ async function finansFikstur(f: Partial<Fikstur>): Promise<void> {
     f.faturalar[0], f.faturalar[1], `${TAG}F1`, `${TAG}F2`, f.cari,
   );
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "invoice_lines" ("id", "invoiceId", "lineNo", "description", "qty", "unitPrice", "lineTotal", "vatAmount") VALUES ($1::uuid, $2::uuid, 1, 'kalem', 1, 100, 100, 0)`,
+    `INSERT INTO "invoice_lines" ("id", "invoiceId", "lineNo", "lineType", "description", "qty", "unitPrice", "lineTotal", "vatAmount") VALUES ($1::uuid, $2::uuid, 1, 'TEXT', 'kalem', 1, 100, 100, 0)`,
     randomUUID(), f.faturalar[0],
   );
   f.odeme = randomUUID();

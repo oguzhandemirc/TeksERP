@@ -74,6 +74,7 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   subcontractorCategory: 32, // subcontractorCategory.code
   fabricProperty: 32, // fabricProperty.code
   item: 32, // item.code
+  serviceItem: 32, // serviceItem.code (service_items ayrımı, 2026-11-07)
   color: 32, // color.code
   station: 32, // station.code
   machine: 32, // machine.code

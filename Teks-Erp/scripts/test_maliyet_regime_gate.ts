@@ -58,6 +58,11 @@ const MALIYET_MODELLERI = new Set([
  */
 const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }> = [
   {
+    dosya: "routes/service-item.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "Hizmet kartı yaşam döngüsü (service-item-lifecycle) aktif sarf normunu canlı referans olarak yalnız SAYAR — pasife almayı reddetmek için; maliyet kapalıyken norm doğamaz, sayım 0'dır (item.routes emsali).",
+  },
+  {
     dosya: "routes/item.routes.ts",
     model: "serviceConsumableNorm",
     neden: "Kart yaşam döngüsü (item-lifecycle) aktif sarf normunu canlı referans olarak yalnız SAYAR — pasife almayı reddetmek için; maliyet kapalıyken norm doğamaz, sayım 0'dır (D4-G1a).",

@@ -215,8 +215,8 @@ async function main(): Promise<void> {
   check("§7d Ham SQL başvuruları süzgeçli", t.sqlIhlal.length === 0, `sql=${t.sqlSayisi}${t.sqlIhlal.length ? " İHLAL: " + t.sqlIhlal.join(", ") : ""}`);
   console.log(`   istisnalar: ${t.istisnalar.length ? t.istisnalar.join(", ") : "yok"}`);
   // MAL-2: maliyet köprüsünün genel alış fiyatı okuyucusu ayrı dosyada (dinamik import; servis statik bağı ticaret kapısını taşırdı).
-  // K2a: ürün kartı canlı referans kataloğu müşteri HİZMET fiyatını sayar/listeler (pasife alma kapısı; yazmaz).
-  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-price-write.helper.ts", "src/services/helpers/service-price-pick.helper.ts", "src/services/service-price.service.ts", "src/services/helpers/item-purchase-price.helper.ts", "src/services/helpers/item-lifecycle.helper.ts"]);
+  // K2a: hizmet kartı canlı referans kataloğu müşteri HİZMET fiyatını sayar/listeler (pasife alma kapısı; yazmaz) — D1b'den beri `service-item-lifecycle.helper`.
+  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-price-write.helper.ts", "src/services/helpers/service-price-pick.helper.ts", "src/services/service-price.service.ts", "src/services/helpers/item-purchase-price.helper.ts", "src/services/helpers/service-item-lifecycle.helper.ts"]);
   const callFiles = new Set<string>();
   let callCount = 0;
   for (const f of srcFiles(join(kok, "src"))) {
@@ -263,7 +263,7 @@ async function main(): Promise<void> {
 
 
   // ── §10 KADEME EKSENİ + İLERİ TARİHLİ PENCERE (hizmet fiyat tablosu, 2026-11-06) ──
-  const svc = (await prisma.item.create({ data: { code: `${TAG}-SV`, name: `${TAG} Hizmet`, itemType: ItemType.SERVICE }, select: { id: true } })).id;
+  const svc = (await prisma.serviceItem.create({ data: { code: `${TAG}-SV`, name: `${TAG} Hizmet` }, select: { id: true } })).id;
   itemIds.push(svc);
   const prop = (await prisma.fabricProperty.create({ data: { code: `${TAG}-P`.slice(0, 32), name: `${TAG} Gramaj`, valueType: "FLAG" }, select: { id: true } })).id;
   propertyIds.push(prop);
@@ -276,17 +276,17 @@ async function main(): Promise<void> {
       return (e as { code?: string }).code ?? String(e);
     }
   };
-  await prisma.itemPrice.create({ data: { itemId: svc, kind: SALE, currency: "TRY", price: 5 } });
-  await prisma.itemPrice.create({ data: { itemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 7 } });
-  check("§10a Kalem geneli + kademe satırı yan yana AÇIK durur (farklı anahtar)", (await prisma.itemPrice.count({ where: { itemId: svc, revokedAt: null } })) === 2);
+  await prisma.itemPrice.create({ data: { serviceItemId: svc, kind: SALE, currency: "TRY", price: 5 } });
+  await prisma.itemPrice.create({ data: { serviceItemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 7 } });
+  check("§10a Kalem geneli + kademe satırı yan yana AÇIK durur (farklı anahtar)", (await prisma.itemPrice.count({ where: { serviceItemId: svc, revokedAt: null } })) === 2);
   check(
     "§10b ⭐ Aynı kalem+kademe iki AÇIK kart varsayılanı → 23505/P2002",
-    (await p2002(() => prisma.itemPrice.create({ data: { itemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 8 } }))) === "P2002",
+    (await p2002(() => prisma.itemPrice.create({ data: { serviceItemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 8 } }))) === "P2002",
   );
-  await prisma.itemPrice.create({ data: { itemId: svc, customerId: cust.id, propertyValueId: pv, kind: SALE, currency: "TRY", price: 6.5 } });
+  await prisma.itemPrice.create({ data: { serviceItemId: svc, customerId: cust.id, propertyValueId: pv, kind: SALE, currency: "TRY", price: 6.5 } });
   check(
     "§10c ⭐ Aynı kalem+kademe+müşteri iki AÇIK istisna → 23505/P2002",
-    (await p2002(() => prisma.itemPrice.create({ data: { itemId: svc, customerId: cust.id, propertyValueId: pv, kind: SALE, currency: "TRY", price: 6 } }))) === "P2002",
+    (await p2002(() => prisma.itemPrice.create({ data: { serviceItemId: svc, customerId: cust.id, propertyValueId: pv, kind: SALE, currency: "TRY", price: 6 } }))) === "P2002",
   );
   check(
     "§10d ⭐ Kalem fiyatı çözümü kademe satırını OKUMAZ (genel 5, müşteri istisnası yok → 5)",
@@ -342,7 +342,7 @@ async function main(): Promise<void> {
       return `${x.statusCode ?? 500}:${x.details?.code ?? "-"}`;
     }
   };
-  const svc2 = (await prisma.item.create({ data: { code: `${TAG}-SV2`, name: `${TAG} Hizmet 2`, itemType: ItemType.SERVICE }, select: { id: true } })).id;
+  const svc2 = (await prisma.serviceItem.create({ data: { code: `${TAG}-SV2`, name: `${TAG} Hizmet 2` }, select: { id: true } })).id;
   itemIds.push(svc2);
   check("§11a ⭐ Başka hizmete eşli kademe → 400 SERVICE_TIER_ITEM_MISMATCH", (await codeOf(() => itemPriceService.upsert({ itemId: svc2, propertyValueId: pv, kind: SALE, currency: "TRY", price: 3 }))) === "400:SERVICE_TIER_ITEM_MISMATCH");
   check("§11b ⭐ Hizmet olmayan kalem + kademe → 400 SERVICE_TIER_NOT_SERVICE", (await codeOf(() => itemPriceService.upsert({ itemId: item, propertyValueId: pv, kind: SALE, currency: "TRY", price: 3 }))) === "400:SERVICE_TIER_NOT_SERVICE");
@@ -357,7 +357,7 @@ async function main(): Promise<void> {
   const tierW = await itemPriceService.upsert({ itemId: svc, propertyValueId: pvProp, kind: SALE, currency: "TRY", price: 8 });
   check("§11g Özellik düzeyi eşleme ile kademe fiyatı yazıldı", tierW.data.created && tierW.data.propertyValueId === pvProp);
   const tierChg = await itemPriceService.upsert({ itemId: svc, propertyValueId: pv, kind: SALE, currency: "TRY", price: 7.5 });
-  const pvRows = await prisma.itemPrice.findMany({ where: { itemId: svc, propertyValueId: pv, customerId: null }, select: { price: true, revokedAt: true } });
+  const pvRows = await prisma.itemPrice.findMany({ where: { serviceItemId: svc, propertyValueId: pv, customerId: null }, select: { price: true, revokedAt: true } });
   check("§11h Kademe fiyatı değişimi = damga + yeni satır (genel satıra dokunmaz)", !tierChg.data.created && pvRows.length === 2 && pvRows.filter((r) => r.revokedAt === null).length === 1 && (await resolveItemPrice({ itemId: svc, kind: SALE, currency: "TRY" }))?.price.equals(5) === true);
 
   const sch = await mkItem("S");
@@ -405,10 +405,11 @@ main()
   })
   .finally(async () => {
     // Fikstür temizliği — üretim yolu değil (birleştirme izleri FK'lıysa sessiz geç).
-    await prisma.itemPrice.deleteMany({ where: { itemId: { in: itemIds } } }).catch(() => {});
+    await prisma.itemPrice.deleteMany({ where: { OR: [{ itemId: { in: itemIds } }, { serviceItemId: { in: itemIds } }] } }).catch(() => {});
     await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: propertyIds } } }).catch(() => {});
     await prisma.fabricProperty.deleteMany({ where: { id: { in: propertyIds } } }).catch(() => {});
     await prisma.item.deleteMany({ where: { id: { in: itemIds } } }).catch(() => {});
+    await prisma.serviceItem.deleteMany({ where: { id: { in: itemIds } } }).catch(() => {});
     await prisma.customer.deleteMany({ where: { id: { in: customerIds } } }).catch(() => {});
     await prisma.$disconnect();
     await pool.end();

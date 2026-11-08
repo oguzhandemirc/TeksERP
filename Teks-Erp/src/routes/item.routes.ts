@@ -24,6 +24,15 @@ function itemWidthGuard(req: Request, _res: Response, next: NextFunction): void 
   }
 }
 
+// Eski yol `{itemType:"SERVICE"}` hizmet kartı açar: `mobile:kumas` (yalnız kumaş ekleme) bunu AÇMAZ —
+// hizmet kartı ucunun (`/api/service-items`) izniyle aynı, 403 PERMISSION_DENIED.
+const requireItemWrite = requirePermission("item:write");
+function serviceCreateNeedsItemWrite(req: Request, res: Response, next: NextFunction): void {
+  const body = req.body as { itemType?: unknown } | undefined;
+  if (body && typeof body === "object" && body.itemType === "SERVICE") return requireItemWrite(req, res, next);
+  next();
+}
+
 export const itemService = new ItemService({
   modelName: "item",
   tableName: "ITEM",
@@ -213,7 +222,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *             properties:
  *               code: { type: string, example: "STK-000123", description: "Opsiyonel — boş bırakılırsa STK-NNNNNN otomatik üretilir" }
  *               name: { type: string, example: "Boyalı Saten Kumaş" }
- *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE, SERVICE] }
+ *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE], description: "SERVICE → hizmet kartı açılır (service_items; eski istemci uyumu, yanıt itemType SERVICE)" }
  *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
  *     responses:
  *       201:
@@ -224,7 +233,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
 // Mobil "Kumaş Ekle" ekranı da bu ucu kullanır. `mobile:kumas` YALNIZ buraya
 // (yaratma) eklenir — PATCH/DELETE hâlâ `item:write` ister, yoksa saha
 // kullanıcısı mevcut kumaşı düzenleyip pasife de alabilirdi.
-router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), itemWidthGuard, controller.create);
+router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), serviceCreateNeedsItemWrite, itemWidthGuard, controller.create);
 
 /**
  * @openapi

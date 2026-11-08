@@ -25,6 +25,7 @@
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Ayarlar fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -41,6 +42,7 @@ import { changeConsumableNorm, createConsumableNorm, revokeConsumableNorm } from
 import { consumableNormsValidAt, isCostRateValidAt, machineCostRateValidAt } from "../src/services/helpers/cost-rate-validity.helper";
 import { AppError } from "../src/utils/app-error";
 import { countItemLiveRefs, transitionItemLifecycle } from "../src/services/helpers/item-lifecycle.helper";
+import { transitionServiceItemLifecycle } from "../src/services/helpers/service-item-lifecycle.helper";
 
 let pass = 0;
 let fail = 0;
@@ -159,9 +161,8 @@ async function main(): Promise<void> {
     return m.id;
   };
   const kalem = async (itemType: ItemType, isActive = true): Promise<string> => {
-    const it = await prisma.item.create({
-      data: { code: `MUS${process.pid % 100000}-${++sira}`, name: `${TAG} ${itemType} ${sira}`, itemType, unit: itemType === ItemType.CONSUMABLE ? "KG" : "MT", isActive, ...(isActive ? {} : { lifecycleStatus: ItemLifecycleStatus.ARCHIVED }) },
-      select: { id: true },
+    const it = await kartAc({
+      code: `MUS${process.pid % 100000}-${++sira}`, name: `${TAG} ${itemType} ${sira}`, itemType, unit: itemType === ItemType.CONSUMABLE ? "KG" : "MT", isActive, ...(isActive ? {} : { lifecycleStatus: ItemLifecycleStatus.ARCHIVED }),
     });
     ids.items.push(it.id);
     return it.id;
@@ -313,7 +314,8 @@ async function main(): Promise<void> {
     const n6e = await createConsumableNorm(hizmet, sarf, { qtyPerM: "0.02", clientToken: randomUUID() }, uid);
     const arsivle = (itemId: string) => hata(() => transitionItemLifecycle({ itemId, to: ItemLifecycleStatus.ARCHIVED, userId: uid }));
     const e6eS = await arsivle(sarf);
-    const e6eH = await arsivle(hizmet);
+    // D1b: hizmet kartı `service_items`'ta — kendi tek yazarından geçer.
+    const e6eH = await hata(() => transitionServiceItemLifecycle({ serviceItemId: hizmet, to: ItemLifecycleStatus.ARCHIVED, userId: uid }));
     const normRef = (e: AppError | null) => (e?.details as { references?: Array<{ kind: string; count: number }> } | undefined)?.references?.find((x) => x.kind === "CONSUMABLE_NORM")?.count;
     check("§6e ⭐ aktif normlu sarf + hizmet kalemi pasife alınamaz → 409 ITEM_HAS_LIVE_REFERENCES (CONSUMABLE_NORM=1)",
       kod(e6eS) === "ITEM_HAS_LIVE_REFERENCES" && normRef(e6eS) === 1 && kod(e6eH) === "ITEM_HAS_LIVE_REFERENCES" && normRef(e6eH) === 1,
@@ -393,7 +395,7 @@ async function temizle(ids: { stations: string[]; machines: string[]; items: str
   await prisma.serviceConsumableNorm.deleteMany({ where: { serviceItemId: { in: ids.items } } });
   await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
   await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
-  await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
+  await kartlariSil(ids.items);
   for (const u of ids.users) {
     await prisma.userPermission.deleteMany({ where: { userId: u } });
     await prisma.session.deleteMany({ where: { userId: u } }).catch(() => undefined);

@@ -2,6 +2,7 @@
 // içe aktarım adaptörleri. Her biri: geçerli/hatalı satır, önizleme = uygulama, replay (clientToken),
 // tekil yolla AYNI defter satırı (iki yol bayt-eşit), ters kayıtla geri sarma (silinmez).
 import prisma, { pool } from "../src/lib/prisma";
+import { kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { ImportService } from "../src/services/import/import.service";
 import { ImportRevertService, REVERT_PLAN } from "../src/services/import/import-revert.service";
 import { getImportAdapter, listAdapters } from "../src/services/import/import-registry";
@@ -165,7 +166,7 @@ async function main(): Promise<void> {
     // ── §3 HİZMET FİYATI ────────────────────────────────────────────────────────
     console.log("§3 hizmet fiyat listesi");
     const e = await customer("E");
-    const svc = await prisma.item.create({ data: { code: `${TAG}-HZM`, name: `${TAG} HİZMET`, itemType: "SERVICE", unit: "MT" }, select: { id: true, code: true } });
+    const svc = await prisma.serviceItem.create({ data: { code: `${TAG}-HZM`, name: `${TAG} HİZMET`, unit: "MT" }, select: { id: true, code: true } });
     const fab = await prisma.item.create({ data: { code: `${TAG}-KMS`, name: `${TAG} KUMAŞ`, itemType: "FABRIC", unit: "MT" }, select: { id: true, code: true } });
     items.push(svc.id, fab.id);
     const sp = (n: number, x: Record<string, string>) => row(n, { customerCode: e.code, itemCode: svc.code, price: "3,75", currency: "USD", ...x });
@@ -180,16 +181,16 @@ async function main(): Promise<void> {
     const spTok = crypto.randomUUID();
     const sp1 = await apply("customerServicePrice", [sp(2, {})], spTok);
     await apply("customerServicePrice", [sp(2, {})], spTok);
-    check("§3b uygula + replay: tek aktif fiyat", sp1.created === 1 && (await prisma.itemPrice.count({ where: { itemId: svc.id, customerId: e.id } })) === 1);
+    check("§3b uygula + replay: tek aktif fiyat", sp1.created === 1 && (await prisma.itemPrice.count({ where: { serviceItemId: svc.id, customerId: e.id } })) === 1);
     const same = await ImportService.preview("customerServicePrice", [sp(2, {})], {}, { userId: adminId, permissions: ALL });
     check("§3c aynı fiyat SKIP", same.rows[0]?.action === "SKIP", same.rows[0]?.action);
     const upd = await apply("customerServicePrice", [sp(2, { price: "4,10" })]);
-    const prices = await prisma.itemPrice.findMany({ where: { itemId: svc.id, customerId: e.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { price: true, revokedAt: true } });
+    const prices = await prisma.itemPrice.findMany({ where: { serviceItemId: svc.id, customerId: e.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { price: true, revokedAt: true } });
     check("§3d farklı fiyat UPDATE: eski sürüm damgalı, yenisi aktif", upd.updated === 1 && prices.length === 2 && prices[0]!.revokedAt !== null && prices[1]!.price.toString() === "4.1", JSON.stringify(prices));
     const logs = await prisma.systemLog.findMany({ where: { tableName: "ITEM_PRICE", newData: { path: ["importRunId"], equals: upd.runId } }, select: { newData: true } });
     check("§3e içe aktarım audit satırında (importRunId) fiyat YOK — servis audit'i tekil uçla aynı, kapsam dışı", logs.length === 1 && !("price" in ((logs[0]?.newData as Record<string, unknown>) ?? {})), JSON.stringify(logs[0]?.newData));
     await ImportRevertService.revert(upd.runId, { reason: "Fiyat bekçi geri sarma", selectedRowNos: [2], permissions: ALL, userId: adminId });
-    const active = await prisma.itemPrice.findFirst({ where: { itemId: svc.id, customerId: e.id, revokedAt: null }, select: { price: true } });
+    const active = await prisma.itemPrice.findFirst({ where: { serviceItemId: svc.id, customerId: e.id, revokedAt: null }, select: { price: true } });
     check("§3f geri sarma önceki fiyatı yeni sürüm olarak yazar (3.75)", active?.price.toString() === "3.75", active?.price.toString());
 
     console.log("§4 kapalı modül");
@@ -222,8 +223,8 @@ async function cleanup(): Promise<void> {
   await prisma.cariBalance.deleteMany({ where: { cariId: { in: accs } } });
   // Fason fixture kalıcıdır: RUB bakiyesi yalnız bu bekçinin hareketiydi (yaz/ters = 0) — satır kalabilir, sıfırdır.
   await prisma.cariAccount.deleteMany({ where: { id: { in: accs } } });
-  await prisma.itemPrice.deleteMany({ where: { itemId: { in: items } } });
-  await prisma.item.deleteMany({ where: { id: { in: items } } });
+  await prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(items) });
+  await kartlariSil(items);
   await prisma.customer.deleteMany({ where: { id: { in: customers } } });
 }
 

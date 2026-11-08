@@ -73,7 +73,8 @@
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı
 // deadlock üretti). ② Bir tx birden çok UZAYDAN kilit alacaksa uzay numarası
 // ARTAN sırada alınır — çapraz-uzay çiftleri `inventory.service`
-// (8021 mükerrer tuzağı → 8030 birleştirme) ve e-İrsaliye üretimi (8023 → 8041); ikisi de ARTAN.
+// (8021 mükerrer tuzağı → 8030 birleştirme), e-İrsaliye üretimi (8023 → 8041) ve fatura hizmet
+// satırı (`invoice-line-subject.helper`: sevk kapsamı 8023 → hizmet kartı 8030 SHARED); üçü de ARTAN.
 // =============================================================================
 
 import { Prisma, Currency } from "@prisma/client";

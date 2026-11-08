@@ -66,6 +66,13 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     to: (r) => ({ to: `/definitions/items?search=${q(r.code ?? r.title)}` }),
     listTo: (t) => `/definitions/items?search=${q(t)}`,
   },
+  serviceItem: {
+    label: "Hizmet Kartları",
+    icon: Layers,
+    permissions: ["item:read"],
+    to: (r) => ({ to: `/definitions/services?search=${q(r.code ?? r.title)}` }),
+    listTo: (t) => `/definitions/services?search=${q(t)}`,
+  },
   color: {
     label: "Renkler",
     icon: Palette,

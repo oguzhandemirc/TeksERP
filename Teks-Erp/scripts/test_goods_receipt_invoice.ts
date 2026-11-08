@@ -649,6 +649,7 @@ async function main(): Promise<void> {
           data: {
             invoiceId: dB.data.id,
             lineNo: 1,
+            lineType: "TEXT",
             description: "yeni",
             qty: 5,
             unit: "m",

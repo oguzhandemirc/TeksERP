@@ -49,7 +49,8 @@ export async function loadServiceTierPrices(params: {
       AND: [
         itemPriceValidAt(params.at),
         {
-          itemId: { in: ids },
+          // Kademe satırı yalnız hizmet kartında (DB CHECK) — konu `serviceItemId`.
+          serviceItemId: { in: ids },
           propertyValueId: { not: null },
           kind: PriceKind.SALE,
           currency: params.currency,
@@ -57,12 +58,13 @@ export async function loadServiceTierPrices(params: {
         },
       ],
     },
-    select: { id: true, itemId: true, propertyValueId: true, customerId: true, price: true, priceUnit: true, validFrom: true },
+    select: { id: true, serviceItemId: true, propertyValueId: true, customerId: true, price: true, priceUnit: true, validFrom: true },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
   for (const r of rows) {
-    out.itemsWithTiers.add(r.itemId);
-    const k = tierKey(r.itemId, r.propertyValueId!);
+    const sid = r.serviceItemId!;
+    out.itemsWithTiers.add(sid);
+    const k = tierKey(sid, r.propertyValueId!);
     const slot = out.byKey.get(k) ?? {};
     // Başka müşterinin satırı sorgudan gelmez; `customerId` eşitliği ikinci sed.
     if (r.customerId && r.customerId === params.customerId) slot.customer ??= r;
@@ -77,11 +79,11 @@ export async function countServiceTierRows(itemIds: string[], now: Date, db: Db 
   if (itemIds.length === 0) return new Map();
   // `revokedAt` SÜZÜLMEZ — açık ya da zamanlanmış damgalı (yürürlükte) satırlar sayılır.
   const counts = await db.itemPrice.groupBy({
-    by: ["itemId"],
-    where: { itemId: { in: itemIds }, propertyValueId: { not: null }, OR: [{ revokedAt: null }, { revokedAt: { gt: now } }] },
+    by: ["serviceItemId"],
+    where: { serviceItemId: { in: itemIds }, propertyValueId: { not: null }, OR: [{ revokedAt: null }, { revokedAt: { gt: now } }] },
     _count: { _all: true },
   });
-  return new Map(counts.map((c) => [c.itemId, c._count._all]));
+  return new Map(counts.map((c) => [c.serviceItemId as string, c._count._all]));
 }
 
 export interface ServicePriceCandidates {

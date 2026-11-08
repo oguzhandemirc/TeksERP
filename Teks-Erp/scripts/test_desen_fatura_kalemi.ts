@@ -24,6 +24,7 @@
 // bakınca (desen kalemi kümeye girmeyince) §7 kırmızı · MIG6: dönüş işlemine değer yazılmayınca §4 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil, fiyatKonusuWhere } from "./lib/kart-fikstur";
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
@@ -74,9 +75,9 @@ async function main(): Promise<void> {
   if (!wh) throw new Error("Varsayılan depo yok");
 
   const mkItem = async (suffix: string, itemType: ItemType, price?: string) => {
-    const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST DSN ${suffix} ${STAMP}`, itemType, unit: "MT" }, select: { id: true } });
+    const it = await kartAc({ code: `${P}-${suffix}`.slice(0, 32), name: `TEST DSN ${suffix} ${STAMP}`, itemType, unit: "MT" });
     fx.itemIds.push(it.id);
-    if (price) await prisma.itemPrice.create({ data: { itemId: it.id, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price } });
+    if (price) await prisma.itemPrice.create({ data: { ...(itemType === ItemType.SERVICE ? { serviceItemId: it.id } : { itemId: it.id }), customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price } });
     return it.id;
   };
   const fabric = await mkItem("KUM", ItemType.FABRIC);
@@ -302,8 +303,8 @@ async function cleanup(): Promise<void> {
   await del("value", () => prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: fx.propIds } } }));
   await del("variant bağı", () => prisma.fabricProperty.updateMany({ where: { id: { in: fx.propIds } }, data: { variantOfPropertyId: null } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
-  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: { itemId: { in: fx.itemIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("itemPrice", () => prisma.itemPrice.deleteMany({ where: fiyatKonusuWhere(fx.itemIds) }));
+  await del("item", () => kartlariSil(fx.itemIds));
   if (fx.customerId) { const cid = fx.customerId; await del("cari", () => prisma.cariAccount.deleteMany({ where: { customerId: cid } })); }
   if (fx.customerId) { const cid = fx.customerId; await del("customer", () => prisma.customer.deleteMany({ where: { id: cid } })); }
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids, ...recIds, ...dispIds, ...fx.woIds] } } }));

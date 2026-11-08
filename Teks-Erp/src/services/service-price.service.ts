@@ -5,7 +5,7 @@
 // tarihli fiyatı ve "şu an hangi fiyat uygulanır" kaynağı. Kaynak `pickServicePrice`ten (fatura ile aynı
 // sıra — ikinci kopya yok); yazım `itemPriceService` üzerinden (kapılar + zamanlanmış damga orada).
 // =============================================================================
-import { ItemLifecycleStatus, ItemType, PriceKind, Prisma, type Currency, type ServiceQtyUnit } from "@prisma/client";
+import { ItemLifecycleStatus, PriceKind, Prisma, type Currency, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
@@ -13,6 +13,7 @@ import { itemPriceService, type ItemPriceUpsertInput } from "./item-price.servic
 import { isItemPricePending, isItemPriceValidAt } from "./helpers/item-price-validity.helper";
 import { countServiceTierRows, pickServicePrice, type ServicePriceSource } from "./helpers/service-price-pick.helper";
 import { pickServiceItemId } from "./helpers/service-item-pick.helper";
+import { priceSubjectId } from "./helpers/item-price-write.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { ITEM_PRICE_REVOKE_REASON } from "./helpers/item-price-validity.helper";
 import { kursunMeterPrice, loadCurrentGramPrices } from "./helpers/kursun-gram-price.helper";
@@ -20,7 +21,7 @@ import { kursunMeterPrice, loadCurrentGramPrices } from "./helpers/kursun-gram-p
 export type ServicePriceWriteInput = Omit<ItemPriceUpsertInput, "kind" | "clientToken"> & { clientToken: string };
 
 const ROW = {
-  id: true, itemId: true, customerId: true, propertyValueId: true, kind: true, currency: true, price: true, priceUnit: true,
+  id: true, itemId: true, serviceItemId: true, customerId: true, propertyValueId: true, kind: true, currency: true, price: true, priceUnit: true,
   validFrom: true, createdAt: true, revokedAt: true, revokeReason: true, clientToken: true,
 } as const;
 type Row = Prisma.ItemPriceGetPayload<{ select: typeof ROW }>;
@@ -82,7 +83,7 @@ export class ServicePriceService {
   /** Sol liste: hizmet kalemleri + güncel kademe satırı sayısı. */
   async listServices(): Promise<ApiResponse<Array<{ id: string; code: string; name: string; unit: string; lifecycleStatus: ItemLifecycleStatus; tierRowCount: number }>>> {
     // Pasif (ARCHIVED) kartlar listenin sonunda; durum yalnız gösterim.
-    const rows = await prisma.item.findMany({ where: { itemType: ItemType.SERVICE }, select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true }, orderBy: { code: "asc" } });
+    const rows = await prisma.serviceItem.findMany({ select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true }, orderBy: { code: "asc" } });
     const items = [...rows].sort((a, b) => Number(a.lifecycleStatus === ItemLifecycleStatus.ARCHIVED) - Number(b.lifecycleStatus === ItemLifecycleStatus.ARCHIVED));
     const byItem = await countServiceTierRows(items.map((i) => i.id), new Date());
     return { success: true, data: items.map((i) => ({ ...i, tierRowCount: byItem.get(i.id) ?? 0 })) };
@@ -90,12 +91,13 @@ export class ServicePriceService {
 
   async table(params: { itemId: string; currency: Currency; customerId: string | null }): Promise<ApiResponse<ServicePriceTable>> {
     const now = new Date();
-    const item = await prisma.item.findUnique({ where: { id: params.itemId }, select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true, itemType: true } });
+    const item = await prisma.serviceItem.findUnique({ where: { id: params.itemId }, select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true } });
+    // Ürün kartı id'si: tablo yalnız hizmet içindir (400); iki tabloda da yoksa 404.
+    if (!item && (await prisma.item.findUnique({ where: { id: params.itemId }, select: { id: true } }))) throw AppError.badRequest("Hizmet fiyat tablosu yalnız hizmet kalemleri içindir.", { code: "SERVICE_TIER_NOT_SERVICE" });
     if (!item) throw AppError.notFound("Hizmet bulunamadı.");
-    if (item.itemType !== ItemType.SERVICE) throw AppError.badRequest("Hizmet fiyat tablosu yalnız hizmet kalemleri içindir.", { code: "SERVICE_TIER_NOT_SERVICE" });
     // `revokedAt` SÜZÜLMEZ — güncel + bekleyen ayrımı bellekte `isItemPriceValidAt` / `isItemPricePending` ile (tek yüklem ikizi).
     const rows = await prisma.itemPrice.findMany({
-      where: { itemId: item.id, kind: PriceKind.SALE, currency: params.currency, OR: [{ revokedAt: null }, { revokedAt: { gt: now } }] },
+      where: { serviceItemId: item.id, kind: PriceKind.SALE, currency: params.currency, OR: [{ revokedAt: null }, { revokedAt: { gt: now } }] },
       select: ROW,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
@@ -153,7 +155,7 @@ export class ServicePriceService {
     // `revokedAt` SÜZÜLMEZ — geçmiş görünümü damgalı sürümleri de listeler.
     const rows = await prisma.itemPrice.findMany({
       where: {
-        itemId: params.itemId, kind: PriceKind.SALE, currency: params.currency,
+        serviceItemId: params.itemId, kind: PriceKind.SALE, currency: params.currency,
         ...(params.customerId !== undefined ? { customerId: params.customerId } : {}),
         ...(params.propertyValueId !== undefined ? { propertyValueId: params.propertyValueId } : {}),
       },
@@ -192,7 +194,7 @@ const writeReplay = (input: ServicePriceWriteInput) =>
       throw AppError.conflict("Bu fiyat kaydedilmiş ama sonra KALDIRILMIŞ — yeniden girmek için tabloyu yenileyin.", { code: "ITEM_PRICE_REMOVED", id: prior.id });
     },
     identity: (prior) => [
-      { ad: "itemId", mevcut: prior.itemId, gelen: input.itemId },
+      { ad: "itemId", mevcut: priceSubjectId(prior), gelen: input.itemId },
       { ad: "customerId", mevcut: prior.customerId, gelen: input.customerId ?? null },
       { ad: "propertyValueId", mevcut: prior.propertyValueId, gelen: input.propertyValueId ?? null },
       { ad: "currency", mevcut: prior.currency, gelen: input.currency },

@@ -177,11 +177,14 @@ function main(): void {
   // ── 3) SQL'İ KOŞ — gerçek çıkış koduyla ──────────────────────────────────
   // ON_ERROR_STOP olmadan psql hatalı ifadeyi atlayıp devam eder ve exit 0
   // döner — "yarım uygulanmış ama başarılı görünen" migration üretir.
+  // --single-transaction: hata = tam geri dönüş (ör. tetik kapat → DELETE hatası → tetik kapalı KALMAZ);
+  // `prisma migrate deploy` da dosyayı tek örtük tx'te koşar. `-1` yalnız `-f`/`-c` ile → stdin `-f -`.
+  const tek = ["-v", "ON_ERROR_STOP=1", "--single-transaction"];
   const exec = psql.useStdin
-    ? run(psql.cmd, [...psql.pre, psql.url, "-v", "ON_ERROR_STOP=1"], {
+    ? run(psql.cmd, [...psql.pre, psql.url, ...tek, "-f", "-"], {
         input: readFileSync(sqlPath, "utf8"),
       })
-    : run(psql.cmd, [...psql.pre, psql.url, "-v", "ON_ERROR_STOP=1", "-f", sqlPath]);
+    : run(psql.cmd, [...psql.pre, psql.url, ...tek, "-f", sqlPath]);
   console.log(exec.out.trim().split("\n").slice(-5).join("\n"));
   if (exec.code !== 0) {
     fail(`SQL BAŞARISIZ (exit=${exec.code}) — resolve KOŞULMADI, defter temiz. Hatayı düzeltip tekrar dene.`);

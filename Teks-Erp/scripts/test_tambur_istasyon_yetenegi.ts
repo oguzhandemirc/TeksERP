@@ -27,6 +27,7 @@
 // Negatif sonda (2026-10-29): `applyTamburCapabilitiesTx` gövdesi boşaltılınca §1–§5 + S1 kırmızı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { kartAc, kartlariSil } from "./lib/kart-fikstur";
 import { ItemType, Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
@@ -60,7 +61,7 @@ async function main(): Promise<void> {
   const grade = (await roleGrade("FIRST")).code;
 
   const mkItem = async (suffix: string, itemType: ItemType) => {
-    const it = await prisma.item.create({ data: { code: `${P}-${suffix}`.slice(0, 32), name: `TEST TBIY ${suffix}`, itemType, unit: "MT" }, select: { id: true } });
+    const it = await kartAc({ code: `${P}-${suffix}`.slice(0, 32), name: `TEST TBIY ${suffix}`, itemType, unit: "MT" });
     fx.itemIds.push(it.id);
     return it.id;
   };
@@ -269,7 +270,7 @@ async function cleanup(): Promise<void> {
   await del("workOrder", () => prisma.workOrder.deleteMany({ where: { id: { in: fx.woIds } } }));
   await del("station", () => prisma.station.deleteMany({ where: { id: { in: fx.stationIds } } }));
   await del("property", () => prisma.fabricProperty.deleteMany({ where: { id: { in: fx.propIds } } }));
-  await del("item", () => prisma.item.deleteMany({ where: { id: { in: fx.itemIds } } }));
+  await del("item", () => kartlariSil(fx.itemIds));
   await del("systemLog", () => prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids, ...fx.woIds] } } }));
   const left = await prisma.roll.count({ where: { id: { in: ids } } });
   check("temizlik: TEST-TBIY top kalıntısı yok", left === 0, String(left));

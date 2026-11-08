@@ -105,6 +105,7 @@
 
 - [ÇEKİRDEK] `migrate resolve --applied` koşmayı doğrulamaz; `\d+` / `pg_enum` / `indisvalid` ile doğrula.
 - [ÇEKİRDEK] `apply-migration.ts` hedefi `process.env.DATABASE_URL`den, adıyla basar, `current_database()` doğrular, `resolve` aynı URL.
+- [ÇEKİRDEK] `apply-migration.ts` SQL'i `--single-transaction` + `ON_ERROR_STOP=1` ile koşar; migration'a tek tx'te koşamayan ifade (`CONCURRENTLY`, `VACUUM`, açık `COMMIT`) yazma ([2026-11-08](../history/arsiv/2026-11.md)).
 - [ÇEKİRDEK] Yeni migration `--create-only`; iki DEFERRABLE FK'nın `DropForeignKey` satırları SİLİNİR.
 - [ÇEKİRDEK] Prisma `Teks-Erp/` içinden ya da `--config Teks-Erp/prisma.config.ts`.
 - [ÇEKİRDEK] timestamptz geri alma `SET timezone='UTC'; BEGIN;`; tip geçişi `USING c AT TIME ZONE 'UTC'`.
