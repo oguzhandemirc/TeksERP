@@ -40,7 +40,8 @@ const COUNTER_FNS = new Set([
 
 /** Sayacı tx İÇİNDE artırmaya devam eden yollar — sayı yalnız DÜŞER (entegratör yazar). */
 const TABAN: Record<string, number> = {
-  "services/subcontractor.service.ts": 2, // fason çıkış (tekil) + fason kabul (toplu)
+  "services/subcontractor/direct-ship.ts": 1, // fason çıkış (tekil) — subcontractor.service bölmesi 2026-11-08
+  "services/subcontractor/receive.ts": 1, // fason kabul (toplu)
   "services/workorder-batch-drop.service.ts": 1, // barkodsuz küme claim'den sonra okunuyor
   "services/helpers/roll-finalize.helper.ts": 1, // top listesi tx içinde hesaplanıyor
   "services/helpers/roll-disposition.helper.ts": 1, // barkodsuz küme claim'den sonra okunuyor
@@ -156,7 +157,7 @@ function main(): void {
   }
   if (SONDA === "artis") {
     const t = tara(`async function f(tx: Prisma.TransactionClient){ await reserveRollBarcodesTx(tx, "H", 2); }`, "sonda.ts");
-    const k = "services/subcontractor.service.ts";
+    const k = "services/subcontractor/receive.ts";
     bulunan[k] = [...(bulunan[k] ?? []), ...t.txIci];
   }
   if (SONDA === "duzelt") {

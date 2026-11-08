@@ -29,6 +29,7 @@ import {
 } from "../src/services/helpers/step-capability.helper";
 import { RouteService, ROUTE_SERVICE_CONFIG } from "../src/services/route.service";
 import { StationService } from "../src/services/station.service";
+import { fasonServisMetni } from "./lib/fason-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -214,8 +215,7 @@ async function main() {
 
     // ── 8) Fason kabul KATEGORİDEN okur (planlama ≠ çalışma zamanı) ─────────
     // Kaynak taraması: istasyon bayrağı fason kabul yoluna SIZMAMALI.
-    const fs = await import("node:fs/promises");
-    const sub = await fs.readFile("src/services/subcontractor.service.ts", "utf8");
+    const sub = fasonServisMetni();
     const receiptBlock = sub.slice(sub.indexOf("const appliesColor ="), sub.indexOf("const appliesColor =") + 200);
     check("fason kabul `requiredCategory.appliesColor` okur (istasyon bayrağı DEĞİL)",
       receiptBlock.includes("step.requiredCategory?.appliesColor"), receiptBlock.split("\n")[0]);

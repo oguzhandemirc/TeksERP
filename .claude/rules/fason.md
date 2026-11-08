@@ -1,6 +1,7 @@
 ---
 paths:
   - "{Teks-Erp,Electron,mobil}/src/**/*{subcontract,Subcontract,fason,Fason,kartela,Kartela,swatch,Swatch}*"
+  - "Teks-Erp/src/services/subcontractor/**"
 ---
 
 **Fason · kartela** — öz. Tam metni baştan okuma; yalnız ilgili bölümü oku:

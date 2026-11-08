@@ -291,7 +291,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       "src/services/helpers/roll-movement.helper.ts",
       "src/services/helpers/roll-step.helper.ts", "src/services/inventory.service.ts",
       "src/services/kursun-bypass.service.ts", "src/services/kursun-qc.service.ts",
-      "src/services/subcontractor.service.ts", "src/services/tambur-manual.service.ts",
+      "src/services/subcontractor/receive.ts", "src/services/subcontractor/dispatch.ts",
+      "src/services/subcontractor/direct-ship.ts", "src/services/tambur-manual.service.ts",
       "src/services/tambur-undo.service.ts", "src/services/workorder-batch-add.service.ts",
       "src/services/workorder-manual-move.service.ts", "src/services/workorder-scan-route.service.ts",
       "src/services/workorder-split.service.ts",
@@ -304,7 +305,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeWidthTracedStepOperationsTx" },
      { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "restoreMeasuredWidthsTx" }],
     ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
-     "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
+     "src/services/kursun-qc.service.ts", "src/services/subcontractor/receive.ts", "src/services/subcontractor/dispatch.ts",
+     "src/services/subcontractor/direct-ship.ts", "src/services/tambur.service.ts"]),
 
   // H1 (Hizmet veren, 2026-10-29): faturalanan metrenin kaynağı; düzeltme = damga + yeni satır, reopen damgalar.
   // D4-B1b (2026-10-30): Tambur CUT okuması aynı deftere; yazım tek boğazda (meter-reading.helper), geri alma/iptal damgalar.
@@ -434,7 +436,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" },
       { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" },
       { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" },
-      { dosya: "src/services/subcontractor.service.ts", sembol: "cancelReceipt" },
+      { dosya: "src/services/subcontractor/receipt-cancel.ts", sembol: "cancelReceipt" },
     ],
     ["src/services/helpers/tambur-plan-gate.helper.ts"]),
   // ⚠️ TANECİK `confirmationId`, SATIR DEĞİL: renk+en birlikte saparsa 2 satır ama
@@ -625,7 +627,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "applyRollFlagSetTx" }],
     // `3c53deaf` (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
     ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
-      "src/services/subcontractor.service.ts", "src/services/workorder.service.ts",
+      "src/services/subcontractor/receive.ts", "src/services/workorder.service.ts",
       "src/services/tambur-undo.service.ts"]),
   // ③a ticari pivot → DEFTER (2026-09-14, WOTOL-BAG-DAMGA-PLAN): bağ silinmez, `unlinkedAt`
   // damgalanır; yeniden bağlama YENİ satır (un-unlink yok) — ters yazan `linkOrderLines`.
@@ -820,7 +822,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   OPENING: { tur: "TERMINAL", gerekce: "defterin epoch fotoğrafı; ÖNCESİ YOK, dolayısıyla tersi de yok (warehouse-ledger-reverse.helper.ts epoch şerhi)" },
   SHRINK: { tur: "BASKA_DEFTER", nerede: "RollVariance", gerekce: "çekme ÖLÇÜMdür ve `SHRINK_REASON_CODE=\"FASON_CEKME\"` ile varyans defterine yazılır; stok defterinde hiç yazarı yok (ölçüldü 2026-09-13: 0 yazar / 0 satır)" },
 
-  FASON_DISPATCH: { tur: "BAGLI_TERS", kod: "FASON_DISPATCH_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor.service.ts", sembol: "cancel" }] },
+  FASON_DISPATCH: { tur: "BAGLI_TERS", kod: "FASON_DISPATCH_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor/dispatch-cancel.ts", sembol: "cancel" }] },
   FASON_DISPATCH_CANCEL: { tur: "TERS_KODU", ileri: "FASON_DISPATCH" },
   // ── Beş kod 2026-09-13'te ÖLÇÜLDÜ (82): geri alma yolları OKUNDU, tahmin edilmedi.
   //    Ölçüm STATİKTİR (kod okuması; çalıştırılmadı). Yöntem: her kodun yazan yolu +
@@ -831,7 +833,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // 2026-09-13 (6e): 82'nin ölçtüğü "ters yolu YOK" borcu KAPANDI — `cancelReceipt`
   // doğan toplar için giriş satırını `FASON_RECEIPT_CANCEL` ile tersliyor
   // (`reverseLatestScopedStockMove`, bekçi `test_stock_ledger_fason §9`).
-  FASON_RECEIPT: { tur: "BAGLI_TERS", kod: "FASON_RECEIPT_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor.service.ts", sembol: "cancelReceipt" }] },
+  FASON_RECEIPT: { tur: "BAGLI_TERS", kod: "FASON_RECEIPT_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor/receipt-cancel.ts", sembol: "cancelReceipt" }] },
   FASON_RECEIPT_CANCEL: { tur: "TERS_KODU", ileri: "FASON_RECEIPT" },
   // DISPOSITION — KARŞI OLAY (1c ③ `75b1eb0d`): kapanış dispozisyonu topu üretimden RAFA indirir
   // (PRODUCTION çıkışı); karşı yönü raftan ÜRETİME giriş = PRODUCTION_ISSUE, artık TEK helper
@@ -953,7 +955,7 @@ export const DAMGA_NULL_BEYANI: DamgaNullBeyani[] = [
   { dosya: "src/services/shipping.service.ts", fonksiyon: "markSackContentChangedTx", alan: "weighedAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "SackWeighing (CLEARED olayı; önceki kg ile)",
     gerekce: "kolon çuvalın ŞU ANKİ tartısıdır; her tartı ve sıfırlama tartı defterinde (kullanıcı kararı 2026-09-26: ayrı defteri olan damga durum kolonudur)" },
-  { dosya: "src/services/subcontractor.service.ts", fonksiyon: "reopenRemainder", alan: "remainderClosedAt", adet: 1, sinif: "DURUM_KOLONU",
+  { dosya: "src/services/subcontractor/remainder.ts", fonksiyon: "reopenRemainder", alan: "remainderClosedAt", adet: 1, sinif: "DURUM_KOLONU",
     tarihce: "RollVariance SUBCONTRACTOR_REMAINDER reversedAt + hareketin ters kaydı",
     gerekce: "kolon kalemin ŞU ANKİ kapanış hâlidir; kapanış kararı ve geri alınması sapma defterinde (kullanıcı kararı 2026-09-26)" },
   { dosya: "src/services/invoice.service.ts", fonksiyon: "cancel", alan: "invoicedAt", adet: 2, sinif: "DURUM_KOLONU",

@@ -41,6 +41,7 @@ import { OUTSTANDING_ITEM } from "../src/services/helpers/fason-open-dispatch.he
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fasonServisUyeMetni } from "./lib/fason-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -239,7 +240,7 @@ async function main(): Promise<void> {
     check("§4g tx-dışı sinyal tek kaynakta: resolveDispatchCancelBlockReason({returnedBeamCount:1}) dolu, 0 → null",
       resolveDispatchCancelBlockReason({ cancelledAt: null, directShipmentNo: null, activeReceiptNo: null, movedRollCount: 0, returnedBeamCount: 1 }) !== null &&
       resolveDispatchCancelBlockReason({ cancelledAt: null, directShipmentNo: null, activeReceiptNo: null, movedRollCount: 0, returnedBeamCount: 0 }) === null);
-    const cancelGovde = (() => { const t = readFileSync(path.join(ROOT, "src/services/subcontractor.service.ts"), "utf8"); const i = t.indexOf("  async cancel("); return t.slice(i, i + 5000); })();
+    const cancelGovde = fasonServisUyeMetni("cancel").slice(0, 5000);
     check("§4g′ cancel() sinyali SAYIYOR ve helper'a GEÇİRİYOR (countReturnedBeamItems → returnedBeamCount)",
       /const returnedBeamCount = hasBeamItems \? await countReturnedBeamItems\(/.test(cancelGovde) && /movedRollCount: movedRolls\.length,\s*returnedBeamCount,\s*(?:returnedYarnCount,\s*)?\}\)/.test(cancelGovde));
     const rc = await cancelWarpBeamReturn(d2, { warpBeamId: b1.id, reason: `${TAG} yanlış metre` }, admin.id);

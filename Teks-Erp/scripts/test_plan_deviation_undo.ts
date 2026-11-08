@@ -44,6 +44,7 @@ import {
 } from "../src/services/helpers/tambur-plan-gate.helper";
 import { FASON_RECEIPT_DEVIATION_SOURCE } from "../src/constants/tambur-plan-gate";
 import { getPlanDeviationScorecard } from "../src/services/reports/plan-deviation-scorecard.report.service";
+import { fasonServisMetni } from "./lib/fason-servis-kaynak";
 
 let pass = 0,
   fail = 0;
@@ -209,7 +210,7 @@ const read = (rel: string) => fs.readFileSync(path.join(SRC, rel), "utf8");
     // ── §6 ŞEKİL: dört dal çağırıyor, dört okuyucu süzüyor ───────────────────
     console.log("\n=== 6) Şekil taraması (⚠️ davranış kanıtı DEĞİL) ===");
     const undoSrc = read("services/tambur-undo.service.ts");
-    const subSrc = read("services/subcontractor.service.ts");
+    const subSrc = fasonServisMetni();
     const stampCalls =
       (undoSrc.match(/revokePlanDeviationsTx\(/g) ?? []).length +
       (subSrc.match(/revokePlanDeviationsTx\(/g) ?? []).length;

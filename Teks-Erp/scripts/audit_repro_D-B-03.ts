@@ -35,6 +35,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import prisma from "../src/lib/prisma";
 import { withBarcodeRetry } from "../src/utils/barcode-retry";
+import { fasonServisMetni } from "./lib/fason-servis-kaynak";
 
 const STAMP = `AUDITREPRO-D-B-03-${randomUUID().slice(0, 6).toUpperCase()}`;
 let fail = 0;
@@ -73,7 +74,8 @@ async function main(): Promise<void> {
   // ── §2 ÇAĞRI YERİ TARAMASI: hangi withBarcodeRetry çağrıları clientToken YAZAN
   //     bir tx'i sarıyor ve predicate/dış-catch TAŞIMIYOR ──────────────────────
   console.log("");
-  const src = readFileSync(join(__dirname, "../src/services/subcontractor.service.ts"), "utf8");
+  // Fason servisi bölündü (2026-11-08): ailenin birleşik metni okunur.
+  const src = fasonServisMetni();
   const lines = src.split("\n");
   const wbrLine = lines.findIndex((l) => l.includes("const result = await withBarcodeRetry(") && lines[lines.indexOf(l) + 1]?.includes("prisma.$transaction"));
   const receiveIdx = lines.findIndex((l) => l.includes("clientToken: data.clientToken ?? null,"));

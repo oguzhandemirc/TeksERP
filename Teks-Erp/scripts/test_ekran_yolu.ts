@@ -66,7 +66,7 @@ const ISTISNA: ReadonlyArray<{ dosya: string; parca: string; neden: string }> = 
   { dosya: "constants/audit-tablo-etiketleri.ts", parca: "Çuval → Sevkiyat", neden: "audit modül adı (atama yönü), menü yolu değil" },
   { dosya: "services/helpers/targetable-property.helper.ts", parca: "Kat → Tambur, Gramaj → Kurşun", neden: "özellik → istasyon eşlemesi örneği" },
   { dosya: "services/import/adapters/station.adapter.ts", parca: "Hayır → KK1", neden: "içe aktarım sütun yardımı (değer → anlam)" },
-  { dosya: "services/subcontractor.service.ts", parca: "Partiler → Birleştir", neden: "karo içi gezinme; kökü `ekranYolu(\"terbiyeIsEmirleri\")`" },
+  { dosya: "services/subcontractor/receipt-cancel.ts", parca: "Partiler → Birleştir", neden: "karo içi gezinme; kökü `ekranYolu(\"terbiyeIsEmirleri\")`" },
   { dosya: "constants/permission-catalog.ts", parca: "Sistem → ", neden: "izin açıklaması (izin kataloğu ekranında kısa ekran adı); ayrı tur" },
   { dosya: "constants/permission-catalog.ts", parca: "Özellik Anahtarları → ", neden: "izin açıklaması; ayrı tur" },
   { dosya: "constants/permission-catalog.ts", parca: "Baskı & Cihazlar → ", neden: "izin açıklaması; ayrı tur" },

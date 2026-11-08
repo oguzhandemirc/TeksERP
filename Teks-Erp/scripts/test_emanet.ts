@@ -48,6 +48,7 @@ import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { ayarServisMetni } from "./lib/ayar-servis-kaynak";
+import { fasonServisUyeMetni } from "./lib/fason-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -102,9 +103,9 @@ function statik(): void {
     /EMANET_ENABLED: "emanet\.enabled"/.test(svc) && /export async function readEmanetEnabled\(/.test(svc) && /hasOwnProperty\.call\(input, "emanetEnabled"\)/.test(svc) &&
     /emanetEnabled: z\.boolean\(\)\.optional\(\)/.test(route));
   const ship = readFileSync(path.join(ROOT, "src/services/shipping.service.ts"), "utf8");
-  const sub = readFileSync(path.join(ROOT, "src/services/subcontractor.service.ts"), "utf8");
+
   const dispatchGovde = ship.slice(ship.indexOf("private async performDispatchTx("), ship.indexOf("private async performDispatchTx(") + 6000);
-  const directGovde = sub.slice(sub.indexOf("async executeDirectShip("), sub.indexOf("async executeDirectShip(") + 20000);
+  const directGovde = fasonServisUyeMetni("executeDirectShip").slice(0, 20000);
   check("§0e ⭐ E4c: malın çıktığı İKİ yol `assertOwnerMatchesTx` çağırır — `performDispatchTx` (üç sevk yolunun boğazı) ve `executeDirectShip`",
     /await assertOwnerMatchesTx\(tx, \{ rollIds: shipmentRollIds/.test(dispatchGovde) && /await assertOwnerMatchesTx\(tx, \{ rollIds: effectiveShipRollIds/.test(directGovde));
   const wbRoute = readFileSync(path.join(ROOT, "src/routes/warp-beam.routes.ts"), "utf8");

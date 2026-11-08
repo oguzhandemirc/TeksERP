@@ -50,7 +50,8 @@ const SRC = resolve(__dirname, "../src");
  * bir kazancı da var: geri sarmada sayaç artışı da geri sarılır, boşluk doğmaz.
  */
 const KNOWN_TX_INTERNAL: Record<string, number> = {
-  "services/subcontractor.service.ts": 2, // fason çıkış (tekil) + fason kabul (toplu)
+  "services/subcontractor/direct-ship.ts": 1, // fason çıkış (tekil) — subcontractor.service bölmesi 2026-11-08
+  "services/subcontractor/receive.ts": 1, // fason kabul (toplu)
   "services/workorder-batch-drop.service.ts": 1, // parti düşürme (100 satır)
   "services/helpers/roll-finalize.helper.ts": 1,
   "services/helpers/roll-disposition.helper.ts": 1,
@@ -69,7 +70,7 @@ const KNOWN_TX_INTERNAL: Record<string, number> = {
  * içinde mi?
  */
 const KNOWN_TX_INTERNAL_SINGULAR: Record<string, number> = {
-  "services/subcontractor.service.ts": 1, // fason çıkış: sevk başına tek çocuk
+  "services/subcontractor/direct-ship.ts": 1, // fason çıkış: sevk başına tek çocuk
 };
 
 /** Kilidi en uzun tutan üç yolun dosyası — burada tx-içi çağrı KALMAMALI. */
