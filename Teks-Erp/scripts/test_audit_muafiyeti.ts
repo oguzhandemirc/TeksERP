@@ -30,7 +30,7 @@ import { AUDIT_EXEMPT_MODELS, AUDIT_MUAF_SINIFLARI } from "./lib/audit-muafiyeti
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 import { walkTs } from "./lib/ts-tarama";
-import { tamburServisDosyasiMi } from "./lib/tambur-servis-kaynak";
+import { aileCephesi } from "./lib/servis-aile";
 
 const KOK = join(__dirname, "..");
 let pass = 0;
@@ -73,10 +73,28 @@ function main(): void {
     }
   }
 
-  // Tambur servisi bölündü (2026-11-08): aile (cephe + `services/tambur/`) eskiden TEK dosyaydı ve
-  // AuditService taşıyordu — aile üyelerinden biri taşıyorsa hepsi taşımış sayılır (kapsam bölme öncesiyle aynı).
-  const tamburAilesi = [...metin.keys()].filter((r) => tamburServisDosyasiMi(r));
-  if (tamburAilesi.some((r) => auditDosya.has(r))) for (const r of tamburAilesi) auditDosya.add(r);
+  // Servisler bölündü (2026-11-08; aile tanımı `lib/servis-aile.ts`): bölme öncesi tek dosyada audit'li eylemden
+  // çağrılan tx yardımcısı artık ayrı aile modülünde. Aile üyesi YALNIZ beyanlıysa ve onu import eden bir aile
+  // kardeşi AuditService taşıyorsa audit'li sayılır (eski "ailede biri taşıyorsa hepsi" kuralı daraltıldı).
+  // Sonda 2026-11-08: anahtar var olmayan dosyaya / audit'li `finalize.ts`e çevrilince §7a + §7 (41 > 40) ❌.
+  const AILE_AUDITSIZ_YARDIMCI: Record<string, string> = {
+    "src/services/tambur/shared.ts": "applyTamburCapabilitiesTx · closeOrphanRollErrors — finalize/kesim eylemlerinin tx İÇİ yardımcısı; audit'i çağıran eylem basar",
+  };
+  const muafModel = new Set(AUDIT_EXEMPT_MODELS.map((x) => x.model));
+  const aileYardimciIhlal: string[] = [];
+  for (const [rel, gerekce] of Object.entries(AILE_AUDITSIZ_YARDIMCI)) {
+    const s = metin.get(rel);
+    const cephe = aileCephesi(join(KOK, rel), join(KOK, "src"));
+    const modul = rel.replace(/\.ts$/, "").split("/").pop()!;
+    const cagiranAudit = cephe === null ? [] : [...metin].filter(([r, k]) => r !== rel && auditDosya.has(r)
+      && aileCephesi(join(KOK, r), join(KOK, "src")) === cephe && (k.includes(`/${modul}"`) || k.includes(`./${modul}"`)));
+    if (!s || cephe === null) aileYardimciIhlal.push(`${rel}: dosya yok ya da bölünmüş aile üyesi değil`);
+    else if (auditDosya.has(rel) || cudModelleri(s).filter((m) => !muafModel.has(m)).length === 0) aileYardimciIhlal.push(`${rel}: artık audit'siz yazıcı değil (ölü beyan)`);
+    else if (cagiranAudit.length === 0) aileYardimciIhlal.push(`${rel}: audit taşıyan aile kardeşi onu çağırmıyor (${gerekce})`);
+    else auditDosya.add(rel);
+  }
+  check("§7a ⭐ aile yardımcısı beyanı canlı ve ölçüldü (iki yönlü)", aileYardimciIhlal.length === 0,
+    aileYardimciIhlal.join(" · ") || `${Object.keys(AILE_AUDITSIZ_YARDIMCI).length} beyan`);
 
   const sinifi = (mdl: string): "SERVIS" | "UC_KATMANI" | "SESSIZ" => {
     if (yazan.get(mdl)!.some((f) => auditDosya.has(f))) return "SERVIS";

@@ -13,6 +13,7 @@
 // (akış ∧ KURSUN AUTO) — liste = kabul.
 //
 // Bölümler:
+//   §0 ⭐ Yorum sökücü sondası (TS sözdizimi; regex sökücü `// a/*b` satırından sonra kodu yutuyordu)
 //   §1 Zemin (helper okundu; akış ≥ 20, kalite ≥ 4 kullanım)
 //   §2 İki doğruluk tablosu + doğuş varsayılanı tablosu
 //   §3 ⭐ İki ikizin canlı DB eşdeğerliği (where ↔ yüklem aynı küme)
@@ -34,6 +35,8 @@
 //   S8b `listDistribution` → `{inspectionEnabled:true}`    → §12 kırmızı (2, Tambur listede)
 //   S9  migration'dan `'TAMBUR'` silinir                   → §7 kırmızı (1)
 //   S10 beyansız yeni `stepCanApplyQuality` çağrısı        → §11 kırmızı (1)
+// 2026-11-08 (bölme temizliği, taban 58/0): eski regex sökücü → §0 ❌ · `tambur/read.ts` `station: true` daraltılınca
+//   → §5 tam satır beyanı ölü + kalite okuması ❌ (2) · beyan anahtarı bozulunca → aynı iki ❌; geri alındı.
 // Faz A sondaları (S1–S5) aynı kalıpları akış ikizinde ölçmüştü; dersleri:
 //   • muaf DOSYA bazında değil SAYIM bazında (aynı dosyaya eklenen yeni tür
 //     kontrolü sessizce kapsanıyordu);
@@ -67,6 +70,7 @@ import { AppError } from "../src/utils/app-error";
 import { testActorId } from "./fixture-test-user";
 import { ENVANTER_SERVIS_REL, envanterServisMetni } from "./lib/envanter-servis-kaynak";
 import { TAMBUR_SERVIS_REL, tamburServisDosyasiMi, tamburServisMetni } from "./lib/tambur-servis-kaynak";
+import { yorumlariSokTs } from "./lib/yorum-sok";
 
 let pass = 0;
 let fail = 0;
@@ -75,9 +79,15 @@ function check(label: string, ok: boolean, extra = "") {
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
 
-/** Yorumları söker — bekçinin kendi açıklama satırları kalıpları METİN olarak taşır. */
+/**
+ * Yorumları söker — bekçinin kendi açıklama satırları kalıpları METİN olarak taşır. TS sözdizimiyle
+ * (`lib/yorum-sok.ts`): regex sökücü `// services/*.ts` satırındaki `/*`yi blok başı sanıp KODU yutuyordu (§0).
+ */
+const sokulmus = new Map<string, string>();
 function yorumlariSok(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  let s = sokulmus.get(src);
+  if (s === undefined) sokulmus.set(src, (s = yorumlariSokTs(src)));
+  return s;
 }
 
 const HELPER = "services/helpers/quality-station.helper";
@@ -171,6 +181,13 @@ async function main() {
   let cleanupItemId: string | null = null;
 
   try {
+    // ── §0 ⭐ Yorum sökücü sondası (saf) ────────────────────────────────────
+    // Regex sökücü satır yorumundaki `/*`den sonraki `*/`ye kadar KODU yutuyordu (ör. `inventory.service.ts` başlığı).
+    const sonda = yorumlariSok("// services/x/*.ts\nconst A = STEP_QUALITY_SELECT;\n/* b */ const B = 1; // c */\nconst u = 'http://x'; // d\n");
+    check("§0 ⭐ yorum sökücü: satır yorumundaki `/*` kodu yutmaz, dize içi `//` yorum değildir",
+      sonda.includes("const A = STEP_QUALITY_SELECT;") && sonda.includes("const B = 1;") && sonda.includes("'http://x'")
+        && !/services\/x|\bb\b \*\/|\/\/ [cd]/.test(sonda), JSON.stringify(sonda));
+
     // ── §1 Zemin ────────────────────────────────────────────────────────────
     const helperYol = "src/services/helpers/quality-station.helper.ts";
     const helperSrc = await fs.readFile(helperYol, "utf8");
@@ -370,8 +387,8 @@ async function main() {
     const KALITE_SELECT_TABANI: Record<string, number> = {
       "services/helpers/roll-defect.helper.ts": 2,
       "services/kursun-qc.service.ts": 3,
-      "services/tambur.service.ts": 1,
     };
+    // Tambur ailesi seçimi KULLANMAZ: tek seçim satırı ölü importtu (bölme öncesi de); kalite okuması tam satırdır (aşağıda).
     const selectIhlal: string[] = [];
     for (const [tablo, ad] of [[AKIS_SELECT_TABANI, "STEP_FLOW_SELECT"], [KALITE_SELECT_TABANI, "STEP_QUALITY_SELECT"]] as const) {
       for (const [dosya, beklenen] of Object.entries(tablo)) {
@@ -384,6 +401,20 @@ async function main() {
     }
     check("§5 ⭐ select kullanımı taban sayımın ALTINA düşmedi (akış + kalite)",
       selectIhlal.length === 0, selectIhlal.join(" · ") || "0 ihlal");
+    // Kalite yüklemini `include: { station: true }` (TAM satır → `inspectionEnabled` dahil) ile besleyen yüzeyler.
+    // İKİ YÖNLÜ: beyanlı yüzey artık yüklemi çağırmıyor, tam satırı okumuyor ya da seçime geçtiyse satır ÖLÜDÜR.
+    const KALITE_TAM_SATIR: Record<string, string> = {
+      [TAMBUR_SERVIS_REL]: "`tambur/read.ts` getStep · getStepByWorkOrder adımı `include: { station: true }` ile okur",
+    };
+    const tamSatirMetni = (ad: string): string | null => {
+      if (!(ad in KALITE_TAM_SATIR)) return null;
+      return yorumlariSok(ad === TAMBUR_SERVIS_REL ? tamburServisMetni() : (kaynaklar.get(ad) ?? ""));
+    };
+    const oluTamSatir = Object.keys(KALITE_TAM_SATIR).filter((ad) => {
+      const s = tamSatirMetni(ad);
+      return !s || !/stepCanApplyQuality\(|stationCanInspect\(/.test(s) || !/\bstation:\s*true\b/.test(s) || s.includes("STEP_QUALITY_SELECT");
+    });
+    check("§5 tam satır kalite beyanı canlı (iki yönlü)", oluTamSatir.length === 0, oluTamSatir.map((a) => `ölü: ${a}`).join(" · ") || `${Object.keys(KALITE_TAM_SATIR).length} beyan`);
     const akisOkumayan: string[] = [];
     const kaliteOkumayan: string[] = [];
     for (const [ad, ham] of kaynaklar) {
@@ -391,7 +422,8 @@ async function main() {
       // tambur servisi bölündü (2026-11-08): aile üyesi bölme öncesindeki gibi ailenin birleşik metniyle ölçülür
       const s = yorumlariSok(tamburServisDosyasiMi(ad) ? tamburServisMetni() : ham);
       if (s.includes("stepRunsStepFlow(") && !s.includes("STEP_FLOW_SELECT") && !/appliesQuality:\s*true/.test(s)) akisOkumayan.push(ad);
-      if (/stepCanApplyQuality\(|stationCanInspect\(/.test(s) && !s.includes("STEP_QUALITY_SELECT") && !/inspectionEnabled:\s*true/.test(s)) kaliteOkumayan.push(ad);
+      const tamSatir = (tamburServisDosyasiMi(ad) ? TAMBUR_SERVIS_REL : ad) in KALITE_TAM_SATIR && /\bstation:\s*true\b/.test(s);
+      if (/stepCanApplyQuality\(|stationCanInspect\(/.test(s) && !s.includes("STEP_QUALITY_SELECT") && !/inspectionEnabled:\s*true/.test(s) && !tamSatir) kaliteOkumayan.push(ad);
     }
     check("§5 akış yüklemini çağıran her dosya akış alanlarını okuyor", akisOkumayan.length === 0, akisOkumayan.join(", ") || "0 ihlal");
     check("§5 kalite yüklemini çağıran her dosya `inspectionEnabled` okuyor", kaliteOkumayan.length === 0, kaliteOkumayan.join(", ") || "0 ihlal");

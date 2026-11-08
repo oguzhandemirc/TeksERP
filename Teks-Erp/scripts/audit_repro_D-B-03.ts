@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   console.log("");
   info("saha (2026-08-25 kopyası): subcontractor_receipts 143 satır, clientToken dolu 2 →");
   info("token gönderen APK sahada AZINLIKTA; yol yeni APK yayıldıkça sıcaklaşır.");
-  info("küme-eşitliği guard'ı KISMİ makbuzda `continue` eder (subcontractor.service.ts:2412-2416)");
+  info("küme-eşitliği guard'ı KISMİ makbuzda `continue` eder (`subcontractor/receive.ts` receive)");
   info("→ kısmi kabulde ikinci kapı da yok: yeni token'la tekrar = İKİNCİ KISMİ MAKBUZ.");
 
   console.log(`\n=== SONUÇ: ${fail} kırmızı ===`);

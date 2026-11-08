@@ -261,7 +261,7 @@ async function main(): Promise<void> {
           // demekti, fabrika gününde değil.
           // ⚠️ KAPSAM DAR: yalnız `setHours`. `setDate`/`setMonth` BİLEREK dışarıda —
           // onlar gün SINIRI kurmaz, SÜRE kaydırır ("termin + 30 gün",
-          // order.service.ts:1438 / workorder.service.ts:250) ve o işlem saat
+          // `order/create.ts` create / `workorder/shared.ts` resolvePlanDates) ve o işlem saat
           // diliminden bağımsız olarak doğrudur; üstelik yerel saati koruduğu için
           // DST geçişlerinde `+ n*86400000`den DAHA doğrudur. İlk yazımda ikisi de
           // taranıyordu ve bu iki meşru satırı yanlış pozitif olarak işaretledi.

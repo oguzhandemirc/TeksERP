@@ -8,13 +8,14 @@
 // Gözlenen: çalıştırınca doldur — log audit/repro/D-A-01.log
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_D-A-01.ts
 // =============================================================================
-// MEKANİZMA (inventory.service.ts:3685 okuma → :3916 claim):
+// MEKANİZMA (denetim anı `inventory.service.ts` @`5b7994663` satırları; bugün `inventory/manual-properties.ts`
+// applyManualProperties) (:3685 okuma → :3916 claim):
 //   • `roll` TX DIŞINDA okunur (:3685); `rollWhole = initialQty.equals(currentQty)`
 //     guard'ı o bayat okumadan hesaplanır (:3782).
 //   • tx içi claim `where: { id, shipmentId: null, sackId: cur.sackId }` (:3931) —
 //     `status` da `currentQty`/`initialQty` da PİN'LENMEZ.
 //   • Yazım MUTLAK: `currentQty = m; initialQty = m` (:3866-3868) — decrement değil.
-//   • `cutWarehouseRoll` (tambur.service.ts:2242) parent'ın İKİSİNİ DE decrement
+//   • `cutWarehouseRoll` (`tambur/warehouse-cut.ts`) parent'ın İKİSİNİ DE decrement
 //     eder → kesimden sonra da `initialQty == currentQty` olur, yani `rollWhole`
 //     guard'ı TX İÇİNE TAŞINSA BİLE bu yarışı yakalayamaz. Tek çözüm pin'lemektir.
 // =============================================================================

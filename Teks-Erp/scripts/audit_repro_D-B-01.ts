@@ -129,7 +129,7 @@ async function main(): Promise<void> {
   // ── §3 REFERANS: aynı 4. durumu DOĞRU uygulayan yol (tambur manuel top) ──
   console.log("\n── §3 Referans: `tambur-manual.service` 409 ENTRY_CANCELLED (kod okuması)\n");
   info("tambur-manual.service.ts:1039-1060 ve :1382-1400 → iptal edilmiş kayıtta 409;");
-  info("subcontractor.service.ts:2356-2362 → RECEIPT_CANCELLED. Desen repoda MEVCUT.");
+  info("subcontractor/receive.ts receive (token replay) → RECEIPT_CANCELLED. Desen repoda MEVCUT.");
 
   console.log(`\n=== SONUÇ: ${fail} kırmızı ===`);
   process.exitCode = fail > 0 ? 1 : 0;

@@ -453,7 +453,7 @@ WHERE rm."exitedAt" IS NOT NULL
       //                     ilgisi yokmuş gibi görünen bir satırla kırmızıya
       //                     dönecekti.
       //   CANCEL:<sevkNo> → fason SEVK İPTALİ; top hiç çıkmadan STOCK'a geri döner
-      //                     (subcontractor.service.ts:1953). qtyOut yazmak, hiç
+      //                     (`subcontractor/dispatch-cancel.ts` cancel). qtyOut yazmak, hiç
       //                     yapılmamış bir işin çıktısını UYDURMAK olurdu — kasıtlı
       //                     olarak boş bırakılır. (2026-08-03 eklendi; marker'ın tek
       //                     yazarı orasıdır ve mevcut nota " | " ile EKLENİR, bu
