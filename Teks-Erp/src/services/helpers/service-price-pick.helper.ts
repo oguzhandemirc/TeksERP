@@ -9,7 +9,7 @@
 // =============================================================================
 import { Prisma, PriceKind, type Currency, type ServiceQtyUnit } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { itemPriceValidAt } from "./item-price-validity.helper";
+import { isItemPriceValidAt, itemPriceValidAt } from "./item-price-validity.helper";
 import type { KursunGramCandidate } from "./kursun-gram-price.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -72,6 +72,32 @@ export async function loadServiceTierPrices(params: {
     out.byKey.set(k, slot);
   }
   return out;
+}
+
+/**
+ * Çok anlı "kartın kademe tablosu var mı" — M an için TEK sorgu; her an kendi penceresinden (bellek ikizi
+ * `isItemPriceValidAt`). Kademe adayı olmayan işlerin (levent sarımı) `itemHasTiers` girdisi.
+ */
+export async function loadServiceTierItemsAtMany(params: { itemIds: string[]; currency: Currency; customerId: string | null; ats: Date[]; db?: Db }): Promise<(itemId: string, at: Date) => boolean> {
+  const ids = [...new Set(params.itemIds)].filter(Boolean);
+  const ats = [...new Map(params.ats.map((a) => [a.getTime(), a])).values()];
+  if (ids.length === 0 || ats.length === 0) return () => false;
+  const rows = await (params.db ?? prisma).itemPrice.findMany({
+    where: {
+      AND: [
+        { OR: ats.map((a) => itemPriceValidAt(a)) },
+        {
+          serviceItemId: { in: ids },
+          propertyValueId: { not: null },
+          kind: PriceKind.SALE,
+          currency: params.currency,
+          ...(params.customerId ? { OR: [{ customerId: params.customerId }, { customerId: null }] } : { customerId: null }),
+        },
+      ],
+    },
+    select: { serviceItemId: true, createdAt: true, validFrom: true, revokedAt: true },
+  });
+  return (itemId, at) => rows.some((r) => r.serviceItemId === itemId && isItemPriceValidAt(r, at));
 }
 
 /** Hizmet başına güncel + bekleyen kademe satırı sayısı (tablonun sol listesi; fiyat SEÇMEZ). */

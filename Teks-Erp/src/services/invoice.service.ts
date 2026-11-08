@@ -37,6 +37,7 @@ import {
   type ServiceBillingLinkInput,
 } from "./helpers/service-billing.helper";
 import { resolveShipmentServiceLinksTx, syncDraftServiceLinksTx } from "./helpers/service-preview-gate.helper";
+import { assertNoConsignmentRevokedLinesTx } from "./helpers/service-winding-confirm.helper";
 import { lineSubjectData, lockInvoiceServiceItemsTx, normalizeInvoiceLines, type InvoiceLineSubjectInput } from "./helpers/invoice-line-subject.helper";
 import { resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -1087,6 +1088,8 @@ export class InvoiceService {
         );
       }
 
+      // F4: emanet çıkış iptaliyle bağı düşen sarım satırı taslakta kaldıysa onay 409 (claim sonrası, aynı tx).
+      await assertNoConsignmentRevokedLinesTx(tx, id);
       // Claim SONRASI içerik tx İÇİNDE taze yüklenir (check-then-act değil).
       const inv = await tx.invoice.findUniqueOrThrow({
         where: { id },

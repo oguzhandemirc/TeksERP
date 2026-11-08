@@ -48,7 +48,7 @@ import type { ApiResponse } from "../types/api.types";
 import {
   assertPriceSubjectUsable, assertTierWritable, normalizePrice, priceSubjectId, removeItemPrice, resolvePriceSubject, writeItemPriceVersionTx, type ItemPriceKey,
 } from "./helpers/item-price-write.helper";
-import { ACTIVE_ITEM_PRICE, itemPriceNow, itemPriceValidAt } from "./helpers/item-price-validity.helper";
+import { ACTIVE_ITEM_PRICE, isItemPriceValidAt, itemPriceNow, itemPriceValidAt } from "./helpers/item-price-validity.helper";
 import { logItemPriceVersionWrite, requestedPriceUnit } from "./helpers/item-price-audit.helper";
 
 
@@ -239,6 +239,37 @@ export async function resolveItemPricesFor(params: {
     if (picked) out.set(itemId, picked);
   }
   return out;
+}
+
+/**
+ * ÇOK ANLI TOPLU çözüm — N kalem × M an için TEK sorgu (fiyat sürümü her anın KENDİ penceresinden):
+ * satırlar anların herhangi birinde geçerli olanlardır; seçim bellekte `isItemPriceValidAt` (Prisma
+ * `itemPriceValidAt`in boğaz-ikizi) + `pickPrice` ile, `resolveItemPricesFor`la aynı sıra. Bulunamayan → null.
+ */
+export async function resolveItemPricesAtMany(params: {
+  itemIds: string[];
+  kind: PriceKind;
+  currency: Currency;
+  customerId?: string | null;
+  ats: Date[];
+  db?: Db;
+}): Promise<(itemId: string, at: Date) => ResolvedItemPrice | null> {
+  const ids = [...new Set(params.itemIds)].filter(Boolean);
+  const ats = [...new Map(params.ats.map((a) => [a.getTime(), a])).values()];
+  if (ids.length === 0 || ats.length === 0) return () => null;
+  const customerId = params.customerId ?? null;
+  const rows = await (params.db ?? prisma).itemPrice.findMany({
+    where: {
+      AND: [
+        { OR: ats.map((a) => itemPriceValidAt(a)) },
+        { OR: [{ itemId: { in: ids } }, { serviceItemId: { in: ids } }], propertyValueId: null, kind: params.kind, currency: params.currency },
+        customerId ? { OR: [{ customerId }, { customerId: null }] } : { customerId: null },
+      ],
+    },
+    select: { id: true, itemId: true, serviceItemId: true, customerId: true, price: true, priceUnit: true, createdAt: true, validFrom: true, revokedAt: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+  return (itemId, at) => pickPrice(rows.filter((r) => priceSubjectId(r) === itemId && isItemPriceValidAt(r, at)), customerId);
 }
 
 export class ItemPriceService {

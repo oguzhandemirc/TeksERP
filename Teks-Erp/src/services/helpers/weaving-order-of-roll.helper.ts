@@ -35,23 +35,45 @@ export async function countRollsOfWeavingOrder(db: Db, weavingOrderId: string): 
   return db.roll.count({ where: rollsOfWeavingOrderWhere(weavingOrderId) });
 }
 
+const ROLL_WEAVING_SELECT = {
+  id: true,
+  weavingOrderId: true,
+  doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true, machineId: true } } } },
+  parentReceipt: { select: { cancelledAt: true, weavingOrderId: true } },
+} as const;
+
+type RollWeavingRow = Prisma.RollGetPayload<{ select: typeof ROLL_WEAVING_SELECT }>;
+
+/** Üç dalın TEK uygulaması (tekil ve toplu okuyucu aynı sırayı okur): indirme → makbuz → doff'suz kolon. */
+function pickWeavingOrder(roll: RollWeavingRow): (WeavingOrderOfRoll & { machineId: string | null }) | null {
+  const run = roll.doffEvent?.revokedAt ? null : roll.doffEvent?.machineRun ?? null;
+  if (run?.weavingOrderId) return { weavingOrderId: run.weavingOrderId, via: "DOFF", machineId: run.machineId };
+  const receiptWo = roll.parentReceipt?.cancelledAt ? null : roll.parentReceipt?.weavingOrderId ?? null;
+  if (receiptWo) return { weavingOrderId: receiptWo, via: "RECEIPT", machineId: null };
+  if (roll.weavingOrderId) return { weavingOrderId: roll.weavingOrderId, via: "ORDER", machineId: null };
+  return null;
+}
+
 /** Top hiçbir dokuma işine bağlı değilse `null` (uydurulmaz). */
 export async function weavingOrderOfRoll(db: Db, rollId: string): Promise<WeavingOrderOfRoll | null> {
-  const roll = await db.roll.findUnique({
-    where: { id: rollId },
-    select: {
-      weavingOrderId: true,
-      doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } },
-      parentReceipt: { select: { cancelledAt: true, weavingOrderId: true } },
-    },
-  });
-  if (!roll) return null;
-  const doffWo = roll.doffEvent?.revokedAt ? null : roll.doffEvent?.machineRun?.weavingOrderId ?? null;
-  if (doffWo) return { weavingOrderId: doffWo, via: "DOFF" };
-  const receiptWo = roll.parentReceipt?.cancelledAt ? null : roll.parentReceipt?.weavingOrderId ?? null;
-  if (receiptWo) return { weavingOrderId: receiptWo, via: "RECEIPT" };
-  if (roll.weavingOrderId) return { weavingOrderId: roll.weavingOrderId, via: "ORDER" };
-  return null;
+  const roll = await db.roll.findUnique({ where: { id: rollId }, select: ROLL_WEAVING_SELECT });
+  const hit = roll ? pickWeavingOrder(roll) : null;
+  return hit ? { weavingOrderId: hit.weavingOrderId, via: hit.via } : null;
+}
+
+/**
+ * F4 dokuma hizmet işi — toplu okuyucu (N+1 yok): top → dokuma işi + (indirme yolunda) tezgah. Bağsız top haritada YOK.
+ * Zincir `pickWeavingOrder`dadır (tekil okuyucuyla aynı).
+ */
+export async function weavingOrdersOfRolls(db: Db, rollIds: string[]): Promise<Map<string, WeavingOrderOfRoll & { machineId: string | null }>> {
+  const out = new Map<string, WeavingOrderOfRoll & { machineId: string | null }>();
+  if (rollIds.length === 0) return out;
+  const rows = await db.roll.findMany({ where: { id: { in: rollIds } }, select: ROLL_WEAVING_SELECT });
+  for (const r of rows) {
+    const hit = pickWeavingOrder(r);
+    if (hit) out.set(r.id, hit);
+  }
+  return out;
 }
 
 /** Z3: fasonda dokunan işlerin KABUL edilen metresi (makbuz zinciri, iptal edilmemiş makbuz, ölü olmayan top) — iş başına Σ ilk metre. */

@@ -312,6 +312,15 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/service-item/processes.ts",
   // Fason dalga-2 tel sözleşmesi (F4 taslak kırılımı `ServiceDraftWorkRow.serviceItemId`) — tip beyanı, çözücü değil.
   "services/service-billing/types.ts",
+  // F4 dokuma işi: tezgah istasyon türü → kart (`loadProcessMap` aynı eşleme) — çözücüye WEAVING kaynağı olarak girer.
+  "services/helpers/service-weaving-work.helper.ts",
+  // F4 taslak kırılımı: çözücünün kartlı işlerini `ServiceDraftWorkRow`a çevirir — çözücü değil, projeksiyon.
+  "services/helpers/service-draft-works.helper.ts",
+  // F4 levent sarımı: öznesi top değil levent, çözücüye girmez; kart süreç eşlemesinden, fiyat SIRASI `pickServicePrice`
+  // (kademe/gram yok) — ikinci sıra değil. Bağ kapısı kartı yalnız hata detayında taşır.
+  "services/helpers/service-winding-work.helper.ts",
+  "services/helpers/service-winding-link.helper.ts",
+  "services/helpers/service-winding-confirm.helper.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.

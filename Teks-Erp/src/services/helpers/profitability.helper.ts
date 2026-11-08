@@ -54,7 +54,9 @@ export interface ProfitabilityRow {
   docNo: string;
   linkId: string;
   customerId: string | null;
-  rollId: string;
+  /** Öznenin topu; F4 levent sarım satırında null (`warpBeamId` dolu). */
+  rollId: string | null;
+  warpBeamId: string | null;
   serviceItemId: string;
   workOrderStepId: string | null;
   machineId: string | null;
@@ -190,7 +192,7 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
           : r.revenueTry.minus(c.consumableTry).minus(c.subcontractTry).minus(mc.machineTry);
         (kind === "DRAFT" ? draftRows : rows).push({
           month, kind, invoiceId: inv.id, docNo: inv.docNo, linkId: l.id, customerId: l.ownerCustomerId ?? inv.cariCustomerId,
-          rollId: l.rollId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId, machineId: l.machineId,
+          rollId: l.rollId, warpBeamId: l.warpBeamId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId, machineId: l.machineId,
           meterBasis: l.meterBasis, meters: sign === 1 ? l.billedMeters : l.billedMeters.neg(),
           revenueTry: neg(r.revenueTry)!, consumableTry: neg(c.consumableTry), subcontractTry: neg(c.subcontractTry),
           subcontractEstimated: c.subcontractEstimated, machineAttributed: mc.machineAttributed, machineHours: neg(mc.machineHours),

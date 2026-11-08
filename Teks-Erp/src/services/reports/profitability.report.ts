@@ -14,11 +14,13 @@ export async function loadNames(results: ProfitabilityResult[]): Promise<ProfitN
   const items = await prisma.serviceItem.findMany({ where: { id: { in: ids((r) => r.serviceItemId) } }, select: { id: true, name: true } });
   const machines = await prisma.machine.findMany({ where: { id: { in: ids((r) => r.machineId) } }, select: { id: true, name: true } });
   const rolls = await prisma.roll.findMany({ where: { id: { in: ids((r) => r.rollId) } }, select: { id: true, barcode: true } });
+  // F4: levent sarım satırının öznesi levent — aynı sözlükte levent no ile (kimlikler çakışmaz, ikisi de UUID).
+  const beams = await prisma.warpBeam.findMany({ where: { id: { in: ids((r) => r.warpBeamId) } }, select: { id: true, beamNo: true } });
   return {
     customers: new Map(customers.map((c) => [c.id, c.name])),
     serviceItems: new Map(items.map((i) => [i.id, i.name])),
     machines: new Map(machines.map((m) => [m.id, m.name])),
-    rolls: new Map(rolls.map((r) => [r.id, r.barcode ?? "barkodsuz top"])),
+    rolls: new Map([...rolls.map((r): [string, string] => [r.id, r.barcode ?? "barkodsuz top"]), ...beams.map((b): [string, string] => [b.id, `Levent ${b.beamNo}`])]),
   };
 }
 

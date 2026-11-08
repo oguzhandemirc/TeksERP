@@ -5,13 +5,15 @@
 // `maliyet-bridge.helper` içinden, finans modülü açıkken DİNAMİK import edilir (maliyet.md köprü kuralı).
 // Yalnız okur; hiçbir şey hesaplamaz — pay/tutar aritmetiği `profitability.helper`dadır.
 // =============================================================================
-import { Currency, InvoiceStatus, InvoiceType, Prisma, ServiceBillingSubject, ServiceMeterBasis } from "@prisma/client";
+import { Currency, InvoiceStatus, InvoiceType, Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { resolveExchangeRateTx } from "./finance.helper";
 
 export interface RevenueLinkRow {
   id: string;
-  rollId: string;
+  /** ROLL öznesi; F4 levent sarım bağında null (öznesi `warpBeamId`). */
+  rollId: string | null;
+  warpBeamId: string | null;
   workOrderStepId: string | null;
   serviceItemId: string;
   billedMeters: Prisma.Decimal;
@@ -91,11 +93,12 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
               billingLinks: { select: { serviceItemId: true, revokedAt: true, invoice: { select: { confirmedAt: true } } } },
             },
           },
+          warpBeamId: true,
           roll: { select: { ownerCustomerId: true } },
+          // F4: levent sarım bağı da kârlılık satırıdır (sahip = leventin emanet sahibi).
+          warpBeam: { select: { ownerCustomerId: true } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        // F4 şema öncüsü: levent öznesi (WARP_BEAM) kârlılık eksenine F4'te bağlanır; bugün yalnız top bağı vardır.
-        where: { subjectKind: ServiceBillingSubject.ROLL },
       },
     },
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
@@ -108,11 +111,12 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
     return {
       id: r.id, docNo: r.docNo, status: r.status, exchangeRate: r.exchangeRate, issueDate: r.issueDate, confirmedAt: r.confirmedAt, cancelledAt: r.cancelledAt,
       cariCustomerId: r.cari.customerId, lineTotalByItem,
-      links: links.flatMap((l) => (l.rollId === null || l.roll === null ? [] : [{
-        id: l.id, rollId: l.rollId, workOrderStepId: l.workOrderStepId, serviceItemId: l.serviceItemId, billedMeters: l.billedMeters, billedQty: l.billedQty,
-        meterBasis: l.meterBasis, serviceAt: l.serviceAt, machineId: l.reading?.machineId ?? null, readingAt: l.reading?.createdAt ?? null, ownerCustomerId: l.roll.ownerCustomerId,
+      links: links.map((l) => ({
+        id: l.id, rollId: l.rollId, warpBeamId: l.warpBeamId, workOrderStepId: l.workOrderStepId, serviceItemId: l.serviceItemId, billedMeters: l.billedMeters, billedQty: l.billedQty,
+        meterBasis: l.meterBasis, serviceAt: l.serviceAt, machineId: l.reading?.machineId ?? null, readingAt: l.reading?.createdAt ?? null,
+        ownerCustomerId: l.roll?.ownerCustomerId ?? l.warpBeam?.ownerCustomerId ?? null,
         readingStepId: l.reading?.workOrderStepId ?? null, ...readingShare(l.serviceItemId, l.reading?.billingLinks ?? []),
-      }])),
+      })),
     };
   });
 }

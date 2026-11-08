@@ -163,7 +163,7 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
     neden:
       "EMANET ÇIKIŞ belgesi emanet modülünün akışıdır (finansa bağlı değil) → rejim kapısı KONULAMAZ. `serviceBillingLink` izi tek " +
       "daldan gelir (F5, 2026-11-08): iptal, levent sarım bağlarını okur (DRAFT dışı faturalı bağ 409) ve DRAFT bağları " +
-      "`helpers/consignment-beam.helper` (`revokeConsignmentBeamLinksTx`) ile yalnız DAMGALAR (revokedAt). Yeni bağ, fatura ya da " +
+      "`helpers/service-winding-link.helper` (`revokeWindingLinksForConsignmentTx`, F4 ile TEK yol) ile yalnız DAMGALAR (revokedAt). Yeni bağ, fatura ya da " +
       "cari satırı yazmaz; ön muhasebe kapalı kurulumda tablo boştur, okuma 0 satır, damga 0 satır (`tambur.routes` emsali).",
   },
   {

@@ -20,6 +20,7 @@ import { loadServiceBillingSettings } from "./system-setting.service";
 import { resolveInvoiceTaxDefaults, taxLineFields } from "./helpers/invoice-tax-defaults.helper";
 import { invoiceService } from "./invoice.service";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import type { ServiceDraftExtras } from "./service-billing/types";
 
 export const SERVICE_PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -29,7 +30,7 @@ export interface ServicePeriodInput {
   period: string;
 }
 
-export interface ServicePeriodPreview {
+export interface ServicePeriodPreview extends ServiceDraftExtras {
   cariId: string;
   cariName: string;
   period: string;
@@ -135,6 +136,8 @@ export async function previewServicePeriodDraft(input: ServicePeriodInput): Prom
     totalMeters: meters.toFixed(3), lines, subtotal: subtotal.toFixed(2),
     periodClosed: closedAt ? closedAt.toISOString().slice(0, 10) : null,
     warnings: [...new Set(warnings)],
+    // F4: kırılım EK alandır; boşsa alan yok (eski yanıtla bayt-aynı).
+    ...(draft.works.length + (draft.excludedWorks?.length ?? 0) > 0 ? { serviceWorks: [...draft.works, ...(draft.excludedWorks ?? [])] } : {}),
   };
 }
 
@@ -185,7 +188,8 @@ export async function createServicePeriodDraft(
     }
     const shipmentNos = [...draft.shipments, ...draft.directShipments].map((s) => s.shipmentNo);
     const shown = shipmentNos.slice(0, 12).join(", ") + (shipmentNos.length > 12 ? ` +${shipmentNos.length - 12}` : "");
-    const notes = `${input.period} dönem sonu hizmet faturası — ${shipmentNos.length} sevkiyat (${shown}).${draft.warnings.length > 0 ? ` ⚠ ${draft.warnings.join(" ")}` : ""}`;
+    const beamCount = draft.links.filter((l) => l.warpBeamId).length;
+    const notes = `${input.period} dönem sonu hizmet faturası — ${shipmentNos.length} sevkiyat (${shown})${beamCount > 0 ? ` + ${beamCount} levent sarımı` : ""}.${draft.warnings.length > 0 ? ` ⚠ ${draft.warnings.join(" ")}` : ""}`;
     return invoiceService.createDraft(
       {
         type: InvoiceType.SALES,

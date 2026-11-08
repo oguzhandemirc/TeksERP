@@ -4,7 +4,7 @@
 // Faturalanabilir AN = AKTİF (ters kaydı olmayan) `SHIP_TO_OWNER` olayı (F5 emanet çıkışı). "Aktif" sorusunun TEK
 // cevabı burası: olayın `reversal`ı (SHIP_TO_OWNER_CANCEL) yok. `serviceAt` = belgenin `dispatchedAt`ı, müşteri =
 // belgenin `ownerCustomerId`si; sarım metresi F4'ün kendi okuyucusundadır (burada yalnız çıkış anındaki kalan).
-// Belge iptali aynı tx'te F4 bağını damgalar (`consignment-dispatch/cancel.ts`, sebep `CONSIGNMENT_CANCEL`).
+// Belge iptali aynı tx'te F4 bağını damgalar: TEK yol `service-winding-link.helper` (`revokeWindingLinksForConsignmentTx`).
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import { sequentialTx } from "./tx-sequential-relations.helper";
@@ -77,17 +77,4 @@ export async function listActiveShipToOwnerBeams(
     });
   }
   return out;
-}
-
-/** Belge iptalinde F4 levent bağlarını damgalar (silinmez); audit çağıranın eyleminde (`revokedBillingLinkIds`). */
-export async function revokeConsignmentBeamLinksTx(
-  tx: Pick<Prisma.TransactionClient, "serviceBillingLink">,
-  input: { linkIds: string[]; userId: string; at: Date },
-): Promise<number> {
-  if (input.linkIds.length === 0) return 0;
-  const r = await tx.serviceBillingLink.updateMany({
-    where: { id: { in: input.linkIds }, revokedAt: null },
-    data: { revokedAt: input.at, revokedById: input.userId, revokeReason: CONSIGNMENT_CANCEL_REVOKE_REASON },
-  });
-  return r.count;
 }

@@ -60,6 +60,8 @@ export const HIZMET_AYAR_PAKETI: readonly PaketSatiri[] = [
   { anahtar: "finance.serviceBilling.brodeUnit", alan: "financeServiceBillingBrodeUnit", hedef: "METER", dilim: "EKS-E2" },
   // Fason F3: adım işi (boya/apre/çözgü) — Gülkesim bugün bu süreçleri yapmaz; açık beyan KAPALI (süreç eşlemesiyle panelden açılır).
   { anahtar: "finance.serviceBilling.stepWorks", alan: "financeServiceBillingStepWorks", hedef: false, dilim: "F3" },
+  // Fason F4: dokuma/levent sarımı — Gülkesim dokuma/devere yapmaz; açık beyan KAPALI.
+  { anahtar: "finance.serviceBilling.weavingWorks", alan: "financeServiceBillingWeavingWorks", hedef: false, dilim: "F4" },
   { anahtar: "finance.serviceBilling.priceDate", alan: "financeServiceBillingPriceDate", hedef: "SERVICE_DAY", dilim: "H7" },
   // K14 (kullanıcı kararı 2026-11-02): gram fiyatı işin yapıldığı gündeki sürümden (açık beyan; varsayılanla aynı).
   { anahtar: "finance.serviceBilling.kursunGramPriceBasis", alan: "financeKursunGramPriceBasis", hedef: "SERVICE_DATE", dilim: "K14" },

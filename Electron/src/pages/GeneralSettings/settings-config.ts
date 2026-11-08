@@ -2438,6 +2438,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci"],
         desc: "Açıkken emanet topun geçtiği adımın süreç türü bir hizmet kartına eşlenmişse o iş de faturalanır: iç adım tamamlanınca çıkış metresiyle, dış (fason) adım kabul edilince kabul metresiyle. Aynı adım zaten kurşun ya da özellik (tambur, brode) işi olarak faturalanıyorsa ikinci satır açılmaz; simüle ölçümlü adım faturaya girmez. Dikkat: açıldığı gün, henüz faturalanmamış toplardaki geçmiş adım işleri o topların ilk sevkinde toplu gelir. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
       },
+      {
+        // Fason F4 (2026-11-08): `defaultOn` backend `readFinanceServiceBillingWeavingWorks` kayıt-yok değeriyle birebir.
+        key: "financeServiceBillingWeavingWorks",
+        group: "Hizmet faturası",
+        title: "Dokuma ve levent sarımını da faturala",
+        summary: "Müşteri ipliğiyle dokunan top ve sarılıp sahibine gönderilen levent hizmet satırı olarak girer.",
+        defaultOn: false,
+        audience: ["Muhasebeci"],
+        desc: "Açıkken müşterinin (emanet) ipliğiyle dokunan top sevk edilince dokuma hizmeti doğuş metresiyle faturalanır; sarılan levent emanet çıkış belgesiyle sahibine gönderilince sarım işi yalnız dönem sonu hizmet faturasında sarım metresiyle görünür. Hizmet kartı tezgahın ya da devere makinesinin istasyonundaki süreç türünden (Süreç türleri ekranındaki eşleme) gelir. Çıkış belgesi iptal edilirse sarım işi faturadan düşer. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
+      },
     ],
     enumFlags: [
       {

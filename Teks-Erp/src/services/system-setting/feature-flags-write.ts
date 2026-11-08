@@ -426,6 +426,12 @@ export async function setFeatureFlags(
       }
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_STEP_WORKS, input.financeServiceBillingStepWorks, "Süreç türü eşlemeli adım işlerini (boya, apre…) hizmet satırı olarak ekle", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingWeavingWorks")) {
+      if (typeof input.financeServiceBillingWeavingWorks !== "boolean") {
+        throw AppError.badRequest("financeServiceBillingWeavingWorks boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_WEAVING_WORKS, input.financeServiceBillingWeavingWorks, "Dokuma ve levent sarımı işlerini hizmet satırı olarak ekle", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {
       const v = input.financeServiceBillingTrigger;
       if (typeof v !== "string" || !SERVICE_BILLING_TRIGGERS.includes(v as ServiceBillingTrigger)) {

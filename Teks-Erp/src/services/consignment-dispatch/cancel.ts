@@ -13,7 +13,7 @@ import { AuditService } from "../audit.service";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "../helpers/warp-beam-event.helper";
 import { applyYarnMovementTx } from "../yarn.service";
-import { revokeConsignmentBeamLinksTx } from "../helpers/consignment-beam.helper";
+import { listWindingLinksForBeams, revokeWindingLinksForConsignmentTx } from "../helpers/service-winding-link.helper";
 import { previewDb } from "./lines";
 import { loadConsignmentDispatchDto, type ConsignmentDispatchDetail } from "./read";
 import { CONSIGNMENT_DISPATCH_TABLE } from "./create";
@@ -79,12 +79,8 @@ async function inspectCancel(db: Db, id: string, opts: { lock: boolean }): Promi
       affected.push({ kind: "YARN", refId: it.lotId ?? it.id, label: `${it.yarnItem?.code ?? "?"} · lot ${it.lot?.lotNo ?? "?"} · ${it.warehouse?.name ?? "?"}`, qty: (it.qtyKg ?? new Prisma.Decimal(0)).toFixed(3), unit: "KG" });
     }
   }
-  const links = beamIds.length === 0 ? [] : await sequentialTx(db).serviceBillingLink.findMany({
-    where: { subjectKind: "WARP_BEAM", warpBeamId: { in: beamIds }, revokedAt: null },
-    select: { id: true, warpBeamId: true, invoiceId: true, invoice: { select: { docNo: true, status: true } } },
-    orderBy: [{ warpBeamId: "asc" }, { id: "asc" }],
-  });
-  const billingLinks = links.map((l) => ({ linkId: l.id, warpBeamId: l.warpBeamId!, invoiceId: l.invoiceId, invoiceNo: l.invoice.docNo, invoiceStatus: l.invoice.status }));
+  // F4 bağ okuyucusu TEK (`service-winding-link.helper`): önizleme ve iptal aynı listeyi görür.
+  const billingLinks = await listWindingLinksForBeams(db, beamIds);
   const invoiced = billingLinks.find((l) => l.invoiceStatus !== "DRAFT");
   if (!obstacle && invoiced) {
     obstacle = { code: "CONSIGNMENT_BEAM_INVOICED", message: `Levent sarım işi ${invoiced.invoiceNo ?? invoiced.invoiceId} faturasında (${invoiced.invoiceStatus}) — önce faturayı iptal edin.`, details: { linkId: invoiced.linkId, invoiceId: invoiced.invoiceId, warpBeamId: invoiced.warpBeamId } };
@@ -121,7 +117,8 @@ export async function cancelConsignmentDispatch(id: string, input: ConsignmentDi
     if (claim.count === 0) {
       throw AppError.conflict(`${r.dispatch.dispatchNo} önizlemeden sonra değişmiş — önizlemeyi yenileyin.`, { code: "CONSIGNMENT_DISPATCH_CHANGED", dispatchId: id });
     }
-    await revokeConsignmentBeamLinksTx(tx, { linkIds: r.billingLinks.map((l) => l.linkId), userId, at: now });
+    // F4 TEK damga yolu: bağların faturası FOR UPDATE yeniden okunur (onay claim'iyle serileşir), DRAFT dışı → 409.
+    await revokeWindingLinksForConsignmentTx(tx, { warpBeamIds: r.beamItems.map((b) => b.warpBeamId!), userId, at: now });
     const beamEvents: Array<{ eventId: string; beamId: string; beamNo: string; lengthM: string; itemId: string }> = [];
     for (const it of r.beamItems) {
       const ev = await applyWarpBeamEventTx(tx, {
