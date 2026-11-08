@@ -527,6 +527,27 @@
       ]
     },
     {
+      "name": "emanet-bakiye",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:stok:oku"
+      ]
+    },
+    {
+      "name": "fason-acik",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:uretim:oku"
+      ]
+    },
+    {
+      "name": "hizmet-geliri",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:fatura:oku"
+      ]
+    },
+    {
       "name": "stok-karnesi",
       "kind": "ANLIK",
       "permissions": [
@@ -740,6 +761,15 @@
     ],
     "karlilik-ozet": [
       "bulut:maliyet:oku"
+    ],
+    "emanet-bakiye": [
+      "bulut:stok:oku"
+    ],
+    "fason-acik": [
+      "bulut:uretim:oku"
+    ],
+    "hizmet-geliri": [
+      "bulut:fatura:oku"
     ],
     "stok-karnesi": [
       "bulut:stok:oku"

@@ -357,6 +357,69 @@ export interface ProfitSummarySnapshot {
   readonly hesaplanamayanMusteri: number;
 }
 
+// ---------------------------------------------------------------- fason · emanet (genel fason PB1)
+
+/**
+ * `ozet.stok.emanet` (isteğe bağlı): müşteri malı (emanet) — fabrikanın emanet modülü açıkken; o zaman `ozet.stok`un ham/
+ * yarı mamul/bitmiş rakamları BİZİM stoktur ve emanet bu ayrı satırdadır. Eski fabrika ya da kapalı modül alanı GÖNDERMEZ.
+ */
+export interface StockConsignedLine {
+  readonly adet: number;
+  readonly miktar: number;
+}
+
+/** Emanet bakiyesi: top (adet · metre) + iplik kg + levent. `null` = o modül fabrikada kapalı (ölçülmedi; 0 değil). */
+export interface ConsignedBalance {
+  readonly topAdet: number;
+  readonly topMiktar: number;
+  readonly iplikKg: string | null;
+  readonly leventAdet: number | null;
+}
+
+/** `GET /anlik/emanet-bakiye` (izin `bulut:stok:oku`): müşteri başına içerideki emanet; sıra fabrikada. Eski fabrika 404. */
+export interface ConsignedBalanceSnapshot {
+  readonly toplam: ConsignedBalance;
+  readonly cariler: readonly (ConsignedBalance & { readonly cariKartId: string; readonly etiket: string })[];
+}
+
+/** `fason-acik` firma satırı (sıra fabrikada: geciken azalan, açık azalan, ad). */
+export interface SubcontractOpenFirm {
+  readonly fasonFirmaId: string;
+  readonly etiket: string;
+  readonly acikSevk: number;
+  readonly geciken: number;
+  readonly kalanMiktar: string;
+  readonly iplikKg: string;
+  readonly leventAdet: number;
+}
+
+/**
+ * `GET /anlik/fason-acik` (izin `bulut:uretim:oku`): fasondaki açık işler — fabrikanın Fason Kokpiti özeti. Gecikme
+ * fabrika gününden ve fabrikada hesaplanır (saatlik). `kirpildi` = firma şeridi ilk N sevkten. Eski fabrika 404.
+ */
+export interface SubcontractOpenSnapshot {
+  readonly acikSevk: number;
+  readonly geciken: number;
+  readonly yaklasan: number;
+  readonly kalanMiktar: string;
+  readonly kirpildi: boolean;
+  readonly firmalar: readonly SubcontractOpenFirm[];
+}
+
+/** `hizmet-geliri` dönem bloğu: onaylı satış faturasının hizmet satırları, hizmet kartı (süreç) başına; TL fabrikada. */
+export interface ServiceRevenuePeriod {
+  readonly toplamTl: string;
+  readonly kalemler: readonly { readonly hizmetId: string; readonly etiket: string; readonly miktar: string; readonly birim: string; readonly tutarTl: string }[];
+}
+
+/** `GET /anlik/hizmet-geliri` (izin `bulut:fatura:oku`): fabrikanın dört standart dönemi. Eski fabrika 404. */
+export interface ServiceRevenueSnapshot {
+  readonly bugun: ServiceRevenuePeriod;
+  readonly buAy: ServiceRevenuePeriod;
+  readonly gecenAy: ServiceRevenuePeriod;
+  readonly son30Gun: ServiceRevenuePeriod;
+}
+
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;

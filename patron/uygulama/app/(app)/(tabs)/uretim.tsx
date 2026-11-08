@@ -1,5 +1,5 @@
 // Üretim — "akış nerede tıkanıyor": dönem segmenti (fabrikanın 4 dönemi; fason sayıları aynı anlıktan seçilir,
-// yeniden çekilmez) · 3 KPI · akış şeridi + istasyon dağılımı (`uretim-akisi`) · "Makineler neden durdu?" · terbiye iş emirleri.
+// yeniden çekilmez) · 3 KPI · fasondaki işler (`fason-acik`, PB1) · akış şeridi + istasyon dağılımı (`uretim-akisi`) · "Makineler neden durdu?" · terbiye iş emirleri.
 // `ozet.uretim`ten yalnız "bugün tamamlanan" okunur; kolon/istasyon `uretim-akisi`nden (aynı sayılar iki kez basılmaz).
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import { FlowStrip, StationBars } from "../../../src/ui/pano/production";
 import { obj, period, pct, qty, str } from "../../../src/ui/pano/read";
 import { RecordStatusBadge } from "../../../src/ui/pano/RecordStatusBadge";
 import { MachineStopsCard } from "../../../src/ui/pano/MachineStopsCard";
+import { SubcontractOpenSection } from "../../../src/ui/fason/FasonCards";
 import { RemoteList, useRecordPage } from "../../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../../src/ui/pano/SnapshotGate";
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
@@ -89,6 +90,8 @@ export default function Production() {
           {!today.data && !fason.data ? <SnapshotGate remote={today} domain="uretim">{() => null}</SnapshotGate> : null}
         </>
       ) : null}
+
+      {read ? <SubcontractOpenSection /> : null}
 
       <SectionHeader title="Üretim akışı" domain="uretim" testID="bolum-akis" />
       <SnapshotGate remote={flow} domain="uretim" variant="list" rows={2} empty="Fabrikadan akış verisi henüz gelmedi" testID="uretim-akisi">

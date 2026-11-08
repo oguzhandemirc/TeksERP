@@ -23,6 +23,10 @@ import { publicFactoryTimezone } from "../services/helpers/factory-timezone-stat
 import { TesisVerisiSchema } from "./wire/esitleme";
 import { EXPENSE_SNAPSHOT, EXPENSE_SNAPSHOT_SCHEMA, buildExpenseSnapshotData } from "./snapshot-expense";
 import { PROFIT_SNAPSHOT, PROFIT_SNAPSHOT_SCHEMA, buildProfitSnapshotData } from "./snapshot-profitability";
+import {
+  CONSIGNED_SNAPSHOT, CONSIGNED_SNAPSHOT_SCHEMA, SERVICE_REVENUE_SNAPSHOT, SERVICE_REVENUE_SNAPSHOT_SCHEMA, SUBCONTRACT_OPEN_SNAPSHOT,
+  SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA, buildConsignedSnapshotData, buildServiceRevenueSnapshotData, buildSubcontractOpenSnapshotData,
+} from "./snapshot-fason";
 
 export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
@@ -43,7 +47,11 @@ const SubcontractWire = z.strictObject({ acikMiktar: Num, acikKalem: Num, fireYu
 
 /** Tel şemaları — anlık başına KATI; tanımadığı anahtar varsa kurucu FIRLATIR (sözleşme dışı çıktı gitmez). */
 export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
-  "ozet.stok": z.strictObject({ hamMiktar: Num, yariMamulMiktar: Num, bitmisMiktar: Num, oluMiktar: Num, oluStokGun: Num, enCokUrun: z.array(Label) }),
+  "ozet.stok": z.strictObject({
+    hamMiktar: Num, yariMamulMiktar: Num, bitmisMiktar: Num, oluMiktar: Num, oluStokGun: Num, enCokUrun: z.array(Label),
+    // PB1 (F1 aynası): emanet açıkken yukarısı BİZİM stok; müşteri malı bu ayrı satırda (kapalıyken alan yok → bayt-aynı).
+    emanet: z.strictObject({ adet: Num, miktar: Num }).optional(),
+  }),
   "ozet.siparis": z.strictObject({ acikKalem: Num, acikMiktar: Num, karsilanmayanMiktar: Num, karsilanmaYuzde: Num, gecikenKalem: Num, gecikenMiktar: Num, enCokCari: z.array(Label) }),
   "ozet.uretim": z.strictObject({
     bugunTamamlananToplam: Num,
@@ -61,6 +69,9 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   }),
   [EXPENSE_SNAPSHOT]: EXPENSE_SNAPSHOT_SCHEMA,
   [PROFIT_SNAPSHOT]: PROFIT_SNAPSHOT_SCHEMA,
+  [CONSIGNED_SNAPSHOT]: CONSIGNED_SNAPSHOT_SCHEMA,
+  [SUBCONTRACT_OPEN_SNAPSHOT]: SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA,
+  [SERVICE_REVENUE_SNAPSHOT]: SERVICE_REVENUE_SNAPSHOT_SCHEMA,
   "stok-karnesi": z.strictObject({
     ozet: z.strictObject({
       bitmisMiktar: Num, bitmisAdet: Num, hamMiktar: Num, hamAdet: Num, yariMamulMiktar: Num, yariMamulAdet: Num,
@@ -111,6 +122,7 @@ async function buildOverview(now: Date, productionOn: boolean): Promise<BuiltSna
       hamMiktar: o.stock.rawQty, yariMamulMiktar: o.stock.semiQty, bitmisMiktar: o.stock.finishedQty,
       oluMiktar: o.stock.deadQty, oluStokGun: o.stock.deadStockDays,
       enCokUrun: o.stock.topItems.map((t) => ({ etiket: t.label, miktar: t.qty })),
+      ...(o.stock.consigned ? { emanet: { adet: o.stock.consigned.count, miktar: o.stock.consigned.qty } } : {}),
     }),
     seal("ozet.siparis", {
       acikKalem: o.orders.openLineCount, acikMiktar: o.orders.openQty, karsilanmayanMiktar: o.orders.uncoveredQty,
@@ -268,6 +280,18 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
         if (data) out.push(seal(PROFIT_SNAPSHOT, data));
         break;
       }
+      case CONSIGNED_SNAPSHOT: {
+        // Emanet modülü kapalıyken üretilmez (müşteri adı sızmaz; İçerideki İşler kapısının aynası).
+        const data = await buildConsignedSnapshotData();
+        if (data) out.push(seal(CONSIGNED_SNAPSHOT, data));
+        break;
+      }
+      case SUBCONTRACT_OPEN_SNAPSHOT:
+        out.push(seal(SUBCONTRACT_OPEN_SNAPSHOT, await buildSubcontractOpenSnapshotData(ctx.now)));
+        break;
+      case SERVICE_REVENUE_SNAPSHOT:
+        out.push(seal(SERVICE_REVENUE_SNAPSHOT, await buildServiceRevenueSnapshotData(ctx.now)));
+        break;
       case "stok-karnesi":
         out.push(await buildStock());
         break;
