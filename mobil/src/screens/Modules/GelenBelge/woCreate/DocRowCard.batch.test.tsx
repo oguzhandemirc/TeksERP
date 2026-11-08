@@ -27,9 +27,9 @@ const detail = {
 };
 const catalog = { propertyId: 'p1', options: [{ id: 'g1', name: '25 gr', isDefault: true }, { id: 'g2', name: '30 gr', isDefault: false }] };
 
-function Harness({ batchSource, form = baseForm }: { batchSource: 'SERIES' | 'DOCUMENT' | null; form?: RowForm }) {
+function Harness({ batchSource, form = baseForm, cands }: { batchSource: 'SERIES' | 'DOCUMENT' | null; form?: RowForm; cands?: number }) {
   const [f, setF] = useState<RowForm>(form);
-  const row: DocRow = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, detail: detail as never, form: f, gramajTouched: false, result: null };
+  const row: DocRow = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, detail: (cands === undefined ? detail : { ...detail, batchNoCandidates: detail.batchNoCandidates.slice(0, cands) }) as never, form: f, gramajTouched: false, result: null };
   const wo = {
     setDetail: jest.fn(), recent: [], mode: 'WITH_WORK_ORDER', saving: false, removeRow: jest.fn(), showGramaj: true, catalog, batchSource,
     updateForm: (_id: string, patch: Partial<RowForm>) => setF((x) => ({ ...x, ...patch })),
@@ -92,6 +92,10 @@ describe('DocRowCard — müşteri parti no ayrı, elle yazılabilir alan', () =
     const ui = renderWithPaper(<Harness batchSource="DOCUMENT" />);
     expect(ui.queryByTestId('belge-satir-bizim-parti-GB-1')).toBeNull();
     expect(ui.getByText('Bizim parti no seçin (2 aday)')).toBeTruthy();
+  });
+  it('belgeden kipinde tek/sıfır adayda "otomatik" yazmaz (numara kâğıttan gelir)', () => {
+    expect(renderWithPaper(<Harness batchSource="DOCUMENT" cands={1} />).getByText('Bizim parti no: belgeden')).toBeTruthy();
+    expect(renderWithPaper(<Harness batchSource="DOCUMENT" cands={0} />).getByText('Bizim parti no: belgede bulunamadı')).toBeTruthy();
   });
 });
 

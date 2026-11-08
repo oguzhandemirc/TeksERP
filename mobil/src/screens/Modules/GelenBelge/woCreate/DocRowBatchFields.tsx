@@ -34,7 +34,7 @@ export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; 
       {fromDoc ? (
         <View style={styles.pick}>
           <SelectButton
-            label={candidates.length > 1 ? `Bizim parti no seçin (${candidates.length} aday)` : 'Bizim parti no: otomatik'}
+            label={docBatchLabel(candidates.length)}
             caption="Bizim parti"
             value={f.ourBatchNo}
             onPress={onPick}
@@ -49,6 +49,12 @@ export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; 
       )}
     </View>
   );
+}
+
+/** Belgeden kipinde numara kâğıttan gelir; tek adayda "otomatik" demek seri sayaç sanılırdı. */
+function docBatchLabel(n: number): string {
+  if (n > 1) return `Bizim parti no seçin (${n} aday)`;
+  return n === 1 ? 'Bizim parti no: belgeden' : 'Bizim parti no: belgede bulunamadı';
 }
 
 const styles = StyleSheet.create({
