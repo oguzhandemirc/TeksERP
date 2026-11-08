@@ -7,7 +7,7 @@
 // Gözlenen: (çalıştırınca doldur — log audit/repro/KYY-2-08.log)
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_KYY-2-08.ts
 //
-// Mekanizma: `shipping.service.ts:690-692`
+// Mekanizma: `shipping/sack-content.ts` moveRollToSack
 //     await touchWarehouseSackTx(tx, fromSackId);   // kilit 1 = KAYNAK
 //     await touchWarehouseSackTx(tx, data.sackId);  // kilit 2 = HEDEF
 //   Sıra kanonik DEĞİL (id ASC değil), isteğin from/to'sundan doğar. A→B ile B→A

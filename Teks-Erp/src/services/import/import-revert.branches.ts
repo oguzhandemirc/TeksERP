@@ -57,7 +57,7 @@ export const delegateOf = (client: unknown, model: string): Delegate =>
 // Sipariş dalı MEVCUT iptal yolunu kullanır (atomik claim + WO/sevkiyat guard'ları).
 // `orderService` örneği `routes/order.routes.ts`te yaşıyor; servis katmanının
 // route'tan import etmesi emsalsiz bir ters bağımlılık olurdu. İptal yolu
-// `this.config`ten YALNIZ `tableName` okuyor (ölçüldü: order.service.ts:2899).
+// `this.config`ten YALNIZ `tableName` okuyor (ölçüldü: `order/lifecycle.ts` softDelete).
 const orderCancelService = new OrderService({ modelName: "order", tableName: "ORDER" });
 
 /**

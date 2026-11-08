@@ -14,7 +14,7 @@
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_S-4-01.ts
 //
 // MEKANİZMA (kod kanıtı):
-//   • `subcontractor.service.ts:2679` `receive` tx'i `touchWorkOrderTx` ile WO
+//   • `subcontractor/receive.ts` `receive` tx'i `touchWorkOrderTx` ile WO
 //     satırını KİLİTLER ve uzun sürer (barkod rezervasyonu, born roll create,
 //     movement, plan-sapma, refakat kartı taraması).
 //   • `workorder-link.service.ts:527` `changeTargetColor` **tx AÇMAZ ve WO

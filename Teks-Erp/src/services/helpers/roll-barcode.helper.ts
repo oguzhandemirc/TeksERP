@@ -96,8 +96,8 @@ export async function generateRollBarcodeTx(
  *
  * **Boşluk (gap) bilinçlidir:** tx sonradan geri sararsa rezerve edilen numaralar
  * kullanılmaz. Barkod bir KİMLİKTİR, sayaç değil — boşluk zararsızdır (helper'ın
- * kendi sözleşmesi bunu zaten söylüyordu; `tambur.service.ts:1990` ve `:2578`
- * 2026-07'den beri aynı şeyi yapıyor). Kapasite 9.999/gün/tip, boşluk payı bol.
+ * kendi sözleşmesi bunu zaten söylüyordu; `tambur/warehouse-cut.ts` ve `tambur/open-fabric-cut.ts`
+ * kesim yolları 2026-07'den beri aynı şeyi yapıyor). Kapasite 9.999/gün/tip, boşluk payı bol.
  */
 export async function reserveRollBarcodesTx(
   db: Prisma.TransactionClient,

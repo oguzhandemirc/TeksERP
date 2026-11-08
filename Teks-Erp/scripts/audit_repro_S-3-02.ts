@@ -20,7 +20,7 @@
 // Gözlenen: <çalıştırınca doldur — log audit/repro/S-3-02.log>
 //
 // KANIT NOKTALARI (kod):
-//   • tambur.service.ts:931          → finalize tx'in İLK ifadesi touchWorkOrderTx
+//   • tambur/finalize.ts finalize    → finalize tx'in İLK ifadesi touchWorkOrderTx
 //   • roll-step.helper.ts:188-191    → helper docstring: "Çağıran tx başında
 //                                       touchWorkOrderTx ile WO'yu write-kilitlemeli"
 //   • tambur-undo.service.ts:1221    → applySingleRestore tx: kilit YOK

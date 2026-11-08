@@ -28,7 +28,7 @@
 // NEGATİF ÖZELLİK YERLEŞİK: [2]/[3] "raporlanan ≠ canlı" olduğunu da doğrular —
 // geri-ekleme kaldırılırsa kırmızı verir (ön koşul kontrolleriyle birlikte).
 //
-// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `shipping.service.ts:4386` içindeki
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `shipping/detail.ts` getShipmentById içindeki
 //    `...freshReturnRows.map(toReturnedRow)` satırı çıkarıldı (brüt → net) →
 //    ÜÇ kontrol KIRMIZI. Geri konunca 33/33 yeşil.
 //    ⚠️ Sonda YALNIZ BU bekçiyi kırdı: liste ve rapor brütü AYRI kod yollarından

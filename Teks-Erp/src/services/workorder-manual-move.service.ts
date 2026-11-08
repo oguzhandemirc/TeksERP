@@ -836,7 +836,7 @@ export class WorkOrderManualMoveService {
         // 3b) BACKFLUSH SKIPPED: ileri-atlamada bypass edilen ara adımları — YALNIZ artık
         //     erişilemezlerse (atlanan set DIŞINDA o adıma muhtaç aktif üretim topu kalmadıysa)
         //     — SKIPPED damgala. recompute SKIPPED'e dokunmaz → jump'lanan toplar orada
-        //     pendingRolls sayılmaz, WO tamamlanabilir. Emsal: subcontractor.service.ts:4701.
+        //     pendingRolls sayılmaz, WO tamamlanabilir. Emsal: `subcontractor/direct-ship.ts` executeDirectShip.
         const skippedStepIds: string[] = [];
         const minSourceSeq = Math.min(
           ...ctx.selected.map(

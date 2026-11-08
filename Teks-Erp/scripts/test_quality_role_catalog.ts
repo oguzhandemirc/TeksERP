@@ -13,7 +13,7 @@
 // `1.KALITE`/`A1`/`FIRE` satırlarının HİÇBİRİ yok, ağaç `8ce92cb3`):
 //   `POST /api/tambur/:id/cut` `{lengthMeters, status:"WAREHOUSE"}` (operatör
 //   kodu YOK) → **201**. Servis `statusToQuality["WAREHOUSE"]` = `"1.KALITE"`
-//   literaline düşüyor (`tambur.service.ts:3093`) ve LENIENT çözüyor
+//   literaline düşüyor (o gün `tambur.service.ts` cutOpenFabric; bugün `tambur/open-fabric-cut.ts`) ve LENIENT çözüyor
 //   (`quality-grade.helper.ts:16` — katalogda yoksa `null` döner, fırlatmaz).
 //   Sonuç: çocuk top `WAREHOUSE` doğdu, `qualityGrade="1.KALITE"` STRING'i
 //   yazıldı, `qualityGradeId` **NULL** kaldı = katalogda karşılığı olmayan
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
       check("§3a ⭐ '1. kalite' tanımsızken kesim 400 verir (①: fail-closed)",
         kes.status === 400,
         kes.status === 201
-          ? "201 döndü — `statusToQuality` literali LENIENT çözülüyor (tambur.service.ts:3093 → quality-grade.helper.ts:16). ① rol çözümü + strict resolve ile kapanır."
+          ? "201 döndü — `statusToQuality` literali LENIENT çözülüyor (tambur/open-fabric-cut.ts cutOpenFabric → quality-grade.helper.ts:16). ① rol çözümü + strict resolve ile kapanır."
           : `status=${kes.status} ${mesaj(kes)}`);
       check("§3b ⭐ hata mesajı EKSİĞİ SÖYLÜYOR (rol/kalite tanımı yok), genel 'bulunamadı' değil",
         // ⚠️ `\brol` KELİME SINIRIYLA: çıplak `rol` deseni "kont**rol**" içinde de
