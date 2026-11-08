@@ -472,10 +472,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // Genel fason dalga-2 şema öncüsü (2026-11-08): uçlar F5'te, panel ekranı P3'te, tablet T1'de doğar —
-  // ekran doğduğu gün bu iki satır ölü muaf olur ve bekçi kırmızı verir; silinmesi P3'ün işidir.
-  { code: "consignment:read", reason: "Emanet çıkış listesi P3'te (panel) doğar; uç F5'te." },
-  { code: "consignment:write", reason: "Emanet çıkış oluştur/iptal P3 (panel) + T1 (tablet `mobile:depo`) ile doğar; uç F5'te." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 
