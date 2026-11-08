@@ -100,6 +100,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Operations/GelenBelgeler/BulkDeleteNotesDialog.tsx::previewBulkDeleteNotes", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // Detaydaki "Taslağı iptal et" onayı açılınca satır/parti sayısını aynı önizlemeden okur (salt okuma POST; uyarısız zarf).
   { yer: "Electron/src/pages/Operations/GelenBelgeler/DeleteDraftNoteAction.tsx::previewBulkDeleteNotes", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // Fason P3 emanet çıkış taslağı: kalem/müşteri değişince önizleme sorar (salt okuma POST; engel nedenleri `data` içinde, zarf uyarısız).
+  { yer: "Electron/src/pages/Operations/ConsignmentDispatches/useConsignmentDraft.ts::previewConsignmentDispatch", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // Veri paneli: taslak değişince gecikmeli `dogrula` (yazmaz, uyarısız zarf) + süzgeç değer listesi (sorgu zarfı `warnings` basabilir) — R2-VERI.
   { yer: "Electron/src/pages/Reports/_v2/custom/data/useDataPanel.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },
