@@ -69,6 +69,13 @@ const IPLIK_MODELLERI = new Set(["yarnStock", "yarnMovement"]);
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/consigned-work.routes.ts",
+    neden:
+      "EMANET EKSTRESİ (genel fason F2, 2026-11-08). Kendi modül kapısını taşır (`requireEmanetEnabled`); iplik dokunuşu SALT OKUMA " +
+      "(lot bölümü `readYarnLotLedger`). Route kapısı KONULAMAZ: top bölümü iplik modülü olmadan meşrudur. Kapı SERVİSTE bölüm başına: " +
+      "`readIplikSurfaceEnabled` kapalıysa `yarnLots: null` + `omitted MODULE_DISABLED` (veri gövdeye girmez; ölçen `test_emanet_ekstre` §5h).",
+  },
+  {
     dosya: "routes/gelen-belge.routes.ts",
     neden:
       "GELEN BELGE (Gülkesim D4, 2026-10-29). Kendi modül kapısını taşır (`requireGelenBelgeEnabled`, emanete bağlı); " +

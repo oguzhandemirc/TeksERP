@@ -95,6 +95,12 @@ export async function readIplikEnabled(tx?: Pick<typeof prisma, "systemSetting">
   return applyModuleCeiling(SETTING_KEYS.IPLIK_ENABLED, await readIplikEnabledRaw(tx));
 }
 
+/** İplik YÜZEYİ açık mı: zincir (ticaret → iplik, `MODULE_DEPENDENCIES`) TEK yerde — iplik verisini gösteren okuma
+ *  yüzeyleri bunu sorar (`requireIplikEnabled` aynı iki seviyeyi hangi modülün kapalı olduğunu söylemek için ayrı ölçer). */
+export async function readIplikSurfaceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return (await readTicaretEnabled(tx)) && (await readIplikEnabled(tx));
+}
+
 /**
  * Çoklu depo modülü açık mı? Default FALSE.
  *
