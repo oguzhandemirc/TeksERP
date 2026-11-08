@@ -43,9 +43,11 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
         subtitle={`Belgede “${unmatched.text}” yazıyor`}
         footer={
           <>
-            <Button onPress={c.close} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
-            <Button mode="outlined" onPress={fromList} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
-            <Button mode="contained" onPress={c.decline} contentStyle={TOUCH} testID="musteri-ekle-hayir">
+            <View style={sheet.footerLeft}>
+              <Button mode="outlined" onPress={c.close} textColor={colors.danger} style={styles.cancel} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
+            </View>
+            <Button mode="contained-tonal" onPress={fromList} buttonColor={colors.surfaceSunken} textColor={colors.text} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
+            <Button mode="contained" onPress={c.decline} buttonColor={colors.successDark} contentStyle={TOUCH} testID="musteri-ekle-hayir">
               {`Hiçbiri — “${unmatched.text}” adıyla yeni kaydet`}
             </Button>
           </>
@@ -71,9 +73,11 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
         title="Yeni müşteri kaydedilsin mi?"
         footer={
           <>
-            <Button onPress={c.close} disabled={c.busy} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
-            <Button mode="outlined" onPress={fromList} disabled={c.busy} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
-            <Button mode="contained" onPress={() => void c.save()} loading={c.busy} disabled={c.busy || !c.canCreate || !c.name.trim()}
+            <View style={sheet.footerLeft}>
+              <Button mode="outlined" onPress={c.close} disabled={c.busy} textColor={colors.danger} style={styles.cancel} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
+            </View>
+            <Button mode="contained-tonal" onPress={fromList} disabled={c.busy} buttonColor={colors.surfaceSunken} textColor={colors.text} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
+            <Button mode="contained" onPress={() => void c.save()} buttonColor={colors.successDark} loading={c.busy} disabled={c.busy || !c.canCreate || !c.name.trim()}
               contentStyle={TOUCH} testID="musteri-ekle-kaydet">
               Kaydet ve seç
             </Button>
@@ -81,7 +85,9 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
         }
       >
         <Text style={styles.body} testID="musteri-ekle-govde">
-          {`Belgede müşteri adı “${unmatched.text}” okundu. Bu adla kayıtlı müşteri yok. Yeni müşteri olarak kaydedilsin mi?`}
+          {'Belgede müşteri adı “'}
+          <Text style={styles.bold}>{unmatched.text}</Text>
+          {'” okundu. Bu adla kayıtlı müşteri yok. Yeni müşteri olarak kaydedilsin mi?'}
         </Text>
         <Text style={sheet.label}>Müşteri adı</Text>
         <ModalTextInput mode="outlined" value={c.name} onChangeText={c.setName} autoCapitalize="characters" maxLength={100}
@@ -97,6 +103,9 @@ const styles = StyleSheet.create({
   trigger: { alignSelf: 'flex-start', marginTop: spacing.xs },
   list: { gap: spacing.sm },
   body: { fontSize: typography.size.base, color: colors.text, marginBottom: spacing.sm },
+  bold: { fontWeight: typography.weight.bold },
+  // Vazgeç en solda, kırmızı çerçeveli: geri çekilme; gri = listeden seç; yeşil = kaydet.
+  cancel: { borderColor: colors.danger },
   option: { minHeight: 56, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   name: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   code: { fontSize: typography.size.sm, color: colors.textSecondary },
