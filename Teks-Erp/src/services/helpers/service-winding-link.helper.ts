@@ -10,7 +10,6 @@ import { InvoiceStatus, Prisma, ServiceBillingSubject } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { activeShipToOwnerWhere } from "./service-winding-work.helper";
-import { reconcileServiceLinksWithLines } from "./service-billing.helper";
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | typeof prisma;
@@ -78,26 +77,4 @@ export async function revokeWindingLinksForConsignmentTx(tx: Tx, p: { warpBeamId
     data: { revokedAt: new Date(), revokedById: p.userId, revokeReason: CONSIGNMENT_CANCEL_REVOKE_REASON },
   });
   return res.count;
-}
-
-/**
- * Onay kapısı: emanet çıkış iptaliyle bağı düşen hizmet kartının satırı taslakta kaldıysa (Σ satır ≠ Σ aktif bağ,
- * ortak `reconcileServiceLinksWithLines` payıyla) 409 `SERVICE_LINES_MISMATCH` — iptal edilen çıkışın sarımı
- * müşteriye kesilmesin. Yalnız damgalı kartlar ölçülür.
- */
-export async function assertNoConsignmentRevokedLinesTx(tx: Tx, invoiceId: string): Promise<void> {
-  const revoked = await tx.serviceBillingLink.findMany({ where: { invoiceId, revokeReason: CONSIGNMENT_CANCEL_REVOKE_REASON }, select: { serviceItemId: true }, distinct: ["serviceItemId"] });
-  if (revoked.length === 0) return;
-  const itemIds = revoked.map((r) => r.serviceItemId);
-  const lines = await tx.invoiceLine.findMany({ where: { invoiceId, serviceItemId: { in: itemIds } }, select: { serviceItemId: true, qty: true, description: true } });
-  const active = await tx.serviceBillingLink.findMany({ where: { invoiceId, serviceItemId: { in: itemIds }, revokedAt: null }, select: { serviceItemId: true, billedMeters: true, billedQty: true } });
-  // Kartın bütün bağları düştüyse satırı hiç kalmamalı (reconcile bağsız kartı ölçmez).
-  const orphan = lines.find((l) => !active.some((a) => a.serviceItemId === l.serviceItemId) && new Prisma.Decimal(l.qty).gt(0));
-  if (orphan) {
-    throw AppError.conflict(
-      `"${orphan.description ?? "Sarım"}" satırının işi emanet çıkış iptaliyle faturadan düştü ama satır taslakta duruyor — satırı çıkarın.`,
-      { code: "SERVICE_LINES_MISMATCH", serviceItemId: orphan.serviceItemId },
-    );
-  }
-  reconcileServiceLinksWithLines(lines, active);
 }

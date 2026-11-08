@@ -195,7 +195,6 @@ async function main(): Promise<void> {
   const base = { invoiceId: invId, serviceItemId: SARIM, billedMeters: 1, meterBasis: ServiceMeterBasis.WOUND, unitPrice: 1, currency: Currency.TRY, serviceAt: new Date() };
   const legacy = await prisma.serviceBillingLink.create({ data: { invoiceId: invId, rollId: rPlain, serviceItemId: DOKUMA, billedMeters: 1, meterBasis: ServiceMeterBasis.DECLARED, unitPrice: 1, currency: Currency.TRY, serviceAt: new Date() }, select: { id: true, subjectKind: true } });
   check("subjectKind verilmeyen (eski yazıcı) satır ROLL doğar", legacy.subjectKind === ServiceBillingSubject.ROLL);
-  await prisma.serviceBillingLink.delete({ where: { id: legacy.id } });
 
   // ── §2 ───────────────────────────────────────────────────────────────────
   section("§2 DB seddi — özne CHECK + aktif bağ unique");
@@ -205,10 +204,9 @@ async function main(): Promise<void> {
   check("WARP_BEAM öznesi + rollId → CHECK reddi", ck2.status === 500 && /service_billing_links_subject_ck/.test(ck2.msg), ck2.msg);
   const ck3 = await errOf(() => prisma.serviceBillingLink.create({ data: { ...base, subjectKind: "WARP_BEAM", rollId: null, warpBeamId: null } }));
   check("WARP_BEAM öznesi + iki kolon boş → CHECK reddi", ck3.status === 500 && /service_billing_links_subject_ck/.test(ck3.msg), ck3.msg);
-  const ok1 = await prisma.serviceBillingLink.create({ data: { ...base, subjectKind: "WARP_BEAM", warpBeamId: bReady.id }, select: { id: true } });
+  await prisma.serviceBillingLink.create({ data: { ...base, subjectKind: "WARP_BEAM", warpBeamId: bReady.id }, select: { id: true } }); // taslak silinince Cascade
   const uq = await errOf(() => prisma.serviceBillingLink.create({ data: { ...base, subjectKind: "WARP_BEAM", warpBeamId: bReady.id } }));
   check("aynı levent × kart ikinci AKTİF bağ → unique reddi (P2002)", uq.code === "P2002", JSON.stringify(uq));
-  await prisma.serviceBillingLink.delete({ where: { id: ok1.id } });
   await invoiceService.deleteDraft(invId, actor);
 
   // ── §3 ───────────────────────────────────────────────────────────────────

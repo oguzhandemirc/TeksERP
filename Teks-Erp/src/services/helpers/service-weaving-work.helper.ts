@@ -87,10 +87,10 @@ export async function listWeavingServiceWorks(rollIds: string[], opts: { db?: Db
 
 /** F4 uyarı metinleri — bekçi aynı cümleyi arar. */
 export function weavingUnmappedWarning(count: number): string {
-  return `${count} dokuma işinin süreç türü hizmet kartına eşlenmemiş (ya da tezgahsız topta belirsiz) — faturaya alınmadı.`;
+  return `${count} dokunan topun tezgah süreç türü hizmet kartına eşlenmemiş (ya da tezgahsız topta belirsiz) — dokuma hizmeti faturaya alınmadı.`;
 }
 export function weavingZeroMeterWarning(count: number): string {
-  return `${count} dokuma işinin doğuş metresi 0 — faturaya alınmadı, topu kontrol edin.`;
+  return `${count} dokunan topun doğuş metresi 0 — dokuma hizmeti faturaya alınmadı, topu kontrol edin.`;
 }
 
 /** Çözücü girdisi (adımsız, WOVEN); aynı top × kart başka kaynaktan iş verdiyse (bağ anahtarı `keyOf`) dokuma işi yazılmaz. */

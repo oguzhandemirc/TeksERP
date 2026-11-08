@@ -2446,7 +2446,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Müşteri ipliğiyle dokunan top ve sarılıp sahibine gönderilen levent hizmet satırı olarak girer.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Açıkken müşterinin (emanet) ipliğiyle dokunan top sevk edilince dokuma işi doğuş metresiyle faturalanır; sarılan levent emanet çıkış belgesiyle sahibine gönderilince sarım işi yalnız dönem sonu hizmet faturasında sarım metresiyle görünür. Hizmet kartı tezgahın ya da devere makinesinin istasyonundaki süreç türünden (Süreç türleri ekranındaki eşleme) gelir. Çıkış belgesi iptal edilirse sarım işi faturadan düşer. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
+        desc: "Açıkken müşterinin (emanet) ipliğiyle dokunan top sevk edilince dokuma hizmeti doğuş metresiyle faturalanır; sarılan levent emanet çıkış belgesiyle sahibine gönderilince sarım işi yalnız dönem sonu hizmet faturasında sarım metresiyle görünür. Hizmet kartı tezgahın ya da devere makinesinin istasyonundaki süreç türünden (Süreç türleri ekranındaki eşleme) gelir. Çıkış belgesi iptal edilirse sarım işi faturadan düşer. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
       },
     ],
     enumFlags: [

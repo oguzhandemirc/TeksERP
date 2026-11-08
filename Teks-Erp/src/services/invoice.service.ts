@@ -37,7 +37,7 @@ import {
   type ServiceBillingLinkInput,
 } from "./helpers/service-billing.helper";
 import { resolveShipmentServiceLinksTx, syncDraftServiceLinksTx } from "./helpers/service-preview-gate.helper";
-import { assertNoConsignmentRevokedLinesTx } from "./helpers/service-winding-link.helper";
+import { assertNoConsignmentRevokedLinesTx } from "./helpers/service-winding-confirm.helper";
 import { lineSubjectData, lockInvoiceServiceItemsTx, normalizeInvoiceLines, type InvoiceLineSubjectInput } from "./helpers/invoice-line-subject.helper";
 import { resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";

@@ -318,6 +318,7 @@ const SERVICE_ITEM_ID_FILES = new Set([
   // (kademe/gram yok) — ikinci sıra değil. Bağ kapısı kartı yalnız hata detayında taşır.
   "services/helpers/service-winding-work.helper.ts",
   "services/helpers/service-winding-link.helper.ts",
+  "services/helpers/service-winding-confirm.helper.ts",
 ]);
 // MALİYET tarafı beyanlı okuyucular (D4-G1a sarf normu): `serviceItemId` normun KENDİ kolonudur, hizmet
 // kalemi çözümü değildir — FinishingRate yasağı (gelir ≠ maliyet) bunlara UYGULANMAZ, beyan yine iki yönlü.
