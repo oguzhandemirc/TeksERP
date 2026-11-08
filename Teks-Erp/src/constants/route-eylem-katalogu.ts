@@ -18,6 +18,10 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Emanet çıkış belgesi (genel fason F5, 2026-11-08)
+  "POST /api/consignment-dispatches/preview": e("emanet çıkış önizlemesi aldı", "emanet çıkış önizlemesi almaya çalıştı"),
+  "POST /api/consignment-dispatches": e("emanet levent/ipliği sahibine çıkardı", "emanet levent/ipliği sahibine çıkarmaya çalıştı"),
+  "POST /api/consignment-dispatches/:id/cancel": e("bir emanet çıkış belgesini iptal etti", "bir emanet çıkış belgesini iptal etmeye çalıştı"),
   // ── Hizmet kartı (service_items ayrımı, 2026-11-07)
   "POST /api/service-items": e("bir hizmet kartı açtı", "bir hizmet kartı açmaya çalıştı"),
   "PATCH /api/service-items/:id": e("bir hizmet kartını düzenledi", "bir hizmet kartını düzenlemeye çalıştı"),

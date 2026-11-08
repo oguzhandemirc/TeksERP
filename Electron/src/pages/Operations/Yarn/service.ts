@@ -214,7 +214,7 @@ export const YARN_KIND_META: Record<YarnMovementKind, YarnKindMeta> = {
 /** Bu ekrandan YAZILABİLEN türler — WARP_* yalnız levent yazıcısından doğar. */
 export const YARN_KINDS: YarnMovementKind[] = ["IN", "OUT", "ADJUST_IN", "ADJUST_OUT"];
 /** Liste süzgecinin tanıdığı TÜM türler (backend liste şemasıyla birebir). */
-export const YARN_FILTER_KINDS: YarnMovementKind[] = [...YARN_KINDS, "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL", "SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL", "SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"];
+export const YARN_FILTER_KINDS: YarnMovementKind[] = [...YARN_KINDS, "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL", "SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL", "SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL", "CONSIGNMENT_OUT", "CONSIGNMENT_OUT_CANCEL"];
 
 /** Bilinmeyen tür (eski panel, yeni backend enum'u) ekranı ÇÖKERTMEZ — ham kod rozetle basılır (47 K2, 2026-09-14). */
 const UNKNOWN_KIND_META: YarnKindMeta = { label: "Bilinmeyen tür", short: "?", sign: 1, adjustment: false, hint: "Panel bu hareket türünü tanımıyor — panel güncellemesi gerekir." };

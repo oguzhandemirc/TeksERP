@@ -42,6 +42,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // Destek talebi (3d-2): talep kaydı panelden clientToken ile doğar; satıcıya giden kimlik talebin id'sidir.
   [`${S}support.service.ts::createSupportTicket`]: { giris: { [`${S}support.service.ts::createSupportTicket`]: "R" } },
   // K4P-LAB: lab testi panelden clientToken ile DRAFT doğar; iptal edilmiş testin token'ı 409 (4. durum).
+  // Emanet çıkış belgesi (F5): panel/tabletten clientToken ile doğar; iptal edilmiş belgenin token'ı 409 (4. durum).
+  [`${S}consignment-dispatch/create.ts::createConsignmentDispatch`]: { giris: { [`${S}consignment-dispatch/create.ts::createConsignmentDispatch`]: "R" } },
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   // K29: okutmayla rota — sahada eklenen adım clientToken ile doğar (aynı okutmanın tekrarı ikinci adım eklemez).
   [`${S}workorder-scan-route.service.ts::applyPlanTx`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
@@ -296,6 +298,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}loom-alarm-duty.service.ts::ruleReplay`]: ["tier", "kind", "userId", "permissionCode"],
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
+  [`${S}consignment-dispatch/create.ts::replayFor`]: ["ownerCustomerId", "items"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
   [`${S}workorder-scan-route.service.ts::replayFor`]: ["workOrderId", "stationId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],

@@ -133,6 +133,8 @@ export interface YarnMovementTxInput {
   bobbinCount?: number | null;
   /** G1: SUBCONTRACT_* türlerinde ZORUNLU (CHECK `yarn_movements_fason_link_ck`), diğerlerinde YAZILMAZ. */
   dispatchItemId?: string | null;
+  /** F5: CONSIGNMENT_OUT(_CANCEL) türlerinde ZORUNLU (CHECK `yarn_movements_consignment_link_ck`), diğerlerinde YAZILMAZ. */
+  consignmentItemId?: string | null;
 }
 
 export interface YarnMovementTxResult {
@@ -223,6 +225,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       warpBeamId: input.warpBeamId ?? null, reasonCode: input.reasonCode ?? null,
       lotId: input.lotId ?? null, bobbinCount: input.bobbinCount ?? null,
       dispatchItemId: input.dispatchItemId ?? null,
+      consignmentItemId: input.consignmentItemId ?? null,
     },
     select: { id: true },
   });

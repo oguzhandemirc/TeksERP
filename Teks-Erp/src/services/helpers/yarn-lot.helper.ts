@@ -117,6 +117,23 @@ export async function yarnLotBalanceTx(
   return new Prisma.Decimal(String(rows[0]?.balance ?? 0));
 }
 
+/** Lot × depo bakiyeleri tek sorguda (anahtar `${lotId}|${warehouseId}`) — çok satırlı çıkış belgesinin N+1'siz okuması. */
+export async function yarnLotWarehouseBalancesTx(
+  tx: { $queryRaw: Prisma.TransactionClient["$queryRaw"] },
+  lotIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (lotIds.length === 0) return out;
+  const rows = await tx.$queryRaw<Array<{ lotId: string; warehouseId: string; balance: string | number | Prisma.Decimal | null }>>`
+    SELECT "lotId", "warehouseId", COALESCE(SUM(${signedQtySql()}), 0) AS balance
+    FROM "yarn_movements"
+    WHERE "lotId" IN (${Prisma.join(lotIds.map((id) => Prisma.sql`${id}::uuid`))})
+    GROUP BY "lotId", "warehouseId"
+  `;
+  for (const r of rows) out.set(`${r.lotId}|${r.warehouseId}`, new Prisma.Decimal(String(r.balance ?? 0)));
+  return out;
+}
+
 /** Birden çok lotun toplam bakiyesi (liste ekranı, tek sorgu). */
 export async function yarnLotBalancesTx(
   tx: { $queryRaw: Prisma.TransactionClient["$queryRaw"] },

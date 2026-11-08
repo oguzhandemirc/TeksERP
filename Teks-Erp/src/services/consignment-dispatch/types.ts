@@ -10,7 +10,7 @@ export type ConsignmentItemKindWire = "WARP_BEAM" | "YARN";
 
 /**
  * POST gövdesinin kalemi — WARP_BEAM ⇒ `warpBeamId`; YARN ⇒ `yarnItemId` + `warehouseId` + `lotId` + `qtyKg`.
- * YARN `lotId` ZORUNLU (DB CHECK `consignment_dispatch_items_kind_ref_ck`): sahip `YarnLot.ownerCustomerId`den
+ * YARN `lotId` ZORUNLU (tip + Zod + servis; DB CHECK `consignment_dispatch_items_kind_ref_ck` lotId'yi SORMAZ — şema boşluğu): sahip `YarnLot.ownerCustomerId`den
  * (≠ `ownerCustomerId` ⇒ 409 `CONSIGNMENT_OWNER_MISMATCH`), bakiye lot × depo düzeyinde (aşarsa 409
  * `CONSIGNMENT_YARN_INSUFFICIENT`).
  */
@@ -135,4 +135,5 @@ export type ConsignmentDispatchErrorCode =
   | "CONSIGNMENT_DISPATCH_CHANGED"
   | "CONSIGNMENT_BEAM_MOVED_AFTER"
   | "CONSIGNMENT_BEAM_INVOICED"
-  | "CLIENT_TOKEN_CONFLICT";
+  /** Aynı token farklı gövde — TEK boğaz `token-replay.helper` bu kodu üretir (sözleşmedeki `CLIENT_TOKEN_CONFLICT` adı düzeltildi). */
+  | "CLIENT_TOKEN_COLLISION";
