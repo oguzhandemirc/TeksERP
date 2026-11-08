@@ -27,12 +27,12 @@
 // ayrılıyor ve iki sınıf resolver'ı AYNI SIKLIKTA görmüyor:
 //
 //   · KOŞULSUZ (3) — her çağrıda resolver'a sorar, 409'u da terfiyi de görür:
-//     `inventory.service.ts:1135` (KK1 initial-entry) ·
-//     `inventory.service.ts:4906` (createOpenFabric) ·
-//     `subcontractor.service.ts:3212` (receive → `roll.createMany`)
+//     `inventory/initial-entry.ts` (KK1 createInitialEntry) ·
+//     `inventory/open-fabric.ts` (createOpenFabric) ·
+//     `subcontractor/receive.ts` (receive → `roll.createMany`)
 //   · KOŞULLU (6) — `parent.warehouseId ?? (await resolveTargetWarehouseId(tx))`:
-//     `subcontractor.service.ts:545` · `tambur.service.ts:1076` · `:2245` ·
-//     `:2781` · `:3167` · `:3629`
+//     `subcontractor/direct-ship.ts` createFasonShipChild · `tambur/finalize.ts` · `tambur/warehouse-cut.ts` ·
+//     `tambur/warehouse-cut-finalize.ts` · `tambur/open-fabric-cut.ts` · `tambur/open-fabric-finalize.ts`
 //     ⚠️ Ebeveyni DAMGALI bir fabrikada bu altısı resolver'a HİÇ SORMAZ —
 //     ne 409'u görür ne terfiyi. Onların deposu ebeveynden MİRASTIR ve
 //     doğruluğu ebeveynin damgasına bağlıdır, resolver'a değil.
@@ -175,7 +175,7 @@ async function main(): Promise<void> {
       const fin = await call("POST", "/api/tambur/finalize", { token, body: { rollId: parent.id, cuts: [{ length: 25, qualityGrade: grade.code }] } });
       const cocuk = await prisma.roll.findMany({ where: { parentRollId: parent.id }, select: { id: true, status: true, warehouseId: true } });
       const hepsiDamgali = cocuk.length > 0 && cocuk.every((c) => c.warehouseId !== null);
-      // ⚠️ Bu KOŞULLU sınıfın bir üyesi (`tambur.service.ts:3629`): ebeveyn
+      // ⚠️ Bu KOŞULLU sınıfın bir üyesi (`tambur/open-fabric-finalize.ts` finalizeOpenFabric): ebeveyn
       // deposuz olduğu için resolver'a SORAR. Ebeveyni damgalı bir fabrikada
       // aynı satır resolver'a hiç sormaz — kapsam envanteri başlıkta.
       check(

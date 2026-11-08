@@ -7082,7 +7082,7 @@ function CameraScanModal({
                     {/* TABLO DÜZENİ (2026-08-04): iş emri no · kumaş · renk · top ·
                         bekleme. İŞ EMRİ NO İKİ KEZ yazılıyordu — `cardNumber` ile
                         `batchNumber` alanlarının İKİSİ DE iş emri numarasını
-                        taşıyor (backend tambur.service.ts:1744 `batchNumber:
+                        taşıyor (backend tambur/open-cards.ts listOpenCards `batchNumber:
                         s.workOrder.workOrderNumber`), biri kaldırıldı. İstasyon adı
                         da düştü: sorgu zaten yalnız TAMBUR adımlarını getiriyor
                         (:1690), her satırda aynı değer yazıyordu. */}
