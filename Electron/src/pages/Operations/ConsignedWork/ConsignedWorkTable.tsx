@@ -7,6 +7,8 @@ import { TERIM } from "@/lib/terim";
 import { type ConsignedBucket, type ConsignedOwnerRow, type ConsignedWorkSummary } from "./service";
 import { rollsLinkFor, type ConsignedBucketKey } from "./consigned-links";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FileText } from "lucide-react";
 import { CariHoldBadge } from "@/pages/Finance/CariHold/CariHoldBadge";
 import { READY_WORKS_PATH, type ReadyWorkRow } from "@/pages/Operations/ReadyWorks/service";
 import { STATE_LABEL } from "@/pages/Operations/ReadyWorks/ready-works-view";
@@ -76,6 +78,7 @@ export function OwnersTable({
   onOpen,
   readiness,
   readinessStatus,
+  onStatement,
 }: {
   rows: ConsignedOwnerRow[];
   totals: ConsignedWorkSummary["totals"];
@@ -83,6 +86,8 @@ export function OwnersTable({
   /** null = kolon yok (sevk okuma izni yok); Map = müşteri id → hazırlık satırı. */
   readiness: Map<string, ReadyWorkRow> | null;
   readinessStatus: ReadinessStatus;
+  /** Satırdaki "Ekstre" düğmesi — müşterinin dönem ekstresini açar. */
+  onStatement?: (r: ConsignedOwnerRow) => void;
 }) {
   // İki "bekliyor" sütunu ayrı sekmeye bağlanır (ham ↔ Ham Stok, yarı mamul ↔ Yarı Mamul); boş olan gizlenir,
   // ikisi de boşsa ham sütunu kalır. Gelen belge onayıyla doğan emanet yarı mamuldür.
@@ -106,6 +111,7 @@ export function OwnersTable({
           <TableHead className="text-right" title="İçeride ama üç durumun dışında (ör. adımsız fason/kartela)">Diğer</TableHead>
           <TableHead className="text-right">Toplam</TableHead>
           {readiness && <TableHead className="whitespace-nowrap text-right" title="Sevke hazırlık — Sevke Hazır İşler'in müşteri birimi (fabrika kuralıyla)">Hazırlık</TableHead>}
+          {onStatement && <TableHead className="w-0"><span className="sr-only">Ekstre</span></TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -130,6 +136,14 @@ export function OwnersTable({
             <TableCell className="text-right"><BucketCell bucket={r.other} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
             <TableCell className="text-right"><BucketCell bucket={r.total} ownerId={r.ownerCustomerId} kind={null} /></TableCell>
             {readiness && <TableCell className="text-right"><ReadinessCell row={readiness.get(r.ownerCustomerId)} status={readinessStatus} /></TableCell>}
+            {onStatement && (
+              <TableCell className="text-right">
+                <Button type="button" variant="ghost" size="sm" className="h-7 gap-1" aria-label={`${r.ownerName} emanet ekstresi`}
+                  onClick={(e) => { e.stopPropagation(); onStatement(r); }} onKeyDown={(e) => e.stopPropagation()}>
+                  <FileText className="h-3.5 w-3.5" /> Ekstre
+                </Button>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

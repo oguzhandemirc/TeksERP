@@ -8,6 +8,7 @@ import { buildStockExport, stockScorecardApi } from "./stockScorecard";
 import { buildStockKalemExport, stockKalemApi } from "./stockKalem";
 import { itemColumns, oldColumns } from "./stockScorecardColumns";
 import { StockKalemTab } from "./StockKalemTab";
+import { ConsignedStockRow } from "./ConsignedStockRow";
 
 type Sekme = "genel" | "kalem";
 
@@ -107,6 +108,8 @@ export function StockScorecardPage() {
               isLoading={query.isLoading}
             />
           </div>
+
+          {sc?.summary.consigned && <ConsignedStockRow consigned={sc.summary.consigned} />}
 
           <ChartCard
             title="Yaş dağılımı (bitmiş depo)"

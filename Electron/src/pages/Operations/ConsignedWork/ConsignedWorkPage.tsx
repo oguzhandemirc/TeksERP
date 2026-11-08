@@ -2,7 +2,7 @@
 // (`/api/consigned-work`); satır ya da hücre tıklaması Kumaş Stoğu'nu o sahibin süzgeciyle açar. Modül kapısı `ROUTE_MODULE`.
 // Hazırlık kolonu (D4-J3) İKİNCİ HESAP DEĞİL: `ready-works?groupBy=customer` ucundan; `shipping:read` yoksa istek atılmaz.
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
@@ -14,8 +14,43 @@ import { primaryBucket, rollsLinkFor } from "./consigned-links";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getAllReadyWorks, READY_WORKS_QUERY_KEY } from "@/pages/Operations/ReadyWorks/service";
 import { OwnersTable, TotalsStrip, type ReadinessStatus } from "./ConsignedWorkTable";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CONSIGNED_STATEMENT_QUERY_KEY } from "./statement/service";
+import { ConsignedStatementView, STATEMENT_PARAMS } from "./statement/ConsignedStatementView";
+
+/** Görünüm URL'de (`?view=ekstre`) — satırdaki "Ekstre" düğmesi ve derin bağlantı aynı yere iner. */
+const VIEW_PARAM = "view";
 
 export function ConsignedWorkPage() {
+  const [sp, setSp] = useSearchParams();
+  if (sp.get(VIEW_PARAM) === "ekstre") {
+    return (
+      <PageShell>
+        <PageHeader
+          title="İçerideki İşler"
+          description="Emanet ekstresi — müşterinin bize bıraktığı malın dönem mutabakatı: açılış, giren, çıkan (BRÜT), fasondan doğrudan sevk, fire, kalan."
+          actions={<RefreshButton queryKey={CONSIGNED_STATEMENT_QUERY_KEY} />}
+        />
+        <ViewTabs value="ekstre" onChange={(v) => setSp(v === "ekstre" ? { [VIEW_PARAM]: "ekstre" } : {}, { replace: true })} />
+        <ConsignedStatementView />
+      </PageShell>
+    );
+  }
+  return <ConsignedNowView onStatement={(id) => setSp({ [VIEW_PARAM]: "ekstre", ...(id ? { [STATEMENT_PARAMS.customer]: id } : {}) })} />;
+}
+
+function ViewTabs({ value, onChange }: { value: "anlik" | "ekstre"; onChange: (v: string) => void }) {
+  return (
+    <Tabs value={value} onValueChange={onChange} className="shrink-0 px-4 pt-1">
+      <TabsList>
+        <TabsTrigger value="anlik">Anlık durum</TabsTrigger>
+        <TabsTrigger value="ekstre">Emanet ekstresi</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
+
+function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | null) => void }) {
   const navigate = useNavigate();
   const [onlyReady, setOnlyReady] = useState(false);
   const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY, onlyReady ? "ready" : "all"], queryFn: () => getConsignedWork(onlyReady) });
@@ -52,6 +87,7 @@ export function ConsignedWorkPage() {
           </div>
         }
       />
+      <ViewTabs value="anlik" onChange={(v) => v === "ekstre" && onStatement(null)} />
       {!q.isLoading && !q.isError && q.data && (
         <ListToolbar>
           <TotalsStrip totals={q.data.totals} />
@@ -81,7 +117,7 @@ export function ConsignedWorkPage() {
                 </div>
               </ListMessage>
             ) : (
-              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} readinessStatus={readinessStatus} />
+              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} readinessStatus={readinessStatus} onStatement={(r) => onStatement(r.ownerCustomerId)} />
             )}
           </>
         )}
