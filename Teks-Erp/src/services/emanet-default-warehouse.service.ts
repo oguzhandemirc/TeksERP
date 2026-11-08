@@ -28,13 +28,16 @@ export async function getEmanetDefaultWarehouse(): Promise<EmanetDefaultWarehous
 
 /** Yazım: pasif/olmayan depo 400 `EMANET_DEFAULT_WAREHOUSE_INVALID` (fail-closed); null temizler (boş metin; audit `set` içinde). */
 export async function setEmanetDefaultWarehouse(warehouseId: string | null, userId: string): Promise<EmanetDefaultWarehouseView> {
+  let canonicalId = "";
   if (warehouseId !== null) {
-    const { problem } = await emanetWarehouseProblem(prisma, warehouseId);
-    if (problem) throw AppError.badRequest(`Emanet varsayılan deposu olarak kaydedilemez: ${problem}`, { code: "EMANET_DEFAULT_WAREHOUSE_INVALID", warehouseId });
+    const { row, problem } = await emanetWarehouseProblem(prisma, warehouseId);
+    if (problem || !row) throw AppError.badRequest(`Emanet varsayılan deposu olarak kaydedilemez: ${problem ?? "Depo bulunamadı."}`, { code: "EMANET_DEFAULT_WAREHOUSE_INVALID", warehouseId });
+    // DB'nin döndürdüğü kanonik (küçük harf) id yazılır — gövdedeki biçim değil (arşiv kapısı karşılaştırması).
+    canonicalId = row.id;
   }
   await systemSettingService.set(
     SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID,
-    warehouseId ?? "",
+    canonicalId,
     "Emanet varsayılan deposu (müşterinin malı depo söylenmeden doğunca buraya girer; boş = varsayılan depo)",
     userId,
   );

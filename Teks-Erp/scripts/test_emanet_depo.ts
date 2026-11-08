@@ -9,13 +9,15 @@
 //      SETTING_KEY_RESERVED; geçerli depo 200 + audit satırı
 //   §3 ⭐ ayar DOLU: sahipli KK1 topu emanet deposunda; sahipsiz varsayılanda; açık depo seçimi (mal kabul) kazanır; gelen belge
 //      onayı toplarını emanet deposuna doğurur
-//   §4 emanet deposu pasife ALINAMAZ (arşiv kapısı canlı referans, 409)
+//   §4 emanet deposu pasife ALINAMAZ ve kalıcı SİLİNEMEZ (409, tek kaynak `EMANET_DEFAULT_WAREHOUSE_REF`); büyük harfli UUID
+//      kanonik yazılır ve elle yazılmışsa da kapıya takılır
 //   §5 ⭐ fail-closed: depo sonradan pasif → sahipli doğum 400 EMANET_DEFAULT_WAREHOUSE_UNUSABLE (top doğmaz); gelen belge onayı
 //      ön kontrolde 400 (başlık DRAFT kalır); GET `problem` taşır
 //   §6 okunamayan değer (çöp) → bugünkü varsayılan; emanet KAPALIYKEN ayar etkisiz (sahipli doğum 403 kalır, 400 değil)
 //   §7 temizleme (null) → bugünkü davranış
 // Negatif sonda: `createInitialEntry`te `resolveBirthWarehouseIdTx` yerine `resolveTargetWarehouseId(tx, warehouseId)` → §3
-// kırmızı; helper'daki `readEmanetEnabled` dalı silinince §6 "emanet kapalı" kırmızı; arşiv kapısındaki ayar satırı silinince §4.
+// kırmızı; helper'daki `readEmanetEnabled` dalı silinince §6 "emanet kapalı" kırmızı; arşiv kapısındaki ayar satırı silinince §4;
+// `hardDelete`teki emanet sayımı silinince §4 kalıcı silme kolu; okuyucudaki `toLowerCase` kaldırılınca §4 büyük harf kolu.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -180,6 +182,19 @@ async function run(url: string): Promise<void> {
   const arcRefs = ((arc?.details as { references?: Array<{ kind: string; count: number }> } | undefined)?.references ?? []);
   check("§4 emanet deposu pasife alınamaz (409, ayar referansı)", codeOf(arc) === "MASTER_DATA_HAS_LIVE_REFERENCES" && arcRefs.some((r) => r.kind === "EMANET_DEFAULT_WAREHOUSE" && r.count === 1), codeOf(arc));
   check("§4 depo aktif kaldı", (await prisma.warehouse.findUniqueOrThrow({ where: { id: emptyWh }, select: { isActive: true } })).isActive);
+  const hd = await expectError(() => warehouseService.hardDelete(emptyWh, admin.id));
+  check("§4 ⭐ boş emanet deposu kalıcı silinemez (409)", hd?.statusCode === 409 && /emanet varsayılan deposu/.test(hd.message) && (await prisma.warehouse.count({ where: { id: emptyWh } })) === 1, `${hd?.statusCode ?? "geçti"} ${hd?.message.slice(0, 80) ?? ""}`);
+  // Büyük harfli UUID: kapı ve okuyucu aynı kanonik biçimi görmeli (gövde biçimi kapıyı atlatmasın).
+  const upWh = await mkWarehouse("BUYUK");
+  const up = await call("PUT", "/api/feature-flags/emanet-default-warehouse", tk, { warehouseId: upWh.toUpperCase() });
+  const stored = (await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID }, select: { value: true } }))?.value;
+  check("§4 büyük harfli gövde kanonik (küçük harf) id olarak yazılır", up.status === 200 && stored === upWh, `${up.status} ${JSON.stringify(stored)}`);
+  await setSetting(SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID, upWh.toUpperCase());
+  const upArc = await expectError(() => warehouseService.update(upWh, { isActive: false }, admin.id));
+  const upHd = await expectError(() => warehouseService.hardDelete(upWh, admin.id));
+  check("§4 ⭐ elle büyük harf yazılmış ayar da kapıya takılır (pasif 409 · silme 409)", codeOf(upArc) === "MASTER_DATA_HAS_LIVE_REFERENCES" && upHd?.statusCode === 409, `${codeOf(upArc)} ${upHd?.statusCode ?? "geçti"}`);
+  check("§4 büyük harfli ayar doğumda aynı depoyu çözer", (await kk1(owner)) === upWh);
+  await setSetting(SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID, emptyWh);
 
   console.log("§5 fail-closed: depo sonradan pasif");
   // Kapıyı atlayan pasifleştirme (eski veri / elle müdahale) — doğum sessizce varsayılana düşmemeli.

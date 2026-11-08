@@ -8,8 +8,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { settingScreenPath } from "../../constants/panel-ayar-yolu";
-import { readEmanetDefaultWarehouseId, readEmanetEnabled } from "../system-setting.service";
+import { readEmanetDefaultWarehouseId, readEmanetEnabled, SETTING_KEYS } from "../system-setting.service";
 import { resolveTargetWarehouseId } from "./warehouse.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -41,7 +40,8 @@ export async function resolveEmanetBirthWarehouseIdTx(db: Db, ownerCustomerId: s
   const { problem } = await emanetWarehouseProblem(db, id);
   if (problem) {
     throw AppError.badRequest(
-      `Emanet varsayılan deposu kullanılamıyor: ${problem} ${settingScreenPath("warehouse")} ekranından emanet deposunu düzeltin ya da boşaltın.`,
+      // Panel yüzeyi P1'de gelir; o güne kadar yönetici ayar adını ve ucu duyar (P1 ekran yoluna çevirir).
+      `Emanet varsayılan deposu kullanılamıyor: ${problem} Sistem yöneticisi "${SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID}" ayarını düzeltmeli ya da boşaltmalı (PUT /api/feature-flags/emanet-default-warehouse).`,
       { code: "EMANET_DEFAULT_WAREHOUSE_UNUSABLE", warehouseId: id },
     );
   }

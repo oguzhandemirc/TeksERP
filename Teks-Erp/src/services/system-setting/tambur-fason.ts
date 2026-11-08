@@ -393,6 +393,7 @@ export async function readEmanetDefaultWarehouseId(tx?: Pick<typeof prisma, "sys
     where: { key: SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID },
     select: { value: true },
   });
-  const v = typeof setting?.value === "string" ? setting.value.trim() : "";
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null;
+  // Kanonik küçük harf: PG uuid metni küçük harf döner; arşiv kapısı ve doğum boğazı aynı biçimi karşılaştırır.
+  const v = typeof setting?.value === "string" ? setting.value.trim().toLowerCase() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v) ? v : null;
 }
