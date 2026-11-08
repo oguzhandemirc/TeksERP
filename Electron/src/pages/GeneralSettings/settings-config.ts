@@ -2436,7 +2436,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Hizmet kartına eşlenmiş süreç türündeki adım (ör. boya) hizmet satırı olarak girer.",
         defaultOn: false,
         audience: ["Muhasebeci"],
-        desc: "Açıkken emanet topun geçtiği adımın süreç türü bir hizmet kartına eşlenmişse o iş de faturalanır: iç adım tamamlanınca çıkış metresiyle, dış (fason) adım kabul edilince kabul metresiyle. Aynı adım zaten kurşun ya da özellik (tambur, brode) işi olarak faturalanıyorsa ikinci satır açılmaz; simüle ölçümlü adım faturaya girmez. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
+        desc: "Açıkken emanet topun geçtiği adımın süreç türü bir hizmet kartına eşlenmişse o iş de faturalanır: iç adım tamamlanınca çıkış metresiyle, dış (fason) adım kabul edilince kabul metresiyle. Aynı adım zaten kurşun ya da özellik (tambur, brode) işi olarak faturalanıyorsa ikinci satır açılmaz; simüle ölçümlü adım faturaya girmez. Dikkat: açıldığı gün, henüz faturalanmamış toplardaki geçmiş adım işleri o topların ilk sevkinde toplu gelir. Kapalıyken (varsayılan) taslak bugünkü gibidir.",
       },
     ],
     enumFlags: [
