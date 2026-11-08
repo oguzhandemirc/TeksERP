@@ -20,7 +20,7 @@
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_S-4-05.ts
 //
 // MEKANİZMA (kod kanıtı):
-//   • Token kontrolü tx DIŞINDA (`subcontractor.service.ts:2350-2371`).
+//   • Token kontrolü tx DIŞINDA (`subcontractor/receive.ts` receive).
 //   • `SubcontractorReceipt.clientToken` `@unique` → eşzamanlıda kaybeden
 //     P2002 alır, ama tx `withBarcodeRetry` ile sarılı (`:2681`) → P2002 5 kez
 //     yeniden denenir ve token hâlâ dolu olduğu için hep düşer.

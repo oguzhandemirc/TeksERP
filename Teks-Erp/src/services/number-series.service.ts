@@ -437,7 +437,7 @@ export function scopedNextSeq(
   // ── ÇAKIŞMA ATLAMASI: kapsam daraltması sayacı 1'e döndürebilir ──────────────
   // Aynı gün biçim değiştirilip GERİ alınırsa kapsam boşalır ve sıra 1'den başlar;
   // o kod ZATEN VAR olabilir. `@unique` P2002 verir ve `withBarcodeRetry` bunu
-  // DETERMİNİSTİK olarak tekrarlayıp 409'la biter (`shipping.service.ts:230` bu
+  // DETERMİNİSTİK olarak tekrarlayıp 409'la biter (`shipping/create.ts` nextShipmentNo bu
   // davranışı yazılı beyan ediyor) — yani kendi kendine onarmaz.
   // ⚠️ SARMALI SERİDE BU ATLAMA YOK ve bu bir EKSİKLİK DEĞİL: sarma GLOBAL olarak
   // körlemesinedir (2026-08-05 kullanıcı kararı) — numara başka bir kayıtta canlı

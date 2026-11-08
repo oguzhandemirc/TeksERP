@@ -632,7 +632,7 @@ export class ReturnService {
       // ⚠️ DÖNGÜ İÇİNDE ÇAĞRILMAZ: iade satırları tek tx'te yaratılıyor ve tx
       // kendi commit edilmemiş satırlarını GÖREMEZ ⇒ satır başına `nextSeriesNo`
       // aynı numarayı üretir, `@unique` P2002 verir ve `withBarcodeRetry` bunu
-      // DETERMİNİSTİK tekrarlayıp 409'la biterdi (`shipping.service.ts:230`
+      // DETERMİNİSTİK tekrarlayıp 409'la biterdi (`shipping/create.ts` nextShipmentNo
       // aynı tuzağı yazılı beyan ediyor).
       // ⚠️ Numara BELGEYE ait: belge `returnGroupId ?? id` ile çözülüyor, yani
       // üye satırların kendi numarası olsaydı hiçbir belgede görünmezdi.

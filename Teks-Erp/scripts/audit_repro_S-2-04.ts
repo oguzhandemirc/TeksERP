@@ -1,6 +1,6 @@
 // =============================================================================
 // AUDIT REPRO — S-2-04: `createShipment` replay'i (`readCreateShipmentReplay`,
-//   shipping.service.ts:1362-1374) kaydın STATÜSÜNE BAKMAZ. Sevkiyat storno +
+//   o günkü tek dosya `shipping.service.ts`; bugün replay `shipping/create.ts` → `helpers/token-replay.helper.ts`) kaydın STATÜSÜNE BAKMAZ. Sevkiyat storno +
 //   kapanışla (`undoDispatch {releaseSacks:true}`) CANCELLED olduktan sonra aynı
 //   `clientToken` ile gelen tekrar, `success:true` + "Sevkiyat kuruldu (onay
 //   bekliyor)" döner. Mal sevk EDİLMEMİŞTİR, çuvallar havuza dönmüştür.

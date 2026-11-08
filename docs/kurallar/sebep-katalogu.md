@@ -93,7 +93,7 @@
 
 ## Açık sorular
 
-- Kök notlar ve kod yorumları hâlâ 'metin saklayan İKİ kind' diyor (CLAUDE.md:73, reason-preset.service.ts:211-215 başlığı), oysa `KIND_STORES_TEXT` bugün ÜÇ true taşıyor (ORDER_CANCEL, order.service.ts:495,3138 üzerinden canlı). Metin drift'i — kural değişmedi, sayı bayat.
+- Kök notlar ve kod yorumları hâlâ 'metin saklayan İKİ kind' diyor (CLAUDE.md:73, reason-preset.service.ts:211-215 başlığı), oysa `KIND_STORES_TEXT` bugün ÜÇ true taşıyor (ORDER_CANCEL, `order/line-cancel.ts` cancelOrderLine + `order.service.ts` cancelWithActions üzerinden canlı). Metin drift'i — kural değişmedi, sayı bayat.
 
 ## Bekçiler — bu alana dokununca koş
 
