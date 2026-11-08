@@ -154,7 +154,7 @@ Backend: `test_fason_termin`, `test_fason_alis_taslagi`, `test_fason_kokpit`, `t
 
 Madde içi: `test_rol_modeli_kalinti`, `test_migrate_partner_roles`, `test_seyitoglu_ayar_paketi`, `test_station_capability`, `test_helpers`, `test_wo_route_coverage_goods`, `test_emanet`, `test_emanet_sahiplik_geri_doldur`, `test_reason_preset_kind_parity`, `test_defter_ters_yol`, `test_db_invariants`, `run-all-tests.ts typecheckGate`
 
-İstemci: `shipmentDetailError.test.tsx`, `DirectShipModal.test.tsx`, `batch-merge-confirm.test.ts`, `fasonReceive.helper.test.ts`, `subcontractorDefault.test.ts`, `useTebdilWizard.test.tsx`, `workOrderPrefill.test.ts`, `fason-receive-attempt.test.ts`, `ScannerRollStrip.test.tsx`, `newRolls.helper.test.ts`, `receiveAttempt.test.ts`, `receivePayload.helper.test.ts`, `segmented-buttons-row.guard.test.ts`, `fason-summary.test.ts`, `receiptPayload.test.ts`, `reworkPayload.test.ts`, `MultiBatchSheet.test`, `FasonStepActions.multibatch.test`, `Rolls/service.test.ts`
+İstemci: `shipmentDetailError.test.tsx`, `DirectShipModal.test.tsx`, `batch-merge-confirm.test.ts`, `fasonReceive.helper.test.ts`, `subcontractorDefault.test.ts`, `useTebdilWizard.test.tsx`, `workOrderPrefill.test.ts`, `fason-receive-attempt.test.ts`, `ScannerRollStrip.test.tsx`, `newRolls.helper.test.ts`, `receiveAttempt.test.ts`, `receivePayload.helper.test.ts`, `segmented-buttons-row.guard.test.ts`, `fason-summary.test.ts`, `receiptPayload.test.ts`, `reworkPayload.test.ts`, `MultiBatchSheet.test`, `ExpectedReturnChips.test`, `FasonStepActions.multibatch.test`, `Rolls/service.test.ts`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
