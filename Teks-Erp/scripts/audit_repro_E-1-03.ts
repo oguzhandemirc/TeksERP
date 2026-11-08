@@ -58,7 +58,7 @@ const clientDateOnlyToIso = (ymd: string): Date => new Date(new Date(ymd).toISOS
 const clientIsoToInput = (d: Date): string => d.toISOString().slice(0, 10);
 
 // ── BACKEND KURALLARI (birebir kopya) ────────────────────────────────────────
-// src/services/order.service.ts:955-964
+// src/services/order/validation.ts assertDeadlineNotBeforeOrderDate
 function assertDeadlineNotBeforeOrderDate(deadline: Date, orderDateOrNow: Date): string | null {
   return deadline.getTime() < orderDateOrNow.getTime()
     ? "Termin tarihi sipariş tarihinden önce olamaz"
@@ -151,7 +151,7 @@ check(late === 0, "Termin GÜNÜNDE sipariş '0 gün gecikmiş' olarak overdue k
 console.log("");
 console.log("--- (5) Gece penceresi: sunucu-üretimi tarihin forma dönüşü (slice(0,10)) ---");
 // İş emri planlı tarihleri: kullanıcı boş bırakırsa backend `new Date()` yazar
-// (workorder.service.ts:390) → o an gece 01:00 ise UTC günü DÜNDÜR.
+// (`workorder/shared.ts` resolvePlanDates) → o an gece 01:00 ise UTC günü DÜNDÜR.
 let nightDrift = 0;
 for (const [label, iso] of [
   ["gece 01:00'de açılan İE", "2026-09-01T01:00:00+03:00"],

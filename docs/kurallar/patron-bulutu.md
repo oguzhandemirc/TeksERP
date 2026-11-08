@@ -33,6 +33,7 @@
 
 ### Kararlar
 
+- **[ÇEKİRDEK]** Ürün kartı `urun`, hizmet kartı `hizmet` boyutunda gider; belge satırı konusu tipli alanla (`satirTipi` + `urunId`/`hizmetId`), bir boyuta iki tablo bağlama.
 - **[ÇEKİRDEK]** Birleşmiş carinin faturası zincirin SON hesabı altında: `fatura.cariHesapId` türeticiden (`cloud-sync/derived-merged-invoice.ts`), `cariId` değişmez; birleşmesiz satır bayt-aynı.
 - **[ÇEKİRDEK]** Zamana bağlı alan (`gecikmis`, `vadesiGecti`) bulutta hesaplanmaz: vadesi (önceki konum, ufuk] aralığına düşen kökler geçiş kaynağıyla yeniden gönderilir.
 - **[ÇEKİRDEK]** Rapor isteği fabrikanın şemasıyla (`PARAMETRE_GECERSIZ`); `audit/*`/kişi adlı rapor yok (`RAPOR_BILINMIYOR`); kapalı rapor/modül buluta da kapalı; dönem görüntüsü değişmedikçe gitmez.

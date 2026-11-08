@@ -16,12 +16,13 @@
 // Gerekçeli istisna, erişimin üstündeki "`revokedAt` SÜZÜLMEZ" işaretidir: en fazla
 // 3 satır yukarıda ya da araya yalnız yorum / `alan: true,` satırları giren aynı
 // blokta (bir işaret altında gruplanmış `_count` anahtarları). Her istisna döndürülür.
-// Süzgeç izleme: yerel (ya da aynı `src/services/<alan>/` ailesinden import edilen) değişkenin başlatıcısı bir düzey; `w.K` + `const w = f(...)` (aynı dosya,
+// Süzgeç izleme: yerel (ya da aynı bölünmüş servis ailesinden — `lib/servis-aile.ts` — import edilen) değişkenin başlatıcısı bir düzey; `w.K` + `const w = f(...)` (aynı dosya,
 // tek `return` nesnesi) ise YALNIZ dönen nesnenin `K` değeri — başka anahtardaki süzgeç saymaz.
 // =============================================================================
 import { readFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { join, relative } from "node:path";
 import * as ts from "typescript";
+import { aileCephesi } from "./lib/servis-aile";
 
 export interface AktifYuklemTanimi {
   /** Prisma delegate adı — `rollMovement`. */
@@ -204,12 +205,9 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
       if (degerler.length !== 1 || degerler[0] === null) return null;
       return degerler[0];
     };
-    // Bölünmüş servis ailesi (`src/services/<alan>/` kardeşleri) ortak sabiti import'la paylaşır;
-    // import alias'ı çözülür, aile dışı dosyaya izlenmez (eski tek-dosya kapsamı korunur).
-    const aileDizini = (yol: string): string | null => {
-      const d = dirname(yol);
-      return dirname(d) === join(kok, "src", "services") ? d : null;
-    };
+    // Bölünmüş servis ailesi (cephe + `<ad>/`; tanım `lib/servis-aile.ts`) bölme öncesi TEK dosyaydı: aile
+    // içi import alias'ı çözülür. Cephesiz dizin (`helpers/`…) aile değildir — aynı-dosya kuralı (daha sıkı).
+    const aileDizini = (yol: string): string | null => aileCephesi(yol, join(kok, "src"));
     const yerelYaDaAileBildirimi = (m: ts.Identifier): ts.Declaration | undefined => {
       let sym = checker.getSymbolAtLocation(m);
       if (sym && sym.flags & ts.SymbolFlags.Alias) sym = checker.getAliasedSymbol(sym);

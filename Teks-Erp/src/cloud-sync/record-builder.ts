@@ -41,25 +41,6 @@ export function selectionOf(p: RecordProjection): Record<string, boolean> {
   return Object.fromEntries([...fields].map((f) => [f, true]));
 }
 
-/** Ana kökte bulunmayan kimlikler ek köklerde (aynı UUID uzayı); ek kökte olmayan kolon `fixed` sabitinden dolar. */
-async function findInExtraRoots(
-  p: RecordProjection,
-  ids: readonly string[],
-  select: Record<string, boolean>,
-): Promise<Array<Record<string, unknown> & { id: string }>> {
-  const out: Array<Record<string, unknown> & { id: string }> = [];
-  let rest = [...ids];
-  for (const extra of p.extraRoots ?? []) {
-    if (rest.length === 0) break;
-    const own = Object.fromEntries(Object.entries(select).filter(([f]) => !(f in extra.fixed)));
-    const rows = (await delegateOf(extra.model).findMany({ where: { id: { in: rest } }, select: own })) as Array<Record<string, unknown> & { id: string }>;
-    for (const r of rows) out.push({ ...r, ...extra.fixed });
-    const got = new Set(rows.map((r) => r.id));
-    rest = rest.filter((id) => !got.has(id));
-  }
-  return out;
-}
-
 /**
  * Kök kimliklerini tel satırlarına çevirir. `nowMs` zamana bağlı türetilmiş alanların anı
  * (turun ufku DEĞİL — "gecikmiş" şimdiye göre hesaplanır, geçişi `crossings` yakalar).
@@ -75,10 +56,6 @@ export async function buildRecords(p: RecordProjection, rootIds: readonly string
   for (const part of chunks([...new Set(rootIds)], ID_CHUNK)) {
     const where = p.scope ? { AND: [{ id: { in: part } }, p.scope.prismaWhere] } : { id: { in: part } };
     const found = (await delegate.findMany({ where, select })) as Array<Record<string, unknown> & { id: string }>;
-    if (p.extraRoots?.length) {
-      const inMain = new Set(found.map((r) => r.id));
-      found.push(...(await findInExtraRoots(p, part.filter((id) => !inMain.has(id)), select)));
-    }
     const foundIds = new Set(found.map((r) => r.id));
     const missing = part.filter((id) => !foundIds.has(id));
     if (missing.length > 0) {
