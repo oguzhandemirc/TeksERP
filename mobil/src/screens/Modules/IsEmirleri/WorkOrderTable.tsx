@@ -5,6 +5,7 @@ import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import TruncatedText from '../../../components/TruncatedText';
 import { formatCalendarDay } from '../../../lib/factory-time';
 import { TERIM } from '../../../lib/terim';
@@ -51,17 +52,17 @@ export default function WorkOrderTable(p: Props) {
   }
   if (p.problem) {
     return (
-      <View style={styles.center} testID="ie-liste-hata">
+      <PullToRefreshView refreshing={p.refreshing} onRefresh={p.onRefresh} contentContainerStyle={styles.centerContent} testID="ie-liste-hata">
         <Icon source={p.problem === 'offline' ? 'wifi-off' : 'alert-circle-outline'} size={48} color={colors.dangerText} />
         <Text style={styles.centerTitle}>{p.problem === 'offline' ? 'Çevrimdışısınız' : 'Liste alınamadı'}</Text>
         <Text style={styles.centerText}>{QUERY_PROBLEM_TEXT[p.problem]}</Text>
         <Button mode="contained" onPress={p.onRetry} contentStyle={styles.bigBtn} icon="refresh">Tekrar dene</Button>
-      </View>
+      </PullToRefreshView>
     );
   }
   if (p.rows.length === 0) {
     return (
-      <View style={styles.center} testID="ie-liste-bos">
+      <PullToRefreshView refreshing={p.refreshing} onRefresh={p.onRefresh} contentContainerStyle={styles.centerContent} testID="ie-liste-bos">
         <Icon source="clipboard-search-outline" size={52} color={colors.textMuted} />
         <Text style={styles.centerTitle}>{p.empty.title}</Text>
         <Text style={styles.centerText}>{p.empty.text}</Text>
@@ -70,7 +71,7 @@ export default function WorkOrderTable(p: Props) {
             {EMPTY_ACTION_LABEL[p.empty.action].label}
           </Button>
         )}
-      </View>
+      </PullToRefreshView>
     );
   }
   return (
@@ -185,6 +186,7 @@ function LocationCell({ row }: { row: WorkOrderListRow }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xxl },
+  centerContent: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xxl },
   centerTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, textAlign: 'center' },
   centerText: { fontSize: typography.size.base, color: colors.textSecondary, textAlign: 'center' },
   bigBtn: { minHeight: 56, paddingHorizontal: spacing.lg },
