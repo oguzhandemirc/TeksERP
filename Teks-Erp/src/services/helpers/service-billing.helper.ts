@@ -19,6 +19,7 @@ import { resolveServiceItemsForRolls, serviceWorkKey } from "./service-pricing.h
 import { toDraftWorkRows } from "./service-draft-works.helper";
 import { collectWindingServiceBilling } from "./service-winding-work.helper";
 import { assertWindingLinksLiveTx, lockWindingBeamsTx } from "./service-winding-link.helper";
+import { lockStepMovementsTx } from "./service-step-movement-lock.helper";
 import type { ServiceDraftWorkRow } from "../service-billing/types";
 import { linkBilledQty, SERVICE_QTY_UNIT_LABEL } from "./service-quantity.helper";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger, type loadServiceBillingSettings } from "../system-setting.service";
@@ -44,6 +45,8 @@ export interface ServiceBillingLinkInput {
   unitPrice: Prisma.Decimal;
   currency: Currency;
   serviceAt: Date;
+  /** F9: iç adım işi (F3) — kanıtı kapanmış hareket; bağ insert'inde hareket FOR SHARE kilitlenir ve canlı olmalı. */
+  stepMovementGuard?: boolean;
 }
 
 export interface ServiceBillingDraft {
@@ -53,6 +56,8 @@ export interface ServiceBillingDraft {
   warnings: string[];
   /** F4 kırılım ("satır neden bu miktar") — yanıtlara `serviceWorks` olarak, boşsa alan hiç eklenmez. */
   works: ServiceDraftWorkRow[];
+  /** F9: bizim hatamızdan yeniden işlem işleri (`excludedReason` dolu) — satıra/bağa girmez; yalnız varsa anahtar var. */
+  excludedWorks?: ServiceDraftWorkRow[];
 }
 
 /** H8b: etkin tetik + kaynağı (müşteri carisinin kendi seçimi mi, fabrika ayarı mı). */
@@ -144,8 +149,10 @@ export async function collectServiceBillingDraft(params: {
       unitPrice: new Prisma.Decimal(w.unitPrice ?? 0),
       currency: params.currency,
       serviceAt: w.serviceAt,
+      ...(w.source === "STEP" && w.meterBasis !== "RECEIVED" ? { stepMovementGuard: true } : {}),
     }));
-  return { lines, links, warnings: res.warnings, works: await toDraftWorkRows(res.works, db) };
+  const excludedWorks = res.excludedWorks ? await toDraftWorkRows(res.excludedWorks, db, true) : [];
+  return { lines, links, warnings: res.warnings, works: await toDraftWorkRows(res.works, db), ...(excludedWorks.length > 0 ? { excludedWorks } : {}) };
 }
 
 /**
@@ -197,6 +204,7 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
     }
   }
   await assertWindingLinksLiveTx(tx, links);
+  await lockStepMovementsTx(tx, links);
   for (const l of links) {
     // Levent TEK sarım işidir: anahtar yalnız levent (süreç türü/kart değişse de ikinci kez faturalanmaz; levent kilit altında).
     const key = l.warpBeamId ? { warpBeamId: l.warpBeamId } : { rollId: l.rollId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId };
@@ -375,11 +383,11 @@ export async function collectPeriodServiceBilling(params: {
   const billedDocNo = billedWhere && rollBilled > 0 ? (await findActiveBillingTx(prisma, billedWhere))?.docNo ?? null : null;
   // F4: levent sarım işi YALNIZ dönem taslağında (patron kararı); ayar kapalıyken bu kol hiç koşmaz (bayt-aynı).
   if (!params.settings.weavingWorks) return { ...draft, shipments, directShipments, billedWorkCount: rollBilled, billedDocNo };
-  // Sarımın hizmet anı zaten çıkış (sevk) anıdır ⇒ SERVICE_DAY ile DISPATCH_DAY aynı fiyat anını verir.
+  // Sarımın hizmet anı = çıkış anı (SERVICE_DAY ≡ DISPATCH_DAY); F9 dışlanan top işleri birleşimde düşmez (levent kolunda dışlama yok).
   const winding = await collectWindingServiceBilling({ customerId: params.customerId, currency: params.currency, from: params.from, to: params.to });
   return {
     lines: [...draft.lines, ...winding.lines], links: [...draft.links, ...winding.links],
-    warnings: [...new Set([...draft.warnings, ...winding.warnings])], works: [...draft.works, ...winding.works],
+    warnings: [...new Set([...draft.warnings, ...winding.warnings])], works: [...draft.works, ...winding.works], ...(draft.excludedWorks ? { excludedWorks: draft.excludedWorks } : {}),
     shipments, directShipments, billedWorkCount: rollBilled + winding.billedCount, billedDocNo: billedDocNo ?? winding.billedDocNo,
   };
 }

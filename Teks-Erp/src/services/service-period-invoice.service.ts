@@ -137,7 +137,7 @@ export async function previewServicePeriodDraft(input: ServicePeriodInput): Prom
     periodClosed: closedAt ? closedAt.toISOString().slice(0, 10) : null,
     warnings: [...new Set(warnings)],
     // F4: kırılım EK alandır; boşsa alan yok (eski yanıtla bayt-aynı).
-    ...(draft.works.length > 0 ? { serviceWorks: draft.works } : {}),
+    ...(draft.works.length + (draft.excludedWorks?.length ?? 0) > 0 ? { serviceWorks: [...draft.works, ...(draft.excludedWorks ?? [])] } : {}),
   };
 }
 

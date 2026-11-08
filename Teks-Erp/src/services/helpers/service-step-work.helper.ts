@@ -20,6 +20,7 @@
 import { MachineDataSource, MeterPhase, Prisma, StationType, StepStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
+import { loadProcessMap, stepCategoryOf } from "./service-process-map.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -45,16 +46,6 @@ export interface StepWorkList {
   zeroMeterCount: number;
 }
 
-/** Adımın süreç türü: planlanan tür, yoksa istasyonun varsayılan türü. */
-function stepCategoryOf(step: { requiredCategoryId: string | null; station: { defaultCategoryId: string | null } }): string | null {
-  return step.requiredCategoryId !== null ? step.requiredCategoryId : step.station.defaultCategoryId;
-}
-
-/** Eşlemeli süreç türleri: kategori → { kart, ad }. Pasif tür de sayılır (eşleme yaşıyorsa faturalar — fail-closed). */
-export async function loadProcessMap(db: Db): Promise<Map<string, { serviceItemId: string; name: string }>> {
-  const rows = await db.serviceItemProcess.findMany({ select: { categoryId: true, serviceItemId: true, category: { select: { name: true } } } });
-  return new Map(rows.map((r) => [r.categoryId, { serviceItemId: r.serviceItemId, name: r.category.name }]));
-}
 
 type Mapped = { categoryId: string; categoryName: string; serviceItemId: string };
 type StepRef = { id: string; stationId: string; requiredCategoryId: string | null; station: { defaultCategoryId: string | null } };

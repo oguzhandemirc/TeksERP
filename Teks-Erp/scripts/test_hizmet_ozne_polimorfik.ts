@@ -24,6 +24,7 @@
 //   §6 ek: iptal → yeniden çıkış yeni bağ doğurur, eski taslak onayı yine 409 · kart değişince levent ikinci kez faturalanmaz
 //   §7 Kilit: levent satırı F5 claim aynasıyla (UPDATE) tutulurken dönem taslağı BEKLER · kârlılık okuyucusu levent bağını sahibiyle okur ·
 //      eşzamanlı iki dönem POST'u → tek taslak · F5 iptali damga/okuma için TEK helper'ı çağırır (AST) · gün içi fiyat değişiminde her çıkış kendi anının fiyatı
+//   §8 F9 birleşimi: weavingWorks açık dönem taslağı bizim-hata yeniden işlem işini `excludedWorks`te gerekçesiyle taşır (sarım kolu düşürmez)
 // Negatif sondalar (2026-11-08) harita satırında.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -47,6 +48,7 @@ import { readServiceRevenueInvoices } from "../src/services/helpers/profitabilit
 import { SETTING_KEYS, loadServiceBillingSettings, readFinanceServiceBillingWeavingWorks, systemSettingService } from "../src/services/system-setting.service";
 import { serviceItemService } from "../src/services/service-item.service";
 import { factoryYmd } from "../src/constants/time";
+import { WorkOrderService } from "../src/services/workorder.service";
 
 let pass = 0;
 let fail = 0;
@@ -67,11 +69,11 @@ const P = `TEST-HOP-${STAMP}`;
 const fx = {
   itemIds: [] as string[], catIds: [] as string[], stationIds: [] as string[], machineIds: [] as string[], rollIds: [] as string[],
   customerIds: [] as string[], beamIds: [] as string[], specIds: [] as string[], dispatchIds: [] as string[], woIds: [] as string[],
-  runIds: [] as string[], doffIds: [] as string[], yarnIds: [] as string[],
+  runIds: [] as string[], doffIds: [] as string[], yarnIds: [] as string[], prodWoIds: [] as string[], shipmentIds: [] as string[],
 };
 const KEYS = [
   SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, SETTING_KEYS.FINANCE_SERVICE_BILLING_WEAVING_WORKS,
-  SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER,
+  SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, SETTING_KEYS.FINANCE_SERVICE_BILLING_STEP_WORKS,
 ];
 const prior = new Map<string, { existed: boolean; value: unknown }>();
 const setSetting = (key: string, value: unknown) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
@@ -384,6 +386,34 @@ async function main(): Promise<void> {
   const sarimLines = pvDay.lines.filter((l) => l.serviceItemId === SARIM);
   check("gün içi fiyat değişimi → değişimden önceki çıkış 0,5 (100 m), sonraki 0,9 (200 m)",
     sarimLines.length === 2 && sarimLines.some((l) => l.qty === "100.000" && eq(l.unitPrice, 0.5)) && sarimLines.some((l) => l.qty === "200.000" && eq(l.unitPrice, 0.9)), JSON.stringify(sarimLines));
+
+  // ── §8 ───────────────────────────────────────────────────────────────────
+  section("§8 F9 birleşimi — sarım kolu dışlanan işi düşürmez");
+  const BOYA = await mkItem("BOYA", ItemType.SERVICE, "4.0000");
+  const catBoya = await mkCat("BOYA");
+  await serviceItemService.replaceProcesses(BOYA, [catBoya], actor);
+  const boyaSt = await prisma.station.create({ data: { code: `${P}-BOY`.slice(0, 32), name: `TEST HOP boya ${STAMP}`, type: "INTERNAL", kind: "OTHER", defaultCategoryId: catBoya }, select: { id: true } });
+  fx.stationIds.push(boyaSt.id);
+  const pwo = (await new WorkOrderService().create({ type: "STOCK_PRODUCTION", targetItemId: fabric, parameters: null, steps: [{ stationId: boyaSt.id, notes: null }] } as never)) as { data?: { id: string } };
+  fx.prodWoIds.push(pwo.data!.id);
+  // F9 sınıfı İE doğuşunda donar; burada yalnız donmuş sonucu (bizim hatamız) kuruyoruz — donmanın kendisi F9 bekçisinde.
+  const pwoRow = await prisma.workOrder.update({ where: { id: pwo.data!.id }, data: { reworkBillable: false }, select: { steps: { select: { id: true } } } });
+  const sh8 = await prisma.shipment.create({ data: { shipmentNo: `${P}-SV`.slice(0, 32), customerId: cust.id, status: "DISPATCHED", dispatchedAt: new Date(Date.now() - 5 * 60_000) }, select: { id: true } });
+  fx.shipmentIds.push(sh8.id);
+  const rOurs = await mkRoll(90, { status: "SHIPPED", shipmentId: sh8.id });
+  await prisma.rollMovement.create({ data: { rollId: rOurs, workOrderStepId: pwoRow.steps[0]!.id, qtyIn: 90, qtyOut: 88, enteredAt: new Date(Date.now() - 20 * 60_000), exitedAt: new Date(Date.now() - 10 * 60_000) } });
+  const s8 = { ...(await loadServiceBillingSettings()), stepWorks: true, weavingWorks: true };
+  const p8 = await collectPeriodServiceBilling({ customerId: cust.id, currency: Currency.TRY, settings: s8, from: new Date(Date.now() - 86400_000), to: new Date(Date.now() + 60_000) });
+  const ex8 = p8.excludedWorks ?? [];
+  check("weavingWorks açık dönem taslağı: bizim hatamız adım işi satırsız/bağsız, excludedWorks'te REWORK_OUR_FAULT",
+    !p8.links.some((l) => l.rollId === rOurs) && ex8.length === 1 && ex8[0]!.subjectId === rOurs && ex8[0]!.excludedReason === "REWORK_OUR_FAULT" && ex8[0]!.serviceItemId === BOYA,
+    JSON.stringify({ ex8, links: p8.links.filter((l) => l.rollId === rOurs).length }));
+  await setSetting(SETTING_KEYS.FINANCE_SERVICE_BILLING_STEP_WORKS, true);
+  const b8 = await mkBeam(250, { machineId: devere.machineId, ship: true });
+  const pv8 = await previewServicePeriodDraft({ cariId: cari.id, period });
+  const row8 = pv8.serviceWorks?.find((w) => w.subjectId === rOurs);
+  check("dönem önizlemesi serviceWorks'te dışlanan satırı gerekçesiyle taşır (levent satırlarıyla birlikte)",
+    row8?.excludedReason === "REWORK_OUR_FAULT" && (pv8.serviceWorks ?? []).some((w) => w.subjectId === b8.id), JSON.stringify(pv8.serviceWorks));
 }
 
 async function cleanup(): Promise<void> {
@@ -410,7 +440,16 @@ async function cleanup(): Promise<void> {
   await del("consignment", () => prisma.consignmentDispatch.deleteMany({ where: { id: { in: fx.dispatchIds } } }));
   await del("beam", () => prisma.warpBeam.deleteMany({ where: { id: { in: fx.beamIds } } }));
   await del("warpSpec", () => prisma.warpSpec.deleteMany({ where: { id: { in: fx.specIds } } }));
+  await del("rollMovement", () => prisma.rollMovement.deleteMany({ where: { rollId: { in: fx.rollIds } } }));
   await del("roll", () => prisma.roll.deleteMany({ where: { id: { in: fx.rollIds } } }));
+  await del("shipment", () => prisma.shipment.deleteMany({ where: { id: { in: fx.shipmentIds } } }));
+  // `work_order_events` append-only mühürlü: İE silinince kaskatla gider.
+  await del("travelerCardScan", () => prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: { in: fx.prodWoIds } } } }));
+  await del("travelerCard", () => prisma.travelerCard.deleteMany({ where: { workOrderId: { in: fx.prodWoIds } } }));
+  await del("batch", () => prisma.batch.deleteMany({ where: { workOrderId: { in: fx.prodWoIds } } }));
+  await del("recordFollow", () => prisma.recordFollow.deleteMany({ where: { workOrderId: { in: fx.prodWoIds } } }));
+  await del("prodStep", () => prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: fx.prodWoIds } } }));
+  await del("prodWo", () => prisma.workOrder.deleteMany({ where: { id: { in: fx.prodWoIds } } }));
   await del("doff", () => prisma.doffEvent.deleteMany({ where: { id: { in: fx.doffIds } } }));
   await del("run", () => prisma.machineRun.deleteMany({ where: { id: { in: fx.runIds } } }));
   await del("weavingOrder", () => prisma.weavingOrder.deleteMany({ where: { id: { in: fx.woIds } } }));

@@ -212,7 +212,7 @@ export async function collectShipmentInvoiceDraftLines(
     warnings: [...product.warnings, ...svc.warnings],
     serviceLinks: svc.links,
     // F4 kırılım (levent sarımı sevk taslağına girmez — yalnız top işleri); boşsa alan yok.
-    ...(svc.works.length > 0 ? { serviceWorks: svc.works } : {}),
+    ...(svc.works.length + (svc.excludedWorks?.length ?? 0) > 0 ? { serviceWorks: [...svc.works, ...(svc.excludedWorks ?? [])] } : {}),
   };
 }
 

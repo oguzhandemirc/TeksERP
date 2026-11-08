@@ -15,7 +15,7 @@ import prisma from "../../lib/prisma";
 import { resolveItemPricesAtMany } from "../item-price.service";
 import { loadServiceTierItemsAtMany, pickServicePrice, tierMissingWarning } from "./service-price-pick.helper";
 import { priceUnitMatches, SERVICE_QTY_UNIT_LABEL } from "./service-quantity.helper";
-import { loadProcessMap } from "./service-step-work.helper";
+import { loadProcessMap } from "./service-process-map.helper";
 import { processOfMachines } from "./service-weaving-work.helper";
 import { listActiveShipToOwnerBeams } from "./consignment-beam.helper";
 import type { ServiceBillingDraft, ServiceBillingLinkInput } from "./service-billing.helper";
