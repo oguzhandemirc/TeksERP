@@ -440,6 +440,7 @@ const L2_YOLU: Record<string, L2Yolu> = {
   // (`test_batch_number_format` §0/§0b/§0c/§1/§3, 56 iddia).
   batchDaily: { not: "İki rejimli üreteç; L2 yolu `batch.shortNumberEnabled` bayrağını oynatmayı gerektirir — rejim aritmetiği `test_batch_number_format`ta sahte tx ile ölçülüyor." },
   batchShort: { not: "İki rejimli üreteç; L2 yolu `batch.shortNumberEnabled` bayrağını oynatmayı gerektirir — sarma ve aralık `test_batch_number_format` §0/§0b/§0c'de ölçülüyor." },
+  consignmentDispatch: { not: "Emanet çıkış belgesi en az bir CONSIGNED levent (READY, sarılmış) ya da sahipli lot + bakiye zinciri ister; numara doğuşu ve EC öneki `test_emanet_cikis` §4a'da servis yolundan ölçülüyor." },
   packingLotCode: {
     not: "PackingGroup: müşteri + ad + kod, başka zincir yok.",
     yarat: async (damga) => {

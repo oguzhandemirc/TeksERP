@@ -57,6 +57,7 @@ const KALAN_OKUYAN_YAZARLAR = new Set([
   "src/services/warp-beam-auto-consume.service.ts::autoConsumeForRollTx",
   "src/services/subcontractor-beam.service.ts::dispatchWarpBeamItemsTx",
   "src/services/warp-beam-mount.service.ts::mountBeamFresh",
+  "src/services/consignment-dispatch/create.ts::createConsignmentDispatch",
 ]);
 
 type Birim = { anahtar: string; ad: string; dugum: ts.Node; cagrilar: Array<{ ad: string; satir: number; yanit: boolean }>; elleToplama: number[] };

@@ -189,6 +189,7 @@ export const TABLE_LABELS: Record<string, string> = {
   PURCHASE_ORDER: "Alış Siparişi",
   ITEM_PRICE: "Ürün Fiyatı",
   LAB_TEST: "Lab Testi",
+  CONSIGNMENT_DISPATCH: "Emanet Çıkış Belgesi",
   LAB_TEST_TYPE: "Lab Test Türü",
   CERTIFICATE: "Sertifika",
   CERTIFICATE_FILE: "Sertifika Belgesi",

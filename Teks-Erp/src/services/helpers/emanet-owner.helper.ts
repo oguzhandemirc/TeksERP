@@ -14,6 +14,7 @@
 //      Bayraktan BAĞIMSIZ: veri varsa çalışır (bayrak sonradan kapatılsa emanet mal yanlış müşteriye gitmez).
 //      Aynı soruyu sevk ÖNİZLEMESİ de sorar (`findOwnerMismatches`, red değil uyarı + `ownerMismatches[]`) —
 //      yüklem TEK yerde yaşar ki önizleme "geçer" derken dispatch 409 vermesin.
+//   ③b `isConsignedTo` — emanet çıkış belgesi (levent/iplik sahibine iade): owner dolu ∧ = belge sahibi.
 // =============================================================================
 import { ROLL_DISPLAY_ORDER } from "../../constants/roll-order";
 import { Prisma } from "@prisma/client";
@@ -118,6 +119,14 @@ export async function previewOwnerMismatches(
     ? `[OWNER_MISMATCH] ${ownerMismatchText(ownerMismatches, "sevkiyat")} — Sevk Et reddedilir.`
     : `[OWNER_MISMATCH] ${ownerMismatches.length} top müşterinin EMANET malı (${ownerMismatches.map((r) => `${r.barcode ?? "?"} (${r.owner ?? "?"})`).join(", ")}) — yalnız sahibine sevk edilebilir.`;
   return { ownerMismatches, warnings: [warning] };
+}
+
+/**
+ * ③b Emanet ÇIKIŞ belgesinin (genel fason F5) sahip yüklemi — `assertOwnerMatchesTx` ikizi ama KATI: sahibine iade
+ * yalnız o müşterinin malını taşır; sahipsiz (fabrikanın) levent/lot da uyuşmazlıktır. Önizleme ve oluştur aynı yüklemi okur.
+ */
+export function isConsignedTo(ownerCustomerId: string | null, customerId: string): boolean {
+  return ownerCustomerId !== null && ownerCustomerId === customerId;
 }
 
 /** ③ Sevk sahiplik kapısı — etkilenen HER top listelenir (soyut sayı yetmez). */
