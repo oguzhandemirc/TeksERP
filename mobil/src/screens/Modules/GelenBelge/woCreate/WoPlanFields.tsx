@@ -10,13 +10,13 @@ import type { DeskKursunMachine } from '../../../../services/inboundDoc.service'
 import type { ProductionRoute } from '../../../../services/route.service';
 import { colors, spacing, typography } from '../../../../theme';
 import { ChoiceChips } from '../../../../components/form/ChoiceChips';
-import { SectionBand } from '../../../../components/form/SectionBand';
+import { FieldCaption } from './FieldCaption';
 import { machineChoice } from '../desk/machineChoice';
 import RouteStepsEditor from './RouteStepsEditor';
 import type { WoFieldKey } from './woFieldCatalog';
 import { deriveWoType, type WoType } from './woForm';
 import type { EditStep } from './woSteps';
-import { TERIM, TERIM_AD } from '../../../../lib/terim';
+import { TERIM_AD } from '../../../../lib/terim';
 
 export interface WoPlanCtx {
   /** Etkin rota (düzenlenmiş adımlarla); varsayılan hedefler bundan. */
@@ -41,6 +41,8 @@ export interface WoPlanCtx {
   woType: WoType | null;
   orderLineIds: readonly string[];
   onWoType: (t: WoType | null) => void;
+  /** "Malın sahibi" seçimi formda: Fason oradan seçilir → tür alanı yalnız Siparişe/Stoğa (Fason'da salt okunur ifade). */
+  ownerCard?: boolean;
   propertyIds: string[] | null;
   onProperties: (ids: string[] | null) => void;
 }
@@ -91,14 +93,7 @@ function MachineBand(p: { list: readonly DeskKursunMachine[]; value: string | nu
   const picked = mc.shortName(p.value);
   return (
     <View style={styles.block}>
-      <SectionBand
-        title="Makine seç"
-        icon="cog-transfer-outline"
-        aside={mc.prefix}
-        tone={picked ? 'ok' : 'idle'}
-        status={p.note ? null : { icon: picked ? 'check' : 'clock-outline', text: picked ?? 'Sonra' }}
-        testID="ie-serit-makine"
-      />
+      <FieldCaption label="Makine seç" aside={mc.prefix} status={p.note ? null : picked ?? 'Sonra'} testID="ie-serit-makine" />
       {p.note ? (
         <MachineNote text={p.note} />
       ) : (
@@ -111,30 +106,37 @@ function MachineBand(p: { list: readonly DeskKursunMachine[]; value: string | nu
 const TYPE_LABEL: Record<WoType, string> = { ORDER_PRODUCTION: 'Siparişe üretim', STOCK_PRODUCTION: 'Stoğa üretim', CUSTOMER_GOODS_SERVICE: TERIM_AD.fasonMusteriMali };
 const TYPE_OPTIONS = (Object.keys(TYPE_LABEL) as WoType[]).map((t) => ({ value: t, label: TYPE_LABEL[t], testID: `ie-form-tur-${t}` }));
 
-/** İş emri türü: dokunulmadıkça otomatik (sipariş kalemi varsa siparişe, yoksa stoğa) ve gövdeye gitmez. */
+const OWN_OPTIONS = TYPE_OPTIONS.filter((o) => o.value !== 'CUSTOMER_GOODS_SERVICE');
+
+/** İş emri türü: dokunulmadıkça otomatik (sipariş kalemi varsa siparişe, yoksa stoğa) ve gövdeye gitmez. Ayrı başlık/açıklama
+ *  yok; "Otomatik" ya da "Otomatiğe dön" çiplerin yanında. Malın sahibi formdaysa Fason orada seçilir, burada salt okunur. */
 export function WoTypeBlock({ plan, show, locked }: BlockProps) {
   if (!show('isEmriTuru')) return null;
   const shown = plan.woType ?? deriveWoType(plan.orderLineIds);
-  return (
-    <View style={styles.block} testID="ie-form-tur">
-      <Text style={styles.label}>{TERIM.terbiyeIsEmri.cumleBasi.yalin} türü</Text>
-      <View style={styles.chips}>
-        <ChoiceChips
-          options={TYPE_OPTIONS}
-          value={shown}
-          onChange={(t) => t && plan.onWoType(t as WoType)}
-          disabled={locked}
-          testID="ie-form-tur-secim"
-        />
-        {plan.woType !== null && (
-          <Button mode="text" onPress={() => plan.onWoType(null)} disabled={locked} contentStyle={styles.btn} testID="ie-form-tur-otomatik">
-            Otomatiğe dön
-          </Button>
-        )}
+  if (plan.ownerCard && shown === 'CUSTOMER_GOODS_SERVICE') {
+    return (
+      <View style={styles.fixed} testID="ie-form-tur">
+        <Text style={styles.fixedLabel}>Tür</Text>
+        <Text style={styles.fixedValue} testID="ie-form-tur-sabit">{TYPE_LABEL.CUSTOMER_GOODS_SERVICE}</Text>
       </View>
-      <Text style={styles.hint}>
-        {plan.woType === null ? 'Otomatik: sipariş kalemi bağlıysa siparişe, değilse stoğa üretim.' : plan.woType === 'CUSTOMER_GOODS_SERVICE' ? 'Müşteri belgenin carisidir; sipariş kalemi bağlanmaz.' : plan.woType === 'ORDER_PRODUCTION' && plan.orderLineIds.length === 0 ? 'Siparişe üretim için yukarıdan sipariş kalemi seçin.' : 'Elle seçildi.'}
-      </Text>
+    );
+  }
+  return (
+    <View style={styles.chips} testID="ie-form-tur">
+      <ChoiceChips
+        options={plan.ownerCard ? OWN_OPTIONS : TYPE_OPTIONS}
+        value={shown}
+        onChange={(t) => t && plan.onWoType(t as WoType)}
+        disabled={locked}
+        testID="ie-form-tur-secim"
+      />
+      {plan.woType !== null ? (
+        <Button mode="text" compact onPress={() => plan.onWoType(null)} disabled={locked} contentStyle={styles.btn} testID="ie-form-tur-otomatik">
+          Otomatiğe dön
+        </Button>
+      ) : (
+        <Text style={styles.hint}>Otomatik</Text>
+      )}
     </View>
   );
 }
@@ -159,12 +161,7 @@ export function TargetPropsBlock({ plan, show, locked }: BlockProps) {
   const hint = catalog.isLoading ? 'Özellikler yükleniyor…' : defaultsLoading ? 'Rotanın varsayılan özellikleri yükleniyor…' : options.length === 0 ? 'Tanımlı özellik yok.' : plan.propertyIds === null ? null : 'Rota bu özellikleri vermeli.';
   return (
     <View style={styles.block} testID="ie-form-ozellik">
-      <SectionBand
-        title="Hedef özellikler"
-        icon="star-four-points-outline"
-        status={{ text: plan.propertyIds === null ? 'varsayılan' : 'elle' }}
-        testID="ie-serit-ozellik"
-      />
+      <FieldCaption label="Hedef özellikler" status={plan.propertyIds === null ? 'varsayılan' : 'elle'} testID="ie-serit-ozellik" />
       <View style={styles.chips}>
         <ChoiceChips
           multi
@@ -187,8 +184,10 @@ export function TargetPropsBlock({ plan, show, locked }: BlockProps) {
 
 const styles = StyleSheet.create({
   block: { gap: spacing.sm },
-  label: { marginTop: spacing.xs, fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
+  fixed: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 40 },
+  fixedLabel: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.textSecondary },
+  fixedValue: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.warningDark },
   btn: { minHeight: 56 },
 });

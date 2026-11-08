@@ -133,10 +133,11 @@ describe('UnifiedWoForm — rota adımları (K30-D)', () => {
 
   it('⭐ dokunulmayan adımlar GİTMEZ; çıkar/yukarı/ekle → tüm liste sırayla steps olarak gider', async () => {
     const s = await openFree();
-    expect(s.getByTestId('ie-adim-ipucu')).toHaveTextContent(/şablonu aynen/);
+    expect(s.queryByTestId('ie-adim-ipucu')).toBeNull();
     expect(body()).not.toHaveProperty('steps');
     fireEvent.press(s.getByTestId('ie-adim-2-yukari'));
     expect(s.getByTestId('ie-adim-1-ad')).toHaveTextContent('1. Boya');
+    expect(s.getByTestId('ie-adim-ipucu')).toHaveTextContent(/Adımları değiştirdiniz/);
     fireEvent.press(s.getByTestId('ie-adim-ekle'));
     fireEvent.press(s.getByTestId('secim-Adım ekle — istasyon-stP'));
     fireEvent.changeText(s.getByTestId('ie-adim-3-not'), ' son kontrol ');

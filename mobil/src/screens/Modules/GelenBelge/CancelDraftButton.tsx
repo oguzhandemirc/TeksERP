@@ -2,7 +2,7 @@
 // yeni kaydı tutuyordu). Taslak deftere yazmamıştır → sunucu sert siler; onay kartı satır/parti sayısını önizlemeden okur.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, IconButton, Text } from 'react-native-paper';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
@@ -16,12 +16,14 @@ interface Props {
   onCancelled: () => void;
   disabled?: boolean;
   testID?: string;
+  /** Tek İE formunun belge satırı: yazısız kırmızı ikon (erişilebilirlik adı aynı). */
+  iconOnly?: boolean;
 }
 
 const messageOf = (e: unknown): string =>
   typeof (e as { message?: unknown })?.message === 'string' ? (e as { message: string }).message : 'Taslak iptal edilemedi.';
 
-export default function CancelDraftButton({ note, onCancelled, disabled, testID = 'belge-taslak-iptal' }: Props) {
+export default function CancelDraftButton({ note, onCancelled, disabled, testID = 'belge-taslak-iptal', iconOnly = false }: Props) {
   const canWrite = usePermissions().has('gelen-belge:write');
   const [open, setOpen] = useState(false);
   const preview = useQuery({
@@ -47,6 +49,18 @@ export default function CancelDraftButton({ note, onCancelled, disabled, testID 
   const blocked = p ? !p.deletable : false;
   return (
     <>
+      {iconOnly ? (
+        <IconButton
+          icon="file-cancel-outline"
+          iconColor={colors.dangerDark}
+          size={24}
+          style={styles.icon}
+          onPress={() => setOpen(true)}
+          disabled={disabled}
+          accessibilityLabel="Taslağı iptal et"
+          testID={testID}
+        />
+      ) : (
       <Button
         mode="outlined"
         icon="file-cancel-outline"
@@ -59,6 +73,7 @@ export default function CancelDraftButton({ note, onCancelled, disabled, testID 
       >
         Taslağı iptal et
       </Button>
+      )}
       <ModuleSheet
         visible={open}
         onDismiss={() => !cancel.isPending && setOpen(false)}
@@ -105,6 +120,7 @@ export default function CancelDraftButton({ note, onCancelled, disabled, testID 
 
 const styles = StyleSheet.create({
   btn: { minHeight: 56 },
+  icon: { width: 56, height: 56, margin: 0 },
   outline: { borderColor: colors.danger },
   body: { gap: spacing.sm },
   count: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },

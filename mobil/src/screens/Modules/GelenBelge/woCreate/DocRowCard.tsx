@@ -1,5 +1,5 @@
 // Belgeden terbiye iş emri — tek belge satırı: okuma izlenir, bitince form dolar (müşteri önerisi, parti adayı, metre +
-// doğrulama, varsayılan gramaj). Toplu görünüm (`list`) kart + madde listesi; tek form (`single`) şeritlerle, kartsız.
+// doğrulama, varsayılan gramaj). Toplu görünüm (`list`) kart + şeritler + madde listesi; tek form (`single`) şeritsiz, kartsız.
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
@@ -79,8 +79,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
       {f && (
         <>
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />
-          <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)}
-            testID={single ? 'ie-serit-parti' : `belge-serit-parti-${row.noteNo}`} />
+          {!single && <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)} testID={`belge-serit-parti-${row.noteNo}`} />}
           {f.multi ? <PartyRows row={row} wo={wo} locked={partyLocked} plan={partyPlan} /> : (
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
@@ -219,7 +218,7 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
 
 const styles = StyleSheet.create({
   box: { padding: spacing.lg, borderRadius: radius.md, gap: spacing.sm, backgroundColor: colors.surfaceMuted },
-  flat: { gap: spacing.sm },
+  flat: { gap: spacing.md },
   ok: { backgroundColor: colors.successContainer },
   warn: { backgroundColor: colors.warningContainer },
   warnText: { color: colors.warningText },

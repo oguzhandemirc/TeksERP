@@ -14,6 +14,7 @@ import FilterBar from './FilterBar';
 import WorkOrderTable from './WorkOrderTable';
 import ActionBar from './ActionBar';
 import ScanStage from './ScanStage';
+import { FieldsHeaderIcon } from '../GelenBelge/woCreate/WoFieldSelector';
 import OptionsSheet from './OptionsSheet';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useScanAction } from './useScanAction';
@@ -31,6 +32,8 @@ export default function IsEmirleriScreen() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [stage, setStage] = useState<{ route: ProductionRoute | null; manual: boolean; n: number } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // Formun ⚙ Alanlar sayfası başlık çubuğundaki ikondan açılır (profil tuşunun solu).
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   const kinds = useDeviceSettingsStore((s) => s.woCreateKinds);
   const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
   const routeOnButton = useDeviceSettingsStore((s) => s.woRouteOnButton);
@@ -54,8 +57,8 @@ export default function IsEmirleriScreen() {
     // Oluşturma formu; geri → liste (kaydedilen İE listede görünsün diye tazelenir).
     const back = () => { setStage(null); void list.refreshAll(); };
     return (
-      <ScreenChrome title={stage.manual ? `${TERIM.terbiyeIsEmri.tekil} · Elle oluştur` : `${TERIM.terbiyeIsEmri.tekil} · Belge okut`} onStepBack={back}>
-        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onCancel={back} onNew={() => setStage({ ...stage, n: stage.n + 1 })} />
+      <ScreenChrome title={stage.manual ? `${TERIM.terbiyeIsEmri.tekil} · Elle oluştur` : `${TERIM.terbiyeIsEmri.tekil} · Belge okut`} onStepBack={back} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
+        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onCancel={back} onNew={() => setStage({ ...stage, n: stage.n + 1 })} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} />
       </ScreenChrome>
     );
   }

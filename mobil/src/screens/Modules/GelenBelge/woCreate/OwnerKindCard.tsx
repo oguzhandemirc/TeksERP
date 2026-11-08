@@ -1,5 +1,5 @@
-// Tek İE formunun en üstü: "Malın sahibi" — Bizim mal (STANDARD, mavi) | Müşteri malı (fason, turuncu). Seçim yokken kart
-// kırmızı çerçeveli ve oluşturma kapalı (çağıran engeller); ön seçimde kısa neden yazılır.
+// Tek İE formunun sol sütun başı: başlıksız iki seçenek — Bizim mal (STANDARD, mavi) | Müşteri malı (fason, turuncu). Seçim
+// yokken kırmızı çerçeve + kısa uyarı ve oluşturma kapalı (çağıran engeller); ön seçimde kısa neden yazılır.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -21,8 +21,7 @@ const OPTIONS: { kind: WoCreateKind; label: string; icon: string; tone: { fg: st
 export default function OwnerKindCard({ value, reason, locked, onChange }: Props) {
   const missing = value === null;
   return (
-    <View style={[styles.card, missing && styles.missing]} testID="ie-mal-sahibi">
-      <Text style={styles.title}>Malın sahibi</Text>
+    <View style={[styles.card, missing && styles.missing]} testID="ie-mal-sahibi" accessibilityLabel="Malın sahibi">
       <View style={styles.row}>
         {OPTIONS.map((o) => {
           const on = value === o.kind;
@@ -37,8 +36,8 @@ export default function OwnerKindCard({ value, reason, locked, onChange }: Props
               testID={`ie-mal-sahibi-${o.kind}`}
             >
               <View style={styles.optInner}>
-                <Icon source={on ? 'radiobox-marked' : 'radiobox-blank'} size={24} color={on ? o.tone.fg : colors.textMuted} />
-                <Icon source={o.icon} size={24} color={o.tone.fg} />
+                <Icon source={on ? 'radiobox-marked' : 'radiobox-blank'} size={22} color={on ? o.tone.fg : colors.textMuted} />
+                <Icon source={o.icon} size={22} color={o.tone.fg} />
                 <Text style={[styles.optLabel, { color: on ? o.tone.fg : colors.text }]}>{o.label}</Text>
               </View>
             </TouchableRipple>
@@ -55,13 +54,12 @@ export default function OwnerKindCard({ value, reason, locked, onChange }: Props
 }
 
 const styles = StyleSheet.create({
-  card: { padding: spacing.md, gap: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  missing: { borderWidth: 2, borderColor: colors.danger },
-  title: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  opt: { flexGrow: 1, flexBasis: 220, minHeight: 64, borderRadius: radius.lg, borderWidth: 2, justifyContent: 'center', overflow: 'hidden' },
-  optInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  optLabel: { flexShrink: 1, fontSize: typography.size.lg, fontWeight: typography.weight.bold },
-  need: { fontSize: typography.size.sm, color: colors.dangerText },
+  card: { gap: spacing.xs },
+  missing: { padding: spacing.xs, borderRadius: radius.lg, borderWidth: 2, borderColor: colors.danger },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  opt: { flexGrow: 1, flexBasis: 150, minHeight: 56, borderRadius: radius.md, borderWidth: 2, justifyContent: 'center', overflow: 'hidden' },
+  optInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  optLabel: { flexShrink: 1, fontSize: typography.size.base, fontWeight: typography.weight.bold },
+  need: { fontSize: typography.size.sm, color: colors.dangerText, paddingHorizontal: spacing.xs },
   reason: { fontSize: typography.size.sm, color: colors.textSecondary },
 });

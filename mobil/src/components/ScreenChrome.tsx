@@ -53,6 +53,8 @@ interface Props {
    *  tuş orada "diğer aksiyonlar" arasında kaybolur — mod, bulunulan yerin
    *  yanında okunmalı (2026-08-17 saha geri bildirimi, KK1 yarı mamul). */
   titleRowExtras?: React.ReactNode;
+  /** Profil tuşunun HEMEN SOLUNDA (zilden sonra) duran yalnız-ikon ekran tetiği (ör. İE formunda ⚙ Alanlar). */
+  profileExtras?: React.ReactNode;
   /** İçeriğin üstündeki şerit yuvası (tezgah alarmı). İstasyon ekranında bildirim şeridi bunun ALTINA gelir. */
   topStrip?: React.ReactNode;
   children: React.ReactNode;
@@ -69,6 +71,7 @@ export default function ScreenChrome({
   secondRowSpread,
   hidePlaceChip,
   titleRowExtras,
+  profileExtras,
   topStrip,
   children,
 }: Props) {
@@ -178,6 +181,8 @@ export default function ScreenChrome({
 
         {/* Bildirim zili — bayrak kapalı / eski backend → null (bugünkü başlık bayt-eşit). */}
         <NotificationBellButton />
+
+        {profileExtras}
 
         {/* Konum tetiğin GERÇEK ölçümünden gelir (measureInWindow) — eski
             `anchorPosition`/`marginTop` telafisi artık gerekmiyor. */}

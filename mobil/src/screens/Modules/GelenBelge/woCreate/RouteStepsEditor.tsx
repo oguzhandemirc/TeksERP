@@ -11,7 +11,7 @@ import type { DeskKursunMachine } from '../../../../services/inboundDoc.service'
 import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import { SectionBand } from '../../../../components/form/SectionBand';
+import { FieldCaption } from './FieldCaption';
 import { MachineChips } from '../desk/DeskReview';
 import { addStep, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
@@ -50,7 +50,7 @@ export default function RouteStepsEditor(p: Props) {
     <View style={styles.root} testID="ie-rota-adimlari">
       <View style={styles.head}>
         <View style={styles.grow}>
-          <SectionBand title="Rota adımları" icon="format-list-numbered" testID="ie-serit-adimlar" />
+          <FieldCaption label="Rota adımları" testID="ie-serit-adimlar" />
         </View>
         {p.edited && can && (
           <Button mode="text" onPress={() => p.onChange(null)} contentStyle={styles.btn} testID="ie-adim-sablona-don">
@@ -58,11 +58,12 @@ export default function RouteStepsEditor(p: Props) {
           </Button>
         )}
       </View>
-      <Text style={styles.hint} testID="ie-adim-ipucu">
-        {p.edited
-          ? `Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`
-          : 'Değiştirmezseniz rota şablonu aynen kullanılır.'}
-      </Text>
+      {/* Değişmemiş şablonda açıklama yok (sade form); değiştirilince bunun kayda gideceği söylenir. */}
+      {p.edited && (
+        <Text style={styles.hint} testID="ie-adim-ipucu">
+          {`Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`}
+        </Text>
+      )}
       {p.steps.map((s, i) => (
         <View key={s.key} style={styles.step} testID={`ie-adim-${i + 1}`}>
           <View style={styles.stepHead}>

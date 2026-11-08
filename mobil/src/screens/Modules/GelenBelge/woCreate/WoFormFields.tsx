@@ -6,7 +6,6 @@ import { StyleSheet, View } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { SheetField } from '../../../../components/ModuleSheet';
-import { SectionBand } from '../../../../components/form/SectionBand';
 import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
@@ -19,13 +18,13 @@ import { useTruncationWarning } from '../../../../hooks/useTruncationWarning';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { colors, spacing, typography } from '../../../../theme';
 import OrderLinkPicker from '../../HizliIsEmri/OrderLinkPicker';
-import { SCAN_ROUTE_HINT, withScanRouteOption } from '../../HizliIsEmri/scanRouteOption';
+import { withScanRouteOption } from '../../HizliIsEmri/scanRouteOption';
 import type { AvailableOrderLine } from '../../../../services/order.service';
 import { SCAN_ROUTE, isScanRoute } from './woFromDoc';
 import { plannedDayOptions, type WoFormExtras, type WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
 import { RouteStepsBlock, TargetPropsBlock, WoTypeBlock, type WoPlanCtx } from './WoPlanFields';
-import { DocFilled, FieldLabel, TargetFields } from './WoTargetFields';
+import { DocFilled, TargetFields } from './WoTargetFields';
 
 interface Props {
   state: WoFormState;
@@ -73,20 +72,22 @@ export default function WoFormFields(props: Props) {
     <View style={styles.root} testID={top ? 'ie-form-alanlari' : 'ie-form-alanlari-diger'}>
       {show('rota') && (
         <>
+          {/* Adım yolu seçicinin ikincil satırında; "sahada belirlenir" rotasında açıklama satırı yok (ad kendini anlatır). */}
           {!p.routeLocked && (
             <SelectButton
               label="Rota seç"
               caption="Rota"
               value={p.route ? p.route.name : null}
+              hint={p.route && !isScanRoute(p.route) && stepPath.length > 0 ? stepPath.join(' › ') : null}
               icon="map-marker-path"
               onPress={() => setPicker('route')}
               disabled={locked}
               testID="ie-form-rota"
             />
           )}
-          {p.route && (
+          {p.routeLocked && p.route && !isScanRoute(p.route) && (
             <Text style={styles.path} numberOfLines={1} testID="ie-rota-yolu">
-              {isScanRoute(p.route) ? SCAN_ROUTE_HINT : stepPath.join(' › ')}
+              {stepPath.join(' › ')}
             </Text>
           )}
         </>
@@ -95,12 +96,9 @@ export default function WoFormFields(props: Props) {
       {p.plan && <WoTypeBlock plan={p.plan} show={show} locked={locked} />}
 
       {show('siparis') && (
-        <>
-          <FieldLabel label="Sipariş (isteğe bağlı)" />
-          <View pointerEvents={locked ? 'none' : 'auto'} testID="ie-form-siparis">
-            <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} />
-          </View>
-        </>
+        <View pointerEvents={locked ? 'none' : 'auto'} testID="ie-form-siparis">
+          <OrderLinkPicker itemId={e.targetItemId} value={e.orderLineIds} onChange={(ids) => edit({ orderLineIds: ids })} onLinePicked={p.onOrderLinePicked} emptyHint="İsteğe bağlı" />
+        </View>
       )}
 
       <TargetFields {...p} customerId={p.plan?.customerId ?? null} onPickItem={() => setPicker('item')} />
@@ -117,7 +115,6 @@ function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
   const plan = { start: show('planBaslangic'), end: show('planBitis'), note: show('not') };
   return (
     <>
-      {(plan.start || plan.end || plan.note) && <SectionBand title="Plan" icon="calendar-range" testID="ie-serit-plan" />}
       {(plan.start || plan.end) && (
         <View style={styles.row}>
           {plan.start && (
@@ -133,12 +130,9 @@ function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
         </View>
       )}
       {plan.note && (
-        <>
-          <FieldLabel label="Not" />
-          <DocFilled k="note" state={p.state} highlight>
-            <TextInput value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
-          </DocFilled>
-        </>
+        <DocFilled k="note" state={p.state} highlight>
+          <TextInput label="Not" value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
+        </DocFilled>
       )}
     </>
   );
@@ -203,7 +197,7 @@ function FieldPickers(p: Props & { picker: Picker; setPicker: (x: Picker) => voi
 }
 
 const styles = StyleSheet.create({
-  root: { gap: spacing.sm },
+  root: { gap: spacing.md },
   path: { minHeight: 32, textAlignVertical: 'center', fontSize: typography.size.base, color: colors.textSecondary },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   col: { flex: 1, minWidth: 200 },

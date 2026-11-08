@@ -7,11 +7,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
 import { ChoiceChips } from '../../../../components/form/ChoiceChips';
-import { SectionBand } from '../../../../components/form/SectionBand';
 import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { meterChoices, parseMeters } from '../approvalGate';
 import type { DocRow, WoRowsState } from './useWoRows';
+import { FieldCaption } from './FieldCaption';
 
 interface MeterProps {
   row: DocRow;
@@ -68,16 +68,9 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
   const f = row.form!;
   if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
   const no = row.noteNo;
-  const chosen = wo.catalog.options.find((o) => o.id === f.gramajValueId);
   return (
     <>
-      <SectionBand
-        title="Kurşun gramajı"
-        icon="weight-gram"
-        tone={chosen ? 'ok' : 'idle'}
-        status={chosen ? { icon: 'check', text: chosen.name } : null}
-        testID={`belge-serit-gramaj-${no}`}
-      />
+      <FieldCaption label="Kurşun gramajı" testID={`belge-serit-gramaj-${no}`} />
       <ChoiceChips
         options={wo.catalog.options.map((o) => ({ value: o.id, label: o.isDefault ? `${o.name} ★` : o.name, a11y: o.isDefault ? `${o.name}, varsayılan` : o.name, testID: `belge-satir-gramaj-${no}-${o.name}` }))}
         value={f.gramajValueId ?? null}

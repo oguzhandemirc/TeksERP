@@ -234,6 +234,7 @@ function buildPlanCtx(p: PlanInput): WoPlanCtx {
     woType: extras.woType,
     orderLineIds: extras.orderLineIds,
     onWoType: (woType) => { edit({ woType }); p.onOwnerKind?.(ownerKindForWoType(woType)); },
+    ownerCard: !!p.onOwnerKind,
     propertyIds: extras.propertyIds,
     onProperties: (propertyIds) => edit({ propertyIds }),
   };

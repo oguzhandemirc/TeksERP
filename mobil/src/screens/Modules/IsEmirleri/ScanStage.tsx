@@ -31,9 +31,12 @@ interface StageProps {
   onCancel: () => void;
   /** Kaydedildikten sonra "Yeni iş emri". */
   onNew: () => void;
+  /** ⚙ Alanlar sayfası başlık ikonundan (kontrollü); verilmezse form kendi düğmesini çizer. */
+  fieldsOpen?: boolean;
+  onFieldsOpenChange?: (open: boolean) => void;
 }
 
-export default function ScanStage({ route, kinds, manual, onCancel, onNew }: StageProps) {
+export default function ScanStage({ route, kinds, manual, onCancel, onNew, fieldsOpen, onFieldsOpenChange }: StageProps) {
   const [note, setNote] = useState<{ id: string; run: number } | null>(null);
   // Fason: müşteri bulunamadıysa "Müşteri seç" kartı kapatır ve formun müşteri seçicisini (PickerModal) açar.
   const [ownerReq, setOwnerReq] = useState<DocRowOpenRequest | null>(null);
@@ -54,6 +57,8 @@ export default function ScanStage({ route, kinds, manual, onCancel, onNew }: Sta
         initialRoute={route}
         routeLocked={false}
         onNew={onNew}
+        fieldsOpen={fieldsOpen}
+        onFieldsOpenChange={onFieldsOpenChange}
         ownerKinds={kinds}
         autoScan={!manual}
         manual={manual}

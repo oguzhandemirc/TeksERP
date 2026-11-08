@@ -2,7 +2,7 @@
 // alan kaybolmaz, altta kapalı "Diğer alanlar (n)" bölümüne iner ve dokununca açılır.
 import React from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
+import { Appbar, Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { fieldLabel, selectorSections, type WoFieldDef, type WoFieldKey } from './woFieldCatalog';
@@ -15,6 +15,11 @@ export function FieldsButton({ onPress }: { onPress: () => void }) {
       </Button>
     </View>
   );
+}
+
+/** Başlık çubuğunda profil tuşunun solunda yalnız ikon (ScreenChrome `profileExtras`); dokunma hedefi 56dp. */
+export function FieldsHeaderIcon({ onPress }: { onPress: () => void }) {
+  return <Appbar.Action icon="cog-outline" color={colors.textOnDark} size={26} onPress={onPress} style={styles.headerIcon} accessibilityLabel="Alanlar" testID="ie-alanlar" />;
 }
 
 interface SheetProps {
@@ -115,6 +120,7 @@ export function OtherFields({ count, valued = [], open, onToggle, onLayout, chil
 }
 
 const styles = StyleSheet.create({
+  headerIcon: { width: 56, height: 56, margin: 0 },
   gearRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   btn: { minHeight: 56 },
   group: { gap: spacing.xs, marginBottom: spacing.sm },

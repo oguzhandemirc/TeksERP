@@ -21,6 +21,7 @@ import { DocScanBody } from '../DocScanScreen';
 import DeskView from '../desk/DeskView';
 import DocBatchView from './DocBatchView';
 import UnifiedWoForm from './UnifiedWoForm';
+import { FieldsHeaderIcon } from './WoFieldSelector';
 import { useTabletWoEntry } from './useWoEntry';
 import { hubTiles, type HubTiles } from './woForm';
 import { useScanRouteMode } from '../../../../hooks/useFeatureFlags';
@@ -95,7 +96,7 @@ export default function WoCreateScreen() {
   const title = stage.kind === 'teach' ? 'Belge tanıt' : stage.kind === 'legacy' ? 'Belge Tara' : stage.kind === 'desk' ? DESK : route ? shortcutTitle(route) : stage.kind === 'form' ? quick_() : title_();
 
   return (
-    <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back} headerExtras={stage.kind === 'unified' ? <FieldsHeaderChip onPress={() => setFieldsOpen(true)} /> : undefined}>
+    <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back} profileExtras={stage.kind === 'unified' ? <FieldsHeaderIcon onPress={() => setFieldsOpen(true)} /> : undefined}>
       {stage.kind === 'hub' && !ready && <ActivityIndicator style={styles.loading} testID="ie-giris-kipi-yukleniyor" />}
       {stage.kind === 'hub' && ready && (
         <Hub
@@ -199,23 +200,6 @@ function Tile({ icon, title, sub, onPress, testID }: { icon: string; title: stri
 }
 
 /** Tek formun ⚙ alan seçicisi başlıkta (gövdede yer kaplamasın); RefreshButton başlık çipi kalıbı. */
-function FieldsHeaderChip({ onPress }: { onPress: () => void }) {
-  return (
-    <TouchableRipple onPress={onPress} style={hdrStyles.chip} borderless rippleColor="rgba(255,255,255,0.2)" accessibilityLabel="Alanlar" testID="ie-alanlar">
-      <View style={hdrStyles.chipInner}>
-        <Icon source="cog-outline" size={18} color={colors.textOnDark} />
-        <Text style={hdrStyles.chipText}>Alanlar</Text>
-      </View>
-    </TouchableRipple>
-  );
-}
-
-const hdrStyles = StyleSheet.create({
-  chip: { borderRadius: 10, marginLeft: 4, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', overflow: 'hidden' },
-  chipInner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9 },
-  chipText: { color: colors.textOnDark, fontWeight: '700', fontSize: 13 },
-});
-
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   body: { padding: spacing.lg, gap: spacing.md },

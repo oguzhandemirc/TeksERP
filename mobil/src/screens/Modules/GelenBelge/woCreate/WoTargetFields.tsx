@@ -9,7 +9,6 @@ import { DocHighlight } from '../../../../components/DocHighlight';
 import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import { CompactNumberField } from '../../../../components/form/CompactNumberField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
-import { SectionBand } from '../../../../components/form/SectionBand';
 import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import TruncatedText from '../../../../components/TruncatedText';
@@ -35,9 +34,9 @@ export interface TargetFieldsProps {
   customerId?: string | null;
 }
 
-const TONE_STATUS: Partial<Record<BandTone, { icon: 'alert-outline' | 'alert-circle-outline'; text: string }>> = {
-  warn: { icon: 'alert-outline', text: 'Sayıyı düzeltin' },
-  missing: { icon: 'alert-circle-outline', text: 'Eksik' },
+const TONE_STATUS: Partial<Record<BandTone, { text: string }>> = {
+  warn: { text: 'Sayıyı düzeltin' },
+  missing: { text: 'Eksik' },
 };
 
 export function TargetFields(p: TargetFieldsProps) {
@@ -56,7 +55,10 @@ export function TargetFields(p: TargetFieldsProps) {
   const itemHint = [docHint, !e.targetItemId && !itemAsk ? defaultHint : null].filter(Boolean).join(' · ') || null;
   return (
     <>
-      <SectionBand title="Hedef" icon="texture-box" tone={p.targetTone ?? 'idle'} status={TONE_STATUS[p.targetTone ?? 'idle'] ?? null} testID="ie-serit-hedef" />
+      {/* Bölüm şeridi yok; hedefte sorun varsa tek satır uyarı (sayı hatalı / kat tipi eksik). */}
+      {TONE_STATUS[p.targetTone ?? 'idle'] && (
+        <NoticeStrip tone={p.targetTone === 'missing' ? 'danger' : 'warn'} text={`Hedef: ${TONE_STATUS[p.targetTone ?? 'idle']!.text}`} testID="ie-hedef-uyari" />
+      )}
       {show('hedefKumas') && (
         <>
           <SelectButton

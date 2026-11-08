@@ -53,22 +53,26 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const layout = woFormLayout(win.width, win.height);
   const twoCol = layout.columns === 2;
   const jump = useMissingJump(u, twoCol, props.openRequest ?? null);
+  // Malın sahibi seçimi sol sütunun başında (yan ekranda da), başlıksız.
+  const owner = u.owner.visible ? <OwnerKindCard value={u.owner.value} reason={u.owner.reason} locked={done || wo.saving} onChange={u.owner.choose} /> : null;
   return (
     <>
       <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
         {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
-        {u.owner.visible && <OwnerKindCard value={u.owner.value} reason={u.owner.reason} locked={done || wo.saving} onChange={u.owner.choose} />}
         {twoCol ? (
-          <View style={[styles.columns, { gap: layout.pad }]} onLayout={jump.at('columns')} testID="ie-form-iki-sutun">
+          <View style={[styles.columns, { gap: layout.pad + spacing.sm }]} onLayout={jump.at('columns')} testID="ie-form-iki-sutun">
             <View style={styles.col} testID="ie-form-sol">
+              {owner}
               <DocColumn u={u} openRequest={jump.request} />
             </View>
+            <View style={styles.divider} testID="ie-form-ayrac" />
             <View style={styles.col} onLayout={jump.at('form')} testID="ie-form-sag">
               <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
             </View>
           </View>
         ) : (
           <>
+            {owner}
             <View style={styles.stack} onLayout={jump.at('doc')}>
               <DocColumn u={u} openRequest={jump.request} />
             </View>
@@ -193,9 +197,10 @@ function ScanModals({ scan }: { scan: DocScanFlow }) {
 }
 
 const styles = StyleSheet.create({
-  body: { gap: spacing.sm },
-  columns: { flexDirection: 'row', alignItems: 'flex-start' },
-  col: { flex: 1, gap: spacing.sm },
-  stack: { gap: spacing.sm },
+  body: { gap: spacing.md },
+  columns: { flexDirection: 'row', alignItems: 'stretch' },
+  divider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
+  col: { flex: 1, gap: spacing.md },
+  stack: { gap: spacing.md },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
 });

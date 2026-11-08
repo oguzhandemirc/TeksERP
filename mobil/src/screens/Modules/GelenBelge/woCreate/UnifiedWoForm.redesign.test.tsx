@@ -114,7 +114,6 @@ jest.mock('../../../../components/ColorSelectField', () => ({ __esModule: true, 
 const form = { ownerCustomerId: 'cu1', ownerSuggested: null, ourBatchNo: 'P-1', meters: 100, metersReview: false, multi: null };
 const row = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, gramajTouched: false, result: null, form, detail: { id: 'n1', noteNo: 'GB-1', status: 'DRAFT', formFields: { en: '150', hedefMetraj: '1200', desenText: 'DSN-7' }, suggestions: {} } } as unknown as DocRow;
 const ui = () => renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
-const bar = (s: ReturnType<typeof ui>, id: string) => bg(s.getByTestId(`${id}-kenar`));
 const bg = (el: { props: { style?: unknown } }) => (StyleSheet.flatten(el.props.style as never) as { backgroundColor?: string }).backgroundColor;
 
 beforeEach(() => {
@@ -132,7 +131,8 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 1 (sağ sütun)', () => {
     expect(s.queryByText('Üretim')).toBeNull();
     expect(s.queryByTestId('ie-rota-adimlari')).toBeNull();
     expect(s.queryByTestId('ie-form-rota')).toBeNull();
-    expect(s.getByTestId('ie-serit-hedef')).toHaveTextContent(/Hedef/);
+    expect(s.queryByTestId('ie-serit-hedef')).toBeNull();
+    expect(s.queryByTestId('ie-hedef-uyari')).toBeNull();
   });
 
   it('⭐ makine şeridi: "Makine seç", ortak önek şeritte, çipte kısa ad; seçilen çip indigo + selected, hap kısa adı söyler', async () => {
@@ -148,7 +148,7 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 1 (sağ sütun)', () => {
     await waitFor(() => expect(s.getByTestId('ie-form-makine-K10').props.accessibilityState).toMatchObject({ selected: true }));
     expect(bg(s.getByTestId('ie-form-makine-K10'))).toBe(colors.choice.onBg);
     expect(s.getByTestId('ie-form-makine-K1').props.accessibilityState).toMatchObject({ selected: false });
-    expect(s.getByTestId('ie-serit-makine-durum')).toHaveTextContent(/[^0-9]10$/);
+    expect(s.getByTestId('ie-serit-makine-durum')).toHaveTextContent(/^10$/);
     expect(mockOpts?.extraBody?.(mockRows[0])?.stepPlanning).toEqual([{ sequence: 1, plannedMachineId: 'm10' }]);
   });
 
@@ -206,11 +206,11 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 2 (alt çubuk)', () => {
     expect(s.getByTestId('mock-acma-istegi')).toHaveTextContent('meter:1');
   });
 
-  it('⭐ dört eksik → ilk üçü hap, kalan "+1"; sayı hatası Hedef şeridini sarı yapar', async () => {
+  it('⭐ dört eksik → ilk üçü hap, kalan "+1"; sayı hatası tek satır Hedef uyarısı çıkarır', async () => {
     setRow({ ownerCustomerId: null, meters: null });
     const s = ui();
     await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
-    expect(bar(s, 'ie-serit-hedef')).not.toBe(colors.band.bar.warn);
+    expect(s.queryByTestId('ie-hedef-uyari')).toBeNull();
     fireEvent.changeText(s.getByTestId('ie-form-en'), '0');
     fireEvent.changeText(s.getByTestId('ie-form-hedef-metraj'), '0');
     expect(s.getByTestId('ie-eksik-musteri')).toBeTruthy();
@@ -218,6 +218,6 @@ describe('UnifiedWoForm — yeniden tasarım Dilim 2 (alt çubuk)', () => {
     expect(s.getByTestId('ie-eksik-en')).toHaveTextContent(/En hatalı/);
     expect(s.queryByTestId('ie-eksik-hedefMetraj')).toBeNull();
     expect(s.getByTestId('ie-eksik-fazla')).toHaveTextContent('+1');
-    expect(bar(s, 'ie-serit-hedef')).toBe(colors.band.bar.warn);
+    expect(s.getByTestId('ie-hedef-uyari')).toHaveTextContent(/Sayıyı düzeltin/);
   });
 });

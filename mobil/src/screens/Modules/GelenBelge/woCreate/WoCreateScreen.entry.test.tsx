@@ -18,10 +18,10 @@ jest.mock('../../../../components/ScreenChrome', () => {
   const { Text, View } = jest.requireActual('react-native');
   return {
     __esModule: true,
-    default: ({ title, children, headerExtras }: { title: string; children: ReactNode; headerExtras?: ReactNode }) => (
+    default: ({ title, children, profileExtras }: { title: string; children: ReactNode; profileExtras?: ReactNode }) => (
       <View>
         <Text testID="baslik">{title}</Text>
-        <View testID="baslik-ekleri">{headerExtras}</View>
+        <View testID="baslik-ekleri">{profileExtras}</View>
         {children}
       </View>
     ),
