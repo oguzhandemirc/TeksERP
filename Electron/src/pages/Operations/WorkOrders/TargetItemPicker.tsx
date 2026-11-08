@@ -43,8 +43,7 @@ export function TargetItemPicker({
           }}
           service={itemService}
           queryKey="items-wo-target"
-          // Hedef yalnız kumaş (başlık "Hedef Kumaş"); süzme sunucuda — iplik/sarf kartı İE hedefine düşmez.
-          filters={{ lifecycleStatus, itemType: "FABRIC" }}
+          filters={{ lifecycleStatus }}
           getLabel={(i) => i.name}
           getSubLabel={(i) => (itemLifecycleOf(i) === "PHASE_OUT" ? `${i.code} · Tükenene kadar` : i.code)}
           nullable

@@ -70,7 +70,7 @@ export function ServiceItemPickerField({ value, onChange, items, noneLabel, clas
             ))}
             {items.length === 0 && (
               <div className="px-2 py-4 text-sm text-muted-foreground">
-                Aktif hizmet kalemi yok. Ürünler ekranında Tür: Hizmet ile bir kalem açın.
+                Aktif hizmet kartı yok. Tanımlar › Hizmet Kartları ekranından bir hizmet kartı açın.
               </div>
             )}
           </div>
