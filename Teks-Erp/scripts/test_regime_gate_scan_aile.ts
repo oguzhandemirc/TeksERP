@@ -10,7 +10,9 @@
 //   (d) `export * from` / `export { x } from` izlenmiyordu.
 // Bu bekçi her sınıfı küçük bir geçici `src/` ağacında ölçer; gerçek kod ağacından bağımsızdır (DB'siz, salt-okur).
 // Gerçek ağaçta taban (bölme öncesi) ⊆ şimdi ölçümü düzeltme PR'ının gövdesinde; kalıcı koruma bu sentetik fikstür.
-// ⭐ NEGATİF SONDA (2026-11-08): (a)–(d) düzeltmeleri tek tek geri alındı → ilgili §2a/§2b/§2c/§2d ❌; geri alınınca yeşil.
+// ⭐ NEGATİF SONDA (2026-11-08): (a)–(d) ve aile genişletmesi tek tek geri alındı → ilgili §2 satırı ❌; geri alınınca yeşil.
+//   (b) İKİ mekanizmadır (gevşetme: kısa yol bayat girişi ezer · deque önü: 0-kenar arkaya girmez). Yalnız biri geri
+//   alınınca §2b2 ❌; ikisi birden geri alınınca §2b1 de ❌ (§2b1 tek başına ikisinden birini yakalamaz, ölçüldü).
 // =============================================================================
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -45,6 +47,20 @@ const FIKSTUR: Record<string, string> = {
   "services/famB/x.ts": 'import "../h";\n',
   "services/h.ts": 'import "./k";\n',
   "services/k.ts": modelKodu("hedefB"),
+  // (b2) Deque önü: b2.routes → q2 (1) → h2 (2) → famQ/y (3, yanlış); b2.routes → famB2.service (1) ⇒ famB2/x (1) →
+  // famQ.service (2) ⇒ famQ/y (2) → k2 (3). 0-kenar ARKAYA girerse famQ/y önce 3'te İŞLENİR, 2'lik giriş atlanır, k2 düşer.
+  "routes/b2.routes.ts": 'import "../services/q2";\nimport "../services/famB2.service";\n',
+  "services/q2.ts": 'import "./h2";\n',
+  "services/h2.ts": 'import "./famQ/y";\n',
+  "services/famB2.service.ts": "export const b2 = 1;\n",
+  "services/famB2/x.ts": 'import "../famQ.service";\n',
+  "services/famQ.service.ts": "export const q = 1;\n",
+  "services/famQ/y.ts": 'import "../k2";\n',
+  "services/k2.ts": modelKodu("hedefB2"),
+  // Aile TEK DOSYA: cephenin import ETMEDİĞİ üye de sayılır (bölme öncesi aynı dosyadaydı).
+  "routes/g.routes.ts": 'import "../services/famG.service";\n',
+  "services/famG.service.ts": "export const g = 1;\n",
+  "services/famG/yalniz.ts": modelKodu("hedefG").replace("../lib", "../../lib"),
   // (c) Kardeş modül: c.routes → famC.service (1) ⇒ famC/a ⇒ famC/b (aile içi, 1) → c1 (2) → c2 (3).
   "routes/c.routes.ts": 'import "../services/famC.service";\n',
   "services/famC.service.ts": 'import "./famC/a";\n',
@@ -83,7 +99,7 @@ function main(): void {
     const S = (rel: string): string => path.join(src, "services", rel);
     const tarama = rejimTaramasiKur({
       src,
-      modeller: new Set(["hedefA", "hedefB", "hedefC", "hedefD1", "hedefD2", "hedefE"]),
+      modeller: new Set(["hedefA", "hedefB", "hedefC", "hedefD1", "hedefD2", "hedefE", "hedefB2", "hedefG"]),
       kapiAdlari: ["requireXEnabled"],
     });
 
@@ -98,15 +114,26 @@ function main(): void {
     check("§2a (a) derinlik 3'teki cephenin alt modülüne inilir", tarama.modelDokunusu(R("a")) === "hedefA", `famA/core@${ulA.get(S("famA/core.ts")) ?? "yok"}`);
     const ulB = ulasilanDosyalar(R("b"), 3, src);
     check(
-      "§2b (b) BFS derinlik sırası korunur (kısa yol kazanır)",
+      "§2b1 (b) kısa yol, önce kuyruğa giren uzun yolu ezer",
       tarama.modelDokunusu(R("b")) === "hedefB" && ulB.get(S("h.ts")) === 2,
       `h@${ulB.get(S("h.ts")) ?? "yok"} k@${ulB.get(S("k.ts")) ?? "yok"}`,
+    );
+    const ulB2 = ulasilanDosyalar(R("b2"), 3, src);
+    check(
+      "§2b2 (b) aile içi 0-kenar deque ÖNÜNE girer (derinlik sırası)",
+      tarama.modelDokunusu(R("b2")) === "hedefB2" && ulB2.get(S("famQ/y.ts")) === 2,
+      `famQ/y@${ulB2.get(S("famQ/y.ts")) ?? "yok"} k2@${ulB2.get(S("k2.ts")) ?? "yok"}`,
     );
     const ulC = ulasilanDosyalar(R("c"), 3, src);
     check(
       "§2c (c) aile içi kardeş kenarı derinlik saymaz",
       tarama.modelDokunusu(R("c")) === "hedefC" && ulC.get(S("famC/b.ts")) === 1,
       `famC/b@${ulC.get(S("famC/b.ts")) ?? "yok"} c2@${ulC.get(S("c2.ts")) ?? "yok"}`,
+    );
+    check(
+      "§2e aile tek dosya: cephenin import etmediği üyenin model dokunuşu sayılır",
+      tarama.modelDokunusu(R("g")) === "hedefG",
+      `famG/yalniz@${ulasilanDosyalar(R("g"), 3, src).get(S("famG/yalniz.ts")) ?? "yok"}`,
     );
     check("§2d1 (d) `export * from` kenardır", tarama.modelDokunusu(R("d1")) === "hedefD1");
     check("§2d2 (d) `export { x } from` kenardır", tarama.modelDokunusu(R("d2")) === "hedefD2");
@@ -116,8 +143,8 @@ function main(): void {
     check("§3b ulaşılan her dosyanın derinliği ≤ 3", [...ulasilanDosyalar(R("e"), 3, src).values()].every((d) => d <= 3));
     const ilgili = tarama.ilgiliRouterlar().map((x) => path.basename(x.f)).sort();
     check(
-      "§3c ilgili router kümesi beklenen (a, b, c, d1, d2 — e değil)",
-      ilgili.join(",") === "a.routes.ts,b.routes.ts,c.routes.ts,d1.routes.ts,d2.routes.ts",
+      "§3c ilgili router kümesi beklenen (a, b, b2, c, d1, d2, g — e değil)",
+      ilgili.join(",") === "a.routes.ts,b.routes.ts,b2.routes.ts,c.routes.ts,d1.routes.ts,d2.routes.ts,g.routes.ts",
       ilgili.join(", "),
     );
   } finally {
