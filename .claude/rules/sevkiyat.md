@@ -2,6 +2,7 @@
 paths:
   - "{Teks-Erp,Electron,mobil}/src/**/*{shipping,shipment,Shipment,sack,Sack,dispatch,Dispatch,DirectShip,return,Return,accounting-export}*"
   - "{Teks-Erp,Electron,mobil}/src/**/{Sevkiyat,TartiPaket,Shipments}/**"
+  - "Teks-Erp/src/services/shipping/**"
 ---
 
 **Sevkiyat · çuval · brüt · storno/iade** — öz. Tam metni baştan okuma; yalnız ilgili bölümü oku:

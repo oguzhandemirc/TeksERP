@@ -10,7 +10,7 @@
     "src/services/label-template.service.ts::LabelTemplateVariant": 1,
     "src/services/label.service.ts::Parameters<typeof buildRollLabelHtml>[0][\"template\"": 1,
     "src/services/label.service.ts::Parameters<typeof templateTextLines>[1": 1,
-    "src/services/shipping.service.ts::(typeof sh.sacks)[number][\"rolls\"][number": 1,
+    "src/services/shipping/documents.ts::(typeof sh.sacks)[number][\"rolls\"][number": 1,
     "src/services/system-setting/feature-flags-read.ts::Pick<typeof prisma, \"systemSetting\">": 1,
     "src/services/system-setting/pin-backup.ts::Pick<typeof prisma, \"systemSetting\">": 1,
     "src/services/traveler-card.service.ts::Prisma.InputJsonValue": 1,

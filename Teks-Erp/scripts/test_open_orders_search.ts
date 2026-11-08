@@ -21,6 +21,7 @@ import path from "path";
 import prisma from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { buildTextSearch } from "../src/utils/query-parser";
+import { sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -89,7 +90,7 @@ async function run(): Promise<void> {
     /listOpenOrdersWithCoverage\(\{[\s\S]*?search:/.test(openOrdersBody),
     "yoksa alan Zod/okuma katmanında sessizce düşer",
   );
-  const svcSrc = read("src/services/shipping.service.ts");
+  const svcSrc = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni
   check(
     "servis imzası `search` alanını tanır",
     /listOpenOrdersWithCoverage\(params: \{[\s\S]*?search\?: string;/.test(svcSrc),

@@ -22,6 +22,7 @@ import { ShippingService } from "../src/services/shipping.service";
 import { getShipmentRollList } from "../src/services/shipment-roll-list.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { firstGrade } from "./fixture-quality-grade";
+import { sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -53,8 +54,7 @@ function astChecks(): void {
   check("§5a liste servisi prisma import ETMEZ", !list.prismaImport);
   check("§5b liste servisinde sorgu çağrısı YOK (ikinci toplayıcı yasak)", list.queries.length === 0, list.queries.join(", "));
   check("§5c liste servisi içeriği resolveShipmentDispatchContent'ten alır", list.calls === 1, `çağrı=${list.calls}`);
-  const ship = readFileSync(path.join(SRC, "shipping.service.ts"), "utf8");
-  const body = ship.slice(ship.indexOf("async getDispatchReport("), ship.indexOf("async getDirectShipmentDispatchReport("));
+  const body = sevkiyatServisUyeMetni("getDispatchReport"); // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövde
   check("§5d getDispatchReport aynı kaynaktan (resolveShipmentDispatchContent)", body.includes("resolveShipmentDispatchContent(") && !body.includes("collectShipmentDocContent("));
 }
 

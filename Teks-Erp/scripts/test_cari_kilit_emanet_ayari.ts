@@ -30,6 +30,7 @@ import { SETTING_KEYS, systemSettingService, readFinanceCariHoldEmanetShipment }
 import { customerService } from "../src/routes/customer.routes";
 import { shippingService } from "../src/services/shipping.service";
 import { ayarServisEtiketi } from "./lib/ayar-servis-kaynak";
+import { sevkiyatServisDosyasiMi } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -96,7 +97,7 @@ function statik(): void {
   check("§0c ayar okuması yalnız helper + ayar servisi (getFeatureFlags)", JSON.stringify(okuyan) === JSON.stringify([HELPER, "services/system-setting.service.ts"]), okuyan.join(", "));
   const sahip = dosyalar.filter((d) => /rollsAllOwnedByTx\(/.test(d.src)).map((d) => d.rel).sort();
   check("§0d rollsAllOwnedByTx yalnız emanet-owner (tanım) + emanet-shipment (karar) — kilit ve risk kapısı kopya kurmaz", JSON.stringify(sahip) === JSON.stringify(["services/helpers/emanet-owner.helper.ts", HELPER]), sahip.join(", "));
-  const ship = dosyalar.find((d) => d.rel === "services/shipping.service.ts")?.src ?? "";
+  const ship = dosyalar.filter((d) => sevkiyatServisDosyasiMi(d.rel)).map((d) => d.src).join("\n"); // sevkiyat servisi bölündü (2026-11-08): aile (cephe + alan modülleri)
   check("§0e üç sevk boğazı (core · önizleme · dispatch) kararı emanetShipmentReleaseTx'ten alır", (ship.match(/emanetShipmentReleaseTx\(/g) ?? []).length >= 3);
 }
 

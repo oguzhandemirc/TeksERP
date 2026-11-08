@@ -29,6 +29,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { cariHoldService } from "../src/services/cari-hold.service";
 import { holdViewsByCustomer } from "../src/services/helpers/cari-hold-badge.helper";
+import { sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -55,7 +56,7 @@ function statik(): void {
   for (const f of ["services/ready-works.service.ts", "services/roll-owner.service.ts", "services/customer.service.ts"]) {
     check(`§4c ${path.basename(f)} rozeti holdViewsByCustomer'dan`, /holdViewsByCustomer\(|withCustomerHolds\(|withCustomerHoldRows\(/.test(readFileSync(path.join(SRC, f), "utf8")));
   }
-  const ship = readFileSync(path.join(SRC, "services/shipping.service.ts"), "utf8");
+  const ship = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni
   check("§4d sevk önizlemesi: şerit metni (cariHold.warning) warnings[]'e giden satırın aynısı", /warning: cariHoldWarning\(holdNotice\)/.test(ship) && ship.includes("warnings.push(cariHold.warning)"));
 }
 

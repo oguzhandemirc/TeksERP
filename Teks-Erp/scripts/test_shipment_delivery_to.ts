@@ -40,6 +40,7 @@ import { AppError } from "../src/utils/app-error";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 const ship = new ShippingService();
 const ROOT = path.join(__dirname, "..");
@@ -70,14 +71,14 @@ let whId = "";
 
 function statik(): void {
   console.log("── §0 Statik ──");
-  const svc = readFileSync(path.join(ROOT, "src/services/shipping.service.ts"), "utf8");
-  const core = svc.slice(svc.indexOf("private async createShipmentCoreTx("), svc.indexOf("private async createShipmentCoreTx(") + 6000);
-  const setter = svc.slice(svc.indexOf("async setDeliveryTo("), svc.indexOf("async setDeliveryTo(") + 1500);
+  // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövdeler (cephe delegasyonu değil; pencere yerine tam gövde)
+  const core = sevkiyatServisUyeMetni("createShipmentCoreTx");
+  const setter = sevkiyatServisUyeMetni("setDeliveryTo");
   check("§0a tek doğrulayıcı: kurulum çekirdeği ve PLANNED düzenleyici `resolveDeliveryToTx` çağırır",
     /await resolveDeliveryToTx\(tx, p\.customerId,/.test(core) && /await resolveDeliveryToTx\(tx, sh\.customerId, input\)/.test(setter));
   check("§0b düzenleme atomik claim `{id, status: PLANNED}` + count 0 → 409 SHIPMENT_NOT_PLANNED",
     /updateMany\(\{\s*where: \{ id: shipmentId, status: ShipmentStatus\.PLANNED \}/.test(setter) && /claimed\.count === 0/.test(setter) && /SHIPMENT_NOT_PLANNED/.test(setter));
-  const dispatch = svc.slice(svc.indexOf("private async performDispatchTx("), svc.indexOf("private async performDispatchTx(") + 6000);
+  const dispatch = sevkiyatServisUyeMetni("performDispatchTx");
   check("§0c sahiplik kapısı DEĞİŞMEDİ — `assertOwnerMatchesTx` sevkiyatın carisini okur, teslim yerini değil",
     /assertOwnerMatchesTx\(tx, \{ rollIds: shipmentRollIds, customerId: shipmentHeader\.customerId/.test(dispatch) && !/deliveryCustomerId/.test(dispatch));
   const searchEnt = readFileSync(path.join(ROOT, "src/constants/search-entities.ts"), "utf8");

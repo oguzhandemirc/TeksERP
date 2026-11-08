@@ -99,7 +99,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // ── Tek yazar helper'ları ───────────────────────────────────────────────────
   [`${S}helpers/cash-ledger.helper.ts::applyCashTxTx`]: { helper: "kasa/banka satırı + bakiye tek yazarı" },
   [`${S}helpers/warp-beam-wind-write.helper.ts::writeWoundTx`]: { helper: "sarım satırı yazarı (raşel kardeşleri token'sız)" },
-  [`${S}shipping.service.ts::createShipmentCoreTx`]: { helper: "sevkiyat çekirdek yazarı" },
+  [`${S}shipping/create.ts::createShipmentCoreTx`]: { helper: "sevkiyat çekirdek yazarı" },
   [`${S}batch.service.ts::createBatchTx`]: { helper: "parti yazarı" },
   // Hizmet fiyat tablosu (2026-11-06): token tek yazar `itemPriceService.upsert` → sürüm helper'ına aktarılır; replay `servicePriceService.write`ta.
   [`${S}helpers/item-price-write.helper.ts::writeItemPriceVersionTx`]: { helper: "kalem fiyatı sürüm yazarı" },
@@ -116,14 +116,14 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}tambur-meter-correct.service.ts::correctCutReading`]: { giris: { [`${S}tambur-meter-correct.service.ts::correctCutReading`]: "K" } },
 
   // ── Boğazda: D3 (plan §4 — kalan (a) yolları) ───────────────────────────────
-  [`${S}shipping.service.ts::createShipmentInner`]: { giris: { [`${S}shipping.service.ts::createShipment`]: "R" } },
-  [`${S}shipping.service.ts::createShipmentFromRollsInner`]: { giris: { [`${S}shipping.service.ts::createShipmentFromRolls`]: "R" } },
+  [`${S}shipping/create.ts::createShipmentInner`]: { giris: { [`${S}shipping/create.ts::createShipment`]: "R" } },
+  [`${S}shipping/create-direct.ts::createShipmentFromRollsInner`]: { giris: { [`${S}shipping/create-direct.ts::createShipmentFromRolls`]: "R" } },
   // #15: 8033/8035 yalnız parti ya da "açılışta" modunda — koşullu kilide K′ kurulmaz, yalnız R (4b onayı).
-  [`${S}shipping.service.ts::openSackFresh`]: { giris: { [`${S}shipping.service.ts::openSack`]: "R" } },
+  [`${S}shipping/sack-open.ts::openSackFresh`]: { giris: { [`${S}shipping/sack-open.ts::openSack`]: "R" } },
   // 9.2: PLANLI sevkiyata dökme/araba yükü; token yalnız yeni doğan birimde saklanır (çözülmüş birimin token'ı 409).
-  [`${S}shipping.service.ts::openLoadUnitTx`]: { helper: "yük birimi tek yaratıcısı (çuval/dökme/araba)" },
-  [`${S}shipping.service.ts::openUnitInShipmentTx`]: { helper: "planlı sevkiyatta yük birimi açıcı; replay kararı addLooseRollsFresh'indir" },
-  [`${S}shipping.service.ts::addLooseRollsFresh`]: { giris: { [`${S}shipping.service.ts::addLooseRollsToShipment`]: "R" } },
+  [`${S}shipping/shared.ts::openLoadUnitTx`]: { helper: "yük birimi tek yaratıcısı (çuval/dökme/araba)" },
+  [`${S}shipping/load.ts::openUnitInShipmentTx`]: { helper: "planlı sevkiyatta yük birimi açıcı; replay kararı addLooseRollsFresh'indir" },
+  [`${S}shipping/load.ts::addLooseRollsFresh`]: { giris: { [`${S}shipping/load.ts::addLooseRollsToShipment`]: "R" } },
   [`${S}warp-beam-mount.service.ts::mountBeamFresh`]: { giris: { [`${S}warp-beam-mount.service.ts::mountBeam`]: "R" } },
   [`${S}warp-beam-wind.service.ts::windWarpBeamFresh`]: { giris: { [`${S}warp-beam-wind.service.ts::windWarpBeam`]: "R" } },
   [`${S}subcontractor-beam.service.ts::returnWarpBeamFresh`]: { giris: { [`${S}subcontractor-beam.service.ts::returnWarpBeam`]: "R" } },
@@ -279,9 +279,9 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}payment.service.ts::paymentReplay`]: ["direction", "method", "amount", "cashBoxId", "bankAccountId", "taraf", "currency", "exchangeRate", "paymentDate"],
   [`${S}purchase-order.service.ts::poReplay`]: ["taraf", "satırlar", "currency", "orderDate", "expectedDate"],
   [`${S}sack-search.service.ts::pickListReplay`]: ["çuvallar"],
-  [`${S}shipping.service.ts::sackReplay`]: ["customerId", "branchId", "packingGroupId", "packageNo"],
-  [`${S}shipping.service.ts::shipmentReplay`]: ["customerId", "branchId", "toplar", "cuvallar"],
-  [`${S}shipping.service.ts::looseUnitReplay`]: ["shipmentId", "unitKind", "unitLabel"],
+  [`${S}shipping/sack-open.ts::sackReplay`]: ["customerId", "branchId", "packingGroupId", "packageNo"],
+  [`${S}shipping/shared.ts::shipmentReplay`]: ["customerId", "branchId", "toplar", "cuvallar"],
+  [`${S}shipping/load.ts::looseUnitReplay`]: ["shipmentId", "unitKind", "unitLabel"],
   [`${S}subcontractor-beam.service.ts::returnReplay`]: ["kind", "dispatchId", "warpBeamId", "lengthM"],
   [`${S}subcontractor-weaving.service.ts::weavingReceiptReplay`]: ["weavingOrderId", "manifestNo"],
   [`${S}subcontractor/receive.ts::receiptReplay`]: ["workOrderId", "stepId", "subcontractorId", "toplar", "metrajlar", "yeniToplar"],

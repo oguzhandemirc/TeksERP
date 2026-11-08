@@ -33,6 +33,7 @@ import { DUPLICATE_GUARD_LOCK_NS } from "../src/services/helpers/duplicate-guard
 import { BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
 import { shippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
+import { sevkiyatServisUyeMetni } from "./lib/sevkiyat-servis-kaynak";
 
 const SRC = join(__dirname, "../src");
 let pass = 0;
@@ -60,8 +61,7 @@ async function main(): Promise<void> {
 
   // ── 1) SIRA — kilit, koruduğu okumadan ÖNCE (asıl kontrol) ────────────────
   console.log("[1] Kilit sırası (load-bearing)");
-  const shipSrc = readFileSync(join(SRC, "services/shipping.service.ts"), "utf8");
-  const undoBody = bodyOf(shipSrc, "async undoDispatch(", "\n  async ");
+  const undoBody = sevkiyatServisUyeMetni("undoDispatch"); // sevkiyat servisi bölündü (2026-11-08): ailedan asıl gövde (cephe delegasyonu değil)
   check("undoDispatch gövdesi çözülebildi", undoBody.length > 200);
   const lockAt = undoBody.indexOf("lockShipmentScopeTx(");
   const countAt = undoBody.indexOf("rollReturn.count(");
