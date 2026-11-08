@@ -39,6 +39,7 @@ import cariMergeRoutes from "./finance-cari-merge.routes";
 import kursunDefaultRoutes from "./finance-kursun-default.routes";
 import expenseAllocationRoutes, { allocationFieldsSchema } from "./finance-expense-allocation.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
+import { TERIM } from "../constants/terim";
 
 const router = Router();
 
@@ -598,12 +599,12 @@ router.get("/invoices", requirePermission("finance:read"), async (req, res, next
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "{ vatRate, withholdingRate (KDV'nin %'si), withholdingRatio, source, withholdingOffReason? }" }
- *       404: { description: Bilinmeyen iş emri (WORK_ORDER_NOT_FOUND) }
+ *       404: { description: Bilinmeyen workOrderId (WORK_ORDER_NOT_FOUND) }
  */
 router.get("/invoices/tax-defaults", requirePermission("finance:read"), async (req, res, next) => {
   try {
     const q = z
-      .object({ type: z.enum(["SALES", "PURCHASE"], { message: "Fatura türü SALES ya da PURCHASE olmalı" }), customerId: z.string().uuid().optional(), workOrderId: z.string().uuid("İş emri kimliği geçersiz").optional() })
+      .object({ type: z.enum(["SALES", "PURCHASE"], { message: "Fatura türü SALES ya da PURCHASE olmalı" }), customerId: z.string().uuid().optional(), workOrderId: z.string().uuid(`${TERIM.terbiyeIsEmri.tekil} kimliği geçersiz`).optional() })
       .strict()
       .parse(req.query);
     res.json({ success: true, data: await resolveInvoiceTaxDefaults({ type: q.type, customerId: q.customerId ?? null, workOrderId: q.workOrderId ?? null }) });
