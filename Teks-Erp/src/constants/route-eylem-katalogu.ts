@@ -63,6 +63,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   get "POST /api/work-orders"() { return e(`${TERIM.terbiyeIsEmri.tekilKucuk} açtı`, `${TERIM.terbiyeIsEmri.tekilKucuk} açmaya çalıştı`); },
   get "PATCH /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenlemeye çalıştı`); },
   get "PUT /api/feature-flags/work-order-default-item"() { return e(`${TERIM.terbiyeIsEmri.tekilKucuk} varsayılan stok kartını değiştirdi`, `${TERIM.terbiyeIsEmri.tekilKucuk} varsayılan stok kartını değiştirmeye çalıştı`); },
+  "PUT /api/feature-flags/emanet-default-warehouse": e("emanet varsayılan deposunu değiştirdi", "emanet varsayılan deposunu değiştirmeye çalıştı"),
   get "PUT /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenlemeye çalıştı`); },
   get "POST /api/work-orders/:id/complete"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} tamamladı`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} tamamlamaya çalıştı`); },
   get "POST /api/work-orders/:id/cancel"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal etti`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal etmeye çalıştı`); },

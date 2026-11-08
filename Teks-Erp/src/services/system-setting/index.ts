@@ -210,7 +210,7 @@ export {
   DEFAULT_FASON_SHRINK_TOLERANCE_PCT, readTamburPlanGateWidthToleranceCm, readTamburPlanGateWidthCheck, readTamburChildWidthSource,
   readTamburLabelPrintTiming, effectiveTamburPlanWidthGate, readFasonShrinkTolerancePct, readDemoModeEnabled,
   readDuplicatesFuzzyEnabled, readDuplicatesFuzzyThresholdPct, readTamburOverQuantityEnabled, readTamburUndoFullSameDayOnly,
-  readTamburSimulatedMeterEnabled, readTamburMeasureSourceRequired, readTamburCalibrationCheck,
+  readTamburSimulatedMeterEnabled, readTamburMeasureSourceRequired, readTamburCalibrationCheck, readEmanetDefaultWarehouseId,
 } from "./tambur-fason";
 export {
   coerceSpecField, DEFAULT_TRAVELER_CARD_CONFIG, normalizeTravelerCardConfig, readTravelerCardConfig,

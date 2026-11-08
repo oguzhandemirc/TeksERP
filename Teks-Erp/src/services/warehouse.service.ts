@@ -17,7 +17,7 @@ import { AppError } from "../utils/app-error";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import type { ApiResponse } from "../types/api.types";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
-import { WAREHOUSE_ARCHIVE } from "./helpers/archive-gate/warehouse-archive.helper";
+import { EMANET_DEFAULT_WAREHOUSE_REF, WAREHOUSE_ARCHIVE } from "./helpers/archive-gate/warehouse-archive.helper";
 import { MOVEMENT_DESC } from "./helpers/warehouse-ledger.helper";
 
 // =============================================================================
@@ -170,6 +170,8 @@ class WarehouseService extends BaseService {
     const transferCount = transferFromCount + transferToCount;
     if (transferCount > 0) blockers.push(`${transferCount} transfer`);
     if (movementCount > 0) blockers.push(`${movementCount} depo hareketi`);
+    // F1b: ayardaki emanet deposu silinirse her sahipli doğum 400 verirdi — sayım pasife alma kapısıyla aynı nesneden.
+    if ((await EMANET_DEFAULT_WAREHOUSE_REF.count(prisma, id)) > 0) blockers.push("emanet varsayılan deposu ayarı");
 
     if (blockers.length > 0) {
       throw AppError.conflict(

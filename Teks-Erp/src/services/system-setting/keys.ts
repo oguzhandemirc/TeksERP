@@ -256,6 +256,10 @@ export const SETTING_KEYS = {
    *  (Customer çekirdek). Ekransız modül: kapı owner YAZAN uçların gövdesinde (403); sevk sahiplik kapısı veri varsa
    *  bayraktan bağımsız çalışır. Varsayılan KAPALI = dünkü davranış (sahiplik alanı yoktu). */
   EMANET_ENABLED: "emanet.enabled",
+  /** F1b emanet varsayılan deposu (Warehouse.id): sahipli (emanet) top depo söylenmeden doğunca buraya girer. Boş = bugünkü
+   *  davranış (varsayılan depo); emanet kapalıyken etkisiz. Feature-flag yükünde DÖNMEZ; tek yazar
+   *  `PUT /api/feature-flags/emanet-default-warehouse` (pasif/olmayan depo 400), ham ayar ucu reddeder. */
+  EMANET_DEFAULT_WAREHOUSE_ID: "emanet.defaultWarehouseId",
   /** K4P Kalite Güvence (4 puan muayene · lab testi · sertifika). Bağımlılık YOK: muayene KK1'de doğar ve KK1
    *  üretim kapalıyken de açıktır. Varsayılan KAPALI = dünkü davranış (yüzey yoktu). */
   KALITE_GUVENCE_ENABLED: "kaliteGuvence.enabled",
