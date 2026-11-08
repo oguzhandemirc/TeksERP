@@ -8,9 +8,18 @@
 // =============================================================================
 import ts from "typescript";
 
-/** `src`deki bütün yorumları söker; satır sonlarını korur. */
-export function yorumlariSokTs(src: string, dosyaAdi = "x.tsx"): string {
-  const sf = ts.createSourceFile(dosyaAdi, src, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+/** Ayrıştırma türü uzantıdan: `.ts`i TSX sanmak `<any>x` / `<T>() =>` sonrasını JSX yapıp yorumları kaçırır. */
+function betikTuru(dosyaAdi: string): ts.ScriptKind {
+  if (dosyaAdi.endsWith(".tsx")) return ts.ScriptKind.TSX;
+  if (dosyaAdi.endsWith(".jsx")) return ts.ScriptKind.JSX;
+  if (/\.[cm]?js$/.test(dosyaAdi)) return ts.ScriptKind.JS;
+  if (/\.[cm]?ts$/.test(dosyaAdi)) return ts.ScriptKind.TS;
+  throw new Error(`yorumlariSokTs: tanınmayan uzantı — ${dosyaAdi}`);
+}
+
+/** `src`deki bütün yorumları söker; satır sonlarını korur. `dosyaAdi` ZORUNLU (ayrıştırma türünü belirler). */
+export function yorumlariSokTs(src: string, dosyaAdi: string): string {
+  const sf = ts.createSourceFile(dosyaAdi, src, ts.ScriptTarget.Latest, false, betikTuru(dosyaAdi));
   const araliklar = new Map<number, number>();
   const topla = (r: ts.CommentRange[] | undefined): void => {
     for (const c of r ?? []) araliklar.set(c.pos, c.end);

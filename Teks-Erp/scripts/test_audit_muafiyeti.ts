@@ -25,7 +25,8 @@
 // DB GEREKTİRMEZ: statik analiz (metin + AST'siz desen; delegate adı yapısal).
 // =============================================================================
 import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
+import ts from "typescript";
 import { AUDIT_EXEMPT_MODELS, AUDIT_MUAF_SINIFLARI } from "./lib/audit-muafiyeti";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
@@ -76,18 +77,21 @@ function main(): void {
   // Servisler bölündü (2026-11-08; aile tanımı `lib/servis-aile.ts`): bölme öncesi tek dosyada audit'li eylemden
   // çağrılan tx yardımcısı artık ayrı aile modülünde. Aile üyesi YALNIZ beyanlıysa ve onu import eden bir aile
   // kardeşi AuditService taşıyorsa audit'li sayılır (eski "ailede biri taşıyorsa hepsi" kuralı daraltıldı).
-  // Sonda 2026-11-08: anahtar var olmayan dosyaya / audit'li `finalize.ts`e çevrilince §7a + §7 (41 > 40) ❌.
+  // Sonda 2026-11-08: anahtar var olmayan dosyaya / audit'li `finalize.ts`e çevrilince §7a + §7 (41 > 40) ❌;
+  // kardeşlerin `./shared` importu `../workorder/shared`e çevrilince (ad çakışması) aynı iki ❌, tek tırnağa çevrilince yeşil.
   const AILE_AUDITSIZ_YARDIMCI: Record<string, string> = {
-    "src/services/tambur/shared.ts": "applyTamburCapabilitiesTx · closeOrphanRollErrors — finalize/kesim eylemlerinin tx İÇİ yardımcısı; audit'i çağıran eylem basar",
+    "src/services/tambur/shared.ts": "applyTamburCapabilitiesTx · closeOrphanRollErrors — tx İÇİ yardımcı; çağıranlar (aile içi kesim/finalize eylemleri + cephe yeniden ihracıyla `tambur-manual.service.ts`) audit'li, audit'i çağıran eylem basar",
   };
+  // `r` dosyası `hedef`i import ediyor mu — ad eşleşmesi değil modül çözümlemesi (göreli belirteç → dosya yolu).
+  const importEder = (r: string, k: string, hedef: string): boolean => ts.preProcessFile(k, true, false).importedFiles
+    .some(({ fileName: b }) => b.startsWith(".") && [`${b}.ts`, `${b}/index.ts`, b].some((a) => resolve(KOK, dirname(r), a) === resolve(KOK, hedef)));
   const muafModel = new Set(AUDIT_EXEMPT_MODELS.map((x) => x.model));
   const aileYardimciIhlal: string[] = [];
   for (const [rel, gerekce] of Object.entries(AILE_AUDITSIZ_YARDIMCI)) {
     const s = metin.get(rel);
     const cephe = aileCephesi(join(KOK, rel), join(KOK, "src"));
-    const modul = rel.replace(/\.ts$/, "").split("/").pop()!;
     const cagiranAudit = cephe === null ? [] : [...metin].filter(([r, k]) => r !== rel && auditDosya.has(r)
-      && aileCephesi(join(KOK, r), join(KOK, "src")) === cephe && (k.includes(`/${modul}"`) || k.includes(`./${modul}"`)));
+      && aileCephesi(join(KOK, r), join(KOK, "src")) === cephe && importEder(r, k, rel));
     if (!s || cephe === null) aileYardimciIhlal.push(`${rel}: dosya yok ya da bölünmüş aile üyesi değil`);
     else if (auditDosya.has(rel) || cudModelleri(s).filter((m) => !muafModel.has(m)).length === 0) aileYardimciIhlal.push(`${rel}: artık audit'siz yazıcı değil (ölü beyan)`);
     else if (cagiranAudit.length === 0) aileYardimciIhlal.push(`${rel}: audit taşıyan aile kardeşi onu çağırmıyor (${gerekce})`);

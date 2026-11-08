@@ -37,6 +37,7 @@
 //   S10 beyansız yeni `stepCanApplyQuality` çağrısı        → §11 kırmızı (1)
 // 2026-11-08 (bölme temizliği, taban 58/0): eski regex sökücü → §0 ❌ · `tambur/read.ts` `station: true` daraltılınca
 //   → §5 tam satır beyanı ölü + kalite okuması ❌ (2) · beyan anahtarı bozulunca → aynı iki ❌; geri alındı.
+//   Sökücü türü TSX'e zorlanınca (`.ts` uzantısı yok sayılır) → §0b ❌ (`<any>b` sonrası yorumlar kalır).
 // Faz A sondaları (S1–S5) aynı kalıpları akış ikizinde ölçmüştü; dersleri:
 //   • muaf DOSYA bazında değil SAYIM bazında (aynı dosyaya eklenen yeni tür
 //     kontrolü sessizce kapsanıyordu);
@@ -84,9 +85,10 @@ function check(label: string, ok: boolean, extra = "") {
  * (`lib/yorum-sok.ts`): regex sökücü `// services/*.ts` satırındaki `/*`yi blok başı sanıp KODU yutuyordu (§0).
  */
 const sokulmus = new Map<string, string>();
-function yorumlariSok(src: string): string {
-  let s = sokulmus.get(src);
-  if (s === undefined) sokulmus.set(src, (s = yorumlariSokTs(src)));
+function yorumlariSok(src: string, dosyaAdi: string): string {
+  const anahtar = `${dosyaAdi}\0${src}`;
+  let s = sokulmus.get(anahtar);
+  if (s === undefined) sokulmus.set(anahtar, (s = yorumlariSokTs(src, dosyaAdi)));
   return s;
 }
 
@@ -183,10 +185,14 @@ async function main() {
   try {
     // ── §0 ⭐ Yorum sökücü sondası (saf) ────────────────────────────────────
     // Regex sökücü satır yorumundaki `/*`den sonraki `*/`ye kadar KODU yutuyordu (ör. `inventory.service.ts` başlığı).
-    const sonda = yorumlariSok("// services/x/*.ts\nconst A = STEP_QUALITY_SELECT;\n/* b */ const B = 1; // c */\nconst u = 'http://x'; // d\n");
+    const sonda = yorumlariSok("// services/x/*.ts\nconst A = STEP_QUALITY_SELECT;\n/* b */ const B = 1; // c */\nconst u = 'http://x'; // d\n", "sonda.ts");
     check("§0 ⭐ yorum sökücü: satır yorumundaki `/*` kodu yutmaz, dize içi `//` yorum değildir",
       sonda.includes("const A = STEP_QUALITY_SELECT;") && sonda.includes("const B = 1;") && sonda.includes("'http://x'")
         && !/services\/x|\bb\b \*\/|\/\/ [cd]/.test(sonda), JSON.stringify(sonda));
+    // `.ts` TSX sanılırsa `<any>b` JSX açılışı olur, sonraki yorumlar sökülmez (tür uzantıdan seçilir).
+    const sondaTip = yorumlariSok("const a = <any>b; // X1\nconst f = <T>(x: T) => x; // X2\nconst c = 1; // X3\n", "sonda.ts");
+    check("§0b ⭐ yorum sökücü: `.ts`te `<any>x` dönüşümü ve generic ok fn sonrası yorumlar sökülür",
+      !/X[123]/.test(sondaTip) && sondaTip.includes("const c = 1;"), JSON.stringify(sondaTip));
 
     // ── §1 Zemin ────────────────────────────────────────────────────────────
     const helperYol = "src/services/helpers/quality-station.helper.ts";
@@ -213,7 +219,7 @@ async function main() {
     let kaliteKullanim = 0;
     for (const [ad, ham] of kaynaklar) {
       if (ad.startsWith(HELPER)) continue;
-      const s = yorumlariSok(ham);
+      const s = yorumlariSok(ham, ad);
       akisKullanim += (s.match(/stepRunsStepFlow\(|\.\.\.STEP_FLOW_WHERE/g) ?? []).length;
       kaliteKullanim += (s.match(/stepCanApplyQuality\(|\.\.\.QUALITY_STATION_WHERE|stationCanInspect\(/g) ?? []).length;
     }
@@ -319,7 +325,7 @@ async function main() {
     const kullanilanMuaf = new Set<string>();
     for (const [ad, ham] of kaynaklar) {
       if (ad.startsWith(HELPER)) continue;
-      const s = yorumlariSok(ham);
+      const s = yorumlariSok(ham, ad);
       const bulunan = (s.match(new RegExp(kararKalibi.source, "g")) ?? []).length;
       if (bulunan === 0) continue;
       const muaf = KIND_MUAF[ad];
@@ -395,7 +401,7 @@ async function main() {
         // envanter ve tambur servisleri bölündü (2026-11-08): cephe anahtarı ailenin (cephe + `services/<ad>/*.ts`) birleşik metnini sayar
         const ham = dosya === ENVANTER_SERVIS_REL ? envanterServisMetni() : dosya === TAMBUR_SERVIS_REL ? tamburServisMetni() : kaynaklar.get(dosya);
         if (!ham) { selectIhlal.push(`${dosya}: DOSYA YOK (taban bayat)`); continue; }
-        const bulunan = (yorumlariSok(ham).match(new RegExp(ad, "g")) ?? []).length;
+        const bulunan = (yorumlariSok(ham, dosya).match(new RegExp(ad, "g")) ?? []).length;
         if (bulunan < beklenen) selectIhlal.push(`${dosya} ${ad}: ${beklenen} bekleniyor, ${bulunan} var`);
       }
     }
@@ -408,7 +414,7 @@ async function main() {
     };
     const tamSatirMetni = (ad: string): string | null => {
       if (!(ad in KALITE_TAM_SATIR)) return null;
-      return yorumlariSok(ad === TAMBUR_SERVIS_REL ? tamburServisMetni() : (kaynaklar.get(ad) ?? ""));
+      return yorumlariSok(ad === TAMBUR_SERVIS_REL ? tamburServisMetni() : (kaynaklar.get(ad) ?? ""), ad);
     };
     const oluTamSatir = Object.keys(KALITE_TAM_SATIR).filter((ad) => {
       const s = tamSatirMetni(ad);
@@ -420,7 +426,7 @@ async function main() {
     for (const [ad, ham] of kaynaklar) {
       if (ad.startsWith(HELPER)) continue;
       // tambur servisi bölündü (2026-11-08): aile üyesi bölme öncesindeki gibi ailenin birleşik metniyle ölçülür
-      const s = yorumlariSok(tamburServisDosyasiMi(ad) ? tamburServisMetni() : ham);
+      const s = yorumlariSok(tamburServisDosyasiMi(ad) ? tamburServisMetni() : ham, ad);
       if (s.includes("stepRunsStepFlow(") && !s.includes("STEP_FLOW_SELECT") && !/appliesQuality:\s*true/.test(s)) akisOkumayan.push(ad);
       const tamSatir = (tamburServisDosyasiMi(ad) ? TAMBUR_SERVIS_REL : ad) in KALITE_TAM_SATIR && /\bstation:\s*true\b/.test(s);
       if (/stepCanApplyQuality\(|stationCanInspect\(/.test(s) && !s.includes("STEP_QUALITY_SELECT") && !/inspectionEnabled:\s*true/.test(s) && !tamSatir) kaliteOkumayan.push(ad);
@@ -429,13 +435,13 @@ async function main() {
     check("§5 kalite yüklemini çağıran her dosya `inspectionEnabled` okuyor", kaliteOkumayan.length === 0, kaliteOkumayan.join(", ") || "0 ihlal");
 
     // ── §6 Helper hijyeni ───────────────────────────────────────────────────
-    const tumKod = [...kaynaklar.values()].map(yorumlariSok).join("\n");
+    const tumKod = [...kaynaklar].map(([ad, ham]) => yorumlariSok(ham, ad)).join("\n");
     const WHERE_ADLARI = ["STEP_FLOW_WHERE", "QUALITY_STATION_WHERE", "KURSUN_DISPATCH_STATION_WHERE"];
     check("§6 where parçaları SPREAD ile kullanılıyor (mutasyon yok)",
       WHERE_ADLARI.every((w) => !new RegExp(`${w}\\.\\w`).test(tumKod)));
     const cakisma: string[] = [];
     for (const [ad, ham] of kaynaklar) {
-      const s = yorumlariSok(ham);
+      const s = yorumlariSok(ham, ad);
       for (const w of WHERE_ADLARI) {
         if (new RegExp(`OR:\\s*\\[[\\s\\S]{0,400}?\\.\\.\\.${w}\\b`).test(s) && w === "STEP_FLOW_WHERE") cakisma.push(`${ad} (${w})`);
       }

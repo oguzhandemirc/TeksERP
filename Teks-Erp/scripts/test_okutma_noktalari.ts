@@ -5,6 +5,8 @@
 // `customerCodeSearchRollIds`) geçer; ikinci çözücü yasağı `test_musteri_barkodu` §AST'tedir.
 //
 // §AST ⭐ başlıktaki her [AÇIK] satırının fonksiyonu boğazı çağırır; [AÇILMALI] etiketi kalmadı;
+//        fonksiyon başlıkta yazan DOSYADA aranır (sonda 2026-11-08: `inventory/relabelX.ts` ya da
+//        `buildRollWhere`i `inventory/relabel.ts`e yazmak → ❌);
 //        liste uçları (findAllRolls · getRollStats) arama id'lerini boğazdan çözer.
 // §1 ⭐ OFF (varsayılan): yedi noktanın müşteri kodlu yanıtı, kod hiç yokkenki yanıtla bayt-aynı.
 // §2 ⭐ iç barkod yanıtı ON/OFF bayt-aynı (yedi nokta).
@@ -16,7 +18,7 @@
 // `prisma.roll.findFirst({ where: { barcode: code } })`a döndürülünce §AST ve §3 ❌.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { ItemType, RollEntrySource, StationType } from "@prisma/client";
@@ -33,8 +35,8 @@ import { generateRollBarcodeTx } from "../src/services/helpers/roll-barcode.help
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
-import { envanterServisDosyasiMi, envanterServisUyeMetni } from "./lib/envanter-servis-kaynak";
-import { tamburServisDosyasiMi, tamburServisUyeMetni } from "./lib/tambur-servis-kaynak";
+import { ENVANTER_SERVIS_REL, envanterServisUyeMetni } from "./lib/envanter-servis-kaynak";
+import { TAMBUR_SERVIS_REL, tamburServisUyeMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -59,10 +61,11 @@ const HELPER = "services/helpers/roll-scan-resolve.helper.ts";
 const GATES = ["resolveRollByScanCode(", "customerCodeSearchRollIds("];
 
 function functionText(rel: string, fn: string): string | null {
-  // envanter servisi bölündü (2026-11-08): aileden ASIL gövde (cephedeki ince delegasyon değil)
-  if (envanterServisDosyasiMi(rel)) return envanterServisUyeMetni(fn) || null;
-  // tambur servisi de bölündü (2026-11-08): aynı kalıp
-  if (tamburServisDosyasiMi(rel)) return tamburServisUyeMetni(fn) || null;
+  // Bölünmüş ailede yalnız CEPHE adı aile çapında aranır (ince delegasyon değil ASIL gövde); başlık üye
+  // yolu yazdıysa fonksiyon O DOSYADA aranır — bayat/yanlış üye yolu kırmızıdır.
+  if (rel === ENVANTER_SERVIS_REL) return envanterServisUyeMetni(fn) || null;
+  if (rel === TAMBUR_SERVIS_REL) return tamburServisUyeMetni(fn) || null;
+  if (!existsSync(join(SRC, rel))) return null;
   const text = readFileSync(join(SRC, rel), "utf8");
   const sf = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true);
   let found: string | null = null;

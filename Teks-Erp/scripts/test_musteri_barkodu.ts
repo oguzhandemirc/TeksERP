@@ -19,6 +19,7 @@
 // §8 ayar: geçersiz değer 400 (Türkçe).
 // Negatif sondalar (elle, PR gövdesinde): helper'da iç barkod önceliği ters çevrilince §4 ❌ ·
 // `src/services/` altına `rollCustomerCode.findFirst({ where: { code } })` yazılınca §AST ❌.
+// 2026-11-08: helper başlığında `tambur/context.ts` satırı eski cephe etiketine (`tambur.service.ts:4012`) çevrilince §AST ❌.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -37,7 +38,6 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 import { sevkiyatServisEtiketi, sevkiyatServisTanimDosyasi } from "./lib/sevkiyat-servis-kaynak";
 import { envanterServisDosyasiMi, envanterServisEtiketi, envanterServisTanimDosyasi } from "./lib/envanter-servis-kaynak";
-import { tamburServisEtiketi } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -186,10 +186,10 @@ function astSection(): void {
     if (rel === HELPER) continue;
     const text = readFileSync(file, "utf8");
     if (!/normalizeScanCode\(/.test(text)) continue;
-    // Servis bölündü (2026-11-08): aile üyesi başlıkta kendi yoluyla (`tambur/read.ts`, satır no isteğe bağlı)
-    // ya da eski cephe adıyla (`tambur.service.ts:`) anılır.
-    const adlar = [rel.replace(/^services\//, ""), tamburServisEtiketi(rel).replace(/^services\//, "")];
-    const tagged = header.split("\n").some((l) => adlar.some((a) => l.includes(`${a}:`) || ilkSutun(l) === a) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
+    // Servis bölündü (2026-11-08): aile üyesi başlıkta KENDİ yoluyla (`tambur/read.ts`, satır no isteğe bağlı) anılır;
+    // cephe adı (`tambur.service.ts:`) üyeyi kapsamaz.
+    const short = rel.replace(/^services\//, "");
+    const tagged = header.split("\n").some((l) => (l.includes(`${short}:`) || ilkSutun(l) === short) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
     if (!applied.has(envanterServisEtiketi(sevkiyatServisEtiketi(rel))) && !tagged) missing.push(rel); // sevkiyat + envanter servisi bölündü (2026-11-08): aile cephe etiketine katlanır
     if (envanterServisDosyasiMi(rel) && !tagged) missing.push(rel); // uygulama yeri ailesi olsa da okutan üye başlıkta anılır
   }
