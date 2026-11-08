@@ -14,6 +14,11 @@
 //   §7 iptal — önizleme her satırı listeler · bayat damga 409 CHANGED · ters çift (SHIP_TO_OWNER_CANCEL reversesEventId,
 //      CONSIGNMENT_OUT_CANCEL aynı kg) · levent READY · lot bakiyesi geri · ikinci iptal 409 · F4 listesi boşaldı
 //   §8 liste — sahip süzgeci + özet şeridi aynı where
+//   §9 iptal engelleri — CONFIRMED faturalı levent bağı 409 CONSIGNMENT_BEAM_INVOICED (belge iptal değil, bağ damgasız;
+//      engel `cancelledAt`ın gölgesinde kalmaz) · DRAFT bağ iptalde damgalanır (revokeReason CONSIGNMENT_CANCEL) ·
+//      çıkıştan sonra levent başka olay aldıysa gerçek iptal 409 CONSIGNMENT_BEAM_MOVED_AFTER (WARP_BEAM_STATE değil)
+//   §10 pasif lot — önizleme blockedReason YARN_LOT_INACTIVE = oluştur 409 · iptal ters kaydı pasif lota yazılır ·
+//      istisna yalnız CONSIGNMENT_OUT_CANCEL (pasif lota IN hâlâ 400)
 //
 // NEGATİF SONDALAR (cp + geri al, 2026-11-08): bkz. PR gövdesi / dosya sonu notu.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döndürülür.
@@ -22,7 +27,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
-import { Prisma, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
+import { Currency, Prisma, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -41,6 +46,7 @@ import type { ConsignmentDispatchCreateInput } from "../src/services/consignment
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 
 let pass = 0;
 let fail = 0;
@@ -104,7 +110,7 @@ async function main(): Promise<void> {
   const admin = await ensureTestAdmin();
   const whId = await fixtureWarehouseId();
   const lots = new YarnLotService();
-  const ids = { custs: [] as string[], yarn: "", spec: "", lots: [] as string[], beams: [] as string[] };
+  const ids = { custs: [] as string[], yarn: "", spec: "", lots: [] as string[], beams: [] as string[], invoices: [] as string[], svc: "" };
 
   try {
     console.log("\n── fikstür ──");
@@ -251,6 +257,56 @@ async function main(): Promise<void> {
     check("§8b cursor: ACTIVE süzgeci sayfada korunur, mükerrer yok", act.data.length === 1 && page2?.data.length === 1 && page2.data[0]!.id !== act.data[0]!.id && page2.data[0]!.cancelledAt === null && act.summary.count === 2);
     const lstB = await listConsignmentDispatches({ ownerCustomerId: custB.id, status: "ALL", limit: 50 });
     check("§8c B süzgeci boş (sessiz düşme yok)", lstB.data.length === 0 && lstB.summary.count === 0);
+
+    console.log("\n── §9 İptal engelleri (fatura bağı · LIFO) ──");
+    const bA3 = await beam(custA.id, 400);
+    const d3 = (await createConsignmentDispatch(body([{ kind: "WARP_BEAM", warpBeamId: bA3 }, yarnLine(lotA.id, "5")]), admin.id)).data;
+    const svc = await prisma.serviceItem.create({ data: { code: `${TAG}-SV`.slice(0, 32), name: `${TAG} levent sarım` }, select: { id: true } });
+    ids.svc = svc.id;
+    const cari = await prisma.$transaction((tx) => ensureCariAccountTx(tx, { customerId: custA.id, subcontractorId: null }));
+    const inv = await prisma.invoice.create({ data: { docNo: `${TAG}-F`, type: "SALES", cariId: cari.id, issueDate: new Date(), status: "CONFIRMED", confirmedAt: new Date() }, select: { id: true } });
+    ids.invoices.push(inv.id);
+    const link = await prisma.serviceBillingLink.create({ data: {
+      invoiceId: inv.id, subjectKind: "WARP_BEAM", warpBeamId: bA3, serviceItemId: svc.id, billedMeters: "400", meterBasis: "WOUND", unitPrice: "1", currency: Currency.TRY, serviceAt: new Date(),
+    }, select: { id: true } });
+    const cp9 = await cancelPreviewConsignmentDispatch(d3.id);
+    check("§9a önizleme: CONFIRMED fatura bağı listelenir, canCancel=false, blockedReason CONSIGNMENT_BEAM_INVOICED",
+      !cp9.canCancel && cp9.blockedReason === "CONSIGNMENT_BEAM_INVOICED" && cp9.billingLinks.length === 1 && cp9.billingLinks[0]!.linkId === link.id);
+    const e9b = await beklenenHata(() => cancelConsignmentDispatch(d3.id, { reason: `${TAG} faturalı`, expectedUpdatedAt: d3.updatedAt }, admin.id));
+    const d3row = await prisma.consignmentDispatch.findUniqueOrThrow({ where: { id: d3.id }, select: { cancelledAt: true } });
+    const link9 = await prisma.serviceBillingLink.findUniqueOrThrow({ where: { id: link.id }, select: { revokedAt: true, revokeReason: true } });
+    check("§9b ⭐ CONFIRMED faturalı levent → iptal 409 CONSIGNMENT_BEAM_INVOICED; belge iptal EDİLMEDİ, bağ damgasız, levent SHIPPED_TO_OWNER",
+      durum(e9b) === 409 && kod(e9b) === "CONSIGNMENT_BEAM_INVOICED" && d3row.cancelledAt === null && link9.revokedAt === null
+      && (await prisma.warpBeam.findUniqueOrThrow({ where: { id: bA3 }, select: { status: true } })).status === "SHIPPED_TO_OWNER", kod(e9b));
+    await prisma.invoice.update({ where: { id: inv.id }, data: { status: "DRAFT" } });
+
+    console.log("\n── §10 Pasif lot ──");
+    await prisma.yarnLot.update({ where: { id: lotA.id }, data: { isActive: false } });
+    const p10 = await previewConsignmentDispatch(body([yarnLine(lotA.id, "1")]));
+    const e10 = await beklenenHata(() => createConsignmentDispatch(body([yarnLine(lotA.id, "1")]), admin.id));
+    check("§10a ⭐ pasif lot: önizleme blockedReason YARN_LOT_INACTIVE + canCreate=false = oluştur 409 YARN_LOT_INACTIVE (önizleme = işlem)",
+      p10.lines[0]?.blockedReason === "YARN_LOT_INACTIVE" && !p10.canCreate && durum(e10) === 409 && kod(e10) === "YARN_LOT_INACTIVE", `${p10.lines[0]?.blockedReason} / ${kod(e10)}`);
+    const e10b = await beklenenHata(() => prisma.$transaction((tx) => applyYarnMovementTx(tx, { itemId: yarn.id, warehouseId: whId, kind: YarnMovementKind.IN, qtyKg: 1, lotId: lotA.id, reason: `${TAG} pasif giriş` })));
+    check("§10b istisna dar: pasif lota IN → 400 YARN_LOT_INACTIVE (ortak kapı gevşemedi)", kod(e10b) === "YARN_LOT_INACTIVE", kod(e10b));
+
+    const before10 = await yarnLotBalanceTx(prisma, lotA.id, whId);
+    const c9 = await cancelConsignmentDispatch(d3.id, { reason: `${TAG} taslak faturalı`, expectedUpdatedAt: d3.updatedAt }, admin.id);
+    const link9c = await prisma.serviceBillingLink.findUniqueOrThrow({ where: { id: link.id }, select: { revokedAt: true, revokeReason: true } });
+    check("§9c ⭐ DRAFT fatura bağı → iptal geçer, bağ damgalı revokeReason=CONSIGNMENT_CANCEL, levent READY",
+      c9.cancelledAt !== null && link9c.revokedAt !== null && link9c.revokeReason === "CONSIGNMENT_CANCEL"
+      && (await prisma.warpBeam.findUniqueOrThrow({ where: { id: bA3 }, select: { status: true } })).status === "READY");
+    const d3yarn = d3.items.find((i) => i.kind === "YARN")!;
+    const back10 = await prisma.yarnMovement.findMany({ where: { consignmentItemId: d3yarn.id, kind: "CONSIGNMENT_OUT_CANCEL" }, select: { qtyKg: true, lotId: true } });
+    check("§10c ⭐ iptal ters kaydı PASİF lota yazıldı (CONSIGNMENT_OUT_CANCEL 5 kg), lot bakiyesi +5",
+      back10.length === 1 && back10[0]!.lotId === lotA.id && back10[0]!.qtyKg.eq(5) && (await yarnLotBalanceTx(prisma, lotA.id, whId)).eq(before10.plus(5)));
+    await prisma.yarnLot.update({ where: { id: lotA.id }, data: { isActive: true } });
+
+    // LIFO: §7h'nin belgesi (A1 çıkışı) — çıkıştan sonra leventi başka olay çevirir (yazar doğrudan), iptal sözleşme koduyla düşer.
+    const shipAgain = await prisma.warpBeamEvent.findFirstOrThrow({ where: { beamId: bA1, kind: "SHIP_TO_OWNER" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, consignmentItemId: true, lengthM: true } });
+    await prisma.$transaction((tx) => applyWarpBeamEventTx(tx, { beamId: bA1, kind: "SHIP_TO_OWNER_CANCEL", from: WarpBeamStatus.SHIPPED_TO_OWNER, to: WarpBeamStatus.READY, data: { consignmentItemId: shipAgain.consignmentItemId, reversesEventId: shipAgain.id, lengthM: shipAgain.lengthM, reason: `${TAG} LIFO` } }));
+    const e9d = await beklenenHata(() => cancelConsignmentDispatch(again.data.id, { reason: `${TAG} LIFO` }, admin.id));
+    check("§9d ⭐ LIFO: çıkıştan sonra olay almış levent → gerçek iptal 409 CONSIGNMENT_BEAM_MOVED_AFTER, belge iptal edilmedi",
+      durum(e9d) === 409 && kod(e9d) === "CONSIGNMENT_BEAM_MOVED_AFTER" && (await prisma.consignmentDispatch.findUniqueOrThrow({ where: { id: again.data.id }, select: { cancelledAt: true } })).cancelledAt === null, kod(e9d));
   } finally {
     const dispatches = await prisma.consignmentDispatch.findMany({ where: { ownerCustomerId: { in: ids.custs } }, select: { id: true } });
     const dIds = dispatches.map((d) => d.id);
@@ -259,6 +315,12 @@ async function main(): Promise<void> {
       await prisma.yarnMovement.deleteMany({ where: { itemId: ids.yarn } });
       await prisma.yarnStock.deleteMany({ where: { itemId: ids.yarn } });
     }
+    if (ids.invoices.length) {
+      await prisma.serviceBillingLink.deleteMany({ where: { invoiceId: { in: ids.invoices } } });
+      await prisma.invoice.deleteMany({ where: { id: { in: ids.invoices } } });
+    }
+    if (ids.svc) await prisma.serviceItem.deleteMany({ where: { id: ids.svc } });
+    await prisma.cariAccount.deleteMany({ where: { customerId: { in: ids.custs } } });
     await prisma.consignmentDispatchItem.deleteMany({ where: { dispatchId: { in: dIds } } });
     await prisma.consignmentDispatch.deleteMany({ where: { id: { in: dIds } } });
     await prisma.warpBeam.deleteMany({ where: { id: { in: ids.beams } } });

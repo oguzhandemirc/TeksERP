@@ -1,8 +1,8 @@
 // =============================================================================
 // EMANET ÇIKIŞ BELGESİ — iptal önizlemesi + iptal (ters çiftler)
 // =============================================================================
-// İptal = DURUM GEÇİŞİ: başlık `updateMany WHERE {id, cancelledAt:null[, updatedAt]}` claim'i (İLK ifade), kalem
-// değişmez. Ters çiftler: `SHIP_TO_OWNER_CANCEL` (SHIPPED_TO_OWNER→READY, `reversesEventId`) · `CONSIGNMENT_OUT_CANCEL`
+// İptal = DURUM GEÇİŞİ: başlık FOR UPDATE (İLK ifade) → denetçi → `updateMany WHERE {id, cancelledAt:null[, updatedAt]}`
+// claim'i; kalem değişmez. Claim denetçiden ÖNCE gelirse `cancelledAt` engel zincirini gölgeler (fatura engeli atlanır). Ters çiftler: `SHIP_TO_OWNER_CANCEL` (SHIPPED_TO_OWNER→READY, `reversesEventId`) · `CONSIGNMENT_OUT_CANCEL`
 // (aynı kalem/depo/lot/kg). F4 levent sarım bağı aynı tx'te damgalanır; DRAFT olmayan faturadaki bağ iptali keser.
 // Önizleme ve iptal AYNI denetçiyi (`inspectCancel`) okur — "önizleme geçer, iptal 409" ayrışması yok.
 // =============================================================================
@@ -37,8 +37,12 @@ interface CancelInspection {
   yarnItems: ItemRow[];
   affected: ConsignmentDispatchCancelPreview["affected"];
   billingLinks: ConsignmentDispatchCancelPreview["billingLinks"];
-  blocked: { code: ConsignmentDispatchErrorCode; message: string; details: Record<string, unknown> } | null;
+  /** Levent/fatura engeli — belgenin iptal durumundan BAĞIMSIZ hesaplanır. */
+  obstacle: CancelBlock | null;
+  /** Önizleme gerekçesi: zaten-iptal ?? engel. */
+  blocked: CancelBlock | null;
 }
+type CancelBlock = { code: ConsignmentDispatchErrorCode; message: string; details: Record<string, unknown> };
 
 /** İptalin etkilediği HER kayıt + ilk engel. `lock`: leventler id sırasıyla FOR UPDATE (iptal tx'i). */
 async function inspectCancel(db: Db, id: string, opts: { lock: boolean }): Promise<CancelInspection> {
@@ -49,9 +53,7 @@ async function inspectCancel(db: Db, id: string, opts: { lock: boolean }): Promi
   if (opts.lock && beamIds.length > 0) {
     await db.$queryRaw`SELECT id FROM warp_beams WHERE id IN (${Prisma.join(beamIds.map((b) => Prisma.sql`${b}::uuid`))}) ORDER BY id FOR UPDATE`;
   }
-  let blocked: CancelInspection["blocked"] = dispatch.cancelledAt
-    ? { code: "CONSIGNMENT_DISPATCH_CANCELLED", message: `${dispatch.dispatchNo} zaten iptal edilmiş.`, details: { dispatchId: id } }
-    : null;
+  let obstacle: CancelBlock | null = null;
   const beamItems: CancelInspection["beamItems"] = [];
   const yarnItems: ItemRow[] = [];
   const affected: CancelInspection["affected"] = [];
@@ -69,8 +71,8 @@ async function inspectCancel(db: Db, id: string, opts: { lock: boolean }): Promi
       beamItems.push({ ...it, shipEventId: ship.id, shipLengthM: ship.lengthM });
       affected.push({ kind: "WARP_BEAM", refId: it.warpBeamId!, label: it.warpBeam?.beamNo ?? it.warpBeamId!, qty: ship.lengthM.toFixed(3), unit: "METER" });
       const last = lastByBeam.get(it.warpBeamId!);
-      if (!blocked && (it.warpBeam?.status !== WarpBeamStatus.SHIPPED_TO_OWNER || last?.id !== ship.id)) {
-        blocked = { code: "CONSIGNMENT_BEAM_MOVED_AFTER", message: `${it.warpBeam?.beamNo} çıkıştan sonra başka işlem almış (durum ${it.warpBeam?.status}) — önce o işlemi geri alın.`, details: { warpBeamId: it.warpBeamId, status: it.warpBeam?.status, lastEventKind: last?.kind ?? null } };
+      if (!obstacle && (it.warpBeam?.status !== WarpBeamStatus.SHIPPED_TO_OWNER || last?.id !== ship.id)) {
+        obstacle = { code: "CONSIGNMENT_BEAM_MOVED_AFTER", message: `${it.warpBeam?.beamNo} çıkıştan sonra başka işlem almış (durum ${it.warpBeam?.status}) — önce o işlemi geri alın.`, details: { warpBeamId: it.warpBeamId, status: it.warpBeam?.status, lastEventKind: last?.kind ?? null } };
       }
     } else {
       yarnItems.push(it);
@@ -84,10 +86,13 @@ async function inspectCancel(db: Db, id: string, opts: { lock: boolean }): Promi
   });
   const billingLinks = links.map((l) => ({ linkId: l.id, warpBeamId: l.warpBeamId!, invoiceId: l.invoiceId, invoiceNo: l.invoice.docNo, invoiceStatus: l.invoice.status }));
   const invoiced = billingLinks.find((l) => l.invoiceStatus !== "DRAFT");
-  if (!blocked && invoiced) {
-    blocked = { code: "CONSIGNMENT_BEAM_INVOICED", message: `Levent sarım işi ${invoiced.invoiceNo ?? invoiced.invoiceId} faturasında (${invoiced.invoiceStatus}) — önce faturayı iptal edin.`, details: { linkId: invoiced.linkId, invoiceId: invoiced.invoiceId, warpBeamId: invoiced.warpBeamId } };
+  if (!obstacle && invoiced) {
+    obstacle = { code: "CONSIGNMENT_BEAM_INVOICED", message: `Levent sarım işi ${invoiced.invoiceNo ?? invoiced.invoiceId} faturasında (${invoiced.invoiceStatus}) — önce faturayı iptal edin.`, details: { linkId: invoiced.linkId, invoiceId: invoiced.invoiceId, warpBeamId: invoiced.warpBeamId } };
   }
-  return { dispatch, beamItems, yarnItems, affected, billingLinks, blocked };
+  const blocked: CancelBlock | null = dispatch.cancelledAt
+    ? { code: "CONSIGNMENT_DISPATCH_CANCELLED", message: `${dispatch.dispatchNo} zaten iptal edilmiş.`, details: { dispatchId: id } }
+    : obstacle;
+  return { dispatch, beamItems, yarnItems, affected, billingLinks, obstacle, blocked };
 }
 
 export async function cancelPreviewConsignmentDispatch(id: string): Promise<ConsignmentDispatchCancelPreview> {
@@ -102,19 +107,20 @@ export async function cancelConsignmentDispatch(id: string, input: ConsignmentDi
   if (expected && Number.isNaN(expected.getTime())) throw AppError.badRequest("expectedUpdatedAt geçersiz tarih.", { code: "VALIDATION_ERROR" });
   const out = await prisma.$transaction(async (tx) => {
     const now = new Date();
+    // Kilit sırası: başlık → leventler (id) → iplik stok satırları (yazar içinde). Oluştur yolu başlığı yeni doğurur;
+    // başka yazar başlığı kilitlemez → döngü yok. Kilit, denetçi ile claim arasında başka iptali dışarıda tutar.
+    const head = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM consignment_dispatches WHERE id = ${id}::uuid FOR UPDATE`;
+    if (head.length === 0) throw AppError.notFound("Emanet çıkış belgesi bulunamadı.", { code: "CONSIGNMENT_DISPATCH_NOT_FOUND" });
+    const r = await inspectCancel(tx, id, { lock: true });
+    if (r.dispatch.cancelledAt) throw AppError.conflict(`${r.dispatch.dispatchNo} zaten iptal edilmiş.`, { code: "CONSIGNMENT_DISPATCH_CANCELLED", dispatchId: id });
+    if (r.obstacle) throw AppError.conflict(r.obstacle.message, { code: r.obstacle.code, ...r.obstacle.details });
     const claim = await tx.consignmentDispatch.updateMany({
       where: { id, cancelledAt: null, ...(expected ? { updatedAt: expected } : {}) },
       data: { cancelledAt: now, cancelledById: userId, cancelReason: reason, updatedById: userId },
     });
     if (claim.count === 0) {
-      const fresh = await tx.consignmentDispatch.findUnique({ where: { id }, select: { dispatchNo: true, cancelledAt: true } });
-      if (!fresh) throw AppError.notFound("Emanet çıkış belgesi bulunamadı.", { code: "CONSIGNMENT_DISPATCH_NOT_FOUND" });
-      if (fresh.cancelledAt) throw AppError.conflict(`${fresh.dispatchNo} zaten iptal edilmiş.`, { code: "CONSIGNMENT_DISPATCH_CANCELLED", dispatchId: id });
-      throw AppError.conflict(`${fresh.dispatchNo} önizlemeden sonra değişmiş — önizlemeyi yenileyin.`, { code: "CONSIGNMENT_DISPATCH_CHANGED", dispatchId: id });
+      throw AppError.conflict(`${r.dispatch.dispatchNo} önizlemeden sonra değişmiş — önizlemeyi yenileyin.`, { code: "CONSIGNMENT_DISPATCH_CHANGED", dispatchId: id });
     }
-    const r = await inspectCancel(tx, id, { lock: true });
-    // Claim kendi `cancelledAt`ını yazdı; engel yalnız levent/fatura kaynaklıdır.
-    if (r.blocked && r.blocked.code !== "CONSIGNMENT_DISPATCH_CANCELLED") throw AppError.conflict(r.blocked.message, { code: r.blocked.code, ...r.blocked.details });
     await revokeConsignmentBeamLinksTx(tx, { linkIds: r.billingLinks.map((l) => l.linkId), userId, at: now });
     const beamEvents: Array<{ eventId: string; beamId: string; beamNo: string; lengthM: string; itemId: string }> = [];
     for (const it of r.beamItems) {

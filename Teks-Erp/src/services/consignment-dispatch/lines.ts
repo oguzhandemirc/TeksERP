@@ -161,7 +161,7 @@ export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: 
       await db.$queryRaw`SELECT 1 FROM "yarn_stocks" WHERE ("itemId", "warehouseId") IN (${Prisma.join(pairs.map((p) => Prisma.sql`(${p.yarnItemId}::uuid, ${p.warehouseId}::uuid)`))}) ORDER BY "itemId", "warehouseId" FOR UPDATE`;
     }
     const lotIds = [...new Set(n.yarns.map((y) => y.lotId))];
-    const lots = await db.yarnLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, itemId: true, lotNo: true, ownerCustomerId: true } });
+    const lots = await db.yarnLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, itemId: true, lotNo: true, ownerCustomerId: true, isActive: true } });
     const items = await db.item.findMany({ where: { id: { in: [...new Set(n.yarns.map((y) => y.yarnItemId))] } }, select: { id: true, code: true, name: true } });
     const warehouses = await db.warehouse.findMany({ where: { id: { in: [...new Set(n.yarns.map((y) => y.warehouseId))] } }, select: { id: true, name: true } });
     const balances = await yarnLotWarehouseBalancesTx(db, lotIds);
@@ -181,6 +181,9 @@ export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: 
       const balanceKg = balances.get(`${y.lotId}|${y.warehouseId}`) ?? D(0);
       const blockedReason: ConsignmentDispatchErrorCode | null = !isConsignedTo(lot.ownerCustomerId, owner.id)
         ? "CONSIGNMENT_OWNER_MISMATCH"
+        // Pasif lot yazarda 400 alırdı; önizleme = işlem olsun diye burada satır engeli (patron kararı 2026-11-08).
+        : !lot.isActive
+          ? "YARN_LOT_INACTIVE"
         : balanceKg.lt(y.qtyKg)
           ? "CONSIGNMENT_YARN_INSUFFICIENT"
           : null;
@@ -203,6 +206,9 @@ export function assertNoBlockedLines(r: ResolvedDispatch): void {
   for (const y of r.yarns) {
     if (y.blockedReason === "CONSIGNMENT_OWNER_MISMATCH") {
       throw AppError.conflict(`"${y.lotNo}" lotu ${r.owner.name} müşterisinin emanet ipliği değil — sahibinden başkasına çıkış belgesi açılamaz.`, { code: y.blockedReason, lotId: y.lotId, ownerCustomerId: y.ownerCustomerId });
+    }
+    if (y.blockedReason === "YARN_LOT_INACTIVE") {
+      throw AppError.conflict(`"${y.lotNo}" lotu pasif — pasif lottan emanet çıkışı yapılamaz.`, { code: y.blockedReason, lotId: y.lotId });
     }
     if (y.blockedReason === "CONSIGNMENT_YARN_INSUFFICIENT") {
       throw AppError.conflict(`"${y.lotNo}" lotunun ${y.warehouseName} deposundaki bakiyesi ${y.balanceKg.toFixed(3)} kg — istenen ${y.qtyKg.toFixed(3)} kg karşılanmıyor.`, { code: y.blockedReason, lotId: y.lotId, warehouseId: y.warehouseId, balanceKg: y.balanceKg.toFixed(3), requestedKg: y.qtyKg.toFixed(3) });

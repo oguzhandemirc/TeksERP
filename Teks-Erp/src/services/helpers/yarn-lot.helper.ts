@@ -86,11 +86,17 @@ export async function assertLotQualityReleasedTx(tx: Prisma.TransactionClient, l
  * Lot bu kaleme mi ait ve aktif mi — hareket yazılmadan ÖNCE sorulur. DB'de çapraz-tablo
  * CHECK kurulamaz (lot.itemId ↔ movement.itemId); tek kapı burası, mutabakat §40 ikinci hat.
  */
-export async function assertLotMatchesItemTx(tx: Prisma.TransactionClient, lotId: string, itemId: string): Promise<void> {
+/**
+ * Pasif lota yazılabilen hareket türleri — YALNIZ ileri kaydı geri çeviren ters tipler, açık beyanla.
+ * Emanet çıkış iptali çıkan kg'yı aynı lota iade eder; lot o arada pasife alındıysa iptal kilitlenmemeli (patron 2026-11-08).
+ */
+export const YARN_KINDS_ALLOWED_ON_INACTIVE_LOT: ReadonlySet<YarnMovementKind> = new Set<YarnMovementKind>([YarnMovementKind.CONSIGNMENT_OUT_CANCEL]);
+
+export async function assertLotMatchesItemTx(tx: Prisma.TransactionClient, lotId: string, itemId: string, kind?: YarnMovementKind): Promise<void> {
   const lot = await tx.yarnLot.findUnique({ where: { id: lotId }, select: { itemId: true, lotNo: true, isActive: true } });
   if (!lot) throw AppError.badRequest("İplik lotu bulunamadı", { code: "YARN_LOT_NOT_FOUND", lotId });
   if (lot.itemId !== itemId) throw AppError.badRequest(`"${lot.lotNo}" lotu başka bir iplik kalemine ait — hareket kalemiyle lot kalemi aynı olmalı.`, { code: "YARN_LOT_ITEM_MISMATCH", lotId });
-  if (!lot.isActive) throw AppError.badRequest(`"${lot.lotNo}" lotu pasif — pasif lota hareket yazılamaz.`, { code: "YARN_LOT_INACTIVE", lotId });
+  if (!lot.isActive && !(kind && YARN_KINDS_ALLOWED_ON_INACTIVE_LOT.has(kind))) throw AppError.badRequest(`"${lot.lotNo}" lotu pasif — pasif lota hareket yazılamaz.`, { code: "YARN_LOT_INACTIVE", lotId });
 }
 
 /** SQL'de işaret: giriş türleri tek kaynaktan (`yarnInboundKinds`), elle liste YOK. */
