@@ -15,5 +15,7 @@ export function cockpitParams(f: CockpitFilter, cursor: string | null, limit = 5
 }
 
 export async function listCockpit(f: CockpitFilter, cursor: string | null): Promise<SubcontractorCockpitResult> {
-  return (await apiClient.get<SubcontractorCockpitResult>("/api/subcontractor/cockpit", { params: cockpitParams(f, cursor) })).data;
+  // Sunucu zarflı yanıt verir ({ success, data: { data, nextCursor, summary } }); zarf burada soyulur.
+  const res = await apiClient.get<{ success: boolean; data: SubcontractorCockpitResult }>("/api/subcontractor/cockpit", { params: cockpitParams(f, cursor) });
+  return res.data.data;
 }

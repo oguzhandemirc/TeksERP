@@ -39,7 +39,7 @@ const RESULT = {
 };
 
 beforeEach(() => {
-  get.mockReset().mockResolvedValue({ data: RESULT });
+  get.mockReset().mockResolvedValue({ data: { success: true, data: RESULT } });
 });
 
 describe("Fason Kokpiti", () => {
