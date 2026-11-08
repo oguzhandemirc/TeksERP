@@ -52,7 +52,7 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'hedefKg', label: 'Hedef kg', section: 'Üretim', required: false, when: 'Hedef metraj/kg ayarı açıksa' },
   { key: 'hedefRenk', label: 'Hedef renk', section: 'Üretim', required: false },
   { key: 'hedefOzellik', label: 'Hedef özellikler', section: 'Üretim', required: false, when: 'Üretim Rotası seçilince' },
-  { key: 'katTipi', label: 'Kat tipi', section: 'Üretim', required: false, when: 'Rotada tambur varsa' },
+  { key: 'katTipi', label: 'Kat tipi', section: 'Üretim', required: false, when: 'Rotada tambur varsa ya da rotasızda' },
   { key: 'planBaslangic', label: 'Planlı başlangıç', section: 'Plan', required: false },
   { key: 'planBitis', label: 'Planlı bitiş', section: 'Plan', required: false },
   { key: 'not', label: 'Not', section: 'Plan', required: false },

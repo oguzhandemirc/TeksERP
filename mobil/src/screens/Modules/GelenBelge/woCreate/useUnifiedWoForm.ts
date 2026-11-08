@@ -86,7 +86,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const showQuantity = useFeatureFlags().data?.targetQuantityEnabled === true;
   const routesQ = useQuery({
     queryKey: ['routes', 'wo-picker'],
-    queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => routeService.getActive(),
     staleTime: 10 * 60 * 1000,
     // Rota formda değiştirilebilir (İş Emirleri girişi ön seçimli açar): kilitli değilse liste gerekir.
     enabled: !routeLocked,
@@ -95,13 +95,17 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const eff = useMemo(() => (route && !isScanRoute(route) ? effectiveRoute(route, extras.steps) : route), [route, extras.steps]);
   const hasTambur = useMemo(() => (eff?.steps ?? []).some((s) => s.station?.kind === 'TAMBUR'), [eff]);
   const fold = useFoldDefault(hasTambur, setForm);
+  // Rotasızda tambura gidip gitmeyeceği bilinmez → kat tipi gramaj gibi görünür ama zorunlu değildir; katalog boşsa
+  // (Kat özelliği pasif) seçilecek değer yoktur → engel de yoktur (sunucu kat tipini zorunlu tutmaz, istasyon varsayılanı).
+  const askFold = hasTambur || (!!route && isScanRoute(route) && fold.values.length > 0);
+  const foldRequired = hasTambur && fold.values.length > 0;
 
   const owner = useOwnerKind(ownerKinds, extras.woType, setForm);
   // "Kendi Üretimimiz" kartta açıkça seçildiyse kalemsiz kayıt türü açıkça Stoğa gider (sunucunun "tür seçilmedi" uyarısı susar).
   const ownGoods = owner.visible && owner.value === 'STANDARD';
   const extraBody = useCallback(
-    (r: DocRow) => buildExtraBody(extras, { hasTambur, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods }),
-    [extras, hasTambur, route, ownGoods],
+    (r: DocRow) => buildExtraBody(extras, { hasTambur: askFold, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods }),
+    [extras, askFold, route, ownGoods],
   );
   // Rota seçilmeden kayıt `extrasIssues` ile kapalıdır; kanca bir rota ister → yer tutucu.
   const wo = useWoRows(eff ?? SCAN_ROUTE, { extraBody });
@@ -134,7 +138,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     form,
     {
       showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
-      hasTambur,
+      hasTambur: askFold,
       hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form && !partyGramaj,
       hasRouteSteps,
       hasMachine: plan.machines.length > 0,
@@ -153,7 +157,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const issues: FormIssue[] = [
     ...ownerIssue,
     ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssueList(row.form) : []),
-    ...extrasIssues(extras, { routeChosen: !!route, hasTambur, perParty, inOther: fields.isOther }),
+    ...extrasIssues(extras, { routeChosen: !!route, hasTambur: foldRequired, perParty, inOther: fields.isOther }),
   ];
   const reading = !!row && (!row.form || !row.detail);
   const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues });
@@ -167,7 +171,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const { okut, dropDoc } = docSlotActions(wo, row, scan, setForm);
   return {
     owner, routeWarning, manual, draft, addDoc,
-    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
+    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),

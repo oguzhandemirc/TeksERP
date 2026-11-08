@@ -1,4 +1,4 @@
-// K30-D tablet İE formu — rota adımları: sade liste; ekle (istasyon seç), çıkar, yukarı/aşağı, fason adımda firma, adım
+// K30-D tablet İE formu — rota adımları: sade liste; ekle (istasyon seç), çıkar, yukarı/aşağı, fason (SUBCONTRACTOR) adımda firma, adım
 // notu; kurşun adımının satırında "Makine seç". Kullanıcı hiç değiştirmezse liste şablondur ve gövdeye gitmez.
 // Özel İE kısayolunda rota kilitli → salt okunur. Saf işlemler `woSteps.ts`te.
 import React, { useMemo, useRef, useState } from 'react';
@@ -12,7 +12,7 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { MachineChips } from '../desk/DeskReview';
-import { addStep, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep } from './woSteps';
+import { addStep, isFasonStation, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep, type StepStation } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
 
 export interface MachinePick {
@@ -65,6 +65,7 @@ export default function RouteStepsEditor(p: Props) {
         <View key={s.key} style={styles.step} testID={`ie-adim-${i + 1}`}>
           <View style={styles.stepHead}>
             <TruncatedText style={styles.stepTitle} testID={`ie-adim-${i + 1}-ad`}>{`${i + 1}. ${s.station?.name ?? 'İstasyon'}`}</TruncatedText>
+            <KindTag station={s.station} testID={`ie-adim-${i + 1}-tur`} />
             {can && (
               <View style={styles.actions}>
                 <IconButton icon="arrow-up" size={26} style={styles.icon} disabled={i === 0} onPress={() => change(moveStep(p.steps, s.key, -1))} accessibilityLabel={`${i + 1}. adımı yukarı taşı`} testID={`ie-adim-${i + 1}-yukari`} />
@@ -92,7 +93,7 @@ export default function RouteStepsEditor(p: Props) {
       <PickerModal
         visible={adding}
         title="Adım ekle — istasyon"
-        options={stations.map((x) => ({ value: x.id, label: x.name, sublabel: x.defaultCategory ? `Fason: ${x.defaultCategory.name}` : undefined }))}
+        options={stations.map((x) => ({ value: x.id, label: x.name, sublabel: stationKindTag(x).label }))}
         loading={p.routesLoading}
         onSelect={(id) => {
           setAdding(false);
@@ -107,11 +108,25 @@ export default function RouteStepsEditor(p: Props) {
   );
 }
 
+/** İç istasyon mavi "Fabrikada", dış işlem turuncu "Fason" — İş Emirleri alt tuşlarındaki mal sahibi etiketiyle aynı dil. */
+function stationKindTag(s: StepStation | null | undefined): { label: string; fason: boolean } {
+  return isFasonStation(s) ? { label: 'Fason', fason: true } : { label: 'Fabrikada', fason: false };
+}
+
+function KindTag({ station, testID }: { station: StepStation | null; testID: string }) {
+  const t = stationKindTag(station);
+  return (
+    <View style={[styles.tag, t.fason ? styles.tagFason : styles.tagOwn]} testID={testID}>
+      <Text style={[styles.tagText, { color: t.fason ? colors.warningDark : colors.infoDark }]}>{t.label}</Text>
+    </View>
+  );
+}
+
 type FirmsByCategory = { byCategory: Map<string, { id: string; name: string; isFavorite?: boolean }[]>; nameById: Map<string, string> };
 
 /** Fason firmaları (Hızlı İE ile aynı liste); yalnız fason adım varken çekilir. */
 function useFirms(steps: readonly EditStep[]): FirmsByCategory {
-  const enabled = steps.some((s) => stepCategoryId(s) !== null);
+  const enabled = steps.some((s) => isFasonStation(s.station) && stepCategoryId(s) !== null);
   const q = useQuery({
     queryKey: ['subcontractors', 'wo-favorites'],
     queryFn: () => subcontractorService.listSubcontractors({ page: 1, pageSize: 500, sortBy: 'name', sortOrder: 'asc', filters: { isActive: 'true' } }),
@@ -130,7 +145,7 @@ function useFirms(steps: readonly EditStep[]): FirmsByCategory {
 }
 
 function FirmRow(p: { step: EditStep; index: number; firms: FirmsByCategory; editable: boolean; onPick: (id: string | null) => void }) {
-  const cat = stepCategoryId(p.step);
+  const cat = isFasonStation(p.step.station) ? stepCategoryId(p.step) : null;
   if (!cat) return null;
   const options = p.firms.byCategory.get(cat) ?? [];
   const current = p.step.plannedSubcontractorId;
@@ -164,6 +179,10 @@ const styles = StyleSheet.create({
   stepHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   stepTitle: { flex: 1, minWidth: 160, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   actions: { flexDirection: 'row' },
+  tag: { borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  tagOwn: { backgroundColor: colors.infoContainer },
+  tagFason: { backgroundColor: colors.warningContainer },
+  tagText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold },
   icon: { width: 56, height: 56, margin: 0 },
   input: { backgroundColor: colors.surface },
   firms: { gap: spacing.xs },

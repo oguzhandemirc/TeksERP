@@ -57,21 +57,24 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const owner = u.owner.visible ? <OwnerKindCard value={u.owner.value} reason={u.owner.reason} locked={done || wo.saving} onChange={u.owner.choose} /> : null;
   return (
     <>
-      <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
-        {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
-        {twoCol ? (
-          <View style={[styles.columns, { gap: layout.pad + spacing.sm }]} onLayout={jump.at('columns')} testID="ie-form-iki-sutun">
-            <View style={styles.col} testID="ie-form-sol">
-              {owner}
-              <DocColumn u={u} openRequest={jump.request} />
-            </View>
-            <View style={styles.divider} testID="ie-form-ayrac" />
-            <View style={styles.col} onLayout={jump.at('form')} testID="ie-form-sag">
+      {twoCol ? (
+        // Yan ekranda iki bağımsız kaydırıcı: belge solda sabit kalır, uzun rota/plan sağda kendi içinde kayar.
+        <View style={styles.split} testID="ie-form-iki-sutun">
+          <KeyboardAwareScrollView ref={jump.leftRef} bottomOffset={24} style={styles.pane} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sol">
+            {owner}
+            <DocColumn u={u} openRequest={jump.request} />
+          </KeyboardAwareScrollView>
+          <View style={styles.divider} testID="ie-form-ayrac" />
+          <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} style={styles.pane} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sag">
+            {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
+            <View style={styles.stack} onLayout={jump.at('form')}>
               <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
             </View>
-          </View>
-        ) : (
-          <>
+          </KeyboardAwareScrollView>
+        </View>
+      ) : (
+        <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
+          {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
             {owner}
             <View style={styles.stack} onLayout={jump.at('doc')}>
               <DocColumn u={u} openRequest={jump.request} />
@@ -79,9 +82,8 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
             <View style={styles.stack} onLayout={jump.at('form')}>
               <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
             </View>
-          </>
-        )}
-      </KeyboardAwareScrollView>
+        </KeyboardAwareScrollView>
+      )}
       <CreateBar wo={wo} done={done} block={u.block} blockKey={u.blockKey} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} />
@@ -104,7 +106,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
 
 type FormModel = ReturnType<typeof useUnifiedWoForm>;
 
-type Spot = 'columns' | 'doc' | 'form' | 'other';
+type Spot = 'doc' | 'form' | 'other';
 const METER_KEYS: readonly IssueKey[] = ['kursunMetresi', 'metreDogrula'];
 
 /**
@@ -113,14 +115,18 @@ const METER_KEYS: readonly IssueKey[] = ['kursunMetresi', 'metreDogrula'];
  */
 function useMissingJump(u: FormModel, twoCol: boolean, external: DocRowOpenRequest | null) {
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  /** Yan ekranda sol (belge) kaydırıcı; tek sütunda kullanılmaz. */
+  const leftRef = useRef<KeyboardAwareScrollViewRef>(null);
   const spots = useRef<Partial<Record<Spot, number>>>({});
   const [request, setRequest] = useState<DocRowOpenRequest | null>(null);
   const at = (k: Spot) => (e: LayoutChangeEvent) => {
     spots.current[k] = e.nativeEvent.layout.y;
   };
   const y = (k: Spot) => spots.current[k] ?? 0;
-  const formTop = () => (twoCol ? y('columns') : 0) + y('form');
+  const formTop = () => y('form');
   const scroll = (to: number) => scrollRef.current?.scrollTo({ y: Math.max(0, to - spacing.md), animated: true });
+  // Belge tarafındaki alanlar: yan ekranda sol kaydırıcının başına, tek sütunda belge bloğuna.
+  const scrollDoc = () => (twoCol ? leftRef.current?.scrollTo({ y: 0, animated: true }) : scroll(y('doc')));
   const open = (kind: DocRowOpenRequest['kind']) => setRequest((r) => ({ kind, seq: (r?.seq ?? 0) + 1 }));
   // Dışarıdan istek (okutma önizlemesinin "Müşteri seç"i): aynı kanaldan, sırası artarak.
   const extSeq = external?.seq;
@@ -131,10 +137,10 @@ function useMissingJump(u: FormModel, twoCol: boolean, external: DocRowOpenReque
   const go = (key: IssueKey) => {
     const f = u.row?.form;
     if (key === 'musteri') return open('owner');
-    if (key === 'malSahibi') return scroll(0);
+    if (key === 'malSahibi') return twoCol ? scrollDoc() : scroll(0);
     if (METER_KEYS.includes(key)) {
       if (f && !f.multi && !f.rolls) return open('meter');
-      return scroll(twoCol ? y('columns') : y('doc'));
+      return scrollDoc();
     }
     if (key !== 'belge' && u.fields.isOther(key as WoFieldKey)) {
       if (!u.fields.otherOpen) u.fields.toggleOther();
@@ -142,7 +148,7 @@ function useMissingJump(u: FormModel, twoCol: boolean, external: DocRowOpenReque
     }
     return scroll(formTop());
   };
-  return { scrollRef, at, go, request };
+  return { scrollRef, leftRef, at, go, request };
 }
 
 /** Üretim / Plan / Diğer alanlar sütunu. */
@@ -207,9 +213,9 @@ function ScanModals({ scan }: { scan: DocScanFlow }) {
 
 const styles = StyleSheet.create({
   body: { gap: spacing.md },
-  columns: { flexDirection: 'row', alignItems: 'stretch' },
+  split: { flex: 1, flexDirection: 'row' },
+  pane: { flex: 1 },
   divider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
-  col: { flex: 1, gap: spacing.md },
   stack: { gap: spacing.md },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
 });

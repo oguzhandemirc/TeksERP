@@ -21,7 +21,7 @@ jest.mock('../../../services/inboundDoc.service', () => ({
     approveNote: (id: string, b: unknown) => mockApprove(id, b),
   },
 }));
-jest.mock('../../../services/route.service', () => ({ routeService: { getAll: () => mockRoutes() } }));
+jest.mock('../../../services/route.service', () => ({ routeService: { getActive: () => mockRoutes() } }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
 // Seçici ve kart iskeleti (kendi bekçileri PickerModal.test / ModuleSheet.test).
 jest.mock('../../../components/PickerModal', () => {

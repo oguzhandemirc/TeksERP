@@ -282,7 +282,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   // ── Master data ───────────────────────────────────────────────────────────
   const routesQuery = useQuery({
     queryKey: ['routes', 'wo-picker'],
-    queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => routeService.getActive(),
     staleTime: 10 * 60 * 1000,
   });
 

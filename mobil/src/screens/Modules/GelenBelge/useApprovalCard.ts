@@ -41,7 +41,7 @@ export function useApprovalCard(noteId: string | null, readDone: boolean) {
   // Rota listesi yalnız onaylayacak kullanıcıya; okunamazsa seçici yok → sunucunun öneri zinciri.
   const routes = useQuery({
     queryKey: ['routes', 'wo-picker'],
-    queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => routeService.getActive(),
     enabled: visible && canApprove,
     retry: false,
     staleTime: 10 * 60 * 1000,

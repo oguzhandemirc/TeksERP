@@ -83,12 +83,12 @@ const route = {
   id: 'r1',
   name: 'Kurşun → Boya',
   steps: [
-    { id: 's1', stationId: 'stK', sequence: 1, station: station('stK', 'Kurşun', { isKursunStation: true }) },
-    { id: 's2', stationId: 'stB', sequence: 2, requiredCategoryId: 'catB', station: station('stB', 'Boya', { defaultCategory: { id: 'catB', name: 'Boyahane' } }) },
+    { id: 's1', stationId: 'stK', sequence: 1, station: station('stK', 'Kurşun', { isKursunStation: true, defaultCategory: { id: 'catK', name: 'Kurşun' } }) },
+    { id: 's2', stationId: 'stB', sequence: 2, requiredCategoryId: 'catB', station: station('stB', 'Boya', { kind: 'SUBCONTRACTOR', defaultCategory: { id: 'catB', name: 'Boyahane' } }) },
   ],
 } as unknown as ProductionRoute;
 const other = { id: 'r2', name: 'Paket', steps: [{ id: 's9', stationId: 'stP', sequence: 1, station: station('stP', 'Paketleme') }] } as unknown as ProductionRoute;
-jest.mock('../../../../services/route.service', () => ({ routeService: { getAll: async () => ({ data: [mockRoute, mockOther] }) } }));
+jest.mock('../../../../services/route.service', () => ({ routeService: { getActive: async () => ({ data: [mockRoute, mockOther] }) } }));
 const mockRoute = route;
 const mockOther = other;
 jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
@@ -160,6 +160,10 @@ describe('UnifiedWoForm — rota adımları (K30-D)', () => {
   it('fason adımda firma seçilir → plannedSubcontractorId; tüm adımlar çıkarılırsa "oluştur" kapalı', async () => {
     const s = await openFree();
     fireEvent.press(await s.findByTestId('ie-adim-2-firma-f1'));
+    // Süreç türü olan İÇ istasyon fason değildir: firma satırı yok, etiketi "Fabrikada"; dış işlem "Fason".
+    expect(s.queryByTestId('ie-adim-1-firma')).toBeNull();
+    expect(s.getByTestId('ie-adim-1-tur')).toHaveTextContent('Fabrikada');
+    expect(s.getByTestId('ie-adim-2-tur')).toHaveTextContent('Fason');
     expect(body().steps?.[1]).toEqual({ stationId: 'stB', sequence: 2, requiredCategoryId: 'catB', plannedSubcontractorId: 'f1' });
     fireEvent.press(s.getByTestId('ie-adim-2-cikar'));
     fireEvent.press(s.getByTestId('ie-adim-1-cikar'));

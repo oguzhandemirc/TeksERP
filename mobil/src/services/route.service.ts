@@ -76,6 +76,10 @@ export const routeService = {
       .get<PaginatedResponse<ProductionRoute>>(`/routes${buildQueryString(params)}`)
       .then((r) => r.data),
 
+  /** Seçicilerin rota listesi: yalnız AKTİF şablonlar (pasif rota yeni iş emrine önerilmez; süzme sunucuda). */
+  getActive: (): Promise<PaginatedResponse<ProductionRoute>> =>
+    routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc', filters: { isActive: 'true' } }),
+
   /** Kısayol rota şablonları (`?shortcut=1`); süzme sunucuda, istemci yalnız alanı doğrular (eski sunucu yok sayar). */
   getShortcuts: (): Promise<PaginatedResponse<ProductionRoute>> =>
     apiClient.get<PaginatedResponse<ProductionRoute>>('/routes?shortcut=1&page=1&pageSize=50').then((r) => r.data),

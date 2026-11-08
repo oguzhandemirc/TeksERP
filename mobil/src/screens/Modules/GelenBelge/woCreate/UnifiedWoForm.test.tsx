@@ -63,7 +63,7 @@ const mockPrefSave = jest.fn(async (b: Record<string, unknown>) => {
 jest.mock('../../../../services/preferences.service', () => ({
   preferencesService: { get: async () => mockBlob, save: (b: Record<string, unknown>) => mockPrefSave(b) },
 }));
-jest.mock('../../../../services/route.service', () => ({ routeService: { getAll: async () => ({ data: [] }) } }));
+jest.mock('../../../../services/route.service', () => ({ routeService: { getActive: async () => ({ data: [] }) } }));
 jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
 let mockQty = false;
 jest.mock('../../../../hooks/useFeatureFlags', () => ({

@@ -148,7 +148,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
         </View>
       )}
       {cols.kat && p.foldValues.length === 0 && (
-        <NoticeStrip tone="warn" text="Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />
+        <NoticeStrip tone="warn" text="Kat değeri tanımlı değil (seçmeden de kaydedilir) — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />
       )}
     </>
   );

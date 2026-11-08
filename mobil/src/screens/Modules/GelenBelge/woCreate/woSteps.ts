@@ -24,6 +24,9 @@ export type StepsBody = NonNullable<CreateWorkOrderFromNoteBody['steps']>;
 /** Kurşun adımı (sunucu `isKursunStation`; eski sunucuda kurşun+KK2 istasyon türü — deskPlan ile aynı). */
 export const isKursunStation = (s: StepStation | null | undefined): boolean => !!s && (s.isKursunStation ?? s.kind === 'PROCESS_QC');
 
+/** Fason (dış işlem) adımı: sunucunun ölçütüyle aynı — istasyon türü SUBCONTRACTOR. İç istasyonun süreç türü fason değildir. */
+export const isFasonStation = (s: StepStation | null | undefined): boolean => s?.kind === 'SUBCONTRACTOR';
+
 /** Adımın fason kategorisi (firma seçimi bunun firmalarından); fason değilse null. */
 export const stepCategoryId = (s: Pick<EditStep, 'requiredCategoryId' | 'station'>): string | null => s.requiredCategoryId ?? s.station?.defaultCategory?.id ?? null;
 

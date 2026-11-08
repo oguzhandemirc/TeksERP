@@ -99,7 +99,7 @@ const route = {
   ],
 } as unknown as ProductionRoute;
 const other = { id: 'r2', name: 'Paket', steps: [{ id: 's9', stationId: 'stP', sequence: 1, station: station('stP', 'Paketleme') }] } as unknown as ProductionRoute;
-jest.mock('../../../../services/route.service', () => ({ routeService: { getAll: async () => ({ data: [mockRoute, mockOther] }) } }));
+jest.mock('../../../../services/route.service', () => ({ routeService: { getActive: async () => ({ data: [mockRoute, mockOther] }) } }));
 const mockRoute = route;
 const mockOther = other;
 jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));

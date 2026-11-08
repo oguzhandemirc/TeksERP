@@ -28,7 +28,7 @@ export function useScanAction(showOnButton: boolean) {
   const shortcuts = useQuery({ queryKey: WO_SHORTCUTS_KEY, queryFn: routeService.getShortcuts, retry: false, staleTime: 60_000, enabled: available });
   const routes = useQuery({
     queryKey: ['routes', 'wo-picker'],
-    queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => routeService.getActive(),
     staleTime: 60_000,
     enabled: available,
   });
