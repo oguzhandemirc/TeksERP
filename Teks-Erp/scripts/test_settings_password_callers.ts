@@ -57,7 +57,10 @@ const CONDITIONAL_GATES: Record<string, string> = {
     "diğer türlerin kendi uçlarında kapı yok",
 };
 /** Kapılı ama panelden çağrılmayan uç — gerekçeli, iki yönlü (kullanılmayan muaf da kırmızı). */
-const NO_CALLER_EXEMPT: Record<string, string> = {};
+const NO_CALLER_EXEMPT: Record<string, string> = {
+  // Genel fason F1b (2026-11-08): backend sözleşmesi bu dilimde, panel ayar yüzeyi P1 dilimi — P1 inince satır bayatlar (§3a') ve silinir.
+  "PUT /api/feature-flags/emanet-default-warehouse": "Emanet varsayılan deposu: panel yüzeyi P1 dilimine planlı (PLAN-genel-fason F1b/P1)",
+};
 
 interface GatedRoute { method: string; path: string; where: string; conditional: boolean }
 interface ClientCall { method: string; pattern: string[] | null; raw: string; where: string; wrapped: boolean; passesHeaders: boolean; wrapperId: number | null; mobile: boolean }

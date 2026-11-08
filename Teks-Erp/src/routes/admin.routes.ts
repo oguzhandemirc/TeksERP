@@ -1785,6 +1785,13 @@ router.put(
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
+      // Emanet varsayılan deposu (F1b): depo kapısı (var + aktif) yalnız kendi ucunda; düz metin onu atlardı.
+      if (key === SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID) {
+        throw AppError.badRequest(
+          `Emanet varsayılan deposu yalnız kendi ucundan (PUT /api/feature-flags/emanet-default-warehouse) değiştirilir`,
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
       if (isReservedSettingKey(key)) {
         throw AppError.badRequest(
           "Bu ayar güvenlik satırıdır ve bu uçtan değiştirilemez",

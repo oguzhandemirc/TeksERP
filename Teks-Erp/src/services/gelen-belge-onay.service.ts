@@ -26,6 +26,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
+import { resolveEmanetBirthWarehouseIdTx } from "./helpers/emanet-warehouse.helper";
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
@@ -120,6 +121,8 @@ async function precheck(note: PreNote, input: ApproveInput, mode: IncomingDocEnt
   // Emanet kapısı + sahip aktifliği TEK yazıcıdan (lisans sorusu + MODULE_DISABLED + pasif/bulunamayan sahip
   // OWNER_CUSTOMER_INVALID aynı helper'da; motor tx içinde yeniden sorar).
   await assertEmanetWritableTx(prisma, note.ownerCustomerId, "gelen belge onayı");
+  // F1b emanet deposu ayarlı ama kullanılamıyorsa onay claim'den ÖNCE 400 (her satır tek tek FAILED olmasın); yazmaz.
+  await resolveEmanetBirthWarehouseIdTx(prisma, note.ownerCustomerId);
   // Cari kilidi (D4-I1, INTAKE): hızlı ret; satır doğum tx'i yeniden sorar (onay sürerken konan kilit).
   await assertCariNotHeldTx(prisma, note.ownerCustomerId, "INTAKE");
   // Risk limiti (D4-I2, finance.riskLimitBlock.intake): kilidin yanında; kabul bakiyeyi değiştirmez, satır tx'i sormaz.

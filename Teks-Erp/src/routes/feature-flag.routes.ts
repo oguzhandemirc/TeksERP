@@ -46,6 +46,7 @@ import { EIRSALIYE_ADAPTERS } from "../constants/e-irsaliye";
 import { isCalendarDate, LEGAL_IDENTITY_LIMITS } from "../services/e-irsaliye/e-irsaliye-settings";
 import { TERIM } from "../constants/terim";
 import { setWorkOrderDefaultItem } from "../services/workorder-default-item.service";
+import { getEmanetDefaultWarehouse, setEmanetDefaultWarehouse } from "../services/emanet-default-warehouse.service";
 
 /** Künyenin metin alanları — eksik alan boş metin; tavan tek tablodan (+8: "123 456 78 90"
  *  gibi boşluklu yazım kabul edilir, rakam süzme servisin temizleyicisinde). */
@@ -1165,6 +1166,61 @@ router.put(
     try {
       const { itemId } = WorkOrderDefaultItemBody.parse(req.body);
       res.status(200).json({ success: true, data: await setWorkOrderDefaultItem(itemId, req.user!.userId) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/emanet-default-warehouse:
+ *   get:
+ *     tags: [FeatureFlags]
+ *     summary: Emanet varsayılan deposu (admin:settings ya da settings:warehouse) — sahipli top depo söylenmeden doğunca girdiği depo
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ warehouse: { id, code, name, isActive } | null (null = varsayılan depo, bugünkü), problem: string | null (pasif/silinmiş → sahipli doğum 400), emanetEnabled }" }
+ *   put:
+ *     tags: [FeatureFlags]
+ *     summary: Emanet varsayılan deposunu yaz (admin:settings ya da settings:warehouse + ayar şifresi); pasif/olmayan depo 400 EMANET_DEFAULT_WAREHOUSE_INVALID, null temizler
+ *     description: Emanet kapalıyken ayar etkisiz. Açık depo seçimi (mal kabul) her zaman kazanır. Ham ayar ucu bu anahtarı reddeder.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [warehouseId]
+ *             properties:
+ *               warehouseId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Güncel görünüm (GET ile aynı) }
+ *       400: { description: EMANET_DEFAULT_WAREHOUSE_INVALID }
+ */
+router.get(
+  "/emanet-default-warehouse",
+  verifyToken,
+  requireAnyPermission("admin:settings", "settings:warehouse"),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ success: true, data: await getEmanetDefaultWarehouse() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+const EmanetDefaultWarehouseBody = z.strictObject({ warehouseId: z.uuid("Geçersiz depo kimliği").nullable() });
+router.put(
+  "/emanet-default-warehouse",
+  verifyToken,
+  requireAnyPermission("admin:settings", "settings:warehouse"),
+  requireSettingsPassword,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { warehouseId } = EmanetDefaultWarehouseBody.parse(req.body);
+      res.status(200).json({ success: true, data: await setEmanetDefaultWarehouse(warehouseId, req.user!.userId) });
     } catch (err) {
       next(err);
     }
