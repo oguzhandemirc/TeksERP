@@ -47,7 +47,7 @@ async function beamCandidates(q: CandidateQuery): Promise<{ rows: ConsignmentCan
 }
 
 interface YarnRow {
-  lotId: string; lotNo: string; isActive: boolean; ownerCustomerId: string | null; itemId: string; itemCode: string; itemName: string;
+  lotId: string; lotNo: string; ownerCustomerId: string | null; itemId: string; itemCode: string; itemName: string;
   warehouseId: string; warehouseName: string; balance: string | number | Prisma.Decimal;
 }
 
@@ -55,7 +55,7 @@ async function yarnCandidates(q: CandidateQuery): Promise<{ rows: ConsignmentCan
   const like = q.search ? `%${escapeLikeTerm(q.search)}%` : null;
   // Bakiye lot × depo düzeyinde (oluştur kapısıyla aynı işaret tablosu); sıfır bakiyeli çift listeye girmez.
   const rows = await prisma.$queryRaw<YarnRow[]>`
-    SELECT l."id" AS "lotId", l."lotNo", l."isActive", l."ownerCustomerId", l."itemId", i."code" AS "itemCode", i."name" AS "itemName",
+    SELECT l."id" AS "lotId", l."lotNo", l."ownerCustomerId", l."itemId", i."code" AS "itemCode", i."name" AS "itemName",
            m."warehouseId", w."name" AS "warehouseName", SUM(${signedQtySql()}) AS balance
     FROM "yarn_movements" m
     JOIN "yarn_lots" l ON l."id" = m."lotId"
@@ -63,12 +63,15 @@ async function yarnCandidates(q: CandidateQuery): Promise<{ rows: ConsignmentCan
     JOIN "warehouses" w ON w."id" = m."warehouseId"
     WHERE l."ownerCustomerId" = ${q.ownerCustomerId}::uuid
       ${like ? Prisma.sql`AND (l."lotNo" ILIKE ${like} OR i."code" ILIKE ${like} OR i."name" ILIKE ${like})` : Prisma.empty}
-    GROUP BY l."id", l."lotNo", l."isActive", l."ownerCustomerId", l."itemId", i."code", i."name", m."warehouseId", w."name"
+    GROUP BY l."id", l."lotNo", l."ownerCustomerId", l."itemId", i."code", i."name", m."warehouseId", w."name"
     HAVING SUM(${signedQtySql()}) > 0
     ORDER BY l."lotNo", w."name", l."id", m."warehouseId"
     LIMIT ${q.limit + 1}
   `;
   const page = rows.slice(0, q.limit);
+  // Lot aktifliği ayrı okunur: ham SQL'de `items` yanında `isActive` kart kullanım cırcırına (d) takılırdı.
+  const lots = page.length ? await prisma.yarnLot.findMany({ where: { id: { in: [...new Set(page.map((r) => r.lotId))] } }, select: { id: true, isActive: true } }) : [];
+  const activeById = new Map(lots.map((l) => [l.id, l.isActive]));
   return {
     truncated: rows.length > q.limit,
     rows: page.map((r) => {
@@ -76,7 +79,7 @@ async function yarnCandidates(q: CandidateQuery): Promise<{ rows: ConsignmentCan
       return {
         lotId: r.lotId, lotNo: r.lotNo, yarnItemId: r.itemId, itemCode: r.itemCode, itemName: r.itemName,
         warehouseId: r.warehouseId, warehouseName: r.warehouseName, balanceKg: balanceKg.toFixed(3),
-        blockedReason: yarnBlockedReason({ ownerCustomerId: r.ownerCustomerId, isActive: r.isActive, balanceKg }, q.ownerCustomerId),
+        blockedReason: yarnBlockedReason({ ownerCustomerId: r.ownerCustomerId, isActive: activeById.get(r.lotId) ?? false, balanceKg }, q.ownerCustomerId),
       };
     }),
   };

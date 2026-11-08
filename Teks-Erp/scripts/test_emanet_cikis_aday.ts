@@ -67,7 +67,7 @@ type RouteLayer = { route?: { path: string; methods: Record<string, boolean>; st
 
 /** Router yığınındaki `/candidates` GET katmanını gerçek middleware'leriyle koşar (verifyToken/emanet kapısı hariç). */
 async function call(query: Record<string, string>, permissions: string[]): Promise<{ status: number; code?: string; data?: ConsignmentCandidates }> {
-  const layer = (router as unknown as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === "/candidates" && l.route.methods.get);
+  const layer = (router as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === "/candidates" && l.route.methods.get);
   if (!layer?.route) return { status: -1, code: "ROUTE_YOK" };
   const req = { query, user: { userId: "x", username: "x", permissions } } as unknown as Request;
   let out: { status: number; body?: { data?: ConsignmentCandidates } } | null = null;
