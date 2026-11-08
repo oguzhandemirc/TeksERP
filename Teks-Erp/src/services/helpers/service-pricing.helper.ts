@@ -277,6 +277,15 @@ async function applyServicePrices(
   return tierMissing;
 }
 
+/** İşlerin hizmet kartları (kod + ad) — satır grubunun başlığı. */
+async function loadServiceItemsById(works: ServiceRollWork[], db: Db): Promise<Map<string, { id: string; code: string; name: string }>> {
+  const items = await db.serviceItem.findMany({
+    where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
+    select: { id: true, code: true, name: true },
+  });
+  return new Map(items.map((i) => [i.id, i]));
+}
+
 /**
  * Toplara yapılan kurşun ve bayrak tipi (H10) işleri hizmet kalemine ve müşteri fiyatına çözer.
  * Yazmaz; eşleşmeyen top ve fiyatsız kalem `warnings`te görünür (sessiz düşmez).
@@ -327,9 +336,8 @@ export async function resolveServiceItemsForRolls(params: {
     };
   });
   const flag = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
-  const flagWorks = flag.works;
-  const stepWorks = opt.stepWorks ? await loadStepWorks(rollIds, basis, { claimed: [...allWorks, ...flagWorks], flagClaims: flag.claims, db, warnings }) : [];
-  const billable = filterBillableWorks([...allWorks, ...flagWorks, ...stepWorks], opt, basis, warnings);
+  const stepWorks = opt.stepWorks ? await loadStepWorks(rollIds, basis, { claimed: [...allWorks, ...flag.works], flagClaims: flag.claims, db, warnings }) : [];
+  const billable = filterBillableWorks([...allWorks, ...flag.works, ...stepWorks], opt, basis, warnings);
   // Adet/vuruşu eksik iş faturaya alınmaz (uydurma miktar yok); birim başına tek uyarı.
   const unknown = billable.filter((w) => w.serviceItemId && w.quantity === null);
   for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
@@ -337,11 +345,7 @@ export async function resolveServiceItemsForRolls(params: {
 
   const tierMissing = await applyServicePrices(works, { opt, currency: params.currency, customerId: params.customerId, db, warnings });
 
-  const items = await db.serviceItem.findMany({
-    where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
-    select: { id: true, code: true, name: true },
-  });
-  const itemById = new Map(items.map((i) => [i.id, i]));
+  const itemById = await loadServiceItemsById(works, db);
   const manualReadings = await loadManualReadingIds(works, db);
   const groups = new Map<string, ServiceLine & { sum: Prisma.Decimal }>();
   const tierMissingByName = new Map<string, number>();
