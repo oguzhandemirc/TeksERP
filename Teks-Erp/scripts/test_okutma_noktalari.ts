@@ -33,6 +33,7 @@ import { generateRollBarcodeTx } from "../src/services/helpers/roll-barcode.help
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
+import { envanterServisDosyasiMi, envanterServisUyeMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -57,6 +58,8 @@ const HELPER = "services/helpers/roll-scan-resolve.helper.ts";
 const GATES = ["resolveRollByScanCode(", "customerCodeSearchRollIds("];
 
 function functionText(rel: string, fn: string): string | null {
+  // envanter servisi bölündü (2026-11-08): aileden ASIL gövde (cephedeki ince delegasyon değil)
+  if (envanterServisDosyasiMi(rel)) return envanterServisUyeMetni(fn) || null;
   const text = readFileSync(join(SRC, rel), "utf8");
   const sf = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true);
   let found: string | null = null;

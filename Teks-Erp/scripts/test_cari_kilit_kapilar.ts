@@ -38,6 +38,7 @@ import { createDeliveryNote, getDeliveryNote } from "../src/services/gelen-belge
 import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
 import { sevkiyatServisUyeMetni, sevkiyatServisEtiketi } from "./lib/sevkiyat-servis-kaynak";
 import { siparisServisEtiketi, siparisServisMetni, siparisServisUyeMetni } from "./lib/siparis-servis-kaynak";
+import { envanterServisEtiketi, envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -91,7 +92,7 @@ function statik(): void {
   const pre = govde(onay, "async function precheck(", 2500);
   check("§0a gelen belge precheck: emanet kapısından SONRA INTAKE kapısı", pre.indexOf('assertCariNotHeldTx(prisma, note.ownerCustomerId, "INTAKE")') > pre.indexOf("assertEmanetWritableTx(prisma"), "precheck");
   check("§0b gelen belge satır doğumu `cariHoldIntakeGate: true` verir", /cariHoldIntakeGate: true/.test(govde(onay, "export async function approveDeliveryNote(", 6000)));
-  const inv = oku("services/inventory.service.ts");
+  const inv = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   check("§0c inventory doğum tx'i: emanet kapısının yanında INTAKE kapısı (bayrakla)", /assertEmanetWritableTx\(tx, opts\?\.ownerCustomerId \?\? null, "top"\);\s*\n\s*\/\/[^\n]*\n\s*if \(opts\?\.cariHoldIntakeGate && opts\.ownerCustomerId\) await assertCariNotHeldTx\(tx, opts\.ownerCustomerId, "INTAKE"\)/.test(inv));
   check("§0d sipariş: prepareOrderCreate INTAKE kapısı", /assertCariNotHeldTx\(prisma, data\.customerId as string, "INTAKE"\)/.test(siparisServisUyeMetni("prepareOrderCreate"))); // sipariş servisi bölündü (2026-11-08): asıl gövde
   check("§0d' sipariş güncellemesi: müşteri değişiminde INTAKE kapısı", /assertCariNotHeldTx\(prisma, finalCustomerId, "INTAKE"\)/.test(siparisServisMetni()));
@@ -127,7 +128,7 @@ function statik(): void {
     });
   const importers = bul(SRC)
     .filter((f) => /from "[^"]*cari-hold\.helper"/.test(readFileSync(f, "utf8")))
-    .map((f) => siparisServisEtiketi(sevkiyatServisEtiketi(path.relative(SRC, f)))) // sevkiyat + sipariş servisi aileleri tek etiket
+    .map((f) => envanterServisEtiketi(siparisServisEtiketi(sevkiyatServisEtiketi(path.relative(SRC, f))))) // sevkiyat + sipariş + envanter servisi aileleri tek etiket
     .filter((r, i, a) => a.indexOf(r) === i)
     .sort();
   check("§0h kapı helper'ını import eden küme SABİT (muaf yollar çağırmaz)", JSON.stringify(importers) === JSON.stringify(BEKLENEN), importers.join(", "));

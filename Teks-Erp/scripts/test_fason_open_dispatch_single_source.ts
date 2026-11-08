@@ -326,7 +326,7 @@ const s = "receiptItems: { none: { isPartial: false } }";`,
 const REMAINDER_HAM_SQL_MUAF = new Set([
   "scripts/consistency-check-derived.sql",
   "src/services/helpers/subcontract-scorecard-query.helper.ts",
-  "src/services/inventory.service.ts",
+  "src/services/inventory/subcontractor-summary.ts", // getRollSubcontractorSummary (inventory.service bölmesi 2026-11-08)
   "scripts/test_consistency_derived.ts",
   // Teşhis script'i (canlıda `--salt-okuma` ile koşar) — kural değil ÖLÇÜM yazar.
   "scripts/olcum_scorecard_kismi_dogrudan_sevk.ts",

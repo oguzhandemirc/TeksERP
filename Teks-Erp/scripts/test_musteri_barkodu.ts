@@ -36,6 +36,7 @@ import { SETTING_KEYS, invalidateFeatureFlagsCache, systemSettingService } from 
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 import { sevkiyatServisEtiketi, sevkiyatServisTanimDosyasi } from "./lib/sevkiyat-servis-kaynak";
+import { envanterServisDosyasiMi, envanterServisEtiketi, envanterServisTanimDosyasi } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -171,7 +172,7 @@ function astSection(): void {
     return found;
   };
   check("§AST uygulama yerleri boğazı çağırır (findRollByBarcode · scanIntoSack · resolveExact)",
-    uses("services/inventory.service.ts", "findRollByBarcode") && uses(relative(SRC, sevkiyatServisTanimDosyasi("scanIntoSack")).split("\\").join("/"), "scanIntoSack") && uses("services/search.service.ts", "resolveExact"));
+    uses(relative(SRC, envanterServisTanimDosyasi("findRollByBarcode")).split("\\").join("/"), "findRollByBarcode") && uses(relative(SRC, sevkiyatServisTanimDosyasi("scanIntoSack")).split("\\").join("/"), "scanIntoSack") && uses("services/search.service.ts", "resolveExact"));
 
   // Envanter: `normalizeScanCode(` gerçek çağrısı olan her dosya (uygulama yerleri hariç) helper başlığında anılır.
   const header = readFileSync(join(SRC, HELPER), "utf8").split("// ====")[2] ?? "";
@@ -185,8 +186,8 @@ function astSection(): void {
     if (!/normalizeScanCode\(/.test(text)) continue;
     const short = rel.replace(/^services\//, "");
     const tagged = header.split("\n").some((l) => l.includes(`${short}:`) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
-    if (!applied.has(sevkiyatServisEtiketi(rel)) && !tagged) missing.push(rel); // sevkiyat servisi bölündü (2026-11-08): aile cephe etiketine katlanır
-    if (rel === "services/inventory.service.ts" && !header.includes("inventory.service.ts:")) missing.push(rel);
+    if (!applied.has(envanterServisEtiketi(sevkiyatServisEtiketi(rel))) && !tagged) missing.push(rel); // sevkiyat + envanter servisi bölündü (2026-11-08): aile cephe etiketine katlanır
+    if (envanterServisDosyasiMi(rel) && !header.includes("inventory.service.ts:")) missing.push(rel);
   }
   check("§AST kalan okutma çağrıları helper başlığında etiketli", missing.length === 0, missing.join(", "));
 

@@ -72,7 +72,8 @@ const fakeReq = (query: Record<string, unknown>) => ({ query }) as unknown as Re
 // ── §0 AST ───────────────────────────────────────────────────────────────────
 /** Yüzey → helper'dan içe aktarması ZORUNLU adlar (kullanılmasa tsc/eslint yakalar). */
 const SURFACES: Record<string, { from: string; names: string[] }> = {
-  "src/services/inventory.service.ts": { from: "./helpers/stock-ownership.helper", names: ["CONSIGNED_WHERE", "readOwnershipScope", "ownershipScopeWhere"] },
+  // inventory.service bölmesi 2026-11-08: liste where'i `inventory/list.ts`te; ailenin geri kalanı §0c taramasında
+  "src/services/inventory/list.ts": { from: "../helpers/stock-ownership.helper", names: ["CONSIGNED_WHERE", "readOwnershipScope", "ownershipScopeWhere"] },
   "src/services/reports/stock-scorecard.report.service.ts": { from: "../helpers/stock-ownership.helper", names: ["consignedRollSql", "splitByOwnership"] },
   "src/services/production-balance.service.ts": { from: "./helpers/stock-ownership.helper", names: ["isConsignedRoll"] },
   "src/services/reports/stock-kalem.report.service.ts": { from: "./stock-scorecard.report.service", names: ["loadShelfCellsByOwnership"] },

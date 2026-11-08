@@ -27,6 +27,7 @@ import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { dismountBeam, mountBeam } from "../src/services/warp-beam-mount.service";
 import { warpLengthFromFabric } from "../src/services/warp-beam-auto-consume.service";
 import { applyWarpBeamEventTx } from "../src/services/helpers/warp-beam-event.helper";
+import { envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -46,7 +47,7 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 function statik(): void {
   console.log("── §0 Statik ──");
   check("§0a formül: 100 m kumaş, take-up %20 → 125 m çözgü; NULL → 100", warpLengthFromFabric(D(100), D(20)).equals(125) && warpLengthFromFabric(D(100), null).equals(100));
-  const inv = readFileSync(path.join(ROOT, "src/services/inventory.service.ts"), "utf8");
+  const inv = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   check("§0b KK1 doğuşu `autoConsumeForRollTx`i tx İÇİNDE, doff bağı varken çağırır", /if \(opts\?\.doffEventId\) \{\s*autoConsumeWarnings\.push\(\.\.\.\(await autoConsumeForRollTx\(tx,/.test(inv));
   check("§0c iptal yolu `cancelConsumedForRollTx`i YALNIZ !isScrap ile çağırır (SCRAP'ta çözgü gerçekten tüketildi)", /if \(!isScrap && r\.doffEventId\) await cancelConsumedForRollTx\(tx,/.test(inv));
   const svc = readFileSync(path.join(ROOT, "src/services/warp-beam-auto-consume.service.ts"), "utf8");

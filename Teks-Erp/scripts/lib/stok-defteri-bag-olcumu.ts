@@ -161,7 +161,7 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
     ad: "redye (STOCK/WAREHOUSE → yeni iş emri adımı) — ÇIKIŞ",
   },
   {
-    dosya: "src/services/inventory.service.ts",
+    dosya: "src/services/inventory/rescue.ts", // inventory.service bölmesi 2026-11-08
     fonksiyon: "rescueStuckRoll",
     ad: "takılı top kurtarma (IN_PRODUCTION → WAREHOUSE) — GİRİŞ",
   },
@@ -194,14 +194,14 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
  */
 export const MIKTAR_YOLLARI: readonly KapisizYol[] = [
   {
-    dosya: "src/services/inventory.service.ts",
+    dosya: "src/services/inventory/qty-adjust.ts", // inventory.service bölmesi 2026-11-08
     fonksiyon: "adjustRollQty",
     ad: "elle metraj düzeltmesi (PATCH /rolls/:id/qty) — YERİNDE MİKTAR",
   },
   {
     // Bütün topta ölçüm düzeltmesi: currentQty = initialQty = m. Yazıcısı ENTRY_CORRECTION
     // (ADJUST, ±fark, ENTRY_QTY_CORRECTION sapmasına bağlı) — 2026-09-14.
-    dosya: "src/services/inventory.service.ts",
+    dosya: "src/services/inventory/manual-properties.ts", // inventory.service bölmesi 2026-11-08
     fonksiyon: "applyManualProperties",
     ad: "bütün top metraj düzeltmesi (Düzelt diyaloğu, currentQty = initialQty = m) — YERİNDE MİKTAR",
   },
@@ -215,7 +215,7 @@ export const MIKTAR_YOLLARI: readonly KapisizYol[] = [
  */
 export const MIKTAR_MUAF: readonly (KapisizYol & { neden: string })[] = [
   {
-    dosya: "src/services/inventory.service.ts",
+    dosya: "src/services/inventory/kursun.ts", // inventory.service bölmesi 2026-11-08
     fonksiyon: "kursunFinish",
     ad: "kurşun ölçümü (IN_PRODUCTION topa ölçülen metraj)",
     neden: "top üretimde, stok kümesi dışı — PRODUCTION_ISSUE ile çıkmış, finalize'da metrajıyla girer",

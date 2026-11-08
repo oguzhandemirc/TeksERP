@@ -131,8 +131,8 @@ WHERE r.status = 'SHIPPED' AND r."preShipStatus" IS NULL AND s."dispatchedAt" >=
     alan: "preCancelStatus",
     sinif: "GERI_ALMA_GIRDISI",
     adayDegil: "şerhi imza taşımıyor ('İptalden önceki raf' — emsal atfı)",
-    yazan: [SVC + "helpers/roll-disposition.helper.ts", SVC + "inventory.service.ts", SVC + "stock-count.service.ts"],
-    tuketen: [SVC + "inventory.service.ts", SVC + "stock-count-reversal.service.ts"],
+    yazan: [SVC + "helpers/roll-disposition.helper.ts", SVC + "inventory/cancel.ts", SVC + "stock-count.service.ts"],
+    tuketen: [SVC + "inventory/restore.ts", SVC + "stock-count-reversal.service.ts"],
     neden: "iptalde YAZILIR (raf), iptali geri almada / sayım stornosunda OKUNUP null'lanır",
     sql: [
       {
@@ -287,7 +287,7 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     alan: "initialQty",
     sinif: "DONMUS_ILERI",
     adayDegil: "şerhi 'Initial measurement' — imza taşımıyor; kural top-duzeltme.md metraj satırında yaşar",
-    yazan: [SVC + "helpers/kursun-meter-stock.helper.ts", SVC + "inventory.service.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur-undo.service.ts", SVC + "tambur.service.ts"],
+    yazan: [SVC + "helpers/kursun-meter-stock.helper.ts", SVC + "inventory/initial-entry.ts", SVC + "inventory/kursun.ts", SVC + "inventory/manual-properties.ts", SVC + "inventory/open-fabric.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur-undo.service.ts", SVC + "tambur.service.ts"],
     neden: "üretim anı giriş metrajı; yalnız AŞIM yönünde ve sapma defteri satırı eşliğinde büyür (tambur-undo restoreBumpTx; H1b kurşun APPLY artı yönü `initialQtyRaise` taşıyan OVERAGE ile, ters yolda geri iner)",
     bekci: [
       { dosya: "test_consistency.ts", bolum: "33", ne: "initialQty = giriş metrajı + Σ canlı TAMBUR aşımı" },
@@ -301,7 +301,9 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     sinif: "DONMUS_ILERI",
     yazan: [
       SVC + "helpers/roll-disposition.helper.ts",
-      SVC + "inventory.service.ts",
+      SVC + "inventory/initial-entry.ts",
+      SVC + "inventory/manual-properties.ts",
+      SVC + "inventory/open-fabric.ts",
       SVC + "return.service.ts",
       SVC + "subcontractor/direct-ship.ts",
       SVC + "subcontractor/receive.ts",
@@ -325,7 +327,7 @@ WHERE r."qualityGradeId" IS NOT NULL AND r."qualityGrade" IS NULL`,
     alan: "entryStationId",
     sinif: "DONMUS_ILERI",
     adayDegil: "imza ('donmuş belge mantığının aynısı') ilk cümlede değil",
-    yazan: [SVC + "inventory.service.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur.service.ts"],
+    yazan: [SVC + "inventory/initial-entry.ts", SVC + "inventory/open-fabric.ts", SVC + "subcontractor/direct-ship.ts", SVC + "subcontractor/receive.ts", SVC + "tambur.service.ts"],
     neden: "giriş anında damgalanır, makine sonradan taşınsa da değişmez; hiçbir ters yol dokunmaz",
   },
   {

@@ -65,6 +65,7 @@ import { KursunBypassService } from "../src/services/kursun-bypass.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { AppError } from "../src/utils/app-error";
 import { testActorId } from "./fixture-test-user";
+import { ENVANTER_SERVIS_REL, envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -373,7 +374,8 @@ async function main() {
     const selectIhlal: string[] = [];
     for (const [tablo, ad] of [[AKIS_SELECT_TABANI, "STEP_FLOW_SELECT"], [KALITE_SELECT_TABANI, "STEP_QUALITY_SELECT"]] as const) {
       for (const [dosya, beklenen] of Object.entries(tablo)) {
-        const ham = kaynaklar.get(dosya);
+        // envanter servisi bölündü (2026-11-08): cephe anahtarı ailenin (cephe + `services/inventory/*.ts`) birleşik metnini sayar
+        const ham = dosya === ENVANTER_SERVIS_REL ? envanterServisMetni() : kaynaklar.get(dosya);
         if (!ham) { selectIhlal.push(`${dosya}: DOSYA YOK (taban bayat)`); continue; }
         const bulunan = (yorumlariSok(ham).match(new RegExp(ad, "g")) ?? []).length;
         if (bulunan < beklenen) selectIhlal.push(`${dosya} ${ad}: ${beklenen} bekleniyor, ${bulunan} var`);

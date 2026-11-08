@@ -175,7 +175,7 @@ const DUZELTILEN: Array<[string, string]> = [
   ["src/services/subcontractor/receive.ts", "sequentialTx(tx).subcontractorReceipt.findUnique"],
   ["src/services/order/create.ts", "sequentialTx(tx).order.create"], // order.service bölmesi 2026-11-08
   ["src/services/weaving-order.service.ts", "sequentialTx(tx).weavingOrder.findUniqueOrThrow"],
-  ["src/services/inventory.service.ts", "sequentialTx(tx).roll.create"],
+  ["src/services/inventory/initial-entry.ts", "sequentialTx(tx).roll.create"], // inventory.service bölmesi 2026-11-08
   ["src/services/batch.service.ts", "sequentialTx(tx).subcontractorDispatch.findMany"],
   ["src/services/helpers/batch-dispatch-surgery.helper.ts", "sequentialTx(tx).subcontractorDispatch.findMany"],
   ["src/services/work-session.service.ts", "sequentialTx(tx).workSession.create"],

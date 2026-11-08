@@ -36,6 +36,7 @@ import { initialEntrySchema } from "../src/controllers/inventory.controller";
 import { WorkSessionService } from "../src/services/work-session.service";
 import { AppError } from "../src/utils/app-error";
 import { testActorId } from "./fixture-test-user";
+import { envanterServisDosyalari, envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -80,12 +81,12 @@ function statik(): void {
     !parse({ inspection: { defects: Array.from({ length: 501 }, () => ({ defectTypeId: uuid() })) } }).success &&
     !parse({ inspection: { defects: [], note: "x".repeat(501) } }).success &&
     !parse({ inspection: { defects: [{ defectTypeId: uuid(), sizeClass: "BOGUS" }] } }).success);
-  const svc = readFileSync(path.join(ROOT, "src/services/inventory.service.ts"), "utf8");
+  const svc = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   const tx = svc.indexOf("roll = await prisma.$transaction(async (tx) => {");
   const call = svc.indexOf("await createInspectionTx(tx, {");
   const end = svc.indexOf("    await AuditService.log({", tx);
   check("§0c `createInspectionTx(tx, …)` doğuş tx'inin İÇİNDE (tek çağrı)", tx > 0 && call > tx && call < end && svc.split("createInspectionTx(").length === 2);
-  const writers = ["src/services/inventory.service.ts"].map((f) => readFileSync(path.join(ROOT, f), "utf8"));
+  const writers = envanterServisDosyalari().map((f) => readFileSync(f, "utf8")); // aile: cephe + alan modülleri
   check("§0d inventory.service muayeneyi doğrudan YAZMAZ (`rollInspection.create` yok — tek yazar)", writers.every((s) => !/rollInspection\.create/.test(s)));
 }
 

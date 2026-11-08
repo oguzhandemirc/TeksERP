@@ -40,6 +40,7 @@ import { K18_DEAD_STATUSES } from "../src/services/batch.service";
 import { NOT_INSIDE_STATUSES, getConsignedWorkSummary, listRollOwnerCustomers } from "../src/services/roll-owner.service";
 import { requireEmanetEnabled } from "../src/middlewares/module.middleware";
 import { AppError } from "../src/utils/app-error";
+import { envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -56,7 +57,7 @@ const fakeReq = (query: Record<string, unknown>) => ({ query }) as unknown as Re
 type RollRow = { id: string; ownerCustomerId: string | null; ownerCustomer?: { id: string; name: string } | null };
 
 function statik(): void {
-  const inv = readFileSync(path.join(ROOT, "src/services/inventory.service.ts"), "utf8");
+  const inv = envanterServisMetni(); // envanter servisi bölündü (2026-11-08): aile metni (cephe + alan modülleri)
   check("§0a buildRollWhere sahibi readIdCondition'dan okur", /readIdCondition\(f\["ownerCustomerId"\]\)/.test(inv));
   const routes = readFileSync(path.join(ROOT, "src/routes/consigned-work.routes.ts"), "utf8");
   check("§0b /api/consigned-work requireEmanetEnabled arkasında", /router\.use\(verifyToken, requireEmanetEnabled\)/.test(routes));

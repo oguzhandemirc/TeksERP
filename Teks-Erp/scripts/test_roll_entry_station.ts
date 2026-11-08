@@ -34,6 +34,7 @@ import { randomUUID } from "crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { resolveEntryStationId } from "../src/services/helpers/roll-entry-station.helper";
 import { InventoryService } from "../src/services/inventory.service";
+import { envanterServisEtiketi } from "./lib/envanter-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -112,9 +113,10 @@ async function main(): Promise<void> {
       const text = fs.readFileSync(f, "utf8");
       const calls = callBodies(text);
       if (calls.length === 0) continue;
-      const exempt = EXEMPT.find((e) => e.file === rel);
+      // envanter servisi bölündü (2026-11-08): muaf, eskiden tek dosya olan AİLEYİ kapsar (cephe etiketine katlanır)
+      const exempt = EXEMPT.find((e) => e.file === envanterServisEtiketi(rel));
       if (exempt) {
-        seenExempt.add(rel);
+        seenExempt.add(exempt.file);
         continue;
       }
       for (const c of calls) {

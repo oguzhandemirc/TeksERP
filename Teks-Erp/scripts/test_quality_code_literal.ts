@@ -141,7 +141,7 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
  * GEREKÇELİ MUAFLAR — dosya başına, ve İZİNLİ DEĞERLER sayılarak.
  *
  * ⚠️ Muaf DOSYA değil DEĞER düzeyindedir: `inventory.service.ts`ı topluca
- * affetmek gerçek bir dosyayı kör ederdi. Listedeki değerler dışında bir
+ * affetmek gerçek bir dosyayı kör ederdi (bölmeden sonra muaf `inventory/list.ts`te). Listedeki değerler dışında bir
  * literal aynı dosyada yine KIRMIZI verir.
  * İki yönlü denetlenir: ölü muaf da KIRMIZI (düzelttiğin şeyi sonsuza dek
  * affeden tek yönlü liste, kapıların sessiz ölüm sebebidir).
@@ -184,7 +184,7 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
       "katalog kodu DEĞİL; burada kod hiç bulunmaz.",
     izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi", "Kalite durumu", "Kalite notu", "Kalite kararı tarihi"],
   },
-  "Teks-Erp/src/services/inventory.service.ts": {
+  "Teks-Erp/src/services/inventory/list.ts": {
     gerekce:
       "`byQuality` özet haritasında NULL kalitenin kova ANAHTARI. Kod değil sentinel; " +
       "değiştirmek panelin okuduğu yanıt anahtarını kırar (sözleşme tetiği).",

@@ -32,6 +32,7 @@ import path from "path";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 import { isEmriServisDosyasiMi, isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 import { siparisServisDosyasiMi, siparisServisMetni } from "./lib/siparis-servis-kaynak";
+import { envanterServisDosyasiMi, envanterServisMetni } from "./lib/envanter-servis-kaynak";
 
 const ROOT = path.resolve(__dirname, "..");
 const ROUTES_DIR = path.join(ROOT, "src/routes");
@@ -372,6 +373,8 @@ function checkTombstoneAnchors(): void {
         ? isEmriServisMetni()
         : siparisServisDosyasiMi(`services/${anchor.service}`) // sipariş servisi de bölündü (2026-11-08)
         ? siparisServisMetni()
+        : envanterServisDosyasiMi(`services/${anchor.service}`) // envanter servisi de bölündü (2026-11-08)
+        ? envanterServisMetni()
         : fs.readFileSync(path.join(ROOT, "src/services", anchor.service), "utf8"),
     );
     const physical = new RegExp(`(prisma|tx)\\.${anchor.model}\\.delete(Many)?\\(`).test(src);

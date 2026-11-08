@@ -76,7 +76,7 @@ async function main() {
     "workorder/create.ts": 1, // create (workorder.service bölmesi 2026-11-08)
     "workorder/replace.ts": 1, // replace
     "workorder/target-planning.ts": 1, // updateTargetProperties
-    "inventory.service.ts": 1, // KK1 createInitialEntry
+    "inventory/initial-entry.ts": 1, // KK1 createInitialEntry (inventory.service bölmesi 2026-11-08)
     "order/validation.ts": 1,  // sipariş kalemi özellikleri — validateLineItems (order.service bölmesi 2026-11-08)
     "route.service.ts": 1,     // rota adımı plannedPropertyIds
     "item.service.ts": 2,      // ürün izinli listesi create + update
