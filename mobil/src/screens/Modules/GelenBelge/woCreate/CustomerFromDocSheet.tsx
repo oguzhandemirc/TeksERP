@@ -44,7 +44,7 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
         footer={
           <>
             <View style={sheet.footerLeft}>
-              <Button mode="outlined" onPress={c.close} textColor={colors.danger} style={styles.cancel} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
+              <Button mode="contained" onPress={c.close} buttonColor={colors.danger} textColor={colors.textOnDark} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
             </View>
             <Button mode="contained-tonal" onPress={fromList} buttonColor={colors.surfaceSunken} textColor={colors.text} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
             <Button mode="contained" onPress={c.decline} buttonColor={colors.successDark} contentStyle={TOUCH} testID="musteri-ekle-hayir">
@@ -74,7 +74,7 @@ export default function CustomerFromDocOffer({ noteId, noteNo, unmatched, disabl
         footer={
           <>
             <View style={sheet.footerLeft}>
-              <Button mode="outlined" onPress={c.close} disabled={c.busy} textColor={colors.danger} style={styles.cancel} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
+              <Button mode="contained" onPress={c.close} disabled={c.busy} buttonColor={colors.danger} textColor={colors.textOnDark} contentStyle={TOUCH} testID="musteri-ekle-vazgec">Vazgeç</Button>
             </View>
             <Button mode="contained-tonal" onPress={fromList} disabled={c.busy} buttonColor={colors.surfaceSunken} textColor={colors.text} contentStyle={TOUCH} testID="musteri-ekle-listeden">Listeden seç</Button>
             <Button mode="contained" onPress={() => void c.save()} buttonColor={colors.successDark} loading={c.busy} disabled={c.busy || !c.canCreate || !c.name.trim()}
@@ -104,8 +104,6 @@ const styles = StyleSheet.create({
   list: { gap: spacing.sm },
   body: { fontSize: typography.size.base, color: colors.text, marginBottom: spacing.sm },
   bold: { fontWeight: typography.weight.bold },
-  // Vazgeç en solda, kırmızı çerçeveli: geri çekilme; gri = listeden seç; yeşil = kaydet.
-  cancel: { borderColor: colors.danger },
   option: { minHeight: 56, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   name: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
   code: { fontSize: typography.size.sm, color: colors.textSecondary },
