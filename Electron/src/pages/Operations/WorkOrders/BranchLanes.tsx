@@ -57,7 +57,8 @@ import { ManualMoveModal } from "./ManualMoveModal";
 import { BatchTimeline, stripFason } from "./BatchTimeline";
 import { findBatchTransferContext, type BatchTransferContext } from "./batch-transfer";
 import { buildMergeConfirmDescription } from "./batch-merge-confirm";
-import { Wrench } from "lucide-react";
+import { Receipt, Wrench } from "lucide-react";
+import { FasonPurchaseDraftDialog } from "./fason-purchase/FasonPurchaseDraftDialog";
 import type { BatchLaneRoll } from "./service";
 import { LabTestsCard } from "@/pages/Quality/LabTests/LabTestsCard";
 import { BatchInspectionsLink } from "@/pages/Quality/Inspections/RollInspectionCard";
@@ -677,6 +678,7 @@ function BatchHistoryModal({
   const directShipments = batch.directShipments ?? [];
   // Fasondan sevk satırına tıklayınca açılan detay modalı.
   const [dsDetailId, setDsDetailId] = useState<string | null>(null);
+  const [purchaseTarget, setPurchaseTarget] = useState<BatchLaneDispatch | null>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
@@ -743,6 +745,7 @@ function BatchHistoryModal({
                         onPrint={() => onPrintDispatch(d)}
                         onDirectShip={() => onDirectShip(d)}
                         onUndoTransfer={() => onUndoTransfer(d)}
+                        onPurchaseDraft={() => setPurchaseTarget(d)}
                       />
                     ))}
                     {cancelledDispatches.length > 0 && (
@@ -833,6 +836,9 @@ function BatchHistoryModal({
           open={Boolean(dsDetailId)}
           onOpenChange={(o) => !o && setDsDetailId(null)}
         />
+        {purchaseTarget && (
+          <FasonPurchaseDraftDialog workOrderId={workOrderId} dispatch={purchaseTarget} onClose={() => setPurchaseTarget(null)} />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -845,11 +851,14 @@ function DispatchRow({
   onPrint,
   onDirectShip,
   onUndoTransfer,
+  onPurchaseDraft,
 }: {
   dispatch: BatchLaneDispatch;
   onPrint: () => void;
   onDirectShip: () => void;
   onUndoTransfer: () => void;
+  /** F6: kabulü olan sevkte alış faturası taslağı (önizleme `finance:read`, oluşturma `finance:write`). */
+  onPurchaseDraft?: () => void;
 }) {
   const meta = STATUS_META[dispatch.status];
   const cancelled = dispatch.status === "CANCELLED";
@@ -895,6 +904,7 @@ function DispatchRow({
             <DropdownMenuItem onClick={onPrint}>
               <Printer className="mr-2 h-4 w-4" /> İrsaliye Yazdır
             </DropdownMenuItem>
+            {onPurchaseDraft && !cancelled && dispatch.receipts.length > 0 && <PurchaseDraftItem onClick={onPurchaseDraft} />}
             <PermissionGate permission="workorder:write">
               {isOpen && atFason > 0 && (
                 <DropdownMenuItem onClick={onDirectShip}>
@@ -911,6 +921,16 @@ function DispatchRow({
         </DropdownMenu>
       </td>
     </tr>
+  );
+}
+
+function PurchaseDraftItem({ onClick }: { onClick: () => void }) {
+  return (
+    <PermissionGate permission="finance:read">
+      <DropdownMenuItem onClick={onClick}>
+        <Receipt className="mr-2 h-4 w-4" /> Alış faturası taslağı
+      </DropdownMenuItem>
+    </PermissionGate>
   );
 }
 

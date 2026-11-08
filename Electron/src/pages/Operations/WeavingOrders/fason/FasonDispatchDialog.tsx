@@ -8,6 +8,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ExpectedReturnField } from "@/components/fason/ExpectedReturnField";
+import { DEFAULT_EXPECTED_RETURN, expectedReturnBody, isPastExpectedReturn, type ExpectedReturnChoice } from "@/components/fason/expectedReturn";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,13 +60,14 @@ function BeamPicker({ order, selected, onToggle }: { order: WeavingOrder; select
 export function FasonDispatchDialog({ order, isPending, onClose, onConfirm }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [f, setF] = useState({ plate: "", driver: "", notes: "" });
+  const [expectedReturn, setExpectedReturn] = useState<ExpectedReturnChoice>(DEFAULT_EXPECTED_RETURN);
   const { iplikEnabled } = useOperationsVisibilityContext();
   const [yarnLines, setYarnLines] = useState<YarnLineDraft[]>([]);
   // Geçersiz satır (kalem/depo/kg eksik) gövdeye GİRMEZ ve butonu kilitler — sessiz düşme yok.
   const yarnPayload = yarnLines.map(yarnLineToPayload);
   const yarnOk = yarnLines.length === 0 || yarnPayload.every((l) => l !== null);
   const yarnCount = yarnPayload.filter((l) => l !== null).length;
-  const canConfirm = (selected.size > 0 || yarnCount > 0) && yarnOk && !isPending;
+  const canConfirm = (selected.size > 0 || yarnCount > 0) && yarnOk && !isPending && !isPastExpectedReturn(expectedReturn);
   const toggle = (id: string) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -95,6 +98,7 @@ export function FasonDispatchDialog({ order, isPending, onClose, onConfirm }: Pr
           {field("driver", "Şoför", 120)}
           {field("notes", "Not", 500, true)}
         </div>
+        <ExpectedReturnField value={expectedReturn} onChange={setExpectedReturn} />
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>Vazgeç</Button>
           <Button
@@ -107,6 +111,7 @@ export function FasonDispatchDialog({ order, isPending, onClose, onConfirm }: Pr
                 plateNumber: f.plate.trim() || null,
                 driverName: f.driver.trim() || null,
                 notes: f.notes.trim() || null,
+                ...expectedReturnBody(expectedReturn),
               })
             }
           >

@@ -232,6 +232,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // İçerideki İşler (ister 3.2): emanet modülünün KENDİ ekranı — sahip başına içerideki emanet top/metre.
   { key: "operations/icerideki-isler", app: "desktop", modul: "emanetEnabled", title: "İçerideki İşler", requires: ["roll:read"], capabilities: [] },
   { key: "operations/kursun-sapmalar", app: "desktop", modul: "productionEnabled", title: "Metre Sapmaları", requires: ["kursun:meter-approve"], capabilities: [] },
+  { key: "operations/fason-kokpiti", app: "desktop", modul: "planlanan:fason", title: "Fason Kokpiti", requires: ["subcontractor:read", "workorder:read"], capabilities: [] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: TERIM_AD.kursunPlanlama, requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
   { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["eirsaliye:read", "eirsaliye:undo", "eirsaliye:write", "return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
