@@ -17,10 +17,12 @@
 //   §7 temizleme (null) → bugünkü davranış
 //   Fason TERBİYE kabulü (`subcontractor/receive.ts`, makbuzdan doğan top sahibi kaynaktan kalıtır) aynı boğazdan: §1 boşken
 //   sahipli/sahipsiz varsayılanda · §3 doluyken sahipli emanet deposunda (defter `toWarehouseId` dahil), sahipsiz varsayılanda ·
-//   §5 depo pasif → sahipli kabul 400, makbuz/doğan top yok, kaynak top fasonda · §6 emanet kapalı → kalıntı sahipli kaynak
-//   varsayılanda (400 değil)
+//   §5 depo pasif → sahipli kabul 400, makbuz/doğan top yok, kaynak top fasonda; ön kontrol iş emri kilidinden ÖNCE sorar
+//   (satır başka tx'te kilitliyken 400 beklemeden döner) · §6 emanet kapalı → kalıntı sahipli kaynak varsayılanda (400 değil).
+//   ARA ADIM (rota fason → iç istasyon, doğan top IN_PRODUCTION) da aynı boğazdan: §3 emanet deposu · §5 pasif → 400, yazımsız
 // Negatif sonda: `createInitialEntry`te `resolveBirthWarehouseIdTx` yerine `resolveTargetWarehouseId(tx, warehouseId)` → §3
-// kırmızı; `receive.ts`te boğaz yerine `resolveTargetWarehouseId(tx)` → §3/§5 fason kolları kırmızı; helper'daki `readEmanetEnabled` dalı silinince §6 "emanet kapalı" kırmızı; arşiv kapısındaki ayar satırı silinince §4;
+// kırmızı; `receive.ts`te boğaz yerine `resolveTargetWarehouseId(tx)` → §3/§5 fason kolları kırmızı; `receive.ts` ön kontrolü
+// silinince §5 kilit kolu kırmızı; helper'daki `readEmanetEnabled` dalı silinince §6 "emanet kapalı" kırmızı; arşiv kapısındaki ayar satırı silinince §4;
 // `hardDelete`teki emanet sayımı silinince §4 kalıcı silme kolu; okuyucudaki `toLowerCase` kaldırılınca §4 büyük harf kolu.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
@@ -152,11 +154,15 @@ async function run(url: string): Promise<void> {
   const subSvc = new SubcontractorService();
   const stFason = (await prisma.station.create({ data: { code: `${TAG}-FSN`.slice(0, 32), name: `${TAG} fason`, type: "EXTERNAL", kind: "SUBCONTRACTOR" }, select: { id: true } })).id;
   made.stations.push(stFason);
+  const stIc = (await prisma.station.create({ data: { code: `${TAG}-IC`.slice(0, 32), name: `${TAG} iç`, type: "INTERNAL", kind: "PROCESS_QC" }, select: { id: true } })).id;
+  made.stations.push(stIc);
   /** Sahibi `ownerCustomerId` olan bir top fasona gider (kaynak top açık depo seçimiyle doğar — ayar onu etkilemez). */
-  const fasonaGonder = async (suffix: string, ownerCustomerId: string | null) => {
+  const fasonaGonder = async (suffix: string, ownerCustomerId: string | null, araAdim = false) => {
+    // `araAdim`: rota fason → iç istasyon; kabulde doğan top IN_PRODUCTION ve sonraki adıma bağlı (son adım değil).
+    const steps = [{ stationId: stFason, stepSequence: 1, status: "PENDING" as const }, ...(araAdim ? [{ stationId: stIc, stepSequence: 2, status: "PENDING" as const }] : [])];
     const w = await prisma.workOrder.create({
-      data: { workOrderNumber: `${TAG}-${suffix}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetItemId: fabric, steps: { create: [{ stationId: stFason, stepSequence: 1, status: "PENDING" as const }] } },
-      select: { id: true, steps: { select: { id: true } } },
+      data: { workOrderNumber: `${TAG}-${suffix}`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetItemId: fabric, steps: { create: steps } },
+      select: { id: true, steps: { select: { id: true }, orderBy: { stepSequence: "asc" } } },
     });
     made.wos.push(w.id);
     await prisma.$transaction((tx) => new TravelerCardService().createForWorkOrder(tx, w.id, admin.id));
@@ -170,12 +176,31 @@ async function run(url: string): Promise<void> {
   const fasonKabul = async (g: { woId: string; stepId: string; rollId: string }) => {
     const res = await subSvc.receive({ workOrderId: g.woId, stepId: g.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: g.rollId }], newRolls: [{ qty: 75 }] }, admin.id)
       .then(() => "geçti", (e: unknown) => codeOf(e instanceof AppError ? e : null));
-    const born = await prisma.roll.findMany({ where: { parentReceipt: { workOrderId: g.woId } }, select: { id: true, warehouseId: true, warehouseMovements: { select: { toWarehouseId: true } } } });
+    const born = await prisma.roll.findMany({ where: { parentReceipt: { workOrderId: g.woId } }, select: { id: true, status: true, warehouseId: true, warehouseMovements: { select: { toWarehouseId: true } } } });
     made.rolls.push(...born.map((b) => b.id));
     const receipts = await prisma.subcontractorReceipt.count({ where: { workOrderId: g.woId } });
     const src = await prisma.roll.findUniqueOrThrow({ where: { id: g.rollId }, select: { status: true } });
     const ledger = born.flatMap((b) => b.warehouseMovements.map((m) => m.toWarehouseId));
-    return { res, receipts, srcStatus: src.status, warehouses: born.map((b) => b.warehouseId), ledger };
+    return { res, receipts, srcStatus: src.status, warehouses: born.map((b) => b.warehouseId), statuses: born.map((b) => b.status), ledger };
+  };
+  /** Ön kontrol ölçümü: iş emri satırı başka tx'te kilitliyken kabul. Ön kontrol kilitten önceyse 400 beklemeden döner;
+   *  yoksa kabul `touchWorkOrderTx`te bekler (3 sn sonra "kilitte bekledi"), kilit bırakılınca tx içi 400 alır. */
+  const kilitliyken = async (g: { woId: string; stepId: string; rollId: string }) => {
+    let birak!: () => void;
+    const bekle = new Promise<void>((r) => { birak = r; });
+    let kilitlendi!: () => void;
+    const kilitli = new Promise<void>((r) => { kilitlendi = r; });
+    const tutucu = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM work_orders WHERE id = ${g.woId}::uuid FOR UPDATE`;
+      kilitlendi();
+      await bekle;
+    }, { timeout: 30_000 });
+    await kilitli;
+    const kabul = fasonKabul(g);
+    const ilk = await Promise.race([kabul.then((r) => r.res), new Promise<string>((r) => setTimeout(() => r("kilitte bekledi"), 3000))]);
+    birak();
+    await tutucu;
+    return { ilk, son: await kabul };
   };
 
   console.log("§1 ayar boş = bugünkü davranış");
@@ -219,6 +244,8 @@ async function run(url: string): Promise<void> {
   const f3o = await fasonKabul(await fasonaGonder("F3O", owner));
   check("§3 ⭐ fason terbiye kabulü: sahipli doğan top emanet deposunda (defter girişi dahil)", f3o.res === "geçti" && allIn(f3o.warehouses, emanetWh) && allIn(f3o.ledger, emanetWh), JSON.stringify(f3o));
   const f3n = await fasonKabul(await fasonaGonder("F3N", null));
+  const f3a = await fasonKabul(await fasonaGonder("F3A", owner, true));
+  check("§3 ⭐ ara adım fason kabulü (doğan top IN_PRODUCTION): sahipli top emanet deposunda", f3a.res === "geçti" && allIn(f3a.warehouses, emanetWh) && f3a.statuses.every((st) => st === RollStatus.IN_PRODUCTION), JSON.stringify(f3a));
   check("§3 fason terbiye kabulü: sahipsiz doğan top varsayılan depoda (ayar yalnız emanete)", f3n.res === "geçti" && allIn(f3n.warehouses, defaultWh) && allIn(f3n.ledger, defaultWh), JSON.stringify(f3n));
 
   console.log("§4 arşiv kapısı");
@@ -252,6 +279,10 @@ async function run(url: string): Promise<void> {
   check("§5 sahipsiz KK1 etkilenmez (varsayılan)", (await kk1(null)) === defaultWh);
   const f5o = await fasonKabul(await fasonaGonder("F5O", owner));
   check("§5 ⭐ fason terbiye kabulü sahipli: 400 EMANET_DEFAULT_WAREHOUSE_UNUSABLE, makbuz yok, doğan top yok, kaynak top fasonda", f5o.res === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && f5o.receipts === 0 && f5o.warehouses.length === 0 && f5o.srcStatus === RollStatus.AT_SUBCONTRACTOR, JSON.stringify(f5o));
+  const f5a = await fasonKabul(await fasonaGonder("F5A", owner, true));
+  check("§5 ⭐ ara adım fason kabulü sahipli: 400, makbuz yok, doğan top yok, kaynak top fasonda", f5a.res === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && f5a.receipts === 0 && f5a.warehouses.length === 0 && f5a.srcStatus === RollStatus.AT_SUBCONTRACTOR, JSON.stringify(f5a));
+  const f5k = await kilitliyken(await fasonaGonder("F5K", owner));
+  check("§5 ⭐ ön kontrol iş emri kilidinden ÖNCE: satır kilitliyken 400 beklemeden döner, sonra da yazım yok", f5k.ilk === "EMANET_DEFAULT_WAREHOUSE_UNUSABLE" && f5k.son.receipts === 0 && f5k.son.warehouses.length === 0, JSON.stringify({ ilk: f5k.ilk, son: f5k.son }));
   const f5n = await fasonKabul(await fasonaGonder("F5N", null));
   check("§5 fason terbiye kabulü sahipsiz etkilenmez (varsayılan)", f5n.res === "geçti" && allIn(f5n.warehouses, defaultWh), JSON.stringify(f5n));
   const n5 = await approveNote("N5");
