@@ -2,7 +2,7 @@
 // MÜŞTERİ HIZLI KAYDI — belgeden İE formu (Gülkesim 2026-11-04)
 // =============================================================================
 // Gerçek DB + gerçek Express (ephemeral port) + gerçek login. Sınanan:
-//   §1 okuma: okunan müşteri adı kayıtlı cariye çözülemezse `ownerUnmatched` (benzerler ≥0,80, en çok 3, puan azalan);
+//   §1 okuma: okunan müşteri adı kayıtlı cariye çözülemezse `ownerUnmatched` (benzerler ≥0,80 + OCR adayları, en çok 5, puan azalan);
 //      benzeri yoksa aday listesi boş; BLIND'de yok; sahip seçiliyken yok; okuma özetinde aynı alan
 //   §1b kısa ad (2026-11-05): tanıtılmış şablon alanından 2 ve 1 harf → teklif var (SOR kipinde de); yalnız boşluk → yok;
 //      tanıtılmamış okumada 2 harf → yok (eşik 3)
@@ -17,6 +17,8 @@
 //      teklif yok; adaylar `code` taşır
 // Sonda 2026-11-05: tanıtılmış eşiği 1→3 → §1b 3 ❌; tanıtım koşulu `true` → §1b 1 ❌; tanıtım okuması kaldırılınca §1b 3 ❌.
 // Sonda 2026-11-05 (§1c): `rank` anahtar eşiği 2→3 → §1c 2 ❌; aday `code` eşlemesi null → §1c 1 ❌.
+//   §1d OCR'a dayanıklı aday (2026-11-08): "QAB M" okuması kayıtlı "QAB"yi aday getirir; tavan 5 (`ocrNameCandidates`)
+// Sonda 2026-11-08 (§1d): `ocrNameCandidates` birleştirmesi çıkarılınca §1d 1 ❌; geri alındı, 28/28.
 // =============================================================================
 import { createHash, randomUUID } from "crypto";
 import type { AddressInfo } from "net";
@@ -101,11 +103,18 @@ async function run(url: string): Promise<void> {
   const sameNote = await makeNote(`MAVIDERE BOYAHNE ${TAG}`, "B");
   const r1 = await readOwnerForNote({ id: sameNote, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
   const ids = r1.unmatched?.candidates.map((c) => c.customerId) ?? [];
-  check("§1 ⭐ benzer adlı kayıtlar adaylarda (≥0,80), öneri yok", r1.suggestion === null && ids.includes(c1) && ids.includes(c2)
-    && (r1.unmatched?.candidates ?? []).every((c) => c.score >= 0.8), JSON.stringify(r1));
+  check("§1 ⭐ benzer adlı kayıtlar adaylarda (ilk ikisi, ≥0,80), öneri yok", r1.suggestion === null && ids.slice(0, 2).sort().join() === [c1, c2].sort().join()
+    && (r1.unmatched?.candidates ?? []).slice(0, 2).every((c) => c.score >= 0.8), JSON.stringify(r1));
+
+  // OCR'a dayanıklı adaylar (2026-11-08 saha: "HHL M" okundu, kayıtlı "HHL" aday çıkmıyordu).
+  const ocrShort = `Q${TAG.slice(0, 2)}`;
+  const cOcr = await makeCustomer(ocrShort);
+  const ocrNote = await makeNote(`${ocrShort} M`, "O");
+  const rOcr = await readOwnerForNote({ id: ocrNote, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
+  check("§1d ⭐ OCR fazladan harf: kayıtlı kısa ad aday (öneri yok, seçim operatörde)", rOcr.suggestion === null && (rOcr.unmatched?.candidates ?? []).some((c) => c.customerId === cOcr), JSON.stringify(rOcr));
   check("§1 aday metni okunan ad", r1.unmatched?.text === `MAVIDERE BOYAHNE ${TAG}`);
 
-  const noneNote = await makeNote(`KUZGUNCUK ZEYTINLIK ${TAG}`, "Y");
+  const noneNote = await makeNote(`ZQKW${TAG}${[...TAG].reverse().join("")}`, "Y");
   const r2 = await readOwnerForNote({ id: noneNote, status: "DRAFT", ownerCustomerId: null }, "NORMAL");
   check("§1 ⭐ benzeri yoksa teklif var, aday listesi boş", r2.suggestion === null && r2.unmatched?.candidates.length === 0, JSON.stringify(r2));
 
@@ -114,9 +123,9 @@ async function run(url: string): Promise<void> {
   const owned = await readOwnerForNote({ id: sameNote, status: "DRAFT", ownerCustomerId: c1 }, "NORMAL");
   check("§1 sahip seçiliyken teklif yok", owned.unmatched === null);
 
-  const ranked = [1, 2, 3, 4, 5].map((i) => ({ id: `id${i}`, name: `n${i}`, score: 0.8 + i / 100 }));
-  const u = unmatchedOf("X", [...ranked, ranked[4]]);
-  check(`§1 ⭐ en çok ${UNMATCHED_MAX} aday, puan azalan, tekil`, u.candidates.length === 3 && u.candidates.map((c) => c.customerId).join() === "id5,id4,id3", JSON.stringify(u));
+  const ranked = [1, 2, 3, 4, 5, 6, 7].map((i) => ({ id: `id${i}`, name: `n${i}`, score: 0.8 + i / 100 }));
+  const u = unmatchedOf("X", [...ranked, ranked[6]]);
+  check(`§1 ⭐ en çok ${UNMATCHED_MAX} aday, puan azalan, tekil`, UNMATCHED_MAX === 5 && u.candidates.length === 5 && u.candidates.map((c) => c.customerId).join() === "id7,id6,id5,id4,id3", JSON.stringify(u));
 
   const summary = (await getReadSummary(sameNote)) as unknown as { ownerUnmatched?: { candidates: unknown[] } } | null;
   check("§1 okuma özeti ownerUnmatched taşır", (summary?.ownerUnmatched?.candidates.length ?? 0) >= 2, JSON.stringify(summary?.ownerUnmatched ?? null));
