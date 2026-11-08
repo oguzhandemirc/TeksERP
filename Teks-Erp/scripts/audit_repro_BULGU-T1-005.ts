@@ -4,7 +4,8 @@
 // ("Barkod üretimi 5 denemede başarısız oldu") + N-1 kez 5 boşa tx.
 //
 // Kök neden (üç halka birlikte):
-//   1) Token kontrolü `subcontractor.service.ts:2350` tx DIŞINDA (havuz) →
+//   (Satır no'ları denetim anının tek dosyası `subcontractor.service.ts` @`5b7994663`; bugün `subcontractor/receive.ts`.)
+//   1) Token kontrolü (:2350, receive) tx DIŞINDA (havuz) →
 //      check-then-act: iki istek de "token yok" görüp geçer.
 //   2) `subcontractorReceipt.create` (clientToken @unique) :2790 — roll
 //      claim'lerinden ÖNCE; KISMİ kabulde top AT_SUBCONTRACTOR'da KALDIĞI için
@@ -214,8 +215,8 @@ async function main(): Promise<void> {
     // ── KONTROL SONDASI (negatif sonda) ──────────────────────────────────
     // Bu harness'ın "her koşulda kırmızı" olmadığını ispatlar. AYNI eşzamanlılık
     // şekli, AYNI token sözleşmesi — ama predicate'i VE dış catch'i OLAN bir yol:
-    // `shipping.openSack` (shipping.service.ts:250 `undefined, (err) => …` +
-    // :288 catch → readOpenSackReplay). Sağlıklı davranış: N istekten hepsi
+    // `shipping.openSack` (bugün `shipping/sack-open.ts`; `undefined, (err) => …` predicate'i +
+    // dış catch → readOpenSackReplay). Sağlıklı davranış: N istekten hepsi
     // başarılı ve HEPSİ AYNI çuvalı döner; "Barkod üretimi ..." 409'u YOK.
     let controlOk = 0;
     let controlBad = 0;

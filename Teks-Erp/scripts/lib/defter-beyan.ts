@@ -819,7 +819,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   KARTELA_CANCEL: { tur: "TERS_KODU", ileri: "KARTELA_DISPATCH" },
   STOCK_COUNT: { tur: "BAGLI_TERS", kod: "STOCK_COUNT", tersYazan: [{ dosya: "src/services/stock-count-reversal.service.ts", sembol: "reverseTx" }] },
   // SCRAP (stok sebep kodu) TERMINAL DEĞİL (6e ① `6a59aa6c`, hüküm ① b1+b2+b3-dar): TEK yazıcısı
-  // depo kesimi kapanışının ham-scrap dalı (tambur.service.ts:2938, CUT_DISCARD ile aynı ternary)
+  // depo kesimi kapanışının ham-scrap dalı (`tambur/warehouse-cut-finalize.ts` finalizeWarehouseCut, CUT_DISCARD ile aynı ternary)
   // ve FULL geri alma `reverseVarianceBoundStockMovesTx` ile bağlı tersler (§14). Kök CLAUDE.md'nin
   // "SCRAP gerçek fire kararıdır" cümlesi RollStatus.SCRAP / RollVariance KARARINI anlatır — bu
   // satır yalnız o kararın STOK DEFTERİ ayağıdır ve kapanış geri alınınca o ayak da döner.

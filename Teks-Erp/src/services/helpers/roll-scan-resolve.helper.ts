@@ -17,17 +17,17 @@
 // `normalizeScanCode(` gerçek çağrıları). Etiket: [İÇ] = iç kod zorunlu (DOKUNULMAZ) ·
 // [AÇIK] = D4-F1b'de bu boğaza bağlandı (tekil okutma `resolveRollByScanCode`; liste/arama süzgeci
 // `customerCodeSearchRollIds` — belirsizlikte tüm adaylar listede, sessiz seçim yok).
-//   inventory.service.ts:1519   buildRollWhere (liste araması)            [AÇIK] — top listesi süzgeci (ids dışarıda çözülür)
-//   inventory.service.ts:2938   getRelabelContext (yeniden etiket)        [AÇIK] — belirsizlikte 409
+//   inventory/list.ts           buildRollWhere (liste araması)            [AÇIK] — top listesi süzgeci (ids dışarıda çözülür)
+//   inventory/relabel.ts        getRelabelContext (yeniden etiket)        [AÇIK] — belirsizlikte 409
 //   workorder-timeline.service.ts:280  lookup (iz sür)                    [AÇIK] — iş emri no önce, sonra top
 //   kartela-timeline.service.ts:71     kartelaEventsWhere                 [İÇ] — kartela, müşteri kodu taşımaz
-//   tambur.service.ts:606       getByCardBarcode (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
-//   tambur.service.ts:1690      listRecentOutputRolls (çıkış araması)     [AÇIK] — çıkış topları kod taşır
-//   tambur.service.ts:1761      getSwatchByBarcode                        [İÇ] — kartela
-//   tambur.service.ts:1803-1804 listSwatches (barcode · cardNumber)       [İÇ] — kartela
+//   tambur/read.ts              getByCardBarcode (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
+//   tambur/output-rolls.ts      listRecentOutputRolls (çıkış araması)     [AÇIK] — çıkış topları kod taşır
+//   tambur/swatch.ts            getSwatchByBarcode                        [İÇ] — kartela
+//   tambur/swatch.ts            listSwatches (barcode · cardNumber)       [İÇ] — kartela
 //   helpers/customer-code-birth.helper.ts:115 customerCodeCollidesWithOurs [İÇ] — doğan kod top barkoduyla çakışmasın
-//   tambur.service.ts:1908-1909 getSwatchStats (barcode · cardNumber)     [İÇ] — kartela
-//   tambur.service.ts:4012      getTamburContext (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
+//   tambur/swatch.ts            getSwatchStats (barcode · cardNumber)     [İÇ] — kartela
+//   tambur/context.ts           getTamburContext (Tambur girişi)          [İÇ] — kod Tambur çıkışında doğar (K13)
 //   traveler-card.service.ts:616  scan (refakat kartı)                    [İÇ] — kart kodu = iş emri no
 //   traveler-card.service.ts:742  list (kart araması)                     [İÇ] — kart kodu
 //   traveler-card.service.ts:817  findByBarcode (refakat kartı)           [İÇ] — kart kodu

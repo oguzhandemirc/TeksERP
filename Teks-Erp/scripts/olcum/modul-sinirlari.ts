@@ -16,6 +16,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { aileCephesi } from "../lib/servis-aile";
 
 type Kind = "static" | "dynamic";
 interface Meta {
@@ -111,7 +112,15 @@ function eris(baslar: string[], yasak: ReadonlySet<string> = new Set(), kesik: R
 }
 
 const tumSrc = [...kenar.keys()];
-const alanSahibi = (f: string): string | null => MODULLER.find((m) => m.alan?.test(f))?.anahtar ?? null;
+// Bölünmüş servis ailesinin üyesi (`services/tambur/*.ts`) alanını cephe adından alır (`tambur.service.ts`);
+// alan desenleri dosya ADINA bakar, aile tanımı tek kaynak (`lib/servis-aile.ts`).
+const BACKEND = path.resolve(__dirname, "..", "..");
+const alanAdi = (f: string): string => {
+  const cephe = aileCephesi(path.join(BACKEND, f), path.join(BACKEND, "src"));
+  return cephe ? path.relative(BACKEND, cephe).split(path.sep).join("/") : f;
+};
+const alanda = (m: Modul, f: string): boolean => !!m.alan && (m.alan.test(f) || m.alan.test(alanAdi(f)));
+const alanSahibi = (f: string): string | null => MODULLER.find((m) => alanda(m, f))?.anahtar ?? null;
 const KB = (n: number): string => `${(n / 1024).toFixed(0)} KB`;
 
 const satirlar: string[] = [];
@@ -121,11 +130,11 @@ satirlar.push("|---|---|---|---|---|---|---|---|---|");
 for (const m of MODULLER) {
   const eksik = m.tohum.filter((t) => !kenar.has(t));
   if (eksik.length) throw new Error(`${m.anahtar}: tohum metafile'da yok: ${eksik.join(", ")}`);
-  const alanDosyalari = m.alan ? tumSrc.filter((f) => m.alan!.test(f)) : [];
+  const alanDosyalari = m.alan ? tumSrc.filter((f) => alanda(m, f)) : [];
   if (m.tohum.length === 0) {
     const C = eris([ROOT]);
     const sizan = alanDosyalari.filter((f) => C.has(f));
-    const importers = sizan.flatMap((s) => tumSrc.filter((f) => C.has(f) && !m.alan!.test(f) && (kenar.get(f) ?? []).some((e) => e.to === s)).map((f) => `${f} → ${s}`));
+    const importers = sizan.flatMap((s) => tumSrc.filter((f) => C.has(f) && !alanda(m, f) && (kenar.get(f) ?? []).some((e) => e.to === s)).map((f) => `${f} → ${s}`));
     satirlar.push(`| ${m.anahtar} | — | — | — | — | ${sizan.length}/${alanDosyalari.length} | ${importers.length} | — | ${m.not} |`);
     json[m.anahtar] = { not: m.not, alanDosyalari, sizan, engeller: importers };
     continue;
@@ -140,7 +149,7 @@ for (const m of MODULLER) {
   const engeller: Array<{ from: string; to: string; kind: Kind; fromSahip: string }> = [];
   for (const s of sizan) {
     for (const f of Cm) {
-      if (m.alan!.test(f)) continue;
+      if (alanda(m, f)) continue;
       for (const e of kenar.get(f) ?? []) if (e.to === s) engeller.push({ from: f, to: s, kind: e.kind, fromSahip: alanSahibi(f) ?? "çekirdek" });
     }
   }
