@@ -3,7 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { DetailTable } from "../_components";
 import { fmtInt, fmtNum } from "../_components/formatters";
-import { widthText, type StockKalem, type StockKalemBitmisRow, type StockKalemHamRow } from "./stockKalem";
+import { consignedKalemText, widthText, type StockKalem, type StockKalemBitmisRow, type StockKalemHamRow } from "./stockKalem";
 
 const right = (text: string, strong = false) => (
   <div className={`text-right tabular-nums ${strong ? "font-medium" : ""}`}>{text}</div>
@@ -39,6 +39,11 @@ export function StockKalemTab({ data, isLoading, warnings }: Props) {
   const t = data?.totals;
   return (
     <div className="flex flex-col gap-4">
+      {data?.consignedTotals && (
+        <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200" data-testid="stock-kalem-consigned">
+          {consignedKalemText(data.consignedTotals)}
+        </p>
+      )}
       {warnings?.map((w) => (
         <p key={w} className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
           {w}

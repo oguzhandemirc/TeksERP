@@ -58,6 +58,8 @@ export type ReasonPresetDto = {
   stopLossClass: MachineStopLossClass | null;
   /** Hedef süre (dk) — yalnız `MACHINE_STOP`ta; NULL = süre izlenmez (Tezgah Salonu). */
   targetMinutes: number | null;
+  /** F9 yeniden işlem sınıfı — yalnız `WORK_ORDER_REWORK`; null = sınıfsız (ücretli) · true = müşteri talebi · false = bizim hatamız. */
+  billable: boolean | null;
 };
 
 /** Liste satırı: DTO + türetilmiş `quickPick` (E7) — kolon değil, sıralamadan (`markQuickPicks`). */
@@ -91,6 +93,7 @@ const SELECT = {
   legacyTexts: true,
   stopLossClass: true,
   targetMinutes: true,
+  billable: true,
 } satisfies Prisma.ReasonPresetSelect;
 
 /** Eski-ad listesinin üst sınırı — en eskisi düşer (sınırsız dizi = sınırsız satır). */
@@ -398,10 +401,12 @@ export const ReasonPresetService = {
       requiresText?: boolean;
       stopLossClass?: MachineStopLossClass | null;
       targetMinutes?: number | null;
+      billable?: boolean | null;
     },
     userId?: string,
   ): Promise<ReasonPresetDto> {
     const label = input.label.trim();
+    const billable = resolveBillable(input.kind, input.billable ?? null);
     if (!label) throw new AppError("Etiket boş olamaz", 400);
     const stopLossClass = resolveStopLossClass(input.kind, input.stopLossClass);
     const targetMinutes = resolveTargetMinutes(input.kind, stopLossClass, input.targetMinutes ?? null);
@@ -419,6 +424,7 @@ export const ReasonPresetService = {
         requiresText: input.requiresText ?? false,
         stopLossClass,
         targetMinutes,
+        billable,
         sortOrder,
         isSystem: false,
         createdById: userId ?? null,
@@ -451,6 +457,7 @@ export const ReasonPresetService = {
       isActive?: boolean;
       stopLossClass?: MachineStopLossClass | null;
       targetMinutes?: number | null;
+      billable?: boolean | null;
     },
     userId?: string,
   ): Promise<ReasonPresetDto> {
@@ -466,6 +473,9 @@ export const ReasonPresetService = {
     const targetMinutes = targetChanges
       ? resolveTargetMinutes(current.kind, stopLossClass ?? current.stopLossClass, input.targetMinutes !== undefined ? input.targetMinutes : current.targetMinutes)
       : undefined;
+
+    // Sınıf katalogda düzeltilir; açılmış İE'lerdeki kopya DONUK kalır (`WorkOrder.reworkBillable`).
+    const billable = input.billable !== undefined ? resolveBillable(current.kind, input.billable) : undefined;
 
     const label = input.label?.trim();
     if (input.label !== undefined && !label) throw new AppError("Etiket boş olamaz", 400);
@@ -492,6 +502,7 @@ export const ReasonPresetService = {
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(stopLossClass !== undefined ? { stopLossClass } : {}),
         ...(targetMinutes !== undefined ? { targetMinutes } : {}),
+        ...(billable !== undefined ? { billable } : {}),
         updatedById: userId ?? null,
       },
       select: SELECT,
@@ -537,6 +548,7 @@ export const ReasonPresetService = {
           // Sınıf kaynaktan kopyalanır — kopyalanmazsa MACHINE_STOP kopyası DB CHECK'e düşerdi.
           stopLossClass: src.stopLossClass,
           targetMinutes: src.targetMinutes,
+          billable: src.billable,
           sortOrder: src.sortOrder + 1,
           isSystem: false,
           createdById: userId ?? null,
@@ -627,6 +639,18 @@ function resolveTargetMinutes(
   }
   if (!Number.isInteger(given) || given < 1 || given > 1440) {
     throw AppError.badRequest("Hedef süre 1 ile 1440 dakika arasında tam sayı olmalı", { code: "STOP_TARGET_OUT_OF_RANGE", given });
+  }
+  return given;
+}
+
+/**
+ * F9 sınıf kapısı — DB CHECK `reason_presets_billable_ck`in servis ikizi: dolu değer yalnız `WORK_ORDER_REWORK`ta.
+ * NULL her zaman serbest (sınıfsız = ücretli, bugünkü).
+ */
+function resolveBillable(kind: ReasonPresetKind, given: boolean | null): boolean | null {
+  if (given === null) return null;
+  if (kind !== ReasonPresetKind.WORK_ORDER_REWORK) {
+    throw AppError.badRequest("Ücret sınıfı yalnız yeniden işlem sebeplerinde girilir", { code: "REASON_BILLABLE_KIND", kind });
   }
   return given;
 }

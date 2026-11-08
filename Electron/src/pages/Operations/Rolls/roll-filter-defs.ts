@@ -21,7 +21,20 @@ const FOLD_FILTER_PLACEHOLDER: FilterDef = {
   options: [],
 };
 
+/** Mülkiyet çipi (genel fason P1): Bizim / Emanet; "Tümü" = anahtar yok (backend boşu ALL okur, bugünkü şekil). */
+export const OWNERSHIP_FILTER: FilterDef = {
+  kind: "select",
+  key: "mulkiyet",
+  label: "Mülkiyet",
+  options: [
+    { value: "OWN", label: "Bizim" },
+    { value: "CONSIGNED", label: "Emanet" },
+  ],
+};
+
 const FILTERS: FilterDef[] = [
+  // Yalnız emanet açıkken listeye girer (Sahibi emsali); backend süzgeci modülden bağımsız uygular.
+  OWNERSHIP_FILTER,
   {
     kind: "select",
     key: "processingStatus",
@@ -254,7 +267,7 @@ export function buildRollFilterDefs(
         // (kat filtresinin boş katalogda düşürülmesiyle aynı gerekçe).
         return multiWarehouse ? [f] : [];
       }
-      if (f.kind === "multi-lookup" && f.key === "ownerCustomerId") return emanetEnabled ? [f] : [];
+      if (f === OWNERSHIP_FILTER || (f.kind === "multi-lookup" && f.key === "ownerCustomerId")) return emanetEnabled ? [f] : [];
       if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
       return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
     }),

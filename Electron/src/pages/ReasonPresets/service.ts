@@ -43,6 +43,8 @@ export interface ReasonPreset {
   stopLossClass?: StopLossClass | null;
   /** Yalnız `MACHINE_STOP` (NON_SCHEDULED hariç): hedef müdahale süresi (dk, 1..1440); null = izlenmez. Duruşa sebep kararında donar. */
   targetMinutes?: number | null;
+  /** Yalnız `WORK_ORDER_REWORK`: null = belirtilmemiş (ücretli) · true = müşteri talebi · false = bizim hatamız (faturasız). İE açılırken donar. */
+  billable?: boolean | null;
 }
 
 /** Sebebe verilebilen kayıp sınıfları — `MINOR` bilinçli dışarıda (süre sınıfı, sebep değil). */
@@ -189,6 +191,7 @@ export const reasonPresetService = {
     fullText?: string | null;
     stopLossClass?: StopLossClass | null;
     targetMinutes?: number | null;
+    billable?: boolean | null;
   }): Promise<ReasonPreset> =>
     apiClient.post<ReasonPreset>("/api/reason-presets", input).then((r) => r.data),
 
@@ -200,6 +203,7 @@ export const reasonPresetService = {
       isActive?: boolean;
       stopLossClass?: StopLossClass | null;
       targetMinutes?: number | null;
+      billable?: boolean | null;
     },
   ): Promise<ReasonPreset> =>
     apiClient.patch<ReasonPreset>(`/api/reason-presets/${id}`, input).then((r) => r.data),

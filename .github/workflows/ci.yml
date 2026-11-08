@@ -1004,7 +1004,22 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: Electron/package-lock.json
-      - run: npm ci # E2E electron binary İSTER → ELECTRON_SKIP_BINARY_DOWNLOAD verilmez
+      # E2E electron ikilisi İSTER; GitHub release indirmesi sık 504 verip işi kırıyordu →
+      # npm ci ikilisiz, ikili sürüm anahtarlı önbellekten, yoksa geri çekilmeli yeniden denemeyle.
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/electron
+          key: electron-bin-${{ runner.os }}-${{ hashFiles('Electron/node_modules/electron/package.json') }}
+      - name: Electron ikilisi (yeniden denemeli)
+        run: |
+          for i in 1 2 3 4 5; do
+            node node_modules/electron/install.js && break
+            echo "electron indirme denemesi $i başarısız; bekleniyor"; sleep $((i * 20))
+          done
+          node -e "require('electron')"
       - name: Playwright + Electron sistem bağımlılıkları
         # yalnız Chromium bağımlılıkları (Electron = Chromium); firefox/webkit apt yükü inmez
         run: npx playwright install-deps chromium

@@ -8,6 +8,7 @@
 /* eslint-disable max-lines -- devralınan gövde kelimesi kelimesine taşındı; ailenin max-lines katkısı bölme öncesi gibi TEK (workorder/replace.ts sayılır) */
 
 import { resolveWorkOrderDefaultItemForCreate } from "../workorder-default-item.service";
+import { freezeReworkBillableTx } from "../helpers/rework-billing.helper";
 import { assertPlannedMachines, filterTemplatePlannedMachines } from "../helpers/planned-machine.helper";
 import { ACTIVE_ORDER_LINK } from "../helpers/order-link.helper";
 import prisma from "../../lib/prisma";
@@ -606,6 +607,8 @@ export async function insertPreparedTx(this: WorkOrderServiceThis, tx: Prisma.Tr
         targetQuantity:    data.targetQuantity ?? null,
         targetWeight:      data.targetWeight ?? null,
         parameters:        (data.parameters as Prisma.InputJsonValue) ?? undefined,
+        // F9: yeniden işlem sebebinin ücret sınıfı İE doğarken DONAR; fatura katalogu canlı okumaz.
+        reworkBillable:    await freezeReworkBillableTx(tx, data.parameters),
         status:            WorkOrderStatus.PLANNED,
         plannedStartDate:  planDates.plannedStartDate,
         plannedEndDate:    planDates.plannedEndDate,

@@ -734,8 +734,12 @@ WHERE i."exchangeRate" <= 0`,
     model: "WorkOrder",
     alan: "reworkBillable",
     sinif: "DONMUS_ILERI",
-    yazan: [],
-    neden: "F9: yeniden işlem İE'si yaratılırken sebebin `ReasonPreset.billable`ı donar; katalog sonradan değişse geçmiş İE'nin ücret sınıfı değişmez. Yazıcı F9'da doğar (İE yaratma yolu), beyana o PR ekler",
+    yazan: [SVC + "helpers/workorder-clone.helper.ts", SVC + "workorder/create.ts"],
+    neden:
+      "F9: yeniden işlem İE'si yaratılırken sebebin `ReasonPreset.billable`ı donar (`freezeReworkBillableTx`); katalog sonradan " +
+      "değişse geçmiş İE'nin ücret sınıfı değişmez. Bölme klonu donmuş değeri kaynaktan KOPYALAR (katalog yeniden okunmaz); " +
+      "PUT/replace `parameters`ı değiştirse de sınıf yeniden çözülmez (bilinçli: hareket = İE doğuşu)",
+    bekci: [{ dosya: "test_hizmet_yeniden_islem.ts", bolum: "3", ne: "katalog sınıfı sonradan değişince geçmiş İE ve faturası değişmez" }],
   },
   {
     model: "DeviceBindingEvent",
