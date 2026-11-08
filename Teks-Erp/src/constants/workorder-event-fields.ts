@@ -15,12 +15,13 @@ export const WORK_ORDER_TRACKED_FIELDS = [
   "routeTemplateId",
   "type",
   "isActive",
+  "materialProvidedBy",
 ] as const;
 
 export type WorkOrderTrackedField = (typeof WORK_ORDER_TRACKED_FIELDS)[number];
 
 /** Değerin deftere nasıl yazılacağı: kimlik alanlarının o anki ADI etikete donar. */
-export const WORK_ORDER_FIELD_KIND: Record<WorkOrderTrackedField, "color" | "item" | "route" | "number" | "date" | "text" | "type" | "flag"> = {
+export const WORK_ORDER_FIELD_KIND: Record<WorkOrderTrackedField, "color" | "item" | "route" | "number" | "date" | "text" | "type" | "flag" | "material"> = {
   targetColorId: "color",
   width: "number",
   targetQuantity: "number",
@@ -32,4 +33,5 @@ export const WORK_ORDER_FIELD_KIND: Record<WorkOrderTrackedField, "color" | "ite
   routeTemplateId: "route",
   type: "type",
   isActive: "flag",
+  materialProvidedBy: "material",
 };

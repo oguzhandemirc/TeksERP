@@ -611,6 +611,7 @@ export async function insertPreparedTx(this: WorkOrderServiceThis, tx: Prisma.Tr
         targetItemId:      resolvedTargetItemId,
         targetColorId:     resolvedTargetColorId,
         foldType:          data.foldType          ?? null,
+        materialProvidedBy: data.materialProvidedBy ?? null,
         scanRouted:        data.scanRouted === true && finalSteps.length === 0,
         steps: {
           create: finalSteps.map((step, index) => ({

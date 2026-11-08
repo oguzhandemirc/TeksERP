@@ -160,6 +160,21 @@ export const workOrderTypeLabels: Record<WorkOrderType, string> = {
   CUSTOMER_GOODS_SERVICE: TERIM_AD.fasonMusteriMali,
 };
 
+/** Fason F7b: iş emrinde ana hammaddeyi kim verdi — BU FABRİKANIN bakışı (backend `enum MaterialProvider`). */
+export const MaterialProvider = {
+  CUSTOMER: "CUSTOMER",
+  US: "US",
+  MIXED: "MIXED",
+} as const;
+export type MaterialProvider = (typeof MaterialProvider)[keyof typeof MaterialProvider];
+
+/** Backend `constants/material-provider.ts` `MATERIAL_PROVIDER_LABEL` aynası (defter etiketiyle aynı dil). */
+export const materialProviderLabels: Record<MaterialProvider, string> = {
+  CUSTOMER: "Müşteri verdi",
+  US: "Bu fabrika verdi",
+  MIXED: "Karışık (müşteri + bu fabrika)",
+};
+
 export const StepStatus = {
   PENDING: "PENDING",
   ACTIVE: "ACTIVE",

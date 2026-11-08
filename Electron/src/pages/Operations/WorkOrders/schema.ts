@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkOrderType } from "@/types/enums";
+import { MaterialProvider, WorkOrderType } from "@/types/enums";
 import { TERIM } from "@/lib/terim";
 
 export const workOrderStepSchema = z.object({
@@ -69,6 +69,8 @@ export const workOrderFormSchema = z.object({
     .max(32, "Katlama tipi en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
+  /** Fason F7b: ana hammaddeyi kim verdi; null = bilinmiyor (bugünkü). */
+  materialProvidedBy: z.enum([MaterialProvider.CUSTOMER, MaterialProvider.US, MaterialProvider.MIXED]).nullable().optional().default(null),
 });
 
 export type WorkOrderFormValues = z.infer<typeof workOrderFormSchema>;
@@ -94,4 +96,5 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   // (kullanıcı hiç dokunmadan kaydeder, backend katalog doğrulamasıyla 400).
   // Ön-seçim artık formda, katalogun İLK değeriyle yapılır.
   foldType: "",
+  materialProvidedBy: null,
 };

@@ -95,6 +95,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Risk limiti yalnız `riskExposureTx` (`helpers/risk-exposure.helper.ts`; `cari_balances` FOR UPDATE); fatura onayı ek = tutar, iş kabulü/sevk ek = 0, `finance.riskLimitBlock.intake` / `.shipment` açıkken; aşım 409 `RISK_LIMIT_EXCEEDED`.
 - **[PROFİL]** `finance.riskLimit.currencyMode` `riskExposureTx` içinde okunur (`PER_CURRENCY` varsayılan · `TRY_CONVERTED` `resolveExchangeRateTx` ile kilitten sonra); kur yoksa 409 `RISK_LIMIT_FX_MISSING`, kur 1 varsayma.
 - **[PROFİL]** KDV/tevkifat ön değeri yalnız `resolveInvoiceTaxDefaults` (`helpers/invoice-tax-defaults.helper.ts`): satış: cari ?? `finance.defaultVatRate`/`finance.withholding.*`; alış: KDV genel, tevkifat fason carisinin `purchaseWithholding*`ı ?? `finance.withholding.purchase.*` (genel yalnız fason rolü olan karta — kart aynı zamanda tedarikçiyse iplik/sarf faturasında da önerilir, satırda düzeltilir; saf tedarikçi ve tarafsız 0; varsayılan kapalı); oranı koda yazma; panel `GET /api/finance/invoices/tax-defaults` · bekçi: `test_kdv_tevkifat_ayari` <sub>(arşiv:2026-11-08)</sub>.
+- **[ÇEKİRDEK]** Satış faturasında iş emrinin `materialProvidedBy` değeri `US` ise (işi yapan ve ana hammaddeyi veren bu fabrika) tevkifat önerisini 0'a çek (`performerSuppliedMainMaterial`); CUSTOMER · MIXED · NULL ve alış faturası bugünkü zincirde kalır; bekçi `test_kdv_tevkifat_ayari` §8 <sub>(arşiv:2026-11-08 F7b)</sub>.
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 

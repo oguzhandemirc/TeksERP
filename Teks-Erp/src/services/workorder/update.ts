@@ -13,6 +13,7 @@ import { ApiResponse } from "../../types/api.types";
 import { isOrderlessWorkOrderType } from "../helpers/workorder-customer-goods.helper";
 import {
   WorkOrderStatus,
+  type MaterialProvider,
 } from "@prisma/client";
 import {
   recordWorkOrderFieldDiffTx,
@@ -35,6 +36,7 @@ interface PlannedFieldsPatch {
   targetItemId?: string | null;
   targetColorId?: string | null;
   foldType?: string | null;
+  materialProvidedBy?: MaterialProvider | null;
 }
 
 /** Gövdedeki plan alanları yazım biçiminde: gönderilmeyen = undefined, null = temizle. */
@@ -42,6 +44,7 @@ function plannedFieldsFromPatch(data: {
   width?: number | null; targetQuantity?: number | null; targetWeight?: number | null;
   plannedStartDate?: string | null; plannedEndDate?: string | null;
   targetItemId?: string | null; targetColorId?: string | null; foldType?: string | null;
+  materialProvidedBy?: MaterialProvider | null;
 }): PlannedFieldsPatch {
   const date = (v: string | null | undefined) => (v ? new Date(v) : v === null ? null : undefined);
   return {
@@ -53,6 +56,7 @@ function plannedFieldsFromPatch(data: {
     targetItemId: data.targetItemId,
     targetColorId: data.targetColorId,
     foldType: data.foldType,
+    materialProvidedBy: data.materialProvidedBy,
   };
 }
 
@@ -68,6 +72,7 @@ export async function update(
       targetItemId?: string | null;
       targetColorId?: string | null;
       foldType?: string | null;
+      materialProvidedBy?: MaterialProvider | null;
     },
     userId?: string,
     /** Renk değişikliğinde kısmi-boya onayı (409 `COLOR_PARTIAL_CONFIRM` sonrası tekrar). */
@@ -245,6 +250,7 @@ export async function update(
           targetItemId: patch.targetItemId,
           targetColorId: patch.targetColorId,
           foldType: patch.foldType,
+          materialProvidedBy: patch.materialProvidedBy,
         },
       });
       if (updateClaim.count === 0 || !before) {

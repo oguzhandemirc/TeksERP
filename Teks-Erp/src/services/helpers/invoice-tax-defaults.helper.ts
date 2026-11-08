@@ -7,10 +7,13 @@
 // tevkifat = fason firma carisinin `purchaseWithholding*` geçersiz kılması ?? genel `finance.withholding.purchase.*`
 // (genel YALNIZ fason rolü olan karta — saf iplik/sarf tedarikçisine uydurulmaz; taraf yoksa 0). Kart hem tedarikçi hem
 // fasonsa fatura içeriği ayrılmaz: iplik faturasında da önerilir, muhasebe satırda düzeltir (F6 kabul bağlamını taşır).
+// F7b MALZEME: işi YAPAN taraf ana hammaddeyi kendisi verdiyse iş fason sayılmayabilir → tevkifat ÖNERİLMEZ.
+// `WorkOrder.materialProvidedBy` BU FABRİKANIN bakışıdır: satışta yapan biziz (US → öneri kapanır); alışta yapan
+// fasoncudur ve kümede "fasoncu verdi" değeri yok → alış bugünkü gibi (bizim/müşterinin malı fasonda = fason).
 // Bekçi `test_kdv_tevkifat_ayari` ikinci çözümleyiciyi AST'den yakalar: `readFinanceDefaultVatRate` ve
 // carinin vergi alanları bu dosya dışında (ayar servisi + cari CRUD hariç) okunmaz.
 // =============================================================================
-import { InvoiceType, type Prisma } from "@prisma/client";
+import { InvoiceType, type MaterialProvider, type Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { readFinanceDefaultVatRate, readFinancePurchaseWithholdingFlags, readFinanceWithholdingFlags, type PurchaseWithholdingFlags, type WithholdingFlags } from "../system-setting.service";
 import { findCariAccountForCardTx } from "./finance.helper";
@@ -46,6 +49,17 @@ export interface InvoiceTaxDefaults {
   /** Pay/payda (gösterim için); tevkifat yoksa null. */
   withholdingRatio: { numerator: number; denominator: number } | null;
   source: { vat: TaxDefaultSource; withholding: TaxDefaultSource };
+  /** F7b: tevkifat malzeme kuralıyla kapandıysa sebebi (yalnız o durumda; panel açıklama basar). */
+  withholdingOffReason?: "PERFORMER_SUPPLIED_MATERIAL";
+}
+
+/**
+ * F7b: işi yapan taraf ana hammaddeyi kendisi mi verdi? `material` BU FABRİKANIN bakışı (İE alanı).
+ * SATIŞ: yapan biziz → US. ALIŞ: yapan fasoncu; CUSTOMER/US/MIXED hiçbiri "fasoncu verdi" demez → hep false.
+ * MIXED/NULL karar vermez (bugünkü; nitelik mali müşavirde).
+ */
+export function performerSuppliedMainMaterial(type: InvoiceType, material: MaterialProvider | null | undefined): boolean {
+  return type === InvoiceType.SALES && material === "US";
 }
 
 export const CARI_TAX_SELECT = {
@@ -66,7 +80,17 @@ export function withholdingPercent(numerator: number, denominator: number): numb
   return Math.round((numerator / denominator) * 10000) / 100;
 }
 
-/** SAF çözüm — servis ve bekçi aynı fonksiyonu koşar. */
+/** SAF malzeme kuralı (F7b): satışta ana hammaddeyi işi yapan bu fabrika verdiyse zincirin tevkifatı 0'a iner. */
+export function applyMaterialRule(
+  type: InvoiceType,
+  material: MaterialProvider | null,
+  base: InvoiceTaxDefaults,
+): InvoiceTaxDefaults {
+  if (!performerSuppliedMainMaterial(type, material) || base.withholdingRate === 0) return base;
+  return { ...base, withholdingRate: 0, withholdingRatio: null, withholdingOffReason: "PERFORMER_SUPPLIED_MATERIAL" };
+}
+
+/** SAF çözüm (cari ?? genel zinciri) — servis ve bekçi aynı fonksiyonu koşar; malzeme kuralı `applyMaterialRule`. */
 export function computeInvoiceTaxDefaults(
   type: InvoiceType,
   override: CariTaxOverride | null,
@@ -117,15 +141,24 @@ function computePurchaseTaxDefaults(party: PurchaseParty | null, general: Genera
 /**
  * Faturanın ön değeri. Taraf `cariId` ya da kart (`customerId`) ile verilir; hesap yoksa (lazy cari) genel
  * ayar. Okuma `db` üzerinden (tx içinden çağrılabilir).
+ * F7b bağlamı (opsiyonel): `materialProvidedBy` doğrudan ya da `workOrderId`den okunur (ikisi verilirse doğrudan
+ * değer kazanır). Bugün hiçbir taslak yolu İE bağlamı taşımaz — bağlantı F6/hizmet taslağında kurulur.
  */
 export async function resolveInvoiceTaxDefaults(
-  input: { type: InvoiceType; cariId?: string | null; customerId?: string | null },
-  db: Pick<typeof prisma, "cariAccount" | "systemSetting" | "customer"> = prisma,
+  input: {
+    type: InvoiceType;
+    cariId?: string | null;
+    customerId?: string | null;
+    workOrderId?: string | null;
+    materialProvidedBy?: MaterialProvider | null;
+  },
+  db: Pick<typeof prisma, "cariAccount" | "systemSetting" | "customer" | "workOrder"> = prisma,
 ): Promise<InvoiceTaxDefaults> {
+  const material = await resolveMaterialContext(input, db);
   const general = { vatRate: await readFinanceDefaultVatRate(db), ...(await readFinanceWithholdingFlags(db)) };
   if (input.type === InvoiceType.PURCHASE) {
     const purchaseGeneral = { ...general, ...(await readFinancePurchaseWithholdingFlags(db)) };
-    return computeInvoiceTaxDefaults(input.type, null, purchaseGeneral, await resolvePurchaseParty(input, db));
+    return applyMaterialRule(input.type, material, computeInvoiceTaxDefaults(input.type, null, purchaseGeneral, await resolvePurchaseParty(input, db)));
   }
   if (input.type !== InvoiceType.SALES) return computeInvoiceTaxDefaults(input.type, null, general);
   let override: CariTaxOverride | null = null;
@@ -134,7 +167,18 @@ export async function resolveInvoiceTaxDefaults(
   } else if (input.customerId) {
     override = await findCariAccountForCardTx(db, { customerId: input.customerId, subcontractorId: null }, CARI_TAX_SELECT);
   }
-  return computeInvoiceTaxDefaults(input.type, override, general);
+  return applyMaterialRule(input.type, material, computeInvoiceTaxDefaults(input.type, override, general));
+}
+
+/** F7b bağlamı: doğrudan değer > İE'nin alanı; kuralın etkisiz olduğu kolda (alış) DB okunmaz. */
+async function resolveMaterialContext(
+  input: { type: InvoiceType; workOrderId?: string | null; materialProvidedBy?: MaterialProvider | null },
+  db: Pick<typeof prisma, "workOrder">,
+): Promise<MaterialProvider | null> {
+  if (input.materialProvidedBy !== undefined) return input.materialProvidedBy;
+  if (!input.workOrderId || input.type !== InvoiceType.SALES) return null;
+  const wo = await db.workOrder.findUnique({ where: { id: input.workOrderId }, select: { materialProvidedBy: true } });
+  return wo?.materialProvidedBy ?? null;
 }
 
 const PURCHASE_PARTY_SELECT = {

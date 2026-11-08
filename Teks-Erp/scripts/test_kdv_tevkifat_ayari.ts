@@ -12,6 +12,9 @@
 //   §7 ALIŞ KOLU (F7, fason planı FK4): kapalı ⇒ 0 = bugünkü (satır şekli bayt-aynı); açık ⇒ yalnız fason rolüne;
 //      fason carisi > genel; "uygulanmaz" genel açığı ezer; tarafsız/fason olmayan ⇒ 0; çöp ayar ⇒ bugünküne düşer;
 //      ayar + cari kapısı (Zod/servis/DB seddi) satış üçlüsünün ikizi
+//   §8 MALZEME (F7b): İE `materialProvidedBy` BU FABRİKANIN bakışı — satışta (yapan biziz) US ⇒ tevkifat önerisi 0
+//      + sebep; CUSTOMER/MIXED/NULL ⇒ bugünkü; alışta (yapan fasoncu) her değer bugünkü; `workOrderId` bağlamı
+//      DB'den okunur, doğrudan değer kazanır; zincir zaten 0 ise sebep yazılmaz
 // Dönem taslağı uçtan ucu (müşteri %10 + 5/10 ⇒ satır) `test_hizmet_fatura` §14/§19v'de.
 // Negatif sondalar (2026-10-31): `computeInvoiceTaxDefaults` geçersiz kılmayı yok sayınca §1/§2 kırmızı ·
 // `service-period-invoice.service`e ikinci `readFinanceDefaultVatRate()` yazılınca §6 kırmızı (geri alındı) ·
@@ -19,6 +22,8 @@
 // F7 sondaları (2026-11-08): alış rol süzgeci silinince §7 4 ❌ · alış kolu bugünküne döndürülünce §7 3 ❌ ·
 // okuyucunun çöp düşmesi kapatılınca §7 "payda 200" ❌ · `invoice.service`e `readFinancePurchaseWithholdingFlags()` ⇒ §6 ❌.
 // İnceleme #630: `isSubcontractorParty` `kind` kolunu düşürünce §7 2 ❌ (yüklem + kartsız eski fason hesabı).
+// F7b sondaları (2026-11-08): malzeme kuralı devreden çıkınca (`applyMaterialRule` hep zinciri döner) §8 3 ❌ ·
+// kural alışa da uygulanınca (`type === SALES` koşulu silinince) §8 3 ❌ · `workOrderId` okuması kapatılınca §8 1 ❌.
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +34,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
-import { computeInvoiceTaxDefaults, isSubcontractorParty, resolveInvoiceTaxDefaults, taxLineFields } from "../src/services/helpers/invoice-tax-defaults.helper";
+import { computeInvoiceTaxDefaults, isSubcontractorParty, performerSuppliedMainMaterial, applyMaterialRule, resolveInvoiceTaxDefaults, taxLineFields } from "../src/services/helpers/invoice-tax-defaults.helper";
 import { computeInvoiceTotals, ensureCariAccountTx } from "../src/services/helpers/finance.helper";
 import { cariService } from "../src/services/cari.service";
 import { testActorId } from "./fixture-test-user";
@@ -113,6 +118,7 @@ async function main(): Promise<void> {
   let legacySubId: string | null = null;
   let legacyCariId: string | null = null;
   let dualCustomerId: string | null = null;
+  const woIds: string[] = [];
   try {
     // ── §1 ──
     section("§1 saf çözüm zinciri");
@@ -358,7 +364,52 @@ async function main(): Promise<void> {
       psed = extractCheckConstraint(e);
     }
     check("DB seddi alış pay > paydayı reddeder ve Türkçe mesajı var", psed === "cari_accounts_purchase_withholding_ck" && Boolean(checkConstraintMessage(psed)), String(psed));
+
+    // ── §8 ──
+    section("§8 MALZEME (F7b) — saf çözüm");
+    const m1 = applyMaterialRule(InvoiceType.SALES, "US", computeInvoiceTaxDefaults(InvoiceType.SALES, none, gOn, null));
+    check("satış genel 9/10 + ana hammaddeyi BU FABRİKA verdi (US) ⇒ öneri 0 + sebep", m1.withholdingRate === 0 && m1.withholdingRatio === null && m1.withholdingOffReason === "PERFORMER_SUPPLIED_MATERIAL", JSON.stringify(m1));
+    const m2 = applyMaterialRule(InvoiceType.SALES, "US", computeInvoiceTaxDefaults(InvoiceType.SALES, cust, gOff, null));
+    check("satış müşteri 5/10 + US ⇒ cari geçersiz kılması da kapanır (0), KDV müşteriden kalır", m2.withholdingRate === 0 && m2.vatRate === 10, JSON.stringify(m2));
+    const sBase = JSON.stringify(computeInvoiceTaxDefaults(InvoiceType.SALES, none, gOn));
+    const sOthers = (["CUSTOMER", "MIXED", null] as const).map((m) => JSON.stringify(applyMaterialRule(InvoiceType.SALES, m, computeInvoiceTaxDefaults(InvoiceType.SALES, none, gOn, null))));
+    check("satış CUSTOMER / MIXED / NULL ⇒ bayt-aynı bugünkü (90)", sOthers.every((x) => x === sBase) && sBase.includes('"withholdingRate":90'), sOthers.join(" · "));
+    const pBase = JSON.stringify(computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, fason));
+    const pAll = (["US", "CUSTOMER", "MIXED", null] as const).map((m) => JSON.stringify(applyMaterialRule(InvoiceType.PURCHASE, m, computeInvoiceTaxDefaults(InvoiceType.PURCHASE, null, pOn, fason))));
+    check("alış (yapan fasoncu) her değerde bayt-aynı bugünkü (70) — US 'fasoncu verdi' DEMEZ", pAll.every((x) => x === pBase) && pBase.includes('"withholdingRate":70'), pAll.join(" · "));
+    const m3 = applyMaterialRule(InvoiceType.SALES, "US", computeInvoiceTaxDefaults(InvoiceType.SALES, none, gOff, null));
+    check("zincir zaten 0 + US ⇒ sebep YAZILMAZ (bugünkü şekil)", JSON.stringify(m3) === JSON.stringify(computeInvoiceTaxDefaults(InvoiceType.SALES, none, gOff)), JSON.stringify(m3));
+    check("performerSuppliedMainMaterial: yalnız SATIŞ ∧ US",
+      performerSuppliedMainMaterial(InvoiceType.SALES, "US") && !performerSuppliedMainMaterial(InvoiceType.PURCHASE, "US")
+      && !performerSuppliedMainMaterial(InvoiceType.SALES, "CUSTOMER") && !performerSuppliedMainMaterial(InvoiceType.SALES, "MIXED")
+      && !performerSuppliedMainMaterial(InvoiceType.SALES, null) && !performerSuppliedMainMaterial(InvoiceType.SALES, undefined));
+
+    section("§8 MALZEME (F7b) — DB çözümü (İE bağlamı)");
+    for (const k of KEYS) await prisma.systemSetting.deleteMany({ where: { key: k } });
+    await systemSettingService.setFeatureFlags({ financeWithholdingEnabled: true, financeWithholdingNumerator: 5, financeWithholdingDenominator: 10, financePurchaseWithholdingEnabled: true, financePurchaseWithholdingNumerator: 7, financePurchaseWithholdingDenominator: 10 }, actor);
+    const mkWo = async (m: "CUSTOMER" | "US" | "MIXED" | null) => {
+      const w = await prisma.workOrder.create({ data: { workOrderNumber: `TEST-KDVWO-${STAMP}-${woIds.length}`, materialProvidedBy: m }, select: { id: true } });
+      woIds.push(w.id);
+      return w.id;
+    };
+    const woUs = await mkWo("US");
+    const woCustomer = await mkWo("CUSTOMER");
+    const woNull = await mkWo(null);
+    const sNone = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES });
+    const sUs = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woUs });
+    check("satış + İE (US) ⇒ 0 + sebep (alan DB'den okunur)", sNone.withholdingRate === 50 && sUs.withholdingRate === 0 && sUs.withholdingOffReason === "PERFORMER_SUPPLIED_MATERIAL", JSON.stringify({ sNone, sUs }));
+    const sCu = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woCustomer });
+    const sNu = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woNull });
+    const sMissing = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: randomUUID() });
+    check("satış + İE (CUSTOMER / NULL / bulunamayan) ⇒ bayt-aynı bugünkü", [sCu, sNu, sMissing].every((x) => JSON.stringify(x) === JSON.stringify(sNone)), JSON.stringify({ sCu, sNu, sMissing }));
+    const sDirect = await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, workOrderId: woUs, materialProvidedBy: "CUSTOMER" });
+    check("doğrudan değer İE alanını ezer (US İE + CUSTOMER ⇒ bugünkü)", JSON.stringify(sDirect) === JSON.stringify(sNone), JSON.stringify(sDirect));
+    const pNoCtx = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId });
+    const pUs = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId, workOrderId: woUs });
+    const pUsDirect = await resolveInvoiceTaxDefaults({ type: InvoiceType.PURCHASE, cariId: fasonCariId, materialProvidedBy: "US" });
+    check("alış fason + İE (US) ⇒ bugünkü 70 (malımız fasonda = fason)", pNoCtx.withholdingRate === 70 && JSON.stringify(pUs) === JSON.stringify(pNoCtx) && JSON.stringify(pUsDirect) === JSON.stringify(pNoCtx), JSON.stringify({ pNoCtx, pUs, pUsDirect }));
   } finally {
+    if (woIds.length > 0) await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     for (const id of [fasonCariId, legacyCariId]) {
       if (!id) continue;
       await prisma.cariBalance.deleteMany({ where: { cariId: id } });

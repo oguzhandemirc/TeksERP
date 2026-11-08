@@ -15,6 +15,7 @@ import {
   RollStatus,
   OrderStatus,
   Prisma,
+  type MaterialProvider,
 } from "@prisma/client";
 import { type TargetValueItem } from "../helpers/workorder-target-value.helper";
 import {
@@ -273,6 +274,8 @@ export interface WorkOrderCreateInput {
   /** Tambur planlama bilgisi — "2-KAT" / "4-KAT" gibi. Tambur'a bilgi olarak
    *  iletilir; operatör finalize sırasında override edebilir. */
   foldType?:          string | null;
+  /** Fason F7b: ana hammaddeyi kim verdi (bu fabrikanın bakışı). undefined = dokunma (replace'te KORUNUR), null = bilinmiyor. */
+  materialProvidedBy?: MaterialProvider | null;
   /**
    * Üretim çıktısı rulolarda olacak özellikler. "Renk veren" fason adımının
    * Fason Kabul'ünde Roll.properties'e bindirilir. Item.allowedProperties

@@ -81,6 +81,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   qualityGrade: "Kalite",
   qualityGradeId: "Kalite",
   foldType: "Kat",
+  materialProvidedBy: "Ana hammaddeyi veren",
   barcode: "Barkod",
   parentBarcode: "Kaynak top barkodu",
   cardNumber: "Kart no",

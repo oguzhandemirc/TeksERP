@@ -31,6 +31,7 @@ export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
   routeTemplateId: "Rota",
   get type() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} tipi`; },
   isActive: "Arşiv",
+  materialProvidedBy: "Ana hammaddeyi veren",
 };
 
 /** Kolon olmayan izlenen plan alanı: kurşun gramajı hedefi (`WorkOrderTargetValue`) — FIELD_CHANGED satırı bu adla yazılır. */

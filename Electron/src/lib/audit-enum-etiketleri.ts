@@ -305,6 +305,9 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // BatchNumberSource (Gülkesim parti no S0, 2026-11-02; ek dosya satır tavanında)
   SERIES: "Numara serisinden",
   DOCUMENT: "Belgeden",
+  // MaterialProvider (fason F7b — iş emrinde ana hammaddeyi kim verdi; CUSTOMER override'da; ek dosya satır tavanında)
+  US: "Bu fabrika verdi",
+  MIXED: "Karışık (müşteri + bu fabrika)",
 
   // DocumentScanContentState (K28 fotoğraf saklama) — REDUCED/PURGED çakışır, DOCUMENT_SCAN.contentState override'ı
   FULL: "Tam",
@@ -402,6 +405,8 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "packing_groups.status": { OPEN: "Açık", CLOSED: "Sevk edildi" },
   // EIrsaliyeSourceType.SHIPMENT (E1-SEMA) — kaydın KAYNAK türü; global `SHIPMENT` depo olayı dilinde ("Sevk çıkışı").
   "E_IRSALIYE.sourceType": { SHIPMENT: "Sevkiyat" },
+  // MaterialProvider.CUSTOMER (fason F7b) — global "Müşteri" firma türü dilidir; iş emrinde ana hammaddeyi VEREN taraftır.
+  "WORK_ORDER.materialProvidedBy": { CUSTOMER: "Müşteri verdi" },
   // OrderStatus (2026-11-04) — sipariş durumu kullanıcıya SEVK diliyle söylenir (panel `orderStatusLabels`);
   // global PENDING/APPROVED/COMPLETED/CANCELLED cihaz/adım/iş emri ile ortak, onlar değişmez.
   "ORDER.status": {

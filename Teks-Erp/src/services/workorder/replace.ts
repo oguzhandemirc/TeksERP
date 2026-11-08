@@ -766,6 +766,8 @@ export async function replace(
           targetItemId: resolvedTargetItemId,
           targetColorId: resolvedTargetColorId,
           foldType: data.foldType ?? null,
+          // Tam replace'in TEK istisnası: gönderilmeyen (eski istemci) alan silinmez; null açıkça temizler.
+          materialProvidedBy: data.materialProvidedBy,
         },
         include: {
           steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
@@ -807,6 +809,7 @@ export async function replace(
         allocationCount: allocations.length,
         targetItemId: updated.targetItemId,
         targetColorId: updated.targetColorId,
+        materialProvidedBy: updated.materialProvidedBy,
         targetPropertyIds,
       },
     });
