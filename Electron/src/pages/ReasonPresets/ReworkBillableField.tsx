@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Label } from "@/components/ui/label";
+import { TERIM } from "@/lib/terim";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** Seçici değeri: "" = sınıflandırılmamış (ücretli, bugünkü) · "true" = müşteri talebi · "false" = bizim hatamız. */
@@ -48,9 +49,9 @@ export function ReworkBillableField({
         </SelectContent>
       </Select>
       <Callout tone="info">
-        &quot;Bizim hatamız&quot; seçilen sebeple açılan iş emrindeki boya, apre, bayrak ve kurşun işi müşteriye
-        <b> faturalanmaz</b>. Sınıf iş emri <b>açılırken</b> donar: burada değiştirmek geçmiş iş emirlerini
-        değiştirmez, yalnız yenilerini etkiler.
+        &quot;Bizim hatamız&quot; seçilen sebeple açılan {TERIM.terbiyeIsEmri.cekimKucuk.bulunma}ki boya, apre, bayrak ve kurşun
+        işi müşteriye <b> faturalanmaz</b>. Sınıf {TERIM.terbiyeIsEmri.tekilKucuk} <b>açılırken</b> donar: burada değiştirmek
+        geçmiş {TERIM.terbiyeIsEmri.cogulCekimKucuk.belirtme} değiştirmez, yalnız yenilerini etkiler.
       </Callout>
     </div>
   );
