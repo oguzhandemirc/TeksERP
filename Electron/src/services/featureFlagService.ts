@@ -298,6 +298,8 @@ export interface FeatureFlags {
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   /** Brode fiyat birimi (backend aynası; default METER). */
   financeServiceBillingBrodeUnit: "METER" | "PIECE" | "STITCH";
+  /** Fason F3: süreç türü eşlemeli adım işi hizmet satırı (backend aynası; default false). */
+  financeServiceBillingStepWorks: boolean;
   financeServiceBillingTrigger: "PER_SHIPMENT" | "PERIOD_END";
   financeServiceBillingPriceDate: "SERVICE_DAY" | "DISPATCH_DAY";
   /** K14: kurşun gram fiyatı — işin anındaki sürüm (varsayılan) · fatura anındaki değer. */

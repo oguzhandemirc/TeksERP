@@ -420,6 +420,12 @@ export async function setFeatureFlags(
       assertBrodeUnitHasPieceInput(v as ServiceBillingBrodeUnit, capture);
       await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_BRODE_UNIT, v, "Brode fiyat birimi — metre · adet · vuruş", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingStepWorks")) {
+      if (typeof input.financeServiceBillingStepWorks !== "boolean") {
+        throw AppError.badRequest("financeServiceBillingStepWorks boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_STEP_WORKS, input.financeServiceBillingStepWorks, "Süreç türü eşlemeli adım işlerini (boya, apre…) hizmet satırı olarak ekle", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {
       const v = input.financeServiceBillingTrigger;
       if (typeof v !== "string" || !SERVICE_BILLING_TRIGGERS.includes(v as ServiceBillingTrigger)) {

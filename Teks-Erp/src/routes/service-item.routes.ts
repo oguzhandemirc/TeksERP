@@ -48,6 +48,12 @@ const lifecycleSummaryQuery = z.object({
     .pipe(z.array(z.string().uuid("Geçersiz hizmet kartı ID")).min(1, "En az bir hizmet kartı ID").max(200, "En fazla 200 hizmet kartı")),
 });
 
+const processesBody = z
+  .object({
+    categoryIds: z.array(z.string().uuid("Geçersiz süreç türü ID"), { message: "categoryIds dizi olmalı" }).max(200, "En fazla 200 süreç türü"),
+  })
+  .strict();
+
 const idOf = (req: Request): string => assertValidUuid(req.params.id as string, "id");
 
 /**
@@ -139,6 +145,26 @@ router.get("/similar-names", requirePermission("item:write"), controller.similar
 router.get("/lifecycle-summary", requirePermission("item:read"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await serviceItemService.lifecycleSummary(lifecycleSummaryQuery.parse(req.query).ids));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/service-items/process-map:
+ *   get:
+ *     tags: [ServiceItems]
+ *     summary: Süreç türü → hizmet kartı eşlemelerinin tamamı (fason F3 adım işi)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: "[{ categoryId, categoryCode, categoryName, categoryActive, serviceItemId, serviceItemCode, serviceItemName }]"
+ */
+router.get("/process-map", requirePermission("item:read"), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await serviceItemService.processMap());
   } catch (err) {
     next(err);
   }
@@ -261,6 +287,67 @@ router.post("/:id/lifecycle", requirePermission("item:write"), async (req: Reque
   try {
     const { to, reason } = lifecycleBody.parse(req.body ?? {});
     res.json(await serviceItemService.transitionLifecycle(idOf(req), to, reason ?? null, req.user?.userId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/service-items/{id}/processes:
+ *   get:
+ *     tags: [ServiceItems]
+ *     summary: Hizmet kartının eşlendiği süreç türleri
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Eşleme listesi
+ *       404:
+ *         description: Kart yok
+ *   put:
+ *     tags: [ServiceItems]
+ *     summary: Süreç türü kümesini değiştir (boş dizi = eşlemeyi kaldır)
+ *     description: Bir süreç türü tek karta eşlenir. Ayar `finance.serviceBilling.stepWorks` açıkken eşlenen türdeki adım işi hizmet satırı olur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [categoryIds]
+ *             properties:
+ *               categoryIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       200:
+ *         description: Güncel eşleme listesi (`changed` değişti mi)
+ *       400:
+ *         description: Bilinmeyen süreç türü (`SERVICE_PROCESS_CATEGORY_INVALID`)
+ *       409:
+ *         description: Tür başka karta eşli (`SERVICE_PROCESS_TAKEN`) ya da pasif karta yeni eşleme (`ITEM_INACTIVE`)
+ */
+router.get("/:id/processes", requirePermission("item:read"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await serviceItemService.processes(idOf(req)));
+  } catch (err) {
+    next(err);
+  }
+});
+router.put("/:id/processes", requirePermission("item:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await serviceItemService.replaceProcesses(idOf(req), processesBody.parse(req.body ?? {}).categoryIds, req.user?.userId));
   } catch (err) {
     next(err);
   }

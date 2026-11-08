@@ -33,6 +33,7 @@
     "financeRiskLimitBlockShipment": true,
     "financeAutoDraftFromShipmentEnabled": true,
     "financeServiceBillingEnabled": true,
+    "financeServiceBillingStepWorks": true,
     "financeExpenseCategorySuggestions": "ON",
     "financeExpenseAllocationField": "OPTIONAL",
     "financeExpenseAllocationClosedWorkOrder": "DENY",

@@ -3806,6 +3806,7 @@ model ServiceItem {
   expenseAllocations       ExpenseAllocation[]
   prices                   ItemPrice[]
   invoiceLines             InvoiceLine[]
+  processMaps              ServiceItemProcess[]
 
   // Canlı ad tekilliği PARTIAL (WHERE "mergedIntoId" IS NULL) — Item emsali, @@unique zorunlu (drift).
   @@unique([nameFold])
@@ -7891,6 +7892,7 @@ model SubcontractorCategory {
   workOrderSteps  WorkOrderStep[]           @relation("StepRequiredCategory")
   routeSteps      RouteStep[]               @relation("RouteStepRequiredCategory")
   defaultStations Station[]                 @relation("StationDefaultCategory")
+  serviceItemMap  ServiceItemProcess?
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8011,6 +8013,26 @@ model Subcontractor {
 }
 
 /// M:N — bir firma birden fazla kategoride hizmet verebilir
+/// SÜREÇ TÜRÜ → HİZMET KARTI eşlemesi (genel fason F3). Saf yapılandırma pivotu: yazımı
+/// `PUT /api/service-items/:id/processes` küme değişimidir (hard delete serbest sınıf, audit'li).
+/// `categoryId` UNIQUE: bir süreç türünün tek varsayılan hizmet kartı olur — adım işi
+/// (`listStepServiceWorks`, ayar `finance.serviceBilling.stepWorks`) belirsiz kalmasın.
+/// Kart pasife alınırken canlı referanstır (`SERVICE_PROCESS_MAP`).
+model ServiceItemProcess {
+  id            String @id @default(uuid()) @db.Uuid
+  serviceItemId String @db.Uuid
+  categoryId    String @unique @db.Uuid
+
+  serviceItem ServiceItem           @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+  category    SubcontractorCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([serviceItemId])
+  @@map("service_item_processes")
+}
+
 model SubcontractorToCategory {
   subcontractorId String @db.Uuid
   categoryId      String @db.Uuid

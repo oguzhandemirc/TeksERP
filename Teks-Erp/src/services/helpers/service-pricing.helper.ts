@@ -5,7 +5,8 @@
 // Zincir: gramaj `listKursunApplications` (process-summary; TABLET + KAĞIT) → yoksa
 // iş emri hedefi (uyarıyla) → `value.serviceItemId` → `property.serviceItemId` →
 // ana bayrağın (variantOf) eşlemesi. Kurşun DIŞI bayrak işleri (Tambur, etek, brode — H10)
-// `listFlagServiceWorks`ten, kalem desen değeri → `property.serviceItemId` (D4-D3) sırasıyla gelir. Fiyat `resolveItemPricesFor(SALE)`, hizmet
+// `listFlagServiceWorks`ten, kalem desen değeri → `property.serviceItemId` (D4-D3) sırasıyla gelir. Ayar açıksa
+// süreç türü eşlemeli adım işleri (F3) `listStepServiceWorks`ten; aynı adımı kurşun/bayrak verdiyse adım işi düşer. Fiyat `resolveItemPricesFor(SALE)`, hizmet
 // anına (as-of) çözülür: istisna genelden önce, damgalı eski sürüm eski işe.
 // ⚠️ `FinishingRate` BURADA OKUNMAZ: o bizim ödediğimiz terbiye/fason MALİYETİDİR,
 // gelir değildir — `test_hizmet_fiyati` AST taraması ikinci kopyayı ve okumayı yasaklar.
@@ -18,6 +19,7 @@ import { TERIM } from "../../constants/terim";
 import { resolveItemPricesFor } from "../item-price.service";
 import { listKursunApplications, readKursunTarget, type KursunApplication } from "./process-summary.helper";
 import { listFlagServiceWorks } from "./service-flag-work.helper";
+import { listStepServiceWorks } from "./service-step-work.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 import { gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEnteredLaterWarning, kursunGramLineLabel, kursunTierLineLabel, loadKursunGramCandidates } from "./kursun-gram-price.helper";
 import { loadServiceTierPrices, pickServicePrice, tierKey, tierMissingWarning } from "./service-price-pick.helper";
@@ -35,8 +37,8 @@ export interface ServiceRollWork {
   rollId: string;
   /** Bayrak işinde adım bilinmeyebilir (kesim depoda, ölçümsüz iş) — bağ anahtarı NULLS NOT DISTINCT. */
   workOrderStepId: string | null;
-  /** PROPERTY = kurşun dışı bayrak işi (H10). */
-  source: KursunApplication["source"] | "PROPERTY";
+  /** PROPERTY = kurşun dışı bayrak işi (H10) · STEP = süreç türü eşlemeli adım işi (F3). */
+  source: KursunApplication["source"] | "PROPERTY" | "STEP";
   valueId: string | null;
   valueName: string;
   gramajFrom: ServiceGramajSource;
@@ -140,6 +142,8 @@ export interface ServiceResolveOptions {
   shippedRollIds?: Set<string>;
   /** Brode fiyat birimi ayarı; verilmezse METER (bugünkü davranış). */
   brodeUnit?: ServiceQtyUnit;
+  /** F3 `finance.serviceBilling.stepWorks`: adım işi kaynağı; verilmezse kapalı (bugünkü çıktı bayt-aynı). */
+  stepWorks?: boolean;
 }
 
 /** Bağ anahtarı — kısmi unique (rollId, serviceItemId, workOrderStepId) ile aynı üçlü. */
@@ -178,12 +182,24 @@ function filterBillableWorks(all: ServiceRollWork[], opt: ServiceResolveOptions,
   return block ? works.filter((w) => !unmeasured.includes(w)) : works;
 }
 
+/** Metresi bulunamayan adım işi (okuma, çıkış/giriş ve top metresi 0) — sessiz düşmez. */
+export function zeroMeterStepWarning(count: number): string {
+  return `${count} adım işinin metresi bulunamadı (okuma ve top metresi 0) — faturaya alınmadı, topu kontrol edin.`;
+}
+
+/** F3 uyarı metni — bekçi aynı cümleyi arar. */
+export function simulatedStepWarning(count: number): string {
+  return `${count} adım işinin metresi yalnız simüle ölçüm — süpervizör düzeltmesi gerekli; faturaya alınmadı.`;
+}
+
 /** Kurşun dışı bayrak işleri (H10) iş satırına; K4 (D4-B2): simüle kesim metresi düşer, uyarı taslakta/önizlemede görünür. */
-async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; brodeUnit: ServiceQtyUnit; db: Db; warnings: string[] }): Promise<ServiceRollWork[]> {
+async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; brodeUnit: ServiceQtyUnit; db: Db; warnings: string[] }): Promise<{ works: ServiceRollWork[]; claims: Array<{ rollId: string; propertyId: string }> }> {
   const { db, warnings } = ctx;
   const flag = await listFlagServiceWorks(rollIds, basis, { shippedRollIds: ctx.shippedRollIds, db });
   if (flag.simulatedCutRollIds.length > 0) warnings.push(simulatedCutWarning(flag.simulatedCutRollIds.length));
-  return flag.works.map((f) => {
+  // Adımsız bayrak işi (CUT/DECLARED) özelliğiyle adım işini bastırır (F3 bayrak önceliği).
+  const claims = flag.works.filter((f) => f.workOrderStepId === null).map((f) => ({ rollId: f.rollId, propertyId: f.propertyId }));
+  const works = flag.works.map((f): ServiceRollWork => {
     const qtyUnit = serviceWorkUnit(f.propertyCode, ctx.brodeUnit);
     return {
       rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: f.valueId, valueName: f.propertyName, gramajFrom: "NONE",
@@ -192,6 +208,21 @@ async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED"
       qtyUnit, quantity: serviceWorkQuantity(f, qtyUnit),
     };
   });
+  return { works, claims };
+}
+
+/** F3 adım işleri iş satırına (metre birimi, kademesiz); kurşun/bayrak işinin adımı ve adımsız bayrak özelliği önceliklidir. */
+async function loadStepWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { claimed: ServiceRollWork[]; flagClaims: Array<{ rollId: string; propertyId: string }>; db: Db; warnings: string[] }): Promise<ServiceRollWork[]> {
+  // Öncelik top başına (top:adım) — aynı sevkteki başka topun bayrağı bu topun adım işini bastırmaz.
+  const claimedWorks = ctx.claimed.flatMap((w) => (w.workOrderStepId ? [{ rollId: w.rollId, workOrderStepId: w.workOrderStepId }] : []));
+  const step = await listStepServiceWorks(rollIds, basis, { db: ctx.db, claimedWorks, flagClaims: ctx.flagClaims });
+  if (step.simulatedCount > 0) ctx.warnings.push(simulatedStepWarning(step.simulatedCount));
+  if (step.zeroMeterCount > 0) ctx.warnings.push(zeroMeterStepWarning(step.zeroMeterCount));
+  return step.works.map((s): ServiceRollWork => ({
+    rollId: s.rollId, workOrderStepId: s.workOrderStepId, source: "STEP", valueId: null, valueName: s.categoryName, gramajFrom: "NONE",
+    serviceItemId: s.serviceItemId, meters: s.meters, meterBasis: s.meterBasis, readingId: s.readingId, serviceAt: s.serviceAt, unitPrice: null,
+    qtyUnit: "METER", quantity: s.meters,
+  }));
 }
 
 /** Fiyat hizmet anına çözülür (geç taslak eski fiyatı korur); aynı an tek sorgu. Birim uyuşmazsa fiyat yok. */
@@ -253,6 +284,15 @@ async function applyServicePrices(
   return tierMissing;
 }
 
+/** İşlerin hizmet kartları (kod + ad) — satır grubunun başlığı. */
+async function loadServiceItemsById(works: ServiceRollWork[], db: Db): Promise<Map<string, { id: string; code: string; name: string }>> {
+  const items = await db.serviceItem.findMany({
+    where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
+    select: { id: true, code: true, name: true },
+  });
+  return new Map(items.map((i) => [i.id, i]));
+}
+
 /**
  * Toplara yapılan kurşun ve bayrak tipi (H10) işleri hizmet kalemine ve müşteri fiyatına çözer.
  * Yazmaz; eşleşmeyen top ve fiyatsız kalem `warnings`te görünür (sessiz düşmez).
@@ -302,8 +342,9 @@ export async function resolveServiceItemsForRolls(params: {
       quantity: picked ? picked.r.meters : a.meters,
     };
   });
-  const flagWorks = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
-  const billable = filterBillableWorks([...allWorks, ...flagWorks], opt, basis, warnings);
+  const flag = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
+  const stepWorks = opt.stepWorks ? await loadStepWorks(rollIds, basis, { claimed: [...allWorks, ...flag.works], flagClaims: flag.claims, db, warnings }) : [];
+  const billable = filterBillableWorks([...allWorks, ...flag.works, ...stepWorks], opt, basis, warnings);
   // Adet/vuruşu eksik iş faturaya alınmaz (uydurma miktar yok); birim başına tek uyarı.
   const unknown = billable.filter((w) => w.serviceItemId && w.quantity === null);
   for (const u of new Set(unknown.map((w) => w.qtyUnit))) warnings.push(missingQuantityWarning(u, unknown.filter((w) => w.qtyUnit === u).length));
@@ -311,11 +352,7 @@ export async function resolveServiceItemsForRolls(params: {
 
   const tierMissing = await applyServicePrices(works, { opt, currency: params.currency, customerId: params.customerId, db, warnings });
 
-  const items = await db.serviceItem.findMany({
-    where: { id: { in: [...new Set(works.map((w) => w.serviceItemId).filter((v): v is string => v !== null))] } },
-    select: { id: true, code: true, name: true },
-  });
-  const itemById = new Map(items.map((i) => [i.id, i]));
+  const itemById = await loadServiceItemsById(works, db);
   const manualReadings = await loadManualReadingIds(works, db);
   const groups = new Map<string, ServiceLine & { sum: Prisma.Decimal }>();
   const tierMissingByName = new Map<string, number>();

@@ -283,6 +283,12 @@ export async function readFinanceServiceBillingEnabled(tx?: Pick<typeof prisma, 
   return asBoolean(setting?.value);
 }
 
+/** Fason F3: adım işi (süreç türü → hizmet kartı) — kayıt yok → KAPALI (bugünkü davranış). */
+export async function readFinanceServiceBillingStepWorks(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_STEP_WORKS }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 export async function readServiceEnum<T extends string>(key: string, allowed: readonly T[], fallback: T, tx?: Pick<typeof prisma, "systemSetting">): Promise<T> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key }, select: { value: true } });
   const v = setting?.value;

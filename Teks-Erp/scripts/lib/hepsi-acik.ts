@@ -70,6 +70,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeRiskLimitCurrencyMode: V("risk karşılaştırma kipi; TRY_CONVERTED dövizli bakiyede kur ister (yoksa 409 FX_MISSING), varsayılan her para birimini ayrı ölçer"),
   financeAutoDraftFromShipmentEnabled: A(true),
   financeServiceBillingEnabled: A(true),
+  financeServiceBillingStepWorks: A(true),
   financeServiceBillingMeterBasis: V("metre tabanı; üç değer de geçerli, varsayılan OUT okuma yolunu işletir"),
   financeServiceBillingBrodeUnit: V("brode fiyat birimi; METER bugünkü yol, ADET/VURUŞ adet girişi ister (bekçi test_brode_fiyat_birimi ölçer)"),
   financeServiceBillingMissingMeter: V("eksik ölçüm davranışı; varsayılan satırı uyarıyla yazar (yolu işletir)"),
