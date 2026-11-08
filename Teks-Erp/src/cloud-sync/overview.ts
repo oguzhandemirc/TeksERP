@@ -33,6 +33,8 @@ export interface OverviewStock {
   deadQty: number;
   deadStockDays: number;
   topItems: Array<{ label: string; qty: number }>;
+  /** PB1: emanet satırı (müşteri malı) — yalnız emanet açıkken; yukarısı o zaman BİZİM stoktur (karne F1). */
+  consigned?: { count: number; qty: number };
 }
 
 export interface OverviewOrders {
@@ -115,6 +117,7 @@ export async function getFactoryOverview(range: DateRange): Promise<FactoryOverv
       deadQty: stockRes.summary.deadQty,
       deadStockDays: stockRes.summary.deadStockDays,
       topItems: stockRes.byItem.slice(0, TOP_N).map((r) => ({ label: r.label, qty: r.qty })),
+      ...(stockRes.summary.consigned ? { consigned: consignedTotal(stockRes.summary.consigned) } : {}),
     },
     orders: {
       openLineCount: ordersRes.summary.openLineCount,
@@ -144,6 +147,11 @@ export async function getFactoryOverview(range: DateRange): Promise<FactoryOverv
     shipping: shippingSection(shipRes),
     subcontract: subcontractSection(subRes),
   };
+}
+
+/** Karnenin emanet satırı (ham + yarı mamul + bitmiş) tek satıra — raf toplamı = bizim + emanet. */
+export function consignedTotal(c: NonNullable<Awaited<ReturnType<typeof getStockScorecard>>["summary"]["consigned"]>): { count: number; qty: number } {
+  return { count: c.rawCount + c.semiCount + c.finishedCount, qty: Math.round((c.rawQty + c.semiQty + c.finishedQty) * 10) / 10 };
 }
 
 /**

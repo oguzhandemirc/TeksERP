@@ -102,6 +102,22 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     reads: ["invoices", "invoice_lines", "service_billing_links", "cash_transactions", "machine_cost_rates", "service_consumable_norms", "rolls", "subcontractor_receipts", "subcontractor_receipt_items", "finishing_rates", "work_sessions", "shift_instances"],
   },
   {
+    // PB1: müşteri başına içerideki emanet (top İçerideki İşler + iplik lot defteri + levent); emanet kapalıyken üretilmez.
+    name: "emanet-bakiye", kind: "ANLIK", source: "cloud-sync/snapshot-fason: roll-owner getConsignedWorkSummary + consigned-material.helper consignedMaterialByOwner",
+    cadence: "SAATLIK", permission: "bulut:stok:oku", reads: ["rolls", "customers", "yarn_lots", "yarn_movements", "warp_beams"],
+  },
+  {
+    // PB1: F10 kokpit özeti (açık sevk · termini geçen · yaklaşan · fasonda kalan); termin çözücüsü kokpitin.
+    name: "fason-acik", kind: "ANLIK", source: "cloud-sync/snapshot-fason: subcontractor-cockpit getSubcontractorCockpit.summary",
+    cadence: "SAATLIK", permission: "bulut:uretim:oku",
+    reads: ["subcontractor_dispatches", "subcontractor_dispatch_items", "subcontractors", "rolls", "warp_beams", "yarn_movements", "weaving_orders"],
+  },
+  {
+    // PB1: onaylı satış faturasının hizmet satırları, hizmet kartı kırılımı × 4 dönem (TL fabrikada).
+    name: "hizmet-geliri", kind: "ANLIK", source: "cloud-sync/snapshot-fason: serviceRevenueByItem (CONFIRMED SALES, lineType SERVICE, issueDate)",
+    cadence: "SAATLIK", permission: "bulut:fatura:oku", module: "finance.enabled", reads: ["invoices", "invoice_lines", "service_items"],
+  },
+  {
     name: "stok-karnesi", kind: "ANLIK", source: "reports/stock-scorecard.report.service getStockScorecard",
     cadence: "SAATLIK", permission: "bulut:stok:oku", reads: ["rolls", "order_lines", "orders", "items", "colors"],
   },

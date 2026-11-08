@@ -44,6 +44,11 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   shift_instances: "ShiftInstance",
   // SY-N3 standart-maliyet: varyant adı/kodu lookup kaynağı.
   product_recipes: "ProductRecipe",
+  // PB1 emanet-bakiye / fason-acik: emanet iplik lotu + defteri, levent, fason dokuma emri.
+  yarn_lots: "YarnLot",
+  yarn_movements: "YarnMovement",
+  warp_beams: "WarpBeam",
+  weaving_orders: "WeavingOrder",
 };
 
 /** Katalogdan türeyen izlenen tablo kümesi (bekçi §7 bunu `READS_MODEL_MAP` ∪ köklerle kıyaslar). */
