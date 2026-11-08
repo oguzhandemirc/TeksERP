@@ -171,6 +171,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeServiceBillingMissingMeter",
       "financeServiceBillingBrodeUnit",
       "financeServiceBillingStepWorks",
+      "financeServiceBillingWeavingWorks",
       "financeServiceBillingTrigger",
       "financeCariHoldDefaultScope",
       "financeCariHoldReleaseBySamePerson",

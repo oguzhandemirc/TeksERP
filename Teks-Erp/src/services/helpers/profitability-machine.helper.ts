@@ -153,7 +153,7 @@ export async function computeMachineCosts(
 ): Promise<{ byLink: Map<string, LinkMachineCost>; idle: IdleMachineDay[] }> {
   const byLink = new Map<string, LinkMachineCost>();
   const refOf = (l: RevenueLinkRow): WorkRef | null =>
-    l.machineId !== null && l.readingStepId !== null ? { machineId: l.machineId, rollId: l.rollId, workOrderStepId: l.readingStepId } : null;
+    l.machineId !== null && l.readingStepId !== null && l.rollId !== null ? { machineId: l.machineId, rollId: l.rollId, workOrderStepId: l.readingStepId } : null;
   const attributed = links.flatMap((l) => { const w = refOf(l); return w ? [w] : []; });
   const firstAt = await workFirstReadingAt(attributed);
   let winStart = rangeStart;

@@ -76,7 +76,7 @@ async function loadReceipts(links: RevenueLinkRow[]): Promise<Map<string, Receip
   const received = links.filter((l) => l.meterBasis === ServiceMeterBasis.RECEIVED);
   const out = new Map<string, ReceiptInfo>();
   if (received.length === 0) return out;
-  const rollIds = [...new Set(received.map((l) => l.rollId))];
+  const rollIds = [...new Set(received.map((l) => l.rollId).filter((v): v is string => v !== null))];
   const rolls = await prisma.roll.findMany({ where: { id: { in: rollIds } }, select: { id: true, parentReceiptId: true } });
   const items = await prisma.subcontractorReceiptItem.findMany({ where: { newRollId: { in: rollIds } }, select: { newRollId: true, receiptId: true } });
   const receiptIds = [...new Set([...rolls.map((r) => r.parentReceiptId), ...items.map((i) => i.receiptId)].filter((v): v is string => v !== null))];

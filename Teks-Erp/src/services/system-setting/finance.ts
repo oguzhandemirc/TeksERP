@@ -289,6 +289,12 @@ export async function readFinanceServiceBillingStepWorks(tx?: Pick<typeof prisma
   return asBoolean(setting?.value);
 }
 
+/** Fason F4: dokuma (doğan top) ve levent sarımı işi — kayıt yok → KAPALI (bugünkü davranış). */
+export async function readFinanceServiceBillingWeavingWorks(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_WEAVING_WORKS }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 export async function readServiceEnum<T extends string>(key: string, allowed: readonly T[], fallback: T, tx?: Pick<typeof prisma, "systemSetting">): Promise<T> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key }, select: { value: true } });
   const v = setting?.value;

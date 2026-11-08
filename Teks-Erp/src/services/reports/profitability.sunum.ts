@@ -82,7 +82,7 @@ function rowKey(by: Exclude<ProfitBreakdown, "is">, r: ProfitabilityRow): string
 export function profitGroups(rows: ProfitabilityRow[], by: ProfitBreakdown, names: ProfitNames): Group[] {
   if (by === "is") {
     return rows.map((r) => ({
-      label: `${names.rolls.get(r.rollId) ?? "—"} · ${names.serviceItems.get(r.serviceItemId) ?? "—"} · ${r.docNo}${r.kind === "CANCELLED" ? " (iptal)" : ""}`,
+      label: `${names.rolls.get(r.rollId ?? r.warpBeamId ?? "") ?? "—"} · ${names.serviceItems.get(r.serviceItemId) ?? "—"} · ${r.docNo}${r.kind === "CANCELLED" ? " (iptal)" : ""}`,
       meters: r.meters, revenue: r.revenueTry, consumable: r.consumableTry, subcontract: r.subcontractTry, machine: r.machineTry,
       contribution: r.contributionTry, labor: r.laborTry, overhead: r.overheadTry, net: r.netTry, missing: new Set(r.missing), estimated: r.subcontractEstimated,
       ...(r.directExpenseTry ? { direct: r.directExpenseTry } : {}),

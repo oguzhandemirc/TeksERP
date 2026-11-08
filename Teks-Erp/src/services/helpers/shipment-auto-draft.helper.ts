@@ -60,6 +60,7 @@ import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { collectShipmentServiceBilling, resolveCustomerServiceBillingTrigger, type ServiceBillingLinkInput } from "./service-billing.helper";
+import type { ServiceDraftWorkRow } from "../service-billing/types";
 import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./../system-setting.service";
 import { isConsignedRoll } from "./stock-ownership.helper";
 
@@ -126,6 +127,8 @@ export interface ShipmentDraftLinesResult {
   warnings: string[];
   /** H7 hizmet faturası açıkken: taslağa bağlanacak işler (kapalıyken alan YOK — yanıt bayt-aynı). */
   serviceLinks?: ServiceBillingLinkInput[];
+  /** F4: hizmet satırlarının iş kırılımı (`ServiceDraftWorkRow`); yalnız iş varsa. */
+  serviceWorks?: ServiceDraftWorkRow[];
   /** H7: sevk brütü (top · metre) — taslak notunda hizmet satırlarının yanında görünür. */
   shipmentGross?: { rollCount: number; meters: string };
 }
@@ -208,6 +211,8 @@ export async function collectShipmentInvoiceDraftLines(
     lines: [...product.lines, ...svc.lines.map((l) => ({ ...l, ...tax }))],
     warnings: [...product.warnings, ...svc.warnings],
     serviceLinks: svc.links,
+    // F4 kırılım (levent sarımı sevk taslağına girmez — yalnız top işleri); boşsa alan yok.
+    ...(svc.works.length > 0 ? { serviceWorks: svc.works } : {}),
   };
 }
 

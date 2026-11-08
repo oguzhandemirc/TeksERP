@@ -41,7 +41,7 @@ function row(p: Partial<Omit<ProfitabilityRow, "meters">> & { meters?: number; c
   const contribution = cons === null || mach === null ? null : D(p.revenue).minus(cons).minus(mach);
   return {
     month: p.month ?? "2023-03", kind: p.kind ?? "INVOICED", invoiceId: `inv-${seq}`, docNo: `HF-${seq}`, linkId: `l-${seq}`,
-    customerId: p.customerId, rollId: `r-${seq}`, serviceItemId: p.serviceItemId, workOrderStepId: null, machineId: p.machineId,
+    customerId: p.customerId, rollId: `r-${seq}`, warpBeamId: null, serviceItemId: p.serviceItemId, workOrderStepId: null, machineId: p.machineId,
     meterBasis: ServiceMeterBasis.OUT, meters: D(p.meters ?? 100), revenueTry: D(p.revenue), consumableTry: cons, subcontractTry: D(0),
     subcontractEstimated: p.subcontractEstimated ?? false, machineAttributed: mach !== null, machineHours: D(1), machineTry: mach,
     contributionTry: contribution, laborTry: D(2), overheadTry: D(0), netTry: contribution === null ? null : contribution.minus(D(2)),

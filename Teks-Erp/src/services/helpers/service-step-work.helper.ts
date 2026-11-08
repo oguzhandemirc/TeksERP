@@ -51,7 +51,7 @@ function stepCategoryOf(step: { requiredCategoryId: string | null; station: { de
 }
 
 /** Eşlemeli süreç türleri: kategori → { kart, ad }. Pasif tür de sayılır (eşleme yaşıyorsa faturalar — fail-closed). */
-async function loadProcessMap(db: Db): Promise<Map<string, { serviceItemId: string; name: string }>> {
+export async function loadProcessMap(db: Db): Promise<Map<string, { serviceItemId: string; name: string }>> {
   const rows = await db.serviceItemProcess.findMany({ select: { categoryId: true, serviceItemId: true, category: { select: { name: true } } } });
   return new Map(rows.map((r) => [r.categoryId, { serviceItemId: r.serviceItemId, name: r.category.name }]));
 }

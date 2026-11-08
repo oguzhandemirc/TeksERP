@@ -9,13 +9,17 @@
 // Ters yol: DRAFT silme → Cascade; iptal → AYNI tx'te damga (iş yeniden faturalanır).
 // İade bağı ÇÖZMEZ (storno ≠ iade).
 // =============================================================================
-import { Currency, InvoiceLineType, Prisma, ServiceMeterBasis, ShipmentStatus, type ServiceQtyUnit } from "@prisma/client";
+import { Currency, InvoiceLineType, Prisma, ServiceBillingSubject, ServiceMeterBasis, ShipmentStatus, type ServiceQtyUnit } from "@prisma/client";
 import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import { findCariAccountForCardTx } from "./finance.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { alreadyBilled, collectRollLineage, findActiveBillingTx, listDirectShipmentServiceRollShipments, listShipmentServiceRollIds, listShipmentServiceRollShipments } from "./service-billing-gate.helper";
 import { resolveServiceItemsForRolls, serviceWorkKey } from "./service-pricing.helper";
+import { toDraftWorkRows } from "./service-draft-works.helper";
+import { collectWindingServiceBilling } from "./service-winding-work.helper";
+import { assertWindingLinksLiveTx, lockWindingBeamsTx } from "./service-winding-link.helper";
+import type { ServiceDraftWorkRow } from "../service-billing/types";
 import { linkBilledQty, SERVICE_QTY_UNIT_LABEL } from "./service-quantity.helper";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger, type loadServiceBillingSettings } from "../system-setting.service";
 
@@ -25,7 +29,10 @@ export type ServiceBillingSettings = Awaited<ReturnType<typeof loadServiceBillin
 
 /** Fatura tx'ine taşınan bağ girdisi (birim fiyat bağ anında donar). */
 export interface ServiceBillingLinkInput {
-  rollId: string;
+  /** ROLL öznesi: işin uygulandığı top; levent (WARP_BEAM) işinde null. */
+  rollId: string | null;
+  /** F4: levent sarım işinin öznesi (yalnız dönem taslağı); yoksa ROLL. */
+  warpBeamId?: string | null;
   workOrderStepId: string | null;
   serviceItemId: string;
   readingId: string | null;
@@ -44,6 +51,8 @@ export interface ServiceBillingDraft {
   lines: Array<{ lineType: typeof InvoiceLineType.SERVICE; itemId: null; serviceItemId: string; description: string; qty: Prisma.Decimal; unit: string; unitPrice: Prisma.Decimal }>;
   links: ServiceBillingLinkInput[];
   warnings: string[];
+  /** F4 kırılım ("satır neden bu miktar") — yanıtlara `serviceWorks` olarak, boşsa alan hiç eklenmez. */
+  works: ServiceDraftWorkRow[];
 }
 
 /** H8b: etkin tetik + kaynağı (müşteri carisinin kendi seçimi mi, fabrika ayarı mı). */
@@ -90,7 +99,7 @@ export async function collectServiceBillingDraft(params: {
   /** K3b: verilirse BÜTÜN okumalar bu istemciden (önizleme kapısı fatura tx'inde, sevk kilidi altında okur). */
   db?: Db;
 }): Promise<ServiceBillingDraft> {
-  if (params.rollIds.length === 0) return { lines: [], links: [], warnings: [] };
+  if (params.rollIds.length === 0) return { lines: [], links: [], warnings: [], works: [] };
   const db = params.db ?? prisma;
   const dispatchDay = params.settings.priceDate === "DISPATCH_DAY";
   const lineage = await collectRollLineage(params.rollIds, db);
@@ -104,6 +113,7 @@ export async function collectServiceBillingDraft(params: {
       missingMeter: params.settings.missingMeter,
       brodeUnit: params.settings.brodeUnit,
       stepWorks: params.settings.stepWorks,
+      weavingWorks: params.settings.weavingWorks,
       priceAsOf: dispatchDay ? params.dispatchedAt ?? new Date() : undefined,
       priceAsOfByRoll: dispatchDay ? params.dispatchedAtByRoll : undefined,
       gramPriceBasis: params.settings.gramPriceBasis,
@@ -135,7 +145,7 @@ export async function collectServiceBillingDraft(params: {
       currency: params.currency,
       serviceAt: w.serviceAt,
     }));
-  return { lines, links, warnings: res.warnings };
+  return { lines, links, warnings: res.warnings, works: await toDraftWorkRows(res.works, db) };
 }
 
 /**
@@ -171,8 +181,9 @@ export function reconcileServiceLinksWithLines<T extends { serviceItemId: string
 /** Kilit sırası ①: bağın dayandığı okumalar — `createDraftFromGoodsReceipts` emsali (kilit → insert → pivot). */
 export async function lockServiceReadingsTx(tx: Tx, links: ServiceBillingLinkInput[]): Promise<void> {
   const ids = [...new Set(links.map((l) => l.readingId).filter((v): v is string => v !== null))].sort();
-  if (ids.length === 0) return;
-  await tx.$queryRaw`SELECT id FROM roll_meter_readings WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE`;
+  if (ids.length > 0) await tx.$queryRaw`SELECT id FROM roll_meter_readings WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE`;
+  // F4 kilit sırası ②: levent sarım bağlarının leventleri (emanet çıkış iptaliyle aynı satır).
+  await lockWindingBeamsTx(tx, links);
 }
 
 /** Kilit sırası ③: bağ insert'i (okuma hâlâ aktif olmalı; aynı iş iki faturaya giremez → 409). */
@@ -185,8 +196,10 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
       throw AppError.conflict("Metre okuması taslak hazırlanırken düzeltildi — taslağı yeniden oluşturun", { code: "SERVICE_READING_CHANGED" });
     }
   }
+  await assertWindingLinksLiveTx(tx, links);
   for (const l of links) {
-    const prior = await findActiveBillingTx(tx, { rollId: l.rollId, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId });
+    const subject = l.warpBeamId ? { warpBeamId: l.warpBeamId } : { rollId: l.rollId };
+    const prior = await findActiveBillingTx(tx, { ...subject, serviceItemId: l.serviceItemId, workOrderStepId: l.workOrderStepId });
     if (prior) throw alreadyBilled(prior.docNo);
   }
   try {
@@ -194,7 +207,9 @@ export async function insertServiceLinksTx(tx: Tx, invoiceId: string, links: Ser
     const res = await tx.serviceBillingLink.createMany({
       data: links.map((l) => ({
         invoiceId,
-        rollId: l.rollId,
+        subjectKind: l.warpBeamId ? ServiceBillingSubject.WARP_BEAM : ServiceBillingSubject.ROLL,
+        rollId: l.warpBeamId ? null : l.rollId,
+        warpBeamId: l.warpBeamId ?? null,
         workOrderStepId: l.workOrderStepId,
         serviceItemId: l.serviceItemId,
         readingId: l.readingId,
@@ -354,8 +369,16 @@ export async function collectPeriodServiceBilling(params: {
     dispatchedAtByRoll: params.settings.priceDate === "DISPATCH_DAY" ? await mapLineageDispatchedAt(pairs, allShipments) : undefined,
   });
   const billedWhere = rollIds.length === 0 ? null : { rollId: { in: await collectRollLineage(rollIds) }, revokedAt: null };
-  const billedWorkCount = billedWhere ? await prisma.serviceBillingLink.count({ where: billedWhere }) : 0;
+  const rollBilled = billedWhere ? await prisma.serviceBillingLink.count({ where: billedWhere }) : 0;
   // 409 mesajındaki fatura no dönemin KENDİ toplarının bağından (carinin rastgele bağından değil).
-  const billedDocNo = billedWhere && billedWorkCount > 0 ? (await findActiveBillingTx(prisma, billedWhere))?.docNo ?? null : null;
-  return { ...draft, shipments, directShipments, billedWorkCount, billedDocNo };
+  const billedDocNo = billedWhere && rollBilled > 0 ? (await findActiveBillingTx(prisma, billedWhere))?.docNo ?? null : null;
+  // F4: levent sarım işi YALNIZ dönem taslağında (patron kararı); ayar kapalıyken bu kol hiç koşmaz (bayt-aynı).
+  if (!params.settings.weavingWorks) return { ...draft, shipments, directShipments, billedWorkCount: rollBilled, billedDocNo };
+  // Sarımın hizmet anı zaten çıkış (sevk) anıdır ⇒ SERVICE_DAY ile DISPATCH_DAY aynı fiyat anını verir.
+  const winding = await collectWindingServiceBilling({ customerId: params.customerId, currency: params.currency, from: params.from, to: params.to });
+  return {
+    lines: [...draft.lines, ...winding.lines], links: [...draft.links, ...winding.links],
+    warnings: [...new Set([...draft.warnings, ...winding.warnings])], works: [...draft.works, ...winding.works],
+    shipments, directShipments, billedWorkCount: rollBilled + winding.billedCount, billedDocNo: billedDocNo ?? winding.billedDocNo,
+  };
 }
