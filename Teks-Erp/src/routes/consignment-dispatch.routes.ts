@@ -14,6 +14,7 @@ import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondi
 import { createConsignmentDispatch, previewConsignmentDispatch } from "../services/consignment-dispatch/create";
 import { cancelConsignmentDispatch, cancelPreviewConsignmentDispatch } from "../services/consignment-dispatch/cancel";
 import { getConsignmentDispatch, listConsignmentDispatches } from "../services/consignment-dispatch/read";
+import { CANDIDATE_DEFAULT_LIMIT, CANDIDATE_MAX_LIMIT, listConsignmentCandidates } from "../services/consignment-dispatch/candidates";
 
 const router = Router();
 router.use(verifyToken, requireEmanetEnabled);
@@ -49,6 +50,12 @@ const ListQuery = z.object({
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 }).passthrough();
+// Aday listesi: `.strict()` ⇒ tanınmayan parametre 400 (fail-closed).
+const CandidatesQuery = z.object({
+  ownerCustomerId: Id,
+  search: z.string().max(64, "Arama en çok 64 karakter").optional(),
+  limit: z.coerce.number().int().min(1).max(CANDIDATE_MAX_LIMIT).default(CANDIDATE_DEFAULT_LIMIT),
+}).strict();
 const STATUSES = ["ACTIVE", "CANCELLED", "ALL"] as const;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -157,6 +164,29 @@ router.post("/", requireAnyPermission("consignment:write", "mobile:depo"), wrap(
 router.post("/preview", requireAnyPermission("consignment:write", "mobile:depo"), wrap(async (req) => {
   const body = parse(PreviewBody, req.body);
   return { status: 200, body: { success: true, data: await previewConsignmentDispatch(body) } };
+}));
+
+/**
+ * @openapi
+ * /api/consignment-dispatches/candidates:
+ *   get:
+ *     tags: [Consignment]
+ *     summary: Sahibe çıkabilecek leventler (READY) + depo bakiyeli lotlar — seçilebilirlik oluşturla aynı yüklem
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: ownerCustomerId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: search, schema: { type: string, maxLength: 64 }, description: "Levent no / çözgü · lot no / iplik kodu-adı" }
+ *       - { in: query, name: limit, schema: { type: integer, maximum: 100, default: 50 }, description: "Tür başına satır tavanı" }
+ *     responses:
+ *       200: { description: "{ success, data: { ownerCustomer, modules, beams, yarns, truncated } }" }
+ *       400: { description: Tanınmayan/geçersiz parametre (VALIDATION_ERROR) }
+ *       403: { description: Emanet kapalı (MODULE_DISABLED) ya da consignment:write / mobile:depo yok }
+ *       404: { description: Sahip müşteri yok (OWNER_CUSTOMER_INVALID) }
+ */
+// `/:id`ten ÖNCE kalmalı — yoksa "candidates" kimlik diye okunur.
+router.get("/candidates", requireAnyPermission("consignment:write", "mobile:depo"), wrap(async (req) => {
+  const q = parse(CandidatesQuery, req.query);
+  return { status: 200, body: { success: true, data: await listConsignmentCandidates({ ownerCustomerId: q.ownerCustomerId, search: q.search?.trim() || undefined, limit: q.limit }) } };
 }));
 
 /**
