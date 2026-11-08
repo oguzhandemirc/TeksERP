@@ -558,7 +558,7 @@ async function main() {
       file: "Teks-Erp/src/services/reports/semantik/calistirici.ts",
       needle: "readReportsStatementTimeoutSec",
     },
-    // ⚠️ FEATURE FLAG DEĞİL — makinenin KİMLİĞİ (`system-setting.service.ts:455`
+    // ⚠️ FEATURE FLAG DEĞİL — makinenin KİMLİĞİ (`system-setting/keys.ts` SYSTEM_INSTALLATION_ID
     // başlığı bunu açıkça yazıyor: "`test_feature_flag_contract` bunu görmez
     // (görmemeli)"). Yazarın niyeti muafiyetti, muaf SATIRI eklenmemişti; bu
     // yüzden §11 bugüne kadar kırmızı kaldı (2026-09-01'de `origin/adnansahin`

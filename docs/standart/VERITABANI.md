@@ -128,7 +128,7 @@ Bunlar ölçüldü, kapatılmadı; her biri ayrı bir iştir. Tekrarlanmazlar �
 
 - **5 index'siz domain FK** ([DB-12] ihlali): `schema.prisma:3702` `SubcontractorDirectShipAllocation.dispatchId` · `:3747` `DirectShipment.branchId` · `:4529` `Sack.branchId` · `:5983` `WarehouseMovement.shipmentId` · `:5984` `WarehouseMovement.rollReturnId`. Dev DB'de ilgili tablolar 0–353 satır. ⚠️ 2026-09-05'te KAPANDI (`20260905140000_indexsiz_domain_fk`). Kurulum penceresinin ne kadar uzadığı ölçülmedi ([DB-29b]) ama bu bir ENGEL DEĞİL: migration pm2 durdurulduktan sonra koşar, kilit kimseyi bloklamaz.
 - **10 model `updatedAt`'siz ama kodda update ediliyor** ([DB-04] ihlali): `rollOperation` · `subcontractorDispatchItem` · `rollVariance` · `sackTagAssignment` · `userRecoveryCode` · `itemAllowedProperty` · `itemAllowedColor` · `rollProperty` · `importRun` · `yarnMovement` (satır sayıları `olcum/faz0-acik-olcumler.json` › `M_01`).
-- **`system_logs.newData ->> 'event'` sorgusu GIN'siz** (`inventory.service.ts:2509`): jsonb GIN sayısı 0, tablo 24.482 satır — vardiya dışı iş.
+- **`system_logs.newData ->> 'event'` sorgusu GIN'siz** (o günkü `inventory.service.ts` `TAMBUR_UNDO%` sorgusu; 2026-11-08'de src'de bu sorgu yok — madde bayat): jsonb GIN sayısı 0, tablo 24.482 satır — vardiya dışı iş.
 - **Şema dışı kalan devralınanlar:** `Roll` 554 satır ve `User` 187 satır (§13 sınırının üstünde) · `PermissionCategory` küçük-harf enum · `endpoint_latency_daily` tekil `@@map`.
 
 ## 13 · Boyut

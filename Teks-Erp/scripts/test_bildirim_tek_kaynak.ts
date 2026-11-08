@@ -17,7 +17,7 @@
 // DB GEREKTİRMEZ.
 //
 // NEGATİF SONDA (2026-10-24, sha256 ile birebir geri alındı): `services/order.service.ts`e
-// `tx.notificationOutbox.create(...)` eklendi ⇒ yalnız §1 ❌ (13 ✅ / 1 ❌, `order.service.ts:3795`);
+// `tx.notificationOutbox.create(...)` eklendi ⇒ yalnız §1 ❌ (13 ✅ / 1 ❌, o günkü tek dosya `order.service.ts`; aile bugün `services/order/`);
 // ayrıca §6 sondaları her koşumda.
 // (2026-10-25, N4-MOTOR) `resolvePreference`'ın başına görme dışı ifade eklendi ⇒ yalnız §4d ❌ (16 ✅ / 1 ❌); md5 ile geri alındı.
 // =============================================================================
