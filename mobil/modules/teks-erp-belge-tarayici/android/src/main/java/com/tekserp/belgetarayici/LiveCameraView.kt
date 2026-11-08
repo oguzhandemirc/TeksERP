@@ -35,7 +35,9 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -56,6 +58,11 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     scaleType = PreviewView.ScaleType.FIT_CENTER
   }
   private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+  // release() havuzu kapattıktan sonra gelen geri çağrı (okuyucu kapanınca iptal edilen görev, geç fotoğraf) havuza
+  // atılamaz; RejectedExecutionException ana iş parçacığında uygulamayı düşürüyordu → kapalıysa yerinde koştur.
+  private val lateSafeExecutor = Executor { r ->
+    try { analysisExecutor.execute(r) } catch (_: RejectedExecutionException) { r.run() }
+  }
   private val mainExecutor = ContextCompat.getMainExecutor(context)
   private var recognizer: TextRecognizer? = null
   private val stability = FrameStability()
@@ -254,7 +261,7 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
           readerErrorSent = true
           emitError("READER_FAILED", "Metin okunamadı (${e.javaClass.simpleName})")
         }
-        .addOnCompleteListener(analysisExecutor) {
+        .addOnCompleteListener(lateSafeExecutor) {
           proxy.close()
           reading.set(false)
         }
@@ -280,7 +287,7 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     val file = File(dir, "${LiveTuning.CAPTURE_PREFIX}${UUID.randomUUID()}.jpg")
     capture.takePicture(
       ImageCapture.OutputFileOptions.Builder(file).build(),
-      analysisExecutor,
+      lateSafeExecutor,
       object : ImageCapture.OnImageSavedCallback {
         override fun onImageSaved(output: ImageCapture.OutputFileResults) {
           try {
