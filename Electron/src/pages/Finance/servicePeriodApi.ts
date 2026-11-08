@@ -16,7 +16,8 @@ export interface ServicePeriodPreview {
   workCount: number;
   alreadyBilledWorkCount: number;
   totalMeters: string;
-  lines: Array<{ itemId: string; description: string; qty: string; unit: string; unitPrice: string; amount: string }>;
+  /** D1c: `lineType`=SERVICE + `serviceItemId`; `itemId` eski panel aynası (= serviceItemId). */
+  lines: Array<{ lineType?: "SERVICE"; serviceItemId?: string; itemId: string; description: string; qty: string; unit: string; unitPrice: string; amount: string }>;
   subtotal: string;
   periodClosed: string | null;
   warnings: string[];

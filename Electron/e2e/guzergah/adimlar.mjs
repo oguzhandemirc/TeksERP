@@ -225,9 +225,9 @@ export const ADIMLAR = [
   },
   {
     id: "B2", rol: "P", gerektirir: [],
-    yol: "Tanımlar → Ürün Kataloğu → Ürünler → Yeni Ürün", rota: "definitions/items",
+    yol: "Tanımlar → Ürün Kataloğu → Ürün Kartları → Yeni Ürün", rota: "definitions/items",
     async yap({ git, tikla, yaz, sec, diyalog, gor, page }) {
-      await git("Ürünler");
+      await git("Ürün Kartları");
       const urunEkle = async (ad, kod, tip, denye) => {
         // ⚠️ Güzergâh "Yeni Ürün" der, ekrandaki düğme "Yeni"dir (diyalog başlığı "Yeni Ürün") — belge notu.
         await tikla("Yeni", { exact: true });

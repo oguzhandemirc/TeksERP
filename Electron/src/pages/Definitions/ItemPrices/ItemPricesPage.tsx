@@ -11,6 +11,9 @@
 // fiyat tablosu olması gerekir. Bu yüzden liste, fiyatı olmayan kalemleri
 // göstermez — ve bunu ekranda SÖYLER, yoksa kullanıcı kalemin silindiğini sanır.
 //
+// KONU İKİ TABLODA (D2): ürün kartı `items`, hizmet kartı `service_items`. Seçici türe göre ayrı modal açar;
+// kartın adı/birimi doğru uçtan okunur (`priceSubject.ts`). Fiyat uçları konu kimliğini iki tabloda çözer.
+//
 // ⚠️ ARAMA SUNUCUDA. Liste sayfalıdır; istemcide süzmek yalnız o anki sayfayı
 // süzer ve kullanıcı "kayıt yok" sanar — oysa kayıt sonraki sayfadadır.
 // =============================================================================
@@ -23,11 +26,12 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
+import { serviceItemService } from "@/pages/Definitions/Services/service";
 import { listItemPrices, type ItemPriceRow } from "./service";
+import { priceSubjectOfRow, type PriceSubject, type PriceSubjectKind } from "./priceSubject";
+import { ItemPricesSubjectBar } from "./ItemPricesSubjectBar";
 import { isDefaultRow } from "./prices";
 import { ItemPricesPanel } from "./ItemPricesPanel";
 import { useItemPricesAccess } from "./useItemPricesAccess";
@@ -35,7 +39,7 @@ import { useItemPricesAccess } from "./useItemPricesAccess";
 const FINDER_PAGE_SIZE = 100;
 
 interface ItemBucket {
-  itemId: string;
+  subject: PriceSubject;
   label: string;
   defaults: number;
   exceptions: number;
@@ -52,7 +56,7 @@ function bucketByItem(rows: ItemPriceRow[]): ItemBucket[] {
   const map = new Map<string, ItemBucket>();
   for (const r of rows) {
     const label = r.item ? `${r.item.code} — ${r.item.name}` : "Kalem (kaydı okunamadı)";
-    const b = map.get(r.itemId) ?? { itemId: r.itemId, label, defaults: 0, exceptions: 0 };
+    const b = map.get(r.itemId) ?? { subject: priceSubjectOfRow(r), label, defaults: 0, exceptions: 0 };
     if (isDefaultRow(r)) b.defaults += 1;
     else b.exceptions += 1;
     map.set(r.itemId, b);
@@ -62,15 +66,19 @@ function bucketByItem(rows: ItemPriceRow[]): ItemBucket[] {
 
 export function ItemPricesPage() {
   const access = useItemPricesAccess();
+  const [kind, setKind] = useState<PriceSubjectKind>("PRODUCT");
   const [itemId, setItemId] = useState<string | null>(null);
+  const pick = (s: PriceSubject) => {
+    setKind(s.kind);
+    setItemId(s.id);
+  };
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  // Seçilen kalemin kimliği (kod/ad/birim) — panel başlığı ve "1 MT fiyatı"
-  // cümlesi için. ReferenceSelect yalnız id döndürür.
+  // Seçilen kartın kimliği (kod/ad/birim) — panel başlığı ve "1 MT fiyatı" cümlesi için; tür hangi uçsa oradan.
   const itemQ = useQuery({
-    queryKey: ["items", "detail", itemId],
-    queryFn: () => itemService.getById(itemId as string),
+    queryKey: [kind === "SERVICE" ? "service-items" : "items", "detail", itemId],
+    queryFn: () => (kind === "SERVICE" ? serviceItemService.getById(itemId as string) : itemService.getById(itemId as string)),
     enabled: Boolean(itemId) && access.visible,
   });
   const item = itemQ.data?.data ?? null;
@@ -93,26 +101,15 @@ export function ItemPricesPage() {
         description="Kalemin alış/satış fiyatı: kart varsayılanı herkese, müşteri istisnası yalnız o müşteriye uygulanır. Fatura satırında fiyat bu sıraya göre çözülür."
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-        <span className="text-xs text-muted-foreground">Kalem</span>
-        <div className="w-96">
-          <ReferenceSelect<Item>
-            value={itemId}
-            onChange={setItemId}
-            service={itemService}
-            queryKey="items"
-            getLabel={(i) => `${i.code} — ${i.name}`}
-            placeholder="Kalem ara (kod veya ad)…"
-            nullable
-            noneLabel="— Kalem seçilmedi"
-          />
-        </div>
-        {itemId && (
-          <Button variant="ghost" size="sm" onClick={() => setItemId(null)}>
-            Başka kalem seç
-          </Button>
-        )}
-      </div>
+      <ItemPricesSubjectBar
+        kind={kind}
+        id={itemId}
+        onKindChange={(k) => {
+          setKind(k);
+          setItemId(null);
+        }}
+        onIdChange={setItemId}
+      />
 
       <PageBody className="p-6">
         {access.isLoading ? (
@@ -127,7 +124,7 @@ export function ItemPricesPage() {
             Kalem fiyatlarını görmek için <strong>item:read</strong> yetkisi gerekir.
           </Callout>
         ) : itemId ? (
-          <ItemPricesPanel itemId={itemId} itemLabel={itemLabel} unit={item?.unit ?? null} isService={item?.itemType === "SERVICE"} />
+          <ItemPricesPanel itemId={itemId} itemLabel={itemLabel} unit={item?.unit ?? null} isService={kind === "SERVICE"} />
         ) : (
           <div className="space-y-4">
             <div className="relative w-96">
@@ -163,9 +160,9 @@ export function ItemPricesPage() {
               <div className="space-y-2">
                 {buckets.map((b) => (
                   <button
-                    key={b.itemId}
+                    key={b.subject.id}
                     type="button"
-                    onClick={() => setItemId(b.itemId)}
+                    onClick={() => pick(b.subject)}
                     className="flex w-full items-center justify-between gap-3 rounded-md border px-4 py-3 text-left text-sm transition-colors hover:bg-muted/50"
                   >
                     <span className="min-w-0 truncate font-medium">{b.label}</span>

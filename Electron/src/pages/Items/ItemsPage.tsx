@@ -26,7 +26,7 @@ import {
 } from "./itemsFilters";
 import type { Item } from "./types";
 
-// "Ürünler" (2026-09-17): aynı `Item` tablosunda kumaş · iplik · sarf birlikte; sayfa adı
+// "Ürün Kartları": aynı `Item` tablosunda kumaş · iplik · sarf birlikte (hizmet kartı ayrı tablo); sayfa adı
 // tür ayrımını taşımaz, tür alanı/süzgeci taşır. Süzgeç planı `itemsFilters.ts`.
 export function ItemsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -68,8 +68,8 @@ export function ItemsPage() {
   return (
     <>
     <CrudPage<Item>
-      title="Ürünler"
-      description="Ürün kataloğu (kumaş · iplik · sarf) — izinli renk ve özellik listesi opsiyoneldir. Hizmetler kendi ekranındadır (Tanımlar › Hizmetler)."
+      title="Ürün Kartları"
+      description="Ürün kataloğu (kumaş · iplik · sarf) — izinli renk ve özellik listesi opsiyoneldir. Hizmetler kendi ekranındadır (Tanımlar › Hizmet Kartları)."
       entityName="Ürün"
       mergeEntity="item"
       importEntity="item"

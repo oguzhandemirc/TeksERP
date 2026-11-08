@@ -1,5 +1,5 @@
-// Hizmet kartı — sade form (K3, 2026-11-06). Hizmet de bir `Item`dır (`itemType: SERVICE`); kumaşa özgü
-// alanlar (denye, çözgü/atkı kartı, izinli renk/özellik) burada YOK. Kod kuralı Ürünler formuyla aynı.
+// Hizmet kartı — sade form. Kart ayrı tabloda (`service_items`, D1b); kumaşa özgü alanlar (denye, çözgü/atkı
+// kartı, izinli renk/özellik) YOK. Boş kod → sunucu HZM-NNNNNN verir; STK-/HZM- öneki elle yazılamaz (sunucu da reddeder).
 import { z } from "zod";
 import { ITEM_UNIT_CODES } from "@/lib/item-unit";
 
@@ -8,7 +8,7 @@ const codeSchema = z
   .trim()
   .max(32, "Kod en fazla 32 karakter olabilir")
   .regex(/^[A-Za-z0-9_-]*$/, "Kod sadece harf, rakam, tire (-) ve alt çizgi (_) içerebilir")
-  .refine((v) => !/^stk-/i.test(v), "STK- öneki otomatik kodlara ayrılmıştır — boş bırakın, sistem versin");
+  .refine((v) => !/^(stk|hzm)-/i.test(v), "STK- ve HZM- önekleri otomatik kodlara ayrılmıştır — boş bırakın, sistem versin");
 
 export const serviceFormSchema = z.object({
   code: codeSchema,
@@ -24,9 +24,9 @@ export type ServiceFormValues = z.infer<typeof serviceFormSchema>;
 
 export const serviceFormDefaults: ServiceFormValues = { code: "", name: "", unit: "MT" };
 
-/** Yeni kayıtta tür SERVICE sabittir; düzenlemede kod ve tür gönderilmez (backend kodu korur). */
+/** Gövde `.strict()` (yalnız code · name · unit · isActive): tür alanı YOK; düzenlemede kod gönderilmez (sunucu korur). */
 export function servicePayload(v: ServiceFormValues, isEdit: boolean) {
   const base = { name: v.name.trim(), unit: v.unit };
   if (isEdit) return base;
-  return { ...base, itemType: "SERVICE" as const, ...(v.code.trim() ? { code: v.code.trim() } : {}) };
+  return { ...base, ...(v.code.trim() ? { code: v.code.trim() } : {}) };
 }

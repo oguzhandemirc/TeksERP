@@ -9,6 +9,7 @@ import { partnerRoleText } from "@/lib/partnerRoles";
 // gecikmiş, listede değil" tutarsızlığının kapısını açardı.
 import { isOverdue, toKurus } from "./Allocations/allocationMath";
 import { PICKER_MAX_PAGE_SIZE } from "@/lib/picker-loader";
+import type { InvoiceLineType } from "./invoiceLineSubject";
 
 export type Currency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
 export type InvoiceType = "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN";
@@ -288,7 +289,10 @@ export interface InvoiceLineRow {
   withholdingRate: number;
   lineTotal: number;
   vatAmount: number;
+  /** D1c satır konusu. Hizmet satırında `item` eski panel için hizmetin AYNASIDIR — kart `serviceItem`'dadır. */
+  lineType?: InvoiceLineType;
   item: { id: string; code: string; name: string } | null;
+  serviceItem?: { id: string; code: string; name: string; unit: string } | null;
 }
 
 /**
@@ -573,7 +577,10 @@ export async function listInvoices(params: {
 }
 
 export interface InvoiceLineInput {
+  /** D1c: panel her satırda AÇIKÇA gönderir (PRODUCT → itemId, SERVICE → serviceItemId, TEXT → ikisi null). */
+  lineType?: InvoiceLineType;
   itemId?: string | null;
+  serviceItemId?: string | null;
   description: string;
   qty: number;
   unit?: string;
@@ -627,7 +634,11 @@ export async function getShipmentInvoiceDraftLines(shipmentId: string) {
 /** Uç yanıtının gövdesi — Decimal alanlar JSON'da STRING gelir. */
 export interface ShipmentInvoiceDraftLines {
   lines: Array<{
-    itemId: string;
+    /** Ürün satırında ürün kartı; hizmet satırında hizmetin eski-panel aynası. */
+    itemId: string | null;
+    /** Yalnız hizmet satırı taşır (D1c). */
+    lineType?: InvoiceLineType;
+    serviceItemId?: string;
     description: string;
     qty: number | string;
     unit: string;

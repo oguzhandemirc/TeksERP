@@ -52,6 +52,7 @@ import { allocationSourceOf, paidDriftK, sumAllocationsK } from "./invoiceDetail
 // Tarih biçimi TEK yerden: üçüncü bir `toLocaleDateString` kopyası, bir gün
 // birinin "saat de yazalım" demesiyle ekranlar arası ayrışmaya döner.
 import { fmtDate, fmtDueDate } from "./Cheques/dates";
+import { lineCardLabel } from "./invoiceLineSubject";
 
 interface Props {
   invoiceId: string;
@@ -345,13 +346,8 @@ export function InvoiceDetailDialog({
                           <td className="px-3 py-2 text-xs text-muted-foreground">{l.lineNo}</td>
                           <td className="px-3 py-2">
                             <div>{l.description}</div>
-                            {/* Ürün bağı varsa kod ikinci satırda — açıklama
-                                serbest metindir ve ürünü tanımlamak zorunda değil. */}
-                            {l.item && (
-                              <div className="text-xs text-muted-foreground">
-                                {l.item.code} · {l.item.name}
-                              </div>
-                            )}
+                            {/* Kart bağı (ürün ya da hizmet) varsa ikinci satırda — açıklama serbest metindir. */}
+                            {lineCardLabel(l) && <div className="text-xs text-muted-foreground">{lineCardLabel(l)}</div>}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
                             {Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {l.unit}

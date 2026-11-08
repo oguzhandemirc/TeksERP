@@ -3,22 +3,21 @@ import { buildQueryString } from '../utils/queryBuilder';
 import type { ApiResponse, PaginatedResponse, QueryParams } from '../types/api';
 import type { Item } from '../types/models';
 
-/** Backend `ItemType` enum'unun aynası. Birim BUNDAN türer, ayrıca sorulmaz. */
-export type ItemType = 'FABRIC' | 'YARN' | 'CONSUMABLE' | 'SERVICE';
+/** Ürün kartı türleri (backend `ItemType`). Hizmet kartı ayrı tabloda (`/api/service-items`), sahada okunmaz.
+ *  Birim BUNDAN türer, ayrıca sorulmaz. */
+export type ItemType = 'FABRIC' | 'YARN' | 'CONSUMABLE';
 
 /** Electron `unitForItemType` ile birebir — kullanıcı düzenleyemez, gösterilir. */
 export const UNIT_FOR_ITEM_TYPE: Record<ItemType, string> = {
   FABRIC: 'MT',
   YARN: 'KG',
   CONSUMABLE: 'ADET',
-  SERVICE: 'MT',
 };
 
 export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
   FABRIC: 'Kumaş',
   YARN: 'İplik',
   CONSUMABLE: 'Sarf Malzeme',
-  SERVICE: 'Hizmet',
 };
 
 const FORM_ITEM_TYPES: ItemType[] = ['FABRIC', 'YARN', 'CONSUMABLE'];

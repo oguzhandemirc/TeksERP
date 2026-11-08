@@ -10,7 +10,6 @@
 // =============================================================================
 import { ITEM_TYPE_FILTER_OPTIONS, colorAxisApplies, type ItemTypeFilter } from "@/components/forms/itemPicker";
 import type { CatalogOption } from "@/components/forms/useItemPickerData";
-import { itemTypeLabels } from "@/types/enums";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 
 export type ItemStatusFilter = "active" | "phaseOut" | "inactive" | "pending" | "all";
@@ -61,8 +60,8 @@ export interface ItemUrlFilterDef {
 }
 
 export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
-  // "Hizmet" (H6) YALNIZ bu listede: ortak seçenek listesi stok seçicileriyle paylaşılır, oraya sızmaz.
-  { key: "itemType", label: "Tür", options: [...ITEM_TYPE_FILTER_OPTIONS, { value: "SERVICE", label: itemTypeLabels.SERVICE }] },
+  // Hizmet kartları ayrı tabloda (`service_items`, Tanımlar › Hizmet Kartları) — Tür listesinde "Hizmet" YOK.
+  { key: "itemType", label: "Tür", options: ITEM_TYPE_FILTER_OPTIONS },
   { key: "unit", label: "Birim", options: [{ value: ITEM_FILTER_ALL, label: "Tümü" }, ...ITEM_UNIT_CODES.map((u) => ({ value: u, label: ITEM_UNIT_LABEL[u] }))] },
 ];
 
@@ -70,7 +69,7 @@ export const itemUrlFilterParam = (key: ItemUrlFilterKey) => `filter[${key}]`;
 
 /**
  * K3 (2026-11-06): Tür "Tümü" iken hizmet kalemleri listelenmez — stok türleri CSV olarak SUNUCUYA gider
- * (`buildWhereClause` CSV → `in`). Hizmetler kendi ekranında; Tür = Hizmet seçilince bu varsayılan eklenmez.
+ * (`buildWhereClause` CSV → `in`). Hizmet kartları ayrı tabloda (`/api/service-items`); Tür seçilince varsayılan eklenmez.
  */
 export function itemTypeDefaultFilter(sp: URLSearchParams): Record<string, string> {
   if (sp.has(itemUrlFilterParam("itemType"))) return {};

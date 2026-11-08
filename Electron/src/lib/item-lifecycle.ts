@@ -56,6 +56,17 @@ export interface ItemLifecyclePreview {
   similarActive: Array<{ id: string; code: string; name: string }>;
 }
 
+/**
+ * Kart yaşam döngüsü uçları — ürün kartı (`/api/items`) ve hizmet kartı (`/api/service-items`) AYNI şekli konuşur;
+ * diyalog ve rozet hangi tabloya gittiğini bu nesneden öğrenir. `queryRoot` = liste önbellek kökü (geçiş sonrası tazelenir).
+ */
+export interface CardLifecycleApi {
+  queryRoot: string;
+  lifecyclePreview: (id: string, to: ItemLifecycleStatus) => Promise<{ data?: ItemLifecyclePreview }>;
+  transitionLifecycle: (id: string, to: ItemLifecycleStatus, reason: string | null) => Promise<{ message?: string }>;
+  lifecycleSummary: (ids: string[]) => Promise<{ data?: Array<{ id: string; liveTotal: number; rolls: number }> }>;
+}
+
 export interface LifecycleChoice {
   to: ItemLifecycleStatus;
   label: string;

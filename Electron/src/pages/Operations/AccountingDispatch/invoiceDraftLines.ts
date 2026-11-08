@@ -22,10 +22,15 @@
 // Bekçi: `invoiceDraftLines.test.ts`.
 // =============================================================================
 import type { Currency } from "@/pages/Finance/service";
+import { lineSubjectFrom, type InvoiceLineSubject, type InvoiceLineType } from "@/pages/Finance/invoiceLineSubject";
 
 /** Backend `ShipmentDraftLine` — Decimal alanlar string DE gelebilir. */
 export interface ShipmentDraftLineDto {
-  itemId: string;
+  /** Ürün satırında ürün kartı; hizmet satırında hizmetin eski-panel aynası (D1c). */
+  itemId: string | null;
+  /** Yalnız hizmet satırı taşır: `SERVICE` + `serviceItemId`. Ürün satırında yok (yanıt bayt-aynı). */
+  lineType?: InvoiceLineType;
+  serviceItemId?: string;
   description: string;
   qty: number | string;
   unit: string;
@@ -44,8 +49,7 @@ export interface ShipmentDraftLinesDto {
 }
 
 /** Fatura formunun beklediği ön-dolum satırı (`InvoicePrefill["lines"][number]`). */
-export interface DraftPrefillLine {
-  itemId: string | null;
+export interface DraftPrefillLine extends InvoiceLineSubject {
   description: string;
   qty: number;
   unit: string;
@@ -61,12 +65,12 @@ function num(v: number | string | null | undefined): number {
 /**
  * Uç yanıtı → form ön-dolumu.
  *
- * ⚠️ `itemId` TAŞINIR: fiyat önerisi ve açıklama ön-dolumu ona bağlı. Düşürmek,
- * kullanıcı fiyatı silip yeniden istediğinde öneriyi ölü bırakırdı.
+ * ⚠️ KONU TAŞINIR (`lineType` · `itemId` · `serviceItemId`): fiyat önerisi ve açıklama ön-dolumu ona bağlı;
+ * hizmet satırı SERVICE olarak açılır (ürün sanılırsa backend 400 `INVOICE_LINE_SUBJECT_MISMATCH` verir).
  */
 export function toPrefillLines(dto: ShipmentDraftLinesDto | null | undefined): DraftPrefillLine[] {
   return (dto?.lines ?? []).map((l) => ({
-    itemId: l.itemId || null,
+    ...lineSubjectFrom({ lineType: l.lineType, itemId: l.itemId || null, serviceItemId: l.serviceItemId ?? null }),
     description: l.description,
     qty: num(l.qty),
     // Fallback YOK: birim miktarın kaynağını izler ve sunucu her satırda gönderir.

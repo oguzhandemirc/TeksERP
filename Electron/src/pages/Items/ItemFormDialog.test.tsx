@@ -106,3 +106,13 @@ describe("ItemFormDialog — En (cm) yalnız Kalite Güvence açıkken (K4P)", (
     expect(screen.queryByLabelText(/En \(cm\)/)).toBeNull();
   });
 });
+
+describe("ItemFormDialog — hizmet kartı ayrı tabloda (D2)", () => {
+  it("⭐ Tip seçenekleri yalnız Kumaş · İplik · Sarf — 'Hizmet' YOK (Tanımlar › Hizmet Kartları)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} />);
+    await user.click(screen.getByRole("combobox"));
+    const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(names).toEqual(["Kumaş", "İplik", "Sarf Malzeme"]);
+  });
+});

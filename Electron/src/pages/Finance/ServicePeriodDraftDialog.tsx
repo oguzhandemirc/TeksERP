@@ -127,7 +127,7 @@ function PreviewBody({ preview }: { preview: ServicePeriodPreview }) {
             </thead>
             <tbody>
               {preview.lines.map((l) => (
-                <tr key={`${l.itemId}:${l.unitPrice}`} className="border-t">
+                <tr key={`${l.serviceItemId ?? l.itemId}:${l.unitPrice}`} className="border-t">
                   <td className="py-1 pr-2">{l.description}</td>
                   <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {l.unit}</td>
                   <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{money(l.unitPrice, preview.currency)}</td>

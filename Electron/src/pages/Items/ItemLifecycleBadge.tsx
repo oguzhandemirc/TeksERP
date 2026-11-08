@@ -6,12 +6,13 @@
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { ITEM_LIFECYCLE_LABEL, itemLifecycleOf } from "@/lib/item-lifecycle";
-import { itemService } from "./service";
-import type { Item } from "./types";
+import { ITEM_LIFECYCLE_LABEL, itemLifecycleOf, type CardLifecycleApi, type ItemLifecycleStatus } from "@/lib/item-lifecycle";
+import { itemLifecycleApi } from "./itemLifecycleApi";
+
+type LifecycleCard = { id: string; lifecycleStatus?: ItemLifecycleStatus | null; isActive?: boolean };
 
 /** Rozet metni — Excel/PDF dışa aktarımı da bunu yazar (kalan sayı olmadan). */
-export const itemLifecycleExportText = (it: Item): string => ITEM_LIFECYCLE_LABEL[itemLifecycleOf(it)];
+export const itemLifecycleExportText = (it: LifecycleCard): string => ITEM_LIFECYCLE_LABEL[itemLifecycleOf(it)];
 
 export function phaseOutBadgeText(summary: { liveTotal: number; rolls: number } | undefined): string {
   if (!summary) return "Tükenene kadar";
@@ -19,10 +20,10 @@ export function phaseOutBadgeText(summary: { liveTotal: number; rolls: number } 
   return summary.rolls > 0 ? `Tükenene kadar · ${summary.rolls} top kaldı` : `Tükenene kadar · ${summary.liveTotal} kayıt kaldı`;
 }
 
-function PhaseOutBadge({ id }: { id: string }) {
+function PhaseOutBadge({ id, api }: { id: string; api: CardLifecycleApi }) {
   const q = useQuery({
-    queryKey: ["items", "lifecycle-summary", id],
-    queryFn: () => itemService.lifecycleSummary([id]),
+    queryKey: [api.queryRoot, "lifecycle-summary", id],
+    queryFn: () => api.lifecycleSummary([id]),
     staleTime: 30_000,
   });
   return (
@@ -32,8 +33,9 @@ function PhaseOutBadge({ id }: { id: string }) {
   );
 }
 
-export function ItemLifecycleBadge({ item }: { item: Item }) {
+/** `api` verilmezse ürün kartı; hizmet kartı kendi uçlarını verir (kalan kayıt sayısı o tablodan). */
+export function ItemLifecycleBadge({ item, api = itemLifecycleApi }: { item: LifecycleCard; api?: CardLifecycleApi }) {
   const s = itemLifecycleOf(item);
-  if (s === "PHASE_OUT") return <PhaseOutBadge id={item.id} />;
+  if (s === "PHASE_OUT") return <PhaseOutBadge id={item.id} api={api} />;
   return s === "ACTIVE" ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>;
 }

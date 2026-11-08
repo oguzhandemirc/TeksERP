@@ -3,13 +3,13 @@ import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
-import type { Item } from "@/pages/Items/types";
+import type { ServiceItem } from "./types";
 import { serviceFormDefaults, serviceFormSchema, type ServiceFormValues } from "./schema";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initial?: Item | null;
+  initial?: ServiceItem | null;
   onSubmit: (values: ServiceFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
 }
@@ -27,7 +27,7 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     <EntityFormDialog<ServiceFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Hizmeti Düzenle" : "Yeni Hizmet"}
+      title={initial ? "Hizmet Kartını Düzenle" : "Yeni Hizmet Kartı"}
       schema={serviceFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}
@@ -44,7 +44,7 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               label="Kod"
               htmlFor="code"
               error={form.formState.errors.code}
-              hint="Boş bırakılırsa sistem verir."
+              hint="Boş bırakılırsa sistem verir (HZM-000001…)."
             >
               <Input id="code" placeholder="KURSUN" {...form.register("code")} />
             </FormField>
@@ -56,7 +56,7 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               placeholder="Kurşun dikimi, tambur, brode..."
               {...form.register("name")}
             />
-            <SimilarNamesWarning entity="items" name={form.watch("name") ?? ""} excludeId={initial?.id} />
+            <SimilarNamesWarning entity="service-items" name={form.watch("name") ?? ""} excludeId={initial?.id} />
           </FormField>
           <FormField
             label="Birim"

@@ -15,8 +15,8 @@ export interface ServiceItemOption {
   name: string;
 }
 
-/** Hizmet kalemi seçicisinin sunucu süzgeci: yalnız aktif SERVICE kalemleri. */
-export const SERVICE_ITEM_PICKER_FILTERS = { isActive: "true", itemType: "SERVICE" } as const;
+/** Hizmet kartı seçicisinin sunucu süzgeci (`/api/service-items` — tablo zaten yalnız hizmet): yalnız aktifler. */
+export const SERVICE_ITEM_PICKER_FILTERS = { isActive: "true" } as const;
 
 const norm = (v: string | null | undefined): string | null => (v ? v : null);
 

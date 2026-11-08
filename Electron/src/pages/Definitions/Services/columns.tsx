@@ -4,12 +4,13 @@ import { Table2 } from "lucide-react";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { unitLabel } from "@/lib/item-unit";
 import { ItemLifecycleBadge, itemLifecycleExportText } from "@/pages/Items/ItemLifecycleBadge";
-import type { Item } from "@/pages/Items/types";
+import { serviceItemLifecycleApi } from "./service";
+import type { ServiceItem } from "./types";
 
 /** Satırdan fiyat tablosuna geçiş (`?item=` ile hizmet seçili açılır). */
 export const servicePricesHref = (id: string) => `/definitions/service-prices?item=${encodeURIComponent(id)}`;
 
-export const serviceColumns: ColumnDef<Item>[] = [
+export const serviceColumns: ColumnDef<ServiceItem>[] = [
   {
     accessorKey: "code",
     header: () => <SortableHeader field="code" label="Kod" />,
@@ -25,7 +26,7 @@ export const serviceColumns: ColumnDef<Item>[] = [
     accessorKey: "isActive",
     header: () => <SortableHeader field="isActive" label="Durum" />,
     meta: { exportValue: itemLifecycleExportText },
-    cell: ({ row }) => <ItemLifecycleBadge item={row.original} />,
+    cell: ({ row }) => <ItemLifecycleBadge item={row.original} api={serviceItemLifecycleApi} />,
   },
   {
     id: "prices",
