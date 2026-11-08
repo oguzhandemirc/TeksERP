@@ -44,7 +44,7 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               label="Kod"
               htmlFor="code"
               error={form.formState.errors.code}
-              hint="Boş bırakılırsa sistem verir (HZM-000001…)."
+              hint="Boş bırakılırsa sistem verir."
             >
               <Input id="code" placeholder="KURSUN" {...form.register("code")} />
             </FormField>
