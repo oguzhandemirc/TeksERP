@@ -25,6 +25,7 @@ import { PermissionManagementService } from "../src/services/permission-manageme
 import { RollStatus } from "@prisma/client";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { siparisServisMetni } from "./lib/siparis-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -58,7 +59,7 @@ async function main(): Promise<void> {
   console.log("\n=== §1: sipariş iptali — varsayılan aksiyon izinli listeden türer ===");
   // Saf fonksiyonlar dışa açılmıyor; kaynağı okuyup DAVRANIŞ sözleşmesini
   // ölçüyoruz. Asıl güvence aşağıdaki kombinasyon taramasıdır.
-  const src = readFileSync(join(__dirname, "../src/services/order.service.ts"), "utf8");
+  const src = siparisServisMetni(); // sipariş servisi bölündü (2026-11-08): aile metni (pickDefaultAction order/shared.ts'de)
   const basla = src.indexOf("function pickDefaultAction(");
   const bitis = basla >= 0 ? src.indexOf("\n}", basla) : -1;
   check("§1: pickDefaultAction bulundu (körlük zemini)", basla >= 0 && bitis > basla);

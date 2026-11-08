@@ -239,7 +239,7 @@ async function yollar(): Promise<Yol[]> {
       },
     },
     {
-      ad: "sipariş", politika: `${S}order.service.ts::orderReplay`, alanlar: {
+      ad: "sipariş", politika: `${S}order/create.ts::orderReplay`, alanlar: {
         customerId: tabanla(siparis({}), siparis({ customerId: m2 })),
         branchId: tabanla(siparis({}), siparis({ branchId: sube.id })),
         "satırlar": tabanla(siparis({}), siparis({ lines: [{ itemId: item, quantity: 11 }] })),
@@ -247,7 +247,7 @@ async function yollar(): Promise<Yol[]> {
       },
     },
     {
-      ad: "hızlı sipariş", politika: `${S}order.service.ts::quickOrderReplay`, alanlar: {
+      ad: "hızlı sipariş", politika: `${S}order/quick-order.ts::quickOrderReplay`, alanlar: {
         customerId: (() => { const x = h(); return tabanla(x.ilk, x.tekrar({ customerId: m2 })); })(),
         branchId: (() => { const x = h(); return tabanla(x.ilk, x.tekrar({ branchId: sube.id })); })(),
         lines: (() => { const x = h(); return tabanla(x.ilk, x.tekrar(async () => ({ rollIds: [await top(item, 71)] }))); })(),

@@ -125,6 +125,7 @@ import {
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { isEmriServisDosyasiMi, isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 import { sevkiyatServisDosyasiMi, sevkiyatServisMetni } from "./lib/sevkiyat-servis-kaynak";
+import { siparisServisDosyasiMi, siparisServisMetni } from "./lib/siparis-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -1212,6 +1213,8 @@ async function main(): Promise<void> {
         ? isEmriServisMetni()
         : sevkiyatServisDosyasiMi(e.manualEntry.path)
         ? sevkiyatServisMetni()
+        : siparisServisDosyasiMi(e.manualEntry.path) // sipariş servisi de bölündü (2026-11-08): `order` beyanı cepheyi gösterir
+        ? siparisServisMetni()
         : readFileSync(join(__dirname, "..", "src", e.manualEntry.path), "utf-8");
       if (!govde.includes(`assertManualNumberAllowed("${e.key}"`)) bagsiz.push(e.key);
     }
