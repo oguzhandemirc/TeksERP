@@ -73,13 +73,16 @@ export async function getDispatchFinishingCheck(dispatchId: string, opts: Dispat
   });
 }
 
-interface DispatchRow {
+export interface DispatchRateCodeRow {
   items: { roll: { itemId: string } | null }[];
   workOrder: { targetItemId: string | null; orderLinks: { orderLine: { itemId: string; recipe: { finishingRateCode: string | null } | null } }[] } | null;
 }
 
-/** Sipariş satırı başına (varyant > ürün yapısı) kod; satır yoksa iş emri hedef ürünü, o da yoksa topların ürünü. */
-async function resolveRateCodes(d: DispatchRow): Promise<(string | null)[]> {
+/**
+ * Sipariş satırı başına (varyant > ürün yapısı) kod; satır yoksa iş emri hedef ürünü, o da yoksa topların ürünü.
+ * F6 alış taslağı da AYNI çözümü okur (kabulün İE'si + topları) — kod seçimi tek yerde.
+ */
+export async function resolveRateCodes(d: DispatchRateCodeRow): Promise<(string | null)[]> {
   const links = d.workOrder?.orderLinks ?? [];
   const fallbackItems = d.workOrder?.targetItemId
     ? [d.workOrder.targetItemId]

@@ -415,6 +415,8 @@ export interface FeatureFlags {
   fasonReceiptApplyTargetVariant: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
   fasonShrinkTolerancePct: number;
+  /** F6: fason sevk termininin genel gün sayısı (firma/süreç türü ezer). `0` = termin yok (default; bugünkü). */
+  fasonExpectedReturnDays: number;
   /** Demo kurulumu mu (default FALSE) — `/api/demo/*` senaryo üreticilerini açar. */
   demoModeEnabled: boolean;
   /** Mükerrer paneli: bulanık ad eşleştirme (default TRUE). Kapalıyken yalnız kesin ad + kimlik. */

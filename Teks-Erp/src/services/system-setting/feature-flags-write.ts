@@ -43,7 +43,7 @@ import { readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, re
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
 import { readPartyCodeAuto } from "./production";
 import { readItemPhaseOutNewOrder, readShippingOrderRequirement, readShippingReadyNotifyUnits, resetReadyBaselineOnIncomingDocOpen } from "./shipping";
-import { DEFAULT_FASON_SHRINK_TOLERANCE_PCT } from "./tambur-fason";
+import { DEFAULT_FASON_SHRINK_TOLERANCE_PCT, FASON_EXPECTED_RETURN_DAYS_MAX } from "./tambur-fason";
 import { normalizeTravelerCardConfig } from "./traveler-card";
 import type { SystemSettingService } from "../system-setting.service";
 
@@ -2108,6 +2108,14 @@ export async function setFeatureFlags(
         "Fason kabulünde çekme toleransı (yüzde) — altındaki fark uyarı üretmez",
         userId
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "fasonExpectedReturnDays")) {
+      const v = input.fasonExpectedReturnDays;
+      // `0` = termin yok (varsayılan, bugünkü davranış) — depoda da 0 yazılır, okuyucu "ayar yok" çözer.
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > FASON_EXPECTED_RETURN_DAYS_MAX) {
+        throw AppError.badRequest(`Fason beklenen dönüş süresi 0 ile ${FASON_EXPECTED_RETURN_DAYS_MAX} gün arasında tam sayı olmalı (0 = termin yok)`);
+      }
+      await this.set(SETTING_KEYS.FASON_EXPECTED_RETURN_DAYS, v, "Fason sevk — beklenen dönüş (gün; firma/süreç türü ezer, 0 = termin yok)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "demoModeEnabled")) {
       if (typeof input.demoModeEnabled !== "boolean") {

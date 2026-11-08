@@ -6,7 +6,8 @@
 // SATIŞ: müşteri cari geçersiz kılması ?? genel satış ayarı. ALIŞ (F7, fason planı FK4): KDV hep genel;
 // tevkifat = fason firma carisinin `purchaseWithholding*` geçersiz kılması ?? genel `finance.withholding.purchase.*`
 // (genel YALNIZ fason rolü olan karta — saf iplik/sarf tedarikçisine uydurulmaz; taraf yoksa 0). Kart hem tedarikçi hem
-// fasonsa fatura içeriği ayrılmaz: iplik faturasında da önerilir, muhasebe satırda düzeltir (F6 kabul bağlamını taşır).
+// fasonsa serbest fatura içeriği ayrılmaz (iplik faturasında da önerilir); fason KABULÜNDEN doğan taslak
+// `purchaseContext:"SUBCONTRACT"` taşır → taraf fason sayılır (F6). Bilinmeyen `workOrderId` 404 (sessiz düşme yok).
 // F7b MALZEME: işi YAPAN taraf ana hammaddeyi kendisi verdiyse iş fason sayılmayabilir → tevkifat ÖNERİLMEZ.
 // `WorkOrder.materialProvidedBy` BU FABRİKANIN bakışıdır: satışta yapan biziz (US → öneri kapanır); alışta yapan
 // fasoncudur ve kümede "fasoncu verdi" değeri yok → alış bugünkü gibi (bizim/müşterinin malı fasonda = fason).
@@ -16,6 +17,7 @@
 import { InvoiceType, type MaterialProvider, type Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { readFinanceDefaultVatRate, readFinancePurchaseWithholdingFlags, readFinanceWithholdingFlags, type PurchaseWithholdingFlags, type WithholdingFlags } from "../system-setting.service";
+import { AppError } from "../../utils/app-error";
 import { findCariAccountForCardTx } from "./finance.helper";
 
 /** Carinin geçersiz kılması (NULL = genel ayar). */
@@ -142,7 +144,8 @@ function computePurchaseTaxDefaults(party: PurchaseParty | null, general: Genera
  * Faturanın ön değeri. Taraf `cariId` ya da kart (`customerId`) ile verilir; hesap yoksa (lazy cari) genel
  * ayar. Okuma `db` üzerinden (tx içinden çağrılabilir).
  * F7b bağlamı (opsiyonel): `materialProvidedBy` doğrudan ya da `workOrderId`den okunur (ikisi verilirse doğrudan
- * değer kazanır). Bugün hiçbir taslak yolu İE bağlamı taşımaz — bağlantı F6/hizmet taslağında kurulur.
+ * değer kazanır). Verilen İE yoksa 404 `WORK_ORDER_NOT_FOUND`. `purchaseContext:"SUBCONTRACT"` = fason kabulü
+ * kaynaklı alış (F6): taraf rolüne bakılmadan fason sayılır.
  */
 export async function resolveInvoiceTaxDefaults(
   input: {
@@ -151,6 +154,7 @@ export async function resolveInvoiceTaxDefaults(
     customerId?: string | null;
     workOrderId?: string | null;
     materialProvidedBy?: MaterialProvider | null;
+    purchaseContext?: "SUBCONTRACT" | null;
   },
   db: Pick<typeof prisma, "cariAccount" | "systemSetting" | "customer" | "workOrder"> = prisma,
 ): Promise<InvoiceTaxDefaults> {
@@ -158,7 +162,9 @@ export async function resolveInvoiceTaxDefaults(
   const general = { vatRate: await readFinanceDefaultVatRate(db), ...(await readFinanceWithholdingFlags(db)) };
   if (input.type === InvoiceType.PURCHASE) {
     const purchaseGeneral = { ...general, ...(await readFinancePurchaseWithholdingFlags(db)) };
-    return applyMaterialRule(input.type, material, computeInvoiceTaxDefaults(input.type, null, purchaseGeneral, await resolvePurchaseParty(input, db)));
+    const party = await resolvePurchaseParty(input, db);
+    const scoped = input.purchaseContext === "SUBCONTRACT" ? { override: party?.override ?? null, isSubcontractor: true } : party;
+    return applyMaterialRule(input.type, material, computeInvoiceTaxDefaults(input.type, null, purchaseGeneral, scoped));
   }
   if (input.type !== InvoiceType.SALES) return computeInvoiceTaxDefaults(input.type, null, general);
   let override: CariTaxOverride | null = null;
@@ -170,15 +176,16 @@ export async function resolveInvoiceTaxDefaults(
   return applyMaterialRule(input.type, material, computeInvoiceTaxDefaults(input.type, override, general));
 }
 
-/** F7b bağlamı: doğrudan değer > İE'nin alanı; kuralın etkisiz olduğu kolda (alış) DB okunmaz. */
+/** F7b bağlamı: doğrudan değer > İE'nin alanı. Verilen İE her türde var olmalı (yoksa 404); alanı yalnız satışta etkili. */
 async function resolveMaterialContext(
   input: { type: InvoiceType; workOrderId?: string | null; materialProvidedBy?: MaterialProvider | null },
   db: Pick<typeof prisma, "workOrder">,
 ): Promise<MaterialProvider | null> {
   if (input.materialProvidedBy !== undefined) return input.materialProvidedBy;
-  if (!input.workOrderId || input.type !== InvoiceType.SALES) return null;
+  if (!input.workOrderId) return null;
   const wo = await db.workOrder.findUnique({ where: { id: input.workOrderId }, select: { materialProvidedBy: true } });
-  return wo?.materialProvidedBy ?? null;
+  if (!wo) throw AppError.notFound("İş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
+  return wo.materialProvidedBy ?? null;
 }
 
 const PURCHASE_PARTY_SELECT = {

@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ACTIVE_FINISHING_RATE, COST_PRICE_REVOKE_REASON } from "./helpers/cost-price-validity.helper";
+import { assertServiceItemUsableTx } from "./helpers/item-usage.helper";
 import { PCT_RULE, isUniqueViolation, logStampedVersionAudit, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 
 export const FINISHING_RATE_SELECT = {
@@ -29,6 +30,8 @@ export const FINISHING_RATE_SELECT = {
   createdAt: true,
   createdById: true,
   subcontractor: { select: { id: true, name: true } },
+  serviceItemId: true,
+  serviceItem: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.FinishingRateSelect;
 
 export type FinishingRateRow = Prisma.FinishingRateGetPayload<{ select: typeof FINISHING_RATE_SELECT }>;
@@ -52,6 +55,8 @@ export interface FinishingRateChangeInput {
   pricePerM: unknown;
   typicalShrinkPct?: unknown;
   note?: unknown;
+  /** F6 köprüsü: alış taslağının kalem kartı. undefined = aktif sürümünkü taşınır · null = köprüsüz. */
+  serviceItemId?: string | null;
 }
 
 export async function listFinishingRates(opts: { code?: string; includeRevoked?: boolean }): Promise<FinishingRateRow[]> {
@@ -89,14 +94,26 @@ export async function changeFinishingRate(
   }
 
   const at = new Date();
+  // Köprü kartı kilidi tx'in İLK ifadesi (8030 SHARED → kart FOR SHARE); pasif/bulunamayan kart gövde hatasıdır → 400.
+  const lockServiceItem = async (tx: Prisma.TransactionClient, id: string): Promise<void> => {
+    try {
+      await assertServiceItemUsableTx(tx, id, "DEFINITION");
+    } catch (e) {
+      if (e instanceof AppError && e.statusCode === 409) throw AppError.badRequest(e.message, e.details);
+      throw e;
+    }
+  };
   type Prev = { id: string; pricePerM: Prisma.Decimal; currency: Currency };
   let outcome: { id: string; wrote: boolean; previous: Prev | null };
   try {
     outcome = await prisma.$transaction(async (tx) => {
+      if (input.serviceItemId) await lockServiceItem(tx, input.serviceItemId);
       const current = await tx.finishingRate.findFirst({
         where: { code, ...ACTIVE_FINISHING_RATE },
-        select: { id: true, name: true, subcontractorId: true, basis: true, currency: true, pricePerM: true, typicalShrinkPct: true, note: true },
+        select: { id: true, name: true, subcontractorId: true, basis: true, currency: true, pricePerM: true, typicalShrinkPct: true, note: true, serviceItemId: true },
       });
+      // undefined = mevcut köprü taşınır (eski panel alanı göndermez; fiyat değişimi köprüyü düşürmez).
+      const serviceItemId = input.serviceItemId === undefined ? (current?.serviceItemId ?? null) : input.serviceItemId;
       const same =
         current &&
         current.name === name &&
@@ -105,7 +122,8 @@ export async function changeFinishingRate(
         current.currency === input.currency &&
         current.pricePerM.equals(price) &&
         (current.typicalShrinkPct === null ? shrink === null : shrink !== null && current.typicalShrinkPct.equals(shrink)) &&
-        current.note === note;
+        current.note === note &&
+        current.serviceItemId === serviceItemId;
       if (current && same) return { id: current.id, wrote: false, previous: current };
       if (current) {
         const claim = await tx.finishingRate.updateMany({
@@ -124,6 +142,7 @@ export async function changeFinishingRate(
           pricePerM: price,
           typicalShrinkPct: shrink,
           note,
+          serviceItemId,
           createdAt: at,
           createdById: userId ?? null,
         },
@@ -147,7 +166,7 @@ export async function changeFinishingRate(
       revokeReason: COST_PRICE_REVOKE_REASON.CHANGED,
       rowId: row.id,
       oldData: outcome.previous ? { pricePerM: outcome.previous.pricePerM.toFixed(4), currency: outcome.previous.currency } : null,
-      newData: { code: row.code, name: row.name, basis: row.basis, currency: row.currency, pricePerM: row.pricePerM.toFixed(4) },
+      newData: { code: row.code, name: row.name, basis: row.basis, currency: row.currency, pricePerM: row.pricePerM.toFixed(4), serviceItemId: row.serviceItemId },
     });
   }
   return { row, wrote: outcome.wrote, previousId: outcome.previous?.id ?? null };

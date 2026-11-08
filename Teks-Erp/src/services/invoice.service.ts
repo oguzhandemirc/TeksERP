@@ -892,6 +892,8 @@ export class InvoiceService {
       if (dup) {
         throw AppError.conflict(
           `${label} için zaten bir fatura var: ${dup.docNo} (${dup.status === "DRAFT" ? "draft" : "onaylı"}). Yeni fatura için önce onu iptal edin.`,
+          // F6: fason kabul dalı sözleşmeli kodu taşır (istemci mesaj ayrıştırmasın); diğer kaynaklar bugünkü gibi kodsuz.
+          key === "subcontractorReceiptId" ? { code: "SUBCONTRACTOR_RECEIPT_ALREADY_INVOICED" } : undefined,
         );
       }
     }

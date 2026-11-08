@@ -39,6 +39,8 @@ const dispatchSchema = z.object({
   allowItemOverride: z.boolean().optional(),
   /** Operatör rota-atlama uyarısını bilinçli onayladı (ROUTE_SKIP geçişi). */
   allowRouteSkip: z.boolean().optional(),
+  /** F6: beklenen dönüş (ISO ya da YYYY-AA-GG); yok ⇒ sunucu varsayılanı, null ⇒ termin yok. */
+  expectedReturnAt: z.string().max(40, "Beklenen dönüş tarihi geçersiz").nullable().optional(),
 }).refine((b) => b.rollIds.length > 0 || (b.warpBeamIds?.length ?? 0) > 0 || (b.yarnLines?.length ?? 0) > 0, { message: "En az bir top seçmelisiniz", path: ["rollIds"] });
 
 /** G1 iplik dönüşü — `qtyKg` dönen kg (Σ ≤ giden), `reasonCode` ZORUNLU (katalog `YARN_SUBCONTRACT_RETURN`), depo/lot opsiyonel (varsayılan çıkışınki). */
@@ -71,6 +73,8 @@ const bulkDispatchSchema = z.object({
   instruction: z.string().max(1000).optional(),
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
+  /** F6: beklenen dönüş (ISO ya da YYYY-AA-GG); yok ⇒ sunucu varsayılanı, null ⇒ termin yok. */
+  expectedReturnAt: z.string().max(40, "Beklenen dönüş tarihi geçersiz").nullable().optional(),
 });
 
 /** Fasondan fasona doğrudan aktarım (zımpara→boyahane; fabrikaya uğramadan). */

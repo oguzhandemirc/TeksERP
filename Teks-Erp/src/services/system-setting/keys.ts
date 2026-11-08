@@ -766,6 +766,9 @@ export const SETTING_KEYS = {
    * o kalıp burada "temizlendi" ile "sıfır tolerans"ı aynı yere düşürürdü.
    */
   FASON_SHRINK_TOLERANCE_PCT: "fason.shrinkTolerancePct",
+  /** F6: fason sevkin beklenen dönüşü için genel gün sayısı (firma > süreç türü > bu ayar). Kayıt yok / 0 = termin
+   *  YOK (bugünkü davranış). Okuma YALNIZ `readFasonExpectedReturnDays` üzerinden. */
+  FASON_EXPECTED_RETURN_DAYS: "fason.expectedReturnDays",
   /**
    * DEMO KURULUMU MU? (default FALSE)
    *

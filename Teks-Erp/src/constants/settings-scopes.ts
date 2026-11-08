@@ -105,6 +105,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "fasonShrinkWarnEnabled",
       "fasonReceiptApplyTargetVariant",
       "fasonShrinkTolerancePct",
+      "fasonExpectedReturnDays",
       "fasonNoteMobileEntry",
       "kursunBypassEnabled",
       "kursunMeterCapture",

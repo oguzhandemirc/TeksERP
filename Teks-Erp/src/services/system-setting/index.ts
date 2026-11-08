@@ -210,7 +210,7 @@ export {
   readCustomerBranchesEnabled, readTamburShortCutA1Enabled, readTamburListByStationEnabled, readMachineStopTrackingEnabled,
   readMachineStopOpenWarningEnabled, readTamburShortCutA1ThresholdM, readFasonShrinkWarnEnabled, readFasonReceiptApplyTargetVariant,
   DEFAULT_FASON_SHRINK_TOLERANCE_PCT, readTamburPlanGateWidthToleranceCm, readTamburPlanGateWidthCheck, readTamburChildWidthSource,
-  readTamburLabelPrintTiming, effectiveTamburPlanWidthGate, readFasonShrinkTolerancePct, readDemoModeEnabled,
+  readTamburLabelPrintTiming, effectiveTamburPlanWidthGate, readFasonShrinkTolerancePct, readFasonExpectedReturnDays, FASON_EXPECTED_RETURN_DAYS_MAX, readDemoModeEnabled,
   readDuplicatesFuzzyEnabled, readDuplicatesFuzzyThresholdPct, readTamburOverQuantityEnabled, readTamburUndoFullSameDayOnly,
   readTamburSimulatedMeterEnabled, readTamburMeasureSourceRequired, readTamburCalibrationCheck, readEmanetDefaultWarehouseId,
 } from "./tambur-fason";

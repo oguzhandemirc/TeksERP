@@ -79,6 +79,8 @@ const finishingRateSchema = z.object({
   pricePerM: decimalInput,
   typicalShrinkPct: decimalInput.nullable().optional(),
   note: z.string().nullable().optional(),
+  // F6: alış taslağı kalem kartı; yoksa aktif sürümünkü taşınır, null = köprüyü kaldır.
+  serviceItemId: z.string().uuid("Geçersiz hizmet kartı ID").nullable().optional(),
 }).strict();
 
 // ── PARAMETRE SETLERİ ────────────────────────────────────────────────────────

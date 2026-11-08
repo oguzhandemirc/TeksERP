@@ -11,6 +11,15 @@ import {
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 
+// F6: varsayılan fason termini (gün). `null` = bu düzeyde yok (zincirde bir alta düşer); aralık dışı 400.
+export const expectedReturnDaysSchema = z
+  .number({ error: "Termin gün sayısı sayı olmalı" })
+  .int("Termin gün sayısı tam sayı olmalı")
+  .min(1, "Termin gün sayısı en az 1 olabilir")
+  .max(365, "Termin gün sayısı en fazla 365 olabilir")
+  .nullable()
+  .optional();
+
 // ─── Subcontractor Schemas ──────────────────────────────────────────────────
 
 // Kod OPSİYONEL: boş/verilmemişse sunucu üretir (`ensureSubCode` → FSN/KAT serisi). Zorunlu tutmak panelin
@@ -25,6 +34,7 @@ const createSubcontractorSchema = z.object({
   categoryIds: z.array(z.string().uuid()).optional(),
   // Fason = carinin rolü: bağlı cari (uuid) ya da null (bağsız). Tip/tekillik kuralı serviste.
   customerId: z.string().uuid("Cari kimliği geçersiz").nullable().optional(),
+  expectedReturnDays: expectedReturnDaysSchema,
 });
 
 const updateSubcontractorSchema = z.object({
@@ -37,6 +47,7 @@ const updateSubcontractorSchema = z.object({
   isFavorite: z.boolean().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
   customerId: z.string().uuid("Cari kimliği geçersiz").nullable().optional(),
+  expectedReturnDays: expectedReturnDaysSchema,
 });
 
 // ─── Category Schemas ───────────────────────────────────────────────────────
@@ -48,6 +59,7 @@ const createCategorySchema = z.object({
   description: z.string().trim().max(500, "Açıklama en fazla 500 karakter olabilir").nullish().transform((v) => v ?? undefined),
   appliesColor: z.boolean().optional(),
   appliesProperty: z.boolean().optional(),
+  expectedReturnDays: expectedReturnDaysSchema,
 });
 
 const updateCategorySchema = z.object({
@@ -57,6 +69,7 @@ const updateCategorySchema = z.object({
   isActive: z.boolean().optional(),
   appliesColor: z.boolean().optional(),
   appliesProperty: z.boolean().optional(),
+  expectedReturnDays: expectedReturnDaysSchema,
 });
 
 // ─── Controllers ────────────────────────────────────────────────────────────

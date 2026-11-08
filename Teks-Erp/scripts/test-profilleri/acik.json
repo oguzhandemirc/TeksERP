@@ -83,6 +83,7 @@
     "fasonNoteMobileEntry": true,
     "fasonShrinkWarnEnabled": true,
     "fasonReceiptApplyTargetVariant": true,
+    "fasonExpectedReturnDays": 5,
     "devereLotRequired": true,
     "devereMountTracking": true,
     "devereMountTrackingRequired": true,

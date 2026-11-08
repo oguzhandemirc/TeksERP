@@ -239,6 +239,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   fasonShrinkWarnEnabled: "planlanan:fason",
   fasonReceiptApplyTargetVariant: "planlanan:fason",
   fasonShrinkTolerancePct: "planlanan:fason",
+  fasonExpectedReturnDays: "planlanan:fason",
   fasonNoteMobileEntry: "planlanan:fason",
   kartelaMeasurementEnabled: "planlanan:kartela",
 
