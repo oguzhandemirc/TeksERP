@@ -52,6 +52,7 @@ import {
 import { roleGrade } from "./fixture-quality-grade";
 import { testActorId } from "./fixture-test-user";
 import { walkTs } from "./lib/ts-tarama";
+import { fasonServisMetni } from "./lib/fason-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -354,7 +355,8 @@ async function main(): Promise<void> {
     JSON.stringify(childOps));
   // Beş kopya yeri (tambur ×4 + fason ×1): her miras yazımı değeri taşır.
   for (const f of ["src/services/tambur.service.ts", "src/services/subcontractor.service.ts"]) {
-    const src = readFileSync(join(__dirname, "..", f), "utf8");
+    // Fason servisi bölündü (2026-11-08): ailenin birleşik metni okunur.
+    const src = f.includes("subcontractor") ? fasonServisMetni() : readFileSync(join(__dirname, "..", f), "utf8");
     const inherit = (src.match(/inheritedFromParentRollId: (parent|roll)\.id,/g) ?? []).length;
     const carry = (src.match(/propertyValueId: op\.propertyValueId,/g) ?? []).length;
     check(`${f}: her miras kopyası propertyValueId taşır`, inherit > 0 && inherit === carry, `${carry}/${inherit}`);

@@ -29,6 +29,7 @@ import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { atlamaDefteri } from "./lib/atlama";
+import { fasonServisMetni } from "./lib/fason-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -264,10 +265,7 @@ async function main(): Promise<void> {
   // ── D6) Kapı CLAIM'de mi (metin sondası) ─────────────────────────────────
   console.log("\n── D6) İptal claim'i DSK koşulunu taşıyor ──");
   {
-    const kaynak = fs.readFileSync(
-      path.resolve(__dirname, "..", "src", "services", "subcontractor.service.ts"),
-      "utf8",
-    );
+    const kaynak = fasonServisMetni();
     check("D6a: cancel claim'inde `directShipments: { none: {} }` var (tx-içi kapı)",
       /cancelledAt: null, directShipments: \{ none: \{\} \}/.test(kaynak),
       "claim yüklemi");

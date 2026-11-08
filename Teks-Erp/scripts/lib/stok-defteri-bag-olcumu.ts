@@ -123,7 +123,7 @@ export interface KapisizYol {
  */
 export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
   {
-    dosya: "src/services/subcontractor.service.ts",
+    dosya: "src/services/subcontractor/dispatch.ts",
     fonksiyon: "dispatch",
     ad: "fason sevki (WAREHOUSE → AT_SUBCONTRACTOR)",
   },
@@ -221,7 +221,7 @@ export const MIKTAR_MUAF: readonly (KapisizYol & { neden: string })[] = [
     neden: "top üretimde, stok kümesi dışı — PRODUCTION_ISSUE ile çıkmış, finalize'da metrajıyla girer",
   },
   {
-    dosya: "src/services/subcontractor.service.ts",
+    dosya: "src/services/subcontractor/direct-ship.ts",
     fonksiyon: "createFasonShipChild",
     ad: "fason kısmi sevk çocuğu (AT_SUBCONTRACTOR doğar)",
     neden: "çocuk stok kümesi dışında doğar; fason kabulü onu satırıyla içeri alır",

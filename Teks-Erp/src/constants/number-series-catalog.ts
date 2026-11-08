@@ -139,7 +139,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "subcontractorDispatch",
-    scopedCounter: { durum: "hazir", not: "İKİ üreteç de `nextSeriesNo` yolundan geçiyor (fason sevk + parti ameliyatı); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).", uretec: ["services/subcontractor.service.ts", "services/helpers/batch-dispatch-surgery.helper.ts"] },
+    scopedCounter: { durum: "hazir", not: "İKİ üreteç de `nextSeriesNo` yolundan geçiyor (fason sevk + parti ameliyatı); yükleyiciler doğuş anını taşıyor (E2 okutulan aile dilimi, 2026-09-23).", uretec: ["services/subcontractor/shared.ts", "services/helpers/batch-dispatch-surgery.helper.ts"] },
     panelGroup: "fason-kartela",
     countTable: { model: "subcontractorDispatch", field: "dispatchNo", birim: "belge" },
     label: "Fason sevk belge no",
@@ -151,7 +151,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   },
   {
     key: "subcontractorReceipt",
-    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor.service.ts" },
+    scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor/shared.ts" },
     panelGroup: "fason-kartela",
     countTable: { model: "subcontractorReceipt", field: "receiptNo", birim: "belge" },
     label: "Fason kabul belge no",
@@ -237,7 +237,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
       not: "`return.service` BELGE BAŞINA tek numara üretir (üyeler liderin kopyasını taşır) ve kapsam damgası migration'da kuruldu — `id`den türemiş eski hex kuyruklar sayaca giremez.",
     },
   },
-  { key: "directShipment", scopedCounter: { durum: "hazir", not: "Üreteç zaten `nextSeriesNo` yolundaydı ama yükleyici ÇIPLAK string döndürüyordu — kapsam damgası SESSİZCE kapalıydı; doğuş anı eklendi (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor.service.ts" }, panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "directShipment", scopedCounter: { durum: "hazir", not: "Üreteç zaten `nextSeriesNo` yolundaydı ama yükleyici ÇIPLAK string döndürüyordu — kapsam damgası SESSİZCE kapalıydı; doğuş anı eklendi (E2 okutulan aile dilimi, 2026-09-23).", uretec: "services/subcontractor/direct-ship.ts" }, panelGroup: "fason-kartela", countTable: { model: "directShipment", field: "shipmentNo", birim: "belge" }, label: "Doğrudan sevk no", seedPrefix: "DSK", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "manifest", scopedCounter: { durum: "hazir", get not() { return `Üreteç \`nextSeriesNo\` yolundan geçiyor (\`nextManifestNo\`, iki kaynak — ${TERIM.terbiyeIsEmri.tekilKucuk} dökümü + çuval çeki listesi — tek üreteç): kod listesi \`formatChangedAt\` damgasına göre süzülüyor ve çakışma atlaması aynı yerde (E2 depo-ticaret dilimi, 2026-09-23).`; }, uretec: "services/helpers/manifest-number.helper.ts" }, panelGroup: "uretim", countTable: { model: "manifest", field: "manifestNo", birim: "belge" }, label: "Çeki listesi no", seedPrefix: "CL", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   {
     key: "order",

@@ -199,7 +199,8 @@ async function s1Xss(): Promise<void> {
   console.log("\n§1f — renderer XSS probu: her ornek belge, butun string yapraklari + ayar zehirli");
   // Builder'lar servis modulu yuklenince kaydolur — kaydeden her modul kaynaktan bulunur.
   const { readdirSync } = await import("node:fs");
-  for (const f of readdirSync(join(SRC, "services")).filter((x) => x.endsWith(".ts"))) {
+  // Özyinelemeli: bölünmüş servislerin kaydı alt dizinde (`services/subcontractor/printed-docs.ts`).
+  for (const f of readdirSync(join(SRC, "services"), { recursive: true, encoding: "utf8" }).filter((x) => x.endsWith(".ts"))) {
     if (/^registerPrintedDocBuilder\(/m.test(readFileSync(join(SRC, "services", f), "utf8"))) await import(join(SRC, "services", f));
   }
   const ozgun = new Map(Object.entries(SAMPLE_PRINTED_DOCS).map(([k, v]) => [k, v]));

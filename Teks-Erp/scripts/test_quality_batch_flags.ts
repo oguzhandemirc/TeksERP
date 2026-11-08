@@ -49,6 +49,7 @@ import { updateSchema } from "../src/routes/feature-flag.routes";
 import { middlewareGovdeAnalizi, yorumlariSok } from "./lib/regime-gate-scan";
 import { createManualMoveFixture } from "./fixture-manual-move";
 import { ayarServisTanimDosyasi } from "./lib/ayar-servis-kaynak";
+import { fasonServisRelYollari } from "./lib/fason-servis-kaynak";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -379,7 +380,8 @@ async function main(): Promise<void> {
     const KAPSAM_DISI: Record<string, string> = {
       "services/helpers/roll-finalize.helper.ts":
         "son-adım finalize — kilitlenirse iş emri hiç kapanmaz",
-      "services/subcontractor.service.ts": "fason kabul doğumu — kalite BİLEREK null",
+      // Fason servisi ailesi (cephe + `services/subcontractor/*.ts`, 2026-11-08 bölmesi): kabul doğumu.
+      ...Object.fromEntries(fasonServisRelYollari().map((rel) => [rel, "fason kabul doğumu — kalite BİLEREK null"])),
       "services/return.service.ts":
         "iade kabulü — `return.gradingEnabled` kapalıyken kalite girecek yüzey YOK",
     };

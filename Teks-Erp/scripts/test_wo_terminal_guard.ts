@@ -25,6 +25,7 @@
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, relative } from "path";
+import { fasonServisMetni } from "./lib/fason-servis-kaynak";
 
 const SRC = join(__dirname, "../src");
 const REPO = join(__dirname, "..");
@@ -158,7 +159,7 @@ function main(): void {
   );
 
   // --- 3) Fason servisi helper'ı gerçekten kullanıyor ------------------------
-  const fason = readFileSync(join(SRC, "services/subcontractor.service.ts"), "utf8");
+  const fason = fasonServisMetni(); // cephe + alan modülleri (2026-11-08 bölmesi)
   const helperCalls = (fason.match(new RegExp(`\\b${HELPER}\\(`, "g")) ?? []).length;
   check(
     `subcontractor.service ${HELPER}'ı import ediyor`,

@@ -78,7 +78,7 @@ async function main() {
     "order.service.ts": 1,     // sipariş kalemi özellikleri
     "route.service.ts": 1,     // rota adımı plannedPropertyIds
     "item.service.ts": 2,      // ürün izinli listesi create + update
-    "subcontractor.service.ts": 1, // fason kabulde uygulanan özellik
+    "subcontractor/receive.ts": 1, // fason kabulde uygulanan özellik (subcontractor.service bölmesi 2026-11-08)
   };
   let totalCalls = 0;
   for (const [file, expected] of Object.entries(GATES)) {

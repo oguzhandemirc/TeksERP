@@ -279,7 +279,7 @@ async function yollar(): Promise<Yol[]> {
       },
     },
     {
-      ad: "fason kabul", politika: `${S}subcontractor.service.ts::receiptReplay`, alanlar: {
+      ad: "fason kabul", politika: `${S}subcontractor/receive.ts::receiptReplay`, alanlar: {
         workOrderId: fason(async (_k, g) => ({ ...g, workOrderId: (await kur()).woId })),
         stepId: fason((k, g) => ({ ...g, stepId: k.ikinciAdim })),
         subcontractorId: fason((_k, g) => ({ ...g, subcontractorId: zimparaci })),

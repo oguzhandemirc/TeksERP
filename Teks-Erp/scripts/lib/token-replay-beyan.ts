@@ -76,7 +76,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}order.service.ts::prepareOrderCreate`]: { giris: { [`${S}order.service.ts::create`]: "R", [`${S}order.service.ts::quickOrderTx`]: "K", [`${S}cloud-inbox.service.ts::createOrderFromMessage`]: "K", [`${S}sales-quote-convert.service.ts::convertQuoteToOrder`]: "K" } },
   [`${S}order.service.ts::quickOrderFromRolls`]: { giris: { [`${S}order.service.ts::quickOrderTx`]: "K" } },
   [`${S}cheque-delivery-note.service.ts::createTx`]: { giris: { [`${S}cheque-delivery-note.service.ts::create`]: "K" } },
-  [`${S}subcontractor.service.ts::receiveInner`]: { giris: { [`${S}subcontractor.service.ts::receive`]: "R" } },
+  [`${S}subcontractor/receive.ts::receiveInner`]: { giris: { [`${S}subcontractor/receive.ts::receive`]: "R" } },
   [`${S}tambur.service.ts::cutWarehouseRollInner`]: { giris: { [`${S}tambur.service.ts::cutWarehouseRoll`]: "R" } },
   [`${S}tambur.service.ts::cutOpenFabricInner`]: { giris: { [`${S}tambur.service.ts::cutOpenFabric`]: "R" } },
   // Gülkesim: belgeden İE formunda hızlı müşteri kaydı tabletten clientToken ile doğar; kimlik = katlanmış ad.
@@ -284,7 +284,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}shipping.service.ts::looseUnitReplay`]: ["shipmentId", "unitKind", "unitLabel"],
   [`${S}subcontractor-beam.service.ts::returnReplay`]: ["kind", "dispatchId", "warpBeamId", "lengthM"],
   [`${S}subcontractor-weaving.service.ts::weavingReceiptReplay`]: ["weavingOrderId", "manifestNo"],
-  [`${S}subcontractor.service.ts::receiptReplay`]: ["workOrderId", "stepId", "subcontractorId", "toplar", "metrajlar", "yeniToplar"],
+  [`${S}subcontractor/receive.ts::receiptReplay`]: ["workOrderId", "stepId", "subcontractorId", "toplar", "metrajlar", "yeniToplar"],
   [`${S}tambur-manual.service.ts::finishedRollReplay`]: ["itemId", "colorId", "initialQty"],
   [`${S}tambur-manual.service.ts::manualRollAttachedReplay`]: ["initialQty", "itemId", "colorId"],
   [`${S}tambur.service.ts::cutReplay`]: ["parentRollId", "cutLength"],
