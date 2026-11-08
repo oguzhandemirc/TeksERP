@@ -12,7 +12,6 @@ import { SETTING_KEYS, readDevereEnabled, readIplikEnabled } from "../system-set
 import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { settingScreenPath } from "../../constants/panel-ayar-yolu";
 import { isConsignedTo } from "../helpers/emanet-owner.helper";
-import { warpBeamRemainingM } from "../helpers/warp-beam.helper";
 import { yarnLotWarehouseBalancesTx } from "../helpers/yarn-lot.helper";
 import type { ConsignmentDispatchCreateInput, ConsignmentDispatchErrorCode } from "./types";
 
@@ -117,7 +116,13 @@ export interface ResolvedDispatch {
  * kilidin ARDINDAN (bayat kalan/bakiye yazılmaz). Bulunamayan referans 404, lot-kalem uyuşmazlığı 400; engeller
  * `blockedReason`ta (önizleme gösterir, oluştur 409'a çevirir).
  */
-export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: { lock: boolean }): Promise<ResolvedDispatch> {
+/**
+ * Levent kalanını çağıran verir: oluştur `remainingMTx` (kilitli tek okuyucu), önizleme `readRemainingM` (gösterim).
+ * Çözücü kalanı kendisi okumaz — defter yazarı kilitsiz kalan okuyamaz (`test_levent_kalan_tek_okuyucu`).
+ */
+export type BeamRemainingOf = (beamId: string) => Promise<Prisma.Decimal>;
+
+export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: { lock: boolean; remainingOf: BeamRemainingOf }): Promise<ResolvedDispatch> {
   const owner = await db.customer.findUnique({ where: { id: n.ownerCustomerId }, select: { id: true, code: true, name: true } });
   // Pasif müşteriye de iade edilebilir (malı onundur) — yalnız varlık sorulur.
   if (!owner) throw AppError.notFound("Sahip müşteri bulunamadı.", { code: "OWNER_CUSTOMER_INVALID" });
@@ -131,19 +136,11 @@ export async function resolveDispatchLines(db: Db, n: NormalizedDispatch, opts: 
       where: { id: { in: n.beamIds } },
       select: { id: true, beamNo: true, status: true, ownerCustomerId: true, warpSpec: { select: { name: true } } },
     });
-    const events = await db.warpBeamEvent.findMany({ where: { beamId: { in: n.beamIds } }, select: { beamId: true, kind: true, lengthM: true } });
-    const byBeam = new Map<string, Array<{ kind: string; lengthM: Prisma.Decimal | null }>>();
-    for (const e of events) {
-      const list = byBeam.get(e.beamId) ?? [];
-      list.push(e);
-      byBeam.set(e.beamId, list);
-    }
     const byId = new Map(rows.map((r) => [r.id, r]));
     for (const id of n.beamIds) {
       const b = byId.get(id);
       if (!b) throw AppError.notFound(`Levent bulunamadı: ${id}`, { code: "WARP_BEAM_NOT_FOUND", warpBeamId: id });
-      // Kalan `readRemainingM` ile aynı formül (tek işaret tablosu), toplu okunur.
-      const remainingM = D(warpBeamRemainingM(byBeam.get(id) ?? []));
+      const remainingM = await opts.remainingOf(id);
       const blockedReason: ConsignmentDispatchErrorCode | null = !isConsignedTo(b.ownerCustomerId, owner.id)
         ? "CONSIGNMENT_OWNER_MISMATCH"
         : b.status !== WarpBeamStatus.READY || remainingM.lte(0)
