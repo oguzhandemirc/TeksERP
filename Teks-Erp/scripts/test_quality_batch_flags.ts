@@ -52,6 +52,7 @@ import { ayarServisTanimDosyasi } from "./lib/ayar-servis-kaynak";
 import { fasonServisRelYollari } from "./lib/fason-servis-kaynak";
 import { isEmriServisDosyasiMi, isEmriServisMetni } from "./lib/is-emri-servis-kaynak";
 import { envanterServisDosyasiMi, envanterServisMetni } from "./lib/envanter-servis-kaynak";
+import { tamburServisDosyasiMi, tamburServisMetni, tamburServisUyeMetni } from "./lib/tambur-servis-kaynak";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -106,6 +107,8 @@ function oku(rel: string): string {
   if (isEmriServisDosyasiMi(rel)) return yorumlariSok(isEmriServisMetni());
   // Envanter servisi bölündü (2026-11-08): aynı kalıp (cephe + `services/inventory/*.ts`).
   if (envanterServisDosyasiMi(rel)) return yorumlariSok(envanterServisMetni());
+  // Tambur servisi bölündü (2026-11-08): aynı kalıp (cephe + `services/tambur/*.ts`).
+  if (tamburServisDosyasiMi(rel)) return yorumlariSok(tamburServisMetni());
   return yorumlariSok(fs.readFileSync(path.join(SRC, rel), "utf8"));
 }
 
@@ -403,14 +406,13 @@ async function main(): Promise<void> {
     // `cutOpenFabric` aynı DOSYADA yaşıyor (tambur.service) → dosya bazlı ölçüm
     // onu göremez; gövde bazlı bakılır. Açık kumaş kesiminde kalite her hâlükârda
     // dolu ("1.KALITE" varsayılanı), yani kapının ısıracağı bir durum yok.
-    const tamburKod = oku("services/tambur.service.ts");
-    // Gövde `cutOpenFabricInner`da (dış metot token boğazı sarmalayıcısı).
-    const ofBas = tamburKod.indexOf("async cutOpenFabricInner(");
-    const ofSon = tamburKod.indexOf("async ", ofBas + 10);
-    check("§4 zemin: cutOpenFabric gövdesi ayrıştırıldı", ofBas > 0 && ofSon > ofBas);
+    // Gövde `cutOpenFabricInner`da (dış metot token boğazı sarmalayıcısı). Tambur servisi bölündü
+    // (2026-11-08): cephedeki ince delegasyon değil, `services/tambur/`daki ASIL gövdenin TAMAMI okunur.
+    const ofGovde = yorumlariSok(tamburServisUyeMetni("cutOpenFabricInner"));
+    check("§4 zemin: cutOpenFabric gövdesi ayrıştırıldı", ofGovde.includes("lengthMeters") && ofGovde.length > 2000);
     check(
       "§4 ⭐ kapsam DIŞI: cutOpenFabric (kalite zaten hep dolu)",
-      ofBas > 0 && ofSon > ofBas && !tamburKod.slice(ofBas, ofSon).includes(`${OKUYUCU}(`),
+      ofGovde.length > 2000 && !ofGovde.includes(`${OKUYUCU}(`),
     );
     // 4f D7 tarafı: `attachRolls`/`quickStart` parti bayrağından ETKİLENMEZ —
     // orada parti zaten KOŞULSUZ doğuyor, bayrak eklemek ikinci bir kural olurdu.

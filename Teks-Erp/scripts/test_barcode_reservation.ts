@@ -28,6 +28,7 @@ import { readdirSync, readFileSync, statSync } from "fs";
 import { join, resolve, relative } from "path";
 import prisma, { pool } from "../src/lib/prisma";
 import { atlamaDefteri } from "./lib/atlama";
+import { tamburServisEtiketi } from "./lib/tambur-servis-kaynak";
 import {
   MAX_ROLL_SEQ,
   ROLL_BARCODE_RE,
@@ -173,12 +174,14 @@ function structural(): void {
     // ŞEKLİNE bağlıdır — meşru bir yeniden adlandırma yüklemi genişletmeyi
     // ve negatif sondayı ZORUNLU kılar.
     const hits = src.match(/(?:generateRollBarcodeTx|reserveRollBarcodes\w*Tx)\s*\(\s*tx\b/g);
+    // Tambur servisi bölündü (2026-11-08): aile (cephe + `services/tambur/*.ts`) cephe etiketinde toplanır → MUST_BE_CLEAN daralmaz
+    const anahtar = tamburServisEtiketi(relative(SRC, f));
     if (hits?.length) {
-      found[relative(SRC, f)] = hits.length;
+      found[anahtar] = (found[anahtar] ?? 0) + hits.length;
       total += hits.length;
     }
     const singular = src.match(/generateRollBarcodeTx\s*\(\s*tx\b/g);
-    if (singular?.length) foundSingular[relative(SRC, f)] = singular.length;
+    if (singular?.length) foundSingular[anahtar] = (foundSingular[anahtar] ?? 0) + singular.length;
   }
 
   check(`körlük zemini: en az ${MIN_FILES_SCANNED} dosya tarandı`, files.length >= MIN_FILES_SCANNED, `${files.length}`);

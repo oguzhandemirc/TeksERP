@@ -57,12 +57,12 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
     gerekce: "Hata YAZMA tek boğazı (KQ-D7): KK2/Kurşun, Tambur ve kurşun bitirişi listesi buradan geçer; istasyonda muayene açık olmalı (kapalıysa eski APK yazması 400, bilinçli fark K2).",
   },
   {
-    dosya: "services/tambur.service.ts",
+    dosya: "services/tambur/read.ts", // tambur.service bölmesi 2026-11-08
     fonksiyon: "getStep",
     gerekce: "Tambur özeti `inspectionEnabled` (KQ-D7): tablet HATA GİR çekmecesini çizer; yazma kapısının ekran ikizi, bilgi — koruma değil.",
   },
   {
-    dosya: "services/tambur.service.ts",
+    dosya: "services/tambur/read.ts", // tambur.service bölmesi 2026-11-08
     fonksiyon: "getByCardBarcode",
     gerekce: "Kart okutma özeti `inspectionEnabled` (KQ-D7): getStep ile aynı alan, aynı anlam; koruma yazma boğazındadır.",
   },

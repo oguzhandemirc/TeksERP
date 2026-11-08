@@ -34,6 +34,7 @@ import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/syste
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 import { envanterServisDosyasiMi, envanterServisUyeMetni } from "./lib/envanter-servis-kaynak";
+import { tamburServisDosyasiMi, tamburServisUyeMetni } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -60,6 +61,8 @@ const GATES = ["resolveRollByScanCode(", "customerCodeSearchRollIds("];
 function functionText(rel: string, fn: string): string | null {
   // envanter servisi bölündü (2026-11-08): aileden ASIL gövde (cephedeki ince delegasyon değil)
   if (envanterServisDosyasiMi(rel)) return envanterServisUyeMetni(fn) || null;
+  // tambur servisi de bölündü (2026-11-08): aynı kalıp
+  if (tamburServisDosyasiMi(rel)) return tamburServisUyeMetni(fn) || null;
   const text = readFileSync(join(SRC, rel), "utf8");
   const sf = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true);
   let found: string | null = null;

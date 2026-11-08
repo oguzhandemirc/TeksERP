@@ -30,6 +30,7 @@ import { AUDIT_EXEMPT_MODELS, AUDIT_MUAF_SINIFLARI } from "./lib/audit-muafiyeti
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 import { walkTs } from "./lib/ts-tarama";
+import { tamburServisDosyasiMi } from "./lib/tambur-servis-kaynak";
 
 const KOK = join(__dirname, "..");
 let pass = 0;
@@ -71,6 +72,11 @@ function main(): void {
       yazan.get(mdl)!.push(rel);
     }
   }
+
+  // Tambur servisi bölündü (2026-11-08): aile (cephe + `services/tambur/`) eskiden TEK dosyaydı ve
+  // AuditService taşıyordu — aile üyelerinden biri taşıyorsa hepsi taşımış sayılır (kapsam bölme öncesiyle aynı).
+  const tamburAilesi = [...metin.keys()].filter((r) => tamburServisDosyasiMi(r));
+  if (tamburAilesi.some((r) => auditDosya.has(r))) for (const r of tamburAilesi) auditDosya.add(r);
 
   const sinifi = (mdl: string): "SERVIS" | "UC_KATMANI" | "SESSIZ" => {
     if (yazan.get(mdl)!.some((f) => auditDosya.has(f))) return "SERVIS";

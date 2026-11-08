@@ -37,6 +37,7 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 import { sevkiyatServisEtiketi, sevkiyatServisTanimDosyasi } from "./lib/sevkiyat-servis-kaynak";
 import { envanterServisDosyasiMi, envanterServisEtiketi, envanterServisTanimDosyasi } from "./lib/envanter-servis-kaynak";
+import { tamburServisEtiketi } from "./lib/tambur-servis-kaynak";
 
 let pass = 0;
 let fail = 0;
@@ -184,7 +185,8 @@ function astSection(): void {
     if (rel === HELPER) continue;
     const text = readFileSync(file, "utf8");
     if (!/normalizeScanCode\(/.test(text)) continue;
-    const short = rel.replace(/^services\//, "");
+    // tambur servisi bölündü (2026-11-08): aile üyesi başlıkta cephe adıyla (`tambur.service.ts:`) anılır
+    const short = tamburServisEtiketi(rel).replace(/^services\//, "");
     const tagged = header.split("\n").some((l) => l.includes(`${short}:`) && /\[(İÇ|AÇILMALI|AÇIK)\]|sınıflandırıcının kendisi/.test(l));
     if (!applied.has(envanterServisEtiketi(sevkiyatServisEtiketi(rel))) && !tagged) missing.push(rel); // sevkiyat + envanter servisi bölündü (2026-11-08): aile cephe etiketine katlanır
     if (envanterServisDosyasiMi(rel) && !header.includes("inventory.service.ts:")) missing.push(rel);

@@ -306,7 +306,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
      { dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "restoreMeasuredWidthsTx" }],
     ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory/kursun.ts",
      "src/services/kursun-qc.service.ts", "src/services/subcontractor/receive.ts", "src/services/subcontractor/dispatch.ts",
-     "src/services/subcontractor/direct-ship.ts", "src/services/tambur.service.ts"]),
+     "src/services/subcontractor/direct-ship.ts",
+     // tambur.service bölmesi 2026-11-08: kesim/finalize yolları alan modüllerinde
+     "src/services/tambur/finalize.ts", "src/services/tambur/open-fabric-cut.ts", "src/services/tambur/open-fabric-finalize.ts",
+     "src/services/tambur/warehouse-cut.ts", "src/services/tambur/warehouse-cut-finalize.ts"]),
 
   // H1 (Hizmet veren, 2026-10-29): faturalanan metrenin kaynağı; düzeltme = damga + yeni satır, reopen damgalar.
   // D4-B1b (2026-10-30): Tambur CUT okuması aynı deftere; yazım tek boğazda (meter-reading.helper), geri alma/iptal damgalar.
