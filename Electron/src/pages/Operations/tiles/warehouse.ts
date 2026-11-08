@@ -1,11 +1,12 @@
 // Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Inbox, PackageCheck, Package, PackageOpen, PackagePlus, ScanLine, ScanText, ShoppingBasket, Tags } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Inbox, PackageCheck, Package, PackageOpen, PackagePlus, ScanLine, ScanText, ShoppingBasket, Tags, Undo2 } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
 import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
 import { isIncomingDocumentVisible } from "../GelenBelgeler/gelenBelge-regime";
 import { isConsignedWorkVisible } from "../ConsignedWork/consignedWork-regime";
+import { CONSIGNMENT_DISPATCHES_PATH, isConsignmentDispatchVisible } from "../ConsignmentDispatches/consignmentDispatch-regime";
 import { CUSTOMER_DEFAULTS_PATH, TEACH_START_PATH } from "../GelenBelgeler/paths";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
@@ -77,6 +78,18 @@ export const warehouseTiles: OperationsTile[] = [
     group: "warehouse",
     permission: "roll:read",
     visibleWhen: isConsignedWorkVisible,
+  },
+  {
+    // Emanet Çıkış (genel fason F5/P3): emanet levent/ipliği sahibine geri veren belge. Emanet KAPALIYKEN gizli.
+    // Top burada yok — emanet top normal sevkiyattan çıkar.
+    key: "emanet-cikis",
+    title: "Emanet Çıkış",
+    description: "Müşterinin emanet leventini ya da ipliğini sahibine geri ver — belge, iptal önizlemesi",
+    icon: Undo2,
+    to: CONSIGNMENT_DISPATCHES_PATH,
+    group: "warehouse",
+    permission: "consignment:read",
+    visibleWhen: isConsignmentDispatchVisible,
   },
   {
     // Gülkesim OCR D5: müşteri irsaliyesi (fotoğraf/Excel/elle) → gözden geçirme → onayda emanet topu.

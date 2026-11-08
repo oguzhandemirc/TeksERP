@@ -112,6 +112,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/gelen-belgeler": "gelenBelgeEnabled",
   // ── EMANET (P1a, ister 3.2) ───────────────────────────────────────────────
   "operations/icerideki-isler": "emanetEnabled",
+  "operations/emanet-cikis": "emanetEnabled",
 };
 
 /**
