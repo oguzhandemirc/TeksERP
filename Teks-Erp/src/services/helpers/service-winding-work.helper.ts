@@ -11,10 +11,9 @@
 // türü eşlenmemiş levent sayılır (çağıran uyarır). Levent TEK sarım işidir: faturalı anahtarı yalnız levent (kart değil).
 // =============================================================================
 import { Currency, InvoiceLineType, PriceKind, Prisma, ServiceMeterBasis } from "@prisma/client";
-import { factoryYmd } from "../../constants/time";
 import prisma from "../../lib/prisma";
-import { resolveItemPricesFor } from "../item-price.service";
-import { loadServiceTierPrices, pickServicePrice, tierMissingWarning } from "./service-price-pick.helper";
+import { resolveItemPricesAtMany } from "../item-price.service";
+import { loadServiceTierItemsAtMany, pickServicePrice, tierMissingWarning } from "./service-price-pick.helper";
 import { priceUnitMatches, SERVICE_QTY_UNIT_LABEL } from "./service-quantity.helper";
 import { loadProcessMap } from "./service-step-work.helper";
 import { processOfMachines } from "./service-weaving-work.helper";
@@ -114,22 +113,18 @@ export async function collectWindingServiceBilling(p: { customerId: string; curr
   const works = list.works.filter((w) => !billedBeams.has(w.warpBeamId));
   if (works.length === 0) return { lines: [], links: [], warnings, works: [], billedCount: billed.length, billedDocNo };
   const items = new Map((await db.serviceItem.findMany({ where: { id: { in: [...new Set(works.map((w) => w.serviceItemId))] } }, select: { id: true, code: true, name: true } })).map((i) => [i.id, i]));
-  // Fiyat günü (SERVICE_DAY = çıkış günü): fabrika günü başına TEK sorgu çifti; an = o günün son çıkışı (belirlenimli).
-  const byDay = new Map<string, WindingWork[]>();
-  for (const w of works) byDay.set(factoryYmd(w.serviceAt), [...(byDay.get(factoryYmd(w.serviceAt)) ?? []), w]);
+  // Fiyat anı = her çıkışın KENDİ anı (gün içi fiyat değişimi doğru); bütün anlar için TEK sorgu çifti.
+  const itemIds = works.map((w) => w.serviceItemId);
+  const ats = works.map((w) => w.serviceAt);
+  const priceAt = await resolveItemPricesAtMany({ itemIds, kind: PriceKind.SALE, currency: p.currency, customerId: p.customerId, ats, db });
+  const hasTiersAt = await loadServiceTierItemsAtMany({ itemIds, currency: p.currency, customerId: p.customerId, ats, db });
   const price = new Map<WindingWork, Prisma.Decimal | null>();
   const tierMissing = new Map<string, number>();
-  for (const group of byDay.values()) {
-    const at = Math.max(...group.map((w) => w.serviceAt.getTime()));
-    const itemIds = [...new Set(group.map((w) => w.serviceItemId))];
-    const prices = await resolveItemPricesFor({ itemIds, kind: PriceKind.SALE, currency: p.currency, customerId: p.customerId, asOf: new Date(at), db });
-    const tiers = await loadServiceTierPrices({ itemIds, currency: p.currency, customerId: p.customerId, at: new Date(at), db });
-    for (const w of group) {
-      const hit = prices.get(w.serviceItemId);
-      const pick = pickServicePrice({ customerTier: null, generalTier: null, gram: null, item: hit && priceUnitMatches(hit.priceUnit, "METER") ? hit.price : null, itemHasTiers: tiers.itemsWithTiers.has(w.serviceItemId), valueInTable: false });
-      price.set(w, pick.unitPrice);
-      if (pick.tierMissing) tierMissing.set(w.serviceItemId, (tierMissing.get(w.serviceItemId) ?? 0) + 1);
-    }
+  for (const w of works) {
+    const hit = priceAt(w.serviceItemId, w.serviceAt);
+    const pick = pickServicePrice({ customerTier: null, generalTier: null, gram: null, item: hit && priceUnitMatches(hit.priceUnit, "METER") ? hit.price : null, itemHasTiers: hasTiersAt(w.serviceItemId, w.serviceAt), valueInTable: false });
+    price.set(w, pick.unitPrice);
+    if (pick.tierMissing) tierMissing.set(w.serviceItemId, (tierMissing.get(w.serviceItemId) ?? 0) + 1);
   }
   const groups = new Map<string, { serviceItemId: string; unitPrice: Prisma.Decimal | null; qty: Prisma.Decimal; n: number }>();
   for (const w of works) {

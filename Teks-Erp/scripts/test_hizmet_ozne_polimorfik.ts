@@ -23,7 +23,7 @@
 //   §5 ek: bizde sarılmamış levent uyarısız; bizde sarılıp eşlenmemiş ve 0 metre uyarılı; hepsi faturalıyken 409 ALREADY_BILLED
 //   §6 ek: iptal → yeniden çıkış yeni bağ doğurur, eski taslak onayı yine 409 · kart değişince levent ikinci kez faturalanmaz
 //   §7 Kilit: levent satırı F5 claim aynasıyla (UPDATE) tutulurken dönem taslağı BEKLER · kârlılık okuyucusu levent bağını sahibiyle okur ·
-//      eşzamanlı iki dönem POST'u → tek taslak
+//      eşzamanlı iki dönem POST'u → tek taslak · gün içi fiyat değişiminde her çıkış kendi anının fiyatı
 // Negatif sondalar (2026-11-08) harita satırında.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -364,6 +364,18 @@ async function main(): Promise<void> {
   check("eşzamanlı iki dönem taslağı → 1 başarılı, diğeri 409 SERVICE_ALREADY_BILLED; levent tek aktif bağ",
     won === 1 && lost.length === 1 && lost[0]!.statusCode === 409 && lost[0]!.details?.code === "SERVICE_ALREADY_BILLED" && b5Active === 1,
     JSON.stringify({ won, lost: lost.map((e) => [e.statusCode, e.details?.code]), b5Active }));
+  // Gün içi fiyat değişimi: her çıkış KENDİ anının fiyatını alır (gün gruplaması değil).
+  const T = new Date(Date.now() - 30 * 60_000);
+  await prisma.itemPrice.updateMany({ where: { serviceItemId: SARIM, revokedAt: null }, data: { validFrom: new Date(Date.now() - 86400_000), revokedAt: T } });
+  await prisma.itemPrice.create({ data: { serviceItemId: SARIM, customerId: null, kind: PriceKind.SALE, currency: Currency.TRY, price: "0.9000", validFrom: T } });
+  const bA = await mkBeam(100, { machineId: devere.machineId, ship: true });
+  const bB = await mkBeam(200, { machineId: devere.machineId, ship: true });
+  await prisma.consignmentDispatch.update({ where: { id: bA.dispatch!.id }, data: { dispatchedAt: new Date(Date.now() - 60 * 60_000) } });
+  await prisma.consignmentDispatch.update({ where: { id: bB.dispatch!.id }, data: { dispatchedAt: new Date(Date.now() - 10 * 60_000) } });
+  const pvDay = await previewServicePeriodDraft({ cariId: cari.id, period });
+  const sarimLines = pvDay.lines.filter((l) => l.serviceItemId === SARIM);
+  check("gün içi fiyat değişimi → değişimden önceki çıkış 0,5 (100 m), sonraki 0,9 (200 m)",
+    sarimLines.length === 2 && sarimLines.some((l) => l.qty === "100.000" && eq(l.unitPrice, 0.5)) && sarimLines.some((l) => l.qty === "200.000" && eq(l.unitPrice, 0.9)), JSON.stringify(sarimLines));
 }
 
 async function cleanup(): Promise<void> {
