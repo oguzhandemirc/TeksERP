@@ -309,6 +309,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   "services/service-item/processes.ts",
   // Fason dalga-2 tel sözleşmesi (F4 taslak kırılımı `ServiceDraftWorkRow.serviceItemId`) — tip beyanı, çözücü değil.
   "services/service-billing/types.ts",
+  // PB1 patron `hizmet-geliri`: onaylı satış satırının KONU kolonunu yalnız kırılım anahtarı olarak GROUP BY'lar (çözücü değil).
+  "cloud-sync/snapshot-fason.ts",
   // F4 dokuma işi: tezgah istasyon türü → kart (`loadProcessMap` aynı eşleme) — çözücüye WEAVING kaynağı olarak girer.
   "services/helpers/service-weaving-work.helper.ts",
   // F4 taslak kırılımı: çözücünün kartlı işlerini `ServiceDraftWorkRow`a çevirir — çözücü değil, projeksiyon.

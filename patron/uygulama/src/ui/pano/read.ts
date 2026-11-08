@@ -4,6 +4,7 @@
 import { formatAgo, formatMoney, formatNumber, syncIsLate } from "../../lib/format";
 import { CHEQUE_BUCKET, CHEQUE_KIND, CHEQUE_KIND_SHORT, PERIOD_LABEL, UNIT, type PeriodKey } from "../../lib/labels/uretim";
 import { lookup } from "../../lib/labels";
+import { stockConsignedText } from "../../lib/fason-summary";
 import type { StatusKind } from "../tokens";
 
 export type Obj = Readonly<Record<string, unknown>>;
@@ -157,8 +158,11 @@ export function areaSummary(projection: string, data: unknown): string {
     }
     case "ozet.uretim":
       return `Bugün ${qty(d.bugunTamamlananToplam)} ${UNIT.top} tamamlandı`;
-    case "ozet.stok":
-      return `Bitmiş ${qty(d.bitmisMiktar)} ${UNIT.metre} · ölü ${qty(d.oluMiktar)} ${UNIT.metre}`;
+    case "ozet.stok": {
+      // PB1: emanet açıkken bitmiş/ölü BİZİM stoktur; müşteri malı ayrı ek (eski fabrika göndermez → ek yok).
+      const consigned = stockConsignedText(d);
+      return `Bitmiş ${qty(d.bitmisMiktar)} ${UNIT.metre} · ölü ${qty(d.oluMiktar)} ${UNIT.metre}${consigned ? ` · ${consigned}` : ""}`;
+    }
     case "ozet.fason": {
       const m = period(d, "buAy");
       return `Açıkta ${qty(m.acikMiktar)} ${UNIT.metre} · fire ${pct(m.fireYuzde)}`;
