@@ -307,6 +307,8 @@ const SERVICE_ITEM_ID_FILES = new Set([
   // F3 adım hizmeti: süreç türü → kart eşlemesi (`service_item_processes`) okuyucusu ve yazım servisi;
   // çözücüye STEP kaynağı olarak girer — fiyat çözmez.
   "services/helpers/service-step-work.helper.ts",
+  // F3/F9 süreç türü → kart eşlemesinin tek okuyucusu (adım işi + hareket geri alma kapısı) — fiyat çözmez.
+  "services/helpers/service-process-map.helper.ts",
   "services/service-item/processes.ts",
   // Fason dalga-2 tel sözleşmesi (F4 taslak kırılımı `ServiceDraftWorkRow.serviceItemId`) — tip beyanı, çözücü değil.
   "services/service-billing/types.ts",

@@ -20,6 +20,7 @@
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { assertMovementWorksNotBilledTx } from "./service-billing-gate.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -44,20 +45,27 @@ export interface RevokeMovementsArgs {
  */
 export async function revokeRollMovements(tx: Tx, args: RevokeMovementsArgs): Promise<number> {
   if (args.rollIds.length === 0) return 0;
+  const where: Prisma.RollMovementWhereInput = {
+    rollId: { in: args.rollIds },
+    ...(args.workOrderStepIds ? { workOrderStepId: { in: args.workOrderStepIds } } : {}),
+    ...(args.onlyOpen ? { exitedAt: null } : {}),
+    ...(args.notes !== undefined ? { notes: args.notes } : {}),
+    ...ACTIVE_MOVEMENT,
+  };
+  // F9: kapanmış hareket adım işinin kanıtıdır — faturalıysa geri alma 409 (bağ, güncellemeden SONRA sorulur).
+  const closed = args.onlyOpen ? [] : await tx.rollMovement.findMany({
+    where: { AND: [where, { exitedAt: { not: null } }] },
+    select: { rollId: true, workOrderStepId: true },
+  });
   const res = await tx.rollMovement.updateMany({
-    where: {
-      rollId: { in: args.rollIds },
-      ...(args.workOrderStepIds ? { workOrderStepId: { in: args.workOrderStepIds } } : {}),
-      ...(args.onlyOpen ? { exitedAt: null } : {}),
-      ...(args.notes !== undefined ? { notes: args.notes } : {}),
-      ...ACTIVE_MOVEMENT,
-    },
+    where,
     data: {
       revokedAt: new Date(),
       revokedById: args.userId ?? null,
       revokeReason: args.reason.slice(0, 300),
     },
   });
+  await assertMovementWorksNotBilledTx(tx, closed);
   return res.count;
 }
 
@@ -104,6 +112,7 @@ export async function reopenClosedMovementsTx(tx: Tx, args: ReopenMovementsArgs)
       code: "ROLL_MOVEMENT_CHANGED",
     });
   }
+  await assertMovementWorksNotBilledTx(tx, rows);
   await tx.rollMovement.createMany({
     data: rows.map((r) => ({
       rollId: r.rollId,
