@@ -28,9 +28,11 @@ import { assertCustomerGoodsHasNoOrderLines } from "./helpers/workorder-customer
 import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
-import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder, type PartyWorkOrderFailure } from "./gelen-belge-cok-parti.service";
+import { allPartiesEntered, assertPartiesShape, getNoteParties, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder, type PartyWorkOrderFailure } from "./gelen-belge-cok-parti.service";
 import { readIncomingDocFormApproval, readMultiPartyWorkOrder, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
+import { noteIncomingKg } from "./gelen-belge-gelen-kg.service";
+import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 
 const workOrders = new WorkOrderService();
 
@@ -63,6 +65,8 @@ export interface FormWorkOrderInput {
   /** Müşterinin parti no'su (belge başlığı); yalnız gönderildiyse taslağa yazılır. */
   customerBatchNo?: string | null;
   kursunMeters: number;
+  /** Gelen kg (operatörün gördüğü/düzelttiği); yoksa belgeden önerilen (`noteIncomingKg`). Özet satırına yazılır, topa geçmez. */
+  incomingKg?: number;
   /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
   routeTemplateId?: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
@@ -212,6 +216,16 @@ async function flagPropertyIds(targets: ReadonlyArray<{ propertyId: string }>): 
  */
 export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşteri malı; tür seçilmediği için ${TERIM.terbiyeIsEmri.tekilKucuk} Stoğa üretim olarak açıldı. Fason (müşteri malı) için "Fason Belge Okut"u kullanın.`;
 
+/** Onayın satır şekli: ayrı toplar TOP satırı (kendi kg'si), partiler ARABA özet satırı + parti kg'si, tek belge özet kg'si. */
+async function approvalLines(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean) {
+  const kg = await incomingKgPlan(noteId, input, parties, separateRolls);
+  if (!parties) return { summaryKg: kg.summary };
+  return {
+    parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null }) })),
+    ...(separateRolls ? { separateRolls: true } : {}),
+  };
+}
+
 export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrderInput, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<FormWorkOrderResult> {
   await assertFormApprovalEnabled();
   // İzin + üretim modülü (lisans sorusu önce) + rota/rotasız — onaydan ÖNCE (fail-closed; tek kapı, SIRALI'da rota zorunlu).
@@ -270,8 +284,7 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     const approved = await approveDeliveryNote(noteId, input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}, actor.userId, {
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
-      ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(rollParties ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : {}) })) } : {}),
-      ...(rollParties ? { separateRolls: true } : {}),
+      ...(await approvalLines(noteId, input, parties, !!rollParties)),
       ...(target ? { item: target } : {}),
     });
     if (woDefault) warnings.push(`Hedef kumaş seçilmedi; ${TERIM.terbiyeIsEmri.tekilKucuk} varsayılan stok kartı (${woDefault.name}) yazıldı.`);
@@ -321,6 +334,22 @@ async function finishParties({ note, parties, mode, input, route, steps, userId,
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;
   return { workOrderId: first.workOrderId, workOrderNo: first.workOrderNo, batchNumber: first.batchNumber, rollId: first.rollIds[0]!, warnings, workOrders: res.workOrders, failed: res.failed, mode };
+}
+
+/**
+ * Özet satırlarının GELEN kg'si: gövde (operatör) > belge önerisi (`pickIncomingKg`; parti başına `/partiler` `suggestedKg`).
+ * "Toplar ayrı geldi"de kg top başınadır (gövde `rolls[].weightKg`) — burada türetilmez.
+ */
+async function incomingKgPlan(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean): Promise<{ summary: number | null; byBlock: Map<number, number | null> }> {
+  const byBlock = new Map<number, number | null>();
+  if (separateRolls) return { summary: null, byBlock };
+  if (parties) {
+    const suggested = new Map((await getNoteParties(noteId)).parties.map((p) => [p.blockNo, p.suggestedKg]));
+    for (const p of parties) byBlock.set(p.blockNo, p.incomingKg ?? suggested.get(p.blockNo) ?? null);
+    return { summary: null, byBlock };
+  }
+  const { trust } = await noteTanitim(noteId);
+  return { summary: (await noteIncomingKg(noteId, trust, input.incomingKg)).kg, byBlock };
 }
 
 function round3(n: number): number {

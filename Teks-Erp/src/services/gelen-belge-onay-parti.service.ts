@@ -8,7 +8,8 @@ import { sayiMetni } from "./reports/anlati/sayi-bicim";
 
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
 
-/** `weightKg`/`senderRollNo`/`lineKind` yalnız "Toplar ayrı geldi"de dolu (özet satırı = bir top); yoksa bugünkü ARABA satırı. */
+/** `senderRollNo`/`lineKind` yalnız "Toplar ayrı geldi"de (özet satırı = bir top). `weightKg` ARABA'da belgenin GELEN kg'si
+ *  (2026-11-09): satıra yazılır, topa YAZILMAZ (onay döngüsü korur — top kg'si "tartılmış top" anlamını korur). */
 export type PartyEntry = { blockNo: number; meters: number; weightKg?: number | null; senderRollNo?: string | null; lineKind?: DeliveryNoteLineKind };
 type SummaryTarget = { id: string; blockNo: number; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; senderRollNo: string | null; lineKind: DeliveryNoteLineKind };
 
@@ -26,8 +27,8 @@ type PartyNote = {
  * Satır claim'i ve döngü bundan sonra yalnız özet satırını görür (ikinci giriş motoru yok).
  */
 /** Özet satırı hedefleri: partiler verildiyse blok başına (`partyLineId`), yoksa tek özet satırı = kurşun metresi (bugünkü). */
-export function summaryTargets(note: PartyNote, parties?: ReadonlyArray<PartyEntry>): SummaryTarget[] {
-  if (!parties?.length) return [{ id: summaryLineId(note.id), blockNo: 1, meters: note.kursunMeters ?? new Prisma.Decimal(0), weightKg: null, senderRollNo: null, lineKind: DeliveryNoteLineKind.ARABA }];
+export function summaryTargets(note: PartyNote, parties?: ReadonlyArray<PartyEntry>, summaryKg?: number | null): SummaryTarget[] {
+  if (!parties?.length) return [{ id: summaryLineId(note.id), blockNo: 1, meters: note.kursunMeters ?? new Prisma.Decimal(0), weightKg: summaryKg == null ? null : new Prisma.Decimal(summaryKg), senderRollNo: null, lineKind: DeliveryNoteLineKind.ARABA }];
   return [...parties].sort((a, b) => a.blockNo - b.blockNo).map((p) => ({
     id: partyLineId(note.id, p.blockNo), blockNo: p.blockNo, meters: new Prisma.Decimal(p.meters),
     weightKg: p.weightKg == null ? null : new Prisma.Decimal(p.weightKg), senderRollNo: p.senderRollNo ?? null, lineKind: p.lineKind ?? DeliveryNoteLineKind.ARABA,
@@ -43,14 +44,14 @@ export function perDocumentEntryWarning(targets: ReadonlyArray<{ meters: Prisma.
   return `Belge başına tek kayıt: ${sayiMetni(Number(o.kursunMeters), 3)} m tek top olarak ${o.itemName} ürünüyle girildi; ${tail}`;
 }
 
-export async function preparePerDocument(note: PartyNote, userId: string, parties?: ReadonlyArray<PartyEntry>): Promise<void> {
-  const targets = summaryTargets(note, parties);
+export async function preparePerDocument(note: PartyNote, userId: string, parties?: ReadonlyArray<PartyEntry>, summaryKg?: number | null): Promise<void> {
+  const targets = summaryTargets(note, parties, summaryKg);
   const infoIds = note.lines.filter((l) => !isSummaryLine(note.id, l) && !l.rollId && isOpenForApproval(l)).map((l) => l.id);
   // Başlık APPROVING'de claim'li: satır yazan başka yol yok, numara (son + 1) yarışsız.
   const created = await prisma.$transaction(async (tx) => {
     const made: Array<SummaryTarget & { lineNo: number }> = [];
     for (const t of targets) {
-      const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id: t.id, noteId: note.id, rollId: null }, data: { meters: t.meters, ...(t.lineKind === DeliveryNoteLineKind.TOP ? { weightKg: t.weightKg, senderRollNo: t.senderRollNo, lineKind: t.lineKind } : {}) } });
+      const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id: t.id, noteId: note.id, rollId: null }, data: { meters: t.meters, weightKg: t.weightKg, ...(t.lineKind === DeliveryNoteLineKind.TOP ? { senderRollNo: t.senderRollNo, lineKind: t.lineKind } : {}) } });
       if (has.count > 0 || (await tx.customerDeliveryNoteLine.count({ where: { id: t.id } }))) continue;
       const last = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId: note.id }, _max: { lineNo: true } });
       const lineNo = (last._max.lineNo ?? 0) + 1;

@@ -168,6 +168,9 @@ async function run(url: string): Promise<void> {
     JSON.stringify(parties.map((p) => [p.batchNo, p.lineCount, p.meters])));
   check("§2 ⭐ canlı uyarı: parti 1 '4 TOP ↔ 3 satır'; parti 2 temiz; belge '2 sayfa, eksik 2'", /4 TOP yazıyor, 3 satır/.test(parties[0]!.warnings.join(" ")) && parties[1]!.warnings.length === 0 && /eksik sayfa: 2/.test(((p2.data?.warnings ?? []) as string[]).join(" ")),
     JSON.stringify({ p: parties.map((p) => p.warnings), d: p2.data?.warnings }));
+  // B1 2026-11-09: parti başına gelen kg önerisi (beyan kg → Σ satır kg, kısmi toplam yok); alan her partide var.
+  const kgs = (p2.data?.parties ?? []) as Array<{ suggestedKg?: number | null; kgSource?: string | null }>;
+  check("§2 ⭐ suggestedKg + kgSource her partide (null ↔ null tutarlı)", kgs.length === 2 && kgs.every((p) => "suggestedKg" in p && "kgSource" in p && (p.suggestedKg === null) === (p.kgSource === null)), JSON.stringify(kgs.map((p) => [p.suggestedKg, p.kgSource])));
   const nAdd = await mkNote();
   await call("POST", `/api/gelen-belge/irsaliyeler/${nAdd}/satirlar`, tk, { senderRollNo: `${TAG}-EK`, meters: 0.5, blockNo: 1 });
   const ekLine = await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId: nAdd, senderRollNo: `${TAG}-EK` }, select: { id: true } });

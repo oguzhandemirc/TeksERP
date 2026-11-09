@@ -22,6 +22,7 @@ import { resolveProducedOutputWhere } from "../helpers/produced-output.helper";
 import { loadCloseSnapshotView } from "../helpers/workorder-close-snapshot.helper";
 import { computeWorkOrderLocks } from "../helpers/workorder-locks.helper";
 import { computeWoInput } from "../helpers/coverage.helper";
+import { computeWoIncoming, type WoIncoming } from "../helpers/wo-incoming.helper";
 import { loadProducedBuckets } from "../helpers/roll-finalize.helper";
 import { workOrderBoundOnly } from "../helpers/dispatch-header.helper";
 import { hasRoll } from "../helpers/dispatch-item-kind.helper";
@@ -141,6 +142,8 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
       count: 0,
       totalMeters: new Prisma.Decimal(0),
     };
+    // Gelen (belgeden): kök topların belge satırları — metre + kg; belgeden doğmamış İE'de null (2026-11-09 ek alan).
+    let incoming: WoIncoming | null = null;
 
     // Per-step individual roll listesi — detay panelinde "hangi parça kaç metre"
     // sorusunun cevabı. Aggregate ile aynı sorgudan dolduruyoruz, ek round-trip yok.
@@ -388,6 +391,7 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         count: wi?.count ?? 0,
         totalMeters: wi?.meters ?? new Prisma.Decimal(0),
       };
+      if (wi) incoming = await computeWoIncoming(wi);
     }
 
     const stepsWithRollSummary = wo.steps.map((step) => ({
@@ -425,6 +429,7 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         dispatchedTotalQty,
         producedRolls,
         inputRolls,
+        incoming,
         locks,
         closeSnapshot,
       },

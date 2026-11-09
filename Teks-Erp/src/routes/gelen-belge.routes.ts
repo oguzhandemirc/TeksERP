@@ -380,7 +380,7 @@ router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper), tanitim? ({ durum: TANITILDI, sablonKodu, sablonAdi } | { durum: TANITILMAMIS }; sistem şablonunda yok)" }
+ *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper), tanitim? ({ durum: TANITILDI, sablonKodu, sablonAdi } | { durum: TANITILMAMIS }; sistem şablonunda yok), incomingKg (gelen kg|null), incomingKgSource (FIELD|TOTAL|LINE_SUM|null); kg metre hücresinden okunuyorsa notices[] KG_FROM_METER_CELL ve formFields'te kg yok" }
  *       404: { description: DELIVERY_NOTE_NOT_FOUND }
  */
 // Tarayan `gelen-belge:read` taşımaz (D7): taslağın kendi okuma sonucunu yalnız bu özetten görür; ayrıntı panelde.
@@ -690,7 +690,7 @@ const FormWorkOrderBody = z.strictObject({
   // Bizim parti no (İE partisi) + müşterinin parti no'su (belge başlığı).
   ourBatchNo: optText(64), customerBatchNo: optText(64),
   ourBatchNoKey: BatchNoKey.nullable().optional(),
-  kursunMeters: Money("Kurşun metresi"),
+  kursunMeters: Money("Kurşun metresi"), incomingKg: z.number("Gelen kg sayı olmalı").positive("Gelen kg sıfırdan büyük olmalı").max(1_000_000).optional(),
   // K29 S14b: yoksa rotasız (yalnız "Rota uygulaması: Okutmayla"; SIRALI'da servis onaydan ÖNCE 400 GELEN_BELGE_ROUTE_REQUIRED).
   routeTemplateId: Id.optional(),
   stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
@@ -700,7 +700,7 @@ const FormWorkOrderBody = z.strictObject({
   parties: z.array(z.strictObject({
     blockNo: z.number().int().min(1).max(99),
     batchNo: optText(64),
-    meters: z.number().positive("Parti metresi sıfırdan büyük olmalı").max(1_000_000),
+    meters: z.number().positive("Parti metresi sıfırdan büyük olmalı").max(1_000_000), incomingKg: z.number("Parti gelen kg sayı olmalı").positive("Parti gelen kg sıfırdan büyük olmalı").max(1_000_000).optional(),
     targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
     stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
   }), "Geçersiz parti listesi").min(2, "Çok parti için en az iki parti gerekir").max(30).optional(),
@@ -732,11 +732,12 @@ const FormWorkOrderBody = z.strictObject({
  *               ourBatchNo: { type: string, maxLength: 64, nullable: true }
  *               ourBatchNoKey: { type: string, nullable: true }
  *               kursunMeters: { type: string, description: "Ondalık metre (operatörün gördüğü → gözden geçirilmiş sayılır)" }
+ *               incomingKg: { type: number, exclusiveMinimum: 0, description: "Gelen kg; yoksa belgeden önerilen (şablon toplamKg → beyan → Σ satır). Özet satırına yazılır, topa geçmez (0 → 400)" }
  *               routeTemplateId: { type: string, format: uuid, description: "Yoksa iş emri ROTASIZ açılır (adımlar istasyonda okutuldukça eklenir) — yalnız production.routeMode=SCAN; SIRALI'da 400 GELEN_BELGE_ROUTE_REQUIRED, belge onaylanmaz" }
  *               stepPlanning: { type: array, items: { type: object, properties: { sequence: { type: integer }, plannedMachineId: { type: string, format: uuid, nullable: true } } } }
  *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }
  *               notes: { type: string, maxLength: 1000, nullable: true }
- *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, targetValues: { type: array }, stepPlanning: { type: array } } } }
+ *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, incomingKg: { type: number, exclusiveMinimum: 0, description: "Parti gelen kg; yoksa /partiler suggestedKg" }, targetValues: { type: array }, stepPlanning: { type: array } } } }
  *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
  *               rollMode: { type: string, enum: [SINGLE, SEPARATE], description: "Toplar ayrı geldi: SEPARATE + rolls → tek iş emri, her top ayrı top; kurşun metresi topların toplamından türetilir (gövdedeki kursunMeters yerine). Verilmezse tek parça (bugünkü)" }
  *               rolls: { type: array, minItems: 1, maxItems: 200, description: "Yalnız rollMode=SEPARATE ile; parties ile birlikte verilemez", items: { type: object, required: [meters], properties: { meters: { type: number, exclusiveMinimum: 0 }, weightKg: { type: number, exclusiveMinimum: 0, nullable: true }, senderRollNo: { type: string, maxLength: 64, nullable: true } } } }
@@ -768,7 +769,7 @@ const FormWorkOrderBody = z.strictObject({
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "{ parties[], warnings[], multi, defaultMode SINGLE|PER_PARTY }" }
+ *       200: { description: "{ parties[] (… suggestedMeters, suggestedKg, kgSource TOTAL|LINE_SUM|null), warnings[], multi, defaultMode SINGLE|PER_PARTY }" }
  *       404: { description: "DELIVERY_NOTE_NOT_FOUND" }
  */
 router.get("/irsaliyeler/:id/partiler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getNoteParties(Id.parse(req.params.id)) })));

@@ -25,6 +25,7 @@
 //    (Gülkesim A 2026-11-02 §11) kurşun önceliği ters (giriş önce) → §11a/§11c ❌; yıldız soyma kapatılınca §11f ❌.
 //    (2. prova 2026-11-06 §7i) `isTotalsLabel` yalnız `matchesLabel`e indirilince bitişik "T.Adet16" vakası ❌ (137/1; geri alındı).
 // =============================================================================
+import { olcuCakisma } from "./lib/gelen-belge-motor-olcu-cakisma";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -413,6 +414,9 @@ cokBlokBirlesikToplam(check, gercek, sablonlar);
   const yabanci = { ...hazir, id: "u-yabanci", identifiers: { keywords: ["BU YAZI BELGEDE YOK QX"] } } as unknown as DocumentTemplate;
   check("§17 eşiği geçmeyen tanıtılmış şablon hazır şablonu ezmez", classifyWithFallback(ocr, [hazir, yabanci], "genel").templateId === "ceki-listesi-a");
 }
+
+// ── §18 metre ↔ kg aynı hücre: atlama öğrenimi + tanıtma kapısı + okuma koruması (`lib/gelen-belge-motor-olcu-cakisma.ts`) ──
+olcuCakisma(check);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

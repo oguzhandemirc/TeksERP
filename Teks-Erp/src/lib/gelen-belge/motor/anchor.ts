@@ -176,6 +176,9 @@ function makeCandidate(elements: OcrElement[], direction: "right" | "below", fir
   return { raw, elements, rect: unionRect(elements.map((e) => e.rect)), direction };
 }
 
+/** Tanıtmada öğrenilen atlama: aynı etiketin sağında birden çok değer varken ("TOPLAM 241,00 MT 734,00 KG") dokunulan değere kadar. */
+const skipOf = (s: AnchorStrategy): number => (typeof s.skipWords === "number" && Number.isInteger(s.skipWords) && s.skipWords > 0 ? s.skipWords : 0);
+
 /** Değer metninin başındaki ayraçları ayıklar (": 12345" → "12345"). */
 function stripLeadingSeparators(elements: OcrElement[]): OcrElement[] {
   let i = 0;
@@ -197,9 +200,11 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     rest = [{ ...lastEl, text: m.remainder }, ...els.slice(m.elementEnd)];
     firstOverride = m.remainder;
   } else rest = stripLeadingSeparators(els.slice(m.elementEnd));
+  const skip = skipOf(strategy);
   if (rest.length > 0) {
     const cut = stop ? findStopIndex(rest, ctx.otherLabels) : rest.length;
-    const c = makeCandidate(limitValueElements(rest.slice(0, cut), strategy, firstOverride), "right", firstOverride);
+    const own = skip ? undefined : firstOverride;
+    const c = makeCandidate(limitValueElements(rest.slice(0, cut).slice(skip), strategy, own), "right", own);
     if (c) return c;
     // Değer başka bir etiketle kesildi ve boş kaldı → sağdaki satırlara bakma, alt arama denenmeli
     if (cut === 0) return null;
@@ -230,7 +235,7 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
   }
   const cleaned = stripLeadingSeparators(taken);
   const cut = stop ? findStopIndex(cleaned, ctx.otherLabels) : cleaned.length;
-  return makeCandidate(limitValueElements(cleaned.slice(0, cut), strategy), "right");
+  return makeCandidate(limitValueElements(cleaned.slice(0, cut).slice(skip), strategy), "right");
 }
 
 /** below: etiketin altında, yatayda etiketle çakışan ya da sol kenarı etiket soluna yakın ilk takeLines satır. */
@@ -270,5 +275,5 @@ export function findValueBelow(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     }
     if (cut < els.length) break; // bu satırda başka bir etiket başladı
   }
-  return makeCandidate(limitValueElements(collected, strategy), "below");
+  return makeCandidate(limitValueElements(collected.slice(skipOf(strategy)), strategy), "below");
 }

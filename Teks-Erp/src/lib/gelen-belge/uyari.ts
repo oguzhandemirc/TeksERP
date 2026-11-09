@@ -49,6 +49,7 @@ export const NOTICE_TITLE: Record<string, string> = {
   PAGE_INCOMPLETE: "Belgenin diğer sayfaları eksik",
   SERVER_COMPLETED: "Boş alanlar sunucu okumasıyla dolduruldu",
   BATCH_NO_DIFFERS: "Parti no farklı okundu",
+  KG_FROM_METER_CELL: "Kg metre hücresinden okunuyor",
 };
 const OTHER_TITLE = "Okuma uyarısı";
 

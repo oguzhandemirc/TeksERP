@@ -1,7 +1,7 @@
 // Tablet tanıtma çekirdeği (panel `tanitma.test.tsx` saf bölümünün aynası) + sayfa eşleme / fotoğraf boyutu.
 import type { ScanWord, ScanWords } from '../../../../types/inboundDocTeach';
 import {
-  assignColumn, assignField, initialTeach, keptOldFields, meterOnCountRow, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier, isKept, locateKept, templateFieldKeys,
+  adoptTemplate, assignColumn, assignField, initialTeach, keptOldFields, meterOnCountRow, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier, isKept, locateKept, templateFieldKeys,
 } from './teachDraft';
 import { chipStatus, fieldReadout, guidedMarks, toggleFieldWord } from './guided';
 import { isUnrecognized, photoSize, teachPages } from './teachPages';
@@ -201,5 +201,15 @@ describe('çok blok tanıtma kapıları', () => {
     expect(meterOnCountRow(adet, X)).toBe(true);
     expect(teachProblems(adet, X).some((p) => p.includes('T.Adet'))).toBe(true);
     expect(meterOnCountRow(assignField(toggleWord(s, 8), X, 'toplamMetre'), X)).toBe(false);
+  });
+});
+
+// B1 2026-11-09: sunucu kataloğa yeni alan ekleyince (ör. `toplamKg` "Gelen kg") bu sürümün tableti şablonu düzenlerken
+// bilinmeyen anahtarı yok sayar; gövdeye atama olarak girmez → sunucu birleşimi (`mergeTemplateForUpdate`) alanı korur.
+describe('adoptTemplate — sunucunun yeni alanı (eski tablet sözleşmesi)', () => {
+  it('⭐ bilinmeyen alan anahtarı kept\'e ve gövdeye girmez; bilinenler kayıtlı gelir', () => {
+    const s = adoptTemplate(initialTeach(SCAN, 'x', []), { name: 'Kömürhan', template: { identifiers: { keywords: ['KÖMÜRHAN'] }, fields: [{ key: 'toplamMetre' }, { key: 'gelecekKgAlani', label: 'Gelen kg' }] } });
+    expect(s.kept).toEqual(['toplamMetre']);
+    expect(suggestBody(s, W, 's1', 'u-komurhan').assignments).toEqual([]);
   });
 });

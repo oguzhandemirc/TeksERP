@@ -17,7 +17,7 @@
 // `forcedStatus: STOCK` ZORUNLU: motorun renk sezgisi (`colorId != null → WAREHOUSE`, ~1130) fason
 // gelen renkli kumaşı bitmiş depoya düşürürdü; emanet mal İŞLENMEK üzere gelir → ham stok.
 // =============================================================================
-import { DeliveryNoteAliasScope, DeliveryNoteLineStatus, DeliveryNoteStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
+import { DeliveryNoteAliasScope, DeliveryNoteLineKind, DeliveryNoteLineStatus, DeliveryNoteStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
 import prisma from "../lib/prisma";
@@ -82,6 +82,8 @@ export type ApproveOptions = {
   parties?: ReadonlyArray<PartyEntry>;
   /** "Toplar ayrı geldi": `parties` her biri bir top (giriş sebebi "<no> top N", uyarı "Toplar ayrı"). */
   separateRolls?: boolean;
+  /** Tek özet satırının (partisiz ARABA) gelen kg'si — satıra yazılır, topa geçmez (2026-11-09). */
+  summaryKg?: number | null;
   /** K30 S16a (yalnız PER_DOCUMENT): iş emri formunda seçilen hedef ürün — özet satırı topları varsayılan yerine bununla doğar.
    *  Top doğurabilirliği çağıran (`itemProblem`) önceden doğrular. */
   item?: { id: string; name: string; source?: "FORM" | "WORK_ORDER_DEFAULT" };
@@ -94,13 +96,13 @@ export interface ApproveResult {
   warnings: string[];
 }
 
-type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean; ocrRaw?: Prisma.JsonValue };
+type LineRow = { id: string; lineNo: number; blockNo: number; lineKind: DeliveryNoteLineKind; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean; ocrRaw?: Prisma.JsonValue };
 
 const PRE_SELECT = {
   id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, senderDocNo: true, processText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
   kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true, ourBatchNo: true, ourBatchNoKey: true, templateId: true,
-  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
+  lines: { select: { id: true, lineNo: true, blockNo: true, lineKind: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
@@ -346,7 +348,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
 
   await claimHeader(id, note, userId, varianceReason);
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}), ...(dup.confirmedPeers.length ? { duplicateDocNoConfirmed: dup.confirmedPeers } : {}), ...(mode === "PER_DOCUMENT" ? { entryMode: mode } : {}), ...(opts.via ? { via: opts.via } : {}) } });
-  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId, opts.parties);
+  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId, opts.parties, opts.summaryKg);
 
   // ── Satır claim: yalnız topsuz satır (PENDING|FAILED; bayat ENTERING de alınır — token replay korur).
   await prisma.customerDeliveryNoteLine.updateMany({
@@ -372,7 +374,8 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           itemId: (line.itemId ?? defaultItem?.id)!,
           colorId: line.colorId,
           initialQty: Number(line.meters),
-          weightKg: line.weightKg == null ? undefined : Number(line.weightKg),
+          // ARABA özet satırının kg'si belgenin GELEN kg'sidir, tartılmış top kg'si değil → topa geçmez (TOP kipi bugünkü gibi).
+          weightKg: line.weightKg == null || (isSummaryLine(note.id, line) && line.lineKind === DeliveryNoteLineKind.ARABA) ? undefined : Number(line.weightKg),
           width: line.widthCm == null ? null : Number(line.widthCm),
           clientToken: uuidv5(line.id, LINE_TOKEN_NS),
         },

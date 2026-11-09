@@ -18,6 +18,8 @@ import { readOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { noteFormFields } from "./gelen-belge-form-alanlari.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 import { noteTemplateFields } from "./gelen-belge-alan-raporu.service";
+import { noteIncomingKg } from "./gelen-belge-gelen-kg.service";
+import { KG_FROM_METER_CELL_TEXT } from "../lib/gelen-belge/kg-koruma";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
 
@@ -90,6 +92,7 @@ export async function getReadSummary(noteId: string) {
   // Kip onayla AYNI: INFO'da belge geneli fark `warnings`e düşer, `ok`u bozmaz.
   // K30-B: tanıtım durumu + güven kipi (SOR'da NORMAL = bugünkü çıktı; `tanitim` yalnız bilgi).
   const { tanitim, trust } = await noteTanitim(note.id);
+  const incoming = await noteIncomingKg(note.id, trust);
   const tc = totalsCheck(note, note.lines, { documentMode: hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO" });
   return {
     noteId: note.id,
@@ -104,7 +107,11 @@ export async function getReadSummary(noteId: string) {
     totals: { declared, ok: declared ? tc.mismatches.length === 0 : null, mismatches: declared ? tc.mismatches : [] },
     warnings: tc.warnings,
     // Okuma uyarıları — panel detayıyla AYNI helper (`noteNotices`); eski tablet alanı yok sayar.
-    notices: noteNotices(note.warnings),
+    // Metre hücresinden okunan kg canlı uyarıdır (şablon düzeltilince kendiliğinden düşer).
+    notices: noteNotices(incoming.kgFromMeterCell ? [...(Array.isArray(note.warnings) ? note.warnings : []), KG_FROM_METER_CELL_TEXT] : note.warnings),
+    // Gelen kg (2026-11-09): şablon alanı → beyan → Σ satır (`pickIncomingKg`); hedef kg DEĞİL. Eski tablet yok sayar.
+    incomingKg: incoming.kg,
+    incomingKgSource: incoming.source,
     // Parti no + kurşun metresi (Gülkesim): kayıtlı başlık değeri + canlı adaylar; eski tablet alanları yok sayar.
     // Müşterinin parti no'su (belgeden okunan başlık); SORMA + tanıtılmamış (BLIND) tahmin forma dolmaz. Eski tablet yok sayar.
     customerBatchNo: trust === "BLIND" ? null : note.customerBatchNo,

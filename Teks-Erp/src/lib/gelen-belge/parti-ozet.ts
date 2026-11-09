@@ -5,6 +5,7 @@
 // CANLI satırlardan sayılır — operatör eksik satırı girince uyarı kendiliğinden düşer (kayıtlı OCR uyarısı bayatlar, gösterilmez).
 // =============================================================================
 import { resolvePartyMeters } from "./kursun-metre";
+import { resolvePartyKg } from "./gelen-kg";
 
 export interface PartyLineInput {
   blockNo: number;
@@ -39,7 +40,11 @@ export interface NoteParty {
    * Onaysız belgede null (2026-11-06 2. prova ek alanı; eski istemci yok sayar). Doldurucu `getNoteParties`.
    */
   recordedMeters: number | null;
+  /** Σ satır kg (kg'li satırlar; kısmi olabilir — bilgi). */
   weightKg: number | null;
+  /** Forma önerilecek parti GELEN kg'si (`resolvePartyKg`): bölüm beyanı kg → Σ satır kg (hepsi doluysa); 2026-11-09 ek alan. */
+  suggestedKg: number | null;
+  kgSource: "TOTAL" | "LINE_SUM" | null;
   warnings: string[];
 }
 
@@ -105,6 +110,7 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
     const declaredMeters = num(d?.m);
     const suggested = resolvePartyMeters(declaredMeters, ls.map((l) => (num(l.meters) ?? 0)));
     const kgs = ls.map((l) => num(l.weightKg)).filter((x): x is number => x !== null);
+    const kg = resolvePartyKg(num(d?.kg), ls.map((l) => num(l.weightKg)));
     const p: NoteParty = {
       blockNo,
       batchNo: str(d?.batchNo),
@@ -119,6 +125,8 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
       suggestedMetersSource: suggested.source === "TOTAL" || suggested.source === "LINE_SUM" ? suggested.source : null,
       recordedMeters: null,
       weightKg: kgs.length ? r3(kgs.reduce((s, x) => s + x, 0)) : null,
+      suggestedKg: kg.kg,
+      kgSource: kg.source === "TOTAL" || kg.source === "LINE_SUM" ? kg.source : null,
       warnings: [],
     };
     const name = p.batchNo ?? `${blockNo}. parti`;

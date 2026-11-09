@@ -8,6 +8,7 @@ import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry
 import { isNumericText } from "./labels";
 import { validateTemplate } from "./templates";
 import { valueShapeOf } from "./value-limit";
+import { learnAnchorSkip, meterKgClashes } from "./olcu-cakisma";
 
 /** Tanıtmada atanabilen başlık alanları → motor alan anahtarı + tip (taslak eşlemesi bu anahtarları okur). Anahtar KALICIDIR
  *  (kayıtlı şablonlar bunu taşır) — yalnız etiket değişir. K30: iş emri formu alanları (`hedefMetraj`, `hedefKg`, `not`). */
@@ -15,6 +16,8 @@ export const ASSIGNABLE_FIELDS = {
   musteri: { label: "Müşteri", type: "text" },
   partiNo: { label: "Parti No", type: "alnum" },
   toplamMetre: { label: "Gelen metre", type: "decimal" },
+  // 2026-11-09: belgedeki gelen kg (fason malın kilosu) — hedef kg DEĞİL; özet satırına ve İE "Gelen kg"ye gider.
+  toplamKg: { label: "Gelen kg", type: "decimal" },
   evrakNo: { label: "Evrak No", type: "alnum" },
   tarih: { label: "Tarih", type: "date" },
   siparisNo: { label: "Sipariş No", type: "alnum" },
@@ -72,8 +75,8 @@ const COUNT_LABEL = /adet/iu;
  * etiketi adet etiketi ya da tablonun toplam etiketi olamaz. "Tekrar eden bölümde tablo gerekli" tablette (`teachProblems`) —
  * "Şablonu güncelle" eski tabloyu taşıyabildiği için kararı yalnız tablet bilir.
  */
-function teachErrors(input: TemplateSuggestInput, explain: TemplateSuggestion["explain"]): string[] {
-  const out: string[] = [];
+function teachErrors(input: TemplateSuggestInput, explain: TemplateSuggestion["explain"], t: DocumentTemplate): string[] {
+  const out: string[] = meterKgClashErrors(t);
   const meterLabel = explain.find((e) => e.field === "toplamMetre")?.label ?? null;
   const totals = input.table?.totalsLabel?.trim() ?? null;
   const tapped = input.assignments.find((a) => a.field === "toplamMetre");
@@ -84,6 +87,13 @@ function teachErrors(input: TemplateSuggestInput, explain: TemplateSuggestion["e
     out.push(`"${meterLabel}" adet/toplam satırıdır — sağındaki sayı top adedi; gelen metre için tablonun Metre sütununu işaretleyin ("Gelen metre" atamasını kaldırın).`);
   }
   return out;
+}
+
+const fieldLabel = (k: string) => ASSIGNABLE_FIELDS[k as AssignableField]?.label ?? k;
+
+/** Metre ailesi ↔ kg ailesi aynı hücre (`meterKgClashes`) — tanıtma kapısı; güncelleme birleşimi de bunu sorar. */
+export function meterKgClashErrors(t: DocumentTemplate): string[] {
+  return meterKgClashes(t).map((c) => `Aynı kutu hem "${fieldLabel(c.meter)}" hem "${fieldLabel(c.kg)}" olamaz — kg için belgedeki kg değerine dokunun.`);
 }
 
 /** Kutunun içindeki OCR kelimeleri (merkezi kutuda). */
@@ -190,6 +200,9 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
     const meta = ASSIGNABLE_FIELDS[a.field];
     const found = findLabelFor(input.ocr, a.rect);
     const strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction, ...valueLimitOf(input.ocr, a.rect, meta.type) } : roiOf(input.ocr, a.rect);
+    // Etiketin sağında başka değer önce geliyorsa ("TOPLAM 241,00 MT 734,00 KG") dokunulana kadar atlanır.
+    const skip = found && strategy.kind === "anchor" ? learnAnchorSkip(input.ocr, strategy, found.rect, a.rect) : 0;
+    if (skip > 0 && strategy.kind === "anchor") strategy.skipWords = skip;
     // Bölüm alanı her bölümde ayrı okunur (bant dilimi) → pencere/konum yedeği onu ilk bölüme çiviler; yalnız başlık alanına.
     if (found && !a.section) {
       labelRects.set(a.field, found.rect);
@@ -226,7 +239,7 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   addLabelWindows(t, input.ocr, labelRects);
   addPositionFallbacks(t, input.ocr, valueRects);
   const v = validateTemplate(t);
-  return { template: t, explain, errors: [...teachErrors(input, explain), ...v.errors] };
+  return { template: t, explain, errors: [...teachErrors(input, explain, t), ...v.errors] };
 }
 
 /** Pencere çıkarımın göreceği BÖLGE çerçevesinde kurulur (iki belgeli fotoğrafta bölge koordinatı sayfanınki değil). */

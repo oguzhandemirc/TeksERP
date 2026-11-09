@@ -122,6 +122,8 @@ export interface AnchorStrategy {
   maxWords?: number;
   /** Tanıtmada dokunulan değerin biçimi (`u` bayraklı regex kaynağı): adayın buna uyan EN UZUN kelime öneki alınır. */
   valueShape?: string;
+  /** Tanıtmada ölçülen: etiketten sonraki adayın ilk N kelimesi başka alanındır (aynı satırda metre + kg); değer N'den başlar. */
+  skipWords?: number;
 }
 
 /** Düzenli ifade stratejisi: tüm metinde (ya da roi içinde) pattern aranır. */

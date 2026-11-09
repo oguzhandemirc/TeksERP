@@ -70,6 +70,8 @@ export interface PartyInput {
   meters: number;
   /** Yalnız "Toplar ayrı geldi" (`rollsAsParties`): topun kilosu ve gönderen top no'su özet satırına yazılır. */
   weightKg?: number | null;
+  /** Partinin gelen kg'si (operatör düzeltmesi); yoksa `/partiler` önerisi (`suggestedKg`). Özet satırına yazılır, topa geçmez. */
+  incomingKg?: number | null;
   senderRollNo?: string | null;
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;

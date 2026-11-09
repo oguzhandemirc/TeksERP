@@ -7,7 +7,7 @@
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
-import { extractDocument, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type RegionExtraction, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
+import { extractDocument, meterKgClashErrors, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type RegionExtraction, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
 import { rectToPhotoFrame } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { draftFromExtraction } from "../lib/gelen-belge/taslak";
 import { getUserTemplate, loadUserTemplates, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
@@ -88,8 +88,9 @@ export async function suggestFromScan(input: SuggestFromScanInput) {
   if (old && base) {
     template = mergeTemplateForUpdate({ ...(old.template as unknown as DocumentTemplate), id: old.code, version: old.version }, s.template, base.keep);
     template = { ...template, id: code, name: input.name, version: old.version };
-    const v = validateTemplate(template);
-    if (!v.ok) return { template, explain: s.explain, errors: v.errors, preview: null, benzerSablonlar };
+    // Birleşik şablon da metre ↔ kg hücre kapısından geçer (eski kg alanı yeni metre alanıyla aynı hücreyi okumasın).
+    const errors = [...validateTemplate(template).errors, ...meterKgClashErrors(template)];
+    if (errors.length) return { template, explain: s.explain, errors, preview: null, benzerSablonlar };
   }
   const doc = extractDocument(ocr, [template], null);
   const draft = draftFromExtraction(doc, { templates: [template] });

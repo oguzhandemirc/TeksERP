@@ -9,6 +9,7 @@ import prisma from "../lib/prisma";
 import { foldSearchText } from "../utils/search-fold";
 import { formFieldsFromRegion, type FormFields } from "../lib/gelen-belge/form-alanlari";
 import { readFirstRegion } from "./gelen-belge-parti-metre.service";
+import { guardKgFields } from "../lib/gelen-belge/kg-koruma";
 import { itemProblem, ROLL_BEARING_ITEM_TYPES } from "./gelen-belge-ayar.service";
 import { readDesenRenkEslesme } from "./system-setting.service";
 import type { TrustMode } from "./gelen-belge-parti-metre.service";
@@ -47,7 +48,8 @@ export async function noteFormFields(noteId: string, trust: TrustMode = "NORMAL"
   if (trust === "BLIND") return { formFields: {}, suggestions: {} };
   const mode = await readDesenRenkEslesme();
   const region = await readFirstRegion(prisma, noteId);
-  const formFields = formFieldsFromRegion(region?.fields, mode);
+  // Metre hücresinden okunan kg (hedef/gelen) forma dolmaz; uyarıyı okuma özeti verir (`noteIncomingKg.kgFromMeterCell`).
+  const formFields = formFieldsFromRegion(guardKgFields(region).fields, mode);
   const suggestions: FormSuggestions = {};
   if (mode === "ONER") {
     const item = formFields.desenText ? await matchItem(formFields.desenText) : undefined;

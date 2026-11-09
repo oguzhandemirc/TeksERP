@@ -219,6 +219,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
         if (s.takeLines !== undefined && typeof s.takeLines !== 'number') errors.push(`${sp}.takeLines sayı olmalı`);
         if (s.maxWords !== undefined && (typeof s.maxWords !== 'number' || !Number.isInteger(s.maxWords) || s.maxWords < 1)) errors.push(`${sp}.maxWords pozitif tam sayı olmalı`);
         if (s.valueShape !== undefined && !shapeOk(s.valueShape)) errors.push(`${sp}.valueShape geçersiz`);
+        if (s.skipWords !== undefined && (typeof s.skipWords !== 'number' || !Number.isInteger(s.skipWords) || s.skipWords < 1 || s.skipWords > 20)) errors.push(`${sp}.skipWords 1..20 tam sayı olmalı`);
         if (s.minLabelSimilarity !== undefined && (typeof s.minLabelSimilarity !== 'number' || s.minLabelSimilarity < 0 || s.minLabelSimilarity > 1)) errors.push(`${sp}.minLabelSimilarity 0..1 olmalı`);
       } else if (s.kind === 'regex') {
         if (!regexOk(s.pattern)) errors.push(`${sp}.pattern geçersiz`);
