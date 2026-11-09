@@ -236,6 +236,8 @@ export interface InboundDocSettings {
   tabletIeGirisi?: TabletWoEntry;
   /** İE partisinin numarası: SERIES = seriden (formda "Otomatik verilir") · DOCUMENT = belgedeki parti no. Eski sunucu göndermez. */
   batchNumberSource?: 'SERIES' | 'DOCUMENT';
+  /** Çok partili belgede fabrika ayarı (tanıtmanın ③ "Fabrika ayarı (şu an …)" satırı). Eski sunucu göndermez. */
+  multiPartyWorkOrder?: 'SINGLE' | 'PER_PARTY';
 }
 
 /** Tablet iş emri girişi: IKISI = bugünkü (top + belge) · BELGE = her karo tek formu açar · TOP = yalnız top yolu. */

@@ -102,9 +102,10 @@ const draw = (tanitim: ReadTanitim | undefined, r: DocRow = row()) =>
 async function teachAndSave(s: ReturnType<typeof renderWithPaper>) {
   await settle();
   await press(s.getByTestId('tanit-serit-ac'));
+  await press(await s.findByTestId('tanit-asama-ESLEME'));
   await press(await s.findByTestId('tanit-adim-partiNo'));
   await press(await s.findByTestId('tanit-kutu-4'));
-  await waitFor(() => expect(s.getByTestId('tanit-okunan')).toHaveTextContent(/Okunan: P2618733/));
+  await waitFor(() => expect(s.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733'));
   await press(s.getByTestId('tanit-kaydet'));
   await flush();
   expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);

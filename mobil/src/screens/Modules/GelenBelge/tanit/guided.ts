@@ -1,22 +1,11 @@
-// Rehberli (adım adım) tanıtma — saf çekirdek. Adım 0 başlık (kimlik yazısı), sonra alanlar sırayla, son adım ad + kaydet.
-// Sunucu etiketi DEĞER kutusundan bulur (suggest.ts findLabelFor) → kullanıcı yalnız değere dokunur.
+// Rehberli (üç aşamalı) tanıtma — dokunuş çekirdeği: ① kimlik satırı aç/kapa, ② alan değerine kelime ekle/çıkar, okunan değer durumu.
+// Sunucu etiketi DEĞER kutusundan bulur (suggest.ts findLabelFor) → kullanıcı yalnız değere dokunur. Aşama kuralları `stages.ts`.
 import type { ScanWord, ScanWords, SuggestResult } from '../../../../types/inboundDocTeach';
-import { addIdentifier, assignField, clearField, FIELD_OPTIONS, isKept, lineTexts, suggestIdentifiers, teachMarks, type FieldKey, type ScanMark, type TeachState } from './teachDraft';
+import { addIdentifier, assignField, clearField, isKept, lineTexts, suggestIdentifiers, type FieldKey, type TeachState } from './teachDraft';
 import { lowerTr } from '../../../../utils/trCase';
 
 export type { FieldKey } from './teachDraft';
-
-/** İlk sürümün alan sırası (K30-T sözleşmesi madde 5; anahtarlar backend ASSIGNABLE_FIELDS). */
-// Evrak no SON adım: istasyonda belge okutma iş emrini önce bununla bulur (K17/K30-E); belgede yoksa atlanır.
-export const GUIDED_FIELDS: readonly FieldKey[] = ['musteri', 'partiNo', 'hedefMetraj', 'toplamMetre', 'en', 'desen', 'renk', 'evrakNo'];
-
-/** Rehberde günlük dil etiketleri (Gelişmiş'teki FIELD_OPTIONS etiketinden kısa). */
-const GUIDED_LABEL: Partial<Record<FieldKey, string>> = { partiNo: 'Parti no', desen: 'Desen', renk: 'Renk', en: 'En', evrakNo: 'Evrak no' };
-export const fieldLabel = (k: FieldKey): string => GUIDED_LABEL[k] ?? FIELD_OPTIONS.find((f) => f.key === k)?.label ?? k;
-
-/** Adımlar: 0 = başlık, 1..n = alanlar, n+1 = bitir. */
-export const FINISH_STEP = GUIDED_FIELDS.length + 1;
-export const stepField = (step: number): FieldKey | null => (step >= 1 && step <= GUIDED_FIELDS.length ? GUIDED_FIELDS[step - 1]! : null);
+export { fieldLabel } from './fieldTargets';
 
 const norm = (t: string) => lowerTr(t).replace(/\s+/g, ' ').trim();
 const clean = (t: string) => t.replace(/[:.\s]+$/u, '').trim();
@@ -50,18 +39,10 @@ export function toggleFieldWord(s: TeachState, words: readonly ScanWord[], key: 
   return assignField({ ...s, selected: [...cur, i] }, words, key);
 }
 
-/** Fotoğraf kutuları: başlık adımında kimlik satırları, alan adımında o alanın değeri "seçili" görünür. */
-export function guidedMarks(s: TeachState, words: readonly ScanWord[], step: number, located: Partial<Record<FieldKey, number[]>> = {}): ScanMark[] {
-  const base = teachMarks({ ...s, selected: [] }, words, located);
-  const key = stepField(step);
-  if (key) {
-    const mine = new Set(s.fields[key] ?? located[key] ?? []);
-    return base.map((m, i) => (mine.has(i) ? { ...m, tone: 'selected' as const, label: fieldLabel(key) } : m));
-  }
-  if (step !== 0) return base;
+/** Satırı kimlik yazısı olarak açık mı (① işaretlerinde satır kelimeleri boyanır). */
+export function identifierWordSet(s: TeachState, words: readonly ScanWord[]): Set<number> {
   const on = new Set(s.identifiers.filter((d) => d.on).map((d) => norm(d.text)));
-  const idLines = new Set(lineTexts(words).filter((l) => on.has(norm(clean(l.text).slice(0, 60)))).flatMap((l) => l.idx));
-  return base.map((m, i) => (idLines.has(i) && m.tone === 'word' ? { ...m, tone: 'identifier' as const, label: 'Başlık' } : m));
+  return new Set(lineTexts(words).filter((l) => on.has(norm(clean(l.text).slice(0, 60)))).flatMap((l) => l.idx));
 }
 
 export type Readout =
@@ -96,7 +77,7 @@ export function fieldReadout(
 }
 
 export type ChipStatus = 'done' | 'skipped' | 'todo';
-export function chipStatus(s: TeachState, key: FieldKey, skipped: readonly FieldKey[]): ChipStatus {
+export function chipStatus(s: TeachState, key: FieldKey, skipped: readonly FieldKey[] = []): ChipStatus {
   if (s.fields[key]?.length || isKept(s, key)) return 'done';
   return skipped.includes(key) ? 'skipped' : 'todo';
 }

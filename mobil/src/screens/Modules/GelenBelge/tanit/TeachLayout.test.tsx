@@ -113,7 +113,7 @@ describe('Tanımı düzenle — dört boyutta düzen + kayıtlı alanlar', () =>
 
     // Kayıtlı alan: ✓ (kayıtlı) + okunan değer, fosforlu kalem vurgusu içinde.
     const row = r.getByTestId('tanit-adim-partiNo');
-    expect(row).toHaveProp('accessibilityLabel', 'Parti no: kayıtlı');
+    expect(row).toHaveProp('accessibilityLabel', 'Gönderen parti no: önceki tanımdan');
     expect(r.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733');
     const hl = r.UNSAFE_getAllByType(DocHighlight).find((n) => within(n).queryByTestId('tanit-deger-partiNo'));
     expect(hl?.props.active).toBe(true);

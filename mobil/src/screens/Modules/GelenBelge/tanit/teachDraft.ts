@@ -2,7 +2,8 @@
 // Kutular iki çerçevededir: `photoRect` saklanan fotoğrafın üstüne çizim/dokunma, `rect` OCR (dik) çerçevesi — öneri ucuna giden budur.
 // Belgeler basılıdır (fabrika cevabı 38): kelime kutusu güvenilir, el yazısı yolu yok. Panel ikizi `Electron/.../GelenBelgeler/tanit/teachDraft.ts` (istemciler kod paylaşmaz; gövde aynı tutulur).
 import { lowerTr } from '../../../../utils/trCase';
-import type { Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from '../../../../types/inboundDocTeach';
+import { clashingPairs } from './olcuCakisma';
+import type { MultiPartyRule, Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from '../../../../types/inboundDocTeach';
 
 /** Fotoğraf üstü kutu (panelde `ZoomableScan.ScanMark`). */
 export interface ScanMark {
@@ -16,6 +17,8 @@ export const FIELD_OPTIONS = [
   { key: 'musteri', label: 'Müşteri' },
   { key: 'partiNo', label: 'Parti No' },
   { key: 'toplamMetre', label: 'Gelen metre' },
+  // 2026-11-09: belgedeki gelen kg (hedef kg DEĞİL); backend ASSIGNABLE_FIELDS aynası.
+  { key: 'toplamKg', label: 'Gelen kg' },
   { key: 'evrakNo', label: 'Evrak No' },
   { key: 'tarih', label: 'Tarih' },
   { key: 'siparisNo', label: 'Sipariş No' },
@@ -63,6 +66,14 @@ export interface TeachState {
   keepOld: OldPart[];
   /** 'Tanımı düzenle': eski şablonda kayıtlı alanlar. Yeniden atanmayan aynen korunur (sunucu birleştirir), gövdeye ATAMA olarak gitmez. */
   kept: FieldKey[];
+  /** 'Tanımı düzenle': kayıtlı olup bu sefer KALDIRILAN alanlar (gövdede `base.drop`). */
+  drop: FieldKey[];
+  /** ③ Çok parti kuralı; null = fabrika ayarı (gövdeye `rules` girmez). */
+  multiParty: MultiPartyRule | null;
+  /** Düzenlenen şablonun kayıtlı kuralı: fabrika ayarına dönüş ancak bu varken `multiParty: null` olarak gider. */
+  oldMultiParty: MultiPartyRule | null;
+  /** Bölüm başlangıç yazısının belgedeki kelimeleri (yalnız işaret; gövdeye `sectionStart` metni gider). */
+  sectionWords: number[];
 }
 
 /** Eski şablondan taşınabilen yapılar (backend `UPDATE_KEEP_PARTS` aynası). */
@@ -79,6 +90,7 @@ export interface Pt {
 
 export const emptyTeach = (name = ''): TeachState => ({
   name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: '', sectionFields: [], keepOld: [], kept: [],
+  drop: [], multiParty: null, oldMultiParty: null, sectionWords: [],
 });
 
 const PAD = 3;
@@ -95,7 +107,7 @@ export function wordAt(words: readonly ScanWord[], p: Pt): number | null {
   return best;
 }
 
-const byReading = (words: readonly ScanWord[]) => (a: number, b: number) =>
+export const byReading = (words: readonly ScanWord[]) => (a: number, b: number) =>
   words[a]!.lineNo - words[b]!.lineNo || words[a]!.rect.x - words[b]!.rect.x;
 
 /** Kelimelerin okuma sırasıyla birleşik yazısı. */
@@ -210,8 +222,10 @@ export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
 }
 
 /** Ekran açılınca: ad + hazır seçili kimlik önerileri. */
-export function initialTeach(scan: ScanWords, name = '', keep: readonly string[] = [], old: { keepOld?: readonly OldPart[]; kept?: readonly FieldKey[] } = {}): TeachState {
-  let s: TeachState = { ...emptyTeach(name), keepOld: [...(old.keepOld ?? [])], kept: [...(old.kept ?? [])] };
+type OldTeach = { keepOld?: readonly OldPart[]; kept?: readonly FieldKey[]; multiParty?: MultiPartyRule | null };
+export function initialTeach(scan: ScanWords, name = '', keep: readonly string[] = [], old: OldTeach = {}): TeachState {
+  const rule = old.multiParty ?? null;
+  let s: TeachState = { ...emptyTeach(name), keepOld: [...(old.keepOld ?? [])], kept: [...(old.kept ?? [])], multiParty: rule, oldMultiParty: rule };
   for (const t of [...keep, ...suggestIdentifiers(scan)]) s = addIdentifier(s, t);
   return s;
 }
@@ -226,20 +240,38 @@ export function teachErrText(e: unknown): string | undefined {
   return first?.message || e.message;
 }
 
+/** Tanıtmanın üç aşaması (① kimlik · ② eşleme · ③ kurallar); her eksik düzeltileceği aşamaya bağlanır. */
+export type Stage = 'TANIMA' | 'ESLEME' | 'KURALLAR';
+export type TeachIssue = { stage: Stage; text: string };
+
+/** Kaydetmeden/önizlemeden önce eksikler, aşamasıyla (Türkçe); boş = hazır. */
+export function teachIssues(s: TeachState, words?: readonly ScanWord[]): TeachIssue[] {
+  const p: TeachIssue[] = [];
+  const add = (stage: Stage, text: string) => p.push({ stage, text });
+  if (!s.identifiers.some((d) => d.on)) add('TANIMA', 'En az bir kimlik yazısı işaretleyin (başlık, firma adı).');
+  const onCount = s.identifiers.filter((d) => d.on).length;
+  if (onCount > MAX_TEMPLATE_IDENTIFIERS) add('TANIMA', `En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir (şu an ${onCount}); fazlasının işaretini kaldırın.`);
+  if (s.name.trim().length < 2) add('TANIMA', 'Belge tipine bir ad verin (en az 2 karakter).');
+  if (Object.keys(s.fields).length === 0 && !s.kept.some((k) => !s.drop.includes(k))) add('ESLEME', 'En az bir alan atayın (ör. Parti No).');
+  if (words && meterOnCountRow(s, words)) add('ESLEME', '"Gelen metre" adet satırına atanmış (T.Adet\'in sağındaki sayı top adedidir) — tablonun Metre sütununu işaretleyin, "Gelen metre"yi kaldırın.');
+  if (words) for (const c of meterKgClashes(s, words)) add('ESLEME', `Aynı kutu hem "${fieldOptionLabel(c.meter)}" hem "${fieldOptionLabel(c.kg)}" olamaz — kg için belgedeki kg değerine dokunun.`);
+  if (s.repeats && !s.sectionStart.trim()) add('KURALLAR', 'Tekrar eden bölümün başlangıç yazısını seçin.');
+  if (s.repeats && s.sectionFields.length === 0) add('KURALLAR', 'Tekrar eden bölümde en az bir alan bölüm başına okunmalı.');
+  // Çok blok: her bölümün satırları ve metresi tablodan okunur ('Tanımı düzenle' eski tabloyu taşıyabilir).
+  if (s.repeats && !s.columns.m?.length && !s.keepOld.includes('tables')) add('KURALLAR', 'Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.');
+  return p;
+}
+
 /** Kaydetmeden/önizlemeden önce eksikler (Türkçe); boş = hazır. */
 export function teachProblems(s: TeachState, words?: readonly ScanWord[]): string[] {
-  const p: string[] = [];
-  if (s.name.trim().length < 2) p.push('Belge tipine bir ad verin (en az 2 karakter).');
-  if (Object.keys(s.fields).length === 0 && s.kept.length === 0) p.push('En az bir alan atayın (ör. Parti No).');
-  if (!s.identifiers.some((d) => d.on)) p.push('En az bir kimlik yazısı işaretleyin (başlık, firma adı).');
-  const onCount = s.identifiers.filter((d) => d.on).length;
-  if (onCount > MAX_TEMPLATE_IDENTIFIERS) p.push(`En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir (şu an ${onCount}); fazlasının işaretini kaldırın.`);
-  if (s.repeats && !s.sectionStart.trim()) p.push('Tekrar eden bölümün başlangıç yazısını seçin.');
-  if (s.repeats && s.sectionFields.length === 0) p.push('Tekrar eden bölümde en az bir alan bölüm başına okunmalı.');
-  // Çok blok: her bölümün satırları ve metresi tablodan okunur ('Tanımı düzenle' eski tabloyu taşıyabilir).
-  if (s.repeats && !s.columns.m?.length && !s.keepOld.includes('tables')) p.push('Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.');
-  if (words && meterOnCountRow(s, words)) p.push('"Gelen metre" adet satırına atanmış (T.Adet\'in sağındaki sayı top adedidir) — tablonun Metre sütununu işaretleyin, "Gelen metre"yi kaldırın.');
-  return p;
+  return teachIssues(s, words).map((i) => i.text);
+}
+
+const fieldOptionLabel = (k: FieldKey): string => FIELD_OPTIONS.find((f) => f.key === k)?.label ?? k;
+
+/** Metre ailesi ile kg ailesi alanı aynı kutuya (≥ %50 kesişim) işaretlenmiş mi (`olcuCakisma.ts`). */
+export function meterKgClashes(s: TeachState, words: readonly ScanWord[]): { meter: FieldKey; kg: FieldKey }[] {
+  return clashingPairs((k) => (s.fields[k]?.length ? unionRect(words, s.fields[k]!) : null));
 }
 
 /** Backend `suggest.ts` `teachErrors` aynası: "Gelen metre" adet/toplam satırının sağındaki TAM SAYIYA atanmış mı (T.Adet 16 → 16 top). */
@@ -267,7 +299,14 @@ export function suggestBody(s: TeachState, words: readonly ScanWord[], scanId: s
   };
   if (columns.length) body.table = { columns, totalsLabel: s.totalsLabel?.length ? textOf(words, s.totalsLabel).slice(0, 40) : null };
   if (s.repeats && s.sectionStart.trim()) body.sectionStartLabel = s.sectionStart.trim().slice(0, 40);
-  if (baseCode) body.base = { code: baseCode, keep: OLD_PARTS.map((p) => p.key).filter((k) => s.keepOld.includes(k)) };
+  if (baseCode) {
+    // Yeniden işaretlenen alan drop'a girmez: sunucu drop'u birleşimden SONRA uygular, yeni atamayı da silerdi.
+    const drop = s.drop.filter((k) => s.kept.includes(k) && !s.fields[k]?.length);
+    body.base = { code: baseCode, keep: OLD_PARTS.map((p) => p.key).filter((k) => s.keepOld.includes(k)), ...(drop.length ? { drop } : {}) };
+  }
+  // Fabrika ayarı = alan yok (bugünkü davranış); kayıtlı kuralı fabrikaya döndürmek yalnız düzenlemede `null` ile.
+  if (s.multiParty) body.rules = { multiParty: s.multiParty };
+  else if (baseCode && s.oldMultiParty) body.rules = { multiParty: null };
   return body;
 }
 
@@ -285,7 +324,7 @@ export function toggleKeepOld(s: TeachState, part: OldPart): TeachState {
 
 /** Eski şablonda olup bu ekranda yeniden atanmayan alanlar — güncellemede aynen korunur (ekranda listelenir). */
 export function keptOldFields(t: TemplateJson | null | undefined, s: TeachState): string[] {
-  const own = new Set(FIELD_OPTIONS.filter((f) => s.fields[f.key]?.length).map((f) => f.key as string));
+  const own = new Set([...FIELD_OPTIONS.filter((f) => s.fields[f.key]?.length).map((f) => f.key as string), ...s.drop]);
   return arr(t?.fields)
     .map((f) => f as { key?: unknown; label?: unknown })
     .filter((f) => typeof f.key === 'string' && !own.has(f.key))
@@ -305,7 +344,13 @@ export function templateFieldKeys(t: TemplateJson | null | undefined): FieldKey[
 }
 
 /** Alan eski şablondan aynen korunuyor mu (kayıtlı ve bu ekranda yeniden atanmadı)? */
-export const isKept = (s: TeachState, k: FieldKey): boolean => s.kept.includes(k) && !s.fields[k]?.length;
+export const isKept = (s: TeachState, k: FieldKey): boolean => s.kept.includes(k) && !s.fields[k]?.length && !s.drop.includes(k);
+
+/** Şablonun çok parti kuralı (bilinmeyen değer yok sayılır → fabrika ayarı). */
+export function templateMultiParty(t: TemplateJson | null | undefined): MultiPartyRule | null {
+  const v = (t?.rules as { multiParty?: unknown } | undefined)?.multiParty;
+  return v === 'SINGLE' || v === 'PER_PARTY' ? v : null;
+}
 
 /** Korunan alanların belge üstündeki kelimeleri: önizlemenin okuduğu değer kutusuna (OCR çerçevesi) merkezi düşen kelimeler. */
 export function locateKept(s: TeachState, words: readonly ScanWord[], rects: Record<string, Rect> | undefined): Partial<Record<FieldKey, number[]>> {
@@ -341,8 +386,10 @@ export function teachMarks(s: TeachState, words: readonly ScanWord[], located: P
 }
 
 /** "Aynı tip (güncelle)": işaretlemeyi koru, seçilen şablonun kimlik yazılarını + taşınabilir yapılarını + adını al. */
+// Kural: kullanıcı bu ekranda seçtiyse o kalır, seçmediyse şablonunki gelir. Bilinmeyen alan anahtarı (yeni sunucu) yok sayılır.
 export function adoptTemplate(s: TeachState, t: { name: string; template: TemplateJson }): TeachState {
-  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template), kept: templateFieldKeys(t.template) };
+  const rule = templateMultiParty(t.template);
+  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template), kept: templateFieldKeys(t.template), drop: [], multiParty: s.multiParty ?? rule, oldMultiParty: rule };
   for (const k of templateKeywords(t.template)) out = addIdentifier(out, k);
   return out;
 }

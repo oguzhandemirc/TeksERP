@@ -2,8 +2,11 @@
 import type { ScanWord, ScanWords } from '../../../../types/inboundDocTeach';
 import {
   adoptTemplate, assignColumn, assignField, initialTeach, keptOldFields, meterOnCountRow, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier, isKept, locateKept, templateFieldKeys,
+  templateMultiParty, meterKgClashes,
 } from './teachDraft';
-import { chipStatus, fieldReadout, guidedMarks, toggleFieldWord } from './guided';
+import { sameCellRatio } from './olcuCakisma';
+import { chipStatus, fieldReadout, toggleFieldWord } from './guided';
+import { dropKept, stageMarks, undoDrop } from './stages';
 import { isUnrecognized, photoSize, teachPages } from './teachPages';
 
 // Fotoğraf dönük saklanmış gibi: photoRect ≠ rect (öneri OCR çerçevesini almalı).
@@ -156,7 +159,7 @@ describe('güncelle kipi — kayıtlı alanlar (kept)', () => {
     expect(fieldReadout(s, 'partiNo', { result, fresh: false, error: null })).toEqual({ kind: 'ok', value: 'P2618733', label: null, kept: true });
     const located = locateKept(s, W, result.preview.fieldRects);
     expect(located).toEqual({ partiNo: [6] });
-    const m = guidedMarks(s, W, 0, located)[6]!;
+    const m = stageMarks(s, W, { stage: 'ESLEME', target: null }, located)[6]!;
     expect(m.tone).toBe('field');
     expect(m.label).toMatch(/kayıtlı/);
   });
@@ -211,5 +214,55 @@ describe('adoptTemplate — sunucunun yeni alanı (eski tablet sözleşmesi)', (
     const s = adoptTemplate(initialTeach(SCAN, 'x', []), { name: 'Kömürhan', template: { identifiers: { keywords: ['KÖMÜRHAN'] }, fields: [{ key: 'toplamMetre' }, { key: 'gelecekKgAlani', label: 'Gelen kg' }] } });
     expect(s.kept).toEqual(['toplamMetre']);
     expect(suggestBody(s, W, 's1', 'u-komurhan').assignments).toEqual([]);
+  });
+});
+
+// Üç aşama (2026-11-09): gelen kg alanı, kurallar ve alan kaldırma gövdesi, şablon kuralının benimsenmesi, metre/kg aynı kutu.
+describe('üç aşama gövdesi ve kapıları', () => {
+  const marked = () => assignField(toggleWord(initialTeach(SCAN, 'Güleçsoy'), 6), W, 'partiNo');
+
+  it('"Gelen kg" (toplamKg) atanabilir alandır ve gövdeye atama olarak girer', () => {
+    const s = assignField(toggleWord(marked(), 9), W, 'toplamKg');
+    expect(suggestBody(s, W, 's1').assignments.map((a) => a.field)).toEqual(['partiNo', 'toplamKg']);
+  });
+
+  it('⭐ fabrika ayarı → gövdede rules YOK; kural seçilince var; düzenlemede kayıtlı kuralı fabrikaya döndürmek null', () => {
+    const s = marked();
+    expect(suggestBody(s, W, 's1')).not.toHaveProperty('rules');
+    expect(suggestBody({ ...s, multiParty: 'SINGLE' }, W, 's1').rules).toEqual({ multiParty: 'SINGLE' });
+    expect(suggestBody({ ...s, oldMultiParty: 'PER_PARTY' }, W, 's1', 'u-x').rules).toEqual({ multiParty: null });
+    expect(suggestBody({ ...s, oldMultiParty: 'PER_PARTY' }, W, 's1')).not.toHaveProperty('rules');
+    expect(suggestBody(s, W, 's1', 'u-x')).not.toHaveProperty('rules');
+  });
+
+  it('⭐ kaldırılan kayıtlı alan base.drop; yeniden işaretlenen drop\'a girmez (sunucu yeni atamayı da silerdi)', () => {
+    let s: ReturnType<typeof marked> = { ...marked(), kept: ['partiNo', 'tarih'] };
+    expect(suggestBody(s, W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: [] });
+    s = dropKept(dropKept(s, 'tarih'), 'partiNo');
+    expect(isKept(s, 'tarih')).toBe(false);
+    expect(suggestBody(s, W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: [], drop: ['tarih'] });
+    expect(suggestBody(undoDrop(s, 'tarih'), W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: [] });
+    expect(keptOldFields({ fields: [{ key: 'tarih', label: 'Tarih' }, { key: 'not' }] }, s)).toEqual(['not']);
+  });
+
+  it('adoptTemplate kuralı alır (kullanıcı seçimi önce gelir), bilinmeyen alan anahtarını yok sayar', () => {
+    const t = { fields: [{ key: 'partiNo' }, { key: 'gelecekAlani' }], identifiers: { keywords: ['ESKİ'] }, rules: { multiParty: 'PER_PARTY' } };
+    const a = adoptTemplate(initialTeach(SCAN, 'X'), { name: 'Eski', template: t });
+    expect(a.kept).toEqual(['partiNo']);
+    expect(a).toMatchObject({ multiParty: 'PER_PARTY', oldMultiParty: 'PER_PARTY', drop: [] });
+    expect(adoptTemplate({ ...initialTeach(SCAN, 'X'), multiParty: 'SINGLE' }, { name: 'Eski', template: t }).multiParty).toBe('SINGLE');
+    expect(adoptTemplate(initialTeach(SCAN, 'X'), { name: 'Eski', template: { rules: { multiParty: 'BILINMEYEN' } } }).multiParty).toBeNull();
+    expect(templateMultiParty(undefined)).toBeNull();
+  });
+
+  it('⭐ aynı kutu hem metre hem kg alanına işaretlenemez (backend teachErrors aynası, ≥ %50 kesişim)', () => {
+    const X: ScanWord[] = [...W, w('241', [52, 1002], 9, 58)];
+    let s = assignField(toggleWord(initialTeach({ ...SCAN, words: X }, 'G'), 9), X, 'toplamMetre');
+    s = assignField(toggleWord(s, 10), X, 'hedefKg');
+    expect(meterKgClashes(s, X)).toEqual([{ meter: 'toplamMetre', kg: 'hedefKg' }]);
+    expect(teachProblems(s, X)).toContain('Aynı kutu hem "Gelen metre" hem "Hedef kg" olamaz — kg için belgedeki kg değerine dokunun.');
+    expect(sameCellRatio({ x: 0, y: 0, width: 10, height: 10 }, { x: 20, y: 0, width: 10, height: 10 })).toBe(0);
+    const apart = assignField(toggleWord(assignField(toggleWord(initialTeach(SCAN, 'G'), 9), W, 'toplamMetre'), 6), W, 'hedefKg');
+    expect(meterKgClashes(apart, W)).toEqual([]);
   });
 });

@@ -3,13 +3,13 @@
 // Gelişmiş kipte bayat önizlemeyle Kaydet önce önizlemeyi tazeleyip gösterir, kayıt ikinci dokunuşta (görmeden kayıt yok);
 // sunucu `benzerSablonlar` gönderirse kayıttan önce "aynı tip mi?" sorulur. ONLINE-ONLY: kuyruğa alınmaz.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import type { SimilarTemplate, SuggestBody, SuggestResult, UserTemplateDetail } from '../../../../types/inboundDocTeach';
 import { suggestName } from './guided';
-import { adoptTemplate, initialTeach, locateKept, oldParts, suggestBody, teachErrText, teachProblems, templateFieldKeys, templateKeywords, type TeachState } from './teachDraft';
+import { adoptTemplate, initialTeach, locateKept, oldParts, suggestBody, teachErrText, teachProblems, templateFieldKeys, templateKeywords, templateMultiParty, type TeachState } from './teachDraft';
 
 export const teachWordsKey = (scanId: string | null) => ['gelen-belge', 'tanitma', 'kelimeler', scanId] as const;
 export const USER_TEMPLATES_PREFIX = ['gelen-belge', 'sablonlar', 'ozel'] as const;
@@ -60,6 +60,13 @@ function passesSaveGate(result: SuggestResult, decided: boolean, mustShowPreview
   return true;
 }
 
+/** Benzer şablonu çeker; çekilemezse bildirim + null (işaretleme korunur). */
+function fetchSimilar(qc: QueryClient, kod: string) {
+  return qc
+    .fetchQuery({ queryKey: userTemplateKey(kod), queryFn: () => inboundDocService.getUserTemplate(kod), staleTime: Infinity, retry: false })
+    .catch(failToast('Belge tipi açılamadı', 'İşaretlemeniz korunuyor; yeniden deneyin.'));
+}
+
 /** Toast: yeni tip | sürümlü güncelleme. */
 function savedToast(updated: boolean, v: { name: string; version: number }) {
   Toast.show({
@@ -73,6 +80,8 @@ function savedToast(updated: boolean, v: { name: string; version: number }) {
 function useTeachSource(scanId: string | null, initialCode: string | null) {
   const [code, setCode] = useState(initialCode);
   const adoptRef = useRef(false);
+  // Benimseme sonrası kayıt: kayıt anındaki benzer şablon sorusunda evet; ① "Onu düzenle" bağlantısında hayır (işaretleme sürer).
+  const adoptSaveRef = useRef(true);
   const [pendingSave, setPendingSave] = useState(false);
   useEffect(() => {
     setCode(initialCode);
@@ -92,13 +101,27 @@ function useTeachSource(scanId: string | null, initialCode: string | null) {
       if (!ex) return;
       adoptRef.current = false;
       setState((s) => (s ? adoptTemplate(s, ex) : s));
-      setPendingSave(true);
+      if (adoptSaveRef.current) setPendingSave(true);
       return;
     }
-    setState(words.data ? initialTeach(words.data, ex?.name ?? suggestName(words.data), templateKeywords(ex?.template), { keepOld: oldParts(ex?.template), kept: templateFieldKeys(ex?.template) }) : null);
+    setState(
+      words.data
+        ? initialTeach(words.data, ex?.name ?? suggestName(words.data), templateKeywords(ex?.template), {
+            keepOld: oldParts(ex?.template),
+            kept: templateFieldKeys(ex?.template),
+            multiParty: templateMultiParty(ex?.template),
+          })
+        : null,
+    );
   }, [words.data, ex]);
 
-  return { code, setCode, existing, ex, words, state, setState, adoptRef, pendingSave, setPendingSave };
+  /** Başka bir kullanıcı şablonunu benimse: kod değişir, şablon gelince işaretleme korunarak birleşir; `andSave` sonra kaydeder. */
+  const adopt = (kod: string, andSave: boolean) => {
+    adoptSaveRef.current = andSave;
+    adoptRef.current = true;
+    setCode(kod);
+  };
+  return { existing, ex, words, state, setState, adopt, pendingSave, setPendingSave };
 }
 
 /** Önizleme durumu; yalnız EN SON isteğin yanıtı ekrana yazılır (hızlı dokunuşta eski yanıt yenisini ezmesin). */
@@ -149,7 +172,7 @@ function useLocated(state: TeachState | null, words: Parameters<typeof locateKep
 export function useTeachModal(scanId: string | null, initialCode: string | null, onSaved: (r: TeachSaved) => void, opts: { auto?: boolean } = {}) {
   const attempt = useAttemptToken();
   const qc = useQueryClient();
-  const { code, setCode, existing, ex, words, state, setState, adoptRef, pendingSave, setPendingSave } = useTeachSource(scanId, initialCode);
+  const { existing, ex, words, state, setState, adopt, pendingSave, setPendingSave } = useTeachSource(scanId, initialCode);
 
   const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, ex?.code ?? null) : null), [state, scanId, words.data, ex?.code]);
   const previewBody = useMemo(() => (body && body.name.length < 2 ? { ...body, name: PREVIEW_NAME } : body), [body]);
@@ -206,20 +229,19 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
   }, [pendingSave, ex, state]);
 
   // Şablon ÖNCE çekilir, sonra kod değişir: çekilemezse benimseme yarım kalmaz (ekran "yükleniyor"da takılmaz).
-  const chooseSimilar = async (kod: string) => {
+  const chooseSimilar = async (kod: string, andSave = true) => {
     setSimilar(null);
-    if (kod === ex?.code) return void save(true);
-    const fetched = qc.fetchQuery({ queryKey: userTemplateKey(kod), queryFn: () => inboundDocService.getUserTemplate(kod), staleTime: Infinity, retry: false });
-    if (!(await fetched.catch(failToast('Belge tipi açılamadı', 'İşaretlemeniz korunuyor; yeniden deneyin.')))) return;
-    adoptRef.current = true;
-    setCode(kod);
+    if (kod === ex?.code) return andSave ? void save(true) : undefined;
+    const got = await fetchSimilar(qc, kod);
+    if (!got) return;
+    adopt(kod, andSave);
+    if (!andSave) Toast.show({ type: 'info', text1: `"${got.name}" tanımı düzenleniyor`, text2: 'İşaretlemeniz korundu; kayıt o belge tipini günceller.' });
   };
 
   return {
     existing: ex,
     /** Kayıtlı (korunan) alanların belge üstündeki kelimeleri — son önizlemenin okuduğu kutudan. */
     located: useLocated(state, words.data?.words, preview?.result.preview?.fieldRects),
-    existingLoading: !!code && existing.isLoading,
     existingError: existing.isError,
     words,
     state,
@@ -237,6 +259,8 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
     busy: saving ? ('save' as const) : previewing ? ('preview' as const) : null,
     similar,
     chooseSimilar: (kod: string) => void chooseSimilar(kod),
+    /** ① "Benzeyen tip · Onu düzenle": o tipi benimser, KAYDETMEZ (eşleme sürer). */
+    adoptSimilar: (kod: string) => void chooseSimilar(kod, false),
     saveAsNew: () => {
       setSimilar(null);
       void save(true);
