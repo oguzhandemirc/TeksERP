@@ -1,5 +1,5 @@
 import { Footprints } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 /** Top izleme aracının (Refakat Kartı İzleme) rotası ve tohum anahtarı — `TravelerTracePage` `useScanSeed("rollId")` okur. */
@@ -14,21 +14,21 @@ interface Props {
 }
 
 /**
- * Top kartından "İz sür" — katalog "top kartından da açılır" diyordu ama bağlantı yoktu
+ * Top kartından "İz sür" — kartta TEK, yazılı outline düğme (2026-11-10: iki "İz sür" vardı, biri link gibiydi).
+ * Önceki not: "İz sür" — katalog "top kartından da açılır" diyordu ama bağlantı yoktu
  * (R0-GECIS bulgusu). Audit `TraceLink` ile aynı kalıp: izin yoksa hiç çizilmez; sekme deposu tıklamada yüklenir.
  */
 export function RollTraceLink({ rollId, className }: Props) {
   const { hasPermission } = useRoleAccess();
   if (!hasPermission("report:production")) return null;
   return (
-    <button
+    <Button
       type="button"
+      size="sm"
+      variant="outline"
       data-testid="roll-trace-link"
       title="Bu topun refakat kartı hangi istasyonlarda okutuldu? (Operasyon → İz sürme → Top İzleme)"
-      className={cn(
-        "inline-flex items-center gap-1 rounded px-1 text-xs font-medium text-primary underline-offset-2 hover:underline",
-        className,
-      )}
+      className={className ? `gap-1 ${className}` : "gap-1"}
       onClick={(e) => {
         e.stopPropagation();
         const target = travelerTraceTarget(rollId);
@@ -38,6 +38,6 @@ export function RollTraceLink({ rollId, className }: Props) {
       }}
     >
       <Footprints className="h-3.5 w-3.5" /> İz sür
-    </button>
+    </Button>
   );
 }

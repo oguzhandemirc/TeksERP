@@ -14,6 +14,9 @@
 //   §5 İçerideki İşler — ölü (K18) · SHIPPED · SCRAP dışlanır; kovalar (waiting/inProcess/ready/other);
 //      metre = currentQty (initialQty DEĞİL); toplam, aynı sahip + canlı statü süzgeçli `/rolls/stats` ile birebir
 //   §8 "Yalnız sevke hazır" (D4-KUC2 b) — süzme sunucuda; satırlar + totals tek WHERE; onlyReady=false bugünkü liste
+//   §9 top kartı (2026-11-10) — liste satırı `ownerCustomer {id,name}` taşır, sahipsizde null; liste `customerBatchNo`
+//      gelen belgeden (ata zinciriyle) türetilir, belgesiz topta null; detay sahibi + etiket müşterisini (null) AYRI,
+//      `deliveryNote` (noteNo, senderDocNo, parti, inherited) ve ata barkodunu döner
 //   §6 sahip lookup'ı — yalnız top sahibi müşteriler (A, B), satır {id,name,code}; emanet KAPALI → boş
 //   §7 KOVA ↔ SEKME — her bağlantılı kova (waiting/waitingSemi/inProcess/ready) sayı+metre olarak, panelin
 //      bağlandığı sekmenin rollScope'u + sahip + includeFire `/rolls/stats`ıyla birebir. Eşleme panelden OKUNUR
@@ -26,6 +29,8 @@
 //   hücresi boş Ham Stok listesi açıyordu); lookup'taki emanet kapısı düşürülünce §6b ❌.
 //   (2026-10-31, D4-KUC2 b) sunucu kapsamı (`consignedOwnerScope`) hep boş → §8a/§8b ❌; süzgeç istemciye taşındı
 //   (ConsignedWorkPage `rows.filter(r => r.ready.count > 0)`) → §0e ❌ (28/1); ikisi de geri alındı.
+//   (2026-11-10, top kartı) liste `attachCustomerBatchNo` düşürülünce §9c/§9d ❌; detay `ownerCustomer` include'u
+//   düşürülünce §9e/§9h ❌ (33/4); geri alındı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -77,6 +82,33 @@ async function middlewareError(): Promise<AppError | null> {
   return got instanceof AppError ? got : null;
 }
 
+type MkFn = (owner: string | null, status: RollStatus, current: number, extra?: Partial<Prisma.RollUncheckedCreateInput>) => Promise<string>;
+type KartRow = RollRow & { barcode: string | null; customerBatchNo?: string | null };
+type KartDetail = KartRow & { labelCustomer?: unknown; parent?: { barcode: string | null } | null; deliveryNote?: { noteNo: string; senderDocNo: string | null; customerBatchNo: string | null; inherited: boolean } | null };
+async function topKarti(c: { item: string; custA: string; mk: MkFn; ids: { notes?: string[] }; base: Record<string, string> }): Promise<void> {
+  const parentId = await c.mk(c.custA, RollStatus.TAMBUR_CONSUMED, 0);
+  const childId = await c.mk(c.custA, RollStatus.WAREHOUSE, 45, { parentRollId: parentId });
+  const loneId = await c.mk(null, RollStatus.WAREHOUSE, 33);
+  const note = await prisma.customerDeliveryNote.create({
+    data: { noteNo: `${TAG}-N`.slice(0, 32), sourceKind: "MANUAL", ownerCustomerId: c.custA, senderDocNo: "IRS-77", customerBatchNo: " P-9 ", lines: { create: [{ lineNo: 1, meters: 100, rollId: parentId }] } },
+    select: { id: true },
+  });
+  (c.ids.notes ??= []).push(note.id);
+  const rows = ((await inventory.findAllRolls(fakeReq({ ...c.base, pageSize: "100" }))) as unknown as { data: KartRow[] }).data;
+  const child = rows.find((r) => r.id === childId);
+  const lone = rows.find((r) => r.id === loneId);
+  check("§9a liste: sahipli satır ownerCustomer {id,name} taşır", child?.ownerCustomer?.id === c.custA && typeof child?.ownerCustomer?.name === "string");
+  check("§9b liste: sahipsiz satırda ownerCustomer null", lone !== undefined && lone.ownerCustomer === null, JSON.stringify(lone?.ownerCustomer));
+  check("§9c liste: müşteri parti no atanın gelen belgesinden (kırpılmış)", child?.customerBatchNo === "P-9", String(child?.customerBatchNo));
+  check("§9d liste: belgesiz topta müşteri parti no null", lone !== undefined && lone.customerBatchNo === null, String(lone?.customerBatchNo));
+  const d = (await inventory.findRollById(childId)).data as unknown as KartDetail;
+  check("§9e detay: sahip dolu, etiket müşterisi AYRI alan (null)", d.ownerCustomer?.id === c.custA && "labelCustomer" in d && d.labelCustomer === null);
+  check("§9f detay: deliveryNote atadan (inherited) noteNo + senderDocNo + parti", d.deliveryNote?.inherited === true && d.deliveryNote.senderDocNo === "IRS-77" && d.deliveryNote.customerBatchNo === "P-9" && d.deliveryNote.noteNo.startsWith(TAG), JSON.stringify(d.deliveryNote));
+  check("§9g detay: ata top barkodu", d.parent?.barcode !== null && d.parent?.barcode?.startsWith(TAG) === true);
+  const dl = (await inventory.findRollById(loneId)).data as unknown as KartDetail;
+  check("§9h detay: sahipsiz + belgesiz → ownerCustomer null, deliveryNote null", dl.ownerCustomer === null && dl.deliveryNote === null);
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) { console.log(`⛔ ${engel}`); process.exitCode = 2; await pool.end(); return; }
@@ -85,7 +117,7 @@ async function main(): Promise<void> {
 
   const foto = await prisma.systemSetting.findMany({ where: { key: SETTING_KEYS.EMANET_ENABLED }, select: { key: true, value: true } });
   const setFlag = (v: boolean) => prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.EMANET_ENABLED }, create: { key: SETTING_KEYS.EMANET_ENABLED, value: String(v) }, update: { value: String(v) } });
-  const ids = { item: "", custA: "", custB: "", st: "", wo: "", grade: "", rolls: [] as string[] };
+  const ids = { item: "", custA: "", custB: "", st: "", wo: "", grade: "", rolls: [] as string[], notes: [] as string[] };
 
   try {
     const item = await prisma.item.create({ data: { code: `${TAG}-I`, name: `${TAG} Kumaş`, itemType: "FABRIC" }, select: { id: true } });
@@ -224,7 +256,10 @@ async function main(): Promise<void> {
     check("§4b KAPALI: İçerideki İşler 403 MODULE_DISABLED (modul emanet)", err?.statusCode === 403 && err.details?.code === "MODULE_DISABLED", `${err?.statusCode} ${String(err?.details?.code)}`);
     const offOwners = (await listRollOwnerCustomers()).data!;
     check("§6b KAPALI: sahip lookup'ı boş (cari adı sızmaz)", offOwners.length === 0, `n=${offOwners.length}`);
+    await topKarti({ item: item.id, custA: custA.id, mk, ids, base });
   } finally {
+    await prisma.customerDeliveryNoteLine.deleteMany({ where: { noteId: { in: ids.notes } } });
+    await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: ids.notes } } });
     await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
     if (ids.wo) { await prisma.workOrderStep.deleteMany({ where: { workOrderId: ids.wo } }); await prisma.workOrder.deleteMany({ where: { id: ids.wo } }); }
     if (ids.st) await prisma.station.deleteMany({ where: { id: ids.st } });

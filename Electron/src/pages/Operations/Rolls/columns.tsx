@@ -150,6 +150,21 @@ function qualityColumn(grades: readonly QualityGrade[]): ColumnDef<Roll> {
   );
 }
 
+export const CUSTOMER_BATCH_HINT = "Müşterinin kendi parti numarası (gelen belge / etiket)";
+/** Etikete basılan parti önce; yoksa gelen belgeden türetilen (sunucu `customerBatchNo`). */
+export const customerBatchOf = (r: Pick<Roll, "labelBatchNo" | "customerBatchNo">): string | null =>
+  r.labelBatchNo?.trim() || r.customerBatchNo?.trim() || null;
+
+/** "Emanet · <müşteri>" — sahipsiz (bizim mal) topta hiçbir şey çizilmez. */
+export function ConsignedBadge({ owner }: { owner: Roll["ownerCustomer"] }) {
+  if (!owner) return null;
+  return (
+    <Badge variant="outline" data-testid="roll-consigned-badge" className="border-amber-400 bg-amber-50 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+      Emanet · {owner.name}
+    </Badge>
+  );
+}
+
 /** SEÇİM tipli özellikte DEĞER de yazılır (RollDetailSheet ile aynı kural) — hücre + dışa aktarım. */
 const rollPropertyText = (p: NonNullable<Roll["properties"]>[number]): string =>
   p.value ? `${p.property.name}: ${p.value.name}` : p.property.name;
@@ -172,9 +187,11 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     id: "item",
     header: "Kumaş",
     meta: { label: "Kumaş", exportValue: (r) => r.item?.name ?? "" },
+    // Emanet (müşteri malı) rozeti ad hücresinde — "Sahibi" sütunu kapalı/gizli olsa da satırda okunur (2026-11-10).
     cell: ({ row }) => (
-      <span className="text-xs font-medium">
-        {row.original.item?.name ?? "—"}
+      <span className="inline-flex flex-wrap items-center gap-1">
+        <span className="text-xs font-medium">{row.original.item?.name ?? "—"}</span>
+        <ConsignedBadge owner={row.original.ownerCustomer} />
       </span>
     ),
   },
@@ -333,16 +350,14 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       ),
   },
   {
-    // Müşteri parti no (etikete basılan J1/K30); yalnız ayarı açık müşterinin toplarında dolu.
+    // Müşterinin parti no'su: etikete basılan (J1/K30) yoksa gelen belgeden türetilen (ata zinciri, sunucu).
     accessorKey: "labelBatchNo",
-    header: "Müşteri Parti",
-    meta: { label: "Müşteri Parti" },
-    cell: ({ row }) =>
-      row.original.labelBatchNo ? (
-        <span className="text-xs">{row.original.labelBatchNo}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
+    header: () => <span title={CUSTOMER_BATCH_HINT}>Müşteri parti no</span>,
+    meta: { label: "Müşteri parti no", exportValue: (r) => customerBatchOf(r) ?? "" },
+    cell: ({ row }) => {
+      const v = customerBatchOf(row.original);
+      return v ? <span className="text-xs">{v}</span> : <span className="text-muted-foreground">—</span>;
+    },
   },
   {
     // BULUNDUĞU İSTASYON (2026-08-05 saha talebi: "Üretimde sekmesi hangi

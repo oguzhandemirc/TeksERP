@@ -158,6 +158,16 @@ export interface Roll {
   warehouse?: { id: string; code: string; name: string } | null;
   /** Emanet sahibi (liste include `ownerCustomer`) — "Sahibi" sütunu; eski sunucu göndermez → opsiyonel. */
   ownerCustomer?: { id: string; name: string } | null;
+  /** Müşterinin parti no'su — gelen belgeden, ata zinciriyle türetilir (liste + detay); yoksa null. */
+  customerBatchNo?: string | null;
+  /** Etiketteki müşteri — SAHİPLİK DEĞİL (yalnız detay). */
+  labelCustomer?: { id: string; name: string } | null;
+  /** Ata top (Tambur kesimi vb.) — yalnız detay. */
+  parent?: { id: string; barcode: string | null } | null;
+  /** Bizim parti + iş emri — yalnız detay. */
+  batch?: { id: string; batchNumber: string; workOrder: { id: string; workOrderNumber: string } | null } | null;
+  /** En yakın atanın gelen belge satırı — yalnız detay; `inherited` = satır atada. */
+  deliveryNote?: RollDeliveryNoteRef | null;
   warehouseId?: string | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
@@ -200,6 +210,15 @@ export interface Roll {
   sack?: { id: string; sackNo: string; seq: number } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RollDeliveryNoteRef {
+  noteId: string;
+  noteNo: string;
+  senderDocNo: string | null;
+  customerBatchNo: string | null;
+  senderRollNo: string | null;
+  inherited: boolean;
 }
 
 /** Roll'a bağlı sevkiyatın durumu (rezerve rozetinin alt metni için).

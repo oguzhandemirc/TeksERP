@@ -9,6 +9,7 @@
 import { ACTIVE_ROLL_PROPERTY } from "../helpers/property-revoke.helper";
 import prisma from "../../lib/prisma";
 import { customerCodeSearchRollIds } from "../helpers/roll-scan-resolve.helper";
+import { attachCustomerBatchNo } from "../helpers/roll-delivery-note-line.helper";
 import { normalizeScanCode } from "../../utils/code-format";
 import { normalizeFoldType } from "../helpers/fold-type";
 import { AppError } from "../../utils/app-error";
@@ -629,7 +630,7 @@ export async function findAllRolls(this: InventoryServiceThis,
       ]);
 
       const hasMore = items.length > limit;
-      const data = hasMore ? items.slice(0, limit) : items;
+      const data = await attachCustomerBatchNo(hasMore ? items.slice(0, limit) : items);
       const last = data[data.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, sortBy) : null;
 
@@ -649,7 +650,7 @@ export async function findAllRolls(this: InventoryServiceThis,
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       prisma.roll.findMany({
         where,
         orderBy,
@@ -659,6 +660,7 @@ export async function findAllRolls(this: InventoryServiceThis,
       }),
       prisma.roll.count({ where }),
     ]);
+    const data = await attachCustomerBatchNo(rows);
 
     return {
       success: true,
