@@ -17,6 +17,7 @@ import type { NoteParty } from '../../../../services/inboundDoc.service';
 import { partyLock, partyTabs, showPartyTabs, STATUS_MARK } from './partyTabs';
 import { usePartyTabState } from './partyTabStore';
 import { PartyAllTable, PartyLockNote, PartyTabStrip } from './PartyTabBar';
+import { OurBatchAutoField, useOurBatchPreview } from './DocRowBatchFields';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
 export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): void {
@@ -42,17 +43,22 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
   const m = row.form?.multi;
   const view = row.parties;
   const [tabState, select] = usePartyTabState(row.noteId);
+  // Seri kipinde açılmamış partiler sırayla numara alır: sekme başına ardışık tahmin (X, X+1…).
+  const result = row.result?.kind === 'OPENED' ? row.result : null;
+  const serial = wo.batchSource !== 'DOCUMENT';
+  const pending = (m?.rows ?? []).filter((r) => partyOutcome(result, r.blockNo)?.kind !== 'OPENED').map((r) => r.blockNo);
+  const preview = useOurBatchPreview(pending.length, serial && !!view && !locked);
   if (!m || !view) return null;
   const set = (next: MultiPartyDraft) => wo.setMulti(row.noteId, next);
   const setRow = (blockNo: number, patch: Partial<PartyRow>) => set({ ...m, rows: m.rows.map((r) => (r.blockNo === blockNo ? { ...r, ...patch } : r)) });
-  const result = row.result?.kind === 'OPENED' ? row.result : null;
   const outcome = (blockNo: number) => partyOutcome(result, blockNo);
   const tabbed = showPartyTabs(m);
   const tabs = partyTabs(m, tabState.visited, outcome);
   const active = tabbed && tabs.some((t) => t.blockNo === tabState.active) ? tabState.active : 'all';
   const pane = (r: PartyRow) => (
     <PartyPane key={r.blockNo} r={r} p={view.parties.find((x) => x.blockNo === r.blockNo)} out={outcome(r.blockNo)} noteNo={row.noteNo} locked={locked} plan={plan}
-      problems={tabbed ? tabs.find((t) => t.blockNo === r.blockNo)?.problems ?? [] : []} hidden={tabbed && active !== r.blockNo} onChange={(patch) => setRow(r.blockNo, patch)} />
+      problems={tabbed ? tabs.find((t) => t.blockNo === r.blockNo)?.problems ?? [] : []} hidden={tabbed && active !== r.blockNo} onChange={(patch) => setRow(r.blockNo, patch)}
+      ourBatch={serial && pending.includes(r.blockNo) ? { code: preview[pending.indexOf(r.blockNo)] } : null} />
   );
   return (
     <View style={styles.box} testID={`belge-partiler-${row.noteNo}`}>
@@ -89,10 +95,12 @@ interface PaneProps {
   problems: readonly string[];
   hidden: boolean;
   onChange: (patch: Partial<PartyRow>) => void;
+  /** Seri kipinde açılmamış parti: bizim parti no tahmini (yoksa `null` → alan çizilmez). */
+  ourBatch: { code: string | undefined } | null;
 }
 
 /** Tek partinin alanları: künye (top, müşteri İE no…), parti no, gelen metre, plan, sunucu uyarıları (beyan ↔ okunan), sonuç. */
-function PartyPane({ r, p, out, noteNo, locked, plan, problems, hidden, onChange }: PaneProps) {
+function PartyPane({ r, p, out, noteNo, locked, plan, problems, hidden, onChange, ourBatch }: PaneProps) {
   // Açılan partinin İE'si yeniden gönderimde sunucuda yeniden açılmaz; alanları kilitlenir.
   const partyLocked = locked || out?.kind === 'OPENED';
   return (
@@ -111,6 +119,7 @@ function PartyPane({ r, p, out, noteNo, locked, plan, problems, hidden, onChange
           onChangeText={(t) => onChange({ batchNo: t })} testID={`belge-parti-no-${noteNo}-${r.blockNo}`} />
         <MeterInput initial={r.meters} locked={partyLocked} onChange={(meters) => onChange({ meters })} testID={`belge-parti-metre-${noteNo}-${r.blockNo}`} />
       </View>
+      {ourBatch && <OurBatchAutoField code={ourBatch.code} testID={`belge-parti-bizim-${noteNo}-${r.blockNo}`} />}
       {problems.map((x) => <Text key={x} style={styles.problem} testID={`belge-parti-eksik-${noteNo}-${r.blockNo}`}>{`${STATUS_MARK.error} ${x}`}</Text>)}
       {plan && <PartyPlanFields ctx={plan} party={r} locked={partyLocked} noteNo={noteNo} onChange={onChange} />}
       {p?.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}

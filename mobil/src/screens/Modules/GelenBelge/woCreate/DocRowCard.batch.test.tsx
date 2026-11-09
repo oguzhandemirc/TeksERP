@@ -1,11 +1,12 @@
 // Belgeden İE satırı — parti no (Gülkesim istek 2) ve kurşun gramajı (istek 3).
 // Müşteri parti no düz metin alanıdır: belgeden geldiyse dolu + sarı vurgu, dokununca seçici AÇILMAZ, yazınca vurgu kalkar.
-// Bizim parti no seri kipinde "Bizim parti: otomatik" (salt okunur); belgeden kipinde aday seçicisi bugünkü gibi.
+// Bizim parti no seri kipinde müşteri alanıyla aynı outlined salt okunur kutu "Otomatik · sıradaki: X" (önizleme yoksa
+// "Otomatik"); belgeden kipinde aday seçicisi bugünkü gibi.
 // Negatif sonda: BatchFields müşteri alanı kaldırılınca / vurgu her zaman kapalıyken / editCustomerBatchNo vurguyu
 // düşürmeyince / seçili gramaj stili kaldırılınca ilgili vaka kırmızı.
 import React, { useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent } from '@testing-library/react-native';
+import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { colors } from '../../../../theme';
@@ -15,7 +16,14 @@ import type { RowForm } from './woFromDoc';
 
 jest.mock('../useReadResult', () => ({ useReadResult: () => ({ watch: null, recheck: jest.fn() }) }));
 jest.mock('../useApprovalCard', () => ({ useApprovalDetail: () => ({ data: undefined, isError: false }) }));
+const mockNumberState = jest.fn();
+jest.mock('../../../../services/batch.service', () => ({ batchService: { getNumberPreview: (n: number) => mockNumberState(n) } }));
 jest.mock('../../../../hooks/usePermission', () => ({ usePermissions: () => ({ has: () => true }) }));
+
+beforeEach(() => {
+  mockNumberState.mockReset();
+  mockNumberState.mockResolvedValue({ success: true, data: { enabled: false, lastCode: null, nextCode: null, min: 1, max: 99 } });
+});
 
 const baseForm: RowForm = {
   ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null,
@@ -83,14 +91,24 @@ describe('DocRowCard — müşteri parti no ayrı, elle yazılabilir alan', () =
     fireEvent.changeText(ui.getByTestId('belge-satir-musteri-parti-GB-1'), 'EL-1');
     expect(ui.getByTestId('belge-satir-musteri-parti-GB-1').props.value).toBe('EL-1');
   });
-  it('⭐ seri kipinde bizim parti no "Bizim parti: otomatik" (salt okunur)', () => {
+  it('⭐ seri kipinde bizim parti no: outlined salt okunur "Otomatik · sıradaki: P05" (tek tahmin istenir)', async () => {
+    mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05'], min: 1, max: 99 } });
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
-    expect(ui.getByTestId('belge-satir-bizim-parti-GB-1')).toBeTruthy();
-    expect(ui.getByText('Bizim parti: otomatik')).toBeTruthy();
+    const box = ui.getByTestId('belge-satir-bizim-parti-GB-1');
+    expect(box.props.editable).toBe(false);
+    await waitFor(() => expect(ui.getByTestId('belge-satir-bizim-parti-GB-1').props.value).toBe('Otomatik · sıradaki: P05'));
+    expect(mockNumberState).toHaveBeenCalledWith(1);
+  });
+  it('önizleme düşerse (çevrimdışı / izin) yalnız "Otomatik"', async () => {
+    mockNumberState.mockRejectedValue(new Error('Network Error'));
+    const ui = renderWithPaper(<Harness batchSource="SERIES" />);
+    await waitFor(() => expect(mockNumberState).toHaveBeenCalled());
+    expect(ui.getByTestId('belge-satir-bizim-parti-GB-1').props.value).toBe('Otomatik');
   });
   it('belgeden kipinde bizim parti no aday seçicisi (bugünkü davranış)', () => {
     const ui = renderWithPaper(<Harness batchSource="DOCUMENT" />);
     expect(ui.queryByTestId('belge-satir-bizim-parti-GB-1')).toBeNull();
+    expect(mockNumberState).not.toHaveBeenCalled();
     expect(ui.getByText('Bizim parti no seçin (2 aday)')).toBeTruthy();
   });
   it('belgeden kipinde tek/sıfır adayda "otomatik" yazmaz (numara kâğıttan gelir)', () => {

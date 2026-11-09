@@ -96,7 +96,8 @@ describe('DocRowCard — list / single', () => {
     const { ui } = draw({ variant: 'single', onReread: jest.fn() });
     const sub = within(ui.getByTestId('ie-serit-belge'));
     expect(sub.getByTestId('tanit-serit-guncelle')).toBeTruthy();
-    expect(sub.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
+    expect(sub.getByTestId('tanit-sablon')).toHaveTextContent(/Güleçsoy/);
+    expect(sub.getByTestId('tanit-sablon')).not.toHaveTextContent(/Şablon/);
   });
 
   it('⭐ müşteri seçili → düz çerçeve + ad; belgede geçen ad sorusu bekliyorsa sarı çerçeve + soru çipi', () => {

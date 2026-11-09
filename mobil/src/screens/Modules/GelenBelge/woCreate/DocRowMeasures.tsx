@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
 import { ChoiceChips } from '../../../../components/form/ChoiceChips';
+import { defaultChoiceText } from '../../../../components/form/defaultChoice';
 import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { meterChoices, parseMeters } from '../approvalGate';
@@ -72,7 +73,7 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
   return (
     <InlineField label="Gramaj" testID={`belge-serit-gramaj-${no}`}>
       <ChoiceChips
-        options={wo.catalog.options.map((o) => ({ value: o.id, label: o.isDefault ? `${o.name} ★` : o.name, a11y: o.isDefault ? `${o.name}, varsayılan` : o.name, testID: `belge-satir-gramaj-${no}-${o.name}` }))}
+        options={wo.catalog.options.map((o) => ({ value: o.id, ...defaultChoiceText(o.name, o.isDefault), testID: `belge-satir-gramaj-${no}-${o.name}` }))}
         value={f.gramajValueId ?? null}
         onChange={(v) => wo.updateForm(row.noteId, { gramajValueId: v === f.gramajValueId ? null : v })}
         disabled={locked}
@@ -83,13 +84,13 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
 }
 
 /** Kat tipi — gramajın altında aynı satır biçimiyle (tambur adımının üretim bilgisi; kurşun gramajı gibi baştan sorulur). */
-export function FoldField(p: { values: readonly { code: string; name: string }[]; value: string | null; locked: boolean; onChange: (code: string) => void }) {
+export function FoldField(p: { values: readonly { code: string; name: string; isDefault?: boolean }[]; value: string | null; locked: boolean; onChange: (code: string) => void }) {
   // Kat kataloğu boş (özellik pasif): seçilecek değer yok, kayıt engellenmez — yalnız bilgi.
   if (p.values.length === 0) return <NoticeStrip tone="warn" text="Kat değeri tanımlı değil (seçmeden de kaydedilir) — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />;
   return (
     <InlineField label="Kat tipi" testID="ie-form-kat-satir">
       <ChoiceChips
-        options={p.values.map((f) => ({ value: f.code, label: f.name, testID: `ie-form-kat-${f.code}` }))}
+        options={p.values.map((f) => ({ value: f.code, ...defaultChoiceText(f.name, f.isDefault), testID: `ie-form-kat-${f.code}` }))}
         value={p.value}
         onChange={(v) => v && p.onChange(v)}
         disabled={p.locked}

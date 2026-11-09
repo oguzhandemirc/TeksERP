@@ -220,7 +220,7 @@ async function readWrapRowsTx(
  * parti doğarsa gerçekleşen numara farklı olur. Yüzey bunu "sıradaki" diye sunar,
  * "ayrılmış" diye değil.
  */
-export async function getBatchNumberState(): Promise<{
+export async function getBatchNumberState(count = 1): Promise<{
   enabled: boolean;
   min: number;
   max: number;
@@ -228,6 +228,8 @@ export async function getBatchNumberState(): Promise<{
   next: number | null;
   lastCode: string | null;
   nextCode: string | null;
+  /** Sıradaki `count` numaranın tahmini (aynı iş emrinde ardışık doğacak partiler); rejim kapalıyken boş. */
+  nextCodes: string[];
   minCode: string;
   maxCode: string;
 }> {
@@ -243,14 +245,15 @@ export async function getBatchNumberState(): Promise<{
   const minCode = formatSeriesCode(fmt, min, now);
   const maxCode = formatSeriesCode(fmt, max, now);
   if (!enabled) {
-    return { enabled, min, max, last: null, next: null, lastCode: null, nextCode: null, minCode, maxCode };
+    return { enabled, min, max, last: null, next: null, lastCode: null, nextCode: null, nextCodes: [], minCode, maxCode };
   }
   // ⚠️ ÖNİZLEME ÜRETİM YOLUNUN KENDİSİNDEN: "sıradaki numara" ikinci kez
   // hesaplansaydı sarma · kapsam · atlama kuralları iki yerde yaşardı ve biri
   // bayatlardı ("türetilmiş alan / ayrışan yüzey").
   const rows = await readWrapRowsTx(prisma as unknown as Prisma.TransactionClient, fmt);
   const last = rows.map((r) => seriesCodeSeq(fmt, r.code)).find((n) => n !== null) ?? null;
-  const nextCode = await nextSeriesNo("batchShort", async () => rows, now);
+  const nextCodes = await batchShortNextCodes(rows, count, now);
+  const nextCode = nextCodes[0];
   return {
     enabled,
     min,
@@ -259,9 +262,29 @@ export async function getBatchNumberState(): Promise<{
     next: seriesCodeSeq(fmt, nextCode),
     lastCode: last === null ? null : formatSeriesCode(fmt, last, now),
     nextCode,
+    nextCodes,
     minCode,
     maxCode,
   };
+}
+
+/**
+ * Kısa rejimde sıradaki `count` kod — her tahmin bir öncekini EN YENİ satır sayarak üretim çekirdeğinden
+ * (`nextSeriesNo`) geçer; sarma/aralık ikinci kez hesaplanmaz. Tahmindir: arada doğan parti kaydırır.
+ */
+export async function batchShortNextCodes(
+  rows: Array<{ code: string; createdAt: Date }>,
+  count: number,
+  now: Date,
+): Promise<string[]> {
+  const born: Array<{ code: string; createdAt: Date }> = [];
+  const out: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const code = await nextSeriesNo("batchShort", async () => [...born, ...rows], now);
+    out.push(code);
+    born.unshift({ code, createdAt: new Date(now.getTime() + i + 1) });
+  }
+  return out;
 }
 
 /**

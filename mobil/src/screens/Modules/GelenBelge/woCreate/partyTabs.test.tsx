@@ -2,7 +2,7 @@
 // tablosundan sekmeye geçiş, tek partide sekme yok; belge önizlemesinde parti bölmesi + fotoğraf odağı.
 // Negatif sonda: `partyTabs` bakılmamış partiyi de 'error' sayarsa ya da `partyLock` her sekmeyi döndürürse kilit vakaları kırmızı.
 import React from 'react';
-import { act, fireEvent, renderHook } from '@testing-library/react-native';
+import { act, fireEvent, renderHook, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import type { InboundNoteDetail, InboundNoteLine, NotePartiesView } from '../../../../services/inboundDoc.service';
 import { initialMultiParty, multiPartyIssues, type MultiPartyDraft } from './partyDraft';
@@ -19,6 +19,9 @@ jest.mock('../../../../components/NumpadInput', () => {
   const RN = jest.requireActual('react-native');
   return { __esModule: true, default: (p: { value: string; onChangeText: (t: string) => void; testID?: string }) => <RN.TextInput value={p.value} onChangeText={p.onChangeText} testID={p.testID} /> };
 });
+
+const mockNumberState = jest.fn();
+jest.mock('../../../../services/batch.service', () => ({ batchService: { getNumberPreview: (n: number) => mockNumberState(n) } }));
 
 const party = (blockNo: number, x: Record<string, unknown> = {}) => ({
   blockNo, batchNo: `P${blockNo}`, orderNo: null, declaredTopCount: 3, declaredMeters: null, lineCount: 3, meters: 100 * blockNo, weightKg: null, warnings: [] as string[], ...x,
@@ -41,7 +44,11 @@ const rowOf = (view: NotePartiesView = viewOf()): DocRow => {
 const multiOf = (): MultiPartyDraft => rowOf().form!.multi!;
 const wo = () => ({ setMulti: jest.fn() }) as unknown as WoRowsState;
 
-beforeEach(() => resetPartyTabStore());
+beforeEach(() => {
+  resetPartyTabStore();
+  mockNumberState.mockReset();
+  mockNumberState.mockResolvedValue({ success: true, data: { enabled: false, lastCode: null, nextCode: null, min: 1, max: 99 } });
+});
 
 describe('sekme durumu (saf)', () => {
   it('⭐ başlık: parti no, yoksa "Parti N"', () => {
@@ -163,5 +170,23 @@ describe('belge önizlemesi: parti bölmesi + fotoğraf odağı', () => {
     await flush();
     expect(ui.queryByTestId('onizleme-yan')).toBeNull();
     expect(ui.getByTestId('belge-tara-onizleme-gorsel')).toBeTruthy();
+  });
+});
+
+describe('PartyRows — bizim parti no tahmini (seri kipi)', () => {
+  it('⭐ her parti sekmesinde ardışık tahmin; açılmış parti sayılmaz', async () => {
+    mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05', 'P06'], min: 1, max: 99 } });
+    const row = { ...rowOf(), result: { kind: 'OPENED', workOrders: [{ id: 'w1', workOrderNo: 'IE-1', blockNos: [1] }], failed: [{ blockNo: 2, message: 'x' }] } } as unknown as DocRow;
+    const ui = renderWithPaper(<PartyRows row={row} wo={{ ...wo(), batchSource: 'SERIES' } as unknown as WoRowsState} locked={false} />);
+    const val = (b: number) => ui.getByTestId(`belge-parti-bizim-GB-1-${b}`, { includeHiddenElements: true }).props.value;
+    await waitFor(() => expect(val(2)).toBe('Otomatik · sıradaki: P05'));
+    expect(val(3)).toBe('Otomatik · sıradaki: P06');
+    expect(ui.queryByTestId('belge-parti-bizim-GB-1-1', { includeHiddenElements: true })).toBeNull();
+    expect(mockNumberState).toHaveBeenCalledWith(2);
+  });
+  it('belgeden kipinde alan yok, önizleme istenmez', () => {
+    const ui = renderWithPaper(<PartyRows row={rowOf()} wo={{ ...wo(), batchSource: 'DOCUMENT' } as unknown as WoRowsState} locked={false} />);
+    expect(ui.queryByTestId('belge-parti-bizim-GB-1-1', { includeHiddenElements: true })).toBeNull();
+    expect(mockNumberState).not.toHaveBeenCalled();
   });
 });

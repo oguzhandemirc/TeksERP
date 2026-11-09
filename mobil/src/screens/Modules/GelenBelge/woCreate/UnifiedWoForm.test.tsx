@@ -230,6 +230,10 @@ describe('UnifiedWoForm — vurgu, yerleşim ve kontrollü Alanlar', () => {
     expect(left.queryByTestId('ie-belge-okut')).toBeNull();
     expect(right.getByTestId('ie-form-en')).toBeTruthy();
     expect(left.queryByTestId('ie-form-en')).toBeNull();
+    // Oran içerikten bağımsız: kutular flexBasis 0 + eşit flex (kaydırıcı sarmalayıcısı basis:auto taşır, 69/31'e kaymıştı).
+    const box = (id: string) => StyleSheet.flatten(s.getByTestId(id).props.style);
+    expect(box('ie-form-sol-kutu')).toMatchObject({ flexBasis: 0, minWidth: 0, flex: 1 });
+    expect(box('ie-form-sag-kutu')).toMatchObject({ flexBasis: 0, minWidth: 0, flex: 1 });
     mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
     const d = renderWithPaper(ui());
     expect(d.queryByTestId('ie-form-iki-sutun')).toBeNull();

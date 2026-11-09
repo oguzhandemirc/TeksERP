@@ -1,9 +1,9 @@
 // K30-A1: tek form / toplu satır / masa satırında tanıtma girişi. Okuma özeti `tanitim` TANITILMAMIS → amber şerit
-// "Bu belge tanınmadı … [Tanıt]"; TANITILDI → "Şablon: <ad>" satırı + "Tanımı düzenle" düğmesi. Alan yoksa (eski sunucu /
+// "Bu belge tanınmadı … [Tanıt]"; TANITILDI → şablon adı + "Tanımı düzenle" ikon düğmesi. Alan yoksa (eski sunucu /
 // yerleşik şablon) çizilmez. Parçalar ayrı: tek formda Belge şeridi (`DocHeadBand`) düğmeyi kendi satırına koyar.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { IconButton, Tooltip } from 'react-native-paper';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import TruncatedText from '../../../../components/TruncatedText';
 import { colors, spacing, typography } from '../../../../theme';
@@ -27,25 +27,29 @@ export function TeachStrip({ entry }: { entry: TeachEntry }) {
   );
 }
 
-/** Tanınmış + foto varken ikincil düğme: kendi tipimiz "Tanımı düzenle", hazır şablon "Yeniden tanıt" (yeni tip açar). */
+/** Düğmenin adı (erişilebilirlik + ipucu): kendi tipimiz "Tanımı düzenle", hazır şablon "Yeniden tanıt" (yeni tip açar). */
+export function templateUpdateLabel(kind: TeachEntry['kind']): string {
+  return kind === 'system' ? 'Yeniden tanıt' : 'Tanımı düzenle';
+}
+
+/** Tanınmış + foto varken ikincil eylem: komşu ikon düğmelerle aynı tek ikon (56dp); ad basılı tutunca ipucunda. */
 export function TemplateUpdateButton({ entry }: { entry: TeachEntry }) {
   if ((entry.kind !== 'taught' && entry.kind !== 'system') || entry.noPhoto) return null;
+  const label = templateUpdateLabel(entry.kind);
   return (
-    <Button mode="outlined" icon="file-replace-outline" onPress={entry.open} contentStyle={styles.btn} testID="tanit-serit-guncelle">
-      {entry.kind === 'system' ? 'Yeniden tanıt' : 'Tanımı düzenle'}
-    </Button>
+    <Tooltip title={label}>
+      <IconButton icon="file-replace-outline" size={28} iconColor={colors.brand} onPress={entry.open} style={styles.icon}
+        accessibilityLabel={label} testID="tanit-serit-guncelle" />
+    </Tooltip>
   );
 }
 
-/** "Şablon: <ad>" satırı (TANITILDI). */
+/** Şablon adı (TANITILDI) — önek yok; sığmazsa kısalır, basılı tutunca tam ad. */
 export function TemplateName({ entry }: { entry: TeachEntry }) {
   if ((entry.kind !== 'taught' && entry.kind !== 'system') || !entry.templateName) return null;
   return (
-    <View style={styles.nameRow} testID="tanit-sablon">
-      <Text style={styles.name}>{entry.kind === 'system' ? 'Hazır şablon:' : 'Şablon:'}</Text>
-      <View style={styles.flex}>
-        <TruncatedText style={styles.name}>{entry.templateName}</TruncatedText>
-      </View>
+    <View style={styles.nameRow} testID="tanit-sablon" accessibilityLabel={`${entry.kind === 'system' ? 'Hazır şablon' : 'Şablon'}: ${entry.templateName}`}>
+      <TruncatedText style={styles.name}>{entry.templateName}</TruncatedText>
     </View>
   );
 }
@@ -70,8 +74,8 @@ export default function TeachBanner(props: TeachEntryInput) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  nameRow: { flex: 1, minWidth: 160, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  // Tek satırlık belge şeridinde ikonları dışarı itmesin: dar sütunda ad kısalır (tam ad TruncatedText balonunda).
+  nameRow: { flex: 1, minWidth: 96 },
   name: { fontSize: typography.size.sm, color: colors.textSecondary },
-  flex: { flex: 1 },
-  btn: { minHeight: 56 },
+  icon: { width: 56, height: 56, margin: 0 },
 });

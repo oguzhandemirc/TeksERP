@@ -1,4 +1,4 @@
-// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → "Şablon: <ad>" satırı + "Tanımı düzenle" düğmesi;
+// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → şablon adı (öneksiz) + "Tanımı düzenle" ikon düğmesi;
 // izin / tanıtım alanı / yerel fotoğraf yoksa ya da satır sonuçlandıysa çizilmez. Kayıt sonrası belge yeniden okutulur
 // (başarılı → onay detayı atılır + rereadRow); sunucu reddederse (409 satırlı taslak) önizleme değerleri applyTaught ile dolar.
 import React from 'react';
@@ -114,8 +114,9 @@ describe('TeachBanner — görünürlük', () => {
   it('⭐ yerelde tanıtılmış satır (yeniden okutulamadı) → sunucu özeti TANITILMAMIS dese de şerit yok, güncelle bağlantısı', () => {
     const s = draw(NOT_TAUGHT, row({ taught: { seq: 1, code: 'u-gulecsoy', name: 'Güleçsoy' } }));
     expect(s.queryByTestId('tanit-serit')).toBeNull();
-    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Tanımı düzenle$/);
-    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveProp('accessibilityLabel', 'Tanımı düzenle');
+    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Güleçsoy/);
+    expect(s.getByTestId('tanit-sablon')).not.toHaveTextContent(/Şablon/);
   });
 
   it('⭐ TANITILMAMIS → belirgin şerit + "Tanıt"', () => {
@@ -128,12 +129,20 @@ describe('TeachBanner — görünürlük', () => {
   it('TANITILDI → şerit yok, şablon satırı + "Tanımı düzenle"; modal güncelle kipinde açılır', async () => {
     const s = draw(TAUGHT);
     expect(s.queryByTestId('tanit-serit')).toBeNull();
-    expect(s.getByTestId('tanit-serit-guncelle')).toHaveTextContent(/Tanımı düzenle$/);
-    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveProp('accessibilityLabel', 'Tanımı düzenle');
+    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Güleçsoy/);
+    expect(s.getByTestId('tanit-sablon')).not.toHaveTextContent(/Şablon/);
     await settle();
     await press(s.getByTestId('tanit-serit-guncelle'));
     await waitFor(() => expect(s.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle — Güleçsoy/));
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
+  });
+
+  it('SISTEM (hazır şablon) → ad öneksiz, ikon düğmenin adı "Yeniden tanıt"', () => {
+    const s = draw({ durum: 'SISTEM', sablonKodu: 'genel', sablonAdi: 'Genel irsaliye' });
+    expect(s.getByTestId('tanit-sablon')).toHaveTextContent(/Genel irsaliye/);
+    expect(s.getByTestId('tanit-sablon')).not.toHaveTextContent(/Şablon/);
+    expect(s.getByTestId('tanit-serit-guncelle')).toHaveProp('accessibilityLabel', 'Yeniden tanıt');
   });
 
   it('bu tablette fotoğraf yoksa: TANITILMAMIS şeridi panel yolunu söyler, Tanıt yok; TANITILDI bağlantısı yok', () => {

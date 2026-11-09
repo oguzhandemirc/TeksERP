@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ColorSelectField from '../../../../components/ColorSelectField';
 import { DocHighlight } from '../../../../components/DocHighlight';
 import { ChoiceChips } from '../../../../components/form/ChoiceChips';
+import { defaultChoiceText } from '../../../../components/form/defaultChoice';
 import { CompactNumberField } from '../../../../components/form/CompactNumberField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import type { BandTone } from '../../../../components/form/tone';
@@ -141,7 +142,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
             <View style={styles.fold}>
               <Text style={styles.label}>Kat tipi</Text>
               <ChoiceChips
-                options={p.foldValues.map((f) => ({ value: f.code, label: f.name, testID: `ie-form-kat-${f.code}` }))}
+                options={p.foldValues.map((f) => ({ value: f.code, ...defaultChoiceText(f.name, f.isDefault), testID: `ie-form-kat-${f.code}` }))}
                 value={e.foldType}
                 onChange={(v) => v && edit({ foldType: v })}
                 disabled={locked}

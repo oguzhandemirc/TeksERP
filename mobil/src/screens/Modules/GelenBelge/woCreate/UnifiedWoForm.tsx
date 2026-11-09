@@ -25,7 +25,7 @@ import { usePartyScanReview } from './PartyScanSide';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
-import { woFormLayout } from './woLayout';
+import { WO_PANE_FLEX, woFormLayout } from './woLayout';
 import { bandTone, TARGET_ISSUE_KEYS, TARGET_WARN_KEYS, type IssueKey } from './woIssues';
 import type { WoFieldKey } from './woFieldCatalog';
 
@@ -61,17 +61,22 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
       {twoCol ? (
         // Yan ekranda iki bağımsız kaydırıcı: belge solda sabit kalır, uzun rota/plan sağda kendi içinde kayar.
         <View style={styles.split} testID="ie-form-iki-sutun">
-          <KeyboardAwareScrollView ref={jump.leftRef} bottomOffset={24} style={styles.pane} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sol">
-            {owner}
-            <DocColumn u={u} openRequest={jump.request} />
-          </KeyboardAwareScrollView>
+          {/* Oran kutuda: kaydırıcının sarmalayıcısı `flexBasis:auto` taşır, içerik genişliği oranı kaydırırdı. */}
+          <View style={[styles.pane, { flex: WO_PANE_FLEX.left }]} testID="ie-form-sol-kutu">
+            <KeyboardAwareScrollView ref={jump.leftRef} bottomOffset={24} style={styles.scroll} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sol">
+              {owner}
+              <DocColumn u={u} openRequest={jump.request} />
+            </KeyboardAwareScrollView>
+          </View>
           <View style={styles.divider} testID="ie-form-ayrac" />
-          <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} style={styles.pane} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sag">
-            {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
-            <View style={styles.stack} onLayout={jump.at('form')}>
-              <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
-            </View>
-          </KeyboardAwareScrollView>
+          <View style={[styles.pane, { flex: WO_PANE_FLEX.right }]} testID="ie-form-sag-kutu">
+            <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} style={styles.scroll} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sag">
+              {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
+              <View style={styles.stack} onLayout={jump.at('form')}>
+                <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
+              </View>
+            </KeyboardAwareScrollView>
+          </View>
         </View>
       ) : (
         <KeyboardAwareScrollView ref={jump.scrollRef} bottomOffset={24} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-tek-form">
@@ -220,7 +225,9 @@ function ScanModals({ scan, row }: { scan: DocScanFlow; row: FormModel['row'] })
 const styles = StyleSheet.create({
   body: { gap: spacing.md },
   split: { flex: 1, flexDirection: 'row' },
-  pane: { flex: 1 },
+  // flexBasis 0 + minWidth 0: genişlik yalnız orandan; uzun satır sütunu büyütmez, kendi içinde kısalır/sarılır.
+  pane: { flexBasis: 0, minWidth: 0 },
+  scroll: { flex: 1 },
   divider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
   stack: { gap: spacing.md },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },

@@ -40,7 +40,7 @@ import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { createBatchTx, generateBatchNumberTx, BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
+import { batchShortNextCodes, createBatchTx, generateBatchNumberTx, BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { DUPLICATE_GUARD_LOCK_NS } from "../src/services/helpers/duplicate-guard.helper";
 import { buildDailyCode, dailyCodePrefix } from "../src/utils/code-format";
@@ -282,6 +282,15 @@ async function main(): Promise<void> {
   const r6e = stubTx({ shortEnabled: true, lastShort: "P10", woTaken: hepsi.filter((c) => c !== "P03") });
   check("R6 98 dolu, tek boş P03 → P03 bulunur", (await generateBatchNumberTx(r6e.tx, D, "wo-1")) === "P03");
   check("R6 kilit doluluk sorgusundan ÖNCE", r6a.calls.indexOf("lock(8022,1)") === 0 && r6a.calls.includes("findTakenInWo"), r6a.calls.join(" → "));
+
+  // Belgeden İE formu "Bizim parti no: Otomatik · sıradaki" — çok parti sekmesi ardışık tahmin; üretim çekirdeğinden.
+  // Negatif sonda: tahmin bir öncekini EN YENİ satır saymazsa (unshift → push) üç sekme aynı kodu basar.
+  const tah0 = await batchShortNextCodes([], 3, D);
+  check("önizleme: kayıt yokken 3 tahmin P01,P02,P03", tah0.join(",") === "P01,P02,P03", tah0.join(","));
+  const tah1 = await batchShortNextCodes([{ code: "P98", createdAt: new Date(D.getTime() - 1000) }], 3, D);
+  check("önizleme: P98'den sonra P99,P01,P02 (SARMA)", tah1.join(",") === "P99,P01,P02", tah1.join(","));
+  const tahGen = await generateBatchNumberTx(stubTx({ shortEnabled: true, lastShort: "P98" }).tx, D);
+  check("önizlemenin ilki üretimle aynı", tah1[0] === tahGen, `${tah1[0]} / ${tahGen}`);
 
   // 1'inci sessiz bozulma: eski günlük kodlar sayaca sızarsa P01 yerine P29 doğar.
   const s4 = stubTx({ shortEnabled: true, lastShort: "P05082628", daily: [`${PFX}28`] });
