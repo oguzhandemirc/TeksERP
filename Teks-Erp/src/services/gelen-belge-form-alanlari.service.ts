@@ -1,7 +1,7 @@
 // =============================================================================
 // GELEN BELGE → İŞ EMRİ FORMU: okuma özetinin `formFields` + `suggestions` alanları (K30 S16a, salt okunur)
 // =============================================================================
-// `gelenBelge.desenRenkEslesme=ONER` iken okunan desen/renk yazısına öğrenilmiş eşleme ya da adı (katlanmış, `nameFold`)/kodu BİREBİR tutan
+// `gelenBelge.desenRenkEslesme=ONER` (varsayılan; KAPALI açıkça seçilmediyse) iken okunan desen/renk yazısına öğrenilmiş eşleme ya da adı (katlanmış, `nameFold`)/kodu BİREBİR tutan
 // TEK canlı kayıt önerilir — benzerlik/bulanık arama YOK (yanlış öneri işi yavaşlatır); iki aday → öneri yok. Öneri yazmaz,
 // görevli formda onaylar. Ürün yalnız top doğurabilen türden (`ROLL_BEARING_ITEM_TYPES`) ve aktif/birleşmemiş olur.
 // =============================================================================

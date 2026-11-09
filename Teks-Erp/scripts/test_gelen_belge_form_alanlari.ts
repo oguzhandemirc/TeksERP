@@ -164,8 +164,8 @@ async function run(url: string): Promise<void> {
 
   console.log("§1 iki ayar");
   const s1 = await call("GET", "/api/gelen-belge/ayarlar", tk);
-  check("§1 desenRenkEslesme KAPALI + default KAPALI; tabletIeGirisi IKISI + default IKISI",
-    s1.data?.desenRenkEslesme === "KAPALI" && s1.data?.defaultDesenRenkEslesme === "KAPALI" && s1.data?.tabletIeGirisi === "IKISI" && s1.data?.defaultTabletIeGirisi === "IKISI",
+  check("§1 desenRenkEslesme ONER + default ONER; tabletIeGirisi IKISI + default IKISI",
+    s1.data?.desenRenkEslesme === "ONER" && s1.data?.defaultDesenRenkEslesme === "ONER" && s1.data?.tabletIeGirisi === "IKISI" && s1.data?.defaultTabletIeGirisi === "IKISI",
     JSON.stringify({ d: s1.data?.desenRenkEslesme, t: s1.data?.tabletIeGirisi }));
   check("§1 iki anahtar ham ayar ucuna kapalı (dedicated)", INCOMING_DOC_DEDICATED_SETTING_KEYS.has(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME) && INCOMING_DOC_DEDICATED_SETTING_KEYS.has(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI));
   const bad1 = await call("PUT", "/api/gelen-belge/ayarlar", tk, { desenRenkEslesme: "BENZER" });

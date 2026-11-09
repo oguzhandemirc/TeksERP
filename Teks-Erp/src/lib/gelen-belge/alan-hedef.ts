@@ -44,6 +44,11 @@ export const FIELD_TARGETS = {
 
 export const FIELD_GROUP_ORDER: readonly FieldGroup[] = ["KIMLIK", "GELEN", "HEDEF", "URUN", "DIGER"];
 
+/** Görüntü etiketi: desen/renk için saklı eski etiket yerine katalog adı ("Gelen kumaş"/"Gelen renk"); diğerleri şablondaki. */
+export function displayFieldLabel(key: string, stored: string): string {
+  return key === "desen" || key === "renk" ? FIELD_TARGETS[key].woLabel : stored;
+}
+
 /** Katalogdaki alanın İE karşılığı; katalog dışı (dosya şablonu anahtarı) → undefined. */
 export function fieldTargetOf(key: string): FieldTarget | undefined {
   return Object.prototype.hasOwnProperty.call(FIELD_TARGETS, key) ? FIELD_TARGETS[key as AssignableField] : undefined;

@@ -1,7 +1,7 @@
 // Gülkesim K30 S16a — iş emri tek formu ayarları ve okuma özeti alanları; backend aynası (`gelen-belge-ayar.service.ts`,
 // `gelen-belge-okuma-ozeti.service.ts`). Eski backend alanları göndermez → istemci bugünkü davranışta kalır.
 
-/** Okunan desen/renk yazısı — KAPALI (varsayılan, bugünkü) · ONER kayıt önerilir · NOT iş emri notuna eklenir. */
+/** Okunan desen/renk yazısı — KAPALI kullanılmaz · ONER kayıt önerilir (varsayılan) · NOT iş emri notuna eklenir. */
 export type DesenRenkEslesmeMode = "KAPALI" | "ONER" | "NOT";
 /** Tablet iş emri girişi — IKISI (varsayılan, bugünkü) · BELGE yalnız belge okutma · TOP yalnız top okutma. */
 export type TabletIeGirisiMode = "IKISI" | "BELGE" | "TOP";

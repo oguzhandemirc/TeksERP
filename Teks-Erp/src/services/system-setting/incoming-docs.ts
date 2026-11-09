@@ -200,7 +200,7 @@ export const readPhotoRetention = (tx?: Pick<typeof prisma, "systemSetting">): P
 export type DesenRenkEslesmeMode = "KAPALI" | "ONER" | "NOT";
 export const DESEN_RENK_ESLESME_VALUES: readonly DesenRenkEslesmeMode[] = ["KAPALI", "ONER", "NOT"];
 /** Varsayılan KAPALI = bugünkü davranış (öneri yok, nota eklenmez). */
-export const DEFAULT_DESEN_RENK_ESLESME: DesenRenkEslesmeMode = "KAPALI";
+export const DEFAULT_DESEN_RENK_ESLESME: DesenRenkEslesmeMode = "ONER";
 export const readDesenRenkEslesme = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DesenRenkEslesmeMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, DEFAULT_DESEN_RENK_ESLESME, tx);
 /** K30 S16a tablet iş emri formunun giriş yolu. */

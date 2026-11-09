@@ -47,7 +47,8 @@ export function templateFieldRows(t: TemplateJson | null | undefined): TemplateF
     .filter((f): f is TemplateJson => !!f && typeof f.key === "string")
     .map((f) => {
       const key = f.key as string;
-      return { key, label: typeof f.label === "string" && f.label.trim() ? f.label : key, woLabel: fieldTargetOf(key)?.woLabel ?? key };
+      const stored = typeof f.label === "string" && f.label.trim() ? f.label : key;
+      return { key, label: key === "desen" || key === "renk" ? (fieldTargetOf(key)?.woLabel ?? stored) : stored, woLabel: fieldTargetOf(key)?.woLabel ?? key };
     })
     .sort((a, b) => compareFieldKeys(a.key, b.key));
 }

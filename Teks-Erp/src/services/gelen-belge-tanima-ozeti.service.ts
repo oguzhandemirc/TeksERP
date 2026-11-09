@@ -8,7 +8,7 @@
 import { DeliveryNoteLineStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { TABLE_TOTAL_SOURCE, type DocumentTemplate } from "../lib/gelen-belge/motor";
-import { FIELD_GROUP_ORDER, FIELD_TARGETS, fieldTargetOf, type FieldGroup } from "../lib/gelen-belge/alan-hedef";
+import { FIELD_GROUP_ORDER, FIELD_TARGETS, displayFieldLabel, fieldTargetOf, type FieldGroup } from "../lib/gelen-belge/alan-hedef";
 import { guardKgFields } from "../lib/gelen-belge/kg-koruma";
 import { partyBlockNos } from "../lib/gelen-belge/parti-ozet";
 import { isSummaryLine } from "./gelen-belge-kontrol.service";
@@ -81,7 +81,7 @@ export function buildTanima(i: TanimaInput): Tanima {
       const target = fieldTargetOf(f.key);
       if (!target) return [];
       const v = i.fields[f.key];
-      return [{ field: f.key, label: f.label, value: typeof v === "string" && v.trim() ? v.trim() : null, woTarget: target.woTarget, woLabel: target.woLabel, group: target.group }];
+      return [{ field: f.key, label: displayFieldLabel(f.key, f.label), value: typeof v === "string" && v.trim() ? v.trim() : null, woTarget: target.woTarget, woLabel: target.woLabel, group: target.group }];
     })
     .sort((a, b) => FIELD_GROUP_ORDER.indexOf(a.group) - FIELD_GROUP_ORDER.indexOf(b.group) || order.indexOf(a.field) - order.indexOf(b.field));
   const rules: TanimaRule[] = [rule("multiParty", i.mode.mode, i.mode.source, multiPartyText(i.mode.mode, i.partyCount))];

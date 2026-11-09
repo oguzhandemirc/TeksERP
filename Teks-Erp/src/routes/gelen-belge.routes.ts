@@ -466,7 +466,7 @@ const SettingsBody = z.strictObject({
  *               stationDocLookup: { type: boolean, description: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false)" }
  *               stationVerifyThreshold: { type: integer, minimum: 0, maximum: 100, nullable: true, description: "İstasyon okutmada doğrulama eşiği %: altındaki aday kendiliğinden açılmaz (0 = kapalı, null = varsayılan 80)" }
  *               photoRetention: { type: string, enum: [FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL, DELETE_ON_DISPATCH], description: "Belge fotoğrafı saklama (K28): tam (varsayılan) · onayda küçült · onayda sil · sevkte sil; geçmiş onaylı belgelere de uygulanır" }
- *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz (varsayılan) · adı/kodu tutan kayıt önerilir · iş emri notuna eklenir" }
+ *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz · adı/kodu tutan kayıt önerilir (varsayılan) · iş emri notuna eklenir" }
  *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
  *               tanitimGuveni: { type: string, enum: [SOR, SORMA], description: "Tanıtılan belgeye güven: okunanları onaylat (varsayılan) · tanıtılan belgeyi sormadan doldur (tanınmayanın tahmini dolmaz)" }
  *     responses:
