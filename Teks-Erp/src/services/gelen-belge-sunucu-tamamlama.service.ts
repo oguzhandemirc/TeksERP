@@ -8,7 +8,7 @@ import { bilgi, uyari } from "../lib/logger";
 import { extractDocument, type OcrResult } from "../lib/gelen-belge/motor";
 import { readerOcr } from "../lib/gelen-belge/okuma-istemcisi";
 import { missingHeaderFields } from "../lib/gelen-belge/sunucu-tamamlama";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { serverReaderState, type ServerReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { engineTemplates } from "./gelen-belge-ozel-sablon.service";
 import { FALLBACK_TEMPLATE_CODE } from "./gelen-belge-sablon.service";
 import type { CompleteFn } from "./gelen-belge-okuma.service";
@@ -22,13 +22,17 @@ export async function deviceMissingFields(result: OcrResult): Promise<string[]> 
   return missingHeaderFields(extractDocument(result, await engineTemplates(), FALLBACK_TEMPLATE_CODE), FALLBACK_TEMPLATE_CODE);
 }
 
-/** Bekçi okuyucuyu ve adresi bu parametrelerle verir; üretimde `readerOcr` + `getReaderUrl()`. */
-export function serverCompleter(read: typeof readerOcr = readerOcr, readerUrl: () => string | null = () => getReaderUrl().url): CompleteFn {
+/** Bekçi okuyucuyu ve okuyucu durumunu bu parametrelerle verir; üretimde `readerOcr` + `serverReaderState()` (adres + ayar). */
+export function serverCompleter(read: typeof readerOcr = readerOcr, readerState: () => Promise<Pick<ServerReaderState, "url" | "enabled">> = serverReaderState): CompleteFn {
   return async (result, content, mimeType): Promise<ServerComplement | null> => {
     const missing = await deviceMissingFields(result);
     if (missing.length === 0) return null;
     const base = { missing, engine: null, version: null, durationMs: null };
-    const url = readerUrl();
+    const { url, enabled } = await readerState();
+    if (!enabled) {
+      bilgi("gelen-belge", `cihaz okumasında ${missing.length} başlık alanı boş; bilgisayarda ikinci okuma kapalı — sunucu tamamlaması atlandı`);
+      return { ...base, ocr: null, failed: "SERVER_OCR_DISABLED" };
+    }
     if (!url) {
       uyari("gelen-belge", `cihaz okumasında ${missing.length} başlık alanı boş; okuma servisi adresi yok — sunucu tamamlaması atlandı`);
       return { ...base, ocr: null, failed: "READER_OFF" };

@@ -98,7 +98,7 @@ function DetailLoading({ failed }: { failed: boolean }) {
 function ReadGuidance({ note, editable, canRequeue, onRequeued }: { note: DeliveryNoteDetail; editable: boolean; canRequeue: boolean; onRequeued: () => void }) {
   return (
     <>
-      {note.status === "DRAFT" && <ScanReadBanner scans={note.scans} lines={note.lines} editable={editable} canRequeue={canRequeue} onRequeued={onRequeued} />}
+      {note.status === "DRAFT" && <ScanReadBanner scans={note.scans} lines={note.lines} editable={editable} canRequeue={canRequeue} onRequeued={onRequeued} serverOcrOff={note.serverOcrEnabled === false} />}
       {note.status !== "CANCELLED" && <UnknownTypeStrip note={note} />}
     </>
   );

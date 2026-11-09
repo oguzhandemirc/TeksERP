@@ -33,7 +33,11 @@ export const REREAD_ERROR_TEXT: Record<string, string> = {
   DOCUMENT_SCAN_ALREADY_READ: "Bu sayfanın satırları zaten taslakta; yeniden okumak satırları ikilerdi. Sayfayı yenileyin.",
   DELIVERY_NOTE_NOT_DRAFT: "Belge artık taslak değil; okunmuş sayfa yalnız taslakta yeniden okunur.",
   DOCUMENT_SCAN_STATE_CHANGED: "Sayfa bu arada başka bir duruma geçti; sayfayı yenileyin.",
+  SERVER_OCR_DISABLED: "Bilgisayarda ikinci okuma kapalı; sayfa yeniden okutulamaz. Fotoğrafı yeniden çekin ya da satırları elle girin.",
 };
+
+/** Ayar kapalıyken düşen sayfa: cihaz okuyamadı, sunucu devralmadı (künyede ayrım yok; ayar detaydan gelir). */
+export const SERVER_OCR_OFF_FAIL_TEXT = "Tablet okuyamadı; bilgisayarda ikinci okuma kapalı. Fotoğrafı yeniden çekin ya da satırları elle girin.";
 
 function rereadErrorText(error: unknown): string {
   const c = errorCode(error);
@@ -60,9 +64,12 @@ interface Props {
   lines?: DeliveryNoteLine[];
   /** Taslak düzenlenebilir mi (READ sayfa yalnız taslakta yeniden okunur). */
   editable?: boolean;
+  /** "Bilgisayarda ikinci okuma" kapalı (detay `serverOcrEnabled === false`): Yeniden okut yerine yeniden çek. */
+  serverOcrOff?: boolean;
 }
 
-export function ScanReadBanner({ scans, canRequeue, onRequeued, lines, editable = false }: Props) {
+export function ScanReadBanner({ scans, canRequeue: canRequeueProp, onRequeued, lines, editable = false, serverOcrOff = false }: Props) {
+  const canRequeue = canRequeueProp && !serverOcrOff;
   const requeue = useMutation({ mutationFn: (id: string) => requeueScan(id), onSuccess: onRequeued });
   const label = (s: DocumentScanInfo) => (scans.length > 1 ? `Sayfa ${s.pageNo}${s.regionNo ? `/${s.regionNo}` : ""}: ` : "");
   const rows = scans.filter((s) => s.mimeType === PDF_MIME || s.status !== "READ" || readWithoutLines(s, lines));
@@ -103,7 +110,7 @@ export function ScanReadBanner({ scans, canRequeue, onRequeued, lines, editable 
           return (
             <div key={s.id} role="alert" className="flex flex-col gap-2 rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between" data-testid="scan-read-failed">
               <span className="min-w-0">
-                <strong>{label(s)}Okunamadı.</strong> {SCAN_FAIL_TEXT[scanFailCode(s)]}
+                <strong>{label(s)}Okunamadı.</strong> {serverOcrOff ? SERVER_OCR_OFF_FAIL_TEXT : SCAN_FAIL_TEXT[scanFailCode(s)]}
               </span>
               {canRequeue && (
                 <Button size="sm" variant="outline" className="shrink-0" disabled={requeue.isPending} onClick={() => requeue.mutate(s.id)}>

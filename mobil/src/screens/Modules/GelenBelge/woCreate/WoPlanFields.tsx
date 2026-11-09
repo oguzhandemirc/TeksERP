@@ -11,7 +11,7 @@ import type { DeskKursunMachine } from '../../../../services/inboundDoc.service'
 import type { ProductionRoute } from '../../../../services/route.service';
 import { colors, spacing, typography } from '../../../../theme';
 import { ChoiceChips } from '../../../../components/form/ChoiceChips';
-import { InlineField } from './InlineField';
+import { ChoiceRow, InlineField } from '../../../../components/form/ChoiceRow';
 import { machineChoice } from '../desk/machineChoice';
 import RouteStepsEditor from './RouteStepsEditor';
 import type { WoFieldKey } from './woFieldCatalog';
@@ -86,13 +86,14 @@ function MachineBand(p: { list: readonly DeskKursunMachine[]; value: string | nu
   const mc = machineChoice(p.list, 'ie-form-makine');
   const picked = mc.shortName(p.value);
   return (
-    <InlineField label="Makine seç" aside={mc.prefix} status={p.note ? null : picked ?? 'Sonra'} testID="ie-serit-makine">
-      {p.note ? (
+    p.note ? (
+      <InlineField label="Makine seç" aside={mc.prefix} testID="ie-serit-makine">
         <MachineNote text={p.note} />
-      ) : (
-        <ChoiceChips options={mc.options} value={p.value} onChange={p.onChange} disabled={p.locked} size={mc.square ? 'square' : 'md'} testID="ie-form-makine" />
-      )}
-    </InlineField>
+      </InlineField>
+    ) : (
+      <ChoiceRow label="Makine seç" aside={mc.prefix} status={picked ?? 'Sonra'} rowTestID="ie-serit-makine"
+        options={mc.options} value={p.value} onChange={p.onChange} disabled={p.locked} size={mc.square ? 'square' : 'md'} testID="ie-form-makine" />
+    )
   );
 }
 

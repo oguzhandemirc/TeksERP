@@ -13,13 +13,15 @@
 //   §3 dönük kare dikleştirilMEDEN okununca alanlar YANLIŞ/boş (hatanın kendisi — normalizasyonun gerekliliği)
 //   §4 değer kutusu kare çerçevesine geri döner (`rectToSource`): kg kutusu döndürülmüş karedeki "734,00" kelimesini kapsar
 //   §5 ⭐ etiket değer olamaz: tam etiket ("Tarih", GENEL sözlüğü) · yalnız şablon etiket kelimeleri · ":" ile biten rakamsız
-//      ham metin reddedilir (`label-as-value`, değer null); gerçek değer ve firma adı (tanıma anahtarı) reddedilmez
+//      ham metin · HAM metni yalnız etiket parçası ("Tarih Müşteri" → stripSpaces "TARİHMÜŞTERİ", §5g/§5h) reddedilir
+//      (`label-as-value`, değer null); gerçek değer ve firma adı (tanıma anahtarı) reddedilmez
 //   §6 skipWords: "TOPLAM 241,00 MT   734,00 KG" — sütun aralığı atlanan kelimelerde kesmez (kg anchor'dan, konum yedeği değil)
 //   §7 makul olmayan değer (`value-guard.ts`): sayısal alanda tarih · en 10–700 dışı · parti no'da virgüllü ondalık → null
 // ⭐ NEGATİF SONDA (2026-11-09, elle, geri alındı): `uprightClientOcr` kareyi hep aynen döndürünce §2/§2q/§2r/§4/§6 düşer
 //    (22 kırmızı; 0°'de renk "MA 9999-99" = sahadaki komşu alana kayma); `extract.ts`te `rejectLabelValue` kaldırılınca
 //    §5d/§5e düşer; `rejectImplausibleValue` kaldırılınca §7d/§7e düşer; `anchor.ts` skip dalı eski hâline (`gap > maxGap`)
-//    dönünce §2 (15/30/45/135/−20°) + §6 düşer.
+//    dönünce §2 (15/30/45/135/−20°) + §6 düşer. `label-guard.ts` ham metin dalı (`onlyLabelWords(rn)`) kaldırılınca
+//    §5g/§5h düşer (2026-11-09, GB0911260050).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -190,6 +192,18 @@ for (const d of ANGLES) {
   check("§5d konum yedeği 'Taşıma Tipi:' etiketini kapınca renk BOŞ + label-as-value", r.renk!.value === null && r.renk!.issues.includes(LABEL_AS_VALUE), JSON.stringify({ v: r.renk!.value, i: r.renk!.issues }));
   check("§5e parti no 'Tarih' etiketini kapınca BOŞ + label-as-value", r.partiNo!.value === null && r.partiNo!.issues.includes(LABEL_AS_VALUE), JSON.stringify({ v: r.partiNo!.value, i: r.partiNo!.issues }));
   check("§5f etiketin sağındaki gerçek değer kabul edilir ('KOYU BEJ')", r.desen!.value === "KOYU BEJ", String(r.desen!.value));
+  // §5g: konum yedeği İKİ etiketi birden kapınca `stripSpaces` değeri "TARİHMÜŞTERİ" yapar — ham metin denetlenir (GB0911260050).
+  check("§5g ham metni yalnız etiket parçası ('Tarih Müşteri' → 'TARİHMÜŞTERİ') etikettir; rakamlı/gerçek kelimeli ham değil",
+    isLabelValue("TARİHMÜŞTERİ", "Tarih Müşteri", g) && isLabelValue("PARTINO", "Parti NO", g) &&
+      !isLabelValue("ISM1439770", "ISM 1439770", g) && !isLabelValue("KOYUBEJ", "KOYU BEJ", g) && !isLabelValue("TARIH58", "Tarih 58", g));
+  const ls2 = [line("Tarih", 100, 300), line("Müşteri", 100, 345)];
+  const ocr2: OcrResult = { text: ls2.map((l) => l.text).join("\n"), blocks: ls2.map((l) => ({ text: l.text, rect: l.rect, lines: [l] })), imageWidth: 1000, imageHeight: 1000 };
+  const t2: DocumentTemplate = { id: "u-etiket-sonda2", name: "sonda", version: 1, identifiers: { keywords: ["sonda"] }, fields: [
+    { key: "partiNo", label: "Parti No", type: "alnum", postProcess: ["upper", "stripSpaces"], strategies: [{ kind: "anchor", labels: ["İş Emri"], direction: "right" }, { kind: "roi", roi: { x: 0.09, y: 0.29, w: 0.3, h: 0.1 }, fallback: true }] },
+  ] };
+  const r2 = extractFields(ocr2, t2).fields;
+  check("§5h motor: parti no konum yedeği 'Tarih' + 'Müşteri' etiketlerini kapınca BOŞ + label-as-value (TARİHMÜŞTERİ değil)",
+    r2.partiNo!.value === null && r2.partiNo!.issues.includes(LABEL_AS_VALUE), JSON.stringify({ v: r2.partiNo!.value, i: r2.partiNo!.issues }));
 }
 
 // ── §6 skipWords sütun aralığını aşar ───────────────────────────────────────

@@ -50,6 +50,8 @@ export const NOTICE_TITLE: Record<string, string> = {
   SERVER_COMPLETED: "Boş alanlar sunucu okumasıyla dolduruldu",
   BATCH_NO_DIFFERS: "Parti no farklı okundu",
   KG_FROM_METER_CELL: "Kg metre hücresinden okunuyor",
+  METER_VALUES_DIFFER: "Belgede iki farklı metre",
+  KG_METER_RATIO: "Kg / metre oranı olağan dışı",
 };
 const OTHER_TITLE = "Okuma uyarısı";
 

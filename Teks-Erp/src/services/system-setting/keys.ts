@@ -361,6 +361,9 @@ export const SETTING_KEYS = {
   /** K30-B tanıtılan belgeye güven: SOR (varsayılan = bugünkü, okunanlar onaylatılır) | SORMA kullanıcı şablonuyla
    *  tanınan belge sorusuz dolar, tanınmayanın sözlük tahmini forma dolmaz. Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_TANITIM_GUVENI: "gelenBelge.tanitimGuveni",
+  /** Bilgisayarda ikinci okuma (sunucu OCR, okuma servisi): true (varsayılan = bugünkü) | false okuma servisine OCR/dönüştürme
+   *  isteği gitmez, belgeyi yalnız cihaz okur. Tek yazar `PUT /api/gelen-belge/ayarlar`; kapı `gelen-belge-sunucu-okuyucu.service`. */
+  GELEN_BELGE_SERVER_OCR_ENABLED: "gelenBelge.serverOcrEnabled",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",

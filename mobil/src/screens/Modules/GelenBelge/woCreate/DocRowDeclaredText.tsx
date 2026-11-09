@@ -2,7 +2,8 @@
 // aynı stil: belgeden geldi ve değişmediyse sarı, dokununca düzeltme sayfası, boşsa "Belgede yok". Gelen metre/kg/en
 // satırının altında aynı yükseklikte ikinci satır; çok partide partinin kendi satırında.
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useIsCompact } from '../../../../hooks/useDeviceType';
 import { DeclaredEditSheet, DeclaredField, declaredLayout } from './DeclaredField';
 import { applyDeclaredText, docDeclaredText, partyDeclaredText, shownDeclared, type DeclaredKind } from './incomingDeclared';
 import type { NoteParty } from '../../../../services/inboundDoc.service';
@@ -28,9 +29,12 @@ function DeclaredTextBox({ kind, title, doc, edited, text, locked, testSuffix, o
   const value = edited ? text : doc;
   const fromDoc = !edited && doc != null;
   const id = `${kind === 'item' ? 'kumas' : 'renk'}-${testSuffix}`;
+  // Dar ekranda metin kutusu satırı tek başına kaplar ve sarar (yan yana kutuda küçültülmüş yazı okunmuyordu).
+  const compact = useIsCompact();
   return (
     <>
-      <DeclaredField label={LABEL[kind]} value={value} fromDoc={fromDoc} emptyText="Belgede yok" onPress={() => setOpen(true)} disabled={locked} testID={`belge-gelen-${id}`} />
+      <DeclaredField label={LABEL[kind]} value={value} fromDoc={fromDoc} emptyText="Belgede yok" onPress={() => setOpen(true)} disabled={locked}
+        wrap={compact} style={compact ? styles.full : undefined} testID={`belge-gelen-${id}`} />
       {open && (
         <DeclaredEditSheet title={title} subtitle={doc != null ? `Belgede: ${doc}` : 'Belgede yok'} kind="text" label={LABEL[kind]} maxLength={120} allowEmpty initial={value ?? ''}
           resetLabel={doc != null && edited ? 'Belgedekine dön' : undefined} onReset={() => { setOpen(false); onReset(); }}
@@ -70,3 +74,7 @@ export function PartyDeclaredRow({ r, p, detail, noteNo, locked, onChange }: { r
   };
   return <View style={declaredLayout.row}>{box('item')}{box('color')}</View>;
 }
+
+const styles = StyleSheet.create({
+  full: { flexBasis: '100%' },
+});

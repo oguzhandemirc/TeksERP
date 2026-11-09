@@ -70,7 +70,9 @@ export const ownerKindForWoType = (t: WoType | null): WoCreateKind => (t === 'CU
  * Oluşturma formu başlığı: Fason seçiliyken "Fason <İE> · …", kendi üretimde / seçim yokken "<İE> · …". Ölçüt yalnız
  * mal sahibi türü (kaydedilecek `CUSTOMER_GOODS_SERVICE`); İE adı rejimden (`TERIM`).
  */
-export function createFormTitle(kind: WoCreateKind | null, manual: boolean): string {
+export function createFormTitle(kind: WoCreateKind | null, manual: boolean, compact = false): string {
+  // Dar başlık çubuğunda (el terminali) yalnız kip yazar; tür formdaki "Malın sahibi"/rozette görünür, başlık kesilmez.
+  if (compact) return manual ? 'Elle oluştur' : 'Belge okut';
   const base = kind === 'CUSTOMER_GOODS' ? `Fason ${TERIM.terbiyeIsEmri.tekil}` : TERIM.terbiyeIsEmri.tekil;
   return `${base} · ${manual ? 'Elle oluştur' : 'Belge okut'}`;
 }

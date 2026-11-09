@@ -1,6 +1,7 @@
 // İş Emirleri — kompakt tablo (FlashList, cursor + sonsuz kaydırma). Görsel hiyerarşi: "Şu an nerede" rozeti en büyük
 // öğe (≥20pt, istasyon renginde dolgulu, yanında istasyon/fasoncu adı — renk tek taşıyıcı değil). Geniş ekranda tablo
-// satırı + başlık; dar ekranda (telefon dikey) aynı sütun kümesi kart satırına dizilir.
+// satırı + başlık; 600–720dp'de aynı sütun kümesi kart satırına dizilir. El terminalinde (<600dp) kart 3 satırdır:
+// İE no + durum · müşteri + tür rozeti · kumaş/renk + top; konum yalnız istasyondaysa rozet (İptal/Başlamadı durumu tekrar etmez).
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -8,6 +9,7 @@ import { FlashList } from '@shopify/flash-list';
 import PullToRefreshView from '../../../components/PullToRefreshView';
 import TruncatedText from '../../../components/TruncatedText';
 import { formatCalendarDay } from '../../../lib/factory-time';
+import { useIsCompact } from '../../../hooks/useDeviceType';
 import { TERIM } from '../../../lib/terim';
 import { QUERY_PROBLEM_TEXT, type QueryProblem } from '../../../utils/queryState';
 import { WORK_ORDER_STATUS_COLOR, WORK_ORDER_STATUS_LABEL, trLabel } from '../../../utils/labels';
@@ -41,6 +43,7 @@ const EMPTY_ACTION_LABEL: Record<Exclude<EmptyAction, null>, { label: string; ic
 
 export default function WorkOrderTable(p: Props) {
   const wide = useWindowDimensions().width >= WIDE_MIN;
+  const compact = useIsCompact();
   const defs = visibleDefs(p.visible);
   if (p.loading) {
     return (
@@ -87,7 +90,7 @@ export default function WorkOrderTable(p: Props) {
       <FlashList
         data={p.rows}
         keyExtractor={(r) => r.id}
-        renderItem={({ item }) => <Row row={item} defs={defs} wide={wide} onOpen={p.onOpen} />}
+        renderItem={({ item }) => (compact ? <CompactRow row={item} defs={defs} onOpen={p.onOpen} /> : <Row row={item} defs={defs} wide={wide} onOpen={p.onOpen} />)}
         onEndReachedThreshold={0.6}
         onEndReached={p.onEndReached}
         refreshing={p.refreshing}
@@ -128,6 +131,49 @@ function Row({ row, defs, wide, onOpen }: { row: WorkOrderListRow; defs: ColumnD
           ))}
         </View>
       )}
+    </TouchableRipple>
+  );
+}
+
+/** Kart dışı kalan isteğe bağlı sütunlar (parti, top/metre, tarih) açıksa küçük 4. satırda. */
+const COMPACT_EXTRA: readonly ColumnKey[] = ['parti', 'topMetre', 'tarih'];
+
+function CompactRow({ row, defs, onOpen }: { row: WorkOrderListRow; defs: ColumnDef[]; onOpen: (id: string) => void }) {
+  const on = (k: ColumnKey) => defs.some((d) => d.key === k);
+  const b = locationBadge(row.konum, row.status);
+  const tur = on('tur') ? typeBadgeText(row) : null;
+  const extra = defs.filter((d) => COMPACT_EXTRA.includes(d.key));
+  return (
+    <TouchableRipple onPress={() => onOpen(row.id)} style={styles.row} testID={`ie-satir-${row.id}`} accessibilityRole="button" accessibilityLabel={`${row.workOrderNumber} ayrıntısı`}>
+      <View style={styles.rowCompact} testID={`ie-kart-dar-${row.id}`}>
+        <View style={styles.compactLine} testID={`ie-kart-satir1-${row.id}`}>
+          <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>
+          {b.kind === 'station' && (
+            <View style={[styles.badgeSmall, { backgroundColor: b.tone.bg }]} testID={`ie-konum-dar-${row.id}`}>
+              <TruncatedText style={[styles.badgeSmallText, { color: b.tone.fg }]}>{b.extra > 0 ? `${b.text} +${b.extra}` : b.text}</TruncatedText>
+            </View>
+          )}
+          <View style={styles.fill} />
+          <Cell k="durum" row={row} />
+        </View>
+        {(on('musteri') || tur) && (
+          <View style={styles.compactLine} testID={`ie-kart-satir2-${row.id}`}>
+            {on('musteri') && <TruncatedText style={[styles.text, styles.compactGrow]}>{customerText(row)}</TruncatedText>}
+            {tur && <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text>}
+          </View>
+        )}
+        {(on('kumas') || on('top')) && (
+          <View style={styles.compactLine} testID={`ie-kart-satir3-${row.id}`}>
+            {on('kumas') && <TruncatedText style={[styles.sub, styles.compactGrow]}>{fabricText(row)}</TruncatedText>}
+            {on('top') && <Cell k="top" row={row} />}
+          </View>
+        )}
+        {extra.length > 0 && (
+          <View style={styles.compactLine}>
+            {extra.map((d) => <Cell key={d.key} k={d.key} row={row} />)}
+          </View>
+        )}
+      </View>
     </TouchableRipple>
   );
 }
@@ -198,6 +244,11 @@ const styles = StyleSheet.create({
   row: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
   rowWide: { flexDirection: 'row', alignItems: 'center', minHeight: 72, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: spacing.md },
   rowNarrow: { paddingHorizontal: spacing.sm, paddingVertical: spacing.md, gap: spacing.sm },
+  rowCompact: { paddingHorizontal: spacing.xs, paddingVertical: spacing.sm, gap: 2, minHeight: 56 },
+  compactLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 22 },
+  compactGrow: { flexShrink: 1 },
+  badgeSmall: { flexShrink: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 1 },
+  badgeSmallText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold },
   narrowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   narrowLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   narrowLabel: { width: 104, fontSize: typography.size.sm, color: colors.textMuted },

@@ -43,8 +43,9 @@ import { stationDocLookup, stationLookupContext, stationLookupStatus } from "../
 import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
 import { kickPhotoRetentionIfActive, requestImmediatePhotoRetentionRun } from "../jobs/gelen-belge-foto-saklama.job";
 import { workOrderSourceNotes } from "../services/gelen-belge-ie-kaynak.service";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { readerServiceAddress, serverReaderState, serverOcrDisabledError } from "../services/gelen-belge-sunucu-okuyucu.service";
 import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
+import { PageBarcodesSchema } from "../lib/gelen-belge/barkod";
 import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import gelenBelgeSablonRoutes from "./gelen-belge-sablon.routes";
@@ -83,6 +84,7 @@ const ScanBody = z.strictObject({
   barcodeText: optText(120),
   // D7: tablet özeti kendisi hesaplar; uyuşmazlık 400 DOCUMENT_SCAN_HASH_MISMATCH (eski istemci göndermez).
   sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "Özet 64 onaltılık karakter olmalı").nullable().optional(),
+  barcodes: PageBarcodesSchema.optional(), // fotoğraftaki barkodlar (tablet ML Kit); eski istemci göndermez → bugünkü okuma
   clientOcr: z.unknown().optional(), // S16c: katı şema serviste (`parseClientOcr`) — ihlal 400 CLIENT_OCR_INVALID (tablet clientOcr'sız tekrarlar)
 });
 const Header = {
@@ -313,7 +315,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     responses:
  *       202: { description: "Tarama künyesi (status, attempts)" }
  *       400: { description: "DOCUMENT_SCAN_PDF_NOT_READABLE (PDF otomatik okunmaz — K6)" }
- *       409: { description: "DOCUMENT_SCAN_ALREADY_READ (serbest ya da satırı taslakta) · DELIVERY_NOTE_NOT_DRAFT · DOCUMENT_SCAN_STATE_CHANGED" }
+ *       409: { description: "DOCUMENT_SCAN_ALREADY_READ (serbest ya da satırı taslakta) · DELIVERY_NOTE_NOT_DRAFT · DOCUMENT_SCAN_STATE_CHANGED · SERVER_OCR_DISABLED (bilgisayarda ikinci okuma kapalı)" }
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi bu kurulumda yok)" }
  * /api/gelen-belge/irsaliyeler/{id}/eslestirme:
  *   get:
@@ -388,19 +390,23 @@ router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (
 router.get("/irsaliyeler/:id/okuma-ozeti", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await getReadSummary(Id.parse(req.params.id)) })));
 // ── D3b okuma durumu / okut / eşleme ──────────────────────────────────────────
 // Servis yok → "yok" (taslak elle sürer; çıkışsız kapı değil). Sağlık yoklaması canlı (5 s), adres maskelenmez (köken; sır yok).
+// `serverOcrEnabled` = panel "Bilgisayarda ikinci okuma"; kapalıyken de sağlık yoklanır (OCR değil) — açmadan önce servis görülür.
 router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () => {
-  const u = getReaderUrl();
+  const u = readerServiceAddress();
+  const { enabled: serverOcrEnabled } = await serverReaderState();
   const counts = await readerQueueCounts();
   const job = readerJobStatus();
-  if (!u.url) return { status: 200, data: { service: u.source === "gecersiz" ? "gecersiz" : "yok", url: null, engine: null, version: null, ...counts, job } };
+  if (!u.url) return { status: 200, data: { service: u.source === "gecersiz" ? "gecersiz" : "yok", url: null, engine: null, version: null, serverOcrEnabled, ...counts, job } };
   const h = await readerHealth(u.url);
-  return { status: 200, data: { service: h.ok ? "var" : "erisilemiyor", url: u.url, engine: h.engine, version: h.version, code: h.code, ...counts, job } };
+  return { status: 200, data: { service: h.ok ? "var" : "erisilemiyor", url: u.url, engine: h.engine, version: h.version, code: h.code, serverOcrEnabled, ...counts, job } };
 }));
 // Okut: PENDING ise dürtme; READ_FAILED ise yeniden kuyruğa (attempts sıfır). Servis yoksa 503 — fotoğraf durur, taslak elle.
 router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(async (req) => {
   // PDF (K6) servis olsa da okunmaz → 400, servis yokluğunun 503'ünden ÖNCE (cevap kuruluma göre değişmesin).
   await assertScanReadable(Id.parse(req.params.id));
-  if (!getReaderUrl().url) throw new AppError("Okuma servisi bu kurulumda yok; taslağı elle ya da Excel'den doldurun.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
+  const reader = await serverReaderState();
+  if (!reader.enabled) throw serverOcrDisabledError();
+  if (!reader.url) throw new AppError("Okuma servisi bu kurulumda yok; taslağı elle ya da Excel'den doldurun.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
   const scan = await requeueScanForReading(Id.parse(req.params.id), req.user!.userId);
   requestImmediateReaderRun();
   return { status: 202, data: scan };
@@ -427,6 +433,7 @@ const SettingsBody = z.strictObject({
   photoRetention: z.enum(["FULL", "SHRINK_ON_APPROVAL", "DELETE_ON_APPROVAL", "DELETE_ON_DISPATCH"], "Seçenek FULL, SHRINK_ON_APPROVAL, DELETE_ON_APPROVAL ya da DELETE_ON_DISPATCH olmalı").optional(),
   desenRenkEslesme: z.enum(["KAPALI", "ONER", "NOT"], "Seçenek KAPALI, ONER ya da NOT olmalı").optional(),
   tabletIeGirisi: z.enum(["IKISI", "BELGE", "TOP"], "Seçenek IKISI, BELGE ya da TOP olmalı").optional(), tanitimGuveni: z.enum(["SOR", "SORMA"], "Seçenek SOR ya da SORMA olmalı").optional(),
+  serverOcrEnabled: z.boolean("Bilgisayarda ikinci okuma evet/hayır olmalı").optional(),
 });
 /**
  * @openapi
@@ -469,6 +476,7 @@ const SettingsBody = z.strictObject({
  *               desenRenkEslesme: { type: string, enum: [KAPALI, ONER, NOT], description: "Okunan desen/renk yazısı: kullanılmaz · adı/kodu tutan kayıt önerilir (varsayılan) · iş emri notuna eklenir" }
  *               tabletIeGirisi: { type: string, enum: [IKISI, BELGE, TOP], description: "Tablet iş emri girişi: belge ve top okutma (varsayılan) · yalnız belge okutma · yalnız top okutma" }
  *               tanitimGuveni: { type: string, enum: [SOR, SORMA], description: "Tanıtılan belgeye güven: okunanları onaylat (varsayılan) · tanıtılan belgeyi sormadan doldur (tanınmayanın tahmini dolmaz)" }
+ *               serverOcrEnabled: { type: boolean, description: "Bilgisayarda ikinci okuma (okuma servisiyle sunucu OCR; varsayılan true). false: okuma servisine OCR/HEIC isteği gitmez, cihazın okuyamadığı sayfa READ_FAILED olur, yeniden okut 409 SERVER_OCR_DISABLED" }
  *     responses:
  *       200: { description: Güncel ayarlar }
  */
@@ -513,6 +521,7 @@ const StationLookupBody = z.union([
  *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE · STATION_INACTIVE · STATION_NOT_TAMBUR" }
  *       404: { description: "STATION_NOT_FOUND (TAMBUR stationId)" }
  *       403: { description: "GELEN_BELGE_STATION_LOOKUP_DISABLED (ayar kapalı) · MODULE_DISABLED (gelen belge / üretim)" }
+ *       409: { description: "SERVER_OCR_DISABLED (bilgisayarda ikinci okuma kapalı; fiş no ile arama sürer)" }
  *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi yok/ulaşılamaz) · HEIC_CONVERT_UNAVAILABLE" }
  */
 router.get("/istasyon-okutma", requireAnyPermission(...STATION_LOOKUP_PERMISSIONS), wrap(async () => ({ status: 200, data: await stationLookupStatus() })));

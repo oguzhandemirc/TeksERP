@@ -248,4 +248,39 @@ describe("tanıtılan belge tipleri (S1b + fotoğrafsız düzenle)", () => {
     expect(screen.getByTestId("user-template-save")).toBeDisabled();
     expect(screen.getByTestId("user-template-hint")).toHaveTextContent("en az bir alan kalmalı");
   });
+
+});
+
+describe("belge tipi düzenle — Barkoddan al (2026-11-09)", () => {
+  const user = row({ kind: "USER", code: "u-gulecsoy", name: "Güleçsoy çeki", id: "t7", inEngine: true, inFile: false, isActive: true, senderCustomer: null });
+  const tpl = { id: "u-gulecsoy", version: 3, name: "Güleçsoy çeki", fields: [{ key: "partiNo", label: "Ham PartiNo" }, { key: "hedefKg", label: "KG/MT" }], identifiers: { keywords: ["GÜLEÇSOY"] } };
+  beforeEach(() => {
+    listSenderTemplates.mockResolvedValue([row({}), user]);
+    listUserTemplates.mockResolvedValue([{ id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: true, updatedAt: "", template: tpl }]);
+    getUserTemplate.mockReset().mockResolvedValue({ id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: true, updatedAt: "", template: tpl, versions: [] });
+    editUserTemplate.mockReset().mockResolvedValue({ code: "u-gulecsoy", name: "Güleçsoy çeki", version: 4, warnings: [], changes: {} });
+  });
+
+  it("⭐ Barkoddan al: işaretlenince gövdede yalnız barcodeFields; kaldırılan alanın kutusu kapanır", async () => {
+    renderWithProviders(<SenderTemplatesPage />);
+    await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
+    await userEvent.click(await screen.findByTestId("user-template-barcode-partiNo"));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Hedef kg alanını kaldır" }));
+    expect(screen.getByTestId("user-template-barcode-hedefKg")).toBeDisabled();
+    await userEvent.click(screen.getByTestId("user-template-save"));
+    await waitFor(() => expect(editUserTemplate).toHaveBeenCalledWith("u-gulecsoy", { expectedVersion: 3, dropFields: ["hedefKg"], barcodeFields: ["partiNo"] }));
+  });
+
+  it("işaretli alan kutusu dolu gelir; kaldırınca barcodeFields: []", async () => {
+    const marked = { ...tpl, fields: tpl.fields.map((f) => (f.key === "partiNo" ? { ...f, fromBarcode: true } : f)) };
+    getUserTemplate.mockResolvedValue({ id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: true, updatedAt: "", template: marked, versions: [] });
+    renderWithProviders(<SenderTemplatesPage />);
+    await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
+    const box = await screen.findByTestId("user-template-barcode-partiNo");
+    expect(box).toBeChecked();
+    expect(screen.getByTestId("user-template-save")).toBeDisabled();
+    await userEvent.click(box);
+    await userEvent.click(screen.getByTestId("user-template-save"));
+    await waitFor(() => expect(editUserTemplate).toHaveBeenCalledWith("u-gulecsoy", { expectedVersion: 3, barcodeFields: [] }));
+  });
 });

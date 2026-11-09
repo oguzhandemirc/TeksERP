@@ -3,14 +3,13 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
-import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import NumpadInput from '../../../../components/NumpadInput';
 import { colors, spacing, typography } from '../../../../theme';
 import { parseMeters } from '../approvalGate';
 import { fmtKursunMeters } from '../readResult';
 import { emptyRoll, initialRolls, ROLLS_MAX, rollsTotal, type RollRow } from './rollDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
-import { InlineField } from './InlineField';
+import { ChoiceRow } from '../../../../components/form/ChoiceRow';
 
 export default function RollRows({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
   const f = row.form;
@@ -29,18 +28,18 @@ export default function RollRows({ row, wo, locked }: { row: DocRow; wo: WoRowsS
   const no = row.noteNo;
   return (
     <View style={styles.box}>
-      <InlineField label="Kumaş nasıl geldi?" testID={`belge-ayri-top-${no}`}>
-        <ChoiceChips
-          options={[
-            { value: 'toplar', label: 'Toplar halinde', testID: `belge-ayri-top-${no}-toplar` },
-            { value: 'tek', label: 'Tek parça', testID: `belge-ayri-top-${no}-tek` },
-          ]}
-          value={rolls ? 'toplar' : 'tek'}
-          onChange={choose}
-          disabled={locked}
-          testID={`belge-ayri-top-${no}-secim`}
-        />
-      </InlineField>
+      <ChoiceRow
+        label="Kumaş nasıl geldi?"
+        rowTestID={`belge-ayri-top-${no}`}
+        options={[
+          { value: 'toplar', label: 'Toplar halinde', icon: 'layers-triple-outline', testID: `belge-ayri-top-${no}-toplar` },
+          { value: 'tek', label: 'Tek parça', icon: 'paper-roll-outline', testID: `belge-ayri-top-${no}-tek` },
+        ]}
+        value={rolls ? 'toplar' : 'tek'}
+        onChange={choose}
+        disabled={locked}
+        testID={`belge-ayri-top-${no}-secim`}
+      />
       {rolls && (
         <View style={styles.box} testID={`belge-toplar-${row.noteNo}`}>
           {rolls.map((r, i) => (

@@ -17,7 +17,7 @@ import { type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { serverReaderState, serverReaderUrl, serverOcrDisabledError } from "./gelen-belge-sunucu-okuyucu.service";
 import { readerOcr } from "../lib/gelen-belge/okuma-istemcisi";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
@@ -75,7 +75,7 @@ export interface StationLookupResult {
 }
 
 export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean }> {
-  return { enabled: (await readIncomingDocStationLookup()) && (await readProductionEnabled()), readerConfigured: getReaderUrl().url !== null };
+  return { enabled: (await readIncomingDocStationLookup()) && (await readProductionEnabled()), readerConfigured: (await serverReaderUrl()) !== null };
 }
 
 async function assertStationLookupEnabled(): Promise<void> {
@@ -139,7 +139,9 @@ async function photoLookup(contentBase64: string, sha256: string | null, sink: S
   let source: StationLookupSource = "STORED_READ";
   let ocr = stored;
   if (!ocr) {
-    const url = getReaderUrl().url;
+    const reader = await serverReaderState();
+    if (!reader.enabled) throw serverOcrDisabledError("Fiş no ile elle arayın.");
+    const url = reader.url;
     if (!url) throw new AppError("Okuma servisi bu kurulumda yok; fiş no ile elle arayın.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
     const r = await readerOcr(url, upload.content, upload.mime);
     if (!r.ok) {

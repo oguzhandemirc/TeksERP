@@ -35,6 +35,9 @@ export interface LiveReadResult {
 
 const r1 = (v: number): number => Math.round(v * 10) / 10;
 
+/** Biçim kuralını çiğneyen değer canlı okumada oy değildir (tablet kilitlemesin); fotoğraf yolu aynı değeri gözden geçirmeye düşürür. */
+const LIVE_FORMAT_ISSUES = new Set(["pattern-mismatch", "date-invalid", "enum-no-match", "out-of-range", "too-long"]);
+
 /** Katı ayrıştırma (`istemci-ocr.ts` tavanları); ihlal 400 `LIVE_FRAME_INVALID`. */
 function parseFrame(raw: unknown) {
   const parsed = ClientOcrSchema.safeParse(raw);
@@ -71,7 +74,8 @@ export async function liveReadFrame(raw: unknown): Promise<LiveReadResult> {
   const got = region.fields.fields;
   const fields = template.fields.map((spec): LiveReadField => {
     const f = got[spec.key];
-    const value = f?.value ?? null;
+    // Etiket/makul olmayan değer motorda zaten boşalır (label-guard · value-guard); biçim ihlali burada boşaltılır, kod issues'ta kalır.
+    const value = f?.issues.some((i) => LIVE_FORMAT_ISSUES.has(i)) ? null : f?.value ?? null;
     const box = value === null ? undefined : toFrameBox(f?.source.rect, region.region.rect.y, transform);
     const issues = f?.issues.length ? f.issues : value === null ? ["not-found"] : undefined;
     return { key: spec.key, label: spec.label, value, needsReview: f?.needsReview ?? true, ...(issues ? { issues } : {}), ...(box ? { box } : {}) };

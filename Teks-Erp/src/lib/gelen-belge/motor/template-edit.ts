@@ -88,6 +88,8 @@ export interface TemplateDefinitionPatch {
   identifiers?: string[];
   dropFields?: string[];
   rules?: { multiParty?: MultiPartyRule | null };
+  /** "Barkoddan al" işaretli alanların TAM listesi (verilmezse dokunulmaz; [] hepsini kaldırır). */
+  barcodeFields?: string[];
 }
 
 export interface TemplateDefinitionChanges {
@@ -95,6 +97,7 @@ export interface TemplateDefinitionChanges {
   identifiers?: { added: string[]; removed: string[] };
   droppedFields?: string[];
   rules?: { multiParty: { from: MultiPartyRule | null; to: MultiPartyRule | null } };
+  barcodeFields?: { from: string[]; to: string[] };
 }
 
 /**
@@ -135,6 +138,22 @@ export function editTemplateDefinition(old: DocumentTemplate, patch: TemplateDef
       if (to) rest.multiParty = to;
       if (Object.keys(rest).length) t.rules = rest;
       else delete t.rules;
+    }
+  }
+  if (patch.barcodeFields !== undefined) {
+    const want = [...new Set(patch.barcodeFields)];
+    const missing = want.filter((k) => !t.fields.some((f) => f.key === k));
+    if (missing.length) errors.push(`Belge tipinde olmayan alan barkoddan alınamaz: ${missing.join(", ")}.`);
+    else {
+      const from = t.fields.filter((f) => f.fromBarcode).map((f) => f.key);
+      const to = t.fields.filter((f) => want.includes(f.key)).map((f) => f.key);
+      if (from.join("\u0000") !== to.join("\u0000")) {
+        changes.barcodeFields = { from, to };
+        t = { ...t, fields: t.fields.map((f) => {
+          const { fromBarcode: _old, ...rest } = f;
+          return want.includes(f.key) ? { ...rest, fromBarcode: true } : rest;
+        }) };
+      }
     }
   }
   return { template: t, changes, errors };

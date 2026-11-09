@@ -81,7 +81,7 @@ export default function RouteStepsEditor(p: Props) {
             <Text style={styles.hint}>{s.notes}</Text>
           ) : null}
           {s.key === kursunKey && p.machine && (
-            <MachineChips list={p.machine.list} value={p.machine.value} locked={p.locked} label="Makine seç" inline testID="ie-form-makine" onChange={p.machine.onChange} />
+            <MachineChips list={p.machine.list} value={p.machine.value} locked={p.locked} label="Makine seç" testID="ie-form-makine" onChange={p.machine.onChange} />
           )}
         </View>
       ))}

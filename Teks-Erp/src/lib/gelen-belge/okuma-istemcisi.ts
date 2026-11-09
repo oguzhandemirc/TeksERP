@@ -39,6 +39,8 @@ export const OcrResultSchema = z.object({
   durationMs: z.number().optional(),
   engine: z.string().optional(),
   rotation: z.number().int().optional(),
+  // Tablet barkodları zarfta saklanır: yeniden okuma/taslak yeniden kurulumu barkodu kaybetmez.
+  barcodes: z.array(z.object({ format: z.string(), value: z.string() })).max(10).optional(),
 });
 
 /** Sidecar `POST /donustur` yanıtı — okuma `app/contract.py` `DonusumSonucu` ile BİREBİR (`tests/test_donustur.py` ölçer). */

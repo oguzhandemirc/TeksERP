@@ -135,6 +135,33 @@ describe('LiveReadModal', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
   });
 
+});
+
+describe('LiveReadModal — müşteri metni, öneri, netlik', () => {
+  it('G müşteri okunmadıysa "Fotoğraftan eşleşecek"; C kilitli alanda farklı son kareler → öneri, dokununca elle kilit', async () => {
+    const { r } = setup();
+    for (let i = 0; i < 3; i++) await sendFrame(reading('1.250', null));
+    expect(r.getByTestId('canli-alan-deger-musteri')).toHaveTextContent('Fotoğraftan eşleşecek');
+    expect(r.queryByTestId('canli-alan-oneri-hedefMetraj')).toBeNull();
+    for (let i = 0; i < 2; i++) await sendFrame(reading('1.520', null));
+    expect(r.getByTestId('canli-alan-oneri-hedefMetraj')).toHaveTextContent(/Son karelerde: 1.520/);
+    fireEvent.press(r.getByTestId('canli-alan-oneri-hedefMetraj'));
+    await waitFor(() => expect(r.getByTestId('canli-alan-deger-hedefMetraj')).toHaveTextContent('1.520'));
+    expect(r.queryByTestId('canli-alan-oneri-hedefMetraj')).toBeNull();
+  });
+
+  it('F bulanık karenin yanıtı oy değildir: net olmayan üç kare kilitlemez', async () => {
+    const { r } = setup();
+    await act(async () => mockCam.props?.onStability?.({ still: false, sharpness: 0.5 }));
+    for (let i = 0; i < 3; i++) await sendFrame(reading('1.250'));
+    expect(r.getByTestId('canli-alan-durum-hedefMetraj')).toHaveTextContent(/Okunuyor/);
+    await act(async () => mockCam.props?.onStability?.({ still: true, sharpness: LIVE_MIN_SHARPNESS }));
+    for (let i = 0; i < 3; i++) await sendFrame(reading('1.250'));
+    expect(r.getByTestId('canli-alan-durum-hedefMetraj')).toHaveTextContent(/Kilitli/);
+  });
+});
+
+describe('LiveReadModal — halka', () => {
   it('görüntü bulanıklaşır/kararırsa halka sıfırlanır, çekim olmaz', async () => {
     const { r, onDone } = setup();
     for (let i = 0; i < 3; i++) await sendFrame(reading('1.250'));

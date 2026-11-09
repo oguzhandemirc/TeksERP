@@ -18,6 +18,7 @@ import { KURSUN_PROPERTY_CODE } from "./helpers/quality-station.helper";
 import { loadProcessChoiceGroups, type ProcessChoiceGroup } from "./helpers/process-choice-catalog.helper";
 import { matchChoiceOption, matchGramajOption, type GramajOption } from "../lib/gelen-belge/gramaj-oneri";
 import { resolveEffectiveDefaultItem, type EffectiveDefaultItem } from "./gelen-belge-varsayilan.service";
+import { ocrEqualScore } from "./helpers/master-match.helper";
 
 export const MATCH_SUGGEST_THRESHOLD = 0.9;
 export const MATCH_LIST_THRESHOLD = 0.8;
@@ -59,14 +60,15 @@ export function aliasKey(scope: DeliveryNoteAliasScope, raw: string): string {
 
 export type Named = { id: string; code: string | null; name: string };
 
-function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchCandidate[] {
+export function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchCandidate[] {
   const key = foldForScope(scope, raw);
   if (!key || key.length < 2) return [];
   const out: MatchCandidate[] = [];
   for (const r of rows) {
     const k = foldForScope(scope, r.name);
     if (!k) continue;
-    const score = k === key ? 1 : scope === "SENDER" ? firmNameSimilarity(key, k, FUZZY_NOISE_WORDS) : productNameSimilarity(key, k);
+    const sim = k === key ? 1 : scope === "SENDER" ? firmNameSimilarity(key, k, FUZZY_NOISE_WORDS) : productNameSimilarity(key, k);
+    const score = Math.max(sim, ocrEqualScore(key, k));
     if (score >= MATCH_LIST_THRESHOLD) out.push({ id: r.id, code: r.code, name: r.name, score: Math.round(score * 10000) / 10000 });
   }
   return out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "tr")).slice(0, LIST_MAX);

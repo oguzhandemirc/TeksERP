@@ -2,7 +2,8 @@
 // eklenir/silinir, gelen metre toplamı izler, gövde SEPARATE + rolls + toplam. Çok partide anahtar çizilmez.
 // Negatif sonda: RollRows `set` içindeki `meters: total` kaldırılınca "gelen metre toplamı izler" vakası kırmızı.
 import React, { useState } from 'react';
-import { act, fireEvent } from '@testing-library/react-native';
+import { act, fireEvent, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { renderWithPaper } from '../../../../test/render';
 import type { InboundNoteDetail } from '../../../../services/inboundDoc.service';
 import RollRows from './RollRows';
@@ -24,6 +25,22 @@ function Harness({ detail, form = baseForm }: { detail: Partial<InboundNoteDetai
   const wo = { updateForm: (_id: string, patch: Partial<RowForm>) => setRow((r) => ({ ...r, form: { ...r.form!, ...patch } })) } as unknown as WoRowsState;
   return <RollRows row={row} wo={wo} locked={false} />;
 }
+
+describe('RollRows — seçenek satırı kalıbı (her genişlikte)', () => {
+  it('⭐ soru kutu değil küçük başlık; "Toplar halinde"/"Tek parça" eşit genişlik, ikonlu, ≥56dp', () => {
+    const ui = renderWithPaper(<Harness detail={{}} />);
+    const cap = ui.getByTestId('belge-ayri-top-GB-1-baslik');
+    expect(StyleSheet.flatten(cap.props.style).backgroundColor).toBeUndefined();
+    expect(within(cap).getByText('Kumaş nasıl geldi?')).toBeTruthy();
+    for (const id of ['belge-ayri-top-GB-1-toplar', 'belge-ayri-top-GB-1-tek']) {
+      const st = StyleSheet.flatten(ui.getByTestId(id).props.style);
+      expect(st).toMatchObject({ flexGrow: 1, flexBasis: 0 });
+      expect(st.minHeight).toBeGreaterThanOrEqual(56);
+    }
+    expect(ui.UNSAFE_getAllByProps({ name: 'layers-triple-outline' }).length).toBeGreaterThan(0);
+    expect(ui.UNSAFE_getAllByProps({ name: 'paper-roll-outline' }).length).toBeGreaterThan(0);
+  });
+});
 
 describe('RollRows — toplar ayrı geldi', () => {
   it('⭐ anahtar varsayılan KAPALI: satır yok, gövde bugünkü (rollMode/rolls yok)', () => {

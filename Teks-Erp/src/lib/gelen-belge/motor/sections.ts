@@ -50,7 +50,8 @@ export function sliceBand(ocr: OcrResult, top: number, bottom: number): OcrResul
     });
     if (lines.length > 0) blocks.push({ ...b, text: lines.map((l) => l.text).join("\n"), lines });
   }
-  return { ...ocr, text: blocks.map((b) => b.text).join("\n"), blocks };
+  // Barkod sayfa genelidir: blok/bölüm bandına taşınmaz (her partinin kendi değeri banttan okunur).
+  return { ...ocr, text: blocks.map((b) => b.text).join("\n"), blocks, barcodes: undefined };
 }
 
 /**

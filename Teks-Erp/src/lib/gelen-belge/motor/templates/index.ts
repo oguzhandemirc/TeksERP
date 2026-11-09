@@ -215,6 +215,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
     if (typeof f.min === 'number' && typeof f.max === 'number' && f.min > f.max) errors.push(`${p}: min > max`);
     if (f.minConfidence !== undefined && (typeof f.minConfidence !== 'number' || f.minConfidence < 0 || f.minConfidence > 1)) errors.push(`${p}.minConfidence 0..1 olmalı`);
     if (f.dateFormats !== undefined && (!Array.isArray(f.dateFormats) || !f.dateFormats.every((d) => typeof d === 'string'))) errors.push(`${p}.dateFormats string dizisi olmalı`);
+    if (f.fromBarcode !== undefined && typeof f.fromBarcode !== 'boolean') errors.push(`${p}.fromBarcode evet/hayır olmalı`);
     if (f.postProcess !== undefined && (!Array.isArray(f.postProcess) || !f.postProcess.every((x) => typeof x === 'string' && POST_PROCESS.has(x)))) errors.push(`${p}.postProcess bilinmeyen adım içeriyor`);
     if (!Array.isArray(f.strategies) || f.strategies.length === 0) { errors.push(`${p}.strategies boş olmayan dizi olmalı`); return; }
     f.strategies.forEach((s, si) => {

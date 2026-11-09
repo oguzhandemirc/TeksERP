@@ -4,6 +4,7 @@
 // Tarama + başlık: DRAFT irsaliye + sayfa fotoğrafları. Belge başına tek kayıt kipinde (T2) onay kartı detayı okur,
 // başlığı yamar ve `gelen-belge:approve` izniyle onaylar; kural sunucuda. Tarama uçları `gelen-belge:write`; modül kapalıyken 403 MODULE_DISABLED (ekran zaten gizli).
 // =============================================================================
+import type { PageBarcode } from './deviceBarcode';
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, DocIncomingDeclared, NotePartiesView } from '../types/inboundDocWoCreate';
@@ -68,14 +69,17 @@ export interface UploadScanBody {
   sha256: string;
   /** S16c: tabletin ML Kit okuması — varsa sunucu okuma servisini atlar (gövde katmanı allowlist'i: alan iki uçta). */
   clientOcr?: ClientOcr;
+  /** Fotoğraftaki barkodlar (cihaz ML Kit, ≤ 10); sunucu şablonun "Barkoddan al" alanına yazar. Eski sunucu 400 → barkodsuz tekrar. */
+  barcodes?: PageBarcode[];
 }
 
 export interface UploadScanResult {
   scan: { id: string; sha256: string; noteId: string | null };
   duplicate: boolean;
   boundTo: string | null;
-  /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · null/yok: cihaz okuması yok (eski sunucu). */
-  deviceOcr?: 'READ' | 'FALLBACK' | null;
+  /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · `FAILED`: okunamadı, bilgisayarda
+   *  ikinci okuma kapalı (özet FAILED → "Okunamadı") · null/yok: cihaz okuması yok (eski sunucu). */
+  deviceOcr?: 'READ' | 'FALLBACK' | 'FAILED' | null;
 }
 
 /** Okuma durumu — SUNUCU türetir (`readSummaryState`); istemci yalnız gösterir. */

@@ -15,7 +15,7 @@ import { mergeExtra } from './woSteps';
 import { sameDocOnSave } from './sameDocOnSave';
 import { applyMulti, applyParties, fillEmptyRowForm, isDone, isPartial, keptResult, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
-import { applyLiveLocks, liveLocksFor } from '../live/liveLocks';
+import { applyLiveLocks, liveLocksFor, liveUserKeysFor } from '../live/liveLocks';
 import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
 import {
   buildCreateBody,
@@ -139,8 +139,8 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
 
   const setDetail = useCallback(
     (noteId: string, detail: InboundNoteDetail) => {
-      // Canlı okumanın kilitli değerleri okumayı ezer (operatör değeri) — forma giriş sınırı burası.
-      const d = applyLiveLocks(detail, liveLocksFor(noteId));
+      // Canlı okuma kilitleri forma burada girer; fotoğraf okumasıyla çelişen alan "Kontrol edin" işaretli gelir.
+      const d = applyLiveLocks(detail, liveLocksFor(noteId), liveUserKeysFor(noteId));
       // Belgesiz taslağa sonradan belge eklendiyse okuma yalnız boş alanlara düşer (elle yazılan ezilmez).
       const formFor = (r: DocRow) => (!r.form ? initialRowForm(d, gramajFor) : manual.has(noteId) ? fillEmptyRowForm(r.form, initialRowForm(d, gramajFor)) : r.form);
       setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail: d, form: formFor(r) } : r)));

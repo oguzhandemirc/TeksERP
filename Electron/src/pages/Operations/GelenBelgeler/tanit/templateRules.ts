@@ -58,9 +58,18 @@ export interface TemplateEditDraft {
   keywords: string[];
   drop: string[];
   multiParty: MultiPartyRule | null;
+  /** "Barkoddan al" işaretli alan anahtarları. */
+  barcode: string[];
 }
 
-export const draftOf = (d: UserTemplateDetail): TemplateEditDraft => ({ name: d.name, keywords: templateKeywords(d.template), drop: [], multiParty: multiPartyRuleOf(d.template) });
+/** Şablonda `fromBarcode: true` olan alanlar (şablon sırası). */
+export function barcodeFieldsOf(t: TemplateJson | null | undefined): string[] {
+  return arr(t?.fields).map(obj).filter((f): f is TemplateJson => !!f && typeof f.key === "string" && f.fromBarcode === true).map((f) => f.key as string);
+}
+
+export const draftOf = (d: UserTemplateDetail): TemplateEditDraft => ({
+  name: d.name, keywords: templateKeywords(d.template), drop: [], multiParty: multiPartyRuleOf(d.template), barcode: barcodeFieldsOf(d.template),
+});
 
 /** Yalnız değişen parçalar + `expectedVersion`; hiçbir şey değişmediyse null (Kaydet kapalı). */
 export function buildEditBody(d: UserTemplateDetail, draft: TemplateEditDraft): TemplateEditBody | null {
@@ -71,6 +80,9 @@ export function buildEditBody(d: UserTemplateDetail, draft: TemplateEditDraft): 
   if (draft.keywords.join("\u0000") !== prev.join("\u0000")) body.identifiers = [...draft.keywords];
   if (draft.drop.length) body.dropFields = [...draft.drop];
   if (draft.multiParty !== multiPartyRuleOf(d.template)) body.rules = { multiParty: draft.multiParty };
+  // Kaldırılan alan barkod listesinde kalmaz (sunucu olmayan alanı reddeder).
+  const barcode = draft.barcode.filter((k) => !draft.drop.includes(k)).sort();
+  if (barcode.join("\u0000") !== barcodeFieldsOf(d.template).filter((k) => !draft.drop.includes(k)).sort().join("\u0000")) body.barcodeFields = barcode;
   return Object.keys(body).length > 1 ? body : null;
 }
 

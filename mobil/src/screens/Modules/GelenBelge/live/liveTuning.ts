@@ -5,6 +5,16 @@
 export const LIVE_VOTE_WINDOW = 5;
 /** Kilit eşiği: aynı (normalize) değer pencerede en az K kez görülürse alan kilitlenir. */
 export const LIVE_VOTE_QUORUM = 3;
+/** Kendini düzelten kilit: oyla kilitlenmiş alanda pencerede kilitten FARKLI aynı değer en az bu kadar → kilit o değere geçer. */
+export const LIVE_VOTE_RELOCK = 4;
+/** "Düzeltildi" işaretinin kaç yanıt (~saniye) görüneceği. */
+export const LIVE_CORRECTED_SHOW = 3;
+/**
+ * Oy sayılan en düşük kare netliği (`onStability.sharpness`). Altındaki karenin yanıtı oylamaya GİRMEZ (geçmişe hiç eklenmez,
+ * pencere kaymaz). Otomatik çekim eşiğinden (`LIVE_MIN_SHARPNESS`) düşük tutuldu: kıpırdayan kare 1,1–1,4 ölçüldü; 1,6
+ * oylamada da eşik olursa elde tutulan tablette kilit gecikirdi. Yalnız en bulanık kareleri eler.
+ */
+export const LIVE_VOTE_MIN_SHARPNESS = 1.2;
 
 /** İki kare isteği arasında en az bu kadar (~saniyede 1); uçuşta hep TEK istek. */
 export const LIVE_REQUEST_INTERVAL_MS = 1000;

@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
+import { useIsCompact } from '../../../hooks/useDeviceType';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { TERIM } from '../../../lib/terim';
 import { colors } from '../../../theme';
@@ -37,6 +38,7 @@ export default function IsEmirleriScreen() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   // Formdaki etkin mal sahibi türü → başlık ("Fason İş Emri · …" / "İş Emri · …").
   const [formKind, setFormKind] = useState<WoCreateKind | null>(null);
+  const compact = useIsCompact();
   const kinds = useDeviceSettingsStore((s) => s.woCreateKinds);
   const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
   const routeOnButton = useDeviceSettingsStore((s) => s.woRouteOnButton);
@@ -60,7 +62,7 @@ export default function IsEmirleriScreen() {
     // Oluşturma formu; geri → liste (kaydedilen İE listede görünsün diye tazelenir).
     const back = () => { setStage(null); void list.refreshAll(); };
     return (
-      <ScreenChrome title={createFormTitle(formKind, stage.manual)} onStepBack={back} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
+      <ScreenChrome title={createFormTitle(formKind, stage.manual, compact)} onStepBack={back} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
         <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onNew={() => setStage({ ...stage, n: stage.n + 1 })} onCreated={back} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} onKindChange={setFormKind} />
       </ScreenChrome>
     );

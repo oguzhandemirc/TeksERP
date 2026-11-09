@@ -64,6 +64,9 @@ export function missingTemplateFields(s: ReadSummary): string[] {
   return (s.templateFields ?? []).filter((f) => !has(f.value)).map((f) => f.label);
 }
 
+/** Sunucunun çapraz doğrulama uyarı kodları — formda sarı iletiyle gösterilir (diğer okuma uyarıları panelde). */
+export const CROSS_CHECK_CODES: ReadonlySet<string> = new Set(['METER_VALUES_DIFFER', 'KG_METER_RATIO']);
+
 /** Belge şeridi altındaki iletiler (§2c tablosu); "panel" geçen metin yok — eleman paneli görmez. */
 export function docReadNotices(i: DocReadInput): DocNotice[] {
   const out: DocNotice[] = [];
@@ -78,6 +81,8 @@ export function docReadNotices(i: DocReadInput): DocNotice[] {
     // Şablonda olup okunamayan alanlar (eski "Belge okundu" kartının kırmızı karoları) formda sarı iletiyle kalır.
     const missing = missingTemplateFields(s);
     if (missing.length > 0) out.push({ key: 'eksik-alan', tone: 'warn', text: `Belgede bulunamadı: ${missing.join(', ')} — formda kontrol edin.` });
+    // Çapraz doğrulama (sunucu `cross-check.ts`): değer değişmez, yalnız karşılaştırma iletisi.
+    for (const n of s.notices ?? []) if (CROSS_CHECK_CODES.has(n.code)) out.push({ key: `capraz-${n.code}`, tone: 'warn', text: n.detail });
   }
   if (i.detailFailed) out.push({ key: 'detay', tone: 'info', text: 'Belge ayrıntısı alınamadı; özet bilgilerle dolduruldu.' });
   return out;

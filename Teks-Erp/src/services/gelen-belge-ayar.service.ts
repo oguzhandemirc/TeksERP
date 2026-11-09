@@ -26,6 +26,7 @@
 //   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI kullanılmaz | ONER kayıt önerilir (varsayılan) | NOT nota eklenir (K30)
 //   · `gelenBelge.tabletIeGirisi` — tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP (K30)
 //   · `gelenBelge.tanitimGuveni` — tanıtılan belgeye güven: SOR (varsayılan) | SORMA sorusuz doldur (K30-B)
+//   · `gelenBelge.serverOcrEnabled` — bilgisayarda ikinci okuma (sunucu OCR): açık (varsayılan) | kapalı = yalnız cihaz okur
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -93,6 +94,7 @@ import {
   PHOTO_RETENTION_VALUES,
   type PhotoRetentionMode,
   readDesenRenkEslesme, DEFAULT_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, type DesenRenkEslesmeMode,
+  readServerOcrEnabled, DEFAULT_SERVER_OCR_ENABLED,
   readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, type TabletIeGirisiMode, readTanitimGuveni, DEFAULT_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, type TanitimGuveniMode,
 } from "./system-setting.service";
 
@@ -160,6 +162,8 @@ export interface IncomingDocSettings extends StationVerifySettings {
   /** K30 tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP. */
   tabletIeGirisi: TabletIeGirisiMode; defaultTabletIeGirisi: TabletIeGirisiMode; tanitimGuveni: TanitimGuveniMode; defaultTanitimGuveni: TanitimGuveniMode;
   defaultPhotoRetention: PhotoRetentionMode;
+  /** Bilgisayarda ikinci okuma (okuma servisiyle sunucu OCR); kapalıyken belgeyi yalnız tablet/telefon okur. */
+  serverOcrEnabled: boolean; defaultServerOcrEnabled: boolean;
 }
 
 /**
@@ -230,6 +234,7 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     desenRenkEslesme: await readDesenRenkEslesme(), defaultDesenRenkEslesme: DEFAULT_DESEN_RENK_ESLESME,
     tabletIeGirisi: await readTabletIeGirisi(), defaultTabletIeGirisi: DEFAULT_TABLET_IE_GIRISI,
     tanitimGuveni: await readTanitimGuveni(), defaultTanitimGuveni: DEFAULT_TANITIM_GUVENI,
+    serverOcrEnabled: await readServerOcrEnabled(), defaultServerOcrEnabled: DEFAULT_SERVER_OCR_ENABLED,
   };
 }
 
@@ -256,6 +261,7 @@ export interface IncomingDocSettingsInput {
   stationDocLookup?: boolean; stationVerifyThreshold?: number | null;
   photoRetention?: PhotoRetentionMode;
   desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode;
+  serverOcrEnabled?: boolean;
 }
 
 /**
@@ -363,6 +369,9 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, input.photoRetention, "Gelen belge: belge fotoğrafı saklama (FULL tam / SHRINK_ON_APPROVAL onayda küçült / DELETE_ON_APPROVAL onayda sil / DELETE_ON_DISPATCH sevkte sil) — geçmiş onaylı belgelere de uygulanır", userId);
   }
   await setStationLookupOptions(input, userId);
+  if (input.serverOcrEnabled !== undefined) {
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED, input.serverOcrEnabled, "Gelen belge: bilgisayarda ikinci okuma (okuma servisiyle sunucu OCR; kapalıyken belgeyi yalnız tablet/telefon okur)", userId);
+  }
   if (input.autoSenderFromTemplate !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
   }

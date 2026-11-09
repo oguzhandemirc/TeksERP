@@ -13,3 +13,14 @@ export function useIsPortrait(): boolean {
   const { width, height } = useWindowDimensions();
   return height >= width;
 }
+
+/** Dar genişlik (el terminali / telefon dikey, ~360–400dp): sıkışık yerleşim dalı. Tablet ve yatay telefon (≥600dp) eski yerleşimde kalır. */
+export const COMPACT_MAX_WIDTH = 600;
+
+export function isCompactWidth(width: number): boolean {
+  return width < COMPACT_MAX_WIDTH;
+}
+
+export function useIsCompact(): boolean {
+  return isCompactWidth(useWindowDimensions().width);
+}

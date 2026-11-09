@@ -714,6 +714,12 @@ async function main() {
       file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
       needle: "gb-tanitim-guveni",
     },
+    // 2026-11-09: bilgisayarda ikinci okuma (sunucu OCR) aç/kapa; panel anahtarı `GelenBelgeReadOptionsField.tsx`.
+    GELEN_BELGE_SERVER_OCR_ENABLED: {
+      why: "Bilgisayarda ikinci okuma (varsayılan true) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okuma kapısı `gelen-belge-sunucu-okuyucu.service` okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
+      needle: "gb-server-ocr",
+    },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",

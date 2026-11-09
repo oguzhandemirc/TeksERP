@@ -3,7 +3,6 @@
 // `HEIC_CONVERT_UNAVAILABLE`, bozuk dosya → 400 `HEIC_CONVERT_FAILED`; hata yolunda hiçbir şey yazılmaz.
 import { AppError } from "../../utils/app-error";
 import { readerConvert } from "./okuma-istemcisi";
-import { getReaderUrl } from "./url";
 
 /** okuma `app/donustur.py` `HEIF_MARKALARI` ikizi — AVIF bilerek yok (servisin çözücüsü kurulu değil). */
 const HEIF_BRANDS: ReadonlySet<string> = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"]);
@@ -18,15 +17,18 @@ export function isHeic(buf: Uint8Array): boolean {
 const JPEG_MAGIC = [0xff, 0xd8, 0xff] as const;
 
 function unavailable(reason: string): AppError {
-  return new AppError("HEIC fotoğraf şu an JPEG'e çevrilemiyor: okuma servisi kapalı ya da güncel değil. JPEG olarak yükleyin ya da sonra deneyin.", 503, true, {
+  const why = reason === "SERVER_OCR_DISABLED" ? "bilgisayarda ikinci okuma kapalı" : "okuma servisi kapalı ya da güncel değil";
+  return new AppError(`HEIC fotoğraf şu an JPEG'e çevrilemiyor: ${why}. JPEG olarak yükleyin ya da sonra deneyin.`, 503, true, {
     code: "HEIC_CONVERT_UNAVAILABLE",
     reason,
   });
 }
 
-/** HEIC baytı → JPEG baytı; boy tavanını çağıran (dönüşüm SONRASI) uygular. */
-export async function convertHeicToJpeg(content: Buffer): Promise<Buffer> {
-  const { url } = getReaderUrl();
+/** HEIC baytı → JPEG baytı; boy tavanını çağıran (dönüşüm SONRASI) uygular. Okuyucu durumu TEK boğazdan
+ *  (`serverReaderState`, adres + "Bilgisayarda ikinci okuma") çağırandan gelir; kapalıyken istek atılmaz. */
+export async function convertHeicToJpeg(content: Buffer, reader: { url: string | null; enabled: boolean }): Promise<Buffer> {
+  const { url, enabled } = reader;
+  if (!enabled) throw unavailable("SERVER_OCR_DISABLED");
   if (!url) throw unavailable("READER_URL_MISSING");
   const r = await readerConvert(url, content);
   if (!r.ok) {

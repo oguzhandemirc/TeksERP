@@ -26,6 +26,8 @@ import { IncomingDeclaredRow } from './DocRowDeclaredText';
 import { declaredLayout } from './DeclaredField';
 import { bandTone, type IssueKey } from './woIssues';
 import type { PartyPlanCtx } from './partyPlan';
+import { NoticeStrip } from '../../../../components/form/NoticeStrip';
+import { liveConflictText, liveConflictsOf } from '../live/liveLocks';
 
 export { FoldField, GramajField } from './DocRowMeasures';
 
@@ -85,6 +87,9 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
       <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} manual={manual} onDraftCancelled={onDraftCancelled} customers={customers} onPreview={onPreview} />
       {f && (
         <>
+          {!done && liveConflictsOf(row.detail).map((c) => (
+            <NoticeStrip key={c.key} tone="warn" text={liveConflictText(c)} testID={`belge-canli-celiski-${c.key}-${row.noteNo}`} />
+          ))}
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />
           {!single && <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)} testID={`belge-serit-parti-${row.noteNo}`} />}
           {f.multi ? <PartyRows row={row} wo={wo} locked={partyLocked} plan={partyPlan} /> : (

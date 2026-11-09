@@ -14,6 +14,15 @@ const TEXT: Record<ReaderStatus["service"], { label: string; variant: "default" 
 export function ReaderStatusBadge() {
   const q = useQuery({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY, "okuma-durum"], queryFn: getReaderStatus, staleTime: 30_000 });
   if (!q.data) return null;
+  if (q.data.serverOcrEnabled === false) {
+    // Kapalıyken kuyruk okunmaz; bekleyen sayfa sayısı görünür (ayar açılınca okunur).
+    const pending = q.data.pending ?? 0;
+    return (
+      <Badge variant="outline" title="Belgeyi yalnız tablet/telefon okur. Bekleyen sayfalar ayar açılınca okunur (Gelen Belge ayarları → Bilgisayarda ikinci okuma)." data-testid="reader-status">
+        Bilgisayarda okuma: kapalı{pending > 0 ? ` · ${pending} sayfa bekliyor` : ""}
+      </Badge>
+    );
+  }
   const t = TEXT[q.data.service] ?? TEXT.yok;
   const engine = q.data.engine ? ` (${q.data.engine}${q.data.version ? ` ${q.data.version}` : ""})` : "";
   return (

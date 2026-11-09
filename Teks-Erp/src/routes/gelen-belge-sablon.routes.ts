@@ -41,6 +41,8 @@ const EditBody = z.strictObject({
   dropFields: z.array(FieldKey).min(1).max(60).optional(),
   // `multiParty: null` kuralı kaldırır (fabrika ayarına döner).
   rules: z.strictObject({ multiParty: z.enum(MULTI_PARTY_RULES as [MultiPartyRule, ...MultiPartyRule[]]).nullable() }).optional(),
+  // "Barkoddan al" işaretli alanların tam listesi; [] hepsini kaldırır, verilmezse dokunulmaz.
+  barcodeFields: z.array(FieldKey).max(60).optional(),
 });
 const ResetPreviewQuery = z.strictObject({
   codes: z.string().trim().min(1, "En az bir kod verin").transform((v) => v.split(",").map((c) => c.trim()).filter(Boolean))
@@ -116,7 +118,7 @@ const SuggestBody = z.strictObject({
  * /api/gelen-belge/sablonlar/ozel/{code}/tanim:
  *   patch:
  *     tags: [Gelen belge]
- *     summary: Belge tipini fotoğrafsız düzenle — ad, kimlik yazıları, alan kaldır, kurallar (birleşim sunucuda; sürüm+1; kod değişmez)
+ *     summary: Belge tipini fotoğrafsız düzenle — ad, kimlik yazıları, alan kaldır, kurallar, barkoddan alınan alanlar `barcodeFields` (birleşim sunucuda; sürüm+1; kod değişmez)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: code, required: true, schema: { type: string } }

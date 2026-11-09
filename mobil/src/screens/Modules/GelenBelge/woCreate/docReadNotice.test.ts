@@ -16,6 +16,12 @@ const all = (w: ReadWatch | null, extra: { formFilled?: boolean; detailFailed?: 
 };
 
 describe('docReadNotice', () => {
+  it('⭐ çapraz doğrulama uyarısı (iki farklı metre) formda sarı iletiyle; diğer kodlar gösterilmez', () => {
+    const notices = [{ code: 'METER_VALUES_DIFFER', title: 'Belgede iki farklı metre', detail: 'Belgede iki farklı metre: 238 / 241' }, { code: 'GRID_EMPTY', title: 'x', detail: 'y' }];
+    const r = all(done({ ownerCustomerId: 'c1', notices }));
+    expect(r.notices).toEqual([{ key: 'capraz-METER_VALUES_DIFFER', tone: 'warn', text: 'Belgede iki farklı metre: 238 / 241' }]);
+  });
+
   it('⭐ şablonda olup bulunamayan alanlar formda sarı iletiyle listelenir (ara "Belge okundu" kartı yok)', () => {
     const tf = [{ key: 'musteri', label: 'Müşteri', value: null, required: true }, { key: 'ieNo', label: 'İş Emri No', value: '12', required: false }, { key: 'tasima', label: 'Taşıma tipi', value: '  ', required: false }];
     const r = all(done({ ownerCustomerId: 'c1', templateFields: tf }));

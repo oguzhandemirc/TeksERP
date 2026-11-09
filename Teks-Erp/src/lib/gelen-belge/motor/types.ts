@@ -72,6 +72,7 @@ export interface OcrResult {
   engine?: string;
   /** Okuma servisi sayfayı dikleştirmek için girdiye saat yönünde uyguladığı dönüş (0/90/180/270); rect'ler DİK çerçevededir. */
   rotation?: number;
+  // `barcodes` (fotoğraftaki barkodlar) modül genişletmesiyle `lib/gelen-belge/barkod.ts`te (dosya boyu tavanı).
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +178,7 @@ export interface FieldSpec {
   postProcess?: PostProcess[];
   /** Azami karakter (uzun metin alanlarında taşmayı keser). */
   maxLength?: number;
+  // `fromBarcode` ("Barkoddan al") modül genişletmesiyle `lib/gelen-belge/barkod.ts`te.
 }
 
 export interface TemplateIdentifiers {
@@ -279,7 +281,7 @@ export interface HeaderLineSpec {
 // ---------------------------------------------------------------------------
 
 export interface FieldSource {
-  strategy: Strategy["kind"] | "none";
+  strategy: Strategy["kind"] | "none" | "barcode";
   /** Eşleşen etiket metni (anchor için). */
   anchor?: string;
   /** Değerin görüntüdeki kutusu (UI'da vurgulamak için). */

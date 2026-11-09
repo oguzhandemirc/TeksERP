@@ -7,6 +7,7 @@ import type { LiveCameraError, LiveStability, LiveTextFrame } from '../../../../
 import type { ClientOcr } from '../../../../services/deviceOcr';
 import type { ScanPage } from '../docScan';
 import { liveFormLocked } from './liveLocks';
+import { LIVE_VOTE_MIN_SHARPNESS } from './liveTuning';
 import { IDLE_RHYTHM, canSend, markSent, markSettled, readyToCapture, stepHold, type HoldState } from './liveRhythm';
 import { EMPTY_VOTE, applyLiveReading, editLiveField, unlockLiveField, type LiveVoteState } from './liveVote';
 import { useLiveCapture } from './useLiveCapture';
@@ -28,6 +29,7 @@ export function useLiveRead({ visible, onDone }: Options) {
   const captureModeRef = useRef(captureMode);
   captureModeRef.current = captureMode;
   const rhythm = useRef(IDLE_RHYTHM);
+  const sharpness = useRef<number | null>(null);
   const hold = useRef<HoldState>({ since: null });
   const gen = useRef(0);
   const resetHold = useCallback(() => {
@@ -45,7 +47,7 @@ export function useLiveRead({ visible, onDone }: Options) {
   // Her açılış/kapanış yeni nesil: önceki oturumun uçuştaki yanıtı ve çekimi sonuç üretmez.
   useEffect(() => {
     gen.current++;
-    rhythm.current = IDLE_RHYTHM;
+    [rhythm.current, sharpness.current] = [IDLE_RHYTHM, null];
     voteRef.current = EMPTY_VOTE;
     setVote(EMPTY_VOTE);
     setOcr(null);
@@ -62,10 +64,11 @@ export function useLiveRead({ visible, onDone }: Options) {
       if (capturingRef.current || !canSend(rhythm.current, now)) return;
       rhythm.current = markSent(rhythm.current, now);
       const g = gen.current;
+      const counts = sharpness.current === null || sharpness.current >= LIVE_VOTE_MIN_SHARPNESS; // bulanık kare oy değil
       liveReadService
         .readFrame(frame.ocr)
         .then((r) => {
-          if (g === gen.current && r) updateVote((s) => applyLiveReading(s, r));
+          if (g === gen.current && r) updateVote((s) => applyLiveReading(s, r, { counts }));
         })
         .catch(() => undefined) // ağ hatası: bir sonraki kare yeniden dener
         .finally(() => {
@@ -77,6 +80,7 @@ export function useLiveRead({ visible, onDone }: Options) {
 
   const onStability = useCallback(
     (s: LiveStability) => {
+      sharpness.current = s.sharpness;
       if (capturingRef.current) return;
       const step = stepHold(hold.current, readyToCapture(captureModeRef.current, liveFormLocked(voteRef.current.fields), s), Date.now());
       hold.current = step.hold;

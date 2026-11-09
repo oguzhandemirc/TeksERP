@@ -8,6 +8,7 @@ import { extractFields } from "./extract";
 import { extractTable } from "./table";
 import { deriveGridCells } from "./grid";
 import { computeNoteTotals } from "./totals";
+import { crossCheckWarnings } from "./cross-check";
 import { splitRegions } from "./regions";
 import { extractSections, sliceBand, type SectionsResult } from "./sections";
 
@@ -107,6 +108,7 @@ function extractRegion(region: PageRegion, templates: DocumentTemplate[], fallba
   for (const t of tables) warnings.push(...t.warnings);
   if (grid) warnings.push(...grid.warnings);
   warnings.push(...fields.warnings);
+  warnings.push(...crossCheckWarnings(region.ocr, fields.fields, totals));
   const sections = template.sections ? extractSections(region.ocr, template, template.sections, tables) : null;
   if (sections) warnings.push(...sections.warnings);
   // Bölümlü şablonda blok alanları bölümlerden gelir (blok no = bölüm no; taslak/BLOCK_IDS_DIFFER aynı sözleşmeyi okur).

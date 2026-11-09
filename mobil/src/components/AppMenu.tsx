@@ -77,6 +77,7 @@ export interface AppMenuItemProps {
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   titleStyle?: StyleProp<TextStyle>;
+  testID?: string;
 }
 
 function AppMenuItem({
@@ -87,6 +88,7 @@ function AppMenuItem({
   disabled,
   style,
   titleStyle,
+  testID,
 }: AppMenuItemProps) {
   return (
     <TouchableRipple
@@ -95,6 +97,7 @@ function AppMenuItem({
       accessibilityRole="menuitem"
       accessibilityState={{ disabled: !!disabled }}
       style={[styles.item, style]}
+      testID={testID}
     >
       <View style={styles.itemRow}>
         {leadingIcon ? (

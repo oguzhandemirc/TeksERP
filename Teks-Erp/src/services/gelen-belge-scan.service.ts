@@ -17,6 +17,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { detectCertificateMime } from "./certificate-file.service";
 import { convertHeicToJpeg, isHeic } from "../lib/gelen-belge/heic";
+import { serverReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 import { applyStoredReadsTx, auditPhotoSource, auditStoredReads, markPhotoSourceTx, prepareStoredReads } from "./gelen-belge-taslak-doldur.service";
 import { readDuplicateDocNoMode } from "./system-setting.service";
@@ -134,7 +135,7 @@ export async function decodeScanUpload(contentBase64: string, clientSha256?: str
     throw AppError.badRequest("Fotoğraf yolda bozuldu (özet tutmuyor); yeniden gönderin.", { code: "DOCUMENT_SCAN_HASH_MISMATCH" });
   }
   // HEIC → JPEG (okuma servisi; yoksa 503, hiçbir şey yazılmaz). Sistem JPEG saklar; tavan dönüşümden SONRA da geçerli.
-  const content = heic ? await convertHeicToJpeg(received) : received;
+  const content = heic ? await convertHeicToJpeg(received, await serverReaderState()) : received;
   if (content.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
   const kind = detectCertificateMime(content);
   if (!kind) throw typeError();
@@ -144,8 +145,10 @@ export async function decodeScanUpload(contentBase64: string, clientSha256?: str
 /**
  * `bornReading` (S16c cihazda OCR): yeni fotoğraf kaydı READING/deneme 1 doğar — okuma işi onu alamaz, çağıran
  * (`gelen-belge-istemci-okuma.service`) cihazın okumasını hemen işler ya da PENDING'e bırakır. PDF yine READ_FAILED doğar.
+ * `bornUnread` (neden kodu): okuyacak kimse yok (cihaz okuması gelmedi + bilgisayarda ikinci okuma kapalı) → READ_FAILED/0
+ * doğar; PENDING'de sonsuza dek "okunuyor" denmez.
  */
-export async function uploadDocumentScan(input: DocumentScanInput, userId: string, opts: { bornReading?: boolean } = {}) {
+export async function uploadDocumentScan(input: DocumentScanInput, userId: string, opts: { bornReading?: boolean; bornUnread?: string } = {}) {
   const { content, mime, sha256, heicSourceBytes } = await decodeScanUpload(input.contentBase64, input.sha256);
   const kind = { mime };
   const mode = await readDuplicateDocNoMode();
@@ -159,7 +162,7 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
     sha256,
     capturedById: userId,
     // K6: PDF doğrudan READ_FAILED (deneme 0) — PENDING'de kalsa "kuyrukta" sayılır ve hiç bitmezdi; enum değişmez.
-    ...(kind.mime === PDF_MIME ? { status: "READ_FAILED" as const } : opts.bornReading ? { status: "READING" as const, attempts: 1 } : {}),
+    ...(kind.mime === PDF_MIME || opts.bornUnread ? { status: "READ_FAILED" as const } : opts.bornReading ? { status: "READING" as const, attempts: 1 } : {}),
   };
   // 8045 kilidi tx'in İLK ifadesi: eşzamanlı aynı yükleme sıraya girer, kaybeden kazananın kaydını yeniden kullanır
   // (sha256 artık UNIQUE değil). Taslağa bağlanıyorsa claim + create aynı tx'te (TOCTOU yok).
@@ -177,7 +180,8 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
   if (created.marked && input.noteId) await auditPhotoSource(input.noteId, userId);
   // HEIC'ten dönüşen kaydın künyesi kaynak türü/boyunu da taşır (bayt yok).
   const base = created.previousScanId ? { ...data, previousScanId: created.previousScanId, reason: "PREVIOUS_NOTE_FINISHED" } : data;
-  const auditData = heicSourceBytes !== null ? { ...base, convertedFrom: "image/heic", sourceSizeBytes: heicSourceBytes } : base;
+  const withHeic = heicSourceBytes !== null ? { ...base, convertedFrom: "image/heic", sourceSizeBytes: heicSourceBytes } : base;
+  const auditData = opts.bornUnread && kind.mime !== PDF_MIME ? { ...withHeic, unreadReason: opts.bornUnread } : withHeic;
   await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: auditData });
   return { scan, duplicate: false, boundTo: scan.noteId };
 }

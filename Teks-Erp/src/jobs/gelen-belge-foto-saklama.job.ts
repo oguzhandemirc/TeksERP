@@ -6,7 +6,7 @@
 // geçmiş onaylılara da uygulanır. Ön koşul: gelen belge modülü açık ve kip FULL değil (FULL'da aday sorgusu bile koşmaz).
 // =============================================================================
 import { reportJobFailure } from "./job-failure";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { readerServiceAddress } from "../services/gelen-belge-sunucu-okuyucu.service";
 import { effectiveIncomingDocsEnabled } from "../services/system-setting.service";
 import { runPhotoRetention, type RetentionRunResult } from "../services/gelen-belge-foto-saklama.service";
 
@@ -37,7 +37,7 @@ export async function runPhotoRetentionOnce(): Promise<RetentionRunResult | null
   lastRunAt = Date.now();
   try {
     if (!(await effectiveIncomingDocsEnabled())) return null;
-    const r = await runPhotoRetention(PHOTO_RETENTION_MAX_PER_RUN, { readerUrl: getReaderUrl().url }, [...failedIds]);
+    const r = await runPhotoRetention(PHOTO_RETENTION_MAX_PER_RUN, { readerUrl: readerServiceAddress().url }, [...failedIds]);
     for (const id of r.failedIds) failedIds.add(id);
     return (lastResult = r);
   } catch (err) {

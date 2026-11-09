@@ -126,7 +126,7 @@ export {
   DEFAULT_MULTI_PARTY_WORK_ORDER, readMultiPartyWorkOrder, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, readDuplicateDocNoMode,
   PHOTO_RETENTION_VALUES, DEFAULT_PHOTO_RETENTION, readPhotoRetention, DESEN_RENK_ESLESME_VALUES, DEFAULT_DESEN_RENK_ESLESME,
   readDesenRenkEslesme, TABLET_IE_GIRISI_VALUES, DEFAULT_TABLET_IE_GIRISI, readTabletIeGirisi, TANITIM_GUVENI_VALUES,
-  DEFAULT_TANITIM_GUVENI, readTanitimGuveni, readRefakatAutoPrint, readIncomingDocDefaultRouteId, ROUTE_SUGGESTION_PRIORITY_VALUES,
+  DEFAULT_TANITIM_GUVENI, readTanitimGuveni, DEFAULT_SERVER_OCR_ENABLED, readServerOcrEnabled, readRefakatAutoPrint, readIncomingDocDefaultRouteId, ROUTE_SUGGESTION_PRIORITY_VALUES,
   DEFAULT_ROUTE_SUGGESTION_PRIORITY, readRouteSuggestionPriority, readHandwritingOutlierFactor, readGelenBelgeEnabled,
   effectiveIncomingDocsEnabled, resolveYarnOutOnInvoiceEnabled,
 } from "./incoming-docs";

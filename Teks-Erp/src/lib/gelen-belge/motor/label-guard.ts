@@ -31,13 +31,21 @@ export function labelGuardFor(t: DocumentTemplate): LabelGuard {
   return { labels, words };
 }
 
-/** Değer etiket mi: tam etiket · yalnız şablon etiket kelimeleri · rakamsız ve ":" ile biten ham metin (değersiz etiket). */
+/** Kelimeler yalnız etiket parçası mı: her kelime tam etiket (GENEL "Tarih") ya da şablon etiket kelimesi. */
+const onlyLabelWords = (n: string, g: LabelGuard): boolean => n.split(" ").every((w) => g.labels.has(w) || g.words.has(w));
+
+/**
+ * Değer etiket mi: tam etiket · yalnız şablon etiket kelimeleri · rakamsız ve ":" ile biten ham metin (değersiz etiket) ·
+ * HAM metin yalnız etiket parçalarından (konum yedeği iki etiketi birden kapınca `stripSpaces` "TARİHMÜŞTERİ" yapıyordu).
+ */
 export function isLabelValue(value: string, raw: string | null, g: LabelGuard): boolean {
   const n = normalizeForMatch(value);
   if (!n) return false;
   if (g.labels.has(n)) return true;
   if (n.split(" ").every((w) => g.words.has(w))) return true;
   const r = (raw ?? "").trim();
+  const rn = normalizeForMatch(r);
+  if (rn && onlyLabelWords(rn, g)) return true;
   return r.endsWith(":") && !/\d/.test(r);
 }
 

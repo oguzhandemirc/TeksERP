@@ -7,7 +7,7 @@
 // =============================================================================
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { serverReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { PDF_MIME } from "./gelen-belge-scan.service";
 import { READ_MAX_ATTEMPTS } from "./gelen-belge-okuma.service";
 import { hasDocumentDeclared, isSummaryLine, totalsCheck } from "./gelen-belge-kontrol.service";
@@ -23,6 +23,14 @@ import { noteIncomingKg } from "./gelen-belge-gelen-kg.service";
 import { KG_FROM_METER_CELL_TEXT } from "../lib/gelen-belge/kg-koruma";
 
 export type ReadSummaryState = "NO_PAGES" | "READING" | "NO_SERVICE" | "READ" | "PARTIAL" | "FAILED";
+/** Sunucu okuyucusu: kullanılabilir · adres yok · "Bilgisayarda ikinci okuma" kapalı (yalnız cihaz okur). Eski bekçiler boolean geçer. */
+export type ReaderAvailability = boolean | "SERVER_OCR_OFF";
+
+/** Okuma özeti için okuyucu durumu — TEK boğazdan (`serverReaderState`). */
+export async function readerAvailability(): Promise<ReaderAvailability> {
+  const r = await serverReaderState();
+  return r.enabled ? r.url !== null : "SERVER_OCR_OFF";
+}
 
 export interface ReadSummaryScan {
   status: "PENDING" | "READING" | "READ" | "READ_FAILED";
@@ -44,7 +52,7 @@ export interface ReadSummaryPages {
  */
 export function readSummaryState(
   scans: ReadonlyArray<ReadSummaryScan>,
-  readerConfigured: boolean,
+  reader: ReaderAvailability,
   lineCount: number,
 ): { state: ReadSummaryState; reason: string | null; pages: ReadSummaryPages } {
   const photos = scans.filter((s) => s.mimeType !== PDF_MIME);
@@ -59,16 +67,19 @@ export function readSummaryState(
     const reason = scans.length ? "PDF sayfa otomatik okunmaz; satırlar panelde girilir." : "Taslakta okunacak sayfa fotoğrafı yok.";
     return { state: "NO_PAGES", reason, pages };
   }
+  const serverOff = reader === "SERVER_OCR_OFF";
   if (pages.waiting) {
-    if (!readerConfigured) return { state: "NO_SERVICE", reason: "Bu kurulumda okuma servisi yok; satırlar panelde elle girilir.", pages };
+    if (serverOff) return { state: "NO_SERVICE", reason: "Bilgisayarda ikinci okuma kapalı; bekleyen sayfa okunmaz. Fotoğrafı yeniden çekin ya da bilgileri elle girin.", pages };
+    if (!reader) return { state: "NO_SERVICE", reason: "Bu kurulumda okuma servisi yok; satırlar panelde elle girilir.", pages };
     const retry = waitingScans.filter((s) => s.status === "PENDING" && s.attempts > 0).reduce((m, s) => Math.max(m, s.attempts), 0);
     const reason = retry ? `Okuma servisi yanıt vermedi; yeniden deneniyor (deneme ${Math.min(retry + 1, READ_MAX_ATTEMPTS)}/${READ_MAX_ATTEMPTS}).` : null;
     return { state: "READING", reason, pages };
   }
   if (pages.failed === pages.total) {
+    if (serverOff) return { state: "FAILED", reason: `Tablet ${pages.failed === 1 ? "sayfayı" : `${pages.failed} sayfayı`} okuyamadı (bilgisayarda ikinci okuma kapalı). Fotoğrafı yeniden çekin ya da bilgileri elle girin.`, pages };
     return { state: "FAILED", reason: `Okuma servisi ${pages.failed === 1 ? "sayfayı" : `${pages.failed} sayfayı`} okuyamadı. Panelden yeniden okutun ya da satırları elle girin.`, pages };
   }
-  if (pages.failed) return { state: "PARTIAL", reason: `${pages.failed} sayfa okunamadı; panelden yeniden okutun.`, pages };
+  if (pages.failed) return { state: "PARTIAL", reason: serverOff ? `${pages.failed} sayfa okunamadı; o sayfaları yeniden çekin.` : `${pages.failed} sayfa okunamadı; panelden yeniden okutun.`, pages };
   if (lineCount === 0) return { state: "READ", reason: "Sayfa okundu ama satır çıkmadı; panelden yeniden okutun ya da satırları elle girin.", pages };
   return { state: "READ", reason: null, pages };
 }
@@ -86,7 +97,7 @@ export async function getReadSummary(noteId: string) {
   });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   const live = note.lines.filter((l) => l.status !== "SKIPPED");
-  const { state, reason, pages } = readSummaryState(note.scans, getReaderUrl().url !== null, live.length);
+  const { state, reason, pages } = readSummaryState(note.scans, await readerAvailability(), live.length);
   const decl = note.totalsDeclared as { blocks?: unknown[]; document?: unknown } | null;
   // Belge geneli başlık beyanı (ör. "Müşteri MT") da beyandır — kapı onu da kıyaslar.
   const declared = (Array.isArray(decl?.blocks) && decl.blocks.length > 0) || !!decl?.document;

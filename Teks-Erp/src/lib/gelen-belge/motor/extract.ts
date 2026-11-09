@@ -5,16 +5,17 @@
  */
 import type { DocumentTemplate, ExtractOptions, ExtractionResult, FieldResult, FieldSpec, OcrResult } from "./types";
 import { buildRows, rowsToText } from "./geometry";
-import { canonicalizeValue } from "./normalizers";
+import { canonicalizeField } from "./char-fix";
 import { validateValue, isHardIssue } from "./validators";
 import { computeConfidence, needsReview as computeNeedsReview, LOW_OCR_CONFIDENCE } from "./confidence";
 import { runStrategy, type RawCandidate, type StrategyContext } from "./strategies";
 import { labelGuardFor, rejectLabelValue } from "./label-guard";
 import { rejectImplausibleValue } from "./value-guard";
+import { applyBarcodes } from "../barkod";
 
 /** Bir ham adayı tam FieldResult'a çevirir. */
 export function evaluateCandidate(field: FieldSpec, cand: RawCandidate, defaultMin: number): FieldResult {
-  const canon = canonicalizeValue(field.type, cand.raw, field);
+  const canon = canonicalizeField(field, cand.raw);
   const issues = [...canon.issues];
   if (canon.value !== null) {
     for (const code of validateValue(field, canon.value)) if (!issues.includes(code)) issues.push(code);
@@ -123,6 +124,8 @@ export function extractFields(ocr: OcrResult, template: DocumentTemplate, option
       }
     }
     if (!chosen) chosen = emptyResult(field);
+    // Fotoğraftaki barkod: işaretli alanda kesin değer, işaretsizde eşitse teyit (barkod yoksa sonuç aynen).
+    chosen = applyBarcodes(field, chosen, ocr.barcodes);
     if (options.collectCandidates) {
       chosen.candidates = evaluated
         .filter((e) => e.value !== null)

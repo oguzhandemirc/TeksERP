@@ -2,16 +2,20 @@
 // durum ikonu (sorun varsa kısa yazı), sağda Yeniden okut / Taslağı iptal et ikonları. İkisinde de tanıtılmamış şeridi ve kısa
 // eylemli iletiler (`docReadNotice`) altta; şablon düzeltmek okuma düzeltmesidir → okuma durumunun yanında durur.
 // Sunucu `tanima` gönderince altta yalnız iş gerektiren şerit (`RecognitionStrip`: tanınmadı + Tanıt · çok parti kipi).
-import React from 'react';
+// Dar ekranda (<600dp) tek formun ikonları sığmaz: en çok iki ikon görünür, fazlası "⋯" menüsüne iner (birincil: yeniden okut).
+import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { SectionBand } from '../../../../components/form/SectionBand';
 import type { BandTone, PillTone } from '../../../../components/form/tone';
 import type { PickerOption } from '../../../../components/PickerModal';
+import AppMenu from '../../../../components/AppMenu';
+import { useIsCompact } from '../../../../hooks/useDeviceType';
+import { usePermissions } from '../../../../hooks/usePermission';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import CancelDraftButton from '../CancelDraftButton';
-import { TeachStrip, TemplateName, TemplateUpdateButton } from '../tanit/TeachBanner';
+import { TeachStrip, TemplateName, TemplateUpdateButton, templateUpdateLabel } from '../tanit/TeachBanner';
 import { useTeachEntry } from '../tanit/useTeachEntry';
 import type { useReadResult } from '../useReadResult';
 import { docReadNotices, docReadPill, type DocNotice } from './docReadNotice';
@@ -71,16 +75,17 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   });
   // Yeni sunucuda (şerit modeli var) şablon adı gösterilmez — tanınmış belgede ✓ yeter; amber şerit yalnız fotoğrafsız açıklama.
   const name = strip ? null : <TemplateName entry={teach} />;
-  const act = (n: DocNotice): NoticeAction => {
-    if (n.action === 'recheck') return { label: 'Yeniden bak', icon: 'refresh' as const, onPress: read.recheck };
-    if (n.action === 'reread' && onReread && !wo.saving) return { label: 'Yeniden okut', icon: 'camera-retake-outline' as const, onPress: onReread };
-    return undefined;
-  };
+  const act = noticeActor(read.recheck, onReread && !wo.saving ? onReread : undefined);
   const busy = w?.phase === 'polling' && !row.form;
   const pillColor = PILL_COLOR[pill.tone];
+  const compact = useIsCompact();
+  const compactActions = useCompactHeadActions(single && compact, { teach, manual, done, cancellable, saving: wo.saving, onReread, onPreview });
   return (
     <>
-      {single ? (
+      {single && compact ? (
+        <CompactBand no={no} pill={pill} pillColor={pillColor} busy={busy} actions={compactActions}
+          cancel={cancellable ? { note: { id: row.noteId, noteNo: no }, onCancelled: onDraftCancelled ?? (() => wo.removeRow(row.noteId)) } : null} />
+      ) : single ? (
         <View style={styles.line} testID="ie-serit-belge" accessibilityLabel={`Belge ${no}: ${pill.text}`}>
           <Icon source="file-document-outline" size={22} color={colors.textSecondary} />
           <Text style={styles.no} numberOfLines={1}>{no}</Text>
@@ -135,6 +140,96 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   );
 }
 
+interface CompactBandProps {
+  no: string;
+  pill: { tone: PillTone; icon: string; text: string };
+  pillColor: string;
+  busy: boolean;
+  actions: HeadAction[];
+  cancel: { note: { id: string; noteNo: string }; onCancelled: () => void } | null;
+}
+
+/** Dar ekran tek form belge satırı: no + durum, sağda en çok iki ikon (+ ⋯); iptal onay kartı menüden açılır. */
+function CompactBand({ no, pill, pillColor, busy, actions, cancel }: CompactBandProps) {
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const wired = actions.map((x) => (x.key === 'cancel' ? { ...x, onPress: () => setCancelOpen(true) } : x));
+  return (
+    <View style={styles.line} testID="ie-serit-belge" accessibilityLabel={`Belge ${no}: ${pill.text}`}>
+      <Icon source="file-document-outline" size={22} color={colors.textSecondary} />
+      <Text style={styles.noCompact} numberOfLines={1}>{no}</Text>
+      {busy ? <ActivityIndicator size="small" /> : <Icon source={pill.icon} size={20} color={pillColor} />}
+      {pill.tone !== 'ok' && <Text style={[styles.state, { color: pillColor }]} numberOfLines={1} testID="ie-serit-belge-durum">{pill.text}</Text>}
+      <View style={styles.flex} />
+      <HeadActions actions={wired} />
+      {cancel && <CancelDraftButton note={cancel.note} onCancelled={cancel.onCancelled} externalOpen={cancelOpen} onExternalClose={() => setCancelOpen(false)} />}
+    </View>
+  );
+}
+
+interface ActionInput {
+  teach: ReturnType<typeof useTeachEntry>;
+  manual: boolean;
+  done: boolean;
+  cancellable: boolean;
+  saving: boolean;
+  onReread?: () => void;
+  onPreview?: () => void;
+}
+
+/** Dar ekran belge satırı eylemleri, öncelik sırasıyla (ilki her zaman ikon kalır); iptalin onay kartını CompactBand bağlar. */
+function useCompactHeadActions(on: boolean, a: ActionInput): HeadAction[] {
+  const canWrite = usePermissions().has('gelen-belge:write');
+  if (!on) return [];
+  const out: HeadAction[] = [];
+  if (a.onReread && !a.done) out.push({ key: 'reread', icon: a.manual ? 'camera-plus-outline' : 'camera-retake-outline', label: a.manual ? 'Belge ekle' : 'Yeniden okut', onPress: a.onReread, disabled: a.saving, testID: a.manual ? 'ie-belge-ekle' : 'ie-belge-yeniden-okut' });
+  if (a.onPreview) out.push({ key: 'preview', icon: 'file-eye-outline', label: 'Belgeyi önizle', onPress: a.onPreview, testID: 'ie-belge-onizle' });
+  const t = a.teach;
+  if ((t.kind === 'taught' || t.kind === 'system') && !t.noPhoto) out.push({ key: 'template', icon: 'file-replace-outline', label: templateUpdateLabel(t.kind), onPress: t.open, testID: 'tanit-serit-guncelle' });
+  if (a.cancellable && canWrite) out.push({ key: 'cancel', icon: 'file-cancel-outline', label: 'Taslağı iptal et', onPress: () => undefined, disabled: a.saving, testID: 'ie-belge-taslak-iptal', danger: true });
+  return out;
+}
+
+interface HeadAction { key: string; icon: string; label: string; onPress: () => void; disabled?: boolean; testID: string; danger?: boolean }
+
+/** Dar ekran: ikiye kadar eylem ikon; fazlasında ilk eylem ikon + kalanlar "⋯" menüsünde (aynı testID'lerle). */
+const COMPACT_VISIBLE_ICONS = 2;
+
+function HeadActions({ actions }: { actions: HeadAction[] }) {
+  const [menu, setMenu] = useState(false);
+  const shown = actions.length <= COMPACT_VISIBLE_ICONS ? actions : actions.slice(0, 1);
+  const rest = actions.slice(shown.length);
+  return (
+    <>
+      {shown.map((a) => (
+        <IconButton key={a.key} icon={a.icon} size={ICON} iconColor={a.danger ? colors.dangerDark : colors.brand} onPress={a.onPress} disabled={a.disabled} style={styles.icon}
+          accessibilityLabel={a.label} testID={a.testID} />
+      ))}
+      {rest.length > 0 && (
+        <AppMenu
+          visible={menu}
+          onDismiss={() => setMenu(false)}
+          anchor={<IconButton icon="dots-horizontal" size={ICON} iconColor={colors.textSecondary} onPress={() => setMenu(true)} style={styles.icon} accessibilityLabel="Diğer belge işlemleri" testID="ie-belge-menu" />}
+        >
+          {rest.map((a) => (
+            <AppMenu.Item key={a.key} title={a.label} leadingIcon={a.icon} disabled={a.disabled} style={styles.menuItem} testID={a.testID}
+              titleStyle={a.danger ? styles.menuDanger : undefined}
+              onPress={() => { setMenu(false); a.onPress(); }} />
+          ))}
+        </AppMenu>
+      )}
+    </>
+  );
+}
+
+/** Kısa iletinin eylemi: yeniden bak her zaman; yeniden okut yalnız kayıt sürmüyorken. */
+function noticeActor(recheck: () => void, reread: (() => void) | undefined) {
+  return (n: DocNotice): NoticeAction => {
+    if (n.action === 'recheck') return { label: 'Yeniden bak', icon: 'refresh' as const, onPress: recheck };
+    if (n.action === 'reread' && reread) return { label: 'Yeniden okut', icon: 'camera-retake-outline' as const, onPress: reread };
+    return undefined;
+  };
+}
+
 type NoticeAction = { label: string; icon: 'refresh' | 'camera-retake-outline'; onPress: () => void } | undefined;
 
 /** Kısa eylemli okuma iletileri (Yeniden bak / Yeniden okut). */
@@ -168,4 +263,7 @@ const styles = StyleSheet.create({
   no: { flexShrink: 0, fontSize: 20, fontWeight: typography.weight.bold, color: colors.text },
   state: { flexShrink: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold },
   icon: { width: 56, height: 56, margin: 0 },
+  noCompact: { flexShrink: 1, fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text },
+  menuItem: { minHeight: 56 },
+  menuDanger: { color: colors.dangerDark },
 });

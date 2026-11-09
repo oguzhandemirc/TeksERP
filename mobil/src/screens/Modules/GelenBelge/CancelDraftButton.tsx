@@ -20,14 +20,23 @@ interface Props {
   iconOnly?: boolean;
   /** `iconOnly` ikon boyu (vars. 24; tek İE formu üst satırı 28). */
   iconSize?: number;
+  /** Tetik başka yerde (dar ekranın ⋯ menüsü): düğme çizilmez, onay kartı bu bayrakla açılır. */
+  externalOpen?: boolean;
+  onExternalClose?: () => void;
 }
 
 const messageOf = (e: unknown): string =>
   typeof (e as { message?: unknown })?.message === 'string' ? (e as { message: string }).message : 'Taslak iptal edilemedi.';
 
-export default function CancelDraftButton({ note, onCancelled, disabled, testID = 'belge-taslak-iptal', iconOnly = false, iconSize = 24 }: Props) {
+export default function CancelDraftButton({ note, onCancelled, disabled, testID = 'belge-taslak-iptal', iconOnly = false, iconSize = 24, externalOpen, onExternalClose }: Props) {
   const canWrite = usePermissions().has('gelen-belge:write');
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const external = externalOpen !== undefined;
+  const open = external ? externalOpen : ownOpen;
+  const setOpen = (v: boolean): void => {
+    if (!external) setOwnOpen(v);
+    else if (!v) onExternalClose?.();
+  };
   const preview = useQuery({
     queryKey: ['gelen-belge-taslak-iptal-onizleme', note.id],
     queryFn: () => draftCancelService.preview(note.id),
@@ -51,7 +60,7 @@ export default function CancelDraftButton({ note, onCancelled, disabled, testID 
   const blocked = p ? !p.deletable : false;
   return (
     <>
-      {iconOnly ? (
+      {external ? null : iconOnly ? (
         <IconButton
           icon="file-cancel-outline"
           iconColor={colors.dangerDark}

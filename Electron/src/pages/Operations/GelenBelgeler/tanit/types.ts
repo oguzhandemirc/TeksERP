@@ -85,6 +85,8 @@ export interface TemplateEditBody {
   identifiers?: string[];
   dropFields?: string[];
   rules?: { multiParty: MultiPartyRule | null };
+  /** "Barkoddan al" işaretli alanların TAM listesi (fotoğraftaki barkod kesin değer olur); verilmezse dokunulmaz. */
+  barcodeFields?: string[];
 }
 export interface TemplateEditResult extends UserTemplateView {
   changes: Record<string, unknown>;

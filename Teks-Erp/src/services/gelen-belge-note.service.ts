@@ -32,7 +32,7 @@ import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
 import { readDocumentTotalCheck, readDuplicateDocNoMode, readIncomingDocEntryMode, readPhotoRetention, readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertDocNoUniqueTx, duplicateDocNoNotice, lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { serverReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 import { noteTanima } from "./gelen-belge-tanima-ozeti.service";
 import { withDocLineCount } from "./gelen-belge-satir-sayim.service";
@@ -157,6 +157,12 @@ export function translateUnique(err: unknown): never {
 }
 
 // ── Okuma ───────────────────────────────────────────────────────────────────
+/** `readerConfigured` = sunucu okuyucusu bu an kullanılabilir (adres + ayar); `serverOcrEnabled` = panel ayarının kendisi. */
+async function readerFlags(): Promise<{ readerConfigured: boolean; serverOcrEnabled: boolean }> {
+  const r = await serverReaderState();
+  return { readerConfigured: r.url !== null, serverOcrEnabled: r.enabled };
+}
+
 export async function getDeliveryNote(id: string) {
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: DETAIL_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
@@ -187,7 +193,7 @@ export async function getDeliveryNote(id: string) {
   // `readerConfigured`: okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
   // K27 (WARN kipi) `duplicateDocNo`: aynı belge no'lu İŞİ SÜREN eşler — bilgi şeridi; yoksa null. Eski istemci yok sayar.
   // K28: onay ekranı kip FULL değilse belge no'yu vurgular ("fotoğraf küçültülecek/silinecek"); eski istemci yok sayar.
-  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, ...(tanima ? { tanima } : {}), readerConfigured: getReaderUrl().url !== null, photoRetention: await readPhotoRetention() };
+  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, ...(tanima ? { tanima } : {}), ...(await readerFlags()), photoRetention: await readPhotoRetention() };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */

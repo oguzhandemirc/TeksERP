@@ -1,7 +1,7 @@
 // Belgenin BEYANI kutusu (2026-11-09): gelen metre / kg / en, müşteri parti no, bizim parti no — tek stil. Sarı zemin = değer
 // belgeden okundu ve elle değişmedi; üstte küçük etiket, altta büyük değer + birim; dokununca düzenleme sayfası (`DeclaredEditSheet`).
 // Satırdaki kutular eşit pay ve EŞİT YÜKSEKLİK alır (`DECLARED_ROW` + tek satır değer), dar ekranda alt alta iner; uzun değer
-// sarmaz, önce küçülür (tam metin erişilebilirlik etiketinde). Kırmızı/sarı yalnız renk ve kenardır, boyut değiştirmez.
+// sarmaz, önce küçülür (tam metin erişilebilirlik etiketinde); `wrap` (dar ekran metin kutusu) küçülmez, 2 satıra sarar. Kırmızı/sarı yalnız renk ve kenardır, boyut değiştirmez.
 import React, { useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -9,7 +9,7 @@ import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import ModalTextInput from '../../../../components/ModalTextInput';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
-import { colors, radius, spacing, typography } from '../../../../theme';
+import { colors, radius, spacing } from '../../../../theme';
 
 export interface DeclaredFieldProps {
   label: string;
@@ -26,10 +26,13 @@ export interface DeclaredFieldProps {
   onPress?: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Uzun metin değeri (dar ekranda gelen kumaş/renk): küçülmez, aynı boyda en çok 2 satıra sarar. */
+  wrap?: boolean;
   testID: string;
 }
 
-export function DeclaredField({ label, value, unit, fromDoc, review, missing, emptyText = '—', onPress, disabled, style, testID }: DeclaredFieldProps) {
+export function DeclaredField({ label, value, unit, fromDoc, review, missing, emptyText = '—', onPress, disabled, style, wrap = false, testID }: DeclaredFieldProps) {
+  const fit = wrap ? { numberOfLines: 2 } : { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.7 };
   const bg = missing ? colors.dangerContainer : fromDoc ? DOC_HIGHLIGHT_BG : onPress ? colors.surface : colors.surfaceMuted;
   const body = (
     <View>
@@ -40,12 +43,12 @@ export function DeclaredField({ label, value, unit, fromDoc, review, missing, em
         {onPress && !disabled ? <Icon source="pencil-outline" size={18} color={colors.brand} /> : null}
       </View>
       {value != null ? (
-        <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} testID={`${testID}-deger`}>
+        <Text style={styles.value} {...fit} testID={`${testID}-deger`}>
           {value}
           {unit ? <Text style={styles.unit}>{` ${unit}`}</Text> : null}
         </Text>
       ) : (
-        <Text style={[styles.value, styles.empty, missing && styles.emptyMissing]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} testID={`${testID}-deger`}>{emptyText}</Text>
+        <Text style={[styles.value, styles.empty, missing && styles.emptyMissing]} {...fit} testID={`${testID}-deger`}>{emptyText}</Text>
       )}
     </View>
   );

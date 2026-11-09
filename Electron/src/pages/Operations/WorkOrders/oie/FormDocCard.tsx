@@ -67,7 +67,7 @@ export function FormDocCard({ scan, disabled }: { scan: FormDocScan; disabled?: 
         <p className="text-sm text-muted-foreground">Belge artık taslak değil ({n?.noteNo}).</p>
       ) : (
         <>
-          {scan.stage === "READ_FAILED" && n && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={scan.reread} />}
+          {scan.stage === "READ_FAILED" && n && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={scan.reread} serverOcrOff={n.serverOcrEnabled === false} />}
           {scan.stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
           {scan.summary?.tanitim && <TanitimStrip scan={scan} tanitim={scan.summary.tanitim} />}
           {(hints.desen || hints.renk) && (

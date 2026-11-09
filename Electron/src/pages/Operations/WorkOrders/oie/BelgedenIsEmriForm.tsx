@@ -113,7 +113,7 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
               </p>
             ) : (
               <>
-                {stage === "READ_FAILED" && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={() => void invalidate()} />}
+                {stage === "READ_FAILED" && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={() => void invalidate()} serverOcrOff={n.serverOcrEnabled === false} />}
                 {stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300" data-testid="oie-no-service">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
                 <DocFields note={n} draft={draft} onChange={setDraft} gramajOptions={gramajOptions} disabled={save.isPending || saved} />
                 {multiDraft && parties.data && <PartyList view={parties.data} value={multiDraft} onChange={setMulti} disabled={save.isPending || saved} />}

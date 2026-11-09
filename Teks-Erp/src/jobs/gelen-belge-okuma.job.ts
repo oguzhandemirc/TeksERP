@@ -4,11 +4,12 @@
 // Backend sürecinin İÇİNDE (ikinci Node süreci yok); `cloud-inbox.job.ts` kalıbı: `running` koruması (tek tur),
 // turlar arası zamanlayıcı, `requestImmediateReaderRun` ile dürtme (okut ucu). İşleme sırası DB'deki atomik claim
 // (`claimNextScan`): iki süreç/iki tur aynı taramayı alamaz. Polling yasağı (`kesif-cihaz.md`) seri port içindir;
-// burası DB kuyruğudur. Ön koşul fail-closed: modül (emanet + gelenBelge) kapalı ya da adres yoksa HİÇBİR dış istek atılmaz.
+// burası DB kuyruğudur. Ön koşul fail-closed: modül (emanet + gelenBelge) kapalı, adres yok ya da "Bilgisayarda ikinci okuma"
+// kapalıysa HİÇBİR dış istek atılmaz; PENDING taramalara dokunulmaz (ayar açılınca okunur).
 // =============================================================================
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { readerServiceAddress, serverReaderState } from "../services/gelen-belge-sunucu-okuyucu.service";
 import { effectiveIncomingDocsEnabled } from "../services/system-setting.service";
 import { claimNextScan, processClaimedScan, type ProcessOutcome } from "../services/gelen-belge-okuma.service";
 
@@ -20,7 +21,7 @@ const MIN_RUN_GAP_MS = 1000;
 /** Tek turda en fazla bu kadar tarama (sidecar tek sayfa kilidi; uzun tur kapanışı geciktirmesin). */
 const MAX_PER_RUN = 5;
 
-export type ReaderRunOutcome = "MESGUL" | "KAPALI" | "ADRES_YOK" | "BOS" | "BASARILI" | "BASARISIZ";
+export type ReaderRunOutcome = "MESGUL" | "KAPALI" | "ADRES_YOK" | "AYAR_KAPALI" | "BOS" | "BASARILI" | "BASARISIZ";
 
 export interface ReaderRunResult {
   readonly outcome: ReaderRunOutcome;
@@ -36,11 +37,12 @@ let timer: NodeJS.Timeout | null = null;
 let lastRunAt = 0;
 let lastResult: ReaderRunResult | null = null;
 
-export async function readerPreconditions(): Promise<{ ok: true; url: string } | { ok: false; outcome: "KAPALI" | "ADRES_YOK" }> {
+export async function readerPreconditions(): Promise<{ ok: true; url: string } | { ok: false; outcome: "KAPALI" | "ADRES_YOK" | "AYAR_KAPALI" }> {
   if (!(await effectiveIncomingDocsEnabled())) return { ok: false, outcome: "KAPALI" };
-  const url = getReaderUrl().url;
-  if (!url) return { ok: false, outcome: "ADRES_YOK" };
-  return { ok: true, url };
+  const r = await serverReaderState();
+  if (!r.enabled) return { ok: false, outcome: "AYAR_KAPALI" };
+  if (!r.url) return { ok: false, outcome: "ADRES_YOK" };
+  return { ok: true, url: r.url };
 }
 
 /** Tek tur: ön koşul → claim → oku → (en çok MAX_PER_RUN) — bir taramanın hatası diğerlerini durdurmaz. */
@@ -104,7 +106,7 @@ export function startDocumentReader(): void {
   if (started) return;
   started = true;
   schedule(STARTUP_DELAY_MS);
-  const u = getReaderUrl();
+  const u = readerServiceAddress();
   if (u.source === "gecersiz") uyari("gelen-belge", "GELEN_BELGE_OKUMA_URL geçersiz (yalnız HTTPS, döngü adresi ya da noktasız compose servisi) — okuma kapalı");
   else if (!u.url) bilgi("gelen-belge", "okuma servisi adresi yok (GELEN_BELGE_OKUMA_URL boş) — taramalar PENDING bekler, taslak elle sürer");
 }

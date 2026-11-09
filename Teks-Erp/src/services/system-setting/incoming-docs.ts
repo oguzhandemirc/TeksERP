@@ -218,6 +218,16 @@ export const DEFAULT_TANITIM_GUVENI: TanitimGuveniMode = "SOR";
 export const readTanitimGuveni = (tx?: Pick<typeof prisma, "systemSetting">): Promise<TanitimGuveniMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, DEFAULT_TANITIM_GUVENI, tx);
 
+/** Bilgisayarda ikinci okuma (sunucu OCR). Kayıt yok / çöp = true (bugünkü: okuma servisi adresi varsa kullanılır);
+ *  yalnız açık `false` kapatır. Önbellek yok — her soruda DB'den (ayar anında geçerli). */
+export const DEFAULT_SERVER_OCR_ENABLED = true;
+export async function readServerOcrEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED }, select: { value: true } });
+  const v = setting?.value;
+  return !(v === false || v === "false");
+}
+
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const client = tx ?? prisma;

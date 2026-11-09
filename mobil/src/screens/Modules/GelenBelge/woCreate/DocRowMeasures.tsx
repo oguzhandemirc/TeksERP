@@ -5,12 +5,11 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Chip, Text } from 'react-native-paper';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
-import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import { defaultChoiceText } from '../../../../components/form/defaultChoice';
 import { colors, spacing, typography } from '../../../../theme';
 import { meterChoices, parseMeters } from '../approvalGate';
 import type { DocRow, WoRowsState } from './useWoRows';
-import { InlineField } from './InlineField';
+import { ChoiceRow } from '../../../../components/form/ChoiceRow';
 import { DeclaredField, declaredLayout } from './DeclaredField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 
@@ -52,15 +51,15 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
   if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
   const no = row.noteNo;
   return (
-    <InlineField label="Gramaj" testID={`belge-serit-gramaj-${no}`}>
-      <ChoiceChips
+    <ChoiceRow
+        label="Gramaj"
+        rowTestID={`belge-serit-gramaj-${no}`}
         options={wo.catalog.options.map((o) => ({ value: o.id, ...defaultChoiceText(o.name, o.isDefault), testID: `belge-satir-gramaj-${no}-${o.name}` }))}
         value={f.gramajValueId ?? null}
         onChange={(v) => wo.updateForm(row.noteId, { gramajValueId: v === f.gramajValueId ? null : v })}
         disabled={locked}
         testID={`belge-satir-gramaj-${no}`}
       />
-    </InlineField>
   );
 }
 
@@ -69,15 +68,15 @@ export function FoldField(p: { values: readonly { code: string; name: string; is
   // Kat kataloğu boş (özellik pasif): seçilecek değer yok, kayıt engellenmez — yalnız bilgi.
   if (p.values.length === 0) return <NoticeStrip tone="warn" text="Kat değeri tanımlı değil (seçmeden de kaydedilir) — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />;
   return (
-    <InlineField label="Kat tipi" testID="ie-form-kat-satir">
-      <ChoiceChips
+    <ChoiceRow
+        label="Kat tipi"
+        rowTestID="ie-form-kat-satir"
         options={p.values.map((f) => ({ value: f.code, ...defaultChoiceText(f.name, f.isDefault), testID: `ie-form-kat-${f.code}` }))}
         value={p.value}
         onChange={(v) => v && p.onChange(v)}
         disabled={p.locked}
         testID="ie-form-kat"
       />
-    </InlineField>
   );
 }
 

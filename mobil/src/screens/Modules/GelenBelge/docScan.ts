@@ -9,6 +9,7 @@ import { sha256Bytes } from '../../../lib/qr-parca';
 import type { AttemptToken } from '../../../offline/attemptToken';
 import type { InboundDocApi, SameDocumentMatch, UploadScanBody } from '../../../services/inboundDoc.service';
 import { logDeviceOcrResponse, readPageText, type ClientOcr } from '../../../services/deviceOcr';
+import { readPageBarcodes, type PageBarcode } from '../../../services/deviceBarcode';
 
 /** Ölçüm bu boyda yapıldı (karar belgesi §2a): uzun kenar ≈ 2600 px, JPEG kalite 0,8. */
 export const TARGET_LONG_EDGE_PX = 2600;
@@ -156,6 +157,8 @@ export interface SubmitInput {
   pageBase?: number;
   /** S16c cihaz okuyucusu (varsayılan `readPageText`; test enjekte eder). null = sunucu okur. */
   readOnDevice?: (page: ScanPage) => Promise<ClientOcr | null>;
+  /** Fotoğraftaki barkodlar (varsayılan `readPageBarcodes`; test enjekte eder). Hata/boş → barkodsuz yükleme. */
+  readBarcodes?: (page: ScanPage) => Promise<PageBarcode[]>;
 }
 
 /** Yarıda kalan gönderimin kaldığı yer: taslak doğduysa id'si + yüklenen sayfa özetleri. */
@@ -220,6 +223,7 @@ export async function submitDocScan(
   prior: SubmitProgress = EMPTY_PROGRESS,
 ): Promise<SubmitResult> {
   const readOnDevice = input.readOnDevice ?? readPageText;
+  const readBarcodes = input.readBarcodes ?? readPageBarcodes;
   if (!input.pages.length) throw new Error('En az bir sayfa fotoğrafı çekin.');
   let note = prior.note;
   const uploaded = new Set(prior.uploaded);
@@ -251,8 +255,11 @@ export async function submitDocScan(
     const page = input.pages[i]!;
     if (uploaded.has(page.sha256)) continue;
     try {
+      // Barkod okuması OCR ile koşut; başarısızlığı yüklemeyi durdurmaz (bugünkü gövde).
+      const barcodesP = readBarcodes(page).catch(() => [] as PageBarcode[]);
       const clientOcr = await read(page);
       void read(pending[pending.indexOf(page) + 1]);
+      const barcodes = await barcodesP;
       const body: UploadScanBody = {
         contentBase64: page.base64,
         noteId: note.id,
@@ -260,7 +267,7 @@ export async function submitDocScan(
         barcodeText: input.barcodeText,
         sha256: page.sha256,
       };
-      const r = await (clientOcr ? uploadWithDeviceRead(api, body, clientOcr) : api.uploadScan(body));
+      const r = await uploadWithExtras(api, body, clientOcr, barcodes);
       logDeviceOcrResponse(page.sha256, r.deviceOcr);
       if (r.duplicate) duplicates++;
       uploaded.add(page.sha256);
@@ -278,12 +285,26 @@ export async function submitDocScan(
   return { note, uploaded: uploaded.size, duplicates };
 }
 
+const isBadRequest = (e: unknown) => (e as { status?: number } | null)?.status === 400;
+
 /** 400 (cihaz okuması geçersiz ya da eski sunucu alanı tanımıyor) → aynı sayfa cihaz okumasız bir kez daha. */
-async function uploadWithDeviceRead(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr) {
+async function uploadWithDeviceRead(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr | null) {
+  if (!clientOcr) return api.uploadScan(body);
   try {
     return await api.uploadScan({ ...body, clientOcr });
   } catch (e) {
-    if ((e as { status?: number } | null)?.status !== 400) throw e;
+    if (!isBadRequest(e)) throw e;
     return api.uploadScan(body);
+  }
+}
+
+/** Barkodlu gövde 400 alırsa (alanı tanımayan eski sunucunun katı gövdesi) önce barkodsuz, sonra bugünkü sıra. */
+async function uploadWithExtras(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr | null, barcodes: PageBarcode[]) {
+  if (!barcodes.length) return uploadWithDeviceRead(api, body, clientOcr);
+  try {
+    return await api.uploadScan({ ...body, barcodes, ...(clientOcr ? { clientOcr } : {}) });
+  } catch (e) {
+    if (!isBadRequest(e)) throw e;
+    return uploadWithDeviceRead(api, body, clientOcr);
   }
 }

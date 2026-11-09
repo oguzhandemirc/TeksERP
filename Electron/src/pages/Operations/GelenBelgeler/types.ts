@@ -141,6 +141,8 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetail
   sameBatch?: SameBatchNotes | null;
   /** Okuma servisi tanımlı mı (false → bekleyen sayfa hiç okunmaz, form elle doldurulur); eski backend göndermez. */
   readerConfigured?: boolean;
+  /** "Bilgisayarda ikinci okuma" ayarı (false → okunamayan sayfa yeniden çekilir, Yeniden okut yok); eski backend göndermez. */
+  serverOcrEnabled?: boolean;
   /** Tanıma özeti (belge tanıt 3 aşama); okunmuş sayfa yoksa / eski backend → yok. */
   tanima?: Tanima;
 }
@@ -279,6 +281,8 @@ export interface ReaderStatus {
   service: "var" | "yok" | "erisilemiyor" | "gecersiz";
   engine: string | null;
   version: string | null;
+  /** "Bilgisayarda ikinci okuma" ayarı (eski backend göndermez = açık) · kuyrukta bekleyen fotoğraf sayısı (PDF hariç). */
+  serverOcrEnabled?: boolean; pending?: number;
 }
 
 /** Satır yazım gövdesi (backend `LineBody`; strictObject — fazla anahtar 400). */
@@ -331,6 +335,8 @@ export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, En
   defaultHeaderLineMeterSource?: HeaderLineMeterSource;
   /** Okunan şablonun gönderen carisi boş gönderene yazılır; eski backend göndermez (undefined = alan çizilmez). */
   autoSenderFromTemplate?: boolean;
+  /** Bilgisayarda ikinci okuma (sunucu OCR); eski backend göndermez (undefined = anahtar çizilmez). */
+  serverOcrEnabled?: boolean; defaultServerOcrEnabled?: boolean;
 }
 /** Rota önerisi önceliği — backend `RouteSuggestionPriority` aynası. */
 export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";

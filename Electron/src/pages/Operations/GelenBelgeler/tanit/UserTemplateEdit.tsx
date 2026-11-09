@@ -1,4 +1,4 @@
-// Belge tipini fotoğrafsız düzenle (Belge Tipleri): ad · kimlik yazıları · alan kaldır · çok parti kuralı → PATCH `/tanim`.
+// Belge tipini fotoğrafsız düzenle (Belge Tipleri): ad · kimlik yazıları · alan kaldır · barkoddan al · çok parti kuralı → PATCH `/tanim`.
 // Birleşim SUNUCUDA (kural 114); gövde yalnız değişen parçayı + `expectedVersion` taşır. 409 (araya giren kayıt / sıfırlanmış tip)
 // diyalogda "yenileyin" olarak kalır; hata toast'ını apiClient basar (ikinci toast yok).
 import { useState } from "react";
@@ -48,7 +48,7 @@ function KeywordList({ keywords, onChange }: { keywords: string[]; onChange: (k:
   );
 }
 
-function FieldDropList({ detail, drop, onChange }: { detail: UserTemplateDetail; drop: string[]; onChange: (d: string[]) => void }) {
+function FieldDropList({ detail, drop, onChange, barcode, onBarcode }: { detail: UserTemplateDetail; drop: string[]; onChange: (d: string[]) => void; barcode: string[]; onBarcode: (b: string[]) => void }) {
   const rows = templateFieldRows(detail.template);
   if (rows.length === 0) return null;
   return (
@@ -63,6 +63,10 @@ function FieldDropList({ detail, drop, onChange }: { detail: UserTemplateDetail;
                 <b className="font-medium">{r.woLabel}</b>
                 {r.label !== r.woLabel && <span className="text-muted-foreground"> ← {r.label}</span>}
               </span>
+              <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs" title="Fotoğraftaki barkod bu alanın biçimine uyuyorsa okunan yazının yerine barkod değeri kullanılır">
+                <Checkbox checked={!gone && barcode.includes(r.key)} disabled={gone} onCheckedChange={(v) => onBarcode(v ? [...barcode, r.key] : barcode.filter((k) => k !== r.key))} aria-label={`${r.woLabel} alanını barkoddan al`} data-testid={`user-template-barcode-${r.key}`} />
+                Barkoddan al
+              </label>
               <label className="flex shrink-0 items-center gap-1.5 text-xs">
                 <Checkbox checked={gone} onCheckedChange={(v) => onChange(v ? [...drop, r.key] : drop.filter((k) => k !== r.key))} aria-label={`${r.woLabel} alanını kaldır`} />
                 Kaldır
@@ -126,7 +130,7 @@ function EditBody({ detail, onDone, onReload }: { detail: UserTemplateDetail; on
           <Input value={draft.name} maxLength={80} onChange={(e) => set({ name: e.target.value })} data-testid="user-template-name" />
         </label>
         <KeywordList keywords={draft.keywords} onChange={(keywords) => set({ keywords })} />
-        <FieldDropList detail={detail} drop={draft.drop} onChange={(drop) => set({ drop })} />
+        <FieldDropList detail={detail} drop={draft.drop} onChange={(drop) => set({ drop })} barcode={draft.barcode} onBarcode={(barcode) => set({ barcode })} />
         <MultiPartyChoice value={draft.multiParty} factory={factory.data?.multiPartyWorkOrder} onChange={(multiParty) => set({ multiParty })} />
         <p className="text-xs text-muted-foreground">Alan yerini değiştirmek ya da yeni alan eklemek için kartta "Fotoğrafla yeniden işaretle". Kod ({detail.code}) değişmez.</p>
         <div className="text-xs text-muted-foreground" data-testid="user-template-versions">

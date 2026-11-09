@@ -6,7 +6,7 @@ import { Text, TouchableRipple } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ColorSelectField from '../../../../components/ColorSelectField';
 import { DocHighlight } from '../../../../components/DocHighlight';
-import { ChoiceChips } from '../../../../components/form/ChoiceChips';
+import { ChoiceRow } from '../../../../components/form/ChoiceRow';
 import { defaultChoiceText } from '../../../../components/form/defaultChoice';
 import { CompactNumberField } from '../../../../components/form/CompactNumberField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
@@ -143,8 +143,9 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
           )}
           {cols.kat && p.foldValues.length > 0 && (
             <View style={styles.fold}>
-              <Text style={styles.label}>Kat tipi</Text>
-              <ChoiceChips
+              <ChoiceRow
+                label="Kat tipi"
+                rowTestID="ie-form-kat-baslikli"
                 options={p.foldValues.map((f) => ({ value: f.code, ...defaultChoiceText(f.name, f.isDefault), testID: `ie-form-kat-${f.code}` }))}
                 value={e.foldType}
                 onChange={(v) => v && edit({ foldType: v })}
@@ -205,8 +206,8 @@ export function DocFilled({ k, state, children, highlight, grow }: { k: DocFille
 
 const styles = StyleSheet.create({
   numbers: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, alignItems: 'flex-end' },
-  fold: { gap: spacing.xs },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
+  // Seçenek satırı eşit pay alır: sayı kutularının yanında en az 240dp, sığmazsa alt satıra tam genişlik.
+  fold: { flexGrow: 1, flexBasis: 240, alignSelf: 'stretch' },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
   hl: { padding: 2 },
   grow: { flex: 1 },
