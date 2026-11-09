@@ -1,19 +1,18 @@
 // Belgeden İE satır kartının parti alanları: müşteri parti no (belgeden, elle düzeltilebilir) + bizim parti no (İE partisi).
 // `DocRowCard.tsx` 300 satır sınırında olduğundan ayrı dosya.
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { batchService } from '../../../../services/batch.service';
 import { SelectButton } from '../../../../components/form/SelectButton';
-import { spacing } from '../../../../theme';
-import { DeclaredEditSheet, DeclaredField } from './DeclaredField';
+import { DeclaredEditSheet, DeclaredField, declaredLayout } from './DeclaredField';
 import { editCustomerBatchNo } from './woFromDoc';
 import { ourBatchAutoText, previewCodes } from './ourBatchPreview';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 /**
  * Müşteri parti no (belgeden okunan beyan kutusu; dokununca düz metin sayfası, seçici yok) + bizim parti no (İE partisi) aynı
- * satırda. Seri kipinde bizimki aynı kutu stilinde salt okunur "Otomatik · sıradaki: X"; belgeden kipinde aday seçici düğmesi.
+ * satırda. Seri kipinde bizimki aynı kutu stilinde salt okunur "Otomatik · X"; belgeden kipinde aday seçici düğmesi.
  */
 export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; wo: WoRowsState; locked: boolean; onPick: () => void }) {
   const f = row.form!;
@@ -22,11 +21,11 @@ export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; 
   const preview = useOurBatchPreview(1, !fromDoc && !locked);
   const [edit, setEdit] = useState(false);
   return (
-    <View style={styles.row}>
-      <DeclaredField label="Müşteri parti no" value={f.customerBatchNo || null} fromDoc={!!f.customerBatchNoFromDoc} emptyText="Yok — dokunup yazın"
+    <View style={declaredLayout.row}>
+      <DeclaredField label="Müşteri parti no" value={f.customerBatchNo || null} fromDoc={!!f.customerBatchNoFromDoc} emptyText="Yok — dokunun"
         onPress={() => setEdit(true)} disabled={locked} testID={`belge-satir-musteri-parti-${row.noteNo}`} />
       {fromDoc ? (
-        <View style={styles.pick}>
+        <View style={declaredLayout.cell}>
           <SelectButton
             label={docBatchLabel(candidates.length)}
             caption="Bizim parti"
@@ -72,9 +71,3 @@ function docBatchLabel(n: number): string {
   if (n > 1) return `Bizim parti no seçin (${n} aday)`;
   return n === 1 ? 'Bizim parti no: belgeden' : 'Bizim parti no: belgede bulunamadı';
 }
-
-const styles = StyleSheet.create({
-  // İki kutu eşit genişlik ve aynı yükseklik (SelectButton ve beyan kutusu 64dp).
-  row: { flexDirection: 'row', alignItems: 'stretch', flexWrap: 'wrap', gap: spacing.sm },
-  pick: { flexGrow: 1, flexBasis: 150, minWidth: 150 },
-});

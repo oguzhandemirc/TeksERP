@@ -5,8 +5,8 @@ import { batchPreviewPlan, ourBatchAutoText, previewCodes } from './ourBatchPrev
 const st = (p: object) => ({ enabled: true, lastCode: 'P04', nextCode: 'P05', min: 1, max: 99, ...p });
 
 describe('ourBatchPreview', () => {
-  it('⭐ tahmin varsa "Otomatik · sıradaki: X", yoksa yalnız "Otomatik"', () => {
-    expect(ourBatchAutoText('P05')).toBe('Otomatik · sıradaki: P05');
+  it('⭐ tahmin varsa "Otomatik · X", yoksa yalnız "Otomatik"', () => {
+    expect(ourBatchAutoText('P05')).toBe('Otomatik · P05');
     expect(ourBatchAutoText(undefined)).toBe('Otomatik');
     expect(ourBatchAutoText(null)).toBe('Otomatik');
     expect(ourBatchAutoText('')).toBe('Otomatik');

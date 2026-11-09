@@ -97,7 +97,7 @@ describe('emptyStateFor — boş liste başlığı + çıkış eylemi', () => {
 
 describe('typeBadgeText — tür rozeti', () => {
   it('yalnız Fason (müşteri malı) işaretlenir; kendi üretimi ve eski sunucu rozetsiz', () => {
-    expect(typeBadgeText({ type: 'CUSTOMER_GOODS_SERVICE' })).toBe('Fason (müşteri malı)');
+    expect(typeBadgeText({ type: 'CUSTOMER_GOODS_SERVICE' })).toBe('Fason');
     expect(typeBadgeText({ type: 'ORDER_PRODUCTION' })).toBeNull();
     expect(typeBadgeText({ type: 'STOCK_PRODUCTION' })).toBeNull();
     expect(typeBadgeText({})).toBeNull();

@@ -12,8 +12,11 @@ import type { WoRowsState } from './useWoRows';
 
 const MAX_CHIPS = 3;
 
+/** Kaydedici: belge kipinde `useWoRows`, kendi üretim kipinde quick-start kancası (aynı dört alan). */
+export type CreateBarSaver = Pick<WoRowsState, 'saving' | 'mode'> & { saveAll: () => unknown; counts: { ready: number } };
+
 interface Props {
-  wo: WoRowsState;
+  wo: CreateBarSaver;
   done: boolean;
   block: string | null;
   /** Engel cümlesinin kaynağı olan hap; müşteri / mal sahibi hapında cümle hapı tekrarladığı için çizilmez. */

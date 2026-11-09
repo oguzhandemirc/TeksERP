@@ -7,10 +7,19 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
 import { TERIM } from '../../../../lib/terim';
+// Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
+jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
 let mockRows: DocRow[] = [];
 let mockOpts: { extraBody?: (r: DocRow) => ExtraFormBody } | undefined;
 const mockSaveAll = jest.fn();
+const mockQuickStart = jest.fn(async (_b: Record<string, unknown>) => ({ data: { workOrder: { id: 'w1', workOrderNumber: 'IE-9' }, attached: 0, batch: null } }));
+jest.mock('../../../../services/workOrder.service', () => ({
+  ...jest.requireActual('../../../../services/workOrder.service'),
+  workOrderService: { quickStart: (b: Record<string, unknown>) => mockQuickStart(b) },
+}));
+jest.mock('../../../../components/BarcodeScannerModal', () => ({ BarcodeScannerModal: () => null }));
+jest.mock('../../../../components/RollPickerModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('./useWoRows', () => ({
   useWoRows: (_r: unknown, opts: typeof mockOpts) => {
     mockOpts = opts;
@@ -227,8 +236,38 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
     expect(s.queryByTestId('ie-eksik-malSahibi')).toBeNull();
     expect(framed()).toBe(false);
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
+    // Kendi üretim: belge taslağı yolu (saveAll) değil, quick-start + ownGoods (topsuz da açılır).
     fireEvent.press(s.getByTestId('ie-form-olustur'));
-    expect(mockSaveAll).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockQuickStart).toHaveBeenCalledTimes(1));
+    expect(mockSaveAll).not.toHaveBeenCalled();
+  });
+
+  it('⭐ kendi üretim kipi: sol sütun "Toplar" bölümü, kayıt quick-start ownGoods + STOCK, not gitmez, sonuç kartı', async () => {
+    mockQuickStart.mockClear();
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={['STANDARD']} />);
+    expect(await s.findByTestId('ie-kendi-toplar')).toBeTruthy();
+    expect(s.getByTestId('ie-kendi-topsuz')).toBeTruthy();
+    expect(s.queryByTestId('ie-mal-sahibi-sec')).toBeNull();
+    fireEvent.press(s.getByTestId('ie-form-olustur'));
+    await waitFor(() => expect(mockQuickStart).toHaveBeenCalledTimes(1));
+    const sent = mockQuickStart.mock.calls[0][0];
+    expect(sent).toMatchObject({ ownGoods: true, rollBarcodes: [], type: 'STOCK_PRODUCTION', routeTemplateId: 'r1' });
+    expect(sent).not.toHaveProperty('notes');
+    expect(typeof sent.clientToken).toBe('string');
+    expect(mockSaveAll).not.toHaveBeenCalled();
+    expect(await s.findByTestId('ie-kendi-sonuc')).toHaveTextContent(/IE-9 oluşturuldu/);
+  });
+
+  it('⭐ fason (tek tür ya da kartta seçili): "Toplar" bölümü yok, bugünkü belge yolu', async () => {
+    const a = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={['CUSTOMER_GOODS']} />);
+    await a.findByTestId('ie-form-olustur');
+    expect(a.queryByTestId('ie-kendi-toplar')).toBeNull();
+    a.unmount();
+    const b = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={['STANDARD', 'CUSTOMER_GOODS']} />);
+    fireEvent.press(await b.findByTestId('ie-mal-sahibi-CUSTOMER_GOODS'));
+    expect(b.queryByTestId('ie-kendi-toplar')).toBeNull();
+    fireEvent.press(b.getByTestId('ie-mal-sahibi-STANDARD'));
+    expect(b.getByTestId('ie-kendi-toplar')).toBeTruthy();
   });
 
   it('⭐ hedef özellik: varsayılan (BAYRAK) seçili görünür ve gitmez; çipe dokununca tüm küme targetPropertyIds olarak gider', async () => {

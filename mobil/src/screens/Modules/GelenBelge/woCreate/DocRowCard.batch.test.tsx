@@ -1,6 +1,6 @@
 // Belgeden İE satırı — parti no (Gülkesim istek 2) ve kurşun gramajı (istek 3).
 // Müşteri parti no beyan kutusudur (`DeclaredField`): belgeden geldiyse dolu + sarı, dokununca seçici değil metin sayfası açılır,
-// düzeltince vurgu kalkar. Bizim parti no seri kipinde aynı kutu stilinde salt okunur "Otomatik · sıradaki: X" (önizleme yoksa
+// düzeltince vurgu kalkar. Bizim parti no seri kipinde aynı kutu stilinde salt okunur "Otomatik · X" (önizleme yoksa
 // "Otomatik"); belgeden kipinde aday seçicisi bugünkü gibi. Gelen metre kutusuna dokununca düzeltme açılır (Düzelt düğmesi yok).
 // Negatif sonda: BatchFields müşteri alanı kaldırılınca / vurgu her zaman kapalıyken / editCustomerBatchNo vurguyu
 // düşürmeyince / seçili gramaj stili kaldırılınca ilgili vaka kırmızı.
@@ -101,11 +101,11 @@ describe('DocRowCard — müşteri parti no beyan kutusu (dokununca metin sayfas
     edit(ui, 'EL-1');
     expect(value(ui, 'belge-satir-musteri-parti-GB-1')).toHaveTextContent('EL-1');
   });
-  it('⭐ seri kipinde bizim parti no: aynı kutu stilinde salt okunur "Otomatik · sıradaki: P05", sarı değil (tek tahmin istenir)', async () => {
+  it('⭐ seri kipinde bizim parti no: aynı kutu stilinde salt okunur "Otomatik · P05", sarı değil (tek tahmin istenir)', async () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05'], min: 1, max: 99 } });
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
     expect(ui.getByTestId('belge-satir-bizim-parti-GB-1').props.accessibilityRole).not.toBe('button');
-    await waitFor(() => expect(value(ui, 'belge-satir-bizim-parti-GB-1')).toHaveTextContent('Otomatik · sıradaki: P05'));
+    await waitFor(() => expect(value(ui, 'belge-satir-bizim-parti-GB-1')).toHaveTextContent('Otomatik · P05'));
     expect(highlighted(ui, 'belge-satir-bizim-parti-GB-1')).toBe(false);
     expect(mockNumberState).toHaveBeenCalledWith(1);
   });
@@ -160,7 +160,7 @@ describe('DocRowCard — çok partide bizim parti no önizlemesi', () => {
   it('⭐ SINGLE: tek numara istenir ve bir kez gösterilir (parti başına alan yok)', async () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05'], min: 1, max: 99 } });
     const ui = renderWithPaper(<MultiHarness mode="SINGLE" />);
-    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-tek-GB-1-deger')).toHaveTextContent('Otomatik · sıradaki: P05'));
+    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-tek-GB-1-deger')).toHaveTextContent('Otomatik · P05'));
     expect(mockNumberState).toHaveBeenCalledWith(1);
     expect(mockNumberState).not.toHaveBeenCalledWith(3);
     expect(ui.queryByTestId('belge-parti-bizim-GB-1-1', { includeHiddenElements: true })).toBeNull();
@@ -168,7 +168,7 @@ describe('DocRowCard — çok partide bizim parti no önizlemesi', () => {
   it('⭐ PER_PARTY: parti sayısı kadar ardışık tahmin, parti başına', async () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05', 'P06', 'P07'], min: 1, max: 99 } });
     const ui = renderWithPaper(<MultiHarness mode="PER_PARTY" />);
-    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-GB-1-3-deger', { includeHiddenElements: true })).toHaveTextContent('Otomatik · sıradaki: P07'));
+    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-GB-1-3-deger', { includeHiddenElements: true })).toHaveTextContent('Otomatik · P07'));
     expect(mockNumberState).toHaveBeenCalledWith(3);
     expect(ui.queryByTestId('belge-parti-bizim-tek-GB-1')).toBeNull();
   });

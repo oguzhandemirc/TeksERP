@@ -4,6 +4,8 @@ import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import WoCreateScreen from './WoCreateScreen';
+// Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
+jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
 const mockShortcuts = jest.fn();
 let mockVisible: { key: string }[] = [{ key: 'HizliIsEmri' }, { key: 'GelenBelge' }];

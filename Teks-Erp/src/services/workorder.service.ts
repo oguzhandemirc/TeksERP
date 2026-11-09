@@ -186,7 +186,7 @@ export class WorkOrderService {
   }
 
   private async quickStartFresh(
-    data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean; sourceNoteId?: string | null; /** S1 çok parti: belgenin bu partisinin no'su (nottaki ourBatchNo yerine). */ sourceBatchNo?: string | null },
+    data: WorkOrderCreateInput & { rollBarcodes: string[]; /** Kendi üretim (tablet): emanet top 400, topsuz açılış serbest. */ ownGoods?: boolean; dispatchFirstStep?: boolean; sourceNoteId?: string | null; /** S1 çok parti: belgenin bu partisinin no'su (nottaki ourBatchNo yerine). */ sourceBatchNo?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{

@@ -28,6 +28,7 @@ import {
 import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
+import { isCustomerGoodsWo } from '../IsEmirleri/workOrderRow';
 
 interface Props {
   workOrderId: string | null;
@@ -151,8 +152,16 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             {wo?.workOrderNumber ?? TERIM.terbiyeIsEmri.tekil}
           </Text>
           {wo ? (
-            <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
-              <Text style={styles.statusChipText}>{trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}</Text>
+            <View style={styles.chipRow}>
+              <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
+                <Text style={styles.statusChipText}>{trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}</Text>
+              </View>
+              {/* "Fason İş Emri" ölçütü tek: tür CUSTOMER_GOODS_SERVICE (liste etiketiyle aynı ton). */}
+              {isCustomerGoodsWo(wo.type) ? (
+                <View style={[styles.statusChip, styles.fasonChip]} testID="ie-detay-fason">
+                  <Text style={styles.fasonChipText}>{`Fason ${TERIM.terbiyeIsEmri.tekil}`}</Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -389,6 +398,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerBatch: { fontSize: 18, fontWeight: '800', color: colors.text },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  fasonChip: { backgroundColor: colors.warningContainer },
+  fasonChipText: { fontSize: 12, fontWeight: '700', color: colors.warningDark },
   statusChip: { alignSelf: 'flex-start', borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, marginTop: 4 },
   statusChipText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   closeBtn: { padding: spacing.xs, borderRadius: radius.full },

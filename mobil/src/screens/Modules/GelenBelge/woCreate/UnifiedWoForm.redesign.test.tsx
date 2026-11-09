@@ -10,6 +10,8 @@ import { renderWithPaper } from '../../../../test/render';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
+// Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
+jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
 let mockRows: DocRow[] = [];
 let mockOpts: { extraBody?: (r: DocRow) => ExtraFormBody } | undefined;

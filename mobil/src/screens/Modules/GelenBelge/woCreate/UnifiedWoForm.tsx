@@ -18,7 +18,8 @@ import PagePreviewModal from '../PagePreviewModal';
 import SameDocumentCard from '../SameDocumentCard';
 import { GramajField, type DocRowOpenRequest } from './DocRowCard';
 import DocColumn from './DocColumn';
-import CreateBar from './CreateBar';
+import CreateBar, { type CreateBarSaver } from './CreateBar';
+import OwnRollsSection from './OwnRollsSection';
 import WoFormFields from './WoFormFields';
 import OwnerKindCard from './OwnerKindCard';
 import { usePartyScanReview } from './PartyScanSide';
@@ -28,6 +29,7 @@ import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './u
 import { WO_PANE_FLEX, woFormLayout } from './woLayout';
 import { bandTone, TARGET_ISSUE_KEYS, TARGET_WARN_KEYS, type IssueKey } from './woIssues';
 import type { WoFieldKey } from './woFieldCatalog';
+import type { WoCreateKind } from '../../../../store/woCreateKinds';
 
 export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const u = useUnifiedWoForm(props);
@@ -55,7 +57,11 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
   const twoCol = layout.columns === 2;
   const jump = useMissingJump(u, twoCol, props.openRequest ?? null);
   // Malın sahibi seçimi sol sütunun başında (yan ekranda da), başlıksız.
-  const owner = u.owner.visible ? <OwnerKindCard value={u.owner.value} reason={u.owner.reason} locked={done || wo.saving} onChange={u.owner.choose} /> : null;
+  const owner = u.owner.visible ? <OwnerKindCard value={u.owner.value} reason={u.owner.reason} locked={done || wo.saving || u.own.saving} onChange={u.owner.choose} /> : null;
+  // Kendi üretim: belge sütunu yerine isteğe bağlı "Toplar"; kayıt quick-start kancasından (alt çubuk aynı).
+  const left = u.ownMode ? <OwnRollsSection own={u.own} itemId={u.form.extras.targetItemId} locked={done || u.own.saving} /> : <DocColumn u={u} openRequest={jump.request} />;
+  const saver: CreateBarSaver = u.ownMode ? { saving: u.own.saving, saveAll: u.own.save, mode: 'WITH_WORK_ORDER', counts: { ready: 1 } } : wo;
+  useKindReport(u.ownMode ? 'STANDARD' : u.owner.value, props.onKindChange);
   return (
     <>
       {twoCol ? (
@@ -65,7 +71,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
           <View style={[styles.pane, { flex: WO_PANE_FLEX.left }]} testID="ie-form-sol-kutu">
             <KeyboardAwareScrollView ref={jump.leftRef} bottomOffset={24} style={styles.scroll} contentContainerStyle={[styles.body, { padding: layout.pad, paddingBottom: spacing.xl * 2 }]} keyboardShouldPersistTaps="handled" testID="ie-form-sol">
               {owner}
-              <DocColumn u={u} openRequest={jump.request} />
+              {left}
             </KeyboardAwareScrollView>
           </View>
           <View style={styles.divider} testID="ie-form-ayrac" />
@@ -83,14 +89,14 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
           {props.fieldsOpen === undefined && <FieldsButton onPress={fields.openSheet} />}
             {owner}
             <View style={styles.stack} onLayout={jump.at('doc')}>
-              <DocColumn u={u} openRequest={jump.request} />
+              {left}
             </View>
             <View style={styles.stack} onLayout={jump.at('form')}>
               <FormColumn u={u} fieldProps={fieldProps} onOtherLayout={jump.at('other')} />
             </View>
         </KeyboardAwareScrollView>
       )}
-      <CreateBar wo={wo} done={done} block={u.block} blockKey={u.blockKey} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
+      <CreateBar wo={saver} done={done} block={u.block} blockKey={u.blockKey} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
       <ScanModals scan={scan} row={u.row} />
       <SameDocumentCard
@@ -111,6 +117,15 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps) {
 }
 
 type FormModel = ReturnType<typeof useUnifiedWoForm>;
+
+/** Başlık için etkin mal sahibi türü (İş Emirleri girişi "Fason İş Emri" / "İş Emri" yazar); değişince bildirilir. */
+function useKindReport(kind: WoCreateKind | null, onKindChange: ((k: WoCreateKind | null) => void) | undefined) {
+  const cb = useRef(onKindChange);
+  cb.current = onKindChange;
+  useEffect(() => {
+    cb.current?.(kind);
+  }, [kind]);
+}
 
 type Spot = 'doc' | 'form' | 'other';
 const METER_KEYS: readonly IssueKey[] = ['kursunMetresi', 'metreDogrula'];

@@ -11,6 +11,7 @@ import { customerCellView } from "./customer-cell";
 import { LocationCell } from "./LocationCell";
 import { locationText } from "./location";
 import { TERIM } from "@/lib/terim";
+import { FasonTag } from "./FasonTag";
 
 // İlerleme = üretimden ÇIKAN ÷ üretime GİREN (detay sağlık şeridiyle birebir aynı).
 // Hedef metraj %99 girilmediğinden hedef-bazlı oran kullanılmaz. Tamamlanan-adım
@@ -40,7 +41,12 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "workOrderNumber",
     get header() { return `${TERIM.terbiyeIsEmri.tekil} No`; },
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.workOrderNumber}</span>,
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="font-mono text-xs">{row.original.workOrderNumber}</span>
+        <FasonTag type={row.original.type} />
+      </span>
+    ),
   },
   {
     id: "batches",

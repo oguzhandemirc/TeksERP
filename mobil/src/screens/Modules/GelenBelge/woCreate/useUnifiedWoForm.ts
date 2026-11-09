@@ -45,6 +45,8 @@ import { defaultWoTypeFor, type WoCreateKind } from '../../../../store/woCreateK
 import type { DocRowOpenRequest } from './DocRowCard';
 import { useManualDraft } from './useManualDraft';
 import { ownerKindCard, routeConflict, shouldApplyCardRoute, woTypeForOwnerKind } from '../../IsEmirleri/createEntry';
+import { isOwnGoodsMode } from './ownGoods';
+import { useOwnGoodsCreate } from './useOwnGoodsCreate';
 
 export interface UnifiedWoFormProps {
   /** Özel iş emri karosundan açıldıysa ön seçili rota (rotasız dahil); düz karoda null = seçilir. */
@@ -65,6 +67,8 @@ export interface UnifiedWoFormProps {
   onNote?: (note: { id: string; noteNo: string }, runKey: number) => void;
   /** Satırın seçicisini dışarıdan aç (önizlemenin "Müşteri seç"i). */
   openRequest?: DocRowOpenRequest | null;
+  /** Etkin mal sahibi türü değişti (başlık "Fason İş Emri" / "İş Emri"); tek türde de bir kez bildirilir. */
+  onKindChange?: (kind: WoCreateKind | null) => void;
 }
 
 /** Formun durumu: rota, ek alanlar, satır (tek belge), tarayıcı; belgeden doldurma ve "oluştur" engeli. */
@@ -101,8 +105,9 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const foldRequired = hasTambur && fold.values.length > 0;
 
   const owner = useOwnerKind(ownerKinds, extras.woType, setForm);
-  // "Kendi Üretimimiz" kartta açıkça seçildiyse kalemsiz kayıt türü açıkça Stoğa gider (sunucunun "tür seçilmedi" uyarısı susar).
-  const ownGoods = owner.visible && owner.value === 'STANDARD';
+  // Kendi üretim (tek tür STANDARD ya da kartta seçili): belge taslağı yok, kayıt quick-start; kalemsiz tür açıkça Stoğa.
+  const ownMode = isOwnGoodsMode(ownerKinds, owner.value);
+  const ownGoods = ownMode;
   const extraBody = useCallback(
     (r: DocRow) => buildExtraBody(extras, { hasTambur: askFold, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods }),
     [extras, askFold, route, ownGoods],
@@ -114,8 +119,10 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const ctx = useQuery({ queryKey: INBOUND_DOC_CONTEXT_KEY, queryFn: inboundDocService.tabletContext, staleTime: 60_000 });
   const customers: PickerOption[] = useMemo(() => (ctx.data?.data.customers ?? []).map((x) => ({ value: x.id, label: x.name })), [ctx.data]);
   const scan = useDocScanFlow(wo.addNote, onNote);
-  const draft = useManualDraft(manual, (note) => { wo.markManual(note.id); scan.b.openNote(note); });
-  useAutoScan(autoScan, scan.source.add);
+  const draft = useManualDraft(manual && !ownMode, (note) => { wo.markManual(note.id); scan.b.openNote(note); });
+  useAutoScan(autoScan && !ownMode, scan.source.add);
+  const realRoute = route && !isScanRoute(route) ? route : null;
+  const own = useOwnGoodsCreate({ lockedItemId: extras.targetItemId, route, extraBody: () => buildExtraBody(extras, { hasTambur: askFold, route: realRoute, ownGoods: true }) });
   const cardRoute = useCardRoute(ownerKinds !== undefined && !routeLocked, row?.form?.ownerCustomerId ?? null, routesQ.data?.data ?? []);
   useEffect(() => {
     if (shouldApplyCardRoute(route, routeTouched, cardRoute)) applyRoute(cardRoute!);
@@ -150,32 +157,43 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   // Gelen metre: çok partide parti toplamı, ayrı toplarda top toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
   const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.rolls ? rollsTotal(row.form.rolls) : row.form.meters) : null;
   const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
-  const done = !!row && isDone(row);
+  const done = ownMode ? !!own.result : !!row && isDone(row);
   // Sıra = göz akışı: sol sütun (belgeden gelenler) önce, sonra sağ sütun (üretim kararı).
   // Malın sahibi seçimi eksikse diğer zorunlu alanlar gibi alt çubuk hapı (kartta hata çerçevesi yok).
   const ownerIssue: FormIssue[] = owner.visible && owner.value === null ? [{ key: 'malSahibi', text: 'Kendi Üretimimiz / Fason Üretim seçin.' }] : [];
   const issues: FormIssue[] = [
     ...ownerIssue,
-    ...(row?.form && wo.mode !== 'SEPARATE' ? rowIssueList(row.form) : []),
+    ...(row?.form && wo.mode !== 'SEPARATE' && !ownMode ? rowIssueList(row.form) : []),
     ...extrasIssues(extras, { routeChosen: !!route, hasTambur: foldRequired, perParty, inOther: fields.isOther }),
   ];
   const reading = !!row && (!row.form || !row.detail);
-  const block = done ? null : createBlockReason({ hasDoc: !!row, reading, issues });
+  // Kendi üretimde belge beklenmez: engel yalnız alanlardan (top da isteğe bağlı).
+  const block = done ? null : createBlockReason({ hasDoc: ownMode || !!row, reading: reading && !ownMode, issues });
   // Kaydedilen / taslak bırakılan / sayfa eklenen belgesiz taslak çıkışta silinmez.
   if (manual && row && (row.result || (scan.b.done?.pages ?? 0) > 0)) draft.keep();
   const addDoc = () => { scan.b.addToNote(); scan.source.add(); };
   // Alt çubuk hapları: belge yokken / okunurken hap yok (çubuk tek cümle söyler).
-  const missing = done || !row || reading ? [] : missingChips(issues);
+  const missing = done || (!ownMode && (!row || reading)) ? [] : missingChips(issues);
   // Engel cümlesi bir hapı aynen tekrarlıyorsa (yalnız müşteri) çubukta ikinci satır çizilmez.
   const blockKey = missing.length > 0 && block === issues[0]?.text ? issues[0].key : null;
   const { okut, dropDoc } = docSlotActions(wo, row, scan, setForm);
+  useDropDocOnOwnMode(ownMode, row?.noteId ?? null, dropDoc);
   return {
-    owner, routeWarning, manual, draft, addDoc,
+    owner, ownMode, own, routeWarning, manual, draft, addDoc,
     route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
   };
+}
+
+/** Kendi üretime geçildi: okutulmuş/belgesiz belge satırı formdan çıkar (belgesiz taslağı `useManualDraft` siler). */
+function useDropDocOnOwnMode(ownMode: boolean, noteId: string | null, dropDoc: () => void) {
+  const dropRef = React.useRef(dropDoc);
+  dropRef.current = dropDoc;
+  useEffect(() => {
+    if (ownMode && noteId) dropRef.current();
+  }, [ownMode, noteId]);
 }
 
 /** Belge sütununu boşalt: "Yeniden okut" tarayıcıyı açar; taslak iptal edilince (`dropDoc`) tarayıcı kendiliğinden açılmaz. */

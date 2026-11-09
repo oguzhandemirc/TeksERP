@@ -17,9 +17,11 @@ interface StageProps {
   /** ⚙ Alanlar sayfası başlık ikonundan (kontrollü); verilmezse form kendi düğmesini çizer. */
   fieldsOpen?: boolean;
   onFieldsOpenChange?: (open: boolean) => void;
+  /** Etkin mal sahibi türü (başlık için). */
+  onKindChange?: (kind: WoCreateKind | null) => void;
 }
 
-export default function ScanStage({ route, kinds, manual, onNew, fieldsOpen, onFieldsOpenChange }: StageProps) {
+export default function ScanStage({ route, kinds, manual, onNew, fieldsOpen, onFieldsOpenChange, onKindChange }: StageProps) {
   return (
     <View style={styles.fill}>
       <UnifiedWoForm
@@ -31,6 +33,7 @@ export default function ScanStage({ route, kinds, manual, onNew, fieldsOpen, onF
         ownerKinds={kinds}
         autoScan={!manual}
         manual={manual}
+        onKindChange={onKindChange}
       />
     </View>
   );

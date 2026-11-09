@@ -152,10 +152,12 @@ const quickStartSchema = z.object({
   // Zod ORDER_PRODUCTION yazıp "sipariş kalemi şart" hatasına düşürüyordu) →
   // override: optional, default YOK. Sipariş bağlanırsa servis ORDER_PRODUCTION türetir.
   type: z.enum(WORK_ORDER_TYPES).optional(),
+  // Boş liste yalnız `ownGoods` ile (kendi üretim İE'si topsuz açılır); aşağıdaki refine bugünkü mesajı korur.
   rollBarcodes: z
     .array(z.string().trim().min(1))
-    .min(1, "En az bir top barkodu okutmalısınız")
     .max(300, "Tek seferde en fazla 300 top bağlanabilir"),
+  // Tablet "Kendi üretim" formu: müşteri malı (emanet) top 400 WO_OWN_GOODS_CONSIGNED_ROLL, Fason türü 400; yoksa bugünkü.
+  ownGoods: z.boolean("Kendi üretim bayrağı evet/hayır olmalı").optional(),
   // İlk rota adımı fason (EXTERNAL) ise: WO oluşturulduktan sonra o adıma
   // planlanan firmaya otomatik fason sevki de yapılır (çeki listesi dahil).
   // Mobil "Fasona Gönder" toggle'ı; ilk adım fason değilse/firma yoksa yok sayılır.
@@ -165,8 +167,12 @@ const quickStartSchema = z.object({
   // K29 S15b: rotasız (adımları sahada okutma ekler). Karar serviste (SCAN → rotasız, SIRALI → 400 SCAN_ROUTE_DISABLED).
   scanRouted: z.boolean().optional(),
 })
+  .refine((d) => d.rollBarcodes.length > 0 || d.ownGoods === true, { message: "En az bir top barkodu okutmalısınız", path: ["rollBarcodes"] })
   .refine((d) => hasRoute(d) || d.scanRouted === true, ROUTE_REFINE_MSG)
   .refine((d) => !(d.scanRouted === true && hasRoute(d)), { message: "Rotasız açılışta rota şablonu ya da adım verilemez.", path: ["scanRouted"] });
+
+/** Bekçi `test_quick_start_own_goods` §7 şemayı doğrudan ölçer (boş liste yalnız ownGoods ile). */
+export const quickStartSchemaForTest = quickStartSchema;
 
 const targetPropertiesSchema = z.object({
   propertyIds: z.array(z.string().uuid()),

@@ -10,6 +10,11 @@ export interface WorkOrderStepInput {
   notes?: string | null;
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
+  /** Önerilen makine (yalnız öneri) — adımın istasyonuna ait olmalı. */
+  plannedMachineId?: string | null;
+  dispatchWithoutColor?: boolean;
+  /** Oluşturmada dizi sırası (verilirse index+1); sunucu yok sayar. */
+  sequence?: number;
 }
 
 /** WO oluşturma/replace ortak gövde — quick-start ve düzenleme paylaşır. */
@@ -40,6 +45,8 @@ export interface WorkOrderPayload {
     plannedSubcontractorId?: string | null;
     /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — çekideki renk satırı susar. */
     dispatchWithoutColor?: boolean;
+    /** Önerilen makine (yalnız öneri; null = temizle). */
+    plannedMachineId?: string | null;
   }[];
   orderLineIds?: string[];
   targetPropertyIds?: string[];
@@ -98,6 +105,8 @@ export interface QuickStartRequest extends WorkOrderPayload {
   dispatchFirstStep?: boolean;
   /** K29 S15b: rotasız iş emri (rota anahtarı gönderilmez; yalnız "Okutmayla" kipinde, değilse 400 SCAN_ROUTE_DISABLED). */
   scanRouted?: boolean;
+  /** Kendi üretim formu: `rollBarcodes` boş olabilir (topsuz İE); emanet top 400 WO_OWN_GOODS_CONSIGNED_ROLL. Eski sunucu siler. */
+  ownGoods?: boolean;
 }
 
 export interface QuickStartResult {

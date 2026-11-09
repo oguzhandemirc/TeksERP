@@ -11,7 +11,7 @@ import { colors, spacing, typography } from '../../../../theme';
 import { meterChoices, parseMeters } from '../approvalGate';
 import type { DocRow, WoRowsState } from './useWoRows';
 import { InlineField } from './InlineField';
-import { DeclaredField } from './DeclaredField';
+import { DeclaredField, declaredLayout } from './DeclaredField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 
 interface MeterProps {
@@ -31,8 +31,8 @@ export function MeterField({ row, wo, meterText, locked, onEdit }: MeterProps) {
   const value = meterText?.replace(/ m$/, '') ?? null;
   return (
     <View style={styles.wrap} testID={`belge-satir-metre-${row.noteNo}`}>
-      <View style={styles.row}>
-        <DeclaredField label="Gelen metre" value={value} unit="m" fromDoc={fromDoc} review={f.metersReview} missing={!value} emptyText="Metre yok — dokunun"
+      <View style={declaredLayout.row}>
+        <DeclaredField label="Gelen metre" value={value} unit="m" fromDoc={fromDoc} review={f.metersReview} missing={!value} emptyText="Yok — dokunun"
           onPress={onEdit} disabled={locked} testID={`belge-satir-metre-kutu-${row.noteNo}`} />
         {f.metersReview && (
           <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked}
@@ -123,7 +123,6 @@ export function MeterSheet({ choices, current, onDismiss, onSave }: SheetProps) 
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.xs, flexGrow: 1, flexBasis: 150, minWidth: 150 },
-  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   help: { fontSize: typography.size.sm, color: colors.warningText },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 56, justifyContent: 'center' },

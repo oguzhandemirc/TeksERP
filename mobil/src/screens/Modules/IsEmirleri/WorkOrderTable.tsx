@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   cell: { justifyContent: 'center' },
   no: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },
   noWrap: { gap: 2, alignItems: 'flex-start' },
-  typeBadge: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.infoText, backgroundColor: colors.infoContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
+  typeBadge: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.warningDark, backgroundColor: colors.warningContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
   text: { fontSize: typography.size.sm, color: colors.text },
   sub: { fontSize: typography.size.sm, color: colors.textSecondary },
   status: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

@@ -9,7 +9,7 @@ import { colors, radius, spacing, typography } from '../../../../theme';
 import { TERIM } from '../../../../lib/terim';
 import { parseMeters } from '../approvalGate';
 import { fmtKursunMeters } from '../readResult';
-import { DeclaredEditSheet, DeclaredField } from './DeclaredField';
+import { DeclaredEditSheet, DeclaredField, declaredLayout } from './DeclaredField';
 import { docIncomingWidth } from './woFromDoc';
 import { chooseMode, MODE_LABELS, partyFacts, partyMeters, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
@@ -177,10 +177,10 @@ function PartyDeclared({ r, p, docWidth, noteNo, locked, onChange }: { r: PartyR
       onSave={(t) => save(apply(parseMeters(t)))} />
   );
   return (
-    <View style={styles.row}>
-      <DeclaredField label="Parti no" value={r.batchNo || null} fromDoc={!!r.batchNo && r.batchNo === (p?.batchNo ?? '')} emptyText="Yok — dokunup yazın"
+    <View style={declaredLayout.row}>
+      <DeclaredField label="Parti no" value={r.batchNo || null} fromDoc={!!r.batchNo && r.batchNo === (p?.batchNo ?? '')} emptyText="Yok — dokunun"
         onPress={() => setEdit('no')} disabled={locked} testID={`belge-parti-no-${id}`} />
-      <DeclaredField label="Metre" value={fmt(r.meters)} unit="m" fromDoc={r.meters != null && r.meters === docMeters} missing={r.meters == null} emptyText="Metre yok — dokunun"
+      <DeclaredField label="Metre" value={fmt(r.meters)} unit="m" fromDoc={r.meters != null && r.meters === docMeters} missing={r.meters == null} emptyText="Yok — dokunun"
         onPress={() => setEdit('metre')} disabled={locked} testID={`belge-parti-metre-${id}`} />
       <DeclaredField label="Gelen kg" value={fmt(r.incomingKg)} unit="kg" fromDoc={!r.kgEdited && r.incomingKg != null && r.incomingKg === docKg} emptyText="Belgede yok"
         onPress={() => setEdit('kg')} disabled={locked} testID={`belge-parti-kg-${id}`} />
@@ -213,7 +213,6 @@ const styles = StyleSheet.create({
   outcome: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   summary: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.warningContainer, borderRadius: radius.md, padding: spacing.md },
   summaryText: { flex: 1, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
-  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: spacing.sm },
   warn: { fontSize: typography.size.sm, color: colors.warningText },
   problem: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.warningText },
   hidden: { display: 'none' },

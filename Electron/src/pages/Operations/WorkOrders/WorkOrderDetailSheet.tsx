@@ -32,6 +32,7 @@ import "./detail-v3/work-order-detail-v3.css";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
 import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
+import { FasonTag } from "./FasonTag";
 
 interface Props {
   workOrder: WorkOrder | null;
@@ -141,6 +142,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 <div className="sheet-head">
                   <div className="sheet-id">
                     <span className="wonum mono">{wo.workOrderNumber}</span>
+                    <FasonTag type={wo.type} long />
                     <span className={`pill ${STATUS_PILL[wo.status] ?? "neutral"}`}>
                       <span className="dot" />
                       {workOrderStatusLabels[wo.status]}

@@ -1,6 +1,6 @@
 // "Elle Oluştur": belgesiz İE formu. Açılışta sayfasız MANUAL taslak doğar (mevcut `POST /gelen-belge/irsaliyeler`);
 // kayıt belge okutmayla AYNI form ucundan gider (sunucu sayfasız taslağı NO_PAGES sayar, engellemez). Kaydedilmeden
-// çıkılırsa ve sayfa eklenmediyse taslak silinir (deftere hiç yazmamış taslak; sunucu yalnız DRAFT'ı siler).
+// çıkılırsa ya da "Kendi üretim" seçilirse ve sayfa eklenmediyse taslak silinir (deftere hiç yazmamış taslak; sunucu yalnız DRAFT'ı siler).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { useAttemptToken } from '../../../../offline/attemptToken';
@@ -38,7 +38,15 @@ export function useManualDraft(enabled: boolean, onReady: (note: Note) => void) 
 
   const started = useRef(false);
   useEffect(() => {
-    if (!enabled || started.current) return;
+    if (!enabled) {
+      // Kendi üretime geçildi: belgesiz taslak artık gereksiz — tutulmayan taslak silinir, geri dönünce yeniden doğar.
+      const n = noteRef.current;
+      if (n && !keepRef.current) void inboundDocService.deleteDraftNote(n.id).catch(() => undefined);
+      if (!keepRef.current) noteRef.current = null;
+      started.current = false;
+      return;
+    }
+    if (started.current) return;
     started.current = true;
     void start();
   }, [enabled, start]);

@@ -8,6 +8,8 @@ import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
+// Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
+jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
 let mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ __esModule: true, default: () => mockDims }));

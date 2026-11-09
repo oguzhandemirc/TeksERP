@@ -110,9 +110,9 @@ describe('DocRowCard — list / single', () => {
     expect(ui.getByTestId('belge-satir-sahip-sor-GB-1')).toBeTruthy();
   });
 
-  it('⭐ metre: yok → "Metre yok"; doğrulama bekliyor → "Doğru" + kısa ipucu (şerit yok)', () => {
+  it('⭐ metre: yok → "Yok — dokunun" (kırmızı, tek satır); doğrulama bekliyor → "Doğru" + kısa ipucu (şerit yok)', () => {
     const a = draw({ variant: 'single', form: { meters: null } }).ui;
-    expect(a.getByTestId('belge-satir-metre-kutu-GB-1-deger')).toHaveTextContent(/^Metre yok/);
+    expect(a.getByTestId('belge-satir-metre-kutu-GB-1-deger')).toHaveTextContent(/^Yok — dokunun$/);
     const b = draw({ variant: 'single', form: { metersReview: true } }).ui;
     expect(b.getByTestId('belge-satir-dogrula-GB-1')).toHaveTextContent(/Doğru$/);
     expect(b.getByText('Metreyi belgeyle karşılaştırın.')).toBeTruthy();

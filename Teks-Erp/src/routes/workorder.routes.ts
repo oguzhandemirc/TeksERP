@@ -500,9 +500,12 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *               scanRouted:
  *                 type: boolean
  *                 description: "K29 rotasız iş emri (adımlar sahada okutmayla eklenir); yalnız production.routeMode=SCAN, değilse 400 SCAN_ROUTE_DISABLED"
+ *               ownGoods:
+ *                 type: boolean
+ *                 description: "Kendi üretim (tablet): rollBarcodes boş olabilir (yalnız İE açılır, toplar sonra Parti Ekle ile); müşteri malı top 400 WO_OWN_GOODS_CONSIGNED_ROLL; Fason türü 400 WO_OWN_GOODS_TYPE. Yoksa bugünkü davranış"
  *     responses:
  *       201: { description: İş emri başlatıldı (workOrder + attached + errors) }
- *       400: { description: "Validasyon / uygun olmayan top / SCAN_ROUTE_DISABLED" }
+ *       400: { description: "Validasyon · uygun olmayan top (details.code ROLL_NOT_FOUND · ROLL_NOT_ATTACHABLE · ROLL_COMMITTED · ROLLS_MIXED_ITEM · ROLL_ITEM_MISMATCH · WO_OWN_GOODS_CONSIGNED_ROLL) · WO_OWN_GOODS_TYPE · SCAN_ROUTE_DISABLED" }
  *       409: { description: Hiç top bağlanamadı }
  */
 router.post(

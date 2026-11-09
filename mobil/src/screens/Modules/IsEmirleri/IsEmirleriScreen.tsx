@@ -20,7 +20,8 @@ import OptionsSheet from './OptionsSheet';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useScanAction } from './useScanAction';
 import type { ProductionRoute } from '../../../services/route.service';
-import { buttonRouteFor, initialFormRoute } from './createEntry';
+import { buttonRouteFor, createFormTitle, initialFormRoute } from './createEntry';
+import type { WoCreateKind } from '../../../store/woCreateKinds';
 import { useColumnPrefs, useLocationStations, useWorkOrderList } from './useWorkOrderList';
 import { DEFAULT_FILTERS, emptyStateFor, type ListFilters } from './workOrderRow';
 import IsEmriTuruAnahtari from './dokuma/IsEmriTuruAnahtari';
@@ -35,6 +36,8 @@ export default function IsEmirleriScreen() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   // Formun ⚙ Alanlar sayfası başlık çubuğundaki ikondan açılır (profil tuşunun solu).
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  // Formdaki etkin mal sahibi türü → başlık ("Fason İş Emri · …" / "İş Emri · …").
+  const [formKind, setFormKind] = useState<WoCreateKind | null>(null);
   const kinds = useDeviceSettingsStore((s) => s.woCreateKinds);
   const setKinds = useDeviceSettingsStore((s) => s.setWoCreateKinds);
   const routeOnButton = useDeviceSettingsStore((s) => s.woRouteOnButton);
@@ -60,8 +63,8 @@ export default function IsEmirleriScreen() {
     // Oluşturma formu; geri → liste (kaydedilen İE listede görünsün diye tazelenir).
     const back = () => { setStage(null); void list.refreshAll(); };
     return (
-      <ScreenChrome title={stage.manual ? `${TERIM.terbiyeIsEmri.tekil} · Elle oluştur` : `${TERIM.terbiyeIsEmri.tekil} · Belge okut`} onStepBack={back} titleRowExtras={lastBatchHint ? <LastBatchHint /> : undefined} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
-        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onNew={() => setStage({ ...stage, n: stage.n + 1 })} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} />
+      <ScreenChrome title={createFormTitle(formKind, stage.manual)} onStepBack={back} titleRowExtras={lastBatchHint ? <LastBatchHint /> : undefined} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
+        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onNew={() => setStage({ ...stage, n: stage.n + 1 })} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} onKindChange={setFormKind} />
       </ScreenChrome>
     );
   }

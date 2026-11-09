@@ -68,6 +68,7 @@
 | `Teks-Erp/scripts/test_produced_buckets.ts` | Üretilen metraj kovasının kalite KODUNDAN değil QualityGrade.targetStatus KATALOĞUNDAN çözüldüğünü ve liste 'çıkan' metrajının detayla birebir aynı sa | ✓ |  |  |
 | `Teks-Erp/scripts/test_property_targetable.ts` | SEÇİM (CHOICE) tipli özelliğin hedef listelerine sızamayacağını (9 hedef kapısının hepsi assertTargetablePropertyIds çağırır) ve FLAG↔CHOICE tip geçiş | ✓ |  |  |
 | `Teks-Erp/scripts/test_quick_start_wo.ts` | Mobil Hızlı İş Emri (quickStart) davranışını kilitler: toplardan hedef ürün türetme, karışık ürün/uygunsuz statü/bulunmayan barkod retleri ve her rett | ✓ |  |  |
+| `Teks-Erp/scripts/test_quick_start_own_goods.ts` | Kendi üretim toplu açılışı (`ownGoods`): topsuz açılış, emanet top reddi (400 `WO_OWN_GOODS_CONSIGNED_ROLL`), Fason türle birlikte ret, bayraksız boş liste 400, replay kimliği | ✓ |  |  |
 | `Teks-Erp/scripts/test_quickstart_dispatch.ts` | Hızlı iş emrinin ilk adım fasonsa sevk + KUMAŞ İRSALİYESİ çekisini birlikte üretmesini, INTERNAL adımda ve FİRMA YOKken sevkin atlanmasını (uyarıyla)  | ✓ |  |  |
 | `Teks-Erp/scripts/test_quickstart_dispatch_api.ts` | Aynı akışı HTTP katmanında ölçer: gerçek Express app + login → quick-start 201 → çeki HTML 200, ve 401/403/404/409/400 ile content-type sözleşmesi. | ✓ |  |  |
 | `Teks-Erp/scripts/test_rescue_stuck.ts` | IN_PRODUCTION'da takılı topun 'Kurtar' yolunu kilitler: barkodlu top WAREHOUSE'a iner + açık hareket qtyOut=currentQty ile kapanır + adım COMPLETED; b | ✓ |  |  |

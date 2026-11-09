@@ -1,6 +1,7 @@
 // Belgenin BEYANI kutusu (2026-11-09): gelen metre / kg / en, müşteri parti no, bizim parti no — tek stil. Sarı zemin = değer
 // belgeden okundu ve elle değişmedi; üstte küçük etiket, altta büyük değer + birim; dokununca düzenleme sayfası (`DeclaredEditSheet`).
-// Satırdaki kutular eşit pay alır, dar ekranda alt alta iner; değer kesilmez (sarar).
+// Satırdaki kutular eşit pay ve EŞİT YÜKSEKLİK alır (`DECLARED_ROW` + tek satır değer), dar ekranda alt alta iner; uzun değer
+// sarmaz, önce küçülür (tam metin erişilebilirlik etiketinde). Kırmızı/sarı yalnız renk ve kenardır, boyut değiştirmez.
 import React, { useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -39,12 +40,12 @@ export function DeclaredField({ label, value, unit, fromDoc, review, missing, em
         {onPress && !disabled ? <Icon source="pencil-outline" size={18} color={colors.brand} /> : null}
       </View>
       {value != null ? (
-        <Text style={styles.value} testID={`${testID}-deger`}>
+        <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} testID={`${testID}-deger`}>
           {value}
           {unit ? <Text style={styles.unit}>{` ${unit}`}</Text> : null}
         </Text>
       ) : (
-        <Text style={[styles.empty, missing && styles.emptyMissing]} testID={`${testID}-deger`}>{emptyText}</Text>
+        <Text style={[styles.value, styles.empty, missing && styles.emptyMissing]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} testID={`${testID}-deger`}>{emptyText}</Text>
       )}
     </View>
   );
@@ -106,9 +107,19 @@ export function DeclaredEditSheet({ title, subtitle, kind, initial, label, maxLe
   );
 }
 
+/** Beyan kutusu yüksekliği (≥56dp dokunma hedefi; etiket + tek satır değer). */
+export const DECLARED_BOX_HEIGHT = 64;
+
+/** Beyan kutularını yan yana dizen satır — tek kaynak (metre/kg/en, müşteri/bizim parti no, parti satırları). */
+export const declaredLayout = StyleSheet.create({
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: spacing.sm },
+  /** Kutu olmayan komşu (ör. bizim parti seçici düğmesi) kutuyla aynı payı alır. */
+  cell: { flexGrow: 1, flexBasis: 150, minWidth: 150 },
+});
+
 const styles = StyleSheet.create({
   box: {
-    flexGrow: 1, flexBasis: 150, minWidth: 150, minHeight: 64, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    flexGrow: 1, flexBasis: 150, minWidth: 150, minHeight: DECLARED_BOX_HEIGHT, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
     borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.borderStrong, justifyContent: 'center',
   },
   review: { borderWidth: 2, borderColor: colors.warning },
@@ -117,10 +128,11 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   flex: { flex: 1 },
   label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, flexShrink: 1 },
-  value: { fontSize: 24, fontWeight: '700', color: colors.text },
-  unit: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
-  empty: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.textMuted },
-  emptyMissing: { color: colors.dangerText, fontWeight: typography.weight.bold },
+  // Değer, boş metin ve salt okunur metin AYNI tipografi (kritik rakam ≥20); durum yalnız renkle ayrılır.
+  value: { fontSize: 20, lineHeight: 26, fontWeight: '700', color: colors.text },
+  unit: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
+  empty: { color: colors.textMuted },
+  emptyMissing: { color: colors.dangerText },
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   btn: { minHeight: 56 },
 });

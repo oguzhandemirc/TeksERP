@@ -12,7 +12,7 @@ import {
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse } from "../../types/api.types";
-import { customerFromRollOwners } from "../helpers/workorder-customer-goods.helper";
+import { assertOwnGoodsRolls, customerFromRollOwners } from "../helpers/workorder-customer-goods.helper";
 import {
   WorkOrder,
   RollStatus,
@@ -59,7 +59,8 @@ export function quickStartReplay(data: WorkOrderCreateInput, barcodes: string[])
       },
       alive: (p) => assertWorkOrderReplayAlive(p.wo),
       identity: (p) => [
-        { ad: "targetItemId", mevcut: p.wo.targetItemId, gelen: data.targetItemId ?? (p.rollItemIds.length === 1 ? p.rollItemIds[0] : null) },
+        // Topsuz (kendi üretim) + hedefsiz açılışta kumaşı sunucu varsayılandan yazar → gövdede kimlik yok, kıyaslanmaz.
+        ...(barcodes.length === 0 && !data.targetItemId ? [] : [{ ad: "targetItemId", mevcut: p.wo.targetItemId, gelen: data.targetItemId ?? (p.rollItemIds.length === 1 ? p.rollItemIds[0] : null) }]),
         { ad: "orderLines", mevcut: activeOrderLineIds(p.wo), gelen: inputOrderLineIds(data) },
       ],
       collision: (p) => `Bu okutma daha önce ${p.wo.workOrderNumber} ${TERIM.terbiyeIsEmri.tekilKucuk} olarak başlatılmış — yeni ${TERIM.terbiyeIsEmri.tekilKucuk} için ekranı kapatıp yeniden açın.`,
@@ -87,7 +88,7 @@ export async function quickStart(this: WorkOrderServiceThis,
   }
 
 export async function quickStartFresh(this: WorkOrderServiceThis, 
-    data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean; sourceNoteId?: string | null; /** S1 çok parti: belgenin bu partisinin no'su (nottaki ourBatchNo yerine). */ sourceBatchNo?: string | null },
+    data: WorkOrderCreateInput & { rollBarcodes: string[]; /** Kendi üretim: emanet top 400, Fason türü 400, top okutmadan açılabilir. */ ownGoods?: boolean; dispatchFirstStep?: boolean; sourceNoteId?: string | null; /** S1 çok parti: belgenin bu partisinin no'su (nottaki ourBatchNo yerine). */ sourceBatchNo?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{
@@ -99,7 +100,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
       batch: { id: string; batchNumber: string } | null;
     }>
   > {
-    const { rollBarcodes, dispatchFirstStep, sourceNoteId, sourceBatchNo, ...woInput } = data;
+    const { rollBarcodes, ownGoods, dispatchFirstStep, sourceNoteId, sourceBatchNo, ...woInput } = data;
     // Kaynak belge iş emri açılmadan ÖNCE doğrulanır (bilinmeyen not 404; yetim WO bırakmaz). Numara nottan okunur.
     if (sourceNoteId && !(await prisma.customerDeliveryNote.findUnique({ where: { id: sourceNoteId }, select: { id: true } }))) {
       throw AppError.notFound("Gelen belge bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
@@ -107,9 +108,11 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
     // Okutulan kod DEPOLANMIŞ biçime çekilir (bkz. normalizeScanCode) — büyütme
     // TEKİLLEŞTİRMEDEN ÖNCE yapılır, yoksa "T1" ve "t1" iki ayrı kod sayılırdı.
     const barcodes = [...new Set(rollBarcodes.map(normalizeScanCode).filter(Boolean))];
-    if (barcodes.length === 0) {
-      throw AppError.badRequest("En az bir top barkodu okutmalısınız.");
+    // Kendi üretim formu topsuz açabilir (toplar sonra "Parti Ekle" ile okutulur); diğer çağıranlar bugünkü gibi en az bir top ister.
+    if (barcodes.length === 0 && !ownGoods) {
+      throw AppError.badRequest("En az bir top barkodu okutmalısınız.", { code: "ROLL_BARCODE_REQUIRED" });
     }
+    if (barcodes.length === 0) return createWithoutRolls.call(this, woInput, userId);
 
     // ── 1) Ön-doğrulama: var + STOCK + aynı ürün ────────────────────────────
     const rolls = await prisma.roll.findMany({
@@ -128,7 +131,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
 
     const missing = barcodes.filter((b) => !byBarcode.has(b));
     if (missing.length > 0) {
-      throw AppError.badRequest(`Şu barkodlar bulunamadı: ${missing.join(", ")}`);
+      throw AppError.badRequest(`Şu barkodlar bulunamadı: ${missing.join(", ")}`, { code: "ROLL_NOT_FOUND", barcodes: missing });
     }
 
     // Envanterdeki serbest+satılabilir toplar (ham STOCK + depo WAREHOUSE/A1_STOCK) bağlanabilir — TEK küme
@@ -138,6 +141,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
       throw AppError.badRequest(
         "Yalnız envanterdeki (stok/depo) toplar bağlanabilir. Uygun olmayan: " +
           notAttachable.map((r) => `${r.barcode} (${r.status})`).join(", "),
+        { code: "ROLL_NOT_ATTACHABLE", barcodes: notAttachable.map((r) => r.barcode) },
       );
     }
     const committed = rolls.filter((r) => r.sackId != null || r.shipmentId != null);
@@ -145,6 +149,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
       throw AppError.badRequest(
         "Bir çuvalda/sevkiyatta olan top üretime bağlanamaz — önce oradan çıkarın: " +
           committed.map((r) => r.barcode).join(", "),
+        { code: "ROLL_COMMITTED", barcodes: committed.map((r) => r.barcode) },
       );
     }
 
@@ -152,6 +157,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
     if (itemIds.length > 1) {
       throw AppError.badRequest(
         `Okutulan toplar farklı ürünlere ait. Tek ${TERIM.terbiyeIsEmri.tekilKucuk} tek kumaş içindir — aynı üründeki topları okutun.`,
+        { code: "ROLLS_MIXED_ITEM" },
       );
     }
     const rollsItemId = itemIds[0];
@@ -163,6 +169,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
     const type =
       (woInput.type as WorkOrder["type"]) ??
       (hasOrderLink ? "ORDER_PRODUCTION" : "STOCK_PRODUCTION");
+    assertOwnGoodsRolls(ownGoods, type, rolls);
 
     // targetItemId: verilmemişse topların ürününden türet; verilmişse tutarlılık şart.
     let targetItemId = woInput.targetItemId ?? null;
@@ -171,6 +178,7 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
     } else if (targetItemId !== rollsItemId) {
       throw AppError.badRequest(
         "Okutulan topların ürünü, seçilen hedef ürün ile aynı değil.",
+        { code: "ROLL_ITEM_MISMATCH" },
       );
     }
 
@@ -319,3 +327,27 @@ export async function quickStartFresh(this: WorkOrderServiceThis,
       ...(createRes.warnings?.length ? { warnings: createRes.warnings } : {}),
     };
   }
+
+/**
+ * Kendi üretim + top okutulmadı: yalnız İE açılır (create'in kendi idempotency boğazı; tür bağdan türer). Yanıt
+ * quickStart şeklindedir (attached 0, parti yok) — istemci tek uçla iki durumu da okur.
+ */
+async function createWithoutRolls(
+  this: WorkOrderServiceThis,
+  woInput: WorkOrderCreateInput,
+  userId?: string,
+): ReturnType<WorkOrderService["quickStartFresh"]> {
+  const hasOrderLink = (woInput.orderLineIds?.length ?? 0) > 0 || (woInput.orderLineAllocations?.length ?? 0) > 0;
+  const type = (woInput.type as WorkOrder["type"]) ?? (hasOrderLink ? "ORDER_PRODUCTION" : "STOCK_PRODUCTION");
+  assertOwnGoodsRolls(true, type, []);
+  const res = await this.create({ ...woInput, type, customerId: null }, userId);
+  if (!res.success || !res.data) {
+    throw AppError.badRequest(res.message ?? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı.`);
+  }
+  return {
+    success: true,
+    data: { workOrder: res.data, attached: 0, errors: [], dispatch: null, batch: null },
+    message: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} ${res.data.workOrderNumber} oluşturuldu — top okutulmadı; topları "Parti Ekle" ile okutun.`,
+    ...(res.warnings?.length ? { warnings: res.warnings } : {}),
+  };
+}

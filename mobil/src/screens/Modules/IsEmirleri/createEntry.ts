@@ -4,6 +4,7 @@ import type { ProductionRoute } from '../../../services/route.service';
 import type { WoCreateKind } from '../../../store/woCreateKinds';
 import { SCAN_ROUTE, isScanRoute } from '../GelenBelge/woCreate/woFromDoc';
 import type { WoType } from '../GelenBelge/woCreate/woForm';
+import { TERIM } from '../../../lib/terim';
 
 /** Tuştan forma geçen rota: ayar kapalıysa null (saklı seçim hiç kullanılmaz). */
 export function buttonRouteFor(showOnButton: boolean, picked: ProductionRoute | null): ProductionRoute | null {
@@ -64,3 +65,12 @@ export function woTypeForOwnerKind(kind: WoCreateKind | null, current: WoType | 
 
 /** Formdaki tür seçicisi değişince kart da izler. */
 export const ownerKindForWoType = (t: WoType | null): WoCreateKind => (t === 'CUSTOMER_GOODS_SERVICE' ? 'CUSTOMER_GOODS' : 'STANDARD');
+
+/**
+ * Oluşturma formu başlığı: Fason seçiliyken "Fason <İE> · …", kendi üretimde / seçim yokken "<İE> · …". Ölçüt yalnız
+ * mal sahibi türü (kaydedilecek `CUSTOMER_GOODS_SERVICE`); İE adı rejimden (`TERIM`).
+ */
+export function createFormTitle(kind: WoCreateKind | null, manual: boolean): string {
+  const base = kind === 'CUSTOMER_GOODS' ? `Fason ${TERIM.terbiyeIsEmri.tekil}` : TERIM.terbiyeIsEmri.tekil;
+  return `${base} · ${manual ? 'Elle oluştur' : 'Belge okut'}`;
+}
