@@ -73,9 +73,6 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   const noPages = manual && w?.phase === 'done' && w.summary.state === 'NO_PAGES';
   const pill = noPages ? { tone: 'idle' as PillTone, icon: 'information-outline' as const, text: 'Belgesiz — elle giriş' } : docReadPill(input);
   const allNotices = done || noPages ? [] : docReadNotices(input);
-  // Tek formda uyarılar başlık modalına gider; toplu listede (çok satır, tek başlık) şerit kalır.
-  const notices = single ? allNotices.filter((n) => !isWarningNotice(n)) : allNotices;
-  const [, bumpTeach] = useState(0);
   const teach = useTeachEntry({ row, wo, tanitim: w?.phase === 'done' ? w.summary.tanitim : undefined, customers });
   const strip = noPages ? null : stripModel({
     tanima: w?.phase === 'done' ? w.summary.tanima : undefined, entry: teach, localTaught: !!row.taught,
@@ -87,9 +84,7 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   const busy = w?.phase === 'polling' && !row.form;
   const pillColor = PILL_COLOR[pill.tone];
   const compact = useIsCompact();
-  const readKey = `${row.noteId}:${row.runKey}`;
-  const unrecognized = !strip || !!strip.unrecognized;
-  useWarningPublish(single, readKey, single ? warningLines(allNotices) : [], teachPromptDue(teach, readKey, unrecognized) || !!teach.teaching);
+  const { notices, readKey, unrecognized, onTeachAnswer } = useHeadWarnings(single, { row, all: allNotices, teach, strip });
   const compactActions = useCompactHeadActions(single && compact, { teach, manual, done, cancellable, saving: wo.saving, onReread, onPreview });
   return (
     <>
@@ -145,11 +140,24 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
       )}
       {strip && <RecognitionStrip model={strip} noteNo={no} multi={row.form?.multi} onMode={(m) => wo.setMulti(row.noteId, m)} />}
       <TeachStrip entry={teach} />
-      <TeachPrompt entry={teach} readKey={readKey} unrecognized={unrecognized} onAnswer={() => bumpTeach((n) => n + 1)} />
+      <TeachPrompt entry={teach} readKey={readKey} unrecognized={unrecognized} onAnswer={onTeachAnswer} />
       <BandNotices notices={notices} act={act} no={no} />
       {teach.modal}
     </>
   );
+}
+
+/**
+ * Tek formda eylemsiz uyarılar başlık modalına gider (şeritten düşer); toplu listede (çok satır, tek başlık) şerit kalır.
+ * Tanıt sorusu / tanıtma açıkken modal bekler (`held`); soru cevaplanınca yeniden çizilip bildirilir.
+ */
+function useHeadWarnings(single: boolean, { row, all, teach, strip }: { row: DocRow; all: DocNotice[]; teach: ReturnType<typeof useTeachEntry>; strip: ReturnType<typeof stripModel> }) {
+  const [, bump] = useState(0);
+  const readKey = `${row.noteId}:${row.runKey}`;
+  const unrecognized = !strip || !!strip.unrecognized;
+  useWarningPublish(single, readKey, single ? warningLines(all) : [], teachPromptDue(teach, readKey, unrecognized) || !!teach.teaching);
+  const notices = single ? all.filter((n) => !isWarningNotice(n)) : all;
+  return { notices, readKey, unrecognized, onTeachAnswer: () => bump((n) => n + 1) };
 }
 
 /** Tek formun uyarılarını başlık ikonuna bildirir (içerik değişince); satır kalkınca temizler. */

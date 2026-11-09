@@ -78,28 +78,6 @@ describe('woFieldCatalog', () => {
     expect(placement('en', ['hedefRenk', 'en'], docKeys)).toBe('top');
   });
 
-  it('Üretim notu: ⚙ listesi ve "Diğer alanlar" etiketi', () => {
-    expect(fieldLabel('not')).toBe('Üretim notu');
-  });
-
-  it('kişisel anahtarlar: digerGizli / adimNotuGizli — varsayılan yazılmaz, diğer anahtarlar korunur', () => {
-    const blob = { tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } };
-    expect(parseOtherHidden(blob)).toBe(false);
-    expect(parseStepNotesHidden(blob)).toBe(false);
-    const off = mergePrefBlob(blob, ['en'], false, { digerGizli: true, adimNotuGizli: true });
-    expect(off).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1, digerGizli: true, adimNotuGizli: true } });
-    expect(parseOtherHidden(off)).toBe(true);
-    expect(parseStepNotesHidden(off)).toBe(true);
-    expect(mergePrefBlob(off, ['en'])).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } });
-  });
-
-  it('otherSectionShown: anahtar kapalıyken gizlenir; değerli gizli alan ya da yönlendirme varken yine çizilir', () => {
-    expect(otherSectionShown(false, [])).toBe(true);
-    expect(otherSectionShown(true, [])).toBe(false);
-    expect(otherSectionShown(true, ['en'])).toBe(true);
-    expect(otherSectionShown(true, [], true)).toBe(true);
-  });
-
   it('koşullu alanlar: metraj/kg bayrakla, kat tipi tamburla, gramaj/makine kurşunla, adımlar rotayla', () => {
     const off: FieldContext = { showQuantity: false, hasTambur: false, hasKursun: false, hasRouteSteps: false };
     for (const k of ['hedefMetraj', 'hedefKg', 'katTipi', 'gramaj', 'makine', 'rotaAdimlari', 'hedefOzellik'] as const) {
@@ -121,5 +99,29 @@ describe('woFieldCatalog', () => {
     expect(
       valuedFields({ ...e, woType: 'CUSTOMER_GOODS_SERVICE', propertyIds: [], machineId: null, width: '150', note: ' ' }, { stepsEdited: true }).sort(),
     ).toEqual(['en', 'hedefOzellik', 'makine', 'rotaAdimlari'].sort());
+  });
+});
+
+describe('woFieldCatalog — etiket ve kişisel anahtarlar (2026-11-09)', () => {
+  it('Üretim notu: ⚙ listesi ve "Diğer alanlar" etiketi', () => {
+    expect(fieldLabel('not')).toBe('Üretim notu');
+  });
+
+  it('kişisel anahtarlar: digerGizli / adimNotuGizli — varsayılan yazılmaz, diğer anahtarlar korunur', () => {
+    const blob = { tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } };
+    expect(parseOtherHidden(blob)).toBe(false);
+    expect(parseStepNotesHidden(blob)).toBe(false);
+    const off = mergePrefBlob(blob, ['en'], false, { digerGizli: true, adimNotuGizli: true });
+    expect(off).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1, digerGizli: true, adimNotuGizli: true } });
+    expect(parseOtherHidden(off)).toBe(true);
+    expect(parseStepNotesHidden(off)).toBe(true);
+    expect(mergePrefBlob(off, ['en'])).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } });
+  });
+
+  it('otherSectionShown: anahtar kapalıyken gizlenir; değerli gizli alan ya da yönlendirme varken yine çizilir', () => {
+    expect(otherSectionShown(false, [])).toBe(true);
+    expect(otherSectionShown(true, [])).toBe(false);
+    expect(otherSectionShown(true, ['en'])).toBe(true);
+    expect(otherSectionShown(true, [], true)).toBe(true);
   });
 });
