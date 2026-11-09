@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { Text, Button, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -29,6 +29,26 @@ import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
 import { isCustomerGoodsWo } from '../IsEmirleri/workOrderRow';
+import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, routeNotes, type DetailRow } from './workOrderDetailView';
+
+const fmtDate = (iso: string) => formatFactory(iso, 'dd.MM.yyyy HH:mm');
+
+/** Etiket solda küçük gri, değer sağda — sıkı satırlı kart. */
+function InfoCard({ title, rows, testID, flex }: { title?: string; rows: readonly DetailRow[]; testID: string; flex?: number }) {
+  return (
+    <View style={[styles.infoCard, flex ? { flex } : null]} testID={testID}>
+      {title ? <Text style={styles.cardTitle}>{title}</Text> : null}
+      {rows.map(([k, v]) => (
+        <View key={k} style={styles.infoRow}>
+          <Text style={styles.infoKey}>{k}</Text>
+          <Text style={styles.infoVal} numberOfLines={2}>
+            {v}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 interface Props {
   workOrderId: string | null;
@@ -45,6 +65,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   const [fix, setFix] = useState<FixKind | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const { has } = usePermissions();
+  const { width: screenWidth } = useWindowDimensions();
+  const cols = detailColumns(screenWidth);
 
   const visible = !!workOrderId;
 
@@ -123,24 +145,24 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       .filter((n): n is string => !!n);
   }, [wo]);
 
-  const infoRows = useMemo(() => {
-    if (!wo) return [];
-    return [
-      ['Ürün', wo.targetItem?.name ?? rolls[0]?.item?.name ?? '—'],
-      ['Renk', wo.targetColor?.name ?? 'Renksiz / Ham'],
-      ['En', wo.width != null ? `${wo.width} cm` : '—'],
-      ['Kat Tipi', wo.foldType ?? '—'],
-      // ÜRETİM ÖZELLİĞİ (2026-08-13 saha bulgusu: geçmiş iş emri detayında hiç
-      // yazmıyordu). ⚠️ Backend pivotu `{ property: {...} }` ile döner; tip
-      // düz `FabricProperty[]` olduğu için İKİ ŞEKLİ de karşıla — biri boş
-      // çıkarsa satır sessizce "—" olur ve eksiklik yine görünmez.
-      ['Üretim Özelliği', targetPropertyNames.length ? targetPropertyNames.join(', ') : '—'],
-      ['Tip', trLabel(WORK_ORDER_TYPE_LABEL, wo.type)],
-      ['Hedef Metraj', wo.targetQuantity != null ? `${Math.round(wo.targetQuantity)} m` : '—'],
-      ['Hedef Kg', wo.targetWeight != null ? `${Math.round(wo.targetWeight)} kg` : '—'],
-      ['Oluşturma', wo.createdAt ? formatFactory(wo.createdAt, 'dd.MM.yyyy HH:mm') : '—'],
-    ];
-  }, [wo, rolls, targetPropertyNames]);
+  const rollMeters = rolls.reduce((a, r) => a + (Number(r.currentQty) || 0), 0);
+  const view = useMemo(() => {
+    if (!wo) return null;
+    return {
+      summary: summaryItems({
+        wo,
+        typeLabel: trLabel(WORK_ORDER_TYPE_LABEL, wo.type),
+        statusLabel: trLabel(WORK_ORDER_STATUS_LABEL, wo.status),
+        rollCount: rolls.length,
+        rollMeters,
+        fmtDate,
+      }),
+      incoming: incomingRows(wo.incoming),
+      target: targetRows({ wo, fallbackItemName: rolls[0]?.item?.name, propertyNames: targetPropertyNames, fmtDate }),
+      chips: routeChips(wo.steps),
+      notes: routeNotes(wo.steps),
+    };
+  }, [wo, rolls, rollMeters, targetPropertyNames]);
 
   return (
     <>
@@ -233,37 +255,55 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       ) : (
         // ── DETAY ────────────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.body}>
-          <View style={styles.infoCard}>
-            {infoRows.map(([k, v]) => (
-              <View key={k} style={styles.infoRow}>
-                <Text style={styles.infoKey}>{k}</Text>
-                <Text style={styles.infoVal} numberOfLines={2}>
-                  {v}
-                </Text>
+          {view && view.summary.length > 0 ? (
+            <View style={styles.strip} testID="ie-detay-ozet">
+              {view.summary.map(([k, v]) => (
+                <View key={k} style={styles.stripItem}>
+                  <Text style={styles.stripKey}>{k}</Text>
+                  <Text style={styles.stripVal} numberOfLines={1}>
+                    {v}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {view ? (
+            <View style={cols === 2 ? styles.rowCols : styles.colStack} testID={cols === 2 ? 'ie-detay-yatay' : 'ie-detay-dikey'}>
+              {view.incoming.length > 0 ? <InfoCard title="Gelen (belgeden)" rows={view.incoming} testID="ie-detay-gelen" flex={cols === 2 ? 1 : undefined} /> : null}
+              <InfoCard title="Hedef" rows={view.target} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
+            </View>
+          ) : null}
+
+          {/* Rota — yatay adım çipleri */}
+          {view && view.chips.length > 0 ? (
+            <View style={styles.section} testID="ie-detay-rota">
+              <Text style={styles.sectionTitle}>Üretim Rotası</Text>
+              <View style={styles.chipsWrap}>
+                {view.chips.map((c, idx) => (
+                  <React.Fragment key={c.id}>
+                    {idx > 0 ? <Icon source="chevron-right" size={18} color={colors.textMuted} /> : null}
+                    <View style={styles.routeChip}>
+                      <Text style={styles.stepSeq}>{c.seq}</Text>
+                      <Text style={styles.stepName} numberOfLines={1}>
+                        {c.name}
+                      </Text>
+                      <Text style={styles.stepMeta}>{trLabel(STEP_STATUS_LABEL, c.status)}</Text>
+                    </View>
+                  </React.Fragment>
+                ))}
               </View>
-            ))}
-          </View>
+              {view.notes.map((n) => (
+                <Text key={n.id} style={styles.note}>{`${n.name}: ${n.note}`}</Text>
+              ))}
+            </View>
+          ) : null}
 
-          {/* Rota */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Üretim Rotası</Text>
-            {(wo.steps ?? []).map((s) => (
-              <View key={s.id} style={styles.stepLine}>
-                <Text style={styles.stepSeq}>{s.stepSequence}</Text>
-                <Text style={styles.stepName} numberOfLines={1}>
-                  {s.station?.name ?? '—'}
-                </Text>
-                <Text style={styles.stepMeta}>
-                  {trLabel(STATION_TYPE_LABEL, s.station?.type)} · {trLabel(STEP_STATUS_LABEL, s.status)}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <WorkOrderRecentEvents workOrderId={wo.id} />
-
-          {/* Bağlı toplar */}
-          <View style={styles.section}>
+          <View style={cols === 2 ? styles.rowCols : styles.colStack}>
+            <View style={cols === 2 ? { flex: 1 } : undefined}>
+              <WorkOrderRecentEvents workOrderId={wo.id} />
+            </View>
+            <View style={[styles.section, cols === 2 ? { flex: 1 } : null]}>
             <Text style={styles.sectionTitle}>Bağlı Toplar ({rolls.length})</Text>
             {rollsQuery.isLoading ? (
               <ActivityIndicator color={colors.brand} style={{ marginVertical: spacing.md }} />
@@ -281,6 +321,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 </View>
               ))
             )}
+            </View>
           </View>
 
           {/* Aksiyonlar */}
@@ -408,10 +449,19 @@ const styles = StyleSheet.create({
   body: { padding: spacing.lg, gap: spacing.md },
   note: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
 
-  infoCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
-  infoRow: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
-  infoKey: { width: 110, color: colors.textSecondary, fontWeight: '600', fontSize: 13 },
-  infoVal: { flex: 1, color: colors.text, fontWeight: '700', fontSize: 13 },
+  infoCard: { backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  cardTitle: { fontSize: 13, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  infoKey: { width: 120, color: colors.textMuted, fontWeight: '500', fontSize: 12 },
+  infoVal: { flex: 1, color: colors.text, fontWeight: '700', fontSize: 14 },
+  rowCols: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  colStack: { gap: spacing.md },
+  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  stripItem: { minWidth: 70 },
+  stripKey: { fontSize: 11, color: colors.textMuted },
+  stripVal: { fontSize: 14, fontWeight: '700', color: colors.text },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
+  routeChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.appBg, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4 },
 
   section: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
   sectionTitle: { fontSize: 13, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: spacing.sm },

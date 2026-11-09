@@ -35,6 +35,10 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         targetItem: true,
         targetColor: true,
         customer: { select: { id: true, name: true, code: true } },
+        // Tablet detay özeti (2026-11-09, additive): canlı partiler, oluşturan, hedef çeşit değerleri (gramaj).
+        batches: { where: { mergedIntoId: null }, select: { id: true, batchNumber: true }, orderBy: { createdAt: "asc" } },
+        createdBy: { select: { id: true, fullName: true } },
+        targetValues: { where: { revokedAt: null }, select: { property: { select: { name: true } }, value: { select: { name: true } } } },
         // Aktif süzgeç ŞART: panel prefill bu listeyi PUT replace'e echo eder — damgalı
         // hedef burada dönerse replace onu DİRİLTİR.
         targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },

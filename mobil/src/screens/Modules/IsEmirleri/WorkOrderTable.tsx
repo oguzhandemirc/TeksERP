@@ -178,7 +178,8 @@ function LocationCell({ row }: { row: WorkOrderListRow }) {
           </View>
         )}
       </View>
-      <Text style={styles.sub} numberOfLines={1}>{b.detail}{b.extra > 0 ? ` · ${b.extra} istasyon daha` : ''}</Text>
+      {/* Alt satır yalnız metin varken: boş satır rozeti dikey ortadan yukarı itiyordu. */}
+      {(b.detail || b.extra > 0) && <Text style={styles.sub} numberOfLines={1}>{b.detail}{b.extra > 0 ? `${b.detail ? ' · ' : ''}${b.extra} istasyon daha` : ''}</Text>}
     </View>
   );
 }

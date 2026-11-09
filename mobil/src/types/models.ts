@@ -307,6 +307,16 @@ export interface WorkOrderToOrderLine {
   };
 }
 
+export interface WorkOrderIncoming {
+  meters: number | null;
+  kg: number | null;
+  widthCm: number | null;
+  notes: { id: string; noteNo: string }[];
+  customerBatchNo: string | null;
+  itemText: string | null;
+  colorText: string | null;
+}
+
 export interface WorkOrder {
   id: string;
   workOrderNumber: string;
@@ -336,6 +346,15 @@ export interface WorkOrder {
   batches?: { id: string; batchNumber: string }[];
   /** Liste response'unda — canlı parti toplamı ("+N" için). */
   _count?: { batches: number };
+  /** `GET /work-orders/:id` — işin müşterisi (fason) ve oluşturan; eski sunucuda yok. */
+  customer?: { id: string; name: string; code?: string | null } | null;
+  createdBy?: { id: string; fullName: string | null } | null;
+  /** Hedef çeşit değerleri (gramaj vb.); aktif olanlar. */
+  targetValues?: { property?: { name?: string | null } | null; value?: { name?: string | null } | null }[];
+  /** Üretime giren ham toplar özeti. */
+  inputRolls?: { count: number; totalMeters: number } | null;
+  /** Gelen (belgeden) bloğu — belgeden doğmamış İE'de null. */
+  incoming?: WorkOrderIncoming | null;
   /** `GET /work-orders/:id` ekler — fiziksel taahhüt; tablet iptal kapısı `materialCommitted`ı okur. */
   locks?: { materialCommitted: boolean } | null;
 }
