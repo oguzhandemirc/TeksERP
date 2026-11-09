@@ -5,7 +5,7 @@ import { lowerTr } from "@/lib/tr-case";
 import type { ScanMark } from "../ZoomableScan";
 import { canReach, fieldWoLabel, firstOpenField, neighbourField, stageIndex, STAGES, type Stage, type StageContext } from "./stages";
 import {
-  addIdentifier, assignField, byReading, clearField, COLUMN_OPTIONS, identifierText, isKept, lineTexts, setDropped, setRepeats, suggestIdentifiers, teachMarks, without,
+  addIdentifier, assignField, byReading, clearField, COLUMN_OPTIONS, identifierText, isKept, lineTexts, sectionStartText, setDropped, setRepeats, suggestIdentifiers, teachMarks, without,
   type ColumnKey, type FieldKey, type TeachState,
 } from "./teachDraft";
 import type { MultiPartyRule, ScanWord, ScanWords, SimilarTemplate, SuggestResult } from "./types";
@@ -13,7 +13,6 @@ import type { MultiPartyRule, ScanWord, ScanWords, SimilarTemplate, SuggestResul
 export const fieldLabel = fieldWoLabel;
 
 const norm = (t: string) => lowerTr(t).replace(/\s+/g, " ").trim();
-const clean = (t: string) => t.replace(/[:.\s]+$/u, "").trim();
 
 /** Ad önerisi: belgenin başlığı (ilk kimlik önerisi). */
 export function suggestName(scan: ScanWords): string {
@@ -58,11 +57,11 @@ export function toggleTotalsWord(s: TeachState, words: readonly ScanWord[], i: n
   return { ...s, totalsLabel: next.length ? next : null };
 }
 
-/** ③ Bölüm başlangıcı: dokunulan kelimenin SATIRI (en çok 40 karakter); aynı satıra yeniden dokunmak kaldırır. */
+/** ③ Bölüm başlangıcı: dokunulan kelimenin SATIRININ etiket kısmı (`sectionStartText`, değer her partide değişir; en çok 40 karakter); aynı satıra yeniden dokunmak kaldırır. */
 export function toggleSectionStart(s: TeachState, words: readonly ScanWord[], i: number): TeachState {
   const line = lineTexts(words).find((l) => l.idx.includes(i));
   if (!line) return s;
-  const text = clean(line.text).slice(0, 40);
+  const text = sectionStartText(line.text).slice(0, 40);
   return { ...setRepeats(s, true), sectionStart: norm(s.sectionStart) === norm(text) ? "" : text };
 }
 
@@ -157,7 +156,9 @@ function targetWords(s: TeachState, words: readonly ScanWord[], t: Target | null
   if (t.kind === "column") return { idx: new Set(s.columns[t.key] ?? []), label: `Sütun: ${COLUMN_LABEL[t.key]}` };
   if (t.kind === "totals") return { idx: new Set(s.totalsLabel ?? []), label: "Toplam satırı" };
   const start = norm(s.sectionStart);
-  return { idx: new Set(start ? lineTexts(words).filter((l) => norm(clean(l.text).slice(0, 40)) === start).flatMap((l) => l.idx) : []), label: "Bölüm başı" };
+  // Etiket kısmı eşleşen satırın yalnız etiket kelimeleri boyanır; kısa etiket (tam metne düşen) bütün satırdır.
+  const startIdx = (l: { idx: number[]; text: string }) => (sectionStartText(l.text) === l.text.trim() ? l.idx : l.idx.filter((k) => identifierText(words[k]!.text) !== ""));
+  return { idx: new Set(start ? lineTexts(words).filter((l) => norm(sectionStartText(l.text).slice(0, 40)) === start).flatMap(startIdx) : []), label: "Bölüm başı" };
 }
 
 /** Fotoğraf kutuları: ① kimlik satırları "Başlık"; ②/③ seçili hedefin kelimeleri "seçili"; geri kalanı bütün işaretler. */

@@ -109,8 +109,12 @@ describe("rehberli tanıtma — dokunuşlar", () => {
     let g = run(named(), [{ type: "STAGE_NEXT" }, { type: "TAP", i: 6 }, { type: "STAGE_NEXT" }, { type: "SET_RULE", set: { rule: "repeats", on: true } }]);
     expect(g.target).toEqual({ kind: "sectionStart" });
     g = guidedReduce(g, { type: "TAP", i: 5 }, W);
-    expect(g.teach.sectionStart).toBe("Ham PartiNo: P2618733");
-    expect(guidedMarks(g.teach, W, g)[4]).toMatchObject({ tone: "selected", label: "Bölüm başı" });
+    // Etiket kısmı kaydedilir: değer (P2618733) her partide değişir, ikinci partiyi kaçırmasın.
+    expect(g.teach.sectionStart).toBe("Ham PartiNo");
+    expect(suggestBody(g.teach, W, "s1").sectionStartLabel).toBe("Ham PartiNo");
+    const marks = guidedMarks(g.teach, W, g);
+    expect(marks[4]).toMatchObject({ tone: "selected", label: "Bölüm başı" });
+    expect(marks[6]?.label).not.toBe("Bölüm başı");
     expect(guidedReduce(g, { type: "TAP", i: 4 }, W).teach.sectionStart).toBe("");
     g = run(g, [{ type: "GOTO", target: { kind: "totals" } }, { type: "TAP", i: 2 }]);
     expect(g.teach.totalsLabel).toEqual([2]);

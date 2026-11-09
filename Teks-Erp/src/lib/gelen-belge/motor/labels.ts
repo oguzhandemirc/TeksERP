@@ -23,6 +23,19 @@ export function labelSimilarity(text: string, labels: string[]): number {
   return best;
 }
 
+/**
+ * Satır yazısının etiket kısmı: rakamlı kelime (değer) atılır, yapışık "No:123" → "No", baş/son noktalama silinir.
+ * Panel + tablet `tanit/teachDraft.ts` `identifierText` bu ifadenin aynasıdır (bekçi `test_gelen_belge_motor` §12i).
+ */
+export const identifierText = (text: string): string =>
+  text.split(/\s+/).map((x) => (/\d/.test(x) ? (/^[^\d:]+:/.exec(x)?.[0] ?? "") : x)).filter(Boolean).join(" ").replace(/^[\s:.,;|/#–-]+|[\s:.,;|/#–-]+$/gu, "");
+
+/** Bölüm başlangıç etiketi: etiket kısmı ≥3 harfse o, değilse tam metin ("No: 12" kısa etiketi değeriyle kalır; yanlış pozitif yok). */
+export function sectionStartLabel(text: string): string {
+  const part = identifierText(text);
+  return (part.match(/\p{L}/gu)?.length ?? 0) >= 3 ? part : text.trim();
+}
+
 export function matchesLabel(text: string, labels: string[], min = LABEL_MIN_SIMILARITY): boolean {
   return labelSimilarity(text, labels) >= min;
 }

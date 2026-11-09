@@ -1,7 +1,10 @@
 // test_gelen_belge_motor §12 (Gülkesim S1, 2026-11-03): tekrarlayan bölüm (çok partili belge) + sayfa devamı + şablon önerisi
 // (belge tipi tanıtma). Saf (DB'siz); dosya boyu tavanı yüzünden ayrı. Fikstürler anonim (0245 = Güleçsoy çeki listesi).
 import { classifyWithFallback, extractDocument, suggestTemplate, validateTemplate, type DocumentTemplate, type OcrBlock, type OcrResult } from "../../src/lib/gelen-belge/motor";
+import { identifierText, sectionStartLabel } from "../../src/lib/gelen-belge/motor/labels";
 import { draftFromExtraction } from "../../src/lib/gelen-belge/taslak";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 type Check = (label: string, ok: boolean, detay?: string) => void;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -86,4 +89,45 @@ export function gulkesimBolum(check: Check, gercek: (ad: string) => OcrResult, s
     JSON.stringify({ t: ur.templateId, f: ur.fields && Object.fromEntries(Object.entries(ur.fields.fields).map(([k, v]) => [k, v.value])), s: ur.sections?.sections.map((s) => s.batchNo) }));
   const other = classifyWithFallback(gercek("0244-kumas-irsaliyesi"), withUser, "genel");
   check("§12h eşik altı belge kullanıcı şablonuna oturmaz → genel (yedek sözlük)", other.templateId === "genel", JSON.stringify(other));
+  bolumEtiketi(check, ocr, cek);
+}
+
+/** 0245'in "Ham PartiNo …" satırlarını yeniden yazar (yalnız satır metni; bölüm başı satırı bu). */
+function withPartiLines(src: OcrResult, texts: [string, string]): OcrResult {
+  const o = clone(src);
+  let k = 0;
+  for (const b of o.blocks) for (const l of b.lines) if (/^Ham PartiNo /.test(l.text)) l.text = texts[k++] ?? l.text;
+  return o;
+}
+
+// §12i/§12j (2026-11-09 ekran denetimi): bölüm başı DEĞERİYLE kaydedilmişse ("Ham PartiNo: P2618733") ikinci parti
+// ("Ham PartiNo: 58") kaçmasın — etiket kısmı eşleşme anında da kayıtta da; ≥3 harf altı etiket tam metne düşer.
+function bolumEtiketi(check: Check, ocr: OcrResult, cek: DocumentTemplate): void {
+  const starts = (o: OcrResult, label: string) => {
+    const t = { ...cek, id: "u-bolum", sections: { ...cek.sections!, startLabels: [label] } };
+    return (extractDocument(o, [t]).regions[0]!.sections?.sections ?? []).filter((x) => !x.continued).length;
+  };
+  const farkli = withPartiLines(ocr, ["Ham PartiNo: P2618733", "Ham PartiNo: 58"]);
+  check("§12j ⭐ değeriyle kayıtlı bölüm başı 'Ham PartiNo: P2618733' → 'Ham PartiNo: 58' satırı da bölüm başı (2 bölüm)",
+    starts(farkli, "Ham PartiNo: P2618733") === 2, String(starts(farkli, "Ham PartiNo: P2618733")));
+  check("§12j rakamsız etiket bugünkü gibi ('Ham PartiNo' 2 · 'Sipariş No' 2)",
+    starts(farkli, "Ham PartiNo") === 2 && starts(ocr, "Sipariş No") === 2, `${starts(farkli, "Ham PartiNo")}/${starts(ocr, "Sipariş No")}`);
+  const kisa = withPartiLines(ocr, ["No: P2618733", "No: 58"]);
+  check("§12j ≥3 harf altı etiket tam metne düşer: 'No: P2618733' yalnız kendi satırında (1 bölüm, 'No: 58' değil)",
+    sectionStartLabel("No: P2618733") === "No: P2618733" && starts(kisa, "No: P2618733") === 1, String(starts(kisa, "No: P2618733")));
+  const sug = suggestTemplate({
+    code: "u-bolum-etiket", name: "Bölüm etiketi", ocr: farkli,
+    assignments: [{ field: "partiNo", rect: elementRect(farkli, "P9918733"), section: true }],
+    identifiers: ["KUMAŞ ÇEKİ LİSTESİ"], sectionStartLabel: "Ham PartiNo: P2618733",
+  });
+  check("§12j kayıtta bölüm başı etiket kısmıyla saklanır ('Ham PartiNo')",
+    JSON.stringify(sug.template.sections?.startLabels) === JSON.stringify(["Ham PartiNo"]), JSON.stringify(sug.template.sections?.startLabels));
+  // Ayna: panel + tablet `identifierText` backend ifadesiyle aynı (tırnak biçimi hariç).
+  const govde = (src: string) => /export const identifierText = \(text: string\): string =>\s*([^\n]+)/.exec(src)?.[1]?.replace(/'/g, '"') ?? null;
+  const root = join(__dirname, "..", "..", "..");
+  const kaynak = govde(readFileSync(join(__dirname, "..", "..", "src", "lib", "gelen-belge", "motor", "labels.ts"), "utf8"));
+  const aynalar = ["Electron/src/pages/Operations/GelenBelgeler/tanit/teachDraft.ts", "mobil/src/screens/Modules/GelenBelge/tanit/teachDraft.ts"]
+    .map((f) => govde(readFileSync(join(root, f), "utf8")));
+  check("§12i identifierText aynası: panel + tablet teachDraft backend labels.ts ile aynı; 'Ham PartiNo: P2618733' → 'Ham PartiNo'",
+    kaynak !== null && aynalar.every((a) => a === kaynak) && identifierText("Ham PartiNo: P2618733") === "Ham PartiNo", JSON.stringify({ kaynak, aynalar }));
 }

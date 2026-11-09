@@ -208,9 +208,12 @@ export function lineTexts(words: readonly ScanWord[]): { lineNo: number; text: s
   return [...map.entries()].map(([lineNo, idx]) => ({ lineNo, idx, text: textOf(words, idx), y: Math.min(...idx.map((i) => words[i]!.rect.y)) }));
 }
 
-/** Satır yazısının kimlik metni: rakamlı kelime (değer, belgeden belgeye değişir) atılır, yapışık 'No:123' → 'No'; öneri + ① dokunuş + ① boyama tek kaynak. */
+/** Satır yazısının kimlik metni: rakamlı kelime (değer, belgeden belgeye değişir) atılır, yapışık 'No:123' → 'No'; öneri + ① dokunuş + ① boyama tek kaynak; backend `motor/labels.ts` aynası (bekçi `test_gelen_belge_motor` §12i). */
 export const identifierText = (text: string): string =>
   text.split(/\s+/).map((x) => (/\d/.test(x) ? (/^[^\d:]+:/.exec(x)?.[0] ?? '') : x)).filter(Boolean).join(' ').replace(/^[\s:.,;|/#–-]+|[\s:.,;|/#–-]+$/gu, '');
+
+/** Bölüm başlangıç yazısı: etiket kısmı (`identifierText`) ≥3 harfse o, değilse tam metin — backend `sectionStartLabel` aynası. */
+export const sectionStartText = (text: string, part = identifierText(text)): string => ((part.match(/\p{L}/gu)?.length ?? 0) >= 3 ? part : text.trim());
 
 /** Kimlik yazısı önerisi: sayfanın üst üçte birindeki yazı satırlarının etiket kısmı (`identifierText`, 3–40 karakter, ≥3 harf), en çok `max` tane. */
 export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
@@ -301,7 +304,7 @@ export function suggestBody(s: TeachState, words: readonly ScanWord[], scanId: s
     identifiers: s.identifiers.filter((d) => d.on).map((d) => d.text),
   };
   if (columns.length) body.table = { columns, totalsLabel: s.totalsLabel?.length ? textOf(words, s.totalsLabel).slice(0, 40) : null };
-  if (s.repeats && s.sectionStart.trim()) body.sectionStartLabel = s.sectionStart.trim().slice(0, 40);
+  if (s.repeats && s.sectionStart.trim()) body.sectionStartLabel = sectionStartText(s.sectionStart).slice(0, 40);
   if (baseCode) {
     // Yeniden işaretlenen alan drop'a girmez: sunucu drop'u birleşimden SONRA uygular, yeni atamayı da silerdi.
     const drop = s.drop.filter((k) => s.kept.includes(k) && !s.fields[k]?.length);

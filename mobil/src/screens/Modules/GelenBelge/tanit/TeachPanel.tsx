@@ -6,7 +6,7 @@ import ModalTextInput from '../../../../components/ModalTextInput';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import type { ScanWord, TemplateJson } from '../../../../types/inboundDocTeach';
 import {
-  addIdentifier, assignColumn, assignField, assignTotals, clearColumn, clearField, COLUMN_OPTIONS, FIELD_OPTIONS, keptOldFields, OLD_PARTS, oldParts, setRepeats, textOf,
+  addIdentifier, assignColumn, assignField, assignTotals, clearColumn, clearField, COLUMN_OPTIONS, FIELD_OPTIONS, keptOldFields, OLD_PARTS, oldParts, sectionStartText, setRepeats, textOf,
   toggleIdentifier, toggleKeepOld, toggleSectionField, type TeachState,
 } from './teachDraft';
 
@@ -130,7 +130,7 @@ function RepeatSection({ state, words, onChange }: Props) {
                 testID="tanit-bolum-baslangic"
               />
             </View>
-            <Button mode="outlined" disabled={!has} onPress={() => onChange((s) => ({ ...s, sectionStart: sel.slice(0, 40), selected: [] }))} contentStyle={styles.btn} testID="tanit-bolum-secimden">
+            <Button mode="outlined" disabled={!has} onPress={() => onChange((s) => ({ ...s, sectionStart: sectionStartText(sel).slice(0, 40), selected: [] }))} contentStyle={styles.btn} testID="tanit-bolum-secimden">
               Seçili yazıyı al
             </Button>
           </View>

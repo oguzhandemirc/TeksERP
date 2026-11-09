@@ -5,7 +5,7 @@ import * as path from 'path';
 import type { ScanWord, ScanWords, SuggestResult } from '../../../../types/inboundDocTeach';
 import { FIELD_GROUP_ORDER, FIELD_TARGETS } from './fieldTargets';
 import {
-  canAdvance, canReach, dropKept, firstTodo, mapGroups, meterSourceText, multiPartyChoices, recognitionText, ruleCount, saveSummary, sectionPreviewText, stageDone, stageIssues, stageTap,
+  canAdvance, canReach, dropKept, firstTodo, mapGroups, meterSourceText, multiPartyChoices, recognitionText, ruleCount, saveSummary, sectionPreviewText, stageDone, stageIssues, stageMarks, stageTap,
 } from './stages';
 import { FIELD_OPTIONS, initialTeach, type TeachState } from './teachDraft';
 import { toggleFieldWord } from './guided';
@@ -89,7 +89,12 @@ describe('dokunuş yönlendirme', () => {
     expect(stageTap(s, W, { stage: 'KURALLAR', target: { kind: 'section' } }, 2)).toBe(s);
     s = stageTap({ ...s, repeats: true }, W, { stage: 'KURALLAR', target: { kind: 'section' } }, 2);
     s = stageTap(s, W, { stage: 'KURALLAR', target: { kind: 'section' } }, 3);
-    expect(s.sectionStart).toBe('Ham PartiNo:');
+    expect(s.sectionStart).toBe('Ham PartiNo');
+    // Değer de seçilse kaydedilen etiket kısmıdır (değer her partide değişir); değer kelimesi bölüm başı boyanmaz.
+    const withValue = stageTap(s, W, { stage: 'KURALLAR', target: { kind: 'section' } }, 4);
+    expect(withValue.sectionStart).toBe('Ham PartiNo');
+    expect(stageMarks(withValue, W, { stage: 'KURALLAR', target: null })[4]?.label).not.toBe('Bölüm başlangıcı');
+    expect(stageMarks(withValue, W, { stage: 'KURALLAR', target: null })[2]?.label).toBe('Bölüm başlangıcı');
     s = stageTap(s, W, { stage: 'KURALLAR', target: { kind: 'totals' } }, 7);
     expect(s.totalsLabel).toEqual([7]);
     expect(stageTap(s, W, { stage: 'ESLEME', target: null }, 0)).toBe(s);

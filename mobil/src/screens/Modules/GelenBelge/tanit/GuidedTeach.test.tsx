@@ -190,15 +190,15 @@ describe('TeachModal — üç aşama: kurallar ve önizleme', () => {
     expect(r.getByTestId('tanit-kaydet')).toBeDisabled();
     await press(r.getByTestId('tanit-kutu-4'));
     await press(r.getByTestId('tanit-kutu-5'));
-    expect(r.getByTestId('tanit-bolum-baslangic-deger')).toHaveTextContent('Ham PartiNo:');
+    expect(r.getByTestId('tanit-bolum-baslangic-deger')).toHaveTextContent(/^Ham PartiNo$/);
     expect(r.getByTestId('tanit-kaydet-neden')).toHaveTextContent(/top tablosu gerekli/);
     await press(r.getByTestId('tanit-asama-ESLEME'));
     await press(r.getByTestId('tanit-sutun-m'));
     await press(r.getByTestId('tanit-kutu-7'));
     expect(r.getByTestId('tanit-sutun-m-deger')).toHaveTextContent('Metre');
     await press(r.getByTestId('tanit-asama-KURALLAR'));
-    await waitFor(() => expect(r.getByTestId('tanit-bolum-onizleme')).toHaveTextContent('‘Ham PartiNo:’ ile başlıyor · 2 bölüm bulundu'));
-    expect(lastSuggest()).toMatchObject({ sectionStartLabel: 'Ham PartiNo:', assignments: [{ field: 'partiNo', section: true }], table: { columns: [{ key: 'm', header: 'Metre' }] } });
+    await waitFor(() => expect(r.getByTestId('tanit-bolum-onizleme')).toHaveTextContent('‘Ham PartiNo’ ile başlıyor · 2 bölüm bulundu'));
+    expect(lastSuggest()).toMatchObject({ sectionStartLabel: 'Ham PartiNo', assignments: [{ field: 'partiNo', section: true }], table: { columns: [{ key: 'm', header: 'Metre' }] } });
     expect(r.getByTestId('tanit-kaydet')).not.toBeDisabled();
   });
 

@@ -3,7 +3,7 @@
 // konumla bölüme düşer. Başlıksız başlayan sayfa (devam sayfası) satırları "devam" bölümüdür: taslak onları SON bölüme ekler.
 import type { DocumentTemplate, FieldResult, FieldSpec, OcrBlock, OcrLine, OcrRect, OcrResult, SectionSpec, TableResult } from "./types";
 import { collectLines } from "./geometry";
-import { labelSimilarity } from "./labels";
+import { labelSimilarity, sectionStartLabel } from "./labels";
 import { normalizeForMatch } from "./text-normalize";
 import { canonicalEquals, sumCanonical } from "./totals";
 import { extractFields } from "./extract";
@@ -53,15 +53,19 @@ export function sliceBand(ocr: OcrResult, top: number, bottom: number): OcrResul
   return { ...ocr, text: blocks.map((b) => b.text).join("\n"), blocks };
 }
 
-/** Satır bölüm başlangıcı mı: metin etiketle BAŞLAR ya da (kısa satırda) etikete bulanık benzer. */
+/**
+ * Satır bölüm başlangıcı mı: metin etiketle BAŞLAR ya da (kısa satırda) etikete bulanık benzer. Etiket hem kayıtlı hâliyle
+ * hem etiket kısmıyla (`sectionStartLabel`; değeriyle kaydedilmiş eski şablon "Ham PartiNo: P2618733") denenir.
+ */
 function isStartLine(line: OcrLine, labels: string[]): boolean {
   const norm = normalizeForMatch(line.text);
   if (!norm) return false;
-  for (const l of labels) {
+  const all = [...new Set(labels.flatMap((l) => [l, sectionStartLabel(l)]))];
+  for (const l of all) {
     const ln = normalizeForMatch(l);
     if (ln && (norm === ln || norm.startsWith(ln + " "))) return true;
   }
-  return labelSimilarity(line.text, labels) >= 0.85;
+  return labelSimilarity(line.text, all) >= 0.85;
 }
 
 export function findPageMarker(ocr: OcrResult, pattern = DEFAULT_PAGE_PATTERN): { no: number; of: number } | null {

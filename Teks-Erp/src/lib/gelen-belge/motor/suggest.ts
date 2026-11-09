@@ -5,7 +5,7 @@ import { type DocumentTemplate, type FieldSpec, type FieldType, type NormRect, t
 import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches } from "./anchor";
 import { resolveRegions } from "./document";
 import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry";
-import { isNumericText } from "./labels";
+import { isNumericText, sectionStartLabel } from "./labels";
 import { validateTemplate } from "./templates";
 import { valueShapeOf } from "./value-limit";
 import { learnAnchorSkip, meterKgClashes } from "./olcu-cakisma";
@@ -226,7 +226,8 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   const sectionFields = input.assignments.filter((a) => a.section).map((a) => a.field);
   if (input.sectionStartLabel?.trim() && sectionFields.length > 0) {
     t.sections = {
-      startLabels: [input.sectionStartLabel.trim()], fields: [...new Set(sectionFields)],
+      // Bölüm başı ETİKETİYLE kaydedilir ("Ham PartiNo: P2618733" → "Ham PartiNo"): değer her partide değişir.
+      startLabels: [sectionStartLabel(input.sectionStartLabel)], fields: [...new Set(sectionFields)],
       ...(sectionFields.includes("partiNo") ? { batchField: "partiNo" } : {}),
       ...(sectionFields.includes("siparisNo") ? { orderField: "siparisNo" } : {}),
       ...(sectionFields.includes("topAdet") ? { countField: "topAdet" } : {}),

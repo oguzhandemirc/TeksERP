@@ -5,7 +5,7 @@ import type { MultiPartyRule, ScanWord, SuggestResult } from '../../../../types/
 import { FIELD_GROUP_ORDER, FIELD_TARGETS, MAP_FIELD_ORDER, fieldLabel, type FieldGroup } from './fieldTargets';
 import { chipStatus, identifierWordSet, toggleFieldWord, toggleHeaderWord } from './guided';
 import {
-  assignColumn, byReading, clearColumn, COLUMN_OPTIONS, isKept, teachIssues, teachMarks, textOf,
+  assignColumn, byReading, clearColumn, COLUMN_OPTIONS, identifierText, isKept, sectionStartText, teachIssues, teachMarks, textOf,
   type ColumnKey, type FieldKey, type ScanMark, type Stage, type TeachIssue, type TeachState,
 } from './teachDraft';
 
@@ -80,10 +80,13 @@ export function toggleTotalsWord(s: TeachState, words: readonly ScanWord[], i: n
   return { ...s, totalsLabel: next.length ? next : null };
 }
 
-/** Bölüm başlangıç yazısına kelime ekle / çıkar; metin kelimelerden kurulur. */
+/** Bölüm başlangıç yazısı seçili kelimelerin etiket kısmı (`sectionStartText`): değer her partide değişir, kaydedilmez. */
+const sectionTextOf = (words: readonly ScanWord[], idx: readonly number[]) => sectionStartText(textOf(words, idx)).slice(0, 40);
+
+/** Bölüm başlangıç yazısına kelime ekle / çıkar; metin kelimelerin etiket kısmından kurulur. */
 export function toggleSectionWord(s: TeachState, words: readonly ScanWord[], i: number): TeachState {
   const next = s.sectionWords.includes(i) ? s.sectionWords.filter((x) => x !== i) : [...s.sectionWords, i].sort(byReading(words));
-  return { ...s, sectionWords: next, sectionStart: textOf(words, next).slice(0, 40) };
+  return { ...s, sectionWords: next, sectionStart: sectionTextOf(words, next) };
 }
 
 /** Kayıtlı alan bu sefer kaldırılsın (`base.drop`) | kaldırma geri alınsın. */
@@ -123,8 +126,11 @@ export function stageMarks(s: TeachState, words: readonly ScanWord[], nav: Stage
   if (stage === 'ESLEME' && target?.kind === 'field') return base.map(paint(s.fields[target.key] ?? located[target.key] ?? [], 'selected', fieldLabel(target.key)));
   if (stage === 'ESLEME' && target?.kind === 'column') return base.map(paint(s.columns[target.key] ?? [], 'selected', `Sütun: ${columnLabel(target.key)}`));
   if (stage !== 'KURALLAR') return base;
-  const sectionOk = s.repeats && s.sectionWords.length > 0 && textOf(words, s.sectionWords).slice(0, 40) === s.sectionStart;
-  let out = sectionOk ? base.map(paint(s.sectionWords, target?.kind === 'section' ? 'selected' : 'section', 'Bölüm başlangıcı')) : base;
+  const sectionOk = s.repeats && s.sectionWords.length > 0 && sectionTextOf(words, s.sectionWords) === s.sectionStart;
+  // Etiket kısmına düşen seçimde yalnız etiket kelimeleri boyanır; kısa etiket (tam metin) bütün seçimdir.
+  const labelOnly = sectionStartText(textOf(words, s.sectionWords)) !== textOf(words, s.sectionWords).trim();
+  const sectionPaint = labelOnly ? s.sectionWords.filter((k) => identifierText(words[k]!.text) !== '') : s.sectionWords;
+  let out = sectionOk ? base.map(paint(sectionPaint, target?.kind === 'section' ? 'selected' : 'section', 'Bölüm başlangıcı')) : base;
   if (target?.kind === 'totals') out = out.map(paint(s.totalsLabel ?? [], 'selected', 'Toplam satırı'));
   return out;
 }

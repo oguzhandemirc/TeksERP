@@ -141,7 +141,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     await flush();
     expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({
       assignments: [{ field: 'partiNo', section: true }],
-      sectionStartLabel: 'Ham PartiNo:', table: { columns: [{ key: 'm', header: 'Metre' }] },
+      sectionStartLabel: 'Ham PartiNo', table: { columns: [{ key: 'm', header: 'Metre' }] },
     });
   });
 

@@ -218,7 +218,7 @@ describe("rehberli tanıtma — ③ Kurallar ve ① benzer tip", () => {
     await userEvent.clear(screen.getByLabelText("Kelime ara"));
     await userEvent.type(screen.getByLabelText("Kelime ara"), "PartiNo");
     await userEvent.click(screen.getByTestId("teach-word-5"));
-    expect(screen.getByTestId("rule-section-info")).toHaveTextContent("‘Ham PartiNo: P2618733’ ile başlıyor");
+    expect(screen.getByTestId("rule-section-info")).toHaveTextContent("‘Ham PartiNo’ ile başlıyor");
     expect(screen.getByTestId("teach-problems")).toHaveTextContent("Metre sütun başlığını");
     expect(screen.getByTestId("teach-save")).toBeDisabled();
   });
