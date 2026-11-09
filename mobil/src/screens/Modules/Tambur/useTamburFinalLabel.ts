@@ -1,11 +1,12 @@
 // Tambur final etiket ayarları (Gülkesim S5): müşteri tartım/bölme/en + fabrika basım zamanı.
 // Uç yoksa ya da hata verirse bugünkü davranış (DEFAULT_LABEL_SETTINGS) — kesim asla kilitlenmez.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
-import { tamburService, type TamburLabelSettings } from '../../../services/tambur.service';
+import { tamburService, type TamburLabelSettings, type TamburLabelSuggestions } from '../../../services/tambur.service';
 import { DEFAULT_LABEL_SETTINGS, parseKg, weightError } from './finalLabel';
 import { useTamburLabelBatch, type TamburLabelBatch } from './useTamburLabelBatch';
+import { initialLabelTexts, labelTextsBody, withSeed, withTexts, withTextsScope, type LabelTextsState } from './labelTexts';
 
 export interface TamburFinalLabelState {
   settings: TamburLabelSettings;
@@ -19,6 +20,32 @@ export interface TamburFinalLabelState {
   blocked: () => boolean;
   /** Müşteri parti no (etiket) — ayar açıksa şerit gösterir, gövdeye gider. */
   batch: TamburLabelBatch;
+  /** Etikete basılacak kumaş adı / renk — yapışkan, her kesime gider (boşsa alan gitmez). */
+  texts: TamburLabelTexts;
+  /** Öneri ucunun anahtarı (pencere aynı sorguyu tazeler). */
+  suggestionParams: { workOrderId?: string | null; rollId?: string | null };
+}
+
+export interface TamburLabelTexts {
+  itemName: string;
+  colorName: string;
+  set: (v: { itemName: string; colorName: string }) => void;
+  /** Gövdeye eklenecek alanlar (`...texts.body()`). */
+  body: () => { labelItemName?: string; labelColorName?: string };
+}
+
+export const labelSuggestionsKey = (p: { workOrderId?: string | null; rollId?: string | null }) =>
+  ['tambur', 'label-suggestions', p.workOrderId ?? null, p.workOrderId ? null : (p.rollId ?? null)] as const;
+
+/** Öneri sorgusu — eski backend (404) ya da ağ hatasında boş liste; kesim asla kilitlenmez. */
+export function useTamburLabelSuggestions(p: { workOrderId?: string | null; rollId?: string | null }, enabled = true) {
+  return useQuery<TamburLabelSuggestions>({
+    queryKey: labelSuggestionsKey(p),
+    queryFn: () => tamburService.labelSuggestions(p),
+    enabled: enabled && !!(p.workOrderId || p.rollId),
+    staleTime: 30_000,
+    retry: false,
+  });
 }
 
 export function useTamburFinalLabel(
@@ -38,10 +65,35 @@ export function useTamburFinalLabel(
   const [kgText, setKgText] = useState('');
   // Yeni top = yeni tartım; önceki topun kg'si sızmasın.
   useEffect(() => setKgText(''), [rollId]);
-  const batch = useTamburLabelBatch(settings.labelBatchEnabled === true, batchScopeKey ?? settings.customerId ?? null);
+  const scopeKey = batchScopeKey ?? settings.customerId ?? null;
+  const batch = useTamburLabelBatch(settings.labelBatchEnabled === true, scopeKey);
+  // Ad/renk yapışkanlığı parti no ile AYNI kapsamda; İE'de saklanmaz, sunucunun `last`ından bir kez dolar.
+  const [texts, setTexts] = useState<LabelTextsState>(() => initialLabelTexts(scopeKey));
+  useEffect(() => {
+    if (scopeKey != null) setTexts((t) => withTextsScope(t, scopeKey));
+  }, [scopeKey]);
+  const suggestionParams = batchScopeKey ? { workOrderId: batchScopeKey } : { rollId: rollId ?? null };
+  const sugg = useTamburLabelSuggestions(suggestionParams);
+  const seededFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (scopeKey == null || !sugg.data || seededFor.current === scopeKey) return;
+    seededFor.current = scopeKey;
+    const last = sugg.data.last;
+    setTexts((t) => withSeed(withTextsScope(t, scopeKey), last));
+    if (settings.labelBatchEnabled === true && last?.batchNo && batch.value === '') batch.setValue(last.batchNo);
+    // batch nesnesi her render yenidir; tohum yalnız kapsam + veri gelince bir kez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, sugg.data, settings.labelBatchEnabled]);
   return {
     settings,
     batch,
+    suggestionParams,
+    texts: {
+      itemName: texts.itemName,
+      colorName: texts.colorName,
+      set: (v) => setTexts((t) => withTexts(t, v)),
+      body: () => labelTextsBody(texts),
+    },
     kgText,
     setKgText,
     weightKg: () => {

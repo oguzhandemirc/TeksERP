@@ -61,7 +61,8 @@ export function locationBadge(konum: WorkOrderLocation | undefined, status: stri
   }
   const fason = konum.sinif === 'FASONDA' || (first.dis && first.fasondaTop > 0);
   const text = (fason ? first.fasoncular[0] : undefined) ?? first.ad;
-  const detail = fason && text !== first.ad ? `${first.ad} · ${first.topSayisi} top` : `${first.topSayisi} top`;
+  // Top sayısı artık ayrı "Top" sütununda; burada yalnız fason ise istasyon adı.
+  const detail = fason && text !== first.ad ? first.ad : '';
   return { kind: 'station', text, extra: konum.istasyonlar.length - 1, tone: stationToneFor(first.dis, first.tur), detail };
 }
 

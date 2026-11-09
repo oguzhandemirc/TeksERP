@@ -83,11 +83,11 @@ describe('doğrulama (2026-11-06)', () => {
     const r = { ...res([], 'UNVERIFIED', 'sunucu'), unverifiedWorkOrders: [wo('IE1', { verification: ver(62, false) })], verification: { threshold: 80, bestScore: 62 } };
     const d = decideLookup(r);
     expect(d.kind).toBe('unsure');
-    expect(d.kind === 'unsure' && d.message).toBe('Belge tam eşleşmedi (%62) — listeden seçin ya da fiş no ile arayın.');
+    expect(d.kind === 'unsure' && d.message).toBe('Belge tam eşleşmedi (%62) — doğru işi seçin.');
     expect(d.kind === 'unsure' && names(d.workOrders)).toEqual(['IE1']);
   });
   it('⭐ top listesi okunamadı (puan yok) → nedeni söylenir', () => {
-    expect(unsureMessage(null)).toBe('Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile arayın.');
+    expect(unsureMessage(null)).toBe('Belge doğrulanamadı — doğru işi seçin.');
     expect(unsureMessage(100, false)).toBe(unsureMessage(null));
   });
   it('⭐ eşiği geçen tek aday → açılır (bugünkü yol)', () => {

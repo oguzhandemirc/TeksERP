@@ -9,6 +9,7 @@ import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
 import ScreenChrome from '../../../../components/ScreenChrome';
 import { useVisibleScreens } from '../../../../hooks/useVisibleScreens';
 import { usePermissions } from '../../../../hooks/usePermission';
@@ -63,7 +64,11 @@ export default function WoCreateScreen() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [hasResult, setHasResult] = useState(false);
-  const canManual = useVisibleScreens().visibleScreens.some((s) => s.key === 'HizliIsEmri');
+  const visibleKeys = useVisibleScreens().visibleScreens;
+  const canManual = visibleKeys.some((s) => s.key === 'HizliIsEmri');
+  // İE oluşunca İş Emirleri listesine gidilir; ekran bu kullanıcıda yoksa bugünkü başarı çubuğu kalır.
+  const nav = useNavigation<{ navigate: (name: string) => void }>();
+  const toList = visibleKeys.some((s) => s.key === 'IsEmirleri') ? () => nav.navigate('IsEmirleri') : undefined;
   const { entry, ready } = useTabletWoEntry();
   const q = useQuery({ queryKey: WO_SHORTCUTS_KEY, queryFn: routeService.getShortcuts, retry: false, staleTime: 60_000 });
   // K29 S14b: "Okutmayla" kipinde rotasız seçenek kısayolların BAŞINDA (varsayılan); sıralıda bugünkü liste.
@@ -137,7 +142,7 @@ export default function WoCreateScreen() {
       {stage.kind === 'teach' && <DocScanBody teachOnly />}
       {stage.kind === 'desk' && <DeskView shortcuts={shortcuts} />}
       {stage.kind === 'unified' && (
-        <UnifiedWoForm key={stage.n} initialRoute={stage.route} routeLocked={stage.locked} onNew={() => setStage({ ...stage, n: stage.n + 1 })} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} />
+        <UnifiedWoForm key={stage.n} initialRoute={stage.route} routeLocked={stage.locked} onNew={() => setStage({ ...stage, n: stage.n + 1 })} onCreated={toList} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} />
       )}
     </ScreenChrome>
   );

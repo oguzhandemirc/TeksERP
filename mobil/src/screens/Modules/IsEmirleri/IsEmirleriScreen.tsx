@@ -64,7 +64,7 @@ export default function IsEmirleriScreen() {
     const back = () => { setStage(null); void list.refreshAll(); };
     return (
       <ScreenChrome title={createFormTitle(formKind, stage.manual)} onStepBack={back} titleRowExtras={lastBatchHint ? <LastBatchHint /> : undefined} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
-        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onNew={() => setStage({ ...stage, n: stage.n + 1 })} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} onKindChange={setFormKind} />
+        <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onNew={() => setStage({ ...stage, n: stage.n + 1 })} onCreated={back} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} onKindChange={setFormKind} />
       </ScreenChrome>
     );
   }

@@ -135,14 +135,14 @@ function Row({ row, defs, wide, onOpen }: { row: WorkOrderListRow; defs: ColumnD
 function Cell({ k, row }: { k: ColumnKey; row: WorkOrderListRow }) {
   switch (k) {
     case 'no': {
-      const tur = typeBadgeText(row);
-      return (
-        <View style={styles.noWrap}>
-          <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>
-          {tur && <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text>}
-        </View>
-      );
+      return <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>;
     }
+    case 'tur': {
+      const tur = typeBadgeText(row);
+      return tur ? <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text> : <Text style={styles.sub}>—</Text>;
+    }
+    case 'top':
+      return <Text style={styles.text} numberOfLines={1} testID={`ie-top-${row.id}`}>{row.konum ? `${row.konum.canliTop} top` : '—'}</Text>;
     case 'musteri':
       return <TruncatedText style={styles.text}>{customerText(row)}</TruncatedText>;
     case 'kumas':
@@ -202,8 +202,7 @@ const styles = StyleSheet.create({
   narrowLabel: { width: 104, fontSize: typography.size.sm, color: colors.textMuted },
   cell: { justifyContent: 'center' },
   no: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },
-  noWrap: { gap: 2, alignItems: 'flex-start' },
-  typeBadge: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.warningDark, backgroundColor: colors.warningContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
+  typeBadge: { alignSelf: 'flex-start', fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.warningDark, backgroundColor: colors.warningContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
   text: { fontSize: typography.size.sm, color: colors.text },
   sub: { fontSize: typography.size.sm, color: colors.textSecondary },
   status: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

@@ -297,6 +297,17 @@ export interface TamburLabelSettings {
   ownerCustomer?: { id: string; name: string } | null;
 }
 
+/** GET /tambur/label-suggestions yanıtı — müşterinin son 180 gündeki etiket değerleri, en son önce. */
+export interface TamburLabelSuggestions {
+  workOrderId: string | null;
+  customerIds: string[];
+  itemNames: string[];
+  colorNames: string[];
+  batchNos: string[];
+  /** Bu İE'de bu alanlardan birini taşıyan en son topun değerleri (yapışkan başlangıç). */
+  last: { itemName: string | null; colorName: string | null; batchNo: string | null } | null;
+}
+
 /** GET/PUT /labels/work-orders/:id/overrides yanıtı. */
 export interface WorkOrderLabelOverrides {
   workOrderId: string;
@@ -486,6 +497,16 @@ export const tamburService = {
       .then((r) => r.data.data as TamburLabelSettings);
   },
 
+  /** Etiket kumaş adı / renk / parti no önerileri + bu İE'deki son değer. Eski backend 404 → çağıran boş listeye düşer. */
+  labelSuggestions: (params: { workOrderId?: string | null; rollId?: string | null }): Promise<TamburLabelSuggestions> => {
+    const qs = new URLSearchParams();
+    if (params.workOrderId) qs.set('workOrderId', params.workOrderId);
+    if (params.rollId) qs.set('rollId', params.rollId);
+    return apiClient
+      .get<ApiResponse<TamburLabelSuggestions>>(`/tambur/label-suggestions?${qs.toString()}`)
+      .then((r) => r.data.data as TamburLabelSuggestions);
+  },
+
   /** İş emri etiket bilgisi (eksik alan / düzelt / boş bas). */
   getLabelOverrides: (workOrderId: string): Promise<WorkOrderLabelOverrides> =>
     apiClient
@@ -527,7 +548,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null; labelBatchNo?: string | null }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null; labelBatchNo?: string | null; labelItemName?: string | null; labelColorName?: string | null }
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(
@@ -552,6 +573,9 @@ export const tamburService = {
       weightKg?: number | null;
       /** Kalan topun etiketine basılacak müşteri parti no (ayar kapalıysa gönderilmez). */
       labelBatchNo?: string | null;
+      /** Kalan topun etiket kumaş adı / rengi (boşsa gönderilmez). */
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     }
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> =>
     apiClient

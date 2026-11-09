@@ -25,15 +25,17 @@ import OwnerKindCard from './OwnerKindCard';
 import { usePartyScanReview } from './PartyScanSide';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import { FieldSelectorSheet, FieldsButton, OtherFields } from './WoFieldSelector';
+import { useCreatedExit, type CreatedExitProps } from './useCreatedExit';
 import { useUnifiedWoForm, type DocScanFlow, type UnifiedWoFormProps } from './useUnifiedWoForm';
 import { WO_PANE_FLEX, woFormLayout } from './woLayout';
 import { bandTone, TARGET_ISSUE_KEYS, TARGET_WARN_KEYS, type IssueKey } from './woIssues';
 import type { WoFieldKey } from './woFieldCatalog';
 import type { WoCreateKind } from '../../../../store/woCreateKinds';
 
-export default function UnifiedWoForm(props: UnifiedWoFormProps) {
+export default function UnifiedWoForm(props: UnifiedWoFormProps & CreatedExitProps) {
   const u = useUnifiedWoForm(props);
   const { wo, scan, form, done, fields } = u;
+  useCreatedExit(done, u.ownMode, wo.mode === 'SEPARATE', props.onCreated);
   const fieldProps = {
     state: form,
     edit: u.edit,

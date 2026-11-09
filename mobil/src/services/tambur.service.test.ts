@@ -50,4 +50,14 @@ describe('tamburService kesim — etiket niyeti gövdede', () => {
       expect(call[1]).toEqual(expect.objectContaining({ labelBatchNo: 'J1' }));
     }
   });
+
+  it('etiket kumaş adı / renk dört kesim/bitir gövdesine geçer — sessiz allowlist bekçisi', async () => {
+    const L = { labelItemName: 'SULTAN', labelColorName: 'EKRU' };
+    await tamburService.cutOpenFabric('r1', { lengthMeters: 5, status: 'WAREHOUSE', ...L });
+    await tamburService.cutWarehouseRoll('r2', { cutLength: 5, ...L });
+    await tamburService.finalizeOpenFabric('r3', { remainingAction: 'keep_1kalite', ...L });
+    await tamburService.finalizeWarehouseCut('r4', { remainingAction: 'keep_a1', ...L });
+    expect(post).toHaveBeenCalledTimes(4);
+    for (const call of post.mock.calls) expect(call[1]).toEqual(expect.objectContaining(L));
+  });
 });

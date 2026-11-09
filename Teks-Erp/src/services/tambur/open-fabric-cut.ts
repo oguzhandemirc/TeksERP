@@ -57,6 +57,7 @@ import { resolveLabelIntent, labelCustomerIdOf } from "../helpers/label-intent.h
 import { generateRollBarcodeTx } from "../helpers/roll-barcode.helper";
 import { TERIM } from "../../constants/terim";
 import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
 
@@ -100,6 +101,8 @@ export async function cutOpenFabricInner(
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -138,6 +141,8 @@ export async function cutOpenFabricInner(
       targetCustomerId: data.targetCustomerId,
       ownerCustomerId: parent.ownerCustomerId,
     });
+    // Etikete basılacak kumaş adı / renk — topun kendi değeri (miras yok), ayara bağlı değil.
+    const labelTexts = resolveRollLabelTexts(data);
     // Barkod-reddi KALDIRILDI (2026-07-16): Tambur adımındaki HER top kesilebilir —
     // barkodsuz açık kumaş VE Konumu-Düzelt ile buraya gelmiş barkodlu TOP. Barkod artık
     // dispatch anahtarı değil, yalnız çocuk-etiketleme semantiği (çocuk hep taze "F" barkod).
@@ -288,6 +293,8 @@ export async function cutOpenFabricInner(
         currentQty: data.lengthMeters,
         weightKg: cutWeightKg,
         labelBatchNo: cutLabelBatchNo,
+        labelItemName: labelTexts.labelItemName,
+        labelColorName: labelTexts.labelColorName,
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
         qualityGradeId: resolvedQualityGradeId,
@@ -475,6 +482,7 @@ export async function cutOpenFabricInner(
         barcode: result.child.barcode,
         parentRemainingQty: result.newParentQty,
         notes: data.notes ?? null,
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

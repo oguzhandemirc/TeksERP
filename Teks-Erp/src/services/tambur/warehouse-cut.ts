@@ -52,6 +52,7 @@ import { buildIntentSnapshot } from "../label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "../helpers/label-intent.helper";
 import { generateRollBarcodeTx } from "../helpers/roll-barcode.helper";
 import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
 
@@ -97,6 +98,8 @@ export async function cutWarehouseRollInner(
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /**
@@ -144,6 +147,8 @@ export async function cutWarehouseRollInner(
       targetCustomerId: data.targetCustomerId,
       ownerCustomerId: parent.ownerCustomerId,
     });
+    // Etikete basılacak kumaş adı / renk — topun kendi değeri (miras yok), ayara bağlı değil.
+    const labelTexts = resolveRollLabelTexts(data);
     // Ham (renksiz STOCK) top da "Top Kesme" aracında kesilebilir. Bitmiş depo
     // topu (WAREHOUSE) klasik akış; ham stok ise operatörün seçtiği hedefe göre
     // çıktı verir. Diğer statüler (IN_PRODUCTION vb.) kesime uygun değil.
@@ -278,6 +283,8 @@ export async function cutWarehouseRollInner(
         currentQty: data.cutLength,
         weightKg: cutWeightKg,
         labelBatchNo: cutLabelBatchNo,
+        labelItemName: labelTexts.labelItemName,
+        labelColorName: labelTexts.labelColorName,
         // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
@@ -561,6 +568,7 @@ export async function cutWarehouseRollInner(
         // (deposuz defter-öncesi top) sessiz kalmasın.
         defter: result.defter,
         notes: data.notes ?? null,
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

@@ -30,6 +30,8 @@ import type { LabelKind } from "@prisma/client";
 import type { ColorNameScope, NameSource } from "../services/helpers/customer-name.helper";
 
 export type { ColorNameScope, NameSource };
+/** Top etiketindeki ad kaynağı: müşteri ad zinciri + topun kendi değeri. */
+export type LabelNameSource = NameSource | "ROLL";
 
 import type { LabelUnitSettings } from "../config/label-units";
 
@@ -50,11 +52,12 @@ export interface LabelPayload {
   itemCode: string;
   itemName: string; // effective (cascade)
   itemNameDefault: string; // bizim isim (Item.name)
-  itemNameSource: NameSource;
+  /** ROLL = topun kendi etiket adı (`Roll.labelItemName`, tamburda kesimde seçilir) — zincirin önünde. */
+  itemNameSource: LabelNameSource;
   colorCode: string | null;
   colorName: string | null; // effective (cascade) — colorId null ise null
   colorNameDefault: string | null;
-  colorNameSource: NameSource | null;
+  colorNameSource: LabelNameSource | null;
   /** Renk adı ana veriden geldiyse hangi kademeden: kumaşa özel ya da genel; aksi hâlde null. */
   colorNameScope?: ColorNameScope | null;
 

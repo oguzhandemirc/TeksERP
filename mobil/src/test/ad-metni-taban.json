@@ -61,7 +61,7 @@
   "screens/Modules/Tambur/TamburFieldFix.tsx": 1,
   "screens/Modules/Tambur/TamburManualRollModal.tsx": 3,
   "screens/Modules/Tambur/TamburOrderLinkSheet.tsx": 7,
-  "screens/Modules/Tambur/TamburScreen.tsx": 22,
+  "screens/Modules/Tambur/TamburScreen.tsx": 21,
   "screens/Modules/Tambur/TamburSendToDyeModal.tsx": 2,
   "screens/Modules/TartiPaket/CuvalDuzeltScreen.tsx": 3,
   "screens/Modules/TartiPaket/HizliSiparisScreen.tsx": 1,

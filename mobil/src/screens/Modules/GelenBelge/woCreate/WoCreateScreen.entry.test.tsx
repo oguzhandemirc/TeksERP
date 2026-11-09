@@ -10,6 +10,8 @@ import WoCreateScreen from './WoCreateScreen';
 const mockShortcuts = jest.fn();
 let mockEntry: { entry: 'IKISI' | 'BELGE' | 'TOP'; ready: boolean } = { entry: 'BELGE', ready: true };
 let mockScan = false;
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: mockNavigate }) }));
 jest.mock('./useWoEntry', () => ({ useTabletWoEntry: () => mockEntry }));
 jest.mock('../../../../hooks/useFeatureFlags', () => ({ ...jest.requireActual('../../../../hooks/useFeatureFlags'), useScanRouteMode: () => mockScan }));
 jest.mock('../../../../services/route.service', () => ({ routeService: { getShortcuts: () => mockShortcuts() } }));

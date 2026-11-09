@@ -41,7 +41,7 @@ export default function LiveReadModal({ visible, onDone, onDismiss }: MultiCamer
           <CameraBody live={live} view={view} searching={!name} />
           <View style={styles.topBar}>
             <IconButton icon="close" size={32} iconColor={colors.textOnDark} style={styles.close} onPress={dismiss} disabled={live.capturing} accessibilityLabel="Kapat" testID="canli-kapat" />
-            <StatusPill tone={name ? 'ok' : 'busy'} icon={name ? 'file-document-check-outline' : 'magnify'} text={name ? 'Belge bulundu' : LIVE_SEARCHING} testID="canli-durum" />
+            <StatusPill tone={name ? 'ok' : 'busy'} icon={name ? 'file-document-check-outline' : 'magnify'} text={name ? 'Belge tespit edildi:' : LIVE_SEARCHING} testID="canli-durum" />
             {name && (
               <TruncatedText style={styles.docName} testID="canli-belge-adi">
                 {name}

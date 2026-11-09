@@ -47,6 +47,7 @@ import {
 } from "@prisma/client";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
 import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
 
 // eslint-disable-next-line max-params -- özgün metot 5 parametreli ve uyarısı cephedeki imzada sayılır; ailenin max-params katkısı bölme öncesi gibi İKİ
@@ -65,6 +66,8 @@ export async function finalizeWarehouseCut(
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -132,6 +135,11 @@ export async function finalizeWarehouseCut(
       action !== "discard" && Number(parent.currentQty) > 0
         ? await resolveTamburLabelBatchNo({ labelBatchNo: data.labelBatchNo, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
         : null;
+    // Kalan topun etiket kumaş adı / rengi — yalnız top doğuyorsa; miras yok, ayara bağlı değil.
+    const labelTexts =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? resolveRollLabelTexts(data)
+        : { labelItemName: null, labelColorName: null };
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
     //
@@ -245,6 +253,8 @@ export async function finalizeWarehouseCut(
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
             labelBatchNo: remainingLabelBatchNo,
+            labelItemName: labelTexts.labelItemName,
+            labelColorName: labelTexts.labelColorName,
             // Ham parent → kalan ham STOCK/SCRAP; bitmiş parent → WAREHOUSE.
             status: childStatus,
             qualityGrade: childQualityGrade,
@@ -427,6 +437,7 @@ export async function finalizeWarehouseCut(
         remainingQty: result.remainingQty,
         defter: result.defter,
         notes: data.notes ?? null,
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

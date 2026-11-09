@@ -45,6 +45,7 @@ import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
+import { labelSummaryText } from './labelTexts';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
 import { useOwnerDefaultTarget } from './ownerTarget';
 import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
@@ -1018,6 +1019,22 @@ export default function TamburScreen() {
     setRecutTargetCustomerName(o.name);
   });
   const [labelInfoOpen, setLabelInfoOpen] = useState(false);
+  // Etiket özeti/penceresi: boş kutuda basılacak kaynak değerler (kumaşın kendi adı/rengi, İE parti no).
+  const openLabelDefaults = {
+    itemName: selectedRoll?.itemName ?? null,
+    colorName: selectedRoll?.colorName ?? null,
+    // stepSummary.batchNumber İE numarasıdır (parti değil) — ipucu genel metinde kalır.
+    batchNo: null,
+  };
+  const recutLabelDefaults = { itemName: recutRollMeta?.item ?? null, colorName: recutRollMeta?.colorName ?? null, batchNo: null };
+  const openLabelSummary = labelSummaryText({
+    itemName: openFinal.texts.itemName, colorName: openFinal.texts.colorName, batchNo: openFinal.batch.value,
+    batchEnabled: openFinal.batch.enabled, defaults: openLabelDefaults,
+  });
+  const recutLabelSummary = labelSummaryText({
+    itemName: recutFinal.texts.itemName, colorName: recutFinal.texts.colorName, batchNo: recutFinal.batch.value,
+    batchEnabled: recutFinal.batch.enabled, defaults: recutLabelDefaults,
+  });
   const printTiming = useTamburPrintTiming();
 
   // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
@@ -1399,6 +1416,8 @@ export default function TamburScreen() {
       weightKg?: number;
       /** Müşteri parti no (etiket); ayar kapalıysa undefined. */
       labelBatchNo?: string | null;
+      /** Etiket kumaş adı / renk (boşsa alan yok). */
+      labelTexts?: { labelItemName?: string; labelColorName?: string };
     }) =>
       tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
@@ -1420,6 +1439,7 @@ export default function TamburScreen() {
         confirmMismatch: data.confirmMismatch,
         weightKg: data.weightKg,
         labelBatchNo: data.labelBatchNo,
+        ...data.labelTexts,
       }, data.measure)),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1698,6 +1718,7 @@ export default function TamburScreen() {
       measure,
       weightKg,
       labelBatchNo,
+      labelTexts,
     }: {
       rollId: string;
       cutLength: number;
@@ -1717,6 +1738,7 @@ export default function TamburScreen() {
       /** S5 tartım (kg). */
       weightKg?: number;
       labelBatchNo?: string | null;
+      labelTexts?: { labelItemName?: string; labelColorName?: string };
     }) =>
       tamburService.cutWarehouseRoll(rollId, withMeasure({
         cutLength,
@@ -1728,6 +1750,7 @@ export default function TamburScreen() {
         clientToken,
         weightKg,
         labelBatchNo,
+        ...labelTexts,
       }, measure)),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1825,6 +1848,7 @@ export default function TamburScreen() {
       varianceReasonText,
       weightKg,
       labelBatchNo,
+      labelTexts,
     }: {
       rollId: string;
       remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
@@ -1832,6 +1856,7 @@ export default function TamburScreen() {
       varianceReasonText?: string | null;
       weightKg?: number;
       labelBatchNo?: string | null;
+      labelTexts?: { labelItemName?: string; labelColorName?: string };
     }) =>
       tamburService.finalizeWarehouseCut(rollId, {
         remainingAction,
@@ -1839,6 +1864,7 @@ export default function TamburScreen() {
         varianceReasonText,
         weightKg,
         labelBatchNo,
+        ...labelTexts,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -2117,6 +2143,7 @@ export default function TamburScreen() {
         measure: resolveMeasure(capture, length),
         weightKg: openFinal.weightKg(),
         labelBatchNo: openFinal.batch.body(),
+        labelTexts: openFinal.texts.body(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
@@ -2399,6 +2426,7 @@ export default function TamburScreen() {
         measure: resolveMeasure(capture, cut),
         weightKg: recutFinal.weightKg(),
         labelBatchNo: recutFinal.batch.body(),
+        labelTexts: recutFinal.texts.body(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
@@ -4111,11 +4139,11 @@ export default function TamburScreen() {
                 kgText={recutFinal.kgText}
                 onKgChange={recutFinal.setKgText}
                 onSuggest={handleRecutLengthChange}
-                batch={recutFinal.batch}
-                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
+                labelSummary={{ text: recutLabelSummary, onPress: () => setLabelInfoOpen(true) }}
               />
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
+                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
                 compact={compact}
                 kartelaOn={markAsKartela}
                 copies={copiesBar}
@@ -4196,19 +4224,6 @@ export default function TamburScreen() {
                     {selectedRoll.colorName ? ` · ${selectedRoll.colorName}` : ''}
                     {selectedRoll.width != null ? ` · ${selectedRoll.width} cm` : ''}
                   </Text>
-                  {selectedRoll.properties.length > 0 && (
-                    <View style={styles.headerPropRow}>
-                      {selectedRoll.properties.map((p) => (
-                        <View key={p.id} style={styles.headerPropChip}>
-                          <Text style={styles.headerPropChipText} numberOfLines={1}>
-                            {/* Değer de basılır ("Gramaj: 50 gr") — final kararı
-                                veren operatör kurşundaki seçimi görmeli (VAL-03). */}
-                            {p.value ? `${p.name}: ${p.value.name}` : p.name}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
                 </View>
 
                 {/* mt kalan / katlama / sipariş kutu grubu. Telefonda başlığın
@@ -4479,12 +4494,12 @@ export default function TamburScreen() {
                 remaining={selectedRoll.currentQty}
                 kgText={openFinal.kgText}
                 onKgChange={openFinal.setKgText}
-                batch={openFinal.batch}
+                labelSummary={{ text: openLabelSummary, onPress: () => setLabelInfoOpen(true) }}
                 onSuggest={(t) => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: t } }))}
-                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
               />
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
+                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
                 compact={compact}
                 kartelaOn={markAsKartela}
                 copies={copiesBar}
@@ -4683,9 +4698,11 @@ export default function TamburScreen() {
           onaylatacak bir karar yok, yalnız bilgi toast'ı gösterilir. */}
 
       <TamburLabelInfoModal
-        workOrderId={activeJob?.stepSummary.workOrderId ?? null}
+        workOrderId={recutRollMeta ? null : (activeJob?.stepSummary.workOrderId ?? null)}
         visible={labelInfoOpen}
         onDismiss={() => setLabelInfoOpen(false)}
+        final={recutRollMeta ? recutFinal : openFinal}
+        defaults={recutRollMeta ? recutLabelDefaults : openLabelDefaults}
       />
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       {recutAmbiguous.modal}
@@ -4755,6 +4772,8 @@ export default function TamburScreen() {
             remainingAction: action,
             weightKg,
             labelBatchNo: action === 'discard' ? undefined : openFinal.batch.body(),
+            // Kuyruğa serileşen vars: alanlar düz (offline/mutations.ts aynı adları geçirir).
+            ...(action === 'discard' ? {} : openFinal.texts.body()),
             foldType: work.foldType ?? null,
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
@@ -4783,6 +4802,7 @@ export default function TamburScreen() {
             remainingAction: action,
             weightKg: action === 'discard' ? undefined : recutFinal.weightKg(),
             labelBatchNo: action === 'discard' ? undefined : recutFinal.batch.body(),
+            labelTexts: action === 'discard' ? undefined : recutFinal.texts.body(),
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
           });
@@ -8827,8 +8847,8 @@ const styles = StyleSheet.create({
   // Siparişler kutusu — turuncu. Yeşil (metre) / mor (katlama) / kırmızı (uyarı)
   // paletinde boşta olan tek belirgin renk; hiçbiriyle karışmaz.
   headerBoxOrders: { backgroundColor: '#ea580c' },
-  // KQ-D7 "HATA GİR": kırmızı, dokunma hedefi ≥ 64 dp.
-  headerBoxDefect: { backgroundColor: '#b91c1c', minHeight: 64, minWidth: 96 },
+  // KQ-D7 "HATA GİR": kırmızı; boyut yanındaki başlık kutularıyla aynı.
+  headerBoxDefect: { backgroundColor: '#b91c1c' },
   headerBoxGreen: { backgroundColor: '#059669' },
   headerBoxDanger: { backgroundColor: '#dc2626' },
   // İş emrinde belirlenen katlama kutusu — yeşil metre / koyu sipariş'ten ayrışsın.

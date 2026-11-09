@@ -14,6 +14,8 @@ interface StageProps {
   manual: boolean;
   /** Kaydedildikten sonra "Yeni iş emri". */
   onNew: () => void;
+  /** İE oluşunca (liste ekranına dönüş). */
+  onCreated?: () => void;
   /** ⚙ Alanlar sayfası başlık ikonundan (kontrollü); verilmezse form kendi düğmesini çizer. */
   fieldsOpen?: boolean;
   onFieldsOpenChange?: (open: boolean) => void;
@@ -21,13 +23,14 @@ interface StageProps {
   onKindChange?: (kind: WoCreateKind | null) => void;
 }
 
-export default function ScanStage({ route, kinds, manual, onNew, fieldsOpen, onFieldsOpenChange, onKindChange }: StageProps) {
+export default function ScanStage({ route, kinds, manual, onNew, onCreated, fieldsOpen, onFieldsOpenChange, onKindChange }: StageProps) {
   return (
     <View style={styles.fill}>
       <UnifiedWoForm
         initialRoute={route}
         routeLocked={false}
         onNew={onNew}
+        onCreated={onCreated}
         fieldsOpen={fieldsOpen}
         onFieldsOpenChange={onFieldsOpenChange}
         ownerKinds={kinds}

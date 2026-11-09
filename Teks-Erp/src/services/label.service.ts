@@ -79,7 +79,7 @@ import {
 } from "./helpers/label-loom-context.helper";
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
-import { applyLabelOverrides, readLabelOverrides } from "../config/label-overrides";
+import { applyLabelOverrides, applyRollLabelTexts, readLabelOverrides } from "../config/label-overrides";
 import { readLabelWidthSource, resolveLabelWidthCm } from "./helpers/label-width-source.helper";
 import { renderLabel, renderedBytes, shouldRasterize, withTemplateUnits, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
 import { renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
@@ -506,6 +506,8 @@ export class LabelService {
     // İE etiket bilgisi (eksik alan / düzeltme / boş bas) — kaynak değerlerin ÜSTÜNE, en son.
     const overrides = readLabelOverrides(roll.batch?.workOrder?.labelOverrides);
     if (Object.keys(overrides).length > 0) applyLabelOverrides(payload, overrides);
+    // Topun kendi etiket adı/rengi (tamburda kesimde seçilen) zincirin en önünde; null → payload bayt-aynı.
+    applyRollLabelTexts(payload, roll);
 
     return { success: true, data: payload };
   }

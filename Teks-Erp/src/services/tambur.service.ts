@@ -205,6 +205,8 @@ export class TamburService {
       remainingWeightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — bu finalize'da doğan HER parçaya yazılır. */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -415,6 +417,8 @@ export class TamburService {
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /**
@@ -459,6 +463,8 @@ export class TamburService {
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -518,6 +524,8 @@ export class TamburService {
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -564,6 +572,8 @@ export class TamburService {
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */

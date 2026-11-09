@@ -11,6 +11,7 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 import { z } from "zod";
 import { correctCutReading } from "../services/tambur-meter-correct.service";
 import { getTamburLabelSettings } from "../services/helpers/tambur-customer-settings.helper";
+import { getTamburLabelSuggestions } from "../services/tambur/label-suggestions";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -997,6 +998,49 @@ router.get(
     try {
       const q = labelSettingsQuery.parse(req.query);
       res.json({ success: true, data: await getTamburLabelSettings(q) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-suggestions:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Etiket kumaş adı / renk / parti no önerileri (son 180 gün) + bu İE'deki son değer
+ *     description: |
+ *       Müşteri kümesi = İE müşterisi ∪ İE partilerindeki topların sahibi (fason); `rollId` verilirse
+ *       topun sahibi/etiket müşterisi ve partisinin İE'si. Listeler tekil, en son kullanılan önce, en çok 20.
+ *       `last` = bu İE'de bu alanlardan birini taşıyan en son topun değerleri (tablet yapışkan değeri).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: workOrderId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: rollId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ workOrderId, customerIds, itemNames, colorNames, batchNos, last }" }
+ *       400: { description: İkisi de yok }
+ *       404: { description: İş emri / top bulunamadı }
+ */
+const labelSuggestionsQuery = z
+  .object({
+    workOrderId: z.string().uuid("Geçersiz iş emri ID").optional(),
+    rollId: z.string().uuid("Geçersiz top ID").optional(),
+  })
+  .refine((q) => !!q.workOrderId || !!q.rollId, { message: "workOrderId ya da rollId gerekli" });
+router.get(
+  "/label-suggestions",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const q = labelSuggestionsQuery.parse(req.query);
+      res.json({ success: true, data: await getTamburLabelSuggestions(q) });
     } catch (err) {
       next(err);
     }

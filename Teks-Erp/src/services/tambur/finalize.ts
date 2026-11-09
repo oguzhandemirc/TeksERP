@@ -65,6 +65,7 @@ import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "../helpers/roll-error-scope.helper";
 import { TERIM } from "../../constants/terim";
 import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { isConsignedRoll } from "../helpers/stock-ownership.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors } from "./shared";
 
@@ -142,6 +143,8 @@ export async function finalize(
       remainingWeightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — bu finalize'da doğan HER parçaya yazılır. */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -537,6 +540,8 @@ export async function finalize(
       targetCustomerId: null,
       ownerCustomerId: roll.ownerCustomerId,
     });
+    // Etikete basılacak kumaş adı / renk — topun kendi değeri (miras yok), ayara bağlı değil.
+    const labelTexts = resolveRollLabelTexts(data);
     // Tamburda tartım (S5) — depoya inen her parça kesim yollarıyla AYNI kapıdan; tx/barkoddan önce.
     for (const seg of segments) {
       if (seg.status !== RollStatus.WAREHOUSE && seg.rawWeightKg == null) continue;
@@ -717,6 +722,8 @@ export async function finalize(
             currentQty: seg.qty,
             weightKg: seg.weightKg,
             labelBatchNo,
+            labelItemName: labelTexts.labelItemName,
+            labelColorName: labelTexts.labelColorName,
             status: seg.status,
             qualityGrade: seg.qualityGrade,
             // seg.qualityGrade nullable → null anahtarla katalog araması yok, id null.
@@ -821,6 +828,7 @@ export async function finalize(
             source: seg.auditSource,
             relatedErrorIds: seg.auditErrorIds,
             splitFromRollId: data.rollId,
+            ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
             inheritedOpCount: inheritedOps.length,
           },
         });

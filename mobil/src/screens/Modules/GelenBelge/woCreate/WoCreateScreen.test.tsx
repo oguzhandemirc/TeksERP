@@ -5,6 +5,8 @@ import { renderWithPaper } from '../../../../test/render';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import WoCreateScreen from './WoCreateScreen';
 // Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: mockNavigate }) }));
 jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
 const mockShortcuts = jest.fn();

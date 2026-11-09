@@ -97,6 +97,9 @@ export interface TamburFinalizeOpenFabricVars {
   weightKg?: number;
   /** Kalan topun etiket parti no'su (müşteri ayarı). Eski kuyrukta `undefined` = dokunma. */
   labelBatchNo?: string | null;
+  /** Kalan topun etiket kumaş adı / rengi. Eski kuyrukta `undefined` = alan gitmez (null). */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
 }
 
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
@@ -249,6 +252,9 @@ export function registerStationMutationDefaults(): void {
         weightKg: vars.weightKg,
         // Müşteri parti no — aynı sessiz-allowlist tuzağı; ayar kapalıysa undefined (alan gitmez).
         labelBatchNo: vars.labelBatchNo,
+        // Etiket kumaş adı / renk — aynı sessiz-allowlist tuzağı.
+        labelItemName: vars.labelItemName,
+        labelColorName: vars.labelColorName,
       })),
     ...OFFLINE_AWARE,
   });

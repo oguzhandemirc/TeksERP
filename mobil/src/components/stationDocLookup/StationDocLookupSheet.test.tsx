@@ -1,4 +1,4 @@
-// K17 — "Belgeden iş bul" kartı: fotoğraf → tek İE açılır; çok → liste; yok → mesaj; elle arama sunucuya gider.
+// K17 — "Belgeden iş bul" kartı: açılınca doğrudan kamera; fotoğraf → tek İE açılır; çok → liste; yok → mesaj; giriş kutusu yok.
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../test/render';
@@ -38,8 +38,8 @@ beforeEach(() => {
 
 it('⭐ belge okut → tek sayfa istenir, tek iş emri doğrudan açılır', async () => {
   mockByPhoto.mockResolvedValue(result([wo('IE1')], 'SINGLE', 'bulundu'));
-  const { findByTestId, onOpen } = setup();
-  fireEvent.press(await findByTestId('belge-okut-cek'));
+  const { onOpen } = setup();
+  await waitFor(() => expect(mockScanner).toHaveBeenCalled());
   await waitFor(() => expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ cardBarcode: 'K-IE1' }), []));
   expect(mockScanner).toHaveBeenCalledWith(expect.objectContaining({ pageLimit: 1 }));
   expect(mockByPhoto.mock.calls[0]![0]).toBe(b64);
@@ -48,7 +48,7 @@ it('⭐ belge okut → tek sayfa istenir, tek iş emri doğrudan açılır', asy
 it('⭐ çok iş emri → liste; seçilen açılır', async () => {
   mockByPhoto.mockResolvedValue(result([wo('IE1'), wo('IE2')], 'MULTIPLE', '2 terbiye iş emri bulundu; açılacak olanı seçin.'));
   const { findByTestId, getByText, onOpen } = setup();
-  fireEvent.press(await findByTestId('belge-okut-cek'));
+  await waitFor(() => expect(mockScanner).toHaveBeenCalled());
   expect(await findByTestId('belge-okut-liste')).toBeTruthy();
   expect(getByText('P-IE2 · Belge 914279')).toBeTruthy();
   expect(onOpen).not.toHaveBeenCalled();
@@ -56,16 +56,19 @@ it('⭐ çok iş emri → liste; seçilen açılır', async () => {
   expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ workOrderNumber: 'IE2' }), [expect.objectContaining({ workOrderNumber: 'IE1' }), expect.objectContaining({ workOrderNumber: 'IE2' })]);
 });
 
-it('⭐ iş emri yok → sunucunun mesajı; elle arama sunucuya gider', async () => {
-  mockBySearch.mockResolvedValue(result([], 'NO_WORK_ORDER', 'Aramaya uyan terbiye iş emri yok.'));
-  const { findByTestId, getByTestId, onOpen } = setup(false);
-  expect(() => getByTestId('belge-okut-cek')).toThrow(); // okuyucu yok → yalnız elle arama
-  fireEvent.changeText(getByTestId('belge-okut-ara-metin'), ' 914279 ');
-  await act(async () => {}); // portal içeriği host'a mikrotask'ta taşınır (SimplePortal): düğme kilidi açılsın
-  fireEvent.press(getByTestId('belge-okut-ara'));
+it('⭐ pencere açılınca doğrudan kamera; elle giriş kutusu ve Ara yok; İptal kapatır, Tekrar okut yeniden açar', async () => {
+  mockByPhoto.mockResolvedValue(result([], 'NO_WORK_ORDER', 'Aramaya uyan terbiye iş emri yok.'));
+  const onDismiss = jest.fn();
+  const { findByTestId, queryByTestId, getByTestId } = renderWithPaper(<StationDocLookupSheet visible onDismiss={onDismiss} onOpen={jest.fn()} readerConfigured />);
   expect(await findByTestId('belge-okut-yok')).toHaveTextContent('Aramaya uyan terbiye iş emri yok.');
-  expect(mockBySearch).toHaveBeenCalledWith('914279', undefined);
-  expect(onOpen).not.toHaveBeenCalled();
+  expect(mockScanner).toHaveBeenCalledTimes(1);
+  expect(queryByTestId('belge-okut-ara-metin')).toBeNull();
+  expect(queryByTestId('belge-okut-ara')).toBeNull();
+  await act(async () => {});
+  fireEvent.press(getByTestId('belge-okut-cek'));
+  await waitFor(() => expect(mockScanner).toHaveBeenCalledTimes(2));
+  fireEvent.press(getByTestId('belge-okut-kapat'));
+  expect(onDismiss).toHaveBeenCalled();
 });
 
 it('⭐ çok İE, ekran bildirilir: burada olanlar üstte; satırda parti no, ayrıntı ve nerede', async () => {
@@ -74,7 +77,7 @@ it('⭐ çok İE, ekran bildirilir: burada olanlar üstte; satırda parti no, ay
   });
   mockByPhoto.mockResolvedValue({ ...result([rich('IE1', 'NOT_YET', 'Buraya henüz gelmedi'), rich('IE2', 'HERE', 'Burada bekliyor'), rich('IE3', 'STARTABLE_HERE', 'Rotasız · burada başlatılabilir')], 'MULTIPLE', 'm'), station: { screen: 'TAMBUR', label: 'Tambur 1' } });
   const { findByTestId, getByTestId, getByText, onOpen } = setup(true, { screen: 'TAMBUR', stationId: 'st-1' });
-  fireEvent.press(await findByTestId('belge-okut-cek'));
+  await waitFor(() => expect(mockScanner).toHaveBeenCalled());
   expect(await findByTestId('belge-okut-liste')).toBeTruthy();
   expect(mockByPhoto.mock.calls[0]![2]).toEqual({ screen: 'TAMBUR', stationId: 'st-1' });
   expect(getByText('Bu belgede 3 parti var; 2 tanesi bu istasyonda (Tambur 1) açılabilir. Açılacak olanı seçin.')).toBeTruthy();
@@ -85,21 +88,18 @@ it('⭐ çok İE, ekran bildirilir: burada olanlar üstte; satırda parti no, ay
 
 it('⭐ çok İE, yalnız biri burada → doğrudan açılır, kardeşler şerit için verilir', async () => {
   mockByPhoto.mockResolvedValue(result([wo('IE1', { atStation: 'PASSED' }), wo('IE2', { atStation: 'STARTABLE_HERE' })], 'MULTIPLE', 'm'));
-  const { findByTestId, onOpen } = setup(true, { screen: 'KURSUN_QC' });
-  fireEvent.press(await findByTestId('belge-okut-cek'));
+  const { onOpen } = setup(true, { screen: 'KURSUN_QC' });
+  await waitFor(() => expect(mockScanner).toHaveBeenCalled());
   await waitFor(() => expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ workOrderNumber: 'IE2' }), [expect.objectContaining({ workOrderNumber: 'IE1' }), expect.objectContaining({ workOrderNumber: 'IE2' })]));
 });
 
-it('⭐ eşik altı aday → kendiliğinden açılmaz; satır ne tuttuğunu söyler; yalnız "Eminim, aç" açar (CONFIRMED bildirilir)', async () => {
+it('⭐ eşik altı aday → kendiliğinden açılmaz; kartın kendisine dokunmak açar (CONFIRMED bildirilir)', async () => {
   const verification = { score: 55, passed: false, strongEvidence: true, threshold: 80, targetKey: 'n1', components: [{ key: 'ROLL_NOS', label: 'Top no', weight: 40, ratio: 0.2, matched: false, detail: '3/16' }] };
   mockByPhoto.mockResolvedValue({ ...result([], 'UNVERIFIED', 'sunucu'), unverifiedWorkOrders: [wo('IE1', { verification })], verification: { threshold: 80, bestScore: 55 }, checkId: 'chk-1' });
-  const { findByTestId, getByTestId, getByText, onOpen } = setup();
-  fireEvent.press(await findByTestId('belge-okut-cek'));
+  const { findByTestId, getByTestId, getByText, queryByText, onOpen } = setup();
   expect(await findByTestId('belge-okut-emin-degil')).toBeTruthy();
-  expect(getByText('Belge tam eşleşmedi (%55) — listeden seçin ya da fiş no ile arayın.')).toBeTruthy();
-  expect(getByTestId('belge-okut-dogrulama-IE1')).toHaveTextContent(/%55 · eşik %80.*Top no.*3\/16/);
-  // Rozet: kısmi eşleşme (3/16) "kısmen tuttu" diye okunur — ekran okuyucu ve renk-körü için metin taşır.
-  expect(getByTestId('belge-okut-rozet-IE1-ROLL_NOS').props.accessibilityLabel).toBe('Top no kısmen tuttu, 3/16');
+  expect(getByText('Belge tam eşleşmedi (%55) — doğru işi seçin.')).toBeTruthy();
+  expect(queryByText(/eşik/)).toBeNull(); // eşik rozeti yok; kısmi eşleşme (oran 0.2) kırmızı satır değil
   expect(onOpen).not.toHaveBeenCalled();
   fireEvent.press(getByTestId('belge-okut-onayla-IE1'));
   expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ workOrderNumber: 'IE1' }), [expect.objectContaining({ workOrderNumber: 'IE1' })]);
@@ -108,8 +108,15 @@ it('⭐ eşik altı aday → kendiliğinden açılmaz; satır ne tuttuğunu söy
 
 it('⭐ kendiliğinden açılan İE izine AUTO olarak bildirilir', async () => {
   mockByPhoto.mockResolvedValue({ ...result([wo('IE1')], 'SINGLE', 'bulundu'), checkId: 'chk-2' });
-  const { findByTestId, onOpen } = setup();
-  fireEvent.press(await findByTestId('belge-okut-cek'));
+  const { onOpen } = setup();
+  await waitFor(() => expect(mockScanner).toHaveBeenCalled());
   await waitFor(() => expect(onOpen).toHaveBeenCalled());
   expect(mockReport).toHaveBeenCalledWith('chk-2', 'IE1', 'AUTO');
+});
+
+it('⭐ müşteri uyuşmazlığı kartta kırmızı tek satır olarak kalır', async () => {
+  const verification = { score: 40, passed: false, strongEvidence: true, threshold: 80, targetKey: 'n1', components: [{ key: 'CUSTOMER', label: 'Müşteri', weight: 20, ratio: 0, matched: false, detail: 'okunan HHLMC' }] };
+  mockByPhoto.mockResolvedValue({ ...result([], 'UNVERIFIED', 's'), unverifiedWorkOrders: [wo('IE1', { verification })], verification: { threshold: 80, bestScore: 40 } });
+  const { findByTestId } = setup();
+  expect(await findByTestId('belge-okut-uyusmaz-IE1')).toHaveTextContent('Uyuşmayan: Müşteri');
 });

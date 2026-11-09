@@ -88,8 +88,8 @@ export function searchable(q: string): boolean {
 
 /** "Belge tam eşleşmedi (%62) — listeden seçin" · puan yoksa nedeni. */
 export function unsureMessage(best: number | null, strong = true): string {
-  if (best === null || !strong) return 'Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile arayın.';
-  return `Belge tam eşleşmedi (%${best}) — listeden seçin ya da fiş no ile arayın.`;
+  if (best === null || !strong) return 'Belge doğrulanamadı — doğru işi seçin.';
+  return `Belge tam eşleşmedi (%${best}) — doğru işi seçin.`;
 }
 
 /** Ne tuttu / ne tutmadı: "%62 · Top no ✗ 3/16 · Müşteri ✓". */

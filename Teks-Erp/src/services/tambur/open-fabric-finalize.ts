@@ -53,6 +53,7 @@ import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
 import { TERIM } from "../../constants/terim";
 import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
 
 export async function finalizeOpenFabric(
@@ -78,6 +79,8 @@ export async function finalizeOpenFabric(
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -184,6 +187,11 @@ export async function finalizeOpenFabric(
       action !== "discard" && Number(parent.currentQty) > 0
         ? await resolveTamburLabelBatchNo({ labelBatchNo: data.labelBatchNo, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
         : null;
+    // Kalan topun etiket kumaş adı / rengi — yalnız top doğuyorsa; miras yok, ayara bağlı değil.
+    const labelTexts =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? resolveRollLabelTexts(data)
+        : { labelItemName: null, labelColorName: null };
     // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
     // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
     const childQualityGrade: string = await resolveRemainingGradeCode(
@@ -291,6 +299,8 @@ export async function finalizeOpenFabric(
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
             labelBatchNo: remainingLabelBatchNo,
+            labelItemName: labelTexts.labelItemName,
+            labelColorName: labelTexts.labelColorName,
             status: RollStatus.WAREHOUSE,
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,
@@ -468,6 +478,7 @@ export async function finalizeOpenFabric(
         remainingChildQuality: result.wantChild ? childQualityGrade : null,
         remainingQty: result.remainingQty,
         notes: data.notes ?? null,
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

@@ -97,6 +97,7 @@ export function partialFailureMessage(
 export function sourceLabel(src: NameSource | null): string {
   if (src === 'OVERRIDE') return 'siparişe özel';
   if (src === 'MASTER') return 'müşteri adı';
+  if (src === 'ROLL') return 'tamburda girilen';
   return 'bizdeki ad';
 }
 

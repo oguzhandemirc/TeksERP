@@ -3953,6 +3953,13 @@ model Roll {
   /// `customerBatchNo`'su DEĞİL. Yalnız cari `tamburLabelBatchEnabled` açıkken yazılır.
   labelBatchNo String? @db.VarChar(64)
 
+  /// Müşterinin etikete basılmasını istediği KUMAŞ ADI / RENK metni — tamburda kesim/bitirme
+  /// anında yazılır, MİRAS ALINMAZ (bölünen çocuğa kopyalanmaz); kumaşın gerçek adı (`itemId`)
+  /// değişmez. Doluyken etiket ad zincirinin en önünde (`itemNameSource`/`colorNameSource` = ROLL);
+  /// NULL = bugünkü zincir. Bayrağa bağlı değil; BaseController yazamaz (yalnız tambur kesim uçları).
+  labelItemName  String? @db.VarChar(80)
+  labelColorName String? @db.VarChar(80)
+
   /// İstemcinin BEYAN ETTİĞİ giriş anı — operatörün "Kaydet"e bastığı an.
   ///
   /// Mükerrer top tuzağının 90 sn'lik penceresi bununla ölçülür, `createdAt` ile

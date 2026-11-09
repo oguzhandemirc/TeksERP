@@ -1339,6 +1339,9 @@ export interface TamburCutRequest {
   measure?: TamburMeasureBody;
   /** Çocuğun etiketine basılacak müşteri parti no; ayar kapalıysa GÖNDERİLMEZ (sunucu 400). */
   labelBatchNo?: string | null;
+  /** Çocuğun etiket kumaş adı / rengi (ayara bağlı değil; boşsa gönderilmez). */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
@@ -1375,6 +1378,9 @@ export interface TamburFinalizeOpenFabricRequest {
   weightKg?: number | null;
   /** Kalan topun etiketine basılacak müşteri parti no (ayar kapalıysa gönderilmez). */
   labelBatchNo?: string | null;
+  /** Kalan topun etiket kumaş adı / rengi (boşsa gönderilmez). */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
 }
 
 // =============================================================================
@@ -1413,7 +1419,8 @@ export interface QualityGrade {
 // Label payload + template
 // =============================================================================
 
-export type NameSource = 'OVERRIDE' | 'MASTER' | 'DEFAULT';
+/** ROLL = topun kendi etiket adı (tamburda kesimde seçilir; eski backend göndermez). */
+export type NameSource = 'OVERRIDE' | 'MASTER' | 'DEFAULT' | 'ROLL';
 
 /**
  * Ana veri kademesi kazandığında hangi tablodan geldiği: `ITEM` = müşterinin YALNIZ

@@ -62,3 +62,27 @@ export function applyLabelOverrides(payload: LabelPayload, overrides: LabelOverr
     target[def.key] = v;
   }
 }
+
+/**
+ * Topun kendi etiket kumaş adı / rengi (`Roll.labelItemName`/`labelColorName`, tamburda kesimde yazılır).
+ * İE düzeltmesinden SONRA uygulanır → en önde. Müşteri belgesi adı (deliveryNote*Text) payload'da
+ * varsa o da aynı ada çekilir: etikette aynı kumaşın iki farklı adı basılmasın. Null alan dokunulmaz.
+ */
+export function applyRollLabelTexts(
+  payload: LabelPayload,
+  roll: { labelItemName?: string | null; labelColorName?: string | null },
+): void {
+  const item = roll.labelItemName?.trim();
+  if (item) {
+    payload.itemName = item;
+    payload.itemNameSource = "ROLL";
+    if (Object.prototype.hasOwnProperty.call(payload, "deliveryNoteItemText")) payload.deliveryNoteItemText = item;
+  }
+  const color = roll.labelColorName?.trim();
+  if (color) {
+    payload.colorName = color;
+    payload.colorNameSource = "ROLL";
+    payload.colorNameScope = null;
+    if (Object.prototype.hasOwnProperty.call(payload, "deliveryNoteColorText")) payload.deliveryNoteColorText = color;
+  }
+}
