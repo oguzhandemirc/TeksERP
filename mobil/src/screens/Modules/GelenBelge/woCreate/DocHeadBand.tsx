@@ -1,9 +1,11 @@
 // Belge satırının başı. Toplu liste: "Belge GB…" şeridi + okuma hapı, altında eylem satırı. Tek İE formu: TEK satır — belge no +
 // durum ikonu (sorun varsa kısa yazı), sağda Yeniden okut / Taslağı iptal et ikonları. İkisinde de fotoğrafsız tanıtma açıklaması ve
 // kısa eylemli iletiler (`docReadNotice`) altta; tanınmamış belge ortada bir kez sorulur (`TeachPrompt`), Tanıt ikonu başlıkta kalır.
+// Tek formda eylemsiz sarı okuma uyarıları (çapraz doğrulama, bulunamayan alan) şerit değil: başlık çubuğunda ünlem + modal
+// (`ReadWarnings`, depo `readWarningStore`); tanıt sorusu varken modal bekler.
 // Sunucu `tanima` gönderince altta yalnız iş gerektiren şerit (`RecognitionStrip`: çok parti kipi).
 // Dar ekranda (<600dp) tek formun ikonları sığmaz: en çok iki ikon görünür, fazlası "⋯" menüsüne iner (birincil: yeniden okut).
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
@@ -16,11 +18,13 @@ import { usePermissions } from '../../../../hooks/usePermission';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import CancelDraftButton from '../CancelDraftButton';
 import { TeachStrip, TemplateName, TemplateUpdateButton, templateAction } from '../tanit/TeachBanner';
-import TeachPrompt from '../tanit/TeachPrompt';
+import TeachPrompt, { teachPromptDue } from '../tanit/TeachPrompt';
 import { useTeachEntry } from '../tanit/useTeachEntry';
 import type { useReadResult } from '../useReadResult';
 import { docReadNotices, docReadPill, type DocNotice } from './docReadNotice';
 import RecognitionStrip from './RecognitionStrip';
+import { useReadWarningStore } from './readWarningStore';
+import { isWarningNotice, warningLines } from './warningLines';
 import { stripModel } from './stripModel';
 import type { DocRow, WoRowsState } from './useWoRows';
 
@@ -68,7 +72,10 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   const input = { watch: w, formFilled: formFilled(row), detailFailed };
   const noPages = manual && w?.phase === 'done' && w.summary.state === 'NO_PAGES';
   const pill = noPages ? { tone: 'idle' as PillTone, icon: 'information-outline' as const, text: 'Belgesiz — elle giriş' } : docReadPill(input);
-  const notices = done || noPages ? [] : docReadNotices(input);
+  const allNotices = done || noPages ? [] : docReadNotices(input);
+  // Tek formda uyarılar başlık modalına gider; toplu listede (çok satır, tek başlık) şerit kalır.
+  const notices = single ? allNotices.filter((n) => !isWarningNotice(n)) : allNotices;
+  const [, bumpTeach] = useState(0);
   const teach = useTeachEntry({ row, wo, tanitim: w?.phase === 'done' ? w.summary.tanitim : undefined, customers });
   const strip = noPages ? null : stripModel({
     tanima: w?.phase === 'done' ? w.summary.tanima : undefined, entry: teach, localTaught: !!row.taught,
@@ -80,6 +87,9 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   const busy = w?.phase === 'polling' && !row.form;
   const pillColor = PILL_COLOR[pill.tone];
   const compact = useIsCompact();
+  const readKey = `${row.noteId}:${row.runKey}`;
+  const unrecognized = !strip || !!strip.unrecognized;
+  useWarningPublish(single, readKey, single ? warningLines(allNotices) : [], teachPromptDue(teach, readKey, unrecognized) || !!teach.teaching);
   const compactActions = useCompactHeadActions(single && compact, { teach, manual, done, cancellable, saving: wo.saving, onReread, onPreview });
   return (
     <>
@@ -135,11 +145,24 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
       )}
       {strip && <RecognitionStrip model={strip} noteNo={no} multi={row.form?.multi} onMode={(m) => wo.setMulti(row.noteId, m)} />}
       <TeachStrip entry={teach} />
-      <TeachPrompt entry={teach} readKey={`${row.noteId}:${row.runKey}`} unrecognized={!strip || !!strip.unrecognized} />
+      <TeachPrompt entry={teach} readKey={readKey} unrecognized={unrecognized} onAnswer={() => bumpTeach((n) => n + 1)} />
       <BandNotices notices={notices} act={act} no={no} />
       {teach.modal}
     </>
   );
+}
+
+/** Tek formun uyarılarını başlık ikonuna bildirir (içerik değişince); satır kalkınca temizler. */
+function useWarningPublish(on: boolean, readKey: string, lines: ReturnType<typeof warningLines>, held: boolean) {
+  const publish = useReadWarningStore((s) => s.publish);
+  const clear = useReadWarningStore((s) => s.clear);
+  const sig = JSON.stringify(lines);
+  useEffect(() => {
+    if (!on) return;
+    publish(lines.length > 0 ? readKey : null, JSON.parse(sig) as typeof lines, held);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `sig` satırların değer kimliği (her çizimde yeni dizi)
+  }, [on, readKey, sig, held, publish]);
+  useEffect(() => (on ? clear : undefined), [on, clear]);
 }
 
 interface CompactBandProps {

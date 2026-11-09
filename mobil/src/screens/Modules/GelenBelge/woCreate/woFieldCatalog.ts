@@ -1,6 +1,6 @@
 // K30-D tablet İE formu alan kataloğu (saf): ⚙ "Alanlar" seçicisi, kişisel tercih blob'u (`tabletIeForm.gizli`) ve
-// alanın yeri (üst form / altta kapalı "Diğer alanlar"). Zorunlular kapatılamaz; belgeden dolan gizli alan üste çıkar
-// (sessiz gönderim yok). Varsayılan HEPSİ AÇIK.
+// alanın yeri (üst form / altta kapalı "Diğer alanlar"). Zorunlular kapatılamaz; belgeden DEĞER dolan gizli alan üste çıkar
+// (sessiz gönderim yok), yalnız öneri/yazı gelen gizli alan (hedef kumaş/renk) "Diğer alanlar"da kalır. Varsayılan HEPSİ AÇIK.
 import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
 
 export type WoFieldKey =
@@ -55,7 +55,7 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'katTipi', label: 'Kat tipi', section: 'Üretim', required: false, when: 'Rotada tambur varsa ya da rotasızda' },
   { key: 'planBaslangic', label: 'Planlı başlangıç', section: 'Plan', required: false },
   { key: 'planBitis', label: 'Planlı bitiş', section: 'Plan', required: false },
-  { key: 'not', label: 'Not', section: 'Plan', required: false },
+  { key: 'not', label: 'Üretim notu', section: 'Plan', required: false },
 ];
 
 export const WO_FIELD_SECTIONS: readonly WoFieldSection[] = ['Belge', 'Üretim', 'Plan'];
@@ -83,6 +83,8 @@ export interface FieldContext {
   hasMachine?: boolean;
   /** Bu formda hiç sorulmayan alanlar (Fason'da hedef kumaş; siparişten gelen / rotanın vermediği hedef renk): "Diğer alanlar"a da girmez. */
   unavailable?: readonly WoFieldKey[];
+  /** Rotanın AUTO verdikleri düşünce seçilecek hedef özellik kalmadı (yüklenirken false). */
+  noTargetProps?: boolean;
 }
 
 /** Alan bu formda çizilebilir mi (koşulu sağlanıyor mu). */
@@ -101,8 +103,9 @@ export function fieldApplicable(k: WoFieldKey, c: FieldContext): boolean {
     case 'makine':
       return c.hasMachine === true;
     case 'rotaAdimlari':
-    case 'hedefOzellik':
       return c.hasRouteSteps;
+    case 'hedefOzellik':
+      return c.hasRouteSteps && c.noTargetProps !== true;
     default:
       return true;
   }
@@ -122,21 +125,49 @@ export function parseHidden(blob: unknown): WoFieldKey[] {
   return out;
 }
 
+/** Kişisel aç/kapa anahtarları (varsayılan kapalı = bugünkü form; varsayılan blob'a yazılmaz). */
+export interface PrefFlags {
+  /** "Diğer alanlar" bölümünü gizle. */
+  digerGizli?: boolean;
+  /** Rota adımlarının boş not kutusunu gizle. */
+  adimNotuGizli?: boolean;
+}
+
 /** Oku-birleştir-yaz: blob'un DİĞER anahtarları (panel teması, sıralar…) ve `tabletIeForm`un diğer alt anahtarları korunur. */
-export function mergePrefBlob(blob: Record<string, unknown> | null | undefined, hidden: readonly WoFieldKey[], hedefDoldur = false): Record<string, unknown> {
+export function mergePrefBlob(blob: Record<string, unknown> | null | undefined, hidden: readonly WoFieldKey[], hedefDoldur = false, flags: PrefFlags = {}): Record<string, unknown> {
   const base = blob ?? {};
   const prev = base[PREF_KEY];
   const prevObj = prev && typeof prev === 'object' && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
   const gizli = [...new Set(hidden.filter((k) => BY_KEY.has(k) && !isRequiredField(k)))];
   // Varsayılan (kapalı) anahtar yazılmaz: blob eski biçimde kalır.
-  const { hedefDoldur: _eski, ...rest } = prevObj;
-  return { ...base, [PREF_KEY]: { ...rest, gizli, ...(hedefDoldur ? { hedefDoldur: true } : {}) } };
+  const { hedefDoldur: _eski, digerGizli: _eskiDiger, adimNotuGizli: _eskiNot, ...rest } = prevObj;
+  const on = { ...(hedefDoldur ? { hedefDoldur: true } : {}), ...(flags.digerGizli ? { digerGizli: true } : {}), ...(flags.adimNotuGizli ? { adimNotuGizli: true } : {}) };
+  return { ...base, [PREF_KEY]: { ...rest, gizli, ...on } };
 }
 
 /** Kişisel anahtar "Belgedeki gelen değerleri hedefe yaz" (`tabletIeForm.hedefDoldur`); yok/bozuk = KAPALI. */
 export function parseFillTarget(blob: unknown): boolean {
   const raw = blob && typeof blob === 'object' ? (blob as Record<string, unknown>)[PREF_KEY] : undefined;
   return !!raw && typeof raw === 'object' && (raw as Record<string, unknown>).hedefDoldur === true;
+}
+
+const flagOn = (blob: unknown, key: keyof PrefFlags): boolean => {
+  const raw = blob && typeof blob === 'object' ? (blob as Record<string, unknown>)[PREF_KEY] : undefined;
+  return !!raw && typeof raw === 'object' && (raw as Record<string, unknown>)[key] === true;
+};
+
+/** Kişisel anahtar "Diğer alanlar bölümünü gizle" (`tabletIeForm.digerGizli`); yok/bozuk = bölüm GÖRÜNÜR (bugünkü form). */
+export const parseOtherHidden = (blob: unknown): boolean => flagOn(blob, 'digerGizli');
+
+/** Kişisel anahtar "Rota adımı notunu gizle" (`tabletIeForm.adimNotuGizli`); yok/bozuk = not kutusu GÖRÜNÜR. */
+export const parseStepNotesHidden = (blob: unknown): boolean => flagOn(blob, 'adimNotuGizli');
+
+/**
+ * "Diğer alanlar" bölümü çizilir mi: anahtar açıkken evet; kapalıyken gizli alanlardan biri gövdeye gidecek değer taşıyorsa
+ * (sessiz gönderim yasak) ya da alt çubuk oraya yönlendirdiyse yine çizilir.
+ */
+export function otherSectionShown(otherHidden: boolean, otherValued: readonly WoFieldKey[], revealed = false): boolean {
+  return !otherHidden || otherValued.length > 0 || revealed;
 }
 
 /** Gizli alanı aç/kapat; zorunlu alan kapatılamaz (liste aynen döner). */
@@ -148,14 +179,12 @@ export function toggleHidden(hidden: readonly WoFieldKey[], k: WoFieldKey): WoFi
 const DOC_KEY_FIELD: Record<DocFilledKey, WoFieldKey> = { width: 'en', targetQuantity: 'hedefMetraj', targetWeight: 'hedefKg', note: 'not' };
 
 /**
- * Bu okumada belgeden dolan ya da belgeden öneri/yazı taşıyan alanlar. Okuma anının görüntüsü (`docShown`) kullanılır:
- * görevli alanı düzeltince rozet düşer ama alan okuma boyunca yerinde kalır (üstten kaybolmaz).
+ * Bu okumada belgeden DEĞER dolan (gövdeye gidecek) alanlar. Okuma anının görüntüsü (`docShown`) kullanılır: görevli alanı
+ * düzeltince rozet düşer ama alan okuma boyunca yerinde kalır. Yalnız öneri/yazı (`suggestions`, `docText`) gizli alanı üste
+ * çıkarmaz — değer gövdeye gitmez; kullanıcı görmek isterse ⚙'tan açar (2026-11-09).
  */
-export function docFilledFields(s: Pick<WoFormState, 'docShown' | 'suggestions' | 'docText'>): WoFieldKey[] {
-  const out: WoFieldKey[] = s.docShown.map((k) => DOC_KEY_FIELD[k]);
-  if (s.suggestions.targetItem || s.docText.desen) out.push('hedefKumas');
-  if (s.suggestions.targetColor || s.docText.renk) out.push('hedefRenk');
-  return out;
+export function docFilledFields(s: Pick<WoFormState, 'docShown'>): WoFieldKey[] {
+  return s.docShown.map((k) => DOC_KEY_FIELD[k]);
 }
 
 export type FieldPlacement = 'top' | 'other';

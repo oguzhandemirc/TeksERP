@@ -7,6 +7,7 @@ import { Button, Chip, IconButton, Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import PickerModal from '../../../../components/PickerModal';
 import TruncatedText from '../../../../components/TruncatedText';
+import { useIsCompact } from '../../../../hooks/useDeviceType';
 import type { DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
@@ -34,6 +35,8 @@ interface Props {
   /** Kurşun adımı satırındaki makine seçici (⚙'de makine açık ve istasyonda makine varsa). */
   machine: MachinePick | null;
   locked: boolean;
+  /** ⚙ "Rota adımı notu" kapalı: boş not kutusu çizilmez; dolu not (şablondan / yazılmış) yine görünür (sessiz gönderim yok). */
+  hideEmptyNotes?: boolean;
 }
 
 export default function RouteStepsEditor(p: Props) {
@@ -44,6 +47,11 @@ export default function RouteStepsEditor(p: Props) {
   const kursunKey = p.steps.find((s) => isKursunStation(s.station))?.key ?? null;
   const can = p.editable && !p.locked;
   const change = (next: EditStep[]) => p.onChange(next);
+  const compact = useIsCompact();
+  // Bir kez dolu görülen adımın kutusu, metin silinse de yerinde kalır (yazarken kutu kaybolmasın).
+  const noted = useRef(new Set<string>());
+  for (const s of p.steps) if (s.notes.trim() !== '') noted.current.add(s.key);
+  const noteShown = (s: EditStep) => !p.hideEmptyNotes || noted.current.has(s.key);
 
   return (
     <View style={styles.root} testID="ie-rota-adimlari">
@@ -75,9 +83,9 @@ export default function RouteStepsEditor(p: Props) {
             )}
           </View>
           <FirmRow step={s} index={i + 1} firms={firms} editable={can} onPick={(id) => change(patchStep(p.steps, s.key, { plannedSubcontractorId: id }))} />
-          {can ? (
+          {can && noteShown(s) ? (
             <TextInput value={s.notes} onChangeText={(t) => change(patchStep(p.steps, s.key, { notes: t }))} mode="outlined" dense placeholder="Adım notu (isteğe bağlı)" style={styles.input} testID={`ie-adim-${i + 1}-not`} />
-          ) : s.notes ? (
+          ) : !can && s.notes ? (
             <Text style={styles.hint}>{s.notes}</Text>
           ) : null}
           {s.key === kursunKey && p.machine && (
@@ -86,7 +94,7 @@ export default function RouteStepsEditor(p: Props) {
         </View>
       ))}
       {can && (
-        <Button mode="outlined" icon="plus" onPress={() => setAdding(true)} contentStyle={styles.btn} style={styles.add} testID="ie-adim-ekle">
+        <Button mode="contained" icon="plus" onPress={() => setAdding(true)} contentStyle={styles.btn} style={compact ? styles.addFull : styles.add} testID="ie-adim-ekle">
           Adım ekle
         </Button>
       )}
@@ -190,4 +198,5 @@ const styles = StyleSheet.create({
   chip: { minHeight: 56, justifyContent: 'center', alignSelf: 'flex-start' },
   btn: { minHeight: 56 },
   add: { alignSelf: 'flex-start' },
+  addFull: { alignSelf: 'stretch' },
 });

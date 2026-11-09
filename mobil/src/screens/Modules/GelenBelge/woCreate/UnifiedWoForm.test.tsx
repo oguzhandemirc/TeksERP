@@ -387,19 +387,59 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
     await waitFor(() => expect(mockBlob).toEqual({ theme: 'dark', tabletIeForm: { gizli: [] } }));
     expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
     expect(s.getByTestId('ie-form-not')).toBeTruthy();
+    // Not kutusunun adı "Üretim notu" (form + ⚙ listesi).
+    expect(within(s.getByTestId('ie-form-alanlari')).getAllByText('Üretim notu').length).toBeGreaterThan(0);
+    expect(within(s.getByTestId('ie-form-alanlari')).queryAllByText('Not')).toHaveLength(0);
   });
 
-  it('⭐ gizli alanı belge doldurursa bu okumada üstte "belgeden" rozetiyle görünür (sessiz gönderim yok)', async () => {
+  it('⭐ gizli alanı belge DEĞERLE doldurursa üstte "belgeden" rozetiyle görünür; yalnız öneri gelen gizli alan altta kalır', async () => {
     mockQty = true;
     mockBlob = { tabletIeForm: { gizli: ['en', 'hedefKumas', 'planBitis'], hedefDoldur: true } };
     mockRows = [row()];
     const s = renderWithPaper(ui());
-    // Tercih yüklendi: yalnız belgenin doldurmadığı gizli alan (Planlı bitiş) altta kalır.
-    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (1)'));
+    // En (değer dolar) üste çıkar; hedef kumaş (yalnız öneri) ve Planlı bitiş "Diğer alanlar"da kalır.
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (2)'));
     await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
     expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-en'));
     expect(s.getByTestId('belgeden-width')).toBeTruthy();
-    expect(s.getByTestId('ie-form-alanlari')).toContainElement(s.getByTestId('ie-form-desen-oneri'));
+    expect(s.queryByTestId('ie-form-desen-oneri')).toBeNull();
+    fireEvent.press(s.getByTestId('ie-diger-alanlar'));
+    expect(s.getByTestId('ie-form-alanlari-diger')).toContainElement(s.getByTestId('ie-form-desen-oneri'));
+  });
+
+  it('⭐ gizli hedef renk: belgede yazan renk varken "Diğer alanlar"da kalır, "Belgede yazan renk" yazısı da onunla altta', async () => {
+    mockBlob = { tabletIeForm: { gizli: ['hedefRenk'] } };
+    const base = row();
+    mockRows = [row({ detail: { ...base.detail!, formFields: { renkText: '58 KOYU BEJ FULAR' }, suggestions: {} } as DocRow['detail'] })];
+    const s = renderWithPaper(ui(colorRoute));
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (1)'));
+    expect(s.queryByTestId('ie-form-renk-metni')).toBeNull();
+    expect(s.queryByText(/Belgede yazan renk/)).toBeNull();
+    fireEvent.press(s.getByTestId('ie-diger-alanlar'));
+    expect(s.getByTestId('ie-form-alanlari-diger')).toContainElement(s.getByTestId('ie-form-renk-metni'));
+  });
+
+  it('⭐ ⚙ "Diğer alanlar" anahtarı kapalıyken bölüm çizilmez; blob\'un diğer anahtarları korunur', async () => {
+    mockBlob = { theme: 'dark', tabletIeForm: { gizli: ['planBitis', 'en'] } };
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (2)'));
+    await openSheet(s);
+    fireEvent.press(s.getByTestId('ie-diger-alanlar-goster'));
+    await waitFor(() => expect(mockBlob).toEqual({ theme: 'dark', tabletIeForm: { gizli: ['planBitis', 'en'], digerGizli: true } }));
+    expect(s.queryByTestId('ie-diger-alanlar')).toBeNull();
+  });
+
+  it('⭐ "Diğer alanlar" kapalı ama gizli alanda kayda girecek değer var → bölüm yine çizilir (sessiz gönderim yok)', async () => {
+    mockQty = true;
+    mockBlob = { tabletIeForm: { gizli: ['planBitis', 'en'], digerGizli: true } };
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.queryByTestId('ie-diger-alanlar')).toBeNull());
+    // Değerli gizli alan: en'i ⚙'tan açıp doldurup yeniden gizleyerek kurarız.
+    fireEvent.press(await openSheet(s));
+    await waitFor(() => expect(s.getByTestId('ie-form-en')).toBeTruthy());
+    fireEvent.changeText(s.getByTestId('ie-form-en'), '170');
+    fireEvent.press(s.getByTestId('ie-alan-en'));
+    await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-dolu')).toHaveTextContent('Dolu, kayda girecek: En (cm)'));
   });
 
   it('⭐ belgeden üste çıkan gizli alan düzeltilince yerinde kalır (rozet düşer, değer gövdeye gider)', async () => {

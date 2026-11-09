@@ -33,9 +33,15 @@ interface SheetProps {
   /** "Belgedeki gelen değerleri hedefe yaz" (kişisel, varsayılan kapalı). */
   fillTarget?: boolean;
   onFillTarget?: (on: boolean) => void;
+  /** "Diğer alanlar" bölümü görünsün (kişisel, varsayılan açık). */
+  otherShown?: boolean;
+  onOtherShown?: (on: boolean) => void;
+  /** Rota adımlarında boş not kutusu görünsün (kişisel, varsayılan açık). */
+  stepNotesShown?: boolean;
+  onStepNotesShown?: (on: boolean) => void;
 }
 
-export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismiss, pending, fillTarget = false, onFillTarget }: SheetProps) {
+export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismiss, pending, fillTarget = false, onFillTarget, otherShown = true, onOtherShown, stepNotesShown = true, onStepNotesShown }: SheetProps) {
   return (
     <ModuleSheet
       visible={visible}
@@ -66,6 +72,14 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
           </View>
         </TouchableRipple>
       )}
+      {onOtherShown && (
+        <SwitchRow title="“Diğer alanlar” bölümü" sub="Kapalıyken kapattığınız alanlar formda hiç görünmez (dolu alan varsa bölüm yine çıkar)."
+          value={otherShown} onChange={onOtherShown} testID="ie-diger-alanlar-goster" />
+      )}
+      {onStepNotesShown && (
+        <SwitchRow title="Rota adımı notu" sub="Kapalıyken adımların boş not kutusu çizilmez (dolu not yine görünür)."
+          value={stepNotesShown} onChange={onStepNotesShown} testID="ie-adim-notu-goster" />
+      )}
       {selectorSections().map(({ section, fields }) => (
         <View key={section} style={styles.group}>
           <Text style={styles.section}>{section}</Text>
@@ -75,6 +89,20 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
         </View>
       ))}
     </ModuleSheet>
+  );
+}
+
+function SwitchRow({ title, sub, value, onChange, testID }: { title: string; sub: string; value: boolean; onChange: (on: boolean) => void; testID: string }) {
+  return (
+    <TouchableRipple onPress={() => onChange(!value)} style={styles.row} testID={testID} accessibilityLabel={title}>
+      <View style={styles.rowInner}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>{title}</Text>
+          <Text style={styles.rowSub}>{sub}</Text>
+        </View>
+        <Switch value={value} onValueChange={onChange} testID={`${testID}-anahtar`} />
+      </View>
+    </TouchableRipple>
   );
 }
 

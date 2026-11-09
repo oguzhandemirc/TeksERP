@@ -5,10 +5,14 @@ import {
   WO_FIELDS,
   docFilledFields,
   fieldApplicable,
+  fieldLabel,
   isRequiredField,
   mergePrefBlob,
   otherFields,
+  otherSectionShown,
   parseHidden,
+  parseOtherHidden,
+  parseStepNotesHidden,
   placement,
   selectorSections,
   toggleHidden,
@@ -17,7 +21,7 @@ import {
 } from './woFieldCatalog';
 
 const ctx: FieldContext = { showQuantity: true, hasTambur: true, hasKursun: true, hasRouteSteps: true, hasMachine: true };
-const noDoc = { docShown: [], suggestions: {}, docText: { desen: null, renk: null } };
+const noDoc = { docShown: [] };
 
 describe('woFieldCatalog', () => {
   it('zorunlu ve kilitli dört alan: Müşteri, Rota, Parti no, Kurşun metresi', () => {
@@ -65,11 +69,35 @@ describe('woFieldCatalog', () => {
     expect(placement('rota', ['rota' as never], [])).toBe('top');
   });
 
-  it('docFilledFields: rozetli alanlar + belgede yazan desen/renk', () => {
+  it('docFilledFields: yalnız belgeden DEĞER dolan alanlar; öneri/yazı gizli alanı üste çıkarmaz', () => {
     expect(docFilledFields(noDoc)).toEqual([]);
-    expect(docFilledFields({ docShown: ['width', 'note'], suggestions: { targetColor: { id: 'c', name: 'Ekru' } }, docText: { desen: 'D-1', renk: null } }).sort()).toEqual(
-      ['en', 'hedefKumas', 'hedefRenk', 'not'].sort(),
-    );
+    expect(docFilledFields({ docShown: ['width', 'note'] }).sort()).toEqual(['en', 'not'].sort());
+    // Gizli hedef renk/kumaş belgede yazsa da "Diğer alanlar"da kalır; değer dolan gizli alan (en) üste çıkar.
+    const docKeys = docFilledFields({ docShown: ['width'] });
+    expect(placement('hedefRenk', ['hedefRenk', 'en'], docKeys)).toBe('other');
+    expect(placement('en', ['hedefRenk', 'en'], docKeys)).toBe('top');
+  });
+
+  it('Üretim notu: ⚙ listesi ve "Diğer alanlar" etiketi', () => {
+    expect(fieldLabel('not')).toBe('Üretim notu');
+  });
+
+  it('kişisel anahtarlar: digerGizli / adimNotuGizli — varsayılan yazılmaz, diğer anahtarlar korunur', () => {
+    const blob = { tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } };
+    expect(parseOtherHidden(blob)).toBe(false);
+    expect(parseStepNotesHidden(blob)).toBe(false);
+    const off = mergePrefBlob(blob, ['en'], false, { digerGizli: true, adimNotuGizli: true });
+    expect(off).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1, digerGizli: true, adimNotuGizli: true } });
+    expect(parseOtherHidden(off)).toBe(true);
+    expect(parseStepNotesHidden(off)).toBe(true);
+    expect(mergePrefBlob(off, ['en'])).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } });
+  });
+
+  it('otherSectionShown: anahtar kapalıyken gizlenir; değerli gizli alan ya da yönlendirme varken yine çizilir', () => {
+    expect(otherSectionShown(false, [])).toBe(true);
+    expect(otherSectionShown(true, [])).toBe(false);
+    expect(otherSectionShown(true, ['en'])).toBe(true);
+    expect(otherSectionShown(true, [], true)).toBe(true);
   });
 
   it('koşullu alanlar: metraj/kg bayrakla, kat tipi tamburla, gramaj/makine kurşunla, adımlar rotayla', () => {

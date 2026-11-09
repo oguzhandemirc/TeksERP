@@ -23,6 +23,7 @@ import DeskView from '../desk/DeskView';
 import DocBatchView from './DocBatchView';
 import UnifiedWoForm from './UnifiedWoForm';
 import { FieldsHeaderIcon } from './WoFieldSelector';
+import { ReadWarningsHeaderIcon } from './ReadWarningsIcon';
 import { useTabletWoEntry } from './useWoEntry';
 import { hubTiles, type HubTiles } from './woForm';
 import { useScanRouteMode } from '../../../../hooks/useFeatureFlags';
@@ -101,7 +102,7 @@ export default function WoCreateScreen() {
   const title = stage.kind === 'teach' ? 'Belge tanıt' : stage.kind === 'legacy' ? 'Belge Tara' : stage.kind === 'desk' ? DESK : route ? shortcutTitle(route) : stage.kind === 'form' ? quick_() : title_();
 
   return (
-    <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back} profileExtras={stage.kind === 'unified' ? <FieldsHeaderIcon onPress={() => setFieldsOpen(true)} /> : undefined}>
+    <ScreenChrome title={title} onStepBack={stage.kind === 'hub' ? undefined : back} profileExtras={stage.kind === 'unified' ? <><ReadWarningsHeaderIcon /><FieldsHeaderIcon onPress={() => setFieldsOpen(true)} /></> : undefined}>
       {stage.kind === 'hub' && !ready && <ActivityIndicator style={styles.loading} testID="ie-giris-kipi-yukleniyor" />}
       {stage.kind === 'hub' && ready && (
         <Hub

@@ -117,6 +117,10 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps & CreatedExitPro
         pending={fields.prefs.pending}
         fillTarget={fields.prefs.fillTarget}
         onFillTarget={fields.prefs.setFillTarget}
+        otherShown={!fields.prefs.otherHidden}
+        onOtherShown={(on) => fields.prefs.setOtherHidden(!on)}
+        stepNotesShown={!fields.prefs.stepNotesHidden}
+        onStepNotesShown={(on) => fields.prefs.setStepNotesHidden(!on)}
       />
     </>
   );
@@ -170,7 +174,7 @@ function useMissingJump(u: FormModel, twoCol: boolean, external: DocRowOpenReque
       return scrollDoc();
     }
     if (key !== 'belge' && u.fields.isOther(key as WoFieldKey)) {
-      if (!u.fields.otherOpen) u.fields.toggleOther();
+      u.fields.revealOther();
       return scroll(formTop() + y('other'));
     }
     return scroll(formTop());
@@ -195,7 +199,7 @@ function FormColumn({ u, fieldProps, onOtherLayout }: FormColumnProps) {
     <>
       {u.routeWarning && <NoticeStrip tone="warn" text={u.routeWarning} testID="ie-rota-celiski" />}
       <WoFormFields {...fieldProps} show={isTop} />
-      <OtherFields onLayout={onOtherLayout} count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
+      <OtherFields onLayout={onOtherLayout} count={fields.otherShown ? fields.other.length : 0} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
         {row?.form && fields.isOther('gramaj') && !u.partyGramaj && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
         <WoFormFields {...fieldProps} show={isOther} zone="other" />
       </OtherFields>

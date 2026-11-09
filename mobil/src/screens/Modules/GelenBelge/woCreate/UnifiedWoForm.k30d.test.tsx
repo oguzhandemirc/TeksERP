@@ -166,6 +166,32 @@ describe('UnifiedWoForm — rota adımları (K30-D)', () => {
     expect(s.queryByTestId('ie-adim-3')).toBeNull();
   });
 
+  it('⭐ ⚙ "Rota adımı notu" kapalı: boş not kutusu çizilmez, şablondan dolu not kutusu görünür; blob\'a adimNotuGizli yazılır', async () => {
+    mockBlob = { tabletIeForm: { hedefDoldur: true, adimNotuGizli: true } };
+    const s = await openFree();
+    await waitFor(() => expect(s.queryByTestId('ie-adim-1-not')).toBeNull());
+    expect(s.queryByTestId('ie-adim-2-not')).toBeNull();
+    // Anahtar ⚙'tan açılınca kutu döner ve varsayılan blob'a yazılmaz.
+    fireEvent.press(s.getByTestId('ie-alanlar'));
+    fireEvent.press(await s.findByTestId('ie-adim-notu-goster'));
+    await waitFor(() => expect(s.getByTestId('ie-adim-1-not')).toBeTruthy());
+    expect(mockBlob).toEqual({ tabletIeForm: { gizli: [], hedefDoldur: true } });
+  });
+
+  it('⭐ "Rota adımı notu" kapalı ama adımın notu dolu (şablondan) → o adımın kutusu görünür (sessiz gönderim yok)', async () => {
+    mockBlob = { tabletIeForm: { hedefDoldur: true, adimNotuGizli: true } };
+    // Rota listesi (seçici kaynağı) modül sabiti: şablon notu bu test için verilir, sonda geri alınır.
+    const first = route.steps![0] as unknown as { defaultNotes?: string | null };
+    first.defaultNotes = 'yavaş sar';
+    try {
+      const s = await openFree();
+      await waitFor(() => expect(s.getByTestId('ie-adim-1-not').props.value).toBe('yavaş sar'));
+      expect(s.queryByTestId('ie-adim-2-not')).toBeNull();
+    } finally {
+      first.defaultNotes = undefined;
+    }
+  });
+
   it('fason adımda firma seçilir → plannedSubcontractorId; tüm adımlar çıkarılırsa "oluştur" kapalı', async () => {
     const s = await openFree();
     fireEvent.press(await s.findByTestId('ie-adim-2-firma-f1'));
@@ -282,6 +308,25 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
     expect(body().targetPropertyIds).toEqual([]);
     fireEvent.press(s.getByTestId('ie-form-ozellik-varsayilan'));
     expect(body()).not.toHaveProperty('targetPropertyIds');
+  });
+
+  it('⭐ rotanın AUTO verdiği özellik sorulmaz (OPTIONAL/REQUIRED kalır); seçili AUTO kümede kalır (gövde bugünkü gibi)', async () => {
+    mockDefaults = new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG', mode: 'AUTO' }, { propertyId: 'p2', valueType: 'FLAG', mode: 'REQUIRED' }] }]]]);
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+    const p2 = await s.findByTestId('ie-form-ozellik-p2');
+    expect(s.queryByTestId('ie-form-ozellik-p1')).toBeNull();
+    fireEvent.press(p2);
+    expect(body().targetPropertyIds).toEqual(['p1']);
+  });
+
+  it('⭐ AUTO elemesinden sonra özellik kalmazsa "Hedef özellikler" çizilmez ve "Diğer alanlar"a da girmez', async () => {
+    mockDefaults = new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG', mode: 'AUTO' }] }, { stationId: 'stB', targets: [{ propertyId: 'p2', valueType: 'FLAG', mode: 'AUTO' }] }]]]);
+    const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+    await s.findByTestId('ie-serit-makine');
+    await waitFor(() => expect(s.queryByTestId('ie-form-ozellik')).toBeNull());
+    mockBlob = { tabletIeForm: { gizli: ['hedefOzellik', 'planBitis'] } };
+    const g = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
+    await waitFor(() => expect(g.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (1)'));
   });
 
   it('⚙ ile rota adımları kapatılınca editör çizilmez, makine önerisi tek başına kalır', async () => {

@@ -134,7 +134,7 @@ function FoldAndPlan(p: Shown & { onPick: (x: Picker) => void }) {
       )}
       {plan.note && (
         <DocFilled k="note" state={p.state} highlight>
-          <TextInput label="Not" value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
+          <TextInput label="Üretim notu" value={p.state.extras.note} onChangeText={(t) => p.edit({ note: t })} mode="outlined" multiline placeholder="İsteğe bağlı" disabled={p.locked} style={styles.input} testID="ie-form-not" />
         </DocFilled>
       )}
     </>

@@ -63,6 +63,18 @@ interface Props {
 
 type Picker = 'owner' | 'batch' | null;
 
+/** Tek formda gramaj + kat tipi "Özellikler" küçük başlığı altında (rotada varsa); ikisi de yoksa başlık da çizilmez. */
+function PropsGroup({ gramaj, fold }: { gramaj: React.ReactNode; fold: React.ReactNode }) {
+  if (!gramaj && !fold) return null;
+  return (
+    <View style={styles.props} testID="ie-form-ozellikler">
+      <Text style={styles.propsHead}>Özellikler</Text>
+      {gramaj}
+      {fold}
+    </View>
+  );
+}
+
 const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
 
 export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, afterGramaj, variant = 'list', onReread, manual = false, onDraftCancelled, openRequest, partyPlan, onPreview }: Props) {
@@ -108,8 +120,14 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
               )}
             </>
           )}
-          {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
-          {afterGramaj}
+          {single ? (
+            <PropsGroup gramaj={!hideGramaj && wo.showGramaj && wo.catalog.options.length > 0 ? <GramajField row={row} wo={wo} locked={partyLocked} /> : null} fold={afterGramaj} />
+          ) : (
+            <>
+              {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
+              {afterGramaj}
+            </>
+          )}
           {!single && !done && issueList.map((n) => <Text key={n.text} style={styles.note}>• {n.text}</Text>)}
         </>
       )}
@@ -239,6 +257,8 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
 }
 
 const styles = StyleSheet.create({
+  props: { gap: spacing.sm },
+  propsHead: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.textSecondary },
   box: { padding: spacing.lg, borderRadius: radius.md, gap: spacing.sm, backgroundColor: colors.surfaceMuted },
   flat: { gap: spacing.md },
   // Gelen metre + kg + en (belgenin beyanı) yan yana eşit pay; dar ekranda alt alta.

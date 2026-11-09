@@ -29,6 +29,8 @@ export interface TeachEntry {
   noPhoto: boolean;
   open: () => void;
   modal: React.ReactElement | null;
+  /** Tanıtma penceresi açık (başka modal üstüne açılmasın). */
+  teaching?: boolean;
 }
 
 const PDF_MIME = 'application/pdf';
@@ -75,6 +77,7 @@ export function useTeachEntry({ row, wo, tanitim: served, customers }: TeachEntr
     templateName: tanitim.durum === 'TANITILMAMIS' ? null : tanitim.sablonAdi,
     noPhoto,
     open: () => setOpen(true),
+    teaching: open,
     modal: noPhoto ? null : <TeachModal visible={open} pages={pages} code={code} onDismiss={() => setOpen(false)} onSaved={(r) => void refill(r)} />,
   };
 }

@@ -11,6 +11,10 @@ export interface DocNotice {
   tone: 'info' | 'warn' | 'danger';
   text: string;
   action?: NoticeAction;
+  /** Sunucu uyarı kodu (çapraz doğrulama) — tek formun uyarı modalı başlığı bundan. */
+  code?: string;
+  /** "Belgede bulunamadı" alan etiketleri. */
+  fields?: string[];
 }
 export interface DocReadPill {
   tone: PillTone;
@@ -80,9 +84,9 @@ export function docReadNotices(i: DocReadInput): DocNotice[] {
     else if (emptyRead(s, i)) out.push({ key: 'bos', tone: 'warn', text: 'Belgeden bilgi çıkmadı. Tekrar okutun ya da elle doldurun.', action: 'reread' });
     // Şablonda olup okunamayan alanlar (eski "Belge okundu" kartının kırmızı karoları) formda sarı iletiyle kalır.
     const missing = missingTemplateFields(s);
-    if (missing.length > 0) out.push({ key: 'eksik-alan', tone: 'warn', text: `Belgede bulunamadı: ${missing.join(', ')} — formda kontrol edin.` });
+    if (missing.length > 0) out.push({ key: 'eksik-alan', tone: 'warn', text: `Belgede bulunamadı: ${missing.join(', ')} — formda kontrol edin.`, fields: missing });
     // Çapraz doğrulama (sunucu `cross-check.ts`): değer değişmez, yalnız karşılaştırma iletisi.
-    for (const n of s.notices ?? []) if (CROSS_CHECK_CODES.has(n.code)) out.push({ key: `capraz-${n.code}`, tone: 'warn', text: n.detail });
+    for (const n of s.notices ?? []) if (CROSS_CHECK_CODES.has(n.code)) out.push({ key: `capraz-${n.code}`, tone: 'warn', text: n.detail, code: n.code });
   }
   if (i.detailFailed) out.push({ key: 'detay', tone: 'info', text: 'Belge ayrıntısı alınamadı; özet bilgilerle dolduruldu.' });
   return out;

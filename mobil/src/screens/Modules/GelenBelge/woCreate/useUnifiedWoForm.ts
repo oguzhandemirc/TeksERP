@@ -18,6 +18,7 @@ import { useWoRows, type DocRow } from './useWoRows';
 import { isDone } from './docRow';
 import { useWoFieldLayout } from './useWoFieldPrefs';
 import { valuedFields } from './woFieldCatalog';
+import { useTargetProps } from './targetProps';
 import type { WoPlanCtx } from './WoPlanFields';
 import {
   applyOrderLine,
@@ -150,6 +151,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     stationRoutesLoading: routesQ.isLoading,
     customerId: row?.form?.ownerCustomerId ?? null,
   });
+  const targetProps = useTargetProps(plan.route, plan.customerId, hasRouteSteps);
   const partyPlan = usePartyPlan({ row, wo, route: eff, allMachines: ctx.data?.data.kursunMachines ?? NO_MACHINES, stepsEdited: plan.stepsEdited });
   // Her parti ayrı + gramaj parti kartında: ortak gramaj alanı çizilmez (parti seçimi yoksa yine o gider).
   const partyGramaj = !!partyPlan && partyPlan.gramaj.length > 0;
@@ -163,6 +165,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
       hasRouteSteps,
       hasMachine: plan.machines.length > 0,
       unavailable: hiddenTarget,
+      noTargetProps: targetProps.empty,
     },
     valuedFields(extras, { stepsEdited: plan.stepsEdited }),
     fieldsOpen !== undefined && onFieldsOpenChange ? { open: fieldsOpen, onOpenChange: onFieldsOpenChange } : undefined,
@@ -197,7 +200,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   useDropDocOnOwnMode(ownMode, row?.noteId ?? null, dropDoc);
   return {
     owner, ownMode, own, routeWarning, manual, draft, addDoc,
-    hiddenTarget, route, setRoute, form, fields, showWidth, hints, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
+    hiddenTarget, route, setRoute, form, fields, showWidth, hints, plan: { ...plan, stepNotesHidden: fields.prefs.stepNotesHidden }, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width }, showWidth)),

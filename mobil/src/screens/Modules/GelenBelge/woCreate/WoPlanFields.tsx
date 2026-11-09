@@ -1,12 +1,9 @@
 // K30-D tablet İE formu — panelde olup tablette eksik kalan alanlar: rota adımları (+ kurşun makinesi önerisi), hedef
 // özellikler. Her biri ⚙ "Alanlar"dan gizlenebilir (`show`). Dokunulmayan alan gövdeye GİTMEZ (woForm). İş emri türü formda
 // sorulmaz: sipariş bağından türer (sunucu), Fason "Malın sahibi" kartından.
-import React, { useMemo } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
-import { useRouteDefaultTargets } from '../../../../hooks/useRouteDefaultTargets';
-import { fabricPropertyService } from '../../../../services/fabricProperty.service';
 import type { DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { colors, spacing, typography } from '../../../../theme';
@@ -14,6 +11,7 @@ import { ChoiceChips } from '../../../../components/form/ChoiceChips';
 import { ChoiceRow, InlineField } from '../../../../components/form/ChoiceRow';
 import { machineChoice } from '../desk/machineChoice';
 import RouteStepsEditor from './RouteStepsEditor';
+import { useTargetProps } from './targetProps';
 import type { WoFieldKey } from './woFieldCatalog';
 import type { EditStep } from './woSteps';
 
@@ -39,6 +37,8 @@ export interface WoPlanCtx {
   customerId: string | null;
   propertyIds: string[] | null;
   onProperties: (ids: string[] | null) => void;
+  /** ⚙ "Rota adımı notu" kapalı (kişisel): boş adım notu kutusu çizilmez. */
+  stepNotesHidden?: boolean;
 }
 
 interface BlockProps {
@@ -64,6 +64,7 @@ export function RouteStepsBlock({ plan, show, locked }: BlockProps) {
           routesLoading={plan.stationRoutesLoading}
           machine={machine}
           locked={locked}
+          hideEmptyNotes={plan.stepNotesHidden}
         />
         {note ? <MachineNote text={note} /> : null}
       </>
@@ -100,21 +101,14 @@ function MachineBand(p: { list: readonly DeskKursunMachine[]; value: string | nu
 /** Hedef özellikler (BAYRAK): dokunulmadıkça rotanın varsayılanları seçili görünür ve gövdeye gitmez (sunucu türetir). */
 export function TargetPropsBlock({ plan, show, locked }: BlockProps) {
   const enabled = plan.showSteps && show('hedefOzellik');
-  const catalog = useQuery({
-    queryKey: ['fabric-properties', 'wo-picker'],
-    queryFn: () => fabricPropertyService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc', filters: { isActive: 'true', valueType: 'FLAG' } }),
-    enabled,
-    staleTime: 10 * 60 * 1000,
-  });
-  const defaults = useRouteDefaultTargets(plan.route, [plan.customerId], enabled);
-  const list = defaults.byCustomer.get(plan.customerId ?? '');
-  const defaultIds = useMemo(() => [...new Set((list ?? []).flatMap((s) => s.targets.filter((t) => t.valueType === 'FLAG').map((t) => t.propertyId)))], [list]);
-  if (!enabled) return null;
+  const tp = useTargetProps(plan.route, plan.customerId, enabled);
+  // Rotanın AUTO verdiği özellik sorulmaz; kalan yoksa alan yok (seçili AUTO kimlikleri kümede kalır, gövde bugünkü gibi).
+  if (!enabled || tp.empty) return null;
   // Varsayılanlar gelmeden dokunulursa küme boş varsayılandan kurulur ve rotanın özelliklerini dışlar → çipler bekler.
-  const defaultsLoading = plan.propertyIds === null && (plan.route?.steps?.length ?? 0) > 0 && !defaults.byCustomer.has(plan.customerId ?? '');
-  const selected = plan.propertyIds ?? defaultIds;
-  const options = catalog.data?.data ?? [];
-  const hint = catalog.isLoading ? 'Özellikler yükleniyor…' : defaultsLoading ? 'Rotanın varsayılan özellikleri yükleniyor…' : options.length === 0 ? 'Tanımlı özellik yok.' : plan.propertyIds === null ? null : 'Rota bu özellikleri vermeli.';
+  const defaultsLoading = plan.propertyIds === null && (plan.route?.steps?.length ?? 0) > 0 && !tp.defaultsLoaded;
+  const selected = plan.propertyIds ?? tp.defaultIds;
+  const options = tp.options;
+  const hint = tp.catalogLoading ? 'Özellikler yükleniyor…' : defaultsLoading ? 'Rotanın varsayılan özellikleri yükleniyor…' : options.length === 0 ? 'Tanımlı özellik yok.' : plan.propertyIds === null ? null : 'Rota bu özellikleri vermeli.';
   return (
     <View style={styles.block} testID="ie-form-ozellik">
       <InlineField label="Hedef özellikler" status={plan.propertyIds === null ? 'varsayılan' : 'elle'} testID="ie-serit-ozellik">

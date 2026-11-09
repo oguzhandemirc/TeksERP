@@ -14,18 +14,25 @@ const answered = new Set<string>();
 /** Test yardımcısı: oturum belleğini boşaltır. */
 export const clearTeachPrompts = () => answered.clear();
 
+/** Soru bu okumada hâlâ sorulacak mı (TEK yüklem: uyarı modalı bunu bekler). */
+export function teachPromptDue(entry: Pick<TeachEntry, 'kind' | 'noPhoto'>, readKey: string, unrecognized = true): boolean {
+  return unrecognized && entry.kind === 'untaught' && !entry.noPhoto && !answered.has(readKey);
+}
+
 interface Props {
   entry: Pick<TeachEntry, 'kind' | 'noPhoto' | 'open'>;
   /** Okuma kimliği (not id + runKey): aynı okumada bir kez sorulur. */
   readKey: string;
   /** Sunucu şeridi belgeyi tanınmış sayıyorsa (yerel tanıtma / şablon) false. */
   unrecognized?: boolean;
+  /** Cevaplandı (Tanıt / Vazgeç): sıradaki modal (okuma uyarıları) açılabilir. */
+  onAnswer?: () => void;
 }
 
-export default function TeachPrompt({ entry, readKey, unrecognized = true }: Props) {
+export default function TeachPrompt({ entry, readKey, unrecognized = true, onAnswer }: Props) {
   const [, bump] = useState(0);
-  const due = unrecognized && entry.kind === 'untaught' && !entry.noPhoto && !answered.has(readKey);
-  const answer = () => { answered.add(readKey); bump((n) => n + 1); };
+  const due = teachPromptDue(entry, readKey, unrecognized);
+  const answer = () => { answered.add(readKey); bump((n) => n + 1); onAnswer?.(); };
   return (
     <ModuleSheet
       visible={due}
