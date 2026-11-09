@@ -179,7 +179,7 @@
 | `Teks-Erp/scripts/test_turkish_search_fold.ts` | Katlamanın sorgu yoluna doğru bağlandığını uçtan uca ölçer: gerçek müşteri/ürün satırı yazıp operatörün hangi yazımla ararsa arasın kaydı bulduğunu do | ✓ |  |  |
 | `mobil/src/components/session/SessionGate.test.tsx` | Odak invariantı: PlaceConfirmView(autoOpen) YALNIZ odaktaki ekranda mount edilir — arka planda mount kalan gate 'oturum kapma savaşı' doğuruyordu. Pla |  |  |  |
 | `mobil/src/components/session/placeSuggest.test.ts` | suggestPlace/placesOfKind: son yer ekran türüyle eşleşiyorsa öneri source=last; tür bazlı yer süzme ve makine listesi kurulumu. |  |  |  |
-| `mobil/src/constants/stationScreens.test.ts` | StationKind↔ekran registry'si çift yönlü tutarlı; tam 4 oturumlu ekran (KK1/KursunQc/Tambur/TartiPaket); anahtarlar SCREEN_BY_KEY ile hizalı. Backend  |  |  |  |
+| `mobil/src/constants/stationScreens.test.ts` | StationKind↔ekran registry'si çift yönlü tutarlı; tam 6 oturumlu ekran (KK1/KursunQc/KaliteKontrol/Tambur/TartiPaket/Dokuma); Kurşun ↔ Kalite Kontrol yer ayrımı `isQualityOnlyStation`; anahtarlar SCREEN_BY_KEY ile hizalı. Backend  |  |  |  |
 | `mobil/src/services/swatch.service.test.ts` | Kartela ADET stok uçları doğru URL/gövdeyle çağrılıyor mu: GET /kartela/stock (arama query'si encode'lu), POST /kartela/stock/reduce. apiClient mock'l |  |  |  |
 | `mobil/src/store/sessionStore.test.ts` | Çalışma oturumu store'u: current/open/close çağrıları ve durum geçişleri (workSession.service mock'lu). |  |  |  |
 | `mobil/src/test/smoke.test.ts` | Altyapı doğrulaması: jest-expo preset + ts transform koşuyor mu (tek assertion). |  |  |  |

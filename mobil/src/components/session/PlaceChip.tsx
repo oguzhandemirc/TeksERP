@@ -13,7 +13,7 @@ import { StyleSheet, View } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { useRoute } from '@react-navigation/native';
 import { useSessionStore } from '../../store/sessionStore';
-import { STATION_KIND_BY_SCREEN } from '../../constants/stationScreens';
+import { stationMatchesScreen } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
 import TruncatedText from '../TruncatedText';
 
@@ -21,8 +21,7 @@ export default function PlaceChip() {
   const route = useRoute();
   const active = useSessionStore((s) => s.active);
 
-  const expectedKind = STATION_KIND_BY_SCREEN[route.name as MobileScreenKey];
-  if (!expectedKind || !active || active.station.kind !== expectedKind) return null;
+  if (!active || !stationMatchesScreen(route.name as MobileScreenKey, active.station)) return null;
 
   // Makine ADI göster (kod değil) — saha operatörü kodu değil adı tanır.
   // Ad boşsa koda düş; makinesiz (SHIPPING) istasyonda istasyon adı.

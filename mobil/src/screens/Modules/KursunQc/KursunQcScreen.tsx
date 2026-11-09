@@ -14,6 +14,7 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useRoute } from '@react-navigation/native';
 import {
   useQuery,
   useMutation,
@@ -75,6 +76,7 @@ import PriorErrorBadge from '../../../components/inspection/PriorErrorBadge';
 import {
   composeStationPanels,
   flowScreenLabels,
+  withoutKursunProps,
   dativeTr,
   emptyRollHint,
   finishStepLabel,
@@ -180,6 +182,9 @@ function HeaderChip({
 }
 
 export default function KursunQcScreen() {
+  // Aynı ekran iki rotada: 'KaliteKontrol' = kurşun kipi KAPALI (kurşunsuz kalite istasyonu;
+  // SessionGate yalnız o istasyonun oturumuyla açar). Gramaj/kurşun özelliği/kurşun metni çizilmez.
+  const kursunEnabled = useRoute().name !== 'KaliteKontrol';
   // Telefon ekranında landscape kilidi kaldırılır + sağ panel drawer'a alınır.
   // Tabletlerde önceki davranış aynen korunur.
   const device = useDeviceType();
@@ -341,7 +346,11 @@ export default function KursunQcScreen() {
   // ── İSTASYON ÖZELLİKLERİ (mod sözleşmesi, 2026-08-10) ─────────────────────
   // AUTO → salt bilgi (backend her topa yazar) · OPSİYONEL/ZORUNLU → tuş.
   // Eski backend `properties` göndermez → hepsi boş → ekran bugünküyle aynı.
-  const stationProps = activeJob?.stepSummary.properties ?? [];
+  const rawStationProps = activeJob?.stepSummary.properties ?? [];
+  const stationProps = useMemo(
+    () => (kursunEnabled ? rawStationProps : withoutKursunProps(rawStationProps)),
+    [kursunEnabled, rawStationProps],
+  );
   const autoProps = useMemo(() => stationProps.filter((p) => p.mode === 'AUTO'), [stationProps]);
   const pickableProps = useMemo(
     () => stationProps.filter((p) => p.mode !== 'AUTO'),
@@ -401,7 +410,7 @@ export default function KursunQcScreen() {
     properties: stationProps,
   });
   // S4: metinler istasyon adından (kurşunsuz Detaylı KK aynı ekranı açar).
-  const labels = flowScreenLabels(activeJob?.stepSummary.stationName ?? activeSession?.station?.name);
+  const labels = flowScreenLabels(activeJob?.stepSummary.stationName ?? activeSession?.station?.name, kursunEnabled);
   // D4-E2b: en ölçen istasyonda isteğe bağlı "Ölçülen en"; eski backend alanı göndermez → gizli.
   const measuredWidth = useMeasuredWidth(
     widthCaptureEnabled(activeJob?.stepSummary),

@@ -23,6 +23,8 @@ export interface SessionStation {
   defaultLabelCopies?: number | null;
   /** Duruş bildirimi bu istasyonda açık mı (false → "Duruş" çipi çizilmez). Eski sunucu göndermez → açık. */
   machineStopEnabled?: boolean;
+  /** Kurşun istasyonu mu (Kurşun ↔ Kalite Kontrol ekranı). Eski sunucu göndermez → kurşun sayılır. */
+  isKursunStation?: boolean;
 }
 
 export interface SessionMachine {

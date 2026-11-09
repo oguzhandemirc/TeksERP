@@ -22,6 +22,7 @@ import { AuditService } from "./audit.service";
 import { resolveActiveSession, sweepIdleSessions } from "./helpers/work-session.helper";
 import { buildPagination } from "../utils/query-parser";
 import { STEP_QUALITY_SELECT, stationCanInspect } from "./helpers/quality-station.helper";
+import { kursunStationIdSet } from "./helpers/route-shortcut.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { WorkSessionEndReason, StationKind } from "@prisma/client";
 import type { ApiResponse, PaginatedResponse } from "../types/api.types";
@@ -96,6 +97,17 @@ export const SESSION_INCLUDE = {
  */
 function withSessionCanInspect<S extends { station: { inspectionEnabled: boolean } | null }>(session: S) {
   return { ...session, station: session.station ? { ...session.station, canInspect: stationCanInspect(session.station) } : null };
+}
+
+/**
+ * Tabletin ekran ayrımı (Kurşun ↔ Kalite Kontrol, aynı PROCESS_QC türü): yer nesnelerine `isKursunStation`
+ * yazar ve aynı nesneleri döner. Ek alan — eski tablet yok sayar; alanı görmeyen yeni tablet bugünkü gibi davranır.
+ */
+async function markSessionStations<T extends { id: string }>(stations: Array<T | null | undefined>): Promise<Array<T & { isKursunStation: boolean }>> {
+  const present = stations.filter((st): st is T => !!st);
+  const kursun = await kursunStationIdSet(present.map((st) => st.id));
+  for (const st of present) (st as T & { isKursunStation: boolean }).isKursunStation = kursun.has(st.id);
+  return present as Array<T & { isKursunStation: boolean }>;
 }
 
 /** "Devralan" ardıl oturumun tooltip için minimal alanları. */
@@ -377,7 +389,9 @@ export class WorkSessionService {
       }).catch(() => undefined);
     }
 
-    return { success: true, data: withSessionCanInspect(created) };
+    const out = withSessionCanInspect(created);
+    await markSessionStations([out.station]);
+    return { success: true, data: out };
   }
 
   /** Cihazın açık oturumlarının TÜMÜNÜ kapat (idempotent — açık oturum yoksa closed:false).
@@ -462,6 +476,7 @@ export class WorkSessionService {
 
     // `canInspect` üst düzeyde de: oturumsuz yanıtta `false` (tablet tek yerden okur).
     const activeOut = active ? withSessionCanInspect(active) : null;
+    await markSessionStations([activeOut?.station, lastPlace?.station]);
     return { success: true, data: { active: activeOut, lastPlace, canInspect: activeOut?.station?.canInspect ?? false } };
   }
 
@@ -482,6 +497,7 @@ export class WorkSessionService {
         code: true,
         name: true,
         kind: true,
+        ...STEP_QUALITY_SELECT,
         machines: {
           where: { isActive: true },
           orderBy: { code: "asc" },
@@ -489,7 +505,10 @@ export class WorkSessionService {
         },
       },
     });
-    return { success: true, data: stations };
+    // `canInspect` + `isKursunStation`: tablet Kurşun / Kalite Kontrol listelerini ayırır. Ek alanlar.
+    const out = stations.map(({ inspectionEnabled, ...st }) => ({ ...st, canInspect: stationCanInspect({ inspectionEnabled }) }));
+    await markSessionStations(out);
+    return { success: true, data: out };
   }
 
   /**
@@ -509,6 +528,7 @@ export class WorkSessionService {
       },
     });
     if (!machine || !machine.station.isActive) throw AppError.notFound("Makine bulunamadı");
+    await markSessionStations([machine.station]);
     return { success: true, data: machine };
   }
 

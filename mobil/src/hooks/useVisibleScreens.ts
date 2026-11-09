@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { usePermissions } from './usePermission';
 import { useFeatureFlags } from './useFeatureFlags';
 import { conditionalScreens } from '../constants/screenModules';
+import { isQualityOnlyStation } from '../constants/stationScreens';
+import { useQualityStationStore } from '../store/qualityStationStore';
+import { useSessionStore } from '../store/sessionStore';
 import type { MobileScreenMeta } from '../types/permissions';
 
 // =============================================================================
@@ -28,16 +31,22 @@ import type { MobileScreenMeta } from '../types/permissions';
 export function useVisibleScreens() {
   const { allowedScreens } = usePermissions();
   const flags = useFeatureFlags().data;
+  // Kalite Kontrol: yer listesinde ya da oturum/son yerde kurşunsuz kalite istasyonu yoksa gizli (bugünkü düzen).
+  const hasQualityPlace = useQualityStationStore((s) => s.hasQualityStation);
+  const sessionQuality = useSessionStore(
+    (s) => isQualityOnlyStation(s.active?.station) || isQualityOnlyStation(s.lastPlace?.station),
+  );
+  const qualityVisible = hasQualityPlace || sessionQuality;
 
   return useMemo(() => {
     const conditional = conditionalScreens(flags);
     const visibleScreens: MobileScreenMeta[] = allowedScreens.filter(
-      (s) => conditional[s.key] !== false
+      (s) => conditional[s.key] !== false && (s.key !== 'KaliteKontrol' || qualityVisible)
     );
     return {
       visibleScreens,
       hasAnyVisibleScreen: visibleScreens.length > 0,
       hasMultipleVisibleScreens: visibleScreens.length > 1,
     };
-  }, [allowedScreens, flags]);
+  }, [allowedScreens, flags, qualityVisible]);
 }

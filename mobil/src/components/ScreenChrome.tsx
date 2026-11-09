@@ -310,10 +310,10 @@ export default function ScreenChrome({
 
       {/* Makine seçme modalı (profil menüsü → Makine değiştir). Menü kapansa da
           yaşasın diye burada — menü içinde olsaydı kapanınca unmount olurdu. */}
-      {placeActions.expectedKind && (
+      {placeActions.screenKey && (
         <MachinePickerModal
           visible={machinePickerOpen}
-          expectedKind={placeActions.expectedKind}
+          screenKey={placeActions.screenKey}
           onClose={() => setMachinePickerOpen(false)}
         />
       )}

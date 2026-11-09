@@ -2,15 +2,15 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MainStackParamList } from './types';
+import { useQuery } from '@tanstack/react-query';
 import { useVisibleScreens } from '../hooks/useVisibleScreens';
+import { usePermissions } from '../hooks/usePermission';
+import { workSessionService } from '../services/workSession.service';
+import { useQualityStationStore } from '../store/qualityStationStore';
 import { useSessionStore } from '../store/sessionStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { withWorkSession, type GatedScreen } from '../components/session/SessionGate';
-import {
-  SCREEN_BY_STATION_KIND,
-  isSessionScreen,
-  isSessionStationKind,
-} from '../constants/stationScreens';
+import { isSessionScreen, screenForStation } from '../constants/stationScreens';
 import ModuleSelectScreen from '../screens/Common/ModuleSelectScreen';
 import LoomAlarmNotifier from '../components/alarm/LoomAlarmNotifier';
 import type { MobileScreenKey } from '../types/permissions';
@@ -22,6 +22,8 @@ const Stack = createNativeStackNavigator<MainStackParamList>();
 const SCREEN_LOADERS: Record<MobileScreenKey, () => GatedScreen> = {
   KK1: () => require('../screens/Modules/KK1/KK1Screen').default,
   KursunQc: () => require('../screens/Modules/KursunQc/KursunQcScreen').default,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni; aynı ekran kurşun kipi kapalı (route adı)
+  KaliteKontrol: () => require('../screens/Modules/KursunQc/KursunQcScreen').default,
   Tambur: () => require('../screens/Modules/Tambur/TamburScreen').default,
   Depo: () => require('../screens/Modules/Depo/DepoScreen').default,
   TartiPaket: () => require('../screens/Modules/TartiPaket/TartiPaketScreen').default,
@@ -78,6 +80,18 @@ export default function MainNavigator() {
   const lastPlace = useSessionStore((s) => s.lastPlace);
   const docDeskDevice = useDeviceSettingsStore((s) => s.docDeskDevice);
 
+  // Kalite Kontrol düğmesi yer listesinden doğar (kurşunsuz kalite istasyonu yoksa gizli).
+  const canQuality = usePermissions().allowedScreens.some((s) => s.key === 'KaliteKontrol');
+  const placesQ = useQuery({
+    queryKey: ['work-session', 'places'],
+    queryFn: workSessionService.places,
+    staleTime: 5 * 60 * 1000,
+    enabled: canQuality,
+  });
+  useEffect(() => {
+    if (placesQ.data) useQualityStationStore.getState().setFromPlaces(placesQ.data);
+  }, [placesQ.data]);
+
   // Oturum durumu login SONRASI yüklenir (auth'suz çağrı 401 üretirdi). Gezici
   // kullanıcı (oturumlu ekranı yok) hiç sorgulamaz — yer sorusu görmez.
   useEffect(() => {
@@ -103,12 +117,12 @@ export default function MainNavigator() {
   // Login-sonrası kısayol: aktif oturum ya da cihazın SON yeri izinli bir oturumlu
   // ekrana işaret ediyorsa doğrudan o ekran açılır — gate tek dokunuş onayı gösterir
   // (yer = ekran; operatör ModuleSelect'te ekran aramaz).
-  const hintKind = active?.station.kind ?? lastPlace?.station.kind;
+  const hintStation = active?.station ?? lastPlace?.station;
   // K23 "Bu cihaz belge masası" (cihaz beyanı): aktif istasyon oturumu yoksa açılış İE oluştur (ekran masa kipinde açılır).
   if (docDeskDevice && !active && visibleScreens.some((s) => s.key === 'GelenBelge')) initialRouteName = 'GelenBelge';
-  else if (isSessionStationKind(hintKind)) {
-    const target = SCREEN_BY_STATION_KIND[hintKind];
-    if (visibleScreens.some((s) => s.key === target)) initialRouteName = target;
+  else {
+    const target = screenForStation(hintStation);
+    if (target && visibleScreens.some((s) => s.key === target)) initialRouteName = target;
   }
 
   return (

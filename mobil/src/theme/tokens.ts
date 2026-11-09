@@ -173,6 +173,7 @@ export const typography = {
 export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }> = {
   KK1: { tint: '#2563eb', bg: '#dbeafe' },
   KursunQc: { tint: '#d97706', bg: '#fef3c7' },
+  KaliteKontrol: { tint: '#0d9488', bg: '#ccfbf1' },
   Tambur: { tint: '#7c3aed', bg: '#ede9fe' },
   Depo: { tint: '#475569', bg: '#e2e8f0' },
   TartiPaket: { tint: '#059669', bg: '#d1fae5' },
