@@ -1,7 +1,7 @@
 // Rehberli tanıtma saf çekirdeği (guided.ts): adım ↔ alan, başlık satırı aç/kapa, çok kelimeli değer, kutu tonları,
 // okunan değer durumları, çip durumu, ad önerisi.
 import type { ScanWord, ScanWords, SuggestResult } from '../../../../types/inboundDocTeach';
-import { chipStatus, fieldLabel, fieldReadout, suggestName, toggleFieldWord, toggleHeaderWord } from './guided';
+import { chipStatus, fieldLabel, fieldReadout, suggestName, identifierWordSet, toggleFieldWord, toggleHeaderWord } from './guided';
 import { stageMarks } from './stages';
 import { initialTeach, type TeachState } from './teachDraft';
 
@@ -49,11 +49,15 @@ describe('guided — başlık adımı', () => {
     expect(on(s)).not.toContain('GÜLEÇSOY BOYA');
     s = toggleHeaderWord(s, SCAN.words, 0);
     expect(on(s)).toContain('GÜLEÇSOY BOYA');
-    // Öneride olmayan satır (sondaki ":" temizlenir) eklenir.
+    // Öneride olmayan satır eklenir — yalnız etiketi (değer kelimesi ve sondaki ":" atılır).
     const without: TeachState = { ...s, identifiers: s.identifiers.filter((d) => !/Ham/.test(d.text)) };
     s = toggleHeaderWord(without, SCAN.words, 5);
     expect(s.identifiers).toHaveLength(without.identifiers.length + 1);
-    expect(on(s)).toContain('Ham PartiNo: P2618733');
+    expect(on(s)).toContain('Ham PartiNo');
+    expect([...identifierWordSet(s, SCAN.words)].filter((i) => i >= 4 && i <= 6)).toEqual([4, 5]); // değer kelimesi "Başlık" boyanmaz
+    s = toggleHeaderWord(s, SCAN.words, 6); // değer kelimesine dokunmak aynı etiketi kapatır, yeni kimlik doğurmaz
+    expect(s.identifiers).toHaveLength(without.identifiers.length + 1);
+    expect(on(s)).not.toContain('Ham PartiNo');
   });
 
   it('kutu tonları: ①de açık kimlik satırları; ②de yalnız seçili alanın değeri seçili', () => {

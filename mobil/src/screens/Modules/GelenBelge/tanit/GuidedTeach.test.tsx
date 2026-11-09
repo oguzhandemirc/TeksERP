@@ -133,7 +133,7 @@ describe('TeachModal — üç aşama', () => {
     expect(r.getByTestId('tanit-asama-3')).toBeTruthy();
     expect(r.queryByTestId('tanit-ileri')).toBeNull();
     expect(r.getByTestId('tanit-asama-TANIMA')).toHaveProp('accessibilityLabel', '1. Tanıma, tamam');
-    expect(r.getByTestId('tanit-ozet')).toHaveTextContent('2 kimlik yazısı · 1 alan · 0 kural');
+    expect(r.getByTestId('tanit-ozet')).toHaveTextContent('3 kimlik yazısı · 1 alan · 0 kural');
     expect(r.getByTestId('tanit-cok-parti-FABRIKA')).toHaveProp('accessibilityState', expect.objectContaining({ checked: true }));
     await waitFor(() => expect(r.getByTestId('tanit-kural-cok-parti')).toHaveTextContent(/Şu an: Tek İE/));
     const calls = mockApi.suggestTemplate.mock.calls.length;

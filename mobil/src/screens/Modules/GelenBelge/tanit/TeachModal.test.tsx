@@ -106,7 +106,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
       scanId: 's1',
       name: 'Güleçsoy',
       assignments: [{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }],
-      identifiers: ['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ'],
+      identifiers: ['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ', 'Ham PartiNo'],
     });
     expect(r.getByTestId('tanit-onizleme-eslesme')).toHaveTextContent(/tanınıyor/);
     expect(r.getByTestId('tanit-onizleme-alanlar')).toHaveTextContent(/P2618733/);

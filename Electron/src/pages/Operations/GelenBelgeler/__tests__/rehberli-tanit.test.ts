@@ -69,6 +69,11 @@ describe("rehberli tanıtma — dokunuşlar", () => {
     g = guidedReduce(g, { type: "TAP", i: 1 }, W);
     expect(g.teach.identifiers).toEqual([{ text: "GÜLEÇSOY BOYA", on: true }]);
     expect(guidedReduce(g, { type: "TAP", i: 0 }, W).teach.identifiers[0]!.on).toBe(false);
+    // Değerli satırda yalnız etiket kimlik olur; değer kelimesine dokunmak aynı etiketi kapatır, değer "Başlık" boyanmaz.
+    g = guidedReduce(g, { type: "TAP", i: 5 }, W);
+    expect(g.teach.identifiers[1]).toEqual({ text: "Ham PartiNo", on: true });
+    expect(guidedMarks(g.teach, W, g).slice(4, 7).map((m) => m.tone)).toEqual(["column", "column", "word"]);
+    expect(guidedReduce(g, { type: "TAP", i: 6 }, W).teach.identifiers).toEqual([g.teach.identifiers[0], { text: "Ham PartiNo", on: false }]);
     expect(suggestName(SCAN)).toBe("GÜLEÇSOY BOYA");
   });
 

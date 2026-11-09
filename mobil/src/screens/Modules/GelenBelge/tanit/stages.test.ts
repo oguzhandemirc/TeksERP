@@ -98,8 +98,8 @@ describe('dokunuş yönlendirme', () => {
 
 describe('özet ve bilgi satırları', () => {
   it('özet "N kimlik yazısı · N alan · N kural"; toplam satırı yalnız tablo varken kural sayılır', () => {
-    let s = toggleFieldWord(start(), W, 'partiNo', 4);
-    expect(saveSummary(s)).toBe('1 kimlik yazısı · 1 alan · 0 kural');
+    let s = toggleFieldWord(start(), W, 'partiNo', 4); // "Ham PartiNo" etiketi kimlikte kalır (değer kelimesi zaten girmedi)
+    expect(saveSummary(s)).toBe('2 kimlik yazısı · 1 alan · 0 kural');
     s = { ...s, multiParty: 'PER_PARTY', totalsLabel: [7] };
     expect(ruleCount(s)).toBe(1);
     expect(ruleCount({ ...s, columns: { m: [5] } })).toBe(2);

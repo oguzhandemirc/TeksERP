@@ -200,7 +200,6 @@ export function toggleSectionField(s: TeachState, key: FieldKey): TeachState {
 
 // Hermes'te Unicode özellik kaçışına (\p{L}) güvenilmez: Latin + Türkçe harf sınıfı (belgeler Türkçe basılı).
 const letters = (t: string) => (t.match(/[A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛû]/g) ?? []).length;
-const digits = (t: string) => (t.match(/\d/g) ?? []).length;
 
 /** Satır yazıları (OCR satır no'suyla gruplu). */
 export function lineTexts(words: readonly ScanWord[]): { lineNo: number; text: string; y: number; idx: number[] }[] {
@@ -209,12 +208,16 @@ export function lineTexts(words: readonly ScanWord[]): { lineNo: number; text: s
   return [...map.entries()].map(([lineNo, idx]) => ({ lineNo, idx, text: textOf(words, idx), y: Math.min(...idx.map((i) => words[i]!.rect.y)) }));
 }
 
-/** Kimlik yazısı önerisi: sayfanın üst üçte birindeki yazı satırları (rakamdan çok harf, 3–40 karakter), en çok `max` tane. */
+/** Satır yazısının kimlik metni: rakamlı kelime (değer, belgeden belgeye değişir) atılır, yapışık 'No:123' → 'No'; öneri + ① dokunuş + ① boyama tek kaynak. */
+export const identifierText = (text: string): string =>
+  text.split(/\s+/).map((x) => (/\d/.test(x) ? (/^[^\d:]+:/.exec(x)?.[0] ?? '') : x)).filter(Boolean).join(' ').replace(/^[\s:.,;|/#–-]+|[\s:.,;|/#–-]+$/gu, '');
+
+/** Kimlik yazısı önerisi: sayfanın üst üçte birindeki yazı satırlarının etiket kısmı (`identifierText`, 3–40 karakter, ≥3 harf), en çok `max` tane. */
 export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
   const out: string[] = [];
   for (const l of lineTexts(scan.words).sort((a, b) => a.y - b.y)) {
-    const t = l.text.replace(/[:.\s]+$/u, '').trim();
-    if (l.y > scan.imageHeight / 3 || t.length < 3 || t.length > 40 || letters(t) < 3 || digits(t) > letters(t)) continue;
+    const t = identifierText(l.text);
+    if (l.y > scan.imageHeight / 3 || t.length < 3 || t.length > 40 || letters(t) < 3) continue;
     if (!out.some((o) => norm(o) === norm(t))) out.push(t);
     if (out.length >= max) break;
   }

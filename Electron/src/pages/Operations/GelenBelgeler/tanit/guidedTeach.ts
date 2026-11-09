@@ -5,7 +5,7 @@ import { lowerTr } from "@/lib/tr-case";
 import type { ScanMark } from "../ZoomableScan";
 import { canReach, fieldWoLabel, firstOpenField, neighbourField, stageIndex, STAGES, type Stage, type StageContext } from "./stages";
 import {
-  addIdentifier, assignField, byReading, clearField, COLUMN_OPTIONS, isKept, lineTexts, setDropped, setRepeats, suggestIdentifiers, teachMarks, without,
+  addIdentifier, assignField, byReading, clearField, COLUMN_OPTIONS, identifierText, isKept, lineTexts, setDropped, setRepeats, suggestIdentifiers, teachMarks, without,
   type ColumnKey, type FieldKey, type TeachState,
 } from "./teachDraft";
 import type { MultiPartyRule, ScanWord, ScanWords, SimilarTemplate, SuggestResult } from "./types";
@@ -20,11 +20,12 @@ export function suggestName(scan: ScanWords): string {
   return suggestIdentifiers(scan, 1)[0] ?? "";
 }
 
-/** Başlık adımı: dokunulan kelimenin SATIRI kimlik yazısı olarak eklenir / kapatılır. */
+/** Başlık adımı: dokunulan kelimenin SATIRI (etiket kısmı, `identifierText`) kimlik yazısı olarak eklenir / kapatılır. */
 export function toggleHeaderWord(s: TeachState, words: readonly ScanWord[], i: number): TeachState {
   const line = lineTexts(words).find((l) => l.idx.includes(i));
   if (!line) return s;
-  const text = clean(line.text);
+  const text = identifierText(line.text);
+  if (!text) return s;
   const hit = s.identifiers.find((d) => norm(d.text) === norm(text.slice(0, 60)));
   if (hit) return { ...s, identifiers: s.identifiers.map((d) => (d === hit ? { ...d, on: !d.on } : d)) };
   return addIdentifier(s, text);
@@ -164,7 +165,7 @@ export function guidedMarks(s: TeachState, words: readonly ScanWord[], g: Pick<G
   const base = teachMarks({ ...s, selected: [] }, words, located);
   if (g.stage === "TANIMA") {
     const on = new Set(s.identifiers.filter((d) => d.on).map((d) => norm(d.text)));
-    const idLines = new Set(lineTexts(words).filter((l) => on.has(norm(clean(l.text).slice(0, 60)))).flatMap((l) => l.idx));
+    const idLines = new Set(lineTexts(words).filter((l) => on.has(norm(identifierText(l.text).slice(0, 60)))).flatMap((l) => l.idx).filter((i) => identifierText(words[i]!.text) !== ""));
     return base.map((m, i) => (idLines.has(i) && m.tone === "word" ? { ...m, tone: "column" as const, label: "Başlık" } : m));
   }
   const mine = targetWords(s, words, g.target, located);
