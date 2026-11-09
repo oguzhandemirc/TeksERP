@@ -7,7 +7,7 @@
 import { DeliveryNoteLineStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { declaredKgOf, pickIncomingKg, type IncomingKgResult } from "../lib/gelen-belge/gelen-kg";
-import { formNumber } from "../lib/gelen-belge/form-alanlari";
+import { formFieldsFromRegion, formNumber } from "../lib/gelen-belge/form-alanlari";
 import { guardKgFields } from "../lib/gelen-belge/kg-koruma";
 import { isSummaryLine } from "./gelen-belge-kontrol.service";
 import { readFirstRegion, type TrustMode } from "./gelen-belge-parti-metre.service";
@@ -43,4 +43,12 @@ export async function noteIncomingWidth(noteId: string, trust: TrustMode = "NORM
   if (manualWidth != null && manualWidth > 0) return manualWidth;
   if (trust === "BLIND") return null;
   return formNumber((await readFirstRegion(prisma, noteId))?.fields.en) ?? null;
+}
+
+/** Belgenin gelen kumaş adı / rengi (müşteri BEYANI, 2026-11-09): şablon `desen`/`renk` alanı (ilk bölge). İE hedefi DEĞİLDİR —
+ *  özet satırının `itemText`/`colorText`ine yazılır; formda hedefe yalnız öneri olur. BLIND: şablon tahmini yok. */
+export async function noteIncomingDeclared(noteId: string, trust: TrustMode = "NORMAL"): Promise<{ itemText: string | null; colorText: string | null }> {
+  if (trust === "BLIND") return { itemText: null, colorText: null };
+  const f = formFieldsFromRegion((await readFirstRegion(prisma, noteId))?.fields, "KAPALI");
+  return { itemText: f.desenText ?? null, colorText: f.renkText ?? null };
 }

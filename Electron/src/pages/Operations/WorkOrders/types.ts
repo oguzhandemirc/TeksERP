@@ -274,8 +274,9 @@ export interface WorkOrder {
    * Sadece findById — girdi kökü topların gelen belge satırlarından metre + kg (2026-11-09). null = İE belgeden doğmadı;
    * `kg` null = bir kökün satırında kg yok (kısmi toplam gösterilmez). Decimal JSON'da metin olabilir. Eski sunucu göndermez.
    * `notes` kaynak belgeler · `widthCm` her kökte aynıysa · `customerBatchNo` tekil birleşik (yeni alanlar; eski sunucu göndermez).
+   * `itemText`/`colorText` gelen kumaş adı / gelen renk — müşteri BEYANI, hedef kumaş/renk değil; her kökte aynıysa.
    */
-  incoming?: { meters: number | string; kg: number | string | null; kgSource: "DOCUMENT" | null; notes?: Array<{ id: string; noteNo: string }>; widthCm?: number | string | null; customerBatchNo?: string | null } | null;
+  incoming?: { meters: number | string; kg: number | string | null; kgSource: "DOCUMENT" | null; notes?: Array<{ id: string; noteNo: string }>; widthCm?: number | string | null; customerBatchNo?: string | null; itemText?: string | null; colorText?: string | null } | null;
   /**
    * Sadece findById response'unda — iptal edilmemiş fason sevklerin toplam
    * metrajı. Form'da yeni hedef metraj girilirken karşılaştırma için kullanılır

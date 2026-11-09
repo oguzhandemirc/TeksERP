@@ -72,7 +72,7 @@ function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchC
   return out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "tr")).slice(0, LIST_MAX);
 }
 
-async function aliasTarget(scope: DeliveryNoteAliasScope, senderCustomerId: string | null, raw: string): Promise<string | null> {
+export async function aliasTarget(scope: DeliveryNoteAliasScope, senderCustomerId: string | null, raw: string): Promise<string | null> {
   const rawKey = aliasKey(scope, raw);
   if (!rawKey) return null;
   const rows = await prisma.deliveryNoteAlias.findMany({

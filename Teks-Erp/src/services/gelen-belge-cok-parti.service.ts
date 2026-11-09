@@ -78,6 +78,9 @@ export interface PartyInput {
   incomingKg?: number | null;
   /** Partinin gelen eni (cm, operatör düzeltmesi); yoksa belgenin şablon `en`i. Özet satırına yazılır, topa geçmez. */
   incomingWidth?: number | null;
+  /** Partinin gelen kumaş adı / rengi (müşteri beyanı, operatör düzeltmesi); undefined → bölüm beyanı → belge geneli; null = yok. */
+  incomingItemText?: string | null;
+  incomingColorText?: string | null;
   senderRollNo?: string | null;
   targetValues?: Array<{ propertyId: string; valueId: string }>;
   stepPlanning?: Array<{ sequence: number; plannedMachineId?: string | null }>;

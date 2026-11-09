@@ -52,13 +52,12 @@ describe('aşama kapıları', () => {
 });
 
 describe('② gruplama', () => {
-  it('varsayılan görünürler gruplu (Kimlik · Gelen · Hedef · Ürün); hedef metraj/kg, top adedi ve diğerleri "Diğer alanlar"da', () => {
+  it('varsayılan görünürler gruplu (Kimlik · Gelen · Hedef; kumaş/renk beyanı Gelen grubunda); hedef metraj/kg, top adedi ve diğerleri "Diğer alanlar"da', () => {
     const { groups, more } = mapGroups(start());
     expect(groups.map((g) => [g.group, g.keys])).toEqual([
       ['KIMLIK', ['musteri', 'partiNo', 'evrakNo']],
-      ['GELEN', ['toplamMetre', 'toplamKg']],
+      ['GELEN', ['toplamMetre', 'toplamKg', 'desen', 'renk']],
       ['HEDEF', ['en']],
-      ['URUN', ['desen', 'renk']],
     ]);
     expect(more).toEqual(['topAdet', 'hedefMetraj', 'hedefKg', 'siparisNo', 'tarih', 'not', 'islem', 'gonderenIsEmriNo']);
   });

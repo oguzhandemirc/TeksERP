@@ -1,6 +1,6 @@
 // İE detayı "Gelen" künyesi (2026-11-09): belge no bağlantısı (izin varsa) + gelen en + müşteri parti no; eski sunucu / belgesiz
 // İE → çizilmez. Negatif sonda: `canOpen` dalı kaldırılıp hep Link çizilince §2 kırmızı; `widthCm == null` dalı kaldırılınca
-// (Number(null)=0) §3 "Gelen en 0 cm" çıkar ve kırmızı.
+// (Number(null)=0) §3 "Gelen en 0 cm" çıkar ve kırmızı; erken dönüşten kumaş/renk çıkarılınca §4 kırmızı.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -40,6 +40,14 @@ describe("İE detayı Gelen künyesi", () => {
     view({ meters: 150, kg: null, kgSource: null, notes: [{ id: "n1", noteNo: "GB-1" }], widthCm: null, customerBatchNo: null });
     expect(screen.queryByTestId("wo-incoming-width")).toBeNull();
     expect(screen.queryByTestId("wo-incoming-batch")).toBeNull();
+  });
+
+  it("⭐ §4 gelen kumaş / gelen renk (beyan) görünür; yoksa (karışık → null) satır yok", () => {
+    view({ meters: 150, kg: null, kgSource: null, notes: [], widthCm: null, customerBatchNo: null, itemText: "Ham Bez 30/1", colorText: null });
+    expect(screen.getByTestId("wo-incoming-fabric")).toHaveTextContent(/^Gelen kumaş Ham Bez 30\/1$/);
+    expect(screen.queryByTestId("wo-incoming-color")).toBeNull();
+    view({ meters: 150, kg: null, kgSource: null, notes: [], widthCm: null, customerBatchNo: null, itemText: null, colorText: "EKRU" });
+    expect(screen.getByTestId("wo-incoming-color")).toHaveTextContent(/^Gelen renk EKRU$/);
   });
 
   it("eski sunucu (yeni alanlar yok) ya da belgesiz İE → çizilmez", () => {

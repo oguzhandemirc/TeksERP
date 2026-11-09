@@ -6,7 +6,7 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
-import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, NotePartiesView } from '../types/inboundDocWoCreate';
+import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, DocIncomingDeclared, NotePartiesView } from '../types/inboundDocWoCreate';
 import type { ClientOcr } from './deviceOcr';
 import type { DocRoll } from '../types/inboundDocRolls';
 import type { SameDocumentMatch, SameDocumentQuery } from '../types/inboundDocSameDoc';
@@ -117,6 +117,8 @@ export interface ReadSummary extends ReadSummaryTanima {
   /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** Gelen kumaş/renk beyanı + eşlenen kart (hedeften ayrı); eski sunucu göndermez. */
+  incomingDeclared?: DocIncomingDeclared;
   /** Toplar ayrı geldi: belgenin top satırları (özet satırı/atlanan hariç). Eski sunucu göndermez. */
   docRolls?: DocRoll[];
   /** K30-T: belge kullanıcı şablonuyla mı okundu (TANITILDI) / hiçbir şablon tutmadı mı (TANITILMAMIS). Yerleşik şablonda ve eski sunucuda yok. */
@@ -194,6 +196,8 @@ export interface InboundNoteDetail {
   /** S16a: okuma özetindekiyle aynı (tek form doldurur). */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** Gelen kumaş/renk beyanı + eşlenen kart (hedeften ayrı); eski sunucu göndermez. */
+  incomingDeclared?: DocIncomingDeclared;
   /** Okuma özetindekiyle aynı (toplar ayrı geldi). */
   docRolls?: DocRoll[];
   /** Gelen kg önerisi: detay ucu taşımaz, okuma özetinden tamamlanır (`withSummaryFields`). */
@@ -250,7 +254,7 @@ export type TabletWoEntry = 'IKISI' | 'BELGE' | 'TOP';
 
 export type { SameDocumentMatch, SameDocumentQuery, SameDocumentState } from '../types/inboundDocSameDoc';
 export type { IncomingKgSource, Tanima, TanimaMappingRow, TanimaRule } from '../types/inboundDocTanima';
-export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../types/inboundDocWoCreate';
+export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, DocIncomingDeclared, MultiPartyMode, NoteParty, NotePartiesView } from '../types/inboundDocWoCreate';
 
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
 export interface InboundNotePatch {

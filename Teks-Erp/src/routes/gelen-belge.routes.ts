@@ -695,6 +695,8 @@ const FormWorkOrderBody = z.strictObject({
   ourBatchNoKey: BatchNoKey.nullable().optional(),
   kursunMeters: Money("Kurşun metresi"), incomingKg: z.number("Gelen kg sayı olmalı").positive("Gelen kg sıfırdan büyük olmalı").max(1_000_000).optional(),
   incomingWidth: IncomingWidth("Gelen en"),
+  // 2026-11-09: belgenin gelen kumaş adı / rengi (müşteri BEYANI; İE hedefi targetItemId/targetColorId ayrı). null/"" = temizle.
+  incomingItemText: optText(160), incomingColorText: optText(120),
   // K29 S14b: yoksa rotasız (yalnız "Rota uygulaması: Okutmayla"; SIRALI'da servis onaydan ÖNCE 400 GELEN_BELGE_ROUTE_REQUIRED).
   routeTemplateId: Id.optional(),
   stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
@@ -706,6 +708,7 @@ const FormWorkOrderBody = z.strictObject({
     batchNo: optText(64),
     meters: z.number().positive("Parti metresi sıfırdan büyük olmalı").max(1_000_000), incomingKg: z.number("Parti gelen kg sayı olmalı").positive("Parti gelen kg sıfırdan büyük olmalı").max(1_000_000).optional(),
     incomingWidth: IncomingWidth("Parti gelen en"),
+    incomingItemText: optText(160), incomingColorText: optText(120),
     targetValues: z.array(z.strictObject({ propertyId: Id, valueId: Id }), "Geçersiz hedef değer").max(50).optional(),
     stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
   }), "Geçersiz parti listesi").min(2, "Çok parti için en az iki parti gerekir").max(30).optional(),
@@ -739,11 +742,13 @@ const FormWorkOrderBody = z.strictObject({
  *               kursunMeters: { type: string, description: "Ondalık metre (operatörün gördüğü → gözden geçirilmiş sayılır)" }
  *               incomingKg: { type: number, exclusiveMinimum: 0, description: "Gelen kg; yoksa belgeden önerilen (şablon toplamKg → beyan → Σ satır). Özet satırına yazılır, topa geçmez (0 → 400)" }
  *               incomingWidth: { type: number, exclusiveMinimum: 0, maximum: 10000, description: "Gelen en (cm, belgenin beyanı); yoksa şablon en alanı. Özet satırı widthCm'ine yazılır, topa geçmez; İE eni width ayrıdır" }
+ *               incomingItemText: { type: string, maxLength: 160, nullable: true, description: "Gelen kumaş adı (müşteri beyanı); yoksa şablon desen alanı. Özet satırı itemText'ine yazılır; İE hedef kumaşı targetItemId ayrıdır (null/boş = beyan yok)" }
+ *               incomingColorText: { type: string, maxLength: 120, nullable: true, description: "Gelen renk (müşteri beyanı); yoksa şablon renk alanı. Özet satırı colorText'ine yazılır; İE hedef rengi targetColorId ayrıdır" }
  *               routeTemplateId: { type: string, format: uuid, description: "Yoksa iş emri ROTASIZ açılır (adımlar istasyonda okutuldukça eklenir) — yalnız production.routeMode=SCAN; SIRALI'da 400 GELEN_BELGE_ROUTE_REQUIRED, belge onaylanmaz" }
  *               stepPlanning: { type: array, items: { type: object, properties: { sequence: { type: integer }, plannedMachineId: { type: string, format: uuid, nullable: true } } } }
  *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }
  *               notes: { type: string, maxLength: 1000, nullable: true }
- *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, incomingKg: { type: number, exclusiveMinimum: 0, description: "Parti gelen kg; yoksa /partiler suggestedKg" }, incomingWidth: { type: number, exclusiveMinimum: 0, description: "Parti gelen eni (cm); yoksa belgenin şablon en alanı" }, targetValues: { type: array }, stepPlanning: { type: array } } } }
+ *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, incomingKg: { type: number, exclusiveMinimum: 0, description: "Parti gelen kg; yoksa /partiler suggestedKg" }, incomingItemText: { type: string, maxLength: 160, nullable: true, description: "Parti gelen kumaş (beyan); yoksa /partiler incomingItemText, o da yoksa belge geneli" }, incomingColorText: { type: string, maxLength: 120, nullable: true }, incomingWidth: { type: number, exclusiveMinimum: 0, description: "Parti gelen eni (cm); yoksa belgenin şablon en alanı" }, targetValues: { type: array }, stepPlanning: { type: array } } } }
  *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse belge tipinin kuralı (okunduğu sürümden), o da yoksa fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
  *               rollMode: { type: string, enum: [SINGLE, SEPARATE], description: "Toplar ayrı geldi: SEPARATE + rolls → tek iş emri, her top ayrı top; kurşun metresi topların toplamından türetilir (gövdedeki kursunMeters yerine). Verilmezse tek parça (bugünkü)" }
  *               rolls: { type: array, minItems: 1, maxItems: 200, description: "Yalnız rollMode=SEPARATE ile; parties ile birlikte verilemez", items: { type: object, required: [meters], properties: { meters: { type: number, exclusiveMinimum: 0 }, weightKg: { type: number, exclusiveMinimum: 0, nullable: true }, senderRollNo: { type: string, maxLength: 64, nullable: true } } } }

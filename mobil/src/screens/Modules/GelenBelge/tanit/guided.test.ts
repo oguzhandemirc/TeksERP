@@ -32,6 +32,9 @@ describe('guided — adımlar', () => {
     expect(fieldLabel('evrakNo')).toBe('İrsaliye no');
     expect(fieldLabel('toplamKg')).toBe('Gelen kg');
     expect(fieldLabel('hedefKg')).toBe('Hedef kg');
+    // 2026-11-09: kumaş adı/renk belgenin beyanı — İE hedefi değil.
+    expect(fieldLabel('desen')).toBe('Gelen kumaş');
+    expect(fieldLabel('renk')).toBe('Gelen renk');
     expect(fieldLabel('musteri')).toMatch(/Müşteri/);
   });
 

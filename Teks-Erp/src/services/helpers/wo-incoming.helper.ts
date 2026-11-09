@@ -5,6 +5,7 @@
 // Değerler yalnız topa DOĞRUDAN bağlı satırdan okunur (`CustomerDeliveryNoteLine.rollId`): ARABA özet satırının kg'si/eni topa
 // yazılmaz, bölünmüş çocuğun atasının değeri çocuğun değildir. Kg: bir kökün satırı yok ya da satırında kg yoksa toplam null —
 // kısmi toplam gösterilmez (sessiz eksik olmaz). En: her kökte var ve hepsi aynıysa tek değer, değilse null (aynı ilke).
+// Gelen kumaş adı / gelen renk (müşteri BEYANI, İE hedefi değil): en gibi — her kökte var ve hepsi aynıysa tek değer, değilse null.
 // Müşteri parti no: satırlardaki tekil değerler, sıralı birleşik. Hiçbir kök belgeden doğmadıysa `null` (kart çizilmez).
 // =============================================================================
 import { Prisma } from "@prisma/client";
@@ -20,9 +21,17 @@ export interface WoIncoming {
   notes: Array<{ id: string; noteNo: string }>;
   widthCm: Prisma.Decimal | null;
   customerBatchNo: string | null;
+  itemText: string | null;
+  colorText: string | null;
 }
 
-type IncomingLine = { rollId: string | null; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; note: { id: string; noteNo: string } };
+type IncomingLine = { rollId: string | null; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; itemText?: string | null; colorText?: string | null; note: { id: string; noteNo: string } };
+
+/** Her kökte aynı (kırpılmış metin birebir) dolu metin → o; aksi null. */
+function sameText(values: ReadonlyArray<string | null | undefined>): string | null {
+  const t = values.map((v) => v?.trim() || null);
+  return t.length > 0 && t[0] && t.every((v) => v === t[0]) ? t[0] : null;
+}
 
 /** Saf: kök kimlikleri + satırları → gelen bloğu (bekçi DB'siz ölçer). */
 export function foldWoIncoming(meters: Prisma.Decimal, rootIds: readonly string[], lines: readonly IncomingLine[]): WoIncoming | null {
@@ -38,14 +47,18 @@ export function foldWoIncoming(meters: Prisma.Decimal, rootIds: readonly string[
   }
   const notes = [...new Map(lines.map((l) => [l.note.id, l.note])).values()].sort((a, b) => a.noteNo.localeCompare(b.noteNo));
   const batches = [...new Set(lines.map((l) => l.customerBatchNo?.trim()).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b));
-  return { meters, kg, kgSource: kg === null ? null : "DOCUMENT", notes, widthCm: width ?? null, customerBatchNo: batches.length ? batches.join(", ") : null };
+  const rootLines = rootIds.map((id) => byRoll.get(id));
+  return {
+    meters, kg, kgSource: kg === null ? null : "DOCUMENT", notes, widthCm: width ?? null, customerBatchNo: batches.length ? batches.join(", ") : null,
+    itemText: sameText(rootLines.map((l) => l?.itemText)), colorText: sameText(rootLines.map((l) => l?.colorText)),
+  };
 }
 
 export async function computeWoIncoming(input: { meters: Prisma.Decimal; rootIds: readonly string[] }, db: Db = prisma): Promise<WoIncoming | null> {
   if (input.rootIds.length === 0) return null;
   const lines = await db.customerDeliveryNoteLine.findMany({
     where: { rollId: { in: [...input.rootIds] } },
-    select: { rollId: true, weightKg: true, widthCm: true, customerBatchNo: true, note: { select: { id: true, noteNo: true } } },
+    select: { rollId: true, weightKg: true, widthCm: true, customerBatchNo: true, itemText: true, colorText: true, note: { select: { id: true, noteNo: true } } },
   });
   return foldWoIncoming(input.meters, input.rootIds, lines);
 }

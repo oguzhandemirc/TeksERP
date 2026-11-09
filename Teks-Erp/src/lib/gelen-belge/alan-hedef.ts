@@ -28,12 +28,13 @@ export const FIELD_TARGETS = {
   toplamMetre: { woTarget: "kursunMeters", woLabel: "Gelen metre", group: "GELEN", defaultVisible: true, targets: WO },
   toplamKg: { woTarget: "incomingKg", woLabel: "Gelen kg", group: "GELEN", defaultVisible: true, targets: WO },
   topAdet: { woTarget: "rollCount", woLabel: "Top adedi", group: "GELEN", defaultVisible: false, targets: WO },
+  // 2026-11-09: belgedeki kumaş adı/renk müşterinin BEYANIDIR (gelen metre gibi), İE hedefi değil; anahtar eski şablonlar için aynı.
+  desen: { woTarget: "incomingItemText", woLabel: "Gelen kumaş", group: "GELEN", defaultVisible: true, targets: WO },
+  renk: { woTarget: "incomingColorText", woLabel: "Gelen renk", group: "GELEN", defaultVisible: true, targets: WO },
   // Hedef metraj gelen metreden türer, hedef kg nadir → varsayılan gizli (plan 2.1 ②).
   hedefMetraj: { woTarget: "targetQuantity", woLabel: "Hedef metraj", group: "HEDEF", defaultVisible: false, targets: WO },
   hedefKg: { woTarget: "targetWeight", woLabel: "Hedef kg", group: "HEDEF", defaultVisible: false, targets: WO },
   en: { woTarget: "width", woLabel: "En", group: "HEDEF", defaultVisible: true, targets: WO },
-  desen: { woTarget: "targetItemId", woLabel: "Desen", group: "URUN", defaultVisible: true, targets: WO },
-  renk: { woTarget: "targetColorId", woLabel: "Renk", group: "URUN", defaultVisible: true, targets: WO },
   siparisNo: { woTarget: "customerOrderNo", woLabel: "Sipariş no", group: "DIGER", defaultVisible: false, targets: WO },
   tarih: { woTarget: "senderDocDate", woLabel: "Belge tarihi", group: "DIGER", defaultVisible: false, targets: WO },
   not: { woTarget: "notes", woLabel: "Not", group: "DIGER", defaultVisible: false, targets: WO },

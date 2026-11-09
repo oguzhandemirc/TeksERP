@@ -17,6 +17,10 @@ export interface CreateWorkOrderFromNoteBody {
   incomingKg?: number;
   /** Gelen en (cm, belgenin beyanı); YALNIZ kullanıcı değiştirdiyse gider (yoksa sunucu şablon `en`ini yazar; eski sunucu strict gövdeyle 400). */
   incomingWidth?: number;
+  /** Gelen kumaş adı / gelen renk (müşteri BEYANI, `incomingDeclared`); YALNIZ kullanıcı değiştirdiyse gider (yoksa sunucu şablon
+   *  desen/renk'ini yazar; null = beyan yok). İE hedefi `targetItemId`/`targetColorId` AYRIDIR. Eski sunucu strict gövdeyle 400. */
+  incomingItemText?: string | null;
+  incomingColorText?: string | null;
   /** Yok = rotasız iş emri (K29; yalnız rota uygulaması "Okutmayla", sunucu SIRALI'da 400 verir). */
   routeTemplateId?: string;
   stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
@@ -31,6 +35,9 @@ export interface CreateWorkOrderFromNoteBody {
     incomingKg?: number;
     /** Parti gelen eni (cm); yalnız kullanıcı değiştirdiyse (yoksa sunucu belgenin `en`ini yazar). */
     incomingWidth?: number;
+    /** Parti gelen kumaş / renk beyanı; yalnız kullanıcı değiştirdiyse (yoksa sunucu bölüm beyanını, o yoksa belge genelini yazar). */
+    incomingItemText?: string | null;
+    incomingColorText?: string | null;
     /** Belge masası: parti başına gramaj / plan makinesi (verilmezse gövdedekiler). */
     targetValues?: { propertyId: string; valueId: string }[];
     stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
@@ -115,6 +122,21 @@ export interface NoteParty {
   /** Önerilen parti gelen kg'si (bölüm beyanı → Σ satır kg); eski sunucu göndermez. */
   suggestedKg?: number | null;
   kgSource?: 'TOTAL' | 'LINE_SUM' | null;
+  /** Bölümün gelen kumaş adı / gelen rengi (müşteri beyanı; bölüm alanı yoksa null → belge geneli `incomingDeclared`). Eski sunucu göndermez. */
+  incomingItemText?: string | null;
+  incomingColorText?: string | null;
+}
+
+/**
+ * Okuma özeti `incomingDeclared` (2026-11-09): belgenin gelen kumaş/renk BEYANI, İE hedefinden AYRI. `suggested*` beyanın eşlendiği
+ * kart (yalnız `gelenBelge.desenRenkEslesme=ONER`; öğrenilmiş eşleme → kod → ad). Form açılışında BOŞ hedefe öneri olur, sonra
+ * bağımsızdır. Beyan yoksa / eski sunucuda alan yok (eski sunucu: `formFields.desenText/renkText` + `suggestions`).
+ */
+export interface DocIncomingDeclared {
+  itemText: string | null;
+  colorText: string | null;
+  suggestedItem: { id: string; name: string; code?: string | null } | null;
+  suggestedColor: { id: string; name: string } | null;
 }
 
 export interface NotePartiesView {

@@ -45,6 +45,10 @@ export interface NoteParty {
   /** Forma önerilecek parti GELEN kg'si (`resolvePartyKg`): bölüm beyanı kg → Σ satır kg (hepsi doluysa); 2026-11-09 ek alan. */
   suggestedKg: number | null;
   kgSource: "TOTAL" | "LINE_SUM" | null;
+  /** Bölümün gelen kumaş adı / gelen rengi (müşteri BEYANI; İE hedefi değil). Bölüm alanı yoksa null — belge geneli
+   *  beyan okuma özetinin `incomingDeclared`ındadır. 2026-11-09 ek alan; eski istemci yok sayar. */
+  incomingItemText: string | null;
+  incomingColorText: string | null;
   warnings: string[];
 }
 
@@ -127,6 +131,8 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
       weightKg: kgs.length ? r3(kgs.reduce((s, x) => s + x, 0)) : null,
       suggestedKg: kg.kg,
       kgSource: kg.source === "TOTAL" || kg.source === "LINE_SUM" ? kg.source : null,
+      incomingItemText: str(d?.itemText),
+      incomingColorText: str(d?.colorText),
       warnings: [],
     };
     const name = p.batchNo ?? `${blockNo}. parti`;

@@ -1,4 +1,5 @@
-// İE detayı "Gelen" künyesi (2026-11-09): kaynak gelen belge no(ları) + gelen en + müşteri parti no — yalnız İE belgeden doğmuşsa.
+// İE detayı "Gelen" künyesi (2026-11-09): kaynak gelen belge no(ları) + gelen kumaş/renk (beyan) + gelen en + müşteri parti no — yalnız
+// İE belgeden doğmuşsa; kumaş/renk müşterinin yazdığıdır, hedef kumaş/renk değil.
 // Değerler sunucudan (`incoming`); en yalnız bütün köklerde aynıysa gelir (kısmi/karışık değer gösterilmez). Belge no, izin varsa
 // gelen belge detayına bağlantıdır (SourceDocsV3 ile aynı gezinme).
 import { Link } from "react-router-dom";
@@ -12,7 +13,9 @@ export function IncomingDoc({ incoming }: { incoming: WorkOrder["incoming"] }) {
   const notes = incoming.notes ?? [];
   const width = incoming.widthCm == null ? null : Number(incoming.widthCm);
   const batch = incoming.customerBatchNo ?? null;
-  if (notes.length === 0 && width == null && !batch) return null;
+  const fabric = incoming.itemText?.trim() || null;
+  const color = incoming.colorText?.trim() || null;
+  if (notes.length === 0 && width == null && !batch && !fabric && !color) return null;
   const canOpen = hasPermission("gelen-belge:read");
   return (
     <>
@@ -31,6 +34,16 @@ export function IncomingDoc({ incoming }: { incoming: WorkOrder["incoming"] }) {
               )}
             </span>
           ))}
+        </span>
+      )}
+      {fabric && (
+        <span data-testid="wo-incoming-fabric">
+          Gelen kumaş <b>{fabric}</b>
+        </span>
+      )}
+      {color && (
+        <span data-testid="wo-incoming-color">
+          Gelen renk <b>{color}</b>
         </span>
       )}
       {width != null && (

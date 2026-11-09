@@ -72,7 +72,7 @@ export function FormDocCard({ scan, disabled }: { scan: FormDocScan; disabled?: 
           {scan.summary?.tanitim && <TanitimStrip scan={scan} tanitim={scan.summary.tanitim} />}
           {(hints.desen || hints.renk) && (
             <p className="text-xs text-muted-foreground" data-testid="wo-doc-hints">
-              Belgede yazan{hints.desen ? ` desen: “${hints.desen}”` : ""}{hints.renk ? ` renk: “${hints.renk}”` : ""} — katalogda eşleşmedi, aşağıdan seçin.
+              Belgede yazan{hints.desen ? ` gelen kumaş: “${hints.desen}”` : ""}{hints.renk ? ` gelen renk: “${hints.renk}”` : ""} — hedef için katalogda eşleşmedi, aşağıdan seçin.
             </p>
           )}
           {n && scan.draft && <DocFields note={n} draft={scan.draft} onChange={scan.setDraft} gramajOptions={NO_GRAMAJ} disabled={disabled} />}

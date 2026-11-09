@@ -22,8 +22,9 @@ export const ASSIGNABLE_FIELDS = {
   tarih: { label: "Tarih", type: "date" },
   siparisNo: { label: "Sipariş No", type: "alnum" },
   topAdet: { label: "Top adedi", type: "integer" },
-  desen: { label: "Hedef kumaş (desen)", type: "text" },
-  renk: { label: "Hedef renk", type: "text" },
+  // 2026-11-09: kumaş adı/renk belgenin BEYANI (özet satırı itemText/colorText); İE hedefine yalnız formda öneri olur.
+  desen: { label: "Gelen kumaş", type: "text" },
+  renk: { label: "Gelen renk", type: "text" },
   en: { label: "En (cm)", type: "decimal" },
   hedefMetraj: { label: "Hedef metraj", type: "decimal" },
   hedefKg: { label: "Hedef kg", type: "decimal" },

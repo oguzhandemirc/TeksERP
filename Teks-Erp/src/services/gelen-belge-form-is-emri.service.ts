@@ -32,7 +32,7 @@ import { allPartiesEntered, assertPartiesShape, getNoteParties, openPartyWorkOrd
 import { readIncomingDocFormApproval, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { resolveMultiPartyMode } from "./gelen-belge-parti-kipi.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
-import { noteIncomingKg, noteIncomingWidth } from "./gelen-belge-gelen-kg.service";
+import { noteIncomingDeclared, noteIncomingKg, noteIncomingWidth } from "./gelen-belge-gelen-kg.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 
 const workOrders = new WorkOrderService();
@@ -70,6 +70,10 @@ export interface FormWorkOrderInput {
   incomingKg?: number;
   /** Gelen en (cm, belgenin beyanı); yoksa şablon `en` alanı (`noteIncomingWidth`). Özet satırına yazılır; İE eni `width` ayrı. */
   incomingWidth?: number;
+  /** Gelen kumaş adı / rengi (müşteri BEYANI); undefined → şablon `desen`/`renk`, null/"" → yok. Özet satırına yazılır; İE hedefi
+   *  (`targetItemId`/`targetColorId`) bağımsızdır. */
+  incomingItemText?: string | null;
+  incomingColorText?: string | null;
   /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
   routeTemplateId?: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
@@ -222,9 +226,15 @@ export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşt
 /** Onayın satır şekli: ayrı toplar TOP satırı (kendi kg'si), partiler ARABA özet satırı + parti kg/en'i, tek belge özet kg/en'i. */
 async function approvalLines(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean) {
   const kg = await incomingPlan(noteId, input, parties, separateRolls);
-  if (!parties) return { summary: { kg: kg.summary, widthCm: kg.width } };
+  const doc = { itemText: given(input.incomingItemText, kg.declared.itemText), colorText: given(input.incomingColorText, kg.declared.colorText) };
+  if (!parties) return { summary: { kg: kg.summary, widthCm: kg.width, ...doc } };
   return {
-    parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null, widthCm: p.incomingWidth ?? kg.width, customerBatchNo: p.batchNo ?? null }) })),
+    parties: parties.map((p) => {
+      // Parti beyanı: gövde > bölüm beyanı > belge geneli (ayrı toplarda her top belge genelini taşır).
+      const sec = kg.sections.get(p.blockNo);
+      const texts = { itemText: given(p.incomingItemText, sec?.itemText ?? doc.itemText), colorText: given(p.incomingColorText, sec?.colorText ?? doc.colorText) };
+      return { blockNo: p.blockNo, meters: p.meters, ...texts, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null, widthCm: p.incomingWidth ?? kg.width, customerBatchNo: p.batchNo ?? null }) };
+    }),
     ...(separateRolls ? { separateRolls: true } : {}),
   };
 }
@@ -345,17 +355,30 @@ async function finishParties({ note, parties, mode, input, route, steps, userId,
  * GELEN en: gövde > şablon `en` (belge geneli; partide `parties[].incomingWidth` yoksa her partiye). "Toplar ayrı geldi"de
  * kg top başınadır (gövde `rolls[].weightKg`) — burada türetilmez.
  */
-async function incomingPlan(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean): Promise<{ summary: number | null; width: number | null; byBlock: Map<number, number | null> }> {
+type SectionDeclared = { itemText: string | null; colorText: string | null };
+type IncomingPlan = { summary: number | null; width: number | null; byBlock: Map<number, number | null>; declared: SectionDeclared; sections: Map<number, SectionDeclared> };
+
+async function incomingPlan(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean): Promise<IncomingPlan> {
   const byBlock = new Map<number, number | null>();
-  if (separateRolls) return { summary: null, width: null, byBlock };
+  const sections = new Map<number, SectionDeclared>();
   const { trust } = await noteTanitim(noteId);
+  const declared = await noteIncomingDeclared(noteId, trust);
+  if (separateRolls) return { summary: null, width: null, byBlock, declared, sections };
   const width = await noteIncomingWidth(noteId, trust, parties ? null : input.incomingWidth);
   if (parties) {
-    const suggested = new Map((await getNoteParties(noteId)).parties.map((p) => [p.blockNo, p.suggestedKg]));
+    const read = (await getNoteParties(noteId)).parties;
+    const suggested = new Map(read.map((p) => [p.blockNo, p.suggestedKg]));
+    // BLIND'da bölüm beyanı da şablon tahminidir → kullanılmaz (kg önerisi beyan/satırdan, metin yok).
+    if (trust !== "BLIND") for (const p of read) sections.set(p.blockNo, { itemText: p.incomingItemText, colorText: p.incomingColorText });
     for (const p of parties) byBlock.set(p.blockNo, p.incomingKg ?? suggested.get(p.blockNo) ?? null);
-    return { summary: null, width, byBlock };
+    return { summary: null, width, byBlock, declared, sections };
   }
-  return { summary: (await noteIncomingKg(noteId, trust, input.incomingKg)).kg, width, byBlock };
+  return { summary: (await noteIncomingKg(noteId, trust, input.incomingKg)).kg, width, byBlock, declared, sections };
+}
+
+/** Gövdede VERİLEN beyan metni türetileni ezer (null/"" = yok); verilmeyen → türetilen. */
+function given(body: string | null | undefined, derived: string | null): string | null {
+  return body === undefined ? derived : body?.trim() || null;
 }
 
 function round3(n: number): number {
