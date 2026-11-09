@@ -14,7 +14,6 @@ import FilterBar from './FilterBar';
 import WorkOrderTable from './WorkOrderTable';
 import ActionBar from './ActionBar';
 import ScanStage from './ScanStage';
-import LastBatchHint from '../../../components/LastBatchHint';
 import { FieldsHeaderIcon } from '../GelenBelge/woCreate/WoFieldSelector';
 import OptionsSheet from './OptionsSheet';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -44,8 +43,6 @@ export default function IsEmirleriScreen() {
   const setRouteOnButton = useDeviceSettingsStore((s) => s.setWoRouteOnButton);
   const woButtons = useDeviceSettingsStore((s) => s.woButtons);
   const setWoButtons = useDeviceSettingsStore((s) => s.setWoButtons);
-  const lastBatchHint = useDeviceSettingsStore((s) => s.woLastBatchHint);
-  const setLastBatchHint = useDeviceSettingsStore((s) => s.setWoLastBatchHint);
   // Tek mal sahibi açıksa formda sorulmaz; hangi türle açılacağı tuşlarda etiketle görünür.
   const kindTag = kinds.length === 1 ? (kinds[0] === 'CUSTOMER_GOODS' ? { label: 'Fason', fason: true } : { label: 'Kendi üretim', fason: false }) : null;
   const scan = useScanAction(routeOnButton);
@@ -63,7 +60,7 @@ export default function IsEmirleriScreen() {
     // Oluşturma formu; geri → liste (kaydedilen İE listede görünsün diye tazelenir).
     const back = () => { setStage(null); void list.refreshAll(); };
     return (
-      <ScreenChrome title={createFormTitle(formKind, stage.manual)} onStepBack={back} titleRowExtras={lastBatchHint ? <LastBatchHint /> : undefined} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
+      <ScreenChrome title={createFormTitle(formKind, stage.manual)} onStepBack={back} profileExtras={<FieldsHeaderIcon onPress={() => setFieldsOpen(true)} />}>
         <ScanStage key={stage.n} route={stage.route} kinds={kinds} manual={stage.manual} onNew={() => setStage({ ...stage, n: stage.n + 1 })} onCreated={back} fieldsOpen={fieldsOpen} onFieldsOpenChange={setFieldsOpen} onKindChange={setFormKind} />
       </ScreenChrome>
     );
@@ -97,7 +94,7 @@ export default function IsEmirleriScreen() {
           onEmptyAction={(a) => setFilters(a === 'clearFilters' ? DEFAULT_FILTERS : { ...filters, status: 'ALL' })}
         />
         {scan.available && <ActionBar groups={scan.groups} type={scan.type} loading={scan.loading} onSelect={scan.select} showRoute={routeOnButton} onScan={() => open(false)} onManual={() => open(true)} buttons={woButtons} kindTag={kindTag} />}
-        <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} routeOnButton={routeOnButton} onRouteOnButton={(v) => void setRouteOnButton(v)} buttons={woButtons} onButtons={(v) => void setWoButtons(v)} lastBatchHint={lastBatchHint} onLastBatchHint={(v) => void setLastBatchHint(v)} onDismiss={() => setOptionsOpen(false)} />
+        <OptionsSheet visible={optionsOpen} kinds={kinds} onChange={(k) => void setKinds(k)} routeOnButton={routeOnButton} onRouteOnButton={(v) => void setRouteOnButton(v)} buttons={woButtons} onButtons={(v) => void setWoButtons(v)} onDismiss={() => setOptionsOpen(false)} />
       </View>
       <ColumnsSheet visible={columnsOpen} columns={cols.visible} onToggle={cols.toggle} onDismiss={() => setColumnsOpen(false)} />
       <WorkOrderDetailSheet workOrderId={openId} onClose={() => setOpenId(null)} onChanged={() => void list.refetch()} />

@@ -86,6 +86,7 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   WO_REPLACE: "Düzenle",
   COLOR_CHANGE: "Rengi Değiştir",
   WIDTH_CHANGE: "Eni Değiştir",
+  FOLD_CHANGE: "Kat Tipini Değiştir",
   FASON_RECEIPT_WIDTH: "Fason kabulünde ölçülen en",
   ORDER_LINK: "Sipariş bağla",
   ORDER_UNLINK: "Sipariş bağını kaldır",

@@ -15,6 +15,8 @@ import { useDeviceSettingsStore, type DocPageSize } from '../../../store/deviceS
 import { upperTr } from '../../../utils/trCase';
 import { formatFactory } from '../../../lib/factory-time';
 import { TERIM } from '../../../lib/terim';
+import { useIncomingScans } from './useIncomingScans';
+import type { IncomingScanItem } from './incomingScans';
 
 // =============================================================================
 // İŞ EMRİ BELGELERİ — sahadaki operatör iş emrine basınca TÜM belgelerine
@@ -28,7 +30,11 @@ import { TERIM } from '../../../lib/terim';
 // kabuğunu ve infinite-scroll sözleşmesini paylaşmak istiyoruz.
 // =============================================================================
 
-type Row = { kind: 'header'; key: string; label: string } | { kind: 'doc'; key: string; doc: WorkOrderDocument };
+// Gelen belge fotoğrafları listenin EN ÜSTÜNDE (kullanıcı 2026-11-09: Belgeler'de önce kaynak belge görünsün).
+type Row =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'scan'; key: string; scan: IncomingScanItem }
+  | { kind: 'doc'; key: string; doc: WorkOrderDocument };
 
 interface Props {
   visible: boolean;
@@ -59,11 +65,14 @@ export default function WorkOrderDocumentsSheet({
   });
 
   const docs = q.data?.data?.documents ?? [];
+  const scans = useIncomingScans(workOrderId, visible);
 
   // Grup başlıklarını araya serpiştir. Sıra backend'den geldiği gibi korunur
   // (kart önce, sonra fason belgeleri tarih desc) — istemci yeniden sıralamaz.
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
+    if (scans.items.length > 0) out.push({ kind: 'header', key: 'h-gelen-belge', label: 'Gelen Belge' });
+    for (const sc of scans.items) out.push({ kind: 'scan', key: `scan-${sc.scanId}`, scan: sc });
     let lastGroup: string | null = null;
     for (const d of docs) {
       if (d.group !== lastGroup) {
@@ -73,7 +82,7 @@ export default function WorkOrderDocumentsSheet({
       out.push({ kind: 'doc', key: `${d.docType}-${d.sourceId}`, doc: d });
     }
     return out;
-  }, [docs]);
+  }, [docs, scans.items]);
 
   const handlePrint = async (doc: WorkOrderDocument, key: string) => {
     if (printingKey) return; // tek soket değil ama çift baskı da istenmez
@@ -114,12 +123,42 @@ export default function WorkOrderDocumentsSheet({
     else await setDocPageSize(docType, next);
   };
 
+  const renderScan = (sc: IncomingScanItem) => {
+    const busy = scans.openingId === sc.scanId;
+    return (
+      <TouchableRipple
+        onPress={() => void scans.open(sc)}
+        disabled={busy || !sc.viewable}
+        style={[styles.card, styles.cardScan, !sc.viewable && styles.cardCancelled]}
+        borderless={false}
+        accessibilityLabel={`${sc.title} ${sc.subtitle}`}
+        testID={`ie-gelen-belge-${sc.scanId}`}
+      >
+        <View style={styles.cardInner}>
+          <View style={styles.cardIcon}>
+            <Icon source="image-outline" size={22} color={sc.viewable ? colors.brand : colors.textMuted} />
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {sc.title}
+            </Text>
+            <Text style={styles.cardSub}>{sc.blockedReason ? `${sc.subtitle} · ${sc.blockedReason}` : sc.subtitle}</Text>
+          </View>
+          <View style={styles.cardAction}>
+            {busy ? <ActivityIndicator size={20} /> : <Icon source={sc.viewable ? 'magnify-plus-outline' : 'image-off-outline'} size={24} color={colors.textMuted} />}
+          </View>
+        </View>
+      </TouchableRipple>
+    );
+  };
+
   const renderItem = (row: Row) => {
     if (row.kind === 'header') {
       return (
         <Text style={styles.groupHeader}>{upperTr(row.label)}</Text>
       );
     }
+    if (row.kind === 'scan') return renderScan(row.scan);
     const d = row.doc;
     const busy = printingKey === row.key;
     return (
@@ -177,6 +216,7 @@ export default function WorkOrderDocumentsSheet({
   };
 
   return (
+    <>
     <RemoteListSheet<Row>
       visible={visible}
       onDismiss={onDismiss}
@@ -194,7 +234,7 @@ export default function WorkOrderDocumentsSheet({
       emptyText={`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait belge yok`}
       emptyHint={`Refakat kartı ${TERIM.terbiyeIsEmri.tekilKucuk} açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir.`}
       hint={{
-        text: 'Satıra dokun → yazdırılır. Kâğıt boyu için sağdaki kutuya dokun (bu cihazda hatırlanır).',
+        text: 'Gelen belge fotoğrafına dokun → tam ekran açılır. Diğer satırlara dokun → yazdırılır; kâğıt boyu için sağdaki kutu (bu cihazda hatırlanır).',
         icon: 'printer',
       }}
       // ScrollView (FlashList değil): liste KISA (bir iş emrinin belgeleri) ve
@@ -206,6 +246,9 @@ export default function WorkOrderDocumentsSheet({
       widthRatio={0.94}
       heightRatio={0.9}
     />
+    {/* Görüntüleyici listenin KARDEŞİ: sonra mount olan portal üstte kalır, kapanınca listeye dönülür. */}
+    {scans.viewer}
+    </>
   );
 }
 
@@ -227,6 +270,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   cardCancelled: { opacity: 0.6 },
+  cardScan: { minHeight: 56, borderColor: colors.brand },
   cardInner: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.md },
   cardIcon: { width: 32, alignItems: 'center' },
   cardBody: { flex: 1, minWidth: 0, gap: 2 },

@@ -1,4 +1,4 @@
-import { detailColumns, incomingRows, targetRows, targetView, shortPropertyLabel, actionPlacement, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum } from './workOrderDetailView';
+import { detailColumns, incomingRows, targetRows, targetView, shortPropertyLabel, actionPlacement, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum, foldLocked } from './workOrderDetailView';
 import type { WorkOrder } from '../../../types/models';
 
 const fmtDate = (s: string) => `D(${s})`;
@@ -182,6 +182,27 @@ describe('targetView adım eşlemesi ve kalemler', () => {
   it('gramaj izinsizse (canGramaj yok) adım altı kalemsizdir', () => {
     const v = targetView({ ...base, wo: w(), gramajPropertyId: 'gr', fixAllowed: { ...allow, gramaj: false } });
     expect(v.byStep.s1[0].fix).toBeNull();
+  });
+  it('kat tipi düzeltme izinliyse ve Tambur başlamadıysa TAMBUR adımı altında kalemlidir', () => {
+    const v = targetView({ ...base, wo: w(), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
+    expect(v.byStep.s2).toEqual([{ label: '', value: '4-KAT', fix: 'fold' }]);
+  });
+  it('Tambur adımı başladıysa kat kilitli (sunucu kilidi aynası) → kalemsiz düz metin', () => {
+    const started = [steps[0], { ...steps[1], status: 'ACTIVE' }];
+    expect(foldLocked(started as never)).toBe(true);
+    expect(foldLocked(steps as never)).toBe(false);
+    expect(foldLocked([] as never)).toBe(false);
+    const v = targetView({ ...base, wo: w({ steps: started as never }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
+    expect(v.byStep.s2).toEqual([{ label: '', value: '4-KAT', fix: null }]);
+  });
+  it('kat boşsa ve izinliyse TAMBUR altında "Kat Belirtilmedi" kalemle açılır; izinsizse hiç çıkmaz', () => {
+    const v = targetView({ ...base, wo: w({ foldType: null }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
+    expect(v.byStep.s2).toEqual([{ label: 'Kat', value: 'Belirtilmedi', fix: 'fold' }]);
+    expect(targetView({ ...base, wo: w({ foldType: null }), gramajPropertyId: 'gr', fixAllowed: allow }).byStep.s2).toBeUndefined();
+  });
+  it('rotada Tambur yoksa kat Hedef kartında, izinliyse kalemli satır', () => {
+    const v = targetView({ ...base, wo: w({ steps: [] }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
+    expect(v.fixByLabel['Kat Tipi']).toBe('fold');
   });
 });
 

@@ -13,6 +13,8 @@ import {
   replaceWorkOrderTargetValues,
 } from "../services/workorder-target-value.service";
 import { updateStepPlannedMachine } from "../services/step-planned-machine.service";
+import { changeWorkOrderFoldType } from "../services/workorder/fold-change";
+import { normalizeFoldType } from "../services/helpers/fold-type";
 
 /** Yalnız gövdedeki özellikler değişir; `valueId: null` = o özelliğin hedefini kaldır.
  *  Boş liste = eski istemci "hepsini kaldır" sözleşmesi. Tanınmayan anahtar 400 (fail-closed). */
@@ -33,6 +35,24 @@ export async function putTargetValues(req: Request, res: Response, next: NextFun
     // `workorder:write` yoksa kapı `mobile:is-emri-duzelt`ten geçmiştir → yalnız kurşun gramajı (servis 403/409).
     const kursunOnly = !matchesPermission(req.user?.permissions ?? [], "workorder:write");
     res.status(200).json(await replaceWorkOrderTargetValues(id, body.items, req.user?.userId, { kursunOnly, reason: body.reason ?? null }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Kat Tipini Değiştir — `null` katı kaldırır; tanınmayan anahtar 400. */
+export const foldTypeBodySchema = z.object({
+  foldType: z.string().max(64).transform((v) => normalizeFoldType(v)).nullable(),
+  reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500, "En çok 500 karakter"),
+  reasonCode: z.string().trim().min(1).max(64).optional(),
+}).strict();
+
+/** PATCH /api/work-orders/:id/fold-type */
+export async function patchFoldType(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const body = foldTypeBodySchema.parse(req.body);
+    res.status(200).json(await changeWorkOrderFoldType(id, { foldType: body.foldType, reason: body.reason, reasonCode: body.reasonCode ?? null }, req.user?.userId));
   } catch (err) {
     next(err);
   }

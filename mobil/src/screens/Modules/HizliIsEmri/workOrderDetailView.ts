@@ -67,8 +67,15 @@ export function incomingRows(incoming: WorkOrderIncoming | null | undefined): De
   return rows.filter((r): r is DetailRow => r !== null);
 }
 
-export type FixKind3 = 'color' | 'width' | 'gramaj';
-export type FixAllowed = Record<FixKind3, boolean>;
+export type FixKind3 = 'color' | 'width' | 'gramaj' | 'fold';
+/** `fold` eski çağıranlarda yok → kalemsiz (bugünkü davranış). */
+export type FixAllowed = Record<Exclude<FixKind3, 'fold'>, boolean> & { fold?: boolean };
+
+/** Kat kilidi (sunucu `computeWorkOrderLocks.foldType` aynası): Tambur adımı başladıysa kat sabittir. */
+export function foldLocked(steps: WorkOrder['steps']): boolean {
+  const t = (steps ?? []).find((s) => s.station?.kind === 'TAMBUR');
+  return !!t && t.status !== 'PENDING';
+}
 
 export interface TargetViewInput {
   wo: WorkOrder;
@@ -118,7 +125,7 @@ export function shortPropertyLabel(propertyName: string, stepName: string): stri
   return upperFirstTr(word);
 }
 
-const NO_FIX: FixAllowed = { color: false, width: false, gramaj: false };
+const NO_FIX: FixAllowed = { color: false, width: false, gramaj: false, fold: false };
 
 /**
  * Hedef kartı + rota adımı altı hedefleri. Eşleme: hedef çeşit değerinin özelliği (ya da bağlı olduğu bayrak)
@@ -145,9 +152,10 @@ export function targetView({ wo, fallbackItemName, propertyNames, fmtDate, grama
   const width = num(wo.width);
   rows.push(width != null ? row('En', `${fmtNum(width)} cm`, 'width') : allow.width ? row('En', 'Belirtilmedi', 'width') : null);
   const fold = txt(wo.foldType);
-  const tamburStep = fold ? steps.find((s) => s.station?.kind === 'TAMBUR') : undefined;
-  if (fold && tamburStep) put(tamburStep.id, { label: '', value: fold, fix: null });
-  else rows.push(fold ? ['Kat Tipi', fold] : null);
+  const tamburStep = steps.find((s) => s.station?.kind === 'TAMBUR');
+  const foldFix: FixKind3 | null = allow.fold && !foldLocked(steps) ? 'fold' : null;
+  if (tamburStep && (fold || foldFix)) put(tamburStep.id, { label: fold ? '' : 'Kat', value: fold ?? 'Belirtilmedi', fix: foldFix });
+  else rows.push(fold ? row('Kat Tipi', fold, foldFix) : null);
   const layers = num(wo.layerCount);
   rows.push(layers != null ? ['Katman', String(layers)] : null);
   // Gramaj = hedef çeşit değeri (ör. Kurşun Gramajı); başka çeşit de aynı satırda adıyla görünür.

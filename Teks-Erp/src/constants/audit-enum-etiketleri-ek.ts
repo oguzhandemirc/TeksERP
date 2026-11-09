@@ -44,7 +44,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   ORDER_LINK_ADDED: "Sipariş bağı eklendi",
   TYPE_DERIVED_FROM_LINKS: "Tür bağlardan türetildi",
   TARGET_COLOR_CHANGED: "Hedef renk değişti",
-  TARGET_WIDTH_CHANGED: "Hedef en değişti",
+  TARGET_WIDTH_CHANGED: "Hedef en değişti", TARGET_FOLD_CHANGED: "Hedef kat tipi değişti",
   MANUAL_MOVE: "Elle taşıma",
   // Kurşun dağıtımı
   KURSUN_BYPASS_ASSIGN: "Kurşun dağıtım ataması",

@@ -11,7 +11,7 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
-import { getKursunGramaj, getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
+import { getKursunGramaj, getWorkOrderSummary, patchFoldType, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -1016,6 +1016,32 @@ router.post(
   requireAnyPermission("roll:manual-adjust", "workorder:write"),
   controller.applyAttributeToRolls,
 );
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/fold-type:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: Kat Tipini Değiştir (tablet Düzelt) — sebep zorunlu; Tambur adımı başladıysa 409 (kilit)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [foldType, reason]
+ *             properties:
+ *               foldType: { type: string, nullable: true, description: "KAT katalog kodu; null = kaldır" }
+ *               reason: { type: string }
+ *               reasonCode: { type: string }
+ *     responses:
+ *       200: { description: "{ previousFoldType, foldType }" }
+ *       400: { description: Katalogda olmayan kat / aynı değer / sebep yok }
+ *       409: { description: "Kat kilitli (Tambur başladı) ya da WORK_ORDER_PLAN_FROZEN" }
+ */
+router.patch("/:id/fold-type", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), patchFoldType);
 
 router.patch(
   "/:id/width",

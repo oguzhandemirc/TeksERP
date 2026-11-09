@@ -17,8 +17,6 @@ interface Props {
   onRouteOnButton: (v: boolean) => void;
   buttons: WoButtons;
   onButtons: (v: WoButtons) => void;
-  lastBatchHint: boolean;
-  onLastBatchHint: (v: boolean) => void;
   onDismiss: () => void;
 }
 
@@ -55,7 +53,7 @@ function CheckRow({ on, locked, label, hint, onPress, testID }: { on: boolean; l
   );
 }
 
-export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, onRouteOnButton, buttons, onButtons, lastBatchHint, onLastBatchHint, onDismiss }: Props) {
+export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, onRouteOnButton, buttons, onButtons, onDismiss }: Props) {
   const scanOn = buttons !== 'manual';
   const manualOn = buttons !== 'scan';
   return (
@@ -87,7 +85,6 @@ export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, 
       )}
 
       <Text style={styles.section}>Form başlığı</Text>
-      <CheckRow on={lastBatchHint} label="Son parti numarasını göster" hint="İş emri formunun başlığında son kullanılan parti numarası görünür (kısa numara açıksa)." onPress={() => onLastBatchHint(!lastBatchHint)} testID="ie-secenek-son-parti" />
     </ModuleSheet>
   );
 }
