@@ -6,7 +6,7 @@ import type { TeachEntry } from '../tanit/useTeachEntry';
 import { modeRuleLine, type MultiPartyDraft } from './partyDraft';
 
 export interface StripModel {
-  /** Tanınmadı uyarısı; `teach` = "Tanıt" düğmesi (bu tablette fotoğraf var). Tanınmış / hazır şablonda null. */
+  /** Tanınmadı (ortada soru, başlıkta Tanıt ikonu); `teach` = bu cihazda fotoğraf var. Tanınmış / hazır şablonda null. */
   unrecognized: { teach: boolean } | null;
   /** Çok parti kip satırı; `canChange` = "Bu sefer değiştir" (kayıt sürmüyor/bitmedi). */
   rule: { text: string; sourceText: string; touched: boolean; canChange: boolean } | null;
@@ -33,5 +33,5 @@ export function stripModel(i: StripInput): StripModel | null {
   return { unrecognized, rule };
 }
 
-/** Şeritte gösterilecek satır var mı (yoksa boş gri alan da kalmaz). */
-export const stripHasContent = (m: StripModel | null): m is StripModel => !!m && (!!m.unrecognized || !!m.rule);
+/** Şeritte gösterilecek satır var mı (yoksa boş gri alan da kalmaz). Tanınmadı uyarısı şeritte değil, ortada soru (`TeachPrompt`). */
+export const stripHasContent = (m: StripModel | null): m is StripModel => !!m && !!m.rule;

@@ -1,7 +1,7 @@
 // Belge satırının başı. Toplu liste: "Belge GB…" şeridi + okuma hapı, altında eylem satırı. Tek İE formu: TEK satır — belge no +
-// durum ikonu (sorun varsa kısa yazı), sağda Yeniden okut / Taslağı iptal et ikonları. İkisinde de tanıtılmamış şeridi ve kısa
-// eylemli iletiler (`docReadNotice`) altta; şablon düzeltmek okuma düzeltmesidir → okuma durumunun yanında durur.
-// Sunucu `tanima` gönderince altta yalnız iş gerektiren şerit (`RecognitionStrip`: tanınmadı + Tanıt · çok parti kipi).
+// durum ikonu (sorun varsa kısa yazı), sağda Yeniden okut / Taslağı iptal et ikonları. İkisinde de fotoğrafsız tanıtma açıklaması ve
+// kısa eylemli iletiler (`docReadNotice`) altta; tanınmamış belge ortada bir kez sorulur (`TeachPrompt`), Tanıt ikonu başlıkta kalır.
+// Sunucu `tanima` gönderince altta yalnız iş gerektiren şerit (`RecognitionStrip`: çok parti kipi).
 // Dar ekranda (<600dp) tek formun ikonları sığmaz: en çok iki ikon görünür, fazlası "⋯" menüsüne iner (birincil: yeniden okut).
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -15,7 +15,8 @@ import { useIsCompact } from '../../../../hooks/useDeviceType';
 import { usePermissions } from '../../../../hooks/usePermission';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import CancelDraftButton from '../CancelDraftButton';
-import { TeachStrip, TemplateName, TemplateUpdateButton, templateUpdateLabel } from '../tanit/TeachBanner';
+import { TeachStrip, TemplateName, TemplateUpdateButton, templateAction } from '../tanit/TeachBanner';
+import TeachPrompt from '../tanit/TeachPrompt';
 import { useTeachEntry } from '../tanit/useTeachEntry';
 import type { useReadResult } from '../useReadResult';
 import { docReadNotices, docReadPill, type DocNotice } from './docReadNotice';
@@ -132,8 +133,9 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           </View>
         </>
       )}
-      {strip && <RecognitionStrip model={strip} noteNo={no} multi={row.form?.multi} onTeach={teach.open} onMode={(m) => wo.setMulti(row.noteId, m)} />}
-      {(!strip || teach.noPhoto) && <TeachStrip entry={teach} />}
+      {strip && <RecognitionStrip model={strip} noteNo={no} multi={row.form?.multi} onMode={(m) => wo.setMulti(row.noteId, m)} />}
+      <TeachStrip entry={teach} />
+      <TeachPrompt entry={teach} readKey={`${row.noteId}:${row.runKey}`} unrecognized={!strip || !!strip.unrecognized} />
       <BandNotices notices={notices} act={act} no={no} />
       {teach.modal}
     </>
@@ -183,8 +185,8 @@ function useCompactHeadActions(on: boolean, a: ActionInput): HeadAction[] {
   const out: HeadAction[] = [];
   if (a.onReread && !a.done) out.push({ key: 'reread', icon: a.manual ? 'camera-plus-outline' : 'camera-retake-outline', label: a.manual ? 'Belge ekle' : 'Yeniden okut', onPress: a.onReread, disabled: a.saving, testID: a.manual ? 'ie-belge-ekle' : 'ie-belge-yeniden-okut' });
   if (a.onPreview) out.push({ key: 'preview', icon: 'file-eye-outline', label: 'Belgeyi önizle', onPress: a.onPreview, testID: 'ie-belge-onizle' });
-  const t = a.teach;
-  if ((t.kind === 'taught' || t.kind === 'system') && !t.noPhoto) out.push({ key: 'template', icon: 'file-replace-outline', label: templateUpdateLabel(t.kind), onPress: t.open, testID: 'tanit-serit-guncelle' });
+  const ta = templateAction(a.teach);
+  if (ta) out.push({ key: 'template', ...ta, onPress: a.teach.open });
   if (a.cancellable && canWrite) out.push({ key: 'cancel', icon: 'file-cancel-outline', label: 'Taslağı iptal et', onPress: () => undefined, disabled: a.saving, testID: 'ie-belge-taslak-iptal', danger: true });
   return out;
 }

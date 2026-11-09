@@ -1,4 +1,5 @@
-// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → "Tanıt" şeridi; TANITILDI → şablon adı (öneksiz) + "Tanımı düzenle" ikon düğmesi;
+// K30-A1 satır şeridi (tek form / toplu / masa): TANITILMAMIS → ortada bir kez "Belge tanınmadı" sorusu (Tanıt | Vazgeç) +
+// başlıkta "Tanıt" ikonu (Vazgeç sonrası dönüş yolu); aynı okumada soru geri gelmez, yeni okuma (runKey) yeniden sorar; TANITILDI → şablon adı (öneksiz) + "Tanımı düzenle" ikon düğmesi;
 // izin / tanıtım alanı / yerel fotoğraf yoksa ya da satır sonuçlandıysa çizilmez. Kayıt sonrası belge yeniden okutulur
 // (başarılı → onay detayı atılır + rereadRow); sunucu reddederse (409 satırlı taslak) önizleme değerleri applyTaught ile dolar.
 import React from 'react';
@@ -12,6 +13,7 @@ import { approvalDetailKey } from '../useApprovalCard';
 import type { DocRow } from '../woCreate/useWoRows';
 import { clearLocalPages, rememberLocalPages } from './localPages';
 import TeachBanner from './TeachBanner';
+import { clearTeachPrompts } from './TeachPrompt';
 
 const mockApi = {
   scanWords: jest.fn(),
@@ -90,6 +92,7 @@ beforeEach(() => {
   mockApi.requeueScan.mockResolvedValue({});
   wo = { rereadRow: jest.fn(), applyTaught: jest.fn() };
   clearLocalPages();
+  clearTeachPrompts();
   rememberLocalPages([{ sha256: 'aa', uri: 'file:///1.jpg' }]);
   setPerms(['gelen-belge:read', 'gelen-belge:template']);
 });
@@ -98,10 +101,10 @@ afterEach(() => act(() => useAuthStore.setState({ user: null })));
 const draw = (tanitim: ReadTanitim | undefined, r: DocRow = row()) =>
   renderWithPaper(<TeachBanner row={r} wo={wo} tanitim={tanitim} customers={CUSTOMERS} />);
 
-/** Şeritten modalı aç → Parti no adımı → değere dokun → okunan değer gelince Kaydet. */
+/** Ortadaki sorudan "Tanıt" → Parti no adımı → değere dokun → okunan değer gelince Kaydet. */
 async function teachAndSave(s: ReturnType<typeof renderWithPaper>) {
   await settle();
-  await press(s.getByTestId('tanit-serit-ac'));
+  await press(await s.findByTestId('tanit-sor-tanit'));
   await press(await s.findByTestId('tanit-asama-ESLEME'));
   await press(await s.findByTestId('tanit-adim-partiNo'));
   await press(await s.findByTestId('tanit-kutu-4'));
@@ -120,11 +123,33 @@ describe('TeachBanner — görünürlük', () => {
     expect(s.getByTestId('tanit-sablon')).not.toHaveTextContent(/Şablon/);
   });
 
-  it('⭐ TANITILMAMIS → belirgin şerit + "Tanıt"', () => {
+  it('⭐ TANITILMAMIS → ortada soru (Tanıt | Vazgeç); sarı şerit yok; başlıkta "Tanıt" ikonu', async () => {
     const s = draw(NOT_TAUGHT);
-    expect(s.getByTestId('tanit-serit')).toHaveTextContent(/Bu belge tanınmadı\. Bir kez tanıtın/);
-    expect(s.getByTestId('tanit-serit-ac')).toHaveTextContent(/Tanıt$/);
+    expect(await s.findByText('Belge tanınmadı')).toBeTruthy();
+    expect(s.getByTestId('tanit-sor-metin')).toHaveTextContent('Bir kez tanıtın, bu gönderenden gelen sonraki belgeler doğru okunsun.');
+    expect(s.getByTestId('tanit-sor-tanit')).toHaveTextContent(/Tanıt$/);
+    expect(s.getByTestId('tanit-sor-vazgec')).toHaveTextContent('Vazgeç');
+    expect(s.queryByTestId('tanit-serit')).toBeNull();
+    expect(s.queryByText(/Bu belge tanınmadı/)).toBeNull();
+    expect(s.getByTestId('belge-tanit')).toHaveProp('accessibilityLabel', 'Tanıt');
     expect(s.queryByTestId('tanit-serit-guncelle')).toBeNull();
+  });
+
+  it('⭐ Vazgeç → soru kapanır, aynı okumada (yeniden çizimde de) geri gelmez; başlıktaki Tanıt tanıtmayı açar; yeni okuma yeniden sorar', async () => {
+    const s = draw(NOT_TAUGHT);
+    await settle();
+    await press(await s.findByTestId('tanit-sor-vazgec'));
+    await settle();
+    expect(s.queryByTestId('tanit-sor-metin')).toBeNull();
+    s.unmount();
+    const again = draw(NOT_TAUGHT);
+    await settle();
+    expect(again.queryByTestId('tanit-sor-metin')).toBeNull();
+    await press(again.getByTestId('belge-tanit'));
+    expect(await again.findByTestId('tanit-asama-ESLEME')).toBeTruthy();
+    again.unmount();
+    const next = draw(NOT_TAUGHT, row({ runKey: 1 }));
+    expect(await next.findByTestId('tanit-sor-metin')).toBeTruthy();
   });
 
   it('TANITILDI → şerit yok, şablon satırı + "Tanımı düzenle"; modal güncelle kipinde açılır', async () => {
@@ -150,7 +175,8 @@ describe('TeachBanner — görünürlük', () => {
     clearLocalPages();
     const a = draw(NOT_TAUGHT);
     expect(a.getByTestId('tanit-serit')).toHaveTextContent(/panelde Gelen Belgeler/);
-    expect(a.queryByTestId('tanit-serit-ac')).toBeNull();
+    expect(a.queryByTestId('tanit-sor-metin')).toBeNull();
+    expect(a.queryByTestId('belge-tanit')).toBeNull();
     const b = draw(TAUGHT);
     expect(b.queryByTestId('tanit-serit-guncelle')).toBeNull();
   });
@@ -166,6 +192,8 @@ describe('TeachBanner — görünürlük', () => {
     const s = draw(tanitim, r);
     expect(s.queryByTestId('tanit-serit')).toBeNull();
     expect(s.queryByTestId('tanit-serit-guncelle')).toBeNull();
+    expect(s.queryByTestId('tanit-sor-metin')).toBeNull();
+    expect(s.queryByTestId('belge-tanit')).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { renderWithPaper } from '../../../../test/render';
 import type { ReadWatch } from '../readResult';
 import { clearLocalPages, rememberLocalPages } from '../tanit/localPages';
+import { clearTeachPrompts } from '../tanit/TeachPrompt';
 import DocRowCard from './DocRowCard';
 import { incomingKgNote } from './DocRowKg';
 import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
@@ -69,6 +70,7 @@ const draw = (o: Opts = {}) => renderWithPaper(<Harness o={o} />);
 
 beforeEach(() => {
   clearLocalPages();
+  clearTeachPrompts();
   mockWatch = null;
 });
 
@@ -82,14 +84,22 @@ describe('belge şeridi — yalnız iş gerektiren satırlar', () => {
     expect(ui.queryByText(/Toplam satırı/)).toBeNull();
     expect(ui.queryByTestId('tanit-sablon')).toBeNull();
   });
-  it('⭐ TANITILMAMIS + fotoğraf var: tek satır uyarı + Tanıt; amber şerit tekrarlanmaz', () => {
+  it('⭐ TANITILMAMIS + fotoğraf var: formda sarı şerit yok; ortada soru; Vazgeç kapatır, aynı okumada geri gelmez; başlıkta Tanıt kalır', () => {
     rememberLocalPages([{ sha256: 'aa', uri: 'file:///1.jpg' }]);
     mockWatch = done({ tanitim: { durum: 'TANITILMAMIS' }, tanima: { template: null, durum: 'TANITILMAMIS', mapping: [], rules: [TAUGHT.rules[0]] } });
     const ui = draw();
-    expect(ui.getByTestId('ie-tanima-1')).toHaveTextContent(/Bu belge tanınmadı/);
-    expect(ui.getByTestId('ie-tanima-tanit')).toBeTruthy();
-    expect(ui.queryByTestId('ie-tanima-3')).toBeNull();
+    expect(ui.queryByTestId('ie-tanima-GB-1')).toBeNull();
+    expect(ui.queryByText(/Bu belge tanınmadı/)).toBeNull();
     expect(ui.queryByTestId('tanit-serit')).toBeNull();
+    expect(ui.getByTestId('tanit-sor-metin')).toHaveTextContent(/Bir kez tanıtın/);
+    expect(ui.getByTestId('tanit-sor-tanit')).toBeTruthy();
+    expect(ui.getByTestId('belge-tanit')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('tanit-sor-vazgec'));
+    expect(ui.queryByTestId('tanit-sor-metin')).toBeNull();
+    ui.unmount();
+    const again = draw();
+    expect(again.queryByTestId('tanit-sor-metin')).toBeNull();
+    expect(again.getByTestId('belge-tanit')).toBeTruthy();
   });
   it('TANITILMAMIS + fotoğraf yok: şerit yok, panel yolunu anlatan amber şerit', () => {
     mockWatch = done({ tanitim: { durum: 'TANITILMAMIS' }, tanima: { template: null, durum: 'TANITILMAMIS', mapping: [], rules: [] } });

@@ -1,45 +1,45 @@
-// K30-A1: tek form / toplu satır / masa satırında tanıtma girişi. Okuma özeti `tanitim` TANITILMAMIS → amber şerit
-// "Bu belge tanınmadı … [Tanıt]"; TANITILDI → şablon adı + "Tanımı düzenle" ikon düğmesi. Alan yoksa (eski sunucu /
-// yerleşik şablon) çizilmez. Parçalar ayrı: tek formda Belge şeridi (`DocHeadBand`) düğmeyi kendi satırına koyar.
+// K30-A1: tek form / toplu satır / masa satırında tanıtma girişi. Okuma özeti `tanitim` TANITILMAMIS → ortada bir kez
+// "Belge tanınmadı" sorusu (`TeachPrompt`) + başlıkta "Tanıt" ikonu; TANITILDI → şablon adı + "Tanımı düzenle" ikonu.
+// Fotoğraf bu cihazda yoksa yalnız panel yolunu anlatan amber şerit. Alan yoksa (eski sunucu / yerleşik şablon) çizilmez. Parçalar ayrı: tek formda Belge şeridi (`DocHeadBand`) düğmeyi kendi satırına koyar.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { IconButton, Tooltip } from 'react-native-paper';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 import TruncatedText from '../../../../components/TruncatedText';
 import { colors, spacing, typography } from '../../../../theme';
+import TeachPrompt from './TeachPrompt';
 import { useTeachEntry, type TeachEntry, type TeachEntryInput } from './useTeachEntry';
 
 // Fotoğrafın yerel kopyası yoksa (başka tablet, uygulama yeniden açıldı, eski belgeden yeni İE) yeniden okutmak
 // eski belgeye fotoğraf eklemez — doğru yol panel tanıtmasıdır (prova 2026-11-06).
 export const TEACH_NO_PHOTO_TEXT = 'Bu belge tanınmadı. Fotoğrafı bu tablette yok — panelde Gelen Belgeler → belge → "Bu belgeyi tanıt".';
 
-/** TANITILMAMIS amber şeridi; foto yoksa eylemsiz açıklama (panel yolu). */
+/** Tanınmamış + fotoğraf bu cihazda yok: eylemsiz açıklama (panel yolu). Fotoğraf varsa soru `TeachPrompt`ta. */
 export function TeachStrip({ entry }: { entry: TeachEntry }) {
-  if (entry.kind !== 'untaught') return null;
-  return (
-    <NoticeStrip
-      tone="warn"
-      icon="alert-circle-outline"
-      text={entry.noPhoto ? TEACH_NO_PHOTO_TEXT : 'Bu belge tanınmadı. Bir kez tanıtın, sonrakiler doğru okunsun.'}
-      action={entry.noPhoto ? undefined : { label: 'Tanıt', icon: 'creation', onPress: entry.open, testID: 'tanit-serit-ac' }}
-      testID="tanit-serit"
-    />
-  );
+  if (entry.kind !== 'untaught' || !entry.noPhoto) return null;
+  return <NoticeStrip tone="warn" icon="alert-circle-outline" text={TEACH_NO_PHOTO_TEXT} testID="tanit-serit" />;
 }
 
-/** Düğmenin adı (erişilebilirlik + ipucu): kendi tipimiz "Tanımı düzenle", hazır şablon "Yeniden tanıt" (yeni tip açar). */
+/** Düğmenin adı (erişilebilirlik + ipucu): tanınmamış "Tanıt", kendi tipimiz "Tanımı düzenle", hazır şablon "Yeniden tanıt". */
 export function templateUpdateLabel(kind: TeachEntry['kind']): string {
-  return kind === 'system' ? 'Yeniden tanıt' : 'Tanımı düzenle';
+  return kind === 'untaught' ? 'Tanıt' : kind === 'system' ? 'Yeniden tanıt' : 'Tanımı düzenle';
 }
 
-/** Tanınmış + foto varken ikincil eylem: komşu ikon düğmelerle aynı tek ikon (56dp); ad basılı tutunca ipucunda. */
-export function TemplateUpdateButton({ entry }: { entry: TeachEntry }) {
-  if ((entry.kind !== 'taught' && entry.kind !== 'system') || entry.noPhoto) return null;
+/** Başlık ikonunun görünümü; foto yoksa / giriş yoksa null. Tanınmamışta soru kapatılsa da tanıtma yolu burada kalır. */
+export function templateAction(entry: TeachEntry): { icon: string; label: string; testID: string } | null {
+  if (!entry.kind || entry.noPhoto) return null;
   const label = templateUpdateLabel(entry.kind);
+  return entry.kind === 'untaught' ? { icon: 'creation', label, testID: 'belge-tanit' } : { icon: 'file-replace-outline', label, testID: 'tanit-serit-guncelle' };
+}
+
+/** Foto varken başlıkta tek ikon (56dp; komşu ikonlarla aynı); ad basılı tutunca ipucunda. */
+export function TemplateUpdateButton({ entry }: { entry: TeachEntry }) {
+  const a = templateAction(entry);
+  if (!a) return null;
   return (
-    <Tooltip title={label}>
-      <IconButton icon="file-replace-outline" size={28} iconColor={colors.brand} onPress={entry.open} style={styles.icon}
-        accessibilityLabel={label} testID="tanit-serit-guncelle" />
+    <Tooltip title={a.label}>
+      <IconButton icon={a.icon} size={28} iconColor={colors.brand} onPress={entry.open} style={styles.icon}
+        accessibilityLabel={a.label} testID={a.testID} />
     </Tooltip>
   );
 }
@@ -61,12 +61,11 @@ export default function TeachBanner(props: TeachEntryInput) {
   return (
     <>
       <TeachStrip entry={entry} />
-      {(entry.kind === 'taught' || entry.kind === 'system') && (
-        <View style={styles.row}>
-          <TemplateName entry={entry} />
-          <TemplateUpdateButton entry={entry} />
-        </View>
-      )}
+      <View style={styles.row}>
+        <TemplateName entry={entry} />
+        <TemplateUpdateButton entry={entry} />
+      </View>
+      <TeachPrompt entry={entry} readKey={`${props.row.noteId}:${props.row.runKey}`} />
       {entry.modal}
     </>
   );

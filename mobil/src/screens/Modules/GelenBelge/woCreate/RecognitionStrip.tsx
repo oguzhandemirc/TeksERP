@@ -1,5 +1,5 @@
-// Belge şeridi (2026-11-09 sadeleşme): yalnız iş gerektiren satırlar — "Bu belge tanınmadı" + Tanıt; çok partide tek kompakt kip
-// satırı + "Bu sefer değiştir" (kip sayfası). Gösterecek satır yoksa hiç çizilmez (boş gri alan kalmaz). Metinler saf `stripModel`den.
+// Belge şeridi (2026-11-09 sadeleşme): yalnız iş gerektiren satırlar — çok partide tek kompakt kip satırı (tanınmadı uyarısı
+// artık ortada soru: `TeachPrompt`) + "Bu sefer değiştir" (kip sayfası). Gösterecek satır yoksa hiç çizilmez (boş gri alan kalmaz). Metinler saf `stripModel`den.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -13,27 +13,15 @@ interface Props {
   model: StripModel | null;
   noteNo: string;
   multi: MultiPartyDraft | null | undefined;
-  onTeach: () => void;
   onMode: (next: MultiPartyDraft) => void;
 }
 
-export default function RecognitionStrip({ model, noteNo, multi, onTeach, onMode }: Props) {
+export default function RecognitionStrip({ model, noteNo, multi, onMode }: Props) {
   const [sheet, setSheet] = useState(false);
   if (!stripHasContent(model)) return null;
-  const { unrecognized, rule } = model;
+  const { rule } = model;
   return (
     <View style={styles.strip} testID={`ie-tanima-${noteNo}`}>
-      {unrecognized && (
-        <View style={[styles.seg, styles.warn]} testID="ie-tanima-1" accessibilityLabel="Bu belge tanınmadı">
-          <Icon source="alert-circle-outline" size={22} color={colors.warningText} />
-          <Text style={[styles.text, styles.grow, { color: colors.warningText }]}>Bu belge tanınmadı — bir kez tanıtın, sonrakiler doğru okunsun.</Text>
-          {unrecognized.teach && (
-            <Button mode="contained-tonal" icon="creation" onPress={onTeach} contentStyle={styles.btn} testID="ie-tanima-tanit">
-              Tanıt
-            </Button>
-          )}
-        </View>
-      )}
       {rule && (
         <View style={styles.seg} testID="ie-tanima-3" accessibilityLabel={`İş emri kuralı: ${rule.text}`}>
           <Icon source="file-cog-outline" size={20} color={colors.textSecondary} />
@@ -84,7 +72,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, minHeight: 56, paddingHorizontal: spacing.md,
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   },
-  warn: { borderColor: colors.warning, backgroundColor: colors.warningContainer },
   inner: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexGrow: 1 },
   grow: { flex: 1, minWidth: 160 },
   text: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
