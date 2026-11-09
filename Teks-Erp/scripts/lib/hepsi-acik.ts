@@ -105,6 +105,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   // ── üretim ─────────────────────────────────────────────────────────────────
   productionCancelReasonRequired: A(true),
   targetQuantityEnabled: A(true),
+  targetWidthEnabled: A(true),
   rawWidthEnabled: A(true),
   kursunBypassEnabled: A(true),
   kursunMeterCapture: A("IN_OUT"), // giriş + çıkış: iki okuma yolunu da işletir

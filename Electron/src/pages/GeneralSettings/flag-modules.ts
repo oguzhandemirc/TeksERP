@@ -127,6 +127,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",
+  targetWidthEnabled: "productionEnabled",
   partyCodeAuto: "productionEnabled",
   batchShortNumberEnabled: "productionEnabled",
   batchLastNumberHintEnabled: "productionEnabled",

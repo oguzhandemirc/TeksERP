@@ -30,9 +30,12 @@ interface SheetProps {
   onDismiss: () => void;
   /** Son seçim sunucuya yazılamadı (yerelde tutuluyor). */
   pending: boolean;
+  /** "Belgedeki gelen değerleri hedefe yaz" (kişisel, varsayılan kapalı). */
+  fillTarget?: boolean;
+  onFillTarget?: (on: boolean) => void;
 }
 
-export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismiss, pending }: SheetProps) {
+export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismiss, pending, fillTarget = false, onFillTarget }: SheetProps) {
   return (
     <ModuleSheet
       visible={visible}
@@ -52,6 +55,17 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
       }
     >
       {pending && <Text style={styles.hint} testID="ie-alanlar-bekliyor">Seçim bu tablette tutuluyor; bağlantı gelince kaydedilecek.</Text>}
+      {onFillTarget && (
+        <TouchableRipple onPress={() => onFillTarget(!fillTarget)} style={styles.row} testID="ie-hedef-doldur" accessibilityLabel="Belgedeki gelen değerleri hedefe yaz">
+          <View style={styles.rowInner}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Belgedeki gelen değerleri hedefe yaz</Text>
+              <Text style={styles.rowSub}>Kapalıyken hedef kutuları boş kalır, belgedeki değer silik ipucu olarak görünür.</Text>
+            </View>
+            <Switch value={fillTarget} onValueChange={onFillTarget} testID="ie-hedef-doldur-anahtar" />
+          </View>
+        </TouchableRipple>
+      )}
       {selectorSections().map(({ section, fields }) => (
         <View key={section} style={styles.group}>
           <Text style={styles.section}>{section}</Text>

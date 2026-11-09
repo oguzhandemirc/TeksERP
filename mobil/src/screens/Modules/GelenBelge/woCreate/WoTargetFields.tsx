@@ -18,6 +18,7 @@ import { colors, radius, spacing, typography } from '../../../../theme';
 import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
 import { useDefaultTargetHint } from './defaultTargetHint';
+import type { TargetHints } from './targetPrefill';
 
 export interface TargetFieldsProps {
   state: WoFormState;
@@ -25,6 +26,8 @@ export interface TargetFieldsProps {
   locked: boolean;
   show: (k: WoFieldKey) => boolean;
   showQuantity: boolean;
+  showWidth?: boolean;
+  hints?: TargetHints;
   targetDerived?: { value: string; derived: boolean };
   hasTambur: boolean;
   /** Üst bölgede kat tipi sol sütunda (gramajın altında) çizilir; burada yalnız "Diğer alanlar"da. */
@@ -45,11 +48,11 @@ const TONE_STATUS: Partial<Record<BandTone, { text: string }>> = {
 export function TargetFields(p: TargetFieldsProps) {
   const { state, edit, locked, show } = p;
   const e = state.extras;
-  const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
+  const qtyVisible = p.showQuantity;
   const itemSug = state.suggestions.targetItem;
   const def = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
   const colorSug = state.suggestions.targetColor;
-  const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') && p.zone === 'other' };
+  const cols = { en: show('en') && p.showWidth !== false, metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') && p.zone === 'other' };
   const anyNumber = cols.en || cols.metraj || cols.kg || cols.kat;
   if (!show('hedefKumas') && !anyNumber && !show('hedefRenk')) return null;
   const itemName = itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null;
@@ -113,7 +116,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
         <View style={styles.numbers} testID="ie-hedef-sayilar">
           {cols.en && (
             <DocFilled k="width" state={state} grow>
-              <CompactNumberField grow label="En" unit="cm" value={e.width} onChangeText={(t) => edit({ width: t })} fromDoc={docOn('width')} placeholder="150" disabled={locked} testID="ie-form-en" />
+              <CompactNumberField grow label="En" unit="cm" value={e.width} onChangeText={(t) => edit({ width: t })} fromDoc={docOn('width')} placeholder={p.hints?.width ?? '150'} disabled={locked} testID="ie-form-en" />
             </DocFilled>
           )}
           {cols.metraj && (
@@ -127,7 +130,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
                 fromDoc={docOn('targetQuantity')}
                 derivedNote={qtyDerived ? 'gelen metre' : null}
                 derivedTestID="gelen-metreden-targetQuantity"
-                placeholder="—"
+                placeholder={p.hints?.targetQuantity ?? '—'}
                 disabled={locked}
                 testID="ie-form-hedef-metraj"
               />
@@ -135,7 +138,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
           )}
           {cols.kg && (
             <DocFilled k="targetWeight" state={state} grow>
-              <CompactNumberField grow label="Hedef kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder="—" disabled={locked} testID="ie-form-hedef-kg" />
+              <CompactNumberField grow label="Hedef kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder={p.hints?.targetWeight ?? '—'} disabled={locked} testID="ie-form-hedef-kg" />
             </DocFilled>
           )}
           {cols.kat && p.foldValues.length > 0 && (

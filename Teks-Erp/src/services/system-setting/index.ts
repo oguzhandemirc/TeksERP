@@ -181,7 +181,7 @@ export {
   readPinLockoutEscalateAfter, readPinLockoutLongPenaltyMin, readPinLockoutConfig, readLoginMethods,
 } from "./pin-backup";
 export {
-  readTargetQuantityEnabled, readRawWidthEnabled, readKk1WeightEntryEnabled, readWorkOrderQuickOwnOnlyEnabled,
+  readTargetQuantityEnabled, readTargetWidthEnabled, readRawWidthEnabled, readKk1WeightEntryEnabled, readWorkOrderQuickOwnOnlyEnabled,
   readSupportOwnTicketsOnlyEnabled, readKk1DuplicateGuardEnabled, readKk1OnlineOnlyEnabled, readKk1LabelScanVerifyEnabled,
   readKk1HistoryAllEntriesEnabled, readSimulatedWeightEnabled, readPartyCodeAuto, readReturnGradingEnabled,
   readKartelaMeasurementEnabled, readFasonNoteMobileEntry,

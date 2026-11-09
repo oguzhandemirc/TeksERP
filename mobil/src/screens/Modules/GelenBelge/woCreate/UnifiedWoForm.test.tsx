@@ -71,8 +71,9 @@ jest.mock('../../../../services/preferences.service', () => ({
 jest.mock('../../../../services/route.service', () => ({ routeService: { getActive: async () => ({ data: [] }) } }));
 jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
 let mockQty = false;
+let mockWidth: boolean | undefined;
 jest.mock('../../../../hooks/useFeatureFlags', () => ({
-  useFeatureFlags: () => ({ data: { targetQuantityEnabled: mockQty } }),
+  useFeatureFlags: () => ({ data: { targetQuantityEnabled: mockQty, targetWidthEnabled: mockWidth } }),
   useScanRouteMode: () => false,
   usePickableLifecycle: () => ['ACTIVE'],
 }));
@@ -106,11 +107,18 @@ const row = (x: Partial<DocRow> = {}): DocRow =>
 
 const ui = (r: ProductionRoute | null = route) => <UnifiedWoForm initialRoute={r} routeLocked={r !== null} onNew={jest.fn()} />;
 
+/** ⚙ "Belgedeki gelen değerleri hedefe yaz" açık (varsayılan kapalı; kopyalama davranışı bu anahtarla). */
+const fillOn = () => {
+  const cur = (mockBlob?.tabletIeForm ?? {}) as Record<string, unknown>;
+  mockBlob = { ...mockBlob, tabletIeForm: { ...cur, hedefDoldur: true } };
+};
+
 beforeEach(() => {
   mockBlob = { theme: 'dark' };
   mockRows = [];
   mockOpts = undefined;
   mockQty = false;
+  mockWidth = undefined;
   mockDims = { width: 800, height: 1280, scale: 1, fontScale: 1 };
   jest.clearAllMocks();
 });
@@ -161,6 +169,8 @@ describe('UnifiedWoForm', () => {
   });
 
   it('⭐ okuma sonucu inputlara dolar + "belgeden" rozeti; metraj/kg bayrak kapalıyken de belgeden geldiği için görünür', async () => {
+    fillOn();
+    mockQty = true;
     mockRows = [row()];
     const s = renderWithPaper(ui());
     await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
@@ -175,6 +185,54 @@ describe('UnifiedWoForm', () => {
     expect(s.queryByTestId('ie-belge-okut')).toBeNull();
     expect(s.queryByText('Belgeyi değiştir')).toBeNull();
     expect(s.getByTestId('ie-form-olustur')).not.toBeDisabled();
+  });
+
+  it('⭐ varsayılan (⚙ anahtarı kapalı): belge hedef kutularına KOPYALANMAZ — kutu boş, silik ipucu "belgede …"; not yine dolar', async () => {
+    mockQty = true;
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-hedef-metraj').props.placeholder).toBe('belgede 1200,5 m'));
+    expect(s.getByTestId('ie-form-en').props.value).toBe('');
+    expect(s.getByTestId('ie-form-en').props.placeholder).toBe('belgede 150 cm');
+    expect(s.getByTestId('ie-form-hedef-metraj').props.value).toBe('');
+    expect(s.getByTestId('ie-form-hedef-kg').props.placeholder).toBe('belgede 300 kg');
+    expect(s.queryByTestId('belgeden-width')).toBeNull();
+    expect(s.queryByTestId('gelen-metreden-targetQuantity')).toBeNull();
+    expect(mockOpts?.extraBody?.(mockRows[0])).not.toHaveProperty('width');
+  });
+
+  it('⭐ ⚙ "Belgedeki gelen değerleri hedefe yaz" anahtarı açılır → tercih blob\'una yazılır, hedef kutuları dolar', async () => {
+    mockQty = true;
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.placeholder).toBe('belgede 150 cm'));
+    fireEvent.press(s.getByTestId('ie-alanlar'));
+    fireEvent.press(s.getByTestId('ie-hedef-doldur'));
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(mockPrefSave.mock.calls[0][0]).toMatchObject({ theme: 'dark', tabletIeForm: { gizli: [], hedefDoldur: true } });
+  });
+
+  it('⭐ hedef metraj/kg ayarı KAPALI: belge değer getirse de kutu çizilmez, gövdeye gitmez (anahtar açık olsa da)', async () => {
+    mockBlob = { tabletIeForm: { hedefDoldur: true } };
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
+    expect(s.queryByTestId('ie-form-hedef-metraj')).toBeNull();
+    expect(s.queryByTestId('ie-form-hedef-kg')).toBeNull();
+    const b = mockOpts?.extraBody?.(mockRows[0]);
+    expect(b).not.toHaveProperty('targetQuantity');
+    expect(b).not.toHaveProperty('targetWeight');
+  });
+
+  it('⭐ hedef en ayarı KAPALI: En kutusu çizilmez, gövdeye en gitmez', async () => {
+    mockWidth = false;
+    mockQty = true;
+    mockBlob = { tabletIeForm: { hedefDoldur: true } };
+    mockRows = [row()];
+    const s = renderWithPaper(ui());
+    await waitFor(() => expect(s.getByTestId('ie-hedef-sayilar')).toBeTruthy());
+    expect(s.queryByTestId('ie-form-en')).toBeNull();
+    expect(mockOpts?.extraBody?.(mockRows[0])).not.toHaveProperty('width');
   });
 
   it('⭐ öneri çipi: "Evet" → hedef kumaş / renk seçili, çip kalkar; öneri alana kendiliğinden yazılmaz', async () => {
@@ -192,6 +250,8 @@ describe('UnifiedWoForm', () => {
   });
 
   it('⭐ kayıt: ek alanlar form ucunun gövdesine; PER_PARTY satırda hedef metraj/kg GİTMEZ', async () => {
+    fillOn();
+    mockQty = true;
     mockRows = [row()];
     const s = renderWithPaper(ui());
     fireEvent.press(await s.findByTestId('ie-form-desen-oneri'));
@@ -207,6 +267,7 @@ describe('UnifiedWoForm', () => {
   });
 
   it('⭐ hedef metraj ayarı açık + belgede hedef yok → gelen metre kutu içi "gelen metre" etiketiyle; yazınca rozet kalkar, değer gövdeye gider', async () => {
+    fillOn();
     mockQty = true;
     const base = row();
     mockRows = [row({ detail: { ...base.detail, formFields: { en: '150' } } } as unknown as Partial<DocRow>)];
@@ -220,6 +281,7 @@ describe('UnifiedWoForm', () => {
   });
 
   it('⭐ toplar ayrı geldi: hedef metraj gelen metresi top toplamı', async () => {
+    fillOn();
     mockQty = true;
     const base = row();
     const rolls = [{ key: 'a', meters: 40, weightKg: null, senderRollNo: '' }, { key: 'b', meters: 60.5, weightKg: null, senderRollNo: '' }];
@@ -239,6 +301,8 @@ describe('UnifiedWoForm', () => {
 
 describe('UnifiedWoForm — vurgu, yerleşim ve kontrollü Alanlar', () => {
   it('⭐ belgeden dolan En sarı vurgulu, rozet yazısı yok; elle değişince vurgu kalkar', async () => {
+    fillOn();
+    mockQty = true;
     mockRows = [row()];
     const s = renderWithPaper(ui());
     await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));
@@ -252,6 +316,7 @@ describe('UnifiedWoForm — vurgu, yerleşim ve kontrollü Alanlar', () => {
   });
 
   it('⭐ tablet yatay (1280×800): iki sütun — solda belge kartı, sağda üretim alanları; dikeyde tek sütun', async () => {
+    fillOn();
     mockRows = [row()];
     mockDims = { width: 1280, height: 800, scale: 1, fontScale: 1 };
     const s = renderWithPaper(ui());
@@ -325,7 +390,8 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
   });
 
   it('⭐ gizli alanı belge doldurursa bu okumada üstte "belgeden" rozetiyle görünür (sessiz gönderim yok)', async () => {
-    mockBlob = { tabletIeForm: { gizli: ['en', 'hedefKumas', 'planBitis'] } };
+    mockQty = true;
+    mockBlob = { tabletIeForm: { gizli: ['en', 'hedefKumas', 'planBitis'], hedefDoldur: true } };
     mockRows = [row()];
     const s = renderWithPaper(ui());
     // Tercih yüklendi: yalnız belgenin doldurmadığı gizli alan (Planlı bitiş) altta kalır.
@@ -337,7 +403,8 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
   });
 
   it('⭐ belgeden üste çıkan gizli alan düzeltilince yerinde kalır (rozet düşer, değer gövdeye gider)', async () => {
-    mockBlob = { tabletIeForm: { gizli: ['en'] } };
+    mockQty = true;
+    mockBlob = { tabletIeForm: { gizli: ['en'], hedefDoldur: true } };
     mockRows = [row()];
     const s = renderWithPaper(ui());
     await waitFor(() => expect(s.getByTestId('ie-form-en').props.value).toBe('150'));

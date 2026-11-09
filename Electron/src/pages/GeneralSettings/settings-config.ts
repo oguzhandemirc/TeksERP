@@ -1328,6 +1328,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         get desc() { return `Kapalıyken ${TERIM.terbiyeIsEmri.tekilKucuk} formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.`; },
       },
       {
+        key: "targetWidthEnabled",
+        get title() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} hedef en alanını göster`; },
+        get summary() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda 'hedef en' kutusu çizilir.`; },
+        defaultOn: true,
+        audience: ["Planlamacı"],
+        get desc() { return `Açıkken (varsayılan) tablet ${TERIM.terbiyeIsEmri.tekilKucuk} formunda hedef en (cm) kutusu görünür. Kapalıyken kutu çizilmez ve gövdeye en gönderilmez; belgedeki gelen en yalnız belge satırında kalır.`; },
+      },
+      {
         key: "partyCodeAuto",
         get title() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} parti kodunu otomatik üret`; },
         get summary() { return `${TERIM.terbiyeIsEmri.tekil} No elle yazılmak yerine sistem tarafından önerilir.`; },

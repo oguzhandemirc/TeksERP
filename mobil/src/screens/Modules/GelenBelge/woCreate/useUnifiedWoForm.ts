@@ -20,7 +20,6 @@ import { useWoFieldLayout } from './useWoFieldPrefs';
 import { valuedFields } from './woFieldCatalog';
 import type { WoPlanCtx } from './WoPlanFields';
 import {
-  applyDocRead,
   applyOrderLine,
   buildExtraBody,
   clearDocRead,
@@ -46,6 +45,8 @@ import type { DocRowOpenRequest } from './DocRowCard';
 import { useManualDraft } from './useManualDraft';
 import { ownerKindCard, routeConflict, shouldApplyCardRoute, woTypeForOwnerKind } from '../../IsEmirleri/createEntry';
 import { isOwnGoodsMode } from './ownGoods';
+import { showDerivedQuantity, targetHints } from './targetPrefill';
+import { useDocReadToForm } from './useDocReadToForm';
 import { fasonItemPrefill, hiddenTargetFields, sendsTargetColor } from './targetVisibility';
 import { useOwnGoodsCreate } from './useOwnGoodsCreate';
 
@@ -88,7 +89,9 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
     applyRoute(r);
   }, [applyRoute]);
   const scanMode = useScanRouteMode();
-  const showQuantity = useFeatureFlags().data?.targetQuantityEnabled === true;
+  const flags = useFeatureFlags().data;
+  const showQuantity = flags?.targetQuantityEnabled === true;
+  const showWidth = flags?.targetWidthEnabled !== false; // eski sunucuda alan yok → açık
   const routesQ = useQuery({
     queryKey: ['routes', 'wo-picker'],
     queryFn: () => routeService.getActive(),
@@ -118,8 +121,8 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const ownMode = ownModeEarly;
   const ownGoods = ownMode;
   const extraBody = useCallback(
-    (r: DocRow) => buildExtraBody(extras, { hasTambur: askFold, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods, omitColor }),
-    [extras, askFold, route, ownGoods, omitColor],
+    (r: DocRow) => buildExtraBody(extras, { hasTambur: askFold, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods, omitColor, omitWidth: !showWidth, omitQuantity: !showQuantity }),
+    [extras, askFold, route, ownGoods, omitColor, showWidth, showQuantity],
   );
   // Rota seçilmeden kayıt `extrasIssues` ile kapalıdır; kanca bir rota ister → yer tutucu.
   const wo = useWoRows(eff ?? SCAN_ROUTE, { extraBody });
@@ -131,13 +134,12 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const draft = useManualDraft(manual && !ownMode, (note) => { wo.markManual(note.id); scan.b.openNote(note); });
   useAutoScan(autoScan && !ownMode, scan.source.add);
   const realRoute = route && !isScanRoute(route) ? route : null;
-  const own = useOwnGoodsCreate({ lockedItemId: extras.targetItemId, route, extraBody: () => buildExtraBody(extras, { hasTambur: askFold, route: realRoute, ownGoods: true }) });
+  const own = useOwnGoodsCreate({ lockedItemId: extras.targetItemId, route, extraBody: () => buildExtraBody(extras, { hasTambur: askFold, route: realRoute, ownGoods: true, omitWidth: !showWidth, omitQuantity: !showQuantity }) });
   const cardRoute = useCardRoute(ownerKinds !== undefined && !routeLocked, row?.form?.ownerCustomerId ?? null, routesQ.data?.data ?? []);
   useEffect(() => {
     if (shouldApplyCardRoute(route, routeTouched, cardRoute)) applyRoute(cardRoute!);
   }, [route, routeTouched, cardRoute, applyRoute]);
   const routeWarning = ownerKinds ? routeConflict(cardRoute, route) : null;
-  useDocReadToForm(row, setForm);
   useFasonItemPrefill(!ownModeEarly && extras.woType === CUSTOMER_GOODS_TYPE, extras.targetItemId, row?.detail?.incomingDeclared, setForm);
   const edit = useCallback((patch: Partial<WoFormExtras>) => setForm((s) => editExtras(s, patch)), []);
   const hasRouteSteps = !!route && !isScanRoute(route) && (route.steps?.length ?? 0) > 0;
@@ -154,7 +156,8 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const fields = useWoFieldLayout(
     form,
     {
-      showQuantity: showQuantity || !!extras.targetQuantity || !!extras.targetWeight,
+      showQuantity,
+      showWidth,
       hasTambur: askFold,
       hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form && !partyGramaj,
       hasRouteSteps,
@@ -167,7 +170,10 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
 
   // Gelen metre: çok partide parti toplamı, ayrı toplarda top toplamı, değilse kurşun metresi (sunucu türetmesiyle aynı kaynak).
   const incomingMeters = row?.form ? (row.form.multi ? multiPartyTotal(row.form.multi) : row.form.rolls ? rollsTotal(row.form.rolls) : row.form.meters) : null;
-  const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showQuantity, perParty });
+  const prefill = { fill: fields.prefs.fillTarget, widthEnabled: showWidth, quantityEnabled: showQuantity };
+  useDocReadToForm(row, setForm, prefill);
+  const targetDerived = derivedTargetQuantity(extras, incomingMeters, { enabled: showDerivedQuantity(prefill), perParty });
+  const hints = targetHints(row?.detail?.formFields, prefill);
   const done = ownMode ? !!own.result : !!row && isDone(row);
   // Sıra = göz akışı: sol sütun (belgeden gelenler) önce, sonra sağ sütun (üretim kararı).
   // Malın sahibi seçimi eksikse diğer zorunlu alanlar gibi alt çubuk hapı (kartta hata çerçevesi yok).
@@ -191,10 +197,10 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   useDropDocOnOwnMode(ownMode, row?.noteId ?? null, dropDoc);
   return {
     owner, ownMode, own, routeWarning, manual, draft, addDoc,
-    hiddenTarget, route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
+    hiddenTarget, route, setRoute, form, fields, showWidth, hints, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
-    onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
+    onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width }, showWidth)),
   };
 }
 
@@ -289,18 +295,6 @@ function useFasonItemPrefill(fason: boolean, targetItemId: string | null, declar
     const patch = fasonItemPrefill({ fason, extras: { targetItemId }, declared });
     if (patch) setForm((s) => (s.extras.targetItemId ? s : editExtras(s, patch)));
   }, [fason, targetItemId, declared, setForm]);
-}
-
-function useDocReadToForm(row: DocRow | null, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
-  const readKey = row?.detail ? `${row.noteId}#${row.runKey}#${row.taught?.seq ?? 0}` : null;
-  const detail = row?.detail ?? null;
-  useEffect(() => {
-    if (readKey && detail) setForm((s) => applyDocRead(s, readKey, detail.formFields, detail.suggestions));
-  }, [readKey, detail, setForm]);
-  const hasRow = !!row;
-  useEffect(() => {
-    if (!hasRow) setForm((s) => (s.appliedNoteId ? clearDocRead(s) : s));
-  }, [hasRow, setForm]);
 }
 
 export type DocScanFlow = ReturnType<typeof useDocScanFlow>;

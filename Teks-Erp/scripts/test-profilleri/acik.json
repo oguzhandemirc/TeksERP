@@ -53,6 +53,7 @@
     "goodsReceiptYarnQualityHoldEnabled": true,
     "productionCancelReasonRequired": true,
     "targetQuantityEnabled": true,
+    "targetWidthEnabled": true,
     "rawWidthEnabled": true,
     "kursunBypassEnabled": true,
     "kursunMeterCapture": "IN_OUT",

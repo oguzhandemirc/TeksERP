@@ -84,6 +84,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
     permission: "settings:work-orders",
     flagKeys: [
       "targetQuantityEnabled",
+      "targetWidthEnabled",
       "partyCodeAuto",
       "batchShortNumberEnabled",
       "batchLastNumberHintEnabled",

@@ -412,6 +412,7 @@ export const updateSchema = z.strictObject({
   // reports.v2Enabled — yeni rapor merkezi (default FALSE = bugünkü rapor menüsü).
   reportsV2Enabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
+  targetWidthEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),
   // kk1.duplicateGuardEnabled — ham girişte mükerrer top tuzağı (default FALSE).

@@ -24,6 +24,7 @@ import { plannedDayOptions, type WoFormExtras, type WoFormState } from './woForm
 import type { WoFieldKey } from './woFieldCatalog';
 import { RouteStepsBlock, TargetPropsBlock, type WoPlanCtx } from './WoPlanFields';
 import { DocFilled, TargetFields } from './WoTargetFields';
+import type { TargetHints } from './targetPrefill';
 
 interface Props {
   state: WoFormState;
@@ -37,8 +38,12 @@ interface Props {
   scanMode: boolean;
   hasTambur: boolean;
   foldValues: readonly FabricPropertyValue[];
-  /** Hedef metraj/kg (`workorder.targetQuantityEnabled`); kapalıyken yalnız belgeden değer geldiyse görünür. */
+  /** Hedef metraj/kg (`workorder.targetQuantityEnabled`); kapalıyken kutu çizilmez (belge değeri getirse de). */
   showQuantity: boolean;
+  /** Hedef en kutusu (`workorder.targetWidthEnabled`); kapalıyken çizilmez. */
+  showWidth?: boolean;
+  /** Boş hedef kutularının silik ipucu ("belgede 241 m"). */
+  hints?: TargetHints;
   /** Hedef metraj boşken gösterilen gelen metre (`derivedTargetQuantity`); yoksa alanın kendi değeri. */
   targetDerived?: { value: string; derived: boolean };
   locked: boolean;

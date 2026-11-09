@@ -47,7 +47,7 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'makine', label: 'Makine seç', section: 'Üretim', required: false, when: 'Kurşun adımının istasyonunda makine varsa' },
   { key: 'siparis', label: 'Sipariş', section: 'Üretim', required: false },
   { key: 'hedefKumas', label: 'Hedef kumaş', section: 'Üretim', required: false },
-  { key: 'en', label: 'En (cm)', section: 'Üretim', required: false },
+  { key: 'en', label: 'En (cm)', section: 'Üretim', required: false, when: 'Hedef en ayarı açıksa' },
   { key: 'hedefMetraj', label: 'Hedef metraj (m)', section: 'Üretim', required: false, when: 'Hedef metraj/kg ayarı açıksa' },
   { key: 'hedefKg', label: 'Hedef kg', section: 'Üretim', required: false, when: 'Hedef metraj/kg ayarı açıksa' },
   { key: 'hedefRenk', label: 'Hedef renk', section: 'Üretim', required: false },
@@ -70,8 +70,10 @@ export function selectorSections(): { section: WoFieldSection; fields: WoFieldDe
 }
 
 export interface FieldContext {
-  /** `workorder.targetQuantityEnabled` ya da belgeden metraj/kg geldi. */
+  /** `workorder.targetQuantityEnabled` açık (kapalıyken belgeden değer gelse de kutu çizilmez). */
   showQuantity: boolean;
+  /** `workorder.targetWidthEnabled` (kapalıysa hedef en kutusu çizilmez). */
+  showWidth?: boolean;
   hasTambur: boolean;
   /** Rotada kurşun adımı var. */
   hasKursun: boolean;
@@ -87,6 +89,8 @@ export interface FieldContext {
 export function fieldApplicable(k: WoFieldKey, c: FieldContext): boolean {
   if (c.unavailable?.includes(k)) return false;
   switch (k) {
+    case 'en':
+      return c.showWidth !== false;
     case 'hedefMetraj':
     case 'hedefKg':
       return c.showQuantity;
@@ -119,12 +123,20 @@ export function parseHidden(blob: unknown): WoFieldKey[] {
 }
 
 /** Oku-birleştir-yaz: blob'un DİĞER anahtarları (panel teması, sıralar…) ve `tabletIeForm`un diğer alt anahtarları korunur. */
-export function mergePrefBlob(blob: Record<string, unknown> | null | undefined, hidden: readonly WoFieldKey[]): Record<string, unknown> {
+export function mergePrefBlob(blob: Record<string, unknown> | null | undefined, hidden: readonly WoFieldKey[], hedefDoldur = false): Record<string, unknown> {
   const base = blob ?? {};
   const prev = base[PREF_KEY];
   const prevObj = prev && typeof prev === 'object' && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
   const gizli = [...new Set(hidden.filter((k) => BY_KEY.has(k) && !isRequiredField(k)))];
-  return { ...base, [PREF_KEY]: { ...prevObj, gizli } };
+  // Varsayılan (kapalı) anahtar yazılmaz: blob eski biçimde kalır.
+  const { hedefDoldur: _eski, ...rest } = prevObj;
+  return { ...base, [PREF_KEY]: { ...rest, gizli, ...(hedefDoldur ? { hedefDoldur: true } : {}) } };
+}
+
+/** Kişisel anahtar "Belgedeki gelen değerleri hedefe yaz" (`tabletIeForm.hedefDoldur`); yok/bozuk = KAPALI. */
+export function parseFillTarget(blob: unknown): boolean {
+  const raw = blob && typeof blob === 'object' ? (blob as Record<string, unknown>)[PREF_KEY] : undefined;
+  return !!raw && typeof raw === 'object' && (raw as Record<string, unknown>).hedefDoldur === true;
 }
 
 /** Gizli alanı aç/kapat; zorunlu alan kapatılamaz (liste aynen döner). */

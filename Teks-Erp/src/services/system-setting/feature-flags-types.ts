@@ -236,6 +236,8 @@ export interface FeatureFlags {
   /** Yeni rapor merkezi (Raporlar v2) açık mı (default false). Client (panel) okur. */
   reportsV2Enabled: boolean;
   targetQuantityEnabled: boolean;
+  /** İş emri formunda hedef en kutusu (default true = bugünkü davranış). */
+  targetWidthEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken gelen weightKg reddedilir). */

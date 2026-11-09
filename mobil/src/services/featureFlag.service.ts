@@ -89,6 +89,8 @@ export interface FeatureFlags {
   devereBeamWeavingLinkRequired: boolean;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
+  /** Hedef en kutusu (default true = bugünkü form). */
+  targetWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi (default false).
@@ -249,6 +251,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   devereBeamWeavingLinkRequired: false,
   pricingEnabled: false,
   targetQuantityEnabled: false,
+  targetWidthEnabled: true,
   rawWidthEnabled: false,
   kk1WeightEntryEnabled: false,
   kk1HistoryAllEntriesEnabled: false,

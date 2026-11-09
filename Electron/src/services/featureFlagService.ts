@@ -452,6 +452,7 @@ export interface FeatureFlags {
   /** Yeni rapor merkezi (Raporlar v2) — default false; bugün hiçbir davranışı değiştirmez (okuyucusu R0-SABLON). */
   reportsV2Enabled: boolean;
   targetQuantityEnabled: boolean;
+  targetWidthEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
   kk1WeightEntryEnabled: boolean;

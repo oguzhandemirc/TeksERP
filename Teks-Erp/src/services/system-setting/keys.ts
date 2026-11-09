@@ -381,6 +381,8 @@ export const SETTING_KEYS = {
   REPORTS_V2_ENABLED: "reports.v2Enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
+  /** İş emri formunda "hedef en" kutusu gösterilsin mi. Default TRUE (bugünkü davranış). */
+  WORKORDER_TARGET_WIDTH_ENABLED: "workorder.targetWidthEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
   KK1_RAW_WIDTH_ENABLED: "kk1.rawWidthEnabled",
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi. Default false.

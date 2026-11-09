@@ -899,6 +899,18 @@ export async function setFeatureFlags(
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "targetWidthEnabled")) {
+      if (typeof input.targetWidthEnabled !== "boolean") {
+        throw AppError.badRequest("targetWidthEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.WORKORDER_TARGET_WIDTH_ENABLED,
+        input.targetWidthEnabled,
+        `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda hedef en alanını göster`,
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "rawWidthEnabled")) {
       if (typeof input.rawWidthEnabled !== "boolean") {
         throw AppError.badRequest("rawWidthEnabled boolean olmalı");

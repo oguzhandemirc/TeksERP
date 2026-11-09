@@ -119,7 +119,7 @@ const ui = () => renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked
 const bg = (el: { props: { style?: unknown } }) => (StyleSheet.flatten(el.props.style as never) as { backgroundColor?: string }).backgroundColor;
 
 beforeEach(() => {
-  mockBlob = {};
+  mockBlob = { tabletIeForm: { hedefDoldur: true } };
   mockDefaults = mockDefaultsLoaded();
   mockRows = [row];
   mockOpts = undefined;

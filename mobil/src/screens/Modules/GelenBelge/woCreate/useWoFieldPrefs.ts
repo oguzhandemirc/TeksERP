@@ -4,14 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { preferencesService } from '../../../../services/preferences.service';
 import type { WoFormState } from './woForm';
-import { docFilledFields, mergePrefBlob, otherFields, parseHidden, placement, toggleHidden, type FieldContext, type WoFieldKey } from './woFieldCatalog';
+import { docFilledFields, mergePrefBlob, otherFields, parseFillTarget, parseHidden, placement, toggleHidden, type FieldContext, type WoFieldKey } from './woFieldCatalog';
 
 const PREFS_KEY = ['preferences'] as const;
 /** Yazılamayan seçim bu aralıkla yeniden denenir (ekran açık kaldıkça). */
 export const PREF_RETRY_MS = 30_000;
 
+interface PrefValue {
+  hidden: WoFieldKey[];
+  fill: boolean;
+}
+
 export interface WoFieldPrefs {
   hidden: WoFieldKey[];
+  /** "Belgedeki gelen değerleri hedefe yaz" (varsayılan kapalı). */
+  fillTarget: boolean;
+  setFillTarget: (on: boolean) => void;
   toggle: (k: WoFieldKey) => void;
   reset: () => void;
   /** Son seçim henüz sunucuya yazılamadı (yerelde tutuluyor). */
@@ -21,9 +29,9 @@ export interface WoFieldPrefs {
 export function useWoFieldPrefs(): WoFieldPrefs {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: PREFS_KEY, queryFn: preferencesService.get, staleTime: 5 * 60_000, retry: false });
-  const [local, setLocal] = useState<WoFieldKey[] | null>(null);
+  const [local, setLocal] = useState<PrefValue | null>(null);
   const [pending, setPending] = useState(false);
-  const want = useRef<WoFieldKey[] | null>(null);
+  const want = useRef<PrefValue | null>(null);
   const busy = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
@@ -36,7 +44,7 @@ export function useWoFieldPrefs(): WoFieldPrefs {
     try {
       // Taze blob okunur: panelin bu arada yazdığı tema/sıra ezilmez.
       const blob = await preferencesService.get();
-      const saved = await preferencesService.save(mergePrefBlob(blob, target));
+      const saved = await preferencesService.save(mergePrefBlob(blob, target.hidden, target.fill));
       qc.setQueryData(PREFS_KEY, saved);
       if (want.current === target) want.current = null;
     } catch {
@@ -66,9 +74,10 @@ export function useWoFieldPrefs(): WoFieldPrefs {
     };
   }, []);
 
-  const hidden = useMemo(() => local ?? parseHidden(q.data), [local, q.data]);
+  const hidden = useMemo(() => local?.hidden ?? parseHidden(q.data), [local, q.data]);
+  const fillTarget = local?.fill ?? parseFillTarget(q.data);
   const write = useCallback(
-    (next: WoFieldKey[]) => {
+    (next: PrefValue) => {
       setLocal(next);
       want.current = next;
       setPending(true);
@@ -76,9 +85,11 @@ export function useWoFieldPrefs(): WoFieldPrefs {
     },
     [flush],
   );
-  const toggle = useCallback((k: WoFieldKey) => write(toggleHidden(hidden, k)), [hidden, write]);
-  const reset = useCallback(() => write([]), [write]);
-  return { hidden, toggle, reset, pending };
+  const toggle = useCallback((k: WoFieldKey) => write({ hidden: toggleHidden(hidden, k), fill: fillTarget }), [hidden, fillTarget, write]);
+  // "Varsayılana dön" yalnız alan listesini sıfırlar; hedefe yaz anahtarı kendi satırından değişir.
+  const reset = useCallback(() => write({ hidden: [], fill: fillTarget }), [fillTarget, write]);
+  const setFillTarget = useCallback((on: boolean) => write({ hidden, fill: on }), [hidden, write]);
+  return { hidden, fillTarget, setFillTarget, toggle, reset, pending };
 }
 
 /** Formun alan yerleşimi: üstte çizilenler, altta "Diğer alanlar"a inenler, ⚙ ve bölüm açıklığı. */

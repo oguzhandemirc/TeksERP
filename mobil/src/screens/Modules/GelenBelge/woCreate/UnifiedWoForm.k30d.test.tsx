@@ -126,7 +126,7 @@ async function openFree() {
 }
 
 beforeEach(() => {
-  mockBlob = {};
+  mockBlob = { tabletIeForm: { hedefDoldur: true } };
   mockDefaults = mockDefaultsLoaded();
   mockRows = [row];
   mockOpts = undefined;
