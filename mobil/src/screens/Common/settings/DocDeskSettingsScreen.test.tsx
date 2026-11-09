@@ -52,3 +52,14 @@ describe('DocDeskSettingsScreen — canlı okuma seçeneği', () => {
     expect(docDeskSummary(false, 'tap', 'camera')).toBe('Kapalı · dokunarak çekim');
   });
 });
+
+describe('DocDeskSettingsScreen — flaş', () => {
+  it('⭐ "Flaşı otomatik aç" varsayılan açık görünür; dokununca kapatılır', () => {
+    const setTorch = jest.fn(async () => undefined);
+    useDeviceSettingsStore.setState({ docTorchAuto: true, setDocTorchAuto: setTorch });
+    renderWithPaper(<DocDeskSettingsScreen />);
+    expect(screen.getByText('Flaşı otomatik aç')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('ayar-flas-otomatik'));
+    expect(setTorch).toHaveBeenCalledWith(false);
+  });
+});

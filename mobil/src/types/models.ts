@@ -329,6 +329,16 @@ export interface WorkOrderIncoming {
   colorText: string | null;
 }
 
+/** İE detayının hedef çeşit değeri. `edit` + `property.values` 2026-11-09 sunucusundan gelir (eski sunucuda yok). */
+export interface WorkOrderTargetValue {
+  propertyId?: string;
+  valueId?: string;
+  property?: { name?: string | null; variantOfPropertyId?: string | null; values?: { id: string; name: string }[] } | null;
+  value?: { name?: string | null } | null;
+  /** Sunucunun adım eşlemesi + tablet düzeltme kilidi (yazma kapısıyla aynı fonksiyon). */
+  edit?: { stepId: string | null; locked: boolean; reason?: string | null } | null;
+}
+
 export interface WorkOrder {
   id: string;
   workOrderNumber: string;
@@ -362,7 +372,7 @@ export interface WorkOrder {
   customer?: { id: string; name: string; code?: string | null } | null;
   createdBy?: { id: string; fullName: string | null } | null;
   /** Hedef çeşit değerleri (gramaj vb.); aktif olanlar. */
-  targetValues?: { propertyId?: string; property?: { name?: string | null; variantOfPropertyId?: string | null } | null; value?: { name?: string | null } | null }[];
+  targetValues?: WorkOrderTargetValue[];
   /** Üretime giren ham toplar özeti. */
   inputRolls?: { count: number; totalMeters: number } | null;
   /** Gelen (belgeden) bloğu — belgeden doğmamış İE'de null. */
@@ -468,6 +478,10 @@ export interface Roll {
   entrySource?: RollEntrySource;
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"); NULL = kayıtlı değil. */
   foldType?: string | null;
+  /** Etikete basılan müşteri kumaş adı / rengi / parti no (tamburda topa yazılır); eski sunucuda yok. */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
+  labelBatchNo?: string | null;
   parentReceiptId?: string | null;
   /** Barkod okumasında (`/rolls/barcode`) kartın tamamı gelir; listelerde yalnız kimlik. */
   item?: { id: string; code: string; name: string; lifecycleStatus?: ItemLifecycleStatus };

@@ -691,14 +691,16 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  *                   properties:
  *                     propertyId: { type: string, format: uuid }
  *                     valueId: { type: string, format: uuid, nullable: true }
- *               reason: { type: string, nullable: true, description: "Gramaj değişim sebebi (İE hareket defterine)" }
+ *               reason: { type: string, nullable: true, description: "Değişim sebebi (İE hareket defterine); tablet düzeltmesinde kurşun dışı değer için zorunlu" }
+ *               reasonCode: { type: string, nullable: true, description: "WORK_ORDER_PLAN_CHANGE sebep kodu (tanınmayan 400)" }
+ *               correction: { type: boolean, enum: [true], description: "Tablet düzeltme kuralları panel izninde de uygulanır" }
  *     responses:
  *       200: { description: "Hedef güncellendi (ya da aynıydı); kurşun gramajı değişti ve uygulanmış top varsa warnings[] eski/yeni top sayısını söyler" }
- *       403: { description: "Yalnız mobile:is-emri-duzelt — gövdede kurşun gramajı dışı özellik" }
- *       409: { description: "WORK_ORDER_PLAN_FROZEN — tablet yolu, iş emri kapanmış" }
+ *       403: { description: "Tablet düzeltmesi — İE'de olmayan hedefi ekleme/kaldırma ya da boş liste" }
+ *       409: { description: "WORK_ORDER_PLAN_FROZEN (iş emri kapanmış) · TARGET_VALUE_STEP_STARTED (değerin adımı başladı) — tablet yolu" }
  *       400: { description: Özellik çeşit değil / değer o özelliğe ait değil }
  */
-// Tablet Düzelt (`mobile:is-emri-duzelt`) yalnız kurşun gramajını yazar — daraltma serviste (`kursunOnly`).
+// Tablet Düzelt (`mobile:is-emri-duzelt`) mevcut hedefleri sebepli düzeltir, adımı başlamışı yazamaz — kapı serviste (`tabletFix`).
 router.put("/:id/target-values", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), putTargetValues);
 
 /**

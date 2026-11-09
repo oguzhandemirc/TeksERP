@@ -14,6 +14,8 @@ import AppModal from '../../../components/AppModal';
 import { withSystemDialog } from '../../../store/lockStore';
 import { colors, spacing, typography } from '../../../theme';
 import { pickPictureSize } from './docScan';
+import { useDocTorch } from './docTorch';
+import TorchButton from './TorchButton';
 import type { FinishResult, Shot } from './captureSession';
 import { useMultiCapture } from './useMultiCapture';
 import type { MultiCameraBinding } from './usePageSource';
@@ -34,6 +36,7 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  const { torch, toggle: toggleTorch } = useDocTorch(visible);
 
   const finished = (r: FinishResult) => {
     if (r.dropped) Toast.show({ type: 'error', text1: `${r.dropped} çekim okunamadı, eklenmedi` });
@@ -67,7 +70,7 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
       </Button>
     </View>
   ) : (
-    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} onCameraReady={() => void onReady()} />
+    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
   );
 
   const counter = n ? `${n} sayfa çekildi (en çok ${capacity})` : `Sayfa ${firstPageNo} — ${MULTI_CAMERA_HINT}`;
@@ -76,6 +79,7 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
     <AppModal visible={visible} onDismiss={dismiss} swipeToDismiss={false} contentStyle={[styles.sheet, { width: width * 0.94, height: height * 0.9 }]}>
       <View style={styles.cameraLayer}>
         {body}
+        {permission?.granted && <TorchButton on={torch} onPress={toggleTorch} style={styles.torch} testID="belge-cok-flas" />}
         {busy && cap.progress && (
           <View style={styles.overlay} testID="belge-cok-iyilestiriliyor">
             <ActivityIndicator color={colors.textOnDark} size="large" />
@@ -142,6 +146,7 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.headerBg, borderRadius: 16, overflow: 'hidden', padding: 0 },
   cameraLayer: { flex: 1, position: 'relative', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim, justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  torch: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   center: { gap: spacing.md, alignItems: 'center', padding: spacing.lg },
   stripBox: { flexGrow: 0 },
   strip: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.sm },

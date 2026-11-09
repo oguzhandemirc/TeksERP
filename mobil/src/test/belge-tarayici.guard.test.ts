@@ -81,3 +81,18 @@ it('⭐ iyileştirme sabitleri ölçülmüş değerde: beyaz 250, siyah tavanı 
   expect(enhance).toMatch(/const val MID_GAMMA = 1\.8\b/);
   expect(enhance).toMatch(/fun levelsLut\(black: Int, white: Int = WHITE_POINT, gamma: Double = MID_GAMMA\)/);
 });
+
+// ── Canlı kamera feneri ────────────────────────────────────────────────────────────────────────────
+const liveView = fs.readFileSync(path.join(MOD, 'android/src/main/java/com/tekserp/belgetarayici/LiveCameraView.kt'), 'utf8');
+const liveJs = fs.readFileSync(path.join(__dirname, '..', 'services', 'liveCamera.ts'), 'utf8');
+
+it('⭐ canlı kamera `torch` özelliği: flaş yoksa sessiz, bağlanınca yeniden uygulanır, kapanışta söner', () => {
+  expect(kt).toMatch(/Prop\("torch"\) \{ view: LiveCameraView, value: Boolean ->\s*view\.setTorch\(value\)/);
+  expect(liveView).toMatch(/if \(c\.cameraInfo\.hasFlashUnit\(\)\) c\.cameraControl\.enableTorch\(on\)/);
+  expect(liveView).toMatch(/bindToLifecycle[\s\S]*?if \(torch\) applyTorch\(true\)/);
+  expect(liveView).toMatch(/private fun stop\(\) \{[\s\S]*?applyTorch\(false\)[\s\S]*?camera = null/);
+  // Fener düğmesi yalnız `torch` bilen APK'da çizilir: native sürüm ≥ JS eşiği.
+  const nativeVer = Number(kt.match(/LIVE_CAMERA_VERSION = (\d+)/)?.[1]);
+  const torchVer = Number(liveJs.match(/LIVE_CAMERA_TORCH_VERSION = (\d+)/)?.[1]);
+  expect(nativeVer).toBeGreaterThanOrEqual(torchVer);
+});

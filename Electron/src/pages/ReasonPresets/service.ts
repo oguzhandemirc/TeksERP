@@ -190,6 +190,12 @@ export const reasonPresetService = {
       .get<ReasonPreset[]>(`/api/reason-presets${includeInactive ? "?includeInactive=true" : ""}`)
       .then((r) => r.data),
 
+  /** Aktif duruş sebepleri, istasyon türü kapsamıyla SUNUCUDA süzülmüş (boş kapsam + o türü taşıyanlar). */
+  listStopReasonsFor: (stationKind: StationKind): Promise<ReasonPreset[]> =>
+    apiClient
+      .get<ReasonPreset[]>(`/api/reason-presets?kind=MACHINE_STOP&stationKind=${encodeURIComponent(stationKind)}`)
+      .then((r) => r.data),
+
   create: (input: {
     kind: ReasonPresetKind;
     label: string;

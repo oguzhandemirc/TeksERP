@@ -27,6 +27,7 @@ const CAMERA_FACING_KEY = 'device_camera_facing';
 const DOC_DESK_KEY = 'device_doc_desk';
 const DOC_DESK_CAPTURE_KEY = 'device_doc_desk_capture';
 const DOC_SCAN_ENGINE_KEY = 'device_doc_scan_engine';
+const DOC_TORCH_AUTO_KEY = 'device_doc_torch_auto';
 const DOC_DESK_FRAME_MS_KEY = 'device_doc_desk_frame_ms';
 const WO_CREATE_KINDS_KEY = 'device_wo_create_kinds';
 const WO_ROUTE_ON_BUTTON_KEY = 'device_wo_route_on_button';
@@ -65,6 +66,16 @@ export function parseDocScanEngine(raw: string | null): DocScanEngine {
 /** Kayıtlı 'live' ama canlı kamera modülü yok (eski APK) → bugünkü kendi kameramız. */
 export function effectiveScanEngine(engine: DocScanEngine, liveAvailable: boolean): DocScanEngine {
   return engine === 'live' && !liveAvailable ? 'camera' : engine;
+}
+
+/** "Flaşı otomatik aç" varsayılanı: belge kameraları feneri yakarak açılır (kağıt gölgesiz, OCR netliği). */
+export const DOC_TORCH_AUTO_DEFAULT = true;
+
+/** Yalnız birebir 'true'/'false' kayıt varsayılanı değiştirir; kayıt yok / bozuk → varsayılan. */
+export function parseDocTorchAuto(raw: string | null): boolean {
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return DOC_TORCH_AUTO_DEFAULT;
 }
 
 /** Otomatik çekim ara kare aralığı seçenekleri (ms) — pil/ısı için seyrekleştirilebilir. */
@@ -202,6 +213,8 @@ interface DeviceSettingsState {
   docDeskFrameMs: number;
   /** Belge okut / tanıt çekimi (CİHAZDA: tarayıcının bu cihazda çalışıp çalışmadığı cihaza bağlı). */
   docScanEngine: DocScanEngine;
+  /** Belge kameraları açılınca fener yansın mı (CİHAZDA: flaş ve masa ışığı cihaza/yere bağlı). Varsayılan AÇIK. */
+  docTorchAuto: boolean;
   /** İE oluştur türleri (Seçenekler; CİHAZDA). Varsayılan yalnız STANDARD = bugünkü davranış. */
   woCreateKinds: WoCreateKind[];
   /** "Rota seçimini Belge Okut tuşunda göster" (CİHAZDA). Varsayılan AÇIK = bugünkü rota seçici; kapalıyken saklı rota kullanılmaz. */
@@ -243,6 +256,7 @@ interface DeviceSettingsState {
   setDocDeskCaptureMode: (v: DocDeskCaptureMode) => Promise<void>;
   setDocDeskFrameMs: (v: number) => Promise<void>;
   setDocScanEngine: (v: DocScanEngine) => Promise<void>;
+  setDocTorchAuto: (v: boolean) => Promise<void>;
   setWoCreateKinds: (v: WoCreateKind[]) => Promise<void>;
   setWoRouteOnButton: (v: boolean) => Promise<void>;
   setWoButtons: (v: WoButtons) => Promise<void>;
@@ -291,6 +305,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   docDeskCaptureMode: 'tap',
   docDeskFrameMs: DOC_DESK_FRAME_MS_DEFAULT,
   docScanEngine: 'camera',
+  docTorchAuto: DOC_TORCH_AUTO_DEFAULT,
   woCreateKinds: [...WO_CREATE_KINDS_DEFAULT],
   woRouteOnButton: true,
   woButtons: 'both',
@@ -300,7 +315,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -325,6 +340,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(SCAN_METHOD_KEY),
         storage.getItem(HARDWARE_LINK_KEY),
         storage.getItem(WO_LAST_BATCH_HINT_KEY),
+        storage.getItem(DOC_TORCH_AUTO_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -364,6 +380,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       docDeskCaptureMode: docDeskCapture === 'auto' ? 'auto' : 'tap',
       docDeskFrameMs: parseDocDeskFrameMs(docDeskFrame),
       docScanEngine: parseDocScanEngine(docScanEngine),
+      docTorchAuto: parseDocTorchAuto(docTorchAuto),
       woCreateKinds: parseWoCreateKinds(woKinds),
       // Varsayılan AÇIK: yalnız birebir 'false' kapatır.
       woRouteOnButton: woRouteOnBtn !== 'false',
@@ -509,6 +526,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
     const engine = parseDocScanEngine(v);
     set({ docScanEngine: engine });
     await storage.setItem(DOC_SCAN_ENGINE_KEY, engine);
+  },
+
+  setDocTorchAuto: async (v) => {
+    set({ docTorchAuto: v });
+    await storage.setItem(DOC_TORCH_AUTO_KEY, v ? 'true' : 'false');
   },
 
   setDocDeskFrameMs: async (v) => {

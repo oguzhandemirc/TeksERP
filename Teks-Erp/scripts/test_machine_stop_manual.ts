@@ -105,9 +105,9 @@ async function main(): Promise<void> {
   check("§1a sebepsiz açılış: requiresReason true, reasonCode/lossClass NULL", a1.data.requiresReason && a1.data.reasonCode === null && a1.data.lossClass === null);
   check("§1b bağlam startedAt'ten: shiftInstanceId = kapsayan vardiya, factoryDay = fabrika günü", a1.data.shiftInstanceId === shift.id && a1.data.factoryDay.getTime() === gunBasi.getTime(), `${a1.data.shiftInstanceId} / ${a1.data.factoryDay.toISOString()}`);
   check("§1c stopKey = clientToken, source SUPERVISOR, endedAt NULL", a1.data.stopKey === token && a1.data.source === MachineDataSource.SUPERVISOR && a1.data.endedAt === null);
-  const a2 = await openManualStop({ machineId: makine2.id, startedAt: S0, reasonCode: "COZGU_KOPUSU" }, undefined);
+  const a2 = await openManualStop({ machineId: makine2.id, startedAt: S0, reasonCode: "HAVA_BASINCI" }, undefined);
   ids.stops.push(a2.data.id);
-  check("§1d sebepli açılış: lossClass katalogdan KOPYA (UNPLANNED), requiresReason false, classifiedAt dolu", a2.data.reasonCode === "COZGU_KOPUSU" && a2.data.lossClass === "UNPLANNED" && !a2.data.requiresReason && a2.data.classifiedAt !== null);
+  check("§1d sebepli açılış: lossClass katalogdan KOPYA (UNPLANNED), requiresReason false, classifiedAt dolu", a2.data.reasonCode === "HAVA_BASINCI" && a2.data.lossClass === "UNPLANNED" && !a2.data.requiresReason && a2.data.classifiedAt !== null);
   const kotu = await hata(() => openManualStop({ machineId: makine.id, startedAt: S1, reasonCode: "YOK_BOYLE_KOD" }, undefined));
   check("§1e geçersiz sebep kodu 400 REASON_CODE_INVALID", kotu?.statusCode === 400 && kod(kotu) === "REASON_CODE_INVALID", kod(kotu));
 

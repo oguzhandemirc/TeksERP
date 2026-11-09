@@ -8,6 +8,7 @@
 // =============================================================================
 import { AppError } from "../utils/app-error";
 import { ClientOcrSchema, clientOcrToResult } from "../lib/gelen-belge/istemci-ocr";
+import { rectToSource, uprightClientOcr, type OrientationTransform } from "../lib/gelen-belge/sayfa-yonu";
 import { extractDocument, type DocumentTemplate, type OcrRect } from "../lib/gelen-belge/motor";
 import { engineTemplates } from "./gelen-belge-ozel-sablon.service";
 import { FALLBACK_TEMPLATE_CODE } from "./gelen-belge-sablon.service";
@@ -42,13 +43,17 @@ function parseFrame(raw: unknown) {
     const where = issue?.path.length ? ` (${issue.path.join(".")})` : "";
     throw AppError.badRequest(`Canlı okuma karesi geçersiz${where}.`, { code: "LIVE_FRAME_INVALID" });
   }
-  return clientOcrToResult(parsed.data);
+  // Kâğıt kadrajda herhangi bir açıyla durabilir: alanlar dik çerçevede çıkarılır, kutular kareye geri çevrilir.
+  const up = uprightClientOcr(parsed.data, "ANY");
+  return { ocr: clientOcrToResult(up.ocr), transform: up.transform };
 }
 
-/** Bölge çerçevesindeki kutu → kare çerçevesi (bölgeler yalnız dikey kaydırılır, `splitRegions`). */
-function toFrameBox(rect: OcrRect | undefined, regionTop: number): LiveReadBox | undefined {
+/** Bölge çerçevesindeki kutu → kare çerçevesi (bölgeler yalnız dikey kaydırılır, `splitRegions`; dikleştirildiyse geri döndürülür). */
+function toFrameBox(rect: OcrRect | undefined, regionTop: number, t: OrientationTransform | null): LiveReadBox | undefined {
   if (!rect || rect.width <= 0 || rect.height <= 0) return undefined;
-  return { x: r1(rect.x), y: r1(rect.y + regionTop), w: r1(rect.width), h: r1(rect.height) };
+  const up = { ...rect, y: rect.y + regionTop };
+  const f = t ? rectToSource(up, t) : up;
+  return { x: r1(f.x), y: r1(f.y), w: r1(f.width), h: r1(f.height) };
 }
 
 /**
@@ -56,7 +61,7 @@ function toFrameBox(rect: OcrRect | undefined, regionTop: number): LiveReadBox |
  * yalnız tanıtılmış/dosya şablonunun alanlarını gösterir. Şablonun TÜM alanları döner; bulunamayan `value: null`.
  */
 export async function liveReadFrame(raw: unknown): Promise<LiveReadResult> {
-  const ocr = parseFrame(raw);
+  const { ocr, transform } = parseFrame(raw);
   const templates: DocumentTemplate[] = (await engineTemplates()).filter((t) => t.id !== FALLBACK_TEMPLATE_CODE);
   const t0 = performance.now();
   const region = extractDocument(ocr, templates, null).regions[0];
@@ -67,7 +72,7 @@ export async function liveReadFrame(raw: unknown): Promise<LiveReadResult> {
   const fields = template.fields.map((spec): LiveReadField => {
     const f = got[spec.key];
     const value = f?.value ?? null;
-    const box = value === null ? undefined : toFrameBox(f?.source.rect, region.region.rect.y);
+    const box = value === null ? undefined : toFrameBox(f?.source.rect, region.region.rect.y, transform);
     const issues = f?.issues.length ? f.issues : value === null ? ["not-found"] : undefined;
     return { key: spec.key, label: spec.label, value, needsReview: f?.needsReview ?? true, ...(issues ? { issues } : {}), ...(box ? { box } : {}) };
   });

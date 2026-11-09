@@ -7,22 +7,34 @@ import { toClientOcr, type ClientOcr } from './deviceOcr';
 
 /** Native sözleşme sürümü: `liveCameraInfo().version` en az bu olmalı. */
 export const LIVE_CAMERA_MIN_VERSION = 1;
+/** `torch` görünüm özelliği bu sürümle geldi; eski APK'da fener düğmesi çizilmez (çalışmayan düğme yok). */
+export const LIVE_CAMERA_TORCH_VERSION = 2;
 
 interface LiveCameraNativeInfo {
   liveCameraInfo: () => unknown;
 }
 
-/** Yeni APK'da `true`; eski APK, iOS/web ya da bozuk köprüde `false` (canlı okuma seçeneği gizlenir). */
-export function isLiveCameraAvailable(): boolean {
-  if (Platform.OS !== 'android') return false;
+/** Native canlı kamera sözleşme sürümü; modül/işlev yok ya da bozuk → 0 (fırlatmaz). */
+function liveCameraVersion(): number {
+  if (Platform.OS !== 'android') return 0;
   try {
     const m = requireOptionalNativeModule<Partial<LiveCameraNativeInfo>>('TeksErpBelgeTarayici');
-    if (!m || typeof m.liveCameraInfo !== 'function') return false;
+    if (!m || typeof m.liveCameraInfo !== 'function') return 0;
     const info = m.liveCameraInfo() as { version?: unknown } | null;
-    return typeof info?.version === 'number' && info.version >= LIVE_CAMERA_MIN_VERSION;
+    return typeof info?.version === 'number' ? info.version : 0;
   } catch {
-    return false;
+    return 0;
   }
+}
+
+/** Yeni APK'da `true`; eski APK, iOS/web ya da bozuk köprüde `false` (canlı okuma seçeneği gizlenir). */
+export function isLiveCameraAvailable(): boolean {
+  return liveCameraVersion() >= LIVE_CAMERA_MIN_VERSION;
+}
+
+/** Canlı kamera feneri yönetebiliyor mu (native `torch` özelliği). */
+export function isLiveTorchAvailable(): boolean {
+  return liveCameraVersion() >= LIVE_CAMERA_TORCH_VERSION;
 }
 
 /** `onText`: o anki karenin okuması. `ocr` sunucuya AYNEN gidebilir (koordinatlar dik kare çerçevesinde, rotation 0). */

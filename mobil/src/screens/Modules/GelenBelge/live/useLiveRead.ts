@@ -1,6 +1,6 @@
 // Canlı okuma (L3) ekran durumu. Kare gelir → (ritim izin verirse) sunucuya TEK istek → yanıt oylamaya. Açılış/kapanış
 // nesil sayacını artırır: geç gelen yanıt/çekim atılır. Tüm form alanları kilitli + kamera sabit + net → "Kıpırdatmayın"
-// halkası → bir kez çekim (`useLiveCapture`). "Çek ve bitir" aynı çekimi elle başlatır.
+// halkası → bir kez çekim (`useLiveCapture`) — yalnız çekim ayarı "Otomatik"se. "Çek ve bitir" aynı çekimi elle başlatır.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { liveReadService } from '../../../../services/liveRead.service';
 import type { LiveCameraError, LiveStability, LiveTextFrame } from '../../../../services/liveCamera';
@@ -10,6 +10,7 @@ import { liveFormLocked } from './liveLocks';
 import { IDLE_RHYTHM, canSend, markSent, markSettled, readyToCapture, stepHold, type HoldState } from './liveRhythm';
 import { EMPTY_VOTE, applyLiveReading, editLiveField, unlockLiveField, type LiveVoteState } from './liveVote';
 import { useLiveCapture } from './useLiveCapture';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 
 interface Options {
   visible: boolean;
@@ -23,6 +24,9 @@ export function useLiveRead({ visible, onDone }: Options) {
   /** null = halka yok; 0–1 = "Kıpırdatmayın" halkası ilerlemesi. */
   const [holdProgress, setHoldProgress] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const captureMode = useDeviceSettingsStore((s) => s.docDeskCaptureMode);
+  const captureModeRef = useRef(captureMode);
+  captureModeRef.current = captureMode;
   const rhythm = useRef(IDLE_RHYTHM);
   const hold = useRef<HoldState>({ since: null });
   const gen = useRef(0);
@@ -74,7 +78,7 @@ export function useLiveRead({ visible, onDone }: Options) {
   const onStability = useCallback(
     (s: LiveStability) => {
       if (capturingRef.current) return;
-      const step = stepHold(hold.current, readyToCapture(liveFormLocked(voteRef.current.fields), s), Date.now());
+      const step = stepHold(hold.current, readyToCapture(captureModeRef.current, liveFormLocked(voteRef.current.fields), s), Date.now());
       hold.current = step.hold;
       setHoldProgress(step.hold.since === null ? null : step.progress);
       if (step.fire) void capture();

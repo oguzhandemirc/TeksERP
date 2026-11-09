@@ -75,3 +75,11 @@
 ## Tablet hedef kutuları (2026-11-09)
 
 Tablet İE formunda belgedeki gelen en/metre/kg hedef kutularına KOPYALANMAZ (kutu boş, silik ipucu "belgede 241 m"); kopyalama yalnız kişisel ⚙ anahtarı `tabletIeForm.hedefDoldur` açıkken; `workorder.targetQuantityEnabled` kapalıysa hedef metraj/kg kutusu hiç çizilmez, `workorder.targetWidthEnabled` (varsayılan AÇIK) kapalıysa hedef En kutusu çizilmez ve gövdeye width gitmez; sunucunun gelen-metre türetmesi değişmez.
+
+## Dönük okuma (2026-11-09)
+
+Cihaz OCR karesini çıkarımdan ÖNCE baskın okuma yönüne göre dikleştir (`lib/gelen-belge/sayfa-yonu.ts` `uprightClientOcr`, çerçeve dönüşümünün tek kaynağı; canlı okuma her açıyı düzeltir ve değer kutusunu kareye geri çevirir, fotoğraf yüklemesi yalnız çeyreğe yuvarlar — `rotation` sözleşmesi); çıkarılan değer etiket metniyse (`motor/label-guard.ts`) ya da makul değilse (`motor/value-guard.ts`: sayısal alanda tarih, `PLAUSIBLE_RANGES` dışı, parti no'da virgüllü ondalık) alanı BOŞ bırak — kilide/forma girmez. · bekçi: `test_gelen_belge_sayfa_yonu` <sub>(2026-11-09 dönük canlı okuma)</sub>
+
+## Yeniden okuma (2026-11-04)
+
+Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramalar/:id/oku` okunmuş sayfayı yalnız DRAFT'ta taslak claim'inden sonra READ→PENDING yapsın: satırsız sayfa doğrudan, taslağın TÜM satırları bu taramadan PENDING/topsuz/düzeltilmemiş (`createdAt == updatedAt`) ise satırlar aynı tx'te silinerek; elle eklenmiş ya da düzeltilmiş satır varsa 409 `DOCUMENT_SCAN_ALREADY_READ`; fotoğraflı satırsız MANUAL taslak OCR olur (PDF hariç). · bekçi: `test_gelen_belge_ayni_belge_tanit` · `test_gelen_belge_yeniden_oku` <sub>(arşiv:2026-11-04)</sub>

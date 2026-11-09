@@ -12,6 +12,7 @@ import LiveReadModal, { LIVE_SEARCHING } from './LiveReadModal';
 import { bindLiveLocks, liveLocksFor, resetLiveLocks } from './liveLocks';
 import { LIVE_HOLD_MS, LIVE_MIN_SHARPNESS, LIVE_REQUEST_INTERVAL_MS } from './liveTuning';
 import { LIVE_CAPTURE_FAILED } from './useLiveCapture';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 
 type CamProps = { onText?: (f: unknown) => void; onStability?: (s: unknown) => void };
 const mockCam: { props: CamProps | null; still: jest.Mock } = { props: null, still: jest.fn() };
@@ -56,6 +57,7 @@ beforeEach(() => {
   mockRead.mockReset();
   (Toast.show as jest.Mock).mockReset();
   resetLiveLocks();
+  useDeviceSettingsStore.setState({ docDeskCaptureMode: 'auto' });
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -115,6 +117,22 @@ describe('LiveReadModal', () => {
     expect(pages[0].sha256).toBe(photoSha256(jpeg));
     bindLiveLocks('not-1', [pages[0].sha256]);
     expect(liveLocksFor('not-1')).toEqual({ hedefMetraj: '1.250' });
+  });
+
+  it('⭐ çekim ayarı "Dokunarak": kilitli + net + süre dolsa da halka yok, otomatik çekim yok; "Çek ve bitir" çeker', async () => {
+    useDeviceSettingsStore.setState({ docDeskCaptureMode: 'tap' });
+    const { r, onDone } = setup();
+    for (let i = 0; i < 3; i++) await sendFrame(reading('1.250', null));
+    expect(r.getByTestId('canli-alan-durum-hedefMetraj')).toHaveTextContent(/Kilitli/);
+    const still = { still: true, sharpness: LIVE_MIN_SHARPNESS };
+    await act(async () => mockCam.props?.onStability?.(still));
+    expect(r.queryByTestId('canli-halka')).toBeNull();
+    now += LIVE_HOLD_MS * 3;
+    await act(async () => mockCam.props?.onStability?.(still));
+    expect(mockCam.still).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    fireEvent.press(r.getByTestId('canli-simdi-cek'));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
   });
 
   it('görüntü bulanıklaşır/kararırsa halka sıfırlanır, çekim olmaz', async () => {

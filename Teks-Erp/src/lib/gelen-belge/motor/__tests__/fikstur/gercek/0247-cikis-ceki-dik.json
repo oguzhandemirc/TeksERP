@@ -1,0 +1,1001 @@
+{
+ "_not": "Demo kurulumdaki gerçek tablet taraması (ML Kit, 2592x1944, dik okunmuş) — ANONİM: firma/müşteri adı, iş emri, evrak/kod, ürün tanımı değiştirildi (README kuralı); kg/m/en değerleri, kutu geometrisi ve güven DOKUNULMADI. Şablon = aynı kurulumun kullanıcı şablonu (v8), tanıma anahtarları anonim. Döndürme bekçide sentetik uygulanır (test_gelen_belge_sayfa_yonu).",
+ "imageWidth": 2592,
+ "imageHeight": 1944,
+ "words": [
+  {
+   "t": "ISM9439770",
+   "rect": {
+    "x": 1688,
+    "y": 260,
+    "width": 212,
+    "height": 51
+   },
+   "l": 0,
+   "p": 0.8684
+  },
+  {
+   "t": "Iş",
+   "rect": {
+    "x": 1416,
+    "y": 300,
+    "width": 36,
+    "height": 42
+   },
+   "l": 1,
+   "p": 0.6973
+  },
+  {
+   "t": "Emri",
+   "rect": {
+    "x": 1465,
+    "y": 289,
+    "width": 85,
+    "height": 48
+   },
+   "l": 1,
+   "p": 0.917
+  },
+  {
+   "t": "19.10.2026",
+   "rect": {
+    "x": 1694,
+    "y": 329,
+    "width": 186,
+    "height": 45
+   },
+   "l": 2,
+   "p": 0.9164
+  },
+  {
+   "t": "ÖRNEK",
+   "rect": {
+    "x": 745,
+    "y": 345,
+    "width": 217,
+    "height": 115
+   },
+   "l": 3,
+   "p": 0.4961
+  },
+  {
+   "t": "TEKSTİL",
+   "rect": {
+    "x": 972,
+    "y": 358,
+    "width": 136,
+    "height": 88
+   },
+   "l": 3,
+   "p": 0.3262
+  },
+  {
+   "t": "Tarih",
+   "rect": {
+    "x": 1420,
+    "y": 361,
+    "width": 92,
+    "height": 36
+   },
+   "l": 4,
+   "p": 0.875
+  },
+  {
+   "t": "Müşteri",
+   "rect": {
+    "x": 1444,
+    "y": 414,
+    "width": 133,
+    "height": 55
+   },
+   "l": 5,
+   "p": 0.8309
+  },
+  {
+   "t": "KG",
+   "rect": {
+    "x": 1577,
+    "y": 411,
+    "width": 50,
+    "height": 47
+   },
+   "l": 5,
+   "p": 0.8711
+  },
+  {
+   "t": "0,00",
+   "rect": {
+    "x": 1695,
+    "y": 405,
+    "width": 70,
+    "height": 37
+   },
+   "l": 6,
+   "p": 0.7852
+  },
+  {
+   "t": "Müşteri",
+   "rect": {
+    "x": 1430,
+    "y": 483,
+    "width": 136,
+    "height": 47
+   },
+   "l": 7,
+   "p": 0.8633
+  },
+  {
+   "t": "MT",
+   "rect": {
+    "x": 1580,
+    "y": 478,
+    "width": 52,
+    "height": 39
+   },
+   "l": 7,
+   "p": 0.7949
+  },
+  {
+   "t": "238,00",
+   "rect": {
+    "x": 1698,
+    "y": 463,
+    "width": 109,
+    "height": 42
+   },
+   "l": 8,
+   "p": 0.9095
+  },
+  {
+   "t": "*1SM9439770*",
+   "rect": {
+    "x": 312,
+    "y": 511,
+    "width": 312,
+    "height": 59
+   },
+   "l": 9,
+   "p": 0.7181
+  },
+  {
+   "t": "Cinsi:",
+   "rect": {
+    "x": 1417,
+    "y": 630,
+    "width": 96,
+    "height": 34
+   },
+   "l": 10,
+   "p": 0.8411
+  },
+  {
+   "t": "MA",
+   "rect": {
+    "x": 609,
+    "y": 679,
+    "width": 79,
+    "height": 52
+   },
+   "l": 11,
+   "p": 0.7409
+  },
+  {
+   "t": "ÖRN",
+   "rect": {
+    "x": 713,
+    "y": 671,
+    "width": 61,
+    "height": 49
+   },
+   "l": 11,
+   "p": 0.5801
+  },
+  {
+   "t": "Mamül",
+   "rect": {
+    "x": 1376,
+    "y": 691,
+    "width": 118,
+    "height": 36
+   },
+   "l": 12,
+   "p": 0.8094
+  },
+  {
+   "t": "En:",
+   "rect": {
+    "x": 1511,
+    "y": 688,
+    "width": 52,
+    "height": 32
+   },
+   "l": 12,
+   "p": 0.8659
+  },
+  {
+   "t": "350,00",
+   "rect": {
+    "x": 1658,
+    "y": 670,
+    "width": 111,
+    "height": 41
+   },
+   "l": 13,
+   "p": 0.9023
+  },
+  {
+   "t": "Müşteri:",
+   "rect": {
+    "x": 256,
+    "y": 710,
+    "width": 140,
+    "height": 37
+   },
+   "l": 14,
+   "p": 0.6973
+  },
+  {
+   "t": "9999-99",
+   "rect": {
+    "x": 602,
+    "y": 741,
+    "width": 133,
+    "height": 43
+   },
+   "l": 15,
+   "p": 0.9079
+  },
+  {
+   "t": "ÖRNEK",
+   "rect": {
+    "x": 758,
+    "y": 733,
+    "width": 97,
+    "height": 40
+   },
+   "l": 15,
+   "p": 0.7588
+  },
+  {
+   "t": "KUMAŞ",
+   "rect": {
+    "x": 869,
+    "y": 728,
+    "width": 51,
+    "height": 38
+   },
+   "l": 15,
+   "p": 0.7669
+  },
+  {
+   "t": "BEJ",
+   "rect": {
+    "x": 924,
+    "y": 722,
+    "width": 99,
+    "height": 40
+   },
+   "l": 15,
+   "p": 0.8078
+  },
+  {
+   "t": "20.10.2026",
+   "rect": {
+    "x": 1663,
+    "y": 725,
+    "width": 184,
+    "height": 42
+   },
+   "l": 16,
+   "p": 0.9109
+  },
+  {
+   "t": "Müş.",
+   "rect": {
+    "x": 261,
+    "y": 768,
+    "width": 77,
+    "height": 40
+   },
+   "l": 17,
+   "p": 0.6777
+  },
+  {
+   "t": "Parti",
+   "rect": {
+    "x": 368,
+    "y": 759,
+    "width": 81,
+    "height": 40
+   },
+   "l": 17,
+   "p": 0.8742
+  },
+  {
+   "t": "NO:",
+   "rect": {
+    "x": 453,
+    "y": 754,
+    "width": 62,
+    "height": 39
+   },
+   "l": 17,
+   "p": 0.6458
+  },
+  {
+   "t": "Sevk",
+   "rect": {
+    "x": 1367,
+    "y": 755,
+    "width": 84,
+    "height": 35
+   },
+   "l": 18,
+   "p": 0.8955
+  },
+  {
+   "t": "Tarihi:",
+   "rect": {
+    "x": 1465,
+    "y": 745,
+    "width": 114,
+    "height": 37
+   },
+   "l": 18,
+   "p": 0.8298
+  },
+  {
+   "t": "99",
+   "rect": {
+    "x": 607,
+    "y": 806,
+    "width": 36,
+    "height": 35
+   },
+   "l": 19,
+   "p": 0.9082
+  },
+  {
+   "t": "ÖRNEK",
+   "rect": {
+    "x": 668,
+    "y": 799,
+    "width": 108,
+    "height": 38
+   },
+   "l": 19,
+   "p": 0.7178
+  },
+  {
+   "t": "KUMAŞ",
+   "rect": {
+    "x": 766,
+    "y": 795,
+    "width": 53,
+    "height": 36
+   },
+   "l": 19,
+   "p": 0.8385
+  },
+  {
+   "t": "BEJ",
+   "rect": {
+    "x": 836,
+    "y": 788,
+    "width": 100,
+    "height": 39
+   },
+   "l": 19,
+   "p": 0.7336
+  },
+  {
+   "t": "işlem:",
+   "rect": {
+    "x": 264,
+    "y": 826,
+    "width": 107,
+    "height": 41
+   },
+   "l": 20,
+   "p": 0.7246
+  },
+  {
+   "t": "ARABADA",
+   "rect": {
+    "x": 610,
+    "y": 860,
+    "width": 159,
+    "height": 44
+   },
+   "l": 21,
+   "p": 0.8058
+  },
+  {
+   "t": "TAŞINACAK",
+   "rect": {
+    "x": 781,
+    "y": 848,
+    "width": 187,
+    "height": 46
+   },
+   "l": 21,
+   "p": 0.8008
+  },
+  {
+   "t": "Taşıma",
+   "rect": {
+    "x": 265,
+    "y": 886,
+    "width": 126,
+    "height": 46
+   },
+   "l": 22,
+   "p": 0.7194
+  },
+  {
+   "t": "Tipi:",
+   "rect": {
+    "x": 405,
+    "y": 879,
+    "width": 76,
+    "height": 41
+   },
+   "l": 22,
+   "p": 0.7391
+  },
+  {
+   "t": "Çıkiş",
+   "rect": {
+    "x": 822,
+    "y": 953,
+    "width": 175,
+    "height": 89
+   },
+   "l": 23,
+   "p": 0.55
+  },
+  {
+   "t": "Çeki",
+   "rect": {
+    "x": 1017,
+    "y": 938,
+    "width": 157,
+    "height": 87
+   },
+   "l": 23,
+   "p": 0.7598
+  },
+  {
+   "t": "Listesi",
+   "rect": {
+    "x": 1198,
+    "y": 916,
+    "width": 234,
+    "height": 94
+   },
+   "l": 23,
+   "p": 0.8488
+  },
+  {
+   "t": "Açıklama",
+   "rect": {
+    "x": 1552,
+    "y": 1047,
+    "width": 164,
+    "height": 47
+   },
+   "l": 24,
+   "p": 0.7544
+  },
+  {
+   "t": "Miktar2",
+   "rect": {
+    "x": 825,
+    "y": 1099,
+    "width": 148,
+    "height": 34
+   },
+   "l": 25,
+   "p": 0.8683
+  },
+  {
+   "t": "Miktar",
+   "rect": {
+    "x": 1071,
+    "y": 1084,
+    "width": 114,
+    "height": 34
+   },
+   "l": 26,
+   "p": 0.9115
+  },
+  {
+   "t": "3",
+   "rect": {
+    "x": 1200,
+    "y": 1082,
+    "width": 18,
+    "height": 28
+   },
+   "l": 26,
+   "p": 0.9219
+  },
+  {
+   "t": "P9908P9904P9138P9111P9123.TOPLAM.KG",
+   "rect": {
+    "x": 1288,
+    "y": 1092,
+    "width": 717,
+    "height": 72
+   },
+   "l": 27,
+   "p": 0.8213
+  },
+  {
+   "t": "Kod",
+   "rect": {
+    "x": 392,
+    "y": 1135,
+    "width": 65,
+    "height": 29
+   },
+   "l": 28,
+   "p": 0.7617
+  },
+  {
+   "t": "Miktar",
+   "rect": {
+    "x": 574,
+    "y": 1117,
+    "width": 115,
+    "height": 33
+   },
+   "l": 29,
+   "p": 0.8893
+  },
+  {
+   "t": "1",
+   "rect": {
+    "x": 705,
+    "y": 1116,
+    "width": 17,
+    "height": 28
+   },
+   "l": 29,
+   "p": 0.6211
+  },
+  {
+   "t": "734,00",
+   "rect": {
+    "x": 793,
+    "y": 1162,
+    "width": 106,
+    "height": 34
+   },
+   "l": 30,
+   "p": 0.849
+  },
+  {
+   "t": "KG",
+   "rect": {
+    "x": 915,
+    "y": 1160,
+    "width": 31,
+    "height": 32
+   },
+   "l": 30,
+   "p": 0.8691
+  },
+  {
+   "t": "3,05",
+   "rect": {
+    "x": 1040,
+    "y": 1148,
+    "width": 66,
+    "height": 35
+   },
+   "l": 31,
+   "p": 0.8525
+  },
+  {
+   "t": "MT",
+   "rect": {
+    "x": 1122,
+    "y": 1147,
+    "width": 32,
+    "height": 33
+   },
+   "l": 31,
+   "p": 0.707
+  },
+  {
+   "t": "91230242",
+   "rect": {
+    "x": 343,
+    "y": 1187,
+    "width": 155,
+    "height": 40
+   },
+   "l": 32,
+   "p": 0.8486
+  },
+  {
+   "t": "241,00",
+   "rect": {
+    "x": 541,
+    "y": 1178,
+    "width": 108,
+    "height": 37
+   },
+   "l": 33,
+   "p": 0.8717
+  },
+  {
+   "t": "MT",
+   "rect": {
+    "x": 665,
+    "y": 1175,
+    "width": 34,
+    "height": 32
+   },
+   "l": 33,
+   "p": 0.627
+  },
+  {
+   "t": "1",
+   "rect": {
+    "x": 292,
+    "y": 1208,
+    "width": 4,
+    "height": 20
+   },
+   "l": 34,
+   "p": 0.4844
+  },
+  {
+   "t": "0,00",
+   "rect": {
+    "x": 1137,
+    "y": 1210,
+    "width": 77,
+    "height": 35
+   },
+   "l": 35,
+   "p": 0.8711
+  },
+  {
+   "t": "MT",
+   "rect": {
+    "x": 1229,
+    "y": 1208,
+    "width": 38,
+    "height": 32
+   },
+   "l": 35,
+   "p": 0.6582
+  },
+  {
+   "t": "241,00",
+   "rect": {
+    "x": 594,
+    "y": 1243,
+    "width": 123,
+    "height": 39
+   },
+   "l": 36,
+   "p": 0.8216
+  },
+  {
+   "t": "MT",
+   "rect": {
+    "x": 733,
+    "y": 1241,
+    "width": 36,
+    "height": 33
+   },
+   "l": 36,
+   "p": 0.7969
+  },
+  {
+   "t": "734,00",
+   "rect": {
+    "x": 846,
+    "y": 1225,
+    "width": 122,
+    "height": 40
+   },
+   "l": 37,
+   "p": 0.9232
+  },
+  {
+   "t": "KG|",
+   "rect": {
+    "x": 988,
+    "y": 1223,
+    "width": 40,
+    "height": 37
+   },
+   "l": 37,
+   "p": 0.543
+  },
+  {
+   "t": "TOPLAM",
+   "rect": {
+    "x": 327,
+    "y": 1260,
+    "width": 149,
+    "height": 37
+   },
+   "l": 38,
+   "p": 0.763
+  }
+ ],
+ "template": {
+  "id": "u-ornek-ceki-listesi",
+  "name": "Örnek çeki listesi",
+  "fields": [
+   {
+    "key": "toplamKg",
+    "type": "decimal",
+    "label": "Gelen kg",
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "TOPLAM"
+      ],
+      "maxWords": 1,
+      "direction": "right",
+      "skipWords": 2,
+      "valueShape": "^\\d+\\s*,\\s*\\d+$"
+     },
+     {
+      "roi": {
+       "h": 0.040123456790123455,
+       "w": 0.1087962962962963,
+       "x": 0.31655092592592593,
+       "y": 0.6123971193415638
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ]
+   },
+   {
+    "key": "evrakNo",
+    "type": "alnum",
+    "label": "Evrak No",
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "Kod"
+      ],
+      "maxWords": 1,
+      "direction": "below",
+      "skipWords": 1,
+      "valueShape": "^\\d+$"
+     },
+     {
+      "roi": {
+       "h": 0.03497942386831276,
+       "w": 0.14351851851851852,
+       "x": 0.08217592592592593,
+       "y": 0.5751028806584362
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ],
+    "postProcess": [
+     "upper",
+     "stripSpaces"
+    ]
+   },
+   {
+    "key": "renk",
+    "type": "text",
+    "label": "Gelen renk",
+    "maxLength": 80,
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "Islem"
+      ],
+      "direction": "right"
+     },
+     {
+      "roi": {
+       "h": 0.03806584362139918,
+       "w": 0.032407407407407406,
+       "x": 0.24344135802469136,
+       "y": 0.356738683127572
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ],
+    "postProcess": [
+     "collapseSpaces",
+     "trimPunct"
+    ]
+   },
+   {
+    "key": "desen",
+    "type": "text",
+    "label": "Gelen kumaş",
+    "maxLength": 80,
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "Müş. Parti NO"
+      ],
+      "direction": "right"
+     },
+     {
+      "roi": {
+       "h": 0.033950617283950615,
+       "w": 0.11882716049382716,
+       "x": 0.22183641975308643,
+       "y": 0.3243312757201646
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ],
+    "postProcess": [
+     "collapseSpaces",
+     "trimPunct"
+    ]
+   },
+   {
+    "key": "partiNo",
+    "type": "alnum",
+    "label": "Parti No",
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "Íş Emri"
+      ],
+      "maxWords": 1,
+      "direction": "right",
+      "valueShape": "^\\d+\\p{L}+\\d+$"
+     },
+     {
+      "roi": {
+       "h": 0.04526748971193416,
+       "w": 0.15046296296296297,
+       "x": 0.5962577160493827,
+       "y": 0.11934156378600823
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ],
+    "postProcess": [
+     "upper",
+     "stripSpaces"
+    ]
+   },
+   {
+    "key": "musteri",
+    "type": "text",
+    "label": "Müşteri",
+    "maxLength": 80,
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "Müşteri"
+      ],
+      "window": {
+       "h": 0.3217,
+       "w": 0.272,
+       "x": 0,
+       "y": 0.156
+      },
+      "direction": "right"
+     },
+     {
+      "roi": {
+       "h": 0.06378600823045268,
+       "w": 0.16435185185185186,
+       "x": 0.1861496913580247,
+       "y": 0.2813786008230453
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ],
+    "postProcess": [
+     "collapseSpaces",
+     "trimPunct"
+    ]
+   },
+   {
+    "key": "toplamMetre",
+    "type": "decimal",
+    "label": "Gelen metre",
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "TOPLAM"
+      ],
+      "maxWords": 1,
+      "direction": "right",
+      "valueShape": "^\\d+\\s*,\\s*\\d+$"
+     },
+     {
+      "roi": {
+       "h": 0.050411522633744855,
+       "w": 0.125,
+       "x": 0.1720679012345679,
+       "y": 0.6473765432098766
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ]
+   },
+   {
+    "key": "en",
+    "type": "decimal",
+    "label": "En (cm)",
+    "strategies": [
+     {
+      "kind": "anchor",
+      "labels": [
+       "Mamül En"
+      ],
+      "maxWords": 1,
+      "direction": "right",
+      "valueShape": "^\\d+\\s*,\\s*\\d+$"
+     },
+     {
+      "roi": {
+       "h": 0.046296296296296294,
+       "w": 0.10108024691358025,
+       "x": 0.6911651234567902,
+       "y": 0.3150720164609053
+      },
+      "kind": "roi",
+      "fallback": true
+     }
+    ]
+   }
+  ],
+  "version": 8,
+  "identifiers": {
+   "keywords": [
+    "Çıkış Çeki Listesi",
+    "ÖRNEK TEKSTİL",
+    "Iş Emri",
+    "Tarih",
+    "Müşteri KG",
+    "Müşteri MT",
+    "Íş Emri",
+    "Múşteri MT"
+   ],
+   "minScore": 0.6
+  },
+  "meterSources": {
+   "total": [
+    "toplamMetre"
+   ]
+  },
+  "batchNoCandidates": [
+   {
+    "kind": "DOC",
+    "field": "evrakNo"
+   },
+   {
+    "kind": "BATCH",
+    "field": "partiNo"
+   }
+  ]
+ }
+}

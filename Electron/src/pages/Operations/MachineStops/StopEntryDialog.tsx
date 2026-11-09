@@ -15,6 +15,7 @@ import type { ReasonPreset } from "@/pages/ReasonPresets/service";
 import type { OpenStopPayload } from "./service";
 import { localInputToIso, nowLocalInput } from "./types";
 import { DateTimeInput } from "@/components/forms/DateTimeInput";
+import { useScopedStopReasons } from "./useScopedStopReasons";
 
 interface Props {
   presets: ReasonPreset[];
@@ -35,6 +36,9 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampE
   const [code, setCode] = useState("");
   const [note, setNote] = useState("");
   const machines = useQuery({ queryKey: ["machines", "stop-entry-picker"], queryFn: () => loadAllForPicker(machineService, { filters: { isActive: "true" }, sortBy: "code" }) });
+  // Sebep seçili makinenin istasyon türüyle süzülür (sunucu kapsam dışını 400'ler); makine değişince sebep sıfırlanır.
+  const scoped = useScopedStopReasons(machineId ? [machines.data?.data.find((m) => m.id === machineId)?.station?.kind] : [], presets);
+  const pickMachine = (id: string) => { setMachineId(id); setCode(""); };
   const ok = machineId !== "" && localInputToIso(startedAt) !== null;
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -49,7 +53,7 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampE
         <div className="space-y-3">
           <div className="space-y-1">
             <Label>{noun}</Label>
-            <Select value={machineId} onValueChange={setMachineId}>
+            <Select value={machineId} onValueChange={pickMachine}>
               <SelectTrigger>
                 <SelectValue placeholder={machines.isLoading ? "Yükleniyor..." : `${noun} seç...`} />
               </SelectTrigger>
@@ -74,7 +78,7 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampE
                 <SelectValue placeholder="Sonra atanacak (borç)" />
               </SelectTrigger>
               <SelectContent>
-                {presets.map((p) => (
+                {scoped.presets.map((p) => (
                   <SelectItem key={p.code} value={p.code}>
                     {p.label}
                   </SelectItem>

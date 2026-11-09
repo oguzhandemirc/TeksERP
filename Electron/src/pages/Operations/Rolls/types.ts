@@ -111,6 +111,9 @@ export interface Roll {
   foldType?: string | null;
   /** Müşterinin etikete istediği parti metni (J1/K30); NULL = yok. */
   labelBatchNo?: string | null;
+  /** Etikete basılan müşteri kumaş adı / rengi (tamburda topa yazılır); NULL = kumaşın kendi adı. */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
   entrySource: string;
   /**
    * Elle eklenen topun sebebi — YALNIZ detay ucunda (`GET /rolls/:id`) döner,

@@ -41,6 +41,7 @@ import { registerReasonCatalogSource } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { stationKindScopeWhere } from "./helpers/station-kind-scope.helper";
 
 export type ReasonPresetDto = {
   id: string;
@@ -707,10 +708,6 @@ function resolveStationKinds(kind: ReasonPresetKind, given: StationKind[] | null
   return [...new Set(given)];
 }
 
-/** Liste süzgeci: kapsamı boş (her istasyon) ya da verilen türü taşıyan satır — tek yüklem, `list` okur. */
-export function stationKindScopeWhere(stationKind: StationKind): Prisma.ReasonPresetWhereInput {
-  return { OR: [{ stationKinds: { isEmpty: true } }, { stationKinds: { has: stationKind } }] };
-}
 
 /** `kind` içinde boş bir kod bulur (çakışırsa `_2`, `_3` … ekler). */
 async function nextFreeCode(kind: ReasonPresetKind, base: string): Promise<string> {

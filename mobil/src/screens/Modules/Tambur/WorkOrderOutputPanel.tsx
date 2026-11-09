@@ -32,6 +32,8 @@ import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import type { Roll } from '../../../types/models';
 import { formatFactory } from '../../../lib/factory-time';
 import { unprintedRolls } from './finalLabel';
+import { labelTextFixLockReason } from './labelTextFix';
+import { colors } from '../../../theme/tokens';
 
 /** "SS:dd" — panelde tarih GEREKMEZ: kapsam zaten tek iş emri. */
 function hhmm(v: string | Date | null | undefined): string {
@@ -43,6 +45,7 @@ export default function WorkOrderOutputPanel({
   onPrint,
   onUndo,
   onPrintUnprinted,
+  onFixLabel,
 }: {
   workOrderId: string | null;
   /** Etiketi yeniden bas — parent'ın yazıcı akışına verir. */
@@ -51,6 +54,8 @@ export default function WorkOrderOutputPanel({
   onUndo: (roll: Roll) => void;
   /** S5 basım zamanı "iş bitince": verilirse etiketi basılmamış topları toplu basar. */
   onPrintUnprinted?: (rolls: Roll[]) => void;
+  /** Etiket ad/renk/parti düzeltmesi (sevk edilene kadar); verilmezse düğme çizilmez. */
+  onFixLabel?: (roll: Roll) => void;
 }) {
   const q = useQuery({
     queryKey: ['tambur', 'wo-output', workOrderId],
@@ -194,6 +199,26 @@ export default function WorkOrderOutputPanel({
                   style={s.rowBtn}
                   accessibilityLabel="Etiketi bas"
                 />
+                {onFixLabel ? (
+                  labelTextFixLockReason(r.status) ? (
+                    // Sevkli/kapanmış top: düğme yerine kilit — neden okunur, dokunuş yok.
+                    <View style={s.lockBox} accessibilityLabel={labelTextFixLockReason(r.status) ?? undefined} testID={`wo-output-etiket-kilit-${r.id}`}>
+                      <Icon source="lock-outline" size={22} color={colors.textMuted} />
+                    </View>
+                  ) : (
+                    <IconButton
+                      icon="tag-edit-outline"
+                      size={26}
+                      iconColor={colors.textOnDark}
+                      containerColor={colors.successDark}
+                      mode="contained"
+                      onPress={() => onFixLabel(r)}
+                      style={s.fixBtn}
+                      accessibilityLabel="Etiket bilgisini düzelt"
+                      testID={`wo-output-etiket-duzelt-${r.id}`}
+                    />
+                  )
+                ) : null}
                 <IconButton
                   icon="undo-variant"
                   size={26}
@@ -291,6 +316,8 @@ const s = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   rowBtn: { margin: 0, marginVertical: 4, width: 48, height: 48, borderRadius: 10 },
+  fixBtn: { margin: 0, width: 56, height: 56, borderRadius: 10 },
+  lockBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   empty: { paddingVertical: 18, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#94a3b8' },
 });

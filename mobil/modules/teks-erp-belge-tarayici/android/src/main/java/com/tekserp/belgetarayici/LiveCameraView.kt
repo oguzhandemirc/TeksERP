@@ -74,6 +74,8 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
 
   private var active = true
   private var released = false
+  /** JS `torch` isteği; kamera her bağlandığında yeniden uygulanır (arka plandan dönüşte fener geri yanar). */
+  private var torch = false
   /** Her bağlamada artar: eski bağlamanın geç gelen sonucu yayımlanmaz. */
   @Volatile private var generation = 0
   private val reading = AtomicBoolean(false)
@@ -116,6 +118,22 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     if (active == value) return
     active = value
     if (value && isAttachedToWindow) start() else if (!value) stop()
+  }
+
+  /** JS `torch` özelliği: flaşı olmayan cihazda sessizce etkisiz. */
+  fun setTorch(value: Boolean) {
+    torch = value
+    applyTorch(value)
+  }
+
+  /** Fener isteğini bağlı kameraya iletir; flaş yoksa / kamera kapalıysa / CameraX reddederse hiçbir şey olmaz. */
+  private fun applyTorch(on: Boolean) {
+    val c = camera ?: return
+    try {
+      if (c.cameraInfo.hasFlashUnit()) c.cameraControl.enableTorch(on)
+    } catch (_: Exception) {
+      // Fener isteğe bağlı; kamera kapanırken gelen istek okumayı düşürmesin.
+    }
   }
 
   /** Görünüm yok edilirken (OnViewDestroys): kamera, okuyucu ve iş parçacığı kapanır. */
@@ -190,6 +208,7 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       camera = p.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, *useCases.toTypedArray())
       bound = useCases
       imageCapture = capture
+      if (torch) applyTorch(true)
     } catch (e: Exception) {
       analysis.clearAnalyzer()
       emitError("CAMERA_UNAVAILABLE", "Kamera açılamadı (${e.javaClass.simpleName})")
@@ -197,6 +216,8 @@ class LiveCameraView(context: Context, appContext: AppContext) : ExpoView(contex
   }
 
   private fun stop() {
+    // Kamera bırakılmadan önce fener açıkça söndürülür (unbind'e güvenilmez; istek `torch`ta kalır, dönüşte yeniden yanar).
+    applyTorch(false)
     generation++
     val uses = bound
     bound = emptyList()

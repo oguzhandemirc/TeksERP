@@ -171,6 +171,10 @@ class TeksErpBelgeTarayiciModule : Module() {
     View(LiveCameraView::class) {
       Events("onText", "onStability", "onError")
 
+      Prop("torch") { view: LiveCameraView, value: Boolean ->
+        view.setTorch(value)
+      }
+
       AsyncFunction("captureStill") { view: LiveCameraView, promise: Promise ->
         view.captureStill(promise)
       }.runOnQueue(Queues.MAIN)
@@ -315,6 +319,6 @@ class TeksErpBelgeTarayiciModule : Module() {
     /** Sunucu okuma servisinin küçültme sınırıyla aynı (`okuma/app` uzun kenar 2600). */
     private const val OCR_LONG_EDGE = 2600
     /** Canlı kamera sözleşme sürümü (JS `isLiveCameraAvailable` en az bunu ister). */
-    private const val LIVE_CAMERA_VERSION = 1
+    private const val LIVE_CAMERA_VERSION = 2
   }
 }

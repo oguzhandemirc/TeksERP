@@ -241,6 +241,15 @@ const relabelSchema = z.object({
   reason:       z.string().trim().min(3, "İşlem nedeni en az 3 karakter olmalı").max(500).optional(),
 });
 
+// Etiket ad/renk/parti no düzeltmesi (sevk edilene kadar): `undefined` dokunma · null/"" temizle · metin yaz.
+// Sınırlar kolonla aynı (VARCHAR 80/80/64); biçim serviste normalize edilir. Sebep ZORUNLU.
+export const labelTextsFixSchema = z.object({
+  labelItemName:  z.string().max(80, "Etiket kumaş adı en çok 80 karakter").nullish(),
+  labelColorName: z.string().max(80, "Etiket rengi en çok 80 karakter").nullish(),
+  labelBatchNo:   z.string().max(64, "Etiket parti no en çok 64 karakter").nullish(),
+  reason:         z.string().trim().min(3, "Düzeltme sebebi (en az 3 karakter) zorunludur").max(500),
+});
+
 // Yeni model: KK2 ölçüm yapmaz; totalMeters opsiyonel — verilmezse roll'un
 // mevcut currentQty'si (fason kabulden gelen irsaliye değeri) kullanılır.
 // Hata aralık değil nokta (endMeter kaldırıldı). Hatalar genelde "Hata Ekle"
@@ -302,6 +311,7 @@ export class InventoryController {
     this.createOpenFabric = this.createOpenFabric.bind(this);
     this.kursunFinish = this.kursunFinish.bind(this);
     this.relabel = this.relabel.bind(this);
+    this.fixLabelTexts = this.fixLabelTexts.bind(this);
     this.prepareForSale = this.prepareForSale.bind(this);
     this.manualAttributes = this.manualAttributes.bind(this);
     this.rescuePreview = this.rescuePreview.bind(this);
@@ -810,6 +820,17 @@ export class InventoryController {
         req.user?.userId,
         { permissions: req.user?.permissions ?? [] },
       );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** PATCH /api/rolls/:id/label-texts — etiket ad/renk/parti no düzeltmesi (sevkli/ölü top 409). */
+  async fixLabelTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = labelTextsFixSchema.parse(req.body);
+      const result = await this.service.fixLabelTexts(req.params.id as string, body, req.user?.userId);
       res.status(200).json(result);
     } catch (error) {
       next(error);

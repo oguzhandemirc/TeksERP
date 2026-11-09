@@ -327,3 +327,21 @@ describe('deviceSettingsStore — belge çekimi (kendi kamera | ML Kit)', () => 
     expect(useDeviceSettingsStore.getState().docScanEngine).toBe('mlkit');
   });
 });
+
+describe('deviceSettingsStore — belge kamerası flaşı (docTorchAuto)', () => {
+  it('⭐ kayıt yokken AÇIK', async () => {
+    fakeDisk();
+    useDeviceSettingsStore.setState({ docTorchAuto: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().docTorchAuto).toBe(true);
+  });
+
+  it('kapatma diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
+    const disk = fakeDisk();
+    await useDeviceSettingsStore.getState().setDocTorchAuto(false);
+    expect(disk['device_doc_torch_auto']).toBe('false');
+    useDeviceSettingsStore.setState({ docTorchAuto: true });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().docTorchAuto).toBe(false);
+  });
+});

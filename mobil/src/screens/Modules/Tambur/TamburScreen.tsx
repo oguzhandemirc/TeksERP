@@ -45,6 +45,7 @@ import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import { labelSummaryText } from './labelTexts';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
 import { useOwnerDefaultTarget } from './ownerTarget';
@@ -785,6 +786,9 @@ export default function TamburScreen() {
   // kendi içinde ayrı bir `undoTarget` tutuyor — o modal ayrı bir bileşen ve
   // state'i paylaşmıyorlar; ikisi aynı onay diyaloğunu kullanır.
   const [panelUndoTarget, setPanelUndoTarget] = useState<Roll | null>(null);
+  // "Bu işten çıkanlar" satırından etiket ad/renk/parti düzeltmesi → kayıttan sonra "yeniden bas?" sorusu.
+  const [labelFixRoll, setLabelFixRoll] = useState<Roll | null>(null);
+  const [labelFixReprint, setLabelFixReprint] = useState<Roll | null>(null);
   // AÇIK KUMAŞ akışının kapanış kararı (2026-08-09). Recut'ınkinden AYRI state:
   // iki akış aynı anda ekranda olabiliyor ve tek bayrağı paylaşsalardı biri
   // kapanınca diğerinin modalı da kapanırdı.
@@ -3360,6 +3364,7 @@ export default function TamburScreen() {
             startPrint(r, printKindForRoll(r));
           }}
           onUndo={(r: Roll) => setPanelUndoTarget(r)}
+          onFixLabel={(r: Roll) => setLabelFixRoll(r)}
           // S5: basım zamanı "iş bitince" ise basılmamış topları mevcut kuyruğa verir.
           onPrintUnprinted={
             shouldAutoPrintAfterCut({ printTiming })
@@ -4703,6 +4708,34 @@ export default function TamburScreen() {
         onDismiss={() => setLabelInfoOpen(false)}
         final={recutRollMeta ? recutFinal : openFinal}
         defaults={recutRollMeta ? recutLabelDefaults : openLabelDefaults}
+      />
+      {labelFixRoll ? (
+        <TamburLabelInfoModal
+          mode="fix"
+          visible
+          roll={labelFixRoll}
+          onDismiss={() => setLabelFixRoll(null)}
+          defaults={{ itemName: labelFixRoll.item?.name ?? null, colorName: labelFixRoll.color?.name ?? null, batchNo: null }}
+          onSaved={(res) => {
+            void qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
+            void qc.invalidateQueries({ queryKey: ['tambur', 'recent-output-rolls'] });
+            setLabelFixReprint({ ...labelFixRoll, labelItemName: res.labelItemName, labelColorName: res.labelColorName, labelBatchNo: res.labelBatchNo });
+          }}
+        />
+      ) : null}
+      <ConfirmDialog
+        kind="simple"
+        visible={!!labelFixReprint}
+        title="Etiketi yeniden bas"
+        description={`Etiket bilgisi düzeltildi${labelFixReprint?.barcode ? ` (${labelFixReprint.barcode})` : ''}. Topun üstündeki eski etiketi değiştirmek için yeniden basılsın mı?`}
+        confirmLabel="Yeniden bas"
+        cancelLabel="Sonra"
+        onDismiss={() => setLabelFixReprint(null)}
+        onConfirm={() => {
+          const r = labelFixReprint;
+          setLabelFixReprint(null);
+          if (r) reprintLabel(r);
+        }}
       />
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       {recutAmbiguous.modal}

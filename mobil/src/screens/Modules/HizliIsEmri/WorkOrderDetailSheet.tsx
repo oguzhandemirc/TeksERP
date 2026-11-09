@@ -9,6 +9,7 @@ import AppModal from '../../../components/AppModal';
 import TruncatedText from '../../../components/TruncatedText';
 import WorkOrderDocumentsSheet from './WorkOrderDocumentsSheet';
 import WorkOrderFixSheet, { type FixKind } from './WorkOrderFixSheet';
+import TargetValueFixSheet, { type TargetValueFixInput } from './TargetValueFixSheet';
 import { kursunGramajKey } from './GramajFixSheet';
 import TamburOrderLinkSheet from '../Tambur/TamburOrderLinkSheet';
 import { tabletCancelAllowed } from './workOrderFix';
@@ -69,11 +70,11 @@ function EditableValue({ text, label, onPress, testID, fill }: { text: string; l
   );
 }
 
-const FIX_TESTID: Record<FixKind3, string> = { color: 'ie-duzelt-renk', width: 'ie-duzelt-en', gramaj: 'ie-duzelt-gramaj', fold: 'ie-duzelt-kat' };
-const FIX_LABEL: Record<FixKind3, string> = { color: 'Rengi değiştir', width: 'Eni değiştir', gramaj: 'Gramajı değiştir', fold: 'Kat tipini değiştir' };
+const FIX_TESTID: Record<FixKind3, string> = { color: 'ie-duzelt-renk', width: 'ie-duzelt-en', gramaj: 'ie-duzelt-gramaj', fold: 'ie-duzelt-kat', target: 'ie-duzelt-hedef' };
+const FIX_LABEL: Record<FixKind3, string> = { color: 'Rengi değiştir', width: 'Eni değiştir', gramaj: 'Gramajı değiştir', fold: 'Kat tipini değiştir', target: 'Hedef değeri değiştir' };
 
 /** Etiket solda küçük gri, değer sağda — sıkı satırlı kart; başlık sağında isteğe bağlı eylem, satır sonunda kalem. */
-function InfoCard({ title, rows, testID, flex, headerRight, fixByLabel, onFix }: { title?: string; rows: readonly DetailRow[]; testID: string; flex?: number; headerRight?: React.ReactNode; fixByLabel?: Partial<Record<string, FixKind3>>; onFix?: (k: FixKind3) => void }) {
+function InfoCard({ title, rows, testID, flex, headerRight, fixByLabel, targetByLabel, onFix }: { title?: string; rows: readonly DetailRow[]; testID: string; flex?: number; headerRight?: React.ReactNode; fixByLabel?: Partial<Record<string, FixKind3>>; targetByLabel?: Partial<Record<string, string>>; onFix?: (k: FixKind3, propertyId?: string) => void }) {
   return (
     <View style={[styles.infoCard, flex ? { flex } : null]} testID={testID}>
       {title || headerRight ? (
@@ -89,7 +90,7 @@ function InfoCard({ title, rows, testID, flex, headerRight, fixByLabel, onFix }:
             <Text style={styles.infoKey}>{k}</Text>
             {fix && onFix ? (
               <View style={styles.infoValBox}>
-                <EditableValue text={v} label={FIX_LABEL[fix]} onPress={() => onFix(fix)} testID={FIX_TESTID[fix]} />
+                <EditableValue text={v} label={FIX_LABEL[fix]} onPress={() => onFix(fix, targetByLabel?.[k])} testID={FIX_TESTID[fix]} />
               </View>
             ) : (
               <Text style={styles.infoVal} numberOfLines={2}>
@@ -116,6 +117,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('detail');
   const [fix, setFix] = useState<FixKind | null>(null);
+  const [targetFix, setTargetFix] = useState<string | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const { has } = usePermissions();
   const { width: screenWidth } = useWindowDimensions();
@@ -161,7 +163,11 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   // Gramajı Değiştir yalnız kurşun hedefi olan / kurşunu uygulanmış iş emrinde; eski sunucu (404) → düğme yok.
   const gramajQ = useQuery({ queryKey: kursunGramajKey(workOrderId ?? ''), queryFn: () => workOrderGramajService.kursunGramaj(workOrderId!), enabled: canFix && !!workOrderId, retry: false });
   const canGramaj = canFix && !!gramajQ.data?.propertyId && (!!gramajQ.data.target || gramajQ.data.appliedRollCount > 0);
-  const openFix = (k: FixKind3) => setFix(k);
+  // 'target' kendi kartını açar (özellik başına); ötekiler Düzelt kart ailesi.
+  const openFix = (k: FixKind3, propertyId?: string) => {
+    if (k === 'target') setTargetFix(propertyId ?? null);
+    else setFix(k);
+  };
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });
     void qc.invalidateQueries({ queryKey: ['work-order-rolls', workOrderId] });
@@ -212,11 +218,20 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         fmtDate,
       }),
       incoming: incomingRows(wo.incoming),
-      target: targetView({ wo, fallbackItemName: rolls[0]?.item?.name, propertyNames: targetPropertyNames, fmtDate, gramajPropertyId, fixAllowed: { color: canFix, width: canFix, gramaj: canGramaj, fold: canFix } }),
+      target: targetView({ wo, fallbackItemName: rolls[0]?.item?.name, propertyNames: targetPropertyNames, fmtDate, gramajPropertyId, fixAllowed: { color: canFix, width: canFix, gramaj: canGramaj, fold: canFix, target: canFix } }),
       chips: routeChips(wo.steps),
       notes: routeNotes(wo.steps),
     };
   }, [wo, rolls, rollMeters, targetPropertyNames, gramajPropertyId, canFix, canGramaj]);
+
+  const targetInput = useMemo<TargetValueFixInput | null>(() => {
+    const tv = targetFix ? (wo?.targetValues ?? []).find((t) => t.propertyId === targetFix) : undefined;
+    if (!wo || !tv?.propertyId) return null;
+    return {
+      woId: wo.id, workOrderNumber: wo.workOrderNumber, propertyId: tv.propertyId, propertyName: tv.property?.name ?? 'Hedef',
+      valueId: tv.valueId ?? null, valueName: tv.value?.name ?? null, options: tv.property?.values ?? [],
+    };
+  }, [wo, targetFix]);
 
   const place = wo
     ? actionPlacement({ canFix, canCancel, isFason: isCustomerGoodsWo(wo.type), hasOrderLinks: (wo.orderLinks ?? []).length > 0, hasIncomingCard: (view?.incoming.length ?? 0) > 0 })
@@ -340,7 +355,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
           {view ? (
             <View style={cols === 2 ? styles.rowCols : styles.colStack} testID={cols === 2 ? 'ie-detay-yatay' : 'ie-detay-dikey'}>
               {view.incoming.length > 0 ? <InfoCard title="Gelen (belgeden)" rows={view.incoming} testID="ie-detay-gelen" flex={cols === 2 ? 1 : undefined} headerRight={docsBtn} /> : null}
-              <InfoCard title="Hedef" rows={view.target.rows} fixByLabel={view.target.fixByLabel} onFix={openFix} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
+              <InfoCard title="Hedef" rows={view.target.rows} fixByLabel={view.target.fixByLabel} targetByLabel={view.target.targetByLabel} onFix={openFix} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
             </View>
           ) : null}
 
@@ -377,7 +392,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                           return (
                             <View key={`${t.label}-${ti}`} style={styles.stepTarget} testID={`ie-detay-adim-hedef-${c.seq}`}>
                               {t.fix ? (
-                                <EditableValue text={text} label={FIX_LABEL[t.fix]} onPress={() => openFix(t.fix as FixKind3)} testID={FIX_TESTID[t.fix]} fill />
+                                <EditableValue text={text} label={FIX_LABEL[t.fix]} onPress={() => openFix(t.fix as FixKind3, t.propertyId)} testID={FIX_TESTID[t.fix]} fill />
                               ) : (
                                 <TruncatedText style={styles.stepTargetText}>{text}</TruncatedText>
                               )}
@@ -465,6 +480,16 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         refresh();
       }}
     />
+    {targetInput ? (
+      <TargetValueFixSheet
+        target={targetInput}
+        onDismiss={() => setTargetFix(null)}
+        onDone={() => {
+          setTargetFix(null);
+          refresh();
+        }}
+      />
+    ) : null}
     {wo ? (
       <TamburOrderLinkSheet visible={linkOpen} onDismiss={() => setLinkOpen(false)} workOrderId={wo.id} onLinked={refresh} />
     ) : null}

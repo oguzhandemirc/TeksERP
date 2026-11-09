@@ -4,11 +4,12 @@
 // Servis dosyası beş yazma yolunu taşır (boyut tavanı); "duruş hangi vardiyaya/koşuma
 // düşer, sebep katalogda var mı, vardiya yazılabilir mi" soruları burada tek yerde.
 // =============================================================================
-import { MachineDataSource, MachineStopEndSource, Prisma, ReasonPresetKind, type MachineStopLossClass } from "@prisma/client";
+import { MachineDataSource, MachineStopEndSource, Prisma, ReasonPresetKind, type MachineStopLossClass, type StationKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ENTRY_STAMP_MAX_FUTURE_MS } from "./duplicate-guard.helper";
 import { assertReplayPayloadMatches, type ReplayAlani } from "./idempotent-replay.helper";
 import { resolveRunStamp, type StampResolution } from "./machine-run-open.helper";
+import { assertStopReasonInScope } from "./station-kind-scope.helper";
 import { readTezgahEscalationGraceMinutes } from "../system-setting.service";
 
 type Tx = Prisma.TransactionClient;
@@ -50,7 +51,8 @@ export const MACHINE_STOP_SELECT = {
   createdAt: true,
   updatedAt: true,
   // Panel listesi makine · vardiya · sınıflandıranı ADIYLA ister (kim/ne zaman); tablet aynı DTO'yu okur (ek alan, kırmaz).
-  machine: { select: { code: true, name: true } },
+  // `station.kind`: panel sınıflama listesini istasyon türü kapsamıyla ister (2026-11-09).
+  machine: { select: { code: true, name: true, station: { select: { kind: true } } } },
   shiftInstance: { select: { id: true, startsAt: true, endsAt: true, isCancelled: true, shiftDefinition: { select: { code: true, name: true } } } },
   classifiedBy: { select: { fullName: true } },
   // Duruşu açan / kapatan (yalnız insan yolu yazar; NULL = bilinmiyor). Kolonlar gövdeden yazılamaz (route `.strict()`).
@@ -121,17 +123,22 @@ export function resolveStopStamp(
 
 export interface StopPreset { code: string; lossClass: MachineStopLossClass; targetMinutes: number | null }
 
-/** Katalogdaki AKTİF MACHINE_STOP satırı; kayıp sınıfı zorunlu (CHECK). Yoksa 400. */
-export async function resolveStopPreset(tx: Tx, code: string): Promise<StopPreset> {
+/**
+ * Katalogdaki AKTİF MACHINE_STOP satırı; kayıp sınıfı zorunlu (CHECK). Yoksa 400.
+ * `stationKind` verilirse (insan yolu) sebep o istasyon türünün kapsamında olmalı → yoksa 400 `STOP_REASON_OUT_OF_SCOPE`;
+ * makine sinyali/eşleme vermez (eşleme fabrikanın kararıdır).
+ */
+export async function resolveStopPreset(tx: Tx, code: string, stationKind?: StationKind): Promise<StopPreset> {
   const trimmed = code.trim();
   const row = await tx.reasonPreset.findFirst({
     where: { kind: ReasonPresetKind.MACHINE_STOP, code: trimmed, isActive: true },
-    select: { code: true, stopLossClass: true, targetMinutes: true },
+    select: { code: true, stopLossClass: true, targetMinutes: true, stationKinds: true },
   });
   if (!row) throw AppError.badRequest(`Geçersiz duruş sebebi: ${trimmed}`, { code: "REASON_CODE_INVALID" });
   if (!row.stopLossClass) {
     throw AppError.badRequest(`Duruş sebebinin kayıp sınıfı yok: ${trimmed}`, { code: "STOP_LOSS_CLASS_MISSING" });
   }
+  if (stationKind) assertStopReasonInScope(row, stationKind);
   return { code: row.code, lossClass: row.stopLossClass, targetMinutes: row.targetMinutes };
 }
 

@@ -26,6 +26,8 @@ export interface LiveCameraHandle {
 
 export interface LiveCameraViewProps {
   style?: StyleProp<ViewStyle>;
+  /** Fener isteği; flaşı olmayan cihazda native sessizce yok sayar. */
+  torch?: boolean;
   onText?: (frame: LiveTextFrame) => void;
   onStability?: (s: LiveStability) => void;
   onError?: (e: LiveCameraError) => void;
@@ -33,6 +35,7 @@ export interface LiveCameraViewProps {
 
 interface NativeProps {
   style?: StyleProp<ViewStyle>;
+  torch?: boolean;
   onText?: (e: NativeSyntheticEvent<unknown>) => void;
   onStability?: (e: NativeSyntheticEvent<unknown>) => void;
   onError?: (e: NativeSyntheticEvent<unknown>) => void;
@@ -82,6 +85,7 @@ const LiveCameraView = forwardRef<LiveCameraHandle, LiveCameraViewProps>(functio
     <Native
       ref={nativeRef}
       style={props.style}
+      torch={props.torch === true}
       onText={(e) => {
         const f = parseLiveText(e.nativeEvent);
         if (f) onText?.(f);

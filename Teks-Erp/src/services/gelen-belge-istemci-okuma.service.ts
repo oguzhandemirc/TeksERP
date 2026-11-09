@@ -8,6 +8,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { uyari } from "../lib/logger";
 import { ClientOcrSchema, clientOcrToResult } from "../lib/gelen-belge/istemci-ocr";
+import { uprightClientOcr } from "../lib/gelen-belge/sayfa-yonu";
 import type { OcrResult } from "../lib/gelen-belge/motor";
 import { processClaimedScan, type CompleteFn } from "./gelen-belge-okuma.service";
 import { serverCompleter } from "./gelen-belge-sunucu-tamamlama.service";
@@ -27,7 +28,8 @@ export function parseClientOcr(raw: unknown): OcrResult {
     const where = issue?.path.length ? ` (${issue.path.join(".")})` : "";
     throw AppError.badRequest(`Cihaz okuması geçersiz${where}; fotoğraf sunucuda okunacak biçimde yeniden gönderilmeli.`, { code: "CLIENT_OCR_INVALID" });
   }
-  return clientOcrToResult(parsed.data);
+  // Yan/ters dönük sayfa çeyrek adımla dikleştirilir (`rotation` sözleşmesi saklanan fotoğraf kutularını geri çevirir).
+  return clientOcrToResult(uprightClientOcr(parsed.data, "QUARTER").ocr);
 }
 
 /** Yeniden kullanılan PENDING kayıt (ağ kopması tekrarı): PENDING → READING atomik claim; kaybeden cihaz okumasını bırakır. */

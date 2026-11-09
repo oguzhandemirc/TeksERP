@@ -12,6 +12,8 @@ import { isAmbiguousFailure, useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorMessage } from "@/services/apiClient";
 import { localInputToIso, nowLocalInput } from "@/pages/Operations/MachineStops/types";
 import { useStopReasonPresets } from "@/pages/Operations/MachineStops/useStopReasonPresets";
+import { useScopedStopReasons } from "@/pages/Operations/MachineStops/useScopedStopReasons";
+import { StationKind } from "@/types/enums";
 import { LOOM_FLOOR_QUERY_KEY } from "../useLoomFloorLive";
 import { ResultView, usePickedRows } from "../jobs/BulkParts";
 import type { LiveLoom } from "../types";
@@ -50,6 +52,9 @@ interface Props {
   online: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+/** Salon yalnız dokuma holünün tezgahlarını kabul eder (backend `LOOM_MACHINE_WHERE`) — sebep listesi o türün kapsamı. */
+const LOOM_STATION_KINDS = [StationKind.WEAVING];
 
 const isoOf = (t: TimeValue): string | null => (t.now ? null : localInputToIso(t.local));
 
@@ -148,7 +153,8 @@ function useStopBulkFlow({ open, mode, looms, online }: Omit<Props, "onOpenChang
 type Flow = ReturnType<typeof useStopBulkFlow>;
 
 function FormFields({ mode, flow }: { mode: StopDialogMode; flow: Flow }) {
-  const { active } = useStopReasonPresets();
+  const { active: all } = useStopReasonPresets();
+  const { presets: active } = useScopedStopReasons(LOOM_STATION_KINDS, all);
   const { form } = flow;
   if (mode === "revoke") {
     return <Textarea aria-label="Geri alma gerekçesi" placeholder="Gerekçe (zorunlu, en az 3 karakter)" maxLength={300} value={form.revokeReason} onChange={(e) => form.setRevokeReason(e.target.value)} />;

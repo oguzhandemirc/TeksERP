@@ -1,35 +1,61 @@
 // Etiket bilgisi (Gülkesim 2026-11-09): tamburcu müşteriyi arayıp etikete basılacak kumaş adı / renk /
 // parti no'yu öğrenir; değer SONRAKİ toplara gider (topa kesimde yazılır, İE'de saklanmaz). Kumaşın gerçek adı değişmez.
 // İE geneli düzeltmenin ad/renk anahtarları burada gösterilmez; kalan anahtarlar (en vb.) "Diğer etiket alanları"nda.
+// `mode="fix"`: kesilmiş TEK topun değerini sevk edilene kadar düzeltir (sebep zorunlu, `PATCH /rolls/:id/label-texts`).
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Checkbox, Icon, IconButton, Text, TouchableRipple } from 'react-native-paper';
+import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import ModuleSheet from '../../../components/ModuleSheet';
 import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
 import { tamburService } from '../../../services/tambur.service';
+import { rollService, type RollLabelTextsFixResult } from '../../../services/roll.service';
 import { showScreenError } from '../../../lib/screenToast';
 import { colors, spacing } from '../../../theme/tokens';
 import { overridePatch } from './finalLabel';
 import { LABEL_BATCH_MAX } from './labelBatch';
 import { LABEL_TEXT_MAX, NAME_OVERRIDE_KEYS, emptyHint } from './labelTexts';
 import { useTamburLabelSuggestions, type TamburFinalLabelState } from './useTamburFinalLabel';
+import { labelTextFixBody, labelTextFixReasonError } from './labelTextFix';
+import { LabelFieldRow, OverrideRow, type FieldDraft } from './TamburLabelInfoRows';
 
-type OverrideDraft = Record<string, { text: string; blank: boolean }>;
+type OverrideDraft = Record<string, FieldDraft>;
 type FieldKey = 'item' | 'color' | 'batch';
 
-export interface TamburLabelInfoModalProps {
+interface CommonProps {
   visible: boolean;
   onDismiss: () => void;
-  /** İş emri (Diğer etiket alanları için); yoksa o bölüm çizilmez. */
-  workOrderId: string | null;
-  /** Etkin kesim akışının etiket durumu (açık kumaş ya da Top Kesme). */
-  final: TamburFinalLabelState;
   /** Boş kutuda basılacak kaynak değerler — silik ipucu. */
   defaults?: { itemName?: string | null; colorName?: string | null; batchNo?: string | null };
 }
+
+/** Düzeltilecek top — liste satırındaki değerler (sunucu yine taze okur). */
+export interface LabelFixRoll {
+  id: string;
+  barcode: string | null;
+  labelItemName?: string | null;
+  labelColorName?: string | null;
+  labelBatchNo?: string | null;
+}
+
+export type TamburLabelInfoModalProps = CommonProps &
+  (
+    | {
+        mode?: 'next';
+        /** İş emri (Diğer etiket alanları için); yoksa o bölüm çizilmez. */
+        workOrderId: string | null;
+        /** Etkin kesim akışının etiket durumu (açık kumaş ya da Top Kesme). */
+        final: TamburFinalLabelState;
+      }
+    | {
+        mode: 'fix';
+        roll: LabelFixRoll;
+        /** Kayıt başarılı (değişiklik olduysa) — parent listeyi tazeler ve "yeniden bas" sorar. */
+        onSaved: (result: RollLabelTextsFixResult) => void;
+      }
+  );
 
 const FIELD_META: Record<FieldKey, { label: string; picker: string; generic: string; max: number }> = {
   item: { label: 'Kumaş adı', picker: 'Etikete basılacak kumaş adı', generic: 'kumaşın kendi adı', max: LABEL_TEXT_MAX },
@@ -37,11 +63,26 @@ const FIELD_META: Record<FieldKey, { label: string; picker: string; generic: str
   batch: { label: 'Parti no', picker: 'Etikete basılacak parti no', generic: 'bizim parti no', max: LABEL_BATCH_MAX },
 };
 
-export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, final, defaults }: TamburLabelInfoModalProps) {
+export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
+  const { visible, onDismiss, defaults } = props;
+  const fix = props.mode === 'fix' ? props : null;
+  const final = props.mode === 'fix' ? null : props.final;
+  const workOrderId = props.mode === 'fix' ? null : props.workOrderId;
   const qc = useQueryClient();
-  const batchEnabled = final.batch.enabled;
-  const sugg = useTamburLabelSuggestions(final.suggestionParams, visible);
+  // Düzeltmede parti alanı: müşteri ayarı açıksa ya da topta değer varsa (temizlenebilsin).
+  const fixSettings = useQuery({
+    queryKey: ['tambur', 'label-settings', fix?.roll.id ?? null, null],
+    queryFn: () => tamburService.labelSettings({ rollId: fix?.roll.id ?? null }),
+    enabled: visible && !!fix,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const batchEnabled = fix
+    ? fixSettings.data?.labelBatchEnabled === true || !!fix.roll.labelBatchNo
+    : final!.batch.enabled;
+  const sugg = useTamburLabelSuggestions(fix ? { rollId: fix.roll.id } : final!.suggestionParams, visible);
   const [draft, setDraft] = useState<Record<FieldKey, string>>({ item: '', color: '', batch: '' });
+  const [reason, setReason] = useState('');
   const [picking, setPicking] = useState<FieldKey | null>(null);
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeText, setFreeText] = useState('');
@@ -51,7 +92,12 @@ export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, 
   // Pencere her açılışta güncel yapışkan değerle başlar; öneriler tazelenir (yeni kesimin değeri listeye girsin).
   useEffect(() => {
     if (!visible) return;
-    setDraft({ item: final.texts.itemName, color: final.texts.colorName, batch: final.batch.value });
+    if (fix) {
+      setDraft({ item: fix.roll.labelItemName ?? '', color: fix.roll.labelColorName ?? '', batch: fix.roll.labelBatchNo ?? '' });
+      setReason('');
+    } else {
+      setDraft({ item: final!.texts.itemName, color: final!.texts.colorName, batch: final!.batch.value });
+    }
     setOthersOpen(false);
     void sugg.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,9 +126,38 @@ export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, 
     onSuccess: (res) => qc.setQueryData(['labels', 'wo-overrides', workOrderId], res),
   });
 
+  const fixMutation = useMutation({
+    mutationFn: (body: Parameters<typeof rollService.fixLabelTexts>[1]) => rollService.fixLabelTexts(fix!.roll.id, body),
+  });
+  const reasonError = fix ? labelTextFixReasonError(reason) : null;
+
+  const submitFix = async () => {
+    if (!fix) return;
+    const body = labelTextFixBody(
+      { itemName: fix.roll.labelItemName, colorName: fix.roll.labelColorName, batchNo: fix.roll.labelBatchNo },
+      { itemName: draft.item, colorName: draft.color, batchNo: draft.batch },
+      batchEnabled,
+    );
+    if (Object.keys(body).length === 0) {
+      Toast.show({ type: 'info', text1: 'Değişiklik yok' });
+      onDismiss();
+      return;
+    }
+    if (reasonError) return;
+    try {
+      const res = await fixMutation.mutateAsync({ ...body, reason: reason.trim() });
+      onDismiss();
+      if (res.data?.changed) fix.onSaved(res.data);
+      else Toast.show({ type: 'info', text1: 'Etiket bilgisi zaten aynı' });
+    } catch (err) {
+      showScreenError(err as Error, 'Etiket bilgisi düzeltilemedi');
+    }
+  };
+
   const submit = async () => {
-    final.texts.set({ itemName: draft.item, colorName: draft.color });
-    if (batchEnabled) final.batch.setValue(draft.batch);
+    if (fix) return submitFix();
+    final!.texts.set({ itemName: draft.item, colorName: draft.color });
+    if (batchEnabled) final!.batch.setValue(draft.batch);
     if (ov.data && workOrderId) {
       const patch = overridePatch(ov.data.overrides, ovDraft);
       if (Object.keys(patch).length > 0) {
@@ -116,12 +191,24 @@ export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, 
       visible={visible}
       onDismiss={onDismiss}
       size="sm"
-      title="Etikete basılacak (sonraki toplar)"
-      subtitle="Değer sonraki kesimlerde aynen kalır. Boş kutu: kumaşın kendi adı/rengi basılır."
+      title={fix ? `Etiket bilgisini düzelt${fix.roll.barcode ? ` — ${fix.roll.barcode}` : ''}` : 'Etikete basılacak (sonraki toplar)'}
+      subtitle={
+        fix
+          ? 'Yalnız bu top. Boş kutu: kumaşın kendi adı/rengi basılır. Kaydedince etiketi yeniden basabilirsin.'
+          : 'Değer sonraki kesimlerde aynen kalır. Boş kutu: kumaşın kendi adı/rengi basılır.'
+      }
       footer={
         <View style={s.actions}>
-          <Button mode="text" onPress={onDismiss} contentStyle={s.btn}>Vazgeç</Button>
-          <Button mode="contained" onPress={() => void submit()} loading={saveOverrides.isPending} disabled={saveOverrides.isPending} contentStyle={s.btn} testID="etiket-bilgisi-kaydet">
+          <Button mode="contained" buttonColor={colors.textSecondary} textColor={colors.textOnDark} onPress={onDismiss} contentStyle={s.btn}>Vazgeç</Button>
+          <Button
+            mode="contained"
+            textColor={colors.textOnDark}
+            onPress={() => void submit()}
+            loading={saveOverrides.isPending || fixMutation.isPending}
+            disabled={saveOverrides.isPending || fixMutation.isPending || (!!fix && !!reasonError)}
+            contentStyle={s.btn}
+            testID="etiket-bilgisi-kaydet"
+          >
             Kaydet
           </Button>
         </View>
@@ -161,7 +248,7 @@ export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, 
                     testID="etiket-serbest-input"
                   />
                   <View style={s.actions}>
-                    <Button mode="outlined" onPress={() => setFreeOpen(false)} contentStyle={s.btn}>Vazgeç</Button>
+                    <Button mode="contained" buttonColor={colors.textSecondary} textColor={colors.textOnDark} onPress={() => setFreeOpen(false)} contentStyle={s.btn}>Vazgeç</Button>
                     <Button mode="contained" onPress={() => choose(picking, freeText)} contentStyle={s.btn} testID="etiket-serbest-kullan">Kullan</Button>
                   </View>
                 </View>
@@ -184,6 +271,21 @@ export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, 
           testID={`etiket-${key}`}
         />
       ))}
+
+      {fix ? (
+        <View style={s.reasonBox}>
+          <ModalTextInput
+            mode="outlined"
+            label="Düzeltme sebebi (zorunlu)"
+            value={reason}
+            onChangeText={setReason}
+            maxLength={500}
+            placeholder="Örn. müşteri adı yanlış söylendi"
+            testID="etiket-duzelt-sebep"
+          />
+          {reason.length > 0 && reasonError ? <Text style={s.err}>{reasonError}</Text> : null}
+        </View>
+      ) : null}
 
       {workOrderId ? (
         <TouchableRipple onPress={() => setOthersOpen((o) => !o)} style={s.othersToggle} testID="etiket-diger-alanlar">
@@ -211,76 +313,14 @@ export default function TamburLabelInfoModal({ visible, onDismiss, workOrderId, 
   );
 }
 
-function LabelFieldRow({ label, value, hint, onPress, onClear, testID }: {
-  label: string; value: string; hint: string; onPress: () => void; onClear: () => void; testID: string;
-}) {
-  const filled = value.trim() !== '';
-  return (
-    <View style={s.fieldRow}>
-      <TouchableRipple onPress={onPress} style={s.field} testID={testID} accessibilityRole="button" accessibilityLabel={`${label}: ${filled ? value : hint}`}>
-        <View>
-          <Text style={s.fieldLabel}>{label}</Text>
-          <Text style={filled ? s.fieldValue : s.fieldHint} testID={`${testID}-deger`}>{filled ? value : hint}</Text>
-        </View>
-      </TouchableRipple>
-      {filled ? <IconButton icon="close-circle-outline" size={26} onPress={onClear} style={s.clear} accessibilityLabel={`${label} temizle`} testID={`${testID}-temizle`} /> : null}
-    </View>
-  );
-}
-
-type FieldDraft = { text: string; blank: boolean };
-
-function OverrideRow({ field, value: v, onChange }: { field: { key: string; label: string; type: 'text' | 'number' }; value: FieldDraft; onChange: (v: FieldDraft) => void }) {
-  return (
-    <View style={s.row}>
-      <View style={s.input}>
-        <ModalTextInput
-          mode="outlined"
-          dense
-          label={field.label}
-          value={v.text}
-          disabled={v.blank}
-          keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'}
-          maxLength={120}
-          onChangeText={(text) => onChange({ ...v, text })}
-          testID={`etiket-bilgisi-${field.key}`}
-        />
-      </View>
-      <TouchableRipple onPress={() => onChange({ text: '', blank: !v.blank })} testID={`etiket-bilgisi-bos-${field.key}`} style={s.blankHit}>
-        <View style={s.row}>
-          <Checkbox.Android status={v.blank ? 'checked' : 'unchecked'} />
-          <Text>Boş bas</Text>
-        </View>
-      </TouchableRipple>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   sub: { color: colors.textSecondary, marginBottom: spacing.sm },
   err: { color: colors.dangerText, marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm },
-  field: {
-    flex: 1,
-    minHeight: 64,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-  },
-  fieldLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
-  fieldValue: { fontSize: 20, fontWeight: '800', color: colors.text },
-  fieldHint: { fontSize: 16, color: colors.textMuted, fontStyle: 'italic' },
-  clear: { margin: 0, width: 56, height: 56 },
   othersToggle: { minHeight: 56, justifyContent: 'center', marginTop: spacing.sm },
   othersLabel: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
-  input: { flex: 1 },
-  blankHit: { minHeight: 56, justifyContent: 'center', paddingRight: spacing.sm },
   freeBox: { gap: spacing.sm, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
   btn: { minHeight: 56 },
+  reasonBox: { marginTop: spacing.sm },
 });

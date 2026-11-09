@@ -30,7 +30,7 @@ const atField = (key: Parameters<typeof isKept>[1], t?: TeachState) => run(named
 
 describe("rehberli tanıtma — aşamalar", () => {
   it("② satır düzeni: görünür alanlar grup sırasıyla, hedef/diğer alanlar açılırda; Gelen kg görünür", () => {
-    expect(MAIN_FIELDS).toEqual(["musteri", "partiNo", "evrakNo", "toplamMetre", "toplamKg", "en", "desen", "renk"]);
+    expect(MAIN_FIELDS).toEqual(["musteri", "partiNo", "evrakNo", "toplamMetre", "toplamKg", "desen", "renk", "en"]);
     expect(OTHER_FIELDS).toEqual(["topAdet", "hedefMetraj", "hedefKg", "siparisNo", "tarih", "not", "islem", "gonderenIsEmriNo"]);
   });
 
@@ -92,7 +92,9 @@ describe("rehberli tanıtma — dokunuşlar", () => {
     const back = run(sk, [{ type: "GOTO", target: { kind: "field", key: "musteri" } }, { type: "TAP", i: 8 }]);
     expect(back.skipped).toEqual([]);
     expect(chipStatus(back.teach, "musteri", back.skipped)).toBe("done");
-    expect(run(atField("renk"), [{ type: "NEXT" }]).target).toBeNull();
+    // af797085a: Gelen kumaş/renk GELEN grubuna geçti, son görünür alan artık En.
+    expect(run(atField("renk"), [{ type: "NEXT" }]).target).toEqual({ kind: "field", key: "en" });
+    expect(run(atField("en"), [{ type: "NEXT" }]).target).toBeNull();
     expect(run(atField("partiNo"), [{ type: "BACK" }]).target).toEqual({ kind: "field", key: "musteri" });
   });
 

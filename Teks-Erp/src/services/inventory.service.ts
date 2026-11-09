@@ -37,6 +37,7 @@ import { getRollHistory as getRollHistoryImpl } from "./inventory/history";
 import { getCancelPreview as getCancelPreviewImpl, softDelete as softDeleteImpl } from "./inventory/cancel";
 import { restoreCancelledRoll as restoreCancelledRollImpl, hardDelete as hardDeleteImpl } from "./inventory/restore";
 import { applyManualProperties as applyManualPropertiesImpl } from "./inventory/manual-properties";
+import { fixRollLabelTexts as fixRollLabelTextsImpl, type LabelTextsFixInput, type LabelTextsFixResult } from "./inventory/label-texts";
 import { adjustRollQty as adjustRollQtyImpl, prepareRawForSale as prepareRawForSaleImpl } from "./inventory/qty-adjust";
 import { createOpenFabric as createOpenFabricImpl, openFabricReplay as openFabricReplayImpl, createOpenFabricFresh as createOpenFabricFreshImpl } from "./inventory/open-fabric";
 import { getRescuePreview as getRescuePreviewImpl, rescueStuckRoll as rescueStuckRollImpl } from "./inventory/rescue";
@@ -725,6 +726,11 @@ export class InventoryService {
     opts?: { permissions?: readonly string[] },
   ): Promise<ApiResponse<Record<string, unknown>>> {
     return applyManualPropertiesImpl(rollId, data, userId, opts);
+  }
+
+  /** Etiket ad/renk/parti no düzeltmesi (sevk edilene kadar) — `PATCH /api/rolls/:id/label-texts`. */
+  async fixLabelTexts(rollId: string, data: LabelTextsFixInput, userId?: string): Promise<ApiResponse<LabelTextsFixResult>> {
+    return fixRollLabelTextsImpl(rollId, data, userId);
   }
 
   /**

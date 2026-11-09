@@ -13,8 +13,11 @@ import AppModal from '../../../../components/AppModal';
 import TruncatedText from '../../../../components/TruncatedText';
 import { StatusPill } from '../../../../components/form';
 import LiveCameraView from '../../../../components/liveCamera/LiveCameraView';
+import { isLiveTorchAvailable } from '../../../../services/liveCamera';
 import { withSystemDialog } from '../../../../store/lockStore';
 import { colors, radius, spacing, typography } from '../../../../theme';
+import { useDocTorch } from '../docTorch';
+import TorchButton from '../TorchButton';
 import type { MultiCameraBinding } from '../usePageSource';
 import LiveFieldPanel from './LiveFieldPanel';
 import { wordRects } from './liveBoxes';
@@ -27,6 +30,8 @@ export default function LiveReadModal({ visible, onDone, onDismiss }: MultiCamer
   const [permission] = useCameraPermissions();
   const [view, setView] = useState({ width: 0, height: 0 });
   const live = useLiveRead({ visible, onDone });
+  const torch = useDocTorch(visible);
+  const torchAvailable = isLiveTorchAvailable();
   const name = live.vote.template?.name ?? null;
 
   const dismiss = () => {
@@ -38,7 +43,7 @@ export default function LiveReadModal({ visible, onDone, onDismiss }: MultiCamer
     <AppModal visible={visible} onDismiss={dismiss} swipeToDismiss={false} contentStyle={[styles.sheet, { width: width * 0.98, height: height * 0.96 }]}>
       <View style={styles.layout}>
         <View style={styles.cameraLayer} onLayout={onLayout} testID="canli-kamera">
-          <CameraBody live={live} view={view} searching={!name} />
+          <CameraBody live={live} view={view} searching={!name} torch={torchAvailable && torch.torch} />
           <View style={styles.topBar}>
             <IconButton icon="close" size={32} iconColor={colors.textOnDark} style={styles.close} onPress={dismiss} disabled={live.capturing} accessibilityLabel="Kapat" testID="canli-kapat" />
             <StatusPill tone={name ? 'ok' : 'busy'} icon={name ? 'file-document-check-outline' : 'magnify'} text={name ? 'Belge tespit edildi:' : LIVE_SEARCHING} testID="canli-durum" />
@@ -47,6 +52,7 @@ export default function LiveReadModal({ visible, onDone, onDismiss }: MultiCamer
                 {name}
               </TruncatedText>
             )}
+            {torchAvailable && <TorchButton on={torch.torch} onPress={torch.toggle} style={styles.torch} testID="canli-flas" />}
           </View>
           {live.cameraError && (
             <Text style={[styles.onDark, styles.error]} testID="canli-kamera-hata">{live.cameraError}</Text>
@@ -82,7 +88,7 @@ export default function LiveReadModal({ visible, onDone, onDismiss }: MultiCamer
 }
 
 /** Kamera katmanı: izin → canlı önizleme + kelime kutuları + (belge türü yokken) tarama çizgisi. */
-function CameraBody({ live, view, searching }: { live: ReturnType<typeof useLiveRead>; view: { width: number; height: number }; searching: boolean }) {
+function CameraBody({ live, view, searching, torch }: { live: ReturnType<typeof useLiveRead>; view: { width: number; height: number }; searching: boolean; torch: boolean }) {
   const [permission, requestPermission] = useCameraPermissions();
   if (!permission) return <ActivityIndicator color={colors.textOnDark} />;
   if (!permission.granted) {
@@ -97,7 +103,7 @@ function CameraBody({ live, view, searching }: { live: ReturnType<typeof useLive
   }
   return (
     <>
-      <LiveCameraView ref={live.cameraRef} style={StyleSheet.absoluteFill} onText={live.onText} onStability={live.onStability} onError={live.onCameraError} />
+      <LiveCameraView ref={live.cameraRef} style={StyleSheet.absoluteFill} torch={torch} onText={live.onText} onStability={live.onStability} onError={live.onCameraError} />
       <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="canli-kutular">
         {wordRects(live.ocr, view).map((r, i) => (
           <View key={i} style={[styles.box, r]} />
@@ -146,6 +152,7 @@ const styles = StyleSheet.create({
   box: { position: 'absolute', borderWidth: 1, borderColor: colors.warning, borderRadius: 2 },
   scanLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: colors.warning, opacity: 0.8 },
   topBar: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  torch: { marginLeft: 'auto' },
   close: { width: 56, height: 56, margin: 0, borderRadius: radius.full, backgroundColor: colors.scrim },
   error: { position: 'absolute', top: 80, left: spacing.lg, right: spacing.lg, textAlign: 'center' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim, justifyContent: 'center', alignItems: 'center', gap: spacing.md },

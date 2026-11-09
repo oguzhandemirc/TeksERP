@@ -1,3 +1,4 @@
+import type { StationKind } from "@/types/enums";
 import { factoryLocaleString, fromFactoryDateTimeInput, toFactoryDateTimeInput } from "@/lib/factory-time";
 // =============================================================================
 // TEZGAH DURUŞLARI — panel tipleri (backend `MachineStopDto` / `StopReclassDto` aynası)
@@ -53,7 +54,8 @@ export interface MachineStop {
   revokedAt: string | null;
   revokeReason: string | null;
   createdAt: string;
-  machine: { code: string; name: string };
+  /** `station.kind`: sınıflama listesinin istasyon türü kapsamı (2026-11-09); eski sunucuda yok → tam liste. */
+  machine: { code: string; name: string; station?: { kind: StationKind } };
   shiftInstance: StopShift | null;
   classifiedBy: { fullName: string } | null;
 }

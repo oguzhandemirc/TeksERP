@@ -155,9 +155,11 @@ describe('targetView adım eşlemesi ve kalemler', () => {
     { id: 's1', stepSequence: 1, status: 'PENDING', station: { name: 'KURŞUN', kind: 'PROCESS_QC', propertyCapabilities: [{ propertyId: 'kursun' }] } },
     { id: 's2', stepSequence: 2, status: 'PENDING', station: { name: 'TAMBUR', kind: 'TAMBUR', propertyCapabilities: [] } },
   ];
-  const w = (o: Partial<WorkOrder> = {}) => wo({ width: 280, foldType: '4-KAT', steps: steps as never, targetValues: [{ propertyId: 'gr', property: { name: 'KURŞUN GRAMAJI', variantOfPropertyId: 'kursun' }, value: { name: '50 gr' } }], ...o });
+  // Adım eşlemesi SUNUCUDAN (`edit.stepId`, yazma kapısıyla aynı fonksiyon) — istemci yetenek listesinden eşleme yapmaz.
+  const gramajTv = { propertyId: 'gr', property: { name: 'KURŞUN GRAMAJI', variantOfPropertyId: 'kursun' }, value: { name: '50 gr' }, edit: { stepId: 's1', locked: false } };
+  const w = (o: Partial<WorkOrder> = {}) => wo({ width: 280, foldType: '4-KAT', steps: steps as never, targetValues: [gramajTv], ...o });
 
-  it('gramaj KURŞUN adımına, kat tipi TAMBUR adımına düşer; Hedef kartından kalkar', () => {
+  it('gramaj sunucunun eşlediği KURŞUN adımına, kat tipi TAMBUR adımına düşer; Hedef kartından kalkar', () => {
     const v = targetView({ ...base, wo: w(), gramajPropertyId: 'gr', fixAllowed: allow });
     expect(v.byStep).toEqual({ s1: [{ label: 'Gramaj', value: '50 gr', fix: 'gramaj' }], s2: [{ label: '', value: '4-KAT', fix: null }] });
     const labels = v.rows.map(([k]) => k);
@@ -165,6 +167,11 @@ describe('targetView adım eşlemesi ve kalemler', () => {
     expect(labels).not.toContain('KURŞUN GRAMAJI');
     expect(labels).not.toContain('Gramaj');
     expect(v.fixByLabel).toEqual({ Renk: 'color', En: 'width' });
+  });
+  it('istemci yetenek listesinden eşleme İCAT ETMEZ: `edit` yoksa (eski sunucu) değer Hedef kartında kalır', () => {
+    const v0 = targetView({ ...base, wo: w({ targetValues: [{ ...gramajTv, edit: undefined }] }), gramajPropertyId: 'gr', fixAllowed: allow });
+    expect(v0.byStep.s1).toBeUndefined();
+    expect(v0.fixByLabel['KURŞUN GRAMAJI']).toBe('gramaj');
   });
   it('eşleme bilgisi yoksa (eski sunucu) değerler Hedef kartında kalır, kalem satırda', () => {
     const v = targetView({ ...base, wo: w({ steps: [] }), gramajPropertyId: 'gr', fixAllowed: allow });
@@ -199,6 +206,32 @@ describe('targetView adım eşlemesi ve kalemler', () => {
     const v = targetView({ ...base, wo: w({ foldType: null }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
     expect(v.byStep.s2).toEqual([{ label: 'Kat', value: 'Belirtilmedi', fix: 'fold' }]);
     expect(targetView({ ...base, wo: w({ foldType: null }), gramajPropertyId: 'gr', fixAllowed: allow }).byStep.s2).toBeUndefined();
+  });
+  describe('kurşun dışı hedef değer (Hedef değeri değiştir)', () => {
+    const steps3 = [...steps, { id: 's3', stepSequence: 3, status: 'PENDING', station: { name: 'BRODE', kind: 'PROCESS_QC', propertyCapabilities: [] } }];
+    const desen = (edit: { stepId: string | null; locked: boolean } | undefined, values = [{ id: 'z', name: 'Zebra' }, { id: 'j', name: 'Jasmin' }]) =>
+      ({ propertyId: 'ds', valueId: 'z', property: { name: 'BRODE DESENİ', variantOfPropertyId: 'brode', values }, value: { name: 'Zebra' }, edit });
+    const tv = (d: ReturnType<typeof desen>) => w({ steps: steps3 as never, targetValues: [gramajTv, d] });
+    it('⭐ adımı başlamamış (locked=false) → adım altında kalemli, özellik kimliğiyle', () => {
+      const v = targetView({ ...base, wo: tv(desen({ stepId: 's3', locked: false })), gramajPropertyId: 'gr', fixAllowed: { ...allow, target: true } });
+      expect(v.byStep.s3).toEqual([{ label: 'Desen', value: 'Zebra', fix: 'target', propertyId: 'ds' }]);
+    });
+    it('⭐ adımı başlamış (locked=true) → düz metin', () => {
+      const v = targetView({ ...base, wo: tv(desen({ stepId: 's3', locked: true })), gramajPropertyId: 'gr', fixAllowed: { ...allow, target: true } });
+      expect(v.byStep.s3).toEqual([{ label: 'Desen', value: 'Zebra', fix: null }]);
+    });
+    it('izin yok · seçenek yok · eski sunucu (edit yok) → kalemsiz', () => {
+      expect(targetView({ ...base, wo: tv(desen({ stepId: 's3', locked: false })), gramajPropertyId: 'gr', fixAllowed: allow }).byStep.s3[0].fix).toBeNull();
+      expect(targetView({ ...base, wo: tv(desen({ stepId: 's3', locked: false }, [])), gramajPropertyId: 'gr', fixAllowed: { ...allow, target: true } }).byStep.s3[0].fix).toBeNull();
+      const old = targetView({ ...base, wo: tv(desen(undefined)), gramajPropertyId: 'gr', fixAllowed: { ...allow, target: true } });
+      expect(old.fixByLabel['BRODE DESENİ']).toBeUndefined();
+      expect(old.rows).toContainEqual(['BRODE DESENİ', 'Zebra']);
+    });
+    it('adımı eşlenemeyen kilitsiz değer Hedef kartında kalemli; özelliği targetByLabel taşır', () => {
+      const v = targetView({ ...base, wo: tv(desen({ stepId: null, locked: false })), gramajPropertyId: 'gr', fixAllowed: { ...allow, target: true } });
+      expect(v.fixByLabel['BRODE DESENİ']).toBe('target');
+      expect(v.targetByLabel['BRODE DESENİ']).toBe('ds');
+    });
   });
   it('rotada Tambur yoksa kat Hedef kartında, izinliyse kalemli satır', () => {
     const v = targetView({ ...base, wo: w({ steps: [] }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });

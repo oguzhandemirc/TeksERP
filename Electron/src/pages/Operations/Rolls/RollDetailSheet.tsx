@@ -17,6 +17,7 @@ import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
 import { RollEditDialog } from "./RollEditDialog";
 import { RescueStuckDialog } from "./RescueStuckDialog";
 import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
+import { RollLabelTextsCard } from "./RollLabelTextsCard";
 import { canAdjustRollQty } from "./qtyAdjustService";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { RollCancelCard } from "./RollCancelCard";
@@ -309,6 +310,9 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               </Card>
             </div>
 
+            {/* Etikete basılan ad/renk/parti — sevk edilene kadar "Düzelt" (sevkliyse kilit + neden). */}
+            <RollLabelTextsCard roll={r} onSaved={() => void detailQuery.refetch()} />
+
             {/* K4P: modül kapalı ya da izin yoksa kart hiç çizilmez (istek de atılmaz). */}
             <RollInspectionCard rollId={r.id} barcode={r.barcode ?? null} />
             <LabTestsCard rollId={r.id} />
@@ -328,12 +332,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                     <>
                       <div className="text-xs text-muted-foreground">Kat</div>
                       <div className="text-xs">{r.foldType}</div>
-                    </>
-                  )}
-                  {r.labelBatchNo && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Müşteri Parti</div>
-                      <div className="text-xs">{r.labelBatchNo}</div>
                     </>
                   )}
                   {/* BULUNDUĞU İSTASYON — yalnız bir adımda duran topta anlamlı.

@@ -217,6 +217,15 @@ export interface RollTabletContext {
   customers: { id: string; name: string }[];
 }
 
+/** PATCH /rolls/:id/label-texts yanıtı. */
+export interface RollLabelTextsFixResult {
+  rollId: string;
+  labelItemName: string | null;
+  labelColorName: string | null;
+  labelBatchNo: string | null;
+  changed: boolean;
+}
+
 export const rollService = {
   createInitialEntry: (data: InitialEntryRequest): Promise<InitialEntryResponse> =>
     apiClient.post<InitialEntryResponse>('/rolls/initial-entry', data).then((r) => r.data),
@@ -286,6 +295,16 @@ export const rollService = {
    * Saha #4: top etiketini değiştir (renk/özellik/en/kalite). Yalnız serbest
    * stok/depo veya PLANNED sevkiyattaki top; DISPATCHED sevkiyatta 409.
    */
+  /**
+   * Etiket ad/renk/parti no düzeltmesi (sevk edilene kadar). Alan yoksa dokunulmaz, '' temizler
+   * (etiket varsayılan ada döner); sebep zorunlu. Sevkli/ölü top 409 (ROLL_SHIPPED / ROLL_DEAD).
+   */
+  fixLabelTexts: (
+    id: string,
+    body: { labelItemName?: string; labelColorName?: string; labelBatchNo?: string; reason: string },
+  ): Promise<ApiResponse<RollLabelTextsFixResult>> =>
+    apiClient.patch<ApiResponse<RollLabelTextsFixResult>>(`/rolls/${id}/label-texts`, body).then((r) => r.data),
+
   relabel: (
     id: string,
     data: { colorId?: string | null; propertyIds?: string[]; width?: number | null; qualityGrade?: string },

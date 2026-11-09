@@ -9,6 +9,8 @@ import { canonicalizeValue } from "./normalizers";
 import { validateValue, isHardIssue } from "./validators";
 import { computeConfidence, needsReview as computeNeedsReview, LOW_OCR_CONFIDENCE } from "./confidence";
 import { runStrategy, type RawCandidate, type StrategyContext } from "./strategies";
+import { labelGuardFor, rejectLabelValue } from "./label-guard";
+import { rejectImplausibleValue } from "./value-guard";
 
 /** Bir ham adayı tam FieldResult'a çevirir. */
 export function evaluateCandidate(field: FieldSpec, cand: RawCandidate, defaultMin: number): FieldResult {
@@ -85,6 +87,7 @@ export function extractFields(ocr: OcrResult, template: DocumentTemplate, option
   const fullText = rowsToText(rows);
   const warnings: string[] = [];
   const fields: Record<string, FieldResult> = {};
+  const guard = labelGuardFor(template);
 
   for (const field of template.fields) {
     const ctx: StrategyContext = { ocr, rows, fullText, otherLabels: otherLabelsFor(template, field), warnings };
@@ -97,7 +100,9 @@ export function extractFields(ocr: OcrResult, template: DocumentTemplate, option
       if (fallback && evaluated.some(hasUsableValue)) continue;
       const cands = runStrategy(strategy, si, field, ctx);
       for (const c of cands) {
-        const fr = fallback ? asPositionFallback(evaluateCandidate(field, c, defaultMin)) : evaluateCandidate(field, c, defaultMin);
+        // Etiket metni ve makul olmayan değer (tarih→sayı, aralık dışı, sayı→parti no) değer sayılmaz: aday boş kalır.
+        const ev = rejectImplausibleValue(rejectLabelValue(evaluateCandidate(field, c, defaultMin), guard), field);
+        const fr = fallback ? asPositionFallback(ev) : ev;
         evaluated.push(fr);
         if (!chosen && isAcceptable(fr, field, defaultMin)) {
           chosen = fr;

@@ -866,6 +866,51 @@ router.patch(
 
 /**
  * @openapi
+ * /api/rolls/{id}/label-texts:
+ *   patch:
+ *     tags: [Inventory]
+ *     summary: Topun etikete basılan kumaş adı / renk / parti no düzeltmesi (sevk edilene kadar)
+ *     description: |
+ *       `Roll.labelItemName` / `labelColorName` / `labelBatchNo` (tamburda kesimde yazılan müşteri
+ *       etiket değerleri). Alan gönderilmezse dokunulmaz; boş string ya da null temizler (etiket
+ *       varsayılan ada döner). Sebep zorunlu; değişimde `labelDirty=true` + audit (eski→yeni).
+ *       Sevk edilmiş (SHIPPED) ya da fason/kartela sevkiyle dışarıdaki top 409 `ROLL_SHIPPED`;
+ *       tüketilmiş/iptal/fire top 409 `ROLL_DEAD`; arada değişen top 409 `ROLL_CHANGED`.
+ *       Yeniden baskı mevcut etiket yolundan yapılır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               labelItemName:  { type: string, nullable: true, maxLength: 80 }
+ *               labelColorName: { type: string, nullable: true, maxLength: 80 }
+ *               labelBatchNo:   { type: string, nullable: true, maxLength: 64 }
+ *               reason:         { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: Etiket bilgisi düzeltildi (ya da zaten aynı — changed=false) }
+ *       400: { description: Sebep yok / alan yok / uzunluk aşımı }
+ *       403: { description: Yetki yok }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: ROLL_SHIPPED · ROLL_DEAD · ROLL_CHANGED }
+ */
+router.patch(
+  "/:id/label-texts",
+  verifyToken,
+  requireAnyPermission("roll:write", "label:edit", "mobile:tambur"),
+  controller.fixLabelTexts,
+);
+
+/**
+ * @openapi
  * /api/rolls/{id}/prepare-for-sale:
  *   post:
  *     tags: [Inventory]

@@ -67,9 +67,9 @@ export function incomingRows(incoming: WorkOrderIncoming | null | undefined): De
   return rows.filter((r): r is DetailRow => r !== null);
 }
 
-export type FixKind3 = 'color' | 'width' | 'gramaj' | 'fold';
-/** `fold` eski çağıranlarda yok → kalemsiz (bugünkü davranış). */
-export type FixAllowed = Record<Exclude<FixKind3, 'fold'>, boolean> & { fold?: boolean };
+export type FixKind3 = 'color' | 'width' | 'gramaj' | 'fold' | 'target';
+/** `fold`/`target` eski çağıranlarda yok → kalemsiz (bugünkü davranış). */
+export type FixAllowed = Record<Exclude<FixKind3, 'fold' | 'target'>, boolean> & { fold?: boolean; target?: boolean };
 
 /** Kat kilidi (sunucu `computeWorkOrderLocks.foldType` aynası): Tambur adımı başladıysa kat sabittir. */
 export function foldLocked(steps: WorkOrder['steps']): boolean {
@@ -93,12 +93,16 @@ export interface StepTarget {
   label: string;
   value: string;
   fix: FixKind3 | null;
+  /** `fix === 'target'` iken düzeltilecek özellik. */
+  propertyId?: string;
 }
 
 export interface TargetView {
   rows: DetailRow[];
   /** Kart satırı etiketi → o satırın kalemi. */
   fixByLabel: Partial<Record<string, FixKind3>>;
+  /** Kart satırı etiketi → 'target' kaleminin özelliği. */
+  targetByLabel: Partial<Record<string, string>>;
   /** Adım id → çipin altına düşen hedefler (Hedef kartında yinelenmez). */
   byStep: Record<string, StepTarget[]>;
 }
@@ -125,19 +129,19 @@ export function shortPropertyLabel(propertyName: string, stepName: string): stri
   return upperFirstTr(word);
 }
 
-const NO_FIX: FixAllowed = { color: false, width: false, gramaj: false, fold: false };
+const NO_FIX: FixAllowed = { color: false, width: false, gramaj: false, fold: false, target: false };
 
 /**
- * Hedef kartı + rota adımı altı hedefleri. Eşleme: hedef çeşit değerinin özelliği (ya da bağlı olduğu bayrak)
- * adım İSTASYONUNUN yetenek listesinde ise değer o adımın çipine düşer (ilk adım kazanır); Kat Tipi TAMBUR
- * türü adıma düşer. Eşlenemeyen (eski sunucu / yetenek yok) Hedef kartında kalır — bilgi kaybolmaz.
- * Kalem: Renk/En satırı + gramaj değeri; satır yoksa ama düzeltme izinliyse "Belirtilmedi" satırı açılır.
+ * Hedef kartı + rota adımı altı hedefleri. Hedef çeşit değerinin adımı SUNUCUDAN (`tv.edit.stepId`, yazma kapısıyla
+ * aynı fonksiyon) — istemci eşleme icat etmez; Kat Tipi TAMBUR türü adıma düşer. Eşlenemeyen / eski sunucu Hedef
+ * kartında kalır — bilgi kaybolmaz. Kalem: Renk/En/Kat + gramaj + kilitsiz (`edit.locked === false`) hedef değer.
  */
 export function targetView({ wo, fallbackItemName, propertyNames, fmtDate, gramajPropertyId, fixAllowed }: TargetViewInput): TargetView {
   const allow = fixAllowed ?? NO_FIX;
   const steps = [...(wo.steps ?? [])].sort((a, b) => a.stepSequence - b.stepSequence);
   const byStep: Record<string, StepTarget[]> = {};
   const fixByLabel: Partial<Record<string, FixKind3>> = {};
+  const targetByLabel: Partial<Record<string, string>> = {};
   const put = (stepId: string, t: StepTarget) => {
     (byStep[stepId] ??= []).push(t);
   };
@@ -165,11 +169,17 @@ export function targetView({ wo, fallbackItemName, propertyNames, fmtDate, grama
     if (!v) continue;
     const name = txt(tv?.property?.name) ?? 'Gramaj';
     const isGramaj = !!gramajPropertyId && tv.propertyId === gramajPropertyId;
-    const ids = [tv.propertyId, tv.property?.variantOfPropertyId].filter((x): x is string => !!x);
-    const step = steps.find((s) => (s.station?.propertyCapabilities ?? []).some((c) => ids.includes(c.propertyId)));
+    const stepId = tv.edit?.stepId ?? null;
+    const step = stepId ? steps.find((s) => s.id === stepId) : undefined;
     if (isGramaj) gramajShown = true;
-    if (step) put(step.id, { label: shortPropertyLabel(name, step.station?.name ?? ''), value: v, fix: isGramaj && allow.gramaj ? 'gramaj' : null });
-    else rows.push(row(name, v, isGramaj ? 'gramaj' : null));
+    // Gramaj kendi ön-ayar kartında (başlamış İE'de de değişir); öteki değer yalnız sunucu kilitsiz derse kalemli.
+    const canTarget = !isGramaj && !!allow.target && !!tv.propertyId && tv.edit?.locked === false && (tv.property?.values?.length ?? 0) > 0;
+    const fix: FixKind3 | null = isGramaj ? (allow.gramaj ? 'gramaj' : null) : canTarget ? 'target' : null;
+    if (step) put(step.id, { label: shortPropertyLabel(name, step.station?.name ?? ''), value: v, fix, ...(fix === 'target' ? { propertyId: tv.propertyId } : {}) });
+    else {
+      rows.push(row(name, v, fix));
+      if (fix === 'target' && tv.propertyId) targetByLabel[name] = tv.propertyId;
+    }
   }
   if (allow.gramaj && !gramajShown) rows.push(row('Gramaj', 'Belirtilmedi', 'gramaj'));
   rows.push(propertyNames.length ? ['Üretim Özelliği', propertyNames.join(', ')] : null);
@@ -181,7 +191,7 @@ export function targetView({ wo, fallbackItemName, propertyNames, fmtDate, grama
   rows.push(wo.plannedEndDate ? ['Planlı Termin', fmtDate(wo.plannedEndDate)] : null);
   const orders = [...new Set((wo.orderLinks ?? []).map((l) => l.orderLine?.order?.orderNumber).filter((x): x is string => !!x))];
   rows.push(orders.length ? ['Sipariş', orders.join(', ')] : null);
-  return { rows: rows.filter((r): r is DetailRow => r !== null), fixByLabel, byStep };
+  return { rows: rows.filter((r): r is DetailRow => r !== null), fixByLabel, targetByLabel, byStep };
 }
 
 /** Hedef kartı satırları (kalemsiz sade görünüm); ayrıntı için `targetView`. */

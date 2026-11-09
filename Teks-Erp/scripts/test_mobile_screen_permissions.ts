@@ -548,7 +548,7 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "mobile:hizli-is-emri",
     path: "PUT /work-orders/:p/target-values",
-    why: "Gramajı Değiştir — `mobile:is-emri-duzelt` yeteneği (panel izni yoksa yalnız kurşun özelliği); menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+    why: "Gramajı / Hedef değeri değiştir — `mobile:is-emri-duzelt` yeteneği (tablet yolunda yalnız mevcut hedefin sebepli düzeltmesi, adımı başlamış değer 409); düğme yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
   },
 ];
 

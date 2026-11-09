@@ -14,10 +14,17 @@
 //   §7 katalog ↔ migration: `stationKinds: WEAVING_ONLY` taşıyan sistem kodları migration'ın UPDATE listesiyle
 //      AYNI küme; uzlaştırma işi kapsamı doğuşta yazar ve var olan satırın kapsamını EZMEZ.
 //   §8 HTTP: `GET /api/reason-presets?stationKind=BILINMEYEN` → 400 (fail-closed); geçerli tür 200.
+//   §9 YAZMA KAPISI (2026-11-09): insan yolu kapsam dışı sebebi YAZAMAZ → 400 `STOP_REASON_OUT_OF_SCOPE`, satır
+//      değişmez: sebepli açılış · sınıflama · yeniden sınıflama (defter satırı doğmaz) · toplu sınıflama (satır
+//      `failed[]`). Kapsamsız sebep her istasyonda geçer. Makine yolu (sinyalli açılış, MACHINE sınıflaması) TAKILMAZ.
+//      Liste süzgeci ile yazma kapısı TEK yüklemi paylaşır (`station-kind-scope.helper.ts`, AST: `resolveStopPreset`
+//      `assertStopReasonInScope` çağırır, `reason-preset.service` yüklemi kendisi tanımlamaz).
 // NEGATİF SONDALAR (2026-11-09):
 //   S1 `openStopCore`daki `machineStopEnabled` kapısı silindi → §2a/§2b kırmızı.
 //   S2 `list` `stationKindScopeWhere`i uygulamadı → §6a/§6d kırmızı.
 //   S3 `resolveStationKinds` kind kontrolü silindi → §5b kırmızı (CHECK 23514 → AppError değil).
+//   S4 `resolveStopPreset`teki `assertStopReasonInScope` çağrısı silindi → §9a/§9b/§9c/§9d/§9f/§9g/§9h/§9i/§9j kırmızı.
+//   S5 makine yolu muafiyeti silindi (sinyal/MACHINE da kapıdan geçti) → §9e/§9g kırmızı.
 // ⚠️ DB'ye YAZAR (TEST-DIK- istasyon/makine/preset; MACHINE_STOP sırasını fotoğraflayıp geri koyar) → `hedefDbEngeli()`.
 // =============================================================================
 import type { Server } from "http";
@@ -30,11 +37,12 @@ import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
+import { ensureTestAdmin, kosumaOzguParola, testActorId } from "./fixture-test-user";
 import { QUICK_PICK_COUNT, MACHINE_STOP_REASONS } from "../src/constants/reason-presets";
 import { ReasonPresetService } from "../src/services/reason-preset.service";
 import { stationService } from "../src/routes/station.routes";
-import { classifyStop, closeManualStop, openManualStop } from "../src/services/machine-stop.service";
+import { classifyStop, closeManualStop, openManualStop, openStopCore, reclassifyStop } from "../src/services/machine-stop.service";
+import { classifyBulkStops } from "../src/services/machine-stop-bulk.service";
 import { openMachineStop } from "../src/services/machine-stop-signal.service";
 import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
 
@@ -164,6 +172,9 @@ async function main(): Promise<void> {
     await prisma.reasonPreset.update({ where: { id: sys.id }, data: { stationKinds: sys.stationKinds } });
   }
 
+  // ── §9 yazma kapısı ──────────────────────────────────────────────────────
+  await scopeWriteGate(katalog[0]!);
+
   // ── §8 HTTP ───────────────────────────────────────────────────────────────
   const parola = kosumaOzguParola();
   const admin = await ensureTestAdmin({ password: parola });
@@ -186,6 +197,59 @@ async function main(): Promise<void> {
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }
+}
+
+/** §9 — insan yolu kapsam dışı sebebi yazamaz; makine yolu takılmaz; yüklem tek kaynak. */
+async function scopeWriteGate(dokumaKodu: string): Promise<void> {
+  const kursun = await fixtureMachine("K9", { kind: StationKind.PROCESS_QC });
+  const dokuma = await fixtureMachine("D9", { kind: StationKind.WEAVING });
+  const tamburOnly = await ReasonPresetService.create({ kind: ReasonPresetKind.MACHINE_STOP, label: `${TAG} yalnız tambur`, stopLossClass: MachineStopLossClass.UNPLANNED, stationKinds: [StationKind.TAMBUR] });
+  ids.presets.push(tamburOnly.id);
+
+  // Her adım kendi makinesinde: sonda altında (kapı yok) bir adımın yanlışlıkla açtığı duruş sonrakini 409'a düşürmesin.
+  const kursunA = await fixtureMachine("K9A", { kind: StationKind.PROCESS_QC });
+  const acRed = await hata(() => openManualStop({ machineId: kursunA.machineId, reasonCode: dokumaKodu, source: MachineDataSource.OPERATOR }, undefined));
+  check("§9a sebepli açılış: dokumaya özgü sebep kurşun makinesinde 400 STOP_REASON_OUT_OF_SCOPE, satır doğmaz", acRed?.statusCode === 400 && kod(acRed) === "STOP_REASON_OUT_OF_SCOPE" && (await prisma.machineStopEvent.count({ where: { machineId: kursunA.machineId } })) === 0, kod(acRed));
+
+  const stop = (await openManualStop({ machineId: kursun.machineId, source: MachineDataSource.OPERATOR }, undefined)).data;
+  const sinifRed = await hata(() => classifyStop(stop.id, { reasonCode: dokumaKodu }, undefined, MachineDataSource.OPERATOR));
+  const sonra = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: stop.id }, select: { reasonCode: true } });
+  check("§9b sınıflama: kapsam dışı sebep 400, duruş sebepsiz kalır", kod(sinifRed) === "STOP_REASON_OUT_OF_SCOPE" && sonra.reasonCode === null, kod(sinifRed));
+  const sinifOk = await hata(() => classifyStop(stop.id, { reasonCode: "MEKANIK_ARIZA" }, undefined, MachineDataSource.SUPERVISOR));
+  check("§9c kapsamsız sebep (boş kapsam = her yer) kurşun makinesinde sınıflanır", sinifOk === null, kod(sinifOk));
+  const reRed = await hata(() => reclassifyStop(stop.id, { fromReasonCode: "MEKANIK_ARIZA", toReasonCode: dokumaKodu, reason: "sonda" }, undefined));
+  const reSay = await prisma.machineStopReclass.count({ where: { stopEventId: stop.id } });
+  check("§9d yeniden sınıflama: kapsam dışı hedef 400, defter satırı doğmaz, karar değişmez", kod(reRed) === "STOP_REASON_OUT_OF_SCOPE" && reSay === 0 && (await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: stop.id }, select: { reasonCode: true } })).reasonCode === "MEKANIK_ARIZA", kod(reRed));
+
+  // Makine yolu: sinyalli açılış eşlenmiş kodu kapsamına bakmadan yazar; MACHINE sınıflaması da öyle.
+  await closeManualStop(stop.id, undefined, undefined, MachineDataSource.OPERATOR);
+  const sinyal = await hata(() => openStopCore({
+    machineId: kursun.machineId, stopKey: randomUUID(), started: { value: new Date(), warning: null }, source: MachineDataSource.MACHINE, actorId: null,
+    reasonCode: dokumaKodu, signal: { signalKind: null, rawStopCode: "SONDA", collectorId: null }, fingerprint: () => [],
+  }));
+  check("§9e makine sinyali (eşlenmiş kod) kapsam dışı sebeple de açılır — eşleme fabrikanın kararı", sinyal === null, kod(sinyal));
+  const kursun2 = await fixtureMachine("K9B", { kind: StationKind.PROCESS_QC });
+  const acikSinyal = (await openStopCore({
+    machineId: kursun2.machineId, stopKey: randomUUID(), started: { value: new Date(), warning: null }, source: MachineDataSource.MACHINE, actorId: null,
+    reasonCode: null, signal: { signalKind: null, rawStopCode: "SONDA2", collectorId: null }, fingerprint: () => [],
+  })).data!;
+  const insanRed = await hata(() => classifyStop(acikSinyal.id, { reasonCode: dokumaKodu }, undefined, MachineDataSource.OPERATOR));
+  check("§9f aynı duruşu İNSAN kapsam dışı sebeple sınıflayamaz", kod(insanRed) === "STOP_REASON_OUT_OF_SCOPE", kod(insanRed));
+  const makineOk = await hata(() => classifyStop(acikSinyal.id, { reasonCode: dokumaKodu }, undefined, MachineDataSource.MACHINE));
+  check("§9g MACHINE kaynaklı sınıflama kapıya takılmaz", makineOk === null, kod(makineOk));
+
+  // Toplu sınıflama: sunucu her satırı ayrı denetler → satır failed[]'e STOP_REASON_OUT_OF_SCOPE ile düşer.
+  const U = await testActorId();
+  const dStop = (await openManualStop({ machineId: dokuma.machineId, source: MachineDataSource.SUPERVISOR }, U)).data;
+  const toplu = (await classifyBulkStops({ reasonCode: tamburOnly.code, rows: [{ stopId: dStop.id }] }, U)).data!;
+  check("§9h toplu sınıflama: yalnız TAMBUR kapsamlı sebep dokuma duruşunda failed[] STOP_REASON_OUT_OF_SCOPE", toplu.ok.length === 0 && toplu.failed.length === 1 && toplu.failed[0]!.code === "STOP_REASON_OUT_OF_SCOPE", JSON.stringify(toplu.failed));
+  const topluOk = (await classifyBulkStops({ reasonCode: dokumaKodu, rows: [{ stopId: dStop.id }] }, U)).data!;
+  check("§9i aynı duruş kapsamındaki (dokuma) sebeple toplu sınıflanır", topluOk.ok.length === 1);
+
+  // Tek kaynak: liste süzgeci ve yazma kapısı aynı helper'dan.
+  const ctx = readFileSync(join(__dirname, "..", "src", "services", "helpers", "machine-stop-context.helper.ts"), "utf8");
+  const rp = readFileSync(join(__dirname, "..", "src", "services", "reason-preset.service.ts"), "utf8");
+  check("§9j tek yüklem: `resolveStopPreset` `assertStopReasonInScope` çağırır, `reason-preset.service` yüklemi tanımlamaz (helper'dan alır)", /assertStopReasonInScope\(row, stationKind\)/.test(ctx) && !/function stationKindScopeWhere/.test(rp) && /from "\.\/helpers\/station-kind-scope\.helper"/.test(rp));
 }
 
 async function cleanup(): Promise<void> {

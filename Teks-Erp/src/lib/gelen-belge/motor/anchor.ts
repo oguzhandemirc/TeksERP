@@ -220,7 +220,7 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
       if (line === m.line) continue;
       if (Math.abs(centerY(line.rect) - labelCy) > 0.6 * labelH) continue;
       const gap = line.rect.x - labelRight;
-      if (gap < -0.3 * labelH || gap > maxGap) continue;
+      if (gap < -0.3 * labelH || (!skip && gap > maxGap)) continue;
       band.push({ line, gap });
     }
   }
@@ -229,7 +229,9 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
   const taken: OcrElement[] = [];
   let prevRight = labelRight;
   for (const b of band) {
-    if (taken.length > 0 && b.line.rect.x - prevRight > 1.5 * labelH) break;
+    // Atlanan kelimeler (`skipWords`) dolana dek sütun aralığı kadar boşluk geçilir ("TOPLAM 241,00 MT   734,00 KG"); sonra bitişik.
+    const limit = taken.length > skip ? 1.5 * labelH : maxGap;
+    if ((taken.length > 0 || skip > 0) && b.line.rect.x - prevRight > limit) break;
     taken.push(...lineElements(b.line));
     prevRight = right(b.line.rect);
   }
