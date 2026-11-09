@@ -79,10 +79,13 @@ export interface FieldContext {
   hasRouteSteps: boolean;
   /** Kurşun adımının istasyonunda aktif makine var (çok partide parti başına seçildiği için yok sayılır). */
   hasMachine?: boolean;
+  /** Bu formda hiç sorulmayan alanlar (Fason'da hedef kumaş; siparişten gelen / rotanın vermediği hedef renk): "Diğer alanlar"a da girmez. */
+  unavailable?: readonly WoFieldKey[];
 }
 
 /** Alan bu formda çizilebilir mi (koşulu sağlanıyor mu). */
 export function fieldApplicable(k: WoFieldKey, c: FieldContext): boolean {
+  if (c.unavailable?.includes(k)) return false;
   switch (k) {
     case 'hedefMetraj':
     case 'hedefKg':

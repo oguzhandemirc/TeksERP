@@ -252,10 +252,11 @@ export function derivedTargetQuantity(e: WoFormExtras, incomingMeters: number | 
 }
 
 /** Form ucunun ek alanları: yalnız dolu olanlar gider (anahtarsız = sunucuda bugünkü türetme). */
-export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null; ownGoods?: boolean }): ExtraBody {
+export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null; ownGoods?: boolean; omitColor?: boolean }): ExtraBody {
   const out: ExtraBody = {};
   if (e.targetItemId) out.targetItemId = e.targetItemId;
-  if (e.targetColorId) out.targetColorId = e.targetColorId;
+  // Gizlenen hedef renk sorusunda önceden seçilmiş değer gitmez (siparişten gelen ya da sorulabilen renk gider).
+  if (e.targetColorId && !c.omitColor) out.targetColorId = e.targetColorId;
   const width = parseFormNumber(e.width);
   if (width !== null) out.width = width;
   // S16a: her parti ayrı İE kipinde hedef metraj/kg belge toplamıdır — yalnız tek İE kipinde gider.

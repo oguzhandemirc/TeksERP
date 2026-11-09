@@ -8,6 +8,7 @@ import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
+import { SCAN_ROUTE } from './woFromDoc';
 // Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
 jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
@@ -82,6 +83,8 @@ jest.mock('../../../../components/ColorSelectField', () => {
 });
 
 const route = { id: 'r1', name: 'Kurşun&Tambur', steps: [] } as unknown as ProductionRoute;
+// Renk veren (boyahane) adımı olan rota: hedef renk sorusu görünür.
+const colorRoute = { id: 'r2', name: 'Boya', steps: [{ id: 's1', stationId: 'st1', sequence: 1, station: { id: 'st1', name: 'Boya', appliesColor: true } }] } as unknown as ProductionRoute;
 const form = { ownerCustomerId: 'cu1', ownerSuggested: null, ourBatchNo: 'P-1', meters: 100, metersReview: false, multi: null };
 const row = (x: Partial<DocRow> = {}): DocRow =>
   ({
@@ -176,7 +179,7 @@ describe('UnifiedWoForm', () => {
 
   it('⭐ öneri çipi: "Evet" → hedef kumaş / renk seçili, çip kalkar; öneri alana kendiliğinden yazılmaz', async () => {
     mockRows = [row()];
-    const s = renderWithPaper(ui());
+    const s = renderWithPaper(ui(colorRoute));
     const chip = await s.findByTestId('ie-form-desen-oneri');
     expect(chip).toHaveTextContent(/Tül Beyaz \(T-1\) mi\?.*belgede “DSN-7”.*Evet/);
     expect(s.getByTestId('renk-alani').props.children).toBe('bos');
@@ -353,5 +356,38 @@ describe('UnifiedWoForm — ⚙ Alanlar (K30-D)', () => {
     fireEvent.press(await openSheet(s));
     await waitFor(() => expect(s.getByTestId('ie-alanlar-bekliyor')).toBeTruthy());
     expect(s.queryByTestId('ie-form-en')).toBeNull();
+  });
+
+  describe('hedef kumaş / renk görünürlüğü', () => {
+    const fasonOwners = ['STANDARD', 'CUSTOMER_GOODS'] as const;
+    const pickFason = async (s: ReturnType<typeof renderWithPaper>) => fireEvent.press(await s.findByTestId('ie-mal-sahibi-CUSTOMER_GOODS'));
+    const withDeclared = () => row({ detail: { ...row().detail, suggestions: {}, incomingDeclared: { itemText: 'DSN-7', colorText: 'Ekru', suggestedItem: { id: 'i9', name: 'Eşlenen Tül' }, suggestedColor: null } } as never });
+
+    it('⭐ Fason: "Hedef kumaş" sorulmaz; kendi üretimin dışındaki (kart boş / bugünkü) formda görünür', async () => {
+      mockRows = [row()];
+      const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={[...fasonOwners]} />);
+      expect(await s.findByTestId('ie-form-hedef-kumas')).toBeTruthy();
+      await pickFason(s);
+      expect(s.queryByTestId('ie-form-hedef-kumas')).toBeNull();
+      s.unmount();
+      expect(renderWithPaper(ui()).getByTestId('ie-form-hedef-kumas')).toBeTruthy();
+    });
+    it('⭐ Fason: belgenin eşlenen kartı hedef kumaşa gizlice yazılır (en öne); eşleme yoksa anahtar gitmez', async () => {
+      mockRows = [withDeclared()];
+      const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={[...fasonOwners]} />);
+      await pickFason(s);
+      await waitFor(() => expect(mockOpts?.extraBody?.(mockRows[0])).toMatchObject({ targetItemId: 'i9', type: 'CUSTOMER_GOODS_SERVICE' }));
+      s.unmount();
+      mockRows = [row({ detail: { ...row().detail, suggestions: {} } as never })];
+      const t = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} ownerKinds={[...fasonOwners]} />);
+      await pickFason(t);
+      expect(mockOpts?.extraBody?.(mockRows[0])).not.toHaveProperty('targetItemId');
+    });
+    it('⭐ hedef renk: renk veren adım yoksa gizli; veren adım varsa ve rotasızda görünür', async () => {
+      mockRows = [row()];
+      expect(renderWithPaper(ui(route)).queryByTestId('renk-alani')).toBeNull();
+      expect(renderWithPaper(ui(colorRoute)).getByTestId('renk-alani')).toBeTruthy();
+      expect(renderWithPaper(ui(SCAN_ROUTE)).getByTestId('renk-alani')).toBeTruthy();
+    });
   });
 });

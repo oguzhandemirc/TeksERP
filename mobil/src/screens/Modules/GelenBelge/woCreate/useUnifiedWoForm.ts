@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { PickerOption } from '../../../../components/PickerModal';
 import { useFeatureFlags, useScanRouteMode } from '../../../../hooks/useFeatureFlags';
 import { preferredFoldCode, useFoldValues } from '../../../../hooks/useFoldValues';
-import { inboundDocService, type DeskKursunMachine } from '../../../../services/inboundDoc.service';
+import { inboundDocService, type DeskKursunMachine, type DocIncomingDeclared } from '../../../../services/inboundDoc.service';
 import type { AvailableOrderLine } from '../../../../services/order.service';
 import { routeService, type ProductionRoute } from '../../../../services/route.service';
 import { INBOUND_DOC_CONTEXT_KEY } from '../DocHeader';
@@ -41,11 +41,12 @@ import { rollsTotal } from './rollDraft';
 import { effectiveRoute, sameAsRoute, stepsDropMachine, stepsFromRoute } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
 import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
-import { defaultWoTypeFor, type WoCreateKind } from '../../../../store/woCreateKinds';
+import { CUSTOMER_GOODS_TYPE, defaultWoTypeFor, type WoCreateKind } from '../../../../store/woCreateKinds';
 import type { DocRowOpenRequest } from './DocRowCard';
 import { useManualDraft } from './useManualDraft';
 import { ownerKindCard, routeConflict, shouldApplyCardRoute, woTypeForOwnerKind } from '../../IsEmirleri/createEntry';
 import { isOwnGoodsMode } from './ownGoods';
+import { fasonItemPrefill, hiddenTargetFields, sendsTargetColor } from './targetVisibility';
 import { useOwnGoodsCreate } from './useOwnGoodsCreate';
 
 export interface UnifiedWoFormProps {
@@ -105,12 +106,20 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const foldRequired = hasTambur && fold.values.length > 0;
 
   const owner = useOwnerKind(ownerKinds, extras.woType, setForm);
+  // Hedef kumaş/renk sorusunun görünürlüğü (kendi üretimde aynen görünür): Fason'da kumaş yok; renk sipariş/rota kuralıyla.
+  const ownModeEarly = isOwnGoodsMode(ownerKinds, owner.value);
+  const orderLinked = extras.orderLineIds.length > 0;
+  const hiddenTarget = useMemo(
+    () => (ownModeEarly ? [] : hiddenTargetFields({ fason: extras.woType === CUSTOMER_GOODS_TYPE, orderLinked, route: eff })),
+    [ownModeEarly, extras.woType, orderLinked, eff],
+  );
+  const omitColor = !ownModeEarly && !sendsTargetColor({ orderLinked, route: eff });
   // Kendi üretim (tek tür STANDARD ya da kartta seçili): belge taslağı yok, kayıt quick-start; kalemsiz tür açıkça Stoğa.
-  const ownMode = isOwnGoodsMode(ownerKinds, owner.value);
+  const ownMode = ownModeEarly;
   const ownGoods = ownMode;
   const extraBody = useCallback(
-    (r: DocRow) => buildExtraBody(extras, { hasTambur: askFold, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods }),
-    [extras, askFold, route, ownGoods],
+    (r: DocRow) => buildExtraBody(extras, { hasTambur: askFold, perParty: r.form?.multi?.mode === 'PER_PARTY', route: route && !isScanRoute(route) ? route : null, ownGoods, omitColor }),
+    [extras, askFold, route, ownGoods, omitColor],
   );
   // Rota seçilmeden kayıt `extrasIssues` ile kapalıdır; kanca bir rota ister → yer tutucu.
   const wo = useWoRows(eff ?? SCAN_ROUTE, { extraBody });
@@ -129,6 +138,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   }, [route, routeTouched, cardRoute, applyRoute]);
   const routeWarning = ownerKinds ? routeConflict(cardRoute, route) : null;
   useDocReadToForm(row, setForm);
+  useFasonItemPrefill(!ownModeEarly && extras.woType === CUSTOMER_GOODS_TYPE, extras.targetItemId, row?.detail?.incomingDeclared, setForm);
   const edit = useCallback((patch: Partial<WoFormExtras>) => setForm((s) => editExtras(s, patch)), []);
   const hasRouteSteps = !!route && !isScanRoute(route) && (route.steps?.length ?? 0) > 0;
   const plan = buildPlanCtx({
@@ -149,6 +159,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
       hasKursun: !!wo.showGramaj && wo.catalog.options.length > 0 && !!row?.form && !partyGramaj,
       hasRouteSteps,
       hasMachine: plan.machines.length > 0,
+      unavailable: hiddenTarget,
     },
     valuedFields(extras, { stepsEdited: plan.stepsEdited }),
     fieldsOpen !== undefined && onFieldsOpenChange ? { open: fieldsOpen, onOpenChange: onFieldsOpenChange } : undefined,
@@ -180,7 +191,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   useDropDocOnOwnMode(ownMode, row?.noteId ?? null, dropDoc);
   return {
     owner, ownMode, own, routeWarning, manual, draft, addDoc,
-    route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
+    hiddenTarget, route, setRoute, form, fields, plan, partyPlan, partyGramaj, scanMode, showQuantity, targetDerived, hasTambur: askFold, foldValues: fold.values, wo, row, scan, done, block, blockKey, missing, issues, reading, okut, dropDoc, customers, edit,
     customersLoading: ctx.isLoading,
     routes: routesQ.data?.data ?? [], routesLoading: routesQ.isLoading,
     onOrderLine: (l: AvailableOrderLine) => setForm((s) => applyOrderLine(s, { itemId: l.itemId, itemName: l.itemName, colorId: l.colorId, width: l.width })),
@@ -272,6 +283,14 @@ function useFoldDefault(hasTambur: boolean, scanRoute: boolean, setForm: React.D
 }
 
 /** Okuma bitince belgeden gelenler forma dolar (aynı okuma bir kez; elle değiştirilen alan ezilmez); belge çıkınca temizlenir. */
+/** Fason'da hedef kumaş sorulmaz: boşsa belgenin eşlenen kartı en öne yazılır (yoksa sunucu müşteri/İE varsayılan kartını uygular). */
+function useFasonItemPrefill(fason: boolean, targetItemId: string | null, declared: DocIncomingDeclared | undefined, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
+  useEffect(() => {
+    const patch = fasonItemPrefill({ fason, extras: { targetItemId }, declared });
+    if (patch) setForm((s) => (s.extras.targetItemId ? s : editExtras(s, patch)));
+  }, [fason, targetItemId, declared, setForm]);
+}
+
 function useDocReadToForm(row: DocRow | null, setForm: React.Dispatch<React.SetStateAction<WoFormState>>) {
   const readKey = row?.detail ? `${row.noteId}#${row.runKey}#${row.taught?.seq ?? 0}` : null;
   const detail = row?.detail ?? null;

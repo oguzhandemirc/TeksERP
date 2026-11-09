@@ -2,6 +2,7 @@
 // satırın düzenlenebilir parti listesi + kip; kayıt kapısı ve gövde parçası. Kural sunucudadır (uyarılar oradan gelir).
 import { TERIM } from '../../../../lib/terim';
 import { fmtMeters } from '../../../../utils/meters';
+import { declaredBodyPart } from './incomingDeclared';
 import { partyProblems, partyTabTitle } from './partyTabs';
 import { MULTI_PARTY_TEXT as MODE_SHORT } from '../tanit/stages';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../../../../services/inboundDoc.service';
@@ -16,6 +17,11 @@ export interface PartyRow {
   /** Parti gelen eni (cm) elle düzeltildi; düzeltilmediyse ekran belgenin enini gösterir, gövdeye girmez. */
   incomingWidth?: number | null;
   widthEdited?: boolean;
+  /** Parti gelen kumaş / renk beyanı: elle düzeltildiyse (null = beyan yok) gövdeye girer; yoksa sunucu bölüm/belge beyanını yazar. */
+  incomingItemText?: string | null;
+  itemEdited?: boolean;
+  incomingColorText?: string | null;
+  colorEdited?: boolean;
   /** Belge masası: parti başına plan makinesi / gramaj (yok = gövdedeki ortak değer). */
   machineId?: string | null;
   gramajValueId?: string | null;
@@ -86,6 +92,8 @@ export function withParties(body: CreateWorkOrderFromNoteBody, m: MultiPartyDraf
       blockNo: r.blockNo, batchNo: r.batchNo.trim() || null, meters: r.meters ?? 0,
       ...(r.kgEdited && r.incomingKg != null && r.incomingKg > 0 ? { incomingKg: r.incomingKg } : {}),
       ...(r.widthEdited && r.incomingWidth != null && r.incomingWidth > 0 ? { incomingWidth: r.incomingWidth } : {}),
+      ...declaredBodyPart({ text: r.incomingItemText ?? null, edited: !!r.itemEdited }, 'item'),
+      ...declaredBodyPart({ text: r.incomingColorText ?? null, edited: !!r.colorEdited }, 'color'),
     })),
     mode: m.mode,
   };

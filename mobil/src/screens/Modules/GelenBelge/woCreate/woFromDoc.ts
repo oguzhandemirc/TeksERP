@@ -11,6 +11,7 @@ import type {
   OwnerSuggestion,
   ReadSummary,
 } from '../../../../services/inboundDoc.service';
+import { declaredBodyPart } from './incomingDeclared';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft, type OpenedWo } from './partyDraft';
@@ -138,6 +139,11 @@ export interface RowForm {
   /** Gelen en (cm) elle düzeltildi; düzeltilmediyse ekran belgedekini (`docIncomingWidth`) gösterir, gövdeye girmez. */
   incomingWidth?: number | null;
   incomingWidthEdited?: boolean;
+  /** Gelen kumaş / renk beyanı (müşteri yazısı; İE hedefi DEĞİL): elle düzeltildiyse değer (null = beyan yok), gövdeye girer; düzeltilmediyse belgedeki (`docDeclaredText`) gösterilir. */
+  incomingItemText?: string | null;
+  incomingItemEdited?: boolean;
+  incomingColorText?: string | null;
+  incomingColorEdited?: boolean;
   gramajValueId: string | null;
   /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
   multi?: MultiPartyDraft | null;
@@ -231,6 +237,8 @@ export function buildCreateBody(
   if (!f.multi && !f.rolls && f.incomingKgEdited && f.incomingKg != null && f.incomingKg > 0) body.incomingKg = f.incomingKg;
   // Gelen en da aynı desen: elle değişmediyse sunucu belgedekini (şablon `en`) yazar.
   if (!f.multi && !f.rolls && f.incomingWidthEdited && f.incomingWidth != null && f.incomingWidth > 0) body.incomingWidth = f.incomingWidth;
+  // Gelen kumaş / renk beyanı: aynı desen (yalnız elle değiştiyse; çok parti/ayrı topta parti başınadır).
+  if (!f.multi && !f.rolls) Object.assign(body, declaredBodyPart({ text: f.incomingItemText ?? null, edited: !!f.incomingItemEdited }, 'item'), declaredBodyPart({ text: f.incomingColorText ?? null, edited: !!f.incomingColorEdited }, 'color'));
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.

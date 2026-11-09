@@ -22,6 +22,7 @@ import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
 import DocRowOwner from './DocRowOwner';
 import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
 import { IncomingKgField, IncomingWidthField } from './DocRowKg';
+import { IncomingDeclaredRow } from './DocRowDeclaredText';
 import { declaredLayout } from './DeclaredField';
 import { bandTone, type IssueKey } from './woIssues';
 import type { PartyPlanCtx } from './partyPlan';
@@ -96,6 +97,9 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
                   <IncomingKgField row={row} wo={wo} locked={locked} />
                   <IncomingWidthField row={row} wo={wo} locked={locked} />
                 </View>
+              )}
+              {!f.rolls && (
+                <IncomingDeclaredRow row={row} wo={wo} locked={locked} />
               )}
             </>
           )}

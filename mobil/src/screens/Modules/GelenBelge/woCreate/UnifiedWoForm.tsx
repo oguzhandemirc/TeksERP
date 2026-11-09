@@ -181,13 +181,17 @@ interface FormColumnProps {
 
 function FormColumn({ u, fieldProps, onOtherLayout }: FormColumnProps) {
   const { wo, row, done, fields } = u;
+  // Bu formda hiç sorulmayan hedef alanları (Fason kumaş; siparişten gelen / rotanın vermediği renk) iki bölgede de çizilmez.
+  const asked = (k: WoFieldKey) => !u.hiddenTarget.includes(k);
+  const isTop = (k: WoFieldKey) => asked(k) && fields.isTop(k);
+  const isOther = (k: WoFieldKey) => asked(k) && fields.isOther(k);
   return (
     <>
       {u.routeWarning && <NoticeStrip tone="warn" text={u.routeWarning} testID="ie-rota-celiski" />}
-      <WoFormFields {...fieldProps} show={fields.isTop} />
+      <WoFormFields {...fieldProps} show={isTop} />
       <OtherFields onLayout={onOtherLayout} count={fields.other.length} valued={fields.otherValued} open={fields.otherOpen} onToggle={fields.toggleOther}>
         {row?.form && fields.isOther('gramaj') && !u.partyGramaj && <GramajField row={row} wo={wo} locked={done || wo.saving} />}
-        <WoFormFields {...fieldProps} show={fields.isOther} zone="other" />
+        <WoFormFields {...fieldProps} show={isOther} zone="other" />
       </OtherFields>
       {wo.mode === 'SEPARATE' && (
         <Text style={styles.hint} testID="ie-form-ayri-onay">

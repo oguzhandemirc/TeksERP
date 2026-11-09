@@ -11,6 +11,7 @@ import { parseMeters } from '../approvalGate';
 import { fmtKursunMeters } from '../readResult';
 import { DeclaredEditSheet, DeclaredField, declaredLayout } from './DeclaredField';
 import { docIncomingWidth } from './woFromDoc';
+import { PartyDeclaredRow } from './DocRowDeclaredText';
 import { chooseMode, MODE_LABELS, partyFacts, partyMeters, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyPlanFields from './PartyPlanFields';
@@ -61,7 +62,7 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
   const active = tabbed && tabs.some((t) => t.blockNo === tabState.active) ? tabState.active : 'all';
   const docWidth = docIncomingWidth(row.detail);
   const pane = (r: PartyRow) => (
-    <PartyPane key={r.blockNo} r={r} docWidth={docWidth} p={view.parties.find((x) => x.blockNo === r.blockNo)} out={outcome(r.blockNo)} noteNo={row.noteNo} locked={locked} plan={plan}
+    <PartyPane key={r.blockNo} r={r} docWidth={docWidth} detail={row.detail} p={view.parties.find((x) => x.blockNo === r.blockNo)} out={outcome(r.blockNo)} noteNo={row.noteNo} locked={locked} plan={plan}
       problems={tabbed ? tabs.find((t) => t.blockNo === r.blockNo)?.problems ?? [] : []} hidden={tabbed && active !== r.blockNo} onChange={(patch) => setRow(r.blockNo, patch)}
       ourBatch={serial && batchPlan.perParty && pending.includes(r.blockNo) ? { code: preview[pending.indexOf(r.blockNo)] } : null} />
   );
@@ -94,6 +95,7 @@ interface PaneProps {
   r: PartyRow;
   /** Belgenin okunan eni (cm; belge geneli) — partide elle düzeltilmediyse gösterilir. */
   docWidth: number | null;
+  detail: DocRow['detail'];
   p: NoteParty | undefined;
   out: PartyOutcome;
   noteNo: string;
@@ -108,7 +110,7 @@ interface PaneProps {
 }
 
 /** Tek partinin alanları: künye (top, müşteri İE no…), parti no, gelen metre, plan, sunucu uyarıları (beyan ↔ okunan), sonuç. */
-function PartyPane({ r, docWidth, p, out, noteNo, locked, plan, problems, hidden, onChange, ourBatch }: PaneProps) {
+function PartyPane({ r, docWidth, detail, p, out, noteNo, locked, plan, problems, hidden, onChange, ourBatch }: PaneProps) {
   // Açılan partinin İE'si yeniden gönderimde sunucuda yeniden açılmaz; alanları kilitlenir.
   const partyLocked = locked || out?.kind === 'OPENED';
   return (
@@ -123,6 +125,7 @@ function PartyPane({ r, docWidth, p, out, noteNo, locked, plan, problems, hidden
         ))}
       </View>
       <PartyDeclared r={r} p={p} docWidth={docWidth} noteNo={noteNo} locked={partyLocked} onChange={onChange} />
+      <PartyDeclaredRow r={r} p={p} detail={detail} noteNo={noteNo} locked={partyLocked} onChange={onChange} />
       {ourBatch && <OurBatchAutoField code={ourBatch.code} testID={`belge-parti-bizim-${noteNo}-${r.blockNo}`} />}
       {problems.map((x) => <Text key={x} style={styles.problem} testID={`belge-parti-eksik-${noteNo}-${r.blockNo}`}>{`${STATUS_MARK.error} ${x}`}</Text>)}
       {plan && <PartyPlanFields ctx={plan} party={r} locked={partyLocked} noteNo={noteNo} onChange={onChange} />}
