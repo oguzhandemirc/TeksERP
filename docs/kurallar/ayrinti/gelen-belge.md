@@ -106,6 +106,10 @@ Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramal
 
 **[PROFİL]** Cihaz okumasında başlık alanı boş kaldıysa aynı fotoğrafı sunucu okuyucusuyla YALNIZ bir kez oku ve yalnız boş alanı doldur (`lib/gelen-belge/sunucu-tamamlama.ts` `completeExtraction`; dolu alanı ezme, tam okunmuş sayfada okuyucuyu çağırma, okuyucu yok/hatalıysa cihaz sonucu kalır ve zarfa `failed` künyesi yazılır); cihaz ile sunucu ya da aynı taslağın sayfaları parti no'yu farklı okursa ilk değeri koru ve `BATCH_NO_DIFFERS` uyarısı düşür. · bekçi: `test_gelen_belge_sunucu_tamamlama` <sub>(arşiv:2026-11-05 sunucu tamamlaması)</sub>
 
+## Çok parti metre + parti no (2026-11-10 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Çok partide partinin metre önerisini YALNIZ `resolvePartyMeters` (`kursun-metre.ts`, belge yoluyla aynı `pickKursunMeters` önceliği: beyan ara toplamı → Σ satır) versin, `/partiler` `suggestedMeters` taşısın, istemci seçmesin; kağıttaki parti no'yu `batchNumberSource`tan bağımsız İE künyesine (`parameters.customerBatchNo`) yaz, istasyon + panel İE araması `workOrderParameterSearch`ten bulsun. · bekçi: `test_gelen_belge_cok_parti` §15 <sub>(arşiv:2026-11-06 214279 parti no + metre)</sub>
+
 ## Tanıtma konum yedeği (2026-11-09 kısa dosyadan taşındı)
 
 **[ÇEKİRDEK]** Tanıtmada etiketli, bölüm dışı alana `[anchor, roi(fallback)]` öğret (`suggest.ts` `addPositionFallbacks`); konum yedeğini yalnız önceki stratejiler kullanılabilir değer bulamadıysa koştur, yalnız kutu içi kelimeyi al ve `position-fallback` + gözden geçirme ile işaretle; okunan müşteri adı karta çözülemezse tablette teklifi not başına BİR KEZ kendiliğinden modal aç (tek teklif; benzer varsa önce ad + kod listesi, yoksa "Yeni müşteri kaydedilsin mi?"). Bekçi: `test_gelen_belge_motor` §15, `test_musteri_hizli_kayit` §1c, `CustomerFromDocSheet.test.tsx`.

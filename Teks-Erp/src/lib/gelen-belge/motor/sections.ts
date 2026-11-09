@@ -2,7 +2,7 @@
 // etiketi ("Sipariş No") her geçtiği yerde yeni bölüm açar; bölümün alanları kendi bandından okunur, tablo satırları
 // konumla bölüme düşer. Başlıksız başlayan sayfa (devam sayfası) satırları "devam" bölümüdür: taslak onları SON bölüme ekler.
 import type { DocumentTemplate, FieldResult, FieldSpec, OcrBlock, OcrLine, OcrRect, OcrResult, SectionSpec, TableResult } from "./types";
-import { collectLines } from "./geometry";
+import { buildRows, collectLines } from "./geometry";
 import { labelSimilarity, sectionStartLabel } from "./labels";
 import { normalizeForMatch } from "./text-normalize";
 import { canonicalEquals, sumCanonical } from "./totals";
@@ -40,12 +40,15 @@ export interface SectionsResult {
 
 export const rowKey = (blockNo: number, index: number): string => `${blockNo}:${index}`;
 
-/** Satır merkezi [top, bottom) bandına düşen OCR satırlarıyla sınırlı sonuç (koordinatlar kaymaz). */
-export function sliceBand(ocr: OcrResult, top: number, bottom: number): OcrResult {
+/**
+ * Satır merkezi [top, bottom) bandına düşen OCR satırlarıyla sınırlı sonuç (koordinatlar kaymaz). `rowCenter` verilirse
+ * satırın kendi merkezi yerine basılı SATIRININ merkezi ölçülür: sınırdaki "T.Adet 5 | 141,70 | 586,00" iki banda bölünmez.
+ */
+export function sliceBand(ocr: OcrResult, top: number, bottom: number, rowCenter?: ReadonlyMap<OcrLine, number>): OcrResult {
   const blocks: OcrBlock[] = [];
   for (const b of ocr.blocks) {
     const lines = b.lines.filter((l) => {
-      const cy = l.rect.y + l.rect.height / 2;
+      const cy = rowCenter?.get(l) ?? l.rect.y + l.rect.height / 2;
       return cy >= top && cy < bottom;
     });
     if (lines.length > 0) blocks.push({ ...b, text: lines.map((l) => l.text).join("\n"), lines });
@@ -188,9 +191,14 @@ export function extractSections(ocr: OcrResult, template: DocumentTemplate, spec
   const count = tops.length + offset;
   // Bölüm alanı her bantta ayrı okunur: etiket penceresi (tanıtmada başlık alanına konur) onu ilk bölüme çivilemesin.
   const sub: DocumentTemplate = { ...template, fields: template.fields.filter((f) => spec.fields.includes(f.key)).map(unpinned) };
+  const rowCenter = new Map<OcrLine, number>();
+  for (const row of buildRows(ocr)) {
+    const cy = row.lines.reduce((a, l) => a + l.rect.y + l.rect.height / 2, 0) / row.lines.length;
+    for (const l of row.lines) rowCenter.set(l, cy);
+  }
   const sections: SectionResult[] = Array.from({ length: count }, (_, i) => {
     const k = i - offset;
-    const fields = k >= 0 ? extractFields(sliceBand(ocr, tops[k]!, tops[k + 1] ?? Infinity), sub).fields : {};
+    const fields = k >= 0 ? extractFields(sliceBand(ocr, tops[k]!, tops[k + 1] ?? Infinity, rowCenter), sub).fields : {};
     const v = (key: string | undefined) => (key ? fields[key]?.value ?? null : null);
     return {
       // Başlangıç etiketi hiç yoksa sayfanın tamamı önceki sayfanın devamıdır (tek sayfalık belgede etkisiz: önceki blok yok).

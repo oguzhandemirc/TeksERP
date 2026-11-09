@@ -273,4 +273,14 @@ describe('üç aşama gövdesi ve kapıları', () => {
     const apart = assignField(toggleWord(assignField(toggleWord(initialTeach(SCAN, 'G'), 9), W, 'toplamMetre'), 6), W, 'hedefKg');
     expect(meterKgClashes(apart, W)).toEqual([]);
   });
+
+  it('⭐ adet satırında yan yana iki toplam (T.Adet 5 | 141,70 | 586,00): ayrı kutular çakışma değil, metre adet sayılmaz', () => {
+    // 2026-11-09 tablet (214279): sunucu iki alanı aynı çapaya bağlayıp reddediyordu; istemci ayrı kutuya uyarı vermemeli.
+    const X: ScanWord[] = [...W, w('T.Adet', [230, 1098], 9, 76), w('5', [343, 1102], 9, 12), w('141,70', [556, 1097], 9, 74), w('586,00', [681, 1100], 9, 72)];
+    let s = assignField(toggleWord(initialTeach({ ...SCAN, words: X }, 'G'), 13), X, 'toplamMetre');
+    s = assignField(toggleWord(s, 12), X, 'toplamKg');
+    expect(meterKgClashes(s, X)).toEqual([]);
+    expect(meterOnCountRow(s, X)).toBe(false);
+    expect(teachProblems(s, X).filter((p) => p.includes('Aynı kutu') || p.includes('adet satırına'))).toEqual([]);
+  });
 });

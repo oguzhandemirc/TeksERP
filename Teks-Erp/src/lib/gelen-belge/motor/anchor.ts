@@ -200,7 +200,8 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     rest = [{ ...lastEl, text: m.remainder }, ...els.slice(m.elementEnd)];
     firstOverride = m.remainder;
   } else rest = stripLeadingSeparators(els.slice(m.elementEnd));
-  const skip = skipOf(strategy);
+  let skip = skipOf(strategy);
+  let labelRight = right(m.rect);
   if (rest.length > 0) {
     const cut = stop ? findStopIndex(rest, ctx.otherLabels) : rest.length;
     const own = skip ? undefined : firstOverride;
@@ -208,11 +209,13 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     if (c) return c;
     // Değer başka bir etiketle kesildi ve boş kaldı → sağdaki satırlara bakma, alt arama denenmeli
     if (cut === 0) return null;
+    // Atlama tek kelime dizisidir: aynı satırda tüketilen kelimeler ("T.Adet 5 | 141,70 | 586,00" → "5") bantta yeniden sayılmaz.
+    skip = Math.max(0, skip - cut);
+    labelRight = Math.max(labelRight, ...rest.slice(0, cut).map((e) => right(e.rect)));
   }
   // 2) Etiket kutusunun dikey bandında, sağında başlayan en yakın satırlar
   const labelH = Math.max(m.rect.height, 1);
   const labelCy = centerY(m.rect);
-  const labelRight = right(m.rect);
   const maxGap = maxDistance * labelH * 4;
   const band: Array<{ line: OcrLine; gap: number }> = [];
   for (const row of ctx.rows) {

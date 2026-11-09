@@ -65,16 +65,23 @@ const centerIn = (e: OcrRect, r: OcrRect) => {
   return x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
 };
 
+/** `skipWords` doğrulayıcı tavanı (`templates/index.ts`: 1..20). */
+const MAX_SKIP_WORDS = 20;
+
 /**
- * Tanıtmada atlama öğrenimi: okuyucunun bu etiketten alacağı aday kelimeler içinde dokunulan değerin ilk kelimesinin sırası.
- * 0 = değer zaten ilk sırada (atlama yok); dokunulan değer adayda yoksa 0 (konum yedeği okur).
+ * Tanıtmada atlama öğrenimi: okuyucu (aynı strateji: yön + değer sınırı) hangi atlamayla dokunulan kutudan başlayan değeri
+ * okuyorsa en küçüğü. 0 = atlama yok; null = hiçbir atlamayla okunamıyor (çağıran konum stratejisine düşebilir).
+ * Okuyucunun kendisiyle ölçülür: ayrı prob sütun aralığında keser, yan yana iki toplam ("141,70  586,00") aynı atlamayı alırdı.
  */
-export function learnAnchorSkip(ocr: OcrResult, s: AnchorStrategy, labelRect: OcrRect, valueRect: OcrRect): number {
+export function learnAnchorSkip(ocr: OcrResult, s: AnchorStrategy, labelRect: OcrRect, valueRect: OcrRect): number | null {
   const ctx = buildAnchorContext(ocr, buildRows(ocr), []);
   const own = findLabelMatches(ctx, s.labels, DEFAULT_MIN_LABEL_SIMILARITY).find((m) => centerIn(m.rect, labelRect) || centerIn(labelRect, m.rect));
-  if (!own) return 0;
-  const probe: AnchorStrategy = { kind: "anchor", labels: s.labels, direction: s.direction, stopAtLabels: false };
-  const cand = s.direction === "below" ? findValueBelow(own, ctx, probe) : findValueRight(own, ctx, probe);
-  const idx = cand ? cand.elements.findIndex((e) => centerIn(e.rect, valueRect)) : -1;
-  return idx > 0 ? idx : 0;
+  if (!own) return null;
+  for (let skip = 0; skip <= MAX_SKIP_WORDS; skip++) {
+    const probe: AnchorStrategy = { ...s, skipWords: skip || undefined };
+    const cand = s.direction === "below" ? findValueBelow(own, ctx, probe) : findValueRight(own, ctx, probe);
+    if (!cand) continue;
+    if (centerIn(cand.elements[0]!.rect, valueRect)) return skip;
+  }
+  return null;
 }
