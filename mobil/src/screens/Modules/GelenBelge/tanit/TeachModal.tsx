@@ -16,6 +16,7 @@ import { canAdvance, stageMarks, stageTap } from './stages';
 import { teachMarks, toggleWord, type ScanMark } from './teachDraft';
 import { teachLayout } from './teachLayout';
 import { photoSize, type TeachPage } from './teachPages';
+import { normTurns, rotateBox, rotatedSize } from './rotateBox';
 import TeachSide from './TeachSide';
 import { useStageNav } from './useStageNav';
 import { useTeachModal, type TeachSaved } from './useTeachModal';
@@ -100,13 +101,21 @@ function usePinchPan(frame: { width: number; height: number }, cw: number, ch: n
 
 // Fotoğraf galerisi gibi: sayfa bölmeye sığar, iki parmakla yakınlaşır (parmakların altındaki nokta yerinde kalır), tek parmakla
 // her yöne kayar. İç içe ScrollView'lar yalnız dik/yatay kaydırıyordu (2026-11-05 kullanıcı denemesi).
-function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: ScanWords; marks: ScanMark[]; size: ViewStyle; onToggle: (i: number) => void }) {
+// Döndür yalnız GÖRÜNTÜDÜR: kutular `photoRect`ten dönmüş çerçeveye çevrilip çizilir, dokunma kelime sırasıyla çalışır; öneri ucuna
+// `rect` (OCR dik çerçevesi) gider — kaydedilen şablon döndürmeden bağımsızdır (`rotateBox.ts`).
+function ScanPane({ uri, scan, marks, size, turns, onRotate, onToggle }: { uri: string; scan: ScanWords; marks: ScanMark[]; size: ViewStyle; turns: number; onRotate: () => void; onToggle: (i: number) => void }) {
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   const photo = photoSize(scan);
-  const k = frame.width > 0 && photo.width > 0 && photo.height > 0 ? Math.min(frame.width / photo.width, frame.height / photo.height) : 0;
-  const cw = photo.width * k;
-  const ch = photo.height * k;
+  const q = normTurns(turns);
+  const view = rotatedSize(photo.width, photo.height, q);
+  const k = frame.width > 0 && view.width > 0 && view.height > 0 ? Math.min(frame.width / view.width, frame.height / view.height) : 0;
+  const cw = view.width * k;
+  const ch = view.height * k;
+  // Görüntü dönmeden önceki ölçüsüyle çizilip merkezinden döndürülür; dönmüş hâli tam (cw × ch) kabını doldurur.
+  const iw = photo.width * k;
+  const ih = photo.height * k;
   const { gesture, moved, zoomed, reset } = usePinchPan(frame, cw, ch);
+  useEffect(() => reset(false), [q]); // eslint-disable-line react-hooks/exhaustive-deps
   // Kenar kalınlığı yakınlıkla büyümesin (yazıyı örtmesin); hareket bitince bir kez güncellenir.
   const border = 2 / zoomed;
   return (
@@ -115,8 +124,16 @@ function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: Sca
         <View style={styles.frame} collapsable={false} onLayout={(e) => setFrame({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} testID="tanit-foto-cerceve">
           <Animated.View style={[{ width: cw, height: ch }, moved]}>
             {/* Tam çözünürlük (scale): yakınlaşınca küçük yazı bulanıklaşmasın. */}
-            <Image source={{ uri }} style={{ width: cw, height: ch }} resizeMode="stretch" resizeMethod="scale" testID="tanit-foto" />
-            {marks.map((m, i) => (
+            <Image
+              source={{ uri }}
+              style={{ position: 'absolute', left: (cw - iw) / 2, top: (ch - ih) / 2, width: iw, height: ih, transform: [{ rotate: `${q * 90}deg` }] }}
+              resizeMode="stretch"
+              resizeMethod="scale"
+              testID="tanit-foto"
+            />
+            {marks.map((m, i) => {
+              const b = rotateBox(m.box, photo.width, photo.height, q);
+              return (
               <Pressable
                 key={m.key}
                 onPress={() => onToggle(i)}
@@ -124,15 +141,17 @@ function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: Sca
                 hitSlop={4}
                 style={[
                   styles.mark,
-                  { left: m.box.x * k, top: m.box.y * k, width: Math.max(m.box.width * k, 8), height: Math.max(m.box.height * k, 8), borderWidth: border },
+                  { left: b.x * k, top: b.y * k, width: Math.max(b.width * k, 8), height: Math.max(b.height * k, 8), borderWidth: border },
                   { borderColor: TONE[m.tone].border, backgroundColor: TONE[m.tone].bg },
                 ]}
                 testID={`tanit-kutu-${i}`}
               />
-            ))}
+              );
+            })}
           </Animated.View>
         </View>
       </GestureDetector>
+      <IconButton icon="rotate-right" mode="contained-tonal" size={28} style={[styles.iconBtn, styles.rotate]} onPress={onRotate} accessibilityLabel="Fotoğrafı döndür" testID="tanit-dondur" />
       {/* Yakınlaşınca görünür: ipucu yazısı yerine tek düğme (az yazı). */}
       {zoomed > 1.01 && (
         <IconButton icon="fit-to-screen-outline" mode="contained-tonal" size={28} style={[styles.iconBtn, styles.fit]} onPress={() => reset(true)} accessibilityLabel="Sığdır" testID="tanit-sigdir" />
@@ -141,11 +160,24 @@ function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: Sca
   );
 }
 
+/** Sayfa başına görüntü dönüşü (çeyrek); yalnız bu tanıtma oturumu — kapanınca sıfırlanır, fotoğraf dosyasına dokunulmaz. */
+function usePageTurns(visible: boolean) {
+  const [turns, setTurns] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!visible) setTurns({});
+  }, [visible]);
+  return {
+    of: (scanId: string) => turns[scanId] ?? 0,
+    rotate: (scanId: string) => setTurns((m) => ({ ...m, [scanId]: normTurns((m[scanId] ?? 0) + 1) })),
+  };
+}
+
 export default function TeachModal({ visible, pages, code, onDismiss, onSaved }: Props) {
   const { width, height } = useWindowDimensions();
   const layout = teachLayout(width, height);
   const insets = useSafeAreaInsets();
   const [pageIdx, setPageIdx] = useState(0);
+  const turns = usePageTurns(visible);
   const nav = useStageNav(visible);
   const { advanced, stage } = nav;
   const page = pages[Math.min(pageIdx, Math.max(0, pages.length - 1))] ?? null;
@@ -207,7 +239,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
           </View>
         ) : (
           <View style={[styles.body, layout.mode === 'stack' && styles.bodyStack]} testID={layout.mode === 'side' ? 'tanit-duzen-yan' : 'tanit-duzen-ust'}>
-            <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} size={paneSize} onToggle={onTap} />
+            <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} size={paneSize} turns={turns.of(page.scanId)} onRotate={() => turns.rotate(page.scanId)} onToggle={onTap} />
             <TeachSide t={t} nav={nav} />
           </View>
         )}
@@ -225,6 +257,7 @@ const styles = StyleSheet.create({
   version: { fontSize: typography.size.sm, color: colors.textSecondary, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.sm, backgroundColor: colors.surfaceSunken },
   iconBtn: { width: 56, height: 56, margin: 0 },
   fit: { position: 'absolute', top: spacing.sm, right: spacing.sm },
+  rotate: { position: 'absolute', top: spacing.sm, left: spacing.sm },
   pages: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   body: { flex: 1, flexDirection: 'row', gap: spacing.lg },
   bodyStack: { flexDirection: 'column', gap: spacing.md },
