@@ -1,4 +1,4 @@
-import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum } from './workOrderDetailView';
+import { detailColumns, incomingRows, targetRows, targetView, shortPropertyLabel, actionPlacement, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum } from './workOrderDetailView';
 import type { WorkOrder } from '../../../types/models';
 
 const fmtDate = (s: string) => `D(${s})`;
@@ -134,4 +134,70 @@ describe('stripDeviceId / fmtNum', () => {
     expect(stripDeviceId(null)).toBeNull();
   });
   it('Türkçe ondalık', () => expect(fmtNum(12.34)).toBe('12,3'));
+});
+
+describe('shortPropertyLabel', () => {
+  it('adım adı atılır, tamlama eki düşer (veri-bağımsız)', () => {
+    expect(shortPropertyLabel('KURŞUN GRAMAJI', 'KURŞUN')).toBe('Gramaj');
+    expect(shortPropertyLabel('Kurşun Gramajı', 'KURSUN')).toBe('Gramaj');
+  });
+  it('eşleşmezse ya da kelime sınırı yoksa adı olduğu gibi bırakır', () => {
+    expect(shortPropertyLabel('KURŞUN GRAMAJI', 'TAMBUR')).toBe('KURŞUN GRAMAJI');
+    expect(shortPropertyLabel('KURŞUNLU', 'KURŞUN')).toBe('KURŞUNLU');
+    expect(shortPropertyLabel('KURŞUN', 'KURŞUN')).toBe('KURŞUN');
+  });
+});
+
+describe('targetView adım eşlemesi ve kalemler', () => {
+  const base = { propertyNames: [] as string[], fmtDate };
+  const allow = { color: true, width: true, gramaj: true };
+  const steps = [
+    { id: 's1', stepSequence: 1, status: 'PENDING', station: { name: 'KURŞUN', kind: 'PROCESS_QC', propertyCapabilities: [{ propertyId: 'kursun' }] } },
+    { id: 's2', stepSequence: 2, status: 'PENDING', station: { name: 'TAMBUR', kind: 'TAMBUR', propertyCapabilities: [] } },
+  ];
+  const w = (o: Partial<WorkOrder> = {}) => wo({ width: 280, foldType: '4-KAT', steps: steps as never, targetValues: [{ propertyId: 'gr', property: { name: 'KURŞUN GRAMAJI', variantOfPropertyId: 'kursun' }, value: { name: '50 gr' } }], ...o });
+
+  it('gramaj KURŞUN adımına, kat tipi TAMBUR adımına düşer; Hedef kartından kalkar', () => {
+    const v = targetView({ ...base, wo: w(), gramajPropertyId: 'gr', fixAllowed: allow });
+    expect(v.byStep).toEqual({ s1: [{ label: 'Gramaj', value: '50 gr', fix: 'gramaj' }], s2: [{ label: '', value: '4-KAT', fix: null }] });
+    const labels = v.rows.map(([k]) => k);
+    expect(labels).not.toContain('Kat Tipi');
+    expect(labels).not.toContain('KURŞUN GRAMAJI');
+    expect(labels).not.toContain('Gramaj');
+    expect(v.fixByLabel).toEqual({ Renk: 'color', En: 'width' });
+  });
+  it('eşleme bilgisi yoksa (eski sunucu) değerler Hedef kartında kalır, kalem satırda', () => {
+    const v = targetView({ ...base, wo: w({ steps: [] }), gramajPropertyId: 'gr', fixAllowed: allow });
+    expect(v.byStep).toEqual({});
+    expect(v.rows).toContainEqual(['Kat Tipi', '4-KAT']);
+    expect(v.rows).toContainEqual(['KURŞUN GRAMAJI', '50 gr']);
+    expect(v.fixByLabel['KURŞUN GRAMAJI']).toBe('gramaj');
+  });
+  it('izin yoksa kalem yok; gramaj izinli ama değer yoksa "Belirtilmedi" satırı kalemle açılır', () => {
+    expect(targetView({ ...base, wo: w(), gramajPropertyId: 'gr' }).fixByLabel).toEqual({});
+    const v = targetView({ ...base, wo: w({ targetValues: [] }), gramajPropertyId: 'gr', fixAllowed: allow });
+    expect(v.rows).toContainEqual(['Gramaj', 'Belirtilmedi']);
+    expect(v.fixByLabel.Gramaj).toBe('gramaj');
+  });
+  it('gramaj izinsizse (canGramaj yok) adım altı kalemsizdir', () => {
+    const v = targetView({ ...base, wo: w(), gramajPropertyId: 'gr', fixAllowed: { ...allow, gramaj: false } });
+    expect(v.byStep.s1[0].fix).toBeNull();
+  });
+});
+
+describe('actionPlacement', () => {
+  const on = { canFix: true, canCancel: true, isFason: false, hasOrderLinks: false, hasIncomingCard: true };
+  it('yetkili: hepsi yerinde; belgeler Gelen kartında', () => {
+    expect(actionPlacement(on)).toEqual({ reprint: true, detach: true, addBatch: true, orderLink: true, documents: 'incoming', cancel: true });
+  });
+  it('Gelen kartı yoksa belgeler özet şeridinde', () => {
+    expect(actionPlacement({ ...on, hasIncomingCard: false }).documents).toBe('summary');
+  });
+  it('fason İE ve bağlı sipariş yoksa Sipariş Bağla gizli; bağlıysa görünür', () => {
+    expect(actionPlacement({ ...on, isFason: true }).orderLink).toBe(false);
+    expect(actionPlacement({ ...on, isFason: true, hasOrderLinks: true }).orderLink).toBe(true);
+  });
+  it('düzeltme yetkisi yoksa düzeltme eylemleri yok, belgeler kalır', () => {
+    expect(actionPlacement({ ...on, canFix: false, canCancel: false })).toEqual({ reprint: false, detach: false, addBatch: false, orderLink: false, documents: 'incoming', cancel: false });
+  });
 });

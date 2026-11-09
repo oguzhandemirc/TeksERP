@@ -230,6 +230,8 @@ export interface Station {
   name: string;
   type: StationType;
   kind?: StationKind;
+  /** `GET /work-orders/:id` adım istasyonunda: hedef özellik eşlemesi için; eski sunucuda yok. */
+  propertyCapabilities?: { propertyId: string }[];
 }
 
 // =============================================================================
@@ -360,7 +362,7 @@ export interface WorkOrder {
   customer?: { id: string; name: string; code?: string | null } | null;
   createdBy?: { id: string; fullName: string | null } | null;
   /** Hedef çeşit değerleri (gramaj vb.); aktif olanlar. */
-  targetValues?: { property?: { name?: string | null } | null; value?: { name?: string | null } | null }[];
+  targetValues?: { propertyId?: string; property?: { name?: string | null; variantOfPropertyId?: string | null } | null; value?: { name?: string | null } | null }[];
   /** Üretime giren ham toplar özeti. */
   inputRolls?: { count: number; totalMeters: number } | null;
   /** Gelen (belgeden) bloğu — belgeden doğmamış İE'de null. */

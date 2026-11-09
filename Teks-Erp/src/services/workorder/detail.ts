@@ -38,13 +38,15 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         // Tablet detay özeti (2026-11-09, additive): canlı partiler, oluşturan, hedef çeşit değerleri (gramaj).
         batches: { where: { mergedIntoId: null }, select: { id: true, batchNumber: true }, orderBy: { createdAt: "asc" } },
         createdBy: { select: { id: true, fullName: true } },
-        targetValues: { where: { revokedAt: null }, select: { property: { select: { name: true } }, value: { select: { name: true } } } },
+        // propertyId/variantOfPropertyId: tablet hedef değeri hangi adımın istasyon yeteneğine bağlı eşler (2026-11-09, additive).
+        targetValues: { where: { revokedAt: null }, select: { propertyId: true, property: { select: { name: true, variantOfPropertyId: true } }, value: { select: { name: true } } } },
         // Aktif süzgeç ŞART: panel prefill bu listeyi PUT replace'e echo eder — damgalı
         // hedef burada dönerse replace onu DİRİLTİR.
         targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },
         steps: {
           include: {
-            station: true,
+            // propertyCapabilities: adım→hedef özellik eşlemesi (tablet rota çipi altı); additive.
+            station: { include: { propertyCapabilities: { select: { propertyId: true } } } },
             requiredCategory: true,
             plannedSubcontractor: true,
           },

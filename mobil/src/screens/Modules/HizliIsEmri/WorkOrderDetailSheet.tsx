@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import { Text, Button, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
+import { Text, Button, TouchableRipple, Icon, IconButton, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 
 import AppModal from '../../../components/AppModal';
+import TruncatedText from '../../../components/TruncatedText';
 import WorkOrderDocumentsSheet from './WorkOrderDocumentsSheet';
 import WorkOrderFixSheet, { type FixKind } from './WorkOrderFixSheet';
 import { kursunGramajKey } from './GramajFixSheet';
@@ -29,7 +30,7 @@ import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
 import { isCustomerGoodsWo } from '../IsEmirleri/workOrderRow';
-import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, routeNotes, type DetailRow, type StepTone } from './workOrderDetailView';
+import { detailColumns, incomingRows, targetView, summaryItems, routeChips, routeNotes, actionPlacement, type DetailRow, type StepTone, type FixKind3 } from './workOrderDetailView';
 
 const TONE: Record<StepTone, { bg: string; fg: string }> = {
   info: { bg: colors.infoContainer, fg: colors.infoText },
@@ -41,19 +42,45 @@ const TONE: Record<StepTone, { bg: string; fg: string }> = {
 
 const fmtDate = (iso: string) => formatFactory(iso, 'dd.MM.yyyy HH:mm');
 
-/** Etiket solda küçük gri, değer sağda — sıkı satırlı kart. */
-function InfoCard({ title, rows, testID, flex }: { title?: string; rows: readonly DetailRow[]; testID: string; flex?: number }) {
+/** Küçük çerçeveli başlık düğmesi (kart başlık satırı). */
+function HeadBtn({ icon, label, onPress, testID, danger }: { icon: string; label: string; onPress: () => void; testID: string; danger?: boolean }) {
+  return (
+    <Button mode="outlined" compact icon={icon} onPress={onPress} testID={testID} style={styles.headBtn} contentStyle={styles.headBtnContent} labelStyle={styles.headBtnLabel} textColor={danger ? colors.danger : undefined}>
+      {label}
+    </Button>
+  );
+}
+
+/** Değerin yanındaki düzeltme kalemi (56dp dokunma alanı). */
+function PencilBtn({ label, onPress, testID }: { label: string; onPress: () => void; testID: string }) {
+  return <IconButton icon="pencil" size={20} onPress={onPress} accessibilityLabel={label} testID={testID} style={styles.pencil} />;
+}
+
+const FIX_TESTID: Record<FixKind3, string> = { color: 'ie-duzelt-renk', width: 'ie-duzelt-en', gramaj: 'ie-duzelt-gramaj' };
+const FIX_LABEL: Record<FixKind3, string> = { color: 'Rengi değiştir', width: 'Eni değiştir', gramaj: 'Gramajı değiştir' };
+
+/** Etiket solda küçük gri, değer sağda — sıkı satırlı kart; başlık sağında isteğe bağlı eylem, satır sonunda kalem. */
+function InfoCard({ title, rows, testID, flex, headerRight, fixByLabel, onFix }: { title?: string; rows: readonly DetailRow[]; testID: string; flex?: number; headerRight?: React.ReactNode; fixByLabel?: Partial<Record<string, FixKind3>>; onFix?: (k: FixKind3) => void }) {
   return (
     <View style={[styles.infoCard, flex ? { flex } : null]} testID={testID}>
-      {title ? <Text style={styles.cardTitle}>{title}</Text> : null}
-      {rows.map(([k, v]) => (
-        <View key={k} style={styles.infoRow}>
-          <Text style={styles.infoKey}>{k}</Text>
-          <Text style={styles.infoVal} numberOfLines={2}>
-            {v}
-          </Text>
+      {title || headerRight ? (
+        <View style={styles.cardHead}>
+          {title ? <Text style={[styles.cardTitle, styles.cardTitleFlex]}>{title}</Text> : <View style={{ flex: 1 }} />}
+          {headerRight}
         </View>
-      ))}
+      ) : null}
+      {rows.map(([k, v]) => {
+        const fix = fixByLabel?.[k];
+        return (
+          <View key={k} style={styles.infoRow}>
+            <Text style={styles.infoKey}>{k}</Text>
+            <Text style={styles.infoVal} numberOfLines={2}>
+              {v}
+            </Text>
+            {fix && onFix ? <PencilBtn label={FIX_LABEL[fix]} onPress={() => onFix(fix)} testID={FIX_TESTID[fix]} /> : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -116,6 +143,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   // Gramajı Değiştir yalnız kurşun hedefi olan / kurşunu uygulanmış iş emrinde; eski sunucu (404) → düğme yok.
   const gramajQ = useQuery({ queryKey: kursunGramajKey(workOrderId ?? ''), queryFn: () => workOrderGramajService.kursunGramaj(workOrderId!), enabled: canFix && !!workOrderId, retry: false });
   const canGramaj = canFix && !!gramajQ.data?.propertyId && (!!gramajQ.data.target || gramajQ.data.appliedRollCount > 0);
+  const openFix = (k: FixKind3) => setFix(k);
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });
     void qc.invalidateQueries({ queryKey: ['work-order-rolls', workOrderId] });
@@ -153,6 +181,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       .filter((n): n is string => !!n);
   }, [wo]);
 
+  const gramajPropertyId = gramajQ.data?.propertyId ?? null;
   const rollMeters = rolls.reduce((a, r) => a + (Number(r.currentQty) || 0), 0);
   const view = useMemo(() => {
     if (!wo) return null;
@@ -165,11 +194,16 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         fmtDate,
       }),
       incoming: incomingRows(wo.incoming),
-      target: targetRows({ wo, fallbackItemName: rolls[0]?.item?.name, propertyNames: targetPropertyNames, fmtDate }),
+      target: targetView({ wo, fallbackItemName: rolls[0]?.item?.name, propertyNames: targetPropertyNames, fmtDate, gramajPropertyId, fixAllowed: { color: canFix, width: canFix, gramaj: canGramaj } }),
       chips: routeChips(wo.steps),
       notes: routeNotes(wo.steps),
     };
-  }, [wo, rolls, rollMeters, targetPropertyNames]);
+  }, [wo, rolls, rollMeters, targetPropertyNames, gramajPropertyId, canFix, canGramaj]);
+
+  const place = wo
+    ? actionPlacement({ canFix, canCancel, isFason: isCustomerGoodsWo(wo.type), hasOrderLinks: (wo.orderLinks ?? []).length > 0, hasIncomingCard: (view?.incoming.length ?? 0) > 0 })
+    : null;
+  const docsBtn = <HeadBtn icon="file-document-multiple-outline" label="Belgeler" onPress={() => setDocumentsOpen(true)} testID="ie-belgeler" />;
 
   return (
     <>
@@ -194,7 +228,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             </>
           ) : null}
         </View>
-        <TouchableRipple onPress={onClose} borderless style={styles.closeBtn}>
+        {place?.reprint ? <IconButton icon="printer" size={24} onPress={() => setFix('reprint')} accessibilityLabel="Kartı yeniden bas" testID="ie-kart-yeniden-bas" style={styles.headIcon} /> : null}
+        <TouchableRipple onPress={onClose} borderless style={styles.closeBtn} accessibilityLabel="Kapat" testID="ie-detay-kapat">
           <Icon source="close" size={24} color={colors.textSecondary} />
         </TouchableRipple>
       </View>
@@ -262,7 +297,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       ) : (
         // ── DETAY ────────────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.body}>
-          {view && view.summary.length > 0 ? (
+          {view && (view.summary.length > 0 || place?.documents === 'summary' || place?.orderLink) ? (
             <View style={styles.strip} testID="ie-detay-ozet">
               {view.summary.map(([k, v], i) => {
                 const perRow = cols === 2 ? view.summary.length : Math.min(3, view.summary.length);
@@ -274,13 +309,19 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                   </View>
                 );
               })}
+              {place?.documents === 'summary' || place?.orderLink ? (
+                <View style={styles.stripActions}>
+                  {place?.orderLink ? <HeadBtn icon="link-variant" label="Sipariş Bağla / Çöz" onPress={() => setLinkOpen(true)} testID="ie-siparis-bagla" /> : null}
+                  {place?.documents === 'summary' ? docsBtn : null}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
           {view ? (
             <View style={cols === 2 ? styles.rowCols : styles.colStack} testID={cols === 2 ? 'ie-detay-yatay' : 'ie-detay-dikey'}>
-              {view.incoming.length > 0 ? <InfoCard title="Gelen (belgeden)" rows={view.incoming} testID="ie-detay-gelen" flex={cols === 2 ? 1 : undefined} /> : null}
-              <InfoCard title="Hedef" rows={view.target} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
+              {view.incoming.length > 0 ? <InfoCard title="Gelen (belgeden)" rows={view.incoming} testID="ie-detay-gelen" flex={cols === 2 ? 1 : undefined} headerRight={docsBtn} /> : null}
+              <InfoCard title="Hedef" rows={view.target.rows} fixByLabel={view.target.fixByLabel} onFix={openFix} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
             </View>
           ) : null}
 
@@ -297,7 +338,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                       <View style={styles.routeStep} testID={`ie-detay-adim-${c.seq}`}>
                         <View style={styles.routeNameRow}>
                           <Text style={styles.stepSeq}>{c.seq}</Text>
-                          <Text style={styles.stepName}>{c.name}</Text>
+                          <TruncatedText style={styles.stepName}>{c.name}</TruncatedText>
                         </View>
                         <View style={[styles.stepBadge, { backgroundColor: tone.bg }]}>
                           <Text style={[styles.stepBadgeText, { color: tone.fg }]}>
@@ -305,6 +346,12 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                           </Text>
                         </View>
                         {c.where && !c.outside ? <Text style={styles.stepMeta}>{c.where}</Text> : null}
+                        {(view.target.byStep[c.id] ?? []).map((t, ti) => (
+                          <View key={`${t.label}-${ti}`} style={styles.stepTarget} testID={`ie-detay-adim-hedef-${c.seq}`}>
+                            <TruncatedText style={styles.stepTargetText}>{t.label ? `${t.label} ${t.value}` : t.value}</TruncatedText>
+                            {t.fix ? <PencilBtn label={FIX_LABEL[t.fix]} onPress={() => openFix(t.fix as FixKind3)} testID={FIX_TESTID[t.fix]} /> : null}
+                          </View>
+                        ))}
                       </View>
                     </React.Fragment>
                   );
@@ -321,7 +368,11 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
               <WorkOrderRecentEvents workOrderId={wo.id} />
             </View>
             <View style={[styles.section, cols === 2 ? { flex: 1 } : null]}>
-            <Text style={styles.sectionTitle}>Bağlı Toplar ({rolls.length})</Text>
+            <View style={styles.cardHead}>
+              <Text style={[styles.sectionTitle, styles.cardTitleFlex]}>Bağlı Toplar ({rolls.length})</Text>
+              {place?.detach ? <HeadBtn icon="tray-remove" label="Top Çıkar" onPress={() => setFix('detach')} testID="ie-top-cikar" /> : null}
+              {place?.addBatch ? <HeadBtn icon="tray-plus" label="Parti Ekle" onPress={() => setFix('addBatch')} testID="ie-parti-ekle" /> : null}
+            </View>
             {rollsQuery.isLoading ? (
               <ActivityIndicator color={colors.brand} style={{ marginVertical: spacing.md }} />
             ) : rolls.length === 0 ? (
@@ -341,66 +392,24 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             </View>
           </View>
 
-          {/* Aksiyonlar */}
-          <View style={styles.actionGrid}>
-            {/* "Belgeler" = iş emrinin TÜM belgeleri (refakat kartı + fason sevk /
-                kabul / doğrudan sevk irsaliyeleri). Eski "Çıktı" butonu yalnız
-                refakat kartını basıyordu; diğer belgelere mobilden hiç
-                ulaşılamıyordu. Kart hâlâ bir dokunuş uzakta (listenin ilk satırı). */}
-            <Button
-              mode="contained"
-              icon="file-document-multiple-outline"
-              onPress={() => setDocumentsOpen(true)}
-              style={styles.actionBtn}
-              contentStyle={styles.btnContent}
-            >
-              Belgeler
-            </Button>
-          </View>
-          {canFix ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Düzelt</Text>
-              <View style={styles.fixGrid}>
-                <Button mode="contained-tonal" icon="palette" onPress={() => setFix('color')} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                  Rengi Değiştir
-                </Button>
-                <Button mode="contained-tonal" icon="arrow-expand-horizontal" onPress={() => setFix('width')} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                  Eni Değiştir
-                </Button>
-                <Button mode="contained-tonal" icon="link-variant" onPress={() => setLinkOpen(true)} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                  Sipariş Bağla / Çöz
-                </Button>
-                <Button mode="contained-tonal" icon="printer" onPress={() => setFix('reprint')} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                  Kartı Yeniden Bas
-                </Button>
-                <Button mode="contained-tonal" icon="tray-remove" onPress={() => setFix('detach')} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                  Top Çıkar
-                </Button>
-                <Button mode="contained-tonal" icon="tray-plus" onPress={() => setFix('addBatch')} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                  Parti Ekle
-                </Button>
-                {canGramaj ? (
-                  <Button mode="contained-tonal" icon="weight-gram" onPress={() => setFix('gramaj')} style={styles.fixBtn} contentStyle={styles.btnContent}>
-                    Gramajı Değiştir
-                  </Button>
-                ) : null}
-              </View>
-            </View>
-          ) : null}
           {editable && !canCancel ? (
             <Text style={styles.note}>Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} üretim başladı — iptal panelden yapılır (toplar için karar ve sebep sorulur).</Text>
           ) : null}
           {canCancel ? (
-            <Button
-              mode="outlined"
-              icon="cancel"
-              textColor={colors.danger}
-              onPress={() => setMode('cancel')}
-              style={styles.cancelBtn}
-              contentStyle={styles.btnContent}
-            >
-              {`${TERIM.terbiyeIsEmri.cekim.belirtme} İptal Et`}
-            </Button>
+            <View style={styles.cancelRow}>
+              <Button
+                mode="outlined"
+                compact
+                icon="cancel"
+                textColor={colors.danger}
+                onPress={() => setMode('cancel')}
+                testID="ie-iptal"
+                style={styles.cancelBtn}
+                contentStyle={styles.headBtnContent}
+              >
+                {`${TERIM.terbiyeIsEmri.cekim.belirtme} İptal Et`}
+              </Button>
+            </View>
           ) : null}
           <View style={{ height: spacing.lg }} />
         </ScrollView>
@@ -499,11 +508,18 @@ const styles = StyleSheet.create({
   warnBox: { flexDirection: 'row', gap: spacing.sm, backgroundColor: colors.dangerContainer, borderRadius: radius.md, padding: spacing.md },
   warnText: { flex: 1, color: colors.dangerText, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 
-  actionGrid: { flexDirection: 'row', gap: spacing.md },
-  fixGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  fixBtn: { flexGrow: 1, flexBasis: '45%', borderRadius: radius.md },
-  actionBtn: { flex: 1, borderRadius: radius.md },
+  cancelRow: { alignItems: 'flex-end' },
   cancelBtn: { borderRadius: radius.md, borderColor: colors.danger },
+  headBtn: { borderRadius: radius.md },
+  headBtnContent: { minHeight: 56 }, // tablet dokunma hedefi tabanı (mobil/CLAUDE.md)
+  headBtnLabel: { fontSize: 13 },
+  headIcon: { margin: 0, width: 56, height: 56 },
+  pencil: { margin: 0, width: 56, height: 56 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  cardTitleFlex: { flex: 1, marginBottom: 0 },
+  stripActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, marginLeft: 'auto' },
+  stepTarget: { flexDirection: 'row', alignItems: 'center' },
+  stepTargetText: { fontSize: 13, fontWeight: '700', color: colors.text },
   actionsCol: { gap: spacing.sm, marginTop: spacing.md },
   btnContent: { height: 48 },
 });
