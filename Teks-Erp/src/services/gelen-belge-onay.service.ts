@@ -38,7 +38,7 @@ import { aliasKey } from "./gelen-belge-eslestirme.service";
 import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 import { declaredPageCount } from "../lib/gelen-belge/parti-ozet";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
-import { perDocumentEntryWarning, preparePerDocument, summaryTargets, type PartyEntry } from "./gelen-belge-onay-parti.service";
+import { perDocumentEntryWarning, preparePerDocument, summaryTargets, type PartyEntry, type SummaryDeclared } from "./gelen-belge-onay-parti.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -82,8 +82,8 @@ export type ApproveOptions = {
   parties?: ReadonlyArray<PartyEntry>;
   /** "Toplar ayrı geldi": `parties` her biri bir top (giriş sebebi "<no> top N", uyarı "Toplar ayrı"). */
   separateRolls?: boolean;
-  /** Tek özet satırının (partisiz ARABA) gelen kg'si — satıra yazılır, topa geçmez (2026-11-09). */
-  summaryKg?: number | null;
+  /** Tek özet satırının (partisiz ARABA) gelen kg'si ve eni — satıra yazılır, topa geçmez (2026-11-09). */
+  summary?: SummaryDeclared;
   /** K30 S16a (yalnız PER_DOCUMENT): iş emri formunda seçilen hedef ürün — özet satırı topları varsayılan yerine bununla doğar.
    *  Top doğurabilirliği çağıran (`itemProblem`) önceden doğrular. */
   item?: { id: string; name: string; source?: "FORM" | "WORK_ORDER_DEFAULT" };
@@ -348,7 +348,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
 
   await claimHeader(id, note, userId, varianceReason);
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}), ...(dup.confirmedPeers.length ? { duplicateDocNoConfirmed: dup.confirmedPeers } : {}), ...(mode === "PER_DOCUMENT" ? { entryMode: mode } : {}), ...(opts.via ? { via: opts.via } : {}) } });
-  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId, opts.parties, opts.summaryKg);
+  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId, opts.parties, opts.summary);
 
   // ── Satır claim: yalnız topsuz satır (PENDING|FAILED; bayat ENTERING de alınır — token replay korur).
   await prisma.customerDeliveryNoteLine.updateMany({
@@ -376,7 +376,8 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           initialQty: Number(line.meters),
           // ARABA özet satırının kg'si belgenin GELEN kg'sidir, tartılmış top kg'si değil → topa geçmez (TOP kipi bugünkü gibi).
           weightKg: line.weightKg == null || (isSummaryLine(note.id, line) && line.lineKind === DeliveryNoteLineKind.ARABA) ? undefined : Number(line.weightKg),
-          width: line.widthCm == null ? null : Number(line.widthCm),
+          // Gelen en da belgenin beyanıdır (ARABA özet satırı) — ölçülmüş top eni değil, topa geçmez.
+          width: line.widthCm == null || (isSummaryLine(note.id, line) && line.lineKind === DeliveryNoteLineKind.ARABA) ? null : Number(line.widthCm),
           clientToken: uuidv5(line.id, LINE_TOKEN_NS),
         },
         userId,

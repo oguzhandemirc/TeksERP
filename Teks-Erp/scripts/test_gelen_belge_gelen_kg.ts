@@ -10,7 +10,9 @@
 //   §4 ⭐ gövdedeki kg önerinin üstünde; §5 ⭐ bir satırda kg yok → özet kg null → İE incoming.kg null
 //   §6 ⭐ çok parti: parti 1 beyan kg (TOTAL), parti 2 gövde düzeltmesi → iki özet satırı; İE incoming.kg = toplam
 //   §7 ⭐ TOP kipi (Toplar ayrı geldi): top kg'si topa yazılır (bugünkü)
-// Negatif sonda: onaydaki ARABA koruması kaldırılınca §3 "Roll.weightKg NULL" kırmızı; MANUAL önceliği düşürülünce §1 kırmızı.
+//   §8 GELEN EN: ⭐ şablon `en` → özet satırı widthCm, Roll.width NULL; ⭐ gövde `incomingWidth` önde; 0 → 400; ⭐ partide gövde/belge
+// Negatif sonda: onaydaki ARABA koruması kaldırılınca §3 "Roll.weightKg NULL" kırmızı; MANUAL önceliği düşürülünce §1 kırmızı;
+// en için ARABA koruması kaldırılınca §8 "Roll.width NULL" kırmızı.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -110,19 +112,19 @@ async function run(url: string): Promise<void> {
   const route = (await prisma.route.create({ data: { name: `${TAG} rota`, steps: { create: [{ stationId: station, sequence: 1 }] } }, select: { id: true } })).id;
   made.routes.push(route);
 
-  const mkNote = async (lines: Array<{ meters: number; weightKg?: number | null; blockNo?: number }>, totalsDeclared?: unknown) => {
+  const mkNote = async (lines: Array<{ meters: number; weightKg?: number | null; blockNo?: number }>, totalsDeclared?: unknown, regionFields?: Record<string, string>) => {
     const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderText: `${TAG} GÖNDEREN`, ...(totalsDeclared ? { totalsDeclared } : {}), lines: lines.map((l, i) => ({ senderRollNo: `${TAG}-${made.notes.length}-${i}`, itemText: "Kumaş", ...l })) });
     const id = (r.data as { id?: string } | undefined)?.id ?? "";
     made.notes.push(id);
     const content = Buffer.from(`${TAG}-${randomUUID()}`);
-    const s = await prisma.documentScan.create({ data: { noteId: id, sha256: createHash("sha256").update(content).digest("hex"), mimeType: "image/jpeg", sizeBytes: content.length, content, status: "READ", ocrResult: { ocr: { text: TAG } } }, select: { id: true } });
+    const s = await prisma.documentScan.create({ data: { noteId: id, sha256: createHash("sha256").update(content).digest("hex"), mimeType: "image/jpeg", sizeBytes: content.length, content, status: "READ", ocrResult: { ocr: { text: TAG }, ...(regionFields ? { regions: [{ templateId: null, fields: regionFields }] } : {}) } }, select: { id: true } });
     made.scans.push(s.id);
     if (r.status !== 201) check("taslak", false, `${r.status} ${r.code ?? ""}`);
     return id;
   };
   const body = (extra: Record<string, unknown> = {}) => ({ clientToken: randomUUID(), ownerCustomerId: owner, kursunMeters: 150, routeTemplateId: route, ...extra });
   const formWo = (id: string, b: unknown) => call("POST", `/api/gelen-belge/irsaliyeler/${id}/is-emri`, wt, b);
-  const lineOf = (id: string) => prisma.customerDeliveryNoteLine.findUnique({ where: { id }, select: { weightKg: true, rollId: true, roll: { select: { weightKg: true } } } });
+  const lineOf = (id: string) => prisma.customerDeliveryNoteLine.findUnique({ where: { id }, select: { weightKg: true, widthCm: true, rollId: true, roll: { select: { weightKg: true, width: true } } } });
   const incomingOf = async (woId: string) => ((await woDetail(woId)).data as { incoming?: { kg: unknown; kgSource: unknown; meters: unknown } | null } | null)?.incoming;
 
   console.log("§2 gövde kapısı");
@@ -174,6 +176,26 @@ async function run(url: string): Promise<void> {
   const r7 = await formWo(n7, body({ rollMode: "SEPARATE", rolls: [{ meters: 70, weightKg: 28 }, { meters: 30, weightKg: 12 }] }));
   const t7 = await lineOf(partyLineId(n7, 1));
   check("§7 ⭐ TOP kipinde top kg'si topa yazılır (28)", r7.status === 201 && Number(t7?.roll?.weightKg) === 28, `${r7.status} ${r7.code ?? ""} ${String(t7?.roll?.weightKg)}`);
+
+  console.log("§8 gelen en");
+  const n8 = await mkNote([{ meters: 100, weightKg: 40 }], undefined, { en: "152,5" });
+  const r8 = await formWo(n8, body({ kursunMeters: 100 }));
+  const l8 = await lineOf(summaryLineId(n8));
+  check("§8 ⭐ gövdesiz → şablon en 152,5 özet satırına; Roll.width NULL", r8.status === 201 && Number(l8?.widthCm) === 152.5 && !!l8?.rollId && l8.roll?.width == null, `${r8.status} ${r8.code ?? ""} ${String(l8?.widthCm)} ${String(l8?.roll?.width)}`);
+  const n8b = await mkNote([{ meters: 100 }], undefined, { en: "152" });
+  const r8b = await formWo(n8b, body({ kursunMeters: 100, incomingWidth: 148 }));
+  const l8b = await lineOf(summaryLineId(n8b));
+  check("§8 ⭐ gövdedeki incomingWidth (148) belgedekinin önünde", r8b.status === 201 && Number(l8b?.widthCm) === 148, `${r8b.status} ${String(l8b?.widthCm)}`);
+  const r8c = await formWo(n8b, body({ incomingWidth: 0 }));
+  check("§8 incomingWidth: 0 → 400", r8c.status === 400, String(r8c.status));
+  const n8d = await mkNote([{ meters: 60, blockNo: 1 }, { meters: 40, blockNo: 2 }], { blocks: [{ blockNo: 1, batchNo: `${TAG}C` }, { blockNo: 2, batchNo: `${TAG}D` }] }, { en: "160" });
+  const r8d = await formWo(n8d, body({ mode: "SINGLE", parties: [{ blockNo: 1, meters: 60 }, { blockNo: 2, meters: 40, incomingWidth: 158 }] }));
+  const a8 = await lineOf(partyLineId(n8d, 1));
+  const b8 = await lineOf(partyLineId(n8d, 2));
+  check("§8 ⭐ parti: belge en 160 + gövde 158; toplar ensiz", r8d.status === 201 && Number(a8?.widthCm) === 160 && Number(b8?.widthCm) === 158 && a8?.roll?.width == null && b8?.roll?.width == null, `${r8d.status} ${r8d.code ?? ""} ${String(a8?.widthCm)} ${String(b8?.widthCm)}`);
+  const n8e = await mkNote([{ meters: 100 }]);
+  const r8e = await formWo(n8e, body({ kursunMeters: 100 }));
+  check("§8 belgede en yoksa özet satırı widthCm NULL", r8e.status === 201 && (await lineOf(summaryLineId(n8e)))?.widthCm == null, String(r8e.status));
 }
 
 async function cleanup(): Promise<void> {

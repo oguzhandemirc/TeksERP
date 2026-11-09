@@ -7,6 +7,7 @@
 import { DeliveryNoteLineStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { declaredKgOf, pickIncomingKg, type IncomingKgResult } from "../lib/gelen-belge/gelen-kg";
+import { formNumber } from "../lib/gelen-belge/form-alanlari";
 import { guardKgFields } from "../lib/gelen-belge/kg-koruma";
 import { isSummaryLine } from "./gelen-belge-kontrol.service";
 import { readFirstRegion, type TrustMode } from "./gelen-belge-parti-metre.service";
@@ -32,4 +33,14 @@ export async function noteIncomingKg(noteId: string, trust: TrustMode = "NORMAL"
     lineKgs: docLines.map((l) => l.weightKg),
   });
   return { ...r, kgFromMeterCell: guarded.dropped.length > 0 };
+}
+
+/**
+ * Belgenin GELEN EN'i (cm, 2026-11-09): ELLE > şablon `en` alanı (form alanıyla aynı çözüm, `formNumber`). Beyanın kaydıdır —
+ * ARABA özet satırının `widthCm`ine yazılır, topa geçmez; İE eni (`work_orders.width`) ayrıdır. BLIND: şablon tahmini yok.
+ */
+export async function noteIncomingWidth(noteId: string, trust: TrustMode = "NORMAL", manualWidth?: number | null): Promise<number | null> {
+  if (manualWidth != null && manualWidth > 0) return manualWidth;
+  if (trust === "BLIND") return null;
+  return formNumber((await readFirstRegion(prisma, noteId))?.fields.en) ?? null;
 }

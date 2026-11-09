@@ -32,7 +32,7 @@ import { allPartiesEntered, assertPartiesShape, getNoteParties, openPartyWorkOrd
 import { readIncomingDocFormApproval, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
 import { resolveMultiPartyMode } from "./gelen-belge-parti-kipi.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
-import { noteIncomingKg } from "./gelen-belge-gelen-kg.service";
+import { noteIncomingKg, noteIncomingWidth } from "./gelen-belge-gelen-kg.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 
 const workOrders = new WorkOrderService();
@@ -68,6 +68,8 @@ export interface FormWorkOrderInput {
   kursunMeters: number;
   /** Gelen kg (operatörün gördüğü/düzelttiği); yoksa belgeden önerilen (`noteIncomingKg`). Özet satırına yazılır, topa geçmez. */
   incomingKg?: number;
+  /** Gelen en (cm, belgenin beyanı); yoksa şablon `en` alanı (`noteIncomingWidth`). Özet satırına yazılır; İE eni `width` ayrı. */
+  incomingWidth?: number;
   /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
   routeTemplateId?: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
@@ -217,12 +219,12 @@ async function flagPropertyIds(targets: ReadonlyArray<{ propertyId: string }>): 
  */
 export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşteri malı; tür seçilmediği için ${TERIM.terbiyeIsEmri.tekilKucuk} Stoğa üretim olarak açıldı. Fason (müşteri malı) için "Fason Belge Okut"u kullanın.`;
 
-/** Onayın satır şekli: ayrı toplar TOP satırı (kendi kg'si), partiler ARABA özet satırı + parti kg'si, tek belge özet kg'si. */
+/** Onayın satır şekli: ayrı toplar TOP satırı (kendi kg'si), partiler ARABA özet satırı + parti kg/en'i, tek belge özet kg/en'i. */
 async function approvalLines(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean) {
-  const kg = await incomingKgPlan(noteId, input, parties, separateRolls);
-  if (!parties) return { summaryKg: kg.summary };
+  const kg = await incomingPlan(noteId, input, parties, separateRolls);
+  if (!parties) return { summary: { kg: kg.summary, widthCm: kg.width } };
   return {
-    parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null }) })),
+    parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null, widthCm: p.incomingWidth ?? kg.width }) })),
     ...(separateRolls ? { separateRolls: true } : {}),
   };
 }
@@ -340,18 +342,20 @@ async function finishParties({ note, parties, mode, input, route, steps, userId,
 
 /**
  * Özet satırlarının GELEN kg'si: gövde (operatör) > belge önerisi (`pickIncomingKg`; parti başına `/partiler` `suggestedKg`).
- * "Toplar ayrı geldi"de kg top başınadır (gövde `rolls[].weightKg`) — burada türetilmez.
+ * GELEN en: gövde > şablon `en` (belge geneli; partide `parties[].incomingWidth` yoksa her partiye). "Toplar ayrı geldi"de
+ * kg top başınadır (gövde `rolls[].weightKg`) — burada türetilmez.
  */
-async function incomingKgPlan(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean): Promise<{ summary: number | null; byBlock: Map<number, number | null> }> {
+async function incomingPlan(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean): Promise<{ summary: number | null; width: number | null; byBlock: Map<number, number | null> }> {
   const byBlock = new Map<number, number | null>();
-  if (separateRolls) return { summary: null, byBlock };
+  if (separateRolls) return { summary: null, width: null, byBlock };
+  const { trust } = await noteTanitim(noteId);
+  const width = await noteIncomingWidth(noteId, trust, parties ? null : input.incomingWidth);
   if (parties) {
     const suggested = new Map((await getNoteParties(noteId)).parties.map((p) => [p.blockNo, p.suggestedKg]));
     for (const p of parties) byBlock.set(p.blockNo, p.incomingKg ?? suggested.get(p.blockNo) ?? null);
-    return { summary: null, byBlock };
+    return { summary: null, width, byBlock };
   }
-  const { trust } = await noteTanitim(noteId);
-  return { summary: (await noteIncomingKg(noteId, trust, input.incomingKg)).kg, byBlock };
+  return { summary: (await noteIncomingKg(noteId, trust, input.incomingKg)).kg, width, byBlock };
 }
 
 function round3(n: number): number {
