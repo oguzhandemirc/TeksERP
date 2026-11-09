@@ -11,7 +11,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { p2002OnField } from "../utils/p2002";
-import { editTemplateDefinition, loadTemplates, meterKgClashErrors, validateTemplate, type DocumentTemplate, type TemplateDefinitionChanges, type TemplateDefinitionPatch } from "../lib/gelen-belge/motor";
+import { editTemplateDefinition, loadTemplates, meterKgClashErrors, normalizeTemplateLetters, validateTemplate, type DocumentTemplate, type TemplateDefinitionChanges, type TemplateDefinitionPatch } from "../lib/gelen-belge/motor";
 import { setUserTemplates } from "../lib/gelen-belge/sablon-bul";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
@@ -40,7 +40,8 @@ export function userTemplateCode(name: string): string {
 /** Gövdedeki şablonu kod/ad/sürümle mühürler ve doğrular (FAIL-CLOSED: şema dışı → 400). */
 function sealTemplate(raw: unknown, code: string, name: string, version: number): DocumentTemplate {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw AppError.badRequest("Şablon bir nesne olmalı.", { code: "USER_TEMPLATE_INVALID", errors: ["şablon bir nesne olmalı"] });
-  const t = { ...(raw as Record<string, unknown>), id: code, name, version };
+  // Etiket/anahtar kelime Türkçe dışı aksanlı harften arındırılmış saklanır (OCR tarafıyla aynı boğaz).
+  const t = normalizeTemplateLetters({ ...(raw as Record<string, unknown>), id: code, name, version });
   if (JSON.stringify(t).length > MAX_TEMPLATE_BYTES) throw AppError.badRequest("Şablon çok büyük.", { code: "USER_TEMPLATE_TOO_LARGE" });
   const v = validateTemplate(t);
   if (!v.ok) throw AppError.badRequest(`Şablon geçersiz: ${v.errors.slice(0, 5).join("; ")}`, { code: "USER_TEMPLATE_INVALID", errors: v.errors });
@@ -52,7 +53,8 @@ export async function loadUserTemplates(): Promise<DocumentTemplate[]> {
   const rows = await prisma.senderTemplate.findMany({ where: { code: { startsWith: USER_TEMPLATE_PREFIX }, isActive: true }, select: { code: true, version: true, template: true }, orderBy: { code: "asc" } });
   const out: DocumentTemplate[] = [];
   for (const r of rows) {
-    const t = { ...(r.template as Record<string, unknown>), id: r.code, version: r.version };
+    // Eski kayıtta "GÙLEÇSOY" gibi etiket kalmış olabilir: eşleştirmede şablon tarafı da aynı eşlemeden geçer.
+    const t = normalizeTemplateLetters({ ...(r.template as Record<string, unknown>), id: r.code, version: r.version });
     if (validateTemplate(t).ok) out.push(t as unknown as DocumentTemplate);
   }
   setUserTemplates(out);

@@ -19,6 +19,7 @@ export { extractSections, findPageMarker, rowKey, DEFAULT_PAGE_PATTERN } from ".
 export type { SectionResult, SectionsResult } from "./sections";
 export type { DocumentExtraction, ForeignDocument, RegionExtraction } from "./document";
 export { normalizeForMatch, turkishUpper, turkishLower, similarity, levenshtein, stripDiacritics } from "./text-normalize";
+export { fixTurkishLetters, normalizeOcrLetters, normalizeTemplateLetters, TURKCE_HARF_ESLEME } from "./turkce-harf";
 export { canonicalizeValue, parseNumber, parseDate, canonicalizeCode, matchEnum } from "./normalizers";
 export type { CanonicalizeSpec } from "./normalizers";
 export { suggestTemplate, findLabelFor, meterKgClashErrors, ASSIGNABLE_FIELDS, ASSIGNABLE_FIELD_KEYS, TABLE_COLUMN_KEYS, MAX_TEMPLATE_IDENTIFIERS } from "./suggest";

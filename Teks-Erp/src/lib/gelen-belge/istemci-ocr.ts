@@ -3,6 +3,7 @@
 // Saf modül: DB/ağ yok. Sözleşme katı (fazla alan 400); koordinat görüntü çerçevesine kırpılır.
 import { z } from "zod";
 import type { OcrElement, OcrLine, OcrPoint, OcrRect, OcrResult } from "./motor";
+import { normalizeOcrLetters } from "./motor/turkce-harf";
 
 export const CLIENT_OCR_MAX_WORDS = 4000;
 export const CLIENT_OCR_MAX_LINES = 2000;
@@ -134,7 +135,8 @@ export function clientOcrToResult(c: ClientOcr): OcrResult {
     lines = groupGeometric(words).map((ws) => toLine(ws, null, null));
   }
   const ordered = sortReadingOrder(lines);
-  return {
+  // Türkçe dışı aksanlı harf boğazı (`motor/turkce-harf`): yükleme, canlı okuma ve istasyon okutması bu dönüşten geçer.
+  return normalizeOcrLetters({
     text: ordered.map((l) => l.text).join("\n"),
     blocks: ordered.map((l) => ({ text: l.text, rect: l.rect, corners: l.corners, lines: [l] })),
     imageWidth: c.width,
@@ -142,5 +144,5 @@ export function clientOcrToResult(c: ClientOcr): OcrResult {
     ...(c.ms !== undefined ? { durationMs: Math.round(c.ms) } : {}),
     engine: CLIENT_OCR_ENGINE,
     rotation: c.rotation ?? 0,
-  };
+  });
 }

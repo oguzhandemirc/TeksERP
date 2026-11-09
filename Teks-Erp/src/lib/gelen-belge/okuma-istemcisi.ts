@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { EgressError, egressRequest } from "../http-egress";
 import type { OcrResult } from "./motor";
+import { normalizeOcrLetters } from "./motor/turkce-harf";
 
 /** Sidecar tek sayfa kilidiyle çalışır; 2600 px fotoğraf CPU'da ~10–60 s (tasarım §3.2: 90 s). */
 export const READER_TIMEOUT_MS = 90 * 1000;
@@ -41,7 +42,8 @@ export const OcrResultSchema = z.object({
   rotation: z.number().int().optional(),
   // Tablet barkodları zarfta saklanır: yeniden okuma/taslak yeniden kurulumu barkodu kaybetmez.
   barcodes: z.array(z.object({ format: z.string(), value: z.string() })).max(10).optional(),
-});
+  // Türkçe dışı aksanlı harf ("GÙLEÇSOY") motora girmeden Türkçe karşılığına döner — sidecar ve saklı zarf aynı boğazdan.
+}).transform((r) => normalizeOcrLetters(r as OcrResult) as typeof r);
 
 /** Sidecar `POST /donustur` yanıtı — okuma `app/contract.py` `DonusumSonucu` ile BİREBİR (`tests/test_donustur.py` ölçer). */
 export const ConvertResultSchema = z.object({
