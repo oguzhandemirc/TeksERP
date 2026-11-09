@@ -37,8 +37,10 @@ jest.mock('./DocRowCard', () => {
   // Tek form kipi + "Yeniden okut" bağı görünsün: kart metnine kip, basışa onReread.
   return { __esModule: true, default: (p: { row: DocRow; variant?: string; onReread?: () => void }) => <Text testID="satir-karti" onPress={p.onReread}>{`${p.row.noteNo} ${p.variant ?? 'list'}`}</Text> };
 });
+const PAGE = { base64: '', sha256: 's1', uri: 'file:///1.jpg', width: 10, height: 10 };
+let mockScan: { pages: typeof PAGE[]; sending: boolean; headerLocked: boolean; uploaded: Set<string> } = { pages: [], sending: false, headerLocked: false, uploaded: new Set() };
 jest.mock('../useDocScan', () => ({
-  useDocScan: () => ({ pages: [], progress: { uploaded: new Set() }, sending: false, headerLocked: false, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: 0 }),
+  useDocScan: () => ({ pages: mockScan.pages, progress: { note: null, uploaded: mockScan.uploaded }, sending: mockScan.sending, headerLocked: mockScan.headerLocked, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: mockScan.pages.length }),
 }));
 jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: () => mockAdd(), busy: false, camera: { visible: false, capacity: 20, firstPageNo: 1, onDone: jest.fn(), onDismiss: jest.fn() } }) }));
 jest.mock('../PageCameraModal', () => ({ __esModule: true, default: () => null }));
@@ -118,6 +120,29 @@ function highlighted(s: ReturnType<typeof renderWithPaper>, testID: string): boo
   }
   return false;
 }
+
+// Canlı kamera "Çek ve bitir" (2026-11-09): gönderim sürerken sayfa listesi/gönder paneli çizilmez, tek kompakt "Belge okunuyor…";
+// gönderim düşünce (sayfalar bekliyor) bugünkü yeniden dene / vazgeç paneli. Negatif sonda: DocColumn'da `sending` dalı
+// kaldırılınca ilk vaka kırmızı.
+describe('UnifiedWoForm — belge gönderilirken', () => {
+  afterEach(() => { mockScan = { pages: [], sending: false, headerLocked: false, uploaded: new Set() }; });
+  it('⭐ gönderim sürerken yalnız "Belge okunuyor…" (sayfa listesi, Vazgeç, gönder düğmesi yok)', () => {
+    mockScan = { pages: [PAGE], sending: true, headerLocked: false, uploaded: new Set() };
+    const s = renderWithPaper(ui());
+    expect(s.getByTestId('ie-belge-okunuyor')).toHaveTextContent(/Belge okunuyor/);
+    expect(s.queryByText(/Sayfalar \(/)).toBeNull();
+    expect(s.queryByTestId('belge-ie-gonder')).toBeNull();
+    expect(s.queryByText('Vazgeç')).toBeNull();
+    expect(s.queryByTestId('ie-belge-okut')).toBeNull();
+  });
+  it('⭐ gönderim düştüyse bekleyen sayfalar + "Yeniden dene" / Vazgeç paneli kalır', () => {
+    mockScan = { pages: [PAGE], sending: false, headerLocked: true, uploaded: new Set() };
+    const s = renderWithPaper(ui());
+    expect(s.queryByTestId('ie-belge-okunuyor')).toBeNull();
+    expect(s.getByTestId('belge-ie-gonder')).toHaveTextContent(/Yeniden dene \(1 sayfa\)/);
+    expect(s.getByText('Vazgeç')).toBeTruthy();
+  });
+});
 
 describe('UnifiedWoForm', () => {
   it('⭐ belge okutulmadan "oluştur" KAPALI + ipucu; belge alanları yer tutucu; Belge okut tarayıcıyı açar', () => {
