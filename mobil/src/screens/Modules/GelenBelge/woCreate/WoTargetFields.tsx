@@ -135,7 +135,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
           )}
           {cols.kg && (
             <DocFilled k="targetWeight" state={state} grow>
-              <CompactNumberField grow label="Kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder="—" disabled={locked} testID="ie-form-hedef-kg" />
+              <CompactNumberField grow label="Hedef kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder="—" disabled={locked} testID="ie-form-hedef-kg" />
             </DocFilled>
           )}
           {cols.kat && p.foldValues.length > 0 && (

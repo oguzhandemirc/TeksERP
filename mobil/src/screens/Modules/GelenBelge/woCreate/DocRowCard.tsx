@@ -21,6 +21,7 @@ import RollRows from './RollRows';
 import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
 import DocRowOwner from './DocRowOwner';
 import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
+import { IncomingKgField } from './DocRowKg';
 import { bandTone, type IssueKey } from './woIssues';
 import type { PartyPlanCtx } from './partyPlan';
 
@@ -88,7 +89,12 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
               <RollRows row={row} wo={wo} locked={locked} />
-              {!f.rolls && <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />}
+              {!f.rolls && (
+                <View style={styles.measures}>
+                  <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
+                  <IncomingKgField row={row} wo={wo} locked={locked} />
+                </View>
+              )}
             </>
           )}
           {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
@@ -224,6 +230,8 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
 const styles = StyleSheet.create({
   box: { padding: spacing.lg, borderRadius: radius.md, gap: spacing.sm, backgroundColor: colors.surfaceMuted },
   flat: { gap: spacing.md },
+  // Gelen metre + gelen kg yan yana; dar ekranda alt alta.
+  measures: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: spacing.md },
   ok: { backgroundColor: colors.successContainer },
   warn: { backgroundColor: colors.warningContainer },
   warnText: { color: colors.warningText },

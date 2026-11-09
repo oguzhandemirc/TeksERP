@@ -1,12 +1,16 @@
 // Çok partili belge (S1, fabrika cevabı 16/17): parti özeti → satırda parti listesi + kip; kayıt gövdesine parties[] + mode +
 // toplam metre; tek partide bugünkü form (multi null). PER_PARTY'de açılan bütün iş emirleri sonuçta.
 // Negatif sonda: `initialMultiParty` tek partide de taslak döndürürse "tek parti → null" vakası kırmızı.
+// T2 (2026-11-09): kip dokunuşu (`chooseMode`/`modeTouched`) yalnız gösterimdir, kip gövdeye HER ZAMAN gider; parti gelen kg'si
+// yalnız elle değiştiyse. Negatif sonda: withParties `mode`u modeTouched'a bağlarsa "dokunulmamış kip de gider" kırmızı;
+// kgEdited koşulu düşerse "öneri gövdeye girmez" kırmızı.
 import React, { type ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { InboundNoteDetail, NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
-import { initialMultiParty, multiPartyIssues, openedWorkOrders, withParties } from './partyDraft';
+import { TERIM } from '../../../../lib/terim';
+import { chooseMode, initialMultiParty, modeRuleLine, multiPartyIssues, openedWorkOrders, withParties } from './partyDraft';
 import { buildCreateBody, initialRowForm, rowIssues } from './woFromDoc';
 import { useWoRows } from './useWoRows';
 
@@ -38,7 +42,8 @@ describe('parti taslağı (saf)', () => {
   });
   it('⭐ iki parti → satırlar + fabrika varsayılan kipi', () => {
     expect(initialMultiParty(view({ defaultMode: 'PER_PARTY' }))).toEqual({
-      mode: 'PER_PARTY', rows: [{ blockNo: 1, batchNo: 'P9918733', meters: 586 }, { blockNo: 2, batchNo: 'P9918734', meters: 3935 }],
+      mode: 'PER_PARTY', defaultMode: 'PER_PARTY', modeSource: 'FACTORY', modeTouched: false,
+      rows: [{ blockNo: 1, batchNo: 'P9918733', meters: 586, incomingKg: null }, { blockNo: 2, batchNo: 'P9918734', meters: 3935, incomingKg: null }],
     });
   });
   it('⭐ 214279: sunucunun önerdiği parti metresi (beyan ara toplamı) Σ satırın önüne geçer; öneri yoksa (eski sunucu) Σ satır', () => {
@@ -53,6 +58,28 @@ describe('parti taslağı (saf)', () => {
     const b = buildCreateBody(f, { clientToken: 't', routeTemplateId: 'r1', gramajPropertyId: null });
     expect(b).toMatchObject({ mode: 'SINGLE', kursunMeters: '4521', parties: [{ blockNo: 1, batchNo: null, meters: 586 }, { blockNo: 2, batchNo: 'P9918734', meters: 3935 }] });
     expect(withParties(b, m).kursunMeters).toBe('4521');
+  });
+  it('⭐ T2 kip: dokunulmamış → kural metni + kaynak; farklı seçim → "sizin seçiminiz"; varsayılana dönüş dokunuşu siler', () => {
+    const m = initialMultiParty(view({ defaultMode: 'PER_PARTY', defaultModeSource: 'TEMPLATE' }))!;
+    expect(modeRuleLine(m)).toEqual({ text: `2 parti → 2 ${TERIM.terbiyeIsEmri.tekilKucuk}`, sourceText: 'şablon kuralı', touched: false });
+    expect(modeRuleLine(initialMultiParty(view())!)).toEqual({ text: `2 parti → 1 ${TERIM.terbiyeIsEmri.tekilKucuk}`, sourceText: 'fabrika ayarı', touched: false });
+    const mine = chooseMode(m, 'SINGLE');
+    expect(mine.modeTouched).toBe(true);
+    expect(modeRuleLine(mine)).toEqual({ text: 'Bu belge için: Tek İE', sourceText: 'sizin seçiminiz', touched: true });
+    expect(chooseMode(mine, 'PER_PARTY').modeTouched).toBe(false);
+  });
+  it('⭐ T2 gövde: kip dokunulmasa da gider (ekranda yazan olur); dokununca seçilen gider', () => {
+    const m = initialMultiParty(view({ defaultMode: 'PER_PARTY', defaultModeSource: 'TEMPLATE' }))!;
+    expect(withParties({ clientToken: 't', ownerCustomerId: 'c', kursunMeters: '1' }, m).mode).toBe('PER_PARTY');
+    expect(withParties({ clientToken: 't', ownerCustomerId: 'c', kursunMeters: '1' }, chooseMode(m, 'SINGLE')).mode).toBe('SINGLE');
+  });
+  it('⭐ T2 parti gelen kg: öneri forma dolar ama gövdeye girmez; elle değişen girer', () => {
+    const m = initialMultiParty(view({ parties: [party(1, { suggestedKg: 120.5, kgSource: 'TOTAL' }), party(2, { suggestedKg: 0 })] }))!;
+    expect(m.rows.map((r) => r.incomingKg)).toEqual([120.5, null]);
+    const base = { clientToken: 't', ownerCustomerId: 'c', kursunMeters: '1' };
+    expect(withParties(base, m).parties!.every((p) => !('incomingKg' in p))).toBe(true);
+    const edited = { ...m, rows: m.rows.map((r) => (r.blockNo === 2 ? { ...r, incomingKg: 80, kgEdited: true } : r)) };
+    expect(withParties(base, edited).parties).toEqual([{ blockNo: 1, batchNo: 'P9918733', meters: 586 }, { blockNo: 2, batchNo: 'P9918734', meters: 586, incomingKg: 80 }]);
   });
   it('eksik parti metresi engeller; tek partili formda parti kuralı yok', () => {
     const m = initialMultiParty(view())!;

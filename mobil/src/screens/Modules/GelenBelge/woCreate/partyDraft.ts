@@ -3,12 +3,16 @@
 import { TERIM } from '../../../../lib/terim';
 import { fmtMeters } from '../../../../utils/meters';
 import { partyProblems, partyTabTitle } from './partyTabs';
+import { MULTI_PARTY_TEXT as MODE_SHORT } from '../tanit/stages';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../../../../services/inboundDoc.service';
 
 export interface PartyRow {
   blockNo: number;
   batchNo: string;
   meters: number | null;
+  /** Parti gelen kg'si (öneri `suggestedKg`, elle düzeltilebilir); `kgEdited` yoksa gövdeye girmez. */
+  incomingKg?: number | null;
+  kgEdited?: boolean;
   /** Belge masası: parti başına plan makinesi / gramaj (yok = gövdedeki ortak değer). */
   machineId?: string | null;
   gramajValueId?: string | null;
@@ -17,6 +21,11 @@ export interface PartyRow {
 export interface MultiPartyDraft {
   rows: PartyRow[];
   mode: MultiPartyMode;
+  /** Sunucunun varsayılanı (belge tipi kuralı > fabrika) ve kaynağı; yok = eski taslak/sunucu (fabrika ayarı). */
+  defaultMode?: MultiPartyMode;
+  modeSource?: 'TEMPLATE' | 'FACTORY';
+  /** Kullanıcı bu belge için varsayılandan farklı kip seçti ("sizin seçiminiz"); varsayılana dönünce düşer. */
+  modeTouched?: boolean;
 }
 
 /**
@@ -31,10 +40,26 @@ const partyMeters = (p: NoteParty): number | null => {
 /** Çok parti (≥2) ise satırlar + fabrika varsayılan kipi; tek/bölümsüz belgede (ya da eski sunucuda) null = bugünkü form. */
 export function initialMultiParty(view: NotePartiesView | null | undefined): MultiPartyDraft | null {
   if (!view?.multi || view.parties.length < 2) return null;
+  const mode: MultiPartyMode = view.defaultMode === 'PER_PARTY' ? 'PER_PARTY' : 'SINGLE';
   return {
-    rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo ?? '', meters: partyMeters(p) })),
-    mode: view.defaultMode === 'PER_PARTY' ? 'PER_PARTY' : 'SINGLE',
+    rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo ?? '', meters: partyMeters(p), incomingKg: p.suggestedKg != null && p.suggestedKg > 0 ? p.suggestedKg : null })),
+    mode,
+    defaultMode: mode,
+    modeSource: view.defaultModeSource === 'TEMPLATE' ? 'TEMPLATE' : 'FACTORY',
+    modeTouched: false,
   };
+}
+
+/** Kip seçimi: varsayılandan farklıysa "sizin seçiminiz", varsayılana dönüş dokunuşu siler. */
+export function chooseMode(m: MultiPartyDraft, mode: MultiPartyMode): MultiPartyDraft {
+  return { ...m, mode, modeTouched: mode !== (m.defaultMode ?? m.mode) };
+}
+
+/** ③ Kurallar satırı: "3 parti → 3 iş emri" + kaynak ("şablon kuralı" | "fabrika ayarı" | "sizin seçiminiz"). */
+export function modeRuleLine(m: MultiPartyDraft): { text: string; sourceText: string; touched: boolean } {
+  const n = m.rows.length;
+  if (m.modeTouched) return { text: `Bu belge için: ${MODE_SHORT[m.mode]}`, sourceText: 'sizin seçiminiz', touched: true };
+  return { text: `${n} parti → ${m.mode === 'PER_PARTY' ? n : 1} ${TERIM.terbiyeIsEmri.tekilKucuk}`, sourceText: m.modeSource === 'TEMPLATE' ? 'şablon kuralı' : 'fabrika ayarı', touched: false };
 }
 
 /** Kilit sebebi sekme başlığıyla (parti no, yoksa "Parti N") — görevli hangi sekmeye bakacağını görür. */
@@ -45,12 +70,19 @@ export function multiPartyIssues(m: MultiPartyDraft): string[] {
 
 export const multiPartyTotal = (m: MultiPartyDraft): number => Math.round(m.rows.reduce((s, r) => s + (r.meters ?? 0), 0) * 1000) / 1000;
 
-/** Tek partili gövdeye parti listesi + kip eklenir; kurşun metresi parti toplamıdır. */
+/**
+ * Tek partili gövdeye parti listesi + kip eklenir; kurşun metresi parti toplamıdır. Kip HER ZAMAN gider (ekranda yazan
+ * olur: varsayılan okunduktan sonra fabrika ayarı değişse de form başka kiple açılmaz); `modeTouched` yalnız gösterimdir.
+ * Parti gelen kg'si yalnız elle değiştiyse gider (yoksa sunucu önerisini yazar).
+ */
 export function withParties(body: CreateWorkOrderFromNoteBody, m: MultiPartyDraft): CreateWorkOrderFromNoteBody {
   return {
     ...body,
     kursunMeters: String(multiPartyTotal(m)),
-    parties: m.rows.map((r) => ({ blockNo: r.blockNo, batchNo: r.batchNo.trim() || null, meters: r.meters ?? 0 })),
+    parties: m.rows.map((r) => ({
+      blockNo: r.blockNo, batchNo: r.batchNo.trim() || null, meters: r.meters ?? 0,
+      ...(r.kgEdited && r.incomingKg != null && r.incomingKg > 0 ? { incomingKg: r.incomingKg } : {}),
+    })),
     mode: m.mode,
   };
 }

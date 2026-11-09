@@ -1,5 +1,5 @@
 // Çok partili belge (S1): "Bu belgede N parti var" — parti no + metre düzenlenir, sunucunun canlı uyarıları gösterilir,
-// "Her parti ayrı iş emri | Tek iş emri" seçimi (fabrika varsayılanı "her parti ayrı" ise seçim yok, K1). Tek partili belgede çizilmez.
+// "Her parti ayrı iş emri | Tek iş emri" seçimi (varsayılan "her parti ayrı" ise seçim yok, K1 — belge şeridinin "Bu sefer değiştir"i açar). Tek partili belgede çizilmez.
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip, Icon, Text, TextInput } from 'react-native-paper';
@@ -9,7 +9,7 @@ import { inboundDocService } from '../../../../services/inboundDoc.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { TERIM } from '../../../../lib/terim';
 import { parseMeters } from '../approvalGate';
-import { MODE_LABELS, partyFacts, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
+import { chooseMode, MODE_LABELS, partyFacts, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyPlanFields from './PartyPlanFields';
 import type { PartyPlanCtx } from './partyPlan';
@@ -18,6 +18,7 @@ import { partyLock, partyTabs, showPartyTabs, STATUS_MARK } from './partyTabs';
 import { usePartyTabState } from './partyTabStore';
 import { PartyAllTable, PartyLockNote, PartyTabStrip } from './PartyTabBar';
 import { OurBatchAutoField, useOurBatchPreview } from './DocRowBatchFields';
+import { batchPreviewPlan } from './ourBatchPreview';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
 export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): void {
@@ -43,11 +44,12 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
   const m = row.form?.multi;
   const view = row.parties;
   const [tabState, select] = usePartyTabState(row.noteId);
-  // Seri kipinde açılmamış partiler sırayla numara alır: sekme başına ardışık tahmin (X, X+1…).
+  // Seri kipinde PER_PARTY: açılmamış partiler sırayla numara alır (sekme başına X, X+1…); SINGLE: tek İE → tek numara.
   const result = row.result?.kind === 'OPENED' ? row.result : null;
   const serial = wo.batchSource !== 'DOCUMENT';
   const pending = (m?.rows ?? []).filter((r) => partyOutcome(result, r.blockNo)?.kind !== 'OPENED').map((r) => r.blockNo);
-  const preview = useOurBatchPreview(pending.length, serial && !!view && !locked);
+  const batchPlan = batchPreviewPlan(m?.mode ?? 'SINGLE', pending);
+  const preview = useOurBatchPreview(batchPlan.count, serial && !!view && !locked);
   if (!m || !view) return null;
   const set = (next: MultiPartyDraft) => wo.setMulti(row.noteId, next);
   const setRow = (blockNo: number, patch: Partial<PartyRow>) => set({ ...m, rows: m.rows.map((r) => (r.blockNo === blockNo ? { ...r, ...patch } : r)) });
@@ -58,12 +60,13 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
   const pane = (r: PartyRow) => (
     <PartyPane key={r.blockNo} r={r} p={view.parties.find((x) => x.blockNo === r.blockNo)} out={outcome(r.blockNo)} noteNo={row.noteNo} locked={locked} plan={plan}
       problems={tabbed ? tabs.find((t) => t.blockNo === r.blockNo)?.problems ?? [] : []} hidden={tabbed && active !== r.blockNo} onChange={(patch) => setRow(r.blockNo, patch)}
-      ourBatch={serial && pending.includes(r.blockNo) ? { code: preview[pending.indexOf(r.blockNo)] } : null} />
+      ourBatch={serial && batchPlan.perParty && pending.includes(r.blockNo) ? { code: preview[pending.indexOf(r.blockNo)] } : null} />
   );
   return (
     <View style={styles.box} testID={`belge-partiler-${row.noteNo}`}>
       <Text style={styles.title}>{`Bu belgede ${m.rows.length} parti var`}</Text>
       <ResultSummary text={partyResultSummary(result, m.rows.map((r) => r.blockNo))} testID={`belge-parti-ozet-${row.noteNo}`} />
+      {serial && !batchPlan.perParty && batchPlan.count > 0 && <OurBatchAutoField code={preview[0]} testID={`belge-parti-bizim-tek-${row.noteNo}`} />}
       {tabbed && <PartyLockNote locks={partyLock(tabs)} onSelect={select} testID={`belge-parti-kilit-${row.noteNo}`} />}
       {tabbed && <PartyTabStrip tabs={tabs} active={active} onSelect={select} testID={`belge-parti-sekme-${row.noteNo}`} />}
       {tabbed && active === 'all' && (
@@ -71,10 +74,10 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
       )}
       {m.rows.map(pane)}
       {view.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
-      {showModeChoice(view) && (
+      {(showModeChoice(view) || m.modeTouched) && (
         <View style={styles.chips}>
           {(['PER_PARTY', 'SINGLE'] as const).map((k) => (
-            <Chip key={k} selected={m.mode === k} onPress={() => set({ ...m, mode: k })} disabled={locked || !!result} style={styles.chip} testID={`belge-parti-kip-${row.noteNo}-${k}`}>
+            <Chip key={k} selected={m.mode === k} onPress={() => set(chooseMode(m, k))} disabled={locked || !!result} style={styles.chip} testID={`belge-parti-kip-${row.noteNo}-${k}`}>
               {MODE_LABELS[k]}
             </Chip>
           ))}
@@ -118,6 +121,7 @@ function PartyPane({ r, p, out, noteNo, locked, plan, problems, hidden, onChange
         <TextInput mode="outlined" label="Parti no" value={r.batchNo} disabled={partyLocked} style={styles.input}
           onChangeText={(t) => onChange({ batchNo: t })} testID={`belge-parti-no-${noteNo}-${r.blockNo}`} />
         <MeterInput initial={r.meters} locked={partyLocked} onChange={(meters) => onChange({ meters })} testID={`belge-parti-metre-${noteNo}-${r.blockNo}`} />
+        <MeterInput initial={r.incomingKg ?? null} label="Gelen kg" locked={partyLocked} onChange={(incomingKg) => onChange({ incomingKg, kgEdited: true })} testID={`belge-parti-kg-${noteNo}-${r.blockNo}`} />
       </View>
       {ourBatch && <OurBatchAutoField code={ourBatch.code} testID={`belge-parti-bizim-${noteNo}-${r.blockNo}`} />}
       {problems.map((x) => <Text key={x} style={styles.problem} testID={`belge-parti-eksik-${noteNo}-${r.blockNo}`}>{`${STATUS_MARK.error} ${x}`}</Text>)}
@@ -153,11 +157,11 @@ function ResultSummary({ text, testID }: { text: string | null; testID: string }
 }
 
 /** Metin yerelde tutulur ("198," yazarken sayıya çevrilip silinmesin); sayı her tuşta üst forma gider. */
-function MeterInput({ initial, locked, onChange, testID }: { initial: number | null; locked: boolean; onChange: (m: number | null) => void; testID: string }) {
+function MeterInput({ initial, label = 'Metre', locked, onChange, testID }: { initial: number | null; label?: string; locked: boolean; onChange: (m: number | null) => void; testID: string }) {
   const [text, setText] = useState(initial !== null ? String(initial).replace('.', ',') : '');
   return (
     <View style={styles.input}>
-      <NumpadInput value={text} label="Metre" mode="outlined" useNativeKeyboard allowDecimal editable={!locked} testID={testID}
+      <NumpadInput value={text} label={label} mode="outlined" useNativeKeyboard allowDecimal editable={!locked} testID={testID}
         onChangeText={(t) => { setText(t); onChange(parseMeters(t)); }} />
     </View>
   );

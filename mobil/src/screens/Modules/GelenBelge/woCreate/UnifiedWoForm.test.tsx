@@ -137,6 +137,8 @@ describe('UnifiedWoForm', () => {
     expect(s.getByTestId('belgeden-width')).toBeTruthy();
     expect(s.getByTestId('ie-form-hedef-metraj').props.value).toBe('1200.5');
     expect(s.getByTestId('ie-form-hedef-kg').props.value).toBe('300');
+    // T2: formdaki kg HEDEF kg'dir (gelen kg belge satırının kutusunda).
+    expect(s.getByTestId('ie-form-hedef-kg').props.accessibilityLabel).toBe('Hedef kg (kg)');
     expect(s.getByTestId('belgeden-targetQuantity')).toBeTruthy();
     expect(s.getByTestId('satir-karti')).toHaveTextContent(/single/);
     // Belge varken dev "Belgeyi okut" düğmesi yok; yeniden okutma kartın Belge şeridinde.

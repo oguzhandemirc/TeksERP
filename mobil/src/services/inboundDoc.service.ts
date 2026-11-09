@@ -19,6 +19,7 @@ import type {
   UserTemplateView,
 } from '../types/inboundDocTeach';
 import type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
+import type { IncomingKgSource, ReadSummaryTanima } from '../types/inboundDocTanima';
 
 export type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 
@@ -81,7 +82,8 @@ export interface UploadScanResult {
 export type ReadSummaryState = 'NO_PAGES' | 'READING' | 'NO_SERVICE' | 'READ' | 'PARTIAL' | 'FAILED';
 
 /** `GET /gelen-belge/irsaliyeler/:id/okuma-ozeti` (tablet izni `gelen-belge:write`). */
-export interface ReadSummary {
+/** `tanima` + gelen kg (2026-11-09) `ReadSummaryTanima`dan; eski sunucu göndermez. */
+export interface ReadSummary extends ReadSummaryTanima {
   noteId: string;
   noteNo: string;
   noteStatus: string;
@@ -194,6 +196,9 @@ export interface InboundNoteDetail {
   suggestions?: DocFormSuggestions | null;
   /** Okuma özetindekiyle aynı (toplar ayrı geldi). */
   docRolls?: DocRoll[];
+  /** Gelen kg önerisi: detay ucu taşımaz, okuma özetinden tamamlanır (`withSummaryFields`). */
+  incomingKg?: number | null;
+  incomingKgSource?: IncomingKgSource | null;
   /** Belge satırları (detay ucu hep gönderir; tablet yalnız parti önizlemesinde okur: top satırları + foto kutusu). */
   lines?: InboundNoteLine[];
 }
@@ -244,6 +249,7 @@ export interface InboundDocSettings {
 export type TabletWoEntry = 'IKISI' | 'BELGE' | 'TOP';
 
 export type { SameDocumentMatch, SameDocumentQuery, SameDocumentState } from '../types/inboundDocSameDoc';
+export type { IncomingKgSource, Tanima, TanimaMappingRow, TanimaRule } from '../types/inboundDocTanima';
 export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../types/inboundDocWoCreate';
 
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */

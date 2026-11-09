@@ -95,6 +95,7 @@ export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
     formFields: s.formFields ?? null,
     suggestions: s.suggestions ?? null,
     ...(s.docRolls ? { docRolls: s.docRolls } : {}),
+    ...(s.incomingKg !== undefined ? { incomingKg: s.incomingKg, incomingKgSource: s.incomingKgSource ?? null } : {}),
   };
 }
 
@@ -105,9 +106,11 @@ export function withSummaryFields(d: InboundNoteDetail, s: ReadSummary | null | 
   const docRolls = d.docRolls ?? s?.docRolls;
   // Müşteri parti no özetten (güven süzgeçli: SORMA'da tanıtılmamış tahmin null); detay ham kolonu taşır.
   const cbn = s?.customerBatchNo !== undefined ? s.customerBatchNo : d.customerBatchNo;
+  // Gelen kg önerisi yalnız okuma özetinde (detay ucu taşımaz).
+  const kg = d.incomingKg === undefined && s?.incomingKg !== undefined ? { incomingKg: s.incomingKg, incomingKgSource: s.incomingKgSource ?? null } : null;
   // Eklenecek bir şey yoksa detay AYNEN döner (eski sunucuda bugünkü nesne).
-  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls && cbn === d.customerBatchNo) return d;
-  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}), ...(cbn !== undefined ? { customerBatchNo: cbn } : {}) };
+  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls && cbn === d.customerBatchNo && !kg) return d;
+  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}), ...(cbn !== undefined ? { customerBatchNo: cbn } : {}), ...(kg ?? {}) };
 }
 
 export interface RowForm {
@@ -127,6 +130,10 @@ export interface RowForm {
   meters: number | null;
   /** Okunan metre doğrulama bekliyor: doğrula ya da düzelt. */
   metersReview: boolean;
+  /** Gelen kg (belgeden önerilen ya da elle); HEDEF kg değil. Yok/null = belgede kg yok. */
+  incomingKg?: number | null;
+  /** Kullanıcı gelen kg'yi değiştirdi → gövdeye girer (yoksa sunucu belgeden önerileni yazar). */
+  incomingKgEdited?: boolean;
   gramajValueId: string | null;
   /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
   multi?: MultiPartyDraft | null;
@@ -164,6 +171,7 @@ export function initialRowForm(d: InboundNoteDetail, gramajFor?: (customerId: st
     customerBatchNoFromDoc: customerBatchNo !== null,
     meters,
     metersReview: meters !== null && !!d.kursunMetersReview,
+    incomingKg: toNumber(d.incomingKg),
     gramajValueId: gramajFor?.(owner) ?? null,
   };
 }
@@ -210,6 +218,8 @@ export function buildCreateBody(
   body.ourBatchNo = f.ourBatchNo ?? null;
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
   if (f.customerBatchNoEdited) body.customerBatchNo = f.customerBatchNo?.trim() || null;
+  // Gelen kg yalnız elle değiştiyse (boşaltılırsa anahtar yok → sunucu belgedekini yazar); çok parti/ayrı topta parti başınadır.
+  if (!f.multi && !f.rolls && f.incomingKgEdited && f.incomingKg != null && f.incomingKg > 0) body.incomingKg = f.incomingKg;
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.

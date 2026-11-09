@@ -1,6 +1,7 @@
 // Belge satırının başı. Toplu liste: "Belge GB…" şeridi + okuma hapı, altında eylem satırı. Tek İE formu: TEK satır — belge no +
 // durum ikonu (sorun varsa kısa yazı), sağda Yeniden okut / Taslağı iptal et ikonları. İkisinde de tanıtılmamış şeridi ve kısa
 // eylemli iletiler (`docReadNotice`) altta; şablon düzeltmek okuma düzeltmesidir → okuma durumunun yanında durur.
+// Sunucu `tanima` gönderince altta üç aşamalı şerit (`RecognitionStrip`): şablon adı ve "Tanıt" oraya taşınır.
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
@@ -14,6 +15,8 @@ import { TeachStrip, TemplateName, TemplateUpdateButton } from '../tanit/TeachBa
 import { useTeachEntry } from '../tanit/useTeachEntry';
 import type { useReadResult } from '../useReadResult';
 import { docReadNotices, docReadPill, type DocNotice } from './docReadNotice';
+import RecognitionStrip from './RecognitionStrip';
+import { stripModel } from './stripModel';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 export type DocRowVariant = 'list' | 'single';
@@ -62,7 +65,13 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
   const pill = noPages ? { tone: 'idle' as PillTone, icon: 'information-outline' as const, text: 'Belgesiz — elle giriş' } : docReadPill(input);
   const notices = done || noPages ? [] : docReadNotices(input);
   const teach = useTeachEntry({ row, wo, tanitim: w?.phase === 'done' ? w.summary.tanitim : undefined, customers });
-  const act = (n: DocNotice) => {
+  const strip = noPages ? null : stripModel({
+    tanima: w?.phase === 'done' ? w.summary.tanima : undefined, entry: teach, localTaught: !!row.taught,
+    multi: row.form?.multi, locked: wo.saving || !!row.result,
+  });
+  // Şerit varken ad ①'de; amber şerit yalnız fotoğrafsız açıklama için kalır (Tanıt düğmesi ①'de).
+  const name = strip ? null : <TemplateName entry={teach} />;
+  const act = (n: DocNotice): NoticeAction => {
     if (n.action === 'recheck') return { label: 'Yeniden bak', icon: 'refresh' as const, onPress: read.recheck };
     if (n.action === 'reread' && onReread && !wo.saving) return { label: 'Yeniden okut', icon: 'camera-retake-outline' as const, onPress: onReread };
     return undefined;
@@ -77,7 +86,7 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           <Text style={styles.no} numberOfLines={1}>{no}</Text>
           {busy ? <ActivityIndicator size="small" /> : <Icon source={pill.icon} size={20} color={pillColor} />}
           {pill.tone !== 'ok' && <Text style={[styles.state, { color: pillColor }]} numberOfLines={1} testID="ie-serit-belge-durum">{pill.text}</Text>}
-          <TemplateName entry={teach} />
+          {name}
           <View style={styles.flex} />
           <TemplateUpdateButton entry={teach} />
           {onPreview && (
@@ -104,7 +113,7 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           />
           <View style={styles.sub} testID={`belge-serit-alt-${no}`}>
             {busy ? <ActivityIndicator size="small" /> : null}
-            <TemplateName entry={teach} />
+            {name}
             <View style={styles.flex} />
             <TemplateUpdateButton entry={teach} />
             {!done && (
@@ -118,7 +127,20 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           </View>
         </>
       )}
-      <TeachStrip entry={teach} />
+      {strip && <RecognitionStrip model={strip} noteNo={no} multi={row.form?.multi} onTeach={teach.open} onMode={(m) => wo.setMulti(row.noteId, m)} />}
+      {(!strip || teach.noPhoto) && <TeachStrip entry={teach} />}
+      <BandNotices notices={notices} act={act} no={no} />
+      {teach.modal}
+    </>
+  );
+}
+
+type NoticeAction = { label: string; icon: 'refresh' | 'camera-retake-outline'; onPress: () => void } | undefined;
+
+/** Kısa eylemli okuma iletileri (Yeniden bak / Yeniden okut). */
+function BandNotices({ notices, act, no }: { notices: DocNotice[]; act: (n: DocNotice) => NoticeAction; no: string }) {
+  return (
+    <>
       {notices.map((n) => {
         const a = act(n);
         return (
@@ -131,7 +153,6 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           />
         );
       })}
-      {teach.modal}
     </>
   );
 }

@@ -132,3 +132,31 @@ describe('DocRowCard — vurgu ve seçili gramaj', () => {
     expect(off.some((x) => x.backgroundColor === colors.choice.onBg)).toBe(false);
   });
 });
+
+// Gece notu (2026-11-09) regresyonu: çok partide SINGLE = tek İE → TEK parti numarası (count=1, formun üstünde bir kez);
+// PER_PARTY → parti sayısı kadar ardışık tahmin. Negatif sonda: SINGLE'da count = parti sayısı → ilk vaka kırmızı.
+describe('DocRowCard — çok partide bizim parti no önizlemesi', () => {
+  const party = (blockNo: number) => ({ blockNo, batchNo: `M${blockNo}`, orderNo: null, declaredTopCount: null, declaredMeters: null, lineCount: 1, meters: 100, weightKg: null, warnings: [] });
+  function MultiHarness({ mode }: { mode: 'SINGLE' | 'PER_PARTY' }) {
+    const view = { parties: [party(1), party(2), party(3)], warnings: [], multi: true, defaultMode: mode };
+    const multi = { mode, defaultMode: mode, rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo, meters: 100 })) };
+    const row: DocRow = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, detail: detail as never, form: { ...baseForm, multi }, parties: view as never, gramajTouched: false, result: null };
+    const wo = { setDetail: jest.fn(), setParties: jest.fn(), setMulti: jest.fn(), recent: [], mode: 'WITH_WORK_ORDER', saving: false, removeRow: jest.fn(), showGramaj: false, catalog, batchSource: 'SERIES', updateForm: jest.fn() } as unknown as WoRowsState;
+    return <DocRowCard row={row} wo={wo} customers={[{ value: 'c1', label: 'Gülkesim' }]} customersLoading={false} />;
+  }
+  it('⭐ SINGLE: tek numara istenir ve bir kez gösterilir (parti başına alan yok)', async () => {
+    mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05'], min: 1, max: 99 } });
+    const ui = renderWithPaper(<MultiHarness mode="SINGLE" />);
+    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-tek-GB-1').props.value).toBe('Otomatik · sıradaki: P05'));
+    expect(mockNumberState).toHaveBeenCalledWith(1);
+    expect(mockNumberState).not.toHaveBeenCalledWith(3);
+    expect(ui.queryByTestId('belge-parti-bizim-GB-1-1', { includeHiddenElements: true })).toBeNull();
+  });
+  it('⭐ PER_PARTY: parti sayısı kadar ardışık tahmin, parti başına', async () => {
+    mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05', 'P06', 'P07'], min: 1, max: 99 } });
+    const ui = renderWithPaper(<MultiHarness mode="PER_PARTY" />);
+    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-GB-1-3', { includeHiddenElements: true }).props.value).toBe('Otomatik · sıradaki: P07'));
+    expect(mockNumberState).toHaveBeenCalledWith(3);
+    expect(ui.queryByTestId('belge-parti-bizim-tek-GB-1')).toBeNull();
+  });
+});

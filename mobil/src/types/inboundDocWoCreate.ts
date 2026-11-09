@@ -13,6 +13,8 @@ export interface CreateWorkOrderFromNoteBody {
   customerBatchNo?: string | null;
   /** Decimal string; verilince gözden geçirilmiş sayılır. */
   kursunMeters: string;
+  /** Gelen kg; YALNIZ kullanıcı değiştirdiyse gider (yoksa sunucu belgeden önerileni yazar; eski sunucu strict gövdeyle 400). */
+  incomingKg?: number;
   /** Yok = rotasız iş emri (K29; yalnız rota uygulaması "Okutmayla", sunucu SIRALI'da 400 verir). */
   routeTemplateId?: string;
   stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
@@ -23,6 +25,8 @@ export interface CreateWorkOrderFromNoteBody {
     blockNo: number;
     batchNo: string | null;
     meters: number;
+    /** Parti gelen kg'si; yalnız kullanıcı değiştirdiyse (yoksa sunucu `/partiler` önerisini yazar). */
+    incomingKg?: number;
     /** Belge masası: parti başına gramaj / plan makinesi (verilmezse gövdedekiler). */
     targetValues?: { propertyId: string; valueId: string }[];
     stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
@@ -84,7 +88,7 @@ export interface PartyWorkOrderFailure {
   message: string;
 }
 
-/** `GET /gelen-belge/irsaliyeler/:id/partiler` — parti özeti + canlı uyarılar + fabrika varsayılan kipi. */
+/** `GET /gelen-belge/irsaliyeler/:id/partiler` — parti özeti + canlı uyarılar + varsayılan kip (belge tipi kuralı > fabrika). */
 export interface NoteParty {
   blockNo: number;
   batchNo: string | null;
@@ -104,6 +108,9 @@ export interface NoteParty {
   suggestedMetersSource?: 'TOTAL' | 'LINE_SUM' | null;
   /** Onaylı partinin KAYITLI metresi (özet satırı, elle düzeltme dahil); onaysız/eski sunucu → null/undefined. */
   recordedMeters?: number | null;
+  /** Önerilen parti gelen kg'si (bölüm beyanı → Σ satır kg); eski sunucu göndermez. */
+  suggestedKg?: number | null;
+  kgSource?: 'TOTAL' | 'LINE_SUM' | null;
 }
 
 export interface NotePartiesView {
@@ -111,6 +118,8 @@ export interface NotePartiesView {
   warnings: string[];
   multi: boolean;
   defaultMode: MultiPartyMode;
+  /** `defaultMode` nereden: belge tipinin kuralı · fabrika ayarı. Eski sunucu göndermez (= fabrika ayarı). */
+  defaultModeSource?: 'TEMPLATE' | 'FACTORY';
 }
 
 export type MultiPartyMode = 'SINGLE' | 'PER_PARTY';
