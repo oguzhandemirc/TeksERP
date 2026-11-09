@@ -35,7 +35,7 @@ function TemplateLinks() {
       <Button variant="ghost" asChild>
         <Link to={SENDER_TEMPLATES_PATH}>
           <FileCog className="mr-1 h-4 w-4" />
-          Gönderen şablonları
+          Belge tipleri
         </Link>
       </Button>
       <Button variant="ghost" asChild>

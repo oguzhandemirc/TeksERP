@@ -2,6 +2,7 @@
 // Kaynak: `Teks-Erp/src/services/gelen-belge-{note,line,scan,eslestirme,onay}.service.ts` select/dönüş şekilleri.
 // Prisma Decimal JSON'da metindir (`meters`/`weightKg`/`widthCm`); toplam kapısının hükmü backend `totalsCheck`ten okunur.
 
+import type { Tanima } from "./tanimaTypes";
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
 import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, ScanContentFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
@@ -138,6 +139,8 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetail
   sameBatch?: SameBatchNotes | null;
   /** Okuma servisi tanımlı mı (false → bekleyen sayfa hiç okunmaz, form elle doldurulur); eski backend göndermez. */
   readerConfigured?: boolean;
+  /** Tanıma özeti (belge tanıt 3 aşama); okunmuş sayfa yoksa / eski backend → yok. */
+  tanima?: Tanima;
 }
 
 export interface SameBatchNotes {

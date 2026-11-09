@@ -271,6 +271,11 @@ export interface WorkOrder {
    */
   inputRolls?: { count: number; totalMeters: number };
   /**
+   * Sadece findById — girdi kökü topların gelen belge satırlarından metre + kg (2026-11-09). null = İE belgeden doğmadı;
+   * `kg` null = bir kökün satırında kg yok (kısmi toplam gösterilmez). Decimal JSON'da metin olabilir. Eski sunucu göndermez.
+   */
+  incoming?: { meters: number | string; kg: number | string | null; kgSource: "DOCUMENT" | null } | null;
+  /**
    * Sadece findById response'unda — iptal edilmemiş fason sevklerin toplam
    * metrajı. Form'da yeni hedef metraj girilirken karşılaştırma için kullanılır
    * (sevk edilen > yeni hedef → fazla, Tambur'da stok kalır uyarısı).

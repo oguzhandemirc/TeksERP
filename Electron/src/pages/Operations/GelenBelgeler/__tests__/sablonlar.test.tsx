@@ -1,13 +1,15 @@
-// Gönderen şablonları (E2): liste, aktif/pasif + seçici → PATCH yalnız değişen alan, şablon önerisi etiketi, bulunabilirlik.
+// Belge Tipleri (eski "Gönderen şablonları", E2 + belge tanıt 3 aşama): liste, kullanma/geri al + seçici → PATCH yalnız değişen alan,
+// fotoğrafsız düzenle (PATCH /tanim yalnız değişen parça), kural özeti, şablon önerisi etiketi, bulunabilirlik.
+// Negatif sonda: buildEditBody her zaman `name` koyunca "yalnız değişen" kırmızı; 409 satırı kaldırılınca "başka biri" kırmızı.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { operationsTiles } from "@/pages/Operations/tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
 import { routeModuleOf } from "@/lib/route-modules";
-import { SenderTemplatesPage, SENDER_TEMPLATES_PATH } from "../GonderenSablonlariPage";
+import { SenderTemplatesPage, SENDER_TEMPLATES_PATH, DOCUMENT_TYPES_TITLE } from "../GonderenSablonlariPage";
 import { SuggestionChips } from "../SuggestionChips";
 import type { SenderTemplateView } from "../types";
 
@@ -28,20 +30,29 @@ vi.mock("@/components/forms/CustomerPickerField", () => ({
   ),
 }));
 
+// Yükleme zinciri bu testin konusu değil (RemarkDialog kendi testinde değil; yalnız düğme varlığı ölçülür).
+vi.mock("../tanit/RemarkDialog", () => ({ RemarkDialog: () => <div data-testid="remark-dialog" /> }));
+
 const listSenderTemplates = vi.fn();
 const updateSenderTemplate = vi.fn();
 vi.mock("../service", () => ({
   INCOMING_DOCUMENT_QUERY_KEY: "gelen-belge",
+  INCOMING_DOCUMENT_SETTINGS_QUERY_KEY: ["gelen-belge", "ayarlar"],
+  getIncomingDocumentSettings: () => Promise.resolve({ multiPartyWorkOrder: "SINGLE" }),
   listSenderTemplates: (...a: unknown[]) => listSenderTemplates(...a),
   updateSenderTemplate: (...a: unknown[]) => updateSenderTemplate(...a),
 }));
 
 const getUserTemplate = vi.fn();
-const updateUserTemplate = vi.fn();
+const editUserTemplate = vi.fn();
+const listUserTemplates = vi.fn();
 vi.mock("../tanit/service", () => ({
   USER_TEMPLATES_QUERY_KEY: ["gelen-belge", "sablonlar", "ozel"],
   getUserTemplate: (...a: unknown[]) => getUserTemplate(...a),
-  updateUserTemplate: (...a: unknown[]) => updateUserTemplate(...a),
+  editUserTemplate: (...a: unknown[]) => editUserTemplate(...a),
+  listUserTemplates: (...a: unknown[]) => listUserTemplates(...a),
+  previewTemplateReset: () => Promise.resolve({ items: [], failed: [] }),
+  resetTemplates: vi.fn(),
 }));
 
 const row = (o: Partial<SenderTemplateView>): SenderTemplateView => ({
@@ -53,9 +64,19 @@ const row = (o: Partial<SenderTemplateView>): SenderTemplateView => ({
 beforeEach(() => {
   listSenderTemplates.mockReset().mockResolvedValue([row({}), row({ code: "urun-sevk-fisi", name: "Ürün sevk fişi", id: null, hitCount: 0, senderCustomer: null })]);
   updateSenderTemplate.mockReset().mockResolvedValue(row({}));
+  listUserTemplates.mockReset().mockResolvedValue([]);
 });
 
 describe("gönderen şablonları sayfası", () => {
+  it("⭐ başlık Belge Tipleri; boş hazır tip bölümü ve yanıltıcı metin yok", async () => {
+    listSenderTemplates.mockResolvedValue([]);
+    renderWithProviders(<SenderTemplatesPage />);
+    expect(await screen.findByTestId("user-templates-empty")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: DOCUMENT_TYPES_TITLE })).toBeInTheDocument();
+    expect(screen.queryByText(/Okuma motorunda gönderen şablonu yok/)).toBeNull();
+    expect(screen.queryByTestId("file-templates-heading")).toBeNull();
+  });
+
   it("satırı olmayan şablon da listelenir; okuma sayısı görünür", async () => {
     renderWithProviders(<SenderTemplatesPage />);
     expect(await screen.findByText("Kumaş çeki listesi")).toBeInTheDocument();
@@ -63,24 +84,25 @@ describe("gönderen şablonları sayfası", () => {
     expect(screen.getByText(/ceki-listesi-a · sürüm 1 · 7 okuma/)).toBeInTheDocument();
   });
 
-  it("pasife alma yalnız isActive gönderir", async () => {
+  it("hazır tipi kullanmama yalnız isActive gönderir", async () => {
     renderWithProviders(<SenderTemplatesPage />);
-    await userEvent.click(await screen.findByRole("switch", { name: "Kumaş çeki listesi aktif" }));
+    await screen.findByTestId("file-templates-heading");
+    await userEvent.click(within(screen.getByTestId("template-ceki-listesi-a")).getByRole("button", { name: "Kullanma" }));
     await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("ceki-listesi-a", { isActive: false }));
   });
 
-  it("⭐ pasif dosya şablonu yeniden etkinleştirilebilir + ipucu; yetim satır kilitli", async () => {
+  it("⭐ pasif tip 'Kullanılmayan tipler'de: Geri al isActive true; yetim satır kilitli", async () => {
     listSenderTemplates.mockResolvedValue([
       row({ isActive: false, inEngine: false }),
       row({ code: "eski-sablon", name: "Eski şablon", id: "t9", inEngine: false, inFile: false }),
     ]);
     renderWithProviders(<SenderTemplatesPage />);
-    const sw = await screen.findByRole("switch", { name: "Kumaş çeki listesi aktif" });
-    expect(sw).toBeEnabled();
-    expect(screen.getByText("Pasif: belge bu şablonla tanınmaz.")).toBeInTheDocument();
-    await userEvent.click(sw);
+    const section = await screen.findByTestId("unused-templates");
+    expect(screen.queryByTestId("template-ceki-listesi-a")).toBeNull();
+    await userEvent.click(within(section).getByRole("button", { name: /Kullanılmayan tipler \(2\)/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Kumaş çeki listesi geri al" }));
     await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("ceki-listesi-a", { isActive: true }));
-    expect(screen.getByRole("switch", { name: "Eski şablon aktif" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Eski şablon geri al" })).toBeNull();
     expect(screen.getByText("Okuma motorunda artık yok")).toBeInTheDocument();
   });
 
@@ -96,7 +118,7 @@ describe("gönderen şablonları sayfası", () => {
   it("liste hatası boş liste gibi gösterilmez", async () => {
     listSenderTemplates.mockRejectedValue(new Error("x"));
     renderWithProviders(<SenderTemplatesPage />);
-    expect(await screen.findByText("Şablonlar yüklenemedi.")).toBeInTheDocument();
+    expect(await screen.findByText("Belge tipleri yüklenemedi.")).toBeInTheDocument();
   });
 });
 
@@ -144,46 +166,86 @@ describe("bulunabilirlik", () => {
   it("karo + palet girişi aynı adres ve izinle; modül kapısı gelenBelge", () => {
     const tile = operationsTiles.find((t) => t.key === "gelen-belge-sablonlari");
     expect(tile?.to).toBe(SENDER_TEMPLATES_PATH);
+    expect(tile?.title).toBe(DOCUMENT_TYPES_TITLE);
     expect(tile?.permission).toBe("gelen-belge:template");
     expect(allCommandEntries.find((e) => e.to === SENDER_TEMPLATES_PATH)?.visibleWhen).toBe(tile?.visibleWhen);
     expect(routeModuleOf(SENDER_TEMPLATES_PATH)).toBe("gelenBelgeEnabled");
   });
 });
 
-describe("tanıtılan belge tipleri (S1b)", () => {
-  const user = row({ kind: "USER", code: "u-gulecsoy", name: "Güleçsoy çeki", id: "t7", inEngine: false, inFile: false, isActive: false, senderCustomer: null });
+describe("tanıtılan belge tipleri (S1b + fotoğrafsız düzenle)", () => {
+  const user = row({ kind: "USER", code: "u-gulecsoy", name: "Güleçsoy çeki", id: "t7", inEngine: true, inFile: false, isActive: true, senderCustomer: null });
+  const tpl = {
+    id: "u-gulecsoy", version: 3, name: "Güleçsoy çeki",
+    fields: [{ key: "partiNo", label: "Ham PartiNo" }, { key: "hedefKg", label: "KG/MT" }, { key: "toplamMetre", label: "Metre" }],
+    sections: { startLabels: ["Ham PartiNo"], fields: ["partiNo"] },
+    tables: [{ totals: { labels: ["T.Adet"] } }],
+    rules: { multiParty: "PER_PARTY" },
+    identifiers: { keywords: ["GÜLEÇSOY", "ÇEKİ"], minScore: 0.6 },
+  };
   beforeEach(() => {
     listSenderTemplates.mockResolvedValue([row({}), user]);
+    listUserTemplates.mockResolvedValue([{ id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: true, updatedAt: "", template: tpl }]);
     getUserTemplate.mockReset().mockResolvedValue({
-      id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: false, updatedAt: "",
-      template: { id: "u-gulecsoy", version: 3, fields: [{ key: "partiNo" }], sections: { startLabels: ["Ham PartiNo"] }, identifiers: { keywords: ["GÜLEÇSOY", "ÇEKİ"], minScore: 0.6 } },
+      id: "t7", code: "u-gulecsoy", name: "Güleçsoy çeki", version: 3, isActive: true, updatedAt: "", template: tpl,
       versions: [{ version: 3, createdAt: "2026-11-03T05:00:00Z", createdById: null }],
     });
-    updateUserTemplate.mockReset().mockResolvedValue({ code: "u-gulecsoy", name: "Güleçsoy çeki", version: 4 });
+    editUserTemplate.mockReset().mockResolvedValue({ code: "u-gulecsoy", name: "Güleçsoy çeki", version: 4, warnings: [], changes: {} });
   });
 
-  it("ayrı bölümde listelenir; pasif kullanıcı şablonu yeniden etkinleştirilebilir", async () => {
+  it("kart kural özetini ve üç düğmeyi gösterir", async () => {
     renderWithProviders(<SenderTemplatesPage />);
-    await screen.findByTestId("user-templates-heading");
-    const sw = await screen.findByRole("switch", { name: "Güleçsoy çeki aktif" });
-    expect(sw).toBeEnabled();
-    await userEvent.click(sw);
-    await waitFor(() => expect(updateSenderTemplate).toHaveBeenCalledWith("u-gulecsoy", { isActive: true }));
-    expect(screen.queryByText("Okuma motorunda artık yok")).toBeNull();
+    const rules = await screen.findByTestId("template-rules-u-gulecsoy");
+    expect(rules).toHaveTextContent("Çok parti: Her parti ayrı");
+    expect(rules).toHaveTextContent("Tekrar eden bölüm: Ham PartiNo");
+    expect(rules).toHaveTextContent("Toplam satırı: T.Adet");
+    expect(screen.getByTestId("user-template-edit-u-gulecsoy")).toBeInTheDocument();
+    expect(screen.getByTestId("template-remark-u-gulecsoy")).toBeInTheDocument();
+    expect(screen.getByTestId("template-reset-u-gulecsoy")).toBeInTheDocument();
   });
 
-  it("düzenle: kimlik yazısı çıkar/ekle → PUT expectedVersion, şablonun geri kalanı aynen", async () => {
+  it("⭐ düzenle: değişiklik yokken Kaydet kapalı; kimlik + alan kaldır + kural → PATCH yalnız değişen parça ve expectedVersion", async () => {
     renderWithProviders(<SenderTemplatesPage />);
     await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
-    await userEvent.click(await screen.findByRole("button", { name: "ÇEKİ kimlik yazısını çıkar" }));
+    expect(await screen.findByTestId("user-template-save")).toBeDisabled();
+    expect(screen.getByTestId("user-template-hint")).toHaveTextContent("Değişiklik yok");
+    await userEvent.click(screen.getByRole("button", { name: "ÇEKİ kimlik yazısını çıkar" }));
     await userEvent.type(screen.getByPlaceholderText("Yeni kimlik yazısı"), "BOYA SAN.{Enter}");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Hedef kg alanını kaldır" }));
+    await userEvent.click(await screen.findByRole("radio", { name: /Fabrika ayarı \(şu an: Tek/ }));
     await userEvent.click(screen.getByTestId("user-template-save"));
-    await waitFor(() => expect(updateUserTemplate).toHaveBeenCalledTimes(1));
-    const [code, body] = updateUserTemplate.mock.calls[0]!;
-    expect(code).toBe("u-gulecsoy");
-    expect(body).toEqual({
-      expectedVersion: 3, name: "Güleçsoy çeki",
-      template: { fields: [{ key: "partiNo" }], sections: { startLabels: ["Ham PartiNo"] }, identifiers: { keywords: ["GÜLEÇSOY", "BOYA SAN."], minScore: 0.6 } },
-    });
+    await waitFor(() => expect(editUserTemplate).toHaveBeenCalledTimes(1));
+    expect(editUserTemplate.mock.calls[0]).toEqual(["u-gulecsoy", {
+      expectedVersion: 3, identifiers: ["GÜLEÇSOY", "BOYA SAN."], dropFields: ["hedefKg"], rules: { multiParty: null },
+    }]);
+  });
+
+  it("yalnız ad değişince gövdede yalnız ad", async () => {
+    renderWithProviders(<SenderTemplatesPage />);
+    await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
+    const name = await screen.findByTestId("user-template-name");
+    await userEvent.type(name, " 2");
+    await userEvent.click(screen.getByTestId("user-template-save"));
+    await waitFor(() => expect(editUserTemplate).toHaveBeenCalledWith("u-gulecsoy", { expectedVersion: 3, name: "Güleçsoy çeki 2" }));
+  });
+
+  it("⭐ 409 sürüm çakışması: 'Başka biri değiştirdi' + Yenile", async () => {
+    const err = Object.assign(new Error("409"), { isAxiosError: true, response: { status: 409, data: { details: { code: "USER_TEMPLATE_VERSION_CHANGED" } } } });
+    editUserTemplate.mockRejectedValue(err);
+    renderWithProviders(<SenderTemplatesPage />);
+    await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
+    await userEvent.type(await screen.findByTestId("user-template-name"), "x");
+    await userEvent.click(screen.getByTestId("user-template-save"));
+    expect(await screen.findByTestId("user-template-conflict")).toHaveTextContent("Başka biri değiştirdi");
+    await userEvent.click(within(screen.getByTestId("user-template-conflict")).getByRole("button", { name: /Yenile/ }));
+    await waitFor(() => expect(getUserTemplate).toHaveBeenCalledTimes(2));
+  });
+
+  it("bütün alanlar kaldırılamaz", async () => {
+    renderWithProviders(<SenderTemplatesPage />);
+    await userEvent.click(await screen.findByTestId("user-template-edit-u-gulecsoy"));
+    for (const n of ["Gönderen parti no", "Gelen metre", "Hedef kg"]) await userEvent.click(await screen.findByRole("checkbox", { name: `${n} alanını kaldır` }));
+    expect(screen.getByTestId("user-template-save")).toBeDisabled();
+    expect(screen.getByTestId("user-template-hint")).toHaveTextContent("en az bir alan kalmalı");
   });
 });

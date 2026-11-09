@@ -18,6 +18,9 @@ export interface NoteParty {
   suggestedMetersSource?: "TOTAL" | "LINE_SUM" | null;
   /** Onaylı belgede parti kaydının metresi (elle düzeltme dahil; 2. prova 2026-11-06). Eski sunucu/onaysız belge → null/yok. */
   recordedMeters?: number | null;
+  /** Partinin gelen kg önerisi (`pickIncomingKg`: beyan > Σ satır kg; 2026-11-09). Eski sunucu göndermez. */
+  suggestedKg?: number | null;
+  kgSource?: "TOTAL" | "LINE_SUM" | null;
 }
 
 export interface NotePartiesView {
@@ -25,4 +28,6 @@ export interface NotePartiesView {
   warnings: string[];
   multi: boolean;
   defaultMode: "SINGLE" | "PER_PARTY";
+  /** `defaultMode` nereden: belge tipi kuralı ya da fabrika ayarı (2026-11-09; eski sunucu göndermez). */
+  defaultModeSource?: "TEMPLATE" | "FACTORY";
 }

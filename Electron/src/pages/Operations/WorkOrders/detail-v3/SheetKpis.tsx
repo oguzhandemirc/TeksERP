@@ -49,11 +49,14 @@ export function SheetKpis({
             {formatNumber(input, 0)}
             <small>m</small>
           </div>
-          {inCount > 0 && (
+          {(inCount > 0 || wo.incoming) && (
             <div className="kpi-sub">
-              <span>
-                <b className="num">{inCount} top</b>
-              </span>
+              {inCount > 0 && (
+                <span>
+                  <b className="num">{inCount} top</b>
+                </span>
+              )}
+              <IncomingKg incoming={wo.incoming} />
             </div>
           )}
         </div>
@@ -112,6 +115,17 @@ export function SheetKpis({
         </div>
       )}
     </>
+  );
+}
+
+/** "Gelen kg" — yalnız İE belgeden doğmuşsa; kg yoksa "—" + ipucu (kısmi toplam gösterilmez, sessiz eksik olmaz). */
+export function IncomingKg({ incoming }: { incoming: WorkOrder["incoming"] }) {
+  if (!incoming) return null;
+  const kg = incoming.kg == null ? null : Number(incoming.kg);
+  return (
+    <span data-testid="wo-incoming-kg" title={kg == null ? "Belgede kg yok" : "Gelen belgedeki kg (top satırları toplamı)"}>
+      Gelen kg <b className="num">{kg == null ? "—" : `${formatNumber(kg, 0)} kg`}</b>
+    </span>
   );
 }
 

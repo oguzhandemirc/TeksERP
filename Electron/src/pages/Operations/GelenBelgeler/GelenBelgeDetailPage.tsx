@@ -32,6 +32,7 @@ import { OpenWorkOrderAction } from "./OpenWorkOrderAction";
 import { BatchNoPicker } from "./BatchNoPicker";
 import { KursunMetersCard } from "./KursunMetersCard";
 import { PartiesCard } from "./PartiesCard";
+import { TanimaKarti } from "./TanimaKarti";
 import { showsPerDocument } from "./partiMetre";
 import type { DeliveryNoteDetail } from "./types";
 import { noteCountText } from "./noteLines";
@@ -146,7 +147,7 @@ export function IncomingDocumentDetailPage() {
               {perDoc && <KursunMetersCard note={n} editable={editable} onPatch={(p) => header.mutateAsync(p)} />}
               <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
               {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} partiesShown={multiParty} />}{/* iptalde toplar düştü; hüküm anlamsız */}
-              <NoticesStrip notices={n.notices} /><PartiesCard noteId={n.id} blocks={n.totalsCheck?.blocks} />
+              <NoticesStrip notices={n.notices} /><PartiesCard noteId={n.id} blocks={n.totalsCheck?.blocks} /><TanimaKarti tanima={n.tanima} />
               <NotePeerStrips note={n} />
               {n.varianceReason && <p className="text-xs text-muted-foreground">Fark gerekçesi: {n.varianceReason}</p>}
               <CancelReasonLine note={n} />

@@ -55,7 +55,7 @@ export function ReadOptionsFields({ draft }: { draft: ReturnType<typeof useReadO
         <div data-testid="gb-auto-sender">
           <FlagToggle
             title="Gönderen cariyi okunan şablondan doldur"
-            summary="Belge şablonu tanınınca, Gönderen Şablonları ekranında o şablona bağlı gönderen cari taslağa yazılır."
+            summary="Belge şablonu tanınınca, Belge Tipleri ekranında o şablona bağlı gönderen cari taslağa yazılır."
             desc="Yalnız gönderen alanı boşken ve şablon ile cari aktifken yazılır; operatörün seçtiği gönderen ezilmez, yeni okunan sayfalara uygulanır. Sahip (müşteri) hiçbir zaman otomatik dolmaz. Kapalı (varsayılan) = bugünkü davranış: gönderen yalnız öneri olarak gösterilir."
             defaultOn={false}
             checked={draft.autoSender === true}

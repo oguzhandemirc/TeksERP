@@ -1,150 +1,84 @@
-// GÖNDEREN ŞABLONLARI (Gülkesim OCR E2) — motorun tanıdığı belge yerleşimleri + fabrikaya özgü bağ.
-// Şablonun gönderen carisi taslakta gönderen önerisinin EN ÖNCESİDİR; varsayılan sahip yalnız belgedeki sahip
-// adı bir öneriye varmazsa önerilir. Pasif şablon öneri vermez (okuma yine sürer). İzin `gelen-belge:template`.
-// "Parti no alanı": formda parti no'nun hangi alan olduğu (onayda öğrenilir; burada değişir/temizlenir). Adaylar
-// şablon tanımından gelir; eski backend alanları göndermez → bölüm çizilmez.
+// BELGE TİPLERİ (eski adı "Gönderen Şablonları"; URL aynı) — tanıtılan belge tipleri + fabrikaya özgü bağ (gönderen cari,
+// varsayılan sahip, parti no alanı). Düzenle fotoğrafsız (PATCH `/tanim`), Sıfırla önizlemeli ve geri alınabilir (pasife alma).
+// Hazır (dosya) tipler yalnız varsa listelenir (paket yalnız GENEL yedeği taşır; boş bölüm yanıltıyordu). İzin `gelen-belge:template`.
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, RotateCcw } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { INCOMING_DOCUMENT_QUERY_KEY, listSenderTemplates, updateSenderTemplate } from "./service";
-import type { BatchNoCandidateKind, SenderTemplatePatch, SenderTemplateView } from "./types";
-import { UserTemplateEditButton } from "./tanit/UserTemplateEdit";
-
-/** S1b: panelde/tablette tanıtılan belge tipi (`u-…`); eski backend `kind` göndermez → koddan. */
-export const isUserTemplate = (r: Pick<SenderTemplateView, "kind" | "code">) => r.kind === "USER" || r.code.startsWith("u-");
+import type { SenderTemplatePatch, SenderTemplateView } from "./types";
+import { listUserTemplates, USER_TEMPLATES_QUERY_KEY } from "./tanit/service";
+import { SablonSifirlaDialog } from "./tanit/SablonSifirlaDialog";
+import { isUserTemplate, TemplateCard, UnusedRow } from "./BelgeTipiKarti";
 
 export const SENDER_TEMPLATES_PATH = "/operations/gelen-belgeler/sablonlar";
+export const DOCUMENT_TYPES_TITLE = "Belge Tipleri";
 const QUERY_KEY = [INCOMING_DOCUMENT_QUERY_KEY, "sablonlar"] as const;
 
-const KIND_LABEL: Record<BatchNoCandidateKind, string> = {
-  BARCODE: "barkod no", DOC: "evrak no", BATCH: "parti no", WORK_ORDER: "gönderenin emir no", ORDER: "sipariş no", FORM: "form no",
-};
-
-/** Parti no alanı seçimi — aday düğmeleri (tek tık = PATCH) + temizle; hatırlanan anahtar tanımda yoksa ayrıca gösterilir. */
-function BatchNoKeyField({ row, onPatch, busy }: { row: SenderTemplateView; onPatch: (p: SenderTemplatePatch) => void; busy: boolean }) {
-  const candidates = row.batchNoCandidates;
-  if (candidates === undefined || row.batchNoKey === undefined) return null;
-  const current = row.batchNoKey;
-  const orphan = current !== null && !candidates.some((c) => c.field === current);
+function UnusedSection({ rows, render }: { rows: SenderTemplateView[]; render: (r: SenderTemplateView) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (rows.length === 0) return null;
   return (
-    <div className="mt-3 min-w-0 space-y-1" data-testid={`batch-no-key-${row.code}`}>
-      <div className="text-xs font-medium text-muted-foreground">Parti no alanı (onayda seçilen alan hatırlanır)</div>
-      {candidates.length === 0 && <div className="text-xs text-muted-foreground">Bu şablonda parti no adayı tanımlı değil.</div>}
-      {(candidates.length > 0 || current !== null) && (
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`${row.name} parti no alanı`}>
-          {candidates.map((c) => (
-            <Button
-              key={c.field}
-              type="button"
-              size="sm"
-              variant={current === c.field ? "default" : "outline"}
-              aria-pressed={current === c.field}
-              disabled={busy}
-              onClick={() => current !== c.field && onPatch({ batchNoKey: c.field })}
-            >
-              {c.label ?? c.field} <span className="ml-1 text-xs opacity-70">({KIND_LABEL[c.kind] ?? c.kind})</span>
-            </Button>
-          ))}
-          {current !== null && (
-            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => onPatch({ batchNoKey: null })} aria-label={`${row.name} parti no alanını temizle`}>
-              <X className="mr-1 h-3.5 w-3.5" /> Temizle
-            </Button>
-          )}
+    <section className="rounded-lg border" data-testid="unused-templates">
+      <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-sm font-semibold" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Kullanılmayan tipler ({rows.length})
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="divide-y border-t">
+          <p className="px-3 py-2 text-xs text-muted-foreground">Bu tipler belge tanımaz. Eski belgeler ve okumalar etkilenmez; "Geri al" tipi yeniden kullanıma açar.</p>
+          {rows.map(render)}
         </div>
       )}
-      {orphan && <div className="text-xs text-amber-700 dark:text-amber-300">Hatırlanan alan ({current}) şablon tanımında artık yok; temizleyin ya da başka alan seçin.</div>}
-      {current === null && candidates.length > 0 && <div className="text-xs text-muted-foreground">Seçili değil: aday tekse o, değilse parti no taslakta seçilir.</div>}
-    </div>
+    </section>
   );
 }
 
-function TemplateCard({ row, onPatch, busy }: { row: SenderTemplateView; onPatch: (p: SenderTemplatePatch) => void; busy: boolean }) {
-  // Yetim = dosyada artık olmayan dosya şablonu satırı; pasif şablon (dosya ya da kullanıcı) yeniden etkinleştirilebilir.
-  const orphan = !isUserTemplate(row) && !row.inFile;
-  return (
-    <div className="rounded-lg border bg-card p-4" data-testid={`template-${row.code}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="break-words font-medium">{row.name}</div>
-          <div className="text-xs text-muted-foreground">
-            {row.code} · sürüm {row.version} · {row.hitCount} okuma
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-        {isUserTemplate(row) && <UserTemplateEditButton code={row.code} name={row.name} />}
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={row.isActive} disabled={busy || orphan} onCheckedChange={(v) => onPatch({ isActive: v })} aria-label={`${row.name} aktif`} />
-          {row.isActive ? "Aktif" : "Pasif"}
-        </label>
-        </div>
-      </div>
-      {!row.isActive && !orphan && <div className="mt-1 text-xs text-muted-foreground">Pasif: belge bu şablonla tanınmaz.</div>}
-      {orphan && (
-        <Badge variant="outline" className="mt-2">
-          Okuma motorunda artık yok
-        </Badge>
-      )}
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <div className="min-w-0 space-y-1">
-          <div className="text-xs font-medium text-muted-foreground">Gönderen cari</div>
-          <CustomerPickerField
-            value={row.senderCustomer?.id ?? null}
-            onChange={(id) => onPatch({ senderCustomerId: id })}
-            disabled={busy}
-            variant="cari"
-            clearable
-            placeholder="Gönderen seç"
-          />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <div className="text-xs font-medium text-muted-foreground">Varsayılan sahip (belgede sahip okunamazsa)</div>
-          <CustomerPickerField
-            value={row.defaultOwnerCustomer?.id ?? null}
-            onChange={(id) => onPatch({ defaultOwnerCustomerId: id })}
-            disabled={busy}
-            clearable
-            placeholder="Varsayılan sahip seç"
-          />
-        </div>
-      </div>
-      <BatchNoKeyField row={row} onPatch={onPatch} busy={busy} />
-    </div>
-  );
-}
-
-export function SenderTemplatesPage() {
+function useTemplates() {
   const qc = useQueryClient();
   const list = useQuery({ queryKey: QUERY_KEY, queryFn: listSenderTemplates });
+  const user = useQuery({ queryKey: USER_TEMPLATES_QUERY_KEY, queryFn: listUserTemplates });
   const update = useMutation({
     mutationFn: ({ code, patch }: { code: string; patch: SenderTemplatePatch }) => updateSenderTemplate(code, patch),
     // Hata toast'u apiClient'ta; liste her durumda sunucudan tazelenir (409 sonrası güncel hâl görünsün).
-    onSettled: () => void qc.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY] }),
   });
+  const templates = new Map((user.data ?? []).map((u) => [u.code, u.template]));
+  return { list, update, templates };
+}
+
+export function SenderTemplatesPage() {
+  const { list, update, templates } = useTemplates();
+  const [reset, setReset] = useState<{ codes: string[]; multi: boolean } | null>(null);
   const rows = list.data ?? [];
-  const fileRows = rows.filter((r) => !isUserTemplate(r));
-  const userRows = rows.filter(isUserTemplate);
+  const active = rows.filter((r) => r.isActive && (isUserTemplate(r) || r.inFile));
+  const userRows = active.filter(isUserTemplate);
+  const fileRows = active.filter((r) => !isUserTemplate(r));
+  const unused = rows.filter((r) => !active.includes(r));
+  const props = (row: SenderTemplateView) => ({ row, busy: update.isPending && update.variables?.code === row.code, onPatch: (patch: SenderTemplatePatch) => update.mutate({ code: row.code, patch }) });
   const card = (row: SenderTemplateView) => (
-    <TemplateCard key={row.code} row={row} busy={update.isPending && update.variables?.code === row.code} onPatch={(patch) => update.mutate({ code: row.code, patch })} />
+    <TemplateCard key={row.code} {...props(row)} template={templates.get(row.code) ?? null} onReset={() => setReset({ codes: [row.code], multi: false })} />
   );
 
   return (
     <PageShell>
       <PageHeader
-        title="Gönderen Şablonları"
-        description="Okuma motorunun tanıdığı belge yerleşimleri. Şablona bağlanan cari, o yerleşimde okunan taslakta gönderen önerisi olur."
+        title={DOCUMENT_TYPES_TITLE}
+        description="Tanıtılan belge tipleri. Tipe bağlanan gönderen cari, o tipte okunan taslakta gönderen önerisi olur. Düzenle fotoğrafsızdır; Sıfırla tipi unutturur, geri alınabilir."
         actions={
-          <Button variant="outline" asChild>
-            <Link to="/operations/gelen-belgeler">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              Gelen Belgeler
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {userRows.length > 1 && (
+              <Button variant="outline" onClick={() => setReset({ codes: userRows.map((r) => r.code), multi: true })} data-testid="templates-reset-many">
+                <RotateCcw className="mr-1 h-4 w-4" /> Birden çok tipi sıfırla
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link to="/operations/gelen-belgeler"><ArrowLeft className="mr-1 h-4 w-4" /> Gelen Belgeler</Link>
+            </Button>
+          </div>
         }
       />
       <PageBody className="min-h-0 space-y-3 p-4 sm:p-6">
@@ -152,20 +86,23 @@ export function SenderTemplatesPage() {
           <div className="text-sm text-muted-foreground">Yükleniyor…</div>
         ) : list.isError ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-            <p className="font-medium text-destructive">Şablonlar yüklenemedi.</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void list.refetch()}>
-              Tekrar dene
-            </Button>
+            <p className="font-medium text-destructive">Belge tipleri yüklenemedi.</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void list.refetch()}>Tekrar dene</Button>
           </div>
         ) : (
           <>
-            {fileRows.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Okuma motorunda gönderen şablonu yok.</div> : fileRows.map(card)}
-            <h2 className="pt-3 text-sm font-semibold" data-testid="user-templates-heading">Tanıtılan belge tipleri</h2>
-            <p className="text-xs text-muted-foreground">Yeni tip: Gelen Belgeler'de okunmuş bir belgenin detayında "Bu belgeyi tanıt". Pasif tip yeni okumalarda kullanılmaz.</p>
-            {userRows.length === 0 ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="user-templates-empty">Henüz tanıtılmış belge tipi yok.</div> : userRows.map(card)}
+            {userRows.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="user-templates-empty">
+                Henüz tanıtılmış belge tipi yok. Yeni tip: menüden "Belge Tanıt" ya da okunmuş bir belgenin detayında "Bu belgeyi tanıt".
+              </div>
+            ) : userRows.map(card)}
+            {fileRows.length > 0 && <h2 className="pt-3 text-sm font-semibold" data-testid="file-templates-heading">Hazır belge tipleri</h2>}
+            {fileRows.map(card)}
+            <UnusedSection rows={unused} render={(r) => <UnusedRow key={r.code} {...props(r)} />} />
           </>
         )}
       </PageBody>
+      {reset && <SablonSifirlaDialog codes={reset.codes} multi={reset.multi} onOpenChange={(o) => !o && setReset(null)} />}
     </PageShell>
   );
 }

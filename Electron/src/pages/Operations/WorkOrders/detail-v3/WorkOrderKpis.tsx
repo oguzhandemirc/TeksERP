@@ -4,6 +4,7 @@ import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import type { WorkOrder } from "../types";
 import type { LinkedFulfillment } from "../order-fulfillment";
 import { OrdersDetailModal, type OrderDetailRow } from "./OrdersDetailModal";
+import { IncomingKg } from "./SheetKpis";
 
 /**
  * v3 dört-kutu özeti: Üretim İlerlemesi (çıkan/giren + bar), Termin (tarih +
@@ -50,6 +51,7 @@ export function WorkOrderKpis({
                 </>
               )}
             </span>
+            <IncomingKg incoming={wo.incoming} />
           </div>
         </div>
 
