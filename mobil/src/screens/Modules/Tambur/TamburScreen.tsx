@@ -4578,6 +4578,7 @@ export default function TamburScreen() {
         onDismiss={() => docLookup.setOpen(false)}
         onOpen={handleDocLookupOpen}
         readerConfigured={docLookup.readerConfigured}
+        deviceOcrAccepted={docLookup.deviceOcrAccepted}
         screen={{ screen: 'TAMBUR', stationId: listStationId }}
       />
 

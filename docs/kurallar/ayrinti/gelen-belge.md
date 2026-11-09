@@ -98,6 +98,10 @@ Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramal
 
 **[PROFİL]** İstasyon okutmasında "burada" cevabını YALNIZ `helpers/station-open-step.helper.ts` (ekranın açık kart listesi yüklemi; kurşunda istasyon düzeyi, makine süzgeci yok) ve rotasız İE için `scanRouteStartableWorkOrderIds` (açık listenin "Sahada belirlenecek" kapısı, oturum istasyonu) ile ver, konumu `workorder-location.helper`dan; ekran sorgu dizgisinde (`screen`, tambur `stationId`), yoksa `atStation` null; tablet HERE|STARTABLE_HERE olan TEK İE'yi açar + kardeş şeridi, aksi seçtirir; rotasız İE'ye "rotasında yok" deme. · bekçi: `test_istasyon_okutma_cok_ie`
 
+## İstasyon okutması doğrulama (2026-11-10 kısa dosyadan taşındı)
+
+**[PROFİL]** İstasyon fotoğraf okutmasında "kendiliğinden açılabilir mi"yi YALNIZ `isScanVerified` (`helpers/station-scan-score.helper.ts`; eşik `gelenBelge.stationVerifyThreshold`, vars. 80, 0 = kapalı, yazar `PUT /ayarlar`) cevaplasın: `workOrders` yalnız eşiği geçeni, geçemeyen `unverifiedWorkOrders` (`UNVERIFIED`); karşılaştırılamayan top listesi geçemez; tablet yalnız `passed` okur, düşük puanı görevli onayıyla açar; iz `StationScanCheck` TELEMETRİ. · bekçi: `test_istasyon_okutma_dogrulama` · `decide.test.ts` <sub>(arşiv:2026-11-06)</sub>
+
 ## Tanıtma konum yedeği (2026-11-09 kısa dosyadan taşındı)
 
 **[ÇEKİRDEK]** Tanıtmada etiketli, bölüm dışı alana `[anchor, roi(fallback)]` öğret (`suggest.ts` `addPositionFallbacks`); konum yedeğini yalnız önceki stratejiler kullanılabilir değer bulamadıysa koştur, yalnız kutu içi kelimeyi al ve `position-fallback` + gözden geçirme ile işaretle; okunan müşteri adı karta çözülemezse tablette teklifi not başına BİR KEZ kendiliğinden modal aç (tek teklif; benzer varsa önce ad + kod listesi, yoksa "Yeni müşteri kaydedilsin mi?"). Bekçi: `test_gelen_belge_motor` §15, `test_musteri_hizli_kayit` §1c, `CustomerFromDocSheet.test.tsx`.

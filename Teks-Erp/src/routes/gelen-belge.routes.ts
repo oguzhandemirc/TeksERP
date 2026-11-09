@@ -490,6 +490,9 @@ const StationLookupBody = z.union([
   z.strictObject({
     contentBase64: z.string().min(1, "Dosya içeriği boş"),
     sha256: z.string().regex(/^[0-9a-fA-F]{64}$/, "Özet 64 onaltılık karakter olmalı").nullable().optional(),
+    // Cihaz okuması (tablet ML Kit); katı şema serviste (`parseClientOcr`). Eski tablet göndermez → bugünkü okuma.
+    clientOcr: z.unknown().optional(),
+    barcodes: PageBarcodesSchema.optional(),
   }),
   z.strictObject({ q: z.string().trim().min(2, "Aramak için en az 2 karakter yazın").max(64, "En çok 64 karakter") }),
 ], "Fotoğraf (contentBase64) ya da arama metni (q) gönderin");
@@ -501,7 +504,7 @@ const StationLookupBody = z.union([
  *     summary: İstasyonda belge okutma açık mı (ayar `gelenBelge.stationDocLookup` + üretim modülü) ve okuma servisi var mı
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "enabled boolean · readerConfigured boolean" }
+ *       200: { description: "enabled boolean · readerConfigured boolean (sunucu okuyucu) · deviceOcrAccepted true (uç clientOcr kabul eder; eski sunucu göndermez)" }
  *   post:
  *     tags: [GelenBelge]
  *     summary: "Eşleme okuması: belge fotoğrafı ya da fiş/evrak/parti no → bağlı iş emri(leri). Tarama/taslak/şablon satırı YAZMAZ"
@@ -511,14 +514,14 @@ const StationLookupBody = z.union([
  *         application/json:
  *           schema:
  *             oneOf:
- *               - { type: object, required: [contentBase64], properties: { contentBase64: { type: string }, sha256: { type: string } } }
+ *               - { type: object, required: [contentBase64], properties: { contentBase64: { type: string }, sha256: { type: string }, clientOcr: { type: object, description: "Tabletin ML Kit okuması (yükleme ucuyla aynı sözleşme); varsa sunucu okuyucu çağrılmaz" }, barcodes: { type: array, items: { type: object, properties: { format: { type: string }, value: { type: string } } } } } }
  *               - { type: object, required: [q], properties: { q: { type: string, minLength: 2, maxLength: 64 } } }
  *     parameters:
  *       - { in: query, name: screen, schema: { type: string, enum: [KURSUN_QC, TAMBUR] }, description: "İsteyen ekran; verilirse her İE'ye atStation (o ekranın açık kart listesinde mi) eklenir" }
  *       - { in: query, name: stationId, schema: { type: string, format: uuid }, description: "Yalnız TAMBUR: açık kart listesinin istasyonu (kurşun oturum istasyonunu kullanır)" }
  *     responses:
- *       200: { description: "outcome SINGLE|MULTIPLE|UNVERIFIED|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|STARTABLE_HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText, verification{score,passed,strongEvidence,threshold,components[],targetKey}|null) · unverifiedWorkOrders[] (eşik altı; otomatik açılmaz) · verification {threshold,bestScore,bestStrong}|null · checkId (açılan İE bildirimi için) · station {screen,label}|null · message" }
- *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE · STATION_INACTIVE · STATION_NOT_TAMBUR" }
+ *       200: { description: "outcome SINGLE|MULTIPLE|UNVERIFIED|NO_WORK_ORDER|NO_DOCUMENT|NO_DOC_NO|UNREADABLE · source SAME_PHOTO|STORED_READ|DEVICE|OCR|SEARCH · read · notes[] · workOrders[] (cardBarcode, batchNumbers, documents[customerOrderNo, customerBatchNo], processText, rollCount, meters, locationText, atStation HERE|STARTABLE_HERE|NOT_YET|PASSED|NOT_ON_ROUTE|null, atStationText, verification{score,passed,strongEvidence,threshold,components[],targetKey}|null) · unverifiedWorkOrders[] (eşik altı; otomatik açılmaz) · verification {threshold,bestScore,bestStrong}|null · checkId (açılan İE bildirimi için) · station {screen,label}|null · message" }
+ *       400: { description: "VALIDATION_ERROR · DOCUMENT_SCAN_INVALID · DOCUMENT_SCAN_TYPE · DOCUMENT_SCAN_PDF_NOT_READABLE · CLIENT_OCR_INVALID (tablet clientOcr'sız tekrarlar) · STATION_INACTIVE · STATION_NOT_TAMBUR" }
  *       404: { description: "STATION_NOT_FOUND (TAMBUR stationId)" }
  *       403: { description: "GELEN_BELGE_STATION_LOOKUP_DISABLED (ayar kapalı) · MODULE_DISABLED (gelen belge / üretim)" }
  *       409: { description: "SERVER_OCR_DISABLED (bilgisayarda ikinci okuma kapalı; fiş no ile arama sürer)" }

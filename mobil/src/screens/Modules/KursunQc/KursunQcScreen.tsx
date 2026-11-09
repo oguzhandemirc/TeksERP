@@ -1797,6 +1797,7 @@ export default function KursunQcScreen() {
         onDismiss={() => docLookup.setOpen(false)}
         onOpen={handleDocLookupOpen}
         readerConfigured={docLookup.readerConfigured}
+        deviceOcrAccepted={docLookup.deviceOcrAccepted}
         screen={{ screen: 'KURSUN_QC' }}
       />
 

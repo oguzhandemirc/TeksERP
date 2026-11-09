@@ -8,6 +8,8 @@
 // çoğu burada / hiçbiri burada ise liste: büyük parti no, işlem, top/metre, müşteri İE no, nerede.
 // Doğrulama (2026-11-06): eşiği geçemeyen aday KENDİLİĞİNDEN AÇILMAZ — "Emin değilim" listesi ne tuttuğunu/tutmadığını
 // gösterir, görevli "Eminim, aç" derse açılır; açılan İE okutma izine bildirilir (AUTO · CHOSEN · CONFIRMED).
+// Cihaz okuması (2026-11-09): çekilen sayfa tablette ML Kit ile okunur (+ barkod), gövdeye `clientOcr` olarak gider; sunucu
+// okuyucusu kapalıyken de kamera açılır (sunucu `deviceOcrAccepted` + cihazda OCR). Eski sunucu 400 → alansız tekrar.
 // =============================================================================
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -16,7 +18,8 @@ import Toast from 'react-native-toast-message';
 import ModuleSheet from '../ModuleSheet';
 import MultiPageCameraModal from '../../screens/Modules/GelenBelge/MultiPageCameraModal';
 import { usePageSource } from '../../screens/Modules/GelenBelge/usePageSource';
-import { MAX_PAGES, type ScanPage } from '../../screens/Modules/GelenBelge/docScan';
+import { MAX_PAGES, readPageExtras, sendWithExtras, type ScanPage } from '../../screens/Modules/GelenBelge/docScan';
+import { deviceOcrAvailable } from '../../services/deviceOcr';
 import { stationDocLookupService, type LookupScreen, type OpenedHow, type StationLookupResult, type StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 import { colors, spacing, typography } from '../../theme';
 import { decideLookup, isHere, partyLabel, rowDetail, rowWhere, verifyBadges } from './decide';
@@ -29,8 +32,10 @@ interface Props {
    * (birden çoksa ekran "diğerine geç" şeridini çizer); tek İE'de boş.
    */
   onOpen: (workOrder: StationLookupWorkOrder, siblings: StationLookupWorkOrder[]) => void;
-  /** Okuma servisi kurulu mu (yoksa yalnız elle arama). */
+  /** Sunucu okuyucusu kullanılabilir mi. */
   readerConfigured: boolean;
+  /** Sunucu cihaz okumasını kabul ediyor mu (eski sunucu: false). Okuyucu kapalıysa kamera buna + cihaz OCR'ına bakar. */
+  deviceOcrAccepted?: boolean;
   /** Soran ekran: sunucu "burada bekliyor mu"yu bu ekranın açık kart listesine göre söyler. */
   screen?: LookupScreen;
 }
@@ -39,6 +44,9 @@ type OpenFn = Props['onOpen'];
 /** Liste satırından açma: nasıl açıldığı okutma izine gider. */
 type PickFn = (workOrder: StationLookupWorkOrder, siblings: StationLookupWorkOrder[], how: OpenedHow) => void;
 type ListKind = 'choose' | 'unsure';
+/** Cihaz okuması yok/başarısız + sunucu okuyucu kapalı (409 SERVER_OCR_DISABLED): kısa cümle, toast değil. */
+const UNREADABLE_TEXT = 'Belge okunamadı — tekrar çekin ya da fiş no ile arayın.';
+const isServerOcrOff = (e: unknown) => (e as { details?: { code?: string } } | null)?.details?.code === 'SERVER_OCR_DISABLED';
 type SheetState = { kind: 'idle' } | { kind: 'busy'; text: string } | { kind: ListKind; items: StationLookupWorkOrder[]; message: string } | { kind: 'empty'; message: string };
 
 /** Sorgu durumu: son istek kazanır (kapanıp açılınca geç gelen yanıt yeni oturumu ezmez). */
@@ -72,6 +80,10 @@ function useLookupRun(onOpen: OpenFn) {
       if (my === seq.current) apply(r);
     } catch (e) {
       if (my !== seq.current) return;
+      if (isServerOcrOff(e)) {
+        setView({ kind: 'empty', message: UNREADABLE_TEXT });
+        return;
+      }
       setView({ kind: 'idle' });
       Toast.show({ type: 'error', text1: 'Belge okutulamadı', text2: e instanceof Error ? e.message : undefined });
     }
@@ -79,14 +91,20 @@ function useLookupRun(onOpen: OpenFn) {
   return { view, reset, run, pick };
 }
 
-export default function StationDocLookupSheet({ visible, onDismiss, onOpen, readerConfigured, screen }: Props) {
+export default function StationDocLookupSheet({ visible, onDismiss, onOpen, readerConfigured, deviceOcrAccepted = false, screen }: Props) {
   const { view, reset, run, pick } = useLookupRun(onOpen);
   const close = () => {
     reset();
     onDismiss();
   };
 
-  const fromPage = (p: ScanPage) => void run('Belge okunuyor…', () => stationDocLookupService.byPhoto(p.base64, p.sha256, screen));
+  // Okutma yapılabilir: sunucu okuyucusu açık YA DA sunucu cihaz okumasını kabul ediyor ve bu tablet okuyabiliyor.
+  const canRead = readerConfigured || (deviceOcrAccepted && deviceOcrAvailable());
+  const fromPage = (p: ScanPage) =>
+    void run('Belge okunuyor…', async () => {
+      const { clientOcr, barcodes } = await readPageExtras(p);
+      return sendWithExtras((extras) => stationDocLookupService.byPhoto(p.base64, p.sha256, screen, extras), clientOcr, barcodes);
+    });
   // Tek sayfa yeter: belge no ilk sayfanın başlığında (tarayıcı sınırı MAX_PAGES − 1 → 1 sayfa).
   const source = usePageSource(MAX_PAGES - 1, (pages) => pages[0] && fromPage(pages[0]));
   const busy = view.kind === 'busy' || source.busy;
@@ -95,8 +113,8 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
   const addRef = useRef(source.add);
   addRef.current = source.add;
   useEffect(() => {
-    if (visible && readerConfigured) addRef.current();
-  }, [visible, readerConfigured]);
+    if (visible && canRead) addRef.current();
+  }, [visible, canRead]);
 
   return (
     <ModuleSheet
@@ -105,7 +123,7 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
       title="Belgeden iş bul"
       footer={
         <>
-          {readerConfigured && (
+          {canRead && (
             <Button mode="outlined" icon="camera" onPress={source.add} disabled={busy} contentStyle={styles.big} testID="belge-okut-cek">
               Tekrar okut
             </Button>
@@ -120,7 +138,11 @@ export default function StationDocLookupSheet({ visible, onDismiss, onOpen, read
       }
     >
       <View style={styles.body}>
-        {!readerConfigured && <Text style={styles.empty}>Belge okuyucu kurulu değil.</Text>}
+        {!canRead && (
+          <Text style={styles.empty} testID="belge-okut-okunamaz">
+            Belge okunamıyor — fiş no ile elle arayın
+          </Text>
+        )}
         <ResultView view={view} onPick={pick} />
       </View>
     </ModuleSheet>

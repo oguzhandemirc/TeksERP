@@ -15,6 +15,7 @@ export function useStationDocLookup() {
   return {
     enabled: status.data?.enabled === true,
     readerConfigured: status.data?.readerConfigured === true,
+    deviceOcrAccepted: status.data?.deviceOcrAccepted === true,
     open,
     setOpen,
   };

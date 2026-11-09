@@ -11,6 +11,8 @@
 // Çok İE (2026-11-06): tablet ekranını bildirirse her İE "burada bekliyor mu" (ekranın açık kart listesinin yüklemi,
 // `helpers/station-open-step.helper.ts`) + şu an nerede ile döner; satır yükleme ve sınıflama `helpers/station-lookup-rows.helper.ts`.
 // Doğrulama (2026-11-06): fotoğraf adayları öteki alanlarla puanlanır; eşik altı OTOMATİK AÇILMAZ (`station-scan-verify.helper`).
+// Cihaz okuması (2026-11-09): tablet ML Kit okumasını (`clientOcr` + `barcodes`) gönderirse sıra SAME_PHOTO → saklı okuma →
+// DEVICE → sunucu okuyucu; cihaz okuması varken okuyucu çağrılmaz ("Bilgisayarda ikinci okuma" kapalıyken de çalışır).
 // Tek yazım: okutma izi (TELEMETRİ, `station-scan-check.service`) — iş kaydı doğmaz.
 // =============================================================================
 import { type Prisma, WorkOrderStatus } from "@prisma/client";
@@ -19,6 +21,9 @@ import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import { serverReaderState, serverReaderUrl, serverOcrDisabledError } from "./gelen-belge-sunucu-okuyucu.service";
 import { readerOcr } from "../lib/gelen-belge/okuma-istemcisi";
+import { normalizeBarcodes } from "../lib/gelen-belge/barkod";
+import type { OcrResult } from "../lib/gelen-belge/motor";
+import { parseClientOcr } from "./gelen-belge-istemci-okuma.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
 import { LOOKUP_NOTE_STATUSES, stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
@@ -50,7 +55,9 @@ const TOLERANT_UNIVERSE_CAP = 2000;
 
 /** UNVERIFIED: aday var ama hiçbiri doğrulama eşiğini geçmedi (`unverifiedWorkOrders`; kendiliğinden açılmaz). */
 export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE" | "UNVERIFIED";
-export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "OCR" | "SEARCH";
+export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "DEVICE" | "OCR" | "SEARCH";
+/** Cihaz okuması boş/başarısız + sunucu okuyucu kapalı: kısa cümle (tablet aynı metni hata kodunda da gösterir). */
+const DEVICE_UNREADABLE_MESSAGE = "Belge okunamadı — tekrar çekin ya da fiş no ile arayın.";
 
 
 export interface StationLookupResult {
@@ -74,8 +81,12 @@ export interface StationLookupResult {
   readonly checkId?: string | null;
 }
 
-export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean }> {
-  return { enabled: (await readIncomingDocStationLookup()) && (await readProductionEnabled()), readerConfigured: (await serverReaderUrl()) !== null };
+/**
+ * `readerConfigured` = sunucu okuyucu kullanılabilir (bugünkü anlam; eski tablet buna bakar). `deviceOcrAccepted` = uç
+ * cihaz okumasını kabul eder — yeni tablet "okutma yapılabilir mi"yi `readerConfigured || (deviceOcrAccepted && cihazda OCR)` ile cevaplar.
+ */
+export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean; deviceOcrAccepted: true }> {
+  return { enabled: (await readIncomingDocStationLookup()) && (await readProductionEnabled()), readerConfigured: (await serverReaderUrl()) !== null, deviceOcrAccepted: true };
 }
 
 async function assertStationLookupEnabled(): Promise<void> {
@@ -88,13 +99,15 @@ async function assertStationLookupEnabled(): Promise<void> {
   }
 }
 
-export type StationLookupInput = { contentBase64: string; sha256?: string | null } | { q: string };
+export type StationLookupInput =
+  | { contentBase64: string; sha256?: string | null; clientOcr?: unknown; barcodes?: { format: string; value: string }[] }
+  | { q: string };
 
 export async function stationDocLookup(input: StationLookupInput, ctx: StationLookupContext | null = null): Promise<StationLookupResult> {
   await assertStationLookupEnabled();
   const label = ctx ? await stationLabel(ctx) : null;
   const sink: ScanVerifySink = {};
-  const raw = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null, sink);
+  const raw = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null, deviceReadOf(input), sink);
   const result = "q" in input ? raw : await applyVerification(raw, sink, ctx?.screen ?? null);
   if (!ctx || !label) return { ...result, station: null };
   const unverified = result.unverifiedWorkOrders ? await markAtStation(result.unverifiedWorkOrders, ctx) : undefined;
@@ -120,7 +133,20 @@ async function searchLookup(q: string): Promise<StationLookupResult> {
   return finish({ source: "SEARCH", read: null, notes: [], workOrders, closed, noteCount: null });
 }
 
-async function photoLookup(contentBase64: string, sha256: string | null, sink: ScanVerifySink): Promise<StationLookupResult> {
+/**
+ * Gövdedeki cihaz okuması (katı ayrıştırma `parseClientOcr`, ihlal 400 CLIENT_OCR_INVALID — tablet alansız tekrarlar);
+ * barkodlar yükleme yoluyla aynı biçimde eklenir (motor `applyBarcodes`). Yok/null → null (bugünkü yol).
+ */
+function deviceReadOf(input: { clientOcr?: unknown; barcodes?: { format: string; value: string }[] }): OcrResult | null {
+  if (input.clientOcr === undefined || input.clientOcr === null) return null;
+  const parsed = parseClientOcr(input.clientOcr);
+  const barcodes = normalizeBarcodes(input.barcodes);
+  return barcodes.length ? { ...parsed, barcodes } : parsed;
+}
+
+const hasText = (ocr: OcrResult): boolean => ocr.blocks.some((b) => b.lines.some((l) => l.text.trim().length > 0));
+
+async function photoLookup(contentBase64: string, sha256: string | null, device: OcrResult | null, sink: ScanVerifySink): Promise<StationLookupResult> {
   const upload = await decodeScanUpload(contentBase64, sha256);
   if (upload.mime === PDF_MIME) {
     throw AppError.badRequest("PDF belge okunmaz; belgenin fotoğrafını çekin.", { code: "DOCUMENT_SCAN_PDF_NOT_READABLE" });
@@ -138,8 +164,14 @@ async function photoLookup(contentBase64: string, sha256: string | null, sink: S
   const stored = known ? ocrFromEnvelope(known.ocrResult) : null;
   let source: StationLookupSource = "STORED_READ";
   let ocr = stored;
+  // Boş cihaz okuması (kelime yok) okuma sayılmaz: okuyucu açıksa o okur, kapalıysa kısa "okunamadı" cümlesi.
+  if (!ocr && device && hasText(device)) {
+    ocr = device;
+    source = "DEVICE";
+  }
   if (!ocr) {
     const reader = await serverReaderState();
+    if (!reader.enabled && device) return finish({ source: "DEVICE", read: null, notes: [], workOrders: [], noteCount: null, unreadable: true });
     if (!reader.enabled) throw serverOcrDisabledError("Fiş no ile elle arayın.");
     const url = reader.url;
     if (!url) throw new AppError("Okuma servisi bu kurulumda yok; fiş no ile elle arayın.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
@@ -335,7 +367,7 @@ function finish(p: {
 }): StationLookupResult {
   const notes = p.notes.map((n) => ({ id: n.id, noteNo: n.noteNo, senderDocNo: n.senderDocNo, ownerName: n.ownerCustomer?.name ?? null, senderName: n.senderCustomer?.name ?? null }));
   const base = { source: p.source, read: p.read, notes, workOrders: p.workOrders };
-  if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: "Belge okunamadı; fiş no ile elle arayın." };
+  if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: p.source === "DEVICE" ? DEVICE_UNREADABLE_MESSAGE : "Belge okunamadı; fiş no ile elle arayın." };
   if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: `Belgede evrak no da parti no da okunamadı; evrak no, parti no ya da ${TERIM.terbiyeIsEmri.tekilKucuk} no ile elle arayın.` };
   if (p.readValues) {
     const v = p.readValues;

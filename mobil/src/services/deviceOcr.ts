@@ -38,6 +38,11 @@ function nativeModule(): TextReaderNative | null {
   return m as TextReaderNative;
 }
 
+/** Cihazda OCR modülü bu yapıda var mı (istasyon okutması sunucu okuyucusu kapalıyken kamerayı buna göre açar). */
+export function deviceOcrAvailable(): boolean {
+  return nativeModule() !== null;
+}
+
 const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
 function quad(v: unknown): [number, number][] | null {

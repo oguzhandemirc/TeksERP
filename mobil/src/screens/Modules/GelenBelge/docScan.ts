@@ -287,24 +287,41 @@ export async function submitDocScan(
 
 const isBadRequest = (e: unknown) => (e as { status?: number } | null)?.status === 400;
 
-/** 400 (cihaz okuması geçersiz ya da eski sunucu alanı tanımıyor) → aynı sayfa cihaz okumasız bir kez daha. */
-async function uploadWithDeviceRead(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr | null) {
-  if (!clientOcr) return api.uploadScan(body);
+/** Gövdeye eklenen cihaz alanları (eski sunucu tanımaz; `sendWithExtras` 400'de çıkarır). */
+export interface PageExtras {
+  clientOcr?: ClientOcr;
+  barcodes?: PageBarcode[];
+}
+
+/** Sayfanın cihaz okuması + barkodları koşut; her başarısızlık boş sonuç (gövde bugünkü gibi gider). */
+export async function readPageExtras(page: ScanPage): Promise<{ clientOcr: ClientOcr | null; barcodes: PageBarcode[] }> {
+  const [clientOcr, barcodes] = await Promise.all([readPageText(page).catch(() => null), readPageBarcodes(page).catch(() => [] as PageBarcode[])]);
+  return { clientOcr, barcodes };
+}
+
+/**
+ * Ek alanlı gönderim: barkodlu gövde 400 alırsa (alanı tanımayan eski sunucunun katı gövdesi) barkodsuz, cihaz okumalı
+ * gövde 400 alırsa (CLIENT_OCR_INVALID ya da eski sunucu) bugünkü gövde BİR KEZ yeniden gönderilir.
+ */
+export async function sendWithExtras<T>(send: (extras: PageExtras) => Promise<T>, clientOcr: ClientOcr | null, barcodes: readonly PageBarcode[]): Promise<T> {
+  const withOcr = async () => {
+    if (!clientOcr) return send({});
+    try {
+      return await send({ clientOcr });
+    } catch (e) {
+      if (!isBadRequest(e)) throw e;
+      return send({});
+    }
+  };
+  if (!barcodes.length) return withOcr();
   try {
-    return await api.uploadScan({ ...body, clientOcr });
+    return await send({ barcodes: [...barcodes], ...(clientOcr ? { clientOcr } : {}) });
   } catch (e) {
     if (!isBadRequest(e)) throw e;
-    return api.uploadScan(body);
+    return withOcr();
   }
 }
 
-/** Barkodlu gövde 400 alırsa (alanı tanımayan eski sunucunun katı gövdesi) önce barkodsuz, sonra bugünkü sıra. */
-async function uploadWithExtras(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr | null, barcodes: PageBarcode[]) {
-  if (!barcodes.length) return uploadWithDeviceRead(api, body, clientOcr);
-  try {
-    return await api.uploadScan({ ...body, barcodes, ...(clientOcr ? { clientOcr } : {}) });
-  } catch (e) {
-    if (!isBadRequest(e)) throw e;
-    return uploadWithDeviceRead(api, body, clientOcr);
-  }
+function uploadWithExtras(api: InboundDocApi, body: UploadScanBody, clientOcr: ClientOcr | null, barcodes: PageBarcode[]) {
+  return sendWithExtras((extras) => api.uploadScan({ ...body, ...extras }), clientOcr, barcodes);
 }

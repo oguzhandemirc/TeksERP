@@ -7,13 +7,24 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type { ClientOcr } from './deviceOcr';
+import type { PageBarcode } from './deviceBarcode';
 
 /** Fotoğraf 1–2 MB base64 + senkron OCR (≈8–12 sn); varsayılan 10 sn yetmez. */
 const LOOKUP_TIMEOUT_MS = 60_000;
 
 export interface StationLookupStatus {
   enabled: boolean;
+  /** Sunucu okuyucusu kullanılabilir ("Bilgisayarda ikinci okuma" açık + adres). */
   readerConfigured: boolean;
+  /** Uç cihaz okumasını (`clientOcr`) kabul eder (2026-11-09; eski sunucu göndermez → undefined). */
+  deviceOcrAccepted?: boolean;
+}
+
+/** Fotoğraf gövdesine eklenen cihaz okuması + barkodlar (eski sunucu 400 verir; çağıran alansız tekrarlar). */
+export interface PhotoExtras {
+  clientOcr?: ClientOcr;
+  barcodes?: PageBarcode[];
 }
 
 /** UNVERIFIED: aday var ama hiçbiri doğrulama eşiğini geçmedi (2026-11-06; `unverifiedWorkOrders`). */
@@ -70,7 +81,7 @@ export interface StationLookupWorkOrder {
 
 export interface StationLookupResult {
   outcome: StationLookupOutcome;
-  source: 'SAME_PHOTO' | 'STORED_READ' | 'OCR' | 'SEARCH';
+  source: 'SAME_PHOTO' | 'STORED_READ' | 'DEVICE' | 'OCR' | 'SEARCH';
   read: { senderDocNo: string | null; ownerText: string | null; senderText: string | null } | null;
   workOrders: StationLookupWorkOrder[];
   /** Sunucunun Türkçe sonuç cümlesi. */
@@ -94,9 +105,9 @@ export const stationDocLookupService = {
   status: (): Promise<StationLookupStatus> =>
     apiClient.get<ApiResponse<StationLookupStatus>>('/gelen-belge/istasyon-okutma').then((r) => r.data.data),
 
-  byPhoto: (contentBase64: string, sha256: string, screen?: LookupScreen): Promise<StationLookupResult> =>
+  byPhoto: (contentBase64: string, sha256: string, screen?: LookupScreen, extras: PhotoExtras = {}): Promise<StationLookupResult> =>
     apiClient
-      .post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { contentBase64, sha256 }, { timeout: LOOKUP_TIMEOUT_MS, params: screenParams(screen) })
+      .post<ApiResponse<StationLookupResult>>('/gelen-belge/istasyon-okutma', { contentBase64, sha256, ...extras }, { timeout: LOOKUP_TIMEOUT_MS, params: screenParams(screen) })
       .then((r) => r.data.data),
 
   /** Okutma izine açılan İE (TELEMETRİ, best-effort — hata yutulur, açmayı etkilemez). */
