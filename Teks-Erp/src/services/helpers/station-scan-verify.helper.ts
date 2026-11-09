@@ -3,7 +3,8 @@
 // =============================================================================
 // `workOrders` YALNIZ eşiği geçenleri taşır — eski tablet (alanı bilmeyen) düşük puanlı İE'yi asla kendiliğinden
 // açamaz; geçemeyenler `unverifiedWorkOrders`ta (yeni tablet "Emin değilim" listesi + görevli onayı). Puan saf
-// `station-scan-score.helper`dan; karşılaştırılan kayıt: İE'ye top vermiş canlı belgelerin TÜM top satırları + başlığı.
+// `station-scan-score.helper`dan; karşılaştırılan kayıt: İE'ye top vermiş canlı belgelerin TÜM top satırları + başlığı
+// (tek parça belgede ARABA metresi — kural `isSinglePieceLines`, İE Gelen kartıyla aynı).
 // =============================================================================
 import { DeliveryNoteLineKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -12,6 +13,7 @@ import type { DraftHeader, DraftLine } from "../../lib/gelen-belge/taslak";
 import { readStationVerifyThreshold } from "../system-setting.service";
 import { recordStationScanCheck, type ScanCheckDecision } from "../station-scan-check.service";
 import { whereRollsOfWorkOrder } from "./workorder-rolls.helper";
+import { isSinglePieceLines } from "./wo-incoming.helper";
 import { LOOKUP_NOTE_STATUSES } from "./workorder-doc-search.helper";
 import type { StationLookupWorkOrder } from "./station-lookup-rows.helper";
 import {
@@ -37,9 +39,10 @@ export interface VerifiedLookup {
 const DAY = (d: Date | null): string | null => (d ? d.toISOString().slice(0, 10) : null);
 const meter = (v: string | number | { toString(): string }): number => Number(String(v).replace(",", "."));
 
-/** Okunan başlık + satırlar → kanıt (yalnız TOP satırları; araba satırı top değildir). */
+/** Okunan başlık + satırlar → kanıt (yalnız TOP satırları; araba satırı top değildir). Top dökümsüz okuma tek parça adayıdır. */
 export function scanEvidenceOf(header: DraftHeader, lines: DraftLine[], batchNos: string[]): ScanEvidence {
   const tops = lines.filter((l) => l.lineKind === "TOP");
+  const total = header.kursun?.meters ? meter(header.kursun.meters) : null;
   return {
     rollNos: tops.map((l) => l.senderRollNo?.trim() ?? "").filter(Boolean),
     meters: tops.map((l) => meter(l.meters)).filter((m) => Number.isFinite(m) && m > 0),
@@ -49,13 +52,15 @@ export function scanEvidenceOf(header: DraftHeader, lines: DraftLine[], batchNos
     ownerText: header.ownerText?.trim() || null,
     senderText: header.senderText?.trim() || null,
     docDay: DAY(header.senderDocDate),
+    singlePiece: tops.length <= 1 && tops.every((l) => !l.senderRollNo?.trim()),
+    totalMeters: total !== null && Number.isFinite(total) && total > 0 ? total : null,
   };
 }
 
 const NOTE_TARGET_SELECT = {
   id: true, customerBatchNo: true, ourBatchNo: true, customerOrderNo: true, ownerText: true, senderText: true, senderDocDate: true,
   ownerCustomer: { select: { name: true } }, senderCustomer: { select: { name: true } },
-  lines: { where: { lineKind: DeliveryNoteLineKind.TOP }, select: { senderRollNo: true, meters: true }, take: 1000 },
+  lines: { select: { lineKind: true, senderRollNo: true, meters: true }, orderBy: { lineNo: "asc" }, take: 1000 },
 } as const;
 
 /** İE'nin karşılaştırma kaydı: top vermiş canlı belgeler (eşleşen belge kümesiyle kesişim varsa yalnız o) + İE partileri. */
@@ -67,9 +72,14 @@ async function targetOf(w: StationLookupWorkOrder, noteIds: string[]): Promise<{
   const narrowed = all.filter((n) => noteIds.includes(n.id));
   const notes = narrowed.length > 0 ? narrowed : all;
   const names = (a: Array<string | null | undefined>) => a.filter((v): v is string => !!v && v.trim().length > 0);
+  const allLines = notes.flatMap((n) => n.lines);
+  const tops = allLines.filter((l) => l.lineKind === DeliveryNoteLineKind.TOP);
+  const singlePiece = isSinglePieceLines(allLines);
   const record: TargetRecord = {
-    rollNos: notes.flatMap((n) => n.lines.map((l) => l.senderRollNo ?? "")).filter(Boolean),
-    meters: notes.flatMap((n) => n.lines.map((l) => meter(l.meters))),
+    rollNos: tops.map((l) => l.senderRollNo ?? "").filter(Boolean),
+    meters: tops.map((l) => meter(l.meters)),
+    singlePiece,
+    pieceMeters: singlePiece ? Math.round(allLines.reduce((s, l) => s + meter(l.meters), 0) * 1000) / 1000 : null,
     batchNos: names([...w.batchNumbers, ...notes.flatMap((n) => [n.customerBatchNo, n.ourBatchNo])]),
     orderNos: names(notes.map((n) => n.customerOrderNo)),
     ownerNames: names(notes.flatMap((n) => [n.ownerText, n.ownerCustomer?.name])),

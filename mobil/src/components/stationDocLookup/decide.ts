@@ -47,13 +47,16 @@ export function partyLabel(w: StationLookupWorkOrder): string {
   return customer ?? w.workOrderNumber;
 }
 
-/** Satır ayrıntısı: işlem · top/metre · müşteri İE no · İE no (eski sunucuda yalnız bugünkü alt metin). */
+/** Satır ayrıntısı: işlem · top/metre (tek parçada "Tek parça · gelen metre") · müşteri İE no · İE no (eski sunucuda yalnız bugünkü alt metin). */
 export function rowDetail(w: StationLookupWorkOrder): string {
   if (w.rollCount === undefined) return workOrderSubtitle(w);
   const orders = [...new Set(w.documents.map((d) => d.customerOrderNo).filter((v): v is string => !!v))];
+  const amount = w.arrival?.form === 'SINGLE_PIECE'
+    ? `Tek parça · ${formatMeters(w.arrival.meters)} m`
+    : `${w.rollCount} top · ${formatMeters(w.meters ?? 0)} m`;
   return [
     w.processText ?? '',
-    `${w.rollCount} top · ${formatMeters(w.meters ?? 0)} m`,
+    amount,
     orders.length > 0 ? `Müşteri İE ${orders.join(', ')}` : '',
     w.workOrderNumber,
   ].filter(Boolean).join(' · ');

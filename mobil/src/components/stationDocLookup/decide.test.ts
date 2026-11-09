@@ -65,6 +65,13 @@ describe('yardımcılar', () => {
     expect(rowWhere(w)).toBe('Rotasız · burada başlatılabilir · Henüz başlamadı');
     expect(siblingStripText([w, wo('IE2')], w)).toBe('Bu belgede 2 parti var · açılan: P-IE1 (YIKAMA)');
   });
+  it('satır: tek parça İE "Tek parça · gelen metre" der; top top gelende ve eski sunucuda bugünkü metin', () => {
+    const single = wo('IE1011260004', { rollCount: 0, meters: 0, arrival: { form: 'SINGLE_PIECE', meters: 241 }, documents: [{ noteNo: 'GB1', senderDocNo: null }] });
+    expect(rowDetail(single)).toBe('Tek parça · 241 m · IE1011260004');
+    expect(rowDetail({ ...single, arrival: { form: 'SINGLE_PIECE', meters: 240.5 } })).toBe('Tek parça · 240,5 m · IE1011260004');
+    expect(rowDetail({ ...single, rollCount: 4, meters: 407, arrival: { form: 'ROLLS', meters: 407 } })).toBe('4 top · 407 m · IE1011260004');
+    expect(rowDetail({ ...single, arrival: undefined })).toBe('0 top · 0 m · IE1011260004');
+  });
   it('arama en az 2 karakter', () => {
     expect(searchable(' 9 ')).toBe(false);
     expect(searchable('91')).toBe(true);

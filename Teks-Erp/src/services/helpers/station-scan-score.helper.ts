@@ -4,20 +4,22 @@
 // Anahtar (fiş no, yoksa parti no) aday İE'yi bulur; AYNI fotoğrafın öteki alanları adayın kayıtlarıyla karşılaştırılır.
 // Puan = Σ ağırlık·oran / Σ ağırlık — yalnız İKİ tarafta da kanıtı olan bileşen paydaya girer. Top listesi (top no ya
 // da top metresi) karşılaştırılamadıysa doğrulama ZAYIF sayılır ve eşik geçilemez (görevli onayı — bilinçli güvenli taraf).
+// Tek parça (2026-11-10): iki taraf da top listesizse (kayıt yalnız ARABA, okuma top dökümsüz) top listesi uygulanamaz;
+// güçlü kanıt TOPLAM METRE olur (aynı tolerans). Top'lu belgede bileşen hiç doğmaz — puan/eşik davranışı aynıdır.
 // "Otomatik açılabilir mi" sorusunun TEK cevabı `isScanVerified`; tablet yalnız sunucunun `passed` alanını okur.
 // =============================================================================
 import { codeMatchTier, tolerantCodeKey } from "./doc-code-match.helper";
 import { foldNameForCompare } from "./name-normalize.helper";
 
-export type VerifyComponentKey = "ROLL_NOS" | "ROLL_METERS" | "ROLL_COUNT" | "BATCH_NO" | "ORDER_NO" | "OWNER" | "SENDER" | "DOC_DATE";
+export type VerifyComponentKey = "ROLL_NOS" | "ROLL_METERS" | "ROLL_COUNT" | "TOTAL_METERS" | "BATCH_NO" | "ORDER_NO" | "OWNER" | "SENDER" | "DOC_DATE";
 
 /** Ağırlıklar (kullanıcı kararı): top no çok yüksek · top metresi yüksek · parti/sipariş no + top sayısı orta · müşteri/gönderen/tarih düşük. */
 export const VERIFY_WEIGHTS: Readonly<Record<VerifyComponentKey, number>> = {
-  ROLL_NOS: 40, ROLL_METERS: 25, ROLL_COUNT: 10, BATCH_NO: 10, ORDER_NO: 10, OWNER: 5, SENDER: 5, DOC_DATE: 5,
+  ROLL_NOS: 40, ROLL_METERS: 25, ROLL_COUNT: 10, TOTAL_METERS: 25, BATCH_NO: 10, ORDER_NO: 10, OWNER: 5, SENDER: 5, DOC_DATE: 5,
 };
 
 const LABELS: Readonly<Record<VerifyComponentKey, string>> = {
-  ROLL_NOS: "Top no", ROLL_METERS: "Top metresi", ROLL_COUNT: "Top sayısı", BATCH_NO: "Parti no", ORDER_NO: "Müşteri İE / sipariş no",
+  ROLL_NOS: "Top no", ROLL_METERS: "Top metresi", ROLL_COUNT: "Top sayısı", TOTAL_METERS: "Toplam metre", BATCH_NO: "Parti no", ORDER_NO: "Müşteri İE / sipariş no",
   OWNER: "Müşteri", SENDER: "Gönderen", DOC_DATE: "Belge tarihi",
 };
 
@@ -32,6 +34,10 @@ export interface ScanEvidence {
   senderText: string | null;
   /** YYYY-AA-GG (belgenin yazdığı takvim günü; dilim dönüşümü yok). */
   docDay: string | null;
+  /** Okumada top dökümü yok (top no'suz, en çok tek başlık satırı) — tek parça belge adayı. */
+  singlePiece?: boolean;
+  /** Belgenin okunan toplam (kurşun) metresi. */
+  totalMeters?: number | null;
 }
 
 /** Adayın kayıtları: İE'ye top vermiş belgelerin TÜM satırları + başlıkları + İE parti no'ları. */
@@ -43,6 +49,10 @@ export interface TargetRecord {
   ownerNames: string[];
   senderNames: string[];
   docDays: string[];
+  /** Kayıtlı satırların HEPSİ ARABA (`isSinglePieceLines`) — tek parça geldi. */
+  singlePiece?: boolean;
+  /** ARABA satırlarının metre toplamı. */
+  pieceMeters?: number | null;
 }
 
 export interface VerifyComponent {
@@ -59,7 +69,7 @@ export interface VerifyComponent {
 export interface ScanScore {
   /** 0–100; karşılaştırılabilen bileşen yoksa null. */
   score: number | null;
-  /** Top listesi (top no ya da metre) karşılaştırıldı mı — değilse eşik geçilemez. */
+  /** Top listesi (top no ya da metre; tek parçada toplam metre) karşılaştırıldı mı — değilse eşik geçilemez. */
   strongEvidence: boolean;
   components: VerifyComponent[];
 }
@@ -91,11 +101,22 @@ function metersComponent(read: number[], stored: number[]): VerifyComponent | nu
   if (a.length === 0 || pool.length === 0) return null;
   let hit = 0;
   for (const m of a) {
-    const i = pool.findIndex((s) => Math.abs(s - m) <= Math.max(METER_ABS_TOL, METER_REL_TOL * s));
+    const i = pool.findIndex((s) => meterNear(m, s));
     if (i >= 0) { hit++; pool.splice(i, 1); }
   }
   const of = Math.max(a.length, stored.filter((m) => m > 0).length);
   return comp("ROLL_METERS", hit / of, `${hit}/${of}`);
+}
+
+const meterNear = (m: number, s: number): boolean => Math.abs(s - m) <= Math.max(METER_ABS_TOL, METER_REL_TOL * s);
+
+/** Tek parça: yalnız İKİ taraf da top listesizken; okunan toplam metre ↔ ARABA metresi (top metresiyle aynı tolerans). */
+function totalMetersComponent(ev: ScanEvidence, t: TargetRecord): VerifyComponent | null {
+  const read = ev.totalMeters ?? 0;
+  const stored = t.pieceMeters ?? 0;
+  if (!ev.singlePiece || !t.singlePiece || !(read > 0) || !(stored > 0)) return null;
+  const ok = meterNear(read, stored);
+  return comp("TOTAL_METERS", ok ? 1 : 0, ok ? `${stored} m` : `okunan ${read} · kayıt ${stored}`);
 }
 
 /** Kod alanı (parti / sipariş no): tam 1 · OCR-toleranslı 0,75 · yok 0. */
@@ -134,6 +155,7 @@ export function scoreScan(ev: ScanEvidence, t: TargetRecord, exclude: readonly V
     rollNosComponent(ev.rollNos, t.rollNos),
     metersComponent(ev.meters, t.meters),
     scalarComponent("ROLL_COUNT", ev.rollCount !== null && ev.rollCount > 0 ? String(ev.rollCount) : null, t.meters.length > 0 ? [String(t.meters.length)] : []),
+    totalMetersComponent(ev, t),
     codeComponent("BATCH_NO", ev.batchNos, t.batchNos),
     codeComponent("ORDER_NO", ev.orderNo ? [ev.orderNo] : [], t.orderNos),
     nameComponent("OWNER", ev.ownerText, t.ownerNames),
@@ -143,11 +165,11 @@ export function scoreScan(ev: ScanEvidence, t: TargetRecord, exclude: readonly V
   const components = candidates.filter((c): c is VerifyComponent => c !== null && !exclude.includes(c.key));
   const total = components.reduce((s, c) => s + c.weight, 0);
   const score = total > 0 ? Math.round((100 * components.reduce((s, c) => s + c.weight * c.ratio, 0)) / total) : null;
-  const strongEvidence = components.some((c) => c.key === "ROLL_NOS" || c.key === "ROLL_METERS");
+  const strongEvidence = components.some((c) => c.key === "ROLL_NOS" || c.key === "ROLL_METERS" || c.key === "TOTAL_METERS");
   return { score, strongEvidence, components };
 }
 
-/** Eşik 0 = doğrulama kapalı (bugünkü davranış). Aksi: puan var ∧ top listesi kanıtı var ∧ puan ≥ eşik. */
+/** Eşik 0 = doğrulama kapalı (bugünkü davranış). Aksi: puan var ∧ top listesi (tek parçada toplam metre) kanıtı var ∧ puan ≥ eşik. */
 export function isScanVerified(s: Pick<ScanScore, "score" | "strongEvidence">, threshold: number): boolean {
   if (threshold <= 0) return true;
   return s.score !== null && s.strongEvidence && s.score >= threshold;

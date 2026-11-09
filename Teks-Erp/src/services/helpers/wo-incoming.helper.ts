@@ -71,6 +71,11 @@ function sameText(values: ReadonlyArray<string | null | undefined>): string | nu
   return t.length > 0 && t[0] && t.every((v) => v === t[0]) ? t[0] : null;
 }
 
+/** Tek parça geliş = satırların HEPSİ ARABA (özet satırı); `arrivalForm` ve istasyon okutması doğrulaması bu TEK kuralı okur. */
+export function isSinglePieceLines(lines: ReadonlyArray<{ lineKind?: string | null } | null | undefined>): boolean {
+  return lines.length > 0 && lines.every((l) => l?.lineKind === "ARABA");
+}
+
 /** Saf: kök kimlikleri + satırları → gelen bloğu (bekçi DB'siz ölçer). */
 export function foldWoIncoming(meters: Prisma.Decimal, rootIds: readonly string[], lines: readonly IncomingLine[]): WoIncoming | null {
   if (rootIds.length === 0 || lines.length === 0) return null;
@@ -90,7 +95,7 @@ export function foldWoIncoming(meters: Prisma.Decimal, rootIds: readonly string[
     meters, kg, kgSource: kg === null ? null : "DOCUMENT", notes, widthCm: width ?? null, customerBatchNo: batches.length ? batches.join(", ") : null,
     itemText: sameText(rootLines.map((l) => l?.itemText)), colorText: sameText(rootLines.map((l) => l?.colorText)),
     rootCount: rootIds.length, rootRollIds: [...rootIds],
-    arrivalForm: rootLines.every((l) => l?.lineKind === "ARABA") ? "SINGLE_PIECE" : "ROLLS",
+    arrivalForm: isSinglePieceLines(rootLines) ? "SINGLE_PIECE" : "ROLLS",
   };
 }
 

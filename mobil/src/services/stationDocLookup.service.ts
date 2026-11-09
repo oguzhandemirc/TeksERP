@@ -72,6 +72,8 @@ export interface StationLookupWorkOrder {
   processText?: string | null;
   rollCount?: number;
   meters?: number;
+  /** Kumaş nasıl geldi + gelen metre (2026-11-10; eski sunucu göndermez). */
+  arrival?: { form: 'SINGLE_PIECE' | 'ROLLS'; meters: number } | null;
   locationText?: string;
   atStation?: AtStation | null;
   atStationText?: string | null;

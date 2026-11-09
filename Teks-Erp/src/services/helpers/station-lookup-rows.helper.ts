@@ -15,6 +15,7 @@ import {
   assertTamburStation, stationScreenOpenStepWhere, stationScreenStationWhere, stationScreenStepWhere, type StationScreen,
 } from "./station-open-step.helper";
 import { scanRouteStartableWorkOrderIds } from "./scan-route-open-cards.helper";
+import { computeWoIncoming, woMemberRootInput } from "./wo-incoming.helper";
 import type { WorkOrderVerification } from "./station-scan-score.helper";
 
 /** Yanıt tavanı — tablet listesi; daha fazlası belge no'nun yanlış okunduğunu gösterir. */
@@ -32,9 +33,11 @@ export interface StationLookupWorkOrder {
   readonly createdAt: Date;
   /** İşlem: belge satırının işlem metni → belge başlığınınki → rota adı. */
   readonly processText: string | null;
-  /** Canlı top sayısı ve metresi (konum helper'ından). */
+  /** Canlı top sayısı ve metresi (konum helper'ından); adımda canlı top yoksa gelen kök sayısı ve metresi. */
   readonly rollCount: number;
   readonly meters: number;
+  /** Kumaş nasıl geldi + gelen metre (İE Gelen kartıyla aynı kaynak); tablet tek parçayı "N top" yerine yazar. Eski tablet yok sayar. */
+  readonly arrival?: { form: "SINGLE_PIECE" | "ROLLS"; meters: number } | null;
   /** "Şu an: Tambur 1 (3 top)" — `workorder-location.helper`. */
   readonly locationText: string;
   /** Bu ekranın açık kart listesinde mi; ekran bildirilmediyse null (eski istemci). */
@@ -157,7 +160,7 @@ export async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds:
   });
   const out: StationLookupWorkOrder[] = [];
   const locations = await loadWorkOrderLocations(rows);
-  // İE başına iki sorgu (≤ 20): hangi belgeler bu İE'ye top verdi + satırların işlem metni — bağ `whereRollsOfWorkOrder`dan.
+  // İE başına dört sorgu (≤ 20): hangi belgeler bu İE'ye top verdi + satırların işlem metni + gelen kökleri ve satırları.
   for (const w of rows) {
     const docs = await prisma.customerDeliveryNote.findMany({
       where: { status: { in: [...LOOKUP_NOTE_STATUSES] }, ...(noteIds ? { id: { in: noteIds } } : {}), lines: { some: { roll: whereRollsOfWorkOrder(w.id) } } },
@@ -170,6 +173,8 @@ export async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds:
       select: { processText: true }, distinct: ["processText"], orderBy: { processText: "asc" }, take: 3,
     });
     const konum = locations.get(w.id);
+    const member = await woMemberRootInput(w.id);
+    const incoming = member ? await computeWoIncoming(member) : null;
     const processText = joinedText(lineProcess.map((l) => l.processText)) ?? joinedText(docs.map((d) => d.processText)) ?? w.routeTemplate?.name ?? null;
     out.push({
       id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, createdAt: w.createdAt,
@@ -177,8 +182,11 @@ export async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds:
       batchNumbers: [...new Set(w.batches.map((b) => b.batchNumber))],
       documents: docs.map((d) => ({ noteNo: d.noteNo, senderDocNo: d.senderDocNo, customerOrderNo: d.customerOrderNo, customerBatchNo: d.customerBatchNo })),
       processText,
-      rollCount: konum?.canliTop ?? 0,
-      meters: Math.round((konum?.istasyonlar.reduce((sum, e) => sum + e.metre, 0) ?? 0) * 10) / 10,
+      // Adımda canlı top yoksa (rotasız / başlamamış) gelen kökler sayılır — "0 top · 0 m" yanıltır (tek parça 1 top · 241 m).
+      ...(konum && konum.canliTop > 0 || !incoming
+        ? { rollCount: konum?.canliTop ?? 0, meters: Math.round((konum?.istasyonlar.reduce((sum, e) => sum + e.metre, 0) ?? 0) * 10) / 10 }
+        : { rollCount: incoming.rootCount, meters: Math.round(Number(incoming.meters) * 10) / 10 }),
+      arrival: incoming ? { form: incoming.arrivalForm, meters: Math.round(Number(incoming.meters) * 10) / 10 } : null,
       locationText: konum ? locationSentence(konum) : "Üretimde topu yok",
       atStation: null,
       atStationText: null,
