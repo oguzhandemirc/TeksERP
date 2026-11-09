@@ -13,19 +13,49 @@ import prisma from "../../lib/prisma";
 
 type Db = Pick<Prisma.TransactionClient, "customerDeliveryNoteLine">;
 
+/** Belge başlığı alanları (hepsi null olabilir); `sender` yalnız malın sahibinden FARKLIYSA dolu. */
+export interface WoIncomingNote {
+  id: string;
+  noteNo: string;
+  senderDocNo: string | null;
+  senderDocDate: Date | null;
+  sender: string | null;
+  declaredTopCount: number | null;
+  customerOrderNo: string | null;
+  processText: string | null;
+}
+
 export interface WoIncoming {
   meters: Prisma.Decimal;
   kg: Prisma.Decimal | null;
   kgSource: "DOCUMENT" | null;
   /** Kökleri doğuran gelen belge(ler), belge no sırasıyla. */
-  notes: Array<{ id: string; noteNo: string }>;
+  notes: WoIncomingNote[];
   widthCm: Prisma.Decimal | null;
   customerBatchNo: string | null;
   itemText: string | null;
   colorText: string | null;
 }
 
-type IncomingLine = { rollId: string | null; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; itemText?: string | null; colorText?: string | null; note: { id: string; noteNo: string } };
+type IncomingLine = { rollId: string | null; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; itemText?: string | null; colorText?: string | null; note: IncomingNoteRow };
+
+type IncomingNoteRow = {
+  id: string; noteNo: string;
+  senderDocNo?: string | null; senderDocDate?: Date | null; senderText?: string | null; declaredTopCount?: number | null;
+  customerOrderNo?: string | null; processText?: string | null;
+  ownerCustomerId?: string | null; senderCustomerId?: string | null; senderCustomer?: { name: string } | null;
+};
+
+const clean = (v: string | null | undefined): string | null => v?.trim() || null;
+
+function toNote(n: IncomingNoteRow): WoIncomingNote {
+  const differs = !!n.senderCustomerId && n.senderCustomerId !== n.ownerCustomerId;
+  const sender = n.senderCustomerId ? (differs ? clean(n.senderCustomer?.name) : null) : clean(n.senderText);
+  return {
+    id: n.id, noteNo: n.noteNo, senderDocNo: clean(n.senderDocNo), senderDocDate: n.senderDocDate ?? null, sender,
+    declaredTopCount: n.declaredTopCount ?? null, customerOrderNo: clean(n.customerOrderNo), processText: clean(n.processText),
+  };
+}
 
 /** Her kökte aynı (kırpılmış metin birebir) dolu metin → o; aksi null. */
 function sameText(values: ReadonlyArray<string | null | undefined>): string | null {
@@ -45,7 +75,7 @@ export function foldWoIncoming(meters: Prisma.Decimal, rootIds: readonly string[
     const w = l?.widthCm ?? null;
     width = width === undefined ? w : width && w && width.equals(w) ? width : null;
   }
-  const notes = [...new Map(lines.map((l) => [l.note.id, l.note])).values()].sort((a, b) => a.noteNo.localeCompare(b.noteNo));
+  const notes = [...new Map(lines.map((l) => [l.note.id, l.note])).values()].map(toNote).sort((a, b) => a.noteNo.localeCompare(b.noteNo));
   const batches = [...new Set(lines.map((l) => l.customerBatchNo?.trim()).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b));
   const rootLines = rootIds.map((id) => byRoll.get(id));
   return {
@@ -58,7 +88,7 @@ export async function computeWoIncoming(input: { meters: Prisma.Decimal; rootIds
   if (input.rootIds.length === 0) return null;
   const lines = await db.customerDeliveryNoteLine.findMany({
     where: { rollId: { in: [...input.rootIds] } },
-    select: { rollId: true, weightKg: true, widthCm: true, customerBatchNo: true, itemText: true, colorText: true, note: { select: { id: true, noteNo: true } } },
+    select: { rollId: true, weightKg: true, widthCm: true, customerBatchNo: true, itemText: true, colorText: true, note: { select: { id: true, noteNo: true, senderDocNo: true, senderDocDate: true, senderText: true, declaredTopCount: true, customerOrderNo: true, processText: true, ownerCustomerId: true, senderCustomerId: true, senderCustomer: { select: { name: true } } } } },
   });
   return foldWoIncoming(input.meters, input.rootIds, lines);
 }

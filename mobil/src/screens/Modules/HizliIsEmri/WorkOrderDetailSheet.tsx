@@ -29,7 +29,15 @@ import { colors, spacing, radius } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
 import { isCustomerGoodsWo } from '../IsEmirleri/workOrderRow';
-import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, routeNotes, type DetailRow } from './workOrderDetailView';
+import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, routeNotes, type DetailRow, type StepTone } from './workOrderDetailView';
+
+const TONE: Record<StepTone, { bg: string; fg: string }> = {
+  info: { bg: colors.infoContainer, fg: colors.infoText },
+  neutral: { bg: colors.border, fg: colors.textSecondary },
+  success: { bg: colors.successContainer, fg: colors.successText },
+  warning: { bg: colors.warningContainer, fg: colors.warningDark },
+  danger: { bg: colors.dangerContainer, fg: colors.dangerDark },
+};
 
 const fmtDate = (iso: string) => formatFactory(iso, 'dd.MM.yyyy HH:mm');
 
@@ -152,7 +160,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       summary: summaryItems({
         wo,
         typeLabel: trLabel(WORK_ORDER_TYPE_LABEL, wo.type),
-        statusLabel: trLabel(WORK_ORDER_STATUS_LABEL, wo.status),
         rollCount: rolls.length,
         rollMeters,
         fmtDate,
@@ -169,12 +176,12 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
     <AppModal visible={visible} onDismiss={onClose} position="bottom" contentStyle={styles.sheet}>
       {/* Başlık */}
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.headerTitleRow}>
           <Text style={styles.headerBatch} numberOfLines={1}>
             {wo?.workOrderNumber ?? TERIM.terbiyeIsEmri.tekil}
           </Text>
           {wo ? (
-            <View style={styles.chipRow}>
+            <>
               <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
                 <Text style={styles.statusChipText}>{trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}</Text>
               </View>
@@ -184,7 +191,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                   <Text style={styles.fasonChipText}>{`Fason ${TERIM.terbiyeIsEmri.tekil}`}</Text>
                 </View>
               ) : null}
-            </View>
+            </>
           ) : null}
         </View>
         <TouchableRipple onPress={onClose} borderless style={styles.closeBtn}>
@@ -257,14 +264,16 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         <ScrollView contentContainerStyle={styles.body}>
           {view && view.summary.length > 0 ? (
             <View style={styles.strip} testID="ie-detay-ozet">
-              {view.summary.map(([k, v]) => (
-                <View key={k} style={styles.stripItem}>
-                  <Text style={styles.stripKey}>{k}</Text>
-                  <Text style={styles.stripVal} numberOfLines={1}>
-                    {v}
-                  </Text>
-                </View>
-              ))}
+              {view.summary.map(([k, v], i) => {
+                const perRow = cols === 2 ? view.summary.length : Math.min(3, view.summary.length);
+                const lastInRow = (i + 1) % perRow === 0;
+                return (
+                  <View key={k} style={[styles.stripItem, { width: `${100 / perRow}%` }, lastInRow ? null : styles.stripDivider]}>
+                    <Text style={styles.stripKey}>{k}</Text>
+                    <Text style={styles.stripVal}>{v}</Text>
+                  </View>
+                );
+              })}
             </View>
           ) : null}
 
@@ -279,20 +288,28 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
           {view && view.chips.length > 0 ? (
             <View style={styles.section} testID="ie-detay-rota">
               <Text style={styles.sectionTitle}>Üretim Rotası</Text>
-              <View style={styles.chipsWrap}>
-                {view.chips.map((c, idx) => (
-                  <React.Fragment key={c.id}>
-                    {idx > 0 ? <Icon source="chevron-right" size={18} color={colors.textMuted} /> : null}
-                    <View style={styles.routeChip}>
-                      <Text style={styles.stepSeq}>{c.seq}</Text>
-                      <Text style={styles.stepName} numberOfLines={1}>
-                        {c.name}
-                      </Text>
-                      <Text style={styles.stepMeta}>{trLabel(STEP_STATUS_LABEL, c.status)}</Text>
-                    </View>
-                  </React.Fragment>
-                ))}
-              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeRow}>
+                {view.chips.map((c, idx) => {
+                  const tone = TONE[c.tone];
+                  return (
+                    <React.Fragment key={c.id}>
+                      {idx > 0 ? <Icon source="arrow-right" size={20} color={colors.textMuted} /> : null}
+                      <View style={styles.routeStep} testID={`ie-detay-adim-${c.seq}`}>
+                        <View style={styles.routeNameRow}>
+                          <Text style={styles.stepSeq}>{c.seq}</Text>
+                          <Text style={styles.stepName}>{c.name}</Text>
+                        </View>
+                        <View style={[styles.stepBadge, { backgroundColor: tone.bg }]}>
+                          <Text style={[styles.stepBadgeText, { color: tone.fg }]}>
+                            {c.outside ? 'Fason dışarıda' : trLabel(STEP_STATUS_LABEL, c.status)}
+                          </Text>
+                        </View>
+                        {c.where && !c.outside ? <Text style={styles.stepMeta}>{c.where}</Text> : null}
+                      </View>
+                    </React.Fragment>
+                  );
+                })}
+              </ScrollView>
               {view.notes.map((n) => (
                 <Text key={n.id} style={styles.note}>{`${n.name}: ${n.note}`}</Text>
               ))}
@@ -439,10 +456,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerBatch: { fontSize: 18, fontWeight: '800', color: colors.text },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   fasonChip: { backgroundColor: colors.warningContainer },
   fasonChipText: { fontSize: 12, fontWeight: '700', color: colors.warningDark },
-  statusChip: { alignSelf: 'flex-start', borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, marginTop: 4 },
+  headerTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  statusChip: { borderRadius: 4, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   statusChipText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   closeBtn: { padding: spacing.xs, borderRadius: radius.full },
   center: { padding: spacing.xxxl, alignItems: 'center', justifyContent: 'center' },
@@ -456,19 +473,23 @@ const styles = StyleSheet.create({
   infoVal: { flex: 1, color: colors.text, fontWeight: '700', fontSize: 14 },
   rowCols: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   colStack: { gap: spacing.md },
-  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  stripItem: { minWidth: 70 },
+  strip: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.xs },
+  stripItem: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  stripDivider: { borderRightWidth: 1, borderRightColor: colors.border },
   stripKey: { fontSize: 11, color: colors.textMuted },
   stripVal: { fontSize: 14, fontWeight: '700', color: colors.text },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
-  routeChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.appBg, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  routeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  routeStep: { alignItems: 'center', gap: 4, backgroundColor: colors.appBg, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minWidth: 110 },
+  routeNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  stepBadge: { borderRadius: 4, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  stepBadgeText: { fontSize: 12, fontWeight: '700' },
 
   section: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
   sectionTitle: { fontSize: 13, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: spacing.sm },
   stepLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 5 },
   stepSeq: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.brandSoft, color: colors.brand, fontWeight: '800', fontSize: 12, textAlign: 'center', lineHeight: 22 },
-  stepName: { flex: 1, fontWeight: '700', color: colors.text, fontSize: 14 },
-  stepMeta: { fontSize: 11, color: colors.textMuted },
+  stepName: { fontWeight: '700', color: colors.text, fontSize: 14 },
+  stepMeta: { fontSize: 12, color: colors.textMuted },
   muted: { color: colors.textMuted, fontSize: 13 },
 
   rollLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: colors.border },

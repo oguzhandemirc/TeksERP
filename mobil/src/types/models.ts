@@ -311,7 +311,17 @@ export interface WorkOrderIncoming {
   meters: number | null;
   kg: number | null;
   widthCm: number | null;
-  notes: { id: string; noteNo: string }[];
+  notes: {
+    id: string;
+    noteNo: string;
+    /** Müşterinin kendi evrak no'su / belge tarihi (ISO) / gönderen (yalnız sahipten farklıysa) / belgedeki top adedi / müşteri sipariş no / istenen işlem. */
+    senderDocNo?: string | null;
+    senderDocDate?: string | null;
+    sender?: string | null;
+    declaredTopCount?: number | null;
+    customerOrderNo?: string | null;
+    processText?: string | null;
+  }[];
   customerBatchNo: string | null;
   itemText: string | null;
   colorText: string | null;

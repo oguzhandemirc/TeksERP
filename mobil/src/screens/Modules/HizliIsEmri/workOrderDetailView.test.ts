@@ -1,4 +1,4 @@
-import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, stripDeviceId, fmtNum } from './workOrderDetailView';
+import { detailColumns, incomingRows, targetRows, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum } from './workOrderDetailView';
 import type { WorkOrder } from '../../../types/models';
 
 const fmtDate = (s: string) => `D(${s})`;
@@ -27,6 +27,31 @@ describe('incomingRows', () => {
       ['Gelen En', '150 cm'],
       ['Gelen Kumaş', 'Tül'],
     ]);
+  });
+});
+
+describe('incomingRows belge başlığı', () => {
+  it('evrak no, tarih, gönderen, sipariş no, işlem, top adedi; boşlar çizilmez', () => {
+    const rows = incomingRows({
+      meters: null, kg: null, widthCm: null, customerBatchNo: null, itemText: null, colorText: null,
+      notes: [
+        { id: '1', noteNo: 'GB0911260035', senderDocNo: '12345', senderDocDate: '2026-11-09T00:00:00.000Z', sender: 'Gönderen AŞ', declaredTopCount: 3, customerOrderNo: 'S-7', processText: 'Boya' },
+        { id: '2', noteNo: 'GB0911260036', senderDocNo: '12346', senderDocDate: '2026-11-09T00:00:00.000Z', sender: null, declaredTopCount: 2, customerOrderNo: null, processText: null },
+      ],
+    });
+    expect(rows).toEqual([
+      ['Belge No', 'GB0911260035, GB0911260036'],
+      ['Müşteri Evrak No', '12345, 12346'],
+      ['Belge Tarihi', '09.11.2026'],
+      ['Gönderen', 'Gönderen AŞ'],
+      ['Müşteri Sipariş No', 'S-7'],
+      ['İstenen İşlem', 'Boya'],
+      ['Belgedeki Top', '5 top'],
+    ]);
+  });
+  it('bir belgede top adedi yoksa toplam gösterilmez', () => {
+    const rows = incomingRows({ meters: null, kg: null, widthCm: null, customerBatchNo: null, itemText: null, colorText: null, notes: [{ id: '1', noteNo: 'A', declaredTopCount: 3 }, { id: '2', noteNo: 'B' }] });
+    expect(rows.some(([k]) => k === 'Belgedeki Top')).toBe(false);
   });
 });
 
@@ -66,7 +91,7 @@ describe('summaryItems', () => {
       typeLabel: 'Fason', statusLabel: 'Devam', rollCount: 0, rollMeters: 0, fmtDate,
     });
     expect(items).toEqual([
-      ['Müşteri', 'Kader'], ['Bizim Parti', 'P01'], ['Tür', 'Fason'], ['Durum', 'Devam'], ['Top', '3 top · 450 m'], ['Oluşturma', 'D(2026-11-09) · Ayşe'],
+      ['Müşteri', 'Kader'], ['Bizim Parti', 'P01'], ['Tür', 'Fason'], ['Top', '3 top · 450 m'], ['Oluşturma', 'D(2026-11-09) · Ayşe'],
     ]);
   });
   it('inputRolls yoksa bağlı toplardan sayar; müşteri yoksa atlar', () => {
@@ -82,6 +107,23 @@ describe('routeChips', () => {
       { id: 'a', stepSequence: 1, status: 'IN_PROGRESS', station: { name: 'KURŞUN' } },
     ] as never);
     expect(chips.map((c) => c.name)).toEqual(['KURŞUN', 'TAMBUR']);
+  });
+});
+
+describe('stepTone / rota rozeti', () => {
+  it('durum renkleri', () => {
+    expect(stepTone('ACTIVE', false)).toBe('info');
+    expect(stepTone('ACTIVE', true)).toBe('warning');
+    expect(stepTone('PENDING', false)).toBe('neutral');
+    expect(stepTone('COMPLETED', false)).toBe('success');
+  });
+  it('fason dışarıda ve konum', () => {
+    const [a, b] = routeChips([
+      { id: 'a', stepSequence: 1, status: 'ACTIVE', station: { name: 'BOYA', type: 'EXTERNAL' } },
+      { id: 'b', stepSequence: 2, status: 'PENDING', station: { name: 'KURŞUN', type: 'INTERNAL' } },
+    ] as never);
+    expect(a).toMatchObject({ outside: true, tone: 'warning', where: 'Fason (dış)' });
+    expect(b).toMatchObject({ outside: false, tone: 'neutral', where: 'Fabrika içi' });
   });
 });
 

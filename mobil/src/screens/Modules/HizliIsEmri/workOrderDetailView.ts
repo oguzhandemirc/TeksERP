@@ -29,12 +29,29 @@ const num = (v: unknown): number | null => {
 
 const txt = (v: string | null | undefined): string | null => (v && v.trim() ? v.trim() : null);
 
+/** "2026-11-09T00:00:00.000Z" (yalnız tarih kolonu) → "09.11.2026"; saat dilimi kaymaz. */
+function fmtIsoDay(iso: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : null;
+}
+
 /** Gelen (belgeden) satırları; dolu olmayan satır yok. `incoming` yoksa boş dizi (kart çizilmez). */
 export function incomingRows(incoming: WorkOrderIncoming | null | undefined): DetailRow[] {
   if (!incoming) return [];
   const rows: (DetailRow | null)[] = [];
-  const notes = (incoming.notes ?? []).map((n) => n.noteNo).filter(Boolean);
+  const nts = incoming.notes ?? [];
+  const notes = nts.map((n) => n.noteNo).filter(Boolean);
   rows.push(notes.length ? ['Belge No', notes.join(', ')] : null);
+  const uniq = (xs: (string | null | undefined)[]) => [...new Set(xs.map((x) => txt(x)).filter((x): x is string => !!x))];
+  const join = (label: string, xs: string[]): DetailRow | null => (xs.length ? [label, xs.join(', ')] : null);
+  rows.push(join('Müşteri Evrak No', uniq(nts.map((n) => n.senderDocNo))));
+  rows.push(join('Belge Tarihi', uniq(nts.map((n) => fmtIsoDay(n.senderDocDate)))));
+  rows.push(join('Gönderen', uniq(nts.map((n) => n.sender))));
+  rows.push(join('Müşteri Sipariş No', uniq(nts.map((n) => n.customerOrderNo))));
+  rows.push(join('İstenen İşlem', uniq(nts.map((n) => n.processText))));
+  // Kısmi toplam gösterilmez: her belgede top adedi varsa toplam, yoksa satır yok.
+  const tops = nts.map((n) => num(n.declaredTopCount));
+  rows.push(tops.length && tops.every((t) => t != null) ? ['Belgedeki Top', `${tops.reduce((a, t) => a + (t as number), 0)} top`] : null);
   const batch = txt(incoming.customerBatchNo);
   rows.push(batch ? ['Müşteri Parti No', batch] : null);
   const m = num(incoming.meters);
@@ -88,21 +105,21 @@ export function targetRows({ wo, fallbackItemName, propertyNames, fmtDate }: Tar
 export interface SummaryInput {
   wo: WorkOrder;
   typeLabel: string;
-  statusLabel: string;
+  /** Eski çağıranlar için tutulur; durum başlıkta rozet olduğundan şeritte yer almaz. */
+  statusLabel?: string;
   rollCount: number;
   rollMeters: number;
   fmtDate: (iso: string) => string;
 }
 
-/** Üst özet şeridi: Müşteri · Bizim parti · Tür · Durum · N top · toplam m · oluşturma. Boş olan atlanır. */
-export function summaryItems({ wo, typeLabel, statusLabel, rollCount, rollMeters, fmtDate }: SummaryInput): DetailRow[] {
+/** Üst özet şeridi: Müşteri · Bizim parti · Tür · N top · toplam m · oluşturma. Boş olan atlanır. */
+export function summaryItems({ wo, typeLabel, rollCount, rollMeters, fmtDate }: SummaryInput): DetailRow[] {
   const items: (DetailRow | null)[] = [];
   const customer = wo.customer?.name ?? wo.orderLinks?.find((l) => l.orderLine?.order?.customer?.name)?.orderLine?.order?.customer?.name ?? null;
   items.push(customer ? ['Müşteri', customer] : null);
   const batches = (wo.batches ?? []).map((b) => b.batchNumber).filter(Boolean);
   items.push(batches.length ? ['Bizim Parti', batches.join(', ')] : null);
   items.push(typeLabel ? ['Tür', typeLabel] : null);
-  items.push(statusLabel ? ['Durum', statusLabel] : null);
   const inCount = num(wo.inputRolls?.count) ?? 0;
   const count = inCount > 0 ? inCount : rollCount;
   const meters = inCount > 0 ? num(wo.inputRolls?.totalMeters) ?? rollMeters : rollMeters;
@@ -114,19 +131,45 @@ export function summaryItems({ wo, typeLabel, statusLabel, rollCount, rollMeters
   return items.filter((r): r is DetailRow => r !== null);
 }
 
+export type StepTone = 'info' | 'neutral' | 'success' | 'warning' | 'danger';
+
 export interface RouteChip {
   id: string;
   seq: number;
   name: string;
   status: string;
+  /** Rozet rengi: Aktif=mavi, Beklemede=gri, Bitti=yeşil, Fason dışarıda=amber, İptal=kırmızı. */
+  tone: StepTone;
+  /** Fason (dış) istasyonda aktif adım → "Fason dışarıda". */
+  outside: boolean;
+  /** "Fabrika içi" / "Fason (dış)" — bilinmiyorsa null. */
+  where: string | null;
+}
+
+export function stepTone(status: string, external: boolean): StepTone {
+  if (status === 'ACTIVE') return external ? 'warning' : 'info';
+  if (status === 'COMPLETED') return 'success';
+  if (status === 'CANCELLED') return 'danger';
+  return 'neutral';
 }
 
 export function routeChips(steps: WorkOrder['steps']): RouteChip[] {
   return [...(steps ?? [])]
     .sort((a, b) => a.stepSequence - b.stepSequence)
-    .map((s) => ({ id: s.id, seq: s.stepSequence, name: s.station?.name ?? '—', status: s.status }));
+    .map((s) => {
+      const type = s.station?.type;
+      const external = type === 'EXTERNAL';
+      return {
+        id: s.id,
+        seq: s.stepSequence,
+        name: s.station?.name ?? '—',
+        status: s.status,
+        tone: stepTone(s.status, external),
+        outside: external && s.status === 'ACTIVE',
+        where: type ? (external ? 'Fason (dış)' : 'Fabrika içi') : null,
+      };
+    });
 }
-
 /** Adım notları (fason talimatı vb.) — boşlar atılır. */
 export function routeNotes(steps: WorkOrder['steps']): { id: string; name: string; note: string }[] {
   return [...(steps ?? [])]

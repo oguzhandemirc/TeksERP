@@ -46,7 +46,14 @@ function pure(): void {
   const L = (rollId: string, kg: string | null, w: string | null, b: string | null, n = "1") => ({ rollId, weightKg: D(kg), widthCm: D(w), customerBatchNo: b, note: { id: `n${n}`, noteNo: `GB-${n}` } });
   const m = new Prisma.Decimal(100);
   const same = foldWoIncoming(m, ["a", "b"], [L("a", "10", "150", "B"), L("b", "5", "150.00", "A", "2")]);
-  check("§1 ⭐ fold: en hepsinde aynı → tek değer; parti no tekil sıralı; belge tekil sıralı; kg toplam", same?.widthCm?.toString() === "150" && same.customerBatchNo === "A, B" && JSON.stringify(same.notes) === JSON.stringify([{ id: "n1", noteNo: "GB-1" }, { id: "n2", noteNo: "GB-2" }]) && Number(same.kg) === 15, JSON.stringify(same));
+  check("§1 ⭐ fold: en hepsinde aynı → tek değer; parti no tekil sıralı; belge tekil sıralı; kg toplam", same?.widthCm?.toString() === "150" && same.customerBatchNo === "A, B" && JSON.stringify(same.notes.map((n) => [n.id, n.noteNo])) === JSON.stringify([["n1", "GB-1"], ["n2", "GB-2"]]) && Number(same.kg) === 15, JSON.stringify(same));
+  const full = foldWoIncoming(m, ["a", "b"], [
+    { ...L("a", "1", "1", null), note: { id: "x", noteNo: "GB-9", senderDocNo: " 12345 ", declaredTopCount: 4, customerOrderNo: "S-7", processText: "Boya", ownerCustomerId: "o", senderCustomerId: "g", senderCustomer: { name: "Gönderen A.Ş." } } },
+    { ...L("b", "1", "1", null), note: { id: "x2", noteNo: "GB-9b", ownerCustomerId: "o", senderCustomerId: "o", senderCustomer: { name: "Sahip" } } },
+  ]);
+  const same2 = foldWoIncoming(m, ["a"], [{ ...L("a", "1", "1", null), note: { id: "y", noteNo: "GB-8", ownerCustomerId: "o", senderCustomerId: "o", senderCustomer: { name: "Sahip" }, senderText: "x" } }]);
+  const n0 = full?.notes[0];
+  check("§1 fold: belge başlığı alanları (evrak no kırpılır, top adedi, sipariş no, işlem); gönderen yalnız sahipten farklıysa", n0?.senderDocNo === "12345" && n0.declaredTopCount === 4 && n0.customerOrderNo === "S-7" && n0.processText === "Boya" && n0.sender === "Gönderen A.Ş." && same2?.notes[0].sender === null, JSON.stringify([n0, same2?.notes[0].sender]));
   const diff = foldWoIncoming(m, ["a", "b"], [L("a", "10", "150", "A"), L("b", "5", "148", "A")]);
   const miss = foldWoIncoming(m, ["a", "b"], [L("a", null, "150", null), L("b", "5", null, null)]);
   const orphan = foldWoIncoming(m, ["a", "c"], [L("a", "10", "150", "A")]);
