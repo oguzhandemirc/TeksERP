@@ -124,6 +124,7 @@ export {
   readIncomingDocEntryMode, AUTO_WORK_ORDER_PATTERNLESS_VALUES, DEFAULT_AUTO_WORK_ORDER_PATTERNLESS, readAutoWorkOrderPatternless,
   FORM_APPROVAL_VALUES, DEFAULT_FORM_APPROVAL, readIncomingDocFormApproval, MULTI_PARTY_WORK_ORDER_VALUES,
   DEFAULT_MULTI_PARTY_WORK_ORDER, readMultiPartyWorkOrder, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, readDuplicateDocNoMode,
+  DUPLICATE_BATCH_NO_VALUES, DEFAULT_DUPLICATE_BATCH_NO, readDuplicateBatchNoMode,
   PHOTO_RETENTION_VALUES, DEFAULT_PHOTO_RETENTION, readPhotoRetention, DESEN_RENK_ESLESME_VALUES, DEFAULT_DESEN_RENK_ESLESME,
   readDesenRenkEslesme, TABLET_IE_GIRISI_VALUES, DEFAULT_TABLET_IE_GIRISI, readTabletIeGirisi, TANITIM_GUVENI_VALUES,
   DEFAULT_TANITIM_GUVENI, readTanitimGuveni, DEFAULT_SERVER_OCR_ENABLED, readServerOcrEnabled, readRefakatAutoPrint, readIncomingDocDefaultRouteId, ROUTE_SUGGESTION_PRIORITY_VALUES,
@@ -132,7 +133,7 @@ export {
 } from "./incoming-docs";
 export type {
   UnreviewedApprovalMode, HeaderLineMeterSource, DocumentTotalCheckMode, BatchNumberSourceMode, IncomingDocEntryMode,
-  AutoWorkOrderPatternlessMode, IncomingDocFormApprovalMode, MultiPartyWorkOrderMode, DuplicateDocNoMode, PhotoRetentionMode,
+  AutoWorkOrderPatternlessMode, IncomingDocFormApprovalMode, MultiPartyWorkOrderMode, DuplicateDocNoMode, DuplicateBatchNoMode, PhotoRetentionMode,
   DesenRenkEslesmeMode, TabletIeGirisiMode, TanitimGuveniMode, RouteSuggestionPriority,
 } from "./incoming-docs";
 export {

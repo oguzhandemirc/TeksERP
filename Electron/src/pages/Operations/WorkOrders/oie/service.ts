@@ -74,6 +74,8 @@ export interface NoteWorkOrderBody {
   mode?: MultiPartyMode;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
   confirmDuplicateDocNo?: boolean;
+  /** Aynı müşteri parti no WARN: işi süren eşe rağmen aç (409 `DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE` sonrası). */
+  confirmDuplicateBatchNo?: boolean;
   // K30 S16a: klasik iş emri formunun alanları (hepsi isteğe bağlı; PER_PARTY'de targetQuantity/targetWeight 400).
   targetItemId?: string;
   targetColorId?: string;

@@ -236,3 +236,36 @@ describe('ApprovalCard — aynı belge no (K27)', () => {
     expect(r.queryByText('Yine de onayla')).toBeNull();
   });
 });
+
+// Aynı müşteri parti no: WARN "Yine de aç" önceki belge no onayıyla birlikte gönderir; BLOCK yalnız "Tamam" (ikinci istek yok).
+describe('ApprovalCard — aynı müşteri parti no', () => {
+  const peers = [{ id: 'p2', noteNo: 'GB-0005', customerBatchNo: 'ISM1439770', workOrderNumber: 'IE0911260003' }];
+  const batch = (code = 'DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE') => Object.assign(new Error('Parti var'), { status: 409, details: { code, peers } });
+  const docNo = () => Object.assign(new Error('Aynı belge no'), { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE', senderDocNo: 'A-1', peers: [{ id: 'p1', noteNo: 'GB-0007', status: 'APPROVED', workOrderNumbers: [] }] } });
+  it('⭐ belge no onayından sonra parti 409 → "BU PARTİ ZATEN VAR"; "Yine de aç" iki bayrakla gönderir', async () => {
+    mockApprove.mockRejectedValueOnce(docNo()).mockRejectedValueOnce(batch()).mockResolvedValueOnce(APPROVED);
+    const { r } = render();
+    await r.findByTestId('onay-karti');
+    fireEvent.press(r.getByTestId('onay-karti-birincil'));
+    fireEvent.press(await r.findByText('Yine de onayla'));
+    expect(await r.findByText('ISM1439770 → IE0911260003')).toBeTruthy();
+    fireEvent.press(r.getByTestId('parti-tekrar-yine-de'));
+    await waitFor(() => expect(mockApprove).toHaveBeenLastCalledWith('n1', { confirmDuplicateDocNo: true, confirmDuplicateBatchNo: true }));
+    expect(await r.findByTestId('onay-karti-sonuc')).toBeTruthy();
+  });
+  it('BLOCK → yalnız "Tamam"; ikinci istek yok, birincil düğme onayları sıfırlar', async () => {
+    mockApprove.mockRejectedValueOnce(batch('DELIVERY_NOTE_DUPLICATE_BATCH_NO')).mockRejectedValueOnce(batch('DELIVERY_NOTE_DUPLICATE_BATCH_NO'));
+    const { r } = render();
+    await r.findByTestId('onay-karti');
+    fireEvent.press(r.getByTestId('onay-karti-birincil'));
+    await r.findByTestId('parti-tekrar-tamam');
+    expect(r.queryByTestId('parti-tekrar-yine-de')).toBeNull();
+    fireEvent.press(r.getByTestId('parti-tekrar-tamam'));
+    await waitFor(() => expect(r.queryByTestId('parti-tekrar-tamam')).toBeNull());
+    expect(mockApprove).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(r.getByTestId('onay-karti-birincil')).not.toBeDisabled());
+    fireEvent.press(r.getByTestId('onay-karti-birincil'));
+    await waitFor(() => expect(mockApprove).toHaveBeenCalledTimes(2));
+    expect(mockApprove).toHaveBeenLastCalledWith('n1', {});
+  });
+});

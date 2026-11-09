@@ -1,29 +1,40 @@
 // Toplam fark şeridi (canlı): onay kapısının hükmü backend `totalsCheck`ten — panel yeniden hesaplamaz; satır yazımı
 // detay sorgusunu tazeler, şerit onunla değişir. Eski backend alanı göndermezse şerit çizilmez.
-import { blockSummary, describeDiff } from "./reviewView";
+import { blockSummary, describeDiff, TOTALS_BAD_TEXT } from "./reviewView";
 import { blockChipLabel } from "./noteLines";
 import type { DocumentCheck, TotalsCheck } from "./reviewTypes";
 
 const HEAD = {
   ok: { cls: "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300", text: "Toplamlar tutuyor" },
-  bad: { cls: "border-destructive bg-destructive/10 text-destructive", text: "Toplamlar tutmuyor — onayda fark gerekçesi istenir" },
-  badClosed: { cls: "border-destructive bg-destructive/10 text-destructive", text: "Toplamlar tutmuyor" },
+  bad: { cls: "border-destructive bg-destructive/10 text-destructive", text: TOTALS_BAD_TEXT.approvable },
+  badClosed: { cls: "border-destructive bg-destructive/10 text-destructive", text: TOTALS_BAD_TEXT.closed },
   none: { cls: "bg-muted/40 text-muted-foreground", text: "Belgede toplam beyanı yok — doğrulanamaz" },
 } as const;
 
 /**
+ * `verdictInAttention`: TUTMUYOR hükmü sayfanın "Dikkat" kutusunda basılır; şerit yalnız blok ayrıntısını gösterir.
  * `approvable` false (onaylanmış belge): onay yönergesi ("fark gerekçesi istenir") basılmaz, yalnız hüküm kalır.
  * `partiesShown`: Partiler kartı çiziliyse parti (blok) kartları orada — aynı veri iki terimle iki yerde görünmesin.
  */
-export function TotalsStrip({ check, approvable = true, partiesShown = false }: { check: TotalsCheck | undefined; approvable?: boolean; partiesShown?: boolean }) {
+interface Props {
+  check: TotalsCheck | undefined;
+  approvable?: boolean;
+  partiesShown?: boolean;
+  verdictInAttention?: boolean;
+}
+
+export function TotalsStrip({ check, approvable = true, partiesShown = false, verdictInAttention = false }: Props) {
   if (!check) return null;
+  const hideVerdict = verdictInAttention && check.ok === false;
   const blocks = partiesShown ? [] : check.blocks;
   const head = check.ok === true ? HEAD.ok : check.ok === false ? (approvable ? HEAD.bad : HEAD.badClosed) : HEAD.none;
   return (
     <div className="flex flex-col gap-2" data-testid="totals-strip" data-ok={check.ok === null ? "unknown" : String(check.ok)}>
-      <div className={`rounded-md border px-3 py-2 text-sm font-medium ${head.cls}`} data-testid="totals-verdict">
-        {head.text}
-      </div>
+      {!hideVerdict && (
+        <div className={`rounded-md border px-3 py-1.5 text-sm font-medium ${head.cls}`} data-testid="totals-verdict">
+          {head.text}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {blocks.map((b, i) => (
           <div

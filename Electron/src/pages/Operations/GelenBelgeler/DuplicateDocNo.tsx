@@ -1,6 +1,6 @@
-// Gülkesim K27 aynı gönderen belge no (WARN kipi): taslak detayında bilgi şeridi + onay diyaloğunda 409 kutusu.
-// Hüküm sunucuda (`helpers/gelen-belge-mukerrer.helper.ts`); panel eş kümesini kurmaz, yalnız basar. Eski backend
-// alanı göndermez / BLOCK kipinde kod gelmez → çizilmez (bugünkü genel hata metni kalır).
+// Mükerrer kapıları (K27 aynı gönderen belge no · aynı müşteri parti no): taslak şeridi + onay/kayıt 409 kutusu (TEK desen).
+// Hüküm sunucuda (`helpers/gelen-belge-mukerrer.helper.ts`); panel eş kümesini kurmaz, yalnız basar. Belge no BLOCK kodu
+// burada yakalanmaz (bugünkü genel hata); parti no BLOCK'u yalnız bilgi kutusudur (onay düğmesi yok).
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { NOTE_STATUS_LABEL } from "./noteStatus";
 import { errorCode } from "./approveFlow";
 import { SameBatchStrip } from "./SameBatchStrip";
-import type { DocNoPeer, DuplicateDocNoDetailFields, DuplicateDocNoNotice } from "./mukerrerTypes";
+import type { BatchNoPeer, DocNoPeer, DuplicateConfirms, DuplicateDocNoDetailFields, DuplicateDocNoNotice, DuplicateGateConflict } from "./mukerrerTypes";
 import type { SameBatchNotes } from "./types";
 
 const DETAIL_BASE = "/operations/gelen-belgeler";
 export const DUPLICATE_DOC_NO_ACTIVE = "DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE";
+export const DUPLICATE_BATCH_NO = "DELIVERY_NOTE_DUPLICATE_BATCH_NO";
+export const DUPLICATE_BATCH_NO_ACTIVE = "DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE";
 
 /** 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` künyesi (`details.senderDocNo` + `details.peers`); başka hata → null. */
 export function duplicateDocNoConflict(error: unknown): DuplicateDocNoNotice | null {
@@ -80,4 +82,52 @@ export function DuplicateDocNoConfirm({ conflict, busy, onConfirm }: { conflict:
       </div>
     </div>
   );
+}
+
+/** Onay/kayıt hatasının mükerrer künyesi (belge no WARN · parti no WARN/BLOCK); başka hata → null. */
+export function duplicateGateConflict(error: unknown): DuplicateGateConflict | null {
+  const notice = duplicateDocNoConflict(error);
+  if (notice) return { gate: "docNo", confirmable: true, notice };
+  const code = errorCode(error);
+  if ((code !== DUPLICATE_BATCH_NO_ACTIVE && code !== DUPLICATE_BATCH_NO) || !axios.isAxiosError(error)) return null;
+  const peers = (error.response?.data as { details?: { peers?: unknown } } | undefined)?.details?.peers;
+  return { gate: "batchNo", confirmable: code === DUPLICATE_BATCH_NO_ACTIVE, peers: Array.isArray(peers) ? (peers as BatchNoPeer[]) : [] };
+}
+
+/** "Yine de" sonrası bayraklar: öncekiler korunur (iki kapı art arda 409 verebilir), çakışan kapınınki eklenir. */
+export function withDuplicateConfirm(prev: DuplicateConfirms | undefined, c: DuplicateGateConflict): DuplicateConfirms {
+  return { ...prev, ...(c.gate === "docNo" ? { confirmDuplicateDocNo: true as const } : { confirmDuplicateBatchNo: true as const }) };
+}
+
+/** "ISM1439770 → IE0911260003" (İE yoksa eşin GB no'su). */
+export const batchPeerLine = (p: BatchNoPeer): string => `${p.customerBatchNo} → ${p.workOrderNumber ?? p.noteNo}`;
+
+/** Toast gibi tek satırlık yüzeyler için kısa metin. */
+export function duplicateGateText(c: DuplicateGateConflict): string {
+  if (c.gate === "docNo") return `Bu belge no (${c.notice.senderDocNo}) işi süren başka bir belgede de var.`;
+  return `BU PARTİ ZATEN VAR: ${c.peers.map(batchPeerLine).join(", ")}${c.confirmable ? "" : " (fabrika ayarı ikinci kez açılmasına izin vermiyor)"}`;
+}
+
+function DuplicateBatchNoConfirm({ conflict, busy, onConfirm, onCancel }: { conflict: Extract<DuplicateGateConflict, { gate: "batchNo" }>; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col gap-2 rounded border border-amber-400 bg-amber-500/10 p-2 text-sm" data-testid="duplicate-batch-no-confirm" data-confirmable={conflict.confirmable ? "1" : "0"}>
+      <p className="font-semibold text-amber-900 dark:text-amber-200">BU PARTİ ZATEN VAR</p>
+      <ul className="flex flex-col gap-0.5">
+        {conflict.peers.map((p) => (
+          <li key={`${p.id}-${p.customerBatchNo}`} className="text-base font-semibold" data-testid="duplicate-batch-no-peer">{batchPeerLine(p)}</li>
+        ))}
+      </ul>
+      {!conflict.confirmable && <p className="text-xs text-muted-foreground">Fabrika ayarı aynı partinin ikinci kez açılmasına izin vermiyor.</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={onCancel} data-testid="duplicate-batch-no-cancel">{conflict.confirmable ? "Vazgeç" : "Tamam"}</Button>
+        {conflict.confirmable && <Button size="sm" variant="secondary" disabled={busy} onClick={onConfirm} data-testid="duplicate-batch-no-force">Yine de aç</Button>}
+      </div>
+    </div>
+  );
+}
+
+/** Mükerrer 409 kutusu — onay diyaloğu, tekli ve toplu İE formu aynı bileşeni kullanır. */
+export function DuplicateGateConfirm({ conflict, busy, onConfirm, onCancel }: { conflict: DuplicateGateConflict; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  if (conflict.gate === "docNo") return <DuplicateDocNoConfirm conflict={conflict.notice} busy={busy} onConfirm={onConfirm} />;
+  return <DuplicateBatchNoConfirm conflict={conflict} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />;
 }

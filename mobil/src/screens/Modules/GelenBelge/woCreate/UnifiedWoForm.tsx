@@ -12,6 +12,7 @@ import Toast from 'react-native-toast-message';
 import { TERIM } from '../../../../lib/terim';
 import { colors, spacing, typography } from '../../../../theme';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
+import { DuplicateBatchNoDialog } from '../DuplicateBatchNoDialog';
 import PageCameraModal from '../PageCameraModal';
 import MultiPageCameraModal from '../MultiPageCameraModal';
 import PagePreviewModal from '../PagePreviewModal';
@@ -102,6 +103,7 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps & CreatedExitPro
       )}
       <CreateBar wo={saver} done={done} block={u.block} blockKey={u.blockKey} missing={u.missing} onMissing={jump.go} onNew={props.onNew} pad={layout.pad} />
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
+      <DuplicateBatchNoDialog conflict={wo.duplicateBatch?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicateBatch} onConfirm={() => void wo.confirmDuplicateBatch()} />
       <ScanModals scan={scan} row={u.row} />
       <SameDocumentCard
         match={scan.b.sameDoc ?? wo.sameDoc}

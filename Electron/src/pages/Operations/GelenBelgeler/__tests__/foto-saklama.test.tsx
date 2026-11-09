@@ -30,12 +30,12 @@ describe("K28 onay öncesi belge no vurgusu", () => {
     expect(retentionDocNoWarning(undefined)).toBeNull();
     render(<NoteHeaderForm note={note({ photoRetention: "FULL" })} suggestions={undefined} editable onPatch={vi.fn()} />);
     expect(screen.queryByTestId("docno-retention-warning")).toBeNull();
-    expect(screen.getByLabelText("Belge no").getAttribute("data-highlight")).toBeNull();
+    expect(screen.getByLabelText("Gönderen belge no").getAttribute("data-highlight")).toBeNull();
   });
   it("§2 ONAYDA KÜÇÜLT → belge no kutusu vurgulu + uyarı", () => {
     render(<NoteHeaderForm note={note({ photoRetention: "SHRINK_ON_APPROVAL" })} suggestions={undefined} editable onPatch={vi.fn()} />);
     expect(screen.getByTestId("docno-retention-warning").textContent).toBe("Onaydan sonra fotoğraf küçültülecek — belge no'yu kontrol edin.");
-    expect(screen.getByLabelText("Belge no").getAttribute("data-highlight")).toBe("retention");
+    expect(screen.getByLabelText("Gönderen belge no").getAttribute("data-highlight")).toBe("retention");
   });
   it("§3 SİL kipleri kendi metnini söyler; onaylı (düzenlenemez) belgede vurgu yok", () => {
     expect(retentionDocNoWarning("DELETE_ON_APPROVAL")).toBe("Onaydan sonra fotoğraf silinecek — belge no'yu kontrol edin.");

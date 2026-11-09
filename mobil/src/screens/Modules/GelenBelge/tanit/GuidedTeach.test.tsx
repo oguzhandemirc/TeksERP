@@ -103,6 +103,18 @@ async function markPartiNo(r: ReturnType<typeof renderWithPaper>) {
 }
 
 describe('TeachModal — üç aşama', () => {
+  it('⭐ ① yalnız genel etiket seçiliyse uyarı (teachIssues engeli değil); başlık seçilince kalkar', async () => {
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await openGuided(r);
+    expect(r.queryByTestId('tanit-kimlik-zayif')).toBeNull();
+    await press(r.getByTestId('tanit-kutu-0')); // GÜLEÇSOY BOYA kapandı
+    await press(r.getByTestId('tanit-kutu-2')); // ÇEKİ LİSTESİ kapandı → yalnız "Ham PartiNo"
+    expect(r.getByTestId('tanit-baslik-secili')).toHaveTextContent(/Ham PartiNo/);
+    expect(r.getByTestId('tanit-kimlik-zayif')).toHaveTextContent(/^Belgeyi ayırt eden bir yazı seçin: başlık ya da firma adı/);
+    await press(r.getByTestId('tanit-kutu-2'));
+    expect(r.queryByTestId('tanit-kimlik-zayif')).toBeNull();
+  });
+
   it('⭐ ① kimlik aç/kapa → İleri → ② değere dokun → okunan değer + etiket → işareti kaldır → ③ özet → Kaydet POST (fabrika ayarı: rules yok)', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await openGuided(r);

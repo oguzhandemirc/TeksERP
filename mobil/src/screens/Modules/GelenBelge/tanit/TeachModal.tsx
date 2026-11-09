@@ -172,6 +172,18 @@ function usePageTurns(visible: boolean) {
   };
 }
 
+/** Yanlış tanınmış belgeden çıkış: kayıt X'i değiştirir; "Yeni tip olarak tanıt" X'e dokunmadan baştan tanıtır. */
+function NotThisType({ name, onNew }: { name: string; onNew: () => void }) {
+  return (
+    <View style={styles.notThis} testID="tanit-bu-degil">
+      <Text style={styles.notThisText}>{`Bu belge "${name}" değil mi? Kaydetmek o tanımı değiştirir — yeni tip olarak tanıtın.`}</Text>
+      <Button mode="outlined" icon="file-plus-outline" onPress={onNew} contentStyle={styles.btn} testID="tanit-yeni-tip">
+        Yeni tip olarak tanıt
+      </Button>
+    </View>
+  );
+}
+
 export default function TeachModal({ visible, pages, code, onDismiss, onSaved }: Props) {
   const { width, height } = useWindowDimensions();
   const layout = teachLayout(width, height);
@@ -191,6 +203,10 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
     { auto: !advanced },
   );
   const title = t.existing ? `Tanımı düzenle — ${t.existing.name}` : 'Bu belgeyi tanıt';
+  const startNew = () => {
+    t.startNew();
+    nav.goTo('TANIMA', null);
+  };
   // Bölme oranla (flex 58/42) değil ölçüyle: tablette fotoğraf bölmesi tüm alanı yutup paneli 32 px'e sıkıştırıyordu (2026-11-05 cihaz ölçümü).
   const paneSize: ViewStyle = layout.mode === 'side' ? { width: layout.imageWidth - spacing.md } : { height: layout.imageHeight };
   const words = t.words.data?.words ?? [];
@@ -221,6 +237,7 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
           </Button>
           <IconButton icon="close" size={32} style={styles.iconBtn} onPress={onDismiss} accessibilityLabel="Tanıtmayı kapat" testID="tanit-kapat" />
         </View>
+        {t.existing && <NotThisType name={t.existing.name} onNew={startNew} />}
         {pages.length > 1 && (
           <View style={styles.pages}>
             {pages.map((p, i) => (
@@ -259,6 +276,8 @@ const styles = StyleSheet.create({
   fit: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   rotate: { position: 'absolute', top: spacing.sm, left: spacing.sm },
   pages: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  notThis: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  notThisText: { flexShrink: 1, fontSize: typography.size.sm, color: colors.textSecondary },
   body: { flex: 1, flexDirection: 'row', gap: spacing.lg },
   bodyStack: { flexDirection: 'column', gap: spacing.md },
   scanPane: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surfaceSunken },

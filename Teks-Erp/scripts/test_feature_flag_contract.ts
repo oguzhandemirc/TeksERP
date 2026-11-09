@@ -680,6 +680,12 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "duplicateDocNo: z.enum(",
     },
+    // 2026-11-10: aynı sahip + müşteri parti no kipi; panel radyosu `GelenBelgeDuplicateDocNoField.tsx`.
+    GELEN_BELGE_DUPLICATE_BATCH_NO: {
+      why: "Aynı müşteri parti no (ALLOW varsayılan | WARN | BLOCK) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; onay ön kontrolü okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "duplicateBatchNo: z.enum(",
+    },
     // Gülkesim S2 (K17, 2026-11-03): istasyonda belge okutarak iş emri bulma; panel satırı kayıt kipi alanında.
     GELEN_BELGE_STATION_DOC_LOOKUP: {
       why: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `/api/gelen-belge/istasyon-okutma` okur",

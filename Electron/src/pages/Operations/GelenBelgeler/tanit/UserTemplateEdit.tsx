@@ -148,14 +148,21 @@ function EditBody({ detail, onDone, onReload }: { detail: UserTemplateDetail; on
   );
 }
 
-export function UserTemplateEditButton({ code, name }: { code: string; name: string }) {
+/** `compact`: tablo satırı sonundaki ikon düğme (Belge Tipleri listesi); test kimliği `-row` ekiyle ayrışır. */
+export function UserTemplateEditButton({ code, name, compact = false }: { code: string; name: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const detail = useQuery({ queryKey: [...USER_TEMPLATES_QUERY_KEY, code, "duzenle"], queryFn: () => getUserTemplate(code), enabled: open, staleTime: 0 });
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)} data-testid={`user-template-edit-${code}`}>
-        <Pencil className="mr-1 h-3.5 w-3.5" /> Düzenle
-      </Button>
+      {compact ? (
+        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setOpen(true)} title="Düzenle" aria-label={`${name} düzenle`} data-testid={`user-template-edit-${code}-row`}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+      ) : (
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)} data-testid={`user-template-edit-${code}`}>
+          <Pencil className="mr-1 h-3.5 w-3.5" /> Düzenle
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>

@@ -34,9 +34,15 @@ describe('tanıtma çekirdeği (tablet)', () => {
     expect(initialTeach(SCAN, 'Güleçsoy').identifiers.every((d) => d.on)).toBe(true);
   });
 
+  it('⭐ kimlik önerisi başlık / firma adını genel etiketlerin önüne alır; tavan güçlüleri kesmez', () => {
+    const scan: ScanWords = { ...SCAN, words: [w('SEVK', [50, 10], 1), w('TARİH', [120, 10], 1), w('Açıklama', [50, 40], 2), w('Cinsi', [50, 70], 3), w('Mamul', [50, 100], 4), w('En', [120, 100], 4), w('KG', [50, 130], 5), w('ÜRÜN', [50, 160], 6), w('SEVK', [120, 160], 6), w('FİŞİ', [180, 160], 6), w('ÖRNEK', [50, 190], 7), w('TEKSTİL', [120, 190], 7)] };
+    expect(suggestIdentifiers(scan, 3)).toEqual(['ÜRÜN SEVK FİŞİ', 'ÖRNEK TEKSTİL', 'SEVK TARİH']);
+  });
+
   it('değer kelimesi kimlik önerisine girmez: rakamlı kelime atılır, etiket kalır', () => {
     const scan: ScanWords = { ...SCAN, words: [w('Müşteri', [50, 20], 1), w('MT', [120, 20], 1), w('238,00', [180, 20], 1), w('Parti', [50, 60], 2), w('No:12345', [120, 60], 2), w('İrsaliye', [50, 100], 3), w('-', [130, 100], 3), w('2026/0042', [150, 100], 3)] };
-    expect(suggestIdentifiers(scan)).toEqual(['Müşteri MT', 'Parti No', 'İrsaliye']);
+    // Güçlü yazı (genel etiket olmayan) önce: "İrsaliye" ayırt eder, "Müşteri MT" / "Parti No" her belgede var.
+    expect(suggestIdentifiers(scan)).toEqual(['İrsaliye', 'Müşteri MT', 'Parti No']);
     expect(identifierText('Ham PartiNo: P2618733')).toBe('Ham PartiNo');
     expect(identifierText('12.01.2026 1234')).toBe('');
     expect(suggestIdentifiers({ ...SCAN, words: [w('No', [50, 20], 1), w('5', [100, 20], 1)] })).toEqual([]); // harf < 3

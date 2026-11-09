@@ -9,6 +9,7 @@
 
 import { ACTIVE_ORDER_LINK } from "../helpers/order-link.helper";
 import prisma from "../../lib/prisma";
+import { whereRollsOfWorkOrder } from "../helpers/workorder-rolls.helper";
 import { AuditService } from "../audit.service";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse } from "../../types/api.types";
@@ -177,21 +178,17 @@ export async function getAttachedRolls(workOrderId: string): Promise<ApiResponse
     }
 
     const stepIds = wo.steps.map((s) => s.id);
-    if (stepIds.length === 0) {
-      return { success: true, data: [] };
-    }
+    // Rotasız (adımsız) İE'nin topları yalnız parti üyeliğiyle bağlıdır — tek kaynak `whereRollsOfWorkOrder` (boş liste dönmesin).
+    const where: Prisma.RollWhereInput = stepIds.length === 0
+      ? whereRollsOfWorkOrder(workOrderId)
+      : { OR: [{ producedInStepId: { in: stepIds } }, { currentStepId: { in: stepIds } }] };
 
     // PERF (#12 select>include): tüketiciler (mobil WorkOrderDetailSheet +
     // printWorkOrder) yalnız id/barcode/status/currentQty/item.name okuyor; color
     // savunma amaçlı dar select'le tutulur. item:true / color:true tüm sütunları
     // çekiyordu (over-fetch).
     const rolls = await prisma.roll.findMany({
-      where: {
-        OR: [
-          { producedInStepId: { in: stepIds } },
-          { currentStepId: { in: stepIds } },
-        ],
-      },
+      where,
       select: {
         id: true,
         barcode: true,

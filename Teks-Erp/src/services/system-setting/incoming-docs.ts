@@ -187,6 +187,13 @@ export const DUPLICATE_DOC_NO_VALUES: readonly DuplicateDocNoMode[] = ["BLOCK", 
 export const DEFAULT_DUPLICATE_DOC_NO: DuplicateDocNoMode = "BLOCK";
 export const readDuplicateDocNoMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DuplicateDocNoMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, tx);
+/** Mükerrer müşteri parti no kipi (aynı sahip + aynı parti no işi süren başka belgede). */
+export type DuplicateBatchNoMode = "BLOCK" | "WARN" | "ALLOW";
+export const DUPLICATE_BATCH_NO_VALUES: readonly DuplicateBatchNoMode[] = ["BLOCK", "WARN", "ALLOW"];
+/** Varsayılan ALLOW = bugünkü davranış (müşteri parti no hiç denetlenmez; 2026-11-10 ölçüldü). */
+export const DEFAULT_DUPLICATE_BATCH_NO: DuplicateBatchNoMode = "ALLOW";
+export const readDuplicateBatchNoMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DuplicateBatchNoMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_DUPLICATE_BATCH_NO, DUPLICATE_BATCH_NO_VALUES, DEFAULT_DUPLICATE_BATCH_NO, tx);
 
 /** K28 belge fotoğrafı saklama — onaydan/sevkten sonra bayt küçültülür ya da silinir; satır (sha256, okuma, künye) kalır. */
 export type PhotoRetentionMode = "FULL" | "SHRINK_ON_APPROVAL" | "DELETE_ON_APPROVAL" | "DELETE_ON_DISPATCH";

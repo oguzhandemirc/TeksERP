@@ -1,7 +1,7 @@
 // Toplu okutma listesi (K8): belge başına kompakt satır (müşteri · parti no · metre · gramaj), satır açılıp düzenlenir;
 // "Hepsini kaydet" her belge için ayrı kayıt (sözleşme 3) çağırır, sonuç satır başına — biri düşerse diğerleri sürer.
 import { TERIM } from "@/lib/terim";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
@@ -14,8 +14,8 @@ import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
-import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
-import type { DuplicateDocNoNotice } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
+import { DuplicateGateConfirm, duplicateGateConflict, withDuplicateConfirm } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
+import type { DuplicateConfirms, DuplicateGateConflict } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
 import { gramajOffer, initialDocDraft, passThroughTargets, routeGramajOptions, seedDraftGramaj, type DocDraft } from "./docDraft";
 import { useOieDefaultTargets } from "./useOieDefaults";
 import { AUTO_PRINT_TEXT, printRefakatCard, useRefakatAutoPrint } from "./refakatPrint";
@@ -42,6 +42,11 @@ function useNotes(noteIds: string[]) {
   });
 }
 
+function conflictRowText(c: DuplicateGateConflict): string {
+  if (c.gate === "docNo") return "Belge no işi süren başka belgede kayıtlı — aşağıdan karar verin.";
+  return c.confirmable ? "Bu parti zaten var — aşağıdan karar verin." : "Bu parti zaten var; fabrika ayarı ikinci kez açılmasına izin vermiyor.";
+}
+
 export function TopluBelgeForm({ noteIds, route }: Props) {
   const notes = useNotes(noteIds);
   const { catalog, isLoading: catalogLoading } = useKursunGramajCatalog();
@@ -52,8 +57,9 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
   const [drafts, setDrafts] = useState<Record<string, DocDraft>>({});
   const [results, setResults] = useState<Record<string, RowResult>>({});
   const [busy, setBusy] = useState(false);
-  // K27 WARN: satır başına 409 künyesi; "Yine de onayla" yalnız o satırı bayrakla yeniden gönderir.
-  const [conflicts, setConflicts] = useState<Record<string, DuplicateDocNoNotice>>({});
+  // Mükerrer kapısı 409'u satır başına; "Yine de" yalnız o satırı, satırın önceki onaylarıyla birlikte yeniden gönderir.
+  const [conflicts, setConflicts] = useState<Record<string, DuplicateGateConflict>>({});
+  const confirmsRef = useRef<Record<string, DuplicateConfirms>>({});
   const attempt = useAttemptToken();
   // Satır taslağı belge okununca bir kez dolar; gramaj teklifi (K22 çözücü, müşteri başına) geldikçe tohumlanır.
   const loaded = notes.map((q) => q.data);
@@ -78,18 +84,15 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
       if (!n || !draft || results[n.id]?.kind === "OK" || (only !== null && n.id !== only)) continue;
       try {
         const passThrough = passThroughTargets(targetsFor(draft.ownerCustomerId), catalog.propertyId);
-        const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough, clientToken: attempt.keyed(n.id), confirmDuplicateDocNo: only === n.id });
+        const out = await saveDoc({ note: n, draft, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough, clientToken: attempt.keyed(n.id), confirms: only === n.id ? confirmsRef.current[n.id] : undefined });
         setConflicts(({ [n.id]: _, ...rest }) => rest);
         setResults((r) => ({ ...r, [n.id]: out.kind === "WORK_ORDER" ? { kind: "OK", text: `${TERIM.terbiyeIsEmri.tekil} ${out.result.workOrderNo}`, workOrderId: out.result.workOrderId } : { kind: "OK", text: "Taslak kaydedildi (onay Gelen Belgeler'den)" } }));
         if (out.kind === "WORK_ORDER" && autoPrint) toast.message(`${out.result.workOrderNo}: ${AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]}`);
       } catch (e) {
         errors.push(e);
-        const conflict = duplicateDocNoConflict(e);
+        const conflict = duplicateGateConflict(e);
         setConflicts(({ [n.id]: _, ...rest }) => (conflict ? { ...rest, [n.id]: conflict } : rest));
-        if (conflict) {
-          setResults((r) => ({ ...r, [n.id]: { kind: "DUPLICATE", text: "Belge no işi süren başka belgede kayıtlı — aşağıdan karar verin." } }));
-          continue;
-        }
+        if (conflict) { setResults((r) => ({ ...r, [n.id]: { kind: "DUPLICATE", text: conflictRowText(conflict) } })); continue; }
         setResults((r) => ({ ...r, [n.id]: { kind: "FAILED", text: saveErrorHint(e) ?? apiErrorText(e, e instanceof Error ? e.message : "Kaydedilemedi.") } }));
       }
     }
@@ -114,7 +117,8 @@ export function TopluBelgeForm({ noteIds, route }: Props) {
             <div key={id} className="flex flex-col gap-1">
               <BulkRow note={loaded[i]} draft={drafts[id]} result={results[id]} gramajOptions={gramajOptions} disabled={busy}
                 onChange={(d) => setDrafts((all) => ({ ...all, [id]: d }))} />
-              {conflicts[id] && <DuplicateDocNoConfirm conflict={conflicts[id]} busy={busy} onConfirm={() => void saveRows(id)} />}
+              {conflicts[id] && <DuplicateGateConfirm conflict={conflicts[id]} busy={busy} onCancel={() => setConflicts(({ [id]: _, ...rest }) => rest)}
+                onConfirm={() => { confirmsRef.current[id] = withDuplicateConfirm(confirmsRef.current[id], conflicts[id]!); void saveRows(id); }} />}
             </div>
           ))}
         </div>

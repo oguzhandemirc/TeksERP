@@ -9,6 +9,10 @@
 //   §3 ⭐ İE incoming: notes[{id,noteNo}] · widthCm · customerBatchNo
 //   §4 ⭐ çok parti: parti satırları kendi parti no'su; İE customerBatchNo birleşik; en yok → null
 //   §5 ⭐ liste araması parti satırı parti no'suyla bulur (başlıkta yok); audit yükünde parti no
+//   §6 ⭐ rotasız İE (adımsız): incoming parti üyeliğinden dolar (metre · SINGLE_PIECE · rootCount); top top → ROLLS
+//   §6 ⭐ rotasız İE Bağlı Toplar (`GET /:id/rolls` → getAttachedRolls) parti üyeliğinden: top top 2 top, tek parça 1 kök
+//   Negatif sonda: detail.ts `woMemberRootInput` geri dönüşü kaldırılınca §6 incoming kırmızı; documents.ts rotasız
+//   `whereRollsOfWorkOrder` dalı eski "adımsız → []" dönüşüne çevrilince §6 Bağlı Toplar kırmızı.
 // Negatif sonda: summaryTargets parti no'yu yazmayınca §4/§5 kırmızı; arama satır dalı kaldırılınca §5 kırmızı;
 // foldWoIncoming en eşitlik denetimi kaldırılınca §1 kırmızı.
 // =============================================================================
@@ -24,6 +28,7 @@ import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { summaryLineId, partyLineId } from "../src/services/gelen-belge-kontrol.service";
 import { foldWoIncoming } from "../src/services/helpers/wo-incoming.helper";
 import { findById as woDetail } from "../src/services/workorder/detail";
+import { getAttachedRolls } from "../src/services/workorder/documents";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -54,6 +59,9 @@ function pure(): void {
   const same2 = foldWoIncoming(m, ["a"], [{ ...L("a", "1", "1", null), note: { id: "y", noteNo: "GB-8", ownerCustomerId: "o", senderCustomerId: "o", senderCustomer: { name: "Sahip" }, senderText: "x" } }]);
   const n0 = full?.notes[0];
   check("§1 fold: belge başlığı alanları (evrak no kırpılır, top adedi, sipariş no, işlem); gönderen yalnız sahipten farklıysa", n0?.senderDocNo === "12345" && n0.declaredTopCount === 4 && n0.customerOrderNo === "S-7" && n0.processText === "Boya" && n0.sender === "Gönderen A.Ş." && same2?.notes[0].sender === null, JSON.stringify([n0, same2?.notes[0].sender]));
+  const ara = foldWoIncoming(m, ["a"], [{ ...L("a", null, null, null), lineKind: "ARABA" as const }]);
+  const mix = foldWoIncoming(m, ["a", "b"], [{ ...L("a", null, null, null), lineKind: "ARABA" as const }, { ...L("b", null, null, null), lineKind: "TOP" as const }]);
+  check("§1 ⭐ fold: geliş biçimi — hepsi ARABA → SINGLE_PIECE; bir TOP / satırsız kök → ROLLS; rootCount", ara?.arrivalForm === "SINGLE_PIECE" && ara.rootCount === 1 && mix?.arrivalForm === "ROLLS" && mix.rootCount === 2 && same?.arrivalForm === "ROLLS", JSON.stringify([ara?.arrivalForm, mix?.arrivalForm]));
   const diff = foldWoIncoming(m, ["a", "b"], [L("a", "10", "150", "A"), L("b", "5", "148", "A")]);
   const miss = foldWoIncoming(m, ["a", "b"], [L("a", null, "150", null), L("b", "5", null, null)]);
   const orphan = foldWoIncoming(m, ["a", "c"], [L("a", "10", "150", "A")]);
@@ -138,7 +146,7 @@ async function run(url: string): Promise<void> {
 
   console.log("§3 İE incoming künyesi");
   const inc2 = await incomingOf((r2.data as { workOrderId?: string } | undefined)?.workOrderId ?? "");
-  check("§3 ⭐ incoming.notes = [{id, noteNo}] kaynak belge", JSON.stringify(inc2?.notes) === JSON.stringify([{ id: n2, noteNo: await noteNoOf(n2) }]), JSON.stringify(inc2?.notes));
+  check("§3 ⭐ incoming.notes = [{id, noteNo}] kaynak belge", JSON.stringify(inc2?.notes?.map((n) => ({ id: n.id, noteNo: n.noteNo }))) === JSON.stringify([{ id: n2, noteNo: await noteNoOf(n2) }]), JSON.stringify(inc2?.notes));
   check("§3 ⭐ incoming.widthCm 152.5 · customerBatchNo P1X", Number(inc2?.widthCm) === 152.5 && inc2?.customerBatchNo === `${TAG}P1X`, JSON.stringify([inc2?.widthCm, inc2?.customerBatchNo]));
 
   console.log("§4 çok parti");
@@ -159,6 +167,25 @@ async function run(url: string): Promise<void> {
   const logs = await prisma.systemLog.findMany({ where: { tableName: "CUSTOMER_DELIVERY_NOTE_LINE", recordId: { in: [partyLineId(n4, 1), partyLineId(n4, 2), summaryLineId(n2)] } }, select: { newData: true } });
   const blob = JSON.stringify(logs.map((x) => x.newData));
   check("§5 audit yükünde parti satırı parti no'su", logs.length >= 3 && blob.includes(`${TAG}BX`), `${logs.length} kayıt`);
+
+  console.log("§6 rotasız İE");
+  type Inc6 = { meters?: unknown; arrivalForm?: string; rootCount?: number; rootRollIds?: string[] } | null | undefined;
+  await setSetting(SETTING_KEYS.PRODUCTION_ROUTE_MODE, "SCAN"); // rotasız İE yalnız okutmayla rota kipinde açılır
+  const n6 = await mkNote([{ meters: 241 }]);
+  const r6 = await formWo(n6, body({ kursunMeters: 241, routeTemplateId: undefined }));
+  const wo6 = (r6.data as { workOrderId?: string } | undefined)?.workOrderId ?? "";
+  const steps6 = await prisma.workOrderStep.count({ where: { workOrderId: wo6 } });
+  const inc6 = (await incomingOf(wo6)) as Inc6;
+  check("§6 ⭐ rotasız tek parça: incoming 241 m · SINGLE_PIECE · 1 kök", r6.status === 201 && steps6 === 0 && Number(inc6?.meters) === 241 && inc6?.arrivalForm === "SINGLE_PIECE" && inc6.rootCount === 1 && inc6.rootRollIds?.length === 1, `${r6.status} ${r6.code ?? ""} adım=${steps6} ${JSON.stringify(inc6)}`);
+  const n7 = await mkNote([{ meters: 100 }, { meters: 50 }]);
+  const r7 = await formWo(n7, body({ kursunMeters: 150, routeTemplateId: undefined, rollMode: "SEPARATE", rolls: [{ meters: 100 }, { meters: 50 }] }));
+  const wo7 = (r7.data as { workOrderId?: string } | undefined)?.workOrderId ?? "";
+  const inc7 = (await incomingOf(wo7)) as Inc6;
+  const att7 = ((await getAttachedRolls(wo7)).data ?? []) as Array<{ id: string; currentQty: unknown }>;
+  const att6 = ((await getAttachedRolls(wo6)).data ?? []) as Array<{ id: string }>;
+  check("§6 ⭐ rotasız top top: Bağlı Toplar 2 top (100 + 50 m) parti üyeliğinden", att7.length === 2 && att7.map((r) => Number(r.currentQty)).sort((a, b) => a - b).join(",") === "50,100", JSON.stringify(att7.map((r) => Number(r.currentQty))));
+  check("§6 rotasız tek parça: uç kökü döner (tablet tek parçada listeden düşürür)", att6.length === 1 && att6[0].id === inc6?.rootRollIds?.[0], JSON.stringify(att6.map((r) => r.id)));
+  check("§6 ⭐ rotasız top top: incoming 150 m · ROLLS · 2 kök", r7.status === 201 && Number(inc7?.meters) === 150 && inc7?.arrivalForm === "ROLLS" && inc7.rootCount === 2, `${r7.status} ${r7.code ?? ""} ${JSON.stringify(inc7)}`);
 }
 
 async function cleanup(): Promise<void> {

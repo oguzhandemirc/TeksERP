@@ -19,6 +19,7 @@
 //   · `gelenBelge.formApproval` — SEPARATE (varsayılan, ayrı onay) | WITH_WORK_ORDER (iş emri formundan okutulan belgeyi iş emri açan kaydeder)
 //   · `gelenBelge.multiPartyWorkOrder` — SINGLE (varsayılan, tek iş emri) | PER_PARTY (çok partili belgede her parti ayrı iş emri)
 //   · `gelenBelge.duplicateDocNo` — BLOCK (varsayılan, sahip + belge no tek) | WARN (işi süren eşte onay 409 + onay bayrağı) | ALLOW (K27)
+//   · `gelenBelge.duplicateBatchNo` — ALLOW (varsayılan, bugünkü) | WARN | BLOCK: aynı sahip + müşteri parti no işi süren başka belgede
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
 //   · `gelenBelge.stationVerifyThreshold` — okutmada doğrulama eşiği % (0 = kapalı; varsayılan 80, yalnız okutma açıkken etkili)
@@ -87,6 +88,10 @@ import {
   DEFAULT_DUPLICATE_DOC_NO,
   DUPLICATE_DOC_NO_VALUES,
   type DuplicateDocNoMode,
+  readDuplicateBatchNoMode,
+  DEFAULT_DUPLICATE_BATCH_NO,
+  DUPLICATE_BATCH_NO_VALUES,
+  type DuplicateBatchNoMode,
   readRefakatAutoPrint,
   readIncomingDocStationLookup,
   readPhotoRetention,
@@ -151,6 +156,9 @@ export interface IncomingDocSettings extends StationVerifySettings {
   /** K27 aynı gönderen belge no: BLOCK engelle (varsayılan) | WARN işi süren eşte uyar | ALLOW serbest. */
   duplicateDocNo: DuplicateDocNoMode;
   defaultDuplicateDocNo: DuplicateDocNoMode;
+  /** Aynı sahip + müşteri parti no işi süren başka belgede: ALLOW serbest (varsayılan) | WARN uyar | BLOCK engelle. */
+  duplicateBatchNo: DuplicateBatchNoMode;
+  defaultDuplicateBatchNo: DuplicateBatchNoMode;
   /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
   refakatAutoPrint: boolean;
   /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
@@ -227,6 +235,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultMultiPartyWorkOrder: DEFAULT_MULTI_PARTY_WORK_ORDER,
     duplicateDocNo: await readDuplicateDocNoMode(),
     defaultDuplicateDocNo: DEFAULT_DUPLICATE_DOC_NO,
+    duplicateBatchNo: await readDuplicateBatchNoMode(),
+    defaultDuplicateBatchNo: DEFAULT_DUPLICATE_BATCH_NO,
     refakatAutoPrint: await readRefakatAutoPrint(),
     stationDocLookup: await readIncomingDocStationLookup(), ...(await readStationVerifySettings()),
     photoRetention: await readPhotoRetention(),
@@ -257,6 +267,7 @@ export interface IncomingDocSettingsInput {
   formApproval?: IncomingDocFormApprovalMode;
   multiPartyWorkOrder?: MultiPartyWorkOrderMode;
   duplicateDocNo?: DuplicateDocNoMode;
+  duplicateBatchNo?: DuplicateBatchNoMode;
   refakatAutoPrint?: boolean;
   stationDocLookup?: boolean; stationVerifyThreshold?: number | null;
   photoRetention?: PhotoRetentionMode;
@@ -349,6 +360,7 @@ async function updateEntryOptions(input: IncomingDocSettingsInput, userId: strin
   await setClosed(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI, input.tabletIeGirisi, { values: TABLET_IE_GIRISI_VALUES, label: `Gelen belge: tablet ${ie} girişi (IKISI / BELGE yalnız belge / TOP yalnız top)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, input.tanitimGuveni, { values: TANITIM_GUVENI_VALUES, label: "Gelen belge: tanıtılan belgeye güven (SOR okunanları onaylat / SORMA sormadan doldur)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, { values: DUPLICATE_DOC_NO_VALUES, label: "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_BATCH_NO, input.duplicateBatchNo, { values: DUPLICATE_BATCH_NO_VALUES, label: "Gelen belge: aynı müşteri parti no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
   if (input.refakatAutoPrint !== undefined) {
     await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);
   }

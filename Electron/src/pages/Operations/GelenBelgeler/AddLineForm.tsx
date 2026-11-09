@@ -1,7 +1,7 @@
 // Elle satır ekleme. Parti token'ı mantıksal deneme başına (useAttemptToken): zaman aşımı tekrarı satırı ikilemez.
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAttemptToken } from "@/lib/attemptToken";
@@ -56,5 +56,27 @@ export function AddLineForm({ noteId, defaultBlock, onAdded }: Props) {
         Satır ekle
       </Button>
     </form>
+  );
+}
+
+/** Tablonun altı: form sürekli açık durmaz — "+ Satır ekle" ile açılır, "Kapat" ile kapanır (girilen satırdan sonra açık kalır). */
+export function AddLineSection(props: Props) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setOpen(true)} data-testid="add-line-open">
+        <Plus className="mr-1 h-4 w-4" />
+        Satır ekle
+      </Button>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <AddLineForm {...props} />
+      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} data-testid="add-line-close">
+        <X className="mr-1 h-4 w-4" />
+        Kapat
+      </Button>
+    </div>
   );
 }

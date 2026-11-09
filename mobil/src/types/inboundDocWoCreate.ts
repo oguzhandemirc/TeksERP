@@ -48,6 +48,8 @@ export interface CreateWorkOrderFromNoteBody {
   rolls?: CreateWorkOrderRoll[];
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` sonrası). */
   confirmDuplicateDocNo?: true;
+  /** Aynı müşteri parti no (WARN): işi süren eşe rağmen kaydet (409 `DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE` sonrası). */
+  confirmDuplicateBatchNo?: true;
   // S16a tek form alanları (hepsi isteğe bağlı): verilen açık değer toptan türetileni ezer; yoksa bugünkü davranış.
   targetItemId?: string;
   targetColorId?: string;

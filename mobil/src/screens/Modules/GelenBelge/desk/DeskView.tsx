@@ -16,6 +16,7 @@ import { useDocScan } from '../useDocScan';
 import { printCard, useWoRows, type DocRow, type WoRowsState } from '../woCreate/useWoRows';
 import { isScanRoute } from '../woCreate/woFromDoc';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
+import { DuplicateBatchNoDialog } from '../DuplicateBatchNoDialog';
 import DeskCamera from './DeskCamera';
 import DeskReview from './DeskReview';
 import { initialAutoState, type AutoCaptureState } from './autoCapture';
@@ -87,10 +88,11 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
     b.finish();
     setTouchedId(null);
   };
-  // K27 WARN: `confirm` = aynı belge no diyaloğunda "Yine de onayla" (gövdeye bayrak).
-  const create = async (confirm = false) => {
+  // `confirm` = mükerrer diyaloğunda "Yine de" (K27 belge no · müşteri parti no; gövdeye bayrak).
+  const create = async (confirm?: 'docNo' | 'batchNo') => {
     if (!row) return;
-    const saved = (await (confirm ? wo.confirmDuplicate() : wo.saveAll())).find((x) => x.noteId === row.noteId);
+    const run = confirm === 'docNo' ? wo.confirmDuplicate : confirm === 'batchNo' ? wo.confirmDuplicateBatch : wo.saveAll;
+    const saved = (await run()).find((x) => x.noteId === row.noteId);
     const item = recentFromResult(row.noteNo, saved?.result ?? null, Date.now());
     if (!item) return; // başarısız: inceleme açık kalır, sonuç satırda; yeniden deneme aynı token'la gider
     announce(item);
@@ -110,7 +112,8 @@ export default function DeskView({ shortcuts }: { shortcuts: readonly Production
       <>
         <DeskReview row={row} wo={wo} shortcuts={shortcuts} route={route} onRoute={(r) => setTouchedId(r.id)} machines={ctx.data?.data.kursunMachines}
           customers={customers} customersLoading={ctx.isLoading} onCancel={() => backToCamera(row.noteId)} onCreate={() => void create()} />
-        <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void create(true)} />
+        <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void create('docNo')} />
+        <DuplicateBatchNoDialog conflict={wo.duplicateBatch?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicateBatch} onConfirm={() => void create('batchNo')} />
       </>
     );
   }

@@ -36,6 +36,7 @@ import { serverReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 import { noteTanima } from "./gelen-belge-tanima-ozeti.service";
 import { withDocLineCount } from "./gelen-belge-satir-sayim.service";
+import { withNoteWorkOrders } from "./gelen-belge-liste-is-emri.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -236,9 +237,9 @@ export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
   const page = rows.slice(0, limit);
   const grouped = await prisma.customerDeliveryNote.groupBy({ by: ["status"], where: base, _count: { _all: true } });
   const summary = Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<DeliveryNoteStatus, number>;
-  // `docLineCount`: özet satırı hariç belge satırı (listede "Top"); eski istemci `_count.lines` okur.
+  // `docLineCount`: özet satırı hariç belge satırı ("Top"; eski istemci `_count.lines`) · `workOrders`: bağlı İE'ler (eski istemci yok sayar).
   return {
-    items: await withDocLineCount(page),
+    items: await withNoteWorkOrders(await withDocLineCount(page)),
     nextCursor: rows.length > limit ? encodeOffsetCursor(offset + limit) : null,
     summary: { ...summary, total: Object.values(summary).reduce((a, b) => a + b, 0) },
   };

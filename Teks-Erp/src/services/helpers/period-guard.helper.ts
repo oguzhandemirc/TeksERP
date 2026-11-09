@@ -68,6 +68,7 @@
 //   8043  DELIVERY_NOTE_CANCEL_LOCK_NS  services/gelen-belge-iptal.service.ts  onaylı gelen belge iptali (belge başına `hashtext(noteId)`; claim + top/iş emri iptali arkasında)
 //   8044  DELIVERY_DOC_NO_LOCK_NS  services/helpers/gelen-belge-mukerrer.helper.ts  gelen belge (sahip, gönderen belge no) BLOCK tekilliği (`hashtext(senderDocNo)`; çok anahtar sıralı)
 //   8045  DOCUMENT_SCAN_SHA_LOCK_NS  services/helpers/gelen-belge-mukerrer.helper.ts  belge taraması aynı bayt (`hashtext(sha256)`; yükleme tx'i, taslak claim'i arkasında)
+//   8046  DELIVERY_BATCH_NO_LOCK_NS  services/helpers/gelen-belge-mukerrer.helper.ts  gelen belge onayı (sahip, katlı müşteri parti no) kapısı (`hashtext(sahip:anahtar)`; onay claim tx'inin İLK ifadesi; çok anahtar sıralı)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı

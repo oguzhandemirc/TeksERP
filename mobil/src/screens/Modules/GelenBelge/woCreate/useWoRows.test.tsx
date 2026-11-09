@@ -263,3 +263,43 @@ describe('useWoRows — K27 aynı belge no (WARN)', () => {
     expect(h.result.current.rows[0].result).toEqual({ kind: 'FAILED', text: 'Aynı belge no' });
   });
 });
+
+describe('useWoRows — aynı müşteri parti no', () => {
+  const peers = [{ id: 'p1', noteNo: 'GB0911260041', status: 'APPROVED', customerBatchNo: 'ISM1439770', workOrderNumber: 'IE0911260003', workOrderNumbers: ['IE0911260003'] }];
+  const err = (code: string) => Object.assign(new Error('Bu müşteri parti no işi süren başka kayıtta var'), { status: 409, details: { code, peers } });
+  const docNo = () => Object.assign(new Error('Bu belge no zaten kayıtlı'), { status: 409, details: { code: 'DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE', senderDocNo: '17', peers: [] } });
+  it('⭐ WARN 409 → kart künyesi; "Yine de aç" yalnız o satırı bayrakla, önceki belge no onayını da taşıyarak gönderir', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    mockCreate.mockImplementation(async (id: string, b: { confirmDuplicateDocNo?: boolean; confirmDuplicateBatchNo?: boolean }) => {
+      if (id === 'n1' && !b.confirmDuplicateDocNo) throw docNo();
+      if (id === 'n1' && !b.confirmDuplicateBatchNo) throw err('DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE');
+      return { workOrderId: `wo-${id}`, workOrderNo: `IE-${id}`, batchNumber: null, rollId: 'roll' };
+    });
+    const h = setup();
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1'), detail('n2')]);
+    await act(async () => void (await h.result.current.saveAll()));
+    await act(async () => void (await h.result.current.confirmDuplicate()));
+    expect(h.result.current.duplicateBatch).toMatchObject({ noteId: 'n1', conflict: { confirmable: true, peers: [{ customerBatchNo: 'ISM1439770', workOrderNumber: 'IE0911260003' }] } });
+    const before = mockCreate.mock.calls.length;
+    let saved: { noteId: string }[] = [];
+    await act(async () => void (saved = await h.result.current.confirmDuplicateBatch()));
+    expect(mockCreate.mock.calls.length).toBe(before + 1);
+    expect(mockCreate.mock.calls[before]).toEqual(['n1', expect.objectContaining({ confirmDuplicateDocNo: true, confirmDuplicateBatchNo: true })]);
+    expect(saved.map((s) => s.noteId)).toEqual(['n1']);
+    expect(h.result.current.duplicateBatch).toBeNull();
+    expect(h.result.current.rows.map((r) => r.result?.kind)).toEqual(['OPENED', 'OPENED']);
+  });
+  it('BLOCK 409 → kart açılır ama onaylanamaz: "Yine de aç" istek atmaz', async () => {
+    mockSettings.mockResolvedValue({ formApproval: 'WITH_WORK_ORDER' });
+    mockCreate.mockRejectedValue(err('DELIVERY_NOTE_DUPLICATE_BATCH_NO'));
+    const h = setup();
+    await waitFor(() => expect(h.result.current.mode).toBe('WITH_WORK_ORDER'));
+    await withRows(h, [detail('n1')]);
+    await act(async () => void (await h.result.current.saveAll()));
+    expect(h.result.current.duplicateBatch).toMatchObject({ noteId: 'n1', conflict: { confirmable: false } });
+    expect(mockCreate.mock.calls[0][1]).not.toHaveProperty('confirmDuplicateBatchNo');
+    await act(async () => void (await h.result.current.confirmDuplicateBatch()));
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+});

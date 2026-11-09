@@ -3,6 +3,7 @@
 // Belgeler basılıdır (fabrika cevabı 38): kelime kutusu güvenilir, el yazısı yolu yok. Panel ikizi `Electron/.../GelenBelgeler/tanit/teachDraft.ts` (istemciler kod paylaşmaz; gövde aynı tutulur).
 import { lowerTr } from '../../../../utils/trCase';
 import { clashingPairs } from './olcuCakisma';
+import { isStrongIdentifier } from './identityStrength';
 import type { MultiPartyRule, Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from '../../../../types/inboundDocTeach';
 
 /** Fotoğraf üstü kutu (panelde `ZoomableScan.ScanMark`). */
@@ -217,14 +218,14 @@ export const sectionStartText = (text: string, part = identifierText(text)): str
 
 /** Kimlik yazısı önerisi: sayfanın üst üçte birindeki yazı satırlarının etiket kısmı (`identifierText`, 3–40 karakter, ≥3 harf), en çok `max` tane. */
 export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
-  const out: string[] = [];
+  const all: string[] = [];
   for (const l of lineTexts(scan.words).sort((a, b) => a.y - b.y)) {
     const t = identifierText(l.text);
     if (l.y > scan.imageHeight / 3 || t.length < 3 || t.length > 40 || letters(t) < 3) continue;
-    if (!out.some((o) => norm(o) === norm(t))) out.push(t);
-    if (out.length >= max) break;
+    if (!all.some((o) => norm(o) === norm(t))) all.push(t);
   }
-  return out;
+  // Başlık / firma adı (güçlü) önce, okuma sırası korunur: genel etiket (Tarih, Açıklama) belgeyi ayırt etmez.
+  return [...all.filter(isStrongIdentifier), ...all.filter((t) => !isStrongIdentifier(t))].slice(0, max);
 }
 
 /** Ekran açılınca: ad + hazır seçili kimlik önerileri. */

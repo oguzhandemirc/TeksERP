@@ -30,6 +30,11 @@ export function labelSimilarity(text: string, labels: string[]): number {
 export const identifierText = (text: string): string =>
   text.split(/\s+/).map((x) => (/\d/.test(x) ? (/^[^\d:]+:/.exec(x)?.[0] ?? "") : x)).filter(Boolean).join(" ").replace(/^[\s:.,;|/#–-]+|[\s:.,;|/#–-]+$/gu, "");
 
+/** Toplam satırı etiketi: dokunulan kutudaki adet atılır ("T.Adet 5" · yapışık "T.Adet16" → "T.Adet"); kısa etiket tam kalır. */
+export function totalsLabelOf(text: string): string {
+  return sectionStartLabel(text.trim().replace(/([\p{L}.])\d{1,4}$/u, "$1"));
+}
+
 /** Bölüm başlangıç etiketi: etiket kısmı ≥3 harfse o, değilse tam metin ("No: 12" kısa etiketi değeriyle kalır; yanlış pozitif yok). */
 export function sectionStartLabel(text: string): string {
   const part = identifierText(text);

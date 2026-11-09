@@ -104,9 +104,13 @@ function sectionWarnings(s: SectionResult, isLast: boolean, page: SectionsResult
   } else if (isLast && pageOpen) {
     out.push(`SECTION_CONTINUES: Parti ${name}: sayfa ${page!.no}/${page!.of} — bölüm sonraki sayfada sürebilir; sayfaları birlikte okutun`);
   }
-  if (s.declared?.m && s.rowCount > 0 && !canonicalEquals(s.declared.m, s.meterSum)) {
-    out.push(`SECTION_SUBTOTAL_MISMATCH: Parti ${name}: ara toplam ${s.declared.m} m, satırların toplamı ${s.meterSum} m`);
-  }
+  // Basılı toplam birincil, tablo teyittir: fark sessiz geçmez (2026-11-10, 214279)
+  const d = s.declared;
+  const diff: string[] = [];
+  if (d?.count && Number(d.count) !== s.rowCount) diff.push(`tablo ${s.rowCount} top / belge ${d.count} top`);
+  if (d?.m && !canonicalEquals(d.m, s.meterSum)) diff.push(`tablo ${s.meterSum} m / belge ${d.m} m`);
+  if (d?.kg && !canonicalEquals(d.kg, s.kgSum)) diff.push(`tablo ${s.kgSum} kg / belge ${d.kg} kg`);
+  if (s.rowCount > 0 && diff.length > 0) out.push(`SECTION_SUBTOTAL_MISMATCH: PARTİ TOPLAMI TUTMUYOR: ${name} ${diff.join(", ")}`);
   return out;
 }
 

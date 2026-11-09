@@ -3,8 +3,8 @@
 // atanır; "T.Adet"/"TOPLAM" satırı beyan edilen toplamdır ve deftere DEĞİL computeNoteTotals'a gider.
 import type { DeclaredTotals, FieldSpec, OcrElement, OcrLine, OcrRect, OcrResult, Row, TableBlock, TableCell, TableColumnSpec, TableResult, TableRow, TableSpec } from "./types";
 import { collectLines, unionRect, averageConfidence } from "./geometry";
-import { buildRowsTilted } from "./rows-tilted";
-import { assignToColumn, isNumericText, labelSimilarity, matchesLabel, LABEL_MIN_SIMILARITY } from "./labels";
+import { buildRowsTilted, pageMedianAngle } from "./rows-tilted";
+import { assignToColumn, isNumericText, labelSimilarity, matchesLabel, totalsLabelOf, LABEL_MIN_SIMILARITY } from "./labels";
 import { evaluateCandidate } from "./extract";
 import { lineElements } from "./anchor";
 import { canonicalEquals, sumCanonical } from "./totals";
@@ -17,7 +17,6 @@ interface BlockDraft {
   headerRect: OcrRect;
   columns: ColumnRect[];
   rows: Row[];
-  totalsRows: Row[];
   /** Sağdaki bitişik sütuna taşmış devam satırları + o sütunun başlık kolonlarına x kayması. */
   spill?: { rows: Row[]; dx: number };
 }
@@ -26,14 +25,24 @@ const DEFAULT_MIN_CONFIDENCE = 0.85;
 
 /** Satır, spec kolon başlıklarından kaçını taşıyor; eşleşen kolonların kutuları. */
 function matchHeader(row: Row, spec: TableSpec): ColumnRect[] {
-  const out: ColumnRect[] = [];
-  for (const col of spec.columns) {
-    let best: { sim: number; rect: OcrRect } | null = null;
-    for (const line of row.lines) {
-      const sim = labelSimilarity(line.text, col.headers);
-      if (sim >= LABEL_MIN_SIMILARITY && (!best || sim > best.sim)) best = { sim, rect: line.rect };
+  const best = (cands: ReadonlyArray<{ text: string; rect: OcrRect }>, col: TableColumnSpec) => {
+    let hit: { sim: number; rect: OcrRect } | null = null;
+    for (const c of cands) {
+      const sim = labelSimilarity(c.text, col.headers);
+      if (sim >= LABEL_MIN_SIMILARITY && (!hit || sim > hit.sim)) hit = { sim, rect: c.rect };
     }
-    if (best) out.push({ key: col.key, rect: best.rect });
+    return hit;
+  };
+  const hits = spec.columns.map((col) => ({ col, hit: best(row.lines, col) }));
+  // ML Kit bitişik başlıkları tek satıra birleştirir ("Kilo Metre", 214279 ikinci bölüm): satırla eşleşmeyen ya da başka kolonla
+  // AYNI satıra düşen kolon kelimede aranır (yoksa iki kolon tek kutuyu paylaşır, hücreler ayrılamaz).
+  const words = row.lines.flatMap((l) => (l.elements.length > 1 ? l.elements : []));
+  const out: ColumnRect[] = [];
+  for (const { col, hit } of hits) {
+    const shared = hit !== null && hits.some((o) => o.col !== col && o.hit?.rect === hit.rect);
+    const word = !hit || shared ? best(words, col) : null;
+    const rect = word?.rect ?? hit?.rect;
+    if (rect) out.push({ key: col.key, rect });
   }
   return out;
 }
@@ -50,32 +59,21 @@ export function gluedTotalsCount(text: string, labels: string[]): string | null 
 
 const isTotalsLabel = (text: string, labels: string[]): boolean => matchesLabel(text, labels) || gluedTotalsCount(text, labels) !== null;
 
-function isTotalsRow(row: Row, spec: TableSpec): boolean {
-  if (!spec.totals) return false;
-  return row.lines.some((l) => isTotalsLabel(l.text, spec.totals!.labels));
-}
-
-/** Satırları başlık/veri/toplam olarak bloklara böler; başlıktan önceki toplam satırları "sahipsiz" döner. */
-function partition(rows: Row[], spec: TableSpec): { blocks: BlockDraft[]; orphanTotals: Row[] } {
+/** Satırları başlık/veri olarak bloklara böler (toplam satırları önceden `findTotals` ile ayrılmıştır). */
+function partition(rows: Row[], spec: TableSpec): { blocks: BlockDraft[] } {
   const minHeader = spec.minHeaderMatches ?? 2;
   const blocks: BlockDraft[] = [];
-  const orphanTotals: Row[] = [];
   let current: BlockDraft | null = null;
   for (const row of rows) {
     const header = matchHeader(row, spec);
     if (header.length >= minHeader) {
-      current = { headerRect: unionRect(header.map((h) => h.rect)), columns: header, rows: [], totalsRows: [] };
+      current = { headerRect: unionRect(header.map((h) => h.rect)), columns: header, rows: [] };
       blocks.push(current);
-      continue;
-    }
-    if (isTotalsRow(row, spec)) {
-      if (current) current.totalsRows.push(row);
-      else orphanTotals.push(row);
       continue;
     }
     if (current) current.rows.push(row);
   }
-  return { blocks: blocks.filter((b) => b.rows.length > 0 || b.totalsRows.length > 0), orphanTotals };
+  return { blocks: blocks.filter((b) => b.rows.length > 0) };
 }
 
 function columnField(col: TableColumnSpec): FieldSpec {
@@ -83,7 +81,8 @@ function columnField(col: TableColumnSpec): FieldSpec {
 }
 
 function makeCell(col: TableColumnSpec, lines: OcrLine[]): TableCell {
-  const raw = lines.map((l) => l.text.trim()).join(" ");
+  // Hücre kenarındaki "|" tablo çizgisidir, rakam değil ("212,30|" → 212.301 olurdu; 214279).
+  const raw = lines.map((l) => l.text.trim().replace(/^\|+\s*|\s*\|+$/g, "")).join(" ");
   const fr = evaluateCandidate(
     columnField(col),
     { raw, ocrConfidence: averageConfidence(lines.flatMap(lineElements)), labelSimilarity: 1, strategyIndex: 0, kind: "roi" },
@@ -96,12 +95,20 @@ function makeCell(col: TableColumnSpec, lines: OcrLine[]): TableCell {
 function assignCells(row: Row, draft: BlockDraft, spec: TableSpec, dx = 0): Record<string, TableCell> {
   const tolerance = Math.max(...draft.columns.map((c) => c.rect.width)) * 0.75;
   const byKey = new Map<string, OcrLine[]>();
+  const colOf = (r: OcrRect) => assignToColumn({ ...r, x: r.x - dx }, draft.columns, tolerance);
   for (const line of row.lines) {
-    const key = assignToColumn({ ...line.rect, x: line.rect.x - dx }, draft.columns, tolerance);
-    if (!key) continue;
-    const arr = byKey.get(key) ?? [];
-    arr.push(line);
-    byKey.set(key, arr);
+    // ML Kit bitişik hücreleri tek satır okur ("13,70 54,4" = Kilo + Metre, 214279): kelimeleri ≥ 2 ayrı kolona düşen satır bölünür.
+    const els = lineElements(line);
+    const cols = els.length > 1 ? els.map((e) => colOf(e.rect)) : [];
+    const parts: Array<[string | null, OcrLine]> = new Set(cols.filter((c) => c !== null)).size > 1
+      ? els.map((e, i) => [cols[i]!, elementLine(e)])
+      : [[colOf(line.rect), line]];
+    for (const [key, part] of parts) {
+      if (!key) continue;
+      const arr = byKey.get(key) ?? [];
+      arr.push(part);
+      byKey.set(key, arr);
+    }
   }
   const cells: Record<string, TableCell> = {};
   for (const col of spec.columns) {
@@ -188,7 +195,8 @@ function buildBlock(draft: BlockDraft, blockNo: number, spec: TableSpec, warning
     const cells = assignCells(row, draft, spec, dx);
     if (!rowAccepted(cells, spec)) {
       // Yalnız bütün zorunlu kolonları dolu olup değeri çözülemeyen satır sayılır; başlık alanındaki yarım satırlar gürültüdür
-      if (spec.columns.filter((c) => c.required).every((c) => cells[c.key])) skipped++;
+      // Rakamsız zorunlu hücre ("FASON" Metre sütununun hizasında) değer değil, künye yazısıdır → sayılmaz
+      if (spec.columns.filter((c) => c.required).every((c) => cells[c.key] && /\d/.test(cells[c.key]!.raw))) skipped++;
       continue;
     }
     rows.push({
@@ -200,9 +208,7 @@ function buildBlock(draft: BlockDraft, blockNo: number, spec: TableSpec, warning
     });
   }
   if (skipped > 0) warnings.push(`TABLE_ROWS_SKIPPED blok ${blockNo}: ${skipped} satır değeri çözülemediği için atlandı`);
-  const declared = draft.totalsRows.length > 0 ? readDeclared(draft.totalsRows[0]!, draft, spec) : null;
-  if (draft.totalsRows.length > 1) warnings.push(`TABLE_TOTALS_AMBIGUOUS blok ${blockNo}: ${draft.totalsRows.length} toplam satırı, ilki alındı`);
-  return { blockNo, headerRect: draft.headerRect, rows, declared };
+  return { blockNo, headerRect: draft.headerRect, rows, declared: null };
 }
 
 const centerX = (r: OcrRect): number => r.x + r.width / 2;
@@ -245,9 +251,8 @@ function withSpill(rows: Row[], spec: TableSpec): { rows: Row[]; spill?: { rows:
   const tolerance = (d: BlockDraft) => Math.max(...d.columns.map((c) => c.rect.width)) * 0.75;
   const edge = Math.max(...blocks.map((d) => right(d) + tolerance(d)));
   const minHeader = spec.minHeaderMatches ?? 2;
-  // Başlık satırının kolonları kenarın içindedir (kenar onlardan); toplam satırının sayıları kenarı aşabilir (0245 sağ üst) → hariç.
-  const isData = (r: Row) => !isTotalsRow(r, spec);
-  const spillLines = rows.filter(isData).flatMap((r) => r.lines.filter((l) => l.rect.x > edge));
+  // Başlık satırının kolonları kenarın içindedir (kenar onlardan); toplam satırları (sayıları kenarı aşabilir) önceden ayrıldı.
+  const spillLines = rows.flatMap((r) => r.lines.filter((l) => l.rect.x > edge));
   if (spillLines.length === 0) return { rows };
   const spillRows = buildRowsTilted(spillLines);
   const dx = spillShift(spillRows, last, spec);
@@ -258,59 +263,104 @@ function withSpill(rows: Row[], spec: TableSpec): { rows: Row[]; spill?: { rows:
     return rowAccepted(cells, spec) && Object.keys(cells).length >= minCells;
   });
   if (accepted.length === 0) return { rows };
-  const kept = rows.map((r) => (isData(r) ? { ...r, lines: r.lines.filter((l) => l.rect.x <= edge) } : r)).filter((r) => r.lines.length > 0);
+  const kept = rows.map((r) => ({ ...r, lines: r.lines.filter((l) => l.rect.x <= edge) })).filter((r) => r.lines.length > 0);
   return { rows: kept, spill: { rows: accepted, dx } };
 }
 
-/** Beyansız bloklar arasında satıra konumca en yakın olanı: önce hemen ALTINDAKİ başlık (0245 yerleşimi), yoksa en yakın. */
-function nearestBlock(row: Row, blocks: TableBlock[]): number {
-  let best = -1;
-  let bestDist = Infinity;
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i]!;
-    if (b.declared !== null) continue;
-    const dy = b.headerRect.y - row.y;
-    const dist = dy >= 0 ? dy : 1e6 + Math.abs(dy);
-    if (dist < bestDist) { bestDist = dist; best = i; }
-  }
-  return best;
+/** Sayfadaki bir toplam satırı: etiket kutusu + etiketin SAĞINDA, eğim boyunca aynı basılı satırdaki sayı kutuları. */
+interface TotalsHit {
+  label: OcrLine;
+  values: OcrLine[];
+}
+
+/** Etiket kısmı: sondaki sayı kelimeleri atılmış satır yazısı ("T.Adet 16 819,20 3.935,00" → "T.Adet"). */
+function labelPart(line: OcrLine): string {
+  const els = lineElements(line);
+  let i = els.length;
+  while (i > 0 && isNumericText(els[i - 1]!.text)) i--;
+  return i > 0 && i < els.length ? els.slice(0, i).map((e) => e.text).join(" ") : line.text;
+}
+
+const isTotalsLine = (line: OcrLine, labels: string[]): boolean => isTotalsLabel(line.text, labels) || isTotalsLabel(labelPart(line), labels);
+
+/**
+ * Toplam satırlarını KONUMDAN bağımsız bulur (214279, 2026-11-10): etiket şablondan (`totals.labels`, tanıtmadaki "Toplam satırı"),
+ * değerler etiketin sağında sayfa eğimi boyunca aynı basılı satırda. Satır gruplaması değerleri ayırabilir (etiket kutusunun kendi
+ * açısı sapık: "T.Adet 5" ↔ "141,7 586,00" ayrı satır) → eğim sayfa medyanından, bant etiket/değer yüksekliğinin 0,6'sı.
+ */
+// Eski şablon etiketi adetle kaydetmiş olabilir ("T.Adet 5"): eşleme etiket kısmıyla da.
+const totalsLabels = (spec: TableSpec): string[] => [...new Set((spec.totals?.labels ?? []).flatMap((l) => [l, totalsLabelOf(l)]))];
+
+function findTotals(lines: OcrLine[], rows: Row[], spec: TableSpec): TotalsHit[] {
+  const labels = totalsLabels(spec);
+  if (labels.length === 0) return [];
+  const tan = Math.tan((pageMedianAngle(lines) * Math.PI) / 180);
+  const labelLines = lines.filter((l) => isTotalsLine(l, labels));
+  const isLabel = new Set(labelLines);
+  const numeric = (l: OcrLine) => isNumericText(l.text) || (lineElements(l).length > 1 && lineElements(l).every((e) => isNumericText(e.text)));
+  return labelLines.map((label) => {
+    const cy = label.rect.y + label.rect.height / 2;
+    const cx = label.rect.x + label.rect.width / 2;
+    const right = label.rect.x + label.rect.width - 0.3 * label.rect.height;
+    const rowMates = new Set(rows.find((r) => r.lines.includes(label))?.lines ?? []);
+    const values = lines.filter((l) => {
+      if (isLabel.has(l) || l.rect.x < right || !numeric(l)) return false;
+      if (rowMates.has(l)) return true;
+      const predicted = cy + tan * (l.rect.x + l.rect.width / 2 - cx);
+      return Math.abs(l.rect.y + l.rect.height / 2 - predicted) < 0.6 * Math.max(label.rect.height, l.rect.height);
+    });
+    return { label, values };
+  });
 }
 
 /**
- * Sahipsiz toplam satırı (0245: üstteki "T.Adet 16 …") önce Σ'sı tutan beyansız bloğa bağlanır; tutmazsa konumca en yakın
- * beyansız bloğa (karşılaştırma computeNoteTotals'a kalır → TOTAL_MISMATCH; OCR'ın tek rakam hatası UNVERIFIED'da gizlenmez).
+ * Toplam satırının adet/kg/m'si: etiketin sağındaki değerler soldan sağa şablon sırasıyla (`totals.valueOrder`; varsayılan adet,
+ * sonra tablonun ölçü kolonları kendi sırasıyla — Top/Kilo/Metre'de adet-kg-mt). Değer sayısı sıradan azsa ya da adet yerine
+ * tam sayı düşmüyorsa eski kolon hizası okuması (`readDeclared`) kalır ("TOPLAM 241,00").
  */
-function attachOrphans(orphans: Row[], drafts: BlockDraft[], blocks: TableBlock[], spec: TableSpec): string[] {
+function readTotals(hit: TotalsHit, draft: BlockDraft, spec: TableSpec): DeclaredTotals {
+  const all = [hit.label, ...hit.values];
+  const box = unionRect(all.map((l) => l.rect));
+  const row: Row = { y: box.y, height: box.height, lines: all, text: all.map((l) => l.text).join("  ") };
+  const measureKeys = spec.columns.filter((c) => c.key === "kg" || c.key === "m").map((c) => c.key as "kg" | "m");
+  const order = spec.totals?.valueOrder ?? ["count", ...measureKeys];
+  const glued = gluedTotalsCount(labelPart(hit.label), totalsLabels(spec));
+  const parts = numericParts(all, hit.label).filter((l) => l.rect.x > hit.label.rect.x).sort((a, b) => a.rect.x - b.rect.x);
+  const decimal: TableColumnSpec = { key: "n", label: "n", type: "decimal", headers: [] };
+  const vals = [...(glued !== null ? [{ raw: glued, value: glued }] : []), ...parts.map((l) => ({ raw: l.text.trim(), value: makeCell(decimal, [l]).value }))];
+  const out: DeclaredTotals = { count: null, kg: null, m: null, rect: box };
+  // Adet yerine yazılı TAM SAYI düşmeli ("241,00 MT" adet değildir — Kömürhan "TOPLAM 241,00 MT 734,00 KG 0,00 MT")
+  const strict = vals.length >= order.length && order.every((k, i) => vals[i]!.value !== null && (k !== "count" || /^\d+$/.test(vals[i]!.raw)));
+  if (!strict) return readDeclared(row, draft, spec);
+  order.forEach((k, i) => { out[k] = vals[i]!.value; });
+  return out;
+}
+
+/**
+ * Her toplam satırı bir partinin (bloğun) toplamıdır; atama TEK kural: adet = bloğun okunan satır sayısı (tek aday). Eşleşmeyen
+ * toplamlar okuma sırasıyla kalan bloklara (çok blokta `TABLE_TOTALS_BY_ORDER` uyarısı), artan toplam `TABLE_TOTALS_ORPHAN`.
+ * Σ satır ↔ beyan farkı ayrı denetimdir (computeNoteTotals TOTAL_MISMATCH · bölüm PARTİ TOPLAMI TUTMUYOR).
+ */
+function attachTotals(hits: TotalsHit[], drafts: BlockDraft[], blocks: TableBlock[], spec: TableSpec): string[] {
   const warnings: string[] = [];
-  for (const row of orphans) {
-    let attached = false;
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i]!;
-      if (b.declared !== null) continue;
-      const declared = readDeclared(row, drafts[i]!, spec);
-      const sumKg = sumCanonical(b.rows.map((r) => r.cells.kg?.value ?? null));
-      const sumM = sumCanonical(b.rows.map((r) => r.cells.m?.value ?? null));
-      const kgOk = declared.kg === null || canonicalEquals(declared.kg, sumKg);
-      const mOk = declared.m === null || canonicalEquals(declared.m, sumM);
-      if ((declared.kg !== null || declared.m !== null) && kgOk && mOk) {
-        b.declared = declared;
-        attached = true;
-        break;
-      }
-    }
-    if (attached) continue;
-    // Konum yedeği yalnız TEK beyansız blok kaldığında: ikisi arasında "en yakın" yanlış bloğa bağlayıp sert kapıyı yanlış partide
-    // tetikleyebilir (R2, 2026-11-06) → sahipsiz kalır + uyarı, operatör görür.
-    const open = blocks.filter((b) => b.declared === null).length;
-    const i = open === 1 ? nearestBlock(row, blocks) : -1;
-    if (i >= 0) {
-      const declared = readDeclared(row, drafts[i]!, spec);
-      if (declared.kg !== null || declared.m !== null) {
-        blocks[i]!.declared = declared;
-        continue;
-      }
-    }
-    warnings.push(`TABLE_TOTALS_ORPHAN: "${row.text}" toplam satırı hiçbir bloğa bağlanamadı`);
+  const sorted = [...hits].sort((a, b) => a.label.rect.y - b.label.rect.y || a.label.rect.x - b.label.rect.x);
+  const rest: TotalsHit[] = [];
+  for (const hit of sorted) {
+    const open = blocks.map((b, i) => ({ b, i, d: readTotals(hit, drafts[i]!, spec) })).filter((x) => x.b.declared === null);
+    const byCount = open.filter((x) => x.d.count !== null && Number(x.d.count) === x.b.rows.length);
+    if (byCount.length === 1) byCount[0]!.b.declared = byCount[0]!.d;
+    else rest.push(hit);
+  }
+  for (const hit of rest) {
+    const i = blocks.findIndex((b) => b.declared === null);
+    const choices = blocks.filter((b) => b.declared === null).length;
+    const text = [hit.label, ...hit.values].map((l) => l.text).join(" ");
+    if (i < 0) { warnings.push(`TABLE_TOTALS_ORPHAN: "${text}" toplam satırı hiçbir bloğa bağlanamadı`); continue; }
+    const d = readTotals(hit, drafts[i]!, spec);
+    if (d.count === null && d.kg === null && d.m === null) { warnings.push(`TABLE_TOTALS_ORPHAN: "${text}" toplam satırı okunamadı`); continue; }
+    blocks[i]!.declared = d;
+    // Tek açık blok kaldıysa bağ kesindir (fark varsa TOTAL_MISMATCH/PARTİ TOPLAMI söyler); seçim varken sıra yedeği uyarılır.
+    if (choices > 1) warnings.push(`TABLE_TOTALS_BY_ORDER blok ${blocks[i]!.blockNo}: "${text}" toplam satırının adedi hiçbir partinin satır sayısını tutmadı; okuma sırasıyla bağlandı — partiyi kontrol edin`);
   }
   return warnings;
 }
@@ -318,11 +368,16 @@ function attachOrphans(orphans: Row[], drafts: BlockDraft[], blocks: TableBlock[
 /** Şablondaki tablo tanımını OCR sonucuna uygular. */
 export function extractTable(ocr: OcrResult, spec: TableSpec): TableResult {
   const warnings: string[] = [];
-  const split = withSpill(buildRowsTilted(collectLines(ocr)), spec);
-  const { blocks: drafts, orphanTotals } = partition(split.rows, spec);
+  const lines = collectLines(ocr);
+  const allRows = buildRowsTilted(lines);
+  // Toplam satırları satır akışından ÖNCE ayrılır: değerleri sahte top satırı olmaz, yerleri bloğu belirlemez.
+  const hits = findTotals(lines, allRows, spec);
+  const taken = new Set(hits.flatMap((h) => [h.label, ...h.values]));
+  const split = withSpill(taken.size > 0 ? buildRowsTilted(lines.filter((l) => !taken.has(l))) : allRows, spec);
+  const { blocks: drafts } = partition(split.rows, spec);
   if (split.spill && drafts.length > 0) drafts[drafts.length - 1]!.spill = split.spill;
   const blocks = drafts.map((d, i) => buildBlock(d, i + 1, spec, warnings));
-  warnings.push(...attachOrphans(orphanTotals, drafts, blocks, spec));
+  warnings.push(...attachTotals(hits, drafts, blocks, spec));
   if (blocks.length === 0) warnings.push(`TABLE_NOT_FOUND ${spec.key}: başlık satırı bulunamadı`);
   return { key: spec.key, blocks, warnings };
 }

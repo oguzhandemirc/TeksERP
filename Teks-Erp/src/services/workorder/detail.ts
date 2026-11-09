@@ -24,7 +24,7 @@ import { computeWorkOrderLocks } from "../helpers/workorder-locks.helper";
 import { targetValueEditLock } from "../helpers/workorder-target-value-step.helper";
 import { KURSUN_PROPERTY_CODE } from "../helpers/quality-station.helper";
 import { computeWoInput } from "../helpers/coverage.helper";
-import { computeWoIncoming, type WoIncoming } from "../helpers/wo-incoming.helper";
+import { computeWoIncoming, woMemberRootInput, type WoIncoming } from "../helpers/wo-incoming.helper";
 import { loadProducedBuckets } from "../helpers/roll-finalize.helper";
 import { workOrderBoundOnly } from "../helpers/dispatch-header.helper";
 import { hasRoll } from "../helpers/dispatch-item-kind.helper";
@@ -412,6 +412,11 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         totalMeters: wi?.meters ?? new Prisma.Decimal(0),
       };
       if (wi) incoming = await computeWoIncoming(wi);
+    }
+    // Rotasız / girdisi adıma işlenmemiş İE: kök parti üyeliğinden — Gelen bloğu boş kalmasın; inputRolls sayımı değişmez.
+    if (!incoming && inputRolls.count === 0) {
+      const member = await woMemberRootInput(id);
+      if (member) incoming = await computeWoIncoming(member);
     }
 
     const stepsWithRollSummary = wo.steps.map((step) => ({

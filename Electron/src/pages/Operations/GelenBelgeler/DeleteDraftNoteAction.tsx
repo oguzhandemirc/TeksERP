@@ -16,17 +16,28 @@ type NoteLike = Pick<DeliveryNoteDetail, "id" | "noteNo" | "status" | "lines" | 
 function describe(note: NoteLike, p: BulkDeletePreviewItem | undefined): string {
   const lines = p?.lineCount ?? note.lines.length;
   const scans = p?.scanCount ?? note.scans.length;
-  const content = [`${lines} satır`, p?.partyCount != null ? `${p.partyCount} parti` : null].filter(Boolean).join(" · ");
+  const content = [`${lines} satır`, p?.partyCount != null ? `${p.partyCount} parti` : null]
+    .filter(Boolean)
+    .join(" · ");
   return (
     `Taslak (${content}) kalıcı olarak kaldırılır; geri alınamaz. Hiç top doğmadığı için stok etkilenmez.` +
-    (scans > 0 ? `\n${scans} sayfa fotoğrafı silinmez; aynı belge yeniden okutulunca yeni kayda bağlanır.` : "") +
+    (scans > 0
+      ? `\n${scans} sayfa fotoğrafı silinmez; aynı belge yeniden okutulunca yeni kayda bağlanır.`
+      : "") +
     `\n${note.noteNo} numarası yeniden verilmez.` +
     (p && !p.deletable ? `\n${p.reason ?? "Bu belge artık taslak değil."}` : "")
   );
 }
 
-export function DeleteDraftNoteAction({ note, listPath }: { note: NoteLike; listPath: string }) {
-  const [open, setOpen] = useState(false);
+interface DialogProps {
+  note: NoteLike;
+  listPath: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+/** Onay diyaloğu — düğmeden ya da detay ⋯ menüsünden açılır; önizleme yalnız açıkken çekilir. */
+export function DeleteDraftNoteDialog({ note, listPath, open, onOpenChange: setOpen }: DialogProps) {
   const preview = useQuery({
     queryKey: ["gelen-belge-toplu-sil-onizleme", [note.id]],
     queryFn: () => previewBulkDeleteNotes([note.id]),
@@ -45,7 +56,8 @@ export function DeleteDraftNoteAction({ note, listPath }: { note: NoteLike; list
       // tazeleme yeniden render ettirir ve silinen detay yeniden çekilip 404 toast'ı basar (PackingLotHeader emsali).
       // Liste sayfası bağlanınca bayat sorgusunu kendisi çeker.
       void navigate(listPath);
-      const isDeletedNote = (key: readonly unknown[]) => key[0] === INCOMING_DOCUMENT_QUERY_KEY && key[2] === note.id;
+      const isDeletedNote = (key: readonly unknown[]) =>
+        key[0] === INCOMING_DOCUMENT_QUERY_KEY && key[2] === note.id;
       qc.removeQueries({ predicate: (q) => isDeletedNote(q.queryKey) });
       void qc.invalidateQueries({ queryKey: [INCOMING_DOCUMENT_QUERY_KEY], refetchType: "none" });
     },
@@ -57,23 +69,36 @@ export function DeleteDraftNoteAction({ note, listPath }: { note: NoteLike; list
   });
   if (note.status !== "DRAFT") return null;
   return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={setOpen}
+      destructive
+      title={`${note.noteNo} taslağı iptal edilsin mi?`}
+      description={describe(note, p)}
+      confirmLabel="Taslağı iptal et"
+      cancelLabel="Vazgeç"
+      isPending={remove.isPending}
+      confirmDisabled={preview.isLoading || (p != null && !p.deletable)}
+      onConfirm={() => remove.mutateAsync().then(() => setOpen(false))}
+    />
+  );
+}
+
+export function DeleteDraftNoteAction({ note, listPath }: { note: NoteLike; listPath: string }) {
+  const [open, setOpen] = useState(false);
+  if (note.status !== "DRAFT") return null;
+  return (
     <>
-      <Button variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setOpen(true)} data-testid="note-delete-draft">
+      <Button
+        variant="outline"
+        className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        onClick={() => setOpen(true)}
+        data-testid="note-delete-draft"
+      >
         <FileX className="mr-1 h-4 w-4" />
         Taslağı iptal et
       </Button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        destructive
-        title={`${note.noteNo} taslağı iptal edilsin mi?`}
-        description={describe(note, p)}
-        confirmLabel="Taslağı iptal et"
-        cancelLabel="Vazgeç"
-        isPending={remove.isPending}
-        confirmDisabled={preview.isLoading || (p != null && !p.deletable)}
-        onConfirm={() => remove.mutateAsync().then(() => setOpen(false))}
-      />
+      <DeleteDraftNoteDialog note={note} listPath={listPath} open={open} onOpenChange={setOpen} />
     </>
   );
 }

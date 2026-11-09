@@ -13,8 +13,8 @@ import { useTabsStore } from "@/store/tabs";
 import { belgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
 import { ScanReadBanner } from "@/pages/Operations/GelenBelgeler/ScanReadBanner";
-import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
-import type { DuplicateDocNoNotice } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
+import { DuplicateGateConfirm, duplicateGateConflict, withDuplicateConfirm } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
+import type { DuplicateConfirms, DuplicateGateConflict } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
 import { useNoteDetail } from "@/pages/Operations/GelenBelgeler/useNoteDetail";
 import { DocFields, FromDocBadge } from "./DocFields";
 import { DocThumb } from "./DocThumb";
@@ -43,7 +43,7 @@ function useSave(noteId: string, route: Props["route"]) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const { catalog } = useKursunGramajCatalog();
   return useMutation({
-    mutationFn: (v: { note: NonNullable<ReturnType<typeof useNoteDetail>["note"]["data"]>; draft: DocDraft; multi: MultiPartyDraft | null; targets: readonly DefaultTarget[] | null; confirmDuplicateDocNo?: boolean }): Promise<SaveOutcome> =>
+    mutationFn: (v: { note: NonNullable<ReturnType<typeof useNoteDetail>["note"]["data"]>; draft: DocDraft; multi: MultiPartyDraft | null; targets: readonly DefaultTarget[] | null; confirms?: DuplicateConfirms }): Promise<SaveOutcome> =>
       saveDoc({ ...v, routeTemplateId: route.id, formApproval: approval.value, gramajPropertyId: catalog.propertyId, passThrough: passThroughTargets(v.targets, catalog.propertyId), clientToken: attempt.token() }),
     onError: (e) => attempt.onFailure(e),
     onSuccess: async (out) => {
@@ -93,8 +93,8 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
   const multiDraft = approval.value === "WITH_WORK_ORDER" ? (multi ?? null) : null;
   const reasons = draft ? docDraftReasons(draft, multiDraft) : [];
   const saved = save.data?.kind === "DRAFT_SAVED";
-  // K27 WARN: işi süren aynı belge no'lu eş → genel hata yerine karar kutusu; onay aynı girdiyi bayrakla yeniden gönderir.
-  const dup = save.isError ? duplicateDocNoConflict(save.error) : null;
+  // Mükerrer kapısı (K27 belge no · müşteri parti no) → genel hata yerine karar kutusu; onay aynı girdiyi bayraklarla yeniden gönderir.
+  const dup = save.isError ? duplicateGateConflict(save.error) : null;
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="oie-doc-form">
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
@@ -128,7 +128,8 @@ export function BelgedenIsEmriForm({ noteId, route }: Props) {
         ready={Boolean(draft) && stage !== "READING" && !saved && targets !== undefined}
         pending={save.isPending}
         dup={dup}
-        onConfirmDuplicate={() => save.variables && save.mutate({ ...save.variables, confirmDuplicateDocNo: true })}
+        onConfirmDuplicate={() => save.variables && dup && save.mutate({ ...save.variables, confirms: withDuplicateConfirm(save.variables.confirms, dup) })}
+        onCancelDuplicate={() => save.reset()}
         error={save.isError && !dup ? (saveErrorHint(save.error) ?? apiErrorText(save.error, "Kaydedilemedi.")) : null}
         savedAsDraft={saved}
         label={approval.value === "WITH_WORK_ORDER" ? saveLabel() : "Taslak kaydet"}
@@ -144,8 +145,9 @@ interface SaveBarProps {
   ready: boolean;
   pending: boolean;
   error: string | null;
-  dup: DuplicateDocNoNotice | null;
+  dup: DuplicateGateConflict | null;
   onConfirmDuplicate: () => void;
+  onCancelDuplicate: () => void;
   savedAsDraft: boolean;
   /** WITH_WORK_ORDER: kayıt iş emrini açar → "<Terbiye İş Emri> oluştur"; ayrı onayda yalnız taslak yazılır. */
   label: string;
@@ -153,14 +155,14 @@ interface SaveBarProps {
   onOpenNote: () => void;
 }
 
-function SaveBar({ reasons, ready, pending, error, dup, onConfirmDuplicate, savedAsDraft, label, onSave, onOpenNote }: SaveBarProps) {
+function SaveBar({ reasons, ready, pending, error, dup, onConfirmDuplicate, onCancelDuplicate, savedAsDraft, label, onSave, onOpenNote }: SaveBarProps) {
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t px-6 py-3">
       {ready && reasons.length > 0 && (
         <ul className="text-xs text-amber-800 dark:text-amber-300" data-testid="oie-reasons">{reasons.map((r) => <li key={r}>{r}</li>)}</ul>
       )}
       {error && <p role="alert" className="rounded bg-destructive/10 px-2 py-1 text-sm text-destructive" data-testid="oie-error">{error}</p>}
-      {dup && <DuplicateDocNoConfirm conflict={dup} busy={pending} onConfirm={onConfirmDuplicate} />}
+      {dup && <DuplicateGateConfirm conflict={dup} busy={pending} onConfirm={onConfirmDuplicate} onCancel={onCancelDuplicate} />}
       {savedAsDraft && <p className="text-sm text-emerald-700 dark:text-emerald-400" data-testid="oie-draft-saved">{draftSavedText()}</p>}
       <div className="flex justify-end gap-2">
         {savedAsDraft && (

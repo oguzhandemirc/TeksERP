@@ -117,3 +117,27 @@ Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramal
 ## Karakter düzeltme + ana veri eşleme + çapraz doğrulama (2026-11-09)
 
 **[ÇEKİRDEK]** Kod alanında (alnum/code) karakter düzeltmesini yalnız `motor/char-fix.ts` `canonicalizeField` ile yap (`extract.ts` tek çağrı): küçük `l`/`|` komşusuna göre I/1; biçim kuralı (`pattern` ya da öğrenilmiş `valueShape`) tutmuyorsa yalnız BAĞLAMA uyan değişikliklerle (rakamlar arası O→0, harfler arası 1→I, ≤ 2) kurala uyan TEK aday alınır, değilse değere dokunma; çapraz doğrulamayı (`motor/cross-check.ts`: etiketli ikinci metre `METER_VALUES_DIFFER`, kg/metre oranı `KG_METER_RATIO` — en varsa 15–1500 g/m², yoksa 20–5000 g/m) yalnız UYARI olarak üret, değeri değiştirme; ana veri eşlemesinde OCR anahtarı eşitliği (`helpers/master-match.helper.ts`) 0,92 sayılır — sahip alanına sessiz atama yapmaz (0,95 altı).
+
+## Mükerrer kapıları (2026-11-10 kısa dosyadan taşındı)
+
+**[PROFİL]** Mükerrer belge no `gelenBelge.duplicateDocNo`: BLOCK (varsayılan) · WARN = işi süren eşte 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` + `details.peers`, `confirmDuplicateDocNo` ile geçer · ALLOW; BLOCK'ta bayrak yok sayılmaz.
+
+**[PROFİL]** `gelenBelge.duplicateBatchNo`: ALLOW (varsayılan, bugünkü) · WARN = aynı sahipte işi süren (`NOTE_WORK_ONGOING_WHERE`) eşte onay 409 `DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE` + `details.peers` [noteNo, workOrderNumber, customerBatchNo], `confirmDuplicateBatchNo` ile geçer · BLOCK 409 `DELIVERY_NOTE_DUPLICATE_BATCH_NO`, bayrak yok sayılır. Karşılaştırma katlı ve boşluksuz (`batchNoFoldKey`), belge kendi partileriyle çakışmaz; yüklem yalnız `helpers/gelen-belge-mukerrer.helper.ts`. Kapıyı (`duplicateBatchNoGateTx`) onay claim tx'inde koştur: İLK ifade 8046 kilidi (`hashtext(sahip:anahtar)`, sıralı), sonra claim ve PER_DOCUMENT özet/parti satırları AYNI tx'te (`gelen-belge-onay-claim.service.ts`) — kilit satırlar yazılana dek tutulur. İstemciler 409'u tek desenle gösterir: panel `DuplicateGateConfirm` (onay diyaloğu, tekli/toplu İE formu; formdan okutmada toast), tablet `DuplicateBatchNoDialog` (onay kartı, belgeden İE, belge masası); "Yine de" önceki kapının onayını da taşır, BLOCK yalnız bilgi. · bekçi: `test_gelen_belge_mukerrer_parti_no` §1–§6 · `DuplicateBatchNoDialog.test.tsx` · `ApprovalCard.test.tsx` · `useWoRows.test.tsx` · `mukerrer-belge-no.test.tsx` · `mukerrer-is-emri.test.tsx` <sub>(arşiv:2026-11-10 aynı müşteri parti no)</sub>
+
+## Basılı toplam satırı (2026-11-10 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Partinin gelen metre/kg/adedini BASILI toplam satırından al, konuma güvenme: etiket YALNIZ şablondan (`totals.labels` = tanıtmadaki "Toplam satırı", adet atılarak `totalsLabelOf`; koda sabit etiket yok), değerler etiketin sağında sayfa eğimi boyunca (`motor/table.ts` `findTotals`), sıra `totals.valueOrder` (varsayılan adet + tablonun ölçü kolonları sırası); toplamı partiye YALNIZ adet = tablo satır sayısıyla bağla, tutmazsa okuma sırası + `TABLE_TOTALS_BY_ORDER`; tablo Σ teyittir (`PARTİ TOPLAMI TUTMUYOR`). · bekçi: `test_gelen_belge_motor` §19 · `test_gelen_belge_cok_parti` §16 <sub>(arşiv:2026-11-10 basılı toplam satırı)</sub>
+
+**[ÇEKİRDEK]** Kelimeleri ayrı tablo kolonlarına düşen OCR satırını (başlık "Kilo Metre", hücre "13,70 54,4") kelimelerine böl; tablo hücresi kenarındaki "|" çizgidir, rakam sayma. · bekçi: `test_gelen_belge_motor` §19b
+
+## Canlı kare okuması (2026-11-10 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Canlı kare okumasını (`POST /api/gelen-belge/canli-okuma`, `gelen-belge-canli-okuma.service.ts`) SALT OKUMA tut: `clientOcr` tel biçimini katı doğrula (ihlal 400 `LIVE_FRAME_INVALID`), bugünkü motorla yalnız şablonun başlık alanlarını + değer kutusunu (karenin piksel çerçevesi) + `engineMs` döndür; tarama/taslak/şablon isabeti/audit YAZMA, GENEL yedeği "tanındı" sayma (template null), izni yükleme ucuyla aynı tut (`gelen-belge:write`), uç request-trace dışlamasında kalsın · bekçi: test_gelen_belge_canli_okuma <sub>(arşiv:2026-11-05 canlı okuma L1)</sub>
+
+## Kimlik gücü + liste İE + detay (2026-11-10)
+
+**[ÇEKİRDEK]** Şablonu yalnız en az bir GÜÇLÜ kimlik yazısı (başlık / firma adı; genel etiket ve "X No" değil — `motor/kimlik-gucu.ts`, tablet aynası `identityStrength.ts`) ya da regex'i tutunca aday say (`classify.ts` `templateMatches`: sınıflandırma + benzer şablon + ikinci belge izi); tanıtma güçlüyü önce önersin, yalnız-zayıf seçimi uyarsın; "Tanımı düzenle — X"te "Yeni tip olarak tanıt" X'e dokunmasın. · bekçi: `test_gelen_belge_kimlik_gucu` · `identityStrength.test.ts` · `TeachBanner.test.tsx` <sub>(arşiv:2026-11-10 kimlik gücü)</sub>
+
+**[PROFİL]** Liste kalemi `workOrders`ı (iptal hariç, İE no sıralı, tekil) YALNIZ `loadNoteWorkOrders`ten ver: sayfa başına tek SQL, bağ `rollWorkOrderEdgesSql` (`whereRollsOfWorkOrder`un SQL ikizi); panel ilk 2 çip + "+N", "Kaynak" yalnız detayda. · bekçi: `test_gelen_belge_liste_is_emri`, `liste-is-emri.test.tsx` <sub>(arşiv:2026-11-10 liste İE sütunu)</sub>
+
+**[PROFİL]** Panel detayında uyarıları tek Dikkat kutusunda topla (yoksa çizme); başlıkta yalnız birincil eylem, diğerleri ⋯ Diğer menüsünde. · bekçi: `detay-sade.test.tsx` <sub>(arşiv:2026-11-10 detay sadeleştirme)</sub>

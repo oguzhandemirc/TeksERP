@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import ModalTextInput from '../../../../components/ModalTextInput';
 import type { SuggestResult } from '../../../../types/inboundDocTeach';
+import { identityWarning } from './identityStrength';
 import { Frame, parts } from './stageParts';
 import { recognitionText } from './stages';
 import type { TeachState } from './teachDraft';
@@ -21,6 +22,7 @@ export default function StageHeader({ state, onChange, preview, onAdoptSimilar }
   const headers = state.identifiers.filter((d) => d.on).map((d) => d.text);
   const rec = preview.fresh ? recognitionText(preview.result) : null;
   const similar = preview.fresh ? preview.result?.benzerSablonlar?.[0] : undefined;
+  const weak = identityWarning(headers);
   return (
     <View style={parts.gap} testID="tanit-asama-1">
       <Text style={parts.ask} testID="tanit-soru">Bu tip belgede her zaman aynı olan yazılara dokunun</Text>
@@ -30,6 +32,7 @@ export default function StageHeader({ state, onChange, preview, onAdoptSimilar }
           {headers.length ? headers.map((t) => <Text key={t} style={parts.value}>{`“${t}”`}</Text>) : <Text style={parts.placeholder}>Henüz kimlik yazısı seçilmedi.</Text>}
         </View>
       </Frame>
+      {weak ? <Text style={parts.warn} testID="tanit-kimlik-zayif">{weak}</Text> : null}
       {rec ? (
         <Text style={rec.ok ? parts.ok : parts.warn} testID="tanit-taninma">{rec.text}</Text>
       ) : (

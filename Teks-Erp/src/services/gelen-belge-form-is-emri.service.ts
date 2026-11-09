@@ -90,6 +90,8 @@ export interface FormWorkOrderInput {
   rolls?: FormRollInput[];
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (onaya geçer). */
   confirmDuplicateDocNo?: boolean;
+  /** Aynı sahip + müşteri parti no (WARN): işi süren eşe rağmen kaydet (onaya geçer). */
+  confirmDuplicateBatchNo?: boolean;
   /** K30 S16a form alanları: verilen değer türetileni EZER, verilmeyen (undefined/null) bugünkü davranış. `targetItemId`
    *  belge onayında topların ürünü olur; `targetQuantity`/`targetWeight` belge toplamıdır → PER_PARTY'de 400. */
   targetItemId?: string | null;
@@ -295,7 +297,8 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     const owner = item ? null : await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { ownerCustomerId: true } });
     const woDefault = item ? undefined : await resolveNoteWorkOrderDefaultItem(owner?.ownerCustomerId ?? null);
     const target = item ?? woDefault;
-    const approved = await approveDeliveryNote(noteId, input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}, actor.userId, {
+    const confirms = { ...(input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}), ...(input.confirmDuplicateBatchNo ? { confirmDuplicateBatchNo: true } : {}) };
+    const approved = await approveDeliveryNote(noteId, confirms, actor.userId, {
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
       ...(await approvalLines(noteId, input, parties, !!rollParties)),

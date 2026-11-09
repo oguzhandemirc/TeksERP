@@ -327,6 +327,10 @@ export interface WorkOrderIncoming {
   customerBatchNo: string | null;
   itemText: string | null;
   colorText: string | null;
+  /** 2026-11-10 sunucusundan: girdi kökü sayısı/kimlikleri ve geliş biçimi (eski sunucuda yok → satır çizilmez). */
+  rootCount?: number;
+  rootRollIds?: string[];
+  arrivalForm?: 'SINGLE_PIECE' | 'ROLLS';
 }
 
 /** İE detayının hedef çeşit değeri. `edit` + `property.values` 2026-11-09 sunucusundan gelir (eski sunucuda yok). */

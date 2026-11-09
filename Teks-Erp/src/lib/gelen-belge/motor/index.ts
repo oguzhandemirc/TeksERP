@@ -6,6 +6,7 @@
 export * from "./types";
 export { loadTemplates, validateTemplate } from "./templates";
 export { classifyDocument, classifyWithFallback, templateMinScore, templatesOverThreshold, USER_TEMPLATE_ID_PREFIX } from "./classify";
+export { isStrongIdentifier } from "./kimlik-gucu";
 export { extractFields } from "./extract";
 export { mergeExtractions } from "./merge";
 export { buildRows, rowsToText, readingOrderText } from "./geometry";

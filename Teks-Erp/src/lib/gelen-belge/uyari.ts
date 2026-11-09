@@ -36,6 +36,7 @@ export const NOTICE_TITLE: Record<string, string> = {
   MULTI_REGION: "Fotoğrafta birden çok bölge",
   TABLE_TOTALS_AMBIGUOUS: "Birden çok toplam satırı",
   TABLE_TOTALS_ORPHAN: "Bağlanamayan toplam satırı",
+  TABLE_TOTALS_BY_ORDER: "Toplam satırı partiye sırayla bağlandı",
   TABLE_ROWS_SKIPPED: "Çözülemeyen satırlar atlandı",
   TABLE_NOT_FOUND: "Tablo bulunamadı",
   LINE_SKIPPED_NO_METERS: "Metresi okunamayan satır atlandı",

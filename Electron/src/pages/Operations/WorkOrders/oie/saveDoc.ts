@@ -3,6 +3,7 @@
 import { TERIM } from "@/lib/terim";
 import { updateNoteHeader } from "@/pages/Operations/GelenBelgeler/service";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
+import type { DuplicateConfirms } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
 import { docDraftReasons, noteWorkOrderBody, separateHeaderPatch, type DocDraft, type FormApproval } from "./docDraft";
 import type { MultiPartyDraft } from "./partyDraft";
 import type { FormEndpointExtras } from "./docFormFill";
@@ -23,8 +24,8 @@ export interface SaveDocInput {
   clientToken: string;
   /** S1 çok partili belge: parti satırları + kip (yalnız WITH_WORK_ORDER'da gövdeye girer). */
   multi?: MultiPartyDraft | null;
-  /** K27 WARN: kullanıcı 409 kutusunda "Yine de onayla" dedi → gövdeye bayrak (yalnız WITH_WORK_ORDER). */
-  confirmDuplicateDocNo?: boolean;
+  /** Mükerrer kapısı 409 kutusunda "Yine de" denen bayraklar → gövdeye aynen (yalnız WITH_WORK_ORDER). */
+  confirms?: DuplicateConfirms;
   /** S16d: klasik formdan gelen alanlar (S16a) + formun hedef değerleri (verilirse gramaj/geçiş değerlerinin yerine). */
   extra?: FormEndpointExtras & { targetValues?: Array<{ propertyId: string; valueId: string }> };
 }
@@ -35,7 +36,7 @@ export async function saveDoc(i: SaveDocInput): Promise<SaveOutcome> {
   if (reasons.length > 0) throw new Error(reasons.join(" "));
   if (i.formApproval === "WITH_WORK_ORDER") {
     const body = { ...noteWorkOrderBody(i.draft, { clientToken: i.clientToken, routeTemplateId: i.routeTemplateId, gramajPropertyId: i.gramajPropertyId, passThrough: i.passThrough }, multi), ...i.extra };
-    return { kind: "WORK_ORDER", result: await createWorkOrderFromNote(i.note.id, i.confirmDuplicateDocNo ? { ...body, confirmDuplicateDocNo: true } : body) };
+    return { kind: "WORK_ORDER", result: await createWorkOrderFromNote(i.note.id, { ...body, ...i.confirms }) };
   }
   const patch = separateHeaderPatch(i.draft, i.note);
   if (Object.keys(patch).length > 0) await updateNoteHeader(i.note.id, patch);

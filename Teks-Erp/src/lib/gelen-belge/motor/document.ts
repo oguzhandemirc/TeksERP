@@ -1,7 +1,7 @@
 // D3a (2026-10-28): tek giriş noktası — bölgeleme → sınıflandırma → başlık alanları → tablo → ızgara → toplam.
 // DB/route yok; saf fonksiyon. Çağıran (D3b okuma işi) sonucu CustomerDeliveryNote DRAFT'a yazar.
 import type { DocumentTemplate, ExtractionResult, FieldResult, GridResult, HeaderLineSpec, HeaderTotalsSpec, NoteTotalsBlockInput, NoteTotalsResult, OcrResult, PageRegion, TableResult } from "./types";
-import { classifyWithFallback, scoreTemplate } from "./classify";
+import { classifyWithFallback, scoreTemplate, templateMatches } from "./classify";
 import { readingOrderText } from "./geometry";
 import { normalizeForMatch } from "./text-normalize";
 import { extractFields } from "./extract";
@@ -160,7 +160,7 @@ export function foreignDocuments(ocr: OcrResult, regions: RegionExtraction[], te
   const norm = normalizeForMatch(text);
   for (const t of templates) {
     if (!known(t.id) || t.id === first.templateId) continue;
-    if (scoreTemplate(text, norm, t) < (t.identifiers.minScore ?? 0.5)) continue;
+    if (!templateMatches(text, norm, t, scoreTemplate(text, norm, t))) continue;
     out.push({ templateId: t.id, templateName: t.name, regionNo: null, fields: extractFields(ocr, t).fields });
   }
   return out;

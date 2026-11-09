@@ -48,6 +48,10 @@ function validateTables(t: Record<string, unknown>, errors: string[]): void {
     });
     if (tb.totals !== undefined) {
       if (!isObj(tb.totals) || !Array.isArray(tb.totals.labels) || tb.totals.labels.length === 0) errors.push(`${p}.totals.labels boş olmayan dizi olmalı`);
+      else if (tb.totals.valueOrder !== undefined) {
+        const vo = tb.totals.valueOrder;
+        if (!Array.isArray(vo) || vo.length === 0 || vo.some((k) => k !== "count" && k !== "kg" && k !== "m") || new Set(vo).size !== vo.length) errors.push(`${p}.totals.valueOrder count/kg/m'den tekrarsız dizi olmalı`);
+      }
     }
   });
 }

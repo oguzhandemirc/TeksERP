@@ -53,6 +53,7 @@ import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
 import { konumYedegi } from "./lib/gelen-belge-motor-konum-yedegi";
 import { cokBlok, cokBlokBirlesikToplam, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
+import { toplamSatiri } from "./lib/gelen-belge-motor-toplam-satiri";
 
 let pass = 0;
 let fail = 0;
@@ -417,6 +418,9 @@ cokBlokBirlesikToplam(check, gercek, sablonlar);
 
 // ── §18 metre ↔ kg aynı hücre: atlama öğrenimi + tanıtma kapısı + okuma koruması (`lib/gelen-belge-motor-olcu-cakisma.ts`) ──
 olcuCakisma(check);
+
+// ── §19 basılı toplam satırı birincil: etiket şablondan, partiye adetle, yeri serbest (`lib/gelen-belge-motor-toplam-satiri.ts`) ──
+toplamSatiri(check, gercek);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

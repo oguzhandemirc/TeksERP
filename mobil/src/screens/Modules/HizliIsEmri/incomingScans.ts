@@ -1,5 +1,5 @@
 // =============================================================================
-// İE Belgeler → "Gelen belge (fotoğraf)" satırları (SAF; testli)
+// İE Belgeler → "Gelen belge" satırları (SAF; testli)
 // =============================================================================
 // Kaynak `GET /gelen-belge/is-emirleri/:id/belgeler` (panel İE "Geldiği belge" ile aynı uç); bayt
 // `GET /gelen-belge/taramalar/:id/icerik` (yalnız id ile, dosya yolu yok). Silinmiş (PURGED) ve PDF
@@ -11,6 +11,7 @@ import type { SourceNote } from '../../../services/incomingScan.service';
 export interface IncomingScanItem {
   scanId: string;
   title: string;
+  /** Çok sayfada "Sayfa N"; tek sayfada boş (satır çizilmez). */
   subtitle: string;
   /** Görüntüleyicide açılabilir mi; değilse `blockedReason` satırda yazar. */
   viewable: boolean;
@@ -24,10 +25,10 @@ export function incomingScanItems(notes: readonly SourceNote[] | null | undefine
   const out: IncomingScanItem[] = [];
   for (const n of notes ?? []) {
     const doc = n.senderDocNo?.trim();
-    const title = ['Gelen belge (fotoğraf)', n.noteNo, doc ? `Evrak ${doc}` : null].filter(Boolean).join(' · ');
+    const title = ['Gelen belge', n.noteNo, doc ? `Evrak ${doc}` : null].filter(Boolean).join(' · ');
     const multi = n.scans.length > 1;
     for (const s of n.scans) {
-      const page = multi ? `Sayfa ${s.pageNo}${s.regionNo != null ? `.${s.regionNo}` : ''}` : 'Tek sayfa';
+      const page = multi ? `Sayfa ${s.pageNo}${s.regionNo != null ? `.${s.regionNo}` : ''}` : ''; // tek sayfada alt satır yok
       const purged = s.contentState === 'PURGED';
       const pdf = s.mimeType === PDF_MIME;
       const blockedReason = purged ? 'Fotoğraf saklama ayarı gereği silindi' : pdf ? 'PDF — panelden açılır' : null;

@@ -10,9 +10,9 @@ describe('incomingScanItems', () => {
       { id: 'n2', noteNo: 'GB-0002', senderDocNo: null, scans: [{ id: 's3', pageNo: 1, regionNo: null, mimeType: 'image/jpeg' }] },
     ]);
     expect(items.map((i) => [i.scanId, i.title, i.subtitle, i.viewable])).toEqual([
-      ['s1', 'Gelen belge (fotoğraf) · GB-0001 · Evrak A-77', 'Sayfa 1', true],
-      ['s2', 'Gelen belge (fotoğraf) · GB-0001 · Evrak A-77', 'Sayfa 2.1', true],
-      ['s3', 'Gelen belge (fotoğraf) · GB-0002', 'Tek sayfa', true],
+      ['s1', 'Gelen belge · GB-0001 · Evrak A-77', 'Sayfa 1', true],
+      ['s2', 'Gelen belge · GB-0001 · Evrak A-77', 'Sayfa 2.1', true],
+      ['s3', 'Gelen belge · GB-0002', '', true],
     ]);
   });
   it('silinmiş fotoğraf ve PDF açılmaz, sebebi yazar', () => {

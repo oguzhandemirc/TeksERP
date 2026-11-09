@@ -19,12 +19,9 @@ vi.mock("../ScanViewer", () => ({ ScanViewer: () => null }));
 vi.mock("../NoteHeaderForm", () => ({ NoteHeaderForm: () => null }));
 vi.mock("../TotalsStrip", () => ({ TotalsStrip: () => null }));
 vi.mock("../LinesTable", () => ({ LinesTable: () => null }));
-vi.mock("../AddLineForm", () => ({ AddLineForm: () => null }));
-vi.mock("../LineImportButton", () => ({ LineImportButton: () => null }));
 vi.mock("../CellReviewDialog", () => ({ CellReviewDialog: () => null }));
 vi.mock("../ApproveDialog", () => ({ ApproveDialog: () => null }));
 vi.mock("../ScanReadBanner", () => ({ ScanReadBanner: () => null }));
-vi.mock("../AddPagesAction", () => ({ AddPagesAction: () => null }));
 
 const empty = { rawText: null, suggested: null, source: "NONE" as const, list: [] };
 const note = {

@@ -7,6 +7,9 @@ import { requeueScan } from "./service";
 import { errorCode } from "./approveFlow";
 import { PDF_MIME, PDF_NOT_READ_TEXT } from "./uploadPrep";
 import type { DeliveryNoteLine, DocumentScanInfo } from "./types";
+import { scanBannerRows } from "./scanBanner";
+
+export { readWithoutLines } from "./scanBanner";
 
 /** Sunucu `READ_MAX_ATTEMPTS` ikizi: bu kadar denemede düşen tarama "servis yanıt vermedi" sınıfındadır. */
 const READ_MAX_ATTEMPTS = 3;
@@ -46,16 +49,6 @@ function rereadErrorText(error: unknown): string {
   return typeof msg === "string" ? msg : "Yeniden okuma başlatılamadı.";
 }
 
-/**
- * Okunmuş ama kendisinden satır çıkmamış sayfa. `scanId` göndermeyen eski backend'de (undefined) karar
- * verilemez → band yok; satırlar verilmediyse de yok.
- */
-export function readWithoutLines(s: DocumentScanInfo, lines: DeliveryNoteLine[] | undefined): boolean {
-  if (!lines || s.status !== "READ" || s.mimeType === PDF_MIME) return false;
-  if (lines.some((l) => l.scanId === undefined)) return false;
-  return !lines.some((l) => l.scanId === s.id);
-}
-
 interface Props {
   scans: DocumentScanInfo[];
   canRequeue: boolean;
@@ -66,67 +59,84 @@ interface Props {
   editable?: boolean;
   /** "Bilgisayarda ikinci okuma" kapalı (detay `serverOcrEnabled === false`): Yeniden okut yerine yeniden çek. */
   serverOcrOff?: boolean;
+  /** Detayın "Dikkat" kutusu: her sayfa tek satır, kutusuz. */
+  compact?: boolean;
 }
 
-export function ScanReadBanner({ scans, canRequeue: canRequeueProp, onRequeued, lines, editable = false, serverOcrOff = false }: Props) {
+interface BandRow {
+  id: string;
+  testId: string;
+  tone: "warn" | "info" | "danger" | "muted";
+  strong?: string;
+  text: string;
+  action?: { label: string; onClick: () => void };
+}
+
+const BOX_TONE: Record<BandRow["tone"], string> = {
+  warn: "rounded border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  info: "rounded border border-sky-300 bg-sky-50 px-3 py-2 text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200",
+  danger: "rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive",
+  muted: "rounded border bg-muted/40 px-3 py-2 text-muted-foreground",
+};
+const LINE_TONE: Record<BandRow["tone"], string> = {
+  warn: "text-amber-900 dark:text-amber-200",
+  info: "text-sky-900 dark:text-sky-200",
+  danger: "text-destructive",
+  muted: "text-muted-foreground",
+};
+
+/** `compact`: detayın "Dikkat" kutusunda tek satır (tam metin tooltip'te); kutusuz. */
+function BandLine({ row, compact, busy }: { row: BandRow; compact: boolean; busy: boolean }) {
+  const full = [row.strong, row.text].filter(Boolean).join(" ");
+  return (
+    <div
+      role={row.tone === "danger" ? "alert" : undefined}
+      className={`flex gap-2 text-sm ${compact ? `items-center justify-between ${LINE_TONE[row.tone]}` : `flex-col sm:flex-row sm:items-center sm:justify-between ${BOX_TONE[row.tone]}`}`}
+      data-testid={row.testId}
+      title={compact ? full : undefined}
+    >
+      <span className={compact ? "min-w-0 truncate" : "min-w-0"}>
+        {row.strong && <strong>{row.strong}</strong>} {row.text}
+      </span>
+      {row.action && (
+        <Button size="sm" variant="outline" className="shrink-0" disabled={busy} onClick={row.action.onClick}>
+          <RotateCcw className="mr-1 h-4 w-4" />
+          {row.action.label}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function ScanReadBanner({ scans, canRequeue: canRequeueProp, onRequeued, lines, editable = false, serverOcrOff = false, compact = false }: Props) {
   const canRequeue = canRequeueProp && !serverOcrOff;
   const requeue = useMutation({ mutationFn: (id: string) => requeueScan(id), onSuccess: onRequeued });
   const label = (s: DocumentScanInfo) => (scans.length > 1 ? `Sayfa ${s.pageNo}${s.regionNo ? `/${s.regionNo}` : ""}: ` : "");
-  const rows = scans.filter((s) => s.mimeType === PDF_MIME || s.status !== "READ" || readWithoutLines(s, lines));
+  const rows = scanBannerRows(scans, lines);
   if (!rows.length) return null;
   // Elle girilmiş satır varsa operatör sayfayı elle karşılamış olabilir → yeniden okuma satır ikiler; düğme yok.
   const canReread = canRequeue && editable && !(lines ?? []).some((l) => l.scanId === null);
+  const toRow = (s: DocumentScanInfo): BandRow => {
+    const run = () => requeue.mutate(s.id);
+    if (s.status === "READ" && s.mimeType !== PDF_MIME) {
+      return { id: s.id, testId: "scan-read-empty", tone: "warn", strong: `${label(s)}Sayfa okundu ama bu sayfadan satır çıkmadı.`, text: "Yeniden okutun ya da satırları elle girin.", action: canReread ? { label: "Yeniden oku", onClick: run } : undefined };
+    }
+    if (s.mimeType === PDF_MIME) return { id: s.id, testId: "scan-pdf-note", tone: "info", text: `${label(s)}${PDF_NOT_READ_TEXT}` };
+    if (s.status === "READ_FAILED") {
+      return { id: s.id, testId: "scan-read-failed", tone: "danger", strong: `${label(s)}Okunamadı.`, text: serverOcrOff ? SERVER_OCR_OFF_FAIL_TEXT : SCAN_FAIL_TEXT[scanFailCode(s)], action: canRequeue ? { label: "Yeniden okut", onClick: run } : undefined };
+    }
+    return { id: s.id, testId: "scan-reading", tone: "muted", text: `${label(s)}${s.status === "READING" ? "Okunuyor…" : "Okuma sırasında bekliyor…"} Satırlar okuma bitince taslağa düşer.` };
+  };
   return (
-    <div className="flex flex-col gap-2" data-testid="scan-read-banner">
+    <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-2"}`} data-testid="scan-read-banner">
       {requeue.isError && (
         <p role="alert" className="text-sm text-destructive" data-testid="scan-reread-error">
           {rereadErrorText(requeue.error)}
         </p>
       )}
-      {rows.map((s) => {
-        if (s.status === "READ" && s.mimeType !== PDF_MIME) {
-          return (
-            <div key={s.id} className="flex flex-col gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200" data-testid="scan-read-empty">
-              <span className="min-w-0">
-                <strong>{label(s)}Sayfa okundu ama bu sayfadan satır çıkmadı.</strong> Yeniden okutun ya da satırları elle girin.
-              </span>
-              {canReread && (
-                <Button size="sm" variant="outline" className="shrink-0" disabled={requeue.isPending} onClick={() => requeue.mutate(s.id)}>
-                  <RotateCcw className="mr-1 h-4 w-4" />
-                  Yeniden oku
-                </Button>
-              )}
-            </div>
-          );
-        }
-        if (s.mimeType === PDF_MIME) {
-          return (
-            <p key={s.id} className="rounded border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200" data-testid="scan-pdf-note">
-              {label(s)}{PDF_NOT_READ_TEXT}
-            </p>
-          );
-        }
-        if (s.status === "READ_FAILED") {
-          return (
-            <div key={s.id} role="alert" className="flex flex-col gap-2 rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between" data-testid="scan-read-failed">
-              <span className="min-w-0">
-                <strong>{label(s)}Okunamadı.</strong> {serverOcrOff ? SERVER_OCR_OFF_FAIL_TEXT : SCAN_FAIL_TEXT[scanFailCode(s)]}
-              </span>
-              {canRequeue && (
-                <Button size="sm" variant="outline" className="shrink-0" disabled={requeue.isPending} onClick={() => requeue.mutate(s.id)}>
-                  <RotateCcw className="mr-1 h-4 w-4" />
-                  Yeniden okut
-                </Button>
-              )}
-            </div>
-          );
-        }
-        return (
-          <p key={s.id} className="rounded border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" data-testid="scan-reading">
-            {label(s)}{s.status === "READING" ? "Okunuyor…" : "Okuma sırasında bekliyor…"} Satırlar okuma bitince taslağa düşer.
-          </p>
-        );
-      })}
+      {rows.map((s) => (
+        <BandLine key={s.id} row={toRow(s)} compact={compact} busy={requeue.isPending} />
+      ))}
     </div>
   );
 }

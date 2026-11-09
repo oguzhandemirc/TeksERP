@@ -7,11 +7,14 @@
 // kısmi toplam gösterilmez (sessiz eksik olmaz). En: her kökte var ve hepsi aynıysa tek değer, değilse null (aynı ilke).
 // Gelen kumaş adı / gelen renk (müşteri BEYANI, İE hedefi değil): en gibi — her kökte var ve hepsi aynıysa tek değer, değilse null.
 // Müşteri parti no: satırlardaki tekil değerler, sıralı birleşik. Hiçbir kök belgeden doğmadıysa `null` (kart çizilmez).
+// Geliş biçimi: her kökün satırı ARABA (özet) ise müşteri kumaşı TEK PARÇA geldi (fiziksel top yok), aksi top top.
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, RollStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
+import { whereRollsOfWorkOrder } from "./workorder-rolls.helper";
 
 type Db = Pick<Prisma.TransactionClient, "customerDeliveryNoteLine">;
+type RollDb = Pick<Prisma.TransactionClient, "roll">;
 
 /** Belge başlığı alanları (hepsi null olabilir); `sender` yalnız malın sahibinden FARKLIYSA dolu. */
 export interface WoIncomingNote {
@@ -35,9 +38,14 @@ export interface WoIncoming {
   customerBatchNo: string | null;
   itemText: string | null;
   colorText: string | null;
+  /** Girdi kökü sayısı ve kimlikleri (tablet tek parçayı "bağlı top" diye listelemesin diye). */
+  rootCount: number;
+  rootRollIds: string[];
+  /** SINGLE_PIECE: her kökün satırı ARABA (özet satırı) — kumaş tek parça geldi; ROLLS: en az bir kök top satırından. */
+  arrivalForm: "SINGLE_PIECE" | "ROLLS";
 }
 
-type IncomingLine = { rollId: string | null; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; itemText?: string | null; colorText?: string | null; note: IncomingNoteRow };
+type IncomingLine = { rollId: string | null; lineKind?: "TOP" | "ARABA"; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; itemText?: string | null; colorText?: string | null; note: IncomingNoteRow };
 
 type IncomingNoteRow = {
   id: string; noteNo: string;
@@ -81,6 +89,8 @@ export function foldWoIncoming(meters: Prisma.Decimal, rootIds: readonly string[
   return {
     meters, kg, kgSource: kg === null ? null : "DOCUMENT", notes, widthCm: width ?? null, customerBatchNo: batches.length ? batches.join(", ") : null,
     itemText: sameText(rootLines.map((l) => l?.itemText)), colorText: sameText(rootLines.map((l) => l?.colorText)),
+    rootCount: rootIds.length, rootRollIds: [...rootIds],
+    arrivalForm: rootLines.every((l) => l?.lineKind === "ARABA") ? "SINGLE_PIECE" : "ROLLS",
   };
 }
 
@@ -88,7 +98,22 @@ export async function computeWoIncoming(input: { meters: Prisma.Decimal; rootIds
   if (input.rootIds.length === 0) return null;
   const lines = await db.customerDeliveryNoteLine.findMany({
     where: { rollId: { in: [...input.rootIds] } },
-    select: { rollId: true, weightKg: true, widthCm: true, customerBatchNo: true, itemText: true, colorText: true, note: { select: { id: true, noteNo: true, senderDocNo: true, senderDocDate: true, senderText: true, declaredTopCount: true, customerOrderNo: true, processText: true, ownerCustomerId: true, senderCustomerId: true, senderCustomer: { select: { name: true } } } } },
+    select: { rollId: true, lineKind: true, weightKg: true, widthCm: true, customerBatchNo: true, itemText: true, colorText: true, note: { select: { id: true, noteNo: true, senderDocNo: true, senderDocDate: true, senderText: true, declaredTopCount: true, customerOrderNo: true, processText: true, ownerCustomerId: true, senderCustomerId: true, senderCustomer: { select: { name: true } } } } },
   });
   return foldWoIncoming(input.meters, input.rootIds, lines);
+}
+
+/**
+ * Adımsız (rotasız) ya da girdisi henüz adıma işlenmemiş İE için girdi kökleri: İE'nin topları (`whereRollsOfWorkOrder`,
+ * parti üyeliği dahil) − iptal/stok; kök = atası bu kümede olmayan. `computeWoInput` sayımına DOKUNMAZ — yalnız Gelen bloğu.
+ */
+export async function woMemberRootInput(workOrderId: string, db: RollDb = prisma): Promise<{ meters: Prisma.Decimal; rootIds: string[] } | null> {
+  const rolls = await db.roll.findMany({
+    where: { AND: [whereRollsOfWorkOrder(workOrderId), { status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] } }] },
+    select: { id: true, parentRollId: true, initialQty: true },
+  });
+  const ids = new Set(rolls.map((r) => r.id));
+  const roots = rolls.filter((r) => !r.parentRollId || !ids.has(r.parentRollId));
+  if (roots.length === 0) return null;
+  return { meters: roots.reduce((a, r) => a.plus(r.initialQty), new Prisma.Decimal(0)), rootIds: roots.map((r) => r.id) };
 }

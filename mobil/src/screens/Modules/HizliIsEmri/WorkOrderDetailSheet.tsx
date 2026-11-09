@@ -31,7 +31,8 @@ import { colors, spacing, radius, palette } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
 import { isCustomerGoodsWo } from '../IsEmirleri/workOrderRow';
-import { detailColumns, incomingRows, targetView, summaryItems, routeChips, routeNotes, actionPlacement, type DetailRow, type StepTone, type FixKind3 } from './workOrderDetailView';
+import { detailColumns, incomingView, singlePieceNote, visibleAttachedRolls, targetView, summaryItems, routeChips, routeNotes, actionPlacement, type DetailRow, type StepTone, type FixKind3 } from './workOrderDetailView';
+import WorkOrderIncomingCard from './WorkOrderIncomingCard';
 
 const TONE: Record<StepTone, { bg: string; fg: string }> = {
   info: { bg: colors.infoContainer, fg: colors.infoText },
@@ -44,6 +45,11 @@ const TONE: Record<StepTone, { bg: string; fg: string }> = {
 const fmtDate = (iso: string) => formatFactory(iso, 'dd.MM.yyyy HH:mm');
 /** Rota adım kutusu sabit genişliği (dp) — tüm kutular aynı boy. */
 const ROUTE_STEP_WIDTH = 168;
+
+/** Başlık çubuğu ikon düğmesi (yazısız, 56dp dokunma alanı). */
+function HeaderIcon({ icon, label, onPress, testID }: { icon: string; label: string; onPress: () => void; testID: string }) {
+  return <IconButton icon={icon} size={24} onPress={onPress} accessibilityLabel={label} testID={testID} style={styles.headIcon} />;
+}
 
 /** Dolu (contained) eylem düğmesi, beyaz yazı + simge (kullanıcı kararı: çerçeveli düğme yok); 56dp. */
 function HeadBtn({ icon, label, onPress, testID, color = colors.brand }: { icon: string; label: string; onPress: () => void; testID: string; color?: string }) {
@@ -154,7 +160,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   const wo = woQuery.data?.data;
   // Tüketilmiş/emekli toplar (Tambur kesimi, fason açık-kumaş, kartela, iptal)
   // gizlenir — özellikle tamamlanan WO'da parent kayıtları karışıklık yaratıyordu.
-  const rolls = (rollsQuery.data?.data ?? []).filter((r) => !isRetiredRoll(r.status));
+  // Tek parça gelen müşteri kumaşı fiziksel top değildir: kök listeden düşer, metre Gelen kartında.
+  const rolls = visibleAttachedRolls((rollsQuery.data?.data ?? []).filter((r) => !isRetiredRoll(r.status)), woQuery.data?.data?.incoming);
+  const pieceNote = singlePieceNote(woQuery.data?.data?.incoming);
   const editable = wo && wo.status !== 'COMPLETED' && wo.status !== 'CANCELLED';
   // Düzeltme menüsü ayrı yetenek (S7); panel yetkisi de açar.
   const canFix = !!editable && (has('mobile:is-emri-duzelt') || has('workorder:write'));
@@ -216,13 +224,14 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         rollCount: rolls.length,
         rollMeters,
         fmtDate,
+        singlePiece: !!pieceNote,
       }),
-      incoming: incomingRows(wo.incoming),
+      incoming: incomingView(wo.incoming, Number(wo.inputRolls?.totalMeters) || null),
       target: targetView({ wo, fallbackItemName: rolls[0]?.item?.name, propertyNames: targetPropertyNames, fmtDate, gramajPropertyId, fixAllowed: { color: canFix, width: canFix, gramaj: canGramaj, fold: canFix, target: canFix } }),
       chips: routeChips(wo.steps),
       notes: routeNotes(wo.steps),
     };
-  }, [wo, rolls, rollMeters, targetPropertyNames, gramajPropertyId, canFix, canGramaj]);
+  }, [wo, rolls, rollMeters, pieceNote, targetPropertyNames, gramajPropertyId, canFix, canGramaj]);
 
   const targetInput = useMemo<TargetValueFixInput | null>(() => {
     const tv = targetFix ? (wo?.targetValues ?? []).find((t) => t.propertyId === targetFix) : undefined;
@@ -234,9 +243,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
   }, [wo, targetFix]);
 
   const place = wo
-    ? actionPlacement({ canFix, canCancel, isFason: isCustomerGoodsWo(wo.type), hasOrderLinks: (wo.orderLinks ?? []).length > 0, hasIncomingCard: (view?.incoming.length ?? 0) > 0 })
+    ? actionPlacement({ canFix, canCancel, isFason: isCustomerGoodsWo(wo.type), hasOrderLinks: (wo.orderLinks ?? []).length > 0 })
     : null;
-  const docsBtn = <HeadBtn icon="file-document-multiple-outline" label="Belgeler" onPress={() => setDocumentsOpen(true)} testID="ie-belgeler" color={colors.brand} />;
 
   return (
     <>
@@ -261,7 +269,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             </>
           ) : null}
         </View>
-        {place?.reprint ? <IconButton icon="printer" size={24} onPress={() => setFix('reprint')} accessibilityLabel="Kartı yeniden bas" testID="ie-kart-yeniden-bas" style={styles.headIcon} /> : null}
+        {wo ? <HeaderIcon icon="file-document-multiple-outline" label="Belgeler" onPress={() => setDocumentsOpen(true)} testID="ie-belgeler" /> : null}
+        {place?.reprint ? <HeaderIcon icon="printer" label="Kartı yeniden bas" onPress={() => setFix('reprint')} testID="ie-kart-yeniden-bas" /> : null}
         <TouchableRipple onPress={onClose} borderless style={styles.closeBtn} accessibilityLabel="Kapat" testID="ie-detay-kapat">
           <Icon source="close" size={24} color={colors.textSecondary} />
         </TouchableRipple>
@@ -331,7 +340,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       ) : (
         // ── DETAY ────────────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.body}>
-          {view && (view.summary.length > 0 || place?.documents === 'summary' || place?.orderLink) ? (
+          {view && (view.summary.length > 0 || place?.orderLink) ? (
             <View style={styles.strip} testID="ie-detay-ozet">
               {view.summary.map(([k, v], i) => {
                 const perRow = cols === 2 ? view.summary.length : Math.min(3, view.summary.length);
@@ -343,10 +352,9 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                   </View>
                 );
               })}
-              {place?.documents === 'summary' || place?.orderLink ? (
+              {place?.orderLink ? (
                 <View style={styles.stripActions}>
-                  {place?.orderLink ? <HeadBtn icon="link-variant" label="Sipariş Bağla / Çöz" onPress={() => setLinkOpen(true)} testID="ie-siparis-bagla" color={colors.brandDark} /> : null}
-                  {place?.documents === 'summary' ? docsBtn : null}
+                  <HeadBtn icon="link-variant" label="Sipariş Bağla / Çöz" onPress={() => setLinkOpen(true)} testID="ie-siparis-bagla" color={colors.brandDark} />
                 </View>
               ) : null}
             </View>
@@ -354,7 +362,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
 
           {view ? (
             <View style={cols === 2 ? styles.rowCols : styles.colStack} testID={cols === 2 ? 'ie-detay-yatay' : 'ie-detay-dikey'}>
-              {view.incoming.length > 0 ? <InfoCard title="Gelen (belgeden)" rows={view.incoming} testID="ie-detay-gelen" flex={cols === 2 ? 1 : undefined} headerRight={docsBtn} /> : null}
+              <WorkOrderIncomingCard view={view.incoming} flex={cols === 2 ? 1 : undefined} onOpenDocuments={() => setDocumentsOpen(true)} />
               <InfoCard title="Hedef" rows={view.target.rows} fixByLabel={view.target.fixByLabel} targetByLabel={view.target.targetByLabel} onFix={openFix} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
             </View>
           ) : null}
@@ -416,25 +424,27 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             </View>
             <View style={[styles.section, cols === 2 ? { flex: 1 } : null]}>
             <View style={styles.cardHead}>
-              <Text style={[styles.sectionTitle, styles.cardTitleFlex]}>Bağlı Toplar ({rolls.length})</Text>
+              <Text style={[styles.sectionTitle, styles.cardTitleFlex]}>{pieceNote && rolls.length === 0 ? 'Bağlı Toplar' : `Bağlı Toplar (${rolls.length})`}</Text>
               {place?.detach ? <HeadBtn icon="tray-remove" label="Top Çıkar" onPress={() => setFix('detach')} testID="ie-top-cikar" color={BTN_DETACH} /> : null}
               {place?.addBatch ? <HeadBtn icon="tray-plus" label="Parti Ekle" onPress={() => setFix('addBatch')} testID="ie-parti-ekle" color={BTN_ADD} /> : null}
             </View>
             {rollsQuery.isLoading ? (
               <ActivityIndicator color={colors.brand} style={{ marginVertical: spacing.md }} />
-            ) : rolls.length === 0 ? (
-              <Text style={styles.muted}>Bağlı top yok.</Text>
             ) : (
-              rolls.slice(0, 100).map((r) => (
-                <View key={r.id} style={styles.rollLine}>
-                  <Text style={styles.rollLineBarcode} numberOfLines={1}>
-                    {r.barcode ?? '—'}
-                  </Text>
-                  <Text style={styles.rollLineMeta} numberOfLines={1}>
-                    {r.item?.name ?? '—'} · {Math.round(Number(r.currentQty))}m
-                  </Text>
-                </View>
-              ))
+              <>
+                {pieceNote ? <Text style={styles.pieceNote} testID="ie-detay-tek-parca">{pieceNote}</Text> : null}
+                {rolls.length === 0 && !pieceNote ? <Text style={styles.muted}>Bağlı top yok.</Text> : null}
+                {rolls.slice(0, 100).map((r) => (
+                  <View key={r.id} style={styles.rollLine}>
+                    <Text style={styles.rollLineBarcode} numberOfLines={1}>
+                      {r.barcode ?? '—'}
+                    </Text>
+                    <Text style={styles.rollLineMeta} numberOfLines={1}>
+                      {r.item?.name ?? '—'} · {Math.round(Number(r.currentQty))}m
+                    </Text>
+                  </View>
+                ))}
+              </>
             )}
             </View>
           </View>
@@ -560,6 +570,7 @@ const styles = StyleSheet.create({
   stepName: { fontWeight: '700', color: colors.text, fontSize: 14 },
   stepMeta: { fontSize: 12, color: colors.textMuted },
   muted: { color: colors.textMuted, fontSize: 13 },
+  pieceNote: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', lineHeight: 20 },
 
   rollLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: colors.border },
   rollLineBarcode: { flex: 1, fontFamily: 'monospace', fontSize: 12, color: colors.text },

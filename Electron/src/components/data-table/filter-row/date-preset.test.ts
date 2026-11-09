@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { addDaysToKey, factoryDayEndIso, factoryDayKey, factoryDayStartIso } from "@/lib/factory-time";
-import { applyDatePreset, datePresetText, readDatePreset, type DatePresetState } from "./date-preset";
+import { applyDatePreset, datePresetText, dayKeysOfPreset, presetFromDayKeys, readDatePreset, type DatePresetState } from "./date-preset";
 
 const NOW = new Date("2026-11-06T09:30:00Z");
 const TODAY = factoryDayKey(NOW);
@@ -62,5 +62,21 @@ describe("Tarih kutusu — URL → hazır seçim adı (gidiş-dönüş)", () => 
   });
   it("'Geçmiş' yazısı alanın diliyle verilir", () => {
     expect(datePresetText(st("past"), "Termini geçmiş")).toBe("Termini geçmiş");
+  });
+});
+
+describe("Tarih kutusu — URL'siz gün anahtarı yolu (yerel süzgeç)", () => {
+  it("hazır seçim gün uçlarına, uçlar geri aynı ada döner", () => {
+    expect(dayKeysOfPreset(st("all"), NOW)).toEqual({ from: "", to: "" });
+    expect(dayKeysOfPreset(st("today"), NOW)).toEqual({ from: TODAY, to: TODAY });
+    expect(dayKeysOfPreset(st("past"), NOW)).toEqual({ from: "", to: addDaysToKey(TODAY, -1) });
+    for (const id of ["all", "today", "last7", "last30", "past"] as const) {
+      const r = dayKeysOfPreset(st(id), NOW);
+      expect(presetFromDayKeys(r.from, r.to, "deadline", NOW).id).toBe(id);
+    }
+  });
+  it("özel aralık aynen geçer ve 'range' okunur", () => {
+    expect(dayKeysOfPreset(st("range", { from: "2026-10-01", to: "2026-10-05" }), NOW)).toEqual({ from: "2026-10-01", to: "2026-10-05" });
+    expect(presetFromDayKeys("2026-10-01", "2026-10-05", "deadline", NOW).id).toBe("range");
   });
 });

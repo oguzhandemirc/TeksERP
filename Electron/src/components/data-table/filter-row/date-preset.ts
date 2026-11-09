@@ -30,11 +30,13 @@ export const DATE_PRESET_LABELS: Record<DatePresetId, string> = {
 
 /** URL → kutu durumu. Tanınmayan mutlak aralık `range` olarak okunur (değer korunur). */
 export function readDatePreset(sp: URLSearchParams, defaultField: string, now: Date = new Date()): DatePresetState {
-  const field = sp.get("dateField") ?? defaultField;
   const fromIso = sp.get("dateFrom");
   const toIso = sp.get("dateTo");
-  const from = fromIso ? factoryDayKey(fromIso) : "";
-  const to = toIso ? factoryDayKey(toIso) : "";
+  return presetFromDayKeys(fromIso ? factoryDayKey(fromIso) : "", toIso ? factoryDayKey(toIso) : "", sp.get("dateField") ?? defaultField, now);
+}
+
+/** Fabrika günü uçları (`yyyy-MM-dd`, "" = açık) → hazır seçim adı; URL'siz (yerel durumlu) süzgeçler de okur. */
+export function presetFromDayKeys(from: string, to: string, field: string, now: Date = new Date()): DatePresetState {
   if (!from && !to) return { id: "all", field, from, to };
   const today = factoryDayKey(now);
   if (!from && to === addDaysToKey(today, -1)) return { id: "past", field, from, to };
@@ -42,6 +44,16 @@ export function readDatePreset(sp: URLSearchParams, defaultField: string, now: D
     if (to === today && from === addDaysToKey(today, -(days - 1))) return { id, field, from, to };
   }
   return { id: "range", field, from, to };
+}
+
+/** Hazır seçim → fabrika günü uçları (`all` = iki uç boş). URL yazımı ile yerel süzgeç aynı hesaptan. */
+export function dayKeysOfPreset(st: DatePresetState, now: Date = new Date()): { from: string; to: string } {
+  if (st.id === "all") return { from: "", to: "" };
+  const today = factoryDayKey(now);
+  const days = WINDOW_DAYS[st.id];
+  if (days) return { from: addDaysToKey(today, -(days - 1)), to: today };
+  if (st.id === "past") return { from: "", to: addDaysToKey(today, -1) };
+  return { from: st.from, to: st.to };
 }
 
 /** Kutu durumu → URL. `all` tarih anahtarlarını siler; cursor/page sıfırlanır. */
@@ -55,19 +67,14 @@ export function applyDatePreset(sp: URLSearchParams, st: DatePresetState, now: D
     next.delete("dateField");
     return next;
   }
-  next.set("dateField", st.field);
-  const today = factoryDayKey(now);
-  const days = WINDOW_DAYS[st.id];
-  if (days) {
-    next.set("dateFrom", factoryDayStartIso(addDaysToKey(today, -(days - 1))));
-    next.set("dateTo", factoryDayEndIso(today));
-  } else if (st.id === "past") {
-    next.set("dateTo", factoryDayEndIso(addDaysToKey(today, -1)));
-  } else {
-    if (st.from) next.set("dateFrom", factoryDayStartIso(st.from));
-    if (st.to) next.set("dateTo", factoryDayEndIso(st.to));
-    if (!st.from && !st.to) next.delete("dateField");
+  const { from, to } = dayKeysOfPreset(st, now);
+  if (!from && !to) {
+    next.delete("dateField");
+    return next;
   }
+  next.set("dateField", st.field);
+  if (from) next.set("dateFrom", factoryDayStartIso(from));
+  if (to) next.set("dateTo", factoryDayEndIso(to));
   return next;
 }
 

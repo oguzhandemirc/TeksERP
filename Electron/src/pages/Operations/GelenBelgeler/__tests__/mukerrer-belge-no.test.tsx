@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { AxiosError, type AxiosResponse } from "axios";
 import { renderWithProviders } from "@/test/render";
 import { ApproveDialog } from "../ApproveDialog";
-import { DuplicateDocNoStrip, duplicateDocNoConflict } from "../DuplicateDocNo";
+import { DuplicateDocNoStrip, duplicateDocNoConflict, duplicateGateConflict, withDuplicateConfirm } from "../DuplicateDocNo";
 import { IncomingDocumentSettingsSection } from "@/pages/GeneralSettings/GelenBelgeSettingsSection";
 
 const approveNote = vi.fn();
@@ -106,5 +106,70 @@ describe("Genel Ayarlar → Gelen Belge: aynı belge no", () => {
     renderWithProviders(<IncomingDocumentSettingsSection />);
     await screen.findByTestId("gelen-belge-settings");
     expect(screen.queryByTestId("gb-duplicate-doc-no")).toBeNull();
+  });
+});
+
+describe("Genel Ayarlar → Gelen Belge: aynı müşteri parti no", () => {
+  const BASE = { defaultItem: null, unreviewedApproval: "WARN", defaultUnreviewedApproval: "WARN", autoWorkOrder: false };
+  beforeEach(() => {
+    getSettings.mockReset();
+    updateSettings.mockReset();
+  });
+  it("⭐ varsayılan İzin ver seçili; 'Uyar' seçilince YALNIZ duplicateBatchNo gider; eski backend çizilmez", async () => {
+    const server = { ...BASE, duplicateDocNo: "BLOCK", defaultDuplicateDocNo: "BLOCK", duplicateBatchNo: "ALLOW", defaultDuplicateBatchNo: "ALLOW" };
+    getSettings.mockResolvedValue(server);
+    updateSettings.mockResolvedValue({ ...server, duplicateBatchNo: "WARN" });
+    const { unmount } = renderWithProviders(<IncomingDocumentSettingsSection />);
+    const field = await screen.findByTestId("gb-duplicate-batch-no");
+    expect(within(field).getByRole("radio", { name: /^İzin ver/ })).toBeChecked();
+    expect(field).toHaveTextContent("Varsayılan: İzin ver");
+    expect(within(field).getByRole("radio", { name: /^Engelle/ })).not.toBeChecked();
+    await userEvent.click(within(field).getByRole("radio", { name: /^Uyar/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+    expect(updateSettings.mock.calls[0]![0]).toStrictEqual({ duplicateBatchNo: "WARN" });
+    unmount();
+    getSettings.mockResolvedValue({ ...BASE, duplicateDocNo: "BLOCK" });
+    renderWithProviders(<IncomingDocumentSettingsSection />);
+    await screen.findByTestId("gb-duplicate-doc-no");
+    expect(screen.queryByTestId("gb-duplicate-batch-no")).toBeNull();
+  });
+});
+
+describe("ApproveDialog — aynı müşteri parti no", () => {
+  const BP = [{ id: "p2", noteNo: "GB-0005", customerBatchNo: "ISM1439770", workOrderNumber: "IE0911260003" }];
+  beforeEach(() => approveNote.mockReset());
+  it("künye: WARN onaylanır, BLOCK onaylanmaz; bayraklar birikir", () => {
+    const warn = duplicateGateConflict(err409("DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE", { peers: BP }));
+    expect(warn).toEqual({ gate: "batchNo", confirmable: true, peers: BP });
+    expect(duplicateGateConflict(err409("DELIVERY_NOTE_DUPLICATE_BATCH_NO", { peers: BP }))).toMatchObject({ gate: "batchNo", confirmable: false });
+    expect(duplicateGateConflict(err409("DELIVERY_NOTE_DUPLICATE_DOC_NO"))).toBeNull();
+    expect(withDuplicateConfirm({ confirmDuplicateDocNo: true }, warn!)).toStrictEqual({ confirmDuplicateDocNo: true, confirmDuplicateBatchNo: true });
+  });
+  it("⭐ WARN 409 → 'BU PARTİ ZATEN VAR' + satır; 'Yine de aç' önceki belge no onayıyla birlikte gönderir", async () => {
+    approveNote
+      .mockRejectedValueOnce(err409("DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE", { senderDocNo: "A-1", peers: PEERS }))
+      .mockRejectedValueOnce(err409("DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE", { peers: BP }))
+      .mockResolvedValueOnce(ok);
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
+    await userEvent.click(within(await screen.findByTestId("duplicate-doc-no-confirm")).getByRole("button", { name: "Yine de onayla" }));
+    const box = await screen.findByTestId("duplicate-batch-no-confirm");
+    expect(box).toHaveTextContent("BU PARTİ ZATEN VAR");
+    expect(box).toHaveTextContent("ISM1439770 → IE0911260003");
+    expect(screen.queryByTestId("approve-error")).toBeNull();
+    await userEvent.click(within(box).getByRole("button", { name: "Yine de aç" }));
+    await screen.findByTestId("approve-result");
+    expect(approveNote.mock.calls[2]![3]).toStrictEqual({ confirmDuplicateDocNo: true, confirmDuplicateBatchNo: true });
+  });
+  it("BLOCK 409 → yalnız bilgi ('Tamam'), onay düğmesi yok, yeniden gönderim yok", async () => {
+    approveNote.mockRejectedValueOnce(err409("DELIVERY_NOTE_DUPLICATE_BATCH_NO", { peers: BP }));
+    renderWithProviders(<ApproveDialog noteId="n1" lines={[]} open onOpenChange={() => {}} onDone={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Onayla" }));
+    const box = await screen.findByTestId("duplicate-batch-no-confirm");
+    expect(within(box).queryByRole("button", { name: "Yine de aç" })).toBeNull();
+    await userEvent.click(within(box).getByRole("button", { name: "Tamam" }));
+    await waitFor(() => expect(screen.queryByTestId("duplicate-batch-no-confirm")).toBeNull());
+    expect(approveNote).toHaveBeenCalledTimes(1);
   });
 });

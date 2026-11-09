@@ -197,6 +197,30 @@ describe('TeachBanner — görünürlük', () => {
   });
 });
 
+describe('TeachBanner — yanlış tanınmış belge', () => {
+  it('⭐ yanlış tanınmış belge: "Tanımı düzenle — X"te "Yeni tip olarak tanıt" → X güncellenmez, yeni tip POST edilir', async () => {
+    const s = draw(TAUGHT);
+    await settle();
+    await press(s.getByTestId('tanit-serit-guncelle'));
+    await waitFor(() => expect(s.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle — Güleçsoy/));
+    expect(s.getByTestId('tanit-bu-degil')).toHaveTextContent(/Bu belge "Güleçsoy" değil mi\? Kaydetmek o tanımı değiştirir/);
+    await press(s.getByTestId('tanit-yeni-tip'));
+    await waitFor(() => expect(s.getByTestId('tanit-baslik')).toHaveTextContent('Bu belgeyi tanıt'));
+    expect(s.queryByTestId('tanit-surum')).toBeNull();
+    expect(s.queryByTestId('tanit-bu-degil')).toBeNull();
+    await press(await s.findByTestId('tanit-asama-ESLEME'));
+    await press(await s.findByTestId('tanit-adim-partiNo'));
+    await press(await s.findByTestId('tanit-kutu-4'));
+    await waitFor(() => expect(s.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733'));
+    await press(s.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
+    expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
+    // Öneri gövdesi eski şablonu taban almaz (base yok): X'in alanları yeni tipe taşınmaz.
+    expect(mockApi.suggestTemplate.mock.calls.every((c) => !(c[0] as { base?: unknown }).base)).toBe(true);
+  });
+});
+
 describe('TeachBanner — kayıt sonrası yeniden okuma', () => {
   it('⭐ yeniden okuma kabul edildi → yalnız okunmuş FOTOĞRAF taramaları kuyruğa, onay detayı atılır, rereadRow', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

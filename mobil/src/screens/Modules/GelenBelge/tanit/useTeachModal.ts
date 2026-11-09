@@ -83,11 +83,14 @@ function useTeachSource(scanId: string | null, initialCode: string | null) {
   // Benimseme sonrası kayıt: kayıt anındaki benzer şablon sorusunda evet; ① "Onu düzenle" bağlantısında hayır (işaretleme sürer).
   const adoptSaveRef = useRef(true);
   const [pendingSave, setPendingSave] = useState(false);
+  // "Bu belge X değil": açılış şablonu bırakılır, aynı belge YENİ tip olarak tanıtılır (X'e dokunulmaz); kapanınca sıfırlanır.
+  const [asNew, setAsNew] = useState(false);
+  useEffect(() => setAsNew(false), [initialCode]);
   useEffect(() => {
-    setCode(initialCode);
+    setCode(asNew ? null : initialCode);
     adoptRef.current = false;
     setPendingSave(false);
-  }, [initialCode, scanId]);
+  }, [initialCode, scanId, asNew]);
   const existing = useQuery({ queryKey: userTemplateKey(code), queryFn: () => inboundDocService.getUserTemplate(code!), enabled: !!code, retry: false, staleTime: Infinity });
   const ex: UserTemplateDetail | null = existing.data ?? null;
   // Güncelle kipinde şablon gelmeden işaretleme başlamaz (eski kimlik yazıları hazır seçili gelir).
@@ -121,7 +124,7 @@ function useTeachSource(scanId: string | null, initialCode: string | null) {
     adoptRef.current = true;
     setCode(kod);
   };
-  return { existing, ex, words, state, setState, adopt, pendingSave, setPendingSave };
+  return { existing, ex, words, state, setState, adopt, pendingSave, setPendingSave, startNew: () => setAsNew(true) };
 }
 
 /** Önizleme durumu; yalnız EN SON isteğin yanıtı ekrana yazılır (hızlı dokunuşta eski yanıt yenisini ezmesin). */
@@ -172,7 +175,7 @@ function useLocated(state: TeachState | null, words: Parameters<typeof locateKep
 export function useTeachModal(scanId: string | null, initialCode: string | null, onSaved: (r: TeachSaved) => void, opts: { auto?: boolean } = {}) {
   const attempt = useAttemptToken();
   const qc = useQueryClient();
-  const { existing, ex, words, state, setState, adopt, pendingSave, setPendingSave } = useTeachSource(scanId, initialCode);
+  const { existing, ex, words, state, setState, adopt, pendingSave, setPendingSave, startNew } = useTeachSource(scanId, initialCode);
 
   const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, ex?.code ?? null) : null), [state, scanId, words.data, ex?.code]);
   const previewBody = useMemo(() => (body && body.name.length < 2 ? { ...body, name: PREVIEW_NAME } : body), [body]);
@@ -239,7 +242,7 @@ export function useTeachModal(scanId: string | null, initialCode: string | null,
   };
 
   return {
-    existing: ex,
+    existing: ex, startNew, // startNew: yanlış tanınmış belgede şablonu bırak, yeni tip olarak tanıt
     /** Kayıtlı (korunan) alanların belge üstündeki kelimeleri — son önizlemenin okuduğu kutudan. */
     located: useLocated(state, words.data?.words, preview?.result.preview?.fieldRects),
     existingError: existing.isError,

@@ -17,6 +17,7 @@
 //   §10 ⭐ K22: istasyonun KAT varsayılanı çok partili İE'lere de yazılır (PER_PARTY + SINGLE; tek parti yoluyla aynı)
 //   §15 ⭐ 214279: parti metresi beyan ara toplamından (Σ satır yalnız beyansızda); SERIES'te kağıttaki parti no künyede + aramada;
 //      DOCUMENT'ta İE parti no'su kağıttaki no (scripts/lib/gelen-belge-cok-parti-kagit-no.ts)
+//   §16 ⭐ 0248 ML Kit yan tarama: parti metre/kg/adet basılı toplam satırından, satır sayısıyla eşlenir (scripts/lib/gelen-belge-cok-parti-toplam-satiri.ts)
 //   §14 ⭐ parti kaydı (özet satırı) top sayısına karışmaz: detay `summary`, liste `docLineCount` (scripts/lib/gelen-belge-cok-parti-sayim.ts)
 // Negatif sonda: `partyWorkOrderToken` sabit token'a (clientToken) bağlanınca §5 ikinci İE replay'e düşer → kırmızı;
 // `engineTemplates` yalnız dosya şablonlarını dönünce §8 kırmızı.
@@ -41,6 +42,7 @@ import { sayfaDamgasiUyaridir } from "./lib/gelen-belge-cok-parti-sayfa";
 import { cokBlokKismi } from "./lib/gelen-belge-cok-parti-kismi";
 import { cokPartiSayim } from "./lib/gelen-belge-cok-parti-sayim";
 import { cokPartiKagitNo } from "./lib/gelen-belge-cok-parti-kagit-no";
+import { cokPartiToplamSatiri } from "./lib/gelen-belge-cok-parti-toplam-satiri";
 import { StationCapabilityService } from "../src/services/station-capability.service";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
@@ -337,6 +339,23 @@ async function run(url: string): Promise<void> {
 
   await cokBlokKismi({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body });
   await cokPartiKagitNo({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body, setSetting, get: (path) => call("GET", path, tk) });
+  await cokPartiToplamSatiri({
+    check, tag: TAG, ocr: gercek("0248-ceki-listesi-mlkit-yan"), addScan,
+    createTemplate: async (name, template) => {
+      const r = await call("POST", "/api/gelen-belge/sablonlar/ozel", tk, { name, template, clientToken: randomUUID() });
+      const row = r.data?.code ? await prisma.senderTemplate.findUnique({ where: { code: String(r.data.code) }, select: { id: true } }) : null;
+      if (row) made.templates.push(row.id);
+      return r;
+    },
+    deactivate: (code) => call("PATCH", `/api/gelen-belge/sablonlar/${code}`, tk, { isActive: false }),
+    emptyNote: async () => {
+      const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderText: `${TAG} ML Kit` });
+      const id = (r.data as { id?: string } | undefined)?.id ?? "";
+      made.notes.push(id);
+      return id;
+    },
+    parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk),
+  });
 }
 
 async function cleanup(): Promise<void> {

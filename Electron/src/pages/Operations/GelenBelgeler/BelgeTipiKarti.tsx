@@ -1,5 +1,5 @@
 // Belge Tipleri kartı: ad · kod/sürüm/okuma · kural özeti · gönderen cari · varsayılan sahip · parti no alanı · Düzenle /
-// Fotoğrafla yeniden işaretle / Sıfırla. Kullanılmayan (pasif/sıfırlanmış/yetim) tipler alttaki katlanır bölümde tek satırdır.
+// Fotoğrafla yeniden işaretle / Sıfırla. Liste tablosunda satıra tıklayınca ayrıntı panelinde (`BelgeTipiSheet`) çizilir.
 import { useState } from "react";
 import { Camera, RotateCcw, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";

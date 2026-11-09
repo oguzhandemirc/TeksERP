@@ -5,7 +5,7 @@ import { type DocumentTemplate, type FieldSpec, type FieldType, type NormRect, t
 import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches } from "./anchor";
 import { resolveRegions } from "./document";
 import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry";
-import { isNumericText, sectionStartLabel } from "./labels";
+import { isNumericText, sectionStartLabel, totalsLabelOf } from "./labels";
 import { validateTemplate } from "./templates";
 import { valueShapeOf } from "./value-limit";
 import { KG_FAMILY_FIELDS, METER_FAMILY_FIELDS, learnAnchorSkip, meterKgClashes } from "./olcu-cakisma";
@@ -244,7 +244,7 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   const cols = input.table?.columns ?? [];
   if (cols.length > 0) {
     const columns: TableColumnSpec[] = cols.map((c) => ({ key: c.key, label: TABLE_COLUMN_KEYS[c.key].label, type: TABLE_COLUMN_KEYS[c.key].type, headers: [c.header.trim()], ...(c.key === "m" ? { required: true } : {}) }));
-    t.tables = [{ key: "toplar", columns, minHeaderMatches: Math.min(2, columns.length), ...(input.table?.totalsLabel ? { totals: { labels: [input.table.totalsLabel.trim()] } } : {}) }];
+    t.tables = [{ key: "toplar", columns, minHeaderMatches: Math.min(2, columns.length), ...(input.table?.totalsLabel ? { totals: { labels: [totalsLabelOf(input.table.totalsLabel)] } } : {}) }];
   }
   const sectionFields = input.assignments.filter((a) => a.section).map((a) => a.field);
   if (input.sectionStartLabel?.trim() && sectionFields.length > 0) {

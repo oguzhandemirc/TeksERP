@@ -275,6 +275,8 @@ export interface ApproveNoteBody {
   routeTemplateId?: string;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen onayla (yalnız operatör "Yine de onayla" deyince). */
   confirmDuplicateDocNo?: true;
+  /** Aynı müşteri parti no WARN: işi süren eşe rağmen onayla (yalnız "Yine de aç" sonrası; BLOCK'ta sunucu yine 409). */
+  confirmDuplicateBatchNo?: true;
 }
 
 export interface AutoWorkOrderGroup {

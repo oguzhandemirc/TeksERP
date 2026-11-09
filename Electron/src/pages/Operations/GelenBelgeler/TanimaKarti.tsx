@@ -1,6 +1,7 @@
 // Belge detayı "Tanıma" kartı (belge tanıt 3 aşama): ① hangi tiple tanındı (okunduğu SÜRÜM, güven) · ② belge alanı → iş emri
 // karşılığı (gruplar çerçeveyle) · ③ uygulanan kurallar ve kaynağı. Blok sunucunun `tanima`sıdır; panel hiçbir şey türetmez.
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import type { Tanima, TanimaMappingRow } from "./tanimaTypes";
 import { FIELD_GROUP_LABEL, FIELD_GROUP_ORDER } from "./tanit/fieldTargets";
 
@@ -74,5 +75,28 @@ export function TanimaKarti({ tanima }: { tanima: Tanima | undefined }) {
         </Step>
       )}
     </section>
+  );
+}
+
+/** Detay sağ sütunu: tanıma tek satır ("Okuma: …"); eşleme + kurallar "Ayrıntı" açılınca (kapalı başlar). */
+export function RecognitionRow({ tanima }: { tanima: Tanima | undefined }) {
+  const [open, setOpen] = useState(false);
+  if (!tanima) return null;
+  const known = tanima.durum !== "TANITILMAMIS" && !!tanima.template;
+  const hasDetail = known || tanima.rules.length > 0;
+  return (
+    <div className="flex flex-col gap-2 text-sm" data-testid="tanima-satiri">
+      <div className="flex items-center justify-between gap-2">
+        <span className={`min-w-0 truncate ${known ? "text-muted-foreground" : "text-amber-800 dark:text-amber-300"}`} data-testid="tanima-durum">
+          {recognitionText(tanima)}
+        </span>
+        {hasDetail && (
+          <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="tanima-ayrinti">
+            {open ? "Gizle" : "Ayrıntı"}
+          </Button>
+        )}
+      </div>
+      {open && <TanimaKarti tanima={tanima} />}
+    </div>
   );
 }

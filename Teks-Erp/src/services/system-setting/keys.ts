@@ -340,6 +340,9 @@ export const SETTING_KEYS = {
   /** Aynı (sahip, gönderen belge no) tekrar gelirse (K27): BLOCK iptal dışı tek belge (varsayılan = bugünkü) | WARN işi süren
    *  eş varken onay 409 + operatör onayıyla geçer | ALLOW serbest. Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   GELEN_BELGE_DUPLICATE_DOC_NO: "gelenBelge.duplicateDocNo",
+  /** Aynı (sahip, müşteri parti no) işi süren başka belgede varsa: ALLOW serbest (varsayılan = bugünkü) | WARN onay 409 +
+   *  operatör onayıyla geçer | BLOCK 409. Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_DUPLICATE_BATCH_NO: "gelenBelge.duplicateBatchNo",
   /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",

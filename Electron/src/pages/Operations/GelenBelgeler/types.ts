@@ -72,6 +72,13 @@ export interface DeliveryNoteHeader extends PartiMetreHeaderFields {
   _count: { lines: number; scans: number };
   /** Liste: özet satırı (parti kaydı) hariç belge satırı sayısı; eski sunucu göndermez → `_count.lines`. */
   docLineCount?: number;
+  /** Liste: satır toplarının bağlı iş emirleri (iptal hariç, İE no sırasıyla); eski sunucu göndermez → undefined ("—"). */
+  workOrders?: NoteWorkOrderRef[];
+}
+
+export interface NoteWorkOrderRef {
+  id: string;
+  workOrderNumber: string;
 }
 
 export interface DeliveryNoteLine {

@@ -2,7 +2,8 @@
 // tekrarı ikinci taslak açmaz, PDF notu, READ_FAILED bandı + yeniden okut, tarih süzgeci sunucuya gider.
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { factoryDayKey } from "@/lib/factory-time";
 import userEvent from "@testing-library/user-event";
 import { AxiosError, type AxiosResponse } from "axios";
 import { renderWithProviders } from "@/test/render";
@@ -196,8 +197,25 @@ describe("ekranlar", () => {
   it("tarih süzgeci isteğe parametre olarak gider", async () => {
     renderWithProviders(<IncomingDocumentsPage />);
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenCalled());
-    await userEvent.click(screen.getByText("başlangıç-seç"));
-    await userEvent.click(screen.getByText("bitiş-seç"));
+    // Tarih kutusu PENCERE açar; aralık "Tarih aralığı" → uçlar → Uygula.
+    await userEvent.click(screen.getByRole("button", { name: /Kayıt tarihi: Tümü/ }));
+    const dlg = await screen.findByRole("dialog");
+    await userEvent.click(within(dlg).getByRole("radio", { name: "Tarih aralığı" }));
+    await userEvent.click(within(dlg).getByText("başlangıç-seç"));
+    await userEvent.click(within(dlg).getByText("bitiş-seç"));
+    await userEvent.click(within(dlg).getByRole("button", { name: "Uygula" }));
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ from: "2026-10-01", to: "2026-10-29" })));
+    expect(screen.getByRole("button", { name: /Kayıt tarihi: 01\.10\.2026 – 29\.10\.2026/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Kayıt tarihi filtresini kaldır" }));
+    await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ from: undefined, to: undefined })));
+  });
+  it("tarih penceresinde hazır seçim (Bugün) fabrika gününü tek tıkla uygular", async () => {
+    renderWithProviders(<IncomingDocumentsPage />);
+    await waitFor(() => expect(listDeliveryNotes).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: /Kayıt tarihi: Tümü/ }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("radio", { name: "Bugün" }));
+    const today = factoryDayKey();
+    await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ from: today, to: today })));
+    expect(screen.getByRole("button", { name: /Kayıt tarihi: Bugün/ })).toBeInTheDocument();
   });
 });

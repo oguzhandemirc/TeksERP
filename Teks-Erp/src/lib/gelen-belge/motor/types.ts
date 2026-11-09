@@ -376,6 +376,8 @@ export interface TableTotalsSpec {
   labels: string[];
   /** Adet (satır sayısı) hücresi hangi kolon anahtarına yazılır; yoksa artakalan tam sayı hücre. */
   countKey?: string;
+  /** Etiketin sağındaki değerlerin sırası (soldan sağa); yoksa adet + tablonun ölçü kolonları kendi sırasıyla (Top/Kilo/Metre: adet-kg-mt). */
+  valueOrder?: Array<"count" | "kg" | "m">;
 }
 
 /**

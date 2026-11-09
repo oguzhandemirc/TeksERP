@@ -2,7 +2,7 @@
 // İş emri detay sheet'i — yerleşim ve görünür satır kararları (SAF; testli)
 // =============================================================================
 // Bileşen yalnız çizer: hangi satır görünür, kaç sütun, rota çipleri, özet şeridi burada.
-// Boş değer ("—") satırı HİÇ üretilmez; Gelen bloğu yalnız sunucu `incoming` döndürdüyse vardır.
+// Boş değer ("—") satırı HİÇ üretilmez; Gelen kartı her zaman vardır (belgesizde yalnız giren metre ya da "Gelen bilgisi yok").
 // =============================================================================
 import type { WorkOrder, WorkOrderIncoming } from '../../../types/models';
 
@@ -35,36 +35,86 @@ function fmtIsoDay(iso: string | null | undefined): string | null {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : null;
 }
 
-/** Gelen (belgeden) satırları; dolu olmayan satır yok. `incoming` yoksa boş dizi (kart çizilmez). */
-export function incomingRows(incoming: WorkOrderIncoming | null | undefined): DetailRow[] {
-  if (!incoming) return [];
-  const rows: (DetailRow | null)[] = [];
+export interface IncomingView {
+  /** Kritik rakam ("241 m"): belgeden gelen metre; belgesiz İE'de üretime giren metre; ikisi de yoksa null. */
+  meters: string | null;
+  metersLabel: 'Gelen Metre' | 'Giren Metre';
+  /** Metrenin altındaki giriş satırları (kg · en · kumaş · renk · müşteri parti no · nasıl geldi). */
+  rows: DetailRow[];
+  /** Kaynak belge(ler): "GB… · Evrak … · gg.aa.yyyy" — dokununca belge görüntüleyici. */
+  sources: string[];
+  /** Kaynak belgenin altındaki künye (gönderen · sipariş no · işlem · belgedeki top). */
+  moreRows: DetailRow[];
+  /** Ne belge ne giren metre var → kart yalnız "Gelen bilgisi yok" der. */
+  empty: boolean;
+}
+
+/** "Kumaş nasıl geldi": eski sunucuda (`arrivalForm` yok) null — satır çizilmez. */
+export function arrivalText(incoming: WorkOrderIncoming | null | undefined): string | null {
+  if (!incoming?.arrivalForm) return null;
+  const n = incoming.rootCount ?? 0;
+  if (incoming.arrivalForm === 'SINGLE_PIECE') return n > 1 ? `Tek parça · ${n} parti` : 'Tek parça';
+  return n > 0 ? `${n} top` : null;
+}
+
+/** Tek parça gelen müşteri kumaşı fiziksel top değildir: Bağlı Toplar bölümü bu açıklamayı yazar (yoksa null). */
+export function singlePieceNote(incoming: WorkOrderIncoming | null | undefined): string | null {
+  if (incoming?.arrivalForm !== 'SINGLE_PIECE') return null;
+  const m = num(incoming.meters);
+  return `Tek parça müşteri kumaşı${m != null ? ` · ${fmtNum(m)} m` : ''} — üretimde top olarak çıkacak`;
+}
+
+/** Tek parçada girdi kökü top listesinde gösterilmez (metre Gelen kartında); top top gelende liste aynen kalır. */
+export function visibleAttachedRolls<T extends { id: string }>(rolls: readonly T[], incoming: WorkOrderIncoming | null | undefined): T[] {
+  if (incoming?.arrivalForm !== 'SINGLE_PIECE' || !incoming.rootRollIds?.length) return [...rolls];
+  const roots = new Set(incoming.rootRollIds);
+  return rolls.filter((r) => !roots.has(r.id));
+}
+
+/** Gelen (giriş) kartı; dolu olmayan satır yok. `inputMeters` belgesiz İE'nin üretime giren metresi. */
+export function incomingView(incoming: WorkOrderIncoming | null | undefined, inputMeters?: number | null): IncomingView {
+  if (!incoming) {
+    const im = num(inputMeters);
+    const has = im != null && im > 0;
+    return { meters: has ? `${fmtNum(im)} m` : null, metersLabel: 'Giren Metre', rows: [], sources: [], moreRows: [], empty: !has };
+  }
   const nts = incoming.notes ?? [];
-  const notes = nts.map((n) => n.noteNo).filter(Boolean);
-  rows.push(notes.length ? ['Belge No', notes.join(', ')] : null);
   const uniq = (xs: (string | null | undefined)[]) => [...new Set(xs.map((x) => txt(x)).filter((x): x is string => !!x))];
   const join = (label: string, xs: string[]): DetailRow | null => (xs.length ? [label, xs.join(', ')] : null);
-  rows.push(join('Müşteri Evrak No', uniq(nts.map((n) => n.senderDocNo))));
-  rows.push(join('Belge Tarihi', uniq(nts.map((n) => fmtIsoDay(n.senderDocDate)))));
-  rows.push(join('Gönderen', uniq(nts.map((n) => n.sender))));
-  rows.push(join('Müşteri Sipariş No', uniq(nts.map((n) => n.customerOrderNo))));
-  rows.push(join('İstenen İşlem', uniq(nts.map((n) => n.processText))));
+  const m = num(incoming.meters);
+  const kg = num(incoming.kg);
+  const w = num(incoming.widthCm);
+  const item = txt(incoming.itemText);
+  const color = txt(incoming.colorText);
+  const batch = txt(incoming.customerBatchNo);
+  const arrival = arrivalText(incoming);
+  const rows: (DetailRow | null)[] = [
+    kg != null ? ['Gelen Kg', `${fmtNum(kg)} kg`] : null,
+    w != null ? ['Gelen En', `${fmtNum(w)} cm`] : null,
+    item ? ['Gelen Kumaş', item] : null,
+    color ? ['Gelen Renk', color] : null,
+    batch ? ['Müşteri Parti No', batch] : null,
+    arrival ? ['Kumaş Nasıl Geldi', arrival] : null,
+  ];
+  const sources = nts
+    .filter((n) => txt(n.noteNo))
+    .map((n) => [n.noteNo, txt(n.senderDocNo) ? `Evrak ${txt(n.senderDocNo)}` : null, fmtIsoDay(n.senderDocDate)].filter(Boolean).join(' · '));
   // Kısmi toplam gösterilmez: her belgede top adedi varsa toplam, yoksa satır yok.
   const tops = nts.map((n) => num(n.declaredTopCount));
-  rows.push(tops.length && tops.every((t) => t != null) ? ['Belgedeki Top', `${tops.reduce((a, t) => a + (t as number), 0)} top`] : null);
-  const batch = txt(incoming.customerBatchNo);
-  rows.push(batch ? ['Müşteri Parti No', batch] : null);
-  const m = num(incoming.meters);
-  rows.push(m != null ? ['Gelen Metre', `${fmtNum(m)} m`] : null);
-  const kg = num(incoming.kg);
-  rows.push(kg != null ? ['Gelen Kg', `${fmtNum(kg)} kg`] : null);
-  const w = num(incoming.widthCm);
-  rows.push(w != null ? ['Gelen En', `${fmtNum(w)} cm`] : null);
-  const item = txt(incoming.itemText);
-  rows.push(item ? ['Gelen Kumaş', item] : null);
-  const color = txt(incoming.colorText);
-  rows.push(color ? ['Gelen Renk', color] : null);
-  return rows.filter((r): r is DetailRow => r !== null);
+  const moreRows: (DetailRow | null)[] = [
+    join('Gönderen', uniq(nts.map((n) => n.sender))),
+    join('Müşteri Sipariş No', uniq(nts.map((n) => n.customerOrderNo))),
+    join('İstenen İşlem', uniq(nts.map((n) => n.processText))),
+    tops.length && tops.every((t) => t != null) ? ['Belgedeki Top', `${tops.reduce((a, t) => a + (t as number), 0)} top`] : null,
+  ];
+  return {
+    meters: m != null ? `${fmtNum(m)} m` : null,
+    metersLabel: 'Gelen Metre',
+    rows: rows.filter((r): r is DetailRow => r !== null),
+    sources,
+    moreRows: moreRows.filter((r): r is DetailRow => r !== null),
+    empty: false,
+  };
 }
 
 export type FixKind3 = 'color' | 'width' | 'gramaj' | 'fold' | 'target';
@@ -204,7 +254,6 @@ export interface ActionInput {
   canCancel: boolean;
   isFason: boolean;
   hasOrderLinks: boolean;
-  hasIncomingCard: boolean;
 }
 export interface ActionPlacement {
   /** Başlıkta yazıcı simgesi. */
@@ -214,19 +263,16 @@ export interface ActionPlacement {
   addBatch: boolean;
   /** Özet şeridi sonu; fason İE'de bağlı sipariş yoksa gizli. */
   orderLink: boolean;
-  /** Belgeler: Gelen kartı başlığı, kart yoksa özet şeridi. */
-  documents: 'incoming' | 'summary';
   /** En altta sağa yaslı küçük kırmızı düğme. */
   cancel: boolean;
 }
 
-export function actionPlacement({ canFix, canCancel, isFason, hasOrderLinks, hasIncomingCard }: ActionInput): ActionPlacement {
+export function actionPlacement({ canFix, canCancel, isFason, hasOrderLinks }: ActionInput): ActionPlacement {
   return {
     reprint: canFix,
     detach: canFix,
     addBatch: canFix,
     orderLink: canFix && !(isFason && !hasOrderLinks),
-    documents: hasIncomingCard ? 'incoming' : 'summary',
     cancel: canCancel,
   };
 }
@@ -239,10 +285,12 @@ export interface SummaryInput {
   rollCount: number;
   rollMeters: number;
   fmtDate: (iso: string) => string;
+  /** Tek parça müşteri kumaşı: "N top" yazılmaz (fiziksel top yok; metre Gelen kartında). */
+  singlePiece?: boolean;
 }
 
 /** Üst özet şeridi: Müşteri · Bizim parti · Tür · N top · toplam m · oluşturma. Boş olan atlanır. */
-export function summaryItems({ wo, typeLabel, rollCount, rollMeters, fmtDate }: SummaryInput): DetailRow[] {
+export function summaryItems({ wo, typeLabel, rollCount, rollMeters, fmtDate, singlePiece }: SummaryInput): DetailRow[] {
   const items: (DetailRow | null)[] = [];
   const customer = wo.customer?.name ?? wo.orderLinks?.find((l) => l.orderLine?.order?.customer?.name)?.orderLine?.order?.customer?.name ?? null;
   items.push(customer ? ['Müşteri', customer] : null);
@@ -252,7 +300,7 @@ export function summaryItems({ wo, typeLabel, rollCount, rollMeters, fmtDate }: 
   const inCount = num(wo.inputRolls?.count) ?? 0;
   const count = inCount > 0 ? inCount : rollCount;
   const meters = inCount > 0 ? num(wo.inputRolls?.totalMeters) ?? rollMeters : rollMeters;
-  items.push(count > 0 ? ['Top', `${count} top · ${fmtNum(meters, 0)} m`] : null);
+  items.push(count > 0 && !singlePiece ? ['Top', `${count} top · ${fmtNum(meters, 0)} m`] : null);
   const by = txt(wo.createdBy?.fullName);
   const when = wo.createdAt ? fmtDate(wo.createdAt) : null;
   const created = [when, by].filter(Boolean).join(' · ');

@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { INBOUND_DOC_SETTINGS_KEY, inboundDocService } from '../../../../services/inboundDoc.service';
 import type { MultiPartyRule, ScanWord, SuggestResult } from '../../../../types/inboundDocTeach';
 import { fieldLabel } from './fieldTargets';
+import { identityWarning } from './identityStrength';
 import { ChoiceRow, Frame, TapRow, parts } from './stageParts';
 import { hasTable, meterSourceText, multiPartyChoices, sectionPreviewText, type TapTarget } from './stages';
 import { FIELD_OPTIONS, setRepeats, textOf, toggleSectionField, type TeachIssue, type TeachState } from './teachDraft';
@@ -25,6 +26,7 @@ export default function StageRules({ state, words, onChange, target, onTarget, p
   const settings = useQuery({ queryKey: INBOUND_DOC_SETTINGS_KEY, queryFn: () => inboundDocService.settings(), retry: false, staleTime: 60_000 });
   const factory: MultiPartyRule | undefined = settings.data?.multiPartyWorkOrder;
   const result = preview.fresh ? preview.result : null;
+  const weak = identityWarning(state.identifiers.filter((d) => d.on).map((d) => d.text));
   return (
     <View style={parts.gap} testID="tanit-asama-3">
       <SectionRule state={state} words={words} onChange={onChange} target={target} onTarget={onTarget} result={result} />
@@ -62,6 +64,7 @@ export default function StageRules({ state, words, onChange, target, onTarget, p
       {issues.map((i) => (
         <Text key={i.text} style={parts.warn} testID="tanit-kural-sorun">{`• ${i.text}`}</Text>
       ))}
+      {weak ? <Text style={parts.warn} testID="tanit-kimlik-zayif">{`• ${weak}`}</Text> : null}
     </View>
   );
 }

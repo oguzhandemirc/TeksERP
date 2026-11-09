@@ -1,4 +1,4 @@
-import { detailColumns, incomingRows, targetRows, targetView, shortPropertyLabel, actionPlacement, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum, foldLocked } from './workOrderDetailView';
+import { detailColumns, incomingView, arrivalText, singlePieceNote, visibleAttachedRolls, targetRows, targetView, shortPropertyLabel, actionPlacement, summaryItems, routeChips, stepTone, stripDeviceId, fmtNum, foldLocked } from './workOrderDetailView';
 import type { WorkOrder } from '../../../types/models';
 
 const fmtDate = (s: string) => `D(${s})`;
@@ -13,45 +13,65 @@ describe('detailColumns', () => {
   });
 });
 
-describe('incomingRows', () => {
-  it('incoming yoksa kart yok', () => {
-    expect(incomingRows(null)).toEqual([]);
-    expect(incomingRows(undefined)).toEqual([]);
+describe('incomingView (Gelen kartı)', () => {
+  const base = { meters: null, kg: null, widthCm: null, customerBatchNo: null, itemText: null, colorText: null, notes: [] as never[] };
+  it('belgesiz İE: giren metre varsa yalnız metre satırı, yoksa "Gelen bilgisi yok"', () => {
+    expect(incomingView(null, 241)).toEqual({ meters: '241 m', metersLabel: 'Giren Metre', rows: [], sources: [], moreRows: [], empty: false });
+    expect(incomingView(undefined, 0).empty).toBe(true);
+    expect(incomingView(null).meters).toBeNull();
   });
-  it('dolu alanları sırayla verir, boşları atar', () => {
-    const rows = incomingRows({ meters: 1200.5, kg: null, widthCm: 150, notes: [{ id: '1', noteNo: 'GB-1' }, { id: '2', noteNo: 'GB-2' }], customerBatchNo: 'M-7', itemText: 'Tül', colorText: null });
-    expect(rows).toEqual([
-      ['Belge No', 'GB-1, GB-2'],
-      ['Müşteri Parti No', 'M-7'],
-      ['Gelen Metre', '1200,5 m'],
-      ['Gelen En', '150 cm'],
-      ['Gelen Kumaş', 'Tül'],
+  it('⭐ metre kritik rakam; kg · en · kumaş · renk · parti no · nasıl geldi sırayla, boşlar atılır', () => {
+    const v = incomingView({ ...base, meters: 241, kg: null, widthCm: 350, customerBatchNo: 'ISM1439770', itemText: '2008-58 KOYU BEJ FULAR', colorText: '58 KOYU BEJ FULAR', notes: [{ id: '1', noteNo: 'GB0911260073' }], rootCount: 1, rootRollIds: ['r1'], arrivalForm: 'SINGLE_PIECE' });
+    expect(v.meters).toBe('241 m');
+    expect(v.metersLabel).toBe('Gelen Metre');
+    expect(v.rows).toEqual([
+      ['Gelen En', '350 cm'],
+      ['Gelen Kumaş', '2008-58 KOYU BEJ FULAR'],
+      ['Gelen Renk', '58 KOYU BEJ FULAR'],
+      ['Müşteri Parti No', 'ISM1439770'],
+      ['Kumaş Nasıl Geldi', 'Tek parça'],
     ]);
+    expect(v.sources).toEqual(['GB0911260073']);
+    expect(v.empty).toBe(false);
+  });
+  it('kaynak belge: GB no · evrak no · tarih; künye satırları kaynak belgenin altında', () => {
+    const v = incomingView({
+      ...base, kg: 1200.5,
+      notes: [
+        { id: '1', noteNo: 'GB0911260035', senderDocNo: '12345', senderDocDate: '2026-11-09T00:00:00.000Z', sender: 'Gönderen AŞ', declaredTopCount: 3, customerOrderNo: 'S-7', processText: 'Boya' },
+        { id: '2', noteNo: 'GB0911260036', senderDocNo: null, senderDocDate: null, sender: null, declaredTopCount: 2, customerOrderNo: null, processText: null },
+      ],
+    });
+    expect(v.rows).toEqual([['Gelen Kg', '1200,5 kg']]);
+    expect(v.sources).toEqual(['GB0911260035 · Evrak 12345 · 09.11.2026', 'GB0911260036']);
+    expect(v.moreRows).toEqual([['Gönderen', 'Gönderen AŞ'], ['Müşteri Sipariş No', 'S-7'], ['İstenen İşlem', 'Boya'], ['Belgedeki Top', '5 top']]);
+    expect(v.meters).toBeNull();
+  });
+  it('bir belgede top adedi yoksa toplam gösterilmez', () => {
+    const v = incomingView({ ...base, notes: [{ id: '1', noteNo: 'A', declaredTopCount: 3 }, { id: '2', noteNo: 'B' }] });
+    expect(v.moreRows.some(([k]) => k === 'Belgedeki Top')).toBe(false);
   });
 });
 
-describe('incomingRows belge başlığı', () => {
-  it('evrak no, tarih, gönderen, sipariş no, işlem, top adedi; boşlar çizilmez', () => {
-    const rows = incomingRows({
-      meters: null, kg: null, widthCm: null, customerBatchNo: null, itemText: null, colorText: null,
-      notes: [
-        { id: '1', noteNo: 'GB0911260035', senderDocNo: '12345', senderDocDate: '2026-11-09T00:00:00.000Z', sender: 'Gönderen AŞ', declaredTopCount: 3, customerOrderNo: 'S-7', processText: 'Boya' },
-        { id: '2', noteNo: 'GB0911260036', senderDocNo: '12346', senderDocDate: '2026-11-09T00:00:00.000Z', sender: null, declaredTopCount: 2, customerOrderNo: null, processText: null },
-      ],
-    });
-    expect(rows).toEqual([
-      ['Belge No', 'GB0911260035, GB0911260036'],
-      ['Müşteri Evrak No', '12345, 12346'],
-      ['Belge Tarihi', '09.11.2026'],
-      ['Gönderen', 'Gönderen AŞ'],
-      ['Müşteri Sipariş No', 'S-7'],
-      ['İstenen İşlem', 'Boya'],
-      ['Belgedeki Top', '5 top'],
-    ]);
+describe('geliş biçimi (tek parça / top top)', () => {
+  const inc = (arrivalForm: 'SINGLE_PIECE' | 'ROLLS' | undefined, rootCount?: number) => ({ meters: 241, kg: null, widthCm: null, customerBatchNo: null, itemText: null, colorText: null, notes: [], arrivalForm, rootCount, rootRollIds: ['root'] });
+  it('arrivalText: Tek parça · N parti · N top; eski sunucu → null (satır yok)', () => {
+    expect(arrivalText(inc('SINGLE_PIECE', 1))).toBe('Tek parça');
+    expect(arrivalText(inc('SINGLE_PIECE', 2))).toBe('Tek parça · 2 parti');
+    expect(arrivalText(inc('ROLLS', 3))).toBe('3 top');
+    expect(arrivalText(inc(undefined, 1))).toBeNull();
+    expect(arrivalText(null)).toBeNull();
   });
-  it('bir belgede top adedi yoksa toplam gösterilmez', () => {
-    const rows = incomingRows({ meters: null, kg: null, widthCm: null, customerBatchNo: null, itemText: null, colorText: null, notes: [{ id: '1', noteNo: 'A', declaredTopCount: 3 }, { id: '2', noteNo: 'B' }] });
-    expect(rows.some(([k]) => k === 'Belgedeki Top')).toBe(false);
+  it('⭐ tek parçada Bağlı Toplar açıklaması metreyle; top topta yok', () => {
+    expect(singlePieceNote(inc('SINGLE_PIECE', 1))).toBe('Tek parça müşteri kumaşı · 241 m — üretimde top olarak çıkacak');
+    expect(singlePieceNote(inc('ROLLS', 2))).toBeNull();
+    expect(singlePieceNote(null)).toBeNull();
+  });
+  it('⭐ tek parçada kök top listeden düşer; top topta liste aynen kalır', () => {
+    const rolls = [{ id: 'root' }, { id: 'child' }];
+    expect(visibleAttachedRolls(rolls, inc('SINGLE_PIECE', 1))).toEqual([{ id: 'child' }]);
+    expect(visibleAttachedRolls(rolls, inc('ROLLS', 1))).toEqual(rolls);
+    expect(visibleAttachedRolls(rolls, null)).toEqual(rolls);
   });
 });
 
@@ -93,6 +113,10 @@ describe('summaryItems', () => {
     expect(items).toEqual([
       ['Müşteri', 'Kader'], ['Bizim Parti', 'P01'], ['Tür', 'Fason'], ['Top', '3 top · 450 m'], ['Oluşturma', 'D(2026-11-09) · Ayşe'],
     ]);
+  });
+  it('⭐ tek parça müşteri kumaşında "N top" yazılmaz', () => {
+    const items = summaryItems({ wo: wo({ inputRolls: { count: 1, totalMeters: 241 } }), typeLabel: '', rollCount: 0, rollMeters: 0, fmtDate, singlePiece: true });
+    expect(items.some(([k]) => k === 'Top')).toBe(false);
   });
   it('inputRolls yoksa bağlı toplardan sayar; müşteri yoksa atlar', () => {
     const items = summaryItems({ wo: wo(), typeLabel: '', statusLabel: '', rollCount: 2, rollMeters: 99.6, fmtDate });
@@ -240,18 +264,15 @@ describe('targetView adım eşlemesi ve kalemler', () => {
 });
 
 describe('actionPlacement', () => {
-  const on = { canFix: true, canCancel: true, isFason: false, hasOrderLinks: false, hasIncomingCard: true };
-  it('yetkili: hepsi yerinde; belgeler Gelen kartında', () => {
-    expect(actionPlacement(on)).toEqual({ reprint: true, detach: true, addBatch: true, orderLink: true, documents: 'incoming', cancel: true });
-  });
-  it('Gelen kartı yoksa belgeler özet şeridinde', () => {
-    expect(actionPlacement({ ...on, hasIncomingCard: false }).documents).toBe('summary');
+  const on = { canFix: true, canCancel: true, isFason: false, hasOrderLinks: false };
+  it('yetkili: hepsi yerinde (Belgeler başlık çubuğunda, burada karar yok)', () => {
+    expect(actionPlacement(on)).toEqual({ reprint: true, detach: true, addBatch: true, orderLink: true, cancel: true });
   });
   it('fason İE ve bağlı sipariş yoksa Sipariş Bağla gizli; bağlıysa görünür', () => {
     expect(actionPlacement({ ...on, isFason: true }).orderLink).toBe(false);
     expect(actionPlacement({ ...on, isFason: true, hasOrderLinks: true }).orderLink).toBe(true);
   });
-  it('düzeltme yetkisi yoksa düzeltme eylemleri yok, belgeler kalır', () => {
-    expect(actionPlacement({ ...on, canFix: false, canCancel: false })).toEqual({ reprint: false, detach: false, addBatch: false, orderLink: false, documents: 'incoming', cancel: false });
+  it('düzeltme yetkisi yoksa düzeltme eylemleri yok', () => {
+    expect(actionPlacement({ ...on, canFix: false, canCancel: false })).toEqual({ reprint: false, detach: false, addBatch: false, orderLink: false, cancel: false });
   });
 });

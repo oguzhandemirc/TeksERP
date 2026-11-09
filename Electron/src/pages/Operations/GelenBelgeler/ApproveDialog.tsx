@@ -11,11 +11,11 @@ import { approveNote, getIncomingDocumentSettings, getSuggestions, INCOMING_DOCU
 import { approveErrorText, approvePrecheck, needsVarianceReason, summarizeApprove, summarizeAutoWorkOrders, unusableDefaultSource, type ApproveOutcome, type AutoWorkOrderSummary } from "./approveFlow";
 import { CUSTOMER_DEFAULTS_PATH } from "./paths";
 import { perDocumentPrecheck, perDocumentSummary } from "./partiMetre";
-import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "./DuplicateDocNo";
+import { DuplicateGateConfirm, duplicateGateConflict, withDuplicateConfirm } from "./DuplicateDocNo";
 import type { DeliveryNoteHeader, DeliveryNoteLine, PerDocumentGate, ProcessChoice } from "./types";
 import type { PhotoRetentionMode } from "./photoRetentionTypes";
 import { retentionDocNoWarning } from "./photoRetention";
-import type { DuplicateDocNoNotice } from "./mukerrerTypes";
+import type { DuplicateConfirms, DuplicateGateConflict } from "./mukerrerTypes";
 
 interface Props {
   noteId: string;
@@ -129,12 +129,12 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
   // Hata metni + kullanılamaz varsayılanın kaynağı (E4; müşteri ise yönetim ekranı bağlantısı çıkar).
   const [error, setError] = useState<{ text: string; source: "CUSTOMER" | "FACTORY" | null } | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  // K27 WARN: işi süren aynı belge no'lu eş → 409 künyesi; "Yine de onayla" bayrakla yeniden gönderir.
-  const [dup, setDup] = useState<DuplicateDocNoNotice | null>(null);
+  // Mükerrer kapısı 409'u (K27 belge no · müşteri parti no): künye kutusu; "Yine de" önceki onaylarla birlikte yeniden gönderir.
+  const [dup, setDup] = useState<DuplicateGateConflict | null>(null);
   const pre = useApprovePrecheck(noteId, lines, open, perDocument);
   const run = useMutation({
-    mutationFn: (confirmDuplicateDocNo: boolean) => confirmDuplicateDocNo
-      ? approveNote(noteId, askReason ? reason.trim() : null, processChoices, { confirmDuplicateDocNo })
+    mutationFn: (confirms: DuplicateConfirms) => Object.keys(confirms).length
+      ? approveNote(noteId, askReason ? reason.trim() : null, processChoices, confirms)
       : approveNote(noteId, askReason ? reason.trim() : null, processChoices),
     onSuccess: ({ result, warnings }) => {
       setOutcome({ o: summarizeApprove(result), warnings, auto: summarizeAutoWorkOrders(result.autoWorkOrders) });
@@ -143,7 +143,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
       onDone();
     },
     onError: (e) => {
-      const conflict = duplicateDocNoConflict(e);
+      const conflict = duplicateGateConflict(e);
       setDup(conflict);
       if (conflict) { setError(null); return; }
       setError({ text: approveErrorText(e, apiErrorText(e, "Onay tamamlanamadı.")), source: unusableDefaultSource(e) });
@@ -181,7 +181,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
             )}
             <ProcessChoicesNote count={processChoices.length} noun={choiceNoun} />
             <ApproveError text={error?.text ?? null} source={error?.source ?? null} />
-            {dup && <DuplicateDocNoConfirm conflict={dup} busy={run.isPending} onConfirm={() => run.mutate(true)} />}
+            {dup && <DuplicateGateConfirm conflict={dup} busy={run.isPending} onConfirm={() => run.mutate(withDuplicateConfirm(run.variables, dup))} onCancel={() => setDup(null)} />}
             {askReason && (
               <Textarea aria-label="Fark gerekçesi" placeholder="Fark gerekçesi (ör. belgedeki toplam yanlış yazılmış)" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
             )}
@@ -191,7 +191,7 @@ export function ApproveDialog({ noteId, lines, processChoices = [], choiceNoun =
           {outcome ? (
             <Button onClick={() => close(false)}>Kapat</Button>
           ) : (
-            <Button onClick={() => run.mutate(false)} disabled={run.isPending || pre.blocked || (askReason && reason.trim().length < 3)}>
+            <Button onClick={() => run.mutate({})} disabled={run.isPending || pre.blocked || (askReason && reason.trim().length < 3)}>
               {askReason ? "Gerekçeyle onayla" : "Onayla"}
             </Button>
           )}

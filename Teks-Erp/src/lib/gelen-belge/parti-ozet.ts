@@ -137,7 +137,13 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
     };
     const name = p.batchNo ?? `${blockNo}. parti`;
     if (p.declaredTopCount !== null && p.declaredTopCount !== p.lineCount) p.warnings.push(`Parti ${name}: belgede ${p.declaredTopCount} TOP yazıyor, ${p.lineCount} satır var.`);
-    if (p.declaredMeters !== null && Math.abs(p.declaredMeters - meters) > Math.max(0.001, p.declaredMeters * TOL)) p.warnings.push(`Parti ${name}: ara toplam ${p.declaredMeters} m, satırların toplamı ${meters} m.`);
+    // Basılı toplam birincil, satırlar teyit: fark "PARTİ TOPLAMI TUTMUYOR" olarak görünür (2026-11-10)
+    const off = (d: number | null, v: number | null) => d !== null && v !== null && Math.abs(d - v) > Math.max(0.001, d * TOL);
+    const diff = [
+      ...(off(p.declaredMeters, meters) ? [`tablo ${meters} m / belge ${p.declaredMeters} m`] : []),
+      ...(off(num(d?.kg), p.weightKg) ? [`tablo ${p.weightKg} kg / belge ${num(d?.kg)} kg`] : []),
+    ];
+    if (diff.length > 0) p.warnings.push(`PARTİ TOPLAMI TUTMUYOR: ${name} ${diff.join(", ")}.`);
     return p;
   });
   const warnings: string[] = [];
