@@ -164,7 +164,7 @@ async function run(url: string): Promise<void> {
   const n1 = await mkNote(false);
   const p2 = await call("GET", `/api/gelen-belge/irsaliyeler/${n1}/partiler`, tk);
   const parties = (p2.data?.parties ?? []) as Array<{ blockNo: number; batchNo: string; lineCount: number; meters: number; warnings: string[] }>;
-  check("§2 ⭐ 2 parti: parti no, satır sayısı, metre", p2.status === 200 && p2.data?.multi === true && parties.length === 2 && parties[0]!.batchNo === `${TAG}-P1A` && parties[0]!.lineCount === 3 && parties[0]!.meters === 330 && parties[1]!.lineCount === 2 && parties[1]!.meters === 410 && p2.data?.defaultMode === "SINGLE",
+  check("§2 ⭐ 2 parti: parti no, satır sayısı, metre", p2.status === 200 && p2.data?.multi === true && parties.length === 2 && parties[0]!.batchNo === `${TAG}-P1A` && parties[0]!.lineCount === 3 && parties[0]!.meters === 330 && parties[1]!.lineCount === 2 && parties[1]!.meters === 410 && p2.data?.defaultMode === "SINGLE" && p2.data?.defaultModeSource === "FACTORY",
     JSON.stringify(parties.map((p) => [p.batchNo, p.lineCount, p.meters])));
   check("§2 ⭐ canlı uyarı: parti 1 '4 TOP ↔ 3 satır'; parti 2 temiz; belge '2 sayfa, eksik 2'", /4 TOP yazıyor, 3 satır/.test(parties[0]!.warnings.join(" ")) && parties[1]!.warnings.length === 0 && /eksik sayfa: 2/.test(((p2.data?.warnings ?? []) as string[]).join(" ")),
     JSON.stringify({ p: parties.map((p) => p.warnings), d: p2.data?.warnings }));

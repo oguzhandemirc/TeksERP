@@ -29,7 +29,8 @@ import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { allPartiesEntered, assertPartiesShape, getNoteParties, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder, type PartyWorkOrderFailure } from "./gelen-belge-cok-parti.service";
-import { readIncomingDocFormApproval, readMultiPartyWorkOrder, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { readIncomingDocFormApproval, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { resolveMultiPartyMode } from "./gelen-belge-parti-kipi.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
 import { noteIncomingKg } from "./gelen-belge-gelen-kg.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
@@ -76,7 +77,7 @@ export interface FormWorkOrderInput {
   notes?: string | null;
   /** S1 çok partili belge (≥2): parti başına top; verilmezse tek top = kursunMeters (bugünkü). */
   parties?: PartyInput[];
-  /** Verilmezse fabrika ayarı `gelenBelge.multiPartyWorkOrder` (varsayılan SINGLE). Yalnız `parties` ile anlamlı. */
+  /** Verilmezse belge tipi kuralı, o da yoksa fabrika ayarı (`resolveMultiPartyMode`). Yalnız `parties` ile anlamlı. */
   mode?: MultiPartyWorkOrderMode;
   /** "Toplar ayrı geldi": SEPARATE + `rolls` → tek İE, her top ayrı top (parti yoluyla, kip SINGLE). Verilmezse tek parça (bugünkü). */
   rollMode?: FormRollMode;
@@ -245,7 +246,8 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (parties) assertPartiesShape(parties);
   // K30: kip onaydan ÖNCE çözülür; parti başına İE'de hedef metraj/kg belge toplamı olduğundan her İE'ye yazılamaz.
   // Ayrı toplar her zaman tek İE (SINGLE); gövdenin `mode`u yalnız partiler içindir.
-  const mode = rollParties ? "SINGLE" : parties ? (input.mode ?? (await readMultiPartyWorkOrder())) : undefined;
+  // Öncelik: gövde `mode` > notun okunduğu şablon sürümünün kuralı > fabrika ayarı (`resolveMultiPartyMode`).
+  const mode = rollParties ? "SINGLE" : parties ? (input.mode ?? (await resolveMultiPartyMode(noteId)).mode) : undefined;
   if (mode === "PER_PARTY" && (input.targetQuantity != null || input.targetWeight != null)) {
     throw AppError.badRequest(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} kipinde hedef metraj ve hedef kg verilemez (belge toplamıdır).`, { code: "GELEN_BELGE_FORM_TARGET_PER_PARTY" });
   }

@@ -7,7 +7,7 @@
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { OcrResultSchema } from "../lib/gelen-belge/okuma-istemcisi";
-import { extractDocument, meterKgClashErrors, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type RegionExtraction, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
+import { extractDocument, meterKgClashErrors, mergeTemplateForUpdate, suggestTemplate, templatesOverThreshold, validateTemplate, type DocumentTemplate, type OcrRect, type OcrResult, type RegionExtraction, type MultiPartyRule, type TemplateSuggestInput, type UpdateKeepPart } from "../lib/gelen-belge/motor";
 import { rectToPhotoFrame } from "../lib/gelen-belge/taslak-foto-cerceve";
 import { draftFromExtraction } from "../lib/gelen-belge/taslak";
 import { getUserTemplate, loadUserTemplates, userTemplateCode } from "./gelen-belge-ozel-sablon.service";
@@ -50,7 +50,12 @@ export async function getScanWords(scanId: string) {
   return { imageWidth: ocr.imageWidth, imageHeight: ocr.imageHeight, rotation: ocr.rotation ?? 0, words };
 }
 
-export type SuggestFromScanInput = Omit<TemplateSuggestInput, "ocr" | "code"> & { scanId: string; base?: { code: string; keep: UpdateKeepPart[] } };
+/** `rules.multiParty: null` yalnız güncellemede anlamlıdır: eski şablonun kuralını kaldırır (fabrika ayarına döner). */
+export type SuggestFromScanInput = Omit<TemplateSuggestInput, "ocr" | "code" | "rules"> & {
+  scanId: string;
+  base?: { code: string; keep: UpdateKeepPart[]; drop?: string[] };
+  rules?: { multiParty?: MultiPartyRule | null };
+};
 
 /**
  * K30-B tel sözleşmesi madde 3: bu taramada kimlik eşiğini (motorun `templateMinScore`u) geçen MEVCUT aktif kullanıcı
@@ -79,15 +84,21 @@ export async function suggestFromScan(input: SuggestFromScanInput) {
   // "Şablonu güncelle": önizleme KAYDEDİLECEK birleşik şablonla koşar (eski şablon + yeni atamalar); istemci bunu aynen kaydeder.
   const old = input.base ? await getUserTemplate(input.base.code) : null;
   const code = old ? old.code : userTemplateCode(input.name);
-  const { base, ...rest } = input;
-  const s = suggestTemplate({ ...rest, code, ocr });
+  const { base, rules: rawRules, ...rest } = input;
+  const rules = rawRules?.multiParty ? { multiParty: rawRules.multiParty } : undefined;
+  const s = suggestTemplate({ ...rest, ...(rules ? { rules } : {}), code, ocr });
   const benzerSablonlar = await similarUserTemplates(ocr, input.base?.code ?? null);
   // Güncellemede doğrulanan KAYDEDİLECEK birleşik şablondur (yalnız yeni parçası boş/eksik olabilir: atanmayan eski alan korunur).
   if (s.errors.length && !(old && base)) return { template: s.template, explain: s.explain, errors: s.errors, preview: null, benzerSablonlar };
   let template = s.template;
   if (old && base) {
-    template = mergeTemplateForUpdate({ ...(old.template as unknown as DocumentTemplate), id: old.code, version: old.version }, s.template, base.keep);
+    template = mergeTemplateForUpdate({ ...(old.template as unknown as DocumentTemplate), id: old.code, version: old.version }, s.template, base.keep, base.drop ?? []);
     template = { ...template, id: code, name: input.name, version: old.version };
+    if (rawRules?.multiParty === null && template.rules) {
+      const { multiParty: _gone, ...restRules } = template.rules;
+      if (Object.keys(restRules).length) template.rules = restRules;
+      else delete template.rules;
+    }
     // Birleşik şablon da metre ↔ kg hücre kapısından geçer (eski kg alanı yeni metre alanıyla aynı hücreyi okumasın).
     const errors = [...validateTemplate(template).errors, ...meterKgClashErrors(template)];
     if (errors.length) return { template, explain: s.explain, errors, preview: null, benzerSablonlar };

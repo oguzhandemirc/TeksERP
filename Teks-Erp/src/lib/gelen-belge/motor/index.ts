@@ -21,6 +21,8 @@ export type { DocumentExtraction, ForeignDocument, RegionExtraction } from "./do
 export { normalizeForMatch, turkishUpper, turkishLower, similarity, levenshtein, stripDiacritics } from "./text-normalize";
 export { canonicalizeValue, parseNumber, parseDate, canonicalizeCode, matchEnum } from "./normalizers";
 export type { CanonicalizeSpec } from "./normalizers";
-export { suggestTemplate, findLabelFor, mergeTemplateForUpdate, meterKgClashErrors, ASSIGNABLE_FIELDS, ASSIGNABLE_FIELD_KEYS, TABLE_COLUMN_KEYS, UPDATE_KEEP_PARTS, MAX_TEMPLATE_IDENTIFIERS } from "./suggest";
-export type { AssignableField, TableColumnKey, TemplateSuggestInput, TemplateSuggestion, UpdateKeepPart } from "./suggest";
+export { suggestTemplate, findLabelFor, meterKgClashErrors, ASSIGNABLE_FIELDS, ASSIGNABLE_FIELD_KEYS, TABLE_COLUMN_KEYS, MAX_TEMPLATE_IDENTIFIERS } from "./suggest";
+export type { AssignableField, TableColumnKey, TemplateSuggestInput, TemplateSuggestion } from "./suggest";
+export { mergeTemplateForUpdate, editTemplateDefinition, UPDATE_KEEP_PARTS } from "./template-edit";
+export type { UpdateKeepPart, TemplateDefinitionPatch, TemplateDefinitionChanges } from "./template-edit";
 export { meterKgClashes, clashingKgFields, KG_FAMILY_FIELDS, METER_FAMILY_FIELDS } from "./olcu-cakisma";

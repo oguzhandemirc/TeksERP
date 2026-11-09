@@ -210,7 +210,17 @@ export interface DocumentTemplate {
   batchNoCandidates?: BatchNoCandidateSpec[];
   /** Kurşun metresi kaynakları rol başına (alan anahtarı ya da `$tableTotal`); Σ satır her zaman son yedektir, yazılmaz. */
   meterSources?: MeterSourcesSpec;
+  /** Belge tipi kuralları (2026-11-09); yokken fabrika ayarı (bugünkü davranış). Bilinmeyen anahtar/değer doğrulamada reddedilir. */
+  rules?: TemplateRules;
 }
+
+/** Çok partili belgede iş emri kuralı — fabrika ayarı `gelenBelge.multiPartyWorkOrder` ile aynı değer kümesi. */
+export type MultiPartyRule = "SINGLE" | "PER_PARTY";
+export const MULTI_PARTY_RULES: readonly MultiPartyRule[] = ["SINGLE", "PER_PARTY"];
+
+export interface TemplateRules { multiParty?: MultiPartyRule }
+/** `rules` nesnesinin tanınan anahtarları (fail-closed doğrulama tek kaynağı). */
+export const TEMPLATE_RULE_KEYS = ["multiParty"] as const;
 
 /** Tekrarlayan bölüm: başlangıç etiketi her geçtiğinde yeni bölüm (parti); alan anahtarları şablonda TANIMLI olmalı. */
 export interface SectionSpec {

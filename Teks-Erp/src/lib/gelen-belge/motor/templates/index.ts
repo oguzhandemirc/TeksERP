@@ -3,7 +3,7 @@
 /**
  * Şablon yükleyici ve şablon doğrulayıcı. JSON dosyaları statik import ile yüklenir.
  */
-import { BATCH_NO_CANDIDATE_KINDS, TABLE_TOTAL_SOURCE, type DocumentTemplate } from "../types";
+import { BATCH_NO_CANDIDATE_KINDS, MULTI_PARTY_RULES, TABLE_TOTAL_SOURCE, TEMPLATE_RULE_KEYS, type DocumentTemplate } from "../types";
 import genel from "./genel.json";
 
 const FIELD_TYPES = new Set(["text", "alnum", "integer", "decimal", "date", "enum", "code"]);
@@ -136,6 +136,15 @@ function validateBatchAndMeters(t: Record<string, unknown>, keys: Set<unknown>, 
   }
 }
 
+/** `rules` FAIL-CLOSED: nesne değilse, bilinmeyen anahtar ya da bilinmeyen değer → hata (eski sunucu yeni kuralı sessizce yok saymasın). */
+function validateRules(t: Record<string, unknown>, errors: string[]): void {
+  const r = t.rules;
+  if (r === undefined) return;
+  if (!isObj(r)) { errors.push("rules nesne olmalı"); return; }
+  for (const k of Object.keys(r)) if (!(TEMPLATE_RULE_KEYS as readonly string[]).includes(k)) errors.push(`rules.${k} bilinmiyor`);
+  if (r.multiParty !== undefined && !(MULTI_PARTY_RULES as readonly unknown[]).includes(r.multiParty)) errors.push("rules.multiParty SINGLE ya da PER_PARTY olmalı");
+}
+
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -184,6 +193,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
   validateTables(t, errors);
   validateGrid(t, errors);
   validateBlockAndHeaderLine(t, errors);
+  validateRules(t, errors);
   if (!Array.isArray(t.fields) || t.fields.length === 0) {
     errors.push('fields boş olmayan dizi olmalı');
     return { ok: errors.length === 0, errors };

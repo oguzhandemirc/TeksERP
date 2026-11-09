@@ -17,6 +17,7 @@ import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
 import { readOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { noteFormFields } from "./gelen-belge-form-alanlari.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
+import { noteTanima } from "./gelen-belge-tanima-ozeti.service";
 import { noteTemplateFields } from "./gelen-belge-alan-raporu.service";
 import { noteIncomingKg } from "./gelen-belge-gelen-kg.service";
 import { KG_FROM_METER_CELL_TEXT } from "../lib/gelen-belge/kg-koruma";
@@ -134,6 +135,8 @@ export async function getReadSummary(noteId: string) {
     ...(await noteFormFields(note.id, trust)),
     // K30-B tel sözleşmesi madde 1: TANITILDI | TANITILMAMIS; sistem şablonunda alan yok. Eski tablet yok sayar.
     ...(tanitim ? { tanitim } : {}),
+    // Tanıma özeti (2026-11-09): ① tip + sürüm · ② alan → İE · ③ kurallar; sunucuda kurulur, istemci türetmez. Eski tablet yok sayar.
+    ...(await noteTanima(note.id, trust).then((t) => (t ? { tanima: t } : {}))),
     // Tablet İş Emirleri okutma önizlemesi: şablon alanları bulundu/bulunamadı; GENEL/BLIND'da yok. Eski tablet yok sayar.
     ...(await noteTemplateFields(note.id, trust).then((r) => (r ? { templateFields: r } : {}))),
   };

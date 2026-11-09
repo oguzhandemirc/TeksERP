@@ -13,7 +13,8 @@ import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
 import { declaredPageCount, noteParties, type NoteParty } from "../lib/gelen-belge/parti-ozet";
 import { isSummaryLine, partyLineId } from "./gelen-belge-kontrol.service";
-import { readMultiPartyWorkOrder, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { resolveMultiPartyMode, type MultiPartyModeSource } from "./gelen-belge-parti-kipi.service";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 import { routeInput, type FormWorkOrderRoute } from "./gelen-belge-oto-is-emri.service";
 import { whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
@@ -30,8 +31,10 @@ export interface NotePartiesView {
   warnings: string[];
   /** İki ya da daha çok parti → form "Bu belgede N parti var" listesini gösterir. */
   multi: boolean;
-  /** Fabrika ayarı (`gelenBelge.multiPartyWorkOrder`) — formun varsayılan seçimi. */
+  /** Formun varsayılan seçimi: notun okunduğu şablon sürümünün kuralı, yoksa fabrika ayarı (`resolveMultiPartyMode`). */
   defaultMode: MultiPartyWorkOrderMode;
+  /** `defaultMode` nereden: TEMPLATE (belge tipi kuralı) · FACTORY (fabrika ayarı). Eski tablet yok sayar. */
+  defaultModeSource: MultiPartyModeSource;
 }
 
 export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
@@ -51,7 +54,8 @@ export async function getNoteParties(noteId: string): Promise<NotePartiesView> {
   const parties = read.map((p) => ({ ...p, recordedMeters: recorded.get(p.blockNo) ?? null }));
   const withWos = [];
   for (const p of parties) withWos.push({ ...p, workOrders: await partyLinkedWorkOrders(note.id, p.blockNo) });
-  return { parties: withWos, warnings, multi: parties.length > 1, defaultMode: await readMultiPartyWorkOrder() };
+  const { mode, source } = await resolveMultiPartyMode(note.id);
+  return { parties: withWos, warnings, multi: parties.length > 1, defaultMode: mode, defaultModeSource: source };
 }
 
 /** D7: partinin bağlı İE'leri — özet satırı (`partyLineId`) → top → İE zinciri (istemci türetmez); onaysız belgede boş. */

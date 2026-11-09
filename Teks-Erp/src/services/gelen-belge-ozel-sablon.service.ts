@@ -4,13 +4,14 @@
 // Şablon JSON'u dosya şablonlarıyla AYNI şemadır (`validateTemplate`); `SenderTemplate.template`te durur, motor dosya
 // şablonlarıyla birlikte yükler (`engineTemplates`). Güncelleme SÜRÜMLÜDÜR: atomik `updateMany WHERE {code, version}`
 // → version+1 + `SenderTemplateVersion` satırı (geçmiş değişmez; belge okunduğu sürümü `templateVersion`da tutar).
-// Pasife alma mevcut PATCH /sablonlar/:code (isActive) ucundandır. Audit tx DIŞINDA.
+// Fotoğrafsız düzenleme PATCH `/tanim` (`editUserTemplate`); pasife alma/geri al PATCH /sablonlar/:code (isActive), toplu sıfırla
+// `gelen-belge-sablon-sifirla.service`. Audit tx DIŞINDA.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { p2002OnField } from "../utils/p2002";
-import { loadTemplates, validateTemplate, type DocumentTemplate } from "../lib/gelen-belge/motor";
+import { editTemplateDefinition, loadTemplates, meterKgClashErrors, validateTemplate, type DocumentTemplate, type TemplateDefinitionChanges, type TemplateDefinitionPatch } from "../lib/gelen-belge/motor";
 import { setUserTemplates } from "../lib/gelen-belge/sablon-bul";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
@@ -110,31 +111,45 @@ export interface CreateUserTemplateInput {
   clientToken?: string | null;
 }
 
-/** Oluştur: kod addan (`u-<slug>`), v1 + sürüm satırı tek tx'te. Aynı ad → 409; aynı token → aynı şablon (replay). */
+/** Sıfırlanmış (pasif) tipin kodu alınmışsa denenecek sonekler: `-2` … `-10` (kod asla yeniden kullanılmaz; eski okumalar ona bağlı). */
+const CODE_SUFFIX_MAX = 10;
+const codeCandidates = (code: string): string[] => [code, ...Array.from({ length: CODE_SUFFIX_MAX - 1 }, (_, i) => `${code}-${i + 2}`)];
+/** Replay kimliği: sonekli kod aynı adın ailesidir (`u-x-3` ↔ `u-x`). */
+const codeFamily = (hit: string, code: string): string => (codeCandidates(code).includes(hit) ? code : hit);
+
+/**
+ * Oluştur: kod addan (`u-<slug>`), v1 + sürüm satırı tek tx'te. Aynı adla AKTİF tip → 409; kod yalnız pasif (sıfırlanmış) satırca
+ * alınmışsa sonekli kod denenir. Aynı token → aynı şablon (replay).
+ */
 export async function createUserTemplate(input: CreateUserTemplateInput, userId: string): Promise<UserTemplateView> {
   const name = input.name.trim();
   const code = userTemplateCode(name);
-  const tpl = sealTemplate(input.template, code, name, 1);
+  sealTemplate(input.template, code, name, 1);
   const replay = tokenReplay<Row, UserTemplateView>({
     find: (db, clientToken) => db.senderTemplate.findUnique({ where: { clientToken }, select: VIEW_SELECT }),
     alive: { neverDies: "Kullanıcı şablonu silinmez; pasife alınsa da kimliği ve sürüm geçmişi aynı kalır." },
-    identity: (hit) => [{ ad: "code", mevcut: hit.code, gelen: code }],
+    identity: (hit) => [{ ad: "code", mevcut: codeFamily(hit.code, code), gelen: code }],
     collision: "Bu deneme başka bir şablon adıyla kaydedilmiş; yeni şablon için ekranı yenileyin.",
     respond: viewOf,
   });
   const row = await replay.run(input.clientToken, async () => {
-    try {
-      const created = await prisma.$transaction(async (tx) => {
-        const r = await tx.senderTemplate.create({ data: { code, version: 1, template: toJson(tpl), clientToken: input.clientToken ?? null }, select: VIEW_SELECT });
-        await tx.senderTemplateVersion.create({ data: { templateId: r.id, version: 1, template: toJson(tpl), createdById: userId } });
-        return r;
-      });
-      await AuditService.log({ userId, action: "CREATE", tableName: TABLE, recordId: created.id, newData: { code, version: 1, source: "USER", name } });
-      return viewOf(created);
-    } catch (err) {
-      if (p2002OnField(err, "code")) throw AppError.conflict(`"${name}" adıyla bir şablon zaten var; başka ad verin ya da mevcut şablonu güncelleyin.`, { code: "USER_TEMPLATE_CODE_TAKEN", templateCode: code });
-      throw err;
+    for (const candidate of codeCandidates(code)) {
+      const tpl = sealTemplate(input.template, candidate, name, 1);
+      try {
+        const created = await prisma.$transaction(async (tx) => {
+          const r = await tx.senderTemplate.create({ data: { code: candidate, version: 1, template: toJson(tpl), clientToken: input.clientToken ?? null }, select: VIEW_SELECT });
+          await tx.senderTemplateVersion.create({ data: { templateId: r.id, version: 1, template: toJson(tpl), createdById: userId } });
+          return r;
+        });
+        await AuditService.log({ userId, action: "CREATE", tableName: TABLE, recordId: created.id, newData: { code: candidate, version: 1, source: "USER", name } });
+        return viewOf(created);
+      } catch (err) {
+        if (!p2002OnField(err, "code")) throw err;
+        const taken = await prisma.senderTemplate.findUnique({ where: { code: candidate }, select: { isActive: true } });
+        if (taken?.isActive !== false) throw AppError.conflict(`"${name}" adıyla bir şablon zaten var; başka ad verin ya da mevcut şablonu güncelleyin.`, { code: "USER_TEMPLATE_CODE_TAKEN", templateCode: candidate });
+      }
     }
+    throw AppError.conflict(`"${name}" adıyla çok sayıda sıfırlanmış tip var; başka bir ad verin.`, { code: "USER_TEMPLATE_CODE_TAKEN", templateCode: code });
   });
   await loadUserTemplates();
   return row;
@@ -163,3 +178,38 @@ export async function updateUserTemplate(code: string, input: UpdateUserTemplate
   await loadUserTemplates();
   return viewOf(row);
 }
+
+export interface EditUserTemplateInput extends TemplateDefinitionPatch {
+  expectedVersion: number;
+}
+
+/**
+ * Fotoğrafsız düzenle (PATCH `/tanim`): birleşim SUNUCUDA (`editTemplateDefinition`), mühür + doğrulama, sonra atomik
+ * `updateMany WHERE {code, version: beklenen, isActive: true}` → version+1 + sürüm satırı. Kod ASLA değişmez (ad değişse de).
+ * Değişiklik yoksa yazılmaz (sürüm artmaz). Metre/kg hücre çakışması uyarı olarak döner (düzenleme yalnız kaldırır, çakışma doğurmaz).
+ */
+export async function editUserTemplate(code: string, input: EditUserTemplateInput, userId: string): Promise<UserTemplateView & { changes: TemplateDefinitionChanges; warnings: string[] }> {
+  const before = code.startsWith(USER_TEMPLATE_PREFIX) ? await prisma.senderTemplate.findUnique({ where: { code }, select: VIEW_SELECT }) : null;
+  if (!before) throw AppError.notFound("Kullanıcı şablonu bulunamadı.", { code: "USER_TEMPLATE_NOT_FOUND" });
+  if (!before.isActive) throw AppError.conflict("Bu belge tipi sıfırlanmış (kullanılmıyor); düzenlemek için önce geri alın.", { code: "USER_TEMPLATE_INACTIVE" });
+  if (before.version !== input.expectedVersion) throw versionChanged(before.version);
+  const old = { ...(before.template as unknown as DocumentTemplate), id: code, version: before.version, name: nameOf(before.template, code) };
+  const { expectedVersion, ...patch } = input;
+  const edit = editTemplateDefinition(old, patch);
+  if (edit.errors.length) throw AppError.badRequest(edit.errors.join(" "), { code: "USER_TEMPLATE_EDIT_INVALID", errors: edit.errors });
+  if (Object.keys(edit.changes).length === 0) return { ...viewOf(before), changes: {}, warnings: meterKgClashErrors(old) };
+  const next = expectedVersion + 1;
+  const tpl = sealTemplate(edit.template, code, edit.template.name, next);
+  const row = await prisma.$transaction(async (tx) => {
+    const c = await tx.senderTemplate.updateMany({ where: { code, version: expectedVersion, isActive: true }, data: { version: next, template: toJson(tpl) } });
+    if (c.count === 0) throw versionChanged(null);
+    await tx.senderTemplateVersion.create({ data: { templateId: before.id, version: next, template: toJson(tpl), createdById: userId } });
+    return tx.senderTemplate.findUniqueOrThrow({ where: { code }, select: VIEW_SELECT });
+  });
+  await AuditService.log({ userId, action: "UPDATE", tableName: TABLE, recordId: row.id, oldData: { code, version: expectedVersion }, newData: { code, fromVersion: expectedVersion, toVersion: next, source: "EDIT", changes: toJson(edit.changes) } });
+  await loadUserTemplates();
+  return { ...viewOf(row), changes: edit.changes, warnings: meterKgClashErrors(tpl) };
+}
+
+const versionChanged = (currentVersion: number | null) =>
+  AppError.conflict("Belge tipi bu arada başka biri tarafından değiştirildi; yenileyip tekrar deneyin.", { code: "USER_TEMPLATE_VERSION_CHANGED", ...(currentVersion !== null ? { currentVersion } : {}) });

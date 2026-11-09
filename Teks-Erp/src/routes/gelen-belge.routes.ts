@@ -35,6 +35,7 @@ import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
 import { searchProcessChoiceValues } from "../services/helpers/process-choice-catalog.helper";
 import { BATCH_NO_KEY_RE, listSenderTemplates, MANUAL_BATCH_NO_KEY, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
+import { loadUserTemplates } from "../services/gelen-belge-ozel-sablon.service";
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
 import { getReadSummary } from "../services/gelen-belge-okuma-ozeti.service";
@@ -247,7 +248,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + satır itemFallback (id, name, source) | null + totalsCheck (+ document) + notices[] (code, title, detail) + perDocument { gate: code KURSUN_METERS_REQUIRED|KURSUN_METERS_REVIEW_PENDING|null, warnings, totalsBlocking } (yalnız gelenBelge.entryMode=PER_DOCUMENT iken)" }
+ *       200: { description: "Taslak + satır problems[] (FAILED|ITEM_UNRESOLVED|NEEDS_REVIEW|SUSPECT_VALUE) + satır itemFallback (id, name, source) | null + totalsCheck (+ document) + notices[] (code, title, detail) + perDocument { gate: code KURSUN_METERS_REQUIRED|KURSUN_METERS_REVIEW_PENDING|null, warnings, totalsBlocking } (yalnız gelenBelge.entryMode=PER_DOCUMENT iken) + tanima? { template { code, name, version, score } | null, durum, mapping[{ field, label, value, woTarget, woLabel, group }], rules[{ key, value, source, text, sourceText }] } (okunmuş sayfa varsa)" }
  *   patch:
  *     tags: [Gelen belge]
  *     summary: Başlık düzelt — yalnız DRAFT (aksi 409 DELIVERY_NOTE_NOT_DRAFT); gövde yalnız tanımlı anahtarları yazar (customerOrderNo ≤ 64 dahil). ourBatchNo (+ ourBatchNoKey aday anahtarı; yoksa MANUAL; anahtar tek başına 400 DELIVERY_NOTE_BATCH_NO_KEY_WITHOUT_VALUE) · kursunMeters (> 0 → kaynak MANUAL, gözden geçirildi; null temizler) · kursunMetersReviewed true (değeri onaylar → MANUAL; metre yoksa 400 KURSUN_METERS_REQUIRED)
@@ -380,7 +381,7 @@ router.get("/rota-onerisi", requirePermission("gelen-belge:write"), wrap(async (
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper), tanitim? ({ durum: TANITILDI, sablonKodu, sablonAdi } | { durum: TANITILMAMIS }; sistem şablonunda yok), incomingKg (gelen kg|null), incomingKgSource (FIELD|TOTAL|LINE_SUM|null); kg metre hücresinden okunuyorsa notices[] KG_FROM_METER_CELL ve formFields'te kg yok" }
+ *       200: { description: "noteId, noteNo, noteStatus, state, reason, pages (total/waiting/read/failed), lineCount, reviewCount, totals (declared, ok, mismatches[]), warnings[], notices[] (code, title, detail — okuma uyarıları, detayla aynı helper), tanitim? ({ durum: TANITILDI, sablonKodu, sablonAdi } | { durum: TANITILMAMIS }; sistem şablonunda yok), incomingKg (gelen kg|null), incomingKgSource (FIELD|TOTAL|LINE_SUM|null); kg metre hücresinden okunuyorsa notices[] KG_FROM_METER_CELL ve formFields'te kg yok; tanima? (detayla aynı blok: tip + sürüm, alan → İE eşlemesi, uygulanan kurallar)" }
  *       404: { description: DELIVERY_NOTE_NOT_FOUND }
  */
 // Tarayan `gelen-belge:read` taşımaz (D7): taslağın kendi okuma sonucunu yalnız bu özetten görür; ayrıntı panelde.
@@ -738,7 +739,7 @@ const FormWorkOrderBody = z.strictObject({
  *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }
  *               notes: { type: string, maxLength: 1000, nullable: true }
  *               parties: { type: array, minItems: 2, description: "Çok partili belge (S1): parti başına top; blockNo /partiler'den", items: { type: object, properties: { blockNo: { type: integer }, batchNo: { type: string, nullable: true }, meters: { type: number }, incomingKg: { type: number, exclusiveMinimum: 0, description: "Parti gelen kg; yoksa /partiler suggestedKg" }, targetValues: { type: array }, stepPlanning: { type: array } } } }
- *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
+ *               mode: { type: string, enum: [SINGLE, PER_PARTY], description: "Çok partide: tek iş emri (partiler ayrı top) ya da her parti ayrı iş emri; verilmezse belge tipinin kuralı (okunduğu sürümden), o da yoksa fabrika ayarı gelenBelge.multiPartyWorkOrder (varsayılan SINGLE)" }
  *               rollMode: { type: string, enum: [SINGLE, SEPARATE], description: "Toplar ayrı geldi: SEPARATE + rolls → tek iş emri, her top ayrı top; kurşun metresi topların toplamından türetilir (gövdedeki kursunMeters yerine). Verilmezse tek parça (bugünkü)" }
  *               rolls: { type: array, minItems: 1, maxItems: 200, description: "Yalnız rollMode=SEPARATE ile; parties ile birlikte verilemez", items: { type: object, required: [meters], properties: { meters: { type: number, exclusiveMinimum: 0 }, weightKg: { type: number, exclusiveMinimum: 0, nullable: true }, senderRollNo: { type: string, maxLength: 64, nullable: true } } } }
  *               targetItemId: { type: string, format: uuid, description: "Hedef kumaş; belge onayında topların ürünü olur (top doğuramazsa 400 GELEN_BELGE_TARGET_ITEM_INVALID). Yoksa varsayılan ürün (bugünkü)" }
@@ -764,12 +765,12 @@ const FormWorkOrderBody = z.strictObject({
  * /api/gelen-belge/irsaliyeler/{id}/partiler:
  *   get:
  *     tags: [Gelen belge]
- *     summary: Çok partili belgenin parti özeti (parti no, sipariş no, işlem, gönderen İE no, yazan top, satır sayısı, metre, kg + canlı uyarılar) ve fabrika varsayılan kipi
+ *     summary: Çok partili belgenin parti özeti (parti no, sipariş no, işlem, gönderen İE no, yazan top, satır sayısı, metre, kg + canlı uyarılar) ve varsayılan kip (belge tipi kuralı > fabrika ayarı)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "{ parties[] (… suggestedMeters, suggestedKg, kgSource TOTAL|LINE_SUM|null), warnings[], multi, defaultMode SINGLE|PER_PARTY }" }
+ *       200: { description: "{ parties[] (… suggestedMeters, suggestedKg, kgSource TOTAL|LINE_SUM|null), warnings[], multi, defaultMode SINGLE|PER_PARTY, defaultModeSource TEMPLATE|FACTORY }" }
  *       404: { description: "DELIVERY_NOTE_NOT_FOUND" }
  */
 router.get("/irsaliyeler/:id/partiler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getNoteParties(Id.parse(req.params.id)) })));
@@ -811,9 +812,12 @@ const TemplatePatch = z.strictObject({
  *       409: { description: "SENDER_TEMPLATE_CHANGED (araya başka yazım girdi)" }
  */
 router.get("/sablonlar", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listSenderTemplates() })));
-router.patch("/sablonlar/:code", requirePermission("gelen-belge:template"), wrap(async (req) => ({
-  status: 200, data: await updateSenderTemplate(TemplateCode.parse(req.params.code), TemplatePatch.parse(req.body), req.user!.userId),
-})));
+router.patch("/sablonlar/:code", requirePermission("gelen-belge:template"), wrap(async (req) => {
+  const view = await updateSenderTemplate(TemplateCode.parse(req.params.code), TemplatePatch.parse(req.body), req.user!.userId);
+  // Kullanıcı şablonunun aktifliği (sıfırla → geri al) motor önbelleğine hemen yansısın.
+  if (view.kind === "USER") await loadUserTemplates();
+  return { status: 200, data: view };
+}));
 
 // ── E4 sahibe özel varsayılan ürün (`gelen-belge:template` — şablon yönetimiyle aynı kişi; SystemSetting değil, ayar şifresi yok)
 const CustomerDefaultBody = z.strictObject({ defaultItemId: Id });
@@ -854,11 +858,7 @@ const CustomerDefaultBody = z.strictObject({ defaultItemId: Id });
  *       409: { description: "GELEN_BELGE_CUSTOMER_DEFAULT_CHANGED" }
  */
 router.get("/varsayilan-urunler", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listCustomerDefaults() })));
-router.put("/varsayilan-urunler/:customerId", requirePermission("gelen-belge:template"), wrap(async (req) => ({
-  status: 200, data: await setCustomerDefault(Id.parse(req.params.customerId), CustomerDefaultBody.parse(req.body).defaultItemId, req.user!.userId),
-})));
-router.delete("/varsayilan-urunler/:customerId", requirePermission("gelen-belge:template"), wrap(async (req) => ({
-  status: 200, data: await removeCustomerDefault(Id.parse(req.params.customerId), req.user!.userId),
-})));
+router.put("/varsayilan-urunler/:customerId", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 200, data: await setCustomerDefault(Id.parse(req.params.customerId), CustomerDefaultBody.parse(req.body).defaultItemId, req.user!.userId) })));
+router.delete("/varsayilan-urunler/:customerId", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 200, data: await removeCustomerDefault(Id.parse(req.params.customerId), req.user!.userId) })));
 
 export default router;
