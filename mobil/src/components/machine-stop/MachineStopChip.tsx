@@ -3,7 +3,8 @@
 // =============================================================================
 // Makine oturumdan (`Device.machineId` → aktif oturum makinesi). Kapı: izin
 // `mobile:makine-durus` ∧ üretim ∧ `uretim.makineDurusTakibi`; biri yoksa sorgu atılmaz,
-// çip çizilmez. Uç 404/403 (eski backend / kapalı) → çip gizli, ekran çalışır.
+// çip çizilmez. Uç 404/403 (eski backend / kapalı) → çip gizli, ekran çalışır. İstasyonda duruş
+// bildirimi kapalıysa (`machineStopEnabled=false`) çip yalnız AÇIK duruş varken çizilir (kapatılsın diye).
 // Aç/kapa/sebep Dokuma panelinin AYNI hook'u: `stopKey` = clientToken, mantıksal
 // deneme başına; kuyruk yok (Dokuma ile aynı — çevrimdışı açılış reddedilir).
 // =============================================================================
@@ -17,6 +18,7 @@ import { useIsOnline } from '../../offline/hooks';
 import { StopPanelBody } from './StopPanel';
 import { formatElapsed } from './stopPayload';
 import { useStopPanel, type StopPanelState } from './useStopPanel';
+import { machineStopChipVisible, stationAllowsStopOpen } from './stationStopGate';
 
 export const MACHINE_STOP_PERMISSION = 'mobile:makine-durus';
 
@@ -33,13 +35,14 @@ export interface MachineStopControl {
 
 export function useMachineStopControl(): MachineStopControl {
   const machineId = useSessionStore((s) => s.active?.machine?.id ?? null);
+  const stationAllows = useSessionStore((s) => stationAllowsStopOpen(s.active?.station));
   const allowed = usePermissions().has(MACHINE_STOP_PERMISSION);
   const tracking = useMachineStopTrackingEnabled();
   const isOnline = useIsOnline();
   const enabled = allowed && tracking && machineId !== null;
   const state = useStopPanel({ machineId, isOnline, enabled, hideOnUnavailable: true });
   const warnOnEntry = useMachineStopOpenWarningEnabled();
-  const visible = enabled && !state.unavailable;
+  const visible = machineStopChipVisible({ enabled, unavailable: state.unavailable, stationAllows, stopOpen: state.openStop !== null });
   const stopOpen = visible && state.openStop !== null;
   return { visible, stopOpen, entryWarning: stopOpen && warnOnEntry, state, isOnline };
 }

@@ -24,6 +24,8 @@ import {
   type StopLossClass,
 } from "./service";
 import { StopLossClassField, StopTargetField } from "./StopLossClassField";
+import { StationKindsField } from "./StationKindsField";
+import type { StationKind } from "@/types/enums";
 import {
   ReworkBillableField,
   fromReworkBillableChoice,
@@ -67,6 +69,8 @@ export function ReasonPresetDialog({
   // Ücret sınıfı yalnız yeniden işlem sebebinde (sunucu başka kind'de 400 REASON_BILLABLE_KIND).
   const asksBillable = kind === "WORK_ORDER_REWORK";
   const [billableSel, setBillableSel] = useState<ReworkBillableChoice>("");
+  // İstasyon türü kapsamı yalnız duruş sebebinde (sunucu başka kind'de 400 STOP_STATION_KINDS_NOT_APPLICABLE).
+  const [stationKinds, setStationKinds] = useState<StationKind[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,12 +80,14 @@ export function ReasonPresetDialog({
       setLossClass("");
       setTargetText("");
       setBillableSel("");
+      setStationKinds([]);
     } else if (preset) {
       setLabel(mode === "duplicate" ? `${preset.label} (kopya)` : preset.label);
       setFullText(preset.fullText ?? "");
       setLossClass(preset.stopLossClass ?? "");
       setTargetText(preset.targetMinutes != null ? String(preset.targetMinutes) : "");
       setBillableSel(toReworkBillableChoice(preset.billable));
+      setStationKinds(preset.stationKinds ?? []);
     }
   }, [open, mode, preset]);
 
@@ -94,8 +100,9 @@ export function ReasonPresetDialog({
       const targetMinutes =
         asksClass && lossClass === "NON_SCHEDULED" ? null : asksTarget ? (parseStopTarget(targetText) ?? null) : undefined;
       const billable = asksBillable ? fromReworkBillableChoice(billableSel) : undefined;
+      const kinds = asksClass ? stationKinds : undefined;
       if (mode === "edit" && preset) {
-        return reasonPresetService.update(preset.id, { label: name, fullText: text ?? null, stopLossClass, targetMinutes, billable });
+        return reasonPresetService.update(preset.id, { label: name, fullText: text ?? null, stopLossClass, targetMinutes, billable, stationKinds: kinds });
       }
       if (mode === "duplicate" && preset) {
         // Kopya sınıfı kaynaktan taşır; kullanıcı diyalogda değiştirdiyse ikinci çağrıyla düzeltilir.
@@ -105,10 +112,11 @@ export function ReasonPresetDialog({
           ...(stopLossClass && stopLossClass !== row.stopLossClass ? { stopLossClass } : {}),
           ...(targetMinutes !== undefined && targetMinutes !== (row.targetMinutes ?? null) ? { targetMinutes } : {}),
           ...(billable !== undefined && billable !== (row.billable ?? null) ? { billable } : {}),
+          ...(kinds !== undefined && kinds.join() !== (row.stationKinds ?? []).join() ? { stationKinds: kinds } : {}),
         };
         return Object.keys(patch).length > 0 ? reasonPresetService.update(row.id, patch) : row;
       }
-      return reasonPresetService.create({ kind, label: name, fullText: text ?? null, stopLossClass, targetMinutes, billable });
+      return reasonPresetService.create({ kind, label: name, fullText: text ?? null, stopLossClass, targetMinutes, billable, stationKinds: kinds });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["reason-presets"] });
@@ -163,6 +171,7 @@ export function ReasonPresetDialog({
 
           {asksClass && <StopLossClassField value={lossClass} onChange={setLossClass} />}
           {asksTarget && <StopTargetField value={targetText} onChange={setTargetText} />}
+          {asksClass && <StationKindsField value={stationKinds} onChange={setStationKinds} />}
           {asksBillable && <ReworkBillableField value={billableSel} onChange={setBillableSel} />}
 
           {mode !== "create" && preset && (

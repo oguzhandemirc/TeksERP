@@ -21,6 +21,8 @@ export interface SessionStation {
   canInspect?: boolean;
   /** İstasyonun varsayılan etiket adedi (1–5; null = genel adet). Eski sunucu göndermez. */
   defaultLabelCopies?: number | null;
+  /** Duruş bildirimi bu istasyonda açık mı (false → "Duruş" çipi çizilmez). Eski sunucu göndermez → açık. */
+  machineStopEnabled?: boolean;
 }
 
 export interface SessionMachine {

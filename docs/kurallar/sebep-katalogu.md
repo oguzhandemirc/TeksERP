@@ -16,7 +16,8 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** `MACHINE_STOP` sebebi panelden eklenir/çoğaltılır ve KAYIP SINIFI (`stopLossClass`) onun zorunlu alanıdır: `MACHINE_STOP`ta boş → 400 `STOP_LOSS_CLASS_REQUIRED`, `MINOR` → 400 (süre sınıfıdır, sebep sınıfı değil), başka kind'de dolu → 400 `STOP_LOSS_CLASS_NOT_APPLICABLE`; birincil kapı servis (`resolveStopLossClass`), `reason_presets_machine_class_chk` ikinci hat; kopya sınıfı taşır; sınıf duruşa kopyalanıp DONAR, katalogda düzeltme geçmişi değiştirmez. Sekme `dokumaEnabled` okur (duruşlar o bayrak altında yazılır; `tezgahEnabled` telemetrinindir). · bekçi: `test_reason_presets §7` <sub>(2026-09-14, elle giriş kapsaması ③)</sub>
+- **[ÇEKİRDEK]** `MACHINE_STOP` sebebi panelden eklenir/çoğaltılır ve KAYIP SINIFI (`stopLossClass`) onun zorunlu alanıdır: `MACHINE_STOP`ta boş → 400 `STOP_LOSS_CLASS_REQUIRED`, `MINOR` → 400 (süre sınıfıdır, sebep sınıfı değil), başka kind'de dolu → 400 `STOP_LOSS_CLASS_NOT_APPLICABLE`; birincil kapı servis (`resolveStopLossClass`), `reason_presets_machine_class_chk` ikinci hat; kopya sınıfı taşır; sınıf duruşa kopyalanıp DONAR, katalogda düzeltme geçmişi değiştirmez. Sekme duruş rejimini (`machineStopEnabled` = dokuma ∨ üretim∧`makineDurusTakibi`) okur; `tezgahEnabled` telemetrinindir. · bekçi: `test_reason_presets §7` <sub>(2026-09-14, elle giriş kapsaması ③)</sub>
+- **[ÇEKİRDEK]** Sebebin İSTASYON TÜRÜ KAPSAMI `ReasonPreset.stationKinds` (boş = her istasyon) yalnız `MACHINE_STOP`ta dolar (başka kind'de 400 `STOP_STATION_KINDS_NOT_APPLICABLE`, CHECK `reason_presets_station_kinds_chk`); `GET /reason-presets?stationKind=` SUNUCUDA süzer (`stationKindScopeWhere`), `quickPick` süzülmüş listede hesaplanır; sistem kapsamını uzlaştırma yalnız DOĞUŞTA yazar, fabrikanınkini ezmez; kapsam görünürlüktür, kod doğrulamada geçerli kalır. · bekçi: `test_durus_istasyon_kapsami` <sub>(arşiv:2026-11-09 duruş istasyon kapısı)</sub>
 - **[ÇEKİRDEK]** Sebep satırı SİLİNMEZ, yalnız gizlenir (`isActive=false`); son aktif satırın gizlenmesi 400 ile reddedilir — fire/düzeltme kararında sebep zorunlu olduğu için boş katalog operatörü kilitler. · bekçi: `test_reason_presets` <sub>(CLAUDE.md:73)</sub>
 
 ### Kararlar
@@ -101,7 +102,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_preset_kind_filtre`, `test_reason_presets`, `test_reason_quick_pick`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
+Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_preset_kind_filtre`, `test_reason_presets`, `test_reason_quick_pick`, `test_durus_istasyon_kapsami`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
 
 İstemci: `RollCancelModal.test.tsx`, `ReasonPresetPicker.test.tsx`, `varianceReasons.test.ts`⚠️, `useReasonPresets.test.tsx`, `reworkPayload.test.ts`, `reasonPreset.order.test.ts`
 

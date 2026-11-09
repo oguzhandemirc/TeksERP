@@ -38,6 +38,8 @@ export const stationFormSchema = z.object({
   appliesQuality: z.boolean(),
   // Muayene (hata girişi) yeteneği — akış kutusundan AYRI (KQ-D1).
   inspectionEnabled: z.boolean(),
+  // Duruş bildirimi (2026-11-09) — varsayılan AÇIK = bugünkü davranış; türden önerilmez (yetenek değil, kapı).
+  machineStopEnabled: z.boolean(),
   // Devere yetenekleri (modül açıkken çizilir; kapalıyken varsayılan false gider = bugün).
   producesWarpBeam: z.boolean(),
   consumesWarpBeam: z.boolean(),
@@ -73,6 +75,7 @@ export const stationFormDefaults: StationFormValues = {
   appliesQuality: false,
   // Muayene varsayılanı KAPALI (backend kolon varsayılanı); tür önerisi açar.
   inspectionEnabled: false,
+  machineStopEnabled: true,
   producesWarpBeam: false,
   consumesWarpBeam: false,
   capturesWidth: false,

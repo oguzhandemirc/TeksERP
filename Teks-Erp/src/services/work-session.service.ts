@@ -86,7 +86,8 @@ export const SESSION_INCLUDE = {
   machine: { select: { id: true, code: true, name: true, productionLineCount: true } },
   // `defaultLabelCopies` (2026-10-24): tabletin "– N +" etiket adedi seçicisinin başlangıç değeri
   // (yalnız `label.copiesSource = STATION`). Ek alan — eski tablet yok sayar.
-  station: { select: { id: true, code: true, name: true, kind: true, defaultLabelCopies: true, ...STEP_QUALITY_SELECT } },
+  // `machineStopEnabled` (2026-11-09): false iken tablet "Duruş" çipini çizmez. Ek alan — eski tablet yok sayar.
+  station: { select: { id: true, code: true, name: true, kind: true, defaultLabelCopies: true, machineStopEnabled: true, ...STEP_QUALITY_SELECT } },
 } as const;
 
 /**

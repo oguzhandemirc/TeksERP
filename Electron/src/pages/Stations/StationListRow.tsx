@@ -15,6 +15,7 @@ export function capabilityChips(s: Station): string[] {
   if (s.appliesColor) out.push("Renk");
   if (s.appliesProperty) out.push("Özellik");
   if (s.inspectionEnabled) out.push("Muayene");
+  if (s.machineStopEnabled === false) out.push("Duruş bildirimi kapalı");
   if (s.appliesQuality) out.push("Kart akışı");
   if (s.producesWarpBeam) out.push("Levent sarar");
   if (s.consumesWarpBeam) out.push("Levent tüketir");

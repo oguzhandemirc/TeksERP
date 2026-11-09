@@ -33,7 +33,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
-import { assertMachineStopKindAllowed, assertStopWritableTx, machineStopRegime } from "./helpers/machine-stop-regime.helper";
+import { assertMachineStopKindAllowed, assertStationStopEnabled, assertStopWritableTx, machineStopRegime } from "./helpers/machine-stop-regime.helper";
 import {
   MACHINE_STOP_SELECT,
   type MachineStopDto,
@@ -99,10 +99,11 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
       // ① Replay — yaratmadan ÖNCE ve AYNI bağlantıda (ayrı havuz alımı istemesin).
       const existing = await findStopReplayTx(tx, input.machineId, stopKey, input.fingerprint);
       if (existing) return { replay: true as const, row: existing };
-      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true, station: { select: { kind: true } } } });
+      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true, station: { select: { kind: true, machineStopEnabled: true } } } });
       if (!machine) throw AppError.notFound("Makine bulunamadı", { machineId: input.machineId });
       if (!machine.isActive) throw AppError.badRequest("Pasif makineye duruş girilemez.", { code: "MACHINE_INACTIVE" });
       assertMachineStopKindAllowed(await machineStopRegime(tx), machine.station.kind, opts); // D4-A1: dokumasız rejimde yalnız kurşun/brode/tambur
+      if (!input.signal) assertStationStopEnabled(machine.station, machine.id); // insan bildirimi; sinyal olgudur
       assertBeamSlotValid(machine, input.beamSlot);
       const preset = input.reasonCode ? await resolveStopPreset(tx, input.reasonCode) : null;
       const shiftInstanceId = await resolveShiftInstanceId(tx, started.value);
@@ -138,9 +139,7 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
     created = out.row;
   } catch (e) {
     if (p2002Mentions(e, /machine_stops_one_open_per_machine_uq/)) {
-      throw AppError.conflict("Bu makinede zaten açık bir duruş var — önce onu kapatın.", {
-        code: "STOP_ALREADY_OPEN", machineId: input.machineId,
-      });
+      throw AppError.conflict("Bu makinede zaten açık bir duruş var — önce onu kapatın.", { code: "STOP_ALREADY_OPEN", machineId: input.machineId });
     }
     if (p2002Mentions(e, /machine_stops_key_uq/)) {
       const again = await prisma.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });

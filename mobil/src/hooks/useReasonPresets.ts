@@ -157,7 +157,7 @@ function saveDiskCache(rows: ReasonPreset[]): void {
  * Bir listenin AKTİF satırları (operatör ekranı için).
  * `all` düzenleme yüzeyinin ihtiyacı olan gizliler dahil listedir.
  */
-export function useReasonPresets(kind: ReasonPresetKind, includeInactive = false) {
+export function useReasonPresets(kind: ReasonPresetKind, includeInactive = false, stationKind?: string | null) {
   const [, force] = useState(0);
   useEffect(() => {
     const notify = () => force((n) => n + 1);
@@ -174,6 +174,15 @@ export function useReasonPresets(kind: ReasonPresetKind, includeInactive = false
     staleTime: 5 * 60 * 1000,
   });
 
+  // İstasyon türüne süzülmüş liste (duruş modalı) — süzme SUNUCUDA. Diske yazılmaz (tam liste kademesi
+  // bozulmasın); okunamazsa ya da boş dönerse aşağıdaki üç kademeye düşülür (boş liste operatörü kilitlemez).
+  const scoped = useQuery({
+    queryKey: [...REASON_PRESETS_QUERY_KEY, 'station', kind, stationKind ?? ''],
+    queryFn: () => reasonPresetService.listForStation(kind, stationKind!),
+    enabled: !!stationKind && !includeInactive,
+    staleTime: 5 * 60 * 1000,
+  });
+
   useEffect(() => {
     // Diske YALNIZ tam liste yazılır: kısmi (aktif-only) liste yazılsaydı
     // düzenleme ekranı çevrimdışıyken gizli satırları "yok" sanardı.
@@ -182,6 +191,12 @@ export function useReasonPresets(kind: ReasonPresetKind, includeInactive = false
   }, [q.data, includeInactive]);
 
   const presets = useMemo<ReasonPreset[]>(() => {
+    if (scoped.data) {
+      const rows = scoped.data
+        .filter((r) => r.kind === kind && r.isActive)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      if (rows.length > 0) return rows;
+    }
     const source = q.data ?? diskCache;
     if (!source) return BUILTIN[kind];
     const rows = source
@@ -189,7 +204,7 @@ export function useReasonPresets(kind: ReasonPresetKind, includeInactive = false
       .sort((a, b) => a.sortOrder - b.sortOrder);
     // Sunucu listesi bu türde BOŞSA zemine düş — boş katalog operatörü kilitler.
     return rows.length > 0 ? rows : BUILTIN[kind];
-  }, [q.data, kind, includeInactive]);
+  }, [q.data, scoped.data, kind, includeInactive]);
 
   return {
     presets,

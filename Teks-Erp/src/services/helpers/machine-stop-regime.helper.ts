@@ -98,6 +98,17 @@ export function assertMachineStopKindAllowed(r: MachineStopRegime, kind: Station
   }
 }
 
+/**
+ * İSTASYON KAPISI (2026-11-09): `Station.machineStopEnabled = false` iken insan duruş AÇAMAZ → 400 `STOP_STATION_DISABLED`.
+ * Yalnız açılış çağırır — açık duruşu kapatma/sınıflama serbest kalır (kilitli duruş olmaz); makine sinyali çağırmaz.
+ */
+export function assertStationStopEnabled(station: { machineStopEnabled: boolean }, machineId: string): void {
+  if (station.machineStopEnabled) return;
+  throw AppError.badRequest("Bu istasyonda duruş bildirimi kapalı (İstasyonlar → Duruş bildirimi).", {
+    code: "STOP_STATION_DISABLED", machineId,
+  });
+}
+
 function assertKindInPermissionScope(kind: StationKind, scope: MachineStopKindScope): void {
   if (scope.generalKindsOnly && !GENERAL_STOP_STATION_KINDS.includes(kind)) {
     throw AppError.forbidden("Bu izinle yalnız kurşun, brode ve tambur makinelerinin duruşuna erişilebilir.", {

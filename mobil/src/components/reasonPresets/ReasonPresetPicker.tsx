@@ -43,6 +43,8 @@ interface Props {
   /** Serbest metin kutusunun ipucu. */
   placeholder?: string;
   maxLength?: number;
+  /** Oturum istasyonunun türü — verilirse liste sunucuda o türe süzülür (duruş sebepleri). */
+  stationKind?: string | null;
 }
 
 export default function ReasonPresetPicker({
@@ -53,8 +55,9 @@ export default function ReasonPresetPicker({
   disabled = false,
   placeholder,
   maxLength = 200,
+  stationKind,
 }: Props) {
-  const { presets } = useReasonPresets(kind);
+  const { presets } = useReasonPresets(kind, false, stationKind);
   const freeTextPreset = useMemo(() => presets.find((r) => r.requiresText) ?? null, [presets]);
 
   const handleText = (t: string): void => {

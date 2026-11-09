@@ -18,6 +18,7 @@ export const buildStationPayload = (v: StationFormValues, initial: Station | nul
   appliesProperty: v.appliesProperty,
   appliesQuality: v.appliesQuality,
   inspectionEnabled: v.inspectionEnabled,
+  machineStopEnabled: v.machineStopEnabled,
   producesWarpBeam: v.producesWarpBeam,
   consumesWarpBeam: v.consumesWarpBeam,
   capturesWidth: v.capturesWidth,

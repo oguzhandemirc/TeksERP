@@ -12,6 +12,7 @@ import { stationFormDefaults, stationFormSchema, type StationFormValues } from "
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import { inspectionHintForKind, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
+import { StationMachineStopField } from "./StationMachineStopField";
 import { StationScanRouteFields } from "./StationScanRouteFields";
 import { StationKursunSection } from "./StationKursunSection";
 import { canHaveKursun } from "./stationListItems";
@@ -47,6 +48,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         appliesProperty: initial.appliesProperty ?? true,
         appliesQuality: initial.appliesQuality ?? false,
         inspectionEnabled: initial.inspectionEnabled ?? false,
+        machineStopEnabled: initial.machineStopEnabled ?? true,
         producesWarpBeam: initial.producesWarpBeam ?? false,
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
         capturesWidth: initial.capturesWidth ?? false,
@@ -170,6 +172,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               <p className="-mt-1 pl-6 text-xs text-muted-foreground" data-testid="inspection-hint">
                 {inspectionHintForKind(form.watch("kind") as StationKind)}
               </p>
+              <StationMachineStopField form={form} />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("appliesQuality")} /> Ara istasyon kart akışı
                 (Kurşun/KK2 ekranı)

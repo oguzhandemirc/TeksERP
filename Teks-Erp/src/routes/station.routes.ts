@@ -179,6 +179,9 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               inspectionEnabled:
  *                 type: boolean
  *                 description: Kalite MUAYENESİ (hata girişi) bu istasyonda açık mı. Gönderilmezse türden türetilir (PROCESS_QC ve TAMBUR true, diğerleri false).
+ *               machineStopEnabled:
+ *                 type: boolean
+ *                 description: Duruş bildirimi — false iken bu istasyonun makinelerinde insan duruş AÇAMAZ (400 STOP_STATION_DISABLED); açık duruş kapatılabilir. Varsayılan true.
  *               producesWarpBeam:
  *                 type: boolean
  *                 description: Devere — bu istasyonun makineleri LEVENT SARAR. Varsayılan false.
@@ -229,6 +232,9 @@ router.post("/", verifyToken, requirePermission("station:write"), validateStatio
  *               inspectionEnabled:
  *                 type: boolean
  *                 description: Kalite MUAYENESİ (hata girişi) açık mı. Gönderilmezse DOKUNULMAZ.
+ *               machineStopEnabled:
+ *                 type: boolean
+ *                 description: Duruş bildirimi açık mı (false → insan duruş açamaz). Gönderilmezse DOKUNULMAZ.
  *               isActive: { type: boolean }
  *     responses:
  *       200:

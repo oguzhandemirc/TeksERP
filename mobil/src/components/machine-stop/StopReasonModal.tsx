@@ -9,11 +9,14 @@ import React from 'react';
 import { Button } from 'react-native-paper';
 import ModuleSheet from '../ModuleSheet';
 import ReasonPresetPicker from '../reasonPresets/ReasonPresetPicker';
+import { useSessionStore } from '../../store/sessionStore';
 import { REASON_NOTE_MAX } from './stopPayload';
 import type { StopPanelState } from './useStopPanel';
 
 export default function StopReasonModal({ state }: { state: StopPanelState }) {
   const classify = state.modal?.mode === 'classify';
+  // Liste oturum istasyonunun TÜRÜNE süzülür (sunucuda): tambur dokuma kopuşlarını görmez.
+  const stationKind = useSessionStore((s) => s.active?.station?.kind ?? null);
   return (
     <ModuleSheet
       visible={state.modal !== null}
@@ -33,7 +36,7 @@ export default function StopReasonModal({ state }: { state: StopPanelState }) {
         </>
       }
     >
-      <ReasonPresetPicker kind="MACHINE_STOP" value={state.reason} onChange={state.setReason} optional={!classify} placeholder="Not (isteğe bağlı) — ya da aşağıdan seç" maxLength={REASON_NOTE_MAX} />
+      <ReasonPresetPicker kind="MACHINE_STOP" stationKind={stationKind} value={state.reason} onChange={state.setReason} optional={!classify} placeholder="Not (isteğe bağlı) — ya da aşağıdan seç" maxLength={REASON_NOTE_MAX} />
     </ModuleSheet>
   );
 }

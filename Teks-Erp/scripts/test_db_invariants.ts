@@ -856,6 +856,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Tezgah Salonu (2026-10-10, migration 20261010130000): hedef süre yalnız MACHINE_STOP ∧
   // NON_SCHEDULED dışı ∧ 1..1440; duruşa donan hedef 1..1440 · pay 0..1440.
   { table: "reason_presets", name: "reason_presets_stop_target_chk" },
+  // 2026-11-09 (migration 20261109165544): dolu istasyon türü kapsamı yalnız MACHINE_STOP (servis ikizi `resolveStationKinds`).
+  { table: "reason_presets", name: "reason_presets_station_kinds_chk" },
   { table: "machine_stop_events", name: "machine_stop_events_escalation_chk" },
   // Dokuma alarm motoru (Faz A1, migration 20261011090000): kademe · plan aralıkları ·
   // üstlenme çift yüklemi (OPEN⇒yok, ACKED⇒var) · susturma çifti · terminal⇔closedAt ·

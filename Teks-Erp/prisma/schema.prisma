@@ -1163,6 +1163,11 @@ model Station {
   /// türetir (PROCESS_QC + TAMBUR = true); doğuşta `inspectionDefaultForKind`.
   inspectionEnabled Boolean @default(false)
 
+  /// Duruş bildirimi bu istasyonun makinelerinde açık mı? (2026-11-09, Gülkesim: "tambur duruş bildiremesin")
+  /// VARSAYILAN TRUE = bugünkü davranış. false → tablet çipi/düğmesi çizilmez, insan duruş AÇMA ucu
+  /// 400 `STOP_STATION_DISABLED`; açık duruşu kapatma/sınıflama serbest (kilitli duruş kalmaz).
+  machineStopEnabled Boolean @default(true)
+
   /// Bu istasyonun makinelerinde LEVENT DOĞAR mı? (devere makinesi, 2026-09-12)
   ///
   /// ⚠️ VARSAYILAN FALSE — bugünkü davranışı BİREBİR korumak için: hiçbir mevcut
@@ -6967,6 +6972,10 @@ model ReasonPreset {
   /// F9 YENİDEN İŞLEM SINIFI — YALNIZ `WORK_ORDER_REWORK`ta dolu olabilir (CHECK `reason_presets_billable_ck`).
   /// NULL = sınıfsız ⇒ ücretli (bugünkü) · true = müşteri talebi (ücretli) · false = bizim hatamız (adım işi faturasız).
   billable      Boolean?
+  /// İSTASYON TÜRÜ KAPSAMI (2026-11-09) — YALNIZ `MACHINE_STOP`ta dolu olabilir (CHECK
+  /// `reason_presets_station_kinds_chk`). Boş = her istasyon (bugünkü); dolu = yalnız o türlerin
+  /// tablet listesinde (`GET /reason-presets?stationKind=`). Görünürlük kararıdır: kod her yerde GEÇERLİ kalır.
+  stationKinds  StationKind[]         @default([])
 
   createdById String? @db.Uuid
   updatedById String? @db.Uuid
