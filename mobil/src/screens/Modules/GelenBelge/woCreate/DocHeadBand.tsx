@@ -1,7 +1,7 @@
 // Belge satırının başı. Toplu liste: "Belge GB…" şeridi + okuma hapı, altında eylem satırı. Tek İE formu: TEK satır — belge no +
 // durum ikonu (sorun varsa kısa yazı), sağda Yeniden okut / Taslağı iptal et ikonları. İkisinde de tanıtılmamış şeridi ve kısa
 // eylemli iletiler (`docReadNotice`) altta; şablon düzeltmek okuma düzeltmesidir → okuma durumunun yanında durur.
-// Sunucu `tanima` gönderince altta üç aşamalı şerit (`RecognitionStrip`): şablon adı ve "Tanıt" oraya taşınır.
+// Sunucu `tanima` gönderince altta yalnız iş gerektiren şerit (`RecognitionStrip`: tanınmadı + Tanıt · çok parti kipi).
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Button, Icon, IconButton, Text } from 'react-native-paper';
@@ -69,7 +69,7 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
     tanima: w?.phase === 'done' ? w.summary.tanima : undefined, entry: teach, localTaught: !!row.taught,
     multi: row.form?.multi, locked: wo.saving || !!row.result,
   });
-  // Şerit varken ad ①'de; amber şerit yalnız fotoğrafsız açıklama için kalır (Tanıt düğmesi ①'de).
+  // Yeni sunucuda (şerit modeli var) şablon adı gösterilmez — tanınmış belgede ✓ yeter; amber şerit yalnız fotoğrafsız açıklama.
   const name = strip ? null : <TemplateName entry={teach} />;
   const act = (n: DocNotice): NoticeAction => {
     if (n.action === 'recheck') return { label: 'Yeniden bak', icon: 'refresh' as const, onPress: read.recheck };

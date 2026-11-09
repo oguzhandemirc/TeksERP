@@ -1,7 +1,7 @@
 // Belgeden İE satırı — parti no (Gülkesim istek 2) ve kurşun gramajı (istek 3).
-// Müşteri parti no düz metin alanıdır: belgeden geldiyse dolu + sarı vurgu, dokununca seçici AÇILMAZ, yazınca vurgu kalkar.
-// Bizim parti no seri kipinde müşteri alanıyla aynı outlined salt okunur kutu "Otomatik · sıradaki: X" (önizleme yoksa
-// "Otomatik"); belgeden kipinde aday seçicisi bugünkü gibi.
+// Müşteri parti no beyan kutusudur (`DeclaredField`): belgeden geldiyse dolu + sarı, dokununca seçici değil metin sayfası açılır,
+// düzeltince vurgu kalkar. Bizim parti no seri kipinde aynı kutu stilinde salt okunur "Otomatik · sıradaki: X" (önizleme yoksa
+// "Otomatik"); belgeden kipinde aday seçicisi bugünkü gibi. Gelen metre kutusuna dokununca düzeltme açılır (Düzelt düğmesi yok).
 // Negatif sonda: BatchFields müşteri alanı kaldırılınca / vurgu her zaman kapalıyken / editCustomerBatchNo vurguyu
 // düşürmeyince / seçili gramaj stili kaldırılınca ilgili vaka kırmızı.
 import React, { useState } from 'react';
@@ -19,6 +19,10 @@ jest.mock('../useApprovalCard', () => ({ useApprovalDetail: () => ({ data: undef
 const mockNumberState = jest.fn();
 jest.mock('../../../../services/batch.service', () => ({ batchService: { getNumberPreview: (n: number) => mockNumberState(n) } }));
 jest.mock('../../../../hooks/usePermission', () => ({ usePermissions: () => ({ has: () => true }) }));
+jest.mock('../../../../components/ModuleSheet', () => {
+  const actual = jest.requireActual('../../../../components/ModuleSheet');
+  return { ...actual, __esModule: true, default: (p: { visible: boolean; children: React.ReactNode; footer?: React.ReactNode }) => (p.visible ? <>{p.children}{p.footer}</> : null) };
+});
 
 beforeEach(() => {
   mockNumberState.mockReset();
@@ -65,45 +69,51 @@ function ancestorStyles(ui: ReturnType<typeof renderWithPaper>, testID: string):
   return out;
 }
 
-describe('DocRowCard — müşteri parti no ayrı, elle yazılabilir alan', () => {
+const value = (ui: ReturnType<typeof renderWithPaper>, id: string) => ui.getByTestId(`${id}-deger`);
+const edit = (ui: ReturnType<typeof renderWithPaper>, text: string) => {
+  fireEvent.press(ui.getByTestId('belge-satir-musteri-parti-GB-1'));
+  fireEvent.changeText(ui.getByTestId('belge-satir-musteri-parti-duzelt-GB-1-giris'), text);
+  fireEvent.press(ui.getByTestId('belge-satir-musteri-parti-duzelt-GB-1-kaydet'));
+};
+
+describe('DocRowCard — müşteri parti no beyan kutusu (dokununca metin sayfası)', () => {
   it('⭐ belgeden okunan değer dolu gelir ve sarı vurgulu', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
-    expect(ui.getByTestId('belge-satir-musteri-parti-GB-1').props.value).toBe('2008-58');
+    expect(value(ui, 'belge-satir-musteri-parti-GB-1')).toHaveTextContent('2008-58');
     expect(highlighted(ui, 'belge-satir-musteri-parti-GB-1')).toBe(true);
   });
-  it('⭐ dokununca seçici açılmaz (düz metin girişi)', () => {
+  it('⭐ dokununca aday seçici AÇILMAZ; düz metin sayfası açılır', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
-    fireEvent(ui.getByTestId('belge-satir-musteri-parti-GB-1'), 'focus');
     fireEvent.press(ui.getByTestId('belge-satir-musteri-parti-GB-1'));
     expect(ui.queryByText(/aday/)).toBeNull();
-    expect(ui.queryByText('Parti no seçin')).toBeNull();
+    expect(ui.getByTestId('belge-satir-musteri-parti-duzelt-GB-1-giris').props.value).toBe('2008-58');
   });
   it('⭐ düzenleyince vurgu kalkar, yazılan değer kalır', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
-    fireEvent.changeText(ui.getByTestId('belge-satir-musteri-parti-GB-1'), '2008-59');
-    expect(ui.getByTestId('belge-satir-musteri-parti-GB-1').props.value).toBe('2008-59');
+    edit(ui, '2008-59');
+    expect(value(ui, 'belge-satir-musteri-parti-GB-1')).toHaveTextContent('2008-59');
     expect(highlighted(ui, 'belge-satir-musteri-parti-GB-1')).toBe(false);
   });
   it('belgede yoksa boş ve vurgusuz; elle yazılabilir', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" form={{ ...baseForm, customerBatchNo: null, customerBatchNoFromDoc: false }} />);
-    expect(ui.getByTestId('belge-satir-musteri-parti-GB-1').props.value).toBe('');
+    expect(value(ui, 'belge-satir-musteri-parti-GB-1')).toHaveTextContent(/Yok/);
     expect(highlighted(ui, 'belge-satir-musteri-parti-GB-1')).toBe(false);
-    fireEvent.changeText(ui.getByTestId('belge-satir-musteri-parti-GB-1'), 'EL-1');
-    expect(ui.getByTestId('belge-satir-musteri-parti-GB-1').props.value).toBe('EL-1');
+    edit(ui, 'EL-1');
+    expect(value(ui, 'belge-satir-musteri-parti-GB-1')).toHaveTextContent('EL-1');
   });
-  it('⭐ seri kipinde bizim parti no: outlined salt okunur "Otomatik · sıradaki: P05" (tek tahmin istenir)', async () => {
+  it('⭐ seri kipinde bizim parti no: aynı kutu stilinde salt okunur "Otomatik · sıradaki: P05", sarı değil (tek tahmin istenir)', async () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05'], min: 1, max: 99 } });
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
-    const box = ui.getByTestId('belge-satir-bizim-parti-GB-1');
-    expect(box.props.editable).toBe(false);
-    await waitFor(() => expect(ui.getByTestId('belge-satir-bizim-parti-GB-1').props.value).toBe('Otomatik · sıradaki: P05'));
+    expect(ui.getByTestId('belge-satir-bizim-parti-GB-1').props.accessibilityRole).not.toBe('button');
+    await waitFor(() => expect(value(ui, 'belge-satir-bizim-parti-GB-1')).toHaveTextContent('Otomatik · sıradaki: P05'));
+    expect(highlighted(ui, 'belge-satir-bizim-parti-GB-1')).toBe(false);
     expect(mockNumberState).toHaveBeenCalledWith(1);
   });
   it('önizleme düşerse (çevrimdışı / izin) yalnız "Otomatik"', async () => {
     mockNumberState.mockRejectedValue(new Error('Network Error'));
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
     await waitFor(() => expect(mockNumberState).toHaveBeenCalled());
-    expect(ui.getByTestId('belge-satir-bizim-parti-GB-1').props.value).toBe('Otomatik');
+    expect(value(ui, 'belge-satir-bizim-parti-GB-1')).toHaveTextContent(/^Otomatik$/);
   });
   it('belgeden kipinde bizim parti no aday seçicisi (bugünkü davranış)', () => {
     const ui = renderWithPaper(<Harness batchSource="DOCUMENT" />);
@@ -118,11 +128,14 @@ describe('DocRowCard — müşteri parti no ayrı, elle yazılabilir alan', () =
 });
 
 describe('DocRowCard — vurgu ve seçili gramaj', () => {
-  it('⭐ okunan kurşun metresi sarı; elle değişince vurgu kalkar', () => {
+  it('⭐ okunan gelen metre sarı; elle değişince vurgu kalkar; Düzelt düğmesi yok, kutuya dokununca düzeltme açılır', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
-    expect(bg(ui.getByTestId('belgeden-metre-GB-1'))).toBe(DOC_HIGHLIGHT_BG);
+    expect(bg(ui.getByTestId('belge-satir-metre-kutu-GB-1'))).toBe(DOC_HIGHLIGHT_BG);
+    expect(ui.queryByTestId('belge-satir-duzelt-GB-1')).toBeNull();
+    fireEvent.press(ui.getByTestId('belge-satir-metre-kutu-GB-1'));
+    expect(ui.getByTestId('belge-satir-metre-giris')).toBeTruthy();
     const ui2 = renderWithPaper(<Harness batchSource="SERIES" form={{ ...baseForm, meters: 300 }} />);
-    expect(ui2.queryByTestId('belgeden-metre-GB-1')).toBeNull();
+    expect(bg(ui2.getByTestId('belge-satir-metre-kutu-GB-1'))).not.toBe(DOC_HIGHLIGHT_BG);
   });
   it('⭐ seçili gramaj marka zeminli; seçili olmayan değil', () => {
     const ui = renderWithPaper(<Harness batchSource="SERIES" />);
@@ -137,17 +150,17 @@ describe('DocRowCard — vurgu ve seçili gramaj', () => {
 // PER_PARTY → parti sayısı kadar ardışık tahmin. Negatif sonda: SINGLE'da count = parti sayısı → ilk vaka kırmızı.
 describe('DocRowCard — çok partide bizim parti no önizlemesi', () => {
   const party = (blockNo: number) => ({ blockNo, batchNo: `M${blockNo}`, orderNo: null, declaredTopCount: null, declaredMeters: null, lineCount: 1, meters: 100, weightKg: null, warnings: [] });
-  function MultiHarness({ mode }: { mode: 'SINGLE' | 'PER_PARTY' }) {
+  function MultiHarness({ mode, setMulti = jest.fn(), en }: { mode: 'SINGLE' | 'PER_PARTY'; setMulti?: jest.Mock; en?: string }) {
     const view = { parties: [party(1), party(2), party(3)], warnings: [], multi: true, defaultMode: mode };
     const multi = { mode, defaultMode: mode, rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo, meters: 100 })) };
-    const row: DocRow = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, detail: detail as never, form: { ...baseForm, multi }, parties: view as never, gramajTouched: false, result: null };
-    const wo = { setDetail: jest.fn(), setParties: jest.fn(), setMulti: jest.fn(), recent: [], mode: 'WITH_WORK_ORDER', saving: false, removeRow: jest.fn(), showGramaj: false, catalog, batchSource: 'SERIES', updateForm: jest.fn() } as unknown as WoRowsState;
+    const row: DocRow = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, detail: { ...detail, formFields: en ? { en } : null } as never, form: { ...baseForm, multi }, parties: view as never, gramajTouched: false, result: null };
+    const wo = { setDetail: jest.fn(), setParties: jest.fn(), setMulti, recent: [], mode: 'WITH_WORK_ORDER', saving: false, removeRow: jest.fn(), showGramaj: false, catalog, batchSource: 'SERIES', updateForm: jest.fn() } as unknown as WoRowsState;
     return <DocRowCard row={row} wo={wo} customers={[{ value: 'c1', label: 'Gülkesim' }]} customersLoading={false} />;
   }
   it('⭐ SINGLE: tek numara istenir ve bir kez gösterilir (parti başına alan yok)', async () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05'], min: 1, max: 99 } });
     const ui = renderWithPaper(<MultiHarness mode="SINGLE" />);
-    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-tek-GB-1').props.value).toBe('Otomatik · sıradaki: P05'));
+    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-tek-GB-1-deger')).toHaveTextContent('Otomatik · sıradaki: P05'));
     expect(mockNumberState).toHaveBeenCalledWith(1);
     expect(mockNumberState).not.toHaveBeenCalledWith(3);
     expect(ui.queryByTestId('belge-parti-bizim-GB-1-1', { includeHiddenElements: true })).toBeNull();
@@ -155,8 +168,21 @@ describe('DocRowCard — çok partide bizim parti no önizlemesi', () => {
   it('⭐ PER_PARTY: parti sayısı kadar ardışık tahmin, parti başına', async () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05', 'P06', 'P07'], min: 1, max: 99 } });
     const ui = renderWithPaper(<MultiHarness mode="PER_PARTY" />);
-    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-GB-1-3', { includeHiddenElements: true }).props.value).toBe('Otomatik · sıradaki: P07'));
+    await waitFor(() => expect(ui.getByTestId('belge-parti-bizim-GB-1-3-deger', { includeHiddenElements: true })).toHaveTextContent('Otomatik · sıradaki: P07'));
     expect(mockNumberState).toHaveBeenCalledWith(3);
     expect(ui.queryByTestId('belge-parti-bizim-tek-GB-1')).toBeNull();
+  });
+  it('⭐ parti kartı aynı beyan kutularını kullanır: parti no / metre / gelen en belgeden sarı; en düzeltmesi parti satırına işler', () => {
+    const setMulti = jest.fn();
+    const ui = renderWithPaper(<MultiHarness mode="SINGLE" setMulti={setMulti} en="160" />);
+    const H = { includeHiddenElements: true };
+    expect(bg(ui.getByTestId('belge-parti-no-GB-1-1', H))).toBe(DOC_HIGHLIGHT_BG);
+    expect(bg(ui.getByTestId('belge-parti-metre-GB-1-1', H))).toBe(DOC_HIGHLIGHT_BG);
+    expect(bg(ui.getByTestId('belge-parti-en-GB-1-1', H))).toBe(DOC_HIGHLIGHT_BG);
+    expect(ui.getByTestId('belge-parti-en-GB-1-1-deger', H)).toHaveTextContent('160 cm');
+    fireEvent.press(ui.getByTestId('belge-parti-en-GB-1-1', H));
+    fireEvent.changeText(ui.getByTestId('belge-parti-en-duzelt-GB-1-1-giris', H), '158');
+    fireEvent.press(ui.getByTestId('belge-parti-en-duzelt-GB-1-1-kaydet', H));
+    expect(setMulti.mock.calls.at(-1)?.[1].rows[0]).toMatchObject({ incomingWidth: 158, widthEdited: true });
   });
 });

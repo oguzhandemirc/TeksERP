@@ -16,6 +16,7 @@ import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft, type OpenedWo } from './partyDraft';
 import { rollIssues, withRolls, type RollRow } from './rollDraft';
 import type { FormIssue } from './woIssues';
+import { parseFormNumber } from './woForm';
 
 /** K29 S14b: rotasız seçenek (sözde rota; kimliği sunucuya HİÇ gitmez — gövdede rota anahtarı olmaz). */
 export const SCAN_ROUTE_ID = 'scan-routed';
@@ -134,6 +135,9 @@ export interface RowForm {
   incomingKg?: number | null;
   /** Kullanıcı gelen kg'yi değiştirdi → gövdeye girer (yoksa sunucu belgeden önerileni yazar). */
   incomingKgEdited?: boolean;
+  /** Gelen en (cm) elle düzeltildi; düzeltilmediyse ekran belgedekini (`docIncomingWidth`) gösterir, gövdeye girmez. */
+  incomingWidth?: number | null;
+  incomingWidthEdited?: boolean;
   gramajValueId: string | null;
   /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
   multi?: MultiPartyDraft | null;
@@ -174,6 +178,11 @@ export function initialRowForm(d: InboundNoteDetail, gramajFor?: (customerId: st
     incomingKg: toNumber(d.incomingKg),
     gramajValueId: gramajFor?.(owner) ?? null,
   };
+}
+
+/** Belgenin gelen eni (cm): okunan şablon `en` alanı (İE eninin ön dolumuyla aynı kaynak); yoksa null. */
+export function docIncomingWidth(d: Pick<InboundNoteDetail, 'formFields'> | null | undefined): number | null {
+  return parseFormNumber(d?.formFields?.en);
 }
 
 /** Müşteri parti no kaynağı: taslağın başlık değeri (özet/detay) → belgenin "parti no" türlü ilk adayı; yoksa null. */
@@ -220,6 +229,8 @@ export function buildCreateBody(
   if (f.customerBatchNoEdited) body.customerBatchNo = f.customerBatchNo?.trim() || null;
   // Gelen kg yalnız elle değiştiyse (boşaltılırsa anahtar yok → sunucu belgedekini yazar); çok parti/ayrı topta parti başınadır.
   if (!f.multi && !f.rolls && f.incomingKgEdited && f.incomingKg != null && f.incomingKg > 0) body.incomingKg = f.incomingKg;
+  // Gelen en da aynı desen: elle değişmediyse sunucu belgedekini (şablon `en`) yazar.
+  if (!f.multi && !f.rolls && f.incomingWidthEdited && f.incomingWidth != null && f.incomingWidth > 0) body.incomingWidth = f.incomingWidth;
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.

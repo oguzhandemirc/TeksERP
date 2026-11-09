@@ -96,8 +96,8 @@ describe('PartyRows (tablet)', () => {
     expect(ui.getByTestId('belge-parti-sonuc-GB-1-1', HIDDEN)).toHaveTextContent(`${TERIM.terbiyeIsEmri.tekil} açıldı: IE-1`);
     expect(ui.getByTestId('belge-parti-sonuc-GB-1-2', HIDDEN)).toHaveTextContent('Açılamadı: Plan makinesi bulunamadı');
     expect(ui.getByTestId('belge-parti-ozet-GB-1')).toHaveTextContent(/1\/2 parti açıldı · 1 parti açılamadı/);
-    expect(ui.getByTestId('belge-parti-metre-GB-1-1', HIDDEN).props.editable).toBe(false);
-    expect(ui.getByTestId('belge-parti-metre-GB-1-2', HIDDEN).props.editable).toBe(true);
+    expect(ui.getByTestId('belge-parti-metre-GB-1-1', HIDDEN).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(ui.getByTestId('belge-parti-metre-GB-1-2', HIDDEN).props.accessibilityState).toMatchObject({ disabled: false });
   });
 });
 

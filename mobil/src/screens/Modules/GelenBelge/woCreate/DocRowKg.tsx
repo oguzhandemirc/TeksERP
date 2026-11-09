@@ -1,41 +1,71 @@
-// "Gelen kg" kutusu (T2): belgeden önerilen gelen kg (`incomingKg`, sunucu `pickIncomingKg`) — HEDEF kg değildir, hedef kg'ye
-// kopyalanmaz. Elle değişince gövdeye girer; boşaltılırsa anahtar gitmez ve sunucu belgedekini yazar (not satırı bunu söyler).
+// "Gelen kg" ve "Gelen en" beyan kutuları (T2 + 2026-11-09): belgeden önerilen gelen kg (`incomingKg`, sunucu `pickIncomingKg`)
+// ve okunan en (şablon `en`) — İE hedefi DEĞİLDİR (hedef kg / İE eni sağ sütunda ayrı). Elle değişince gövdeye girer; sayfada
+// boş kaydetmek ya da "Belgedekine dön" belgedekine döndürür (sunucu da anahtarsız gövdede belgedekini yazar).
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
-import NumpadInput from '../../../../components/NumpadInput';
 import type { IncomingKgSource } from '../../../../services/inboundDoc.service';
-import { colors, spacing, typography } from '../../../../theme';
 import { fmtKursunMeters } from '../readResult';
 import { parseMeters } from '../approvalGate';
+import { DeclaredEditSheet, DeclaredField } from './DeclaredField';
+import { docIncomingWidth } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 const SOURCE_TEXT: Record<IncomingKgSource, string> = { FIELD: 'belgedeki kg alanından', TOTAL: 'belgedeki toplamdan', LINE_SUM: 'satır toplamı' };
 
-/** Kutunun altındaki kaynak notu: belgeden (kaynak) · elle · belgede yok. */
-export function incomingKgNote(a: { value: number | null; edited: boolean; suggested: number | null; source: IncomingKgSource | null }): string {
-  if (a.edited && a.value == null) return a.suggested != null ? `Boş bırakılırsa belgedeki ${fmtKursunMeters(a.suggested)} kg yazılır` : 'Belgede kg yok';
-  if (a.edited) return 'Elle girildi';
-  if (a.value == null) return 'Belgede kg yok';
-  return a.source ? `Belgeden · ${SOURCE_TEXT[a.source]}` : 'Belgeden';
+/** Düzeltme sayfasının alt başlığı: belgedeki değer + kaynağı ya da "Belgede kg yok". */
+export function incomingKgNote(a: { suggested: number | null; source: IncomingKgSource | null }): string {
+  if (a.suggested == null) return 'Belgede kg yok';
+  return `Belgede: ${fmtKursunMeters(a.suggested)} kg${a.source ? ` (${SOURCE_TEXT[a.source]})` : ''}`;
 }
+
+const numText = (n: number | null | undefined) => (n != null ? String(n).replace('.', ',') : '');
+const fmt = (n: number | null | undefined) => (n != null ? fmtKursunMeters(n) : null);
 
 export function IncomingKgField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
   const f = row.form!;
+  const [open, setOpen] = useState(false);
   const suggested = row.detail?.incomingKg != null && Number(row.detail.incomingKg) > 0 ? Number(row.detail.incomingKg) : null;
-  // Metin yerelde ("12," yazarken silinmesin); sayı her tuşta forma gider.
-  const [text, setText] = useState(f.incomingKg != null ? String(f.incomingKg).replace('.', ',') : '');
-  const note = incomingKgNote({ value: f.incomingKg ?? null, edited: !!f.incomingKgEdited, suggested, source: row.detail?.incomingKgSource ?? null });
+  const value = f.incomingKg ?? null;
+  const fromDoc = !f.incomingKgEdited && value != null && value === suggested;
+  const back = () => { setOpen(false); wo.updateForm(row.noteId, { incomingKg: suggested, incomingKgEdited: false }); };
   return (
-    <View style={styles.wrap} testID={`belge-satir-kg-${row.noteNo}`}>
-      <NumpadInput value={text} label="Gelen kg" mode="outlined" useNativeKeyboard allowDecimal editable={!locked} testID={`belge-satir-kg-giris-${row.noteNo}`}
-        onChangeText={(t) => { setText(t); wo.updateForm(row.noteId, { incomingKg: parseMeters(t), incomingKgEdited: true }); }} />
-      <Text style={styles.note} testID={`belge-satir-kg-not-${row.noteNo}`}>{note}</Text>
-    </View>
+    <>
+      <DeclaredField label="Gelen kg" value={fmt(value)} unit="kg" fromDoc={fromDoc} emptyText="Belgede yok" onPress={() => setOpen(true)} disabled={locked}
+        testID={`belge-satir-kg-${row.noteNo}`} />
+      {open && (
+        <DeclaredEditSheet title="Gelen kg" subtitle={incomingKgNote({ suggested, source: row.detail?.incomingKgSource ?? null })} kind="number" label="Gelen kg"
+          initial={numText(value)} allowEmpty parse={parseMeters} resetLabel={suggested != null && !fromDoc ? 'Belgedekine dön' : undefined} onReset={back}
+          onDismiss={() => setOpen(false)} testID={`belge-satir-kg-duzelt-${row.noteNo}`}
+          onSave={(t) => {
+            const n = parseMeters(t);
+            if (n == null) back();
+            else { setOpen(false); wo.updateForm(row.noteId, { incomingKg: n, incomingKgEdited: n !== suggested }); }
+          }} />
+      )}
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { minWidth: 180, flexGrow: 1, flexBasis: 180, gap: spacing.xs },
-  note: { fontSize: typography.size.sm, color: colors.textSecondary },
-});
+export function IncomingWidthField({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
+  const f = row.form!;
+  const [open, setOpen] = useState(false);
+  const docWidth = docIncomingWidth(row.detail);
+  const value = f.incomingWidthEdited ? f.incomingWidth ?? null : docWidth;
+  const fromDoc = !f.incomingWidthEdited && docWidth != null;
+  const back = () => { setOpen(false); wo.updateForm(row.noteId, { incomingWidth: null, incomingWidthEdited: false }); };
+  return (
+    <>
+      <DeclaredField label="Gelen en" value={fmt(value)} unit="cm" fromDoc={fromDoc} emptyText="Belgede yok" onPress={() => setOpen(true)} disabled={locked}
+        testID={`belge-satir-en-${row.noteNo}`} />
+      {open && (
+        <DeclaredEditSheet title="Gelen en" subtitle={docWidth != null ? `Belgede: ${fmt(docWidth)} cm` : 'Belgede en yok'} kind="number" label="Gelen en (cm)"
+          initial={numText(value)} allowEmpty parse={parseMeters} resetLabel={docWidth != null && !fromDoc ? 'Belgedekine dön' : undefined} onReset={back}
+          onDismiss={() => setOpen(false)} testID={`belge-satir-en-duzelt-${row.noteNo}`}
+          onSave={(t) => {
+            const n = parseMeters(t);
+            if (n == null || n === docWidth) back();
+            else { setOpen(false); wo.updateForm(row.noteId, { incomingWidth: n, incomingWidthEdited: true }); }
+          }} />
+      )}
+    </>
+  );
+}

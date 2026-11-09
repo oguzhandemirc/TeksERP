@@ -1,41 +1,30 @@
 // Belgeden İE satır kartının parti alanları: müşteri parti no (belgeden, elle düzeltilebilir) + bizim parti no (İE partisi).
 // `DocRowCard.tsx` 300 satır sınırında olduğundan ayrı dosya.
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { batchService } from '../../../../services/batch.service';
 import { SelectButton } from '../../../../components/form/SelectButton';
-import { DOC_HIGHLIGHT_BG, DocHighlight } from '../../../../components/DocHighlight';
 import { spacing } from '../../../../theme';
+import { DeclaredEditSheet, DeclaredField } from './DeclaredField';
 import { editCustomerBatchNo } from './woFromDoc';
 import { ourBatchAutoText, previewCodes } from './ourBatchPreview';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 /**
- * Müşteri parti no (belgeden okunan, elle yazılabilir düz metin; seçici yok) + bizim parti no (İE partisi) aynı satırda.
- * Seri kipinde bizimki müşteri alanıyla aynı görünümde salt okunur "Otomatik · sıradaki: X"; belgeden kipinde aday seçici
- * düğmesi (bugünkü davranış).
+ * Müşteri parti no (belgeden okunan beyan kutusu; dokununca düz metin sayfası, seçici yok) + bizim parti no (İE partisi) aynı
+ * satırda. Seri kipinde bizimki aynı kutu stilinde salt okunur "Otomatik · sıradaki: X"; belgeden kipinde aday seçici düğmesi.
  */
 export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; wo: WoRowsState; locked: boolean; onPick: () => void }) {
   const f = row.form!;
   const candidates = row.detail?.batchNoCandidates ?? [];
   const fromDoc = wo.batchSource === 'DOCUMENT';
   const preview = useOurBatchPreview(1, !fromDoc && !locked);
+  const [edit, setEdit] = useState(false);
   return (
     <View style={styles.row}>
-      <DocHighlight active={!!f.customerBatchNoFromDoc} style={styles.hl}>
-        <TextInput
-          mode="outlined"
-          label="Müşteri parti no"
-          value={f.customerBatchNo ?? ''}
-          disabled={locked}
-          maxLength={64}
-          style={[styles.input, f.customerBatchNoFromDoc ? styles.hlInput : null]}
-          onChangeText={(t) => wo.updateForm(row.noteId, editCustomerBatchNo(t))}
-          testID={`belge-satir-musteri-parti-${row.noteNo}`}
-        />
-      </DocHighlight>
+      <DeclaredField label="Müşteri parti no" value={f.customerBatchNo || null} fromDoc={!!f.customerBatchNoFromDoc} emptyText="Yok — dokunup yazın"
+        onPress={() => setEdit(true)} disabled={locked} testID={`belge-satir-musteri-parti-${row.noteNo}`} />
       {fromDoc ? (
         <View style={styles.pick}>
           <SelectButton
@@ -49,6 +38,11 @@ export default function BatchFields({ row, wo, locked, onPick }: { row: DocRow; 
         </View>
       ) : (
         <OurBatchAutoField code={preview[0]} testID={`belge-satir-bizim-parti-${row.noteNo}`} />
+      )}
+      {edit && (
+        <DeclaredEditSheet title="Müşteri parti no" subtitle="Belgedeki gönderen parti numarası" kind="text" label="Müşteri parti no" maxLength={64}
+          initial={f.customerBatchNo ?? ''} allowEmpty onDismiss={() => setEdit(false)} testID={`belge-satir-musteri-parti-duzelt-${row.noteNo}`}
+          onSave={(t) => { setEdit(false); if (t.trim() !== (f.customerBatchNo ?? '')) wo.updateForm(row.noteId, editCustomerBatchNo(t.trim())); }} />
       )}
     </View>
   );
@@ -68,13 +62,9 @@ export function useOurBatchPreview(count: number, enabled: boolean): readonly st
   return q.data ? previewCodes(q.data.data) : NO_PREVIEW;
 }
 
-/** Seri kipinde bizim parti no: müşteri parti no girdisiyle aynı outlined görünüm, salt okunur. */
+/** Seri kipinde bizim parti no: beyan kutusu stilinde salt okunur (sarı değil — belgeden gelmez, sayaçtan). */
 export function OurBatchAutoField({ code, testID }: { code: string | null | undefined; testID: string }) {
-  return (
-    <View style={styles.autoBox}>
-      <TextInput mode="outlined" label="Bizim parti no" value={ourBatchAutoText(code)} editable={false} style={styles.input} testID={testID} />
-    </View>
-  );
+  return <DeclaredField label="Bizim parti no" value={ourBatchAutoText(code)} testID={testID} />;
 }
 
 /** Belgeden kipinde numara kâğıttan gelir; tek adayda "otomatik" demek seri sayaç sanılırdı. */
@@ -84,12 +74,7 @@ function docBatchLabel(n: number): string {
 }
 
 const styles = StyleSheet.create({
-  // İki kutu eşit genişlik ve aynı yükseklik (SelectButton 64dp; outlined girdi 58 + etiket payı).
-  row: { flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: spacing.sm },
-  hl: { padding: 2, flex: 1, minWidth: 220 },
-  input: { height: 58 },
-  hlInput: { backgroundColor: DOC_HIGHLIGHT_BG },
-  pick: { flex: 1, minWidth: 220 },
-  // Müşteri kutusunun DocHighlight payı (2) kadar: iki outlined kutu aynı hizada.
-  autoBox: { padding: 2, flex: 1, minWidth: 220 },
+  // İki kutu eşit genişlik ve aynı yükseklik (SelectButton ve beyan kutusu 64dp).
+  row: { flexDirection: 'row', alignItems: 'stretch', flexWrap: 'wrap', gap: spacing.sm },
+  pick: { flexGrow: 1, flexBasis: 150, minWidth: 150 },
 });

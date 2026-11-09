@@ -13,6 +13,9 @@ export interface PartyRow {
   /** Parti gelen kg'si (öneri `suggestedKg`, elle düzeltilebilir); `kgEdited` yoksa gövdeye girmez. */
   incomingKg?: number | null;
   kgEdited?: boolean;
+  /** Parti gelen eni (cm) elle düzeltildi; düzeltilmediyse ekran belgenin enini gösterir, gövdeye girmez. */
+  incomingWidth?: number | null;
+  widthEdited?: boolean;
   /** Belge masası: parti başına plan makinesi / gramaj (yok = gövdedeki ortak değer). */
   machineId?: string | null;
   gramajValueId?: string | null;
@@ -32,7 +35,7 @@ export interface MultiPartyDraft {
  * Forma ilk metre: onaylı partide KAYITLI metre (elle düzeltme dahil), yoksa sunucunun önerisi (beyan ara toplamı önce),
  * eski sunucuda Σ satır; seçim kuralı istemcide kurulmaz.
  */
-const partyMeters = (p: NoteParty): number | null => {
+export const partyMeters = (p: NoteParty): number | null => {
   const m = p.recordedMeters ?? p.suggestedMeters ?? p.meters;
   return m > 0 ? m : null;
 };
@@ -73,7 +76,7 @@ export const multiPartyTotal = (m: MultiPartyDraft): number => Math.round(m.rows
 /**
  * Tek partili gövdeye parti listesi + kip eklenir; kurşun metresi parti toplamıdır. Kip HER ZAMAN gider (ekranda yazan
  * olur: varsayılan okunduktan sonra fabrika ayarı değişse de form başka kiple açılmaz); `modeTouched` yalnız gösterimdir.
- * Parti gelen kg'si yalnız elle değiştiyse gider (yoksa sunucu önerisini yazar).
+ * Parti gelen kg'si / eni yalnız elle değiştiyse gider (yoksa sunucu önerisini / belgedekini yazar).
  */
 export function withParties(body: CreateWorkOrderFromNoteBody, m: MultiPartyDraft): CreateWorkOrderFromNoteBody {
   return {
@@ -82,6 +85,7 @@ export function withParties(body: CreateWorkOrderFromNoteBody, m: MultiPartyDraf
     parties: m.rows.map((r) => ({
       blockNo: r.blockNo, batchNo: r.batchNo.trim() || null, meters: r.meters ?? 0,
       ...(r.kgEdited && r.incomingKg != null && r.incomingKg > 0 ? { incomingKg: r.incomingKg } : {}),
+      ...(r.widthEdited && r.incomingWidth != null && r.incomingWidth > 0 ? { incomingWidth: r.incomingWidth } : {}),
     })),
     mode: m.mode,
   };

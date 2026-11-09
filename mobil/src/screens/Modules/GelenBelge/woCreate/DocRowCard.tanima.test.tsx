@@ -1,9 +1,11 @@
-// T2 (belge tanıt 3 aşama, 2026-11-09): belge şeridinin üç aşaması (sunucunun `tanima` bloğundan) + "Bu sefer değiştir" kip
-// sayfası + "Gelen kg" kutusu (hedef kg değil; yalnız elle değişince gövdeye girer).
-// Negatif sonda: şerit `tanima` yokken de çizilirse "eski sunucu" vakası; ③ kaynak metni kullanıcı seçiminde "sizin seçiminiz"e
-// dönmezse kip vakası; Gelen kg notu kaynak metnini düşürürse kg vakası kırmızı.
+// Belge şeridi (2026-11-09 sadeleşme): yalnız iş gerektiren satırlar (tanınmadı + Tanıt · çok parti kipi + "Bu sefer değiştir")
+// + beyan kutuları "Gelen kg" / "Gelen en" (İE hedefi değil; sarı = belgeden; yalnız elle değişince gövdeye girer).
+// Negatif sonda: tanınmış tek partili belgede şerit çizilirse ilk vaka; kg vurgusu kaldırılırsa kg vakası; gelen en elle
+// değişmeden gövdeye girerse en gövde vakası kırmızı.
 import React, { useState } from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent } from '@testing-library/react-native';
+import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { renderWithPaper } from '../../../../test/render';
 import type { ReadWatch } from '../readResult';
 import { clearLocalPages, rememberLocalPages } from '../tanit/localPages';
@@ -25,7 +27,8 @@ jest.mock('../../../../services/batch.service', () => ({ batchService: { getNumb
 jest.mock('../../../../hooks/usePermission', () => ({ usePermissions: () => ({ has: () => true }) }));
 jest.mock('../../../../components/ModuleSheet', () => {
   const actual = jest.requireActual('../../../../components/ModuleSheet');
-  return { ...actual, __esModule: true, default: (p: { visible: boolean; children: React.ReactNode }) => (p.visible ? <>{p.children}</> : null) };
+  const { Text } = jest.requireActual('react-native');
+  return { ...actual, __esModule: true, default: (p: { visible: boolean; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode }) => (p.visible ? <>{p.subtitle ? <Text>{p.subtitle}</Text> : null}{p.children}{p.footer}</> : null) };
 });
 
 const SUMMARY = { noteId: 'n1', noteNo: 'GB-1', noteStatus: 'DRAFT', state: 'READ', reason: null, pages: { total: 1, waiting: 0, read: 1, failed: 0 }, lineCount: 3, reviewCount: 0, totals: { declared: false, ok: null, mismatches: [] }, warnings: [] };
@@ -69,35 +72,36 @@ beforeEach(() => {
   mockWatch = null;
 });
 
-describe('belge şeridi — üç aşama', () => {
-  it('⭐ TANITILDI: ① ad + güven, ② alan sayısı (dokununca eşleme sayfası), ③ kurallar', () => {
+describe('belge şeridi — yalnız iş gerektiren satırlar', () => {
+  it('⭐ TANITILDI tek parti: şerit hiç çizilmez (ad, alan sayısı, kural satırı yok; boş alan kalmaz)', () => {
     mockWatch = done({ tanitim: { durum: 'TANITILDI', sablonKodu: 'u-komurhan', sablonAdi: 'Kömürhan Çeki Listesi' }, tanima: TAUGHT });
     const ui = draw();
-    expect(ui.getByTestId('ie-tanima-1')).toHaveTextContent(/Tanındı: Kömürhan Çeki Listesi · %94/);
-    expect(ui.getByTestId('ie-tanima-2')).toHaveTextContent(/2 alan → iş emri/);
-    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/Toplam satırı: T\.Adet/);
-    // Ad şeritte; üst satırdaki eski ad etiketi tekrarlanmaz.
+    expect(ui.queryByTestId('ie-tanima-GB-1')).toBeNull();
+    expect(ui.queryByText(/Tanındı/)).toBeNull();
+    expect(ui.queryByText(/alan → iş emri/)).toBeNull();
+    expect(ui.queryByText(/Toplam satırı/)).toBeNull();
     expect(ui.queryByTestId('tanit-sablon')).toBeNull();
-    expect(ui.queryByTestId('ie-tanima-esleme')).toBeNull();
-    fireEvent.press(ui.getByTestId('ie-tanima-2'));
-    expect(ui.getByTestId('ie-tanima-esleme-toplamMetre')).toHaveTextContent(/T\.Metre.*241.*Gelen metre/);
-    expect(ui.getByTestId('ie-tanima-esleme')).toHaveTextContent(/Toplam satırı: T\.Adet \(şablon kuralı\)/);
   });
-  it('⭐ TANITILMAMIS + fotoğraf var: "Tanınmadı" + Tanıt düğmesi; eşleme yok', () => {
+  it('⭐ TANITILMAMIS + fotoğraf var: tek satır uyarı + Tanıt; amber şerit tekrarlanmaz', () => {
     rememberLocalPages([{ sha256: 'aa', uri: 'file:///1.jpg' }]);
     mockWatch = done({ tanitim: { durum: 'TANITILMAMIS' }, tanima: { template: null, durum: 'TANITILMAMIS', mapping: [], rules: [TAUGHT.rules[0]] } });
     const ui = draw();
-    expect(ui.getByTestId('ie-tanima-1')).toHaveTextContent(/Tanınmadı/);
+    expect(ui.getByTestId('ie-tanima-1')).toHaveTextContent(/Bu belge tanınmadı/);
     expect(ui.getByTestId('ie-tanima-tanit')).toBeTruthy();
-    expect(ui.queryByTestId('ie-tanima-2')).toBeNull();
-    // Amber şerit yalnız fotoğrafsız açıklama için; burada Tanıt ①'de.
+    expect(ui.queryByTestId('ie-tanima-3')).toBeNull();
     expect(ui.queryByTestId('tanit-serit')).toBeNull();
   });
-  it('⭐ SISTEM: "Hazır şablon" + üst satırda Yeniden tanıt ikonu kalır', () => {
+  it('TANITILMAMIS + fotoğraf yok: şerit yok, panel yolunu anlatan amber şerit', () => {
+    mockWatch = done({ tanitim: { durum: 'TANITILMAMIS' }, tanima: { template: null, durum: 'TANITILMAMIS', mapping: [], rules: [] } });
+    const ui = draw();
+    expect(ui.queryByTestId('ie-tanima-GB-1')).toBeNull();
+    expect(ui.getByTestId('tanit-serit')).toHaveTextContent(/panelde/);
+  });
+  it('⭐ SISTEM: şerit yok; üst satırda Yeniden tanıt ikonu kalır', () => {
     rememberLocalPages([{ sha256: 'aa', uri: 'file:///1.jpg' }]);
     mockWatch = done({ tanitim: { durum: 'SISTEM', sablonKodu: 'GENEL', sablonAdi: 'Genel İrsaliye' }, tanima: { ...TAUGHT, durum: 'SISTEM', template: { ...TAUGHT.template!, name: 'Genel İrsaliye', score: null } } });
     const ui = draw();
-    expect(ui.getByTestId('ie-tanima-1')).toHaveTextContent(/Hazır şablon: Genel İrsaliye/);
+    expect(ui.queryByTestId('ie-tanima-GB-1')).toBeNull();
     expect(ui.getByTestId('tanit-serit-guncelle').props.accessibilityLabel).toBe('Yeniden tanıt');
   });
   it('eski sunucu (tanima yok) → şerit çizilmez, bugünkü ad etiketi', () => {
@@ -106,10 +110,11 @@ describe('belge şeridi — üç aşama', () => {
     expect(ui.queryByTestId('ie-tanima-GB-1')).toBeNull();
     expect(ui.getByTestId('tanit-sablon')).toHaveTextContent(/Güleçsoy/);
   });
-  it('⭐ çok parti: ③ "2 parti → 2 iş emri (şablon kuralı)"; "Bu sefer değiştir" → Tek İE "sizin seçiminiz", K1 seçimi görünür', () => {
+  it('⭐ çok parti: tek kip satırı "2 parti → 2 iş emri (şablon kuralı)"; "Bu sefer değiştir" → Tek İE "sizin seçiminiz", K1 seçimi görünür', () => {
     mockWatch = done({ tanima: TAUGHT });
     const setMulti = jest.fn();
     const ui = draw({ parties: { parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'PER_PARTY', defaultModeSource: 'TEMPLATE' }, setMulti });
+    expect(ui.queryByTestId('ie-tanima-1')).toBeNull();
     expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/2 parti → 2 .*iş emri \(şablon kuralı\)/);
     // K1: varsayılan her parti ayrı → formda kip seçimi yok.
     expect(ui.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
@@ -126,24 +131,37 @@ describe('belge şeridi — üç aşama', () => {
   });
 });
 
+const bg = (el: { props: { style?: unknown } }) => (StyleSheet.flatten(el.props.style as never) as { backgroundColor?: unknown } | undefined)?.backgroundColor;
+
 describe('Gelen kg', () => {
-  it('⭐ belgeden önerilen kg dolu gelir, kaynak notu; elle değişince "Elle girildi" ve forma işler', () => {
+  it('⭐ belgeden önerilen kg sarı beyan kutusunda (kaynak yazısı yok); dokununca düzeltme, elle değişince sarı kalkar ve forma işler', () => {
     const updateForm = jest.fn();
     const ui = draw({ form: { incomingKg: 180.5 }, detail: { incomingKg: 180.5, incomingKgSource: 'TOTAL' }, updateForm });
-    expect(ui.getByTestId('belge-satir-kg-giris-GB-1').props.value).toBe('180,5');
-    expect(ui.getByTestId('belge-satir-kg-not-GB-1')).toHaveTextContent('Belgeden · belgedeki toplamdan');
-    fireEvent.changeText(ui.getByTestId('belge-satir-kg-giris-GB-1'), '175');
+    expect(ui.getByTestId('belge-satir-kg-GB-1-deger')).toHaveTextContent('180,5 kg');
+    expect(bg(ui.getByTestId('belge-satir-kg-GB-1'))).toBe(DOC_HIGHLIGHT_BG);
+    expect(ui.queryByText(/Belgeden ·/)).toBeNull();
+    fireEvent.press(ui.getByTestId('belge-satir-kg-GB-1'));
+    expect(ui.getByText('Belgede: 180,5 kg (belgedeki toplamdan)')).toBeTruthy();
+    fireEvent.changeText(ui.getByTestId('belge-satir-kg-duzelt-GB-1-giris'), '175');
+    fireEvent.press(ui.getByTestId('belge-satir-kg-duzelt-GB-1-kaydet'));
     expect(updateForm).toHaveBeenLastCalledWith({ incomingKg: 175, incomingKgEdited: true });
-    expect(ui.getByTestId('belge-satir-kg-not-GB-1')).toHaveTextContent('Elle girildi');
+    expect(ui.getByTestId('belge-satir-kg-GB-1-deger')).toHaveTextContent('175 kg');
+    expect(bg(ui.getByTestId('belge-satir-kg-GB-1'))).not.toBe(DOC_HIGHLIGHT_BG);
+    // Boş kaydetmek belgedekine döner (sarı geri gelir).
+    fireEvent.press(ui.getByTestId('belge-satir-kg-GB-1'));
+    fireEvent.changeText(ui.getByTestId('belge-satir-kg-duzelt-GB-1-giris'), '');
+    fireEvent.press(ui.getByTestId('belge-satir-kg-duzelt-GB-1-kaydet'));
+    expect(updateForm).toHaveBeenLastCalledWith({ incomingKg: 180.5, incomingKgEdited: false });
+    expect(bg(ui.getByTestId('belge-satir-kg-GB-1'))).toBe(DOC_HIGHLIGHT_BG);
   });
-  it('belgede kg yoksa kutu boş + "Belgede kg yok"', () => {
+  it('belgede kg yoksa kutu "Belgede yok", sarı değil', () => {
     const ui = draw();
-    expect(ui.getByTestId('belge-satir-kg-giris-GB-1').props.value).toBe('');
-    expect(ui.getByTestId('belge-satir-kg-not-GB-1')).toHaveTextContent('Belgede kg yok');
+    expect(ui.getByTestId('belge-satir-kg-GB-1-deger')).toHaveTextContent('Belgede yok');
+    expect(bg(ui.getByTestId('belge-satir-kg-GB-1'))).not.toBe(DOC_HIGHLIGHT_BG);
   });
-  it('not metni (saf): boşaltılan kutu belgedekinin yazılacağını söyler', () => {
-    expect(incomingKgNote({ value: null, edited: true, suggested: 180, source: 'FIELD' })).toBe('Boş bırakılırsa belgedeki 180 kg yazılır');
-    expect(incomingKgNote({ value: 180, edited: false, suggested: 180, source: 'LINE_SUM' })).toBe('Belgeden · satır toplamı');
+  it('sayfa alt başlığı (saf)', () => {
+    expect(incomingKgNote({ suggested: 180, source: 'FIELD' })).toBe('Belgede: 180 kg (belgedeki kg alanından)');
+    expect(incomingKgNote({ suggested: null, source: null })).toBe('Belgede kg yok');
   });
   it('⭐ gövde: öneri gitmez (sunucu yazar), elle değişen gider; çok partide üst düzey gitmez', () => {
     const f = initialRowForm({ ...detail, ownerCustomerId: 'c1', incomingKg: 180 } as never);
@@ -154,5 +172,34 @@ describe('Gelen kg', () => {
     expect(buildCreateBody({ ...f, incomingKg: null, incomingKgEdited: true }, opts)).not.toHaveProperty('incomingKg');
     const multi = initialMultiParty({ parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'SINGLE' });
     expect(buildCreateBody({ ...f, incomingKg: 175, incomingKgEdited: true, multi }, opts)).not.toHaveProperty('incomingKg');
+  });
+});
+
+describe('Gelen en (belgenin beyanı)', () => {
+  it('⭐ şablon `en` sarı beyan kutusunda; elle düzeltince sarı kalkar, gövdeye girer', () => {
+    const updateForm = jest.fn();
+    const ui = draw({ detail: { formFields: { en: '152' } }, updateForm });
+    expect(ui.getByTestId('belge-satir-en-GB-1-deger')).toHaveTextContent('152 cm');
+    expect(bg(ui.getByTestId('belge-satir-en-GB-1'))).toBe(DOC_HIGHLIGHT_BG);
+    fireEvent.press(ui.getByTestId('belge-satir-en-GB-1'));
+    fireEvent.changeText(ui.getByTestId('belge-satir-en-duzelt-GB-1-giris'), '148,5');
+    fireEvent.press(ui.getByTestId('belge-satir-en-duzelt-GB-1-kaydet'));
+    expect(updateForm).toHaveBeenLastCalledWith({ incomingWidth: 148.5, incomingWidthEdited: true });
+    expect(ui.getByTestId('belge-satir-en-GB-1-deger')).toHaveTextContent('148,5 cm');
+    expect(bg(ui.getByTestId('belge-satir-en-GB-1'))).not.toBe(DOC_HIGHLIGHT_BG);
+  });
+  it('belgede en yoksa "Belgede yok"', () => {
+    expect(draw().getByTestId('belge-satir-en-GB-1-deger')).toHaveTextContent('Belgede yok');
+  });
+  it('⭐ gövde: belgedeki en gitmez (sunucu yazar); elle düzeltilen gider; partide parti başına', () => {
+    const f = initialRowForm({ ...detail, ownerCustomerId: 'c1', formFields: { en: '152' } } as never);
+    const opts = { clientToken: 't', routeTemplateId: null, gramajPropertyId: null };
+    expect(buildCreateBody(f, opts)).not.toHaveProperty('incomingWidth');
+    expect(buildCreateBody({ ...f, incomingWidth: 148, incomingWidthEdited: true }, opts).incomingWidth).toBe(148);
+    const multi = initialMultiParty({ parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'SINGLE' })!;
+    const body = buildCreateBody({ ...f, incomingWidth: 148, incomingWidthEdited: true, multi: { ...multi, rows: [{ ...multi.rows[0]!, incomingWidth: 150, widthEdited: true }, multi.rows[1]!] } }, opts);
+    expect(body).not.toHaveProperty('incomingWidth');
+    expect(body.parties?.[0]?.incomingWidth).toBe(150);
+    expect(body.parties?.[1]).not.toHaveProperty('incomingWidth');
   });
 });

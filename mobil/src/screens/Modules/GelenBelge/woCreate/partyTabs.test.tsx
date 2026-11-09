@@ -178,7 +178,7 @@ describe('PartyRows — bizim parti no tahmini (seri kipi)', () => {
     mockNumberState.mockResolvedValue({ success: true, data: { enabled: true, lastCode: 'P04', nextCode: 'P05', nextCodes: ['P05', 'P06'], min: 1, max: 99 } });
     const row = { ...rowOf(), result: { kind: 'OPENED', workOrders: [{ id: 'w1', workOrderNo: 'IE-1', blockNos: [1] }], failed: [{ blockNo: 2, message: 'x' }] } } as unknown as DocRow;
     const ui = renderWithPaper(<PartyRows row={row} wo={{ ...wo(), batchSource: 'SERIES' } as unknown as WoRowsState} locked={false} />);
-    const val = (b: number) => ui.getByTestId(`belge-parti-bizim-GB-1-${b}`, { includeHiddenElements: true }).props.value;
+    const val = (b: number) => ui.getByTestId(`belge-parti-bizim-GB-1-${b}-deger`, { includeHiddenElements: true }).props.children[0];
     await waitFor(() => expect(val(2)).toBe('Otomatik · sıradaki: P05'));
     expect(val(3)).toBe('Otomatik · sıradaki: P06');
     expect(ui.queryByTestId('belge-parti-bizim-GB-1-1', { includeHiddenElements: true })).toBeNull();

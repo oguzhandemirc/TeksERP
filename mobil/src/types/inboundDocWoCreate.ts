@@ -15,6 +15,8 @@ export interface CreateWorkOrderFromNoteBody {
   kursunMeters: string;
   /** Gelen kg; YALNIZ kullanıcı değiştirdiyse gider (yoksa sunucu belgeden önerileni yazar; eski sunucu strict gövdeyle 400). */
   incomingKg?: number;
+  /** Gelen en (cm, belgenin beyanı); YALNIZ kullanıcı değiştirdiyse gider (yoksa sunucu şablon `en`ini yazar; eski sunucu strict gövdeyle 400). */
+  incomingWidth?: number;
   /** Yok = rotasız iş emri (K29; yalnız rota uygulaması "Okutmayla", sunucu SIRALI'da 400 verir). */
   routeTemplateId?: string;
   stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
@@ -27,6 +29,8 @@ export interface CreateWorkOrderFromNoteBody {
     meters: number;
     /** Parti gelen kg'si; yalnız kullanıcı değiştirdiyse (yoksa sunucu `/partiler` önerisini yazar). */
     incomingKg?: number;
+    /** Parti gelen eni (cm); yalnız kullanıcı değiştirdiyse (yoksa sunucu belgenin `en`ini yazar). */
+    incomingWidth?: number;
     /** Belge masası: parti başına gramaj / plan makinesi (verilmezse gövdedekiler). */
     targetValues?: { propertyId: string; valueId: string }[];
     stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];
