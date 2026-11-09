@@ -2,17 +2,13 @@
 // PATCH `/tanim` gövdesi (yalnız DEĞİŞEN parça; birleşim sunucuda — istemci şablon JSON'u kurmaz).
 import { TERIM } from "@/lib/terim";
 import { compareFieldKeys, fieldTargetOf } from "./fieldTargets";
-import { templateKeywords } from "./teachDraft";
+import { multiPartyRuleOf, templateKeywords } from "./teachDraft";
 import type { MultiPartyRule, TemplateEditBody, TemplateJson, UserTemplateDetail } from "./types";
 
 const obj = (v: unknown): TemplateJson | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as TemplateJson) : null);
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
-/** Şablonun çok parti kuralı; bilinmeyen değer kural sayılmaz (backend `multiPartyRuleOf` aynası). */
-export function multiPartyRuleOf(t: TemplateJson | null | undefined): MultiPartyRule | null {
-  const v = obj(t?.rules)?.multiParty;
-  return v === "SINGLE" || v === "PER_PARTY" ? v : null;
-}
+export { multiPartyRuleOf };
 
 export function multiPartyLabel(mode: MultiPartyRule): string {
   return mode === "PER_PARTY" ? `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}` : `Tek ${TERIM.terbiyeIsEmri.tekilKucuk}`;

@@ -1,101 +1,94 @@
-// Rehberli tanıtma paneli (K30-T A2): başlık → alanlar sırayla → ad + kaydet. Kullanıcı yalnız DEĞERE dokunur; etiketi sunucu bulur,
-// önizleme kendiliğinden koşar ve "Okunan: …" anında görünür. Durum geçişleri saf `guidedReduce`te.
-// Sözleşme A2 "Etiketi değiştir" düğmesi: etiket seçimi sunucuda (anchor) ve istemciden ezilemez; düğme dürüstçe "Yeniden işaretle".
-import { Check, ChevronLeft, ChevronRight, Loader2, RotateCcw, SkipForward } from "lucide-react";
+// Rehberli tanıtma paneli (belge tanıt 3 aşama): aşama şeridi "① Tanıma · ② Eşleme · ③ Kurallar" + aşama gövdesi + Geri/İleri.
+// İleri o aşamanın sorunu yoksa açık, kapalıysa gerekçe tek satır; şeritten geri hep, ileri kapıya uyarak. Durum geçişleri saf `guidedReduce`te.
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { chipStatus, fieldLabel, fieldReadout, FINISH_STEP, GUIDED_FIELDS, stepField, type GuidedEvent, type Readout } from "./guidedTeach";
-import { isKept, type FieldKey, type TeachState } from "./teachDraft";
-import type { SuggestResult } from "./types";
+import { EslemeStage, type PreviewInfo } from "./EslemeStage";
+import type { GuidedEvent, GuidedState } from "./guidedTeach";
+import { KurallarStage } from "./KurallarStage";
+import { canReach, confidenceText, stageIndex, stageProblems, STAGES, type StageContext } from "./stages";
+import type { ScanWord, SimilarTemplate } from "./types";
 
 interface Props {
-  state: TeachState;
-  step: number;
-  skipped: readonly FieldKey[];
+  g: GuidedState;
+  words: readonly ScanWord[];
   dispatch: (ev: GuidedEvent) => void;
   onName: (name: string) => void;
-  preview: { result: SuggestResult | null; fresh: boolean; error: string | null };
-  /** Güncelle kipinde eski şablonun alanları: işaretlenmeyen/atlanan alan sunucu birleştirmesinde eski haliyle KORUNUR. */
-  oldKeys?: readonly string[];
+  /** Kimlik yazısını kapat (fotoğrafta satıra yeniden dokunmakla aynı). */
+  onIdentifierOff: (text: string) => void;
+  preview: PreviewInfo;
+  ctx: StageContext;
+  /** ① "Benzeyen tip · Onu düzenle": o tipin düzenle kipine geçer (bu belgeyle). Güncellenen tip listede yoktur. */
+  onEditSimilar: (code: string) => void;
+  existingCode: string | null;
 }
 
-const CHIP_TONE = { done: "border-emerald-600 text-emerald-700 dark:text-emerald-300", skipped: "border-dashed text-muted-foreground line-through", todo: "" } as const;
-
-function ReadoutLine({ r }: { r: Readout }) {
-  if (r.kind === "idle") return <p className="text-sm text-muted-foreground">Henüz dokunulmadı.</p>;
-  if (r.kind === "loading") return <p className="flex items-center gap-1 text-sm text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Okunuyor…</p>;
-  if (r.kind === "ok")
-    return (
-      <p className="text-sm text-emerald-700 dark:text-emerald-300" data-testid="guided-readout-ok">
-        Okunan: <strong>{r.value}</strong>{r.label ? <span className="text-muted-foreground"> (etiket: “{r.label}”)</span> : null}
-      </p>
-    );
-  if (r.kind === "empty") return <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="guided-readout-fail">Okunamadı — işareti kaldırıp değerin kendisine yeniden dokunun ya da bu belgede yoksa atlayın.</p>;
-  return <p className="text-sm text-destructive" data-testid="guided-readout-fail">{r.text}</p>;
+function StageStrip({ g, words, dispatch, ctx }: Pick<Props, "g" | "words" | "dispatch" | "ctx">) {
+  const at = stageIndex(g.stage);
+  return (
+    <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Tanıtma aşamaları">
+      {STAGES.map((st, i) => {
+        const done = i < at;
+        const reachable = canReach(g.stage, st.key, g.teach, { words, ctx });
+        return (
+          <Button key={st.key} type="button" size="sm" role="tab" aria-selected={i === at} disabled={!reachable} variant={i === at ? "default" : "outline"} className={cn(done && "border-emerald-600 text-emerald-700 dark:text-emerald-300")} onClick={() => dispatch({ type: "STAGE_GOTO", stage: st.key })} data-testid={`stage-${st.key}`}>
+            {done ? <Check className="mr-1 h-3.5 w-3.5" /> : <span className="mr-1 text-xs opacity-70">{st.no}</span>}{st.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
 }
 
-export function GuidedTeach({ state, step, skipped, dispatch, onName, preview, oldKeys = [] }: Props) {
-  const key = stepField(step);
-  const keptOld = (k: FieldKey) => oldKeys.includes(k) && !state.fields[k]?.length;
-  const steps = ["Başlık", ...GUIDED_FIELDS.map(fieldLabel), "Bitir"];
+function TanimaStage({ g, onName, onIdentifierOff, preview, onEditSimilar, existingCode }: Omit<Props, "words" | "ctx" | "dispatch">) {
+  const ids = g.teach.identifiers.filter((d) => d.on);
+  const similar: SimilarTemplate[] = preview.fresh ? (preview.result?.benzerSablonlar ?? []).filter((b) => b.kod !== existingCode) : [];
+  return (
+    <div className="space-y-2" data-testid="stage-tanima">
+      <p className="text-sm text-muted-foreground">Bu tip belgede her zaman aynı olan yazılara dokunun (firma adı, belge başlığı). Önerilen başlık hazır seçili gelir.</p>
+      <ul className="flex flex-wrap gap-1.5" data-testid="guided-identifiers">
+        {ids.map((d) => (
+          <li key={d.text} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-0.5 pl-2.5 pr-1 text-sm">
+            {d.text}
+            <Button type="button" size="icon" variant="ghost" className="h-5 w-5" aria-label={`${d.text} kimlik yazısını çıkar`} onClick={() => onIdentifierOff(d.text)} data-testid={`guided-identifier-off-${d.text}`}>
+              <X className="h-3 w-3" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {ids.length === 0 && <p className="text-sm text-amber-700 dark:text-amber-300">Henüz kimlik yazısı seçilmedi.</p>}
+      <p className="text-sm" data-testid="guided-confidence">{confidenceText(preview.result, preview.fresh)}</p>
+      {similar[0] && (
+        <p className="text-sm" data-testid="guided-similar">
+          Benzeyen tip: <b>{similar[0].ad}</b> ·{" "}
+          <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => onEditSimilar(similar[0]!.kod)} data-testid="guided-similar-edit">Onu düzenle</button>
+        </p>
+      )}
+      <label className="block space-y-1 text-sm">
+        <span className="font-medium">Belge tipinin adı</span>
+        <Input value={g.teach.name} maxLength={80} onChange={(e) => onName(e.target.value)} placeholder="ör. Güleçsoy çeki listesi" data-testid="guided-name" />
+      </label>
+    </div>
+  );
+}
+
+export function GuidedTeach(props: Props) {
+  const { g, words, dispatch, ctx } = props;
+  const at = stageIndex(g.stage);
+  const blocked = stageProblems(g.stage, g.teach, words, ctx)[0] ?? null;
   return (
     <div className="space-y-3 rounded-lg border p-3" data-testid="guided-teach">
-      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Tanıtma adımları">
-        {steps.map((label, i) => {
-          const k = stepField(i);
-          const st = k ? chipStatus(state, k, skipped) : "todo";
-          return (
-            <Button key={label} type="button" size="sm" role="tab" aria-selected={i === step} variant={i === step ? "default" : "outline"} className={cn(i !== step && CHIP_TONE[st])} onClick={() => dispatch({ type: "GOTO", step: i })} data-testid={`guided-chip-${i}`}>
-              {st === "done" && <Check className="mr-1 h-3 w-3" />}{label}
-            </Button>
-          );
-        })}
-      </div>
-
-      {step === 0 && (
-        <div className="space-y-1" data-testid="guided-step-header">
-          <p className="font-medium">Belgenin başlığına dokunun</p>
-          <p className="text-sm text-muted-foreground">Firma adı ya da belge adı gibi her belgede aynı kalan yazı; sistem bu tipi bununla tanır. Önerilen başlık hazır seçili gelir.</p>
-          <ul className="text-sm" data-testid="guided-identifiers">
-            {state.identifiers.filter((d) => d.on).map((d) => <li key={d.text}>• {d.text}</li>)}
-          </ul>
-          {!state.identifiers.some((d) => d.on) && <p className="text-sm text-amber-700 dark:text-amber-300">Henüz başlık seçilmedi.</p>}
-        </div>
-      )}
-
-      {key && (
-        <div className="space-y-1" data-testid={`guided-step-${key}`}>
-          <p className="font-medium">{fieldLabel(key)} değerine dokunun</p>
-          <p className="text-sm text-muted-foreground">Etikete değil, değerin kendisine dokunun; yanındaki basılı etiketi sistem bulur.</p>
-          <ReadoutLine r={fieldReadout(state, key, preview)} />
-          {keptOld(key) && <p className="text-xs text-muted-foreground" data-testid="guided-kept-old">Eski şablondaki “{fieldLabel(key)}” tanımı korunur; değiştirmek için değere dokunun.</p>}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" size="sm" variant="outline" onClick={() => dispatch({ type: "SKIP" })} data-testid="guided-skip"><SkipForward className="mr-1 h-4 w-4" /> Bu belgede yok</Button>
-            {state.fields[key]?.length ? <Button type="button" size="sm" variant="outline" onClick={() => dispatch({ type: "RELABEL" })} data-testid="guided-relabel"><RotateCcw className="mr-1 h-4 w-4" /> Yeniden işaretle</Button> : null}
-          </div>
-        </div>
-      )}
-
-      {step === FINISH_STEP && (
-        <div className="space-y-2" data-testid="guided-step-finish">
-          <ul className="space-y-1 text-sm">
-            {GUIDED_FIELDS.map((k) => (
-              <li key={k} className="flex gap-2"><span className="w-32 shrink-0 text-muted-foreground">{fieldLabel(k)}</span>
-                {state.fields[k]?.length || isKept(state, k) ? <ReadoutLine r={fieldReadout(state, k, preview)} /> : <span className="text-muted-foreground">{keptOld(k) ? "Eski şablondaki tanım korunur" : skipped.includes(k) ? "Bu belgede yok" : "—"}</span>}
-              </li>
-            ))}
-          </ul>
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Belge tipinin adı</span>
-            <Input value={state.name} onChange={(e) => onName(e.target.value)} placeholder="ör. Güleçsoy çeki listesi" data-testid="guided-name" />
-          </label>
-        </div>
-      )}
-
-      <div className="flex justify-between gap-2">
-        <Button type="button" size="sm" variant="ghost" disabled={step === 0} onClick={() => dispatch({ type: "BACK" })} data-testid="guided-back"><ChevronLeft className="mr-1 h-4 w-4" /> Geri</Button>
-        {step < FINISH_STEP && <Button type="button" size="sm" onClick={() => dispatch({ type: "NEXT" })} data-testid="guided-next">Sonraki <ChevronRight className="ml-1 h-4 w-4" /></Button>}
+      <StageStrip g={g} words={words} dispatch={dispatch} ctx={ctx} />
+      {g.stage === "TANIMA" && <TanimaStage {...props} />}
+      {g.stage === "ESLEME" && <EslemeStage g={g} words={words} dispatch={dispatch} preview={props.preview} />}
+      {g.stage === "KURALLAR" && <KurallarStage g={g} words={words} dispatch={dispatch} preview={props.preview} />}
+      <div className="flex items-center justify-between gap-2 border-t pt-2">
+        <Button type="button" size="sm" variant="ghost" disabled={at === 0} onClick={() => dispatch({ type: "STAGE_BACK" })} data-testid="stage-back"><ChevronLeft className="mr-1 h-4 w-4" /> Geri</Button>
+        {blocked && <span className="min-w-0 flex-1 text-right text-xs text-amber-800 dark:text-amber-300" data-testid="stage-blocked">{blocked}</span>}
+        {at < STAGES.length - 1 && (
+          <Button type="button" size="sm" disabled={!!blocked} onClick={() => dispatch({ type: "STAGE_NEXT" })} data-testid="stage-next">İleri <ChevronRight className="ml-1 h-4 w-4" /></Button>
+        )}
       </div>
     </div>
   );

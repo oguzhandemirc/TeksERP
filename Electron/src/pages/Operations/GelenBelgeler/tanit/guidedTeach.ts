@@ -1,20 +1,16 @@
-// Rehberli (adım adım) tanıtma — saf çekirdek (K30-T A2/A3; tablet `mobil/.../tanit/guided.ts` aynası + panel reducer'ı).
-// Adım 0 başlık (kimlik yazısı), sonra alanlar sırayla, son adım ad + kaydet. Sunucu etiketi DEĞER kutusundan bulur → kullanıcı yalnız değere dokunur.
+// Rehberli tanıtma — saf çekirdek (belge tanıt 3 aşama, 2026-11-09; tablet T1 reducer'ı ile aynı kurallar): ① Tanıma (kimlik yazısı + ad)
+// · ② Eşleme (satır seç → değere dokun; top tablosu sütunları) · ③ Kurallar (tekrar eden bölüm, çok parti, toplam satırı).
+// Sunucu etiketi DEĞER kutusundan bulur → kullanıcı yalnız değere dokunur. Aşama kapısı `stages.ts`.
 import { lowerTr } from "@/lib/tr-case";
 import type { ScanMark } from "../ZoomableScan";
-import { addIdentifier, assignField, clearField, FIELD_OPTIONS, isKept, lineTexts, suggestIdentifiers, teachMarks, type FieldKey, type TeachState } from "./teachDraft";
-import type { ScanWord, ScanWords, SimilarTemplate, SuggestResult } from "./types";
+import { canReach, fieldWoLabel, firstOpenField, neighbourField, stageIndex, STAGES, type Stage, type StageContext } from "./stages";
+import {
+  addIdentifier, assignField, byReading, clearField, COLUMN_OPTIONS, isKept, lineTexts, setDropped, setRepeats, suggestIdentifiers, teachMarks, without,
+  type ColumnKey, type FieldKey, type TeachState,
+} from "./teachDraft";
+import type { MultiPartyRule, ScanWord, ScanWords, SimilarTemplate, SuggestResult } from "./types";
 
-/** İlk sürümün alan sırası (K30-T A2; anahtarlar backend ASSIGNABLE_FIELDS). */
-// Evrak no SON adım: istasyonda belge okutma iş emrini önce bununla bulur (K17/K30-E); belgede yoksa atlanır.
-export const GUIDED_FIELDS: readonly FieldKey[] = ["musteri", "partiNo", "hedefMetraj", "toplamMetre", "en", "desen", "renk", "evrakNo"];
-
-const GUIDED_LABEL: Partial<Record<FieldKey, string>> = { partiNo: "Parti no", desen: "Desen", renk: "Renk", en: "En", evrakNo: "Evrak no" };
-export const fieldLabel = (k: FieldKey): string => GUIDED_LABEL[k] ?? FIELD_OPTIONS.find((f) => f.key === k)?.label ?? k;
-
-/** Adımlar: 0 = başlık, 1..n = alanlar, n+1 = bitir. */
-export const FINISH_STEP = GUIDED_FIELDS.length + 1;
-export const stepField = (step: number): FieldKey | null => (step >= 1 && step <= GUIDED_FIELDS.length ? GUIDED_FIELDS[step - 1]! : null);
+export const fieldLabel = fieldWoLabel;
 
 const norm = (t: string) => lowerTr(t).replace(/\s+/g, " ").trim();
 const clean = (t: string) => t.replace(/[:.\s]+$/u, "").trim();
@@ -41,15 +37,46 @@ export function toggleFieldWord(s: TeachState, words: readonly ScanWord[], key: 
     const left = cur.filter((x) => x !== i);
     return left.length ? { ...s, fields: { ...s.fields, [key]: left } } : clearField(s, key);
   }
-  return assignField({ ...s, selected: [...cur, i] }, words, key);
+  return assignField({ ...s, selected: [...cur, i], drop: s.drop.filter((k) => k !== key) }, words, key);
 }
 
+/** ② Top tablosu sütun başlığına dokunuş: kelime o sütunun başlığına eklenir/çıkarılır (başka alandan/sütundan düşer). */
+export function toggleColumnWord(s: TeachState, words: readonly ScanWord[], key: ColumnKey, i: number): TeachState {
+  const cur = s.columns[key] ?? [];
+  const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort(byReading(words));
+  const columns = without(s.columns, [i]);
+  if (next.length) columns[key] = next;
+  else delete columns[key];
+  return { ...s, columns, fields: without(s.fields, [i]) };
+}
+
+/** ③ Toplam satırı yazısına dokunuş: kelime toplam etiketine eklenir/çıkarılır. */
+export function toggleTotalsWord(s: TeachState, words: readonly ScanWord[], i: number): TeachState {
+  const cur = s.totalsLabel ?? [];
+  const next = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort(byReading(words));
+  return { ...s, totalsLabel: next.length ? next : null };
+}
+
+/** ③ Bölüm başlangıcı: dokunulan kelimenin SATIRI (en çok 40 karakter); aynı satıra yeniden dokunmak kaldırır. */
+export function toggleSectionStart(s: TeachState, words: readonly ScanWord[], i: number): TeachState {
+  const line = lineTexts(words).find((l) => l.idx.includes(i));
+  if (!line) return s;
+  const text = clean(line.text).slice(0, 40);
+  return { ...setRepeats(s, true), sectionStart: norm(s.sectionStart) === norm(text) ? "" : text };
+}
+
+/** Belgeye dokunuşun gideceği yer: ② bir alan ya da sütun, ③ bölüm başı ya da toplam satırı; ① her zaman kimlik yazısı. */
+export type Target = { kind: "field"; key: FieldKey } | { kind: "column"; key: ColumnKey } | { kind: "sectionStart" } | { kind: "totals" };
+
 export interface GuidedState {
-  step: number;
+  stage: Stage;
+  target: Target | null;
   /** "Bu belgede yok" denen alanlar. */
   skipped: FieldKey[];
   teach: TeachState;
 }
+
+export type GuidedRule = { rule: "repeats"; on: boolean } | { rule: "multiParty"; value: MultiPartyRule | null };
 
 export type GuidedEvent =
   | { type: "TAP"; i: number }
@@ -57,54 +84,91 @@ export type GuidedEvent =
   | { type: "BACK" }
   | { type: "SKIP" }
   | { type: "RELABEL" }
-  | { type: "GOTO"; step: number };
+  | { type: "GOTO"; target: Target | null }
+  | { type: "STAGE_NEXT" }
+  | { type: "STAGE_BACK" }
+  | { type: "STAGE_GOTO"; stage: Stage }
+  | { type: "SET_RULE"; set: GuidedRule }
+  | { type: "DROP_FIELD"; key: FieldKey; on: boolean };
 
-export const guidedStart = (teach: TeachState): GuidedState => ({ step: 0, skipped: [], teach });
+export const guidedStart = (teach: TeachState): GuidedState => ({ stage: "TANIMA", target: null, skipped: [], teach });
 
-const firstOnIdentifier = (s: TeachState) => s.identifiers.find((d) => d.on)?.text ?? "";
+const fieldOf = (t: Target | null): FieldKey | null => (t?.kind === "field" ? t.key : null);
 
-/** Rehber reducer'ı: TAP alanın kelimesini ekler/çıkarır (başlıkta satırı), NEXT ilerler (başlıktan çıkarken ad boşsa başlık),
- *  SKIP "Bu belgede yok" (alan boşaltılır), RELABEL alanı boşaltıp aynı adımda yeniden dokunmayı bekler. */
-export function guidedReduce(g: GuidedState, ev: GuidedEvent, words: readonly ScanWord[]): GuidedState {
-  const key = stepField(g.step);
+function enter(g: GuidedState, stage: Stage): GuidedState {
+  const target: Target | null = stage === "ESLEME" ? { kind: "field", key: firstOpenField(g.teach, g.skipped) } : null;
+  return { ...g, stage, target };
+}
+
+function tap(g: GuidedState, words: readonly ScanWord[], i: number): GuidedState {
+  const t = g.target;
+  if (g.stage === "TANIMA") return { ...g, teach: toggleHeaderWord(g.teach, words, i) };
+  if (g.stage === "ESLEME" && t?.kind === "field") return { ...g, skipped: g.skipped.filter((k) => k !== t.key), teach: toggleFieldWord(g.teach, words, t.key, i) };
+  if (g.stage === "ESLEME" && t?.kind === "column") return { ...g, teach: toggleColumnWord(g.teach, words, t.key, i) };
+  if (g.stage === "KURALLAR" && t?.kind === "sectionStart") return { ...g, teach: toggleSectionStart(g.teach, words, i) };
+  if (g.stage === "KURALLAR" && t?.kind === "totals") return { ...g, teach: toggleTotalsWord(g.teach, words, i) };
+  return g;
+}
+
+function moveField(g: GuidedState, dir: 1 | -1): GuidedState {
+  const k = fieldOf(g.target);
+  if (!k) return g;
+  const n = neighbourField(k, dir);
+  return { ...g, target: n ? { kind: "field", key: n } : null };
+}
+
+function setRule(g: GuidedState, set: GuidedRule): GuidedState {
+  if (set.rule === "multiParty") return { ...g, teach: { ...g.teach, multiParty: set.value } };
+  return { ...g, teach: setRepeats(g.teach, set.on), target: set.on ? { kind: "sectionStart" } : g.target?.kind === "sectionStart" ? null : g.target };
+}
+
+/** Reducer: TAP aşama/hedefe göre kelimeyi ekler/çıkarır; NEXT/BACK ② içinde sonraki/önceki alan; SKIP "Bu belgede yok" + ilerle;
+ *  RELABEL alanı boşaltır; STAGE_* aşama kapısına (`canReach`) uyar; SET_RULE ③ kuralları; DROP_FIELD kayıtlı alanı kaldırır/geri alır. */
+export function guidedReduce(g: GuidedState, ev: GuidedEvent, words: readonly ScanWord[], ctx: StageContext = {}): GuidedState {
+  const key = fieldOf(g.target);
+  const at = stageIndex(g.stage);
   switch (ev.type) {
-    case "TAP": {
-      if (g.step === 0) return { ...g, teach: toggleHeaderWord(g.teach, words, ev.i) };
+    case "TAP": return tap(g, words, ev.i);
+    case "NEXT": return moveField(g, 1);
+    case "BACK": return moveField(g, -1);
+    case "SKIP":
       if (!key) return g;
-      return { ...g, skipped: g.skipped.filter((k) => k !== key), teach: toggleFieldWord(g.teach, words, key, ev.i) };
+      return moveField({ ...g, skipped: g.skipped.includes(key) ? g.skipped : [...g.skipped, key], teach: clearField(g.teach, key) }, 1);
+    case "RELABEL":
+      return key ? { ...g, skipped: g.skipped.filter((k) => k !== key), teach: clearField(g.teach, key) } : g;
+    case "GOTO": return { ...g, target: ev.target };
+    case "STAGE_NEXT": {
+      const next = STAGES[at + 1]?.key;
+      return next && canReach(g.stage, next, g.teach, { words, ctx }) ? enter(g, next) : g;
     }
-    case "NEXT": {
-      if (g.step >= FINISH_STEP) return g;
-      const teach = g.step === 0 && g.teach.name.trim().length < 2 ? { ...g.teach, name: firstOnIdentifier(g.teach).slice(0, 80) } : g.teach;
-      return { ...g, teach, step: g.step + 1 };
-    }
-    case "BACK":
-      return g.step > 0 ? { ...g, step: g.step - 1 } : g;
-    case "SKIP": {
-      if (!key) return g;
-      return { step: g.step + 1, skipped: g.skipped.includes(key) ? g.skipped : [...g.skipped, key], teach: clearField(g.teach, key) };
-    }
-    case "RELABEL": {
-      if (!key) return g;
-      return { ...g, skipped: g.skipped.filter((k) => k !== key), teach: clearField(g.teach, key) };
-    }
-    case "GOTO":
-      return { ...g, step: Math.max(0, Math.min(FINISH_STEP, ev.step)) };
+    case "STAGE_BACK": return at > 0 ? enter(g, STAGES[at - 1]!.key) : g;
+    case "STAGE_GOTO": return ev.stage !== g.stage && canReach(g.stage, ev.stage, g.teach, { words, ctx }) ? enter(g, ev.stage) : g;
+    case "SET_RULE": return setRule(g, ev.set);
+    case "DROP_FIELD": return { ...g, teach: setDropped(g.teach, ev.key, ev.on) };
   }
 }
 
-/** Fotoğraf kutuları: başlık adımında kimlik satırları, alan adımında o alanın değeri "seçili" görünür. */
-export function guidedMarks(s: TeachState, words: readonly ScanWord[], step: number, located: Partial<Record<FieldKey, number[]>> = {}): ScanMark[] {
+const COLUMN_LABEL = Object.fromEntries(COLUMN_OPTIONS.map((c) => [c.key, c.label])) as Record<ColumnKey, string>;
+
+function targetWords(s: TeachState, words: readonly ScanWord[], t: Target | null, located: Partial<Record<FieldKey, number[]>>): { idx: Set<number>; label: string } | null {
+  if (!t) return null;
+  if (t.kind === "field") return { idx: new Set(s.fields[t.key] ?? (isKept(s, t.key) ? located[t.key] : undefined) ?? []), label: fieldLabel(t.key) };
+  if (t.kind === "column") return { idx: new Set(s.columns[t.key] ?? []), label: `Sütun: ${COLUMN_LABEL[t.key]}` };
+  if (t.kind === "totals") return { idx: new Set(s.totalsLabel ?? []), label: "Toplam satırı" };
+  const start = norm(s.sectionStart);
+  return { idx: new Set(start ? lineTexts(words).filter((l) => norm(clean(l.text).slice(0, 40)) === start).flatMap((l) => l.idx) : []), label: "Bölüm başı" };
+}
+
+/** Fotoğraf kutuları: ① kimlik satırları "Başlık"; ②/③ seçili hedefin kelimeleri "seçili"; geri kalanı bütün işaretler. */
+export function guidedMarks(s: TeachState, words: readonly ScanWord[], g: Pick<GuidedState, "stage" | "target">, located: Partial<Record<FieldKey, number[]>> = {}): ScanMark[] {
   const base = teachMarks({ ...s, selected: [] }, words, located);
-  const key = stepField(step);
-  if (key) {
-    const mine = new Set(s.fields[key] ?? located[key] ?? []);
-    return base.map((m, i) => (mine.has(i) ? { ...m, tone: "selected" as const, label: fieldLabel(key) } : m));
+  if (g.stage === "TANIMA") {
+    const on = new Set(s.identifiers.filter((d) => d.on).map((d) => norm(d.text)));
+    const idLines = new Set(lineTexts(words).filter((l) => on.has(norm(clean(l.text).slice(0, 60)))).flatMap((l) => l.idx));
+    return base.map((m, i) => (idLines.has(i) && m.tone === "word" ? { ...m, tone: "column" as const, label: "Başlık" } : m));
   }
-  if (step !== 0) return base;
-  const on = new Set(s.identifiers.filter((d) => d.on).map((d) => norm(d.text)));
-  const idLines = new Set(lineTexts(words).filter((l) => on.has(norm(clean(l.text).slice(0, 60)))).flatMap((l) => l.idx));
-  return base.map((m, i) => (idLines.has(i) && m.tone === "word" ? { ...m, tone: "column" as const, label: "Başlık" } : m));
+  const mine = targetWords(s, words, g.target, located);
+  return mine ? base.map((m, i) => (mine.idx.has(i) ? { ...m, tone: "selected" as const, label: mine.label } : m)) : base;
 }
 
 export type Readout =

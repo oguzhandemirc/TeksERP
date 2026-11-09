@@ -32,7 +32,9 @@ export interface SuggestBody {
   table?: { columns: Array<{ key: string; header: string }>; totalsLabel?: string | null };
   sectionStartLabel?: string | null;
   /** Güncelle kipi: sunucu bu kullanıcı şablonuyla birleştirip önizler; dönen `template` aynen kaydedilir. */
-  base?: { code: string; keep: Array<"tables" | "sections"> };
+  base?: { code: string; keep: Array<"tables" | "sections">; drop?: string[] };
+  /** ③ Kurallar; yoksa fabrika ayarı (güncellemede kayıtlı kural korunur, `multiParty: null` kaldırır). */
+  rules?: { multiParty?: MultiPartyRule | null };
 }
 
 export interface SuggestPreview {

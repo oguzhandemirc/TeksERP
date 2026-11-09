@@ -1,13 +1,14 @@
-// Tanıtma sayfasının sağ sütunu: kip seçimi (Adım adım | Gelişmiş), rehber ya da serbest panel, eksikler, Önizle/Kaydet ve
-// benzer şablon diyaloğu. Kaydet tek tıktır: bayat önizlemeyi kendisi tazeler (useTeach.save).
+// Tanıtma sayfasının sağ sütunu: rehberli 3 aşama (varsayılan) ya da "Serbest işaretleme" (bugünkü serbest panel), eksikler, kaydet
+// çubuğu ("3 kimlik yazısı · 7 alan · 2 kural" + Kaydet) ve benzer şablon diyaloğu. Kaydet tek tıktır: bayat önizlemeyi tazeler (useTeach.save).
 import { Eye, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FINISH_STEP, type GuidedEvent } from "./guidedTeach";
+import type { GuidedEvent, GuidedState } from "./guidedTeach";
 import { GuidedTeach } from "./GuidedTeachPanel";
 import { SimilarDialog } from "./SimilarDialog";
+import { teachSummary } from "./stages";
 import { TeachPanel } from "./TeachPanel";
 import { TeachPreview } from "./TeachPreview";
-import { oldTemplateFieldKeys, type FieldKey } from "./teachDraft";
+import { toggleIdentifier } from "./teachDraft";
 import type { UserTemplateDetail } from "./types";
 import type { TeachHook } from "./useTeach";
 
@@ -16,37 +17,52 @@ interface Props {
   existing: UserTemplateDetail | null;
   advanced: boolean;
   onAdvanced: (on: boolean) => void;
-  nav: { step: number; skipped: FieldKey[] };
+  g: GuidedState | null;
   dispatch: (ev: GuidedEvent) => void;
+  onEditSimilar: (code: string) => void;
 }
 
-export function TeachControls({ t, existing, advanced, onAdvanced, nav, dispatch }: Props) {
+function ModeLink({ advanced, onAdvanced }: Pick<Props, "advanced" | "onAdvanced">) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-sm font-medium">{advanced ? "Serbest işaretleme" : "Adım adım tanıtma"}</span>
+      {advanced ? (
+        <Button size="sm" variant="link" className="h-auto p-0" onClick={() => onAdvanced(false)} data-testid="teach-mode-guided">Adım adım'a dön</Button>
+      ) : (
+        <Button size="sm" variant="link" className="h-auto p-0 text-muted-foreground" onClick={() => onAdvanced(true)} data-testid="teach-mode-advanced">Serbest işaretleme</Button>
+      )}
+    </div>
+  );
+}
+
+export function TeachControls({ t, existing, advanced, onAdvanced, g, dispatch, onEditSimilar }: Props) {
   if (!t.state || !t.words.data) return null;
-  const showProblems = advanced || nav.step === FINISH_STEP;
+  const words = t.words.data.words;
+  const showProblems = advanced || g?.stage === "KURALLAR";
   return (
     <>
-      <div className="flex gap-1" role="group" aria-label="Tanıtma kipi">
-        <Button size="sm" variant={advanced ? "outline" : "default"} onClick={() => onAdvanced(false)} data-testid="teach-mode-guided">Adım adım</Button>
-        <Button size="sm" variant={advanced ? "default" : "outline"} onClick={() => onAdvanced(true)} data-testid="teach-mode-advanced">Gelişmiş (tablo, bölüm)</Button>
-      </div>
-      {advanced ? (
+      <ModeLink advanced={advanced} onAdvanced={onAdvanced} />
+      {advanced || !g ? (
         <>
-          <TeachPanel state={t.state} words={t.words.data.words} onChange={t.setState} old={existing?.template ?? null} />
+          <TeachPanel state={t.state} words={words} onChange={t.setState} old={existing?.template ?? null} />
           {t.preview && <TeachPreview result={t.preview} stale={!t.previewFresh} />}
         </>
       ) : (
         <GuidedTeach
-          state={t.state}
-          step={nav.step}
-          skipped={nav.skipped}
+          g={g}
+          words={words}
           dispatch={dispatch}
           onName={(name) => t.setState((s) => ({ ...s, name }))}
+          onIdentifierOff={(text) => t.setState((s) => toggleIdentifier(s, text))}
           preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError }}
-          oldKeys={oldTemplateFieldKeys(existing?.template)}
+          ctx={t.stageCtx}
+          onEditSimilar={onEditSimilar}
+          existingCode={existing?.code ?? null}
         />
       )}
       {showProblems && t.problems.length > 0 && <ul className="text-xs text-amber-800 dark:text-amber-300" data-testid="teach-problems">{t.problems.map((p) => <li key={p}>{p}</li>)}</ul>}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="mr-auto text-sm text-muted-foreground" data-testid="teach-summary">{teachSummary(t.state)}</span>
         {advanced && (
           <Button variant="outline" onClick={t.runPreview} disabled={t.previewProblems.length > 0 || t.previewing} data-testid="teach-preview-run">
             <Eye className="mr-1 h-4 w-4" /> {t.previewing ? "Önizleniyor…" : "Önizle"}
