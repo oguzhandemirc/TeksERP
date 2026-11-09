@@ -1,6 +1,7 @@
 import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import type { WorkOrder } from "../types";
 import type { LinkedFulfillment } from "../order-fulfillment";
+import { IncomingDoc } from "./IncomingDoc";
 
 /**
  * Yan panel (slide-over) KPI satırı — v3 kurumsal `.kpi` kartlarıyla, ama
@@ -57,6 +58,7 @@ export function SheetKpis({
                 </span>
               )}
               <IncomingKg incoming={wo.incoming} />
+              <IncomingDoc incoming={wo.incoming} />
             </div>
           )}
         </div>

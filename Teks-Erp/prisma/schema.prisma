@@ -14865,6 +14865,8 @@ model CustomerDeliveryNoteLine {
   colorText    String?                @db.VarChar(120)
   colorId      String?                @db.Uuid
   processText  String?                @db.VarChar(120)
+  /// Müşterinin (kağıttaki) parti no'su — yalnız onayda doğan özet/parti satırında (çok partide partinin, tek partide başlığın).
+  customerBatchNo String?              @db.VarChar(64)
   /// 0..1 — OCR güveni; elle/Excel satırda 1.
   confidence   Decimal                @default(1) @db.Decimal(5, 4)
   needsReview  Boolean                @default(false)

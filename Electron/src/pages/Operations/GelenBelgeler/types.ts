@@ -91,6 +91,8 @@ export interface DeliveryNoteLine {
   colorText: string | null;
   colorId: string | null;
   processText: string | null;
+  /** Onayda doğan parti kaydının müşteri parti no'su (çok partide partinin); belge satırında ve eski sunucuda yok/null. */
+  customerBatchNo?: string | null;
   confidence: number | null;
   needsReview: boolean;
   sourceRects: Record<string, OcrRect> | null;

@@ -224,7 +224,7 @@ async function approvalLines(noteId: string, input: FormWorkOrderInput, parties:
   const kg = await incomingPlan(noteId, input, parties, separateRolls);
   if (!parties) return { summary: { kg: kg.summary, widthCm: kg.width } };
   return {
-    parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null, widthCm: p.incomingWidth ?? kg.width }) })),
+    parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null, widthCm: p.incomingWidth ?? kg.width, customerBatchNo: p.batchNo ?? null }) })),
     ...(separateRolls ? { separateRolls: true } : {}),
   };
 }

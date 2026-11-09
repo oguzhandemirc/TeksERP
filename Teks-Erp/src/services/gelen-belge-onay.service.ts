@@ -99,7 +99,7 @@ export interface ApproveResult {
 type LineRow = { id: string; lineNo: number; blockNo: number; lineKind: DeliveryNoteLineKind; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean; ocrRaw?: Prisma.JsonValue };
 
 const PRE_SELECT = {
-  id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, senderDocNo: true, processText: true, pageCount: true,
+  id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, senderDocNo: true, customerBatchNo: true, processText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
   kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true, ourBatchNo: true, ourBatchNoKey: true, templateId: true,
   lines: { select: { id: true, lineNo: true, blockNo: true, lineKind: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },

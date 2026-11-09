@@ -214,8 +214,8 @@ export function buildDeliveryNoteBaseWhere(q: DeliveryNoteListQuery): Prisma.Cus
       { noteNo: { contains: term, mode: "insensitive" } },
       { senderDocNo: { contains: term, mode: "insensitive" } },
       { senderText: { contains: term, mode: "insensitive" } },
-      { customerBatchNo: { contains: term, mode: "insensitive" } },
-      { customerOrderNo: { contains: term, mode: "insensitive" } },
+      { customerBatchNo: { contains: term, mode: "insensitive" } }, { customerOrderNo: { contains: term, mode: "insensitive" } },
+      { lines: { some: { customerBatchNo: { contains: term, mode: "insensitive" } } } }, // çok partide parti no satırda yaşar
     ];
   }
   return where;

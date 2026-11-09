@@ -10,17 +10,19 @@ const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
 
 /** `senderRollNo`/`lineKind` yalnız "Toplar ayrı geldi"de (özet satırı = bir top). `weightKg`/`widthCm` ARABA'da belgenin GELEN
  *  kg'si / eni (2026-11-09): satıra yazılır, topa YAZILMAZ (onay döngüsü korur — top kg'si/eni "ölçülmüş" anlamını korur). */
-export type PartyEntry = { blockNo: number; meters: number; weightKg?: number | null; widthCm?: number | null; senderRollNo?: string | null; lineKind?: DeliveryNoteLineKind };
+export type PartyEntry = { blockNo: number; meters: number; weightKg?: number | null; widthCm?: number | null; customerBatchNo?: string | null; senderRollNo?: string | null; lineKind?: DeliveryNoteLineKind };
 /** Tek özet satırının (partisiz ARABA) belge beyanı: gelen kg + gelen en (satıra yazılır, topa geçmez). */
 export type SummaryDeclared = { kg?: number | null; widthCm?: number | null };
-type SummaryTarget = { id: string; blockNo: number; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; senderRollNo: string | null; lineKind: DeliveryNoteLineKind };
+type SummaryTarget = { id: string; blockNo: number; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; customerBatchNo: string | null; senderRollNo: string | null; lineKind: DeliveryNoteLineKind };
 
 const dec = (n: number | null | undefined) => (n == null ? null : new Prisma.Decimal(n));
+const batchText = (v: string | null | undefined) => v?.trim().slice(0, 64) || null;
 
 /** Onay ön okumasının bu dosyanın kullandığı alt kümesi. */
 type PartyNote = {
   id: string;
   noteNo: string;
+  customerBatchNo: string | null;
   kursunMeters: Prisma.Decimal | null;
   kursunMetersSource: string | null;
   lines: ReadonlyArray<{ id: string; blockNo: number; rollId: string | null; status: DeliveryNoteLineStatus }>;
@@ -30,12 +32,14 @@ type PartyNote = {
  * PER_DOCUMENT hazırlık — TEK tx: özet satırı (sabit kimlik; varsa metresi tazelenir) + belgenin topsuz açık satırları INFO.
  * Satır claim'i ve döngü bundan sonra yalnız özet satırını görür (ikinci giriş motoru yok).
  */
-/** Özet satırı hedefleri: partiler verildiyse blok başına (`partyLineId`), yoksa tek özet satırı = kurşun metresi (bugünkü). */
+/** Özet satırı hedefleri: partiler verildiyse blok başına (`partyLineId`), yoksa tek özet satırı = kurşun metresi (bugünkü).
+ *  Müşteri parti no: çok partide partinin (formda onaylanan), tek partide / ayrı toplarda başlığınki. */
 export function summaryTargets(note: PartyNote, parties?: ReadonlyArray<PartyEntry>, summary?: SummaryDeclared): SummaryTarget[] {
-  if (!parties?.length) return [{ id: summaryLineId(note.id), blockNo: 1, meters: note.kursunMeters ?? new Prisma.Decimal(0), weightKg: dec(summary?.kg), widthCm: dec(summary?.widthCm), senderRollNo: null, lineKind: DeliveryNoteLineKind.ARABA }];
+  if (!parties?.length) return [{ id: summaryLineId(note.id), blockNo: 1, meters: note.kursunMeters ?? new Prisma.Decimal(0), weightKg: dec(summary?.kg), widthCm: dec(summary?.widthCm), customerBatchNo: batchText(note.customerBatchNo), senderRollNo: null, lineKind: DeliveryNoteLineKind.ARABA }];
   return [...parties].sort((a, b) => a.blockNo - b.blockNo).map((p) => ({
     id: partyLineId(note.id, p.blockNo), blockNo: p.blockNo, meters: new Prisma.Decimal(p.meters),
     weightKg: dec(p.weightKg), widthCm: dec(p.widthCm), senderRollNo: p.senderRollNo ?? null, lineKind: p.lineKind ?? DeliveryNoteLineKind.ARABA,
+    customerBatchNo: p.lineKind === DeliveryNoteLineKind.TOP ? batchText(note.customerBatchNo) : batchText(p.customerBatchNo),
   }));
 }
 
@@ -55,11 +59,11 @@ export async function preparePerDocument(note: PartyNote, userId: string, partie
   const created = await prisma.$transaction(async (tx) => {
     const made: Array<SummaryTarget & { lineNo: number }> = [];
     for (const t of targets) {
-      const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id: t.id, noteId: note.id, rollId: null }, data: { meters: t.meters, weightKg: t.weightKg, widthCm: t.widthCm, ...(t.lineKind === DeliveryNoteLineKind.TOP ? { senderRollNo: t.senderRollNo, lineKind: t.lineKind } : {}) } });
+      const has = await tx.customerDeliveryNoteLine.updateMany({ where: { id: t.id, noteId: note.id, rollId: null }, data: { meters: t.meters, weightKg: t.weightKg, widthCm: t.widthCm, customerBatchNo: t.customerBatchNo, ...(t.lineKind === DeliveryNoteLineKind.TOP ? { senderRollNo: t.senderRollNo, lineKind: t.lineKind } : {}) } });
       if (has.count > 0 || (await tx.customerDeliveryNoteLine.count({ where: { id: t.id } }))) continue;
       const last = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId: note.id }, _max: { lineNo: true } });
       const lineNo = (last._max.lineNo ?? 0) + 1;
-      await tx.customerDeliveryNoteLine.create({ data: { id: t.id, noteId: note.id, lineNo, blockNo: t.blockNo, lineKind: t.lineKind, meters: t.meters, weightKg: t.weightKg, widthCm: t.widthCm, senderRollNo: t.senderRollNo, status: DeliveryNoteLineStatus.PENDING, confidence: new Prisma.Decimal(1) } });
+      await tx.customerDeliveryNoteLine.create({ data: { id: t.id, noteId: note.id, lineNo, blockNo: t.blockNo, lineKind: t.lineKind, meters: t.meters, weightKg: t.weightKg, widthCm: t.widthCm, customerBatchNo: t.customerBatchNo, senderRollNo: t.senderRollNo, status: DeliveryNoteLineStatus.PENDING, confidence: new Prisma.Decimal(1) } });
       made.push({ ...t, lineNo });
     }
     if (infoIds.length) {
@@ -68,7 +72,7 @@ export async function preparePerDocument(note: PartyNote, userId: string, partie
     return made;
   });
   if (created.length) {
-    await AuditService.logMany(created.map((c) => ({ userId, action: "CREATE" as const, tableName: LINE_TABLE, recordId: c.id, newData: { noteId: note.id, noteNo: note.noteNo, lineNo: c.lineNo, blockNo: c.blockNo, lineKind: c.lineKind, meters: c.meters.toString(), ...(c.weightKg ? { weightKg: c.weightKg.toString() } : {}), ...(c.widthCm ? { widthCm: c.widthCm.toString() } : {}), ...(c.senderRollNo ? { senderRollNo: c.senderRollNo } : {}), kursunMetersSource: note.kursunMetersSource, entryMode: "PER_DOCUMENT", ...(parties?.length ? { party: true } : {}) } })));
+    await AuditService.logMany(created.map((c) => ({ userId, action: "CREATE" as const, tableName: LINE_TABLE, recordId: c.id, newData: { noteId: note.id, noteNo: note.noteNo, lineNo: c.lineNo, blockNo: c.blockNo, lineKind: c.lineKind, meters: c.meters.toString(), ...(c.weightKg ? { weightKg: c.weightKg.toString() } : {}), ...(c.widthCm ? { widthCm: c.widthCm.toString() } : {}), ...(c.senderRollNo ? { senderRollNo: c.senderRollNo } : {}), ...(c.customerBatchNo ? { customerBatchNo: c.customerBatchNo } : {}), kursunMetersSource: note.kursunMetersSource, entryMode: "PER_DOCUMENT", ...(parties?.length ? { party: true } : {}) } })));
   }
   if (infoIds.length) await AuditService.logMany(infoIds.map((lid) => ({ userId, action: "UPDATE" as const, tableName: LINE_TABLE, recordId: lid, oldData: { status: note.lines.find((l) => l.id === lid)?.status ?? null }, newData: { status: "INFO", noteNo: note.noteNo, entryMode: "PER_DOCUMENT" } })));
 }

@@ -5,6 +5,7 @@ import type { WorkOrder } from "../types";
 import type { LinkedFulfillment } from "../order-fulfillment";
 import { OrdersDetailModal, type OrderDetailRow } from "./OrdersDetailModal";
 import { IncomingKg } from "./SheetKpis";
+import { IncomingDoc } from "./IncomingDoc";
 
 /**
  * v3 dört-kutu özeti: Üretim İlerlemesi (çıkan/giren + bar), Termin (tarih +
@@ -52,6 +53,7 @@ export function WorkOrderKpis({
               )}
             </span>
             <IncomingKg incoming={wo.incoming} />
+            <IncomingDoc incoming={wo.incoming} />
           </div>
         </div>
 

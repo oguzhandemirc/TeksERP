@@ -246,6 +246,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "customer_lab_specs", index: "customer_lab_specs_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün, test türü) başına tek aktif lab spesifikasyonu (K4P-SERT)" },
   // customer_delivery_notes (sahip, gönderen belge no) partial UNIQUE K27'de (migration 20261103093156) DÜZ index'e döndü —
   // tekillik fabrika ayarı `gelenBelge.duplicateDocNo` (BLOCK: 8044 kilidi + kontrol; bekçi test_gelen_belge_mukerrer_belge_no).
+  // Parti satırı müşteri parti no araması (migration 20261109121734): kolon yalnız özet/parti satırında dolu.
+  { table: "customer_delivery_note_lines", index: "customer_delivery_note_lines_customer_batch_idx", uniq: false, predicate: `("customerBatchNo" IS NOT NULL)`, why: "null-yoğun: Gelen Belgeler araması yalnız parti satırlarını tarar (EXPLAIN 300k: 72 → 2 ms)" },
   // H1 kurşun metre defteri (migration 20261029005529) — top × adım × evre ve okuma başına TEK aktif satır; damgalı geçmiş serbest.
   { table: "roll_meter_readings", index: "roll_meter_readings_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "düzeltme = damga + yeni satır; ikinci aktif okuma/onay seddi (bekçi test_kursun_metre §8)" },
   { table: "roll_meter_acks", index: "roll_meter_acks_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "okuma başına tek aktif sapma onayı (H2)" },

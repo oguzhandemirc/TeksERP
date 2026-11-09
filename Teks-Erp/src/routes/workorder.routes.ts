@@ -155,7 +155,11 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: İş emri detayı (rota adımları ve siparişler dahil)
+ *         description: |
+ *           İş emri detayı (rota adımları ve siparişler dahil). `incoming` (belgeden doğmuş İE; değilse null): meters,
+ *           kg (kök satırlarının toplamı; eksik satırda null), kgSource DOCUMENT|null, notes[{id, noteNo}] (kaynak gelen
+ *           belgeler), widthCm (her kökte aynıysa tek değer, değilse null), customerBatchNo (satırlardaki müşteri parti
+ *           no'ları, tekil birleşik; yoksa null). Eski istemci yeni alanları yok sayar.
  *       404:
  *         description: İş emri bulunamadı
  */
