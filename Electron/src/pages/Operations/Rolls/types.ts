@@ -166,6 +166,10 @@ export interface Roll {
   labelCustomer?: { id: string; name: string } | null;
   /** Emanet topun etiketindeki alıcı (2026-11-10, detay ucu) — eski sunucu göndermez. */
   labelConsignee?: { id: string; name: string } | null;
+  /** "Etiketi düzenle" ile elle yazılmış alanlar (yalnız gösterim) — eski sunucu göndermez. */
+  labelOverrides?: Record<string, string> | null;
+  /** Topun bir seferlik etiket şablonu (detay ucu) — eski sunucu göndermez. */
+  labelTemplate?: { id: string; name: string } | null;
   /** Kg'nin kaynağı (2026-11-10) — kantar / elle / simüle; eski satırda null. */
   weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
   /** Ata top (Tambur kesimi vb.) — yalnız detay; metreleri top kartı tablosu için (eski sunucu göndermez). */

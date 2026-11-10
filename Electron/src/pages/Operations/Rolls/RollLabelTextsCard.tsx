@@ -68,6 +68,7 @@ export function RollLabelTextsCard({ roll, onSaved, showValues = true }: Props) 
           <div className="text-xs text-muted-foreground">Müşteri parti</div>
           <div>{roll.labelBatchNo ?? <span className="text-muted-foreground">—</span>}</div>
         </div>}
+        <LabelEditMark roll={roll} />
         {canWrite && lock && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="etiket-bilgisi-kilit">
             <Lock className="h-3 w-3" /> {lock}
@@ -159,5 +160,17 @@ export function RollLabelTextsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** "Etiketi düzenle" izi: elle yazılmış alan sayısı ve bir seferlik şablon (basım her yüzeyde bunu uygular). */
+function LabelEditMark({ roll }: { roll: Roll }) {
+  const n = Object.keys(roll.labelOverrides ?? {}).length;
+  if (n === 0 && !roll.labelTemplate) return null;
+  return (
+    <p className="text-xs text-sky-700 dark:text-sky-400" data-testid="etiket-elle-duzenlendi">
+      Etikette elle düzenlendi{n > 0 ? ` (${n} alan)` : ""}
+      {roll.labelTemplate ? ` · şablon: ${roll.labelTemplate.name}` : ""}
+    </p>
   );
 }
