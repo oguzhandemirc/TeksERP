@@ -1,7 +1,7 @@
 // Geniş tablet ana kesim sol sütunu (2026-11-10, kullanıcı): bilgi kartı · adım notu · hata metreleri · canlı etiket
 // önizlemesi (kalan yüksekliğin tamamı). Kat / En / Kalite sağ sütunda (TamburCutSettingsCard). Saf görünüm — state ekranın; telefon/manuel/Top Kesme kullanmaz.
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Text, TouchableRipple } from 'react-native-paper';
 import { colors, palette } from '../../../theme/tokens';
 import TamburInfoCard, { type TamburInfoCardProps } from './TamburInfoCard';
@@ -42,19 +42,20 @@ function DefectCard({ d }: { d: NonNullable<TamburWideCutProps['defects']> }) {
 }
 
 export default function TamburWideCut(p: TamburWideCutProps) {
-  // Bilgi + hata kartları minimum yükseklikte; kalan yüksekliğin tamamı etiket önizlemesine (kullanıcı: etiket büyük).
+  // Kaydırmasız (2026-11-11): bilgi + hata kartları doğal yükseklikte, kalan yüksekliğin tamamı etiket önizlemesine;
+  // kâğıt o alana ölçeklenir, sütun alt şeridin altına taşmaz.
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" testID="tambur-genis-sol">
+    <View style={s.content} testID="tambur-genis-sol">
       <TamburInfoCard {...p.info} />
       {p.note}
       {p.defects && <DefectCard d={p.defects} />}
       <TamburLabelPreviewCard {...p.preview} />
-    </ScrollView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  content: { flexGrow: 1, gap: 8, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4 },
+  content: { flex: 1, minHeight: 0, overflow: 'hidden', gap: 8, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4 },
   card: { backgroundColor: palette.white, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: palette.slate[200] },
   rowCenter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { fontSize: 15, fontWeight: '800', color: palette.slate[900] },

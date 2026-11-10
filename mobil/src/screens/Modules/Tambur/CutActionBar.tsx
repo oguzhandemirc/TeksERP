@@ -181,6 +181,9 @@ function WideLeftBar(p: Pick<Props, 'kartelaOn' | 'onToggleKartela' | 'kesLabel'
   );
 }
 
+/** Kesim ekranı aksiyon düğmelerinin köşe yuvarlaklığı (Bitir/Kartela/Kes; önizlemedeki Şablon Değiştir de). */
+export const ACTION_BUTTON_RADIUS = radius.md;
+
 // ───────────────────────── Bitir (Top Kesme kapanışı) ─────────────────────────
 export function BitirButton({
   onPress,
@@ -482,7 +485,7 @@ const styles = StyleSheet.create({
   // Kartela toggle — sabit genişlik (outline↔dolu geçişinde Kes zıplamasın).
   toggle: {
     height: BAR_HEIGHT,
-    borderRadius: radius.md,
+    borderRadius: ACTION_BUTTON_RADIUS,
     borderWidth: 1.5,
     borderColor: KARTELA_BG,
     overflow: 'hidden',

@@ -8,6 +8,7 @@ import type { TamburLabelPreview, TamburPreviewElement } from '../../../services
 import { colors, palette } from '../../../theme/tokens';
 import type { EditAnchor } from './TamburInlineEditor';
 import { emptyFieldText } from './labelPreviewMap';
+import { fitPaperScale } from './labelPaperFit';
 
 export interface PaperRow {
   key: string | null;
@@ -160,7 +161,7 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
   };
   const wMm = preview?.widthMm || FALLBACK_MM.w;
   const hMm = preview?.heightMm || FALLBACK_MM.h;
-  const s = box ? Math.min(box.w / wMm, box.h / hMm) : 0;
+  const s = box ? fitPaperScale(box.w, box.h, wMm, hMm) : 0;
   const rows: PaperRow[] | null = preview?.elements
     ? null
     : preview?.rows
@@ -216,8 +217,9 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, gap: 4 },
-  area: { flex: 1, minHeight: 120 },
+  wrap: { flex: 1, minHeight: 0, gap: 4 },
+  // minHeight 0: kaydırmasız sol sütunda alan kalan yere küçülebilsin (kâğıt ölçeği onLayout'tan izler).
+  area: { flex: 1, minHeight: 0, overflow: 'hidden' },
   paperLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   paper: {
     backgroundColor: palette.white,

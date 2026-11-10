@@ -73,6 +73,15 @@ describe('TamburLabelPreviewCard', () => {
     expect(r.getByText('yeni barkod — kesimde verilir')).toBeTruthy();
   });
 
+  it('"Şablon Değiştir" düğmesi: metin + erişilebilirlik adı; dokununca mevcut pencere açılır (davranış aynı)', () => {
+    const p = props();
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    expect(r.getByText('Şablon Değiştir')).toBeTruthy();
+    expect(r.queryByText('Değiştir')).toBeNull();
+    fireEvent.press(r.getByLabelText('Etiket şablonunu değiştir'));
+    expect(p.onOpenInfo).toHaveBeenCalledTimes(1);
+  });
+
   it('metreye dokun → kutu YERİNDE açılır (modal yok) → ✓: kesimin uzunluk yazıcısı çağrılır', async () => {
     const p = props();
     const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);

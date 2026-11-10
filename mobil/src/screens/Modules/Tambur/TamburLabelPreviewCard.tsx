@@ -10,6 +10,7 @@ import { colors, palette } from '../../../theme/tokens';
 import { editorForKey, inlineKind, type InlineEditor, type PreviewEditContext, type PreviewEditor } from './labelPreviewMap';
 import TamburInlineEditor, { editorRect, type EditAnchor } from './TamburInlineEditor';
 import TamburLabelPaper, { type PaperRow } from './TamburLabelPaper';
+import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 
 export interface PreviewField {
   value: string;
@@ -93,8 +94,20 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
           {[p.preview?.templateName, `kimin için: ${p.forWhom}`].filter(Boolean).join(' · ')}
         </Text>
         <View style={{ flex: 1 }} />
-        <Button mode="contained-tonal" compact icon="swap-horizontal" onPress={p.onOpenInfo} style={s.change} labelStyle={s.changeLabel} testID="tambur-etiket-degistir">
-          Değiştir
+        <Button
+          mode="contained"
+          compact
+          icon="swap-horizontal"
+          onPress={p.onOpenInfo}
+          buttonColor={CHANGE_BG}
+          textColor={palette.white}
+          style={s.change}
+          contentStyle={s.changeContent}
+          labelStyle={s.changeLabel}
+          accessibilityLabel="Etiket şablonunu değiştir"
+          testID="tambur-etiket-degistir"
+        >
+          Şablon Değiştir
         </Button>
       </View>
       <TamburLabelPaper preview={p.preview} fallbackRows={p.fallbackRows} isEditable={isEditable} onEdit={onEdit} stale={p.stale} overlay={overlay} />
@@ -115,11 +128,15 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
   );
 }
 
+// Dolu indigo: Bitir yeşilinden ve METRE/KG grisinden ayrışır (2026-11-11).
+const CHANGE_BG = palette.indigo[700];
+
 const s = StyleSheet.create({
-  card: { flex: 1, backgroundColor: palette.white, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: palette.slate[200] },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  card: { flex: 1, minHeight: 0, backgroundColor: palette.white, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: palette.slate[200] },
+  head: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
   title: { fontSize: 15, fontWeight: '800', color: palette.slate[900] },
   meta: { fontSize: 13, color: colors.textMuted, flexShrink: 1 },
-  change: { marginVertical: 0 },
-  changeLabel: { marginVertical: 12, fontSize: 13 },
+  change: { marginVertical: 0, borderRadius: ACTION_BUTTON_RADIUS },
+  changeContent: { minHeight: 44 },
+  changeLabel: { marginVertical: 0, fontSize: 14, fontWeight: '800', color: palette.white },
 });

@@ -44,8 +44,8 @@ export function TamburMeterTrailView({ trail, pendingM, tone = 'dark', omitRemai
       </View>
       {over != null && (
         <View style={[s.warn, orange && s.warnPill]} testID="tambur-metre-asim">
-          <Icon source="alert-outline" size={14} color={orange ? palette.white : light ? WARN_LIGHT : WARN} />
-          <Text style={[s.warnText, light && { color: WARN_LIGHT }, orange && { color: palette.white }]}>{overageWarningText(over)}</Text>
+          <Icon source="alert-outline" size={orange ? 17 : 14} color={orange ? palette.white : light ? WARN_LIGHT : WARN} />
+          <Text style={[s.warnText, light && { color: WARN_LIGHT }, orange && s.warnTextOrange]}>{overageWarningText(over)}</Text>
         </View>
       )}
     </View>
@@ -70,7 +70,9 @@ const s = StyleSheet.create({
   rootTight: { marginTop: 0 },
   partOrange: { fontSize: 15, fontWeight: '700', color: palette.slate[900] },
   // Turuncu zeminde uyarı koyu kehribar hap içinde beyaz (kontrast ~8:1).
-  warnPill: { alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: palette.amber[900] },
+  warnPill: { alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 9, gap: 6, backgroundColor: palette.amber[900] },
   warn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   warnText: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: WARN },
+  // Künye kartında ~2 pt büyük (cihaz 2026-11-11): operatör kesim sırasında uzaktan okur.
+  warnTextOrange: { fontSize: 14, color: palette.white },
 });
