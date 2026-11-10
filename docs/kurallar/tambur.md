@@ -44,8 +44,11 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Bilinmeyen istasyon 404, pasif/TAMBUR olmayan 400; tablet `stationId`yi yalnız [PROFİL] `tambur.listByStationEnabled` açıkken gönderir.
 - **[ÇEKİRDEK]** Rapor çıpası `Roll.finalizedAt` ve `statusChangedAt` — TRIGGER yazar; kaynak statü listesinde SHIPPED/CANCELLED bilerek YOK; damga üzerine yazılır.
 - **[PROFİL]** `quality.gradeRequiredEnabled` DAR kapsam (KK1 · Tambur kalan-kuyruk · depo kesimi · WO kapanışının satılabilir dalları); fason kabulü · son-adım finalize · `cutOpenFabric` · `attachRolls` DIŞARIDA; kapsamı genişletme.
-- **[PROFİL]** Müşteri tambur ayarlarını (en kaynağı, tartım, bölme ölçüsü) hedef müşteri ?? top sahibinden YALNIZ `tambur-customer-settings.helper` çözer.
-- **[ÇEKİRDEK]** Tablette Kime? varsayılanı fason (EMANET) topta malın sahibidir (`label-settings.ownerCustomer`), sahipsiz topta Stok; top başına bir kez uygulanır, operatörün Stok/başka hedef seçimi ezilmez (`mobil/.../Tambur/ownerTarget.ts`).
+- **[PROFİL]** Müşteri tambur ayarlarını (en kaynağı, tartım, bölme ölçüsü) top sahibi ?? hedef müşteriden YALNIZ `tambur-customer-settings.helper` çözer. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
+- **[ÇEKİRDEK]** Emanet topun etiket hedefi malın sahibidir: başka müşteri / başka müşterinin sipariş satırı 409 `LABEL_TARGET_NOT_OWNER`, boş hedef ve üç kalan-yazan yol sahip niyetini yazar; tablette Kime? yerine sabit "Sahibi" satırı (`ownerLockOf`). <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
+- **[ÇEKİRDEK]** Etiket alıcısı (`Roll.labelConsigneeId`) yalnız emanet topta, sahibin aktif alıcısı olur; çocuğa MİRAS geçmez; null = malın sahibi; şablon sırası elle > alıcı > müşteri > cihaz > aşama, tekil ve toplu yol aynı. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
+- **[ÇEKİRDEK]** Kesim kg kaynağını (`weightSource`) YALNIZ `resolveWeightSource` çözer (çuval tartısıyla ortak): kaynaksız kg MANUAL, kgsız kaynak 400, simüle kantar + bayrak kapalı 400. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
+- **[ÇEKİRDEK]** Çocuk top eni atadan miras, yoksa gelen belge TOP satırının `widthCm`i; ölçülen en ezer ve `widthBefore` izini audit'e bırakır. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
 - **[PROFİL]** Top doğuran her yolda tartım kapısı 400 `TAMBUR_WEIGHT_REQUIRED` (discard/kalan 0 hariç); `tambur.labelPrintTiming` (EACH | END) istemci kararıdır.
 
 ### Yasaklar
@@ -123,6 +126,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - "Kısa kesim bayrak+eşik cihazda" → fabrika ayarı + cihaz override.
 - "Hiç açık parti yok → NULL" → `batch.autoCreateEnabled` açıksa sunucu açar.
 - "KK1 auto kalır" → KK1 etiket-doğrulama `tap`.
+- "Kime? müşterisi sahibi ezer" / "operatörün Stok seçimi ezilmez (emanet)" → emanette hedef sahip sabit, ayar sahip ?? hedef (2026-11-10).
 
 ## Çözülmüş çelişkiler
 
