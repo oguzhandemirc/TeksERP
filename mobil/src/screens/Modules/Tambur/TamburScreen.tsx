@@ -55,7 +55,11 @@ import { useTamburLabelCard } from './useTamburLabelCard';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { labelSummaryText, type LabelTextsBody } from './labelTexts';
-import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
+import { useTamburFinalLabel, useTamburLabelSuggestions, useTamburPrintTiming } from './useTamburFinalLabel';
+import { LABEL_TEMPLATE_NOT_OFFERED, useTamburTemplateChoice, useTemplateChoiceSync } from './useTamburTemplateChoice';
+import {
+  cutTemplateId, offerFromPreview, previewTemplateId, reprintTemplateWrite, shownTemplateId, templatePickerOptions,
+} from './labelTemplateChoice';
 import { useOwnerDefaultTarget } from './ownerTarget';
 import { finalizeWeightError, shouldAutoPrintAfterCut, splitSuggestion } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
@@ -77,7 +81,7 @@ import { readMeter } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
 import PullToRefreshView from '../../../components/PullToRefreshView';
 import RemoteListSheet from '../../../components/RemoteListSheet';
-import { labelService } from '../../../services/label.service';
+import { labelService, type RollTemplateOptions } from '../../../services/label.service';
 import { VARIANCE_MIN_REASON_TEXT } from '../../../constants/varianceReasons';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
@@ -1106,11 +1110,18 @@ export default function TamburScreen() {
   const [cardCodeOpen, setCardCodeOpen] = useState(false);
   // Geniş hata cetveli ölçeği için (metre şeridiyle aynı sorgu, önbellek ortak).
   const rollTrail = useRollMeterTrail(selectedRoll?.rollId);
+  // Etiket şablonu seçimi (çoklu etiket seti): İE boyunca yapışkan; öneri sorgusu openFinal'inkiyle AYNI anahtar (ek istek yok).
+  const templateSugg = useTamburLabelSuggestions({ ...openFinal.suggestionParams, consigneeId: null }, wideMain);
+  const templateChoice = useTamburTemplateChoice(activeJob?.stepSummary.workOrderId ?? selectedRoll?.rollId ?? null, {
+    loaded: !!templateSugg.data || templateSugg.isError,
+    templateId: templateSugg.data?.last?.templateId,
+  });
   const livePreview = useTamburLivePreview({
     rollId: wideMain ? selectedRoll?.rollId : null,
     orderLineId: work.voluntaryEntry.targetOrderLineId,
     customerId: work.voluntaryEntry.targetCustomerId,
     consigneeId: openFinal.texts.consigneeId,
+    templateId: previewTemplateId(templateChoice.state, null),
     draft: buildPreviewDraft({
       lengthText: cutMode === 'manual' ? work.voluntaryEntry.length : '',
       kgText: openFinal.kgText,
@@ -1121,6 +1132,8 @@ export default function TamburScreen() {
       batch: openFinal.batch,
     }),
   });
+  const templateOffer = useMemo(() => (wideMain ? offerFromPreview(livePreview.preview) : null), [wideMain, livePreview.preview]);
+  useTemplateChoiceSync(templateChoice, templateOffer, livePreview);
 
   // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
   // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
@@ -1412,9 +1425,38 @@ export default function TamburScreen() {
   // "Etiketi Tekrar Bas" — varolan etiketi AYNEN bas, "kime?" SORMA.
   // labelContext=undefined → backend topun mevcut snapshot/effective etiketini
   // basar (yeni hedef seçilmez). Müşteri değiştirmek = "Etiket Değiştir" akışı.
-  const reprintLabel = (roll: Roll) => {
+  const printAsIs = (roll: Roll) => {
     setLabelContext(undefined);
     startPrint(roll);
+  };
+  // K8: teklif ≥2 ise önce şablon seçici (ön seçili = topun şablonu); farklı seçim topa yazılır, sonra basılır.
+  // Eski backend (404) / hata → bugünkü gibi doğrudan basar, tost yok.
+  const [reprintPick, setReprintPick] = useState<{ roll: Roll; opts: RollTemplateOptions } | null>(null);
+  const reprintLabel = (roll: Roll) => {
+    labelService
+      .getRollTemplateOptions(roll.id)
+      .then((opts) => {
+        if (opts && opts.options.length >= 2) setReprintPick({ roll, opts });
+        else printAsIs(roll);
+      })
+      .catch(() => printAsIs(roll));
+  };
+  const onReprintTemplate = (id: string) => {
+    const pick = reprintPick;
+    setReprintPick(null);
+    if (!pick) return;
+    const write = reprintTemplateWrite(id, pick.opts);
+    if (write === undefined) {
+      printAsIs(pick.roll);
+      return;
+    }
+    labelService
+      .setRollTemplate(pick.roll.id, { templateId: write })
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
+        printAsIs(pick.roll);
+      })
+      .catch((e: unknown) => showScreenError(e, 'Etiket şablonu kaydedilemedi'));
   };
 
   // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. labelContext={stock:true}
@@ -1502,6 +1544,8 @@ export default function TamburScreen() {
       labelBatchNo?: string | null;
       /** Etiket kumaş adı / renk (boşsa alan yok). */
       labelTexts?: LabelTextsBody;
+      /** Seçilen etiket şablonu — yalnız varsayılandan farklıysa dolu. */
+      labelTemplateId?: string;
     }) =>
       tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
@@ -1524,6 +1568,8 @@ export default function TamburScreen() {
         weightKg: data.weightKg,
         labelBatchNo: data.labelBatchNo,
         ...data.labelTexts,
+        // Aynı sessiz-allowlist tuzağı: seçim yoksa alan HİÇ gitmez (eski backend / varsayılan).
+        ...(data.labelTemplateId ? { labelTemplateId: data.labelTemplateId } : {}),
       }, data.measure)),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1600,6 +1646,12 @@ export default function TamburScreen() {
     onError: (err: Error, variables) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       cutAttempt.onFailure(err);
+      // Seçilen şablon artık teklifte değil (yönetici seti değiştirdi): varsayılana dön, operatör yeniden basar.
+      if ((err as Error & { details?: { code?: unknown } }).details?.code === LABEL_TEMPLATE_NOT_OFFERED) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        templateChoice.drop('Seçilen şablon artık tanımlı değil — varsayılana dönüldü, tekrar Kes\'e basın');
+        return;
+      }
       const mm = readPlanMismatch(err);
       if (mm) {
         // Onay modalı konuşur — kırmızı toast basılmaz (409 bir hata değil,
@@ -2219,6 +2271,7 @@ export default function TamburScreen() {
         weightKg: openFinal.weightKg(),
         labelBatchNo: openFinal.batch.body(),
         labelTexts: openFinal.texts.body(),
+        labelTemplateId: wideMain ? cutTemplateId(templateChoice.state, templateOffer) : undefined,
       });
     };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
@@ -3389,6 +3442,11 @@ export default function TamburScreen() {
           fallbackRows: (openCard.card.rows ?? []).map((r) => ({ key: r.key, text: `${r.label}: ${r.value}`, muted: r.muted })),
           ctx: { owner: !!owner, batchEnabled: openFinal.batch.enabled, manualLength: cutMode === 'manual' },
           forWhom: owner ? (openCard.card.consignee?.text ?? owner.name) : customerName,
+          templateOffer,
+          selectedTemplateId: shownTemplateId(templateChoice.state, templateOffer),
+          onPickTemplate: (id) => {
+            if (templateOffer) templateChoice.pick(id, templateOffer);
+          },
           onOpenInfo: () => setLabelInfoOpen(true),
           length: { value: work.voluntaryEntry.length, set: setCutLength },
           kg: { value: openFinal.kgText, set: openFinal.setKgText },
@@ -5969,6 +6027,18 @@ export default function TamburScreen() {
       />
 
       {scanRoute.dialog}
+      {/* Yeniden basım şablon seçicisi — en sonda: açık liste modallarının ÜSTÜNDE açılır. */}
+      {reprintPick ? (
+        <PickerModal
+          visible
+          title="Etiket şablonu — yeniden bas"
+          options={templatePickerOptions(reprintPick.opts)}
+          selectedValue={reprintPick.opts.currentTemplateId ?? reprintPick.opts.defaultTemplateId}
+          disableSort
+          onSelect={onReprintTemplate}
+          onDismiss={() => setReprintPick(null)}
+        />
+      ) : null}
     </ScreenChrome>
   );
 }

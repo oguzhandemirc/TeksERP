@@ -11,6 +11,8 @@ export interface LivePreviewInput {
   orderLineId: string | null | undefined;
   customerId: string | null | undefined;
   consigneeId: string | null | undefined;
+  /** Seçilen şablon — yalnız varsayılandan farklıysa dolu (`labelTemplateChoice.previewTemplateId`). */
+  templateId?: string;
   draft: TamburLabelPreviewDraft;
 }
 
@@ -28,6 +30,10 @@ export function useTamburLivePreview(i: LivePreviewInput): {
   loading: boolean;
   /** Son istek başarısız — ekrandaki görüntü bir önceki taslağın. */
   stale: boolean;
+  /** Son hatanın `details.code`u (ör. LABEL_TEMPLATE_NOT_OFFERED → seçim varsayılana döner). */
+  errorCode: string | null;
+  /** Son (hatalı olabilen) isteğin taşıdığı şablon — reddi yalnız O seçime uygulamak için. */
+  requestTemplateId: string | null;
 } {
   const body = useMemo(
     () =>
@@ -37,12 +43,13 @@ export function useTamburLivePreview(i: LivePreviewInput): {
             orderLineId: i.orderLineId ?? null,
             customerId: i.orderLineId ? null : (i.customerId ?? null),
             consigneeId: i.consigneeId ?? null,
+            ...(i.templateId ? { templateId: i.templateId } : {}),
             draft: i.draft,
           }
         : null,
     // Taslak her render yeni nesne — anahtar içerikten.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [i.rollId, i.orderLineId, i.customerId, i.consigneeId, JSON.stringify(i.draft)],
+    [i.rollId, i.orderLineId, i.customerId, i.consigneeId, i.templateId, JSON.stringify(i.draft)],
   );
   const debounced = useDebounced(body, PREVIEW_DEBOUNCE_MS);
   const q = useQuery({
@@ -53,5 +60,8 @@ export function useTamburLivePreview(i: LivePreviewInput): {
     staleTime: 30_000,
     retry: false,
   });
-  return { preview: q.data ?? null, loading: q.isFetching, stale: q.isError };
+  const code = (q.error as { details?: { code?: unknown } } | null)?.details?.code;
+  return { preview: q.data ?? null, loading: q.isFetching, stale: q.isError, errorCode: typeof code === 'string' ? code : null,
+    requestTemplateId: debounced?.templateId ?? null,
+  };
 }

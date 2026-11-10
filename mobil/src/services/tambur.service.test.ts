@@ -60,4 +60,21 @@ describe('tamburService kesim — etiket niyeti gövdede', () => {
     expect(post).toHaveBeenCalledTimes(4);
     for (const call of post.mock.calls) expect(call[1]).toEqual(expect.objectContaining(L));
   });
+
+  it('etiket şablonu (labelTemplateId) dört kesim/bitir gövdesine geçer — sessiz allowlist bekçisi', async () => {
+    const T = { labelTemplateId: 'tpl-en' };
+    await tamburService.cutOpenFabric('r1', { lengthMeters: 5, status: 'WAREHOUSE', ...T });
+    await tamburService.cutWarehouseRoll('r2', { cutLength: 5, ...T });
+    await tamburService.finalizeOpenFabric('r3', { remainingAction: 'keep_1kalite', ...T });
+    await tamburService.finalizeWarehouseCut('r4', { remainingAction: 'keep_a1', ...T });
+    expect(post).toHaveBeenCalledTimes(4);
+    for (const call of post.mock.calls) expect(call[1]).toEqual(expect.objectContaining(T));
+  });
+
+  it('önizleme gövdesi templateId taşır; verilmezse alan yok', async () => {
+    await tamburService.labelPreview({ rollId: 'r1', templateId: 'tpl-en', draft: {} });
+    expect(post).toHaveBeenLastCalledWith('/tambur/label-preview', expect.objectContaining({ templateId: 'tpl-en' }));
+    await tamburService.labelPreview({ rollId: 'r1', draft: {} });
+    expect('templateId' in post.mock.calls[1]![1]).toBe(false);
+  });
 });

@@ -1187,6 +1187,8 @@ export interface TamburLabelExtras {
   weightSource?: TamburWeightSource;
   /** Operatörün ölçtüğü en (cm); yok = atadan miras / gelen belge. */
   widthCm?: number | null;
+  /** Çocuğun etiket şablonu (çoklu etiket seti); yalnız varsayılandan FARKLI seçimde gönderilir. */
+  labelTemplateId?: string;
 }
 
 export interface TamburCut {

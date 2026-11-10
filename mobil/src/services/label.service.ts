@@ -1,6 +1,7 @@
 import { apiClient } from './api';
 import type { PrintJobAttachment } from './printJob.service';
 import type { ApiResponse } from '../types/api';
+import type { LabelTemplateOption } from './tambur.service';
 import type {
   ColorNameScope,
   LabelPayload,
@@ -33,7 +34,47 @@ export interface LabelNamePreview {
 // etmez (boş alan yerine satır komple gizlenir).
 // =============================================================================
 
+/** `GET /labels/rolls/:id/template-options` — yeniden basım şablon seçicisi (çoklu etiket seti, 2026-11-11). */
+export interface RollTemplateOptions {
+  kind: string | null;
+  /** Topun uygulanan kayıtlı seçimi; null = varsayılan basılır. */
+  currentTemplateId: string | null;
+  defaultTemplateId: string | null;
+  options: LabelTemplateOption[];
+}
+
+/** Sarmalanmış hata (`status`) ya da ham axios (`response.status`) 404 mü — eski backend. */
+const isNotFound = (e: unknown): boolean => {
+  const x = e as { status?: number; response?: { status?: number } } | null;
+  return x?.status === 404 || x?.response?.status === 404;
+};
+
 export const labelService = {
+  /** Topun seçilebilir şablonları. Eski backend 404 → null (çağıran doğrudan basar, tost YOK). */
+  getRollTemplateOptions: (rollId: string): Promise<RollTemplateOptions | null> =>
+    apiClient
+      .get<ApiResponse<RollTemplateOptions>>(`/labels/rolls/${rollId}/template-options`)
+      .then((r) => {
+        const d = r.data?.data;
+        return d && Array.isArray(d.options) ? d : null;
+      })
+      .catch((e: unknown) => {
+        if (isNotFound(e)) return null;
+        throw e;
+      }),
+
+  /** Topun şablonunu yaz (tek yazar `RollLabelEditService.setTemplate`); null = varsayılana dön. */
+  setRollTemplate: (
+    rollId: string,
+    body: { templateId: string | null; expectedEditedAt?: string | null },
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .put<ApiResponse<unknown>>(`/labels/rolls/${rollId}/template`, {
+        templateId: body.templateId,
+        ...(body.expectedEditedAt ? { expectedEditedAt: body.expectedEditedAt } : {}),
+      })
+      .then((r) => r.data),
+
   /** Rulonun etiket payload'unu effective name cascade ile döner. */
   getRollLabel: (rollId: string): Promise<ApiResponse<LabelPayload>> =>
     apiClient

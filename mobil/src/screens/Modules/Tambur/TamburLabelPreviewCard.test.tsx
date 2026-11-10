@@ -45,6 +45,9 @@ function props(over: Partial<TamburLabelPreviewCardProps> = {}): TamburLabelPrev
     fallbackRows: [],
     ctx: { owner: false, batchEnabled: false, manualLength: true },
     forWhom: 'GAHAHA',
+    templateOffer: null,
+    selectedTemplateId: null,
+    onPickTemplate: jest.fn(),
     onOpenInfo: jest.fn(),
     length: { value: '', set: jest.fn() },
     kg: { value: '', set: jest.fn() },
@@ -71,15 +74,6 @@ describe('TamburLabelPreviewCard', () => {
     expect(r.queryByTestId('onizleme-alan-printedAt')).toBeNull();
     expect(r.getByText('Made in Türkiye')).toBeTruthy();
     expect(r.getByText('yeni barkod — kesimde verilir')).toBeTruthy();
-  });
-
-  it('"Şablon Değiştir" düğmesi: metin + erişilebilirlik adı; dokununca mevcut pencere açılır (davranış aynı)', () => {
-    const p = props();
-    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
-    expect(r.getByText('Şablon Değiştir')).toBeTruthy();
-    expect(r.queryByText('Değiştir')).toBeNull();
-    fireEvent.press(r.getByLabelText('Etiket şablonunu değiştir'));
-    expect(p.onOpenInfo).toHaveBeenCalledTimes(1);
   });
 
   it('metreye dokun → kutu YERİNDE açılır (modal yok) → ✓: kesimin uzunluk yazıcısı çağrılır', async () => {
@@ -127,6 +121,56 @@ describe('TamburLabelPreviewCard', () => {
     expect(p.quality.pick).toHaveBeenCalledWith('A1');
   });
 
+});
+
+describe('TamburLabelPreviewCard — Şablon Değiştir (çoklu etiket seti)', () => {
+  it('"Şablon Değiştir" — eski backend (teklif yok): metin + erişilebilirlik adı; dokununca etiket bilgisi penceresi', () => {
+    const p = props();
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    expect(r.getByText('Şablon Değiştir')).toBeTruthy();
+    expect(r.queryByText('Değiştir')).toBeNull();
+    fireEvent.press(r.getByLabelText('Etiket şablonunu değiştir'));
+    expect(p.onOpenInfo).toHaveBeenCalledTimes(1);
+    expect(r.queryByText('Etiket şablonu')).toBeNull();
+  });
+
+  it('"Şablon Değiştir" → PickerModal şablonları sunucu sırasıyla listeler; seçim onPickTemplate (pencere açılmaz)', async () => {
+    const offer = {
+      kind: 'ROLL_FINISHED',
+      defaultTemplateId: 'tr',
+      options: [
+        { id: 'tr', name: 'Türkçe Etiket', source: 'DEFAULT' as const, isDefault: true },
+        { id: 'en', name: 'English Label', source: 'CUSTOMER' as const, isDefault: false },
+        { id: 'it', name: 'Etichetta Italiana', source: 'GLOBAL' as const, isDefault: false },
+      ],
+    };
+    const p = props({ templateOffer: offer, selectedTemplateId: 'tr' });
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    expect(r.queryByTestId('tambur-etiket-tek-sablon')).toBeNull();
+    fireEvent.press(r.getByTestId('tambur-etiket-degistir'));
+    await flush();
+    expect(r.getByText('Etiket şablonu')).toBeTruthy();
+    expect(r.getByText('★ Türkçe Etiket')).toBeTruthy();
+    expect(r.getByText('müşteri')).toBeTruthy();
+    expect(r.getByText('herkes için')).toBeTruthy();
+    fireEvent.press(r.getByText('English Label'));
+    await flush();
+    expect(p.onPickTemplate).toHaveBeenCalledWith('en');
+    expect(p.onOpenInfo).not.toHaveBeenCalled();
+  });
+
+  it('K4: tek seçenekte düğme pasif + "Tek şablon atanmış"; dokunmak hiçbir şey açmaz', async () => {
+    const offer = { kind: 'ROLL_FINISHED', defaultTemplateId: 'tr', options: [{ id: 'tr', name: 'Türkçe Etiket', source: 'DEFAULT' as const, isDefault: true }] };
+    const p = props({ templateOffer: offer, selectedTemplateId: 'tr' });
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    expect(r.getByTestId('tambur-etiket-tek-sablon')).toHaveTextContent('Tek şablon atanmış');
+    expect(r.getByTestId('tambur-etiket-degistir')).toBeDisabled();
+    fireEvent.press(r.getByTestId('tambur-etiket-degistir'));
+    await flush();
+    expect(r.queryByText('Etiket şablonu')).toBeNull();
+    expect(p.onOpenInfo).not.toHaveBeenCalled();
+    expect(p.onPickTemplate).not.toHaveBeenCalled();
+  });
 });
 
 describe('TamburLabelPreviewCard — boş alan, otomatik ve ağ hatası', () => {

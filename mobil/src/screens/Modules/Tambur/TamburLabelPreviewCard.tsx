@@ -10,6 +10,7 @@ import { colors, palette } from '../../../theme/tokens';
 import { editorForKey, inlineKind, type InlineEditor, type PreviewEditContext, type PreviewEditor } from './labelPreviewMap';
 import TamburInlineEditor, { editorRect, type EditAnchor } from './TamburInlineEditor';
 import TamburLabelPaper, { type PaperRow } from './TamburLabelPaper';
+import { templateButtonMode, templatePickerOptions, type TemplateOffer } from './labelTemplateChoice';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 
 export interface PreviewField {
@@ -24,7 +25,12 @@ export interface TamburLabelPreviewCardProps {
   ctx: PreviewEditContext;
   /** Etiket kimin için (müşteri / Stok / sahip). */
   forWhom: string;
-  /** "Değiştir": mevcut etiket bilgisi penceresi. */
+  /** Seçilebilir şablonlar; null = eski backend → "Şablon Değiştir" eski işini (etiket bilgisi penceresi) yapar. */
+  templateOffer: TemplateOffer | null;
+  /** Seçicide işaretli şablon (seçim ya da varsayılan). */
+  selectedTemplateId: string | null;
+  onPickTemplate: (templateId: string) => void;
+  /** Eski backend yedeği: etiket bilgisi penceresi (yeni backend'de "Diğer → Etiket bilgisi"). */
   onOpenInfo: () => void;
   length: PreviewField;
   kg: PreviewField;
@@ -94,21 +100,7 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
           {[p.preview?.templateName, `kimin için: ${p.forWhom}`].filter(Boolean).join(' · ')}
         </Text>
         <View style={{ flex: 1 }} />
-        <Button
-          mode="contained"
-          compact
-          icon="swap-horizontal"
-          onPress={p.onOpenInfo}
-          buttonColor={CHANGE_BG}
-          textColor={palette.white}
-          style={s.change}
-          contentStyle={s.changeContent}
-          labelStyle={s.changeLabel}
-          accessibilityLabel="Etiket şablonunu değiştir"
-          testID="tambur-etiket-degistir"
-        >
-          Şablon Değiştir
-        </Button>
+        <TemplateChange offer={p.templateOffer} selectedId={p.selectedTemplateId} onPick={p.onPickTemplate} onOpenInfo={p.onOpenInfo} />
       </View>
       <TamburLabelPaper preview={p.preview} fallbackRows={p.fallbackRows} isEditable={isEditable} onEdit={onEdit} stale={p.stale} overlay={overlay} />
       {p.footer}
@@ -128,6 +120,57 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
   );
 }
 
+/** "Şablon Değiştir": seçici (≥2), pasif (tek, K4) ya da eski backend'de etiket bilgisi penceresi. */
+function TemplateChange(p: {
+  offer: TemplateOffer | null;
+  selectedId: string | null;
+  onPick: (templateId: string) => void;
+  onOpenInfo: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const mode = templateButtonMode(p.offer);
+  return (
+    <>
+      {mode === 'single' ? (
+        <Text style={s.hint} testID="tambur-etiket-tek-sablon">
+          Tek şablon atanmış
+        </Text>
+      ) : null}
+      <Button
+        mode="contained"
+        compact
+        icon="swap-horizontal"
+        onPress={mode === 'legacy' ? p.onOpenInfo : () => setOpen(true)}
+        disabled={mode === 'single'}
+        buttonColor={mode === 'single' ? palette.slate[300] : CHANGE_BG}
+        textColor={palette.white}
+        style={s.change}
+        contentStyle={s.changeContent}
+        labelStyle={s.changeLabel}
+        accessibilityLabel="Etiket şablonunu değiştir"
+        accessibilityHint={mode === 'single' ? 'Tek şablon atanmış' : undefined}
+        testID="tambur-etiket-degistir"
+      >
+        Şablon Değiştir
+      </Button>
+      {p.offer ? (
+        <PickerModal
+          visible={open}
+          title="Etiket şablonu"
+          options={templatePickerOptions(p.offer)}
+          selectedValue={p.selectedId}
+          disableSort
+          onSelect={(id) => {
+            setOpen(false);
+            p.onPick(id);
+          }}
+          onDismiss={() => setOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
 // Dolu indigo: Bitir yeşilinden ve METRE/KG grisinden ayrışır (2026-11-11).
 const CHANGE_BG = palette.indigo[700];
 
@@ -136,6 +179,7 @@ const s = StyleSheet.create({
   head: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
   title: { fontSize: 15, fontWeight: '800', color: palette.slate[900] },
   meta: { fontSize: 13, color: colors.textMuted, flexShrink: 1 },
+  hint: { fontSize: 12, color: colors.textMuted },
   change: { marginVertical: 0, borderRadius: ACTION_BUTTON_RADIUS },
   changeContent: { minHeight: 44 },
   changeLabel: { marginVertical: 0, fontSize: 14, fontWeight: '800', color: palette.white },

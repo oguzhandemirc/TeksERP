@@ -332,6 +332,18 @@ export interface TamburLabelPreview {
   sourceWidthCm?: number | null;
   elements: TamburPreviewElement[] | null;
   rows: { key: string | null; text: string; size: string; bold: boolean }[] | null;
+  /** Bu bağlamda seçilebilir şablonlar (çoklu etiket seti, 2026-11-11); eski backend göndermez → seçici yok. */
+  templateOptions?: LabelTemplateOption[];
+  /** Seçim yapılmasaydı basılacak şablon; eski backend göndermez. */
+  defaultTemplateId?: string | null;
+}
+
+/** Seçilebilir etiket şablonu (backend `helpers/label-template-options.ts` aynası). */
+export interface LabelTemplateOption {
+  id: string;
+  name: string;
+  source: 'DEFAULT' | 'CUSTOMER' | 'GLOBAL';
+  isDefault: boolean;
 }
 
 export interface TamburLabelPreviewDraft {
@@ -352,7 +364,15 @@ export interface TamburLabelSuggestions {
   colorNames: string[];
   batchNos: string[];
   /** Bu İE'de bu alanlardan birini taşıyan en son topun değerleri (yapışkan başlangıç). */
-  last: { itemName: string | null; colorName: string | null; batchNo: string | null; consigneeId?: string | null; consigneeName?: string | null } | null;
+  last: {
+    itemName: string | null;
+    colorName: string | null;
+    batchNo: string | null;
+    consigneeId?: string | null;
+    consigneeName?: string | null;
+    /** İE'nin son kesiminde seçilen şablon (null = varsayılan); eski backend göndermez. */
+    templateId?: string | null;
+  } | null;
 }
 
 /** GET/PUT /labels/work-orders/:id/overrides yanıtı. */
@@ -564,6 +584,8 @@ export const tamburService = {
     orderLineId?: string | null;
     customerId?: string | null;
     consigneeId?: string | null;
+    /** Yalnız varsayılandan FARKLI seçimde gönderilir (eski backend alanı strip eder). */
+    templateId?: string;
     draft: TamburLabelPreviewDraft;
   }): Promise<TamburLabelPreview | null> =>
     apiClient
