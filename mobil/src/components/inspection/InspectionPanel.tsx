@@ -12,7 +12,7 @@ import { StyleSheet, View } from 'react-native';
 import { Icon, Surface, Text } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import { palette } from '../../theme/tokens';
+import { palette, spacing } from '../../theme/tokens';
 import type { DefectType } from '../../types/models';
 import DefectRuler from './DefectRuler';
 import DeletePointModal from './DeletePointModal';
@@ -64,9 +64,9 @@ export interface InspectionPanelProps {
   compact?: boolean;
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
   children?: React.ReactNode;
-  /** Cetvel ile giriş arasına esnek boşluk: giriş bloğu (ve konağın altındaki düğme) kabın altına yaslanır.
-   *  Konak `flex:1` kolon olmalı; varsayılan kapalı (diğer ekranlar bugünkü gibi yukarıdan dizer).
-   *  Artan yerin çoğu giriş bloğuna gider: `flexGrow`lu konak eki (ör. kurşun sayaç şeridi) onu doldurur. */
+  /** Giriş bloğu (ve konağın altındaki düğme) kabın altına yaslanır; artan yerin TAMAMI giriş bloğuna gider ve
+   *  `flexGrow`lu konak eki (ör. kurşun sayaç şeridi) onu doldurur — bloklar arası aralık hep aynı kalır.
+   *  Konak `flex:1` kolon olmalı; varsayılan kapalı (diğer ekranlar bugünkü gibi yukarıdan dizer). */
   entryAtBottom?: boolean;
   /** K4P özet şeridi: sayım + sunucu önizlemesi (konak hesaplar/çeker; bileşen yalnız gösterir). */
   summary?: InspectionSummary;
@@ -192,7 +192,6 @@ export default function InspectionPanel(props: InspectionPanelProps) {
           alwaysRuler={props.rulerAlways === true}
         />
       </View>
-      {props.entryAtBottom === true && <View style={styles.entrySpacer} testID="inspection-entry-spacer" />}
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
       <View style={[styles.entryFixed, props.entryAtBottom === true && styles.entryGrow]} testID="inspection-entry-block">
         {!readOnly && (
@@ -227,11 +226,10 @@ export default function InspectionPanel(props: InspectionPanelProps) {
 
 const styles = StyleSheet.create({
   rulerBlock: { height: 112, paddingHorizontal: 8 },
-  entryFixed: { paddingHorizontal: 8, gap: 10 },
-  // flex:1 → flexShrink 1, flexBasis 0: yer yoksa 0'a iner, içerik itilmez.
-  entrySpacer: { flex: 1, minHeight: 0 },
-  // Boş dikey alanın ¾'ü giriş bloğuna; büyüyen ek yoksa blok yine alta yaslı kalır.
-  entryGrow: { flexGrow: 3, justifyContent: 'flex-end' },
+  entryFixed: { paddingHorizontal: 8, gap: spacing.md },
+  // Ayrı boşluk görünümü yok (kolon gap'iyle çift aralık doğuruyordu): artan yer bloğun içinde, büyüyen eke ya da
+  // (ek yoksa) bloğun üstüne gider; içerik alta yaslı.
+  entryGrow: { flexGrow: 1, justifyContent: 'flex-end' },
   section: { flex: 1, backgroundColor: palette.white, borderRadius: 12, padding: 14, gap: 8 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: palette.slate[900] },
   muted: { fontSize: 12, color: palette.slate[400], fontStyle: 'italic' },

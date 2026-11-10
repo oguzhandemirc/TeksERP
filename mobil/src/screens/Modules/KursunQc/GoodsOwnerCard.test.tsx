@@ -39,10 +39,11 @@ describe('MeterStrip fill', () => {
   } as unknown as MeterCaptureState;
   const acks = { pinPendingCount: 0, officePendingCount: 0, openPin: jest.fn() } as unknown as MeterAcksState;
 
-  it('fill: şerit boş alana yayılır (tavanlı), rakam 32 tabular', () => {
+  it('fill: şerit artan alana yayılır, rakam 32 tabular', () => {
     const r = renderWithPaper(<MeterStrip meter={meter} acks={acks} roll={null} stepId={null} fill />);
     const root = StyleSheet.flatten(r.getByTestId('metre-serit').props.style);
-    expect(root).toMatchObject({ flexGrow: 1, maxHeight: 220 });
+    expect(root).toMatchObject({ flexGrow: 1 });
+    expect(root.maxHeight).toBeUndefined();
     const value = StyleSheet.flatten(r.getByText(fmtMeters(120)).props.style);
     expect(value).toMatchObject({ fontSize: 32, fontVariant: ['tabular-nums'] });
   });

@@ -110,7 +110,7 @@ import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachin
 import { findTarget, targetChipText } from './gramajTap';
 import { usePropAnswers } from './usePropAnswers';
 import { useAuthStore } from '../../../store/authStore';
-import { palette } from '../../../theme/tokens';
+import { palette, spacing } from '../../../theme/tokens';
 import PlannedMachineBadge from './PlannedMachineBadge';
 import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
 import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
@@ -1577,7 +1577,7 @@ export default function KursunQcScreen() {
             </View>
           ) : (
             // Tek gap'li kolon: cetvel üstte; giriş (hata metresi + tip ızgarası + çıkış metresi) ve
-            // Tamamla düğmesi en altta (başparmak erişimi) — arada InspectionPanel'in esnek boşluğu (entryAtBottom).
+            // Tamamla düğmesi en altta (başparmak erişimi) — artan yer giriş bloğunda (entryAtBottom), aralıklar eşit.
             <View style={styles.rollPane}>
               <GoodsOwnerCard roll={selectedRoll} />
               {/* KQ-D3: hata girişi TEK bileşen (InspectionPanel; K4P ile ortak) —
@@ -1715,7 +1715,7 @@ export default function KursunQcScreen() {
                     compact={compact}
                     // Hata yokken de 0…top boyu cetveli (Tambur'daki ölçek gibi); boş durum yazısı yok.
                     rulerAlways
-                    // Giriş + Tamamla en alta yaslanır; yer darsa boşluk 0'a iner (taşma yok).
+                    // Giriş + Tamamla en alta yaslanır; artan yer bloğun içinde (sayaç şeridi doldurur), aralıklar eşit.
                     entryAtBottom
                   >
                     <MeasuredWidthField state={measuredWidth} hidden={selectedRoll.qc2Completed} />
@@ -2638,10 +2638,10 @@ const styles = StyleSheet.create({
   // Sabit (sticky) hata giriş zonu — header ile scroll arasında, kaymaz.
   // Dış yatay boşluk minimal (8) → amber kutu kolon genişliğini neredeyse
   // tam kullanır; kart kenarı ekrana yapışmasın diye küçük pay bırakıldı.
-  // Seçili top içeriği — öğeler arası boşluk EŞİT (tek gap); artan yer cetvel ile alt blok
-  // arasındaki esnek boşluğa gider (InspectionPanel entryAtBottom). paddingTop: koyu band
+  // Seçili top içeriği — öğeler arası boşluk EŞİT (tek gap token'ı); artan yer giriş bloğuna,
+  // tablette sayaç şeridine gider (InspectionPanel entryAtBottom + MeterStrip fill). paddingTop: koyu band
   // kalkınca cetvel navbara yapışmasın (sağ kolon şeridiyle simetrik pay).
-  rollPane: { flex: 1, gap: 10, paddingTop: 8 },
+  rollPane: { flex: 1, gap: spacing.md, paddingTop: spacing.sm },
   // Hata giriş alanı — dış boşluk rollPane gap'inden gelir; burada yalnız yatay
   // iç boşluk (amber kartı kenardan içeri al). Border/zemin YOK (hr çizgisi kalktı).
   entryFixed: { paddingHorizontal: 8 },

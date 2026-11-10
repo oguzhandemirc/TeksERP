@@ -2,8 +2,8 @@
 // H3 sayaç şeridi — GİRİŞ / ÇIKIŞ / FARK + kaynak rengi + bekleyen onay bantları
 // =============================================================================
 // Yeşil = bağlı sayaç, amber = elle, kırmızı = SİMÜLASYON. Gramaj panelinin ÜSTÜNDE
-// durur; telefon dikeyinde hücreler alt alta kırılır (flexWrap). `fill` (tablet, GK 2026-11-11): şerit sol sütunun boş
-// dikey alanını doldurur, rakamlar kritik boyda (32) — cetvel ile alt blok arasında ölü boşluk kalmasın.
+// durur; telefon dikeyinde hücreler alt alta kırılır (flexWrap). `fill` (tablet, GK 2026-11-11): şerit sol sütunun artan
+// dikey alanını doldurur, rakamlar kritik boyda (32) — bloklar arasında ölü boşluk kalmasın.
 // =============================================================================
 
 import React from 'react';
@@ -19,7 +19,7 @@ interface Props {
   acks: MeterAcksState;
   roll: MeterRoll | null;
   stepId: string | null;
-  /** Tablet: boş dikey alana yayıl (flexGrow, tavanlı) + büyük rakam. Telefonda verilmez (taşma yok). */
+  /** Tablet: artan dikey alana yayıl (flexGrow) + büyük rakam. Telefonda verilmez (taşma yok). */
   fill?: boolean;
 }
 
@@ -85,8 +85,8 @@ export default function MeterStrip({ meter, acks, roll, stepId, fill }: Props) {
 const s = StyleSheet.create({
   // Paper Surface değil düz View: Surface flexGrow'u dış katmana verip zemini içerikte bırakıyordu.
   root: { borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm, ...shadow.sm },
-  // Boş alanı doldurur ama sınırsız şişmez; içerik dikeyde ortalı.
-  rootFill: { flexGrow: 1, minHeight: 112, maxHeight: 220, justifyContent: 'center' },
+  // Sol sütunun artan dikey alanını doldurur (bloklar arası aralık sabit kalsın); içerik dikeyde ortalı.
+  rootFill: { flexGrow: 1, minHeight: 112, justifyContent: 'center' },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.lg },
   cell: { flex: 1, minWidth: 110, gap: spacing.xs },
   cellLabel: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.bold, letterSpacing: 0.5 },

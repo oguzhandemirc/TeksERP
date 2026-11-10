@@ -151,23 +151,20 @@ describe('overMaxMode konak bağı', () => {
 });
 
 describe('InspectionPanel — giriş alta yaslı (GK kurşun, 2026-11-10)', () => {
-  it('varsayılan: esnek boşluk yok (diğer ekranlar bugünkü gibi yukarıdan dizer)', () => {
+  it('varsayılan: ayrı boşluk görünümü yok (diğer ekranlar bugünkü gibi yukarıdan dizer)', () => {
     const { r } = setup();
     expect(r.queryByTestId('inspection-entry-spacer')).toBeNull();
   });
-  it('entryAtBottom: cetvel ile giriş arasında daralabilir esnek boşluk', () => {
+  it('entryAtBottom: artan yerin TAMAMI giriş bloğunda (alta yaslı); ayrı boşluk görünümü yok — çift aralık olmaz', () => {
     const { r } = setup({ entryAtBottom: true, rulerAlways: true });
-    const spacer = r.getByTestId('inspection-entry-spacer');
-    expect(spacer.props.style).toMatchObject({ flex: 1, minHeight: 0 });
-    // Sıra: cetvel → boşluk → metre girişi (başparmak erişimi alt blokta).
+    expect(r.queryByTestId('inspection-entry-spacer')).toBeNull();
+    expect(StyleSheet.flatten(r.getByTestId('inspection-entry-block').props.style)).toMatchObject({ flexGrow: 1, justifyContent: 'flex-end' });
+    // Sıra: cetvel → metre girişi (başparmak erişimi alt blokta).
     const json = JSON.stringify(r.toJSON());
     const iRuler = json.indexOf('inspection-ruler');
-    const iSpacer = json.indexOf('inspection-entry-spacer');
     const iMeter = json.indexOf('"testID":"meter"');
     expect(iRuler).toBeGreaterThanOrEqual(0);
-    expect(iRuler < iSpacer && iSpacer < iMeter).toBe(true);
-    // Artan yerin çoğu giriş bloğuna (konak eki — sayaç şeridi — onu doldurur).
-    expect(StyleSheet.flatten(r.getByTestId('inspection-entry-block').props.style)).toMatchObject({ flexGrow: 3, justifyContent: 'flex-end' });
+    expect(iRuler < iMeter).toBe(true);
   });
   it('varsayılan: giriş bloğu büyümez', () => {
     const { r } = setup();
