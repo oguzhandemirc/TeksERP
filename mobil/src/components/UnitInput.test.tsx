@@ -2,18 +2,18 @@
 // erişilebilirlik etiketi birimin uzun adını taşır.
 import React from 'react';
 import { fireEvent } from '@testing-library/react-native';
-import { renderWithPaper } from '../../../test/render';
-import TamburUnitInput, { showClearIcon } from './TamburUnitInput';
+import { renderWithPaper } from '../test/render';
+import UnitInput, { showClearIcon } from './UnitInput';
 
-function box(over: Partial<React.ComponentProps<typeof TamburUnitInput>> = {}) {
+function box(over: Partial<React.ComponentProps<typeof UnitInput>> = {}) {
   const onClear = jest.fn();
   const r = renderWithPaper(
-    <TamburUnitInput value="50" onChange={jest.fn()} unit="m" unitName="metre" label="Kesim uzunluğu" placeholder="kalanı kes" onClear={onClear} testID="t" {...over} />,
+    <UnitInput value="50" onChange={jest.fn()} unit="m" unitName="metre" label="Kesim uzunluğu" placeholder="kalanı kes" onClear={onClear} testID="t" {...over} />,
   );
   return { r, onClear };
 }
 
-describe('TamburUnitInput', () => {
+describe('UnitInput', () => {
   it('birim metni kutunun içinde görünür; ayrı başlık yok', () => {
     const { r } = box({ unit: 'cm', unitName: 'santimetre', label: 'En' });
     expect(r.getByText('cm')).toBeTruthy();

@@ -106,6 +106,8 @@ import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { beyondDeclaredDefectWarning, rollDeclaredMeters } from "./helpers/meter-compare.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE, isActionableRollError } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
+import { kursunGoodsOwnerOf, type KursunGoodsOwner } from "./helpers/kursun-goods-owner.helper";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 
 /** Muayene satırı KK2/Tambur silme ucundan silinemez (belge parçası; düzeltme revizyondur). */
 const INSPECTION_ERROR_IMMUTABLE_MESSAGE = "Muayene hatası buradan silinemez; muayeneyi panelden düzeltin";
@@ -143,6 +145,8 @@ interface RollSummary {
   meter?: RollMeterBase;
   /// D4-KUC3b: ölçülen en sınırı — YALNIZ `capturesWidth` adımda (tablet isteği göndermeden uyarır; sınır yazım kapısıyla aynı hesap).
   widthLimit?: MeasuredWidthLimit;
+  /// GK 2026-11-11 "Malın sahibi": emanet sahibi ya da İE/sipariş müşterisi; bilinmiyorsa null. Eski APK yok sayar.
+  goodsOwner: KursunGoodsOwner | null;
 }
 
 interface PriorDefectSummary {
@@ -1811,6 +1815,8 @@ export class KursunQcService {
             workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true } },
+            customer: { select: { name: true } },
+            orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLine: { select: { order: { select: { customer: { select: { name: true } } } } } } } },
           },
         },
       },
@@ -1827,7 +1833,7 @@ export class KursunQcService {
     const openMovements = await prisma.rollMovement.findMany({
       where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
       select: {
-        roll: { select: { id: true, barcode: true, currentQty: true, width: true } },
+        roll: { select: { id: true, barcode: true, currentQty: true, width: true, ownerCustomer: { select: { name: true } } } },
       },
       orderBy: { enteredAt: "asc" },
     });
@@ -1930,6 +1936,7 @@ export class KursunQcService {
     // barkodsuz açık kumaş topları listede ad + renkle görünsün.
     const itemName = step.workOrder.targetItem?.name ?? null;
     const colorName = step.workOrder.targetColor?.name ?? null;
+    const orderCustomerNames = step.workOrder.orderLinks.map((l) => l.orderLine.order.customer?.name);
     // H3b: sayaç kipi kapalıyken (varsayılan) yalnız kip okunur; taban/politika okunmaz, anahtar eklenmez.
     const capture = await resolveKursunMeterCapture();
     const meterOn = capture !== "OFF";
@@ -1959,6 +1966,7 @@ export class KursunQcService {
         ...(widthToleranceCm != null
           ? { widthLimit: measuredWidthLimit(m.roll.width == null ? null : Number(m.roll.width), widthToleranceCm) }
           : {}),
+        goodsOwner: kursunGoodsOwnerOf({ rollOwnerName: m.roll.ownerCustomer?.name, workOrderCustomerName: step.workOrder.customer?.name, orderCustomerNames }),
       };
     });
 

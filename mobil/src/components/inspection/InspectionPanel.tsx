@@ -65,7 +65,8 @@ export interface InspectionPanelProps {
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
   children?: React.ReactNode;
   /** Cetvel ile giriş arasına esnek boşluk: giriş bloğu (ve konağın altındaki düğme) kabın altına yaslanır.
-   *  Konak `flex:1` kolon olmalı; varsayılan kapalı (diğer ekranlar bugünkü gibi yukarıdan dizer). */
+   *  Konak `flex:1` kolon olmalı; varsayılan kapalı (diğer ekranlar bugünkü gibi yukarıdan dizer).
+   *  Artan yerin çoğu giriş bloğuna gider: `flexGrow`lu konak eki (ör. kurşun sayaç şeridi) onu doldurur. */
   entryAtBottom?: boolean;
   /** K4P özet şeridi: sayım + sunucu önizlemesi (konak hesaplar/çeker; bileşen yalnız gösterir). */
   summary?: InspectionSummary;
@@ -193,7 +194,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
       </View>
       {props.entryAtBottom === true && <View style={styles.entrySpacer} testID="inspection-entry-spacer" />}
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
-      <View style={styles.entryFixed}>
+      <View style={[styles.entryFixed, props.entryAtBottom === true && styles.entryGrow]} testID="inspection-entry-block">
         {!readOnly && (
           <InspectionEntry
             defectTypes={defectTypes}
@@ -229,6 +230,8 @@ const styles = StyleSheet.create({
   entryFixed: { paddingHorizontal: 8, gap: 10 },
   // flex:1 → flexShrink 1, flexBasis 0: yer yoksa 0'a iner, içerik itilmez.
   entrySpacer: { flex: 1, minHeight: 0 },
+  // Boş dikey alanın ¾'ü giriş bloğuna; büyüyen ek yoksa blok yine alta yaslı kalır.
+  entryGrow: { flexGrow: 3, justifyContent: 'flex-end' },
   section: { flex: 1, backgroundColor: palette.white, borderRadius: 12, padding: 14, gap: 8 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: palette.slate[900] },
   muted: { fontSize: 12, color: palette.slate[400], fontStyle: 'italic' },

@@ -1,7 +1,8 @@
 // K4P-TABLET — InspectionPanel 4 puan modu render bekçisi: boyut şeridi, sabit puan tek dokunuş,
 // konumsuz kayıt, önceki hatalar gri, özet/çevrimdışı/en-yok şeritleri, numpad'i kendiliğinden almaz.
 import React from 'react';
-import { act, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { act, fireEvent, within } from '@testing-library/react-native';
 import { renderWithPaper } from '../../test/render';
 import InspectionPanel from './InspectionPanel';
 import type { DefectType } from '../../types/models';
@@ -165,5 +166,29 @@ describe('InspectionPanel — giriş alta yaslı (GK kurşun, 2026-11-10)', () =
     const iMeter = json.indexOf('"testID":"meter"');
     expect(iRuler).toBeGreaterThanOrEqual(0);
     expect(iRuler < iSpacer && iSpacer < iMeter).toBe(true);
+    // Artan yerin çoğu giriş bloğuna (konak eki — sayaç şeridi — onu doldurur).
+    expect(StyleSheet.flatten(r.getByTestId('inspection-entry-block').props.style)).toMatchObject({ flexGrow: 3, justifyContent: 'flex-end' });
+  });
+  it('varsayılan: giriş bloğu büyümez', () => {
+    const { r } = setup();
+    expect(StyleSheet.flatten(r.getByTestId('inspection-entry-block').props.style).flexGrow).toBeUndefined();
+  });
+});
+
+describe('InspectionPanel — birimli metre kutusu (GK 2026-11-11)', () => {
+  it('birim "m" kutunun içinde; kutu tür düğmeleriyle aynı satırda (ilk hücre) ve aynı yükseklikte', () => {
+    const { r } = setup();
+    const box = r.getByTestId('inspection-meter-kutu');
+    expect(within(box).getByText('m')).toBeOnTheScreen();
+    expect(within(box).getByTestId('meter')).toBeOnTheScreen();
+    const grid = r.getByTestId('inspection-type-grid');
+    expect(within(grid).getByTestId('inspection-meter-kutu')).toBeTruthy();
+    expect(within(grid).getByTestId('inspection-type-t-leke')).toBeTruthy();
+    expect(StyleSheet.flatten(box.props.style).minHeight).toBe(64);
+    expect(r.queryByText('Hata metresi (mt)')).toBeNull();
+  });
+  it('tip tanımsızken de metre kutusu çizilir', () => {
+    const { r } = setup({ defectTypes: [] });
+    expect(r.getByTestId('inspection-meter-kutu')).toBeOnTheScreen();
   });
 });

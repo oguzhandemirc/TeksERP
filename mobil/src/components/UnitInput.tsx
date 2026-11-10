@@ -1,13 +1,12 @@
-// Tambur geniş kesim sayı girişi (Metre · Kg · En; kullanıcı 2026-11-11 tur-4): beyaz zemin, çerçevesiz, köşe
-// ACTION_BUTTON_RADIUS; başlık yerine kutunun içinde sağda birim. Sıra: değer … ⊗ birim. Tuş takımı NumpadInput'ta.
+// Birimli sayı girişi (Tambur Metre · Kg · En; Kurşun/muayene hata metresi): beyaz zemin, çerçevesiz, köşe radius.md;
+// başlık yerine kutunun içinde sağda gri birim. Sıra: değer … ⊗ birim. Tuş takımı NumpadInput'ta.
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { IconButton, Text } from 'react-native-paper';
-import NumpadInput from '../../../components/NumpadInput';
-import { colors, palette, shadow, spacing, typography } from '../../../theme/tokens';
-import { ACTION_BUTTON_RADIUS } from './CutActionBar';
+import NumpadInput from './NumpadInput';
+import { colors, palette, radius, shadow, spacing, typography } from '../theme/tokens';
 
-export interface TamburUnitInputProps {
+export interface UnitInputProps {
   value: string;
   onChange: (v: string) => void;
   /** Kutunun içinde sağda gösterilen birim ("m", "kg", "cm"). */
@@ -23,6 +22,12 @@ export interface TamburUnitInputProps {
   /** Otomatik kipte ⊗ çizilmez (kutu salt okunur görünüm). */
   manual?: boolean;
   required?: boolean;
+  /** Mount anında tuş takımını bu kutuya bağlar (NumpadInput.autoActivate). */
+  autoActivate?: boolean;
+  /** Telefonda sistem klavyesi (NumpadInput.useNativeKeyboard). */
+  useNativeKeyboard?: boolean;
+  /** Kutu yerleşimi (genişlik/yükseklik) — görünüm tokenları burada sabit. */
+  style?: StyleProp<ViewStyle>;
   testID: string;
   clearTestID?: string;
 }
@@ -35,12 +40,12 @@ export function showClearIcon(value: string, manual = true): boolean {
 // İkon küçük ama dokunma hedefi IconButton + hitSlop ≥44dp.
 const CLEAR_HIT = { top: 6, bottom: 6, left: 6, right: 6 };
 
-export default function TamburUnitInput(p: TamburUnitInputProps) {
+export default function UnitInput(p: UnitInputProps) {
   const [focused, setFocused] = useState(false);
   const manual = p.manual ?? true;
   const a11y = `${p.label}, ${p.unitName}${p.required ? ', zorunlu' : ''}`;
   return (
-    <View style={[s.box, focused && s.boxFocused]} testID={`${p.testID}-kutu`}>
+    <View style={[s.box, p.style, focused && s.boxFocused]} testID={`${p.testID}-kutu`}>
       <NumpadInput
         mode="flat"
         value={p.value}
@@ -48,6 +53,8 @@ export default function TamburUnitInput(p: TamburUnitInputProps) {
         numpadLabel={`${p.label} (${p.unit})`}
         allowDecimal
         numpadMaxLength={p.numpadMaxLength ?? 8}
+        autoActivate={p.autoActivate}
+        useNativeKeyboard={p.useNativeKeyboard}
         placeholder={p.placeholder}
         editable={manual}
         style={s.input}
@@ -85,7 +92,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     backgroundColor: palette.white,
-    borderRadius: ACTION_BUTTON_RADIUS,
+    borderRadius: radius.md,
     borderWidth: 2,
     borderColor: 'transparent',
     paddingRight: spacing.md,
@@ -94,7 +101,15 @@ const s = StyleSheet.create({
   },
   // Çerçeve yalnız odakta (tuş takımı hedefi) — NumpadInput'un indigo vurgusuyla aynı renk.
   boxFocused: { borderColor: palette.indigo[600] },
-  input: { flex: 1, minWidth: 0, backgroundColor: 'transparent', fontSize: typography.size.xxl, fontWeight: typography.weight.bold, height: 52 },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'transparent',
+    fontSize: typography.size.xxl,
+    fontWeight: typography.weight.bold,
+    fontVariant: ['tabular-nums'],
+    height: 52,
+  },
   content: { paddingLeft: spacing.md, paddingRight: spacing.xs, paddingTop: 0, paddingBottom: 0 },
   clear: { margin: 0 },
   unit: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.textMuted },

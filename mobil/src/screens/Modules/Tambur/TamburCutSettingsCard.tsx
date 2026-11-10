@@ -9,7 +9,7 @@ import { colors, palette, shadow, spacing } from '../../../theme/tokens';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 import type { QualityOption } from './TamburCompactPickers';
 import { nextFoldCode } from './foldCycle';
-import TamburUnitInput from './TamburUnitInput';
+import UnitInput from '../../../components/UnitInput';
 
 export interface TamburCutSettingsProps {
   fold: { options: { code: string; name: string }[]; value: string | null | undefined; onPick: (code: string) => void };
@@ -79,7 +79,7 @@ export default function TamburCutSettingsCard(p: TamburCutSettingsProps) {
       </View>
       {p.width && (
         <View style={s.widthCol}>
-          <TamburUnitInput
+          <UnitInput
             value={p.width.value}
             onChange={p.width.onChange}
             unit="cm"

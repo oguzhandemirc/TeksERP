@@ -39,6 +39,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** DECLARED_IN tabanını yalnız `rollDeclaredInSql`den oku; `initialQty`yi yükselten yeni yazıcı `initialQtyRaise` doldurur.
 - **[ÇEKİRDEK]** "İmza bekliyor" yüklemi yalnız `METER_SIGNATURE_MODES` (SUPERVISOR_PIN · OFFICE); SQL ve bellek ikizi aynı sabitten; OPERATOR_REASON'da sebep yazımda alınır, sonradan kayan fark "imzasız sapma"dır, adımı tutmaz.
 - **[ÇEKİRDEK]** Adım özetinde `meter`/`rolls[].meter`i YALNIZ `kursun.meterCapture` OUT/IN_OUT iken ekle (OFF'ta bayt-aynı); kip/politika `resolveKursunMeterCapture`/`resolveKursunMeterPolicy`, taban `loadRollMeterBases` tek sorguda; açık kart listesine koyma.
+- **[ÇEKİRDEK]** Adım özetindeki `rolls[].goodsOwner`ı ("Malın sahibi") yalnız `kursunGoodsOwnerOf`tan türet: emanet sahibi > İE carisi > siparişlerin TEK müşterisi, değilse null (tablet gizler, ad uydurmaz).
 - **[ÇEKİRDEK]** Dağıtımsız kapanışta atomik claim GEREKMEZ: `closeBypassMovementsTx`'in `exitedAt IS NULL` guard'ı + kapsam paritesi; idempotent tekrar izi marker (`findCompletedUnassignedClosure`).
 - **[ÇEKİRDEK]** Bypass ataması istasyon özelliğinde MOD `AUTO` arar; `StationProperty` satırının varlığı YETMEZ.
 - **[ÇEKİRDEK]** Gramaj görünümü YALNIZ `process-summary.helper.ts`ten türer; hedef gramaj `WorkOrderTargetValue` (damgayla sürümlü), sapma türetilir, engellemez; kâğıt gramajı `KursunBypassAssignment.propertyValueId`ye, tamamlanınca donar, RollOperation yazmaz.
@@ -124,7 +125,7 @@ Backend: `test_station_default_targets`, `test_fason_kursun_zincir`, `test_audit
 
 Madde içi: `test_guarded_hard_remove`, `test_gelen_belge_formdan_is_emri`, `test_station_quality_capability`, `test_permission_catalog`, `test_brode_fiyat_birimi`
 
-İstemci: `machine-tabs.test.ts`, `queue-reorder.test.ts`, `selection.test.ts`, `production-regime.test.ts`, `tile-visibility.test.ts`, `command-entries.test.ts`, `GramajTapPanel.test.tsx`, `kursun-station.test.ts`, `belge-kayit.test.tsx`, `useWoRows.test.tsx`, `KursunStepFields.test`, `brodePiece.test.tsx`, `meterCapture.test.tsx`, `meterRecovery.test.tsx`
+İstemci: `machine-tabs.test.ts`, `queue-reorder.test.ts`, `selection.test.ts`, `production-regime.test.ts`, `tile-visibility.test.ts`, `command-entries.test.ts`, `GramajTapPanel.test.tsx`, `kursun-station.test.ts`, `belge-kayit.test.tsx`, `useWoRows.test.tsx`, `KursunStepFields.test`, `brodePiece.test.tsx`, `meterCapture.test.tsx`, `meterRecovery.test.tsx`, `GoodsOwnerCard.test.tsx`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

@@ -929,6 +929,8 @@ export interface KursunRollSummary {
   meter?: { declaredIn: number | null; measuredIn: number | null } | null;
   /** D4-KUC3b: ölçülen en sınırı (yalnız en ölçen adımda; sunucu yazım kapısıyla aynı hesap). Eski backend göndermez → ön-denetim yok. */
   widthLimit?: { widthBefore: number | null; toleranceCm: number; maxCm: number | null };
+  /** GK 2026-11-11 "Malın sahibi": emanet sahibi (consigned) ya da İE/sipariş müşterisi; bilinmiyorsa null. Eski backend göndermez → satır yok. */
+  goodsOwner?: { name: string; consigned: boolean } | null;
 }
 
 /** Önceki adım hatası + künye ("KK Masa 2 · Ayşe · 13:40"). */

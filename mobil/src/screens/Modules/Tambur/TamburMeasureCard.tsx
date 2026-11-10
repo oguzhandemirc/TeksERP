@@ -1,12 +1,12 @@
 // Geniş tablet ölçüm kartı (2026-11-10/11, kullanıcı kararı; başlıksız): yalnız MANUEL kipteki alanın kutusu çizilir (Metre ve/veya
-// Kg). Kipler alt şeritteki METRE/KG düğmelerinde; ikisi de otomatikse kartı çağıran hiç çizmez. Kutular TamburUnitInput
+// Kg). Kipler alt şeritteki METRE/KG düğmelerinde; ikisi de otomatikse kartı çağıran hiç çizmez. Kutular UnitInput
 // (birim kutunun içinde sağda, dolu kutuda ⊗); kg kutusunda Tart (varsa) bugünkü gibi.
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Button } from 'react-native-paper';
 import { palette, spacing } from '../../../theme/tokens';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
-import TamburUnitInput from './TamburUnitInput';
+import UnitInput from '../../../components/UnitInput';
 
 export interface TamburMeasureCardProps {
   /** Metre Manuel değilse null (kutu yok). */
@@ -23,7 +23,7 @@ export default function TamburMeasureCard({ length, kg, extras }: TamburMeasureC
       <View style={s.row}>
         {length && (
           <View style={s.col}>
-            <TamburUnitInput
+            <UnitInput
               value={length.value}
               onChange={length.onChange}
               unit="m"
@@ -39,7 +39,7 @@ export default function TamburMeasureCard({ length, kg, extras }: TamburMeasureC
         {kg && (
           <View style={[s.col, s.inputRow]}>
             <View style={s.grow}>
-              <TamburUnitInput
+              <UnitInput
                 value={kg.value}
                 onChange={kg.onChange}
                 unit="kg"

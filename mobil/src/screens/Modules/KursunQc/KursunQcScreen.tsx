@@ -84,6 +84,7 @@ import {
   finishStepLabel,
   nextStationLabel,
 } from './stationPanels';
+import GoodsOwnerCard from './GoodsOwnerCard';
 import GramajTapPanel from './GramajTapPanel';
 import AllDoneFinishPanel from './AllDoneFinishPanel';
 import { useGramajTap } from './useGramajTap';
@@ -1578,6 +1579,7 @@ export default function KursunQcScreen() {
             // Tek gap'li kolon: cetvel üstte; giriş (hata metresi + tip ızgarası + çıkış metresi) ve
             // Tamamla düğmesi en altta (başparmak erişimi) — arada InspectionPanel'in esnek boşluğu (entryAtBottom).
             <View style={styles.rollPane}>
+              <GoodsOwnerCard roll={selectedRoll} />
               {/* KQ-D3: hata girişi TEK bileşen (InspectionPanel; K4P ile ortak) —
                   cetvel + metre + tip ızgarası. Kalite paneli kapalı istasyonda
                   (yalnız kurşun) çizilmez; işlem paneli aynı sütunda kalır. */}
@@ -1586,7 +1588,7 @@ export default function KursunQcScreen() {
                   <>
                     {meter.outOn && <BrodePieceField state={brodePiece} hidden={selectedRoll.qc2Completed} />}
                     {meter.outOn && (
-                      <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} />
+                      <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} fill={!compact && panels.qualityPanel} />
                     )}
                     <GramajTapPanel state={gramajTap} hasRoll={!selectedRoll.qc2Completed} />
                   </>
@@ -1692,7 +1694,8 @@ export default function KursunQcScreen() {
                 {exitMeterRequired(activeJob.stepSummary) && selectedRoll.barcode && !selectedRoll.qc2Completed && (
                   <>
                     <BrodePieceField state={brodePiece} hidden={false} />
-                    <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} />
+                    {/* Tablet: şerit cetvel ile alt blok arasındaki boş alanı doldurur (InspectionPanel entryAtBottom). */}
+                    <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} fill={!compact && panels.qualityPanel} />
                   </>
                 )}
                   </>
