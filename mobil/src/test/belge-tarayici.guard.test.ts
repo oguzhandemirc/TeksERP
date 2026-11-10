@@ -2,7 +2,7 @@
 // BEKÇİ: ML Kit belge tarayıcısı köprüsü (mobil/modules/teks-erp-belge-tarayici)
 // =============================================================================
 // Native kaynak jest'te koşmaz; sözleşmenin taşıyıcı seçenekleri metinden ölçülür: galeriden içe aktarma AÇIK (kullanıcı kararı 2026-11-02)
-// (aynı fotoğrafı sayfa özeti eler), çıktı JPEG, ML Kit sürümü TAM SABİT, uygunluk modül inmemişse indirmeyi arka plana
+// (aynı fotoğrafı sayfa özeti eler), çıktı JPEG, ML Kit sürümü TAM SABİT, uygunluk modül inmemişse indirmeyi hemen başlatır
 // bırakır (tarama beklemez), JS'in çağırdığı modül adı + işlevler native tanımla aynı.
 // =============================================================================
 import fs from 'fs';
@@ -25,9 +25,10 @@ it('ML Kit tarayıcı bağımlılığı TAM SABİT (aralık/+ yok)', () => {
   expect(m?.[1]).toBe('16.0.0');
 });
 
-it('modül hazır değilse indirme arka plana bırakılır ve "yok" denir (çevrimdışı tablet kameraya düşer)', () => {
+it('modül hazır değilse indirme HEMEN başlatılır ve "yok" denir (çevrimdışı tablet kameraya düşer)', () => {
   expect(kt).toMatch(/areModulesAvailable\(scanner\)/);
-  expect(kt).toMatch(/deferredInstall\(scanner\)/);
+  expect(kt).toMatch(/installModules\(ModuleInstallRequest\.newBuilder\(\)\.addApi\(scanner\)\.build\(\)\)/);
+  expect(kt).not.toMatch(/deferredInstall\(/);
   expect(kt).toMatch(/verdict\(false, "module_missing"\)/);
 });
 

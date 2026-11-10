@@ -12,6 +12,7 @@ import android.util.Base64
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
@@ -231,8 +232,8 @@ class TeksErpBelgeTarayiciModule : Module() {
       if (response.areModulesAvailable()) {
         verdict(true, "ok")
       } else {
-        // İnternet gelince Play Hizmetleri indirir; bu tarama kamerayla sürer.
-        installer.deferredInstall(scanner)
+        // Hemen indir (deferredInstall cihaz boşta+şarjda bekler, sahada hiç inmiyordu); bu tarama kamerayla sürer.
+        installer.installModules(ModuleInstallRequest.newBuilder().addApi(scanner).build())
         verdict(false, "module_missing")
       }
     } catch (e: TimeoutException) {
