@@ -9,7 +9,7 @@
 import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx } from "../helpers/emanet-warehouse.helper";
 import { AppError } from "../../utils/app-error";
 import { assertRollReplayAlive, tokenReplay } from "../helpers/token-replay.helper";
 import { ApiResponse } from "../../types/api.types";
@@ -166,9 +166,10 @@ export async function createOpenFabricFresh(this: InventoryServiceThis,
       // bulunduğu depo"yu taşır ve NULL bırakmak envanteri deliklendirir. Tek
       // depolu fabrikada zaten tek doğru cevap var; çok depolu ticaret kurulumu
       // bu yolu (fason dönüşü açık kumaş) hiç kullanmıyor.
-      const openFabricWarehouseId = await resolveTargetWarehouseId(tx);
-      // EMANET: makbuzdan doğan top kaynak topların tek sahibini alır (fason kabulüyle aynı kalıtım, H10).
+      // EMANET: makbuzdan doğan top kaynak topların tek sahibini alır (fason kabulüyle aynı kalıtım, H10); sahipli
+      // doğum emanet deposuna (fason kabulüyle aynı boğaz, F1b), sahipsiz bugünkü varsayılana.
       const openFabricOwnerId = await resolveOwnerFromReceiptTx(tx, receipt.id);
+      const openFabricWarehouseId = await resolveBirthWarehouseIdTx(tx, null, openFabricOwnerId);
       const created = await tx.roll.create({
         data: {
           barcode: null,

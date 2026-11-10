@@ -22,7 +22,7 @@ import { AuditService } from "../audit.service";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse } from "../../types/api.types";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx } from "../helpers/emanet-warehouse.helper";
 import { pickFinalizeChildWidthTx } from "../helpers/finalize-child-width.helper";
 import { auditBornCustomerCodes, birthCustomerCodesTx, type BornCustomerCode } from "../helpers/customer-code-birth.helper";
 import {
@@ -695,9 +695,9 @@ export async function finalize(
         select: { propertyId: true, valueId: true },
       });
 
-      // Parent deposuz ise (backfill öncesi kayıt) düşülecek depo — döngü DIŞINDA
-      // bir kez çözülür (segment başına sorgu açmamak için).
-      const cutWarehouseFallbackId = roll.warehouseId ?? (await resolveTargetWarehouseId(tx));
+      // Çocukların deposu döngü DIŞINDA bir kez: sahipli üretim çıktısı emanet deposuna (açıkken), yoksa ebeveynin
+      // kayıtlı deposu, o da yoksa (backfill öncesi kayıt) varsayılan — `resolveBirthWarehouseIdTx` (fason.md F1b).
+      const cutWarehouseId = await resolveBirthWarehouseIdTx(tx, null, roll.ownerCustomerId, roll.warehouseId);
 
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
       // (Segmentler ve barkodları tx AÇILMADAN ÖNCE hazırlandı — gerekçe ve
@@ -742,11 +742,9 @@ export async function finalize(
             // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
             // gitse bile hangi partiden geldiği lane'de izlenir.
             batchId: roll.batchId,
-            // DEPO parent'tan MİRAS ALINIR — giriş istasyonunun TERSİNE. Sebep:
-            // kesmek malı TAŞIMAZ; çocuk fiziksel olarak ebeveynin durduğu
-            // depodadır. (Giriş istasyonu "nerede doğdu"yu sorar, depo "nerede
-            // duruyor"u.) Parent deposuz ise (backfill öncesi kayıt) varsayılan.
-            warehouseId: roll.warehouseId ?? cutWarehouseFallbackId,
+            // DEPO: üretim çıktısı (ebeveyn IN_PRODUCTION, depoda durmuyor) — sahipli ise emanet deposu, yoksa
+            // ebeveynin kayıtlı deposu (yukarıda bir kez çözüldü).
+            warehouseId: cutWarehouseId,
             // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
             // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.

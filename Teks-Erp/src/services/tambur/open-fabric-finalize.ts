@@ -25,7 +25,7 @@ import {
   type RemainingAction,
 } from "../helpers/quality-role.helper";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx } from "../helpers/emanet-warehouse.helper";
 import { recordVarianceTx } from "../helpers/roll-variance.helper";
 import {
   cutChildrenMeasureSourceTx,
@@ -310,8 +310,8 @@ export async function finalizeOpenFabric(
             ownerCustomerId: parent.ownerCustomerId ?? null,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
-            // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
-            warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
+            // DEPO: üretim çıktısı — sahipli ise emanet deposu (açıkken), yoksa ebeveynin kayıtlı deposu (fason.md F1b).
+            warehouseId: await resolveBirthWarehouseIdTx(tx, null, parent.ownerCustomerId, parent.warehouseId),
             // GİRİŞ İSTASYONU — kalan parça da aynı kesimin ürünü.
             // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
