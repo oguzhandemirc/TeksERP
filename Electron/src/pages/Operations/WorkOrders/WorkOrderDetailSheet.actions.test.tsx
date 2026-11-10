@@ -21,7 +21,6 @@ vi.mock("./detail-v3/KunyeCard", () => ({ KunyeCard: Null }));
 vi.mock("./detail-v3/RouteStepline", () => ({ RouteStepline: Null }));
 vi.mock("./detail-v3/ProducedV3", () => ({ ProducedV3: Null }));
 vi.mock("./detail-v3/OrderLinksV3", () => ({ OrderLinksV3: Null }));
-vi.mock("./detail-v3/VariantTargetsSection", () => ({ VariantTargetsSection: Null }));
 vi.mock("./detail-v3/ProcessSummaryCard", () => ({ ProcessSummaryCard: Null }));
 vi.mock("./WorkOrderEventsSheet", () => ({ WorkOrderEventsSheet: Null }));
 vi.mock("./WorkOrderDocumentsDialog", () => ({ WorkOrderDocumentsDialog: Null }));

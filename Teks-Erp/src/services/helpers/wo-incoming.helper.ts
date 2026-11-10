@@ -109,6 +109,26 @@ export async function computeWoIncoming(input: { meters: Prisma.Decimal; rootIds
 }
 
 /**
+ * Kümedeki her topun KÖKÜ: ata zinciri küme içinde tırmanılır; kök = atası bu kümede olmayan. Girdi sayımının tek tanımı
+ * (Gelen bloğu + gramaj önerisi kapsaması): Tambur çocukları atalarının kökünde sayılır, çift sayım olmaz.
+ */
+export function rootOfEachRoll(rolls: ReadonlyArray<{ id: string; parentRollId: string | null }>): Map<string, string> {
+  const parentOf = new Map(rolls.map((r) => [r.id, r.parentRollId]));
+  const out = new Map<string, string>();
+  for (const r of rolls) {
+    let cur = r.id;
+    // Döngü koruması: kirli veride ata zinciri kendine dönerse küme boyu kadar adımda durulur.
+    for (let i = 0; i < rolls.length; i++) {
+      const p = parentOf.get(cur);
+      if (!p || !parentOf.has(p)) break;
+      cur = p;
+    }
+    out.set(r.id, cur);
+  }
+  return out;
+}
+
+/**
  * Adımsız (rotasız) ya da girdisi henüz adıma işlenmemiş İE için girdi kökleri: İE'nin topları (`whereRollsOfWorkOrder`,
  * parti üyeliği dahil) − iptal/stok; kök = atası bu kümede olmayan. `computeWoInput` sayımına DOKUNMAZ — yalnız Gelen bloğu.
  */
@@ -117,8 +137,8 @@ export async function woMemberRootInput(workOrderId: string, db: RollDb = prisma
     where: { AND: [whereRollsOfWorkOrder(workOrderId), { status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] } }] },
     select: { id: true, parentRollId: true, initialQty: true },
   });
-  const ids = new Set(rolls.map((r) => r.id));
-  const roots = rolls.filter((r) => !r.parentRollId || !ids.has(r.parentRollId));
+  const rootOf = rootOfEachRoll(rolls);
+  const roots = rolls.filter((r) => rootOf.get(r.id) === r.id);
   if (roots.length === 0) return null;
   return { meters: roots.reduce((a, r) => a.plus(r.initialQty), new Prisma.Decimal(0)), rootIds: roots.map((r) => r.id) };
 }

@@ -70,7 +70,8 @@ export function ProcessSummaryCard({ scope, editableTarget = false }: Props) {
           suggestion={noteSuggestion}
           workOrderId={scope.workOrderId}
           propertyId={canEdit ? (catalog.propertyId as string) : null}
-          currentValueId={s.target?.valueId ?? null}
+          target={s.target ? { valueId: s.target.valueId, valueName: s.target.valueName } : null}
+          variantTargets={q.data.variantTargets}
         />
       )}
 
