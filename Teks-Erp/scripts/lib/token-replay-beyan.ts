@@ -266,7 +266,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}customer-quick-create.service.ts::quickCreateReplay`]: ["ad"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
-  [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "qtyPerM"],
+  [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "propertyValueId", "qtyPerM", "basis"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
   [`${S}sales-quote-transitions.service.ts::reviseReplay`]: ["revisionOfId"],

@@ -5,16 +5,21 @@ import type { ApiResponse } from "@/types/api";
 
 interface ItemBrief { id: string; code: string; name: string; itemType: string; isActive: boolean }
 
+export type NormBasis = "PER_METER" | "PER_ROLL";
+
 export interface ConsumableNorm {
   id: string; serviceItemId: string; consumableItemId: string; qtyPerM: string; unit: string; note: string | null;
+  /** Eski backend göndermez → PER_METER / çeşitsiz sayılır. */
+  basis?: NormBasis; propertyValueId?: string | null;
+  propertyValue?: { id: string; name: string; amount: string | null } | null;
   createdAt: string; revokedAt: string | null; revokeReason: string | null;
   serviceItem: ItemBrief; consumableItem: ItemBrief;
 }
 
-export interface NormValues { qtyPerM: string; note: string | null; clientToken: string }
+export interface NormValues { qtyPerM: string; basis: NormBasis; note: string | null; clientToken: string }
 
 export function buildNormBody(v: NormValues): NormValues {
-  return { qtyPerM: v.qtyPerM, note: v.note, clientToken: v.clientToken };
+  return { qtyPerM: v.qtyPerM, basis: v.basis, note: v.note, clientToken: v.clientToken };
 }
 
 const BASE = "/api/cost/consumable-norms";
@@ -25,8 +30,8 @@ export const consumableNormService = {
     (await apiClient.get<ApiResponse<ConsumableNorm[]>>(BASE, {
       params: { "filter[serviceItemId]": serviceItemId, "filter[consumableItemId]": consumableItemId, includeRevoked: "1" },
     })).data.data,
-  create: async (serviceItemId: string, consumableItemId: string, v: NormValues) =>
-    (await apiClient.post<ApiResponse<ConsumableNorm>>(BASE, { serviceItemId, consumableItemId, ...buildNormBody(v) })).data,
+  create: async (key: { serviceItemId: string; consumableItemId: string; propertyValueId: string | null }, v: NormValues) =>
+    (await apiClient.post<ApiResponse<ConsumableNorm>>(BASE, { ...key, ...buildNormBody(v) })).data,
   change: async (normId: string, v: NormValues) =>
     (await apiClient.post<ApiResponse<ConsumableNorm>>(`${BASE}/${normId}/change`, buildNormBody(v))).data,
   revoke: async (normId: string) => (await apiClient.post<ApiResponse<{ id: string }>>(`${BASE}/${normId}/revoke`, {})).data,

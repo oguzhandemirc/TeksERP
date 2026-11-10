@@ -319,6 +319,9 @@ const ENUM_LABELS_ANA: Record<string, string> = {
 
   // DocumentScanContentState (K28 fotoğraf saklama) — REDUCED/PURGED çakışır, DOCUMENT_SCAN.contentState override'ı
   FULL: "Tam",
+  // ConsumableNormBasis — sarf normu tabanı (2026-11-10)
+  PER_METER: "Metre başına",
+  PER_ROLL: "Top başına",
 };
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */

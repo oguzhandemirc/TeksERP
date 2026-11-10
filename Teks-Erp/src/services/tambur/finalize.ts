@@ -804,7 +804,7 @@ export async function finalize(
           await inheritRollPropertiesTx(tx, { childId: splitRoll.id, rows: parentProperties });
         }
         if (seg.inheritProperties) {
-          await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: roll.currentStep!.stationId, rollId: splitRoll.id, userId });
+          await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: roll.currentStep!.stationId, rollId: splitRoll.id, userId, birth: "OUTPUT" });
         }
 
         // Kurşun/KK2 yaşam döngüsü kalıtımı: parent'taki op'ları yeni rollId

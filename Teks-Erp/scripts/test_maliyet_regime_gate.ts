@@ -103,6 +103,16 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     neden: "Sarf stoğu (kuşak / kurşun şeridi) kurşun düşümünde geçerli sarf normunu yalnız OKUR (consumable-stock.helper → consumableNormsValidAt; miktar = metre × norm); maliyet kapalıyken norm doğamaz, düşüm 0 — fiyat okumaz.",
   },
   {
+    dosya: "routes/tambur.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "Tambur çıktı topu doğumunda top başına (PER_ROLL) sarf normunu yalnız OKUR (consumable-birth.helper → consumableNormsValidAt; poşet, GK sarf 2026-11-10); maliyet kapalıyken norm doğamaz, düşüm 0 — fiyat okumaz.",
+  },
+  {
+    dosya: "routes/workorder.routes.ts",
+    model: "serviceConsumableNorm",
+    neden: "İE sarfiyat kartı (GET /:id/consumables) kurşun satırının kumaş metresini tüketim ÷ o anki norm ile türetmek için norm geçmişini yalnız OKUR (consumable-usage.service); maliyet kapalıyken norm yok, metre/≈ kg boş — fiyat okumaz.",
+  },
+  {
     dosya: "routes/goods-receipt.routes.ts",
     model: "serviceConsumableNorm",
     neden: "Sarf stoğu (kuşak / kurşun şeridi) kurşun düşümünde geçerli sarf normunu yalnız OKUR (consumable-stock.helper → consumableNormsValidAt; miktar = metre × norm); maliyet kapalıyken norm doğamaz, düşüm 0 — fiyat okumaz.",

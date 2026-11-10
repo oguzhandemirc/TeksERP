@@ -1244,7 +1244,7 @@ export class TamburManualService {
       });
 
       // İstasyon yeteneği (T1) bağlamayla AYNI tx'te: FAZ 2 düşerse replay yeniden yazar (no-op güvenli).
-      await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: ctx.stationId, rollId: roll.id, userId: ctx.userId });
+      await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: ctx.stationId, rollId: roll.id, userId: ctx.userId, birth: "INPUT" });
       // Adım/WO durumu: yeni açık hareket adımı ACTIVE'e çeker; PLANNED WO üretime girer.
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, step.workOrderId);
@@ -1586,7 +1586,7 @@ export class TamburManualService {
     const capStationId = created.idempotent === true ? roll.entryStationId : ctx.stationId;
     const tamburCaps = await loadSessionTamburCaps(capStationId);
     if (capStationId && tamburCaps.length > 0) {
-      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: capStationId, rollId: roll.id, userId: ctx.userId }));
+      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: capStationId, rollId: roll.id, userId: ctx.userId, birth: "OUTPUT" }));
     }
     // Yarışın kaybedeni de replay'dir: faz 1'in boğazı `idempotent: true` döndü → ikinci CREATE audit yazılmaz.
     const idempotentReplay = created.idempotent === true;

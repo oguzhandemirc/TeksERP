@@ -303,7 +303,7 @@ export async function finalizeWarehouseCut(
         if (propertySnapshot.length > 0) {
           await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
-        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
         // Kalan child'a da KURSUN/QC2 kalıtımı uygula. Filter YOK — zincirleme
         // inherit (depo topundaki op'lar zaten inherit'li).
         const inheritedOps = await tx.rollOperation.findMany({

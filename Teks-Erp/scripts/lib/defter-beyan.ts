@@ -205,11 +205,12 @@ const PIVOT = (model: string, gerekce = "saf ayar kümesi — parasal/ticari/kal
 
 export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── DEFTERLER ──────────────────────────────────────────────────────────────
-  D("ConsumableMovement", "sarf stok defteri (kuşak / kurşun şeridi): mal kabul girişi ↔ fiş iptali, üretim tüketimi ↔ iz geri alımı; bakiye TÜRETİLİR",
+  D("ConsumableMovement", "sarf stok defteri (kuşak / kurşun şeridi / poşet): mal kabul girişi ↔ fiş iptali, üretim tüketimi ↔ iz geri alımı, tambur çıktı topu tüketimi ↔ tambur geri alma; bakiye TÜRETİLİR",
     { tur: "TERS_BAG", kolon: "reversesId" },
     [
       { dosya: "src/services/helpers/consumable-stock.helper.ts", sembol: "reverseConsumableReceiptTx" },
       { dosya: "src/services/helpers/consumable-stock.helper.ts", sembol: "reverseConsumptionTx" },
+      { dosya: "src/services/helpers/consumable-stock.helper.ts", sembol: "reverseBirthConsumptionTx" },
     ],
     ["src/services/helpers/consumable-stock.helper.ts"]),
   D("WarehouseMovement", "depo giriş/çıkış defteri; 13 olay", { tur: "TERS_BAG", kolon: "reversesMovementId" },

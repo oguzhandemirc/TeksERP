@@ -6,10 +6,10 @@
 // Bilinmeyen değer 0 DEĞİLDİR: `null` + eksik kodu. Tüm aritmetik `Prisma.Decimal`; yuvarlama sunumda.
 // `fabric-cost.helper` (standart ürün maliyeti) ile karşılıklı import YASAK (`test_karlilik_cekirdek` §0).
 // =============================================================================
-import { Currency, Prisma, ServiceMeterBasis } from "@prisma/client";
+import { ConsumableNormBasis, Currency, Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import type { ProfitConsumablePriceSource, ProfitSubcontractSource } from "../system-setting.service";
-import { consumableNormHistory, isCostRateValidAt } from "./cost-rate-validity.helper";
+import { consumableNormHistory, isCostRateValidAt, pickNormsForValue } from "./cost-rate-validity.helper";
 import { finishingRateValidAt } from "./cost-price-validity.helper";
 import { suggestConsumablePurchasePrices } from "./maliyet-bridge.helper";
 import type { RevenueLinkRow } from "./profitability-finance.helper";
@@ -125,7 +125,9 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
   for (const l of links) {
     const missing: ProfitMissingCode[] = [];
     // ── Sarf: hizmet anında geçerli normlar (sarf kalemi başına tek sürüm) ──
-    const valid = norms.filter((n) => n.serviceItemId === l.serviceItemId && isCostRateValidAt(n, l.serviceAt));
+    // Bağ işin çeşidini taşımaz (iş listesi yeniden yazılmaz, §0b) → yalnız çeşitsiz normlar; yalnız çeşide özel
+    // normu olan kalem SARF_NORMU eksik düşer (yanlış toplam yerine "bilinmiyor"). Gerçek tüketim İE sarfiyatında.
+    const valid = pickNormsForValue(norms.filter((n) => n.serviceItemId === l.serviceItemId && isCostRateValidAt(n, l.serviceAt)), null);
     let consumableTry: Prisma.Decimal | null = D0();
     if (valid.length === 0) { missing.push("SARF_NORMU"); consumableTry = null; }
     for (const n of valid) {
@@ -133,7 +135,9 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
       if (n.qtyPerM.isZero()) continue;
       const p = await priceOf(n.consumableItemId, l.serviceAt);
       if ("missing" in p) { if (!missing.includes(p.missing)) missing.push(p.missing); consumableTry = null; continue; }
-      if (consumableTry) consumableTry = consumableTry.plus(l.billedMeters.mul(n.qtyPerM).mul(p.unitTry));
+      // Top başına norm: bağ = top × kalem × adım → bağ başına 1 birim (metreyle çarpılmaz).
+      const qty = n.basis === ConsumableNormBasis.PER_ROLL ? n.qtyPerM : l.billedMeters.mul(n.qtyPerM);
+      if (consumableTry) consumableTry = consumableTry.plus(qty.mul(p.unitTry));
     }
     // ── Dış fason: yalnız fason kabulünden doğan iş (RECEIVED) ──
     let subcontractTry: Prisma.Decimal | null = D0();

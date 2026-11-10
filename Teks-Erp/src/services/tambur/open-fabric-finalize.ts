@@ -350,7 +350,7 @@ export async function finalizeOpenFabric(
         if (propertySnapshot.length > 0) {
           await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
-        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
         remainingChildId = child.id;
         // STOK DEFTERİ — kalan parça da depoda doğar: `cutOpenFabric` çocuğuyla AYNI
         // giriş (2026-09-14'e kadar satırsızdı; tipli `rollData` yüzünden K

@@ -4344,6 +4344,8 @@ model Roll {
   warpBeamEvents       WarpBeamEvent[]             @relation("WarpBeamEventRoll")
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
   inheritedOperations  RollOperation[]             @relation("RollOperationInherited")
+  /// Tambur çıktı topu doğunca düşülen top başına sarf (PER_ROLL normu; `consumable-stock.helper`).
+  birthConsumables     ConsumableMovement[]        @relation("ConsumableMovementBirthRoll")
   dispatchItems        SubcontractorDispatchItem[]
   receiptItems         SubcontractorReceiptItem[]
   kartelaDispatchItems KartelaDispatchItem[]       @relation("RollKartelaDispatchItems")
@@ -9761,6 +9763,8 @@ model FabricPropertyValue {
   /// Sarf stoğu (kuşak): bu değer üretimde uygulanınca top başına 1 birim düşülen sarf kalemi (CONSUMABLE); yoksa düşüm yok.
   consumableItemId        String?                  @db.Uuid
   consumableItem          Item?                    @relation("FabricPropertyValueConsumableItem", fields: [consumableItemId], references: [id], onDelete: Restrict)
+  /// Bu çeşide (ör. kurşun gramajı) ÖZEL sarf normları (`ServiceConsumableNorm.propertyValueId`).
+  consumableNorms         ServiceConsumableNorm[]
   /// Brode deseni: bir adetteki vuruş (dikiş) sayısı — VURUŞ fiyat biriminde miktar = adet × bu (CHECK > 0).
   stitchCount             Int?
   /// Kurşun gramajı (oie-a): metre başına gram (gr/m). NULL = yalnız etiket (bugün); CHECK > 0.
@@ -14357,27 +14361,33 @@ model MachineCostRate {
 /// `unit` sarf kaleminin birimi, doğuşta donar. Okuma YALNIZ `consumableNormsValidAt`.
 /// Çift başına tek aktif: ŞEMA-DIŞI partial unique `service_consumable_norms_active_pair_uq`.
 model ServiceConsumableNorm {
-  id               String    @id @default(uuid()) @db.Uuid
-  serviceItemId    String    @db.Uuid
-  consumableItemId String    @db.Uuid
-  /// Metre başına sarf miktarı — CHECK >= 0 (0 = "sarf kullanmaz" açık beyanı).
-  qtyPerM          Decimal   @db.Decimal(12, 6)
-  unit             String    @db.VarChar(16)
-  note             String?   @db.VarChar(300)
-  clientToken      String    @unique @db.Uuid
-  createdById      String?   @db.Uuid
-  revokedAt        DateTime? @db.Timestamptz
-  revokedById      String?   @db.Uuid
-  revokeReason     String?   @db.VarChar(300)
+  id               String              @id @default(uuid()) @db.Uuid
+  serviceItemId    String              @db.Uuid
+  consumableItemId String              @db.Uuid
+  /// Taban birimi başına sarf miktarı (ad tarihsel: PER_METER'de metre, PER_ROLL'da top başına) — CHECK >= 0 (0 = "sarf kullanmaz" açık beyanı).
+  qtyPerM          Decimal             @db.Decimal(12, 6)
+  /// Miktarın tabanı; varsayılan PER_METER = norm tabanı gelmeden önceki davranış.
+  basis            ConsumableNormBasis @default(PER_METER)
+  /// İsteğe bağlı çeşit (kurşun gramajı): doluysa norm yalnız işlemin çeşidi buysa geçerli; çeşide özel norm varsa çeşitsizi ezer.
+  propertyValueId  String?             @db.Uuid
+  unit             String              @db.VarChar(16)
+  note             String?             @db.VarChar(300)
+  clientToken      String              @unique @db.Uuid
+  createdById      String?             @db.Uuid
+  revokedAt        DateTime?           @db.Timestamptz
+  revokedById      String?             @db.Uuid
+  revokeReason     String?             @db.VarChar(300)
 
-  serviceItem    ServiceItem @relation("ServiceConsumableNormService", fields: [serviceItemId], references: [id], onDelete: Restrict)
-  consumableItem Item        @relation("ServiceConsumableNormConsumable", fields: [consumableItemId], references: [id], onDelete: Restrict)
+  serviceItem    ServiceItem          @relation("ServiceConsumableNormService", fields: [serviceItemId], references: [id], onDelete: Restrict)
+  consumableItem Item                 @relation("ServiceConsumableNormConsumable", fields: [consumableItemId], references: [id], onDelete: Restrict)
+  propertyValue  FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([serviceItemId, createdAt])
   @@index([consumableItemId])
+  @@index([propertyValueId])
   @@map("service_consumable_norms")
 }
 
@@ -15216,6 +15226,12 @@ model ServiceBillingLink {
   @@map("service_billing_links")
 }
 
+/// Sarf normunun miktar tabanı: işlenen metre başına ya da doğan (tambur çıktı) top başına.
+enum ConsumableNormBasis {
+  PER_METER
+  PER_ROLL
+}
+
 /// Sarf stok hareketinin türü. Ters türler (`*_CANCEL_OUT`, `*_REVERSAL_IN`) daima `reversesId` ile ileri satıra bağlıdır.
 enum ConsumableMovementKind {
   RECEIPT_IN
@@ -15240,6 +15256,8 @@ model ConsumableMovement {
   goodsReceiptId  String? @db.Uuid
   /// Tüketimi doğuran üretim izi (kurşun/tambur); iz geri alınınca ters kayıt yazılır.
   rollOperationId String? @db.Uuid
+  /// Top başına tüketimi doğuran tambur çıktı topu (iz yok; CHECK: tüketim satırında `rollOperationId` XOR bu).
+  birthRollId     String? @db.Uuid
   reversesId      String? @unique @db.Uuid
   reason          String? @db.VarChar(300)
   userId          String? @db.Uuid
@@ -15247,6 +15265,7 @@ model ConsumableMovement {
   item          Item                @relation(fields: [itemId], references: [id], onDelete: Restrict)
   goodsReceipt  GoodsReceipt?       @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
   rollOperation RollOperation?      @relation(fields: [rollOperationId], references: [id], onDelete: Restrict)
+  birthRoll     Roll?               @relation("ConsumableMovementBirthRoll", fields: [birthRollId], references: [id], onDelete: Restrict)
   reverses      ConsumableMovement? @relation("ConsumableMovementReversal", fields: [reversesId], references: [id], onDelete: Restrict)
   reversedBy    ConsumableMovement? @relation("ConsumableMovementReversal")
 
@@ -15254,6 +15273,8 @@ model ConsumableMovement {
 
   /// Aynı izden aynı kaleme tek tüketim (tekrar çağrı no-op).
   @@unique([rollOperationId, itemId])
+  /// Aynı çıktı topundan aynı kaleme tek tüketim (tekrar çağrı no-op).
+  @@unique([birthRollId, itemId])
   @@index([itemId, createdAt])
   @@index([goodsReceiptId])
   @@map("consumable_movements")

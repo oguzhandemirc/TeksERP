@@ -7,7 +7,8 @@ import { z } from "zod";
 import { WorkOrderController } from "../controllers/workorder.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { workOrderConsumableUsage } from "../services/consumable-usage.service";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
@@ -734,6 +735,31 @@ router.get("/:id/kursun-gramaj", verifyToken, requireAnyPermission("workorder:wr
  *       200: { description: "{ kursun: { target, rows, totals }, deliveryNoteGramaj? } — deliveryNoteGramaj yalnız gelen belge modülü açıkken (H9b; gelen belgesiz İE'de null)" }
  */
 router.get("/:id/process-summary", verifyToken, requirePermission("workorder:read"), getWorkOrderSummary);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/consumables:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İE sarfiyatı — şu ana kadarki canlı sarf tüketimi (poşet, kurşun ipi …); maliyet alanları yalnız cost:read
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ enabled, rows[{ itemId, name, unit, qty, kursunKg, costTry?, unitCostTry? }], totalCostTry?, customer? }" }
+ *       404: { description: İş emri bulunamadı }
+ */
+router.get("/:id/consumables", verifyToken, requirePermission("workorder:read"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = z.string().uuid("Geçersiz iş emri ID").parse(req.params.id);
+    // Maliyet OPT-IN: alan izinsiz yanıta hiç girmez (istemci izni ikinci kez yorumlamaz).
+    const canCost = matchesPermission(req.user?.permissions ?? [], "cost:read");
+    res.json({ success: true, data: await workOrderConsumableUsage(id, { canCost }) });
+  } catch (e) { next(e); }
+});
 
 // ── Sipariş bağlama + hedef düzeltme (2026-08-17 saha talepleri 8/10/12) ─────
 // Bu dört uç, "Düzenle" ekranını hiç açmadan TEK bir şeyi değiştirir. Gerekçe:

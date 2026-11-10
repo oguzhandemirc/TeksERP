@@ -4,12 +4,13 @@
 // Ayar `consumable.stockEnabled` (ticaret && bayrak) KAPALIYKEN ileri satır yazılmaz (bugünkü davranış).
 // Ters kayıt ayardan BAĞIMSIZ yazılır: açıkken düşülmüş tüketim, ayar sonra kapansa da geri alınınca geri gelir.
 // Miktar formülü YAZILMAZ, tek kaynaklardan gelir: kurşun = işlenen metre × geçerli sarf normu
-// (`consumableNormsValidAt`, hizmet kalemi `pickServiceItemId`), kuşak = `expectedRolls` (kuşak ihtiyacı raporu).
+// (`consumableNormsValidAt` + çeşit seçimi `pickNormsForValue`, hizmet kalemi `pickServiceItemId`), kuşak = `expectedRolls`
+// (kuşak ihtiyacı raporu), tambur çıktı topu = top başına (PER_ROLL) norm × 1 (`consumable-birth.helper`).
 // Eksi bakiye ENGELLEMEZ; uyarı döner.
 // =============================================================================
-import { ConsumableMovementKind, Prisma, RollOperationType } from "@prisma/client";
+import { ConsumableMovementKind, ConsumableNormBasis, Prisma, RollOperationType, type ServiceConsumableNorm } from "@prisma/client";
 import { resolveConsumableStockEnabled } from "../system-setting.service";
-import { consumableNormsValidAt } from "./cost-rate-validity.helper";
+import { consumableNormsValidAt, pickNormsForValue } from "./cost-rate-validity.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { expectedRolls } from "./expected-rolls.helper";
@@ -111,13 +112,22 @@ function processedMeters(r: { currentQty: Prisma.Decimal; initialQty: Prisma.Dec
   return r.currentQty.gt(0) ? r.currentQty : r.initialQty;
 }
 
+/** Norm → miktar: PER_METER metre × norm, PER_ROLL top (iz/doğum) başına 1 × norm. Aynı kalem toplanır. */
+export function normDemands(norms: ServiceConsumableNorm[], meters: Prisma.Decimal): Demand[] {
+  const byItem = new Map<string, Prisma.Decimal>();
+  for (const n of norms) {
+    const qty = n.basis === ConsumableNormBasis.PER_ROLL ? n.qtyPerM : meters.mul(n.qtyPerM);
+    byItem.set(n.consumableItemId, (byItem.get(n.consumableItemId) ?? new Prisma.Decimal(0)).plus(qty.toDecimalPlaces(3)));
+  }
+  return [...byItem].map(([itemId, qty]) => ({ itemId, qty }));
+}
+
 async function kursunDemands(tx: Tx, op: OpRow, at: Date, given?: Prisma.Decimal | null): Promise<Demand[]> {
   if (!op.propertyValue) return [];
   const serviceItemId = pickServiceItemId({ value: op.propertyValue.serviceItemId, property: op.propertyValue.property.serviceItemId });
   if (!serviceItemId) return [];
-  const norms = await consumableNormsValidAt(tx, serviceItemId, at);
-  const meters = processedMeters(op.roll, given);
-  return norms.map((n) => ({ itemId: n.consumableItemId, qty: meters.mul(n.qtyPerM).toDecimalPlaces(3) }));
+  const norms = pickNormsForValue(await consumableNormsValidAt(tx, serviceItemId, at), op.propertyValueId);
+  return normDemands(norms, processedMeters(op.roll, given));
 }
 
 /** Kuşak: iş emri hedef değerinin sarf kalemi × beklenen top (`expectedRolls`; top boyu siparişten, tekse). */
@@ -144,6 +154,7 @@ const OP_SELECT = {
   id: true,
   operationType: true,
   inheritedFromParentRollId: true,
+  propertyValueId: true,
   roll: { select: { currentQty: true, initialQty: true } },
   step: { select: { workOrderId: true } },
   propertyValue: { select: { serviceItemId: true, property: { select: { serviceItemId: true } } } },
@@ -176,6 +187,38 @@ export async function consumeForOperationTx(
     skipDuplicates: true,
   });
   return [...warnings, ...(await negativeWarnings(tx, demands.map((d) => d.itemId)))];
+}
+
+/** Tambur çıktı topu tüketimi (talep `consumable-birth.helper`ten): `birthRollId`ye bağlı, tekrar no-op (`@@unique([birthRollId, itemId])`). */
+export async function writeBirthConsumptionTx(tx: Tx, rollId: string, demands: Demand[], userId?: string | null): Promise<ConsumableWarning[]> {
+  const live = demands.filter((d) => d.qty.gt(0));
+  if (live.length === 0) return [];
+  await tx.consumableMovement.createMany({
+    data: live.map((d) => ({ itemId: d.itemId, kind: ConsumableMovementKind.CONSUMPTION_OUT, qty: d.qty, birthRollId: rollId, userId: userId ?? null })),
+    skipDuplicates: true,
+  });
+  return negativeWarnings(tx, live.map((d) => d.itemId));
+}
+
+/** Tambur çıktı topu geri alınınca (çocuk iptali) top başına tüketimin CONSUMPTION_REVERSAL_IN'i — ayardan bağımsız. */
+export async function reverseBirthConsumptionTx(
+  tx: Tx,
+  rollIds: string[],
+  userId?: string | null,
+  reason?: string,
+): Promise<number> {
+  if (rollIds.length === 0) return 0;
+  const open = await tx.consumableMovement.findMany({
+    where: { kind: ConsumableMovementKind.CONSUMPTION_OUT, reversedBy: null, birthRollId: { in: rollIds } },
+    select: { id: true, itemId: true, qty: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  for (const m of open) {
+    await tx.consumableMovement.create({
+      data: { itemId: m.itemId, kind: ConsumableMovementKind.CONSUMPTION_REVERSAL_IN, qty: m.qty, reversesId: m.id, reason: (reason ?? "Tambur çıktı topu geri alındı").slice(0, 300), userId: userId ?? null },
+    });
+  }
+  return open.length;
 }
 
 /** İz geri alınınca (damga) ters kaydı olmayan tüketimin CONSUMPTION_REVERSAL_IN'i — ayardan bağımsız. */

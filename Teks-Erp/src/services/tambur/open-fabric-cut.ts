@@ -347,7 +347,7 @@ export async function cutOpenFabricInner(
     if (propertySnapshot.length > 0) {
       await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
     }
-    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
 
     // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
     // işlemler child top'a `inheritedFromParentRollId=parent.id` ile kopyalanır.

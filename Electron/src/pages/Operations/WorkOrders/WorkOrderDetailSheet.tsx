@@ -23,6 +23,7 @@ import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
 import { ProcessSummaryCard } from "./detail-v3/ProcessSummaryCard";
+import { ConsumableUsageCard } from "./detail-v3/ConsumableUsageCard";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { KunyeCard } from "./detail-v3/KunyeCard";
 import { RouteStepline } from "./detail-v3/RouteStepline";
@@ -224,6 +225,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                     <ProcessSummaryCard scope={{ workOrderId: wo.id }} editableTarget />
                   </V3Section>
                 )}
+
+                <ConsumableUsageCard workOrderId={wo.id} />
 
                 {hasProduced && (
                   <V3Section title="Üretilen Toplar">
