@@ -486,6 +486,9 @@ export class LabelService {
     if (dnl?.colorText) payload.deliveryNoteColorText = dnl.colorText;
     // Müşteri top no (H9): aynı çözücü — Tambur çocuğu kök topun satırındaki numarayı taşır.
     if (dnl?.senderRollNo) payload.deliveryNoteRollNo = dnl.senderRollNo;
+    // Gelen belge müşteri partisi: şablon alanı `customerBatchNo`nun yedeği (labelBatchNo boşsa); yoksa alan yok.
+    const dnBatch = dnl?.customerBatchNo?.trim();
+    if (dnBatch) payload.deliveryNoteBatchNo = dnBatch;
     // Müşteri barkodu (D4-F3): yalnız kodlu topta alan EKLENİR (kodsuz topta payload bayt-aynı).
     const customerCode = (preloaded?.customerCodes ?? (await loadActiveCustomerCodes([roll.id]))).get(roll.id);
     if (customerCode) payload.customerCode = customerCode;

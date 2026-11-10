@@ -7,6 +7,7 @@ import {
   labelBatchStripText,
   labelBatchWarning,
   withScope,
+  withAutoSeed,
   withUse,
   withValue,
   type LabelBatchState,
@@ -16,6 +17,8 @@ export interface TamburLabelBatch {
   enabled: boolean;
   value: string;
   setValue: (t: string) => void;
+  /** Varsayılan değer (gelen belge partisi / İE'nin son değeri) — elle girilen değeri ezmez. */
+  autoSeed: (seed: string | null | undefined) => void;
   /** Gövdeye giden değer (ayar kapalıysa undefined). */
   body: () => string | null | undefined;
   /** Başarılı kesimin gönderdiği değer → sayaç. */
@@ -36,6 +39,7 @@ export function useTamburLabelBatch(enabled: boolean, scopeKey: string | null): 
     enabled,
     value: st.value,
     setValue: (t) => setSt((s) => withValue(s, t)),
+    autoSeed: (seed) => setSt((s) => withAutoSeed(s, seed)),
     body: () => labelBatchBody(enabled, st),
     recordUse: (sent) => setSt((s) => withUse(s, sent)),
     stripText: labelBatchStripText(st),

@@ -80,10 +80,16 @@ export function useTamburFinalLabel(
     seededFor.current = scopeKey;
     const last = sugg.data.last;
     setTexts((t) => withSeed(withTextsScope(t, scopeKey), last));
-    if (settings.labelBatchEnabled === true && last?.batchNo && batch.value === '') batch.setValue(last.batchNo);
+    if (settings.labelBatchEnabled === true && last?.batchNo && batch.value === '') batch.autoSeed(last.batchNo);
     // batch nesnesi her render yenidir; tohum yalnız kapsam + veri gelince bir kez.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey, sugg.data, settings.labelBatchEnabled]);
+  // Parti no varsayılanı = topun gelen belge partisi (sunucu tek çözücüden); elle girilen değeri ezmez.
+  const dnBatch = settings.labelBatchEnabled === true ? (settings.deliveryNoteBatchNo ?? null) : null;
+  useEffect(() => {
+    if (dnBatch) batch.autoSeed(dnBatch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rollId, dnBatch, scopeKey]);
   return {
     settings,
     batch,

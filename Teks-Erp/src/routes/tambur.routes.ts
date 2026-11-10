@@ -983,7 +983,7 @@ router.post(
  *         name: customerId
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming, ownerCustomer }" }
+ *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming, ownerCustomer, deliveryNoteBatchNo (topun gelen belge müşteri partisi — tablet parti no varsayılanı; yoksa null) }" }
  *       404: { description: Top bulunamadı }
  */
 const labelSettingsQuery = z.object({

@@ -56,6 +56,8 @@ export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
   { key: "foldType",        defaultLabel: "Kat",               type: "text" },
   // Müşterinin etikete istediği parti (Roll.labelBatchNo) — bizim Parti No'muz değil; boşsa atlanır.
   { key: "labelBatchNo",    defaultLabel: "Müşteri Parti",     type: "text" },
+  // Etikete basılan müşteri partisi YOKSA gelen belgenin partisi (ata zinciriyle) — OPT-IN kanvas alanı.
+  { key: "customerBatchNo", defaultLabel: "Müşteri parti (etiket › gelen belge)", type: "text", defaultVisible: false },
   // Müşterinin GELEN BELGESİNDEKİ kumaş adı/rengi (hizmet ekseni E3) — ham metin, Tambur çocuğunda ata topun
   // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
   { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },
@@ -89,6 +91,8 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "foldType",         defaultLabel: "Kat",                    type: "text" },
   // Müşterinin etikete istediği parti (Roll.labelBatchNo, tamburda girilir) — boşsa atlanır.
   { key: "labelBatchNo",     defaultLabel: "Müşteri Parti",          type: "text" },
+  // Etikete basılan müşteri partisi YOKSA gelen belgenin partisi (ata zinciriyle) — OPT-IN kanvas alanı.
+  { key: "customerBatchNo",  defaultLabel: "Müşteri parti (etiket › gelen belge)", type: "text", defaultVisible: false },
   { key: "customerName",     defaultLabel: "Müşteri",                type: "text" },
   { key: "orderNumber",      defaultLabel: "Sipariş No",             type: "text" },
   { key: "batchNumber",      defaultLabel: "Parti No",               type: "text" },

@@ -89,6 +89,9 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Müşterinin etikete istediği parti — boşsa present:false (eleman atlanır).
     case "labelBatchNo":
       return str(payload.labelBatchNo);
+    // Müşteri partisi zinciri: etikete yazılan (tamburda girilen) > gelen belgenin partisi; ikisi de yoksa atlanır.
+    case "customerBatchNo":
+      return str((payload.labelBatchNo ?? "").trim() || payload.deliveryNoteBatchNo);
     case "widthCm":
       return measure(payload.widthCm, "cm", payload.unitSettings);
     case "lengthMeters":

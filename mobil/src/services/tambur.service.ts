@@ -295,6 +295,8 @@ export interface TamburLabelSettings {
   labelBatchEnabled?: boolean;
   /** Topun sahibi (EMANET, fason mal) — Kime?'den bağımsız; eski backend göndermez → undefined (bugünkü davranış). */
   ownerCustomer?: { id: string; name: string } | null;
+  /** Topun gelen belge müşteri partisi — parti no varsayılanı; eski backend göndermez → tohum yok. */
+  deliveryNoteBatchNo?: string | null;
 }
 
 /** GET /tambur/label-suggestions yanıtı — müşterinin son 180 gündeki etiket değerleri, en son önce. */

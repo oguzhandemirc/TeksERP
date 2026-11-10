@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { normalizeLabelBatchNo } from "./label-batch-no.helper";
+import { resolveDeliveryNoteLinesForRolls } from "./roll-delivery-note-line.helper";
 import { readLabelWidthSource, type LabelWidthSource } from "./label-width-source.helper";
 import { readTamburLabelPrintTiming, type TamburLabelPrintTiming } from "../system-setting.service";
 
@@ -95,6 +96,8 @@ export interface TamburLabelSettingsView extends TamburCustomerSettings {
   printTiming: TamburLabelPrintTiming;
   /** Malın sahibi (EMANET `Roll.ownerCustomerId`) — Kime?'den BAĞIMSIZ; tablet fason topta hedefi buna çeker. Sahipsiz/topsuz: null. */
   ownerCustomer: { id: string; name: string } | null;
+  /** Topun gelen belge müşteri partisi (ata zinciriyle, tek çözücü) — tablette parti no varsayılanı. Satırsız/topsuz: null. */
+  deliveryNoteBatchNo: string | null;
 }
 
 /**
@@ -107,12 +110,14 @@ export async function getTamburLabelSettings(args: {
 }): Promise<TamburLabelSettingsView> {
   let ownerCustomerId: string | null = null;
   let ownerCustomer: { id: string; name: string } | null = null;
+  let deliveryNoteBatchNo: string | null = null;
   if (args.rollId) {
     const roll = await prisma.roll.findUnique({ where: { id: args.rollId }, select: { ownerCustomerId: true, ownerCustomer: { select: { id: true, name: true } } } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
     ownerCustomerId = roll.ownerCustomerId;
     ownerCustomer = roll.ownerCustomer ?? null;
+    deliveryNoteBatchNo = (await resolveDeliveryNoteLinesForRolls([args.rollId])).get(args.rollId)?.customerBatchNo?.trim() || null;
   }
   const settings = await loadTamburCustomerSettings(tamburSettingsCustomerId(args.customerId, ownerCustomerId));
-  return { ...settings, printTiming: await readTamburLabelPrintTiming(), ownerCustomer };
+  return { ...settings, printTiming: await readTamburLabelPrintTiming(), ownerCustomer, deliveryNoteBatchNo };
 }

@@ -21,7 +21,7 @@ describe('tambur müşteri parti no (labelBatch)', () => {
   it('iş emri değişince değer ve sayaç sıfırlanır', () => {
     const s = withUse(withValue(initialLabelBatch('ie-1'), 'J1'), 'J1');
     const n = withScope(s, 'ie-2');
-    expect(n).toEqual({ scopeKey: 'ie-2', value: '', count: 0 });
+    expect(n).toEqual({ scopeKey: 'ie-2', value: '', count: 0, auto: false, touched: false });
   });
 
   it('sayaç: başarılı kesimde artar, değer değişince sıfırlanır, boşluk farkı değişiklik sayılmaz', () => {
