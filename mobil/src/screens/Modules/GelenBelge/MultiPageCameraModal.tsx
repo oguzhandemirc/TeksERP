@@ -20,6 +20,7 @@ import type { FinishResult, Shot } from './captureSession';
 import { useMultiCapture } from './useMultiCapture';
 import type { MultiCameraBinding } from './usePageSource';
 import LiveReadModal from './live/LiveReadModal';
+import { useIsCompact } from '../../../hooks/useDeviceType';
 
 export const MULTI_CAMERA_HINT = 'Belgeyi çerçeveyi dolduracak şekilde düz tutun';
 
@@ -37,6 +38,9 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
   const cameraRef = useRef<CameraView | null>(null);
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const { torch, toggle: toggleTorch } = useDocTorch(visible);
+  const compact = useIsCompact();
+  // Tek çekimlik kullanım (istasyon "Belgeden iş bul"): sayfa no anlamsız, çekim kendiliğinden biter → Tamam yok.
+  const single = capacity === 1;
 
   const finished = (r: FinishResult) => {
     if (r.dropped) Toast.show({ type: 'error', text1: `${r.dropped} çekim okunamadı, eklenmedi` });
@@ -73,7 +77,8 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
     <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
   );
 
-  const counter = n ? `${n} sayfa çekildi (en çok ${capacity})` : `Sayfa ${firstPageNo} — ${MULTI_CAMERA_HINT}`;
+  const counter = n ? `${n} sayfa çekildi (en çok ${capacity})` : single ? MULTI_CAMERA_HINT : `Sayfa ${firstPageNo} — ${MULTI_CAMERA_HINT}`;
+  const fill = compact ? styles.btnFill : undefined;
 
   return (
     <AppModal visible={visible} onDismiss={dismiss} swipeToDismiss={false} contentStyle={[styles.sheet, { width: width * 0.94, height: height * 0.9 }]}>
@@ -94,14 +99,19 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
         <Text style={styles.onDark} testID="belge-cok-sayac">
           {cap.confirmDiscard ? `${n} çekim silinecek — kapatmak için Vazgeç'e tekrar basın` : counter}
         </Text>
+        {/* Vazgeç solda kırmızı, onay yeşil sağda; dar ekranda düğmeler satırı paylaşır, taşmaz (saha 2026-11-10). */}
         <View style={styles.actions}>
-          <Button mode="outlined" textColor={colors.textOnDark} onPress={dismiss} contentStyle={styles.btn} disabled={busy} testID="belge-cok-vazgec">
+          <Button mode="contained" buttonColor={colors.danger} textColor={colors.textOnDark} onPress={dismiss} style={fill} contentStyle={styles.btn} disabled={busy} testID="belge-cok-vazgec">
             Vazgeç
           </Button>
+          <View style={styles.spacer} />
           <Button
-            mode="contained-tonal"
+            mode={single ? 'contained' : 'contained-tonal'}
+            buttonColor={single ? colors.success : undefined}
+            textColor={single ? colors.textOnDark : undefined}
             icon="camera"
             onPress={cap.capture}
+            style={fill}
             contentStyle={styles.btn}
             loading={cap.shooting}
             disabled={cap.shooting || busy || !permission?.granted || n >= capacity}
@@ -109,9 +119,11 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
           >
             Çek
           </Button>
-          <Button mode="contained" icon="check" onPress={cap.finish} contentStyle={styles.btn} disabled={n === 0 || busy || cap.shooting} testID="belge-cok-tamam">
-            {`Tamam (${n})`}
-          </Button>
+          {!single && (
+            <Button mode="contained" buttonColor={colors.success} textColor={colors.textOnDark} icon="check" onPress={cap.finish} style={fill} contentStyle={styles.btn} disabled={n === 0 || busy || cap.shooting} testID="belge-cok-tamam">
+              {`Tamam (${n})`}
+            </Button>
+          )}
         </View>
       </View>
     </AppModal>
@@ -156,7 +168,9 @@ const styles = StyleSheet.create({
   thumbDel: { position: 'absolute', top: 0, right: 0, width: 56, height: 56, alignItems: 'flex-end', justifyContent: 'flex-start', padding: 4 },
   thumbDelText: { color: colors.textOnDark, backgroundColor: colors.scrim, borderRadius: 12, width: 24, height: 24, textAlign: 'center', lineHeight: 24, fontWeight: '700' },
   bar: { padding: spacing.md, gap: spacing.sm },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  spacer: { flex: 1 },
   btn: { minHeight: 56, paddingHorizontal: spacing.md },
+  btnFill: { flexShrink: 1 },
   onDark: { color: colors.textOnDark, fontSize: typography.size.base },
 });

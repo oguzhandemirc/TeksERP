@@ -75,6 +75,12 @@ describe('MultiPageCameraModal', () => {
     expect(onDone.mock.calls[0]![0]).toHaveLength(1);
   });
 
+  it('tek çekimlik: sayfa no yazmaz, Tamam düğmesi yok', () => {
+    const { r } = setup(1);
+    expect(r.getByTestId('belge-cok-sayac')).not.toHaveTextContent(/Sayfa/);
+    expect(r.queryByTestId('belge-cok-tamam')).toBeNull();
+  });
+
   it('iyileştirme yok (eski APK) → ham fotoğraf gider', async () => {
     mockEnhance.mockResolvedValue(null);
     const { r, onDone } = setup();
