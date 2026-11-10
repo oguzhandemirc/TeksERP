@@ -151,6 +151,11 @@ export function useShipmentLooseLoadEnabled(): boolean {
   return useFeatureFlags().data?.shipmentLooseLoadEnabled === true;
 }
 
+/** El terminali sevk (Sevk Çıkışı v2) açık mı? Yalnız gerçek `true` açar (eksik/tanınmayan → kapalı). */
+export function useShipmentHandheldCreateEnabled(): boolean {
+  return (useFeatureFlags().data?.shipmentHandheldCreateEnabled ?? DEFAULT_FEATURE_FLAGS.shipmentHandheldCreateEnabled) === true;
+}
+
 /** Sevk öncesi TÜM çuvallar tartılı olmalı mı? Default FALSE (yalnız yurtdışı).
  *  FAIL-OPEN: bayrak yüklenemezse sahayı sevk edemez hâle getirmeyiz — kesin
  *  kapı sunucudadır, ekran yalnız uyarıyı ÖNCEDEN gösterir. */
