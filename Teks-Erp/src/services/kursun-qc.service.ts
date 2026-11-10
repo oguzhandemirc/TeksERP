@@ -17,7 +17,7 @@
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { kursunOpenStepWhere, PENDING_BYPASS_WHERE, stationScreenStationWhere } from "./helpers/station-open-step.helper";
-import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeRollOperations, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
 import prisma from "../lib/prisma";
@@ -1294,6 +1294,73 @@ export class KursunQcService {
    * (IN_PRODUCTION) yapılır. İleri taşınmış veya status değişmişse hata döner —
    * admin müdahalesi gerekir.
    */
+  /**
+   * GK (2026-11-10): AÇIK adımda kontrolü tamamlanmış TEK topu yeniden açar (tablette hata eklemeden önce onaylı).
+   * QC2_COMPLETED satırı damgalanır (ölçülen en geri konur), bu adımdaki ÇIKIŞ okuması damgalanır (stok
+   * etkisi `reverseExitMeterStockTx` ile terslenir); KURSUN_APPLIED/RollProperty korunur (reopenStep paritesi).
+   * Kapalı adım için yol `reopenStep`tir. Aktif QC2 satırı yoksa 409 `KURSUN_ROLL_NOT_COMPLETED`.
+   */
+  async reopenRoll(
+    data: { rollId: string; stepId: string },
+    userId?: string
+  ): Promise<ApiResponse<{ qc2Revoked: number; meterReadingsRevoked: number; widthRestored: number }>> {
+    await this.assertRollInFlowStep(data.rollId, data.stepId);
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: data.stepId },
+      select: { workOrderId: true, status: true },
+    });
+    if (!step) throw AppError.notFound("Adım bulunamadı");
+    if (step.status === StepStatus.COMPLETED) {
+      throw AppError.badRequest("Adım kapalı — önce kartı okutup adımı yeniden açın");
+    }
+    const widthRestored = { count: 0 };
+    const out = await prisma.$transaction(async (tx) => {
+      // completeQc2/finishStep ile aynı iş emri kilidi; tablet kapısı tx İÇİNDE.
+      await touchWorkOrderTx(tx, step.workOrderId);
+      await assertKursunTabletMayWrite(tx, data.stepId, "Top yeniden açma");
+      // Atomik claim: aktif QC2 satırı yoksa (zaten açık / eşzamanlı açıldı) hiçbir şey değişmez.
+      const qc2Revoked = await revokeRollOperations(tx, {
+        rollIds: [data.rollId],
+        workOrderStepIds: [data.stepId],
+        operationTypes: [RollOperationType.QC2_COMPLETED],
+        reason: "KURSUN_ROLL_REOPEN",
+        userId: userId ?? null,
+        widthRestored,
+      });
+      if (qc2Revoked === 0) {
+        throw AppError.conflict("Bu topun kontrolü zaten açık", { code: "KURSUN_ROLL_NOT_COMPLETED" });
+      }
+      const meterReadingsRevoked = await revokeStepMeterReadingsTx(tx, {
+        rollIds: [data.rollId],
+        stepId: data.stepId,
+        userId: userId ?? null,
+        reason: "KURSUN_ROLL_REOPEN",
+        phase: MeterPhase.OUT,
+      });
+      return { qc2Revoked, meterReadingsRevoked };
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: data.rollId,
+      newData: {
+        status: "QC2_REOPENED",
+        rollId: data.rollId,
+        stepId: data.stepId,
+        ...(out.meterReadingsRevoked > 0 ? { meterReadingsRevoked: out.meterReadingsRevoked } : {}),
+        ...(widthRestored.count > 0 ? { widthRestored: widthRestored.count } : {}),
+      },
+    });
+
+    return {
+      success: true,
+      data: { ...out, widthRestored: widthRestored.count },
+      message: "Topun kontrolü yeniden açıldı",
+    };
+  }
+
   async reopenStep(
     data: { stepId: string },
     userId?: string
