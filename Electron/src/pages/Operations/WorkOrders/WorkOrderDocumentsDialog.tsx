@@ -9,6 +9,7 @@ import { type PrintedDocType } from "@/services/printedDocumentService";
 import { workOrderService } from "./service";
 import type { WorkOrderDocument } from "./types";
 import { TERIM } from "@/lib/terim";
+import { SourceDocsV3 } from "./detail-v3/SourceDocsV3";
 
 interface Props {
   open: boolean;
@@ -117,6 +118,8 @@ export function WorkOrderDocumentsDialog({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+            {/* Geldiği gelen belge(ler) modalın başında — sayfadaki ayrı bölüm buraya taşındı (2026-11-10). */}
+            {workOrderId && <SourceDocsV3 workOrderId={workOrderId} onNavigate={() => onOpenChange(false)} />}
             {q.isLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-16 w-full" />

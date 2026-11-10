@@ -1,5 +1,5 @@
-// K28 İE detayı "Geldiği belge": iş emrinin toplarının geldiği gelen belge(ler) + fotoğraf aç. Fotoğraf saklama ayarıyla
-// silinmişse açıklama yazılır (belge, satırlar ve belge no kalır). Modül kapalı / izin yoksa / belge yoksa bölüm çizilmez.
+// K28 İE "Geldiği belge": iş emrinin toplarının geldiği gelen belge(ler) + fotoğraf aç; yeri "Belgeler" modalının başı (2026-11-10).
+// Fotoğraf saklama ayarıyla silinmişse açıklama yazılır. Modül kapalı / izin yoksa / belge yoksa bölüm çizilmez.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +12,6 @@ import { useScanImage } from "@/pages/Operations/GelenBelgeler/useScanImage";
 import { isScanPurged, SCAN_PURGED_TEXT } from "@/pages/Operations/GelenBelgeler/photoRetention";
 import { NOTE_STATUS_LABEL } from "@/pages/Operations/GelenBelgeler/noteStatus";
 import type { WorkOrderSourceNote } from "@/pages/Operations/GelenBelgeler/photoRetentionTypes";
-import { V3Section } from "./V3Section";
 
 type Scan = WorkOrderSourceNote["scans"][number];
 
@@ -56,7 +55,8 @@ function PhotoDialog({ note, onClose }: { note: WorkOrderSourceNote; onClose: ()
   );
 }
 
-export function SourceDocsV3({ workOrderId }: { workOrderId: string }) {
+/** `onNavigate`: GB bağlantısına tıklanınca (modal kapansın diye) çağrılır. */
+export function SourceDocsV3({ workOrderId, onNavigate }: { workOrderId: string; onNavigate?: () => void }) {
   const { hasPermission } = useRoleAccess();
   const enabled = useGelenBelgeEnabled() && hasPermission("gelen-belge:read");
   const q = useQuery({
@@ -69,13 +69,16 @@ export function SourceDocsV3({ workOrderId }: { workOrderId: string }) {
   const notes = q.data?.notes ?? [];
   if (!enabled || notes.length === 0) return null;
   return (
-    <V3Section title="Geldiği belge" count={q.data && q.data.total > notes.length ? `${notes.length} / ${q.data.total}` : undefined}>
+    <section className="space-y-2" data-testid="wo-source-docs-section">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Geldiği belge{q.data && q.data.total > notes.length ? ` (${notes.length} / ${q.data.total})` : ""}
+      </div>
       <ul className="flex flex-col gap-2" data-testid="wo-source-docs">
         {notes.map((n) => {
           const allPurged = n.scans.length > 0 && n.scans.every(isScanPurged);
           return (
             <li key={n.id} className="flex flex-wrap items-center gap-3 text-sm" data-testid="wo-source-doc">
-              <Link to={`/operations/gelen-belgeler/${n.id}`} className="font-medium underline">
+              <Link to={`/operations/gelen-belgeler/${n.id}`} className="font-medium underline" onClick={onNavigate}>
                 {n.noteNo}
               </Link>
               <span className="text-muted-foreground">Belge no: {n.senderDocNo ?? "—"}</span>
@@ -94,6 +97,6 @@ export function SourceDocsV3({ workOrderId }: { workOrderId: string }) {
         })}
       </ul>
       {open && <PhotoDialog note={open} onClose={() => setOpen(null)} />}
-    </V3Section>
+    </section>
   );
 }

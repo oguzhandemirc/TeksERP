@@ -18,6 +18,8 @@ interface Props {
   successMessage?: string;
   /** Toast gösterimi devre dışı bırak (nadir durumlar için) */
   silent?: boolean;
+  /** Yalnız ikon (dar başlıklar): metin gizlenir, etiket `aria-label` + tooltip (`title`) olur. */
+  iconOnly?: boolean;
 }
 
 const MIN_SPIN_MS = 600;
@@ -30,6 +32,7 @@ export function RefreshButton({
   className,
   successMessage = "Liste yenilendi",
   silent,
+  iconOnly,
 }: Props) {
   const qc = useQueryClient();
   const key = Array.isArray(queryKey) ? queryKey : [queryKey];
@@ -72,13 +75,15 @@ export function RefreshButton({
       disabled={isSpinning}
       onClick={handleClick}
       aria-live="polite"
+      aria-label={iconOnly ? label : undefined}
+      title={iconOnly ? label : undefined}
     >
       {justDone ? (
         <Check className="h-3.5 w-3.5" />
       ) : (
         <RefreshCw className={cn("h-3.5 w-3.5 transition-transform", isSpinning && "animate-spin")} />
       )}
-      {isSpinning ? "Yenileniyor..." : justDone ? "Güncellendi" : label}
+      {!iconOnly && (isSpinning ? "Yenileniyor..." : justDone ? "Güncellendi" : label)}
     </Button>
   );
 }

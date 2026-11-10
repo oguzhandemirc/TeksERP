@@ -6,6 +6,7 @@ import type { LinkedFulfillment } from "../order-fulfillment";
 import { OrdersDetailModal, type OrderDetailRow } from "./OrdersDetailModal";
 import { IncomingKg } from "./SheetKpis";
 import { IncomingDoc } from "./IncomingDoc";
+import { isCustomerGoodsWorkOrder } from "../FasonTag";
 
 /**
  * v3 dört-kutu özeti: Üretim İlerlemesi (çıkan/giren + bar), Termin (tarih +
@@ -29,6 +30,7 @@ export function WorkOrderKpis({
   const term = terminInfo(wo.plannedEndDate, wo.status);
   const rows = orderRows(wo.orderLinks ?? []);
   const customerNames = [...new Set(rows.map((r) => r.customer))];
+  const incomingMeters = Number(wo.incoming?.meters ?? 0);
 
   return (
     <>
@@ -80,6 +82,21 @@ export function WorkOrderKpis({
               <div className="kpi-sub" style={{ gap: "6px" }}>
                 <span className="chip ok num">Sevk {formatNumber(fulfill.shipped, 0)}</span>
                 <span className="chip bad num">Açık {formatNumber(fulfill.open, 0)}</span>
+              </div>
+            </>
+          ) : isCustomerGoodsWorkOrder(wo.type) ? (
+            // Fason (müşteri malı) İE stok için üretilmez — mal müşterinin; ölçüt "Fason İş Emri" etiketiyle aynı.
+            <>
+              <div className="big" style={{ fontSize: "16px" }} data-testid="wo-kpi-customer-goods">
+                Müşteri malı
+              </div>
+              <div className="kpi-sub">
+                {wo.customer && <span>{wo.customer.name}</span>}
+                {incomingMeters > 0 && (
+                  <span data-testid="wo-kpi-incoming-m">
+                    Gelen <b className="num">{formatNumber(incomingMeters, 0)} m</b>
+                  </span>
+                )}
               </div>
             </>
           ) : (
