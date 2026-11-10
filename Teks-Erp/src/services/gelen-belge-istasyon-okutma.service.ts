@@ -7,7 +7,8 @@
 // Aynı fotoğraf (sha256) zaten taranmışsa OCR koşmaz: o taramanın belgesi ya da saklı okuması kullanılır.
 // K30-E: belge no tutmazsa / okunamazsa (kullanıcı şablonunda Evrak No atanmamış) okunan PARTİ NO açık iş emirlerinde
 // aranır; iki yol da OCR'a toleranslı karşılaştırmayı `helpers/doc-code-match.helper.ts`ten alır.
-// Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
+// Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir; parti no → İE TEK yüklemi
+// `workOrdersOfNoteBatchWhere` (satır partisi önce; başlık yalnız satırında parti olmayan belgede — 2026-11-10).
 // Çok İE (2026-11-06): tablet ekranını bildirirse her İE "burada bekliyor mu" (ekranın açık kart listesinin yüklemi,
 // `helpers/station-open-step.helper.ts`) + şu an nerede ile döner; satır yükleme ve sınıflama `helpers/station-lookup-rows.helper.ts`.
 // Doğrulama (2026-11-06): fotoğraf adayları öteki alanlarla puanlanır; eşik altı OTOMATİK AÇILMAZ (`station-scan-verify.helper`).
@@ -26,7 +27,7 @@ import type { OcrResult } from "../lib/gelen-belge/motor";
 import { parseClientOcr } from "./gelen-belge-istemci-okuma.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
-import { LOOKUP_NOTE_STATUSES, stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { LINE_HAS_BATCH_WHERE, LOOKUP_NOTE_STATUSES, stationWorkSearchWhere, workOrdersOfNoteBatchWhere } from "./helpers/workorder-doc-search.helper";
 import { decodeScanUpload, PDF_MIME } from "./gelen-belge-scan.service";
 import { extractDraft, ocrFromEnvelope } from "./gelen-belge-taslak-doldur.service";
 import { readIncomingDocStationLookup, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
@@ -285,36 +286,44 @@ function warnIfCapped(what: string, size: number): void {
 }
 
 /**
- * Parti no yedeği: açık İE'lerin parti no'ları + işi süren belgelerin parti no'ları (bizim / müşterinin) evreninde
- * toleranslı eşleşme → eşleşen KAYITLI değerlerle açık İE'ler. Arama sorusudur (elle aramanın parti dalı gibi);
- * partinin kimliği yine `id`dir.
+ * Parti no yedeği: açık İE'lerin parti no'ları + işi süren belgelerin parti no'ları (başlık bizim / müşterinin + satır
+ * müşteri parti no'su) evreninde toleranslı eşleşme → eşleşen KAYITLI değerlerle açık İE'ler. İE kümesi TEK yüklemden
+ * (`workOrdersOfNoteBatchWhere`: satır partisi önce; başlık yalnız satırında parti olmayan belgede bütün belgeye).
  */
 async function workOrdersOfBatchNos(reads: string[]): Promise<{ tier: CodeMatchTier; loaded: LoadedWorkOrders } | null> {
   const open: Prisma.WorkOrderWhereInput = { status: { in: OPEN_WORK_ORDER_STATUSES }, isActive: true };
   const noteHasBatch: Prisma.CustomerDeliveryNoteWhereInput = { OR: [{ ourBatchNo: { not: null } }, { customerBatchNo: { not: null } }] };
-  const fetch = async (batchWhere: Prisma.BatchWhereInput, noteWhere: Prisma.CustomerDeliveryNoteWhereInput, cap: number | undefined) => {
+  const fetch = async (batchWhere: Prisma.BatchWhereInput, noteWhere: Prisma.CustomerDeliveryNoteWhereInput, lineWhere: Prisma.CustomerDeliveryNoteLineWhereInput, cap: number | undefined) => {
     const batches = await prisma.batch.findMany({ where: { AND: [{ workOrder: open }, batchWhere] }, select: { batchNumber: true }, distinct: ["batchNumber"], orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: cap });
     const notes = await prisma.customerDeliveryNote.findMany({
       where: { AND: [ONGOING_LOOKUP_NOTE, noteHasBatch, noteWhere] },
       select: { ourBatchNo: true, customerBatchNo: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: cap,
     });
-    return { size: Math.max(batches.length, notes.length), values: [...batches.map((b) => b.batchNumber), ...notes.flatMap((n) => [n.ourBatchNo, n.customerBatchNo])] };
+    const lines = await prisma.customerDeliveryNoteLine.findMany({
+      where: { AND: [{ note: ONGOING_LOOKUP_NOTE }, LINE_HAS_BATCH_WHERE, lineWhere] },
+      select: { customerBatchNo: true }, distinct: ["customerBatchNo"], orderBy: [{ customerBatchNo: "asc" }], take: cap,
+    });
+    return {
+      size: Math.max(batches.length, notes.length, lines.length),
+      values: [...batches.map((b) => b.batchNumber), ...notes.flatMap((n) => [n.ourBatchNo, n.customerBatchNo]), ...lines.map((l) => l.customerBatchNo)],
+    };
   };
   // Tam eşleşme önce DB'de (tavansız); kayıttaki yazım `matchCodes`la süzülür (ölçü TEK helper'da).
   const eq = (v: string) => ({ equals: v, mode: "insensitive" as const });
   const exact = await fetch(
     { OR: reads.map((r) => ({ batchNumber: eq(r) })) },
     { OR: reads.flatMap((r) => [{ ourBatchNo: eq(r) }, { customerBatchNo: eq(r) }]) },
+    { OR: reads.map((r) => ({ customerBatchNo: eq(r) })) },
     undefined,
   );
   let m = matchCodes(reads, exact.values);
   if (!m) {
-    const universe = await fetch({}, {}, TOLERANT_UNIVERSE_CAP);
+    const universe = await fetch({}, {}, {}, TOLERANT_UNIVERSE_CAP);
     warnIfCapped("parti no", universe.size);
     m = matchCodes(reads, universe.values);
   }
   if (!m) return null;
-  const byNote = whereWorkOrdersOfRolls({ deliveryNoteLine: { note: { status: { in: [...LOOKUP_NOTE_STATUSES] }, OR: [{ ourBatchNo: { in: m.values } }, { customerBatchNo: { in: m.values } }] } } });
+  const byNote = workOrdersOfNoteBatchWhere({ in: m.values });
   return { tier: m.tier, loaded: await loadWorkOrders({ AND: [open, { OR: [{ batches: { some: { batchNumber: { in: m.values } } } }, byNote] }] }, null) };
 }
 

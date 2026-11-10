@@ -143,3 +143,7 @@ Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramal
 **[PROFİL]** Liste kalemi `workOrders`ı (iptal hariç, İE no sıralı, tekil) YALNIZ `loadNoteWorkOrders`ten ver: sayfa başına tek SQL, bağ `rollWorkOrderEdgesSql` (`whereRollsOfWorkOrder`un SQL ikizi); panel ilk 2 çip + "+N", "Kaynak" yalnız detayda. · bekçi: `test_gelen_belge_liste_is_emri`, `liste-is-emri.test.tsx` <sub>(arşiv:2026-11-10 liste İE sütunu)</sub>
 
 **[PROFİL]** Panel detayında uyarıları tek Dikkat kutusunda topla (yoksa çizme); başlıkta yalnız birincil eylem, diğerleri ⋯ Diğer menüsünde. · bekçi: `detay-sade.test.tsx` <sub>(arşiv:2026-11-10 detay sadeleştirme)</sub>
+
+## Çok partide parti no → İE
+- Okutma parti yedeği, istasyon elle araması ve İE liste aramasının belge dalı parti alanlarında `helpers/workorder-doc-search.helper.ts` `workOrdersOfNoteBatchWhere(filtre)`ini kullanır: satır `customerBatchNo`su o satırın topunun İE'sine; başlık `customerBatchNo`/`ourBatchNo` yalnız satırında parti no (boş metin hariç) olmayan belgede bütün belgenin toplarına.
+- İE'nin belge partisi (istasyon kartı `documents[].customerBatchNo`, fotoğraf doğrulamasının parti bileşeni) bellek-içi ikiz `noteBatchNosForWorkOrder`den. Gerekçe: arşiv 2026-11-10 "İstasyon Belgeden iş bul". Bekçi: `test_istasyon_belge_arama_parti` §7.

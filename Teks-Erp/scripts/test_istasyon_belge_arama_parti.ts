@@ -11,7 +11,11 @@
 //   §4 ⭐ (iv) aynı parti no'lu üç açık iş emri → MULTIPLE (choose)
 //   §5 ⭐ (v) tamamlanmış (kartı açık kalsa da) ve iptal iş emri parti no ile eşleşmez
 //   §6 ⭐ (vi) hiçbiri → iş emri yok + cümle okunan evrak no ve parti no'yu söyler; yanıt şekli (outcome/workOrders/message)
+//   §7 ⭐ çok partili belge (parti no satırda, başlık tek değer): 733 → yalnız İE-A, 734 → yalnız İE-B; elle arama aynı;
+//      satırda partisiz belgede başlık eşleşmesi eskisi gibi
 // Negatif sonda (2026-11-04 ölçüldü, 15/5): parti no yedeği (`workOrdersOfBatchNos` dalı) kapatılınca §1/§2/§4/§5 kırmızı.
+// Negatif sonda (2026-11-10 ölçüldü): `workOrdersOfNoteBatchWhere` satır dalı silinince §7 beş kırmızı (30/5); başlık dalının
+// `lines: { none }` koşulu silinince 734 → MULTIPLE (34/1).
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -230,6 +234,46 @@ async function run(url: string, sidecar: { url: string }): Promise<void> {
   const msgB = r6b.data?.message ?? "";
   check("§6 evrak no okunmadıysa cümle 'okunamadı' der", (r6b.data?.workOrders ?? []).length === 0 && msgB.includes("evrak no: okunamadı") && msgB.includes(noBatch), msgB);
   check("§6 yanıt şekli değişmedi (outcome · source · read · notes · workOrders · message)", ["outcome", "source", "read", "notes", "workOrders", "message"].every((k) => r6.data !== undefined && k in r6.data), JSON.stringify(Object.keys(r6.data ?? {})));
+
+  console.log("§7 çok partili belge: parti no SATIRDA, başlık tek değer (Güleçsoy demo 2026-11-10)");
+  // İki belge, her ikisinde iki parti satırı (ayrı top): GB-X (iptal İE'ler, başlık 733) · GB-Y (açık İE-A/İE-B, başlık 734).
+  // İE'lerin kendi partisi ayrı adla doğar (batches dalı karışmasın); satırlar tek belgeye taşınır.
+  const B733 = `P7${D}33`;
+  const B734 = `P7${D}34`;
+  const woA = await mkWo("7A", {}, `Q7A${D}`);
+  const woB = await mkWo("7B", {}, `Q7B${D}`);
+  const woC = await mkWo("7C", {}, `Q7C${D}`);
+  const woD = await mkWo("7D", {}, `Q7D${D}`);
+  const noteOfWo = async (wo: string) => (await prisma.customerDeliveryNoteLine.findFirstOrThrow({ where: { noteId: { in: made.notes }, roll: { OR: [{ producedInStep: { workOrderId: wo } }, { currentStep: { workOrderId: wo } }, { batch: { workOrderId: wo } }] } }, select: { id: true, noteId: true } }));
+  const [lA, lB, lC, lD] = [await noteOfWo(woA), await noteOfWo(woB), await noteOfWo(woC), await noteOfWo(woD)];
+  const twoParty = async (first: typeof lA, second: typeof lA, header: string) => {
+    await prisma.customerDeliveryNoteLine.update({ where: { id: first.id }, data: { customerBatchNo: B733 } });
+    await prisma.customerDeliveryNoteLine.update({ where: { id: second.id }, data: { noteId: first.noteId, lineNo: 99, customerBatchNo: B734 } });
+    await prisma.customerDeliveryNote.update({ where: { id: first.noteId }, data: { customerBatchNo: header, ourBatchNo: header } });
+  };
+  await twoParty(lC, lD, B733); // GB-X: başlık 733, İE'ler iptal
+  await prisma.workOrder.updateMany({ where: { id: { in: [woC, woD] } }, data: { status: "CANCELLED" } });
+  await twoParty(lA, lB, B734); // GB-Y: başlık 734
+  const r7a = await lookup({ parti: B733 });
+  check("§7 ⭐ 733 → yalnız İE-A (SINGLE; iptal İE'li belgenin başlığı ve öteki belgenin başlığı karışmaz)", r7a.data?.outcome === "SINGLE" && ids(r7a) === woA, `${r7a.data?.outcome} ${ids(r7a)} ${r7a.data?.message}`);
+  const r7b = await lookup({ parti: B734 });
+  check("§7 ⭐ 734 → yalnız İE-B (başlık 734 belgenin öteki satırını getirmez)", r7b.data?.outcome === "SINGLE" && ids(r7b) === woB, `${r7b.data?.outcome} ${ids(r7b)} ${r7b.data?.message}`);
+  const r7t = await lookup({ parti: `P-7${D}33` });
+  check("§7 toleranslı okuma (tire) satır partisini de bulur → İE-A", r7t.data?.outcome === "SINGLE" && ids(r7t) === woA, `${r7t.data?.outcome} ${ids(r7t)} ${r7t.data?.message}`);
+  const s7 = await call("POST", "/api/gelen-belge/istasyon-okutma", kursunOp, { q: B733 });
+  check("§7 ⭐ elle arama (q) aynı yüklem: 733 → yalnız İE-A", s7.data?.outcome === "SINGLE" && ids(s7) === woA, `${s7.status} ${s7.data?.outcome} ${ids(s7)} ${s7.data?.message}`);
+  const docs7 = (r7a.data?.workOrders?.[0] as { documents?: Array<{ customerBatchNo: string | null }> } | undefined)?.documents ?? [];
+  check("§7 İE kartındaki belge partisi İE'nin satırından (başlık 734 değil, 733)", docs7.length > 0 && docs7.every((d) => d.customerBatchNo === B733), JSON.stringify(docs7));
+  // Satırında parti no olmayan belge: başlık eşleşmesi bütün belgeye (bugünkü davranış).
+  const BE = `P7${D}EE`;
+  const woE = await mkWo("7E", {}, `Q7E${D}`);
+  const lE = await noteOfWo(woE);
+  await prisma.customerDeliveryNoteLine.update({ where: { id: lE.id }, data: { customerBatchNo: null } });
+  await prisma.customerDeliveryNote.update({ where: { id: lE.noteId }, data: { customerBatchNo: BE } });
+  const r7e = await lookup({ parti: BE });
+  check("§7 ⭐ satırda partisiz belge: başlık parti no ile İE bulunur (eskisi gibi)", r7e.data?.outcome === "SINGLE" && ids(r7e) === woE, `${r7e.data?.outcome} ${ids(r7e)} ${r7e.data?.message}`);
+  const s7e = await call("POST", "/api/gelen-belge/istasyon-okutma", kursunOp, { q: BE });
+  check("§7 elle arama: satırda partisiz belgede başlık parti no → İE", s7e.data?.outcome === "SINGLE" && ids(s7e) === woE, `${s7e.data?.outcome} ${ids(s7e)} ${s7e.data?.message}`);
 }
 
 async function cleanup(): Promise<void> {

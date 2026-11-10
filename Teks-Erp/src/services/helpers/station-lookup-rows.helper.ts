@@ -9,7 +9,7 @@ import { z } from "zod";
 import prisma from "../../lib/prisma";
 import { getStampContext } from "./work-session.helper";
 import { whereRollsOfWorkOrder } from "./workorder-rolls.helper";
-import { LOOKUP_NOTE_STATUSES } from "./workorder-doc-search.helper";
+import { LINE_HAS_BATCH_WHERE, LOOKUP_NOTE_STATUSES, noteBatchNosForWorkOrder } from "./workorder-doc-search.helper";
 import { loadWorkOrderLocations, type WorkOrderLocation } from "./workorder-location.helper";
 import {
   assertTamburStation, stationScreenOpenStepWhere, stationScreenStationWhere, stationScreenStepWhere, type StationScreen,
@@ -164,7 +164,11 @@ export async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds:
   for (const w of rows) {
     const docs = await prisma.customerDeliveryNote.findMany({
       where: { status: { in: [...LOOKUP_NOTE_STATUSES] }, ...(noteIds ? { id: { in: noteIds } } : {}), lines: { some: { roll: whereRollsOfWorkOrder(w.id) } } },
-      select: { noteNo: true, senderDocNo: true, customerOrderNo: true, customerBatchNo: true, processText: true },
+      select: {
+        noteNo: true, senderDocNo: true, customerOrderNo: true, customerBatchNo: true, processText: true,
+        lines: { where: { AND: [{ roll: whereRollsOfWorkOrder(w.id) }, LINE_HAS_BATCH_WHERE] }, select: { customerBatchNo: true }, take: 50 },
+        _count: { select: { lines: { where: LINE_HAS_BATCH_WHERE } } },
+      },
       orderBy: { noteNo: "asc" },
       take: 5,
     });
@@ -180,7 +184,11 @@ export async function loadWorkOrders(where: Prisma.WorkOrderWhereInput, noteIds:
       id: w.id, workOrderNumber: w.workOrderNumber, status: w.status, createdAt: w.createdAt,
       cardBarcode: w.travelerCards[0]!.barcode,
       batchNumbers: [...new Set(w.batches.map((b) => b.batchNumber))],
-      documents: docs.map((d) => ({ noteNo: d.noteNo, senderDocNo: d.senderDocNo, customerOrderNo: d.customerOrderNo, customerBatchNo: d.customerBatchNo })),
+      // Çok partili belgede başlık tek parti taşır: bu İE'nin partisi satırlardan (`noteBatchNosForWorkOrder`).
+      documents: docs.map((d) => ({
+        noteNo: d.noteNo, senderDocNo: d.senderDocNo, customerOrderNo: d.customerOrderNo,
+        customerBatchNo: noteBatchNosForWorkOrder({ customerBatchNo: d.customerBatchNo }, d._count.lines > 0, d.lines.map((l) => l.customerBatchNo)).join(", ") || null,
+      })),
       processText,
       // Adımda canlı top yoksa (rotasız / başlamamış) gelen kökler sayılır — "0 top · 0 m" yanıltır (tek parça 1 top · 241 m).
       ...(konum && konum.canliTop > 0 || !incoming

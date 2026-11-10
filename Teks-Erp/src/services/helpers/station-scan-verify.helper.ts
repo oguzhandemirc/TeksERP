@@ -14,7 +14,7 @@ import { readStationVerifyThreshold } from "../system-setting.service";
 import { recordStationScanCheck, type ScanCheckDecision } from "../station-scan-check.service";
 import { whereRollsOfWorkOrder } from "./workorder-rolls.helper";
 import { isSinglePieceLines } from "./wo-incoming.helper";
-import { LOOKUP_NOTE_STATUSES } from "./workorder-doc-search.helper";
+import { LINE_HAS_BATCH_WHERE, LOOKUP_NOTE_STATUSES, noteBatchNosForWorkOrder } from "./workorder-doc-search.helper";
 import type { StationLookupWorkOrder } from "./station-lookup-rows.helper";
 import {
   isScanVerified, scoreScan, type ScanEvidence, type TargetRecord, type VerifyComponentKey, type WorkOrderVerification,
@@ -61,6 +61,7 @@ const NOTE_TARGET_SELECT = {
   id: true, customerBatchNo: true, ourBatchNo: true, customerOrderNo: true, ownerText: true, senderText: true, senderDocDate: true,
   ownerCustomer: { select: { name: true } }, senderCustomer: { select: { name: true } },
   lines: { select: { lineKind: true, senderRollNo: true, meters: true }, orderBy: { lineNo: "asc" }, take: 1000 },
+  _count: { select: { lines: { where: LINE_HAS_BATCH_WHERE } } },
 } as const;
 
 /** İE'nin karşılaştırma kaydı: top vermiş canlı belgeler (eşleşen belge kümesiyle kesişim varsa yalnız o) + İE partileri. */
@@ -72,6 +73,11 @@ async function targetOf(w: StationLookupWorkOrder, noteIds: string[]): Promise<{
   const narrowed = all.filter((n) => noteIds.includes(n.id));
   const notes = narrowed.length > 0 ? narrowed : all;
   const names = (a: Array<string | null | undefined>) => a.filter((v): v is string => !!v && v.trim().length > 0);
+  // Çok partili belgede başlık tek parti taşır: İE'nin partisi kendi satırlarından (`noteBatchNosForWorkOrder`).
+  const ownLines = notes.length === 0 ? [] : await prisma.customerDeliveryNoteLine.findMany({
+    where: { AND: [{ noteId: { in: notes.map((n) => n.id) } }, { roll: whereRollsOfWorkOrder(w.id) }, LINE_HAS_BATCH_WHERE] }, select: { noteId: true, customerBatchNo: true },
+  });
+  const noteBatchNos = notes.flatMap((n) => noteBatchNosForWorkOrder(n, n._count.lines > 0, ownLines.filter((l) => l.noteId === n.id).map((l) => l.customerBatchNo)));
   const allLines = notes.flatMap((n) => n.lines);
   const tops = allLines.filter((l) => l.lineKind === DeliveryNoteLineKind.TOP);
   const singlePiece = isSinglePieceLines(allLines);
@@ -80,7 +86,7 @@ async function targetOf(w: StationLookupWorkOrder, noteIds: string[]): Promise<{
     meters: tops.map((l) => meter(l.meters)),
     singlePiece,
     pieceMeters: singlePiece ? Math.round(allLines.reduce((s, l) => s + meter(l.meters), 0) * 1000) / 1000 : null,
-    batchNos: names([...w.batchNumbers, ...notes.flatMap((n) => [n.customerBatchNo, n.ourBatchNo])]),
+    batchNos: names([...w.batchNumbers, ...noteBatchNos]),
     orderNos: names(notes.map((n) => n.customerOrderNo)),
     ownerNames: names(notes.flatMap((n) => [n.ownerText, n.ownerCustomer?.name])),
     senderNames: names(notes.flatMap((n) => [n.senderText, n.senderCustomer?.name])),
