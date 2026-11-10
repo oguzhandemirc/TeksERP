@@ -6,6 +6,7 @@
 // =============================================================================
 import type { LabelKind } from "@prisma/client";
 import type { LabelPayload } from "../../types/label.types";
+import type { LabelTemplateOption } from "../helpers/label-template-options.helper";
 import { elementSupported, prepareElements, type LabelElement } from "../../config/label-elements";
 import { elementText } from "../helpers/label-canvas-native.helper";
 import { bannerValueText, qrFootprintDots } from "../helpers/native-label.shared";
@@ -43,6 +44,9 @@ export interface TamburLabelPreview {
   elements: TamburPreviewElement[] | null;
   /** Akış şablonu (ya da şablonsuz yedek) → sıralı satırlar. */
   rows: Array<{ key: string | null; text: string; size: string; bold: boolean }> | null;
+  /** Seçilebilir şablonlar (varsayılan + müşteri seti + herkes için set; tekrarsız). */
+  templateOptions: LabelTemplateOption[];
+  defaultTemplateId: string | null;
 }
 
 /** Değeri kesim anında sistemin atadığı alanlar: önizlemede değersiz olmaları beklenendir, "boş" uyarısı değildir. */

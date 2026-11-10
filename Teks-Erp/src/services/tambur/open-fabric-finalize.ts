@@ -7,7 +7,7 @@
 // =============================================================================
 /* eslint-disable max-lines -- devralınan gövde kelimesi kelimesine taşındı; ailenin max-lines katkısı bölme öncesi gibi TEK (tambur/finalize.ts sayılır) */
 
-import { stageForProductionExit } from "../helpers/roll-stage.helper";
+import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { consumeForOperationTx } from "../helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "../helpers/property-revoke.helper";
@@ -57,6 +57,7 @@ import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatch
 import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 
 export async function finalizeOpenFabric(
     openFabricRollId: string,
@@ -85,6 +86,10 @@ export async function finalizeOpenFabric(
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -212,6 +217,16 @@ export async function finalizeOpenFabric(
       ? await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm)
       : { width: parent.width, trace: null };
     const remainingIntent = ownerTailIntent(parent.ownerCustomerId);
+    const remainingTemplate = remainingBorn
+      ? await resolveTamburLabelTemplate({
+          labelTemplateId: data.labelTemplateId,
+          kind: rollLabelKindOf(stageForProductionExit(parent.currentStep?.outputStage)),
+          customerId: remainingIntent.labelCustomerId,
+          consigneeId: remainingConsigneeId,
+          deviceId: data.labelDeviceId,
+          machineId,
+        })
+      : { labelTemplateId: null, labelTemplateKind: null };
     // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
     // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
     const childQualityGrade: string = await resolveRemainingGradeCode(
@@ -320,6 +335,8 @@ export async function finalizeOpenFabric(
             weightKg: remainingWeightKg,
             weightSource: remainingWeightSource,
             labelConsigneeId: remainingConsigneeId,
+            labelTemplateId: remainingTemplate.labelTemplateId,
+            labelTemplateKind: remainingTemplate.labelTemplateKind,
             labelBatchNo: remainingLabelBatchNo,
             labelItemName: labelTexts.labelItemName,
             labelColorName: labelTexts.labelColorName,

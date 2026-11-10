@@ -1082,6 +1082,63 @@ router.put(
   },
 );
 
+// ── Yeniden basımda şablon seçimi (çoklu etiket seti) — seçim topa yazılır, basım yolları onu basar.
+const rollTemplateSetBody = z.object({
+  templateId: z.string().uuid("Geçersiz şablon ID").nullable(),
+  expectedEditedAt: z.string().datetime({ offset: true }).nullable().optional(),
+});
+
+/**
+ * @openapi
+ * /api/labels/rolls/{id}/template-options:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Topun etiketi için seçilebilir şablonlar (varsayılan + müşteri seti + herkes için set)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ kind, currentTemplateId, defaultTemplateId, options:[{id,name,source,isDefault}], labelEditedAt }" }
+ *       404: { description: Top bulunamadı }
+ * /api/labels/rolls/{id}/template:
+ *   put:
+ *     tags: [Labels]
+ *     summary: Topun etiket şablonunu seç — body { templateId|null, expectedEditedAt? } — BASMAZ
+ *     description: |
+ *       Teklif dışı id 400 `LABEL_TEMPLATE_NOT_OFFERED`; varsayılan seçilirse topa null yazılır. Aynı değer 200
+ *       `changed:false`. Araya yazan 409 `LABEL_EDIT_STALE`; sevkli/ölü top 409 `ROLL_SHIPPED`/`ROLL_DEAD`.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Güncel teklif (GET biçimi) + changed }
+ *       400: { description: LABEL_TEMPLATE_NOT_OFFERED · ROLL_NO_BARCODE }
+ *       409: { description: LABEL_EDIT_STALE · ROLL_SHIPPED · ROLL_DEAD }
+ */
+router.get(
+  "/rolls/:id/template-options",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = rollIdParam.parse(req.params);
+      res.status(200).json(await rollLabelEditService.getTemplateOptions(id, { deviceId: req.device?.id ?? null }));
+    } catch (e) { next(e); }
+  },
+);
+router.put(
+  "/rolls/:id/template",
+  verifyToken,
+  requireAnyPermission("label:edit", "roll:write", ...MOBILE_LABEL_PRINTERS),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = rollIdParam.parse(req.params);
+      const body = rollTemplateSetBody.parse(req.body ?? {});
+      res.status(200).json(await rollLabelEditService.setTemplate(id, body, req.user?.userId, req.device?.id ?? null));
+    } catch (e) { next(e); }
+  },
+);
+
 // ── İş emri etiket bilgisi (Gülkesim S5) — İE açan panelden, tamburcu tabletten yazar.
 const labelOverrideService = new LabelOverrideService();
 const LABEL_OVERRIDE_WRITERS = requireAnyPermission("label:edit", "workorder:write", "mobile:tambur");

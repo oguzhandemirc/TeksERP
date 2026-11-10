@@ -6,7 +6,7 @@
 // dışa açık ad yalnız cepheden (`../tambur.service`) okunur.
 // =============================================================================
 
-import { stageForProductionExit } from "../helpers/roll-stage.helper";
+import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { consumeForOperationTx } from "../helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
@@ -70,6 +70,7 @@ import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from ".
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { isConsignedRoll } from "../helpers/stock-ownership.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
 // hiçbiri yoksa stok) `helpers/label-intent.helper.ts`'te yaşar — eskiden bu
@@ -151,6 +152,10 @@ export async function finalize(
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kalan kuyruk parçasının kg kaynağı. */
@@ -577,6 +582,14 @@ export async function finalize(
       labelConsigneeId: data.labelConsigneeId, targetCustomerId: null, ownerCustomerId: roll.ownerCustomerId,
     });
     const childIntent = ownerTailIntent(roll.ownerCustomerId);
+    const childTemplate = await resolveTamburLabelTemplate({
+      labelTemplateId: data.labelTemplateId,
+      kind: rollLabelKindOf(stageForProductionExit(roll.currentStep?.outputStage)),
+      customerId: childIntent.labelCustomerId,
+      consigneeId: childLabelConsigneeId,
+      deviceId: data.labelDeviceId,
+      machineId,
+    });
     const baseChildWidth = wo?.width ?? (await inheritedChildWidth(roll.id, roll.width));
     const measuredChildWidth = await resolveTamburChildWidth(baseChildWidth, data.widthCm);
 
@@ -752,6 +765,8 @@ export async function finalize(
             weightKg: seg.weightKg,
             weightSource: seg.weightSource,
             labelConsigneeId: childLabelConsigneeId,
+            labelTemplateId: childTemplate.labelTemplateId,
+            labelTemplateKind: childTemplate.labelTemplateKind,
             labelBatchNo,
             labelItemName: labelTexts.labelItemName,
             labelColorName: labelTexts.labelColorName,

@@ -56,6 +56,8 @@ import { inheritedChildWidth, resolveTamburChildWidth } from "../helpers/tambur-
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { rollLabelKindOf } from "../helpers/roll-stage.helper";
 
 export async function cutWarehouseRoll(this: TamburServiceThis, 
     ...args: Parameters<TamburService["cutWarehouseRollInner"]>
@@ -103,6 +105,10 @@ export async function cutWarehouseRollInner(
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -254,6 +260,14 @@ export async function cutWarehouseRollInner(
         : { stock: true as const };
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
+    const cutTemplate = await resolveTamburLabelTemplate({
+      labelTemplateId: data.labelTemplateId,
+      kind: rollLabelKindOf(parent.stage),
+      customerId: cutLabelCustomerId,
+      consigneeId: cutConsigneeId,
+      deviceId: data.labelDeviceId,
+      machineId: sessionMachineId,
+    });
 
     let result: {
       child: Roll;
@@ -297,6 +311,8 @@ export async function cutWarehouseRollInner(
         weightKg: cutWeightKg,
         weightSource: cutWeightSource,
         labelConsigneeId: cutConsigneeId,
+        labelTemplateId: cutTemplate.labelTemplateId,
+        labelTemplateKind: cutTemplate.labelTemplateKind,
         labelBatchNo: cutLabelBatchNo,
         labelItemName: labelTexts.labelItemName,
         labelColorName: labelTexts.labelColorName,

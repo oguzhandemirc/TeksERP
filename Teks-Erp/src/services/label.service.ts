@@ -28,6 +28,7 @@ import {
 } from "./system-setting.service";
 import { LabelKind, PrinterLanguage, Prisma, RollStage, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import { resolveRollLabelKind, rollLabelKindOf } from "./helpers/roll-stage.helper";
+import { appliedRollTemplateId } from "./helpers/roll-label-template.helper";
 import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { loadActiveCustomerCodes } from "./helpers/roll-customer-code-read.helper";
@@ -258,7 +259,8 @@ function pickBulkRollTemplate(
   payload: LabelPayload,
   kind: LabelKind,
 ): { template: LabelTemplate; variant: LabelTemplateVariant | null } | undefined {
-  const byRoll = payload.rollLabelTemplateId ? ctx.rollTemplateById?.get(payload.rollLabelTemplateId) : undefined;
+  const rollTemplateId = appliedRollTemplateId(payload, kind);
+  const byRoll = rollTemplateId ? ctx.rollTemplateById?.get(rollTemplateId) : undefined;
   const byConsignee = payload.consigneeId ? ctx.consigneeTemplateById?.get(payload.consigneeId) : undefined;
   return (byRoll && consigneeTemplateUsable(byRoll.template, kind) ? byRoll : undefined)
     ?? (byConsignee && consigneeTemplateUsable(byConsignee.template, kind) ? byConsignee : undefined)
@@ -553,8 +555,13 @@ export class LabelService {
     payload.labelBatchNo = edit.columns.labelBatchNo;
     applyRollLabelTexts(payload, { labelItemName: edit.columns.labelItemName, labelColorName: edit.columns.labelColorName });
     applyRollLabelOverrides(payload, edit.overrides);
-    const oneTimeTemplateId = opts?.labelEdit?.templateId !== undefined ? opts.labelEdit.templateId : roll.labelTemplateId;
-    if (oneTimeTemplateId) payload.rollLabelTemplateId = oneTimeTemplateId;
+    // Taslağın şablonu bağlamsızdır (operatör şu an bu etikete bakıyor); kayıtlı seçim kendi bağlamını taşır.
+    const draftTemplate = opts?.labelEdit?.templateId !== undefined;
+    const oneTimeTemplateId = draftTemplate ? opts.labelEdit!.templateId : roll.labelTemplateId;
+    if (oneTimeTemplateId) {
+      payload.rollLabelTemplateId = oneTimeTemplateId;
+      payload.rollLabelTemplateKind = draftTemplate ? null : roll.labelTemplateKind;
+    }
 
     return { success: true, data: payload };
   }
@@ -908,7 +915,7 @@ export class LabelService {
         kind,
         peripheralId: opts?.peripheralId,
         // Topun bir seferlik şablonu zincirin önünde (taslakta taslağınki); yoksa istekteki explicit şablon.
-        templateId: payload.rollLabelTemplateId ?? opts?.templateId,
+        templateId: appliedRollTemplateId(payload, kind) ?? opts?.templateId,
         machineId: opts?.machineId,
         deviceId: opts?.deviceId,
         // Müşteri şablonu halkası — payload ÖNCE çözüldü (explicit-only):
@@ -2389,7 +2396,7 @@ export class LabelService {
       const kind: LabelKind = rollLabelKindOf(roll.stage);
       const routing = await resolveLabelRouting({
         kind,
-        templateId: payload.rollLabelTemplateId ?? null,
+        templateId: appliedRollTemplateId(payload, kind) ?? null,
         customerId: payload.customerId ?? null,
         consigneeId: payload.consigneeId ?? null,
         peripheralId: opts?.peripheralId ?? null,

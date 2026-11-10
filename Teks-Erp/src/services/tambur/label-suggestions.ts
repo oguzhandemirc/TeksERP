@@ -21,7 +21,7 @@ export interface TamburLabelSuggestions {
   itemNames: string[];
   colorNames: string[];
   batchNos: string[];
-  last: { itemName: string | null; colorName: string | null; batchNo: string | null; consigneeId: string | null; consigneeName: string | null } | null;
+  last: { itemName: string | null; colorName: string | null; batchNo: string | null; consigneeId: string | null; consigneeName: string | null; templateId: string | null } | null;
 }
 
 /** İE (ya da top üzerinden İE) + müşteri kümesi: İE müşterisi ∪ İE partilerindeki topların sahibi (fason). */
@@ -100,15 +100,17 @@ export async function getTamburLabelSuggestions(args: { workOrderId?: string | n
     const r = await prisma.roll.findFirst({
       where: {
         batch: { workOrderId },
-        OR: [{ labelItemName: { not: null } }, { labelColorName: { not: null } }, { labelBatchNo: { not: null } }, { labelConsigneeId: { not: null } }],
+        OR: [{ labelItemName: { not: null } }, { labelColorName: { not: null } }, { labelBatchNo: { not: null } }, { labelConsigneeId: { not: null } }, { labelTemplateId: { not: null } }],
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { labelItemName: true, labelColorName: true, labelBatchNo: true, labelConsigneeId: true, labelConsignee: { select: { name: true } } },
+      select: { labelItemName: true, labelColorName: true, labelBatchNo: true, labelConsigneeId: true, labelConsignee: { select: { name: true } }, labelTemplateId: true },
     });
     if (r) {
       last = {
         itemName: r.labelItemName, colorName: r.labelColorName, batchNo: r.labelBatchNo,
         consigneeId: r.labelConsigneeId, consigneeName: r.labelConsignee?.name ?? null,
+        // İE'nin son kesiminde seçilen şablon (çoklu etiket) — tablet yeniden açılınca buradan başlar.
+        templateId: r.labelTemplateId,
       };
     }
   }

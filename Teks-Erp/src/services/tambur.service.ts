@@ -209,6 +209,8 @@ export class TamburService {
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kalan kuyruk parçasının kg kaynağı. */
@@ -427,6 +429,8 @@ export class TamburService {
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -479,6 +483,8 @@ export class TamburService {
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -546,6 +552,8 @@ export class TamburService {
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -600,6 +608,8 @@ export class TamburService {
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */

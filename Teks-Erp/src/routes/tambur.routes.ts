@@ -1107,10 +1107,12 @@ router.get(
  *     description: |
  *       Payload `getRollLabel` zinciri, şablon preview-fields ile aynı karar (emanette sahip). Kanvas varyantında
  *       konumlu elemanlar (metin baskıyla aynı fonksiyonlardan), akış şablonunda sıralı satırlar. Çocuk barkodu
- *       kesimde doğar → barkod elemanı yer tutucu.
+ *       kesimde doğar → barkod elemanı yer tutucu. Gövdede `templateId` (çoklu etiket seti) seçilen şablonla çizer;
+ *       teklif dışı id 400 `LABEL_TEMPLATE_NOT_OFFERED`. Yanıt seçiciyi besler: `templateOptions`, `defaultTemplateId`.
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{ kind, templateId, templateName, widthMm, heightMm, elements | null, rows | null }" }
+ *       200: { description: "{ kind, templateId, templateName, widthMm, heightMm, elements | null, rows | null, templateOptions:[{id,name,source,isDefault}], defaultTemplateId }" }
+ *       400: { description: LABEL_TEMPLATE_NOT_OFFERED }
  *       404: { description: Top bulunamadı }
  */
 const optNum = z.number().finite().nonnegative().max(100000).nullish();
@@ -1120,6 +1122,7 @@ const labelPreviewBody = z.object({
   orderLineId: z.string().uuid("Geçersiz sipariş satırı ID").nullish(),
   customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
   consigneeId: z.string().uuid("Geçersiz alıcı ID").nullish(),
+  templateId: z.string().uuid("Geçersiz şablon ID").nullish(),
   draft: z
     .object({
       lengthMeters: optNum,

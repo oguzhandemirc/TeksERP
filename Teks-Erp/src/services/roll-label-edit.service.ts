@@ -23,6 +23,8 @@ import { fieldDisplayValue } from "./helpers/label-field-values";
 import { boundKeysOf, foreignKeys, usableForRoll } from "./helpers/label-template-usable.helper";
 import { resolveLabelRouting } from "./helpers/label-routing.resolver";
 import { rollLabelKindOf } from "./helpers/roll-stage.helper";
+import { rollTemplateApplies } from "./helpers/roll-label-template.helper";
+import { isOfferedTemplate, resolveLabelTemplateOptions, type LabelTemplateOption } from "./helpers/label-template-options.helper";
 import { LABEL_TEXT_LOCKED_STATUSES, labelTextFixBlock } from "./inventory/label-texts";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { resolveTamburConsignee } from "./helpers/tambur-customer-settings.helper";
@@ -83,8 +85,24 @@ export interface RollLabelEditInput {
 const ROLL_EDIT_SELECT = {
   id: true, barcode: true, status: true, stage: true, ownerCustomerId: true, labelCustomerId: true,
   labelConsigneeId: true, labelItemName: true, labelColorName: true, labelBatchNo: true,
-  labelOverrides: true, labelTemplateId: true, labelEditedAt: true,
+  labelOverrides: true, labelTemplateId: true, labelTemplateKind: true, labelEditedAt: true,
 } satisfies Prisma.RollSelect;
+
+/** Yeniden basım seçicisi — topun etiket bağlamında teklif edilen şablonlar (çoklu etiket seti). */
+export interface RollTemplateOptionsView {
+  kind: LabelKind;
+  /** Topa yazılmış ve bu bağlamda UYGULANAN seçim; yoksa null (= varsayılan basılır). */
+  currentTemplateId: string | null;
+  defaultTemplateId: string | null;
+  options: LabelTemplateOption[];
+  labelEditedAt: string | null;
+}
+
+export interface RollTemplateSetInput {
+  /** null / varsayılanın id'si = varsayılana dön (topa null yazılır). */
+  templateId: string | null;
+  expectedEditedAt?: string | null;
+}
 
 export class RollLabelEditService {
   async getEditForm(rollId: string, opts: { peripheralId?: string | null } = {}): Promise<ApiResponse<RollLabelEditView>> {
@@ -131,7 +149,8 @@ export class RollLabelEditService {
         barcode: roll.barcode,
         locked: block ? { code: block.code, reason: block.reason } : null,
         labelEditedAt: roll.labelEditedAt?.toISOString() ?? null,
-        templateId: roll.labelTemplateId,
+        // Seçim başka bağlamın etiketine aitse (aşama değişti) bu formda yok sayılır — basım yoluyla aynı yüklem.
+        templateId: rollTemplateApplies(roll, kind) ? roll.labelTemplateId : null,
         chainTemplateId: chain.template?.id ?? null,
         templates,
         fields,
@@ -182,6 +201,8 @@ export class RollLabelEditService {
         ...after.columns,
         labelOverrides: Object.keys(after.overrides).length > 0 ? after.overrides : Prisma.DbNull,
         labelTemplateId: nextTemplateId,
+        // Şablon değişmediyse bağlamı korunur; yeni seçim topun şu anki etiket bağlamına aittir.
+        labelTemplateKind: nextTemplateId === roll.labelTemplateId ? roll.labelTemplateKind : nextTemplateId ? rollLabelKindOf(roll.stage) : null,
         labelConsigneeId: nextConsignee,
         labelEditedAt: new Date(),
         labelDirty: true,
@@ -207,6 +228,77 @@ export class RollLabelEditService {
       newData: { ...after.columns, labelOverrides: after.overrides, labelTemplateId: nextTemplateId, labelConsigneeId: nextConsignee, labelCustomerId: nextCustomerId, event: "ROLL_LABEL_EDIT" },
     });
     return { success: true, data: { ...(await this.getEditForm(rollId)).data, changed: true }, message: "Etiket kaydedildi" };
+  }
+
+  /** Topun etiket bağlamındaki teklif (DEFAULT ∪ müşteri seti ∪ global set) — tek kaynak `resolveLabelTemplateOptions`. */
+  async getTemplateOptions(rollId: string, opts: { deviceId?: string | null } = {}): Promise<ApiResponse<RollTemplateOptionsView>> {
+    const roll = await prisma.roll.findUnique({ where: { id: rollId }, select: ROLL_EDIT_SELECT });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    const { kind, offer } = await this.offerFor(rollId, roll.stage, opts.deviceId ?? null);
+    return {
+      success: true,
+      data: {
+        kind,
+        currentTemplateId: rollTemplateApplies(roll, kind) ? roll.labelTemplateId : null,
+        defaultTemplateId: offer.defaultTemplateId,
+        options: offer.options,
+        labelEditedAt: roll.labelEditedAt?.toISOString() ?? null,
+      },
+    };
+  }
+
+  /**
+   * Yeniden basımda şablon seçimi — topa yazar (K8). Teklif dışı id 400; varsayılan seçilirse null yazılır
+   * (varsayılan sonradan değişince top da uyar). Claim: durum kilidi + `labelEditedAt`; aynı değer no-op.
+   */
+  async setTemplate(rollId: string, input: RollTemplateSetInput, userId?: string, deviceId?: string | null): Promise<ApiResponse<RollTemplateOptionsView & { changed: boolean }>> {
+    const roll = await prisma.roll.findUnique({ where: { id: rollId }, select: ROLL_EDIT_SELECT });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (!roll.barcode) throw AppError.badRequest("Barkodsuz (açık kumaş) topun etiketi yok.", { code: "ROLL_NO_BARCODE" });
+    const block = labelTextFixBlock(roll.status);
+    if (block) throw AppError.conflict(block.reason, { code: block.code });
+
+    const { kind, offer } = await this.offerFor(rollId, roll.stage, deviceId ?? null);
+    const current = rollTemplateApplies(roll, kind) ? roll.labelTemplateId : null;
+    const next = input.templateId === offer.defaultTemplateId ? null : input.templateId;
+    if (next === current) {
+      return { success: true, data: { ...(await this.getTemplateOptions(rollId, { deviceId })).data, changed: false }, message: "Etiket şablonu zaten bu" };
+    }
+    if (next !== null && !isOfferedTemplate(offer, next)) {
+      throw AppError.badRequest("Seçilen şablon bu top etiketi için atanmış şablonlardan biri değil.", { code: "LABEL_TEMPLATE_NOT_OFFERED" });
+    }
+    const expected = input.expectedEditedAt === undefined ? roll.labelEditedAt : input.expectedEditedAt ? new Date(input.expectedEditedAt) : null;
+    if (expected && Number.isNaN(expected.getTime())) throw AppError.badRequest("expectedEditedAt geçersiz", { code: "LABEL_EDIT_INVALID" });
+    if ((expected?.getTime() ?? null) !== (roll.labelEditedAt?.getTime() ?? null)) {
+      throw AppError.conflict("Etiket başka biri tarafından değiştirildi; yenileyip tekrar deneyin.", { code: "LABEL_EDIT_STALE" });
+    }
+    const { count } = await prisma.roll.updateMany({
+      where: { id: rollId, status: { notIn: [...LABEL_TEXT_LOCKED_STATUSES] }, labelEditedAt: roll.labelEditedAt },
+      data: { labelTemplateId: next, labelTemplateKind: next ? kind : null, labelEditedAt: new Date(), labelDirty: true },
+    });
+    if (count === 0) {
+      const now = await prisma.roll.findUnique({ where: { id: rollId }, select: { status: true } });
+      const late = now ? labelTextFixBlock(now.status) : null;
+      if (late) throw AppError.conflict(late.reason, { code: late.code });
+      throw AppError.conflict("Etiket başka biri tarafından değiştirildi; yenileyip tekrar deneyin.", { code: "LABEL_EDIT_STALE" });
+    }
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: rollId,
+      oldData: { barcode: roll.barcode, labelTemplateId: roll.labelTemplateId, labelTemplateKind: roll.labelTemplateKind },
+      newData: { labelTemplateId: next, labelTemplateKind: next ? kind : null, event: "ROLL_LABEL_TEMPLATE" },
+    });
+    return { success: true, data: { ...(await this.getTemplateOptions(rollId, { deviceId })).data, changed: true }, message: "Etiket şablonu kaydedildi" };
+  }
+
+  /** Teklif, basım yolunun gördüğü müşteri/alıcıyla (payload) ve topun etiket bağlamıyla hesaplanır. */
+  private async offerFor(rollId: string, stage: Parameters<typeof rollLabelKindOf>[0], deviceId: string | null) {
+    const kind = rollLabelKindOf(stage);
+    const payload = (await labelService.getRollLabel(rollId)).data;
+    const offer = await resolveLabelTemplateOptions({ kind, customerId: payload.customerId ?? null, consigneeId: payload.consigneeId ?? null, deviceId });
+    return { kind, offer };
   }
 
   /** Bir seferlik şablon: var, aktif, silinmemiş, serbest değil, top bağlamına uygun — değilse 400. */

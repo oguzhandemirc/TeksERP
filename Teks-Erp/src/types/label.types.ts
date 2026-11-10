@@ -108,6 +108,9 @@ export interface LabelPayload {
   displayOverrides?: Record<string, string>;
   /** Topun bir seferlik şablonu (`Roll.labelTemplateId`); seçilmemişse ALAN YOK. */
   rollLabelTemplateId?: string;
+  /** Seçimin bağlamı (`Roll.labelTemplateKind`); null = her bağlamda uygulanır. Uygulanma kararı yalnız
+   *  `rollTemplateApplies` (helpers/roll-label-template.helper.ts). Seçim yoksa ALAN YOK. */
+  rollLabelTemplateKind?: LabelKind | null;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---

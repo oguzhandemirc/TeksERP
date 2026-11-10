@@ -7,7 +7,7 @@
 // =============================================================================
 /* eslint-disable max-lines -- devralınan gövde kelimesi kelimesine taşındı; ailenin max-lines katkısı bölme öncesi gibi TEK (tambur/finalize.ts sayılır) */
 
-import { stageForProductionExit } from "../helpers/roll-stage.helper";
+import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "../helpers/property-revoke.helper";
 import {
@@ -62,6 +62,7 @@ import { inheritedChildWidth, resolveTamburChildWidth } from "../helpers/tambur-
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 
 export async function cutOpenFabric(this: TamburServiceThis, 
     ...args: Parameters<TamburService["cutOpenFabricInner"]>
@@ -107,6 +108,10 @@ export async function cutOpenFabricInner(
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -243,6 +248,14 @@ export async function cutOpenFabricInner(
     const cutIntent = await resolveLabelIntent({ ...data, ownerCustomerId: parent.ownerCustomerId });
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
+    const cutTemplate = await resolveTamburLabelTemplate({
+      labelTemplateId: data.labelTemplateId,
+      kind: rollLabelKindOf(stageForProductionExit(parent.currentStep?.outputStage)),
+      customerId: cutLabelCustomerId,
+      consigneeId: cutConsigneeId,
+      deviceId: data.labelDeviceId,
+      machineId: sessionMachineId,
+    });
 
     // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); rolden çözülen
     // kod ZATEN aktif katalog satırından geldiği için lenient yol yeterli
@@ -308,6 +321,8 @@ export async function cutOpenFabricInner(
         weightKg: cutWeightKg,
         weightSource: cutWeightSource,
         labelConsigneeId: cutConsigneeId,
+        labelTemplateId: cutTemplate.labelTemplateId,
+        labelTemplateKind: cutTemplate.labelTemplateKind,
         labelBatchNo: cutLabelBatchNo,
         labelItemName: labelTexts.labelItemName,
         labelColorName: labelTexts.labelColorName,

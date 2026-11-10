@@ -50,6 +50,8 @@ const labelItemNameField = z.string().max(80, "Etiket kumaş adı en çok 80 kar
 const labelColorNameField = z.string().max(80, "Etiket rengi en çok 80 karakter").nullish();
 // Emanet top etiket alıcısı (tablet önce `ensure` çağırır; sahip doğrulaması serviste) — aynı strip tuzağı.
 const labelConsigneeIdField = z.string().uuid("Geçersiz alıcı ID").nullish();
+// Kesimde seçilen etiket şablonu (çoklu etiket seti) — ⚠️ Zod tanımadığı anahtarı sessizce siler; beş şemada da.
+const labelTemplateIdField = z.string().uuid("Geçersiz şablon ID").nullish();
 // Kg kaynağı beyanı — yalnız kg ile; simüle kapısı serviste (`resolveTamburWeightSource`).
 const weightSourceField = z.enum(["SCALE", "MANUAL", "SIMULATED"], { message: "Kg kaynağı SCALE, MANUAL ya da SIMULATED olmalı" }).nullish();
 
@@ -104,6 +106,7 @@ export const finalizeSchema = z.object({
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
   labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
   widthCm: measuredWidthCmSchema,
   // Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH sonrası aynı istek
   // bu bayrakla tekrarlanır. bkz. constants/tambur-plan-gate.ts.
@@ -149,6 +152,7 @@ export const cutOpenFabricSchema = z.object({
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
   labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
   widthCm: measuredWidthCmSchema,
   weightSource: weightSourceField,
   // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
@@ -194,6 +198,7 @@ export const finalizeOpenFabricSchema = z.object({
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
   labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
   widthCm: measuredWidthCmSchema,
   weightSource: weightSourceField,
 });
@@ -224,6 +229,7 @@ export const cutWarehouseRollSchema = z.object({
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
   labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
   widthCm: measuredWidthCmSchema,
   weightSource: weightSourceField,
 });
@@ -294,6 +300,7 @@ export const finalizeWarehouseCutSchema = z.object({
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
   labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
   widthCm: measuredWidthCmSchema,
   weightSource: weightSourceField,
 });
@@ -371,7 +378,7 @@ export class TamburController {
   async cutWarehouseRoll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = cutWarehouseRollSchema.parse(req.body);
+      const body = { ...cutWarehouseRollSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Oturum bağlamı — çıkan parçanın GİRİŞ İSTASYONU damgası için.
       // ⚠️ `enforceForMobile` KOYULMADI: bu uç bugüne kadar oturum ZORUNLU
       // kılmıyordu; enforce eklemek oturumsuz tablette 409 üretir ve çalışan
@@ -394,7 +401,7 @@ export class TamburController {
   async finalizeWarehouseCut(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = finalizeWarehouseCutSchema.parse(req.body);
+      const body = { ...finalizeWarehouseCutSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Kesilen parçayla AYNI damga — biri yapılıp diğeri unutulursa aynı kesimin
       // parçası dolu, kalanı boş doğar.
       const stamp = await getStampContext(req);
@@ -415,7 +422,7 @@ export class TamburController {
   async cutOpenFabric(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = cutOpenFabricSchema.parse(req.body);
+      const body = { ...cutOpenFabricSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Makine atfı: kesim çocukları "Bu makine" süzgecinde görünebilsin (2026-08-12).
       const stamp = await getStampContext(req);
       const result = await this.service.cutOpenFabric(
@@ -434,7 +441,7 @@ export class TamburController {
   async finalizeOpenFabric(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = finalizeOpenFabricSchema.parse(req.body);
+      const body = { ...finalizeOpenFabricSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.finalizeOpenFabric(
@@ -613,7 +620,7 @@ export class TamburController {
    */
   async finalize(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = finalizeSchema.parse(req.body);
+      const body = { ...finalizeSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.finalize(

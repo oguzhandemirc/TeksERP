@@ -50,6 +50,8 @@ import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatch
 import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { rollLabelKindOf } from "../helpers/roll-stage.helper";
 
 // eslint-disable-next-line max-params -- özgün metot 5 parametreli ve uyarısı cephedeki imzada sayılır; ailenin max-params katkısı bölme öncesi gibi İKİ
 export async function finalizeWarehouseCut(
@@ -71,6 +73,10 @@ export async function finalizeWarehouseCut(
       labelColorName?: string | null;
       /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
       labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
       /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
       widthCm?: number | null;
       /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
@@ -159,6 +165,16 @@ export async function finalizeWarehouseCut(
       ? await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm)
       : { width: parent.width, trace: null };
     const remainingIntent = ownerTailIntent(parent.ownerCustomerId);
+    const remainingTemplate = remainingBorn
+      ? await resolveTamburLabelTemplate({
+          labelTemplateId: data.labelTemplateId,
+          kind: rollLabelKindOf(parent.stage),
+          customerId: remainingIntent.labelCustomerId,
+          consigneeId: remainingConsigneeId,
+          deviceId: data.labelDeviceId,
+          machineId: sessionMachineId,
+        })
+      : { labelTemplateId: null, labelTemplateKind: null };
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
     //
@@ -273,6 +289,8 @@ export async function finalizeWarehouseCut(
             weightKg: remainingWeightKg,
             weightSource: remainingWeightSource,
             labelConsigneeId: remainingConsigneeId,
+            labelTemplateId: remainingTemplate.labelTemplateId,
+            labelTemplateKind: remainingTemplate.labelTemplateKind,
             labelBatchNo: remainingLabelBatchNo,
             labelItemName: labelTexts.labelItemName,
             labelColorName: labelTexts.labelColorName,
