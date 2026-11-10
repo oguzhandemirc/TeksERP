@@ -41,11 +41,11 @@ beforeEach(() => {
 });
 
 describe("Cariler — tek satır + kayıt", () => {
-  it("⭐ satır: Ara · Yön · Fason; '+ Filtre' yalnız dar ekranda (boş kutuları taşır)", () => {
+  it("⭐ satır: Ara · Yön · Fason; '+ Filtre' hep görünür (kutular kaldırılabilir)", () => {
     setup();
     const chips = within(screen.getByTestId("filter-row-scroll")).getAllByTestId(/^filter-chip-/).map((c) => c.dataset.testid);
     expect(chips).toEqual(["filter-chip-direction", "filter-chip-subcontractor"]);
-    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).toContain("lg:hidden");
+    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).not.toContain("lg:hidden");
   });
 
   it("⭐ kayıtlı Yön/Fason açılışta geri gelir; geri yükleme bitene dek ready=false (sorgu beklesin), bitince true", async () => {

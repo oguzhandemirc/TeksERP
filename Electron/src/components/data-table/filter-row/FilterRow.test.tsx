@@ -1,10 +1,30 @@
 // Bekçi — tek satır filtre çubuğu: ✕ yalnız kendi filtresini, "Temizle" hepsini kaldırır;
 // "+ Filtre" kutu ekler; satır hiçbir genişlikte sarmaz (sınıf sözleşmesi — jsdom CSS hesaplamaz).
-import { describe, it, expect, vi } from "vitest";
+import { useSyncExternalStore } from "react";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { FilterRow, FILTER_ROW_CLASS, FILTER_ROW_SCROLL_CLASS } from "./FilterRow";
 import type { RowFilter } from "./row-filter";
+import type { AppPreferences } from "@/types/preferences";
+import type { PreferencePatch } from "@/providers/PreferencesProvider";
+
+const store = vi.hoisted(() => {
+  let prefs: AppPreferences = {};
+  const subs = new Set<() => void>();
+  return {
+    get: () => prefs,
+    set: (p: AppPreferences) => ((prefs = p), subs.forEach((s) => s())),
+    subscribe: (s: () => void) => (subs.add(s), () => void subs.delete(s)),
+  };
+});
+vi.mock("@/providers/PreferencesProvider", () => ({
+  usePreferences: () => ({
+    prefs: useSyncExternalStore(store.subscribe, store.get),
+    setPreference: (p: PreferencePatch) => store.set({ ...store.get(), ...(typeof p === "function" ? p(store.get()) : p) }),
+  }),
+}));
+beforeEach(() => store.set({}));
 
 function Probe() {
   return <output data-testid="url">{decodeURIComponent(useLocation().search)}</output>;
@@ -57,29 +77,65 @@ describe("FilterRow — aktif filtreyi kaldırmak", () => {
   });
 });
 
-describe("FilterRow — + Filtre", () => {
-  it("seçilen filtre satıra kutu olarak eklenir; eklenmiş boş kutunun ✕'i kutuyu kapatır", () => {
+describe("FilterRow — + Filtre (tikli seçim, çakılı kutu yok)", () => {
+  const openMenu = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
+    return within(screen.getByRole("menu"));
+  };
+
+  it("menü BÜTÜN filtreleri listeler; satırda görünenler tikli", () => {
+    setup("/?filter[colorId]=r1", [f("a", ["filter[a]"])], [f("kumas", ["filter[itemId]"]), f("renk", ["filter[colorId]"])]);
+    const menu = openMenu();
+    expect(menu.getByRole("menuitemcheckbox", { name: "A" })).toHaveAttribute("aria-checked", "true");
+    expect(menu.getByRole("menuitemcheckbox", { name: "KUMAS" })).toHaveAttribute("aria-checked", "false");
+    // URL'de etkin olan "daha fazla" filtresi görünür ve tikli.
+    expect(menu.getByRole("menuitemcheckbox", { name: "RENK" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("filter-chip-renk")).toHaveAttribute("data-active", "true");
+  });
+
+  it("tiksize dokununca kutu satıra eklenir; eklenmiş boş kutunun ✕'i kutuyu kapatır", () => {
     setup("/", [], [f("kumas", ["filter[itemId]"]), f("renk", ["filter[colorId]"])]);
     expect(screen.queryByTestId("filter-chip-kumas")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Filtre/ }));
-    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "KUMAS" }));
+    fireEvent.click(openMenu().getByRole("menuitemcheckbox", { name: "KUMAS" }));
     expect(screen.getByTestId("filter-chip-kumas")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "KUMAS filtresini kaldır" }));
     expect(screen.queryByTestId("filter-chip-kumas")).toBeNull();
   });
 
-  it("URL'de etkin olan 'daha fazla' filtresi eklemeden kutu olarak görünür ve menüde tekrar çıkmaz", () => {
-    setup("/?filter[colorId]=r1", [], [f("kumas", ["filter[itemId]"]), f("renk", ["filter[colorId]"])]);
-    expect(screen.getByTestId("filter-chip-renk")).toHaveAttribute("data-active", "true");
-    fireEvent.click(screen.getByRole("button", { name: /Filtre/ }));
-    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "RENK" })).toBeNull();
+  it("⭐ varsayılan (eski çakılı) kutu tikliye dokununca satırdan kalkar", () => {
+    setup("/", [f("a", ["filter[a]"]), f("b", ["filter[b]"])]);
+    fireEvent.click(openMenu().getByRole("menuitemcheckbox", { name: "A" }));
+    expect(screen.queryByTestId("filter-chip-a")).toBeNull();
+    expect(screen.getByTestId("filter-chip-b")).toBeInTheDocument();
+    expect(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name: "A" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("⭐ değeri dolu kutu gizlenince değeri temizlenir (yalnız kendi anahtarları), yerel durum da sıfırlanır", () => {
+    const onClear = vi.fn();
+    const url = setup("/?filter[a]=1&filter[b]=2&search=q", [f("a", ["filter[a]"]), f("b", ["filter[b]"]), f("loc", [], { active: true, onClear })]);
+    fireEvent.click(openMenu().getByRole("menuitemcheckbox", { name: "A" }));
+    expect(url()).toBe("?filter[b]=2&search=q");
+    expect(screen.queryByTestId("filter-chip-a")).toBeNull();
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name: "LOC" }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("Varsayılana dön: kaldırılan varsayılan geri gelir, eklenen kalkar ve değeri temizlenir", () => {
+    const url = setup("/?search=q", [f("a", ["filter[a]"])], [f("kumas", ["filter[itemId]"])]);
+    fireEvent.click(openMenu().getByRole("menuitemcheckbox", { name: "A" }));
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name: "KUMAS" }));
+    expect(screen.queryByTestId("filter-chip-a")).toBeNull();
+    expect(screen.getByTestId("filter-chip-kumas")).toBeInTheDocument();
+    fireEvent.click(openMenu().getByRole("menuitem", { name: /Varsayılana dön/ }));
+    expect(screen.getByTestId("filter-chip-a")).toBeInTheDocument();
+    expect(screen.queryByTestId("filter-chip-kumas")).toBeNull();
+    expect(url()).toBe("?search=q");
   });
 
   it("onAdd taşıyan filtre kutu açmadan doğrudan etkinleşir", () => {
     const onAdd = vi.fn();
     setup("/", [], [f("iptal", [], { active: false, onAdd })]);
-    fireEvent.click(screen.getByRole("button", { name: /Filtre/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "IPTAL" }));
+    fireEvent.click(openMenu().getByRole("menuitemcheckbox", { name: "IPTAL" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 });
@@ -106,26 +162,24 @@ describe("FilterRow — TEK SATIR sözleşmesi", () => {
     expect(screen.getByRole("button", { name: "Filtre ekle" })).toBeInTheDocument();
   });
 
-  it("⭐ dar ekranda (lg altı) boş kalıcı kutu satırdan kalkar ve menüde çıkar; etkin kutu hep satırda", () => {
+  it("⭐ dar ekranda (lg altı) boş kutu satırdan kalkar ve menüde 'Aç' ile açılır; etkin kutu hep satırda", () => {
     setup("/?filter[b]=1", [f("a", ["filter[a]"]), f("b", ["filter[b]"])], [f("kumas", ["filter[itemId]"])]);
     expect(screen.getByTestId("filter-chip-a").className).toContain("hidden lg:inline-flex");
     expect(screen.getByTestId("filter-chip-b").className).not.toContain("hidden");
     fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));
-    expect(menu.getByRole("menuitem", { name: "A" }).className).toContain("lg:hidden");
-    expect(menu.getByRole("menuitem", { name: "KUMAS" }).className).not.toContain("lg:hidden");
-    expect(menu.queryByRole("menuitem", { name: "B" })).toBeNull();
+    expect(menu.getByRole("menuitem", { name: "A aç" }).className).toContain("lg:hidden");
+    expect(menu.queryByRole("menuitem", { name: "B aç" })).toBeNull();
+    expect(menu.queryByRole("menuitem", { name: "KUMAS aç" })).toBeNull();
+    fireEvent.click(menu.getByRole("menuitem", { name: "A aç" }));
+    expect(screen.getByTestId("filter-chip-a").className).not.toContain("hidden");
   });
 
-  it("⭐ eklenecek filtre yoksa '+ Filtre' çizilmez; yalnız dar-ekran kutuları varsa geniş ekranda gizli", () => {
+  it("⭐ filtre varsa '+ Filtre' hep çizilir (kaldırmak için de); filtre yoksa çizilmez", () => {
     setup("/?filter[a]=1", [f("a", ["filter[a]"])]);
-    expect(screen.queryByRole("button", { name: "Filtre ekle" })).toBeNull();
-    cleanup();
-    setup("/", [f("a", ["filter[a]"])]);
-    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).toContain("lg:hidden");
-    cleanup();
-    setup("/", [f("a", ["filter[a]"])], [f("kumas", ["filter[itemId]"])]);
     expect(screen.getByRole("button", { name: "Filtre ekle" }).className).not.toContain("lg:hidden");
+    cleanup();
+    setup("/", []);
+    expect(screen.queryByRole("button", { name: "Filtre ekle" })).toBeNull();
   });
 });
-

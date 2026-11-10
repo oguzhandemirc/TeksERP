@@ -63,7 +63,7 @@ function setup(initial = "/?cursor=abc&page=3", productionEnabled = true, showCa
 const openView = () => fireEvent.click(within(screen.getByTestId("filter-chip-nerede")).getByRole("button", { name: /Görünüm:/ }));
 const addFilter = (name: string) => {
   fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
-  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name }));
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name }));
 };
 
 beforeEach(() => {
@@ -120,8 +120,8 @@ describe("Görünüm — hızlı sekmeler tek açılırda", () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));
-    expect(menu.queryByRole("menuitem", { name: "Fason firma" })).toBeNull();
-    expect(menu.queryByRole("menuitem", { name: "Üretim" })).toBeNull();
+    expect(menu.queryByRole("menuitemcheckbox", { name: "Fason firma" })).toBeNull();
+    expect(menu.queryByRole("menuitemcheckbox", { name: "Üretim" })).toBeNull();
   });
 });
 

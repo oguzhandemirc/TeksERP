@@ -25,7 +25,7 @@ describe("Sevk Edilenler — tek satır", () => {
     expect(chips).toEqual(["filter-chip-date", "filter-chip-customerId", "filter-chip-invoiced", "filter-chip-destination"]);
     fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));
-    for (const n of ["Şube", "İade"]) expect(menu.getByRole("menuitem", { name: n })).toBeTruthy();
+    for (const n of ["Şube", "İade"]) expect(menu.getByRole("menuitemcheckbox", { name: n })).toBeTruthy();
   });
 
   it("⭐ kayıt yokken son 30 gün sevk tarihine göre (eski defaultDateRangeDays=30); allowlist tam", () => {

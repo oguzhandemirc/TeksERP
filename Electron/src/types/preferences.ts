@@ -33,6 +33,9 @@ export interface AppPreferences {
   /** Liste filtre kaydı — tablo anahtarı → son kullanılan süzgeç + sıralama (arama hariç; hazır tarih
    *  göreli `datePreset`). Şekli `filter-row/filter-persist.ts` sahiplenir ve okurken süzer. */
   tableFilters?: Record<string, { query: string; savedAt: string }>;
+  /** Filtre satırı kutu görünürlüğü — sayfa (pathname ya da `viewKey`) → { filtreId: görünür } yalnız
+   *  sayfa varsayılanından sapanlar; şekli `filter-row/filter-visibility.ts` sahiplenir ve okurken süzer. */
+  filterRowVisibility?: Record<string, Record<string, boolean>>;
   /** Tablo sütun görünürlüğü — queryKey → { columnId: visible }. */
   tableVisibility?: Record<string, Record<string, boolean>>;
   /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */
