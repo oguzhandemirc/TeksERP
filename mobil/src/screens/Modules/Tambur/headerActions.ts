@@ -16,7 +16,8 @@ export type TamburHeaderAction =
   | 'labelInfo'
   | 'woDetail'
   | 'refreshJob'
-  | 'closeJob';
+  | 'closeJob'
+  | 'cardCode';
 
 export interface TamburHeaderInput {
   width: number;
@@ -29,6 +30,8 @@ export interface TamburHeaderInput {
   labelInfo?: boolean;
   /** Tek açık işte "İş emri listesi" kartı çizilmez (2026-11-10) → sekmenin detay/yenile/kapat'ı "Diğer"e. */
   singleJobTab?: boolean;
+  /** İş yokken tam ekran boş durumda okutma çubuğu yok → elle kart no girişi "Diğer"de (2026-11-11). */
+  cardCodeEntry?: boolean;
 }
 
 /** Bu genişliğin altında seyrek aksiyonlar "Diğer" menüsüne katlanır. */
@@ -53,6 +56,7 @@ export function tamburHeaderActions(i: TamburHeaderInput): {
   const pinned: TamburHeaderAction[] = [];
   if (i.labelInfo && !i.manualMode) pinned.push('labelInfo');
   if (i.singleJobTab && i.hasActiveJob && !i.manualMode) pinned.push('woDetail', 'refreshJob', 'closeJob');
+  if (i.cardCodeEntry && !i.hasActiveJob && !i.manualMode) pinned.push('cardCode');
   const r = foldRare(i, all);
   return { inline: r.inline, overflow: [...r.overflow, ...pinned] };
 }
@@ -65,6 +69,6 @@ function foldRare(i: TamburHeaderInput, all: TamburHeaderAction[]): { inline: Ta
   if (!i.manualMode) foldable.add('manual');
   const overflow = all.filter((a) => foldable.has(a));
   // Menüde tek öğe kalırsa katlamak yer kazandırmaz.
-  if (overflow.length < 2 && !i.labelInfo && !i.singleJobTab) return { inline: all, overflow: [] };
+  if (overflow.length < 2 && !i.labelInfo && !i.singleJobTab && !i.cardCodeEntry) return { inline: all, overflow: [] };
   return { inline: all.filter((a) => !foldable.has(a)), overflow };
 }

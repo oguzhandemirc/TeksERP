@@ -70,4 +70,13 @@ describe('tamburHeaderActions', () => {
     const r = tamburHeaderActions({ ...base, width: 1280, hasActiveJob: false, singleJobTab: true });
     expect(r.overflow).not.toContain('closeJob');
   });
+
+  it('iş yokken tam ekran boş durumda elle kart no "Diğer"de; iş açıkken yok', () => {
+    const wide = tamburHeaderActions({ ...base, width: 1600, hasActiveJob: false, cardCodeEntry: true });
+    expect(wide.overflow).toEqual(['cardCode']);
+    expect(wide.inline).toContain('list');
+    const narrow = tamburHeaderActions({ ...base, width: 1280, hasActiveJob: false, cardCodeEntry: true });
+    expect(narrow.overflow).toContain('cardCode');
+    expect(tamburHeaderActions({ ...base, width: 1600, hasActiveJob: true, cardCodeEntry: true }).overflow).not.toContain('cardCode');
+  });
 });

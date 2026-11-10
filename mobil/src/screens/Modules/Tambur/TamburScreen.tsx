@@ -120,6 +120,8 @@ import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip
 import TamburMeterTrail, { useRollMeterTrail } from './TamburMeterTrail';
 import TamburWideCut from './TamburWideCut';
 import TamburMeasureCard from './TamburMeasureCard';
+import TamburIdleState from './TamburIdleState';
+import TamburCardCodeSheet from './TamburCardCodeSheet';
 import { useTamburLivePreview } from './useTamburLivePreview';
 import { buildPreviewDraft, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
 import { draftKey, partyCards, showJobTabs, showPartyList, switchDraft } from './partyList';
@@ -1099,6 +1101,9 @@ export default function TamburScreen() {
   const printTiming = useTamburPrintTiming();
   // Geniş tablet ana kesim (2026-11-10, hedef görsel): yalnız kart akışı; telefon/manuel/Top Kesme bugünkü düzende.
   const wideMain = !compact && !manualMode && !(recutResolvedRollId && recutRollMeta) && !!activeJob && !!selectedRoll;
+  // İş yokken tablette tam ekran tek boş durum (2026-11-11): sütunlar + tuş takımı çizilmez.
+  const idleFull = !compact && !manualMode && !(recutResolvedRollId && recutRollMeta) && !activeJob;
+  const [cardCodeOpen, setCardCodeOpen] = useState(false);
   // Geniş hata cetveli ölçeği için (metre şeridiyle aynı sorgu, önbellek ortak).
   const rollTrail = useRollMeterTrail(selectedRoll?.rollId);
   const livePreview = useTamburLivePreview({
@@ -3940,6 +3945,7 @@ export default function TamburScreen() {
     hasActiveJob: !!activeJob,
     labelInfo: wideMain,
     singleJobTab: wideMain && !showJobTabs(openJobs.length),
+    cardCodeEntry: idleFull,
   });
   const headerActionMeta = (
     a: TamburHeaderAction,
@@ -3979,6 +3985,8 @@ export default function TamburScreen() {
         return { icon: 'refresh', label: 'İşi yenile', onPress: () => activeRefresh.onRefresh() };
       case 'closeJob':
         return { icon: 'close', label: 'İşi kapat', onPress: () => activeCardId && closeJob(activeCardId) };
+      case 'cardCode':
+        return { icon: 'keyboard-outline', label: 'Kart no yaz', onPress: () => setCardCodeOpen(true) };
     }
   };
   const renderHeaderAction = (a: TamburHeaderAction) => {
@@ -4074,7 +4082,9 @@ export default function TamburScreen() {
             : undefined
         }
       >
+        {idleFull && <TamburIdleState />}
         {/* ════════ SOL: form ════════ */}
+        {!idleFull && (
         <View style={[styles.formCol, wideMain && styles.formColWide]}>
           {manualMode ? (
             // ══ MANUEL EKLE — kartsız BİTMİŞ ürün ══════════════════════════
@@ -5044,9 +5054,10 @@ export default function TamburScreen() {
           )}
 
         </View>
+        )}
 
         {/* ════════ SAĞ: card scan + tab + roll list + numpad ════════ */}
-        {!compact && (
+        {!compact && !idleFull && (
           <View style={[styles.rightCol, wideMain && styles.rightColWide]}>
             {renderRightContent()}
             {/* Otomatik modda yazılacak bir şey yok → numpad gizlenir. Recut
@@ -5083,6 +5094,15 @@ export default function TamburScreen() {
         readerConfigured={docLookup.readerConfigured}
         deviceOcrAccepted={docLookup.deviceOcrAccepted}
         screen={{ screen: 'TAMBUR', stationId: listStationId }}
+      />
+
+      <TamburCardCodeSheet
+        visible={cardCodeOpen}
+        onDismiss={() => setCardCodeOpen(false)}
+        onSubmit={(code) => {
+          setCardCodeOpen(false);
+          void resolveCard(code, true);
+        }}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
