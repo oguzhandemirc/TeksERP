@@ -20,6 +20,8 @@ jest.mock('../../../components/NumpadInput', () => {
 });
 
 const flush = () => act(async () => { await Promise.resolve(); });
+// Kart solarak kapanır (motion `base`); söküm zamanlayıcısı act içinde dolsun.
+const settle = () => act(async () => { await new Promise((res) => setTimeout(res, 320)); });
 
 const preview: TamburLabelPreview = {
   kind: 'FINISHED',
@@ -88,10 +90,26 @@ describe('TamburLabelPreviewCard', () => {
     fireEvent.press(r.getByTestId('onizleme-onay'));
     await flush();
     expect(p.length.set).toHaveBeenCalledWith('12,5');
+    await settle();
     expect(r.queryByTestId('onizleme-yerinde-kutu')).toBeNull();
   });
 
-  it('ada dokun → yerinde metin kutusu (pencere açılmaz); klavye "bitti" ad yazıcısını çağırır; ✕ ilk değere döner', async () => {
+  it('perdeye (kutunun dışına) dokunmak değişikliği ATAR ve kutuyu kapatır', async () => {
+    const p = props();
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    layout(r);
+    fireEvent.press(r.getByTestId('onizleme-alan-itemName'));
+    await flush();
+    fireEvent.changeText(r.getByTestId('onizleme-yerinde'), 'ATILACAK');
+    await flush();
+    fireEvent.press(r.getByTestId('onizleme-perde'));
+    await flush();
+    await settle();
+    expect(r.queryByTestId('onizleme-yerinde-kutu')).toBeNull();
+    expect(p.itemName.set).not.toHaveBeenCalled();
+  });
+
+  it('ada dokun → yerinde metin kutusu (pencere açılmaz); klavye "bitti" ad yazıcısını çağırır; ✕ hiçbir şey yazmaz', async () => {
     const p = props();
     const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
     layout(r);
@@ -107,6 +125,7 @@ describe('TamburLabelPreviewCard', () => {
     fireEvent.press(r.getByTestId('onizleme-vazgec'));
     await flush();
     expect(p.itemName.set).toHaveBeenCalledTimes(1);
+    await settle();
     expect(r.queryByTestId('onizleme-yerinde-kutu')).toBeNull();
   });
 

@@ -1,5 +1,5 @@
 // Canlı etiket önizlemesi saf eşlemesi: alan → düzenleyici, dokunulamazlar, taslak ve Kes ikinci satırı.
-import { editorRect } from './TamburInlineEditor';
+import { editorCardSize, floatingEditorPos } from './TamburInlineEditor';
 import { buildPreviewDraft, editorForKey, emptyFieldText, isSystemAssignedField, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
 
 const own = { owner: false, batchEnabled: true, manualLength: true };
@@ -80,12 +80,22 @@ describe('widthHintText', () => {
   });
 });
 
-describe('editorRect (yerinde düzenleme kutusu)', () => {
-  it('dokunulan elemanın hizasında açılır, kâğıttan taşmaz', () => {
-    const paper = { w: 600, h: 350 };
-    expect(editorRect({ x: 20, y: 100, h: 20, align: 'left' }, paper)).toEqual({ left: 20, top: 84, width: 300, height: 52 });
-    expect(editorRect({ x: 590, y: 100, h: 20, align: 'left' }, paper).left).toBe(300);
-    expect(editorRect({ x: 580, y: 340, h: 20, align: 'right' }, paper)).toEqual({ left: 280, top: 298, width: 300, height: 52 });
+describe('yüzen yerinde düzenleme kartı', () => {
+  const win = { w: 1280, h: 800 };
+  it('kart boyu: metin tek satır, sayı tuş takımıyla; alçak pencerede kısa tuşlar', () => {
+    expect(editorCardSize('text', win)).toEqual({ w: 460, h: 106, compactKeys: false });
+    expect(editorCardSize('number', win)).toEqual({ w: 360, h: 410, compactKeys: false });
+    expect(editorCardSize('number', { w: 1280, h: 500 })).toEqual({ w: 360, h: 330, compactKeys: true });
+    expect(editorCardSize('text', { w: 400, h: 800 }).w).toBe(368);
+  });
+  it('giriş satırı dokunulan alanın satırına oturur, kart pencereden taşmaz', () => {
+    const card = { w: 460, h: 106 };
+    expect(floatingEditorPos({ x: 300, y: 400, h: 20, align: 'left' }, card, win)).toEqual({ left: 276, top: 344 });
+    expect(floatingEditorPos({ x: 1200, y: 400, h: 20, align: 'left' }, card, win).left).toBe(804);
+    expect(floatingEditorPos({ x: 900, y: 400, h: 20, align: 'right' }, card, win).left).toBe(592);
+    expect(floatingEditorPos({ x: 640, y: 400, h: 20, align: 'center' }, card, win).left).toBe(410);
+    expect(floatingEditorPos({ x: 300, y: 780, h: 20, align: 'left' }, card, win).top).toBe(678);
+    expect(floatingEditorPos({ x: 300, y: 0, h: 20, align: 'left' }, card, win, 30).top).toBe(46);
   });
 });
 

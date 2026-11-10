@@ -9,7 +9,7 @@ import TruncatedText from '../../../components/TruncatedText';
 import type { TamburLabelPreview } from '../../../services/tambur.service';
 import { colors, palette } from '../../../theme/tokens';
 import { editorForKey, inlineKind, type InlineEditor, type PreviewEditContext, type PreviewEditor } from './labelPreviewMap';
-import TamburInlineEditor, { editorRect, type EditAnchor } from './TamburInlineEditor';
+import TamburInlineEditor, { type EditAnchor } from './TamburInlineEditor';
 import TamburLabelPaper, { type PaperRow } from './TamburLabelPaper';
 import { templateButtonMode, templatePickerOptions, type TemplateOffer } from './labelTemplateChoice';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
@@ -46,6 +46,8 @@ export interface TamburLabelPreviewCardProps {
   footer?: React.ReactNode;
 }
 
+const noop = () => {};
+
 const INLINE_META: Record<InlineEditor, { label: string; max: number }> = {
   length: { label: 'Kesim uzunluğu (m) — boş = kalanı kes', max: 8 },
   kg: { label: 'Ağırlık (kg)', max: 8 },
@@ -76,7 +78,8 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
   };
   const inline = editing && inlineKind(editing.editor) ? (editing.editor as InlineEditor) : null;
   const close = () => setEditing(null);
-  const overlay = (paper: { w: number; h: number }) =>
+  // Kâğıt katmanına yalnız görünmez çapa düşer; kart + odak perdesi kök portalda çizilir (TamburInlineEditor).
+  const overlay = () =>
     inline && editing ? (
       <TamburInlineEditor
         key={`${inline}-${editing.anchor.x}-${editing.anchor.y}`}
@@ -85,12 +88,10 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
         initial={p[inline].value}
         placeholder={inline === 'width' ? p.width.placeholder : editing.shown || undefined}
         maxLength={INLINE_META[inline].max}
-        rect={editorRect(editing.anchor, paper)}
-        onCommit={(v) => {
-          p[inline].set(v);
-          close();
-        }}
-        onCancel={close}
+        anchor={editing.anchor}
+        onCommit={(v) => p[inline].set(v)}
+        onCancel={noop}
+        onClosed={close}
       />
     ) : null;
   return (
