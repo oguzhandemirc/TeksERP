@@ -6,6 +6,7 @@ import { Button, Text, TouchableRipple } from 'react-native-paper';
 import { colors, palette } from '../../../theme/tokens';
 import TamburInfoCard, { type TamburInfoCardProps } from './TamburInfoCard';
 import TamburLabelPreviewCard, { type TamburLabelPreviewCardProps } from './TamburLabelPreviewCard';
+import { PaperZoomResetContext } from './TamburLabelPaper';
 
 export interface TamburWideCutProps {
   info: TamburInfoCardProps;
@@ -14,6 +15,8 @@ export interface TamburWideCutProps {
   /** Hata kartı: hata yoksa ve muayene kapalıysa null (bölüm çizilmez). */
   defects: { count: number; critCount: number; ruler: React.ReactNode | null; onOpen: () => void; onAdd: (() => void) | null } | null;
   preview: TamburLabelPreviewCardProps;
+  /** Değişince önizleme yakınlaştırması 1×'e döner (iş emri + top). */
+  zoomResetKey?: string;
 }
 
 function DefectCard({ d }: { d: NonNullable<TamburWideCutProps['defects']> }) {
@@ -49,7 +52,9 @@ export default function TamburWideCut(p: TamburWideCutProps) {
       <TamburInfoCard {...p.info} />
       {p.note}
       {p.defects && <DefectCard d={p.defects} />}
-      <TamburLabelPreviewCard {...p.preview} />
+      <PaperZoomResetContext.Provider value={p.zoomResetKey ?? null}>
+        <TamburLabelPreviewCard {...p.preview} />
+      </PaperZoomResetContext.Provider>
     </View>
   );
 }

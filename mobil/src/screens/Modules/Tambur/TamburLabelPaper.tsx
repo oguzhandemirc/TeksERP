@@ -1,14 +1,16 @@
 // Canlı etiket "kâğıdı" (2026-11-10) — sunucunun HTML render elemanlarını (mm) etiket oranında çizer.
 // Düzenlenebilir alanlar mavi zeminli ve dokunulabilir; barkod/tarih/sabit metin düz çizilir.
 // Uç yoksa (eski backend) şablonun alan listesinden satır görünümüne düşer.
-import React, { useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { TamburLabelPreview, TamburPreviewElement } from '../../../services/tambur.service';
-import { colors, palette } from '../../../theme/tokens';
+import { colors, palette, radius, shadow, spacing } from '../../../theme/tokens';
 import type { EditAnchor } from './TamburInlineEditor';
 import { AUTO_FIELD_TEXT, emptyFieldText, isSystemAssignedField } from './labelPreviewMap';
-import { fitPaperScale } from './labelPaperFit';
+import { clampPaperPan, clampPaperZoom, doubleTapZoom, fitPaperScale, paperPanLimit, PAPER_ZOOM_MIN } from './labelPaperFit';
 
 export interface PaperRow {
   key: string | null;
@@ -31,6 +33,86 @@ export interface TamburLabelPaperProps {
 }
 
 const FALLBACK_MM = { w: 100, h: 60 };
+
+/** Değişince yakınlaştırma 1×'e döner (iş emri / top değişimi). Sağlayıcı geniş kesim kabında; kart prop taşımaz. */
+export const PaperZoomResetContext = createContext<string | null>(null);
+
+/**
+ * İki parmakla yakınlaştır (1×–4×), yakınken tek parmakla kaydır (kâğıt kenarıyla sınırlı), çift dokunuş 1× ↔ 2×.
+ * Tek dokunuş alanın düzenleyicisine kalır: pinch iki parmak ister, pan yalnız yakınken ve minDistance sonrası etkin.
+ */
+function usePaperZoom(paper: { w: number; h: number }, area: { w: number; h: number } | null, resetKey: string | null) {
+  const zoom = useSharedValue(1);
+  const savedZoom = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const savedTx = useSharedValue(0);
+  const savedTy = useSharedValue(0);
+  const [zoomed, setZoomed] = useState(false);
+  const aw = area?.w ?? 0;
+  const ah = area?.h ?? 0;
+
+  const reset = (animated: boolean) => {
+    zoom.value = animated ? withTiming(1) : 1;
+    tx.value = animated ? withTiming(0) : 0;
+    ty.value = animated ? withTiming(0) : 0;
+    savedZoom.value = 1;
+    savedTx.value = 0;
+    savedTy.value = 0;
+    setZoomed(false);
+  };
+  useEffect(() => {
+    reset(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız iş emri / top değişince
+  }, [resetKey]);
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      'worklet';
+      const z = clampPaperZoom(savedZoom.value * e.scale);
+      zoom.value = z;
+      tx.value = clampPaperPan(savedTx.value, paperPanLimit(paper.w, aw, z));
+      ty.value = clampPaperPan(savedTy.value, paperPanLimit(paper.h, ah, z));
+    })
+    .onEnd(() => {
+      'worklet';
+      savedZoom.value = zoom.value;
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+      runOnJS(setZoomed)(zoom.value > PAPER_ZOOM_MIN + 0.01);
+    });
+  const pan = Gesture.Pan()
+    .enabled(zoomed)
+    .minDistance(10)
+    .maxPointers(1)
+    .onUpdate((e) => {
+      'worklet';
+      tx.value = clampPaperPan(savedTx.value + e.translationX, paperPanLimit(paper.w, aw, zoom.value));
+      ty.value = clampPaperPan(savedTy.value + e.translationY, paperPanLimit(paper.h, ah, zoom.value));
+    })
+    .onEnd(() => {
+      'worklet';
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+    });
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd((_e, success) => {
+      'worklet';
+      if (!success) return;
+      const next = doubleTapZoom(zoom.value);
+      zoom.value = withTiming(next);
+      savedZoom.value = next;
+      tx.value = withTiming(0);
+      ty.value = withTiming(0);
+      savedTx.value = 0;
+      savedTy.value = 0;
+      runOnJS(setZoomed)(next > PAPER_ZOOM_MIN);
+    });
+  const gesture = Gesture.Simultaneous(pinch, pan, doubleTap);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: zoom.value }] }));
+  return { gesture, style, zoomed, reset: () => reset(true) };
+}
 const EDIT_BG = 'rgba(37,99,235,0.12)';
 const EDIT_BORDER = palette.blue[600];
 
@@ -168,6 +250,7 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
   const wMm = preview?.widthMm || FALLBACK_MM.w;
   const hMm = preview?.heightMm || FALLBACK_MM.h;
   const s = box ? fitPaperScale(box.w, box.h, wMm, hMm) : 0;
+  const zoomCtl = usePaperZoom({ w: wMm * s, h: hMm * s }, box, useContext(PaperZoomResetContext));
   const rows: PaperRow[] | null = preview?.elements
     ? null
     : preview?.rows
@@ -178,9 +261,10 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
       <View style={styles.area} onLayout={onLayout} testID="tambur-etiket-onizleme">
         {/* Kâğıt MUTLAK katmanda: alanın yüksekliğini kâğıt belirlemesin (aksi hâlde kâğıt büyüyünce alan da büyür,
             kaydırma içeriği alt şeridin altına taşar — cihaz 2026-11-11). Alan = kalan yer; kâğıt ona sığar. */}
-        <View style={styles.paperLayer} pointerEvents="box-none">
+        <GestureDetector gesture={zoomCtl.gesture}>
+        <Animated.View style={styles.paperLayer} collapsable={false}>
         {s > 0 && (
-          <View style={[styles.paper, { width: wMm * s, height: hMm * s }]}>
+          <Animated.View style={[styles.paper, { width: wMm * s, height: hMm * s }, zoomCtl.style]}>
             {preview?.elements
               ? preview.elements.map((el, i) => {
                   const key = el.type === 'text' || el.type === 'banner' ? el.bind : null;
@@ -208,9 +292,22 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
                 </View>
               )}
             {overlay?.({ w: wMm * s, h: hMm * s })}
-          </View>
+          </Animated.View>
         )}
-        </View>
+        </Animated.View>
+        </GestureDetector>
+        {zoomCtl.zoomed && (
+          <TouchableRipple
+            onPress={zoomCtl.reset}
+            style={styles.zoomChip}
+            borderless
+            accessibilityRole="button"
+            accessibilityLabel="Yakınlaştırmayı sıfırla"
+            testID="onizleme-zoom-sifirla"
+          >
+            <Text style={styles.zoomChipText}>1×</Text>
+          </TouchableRipple>
+        )}
       </View>
       {stale && (
         <View style={styles.staleRow}>
@@ -248,6 +345,20 @@ const styles = StyleSheet.create({
   rowText: { color: palette.black, fontFamily: 'monospace' },
   rowBig: { fontWeight: '800' },
   rowMuted: { color: palette.slate[400] },
+  // Yakınken köşede sıfırlama çipi; dokunma alanı 48 dp.
+  zoomChip: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    minWidth: 48,
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: palette.slate[700],
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+  },
+  zoomChipText: { color: palette.white, fontSize: 16, fontWeight: '800' },
   staleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   staleText: { fontSize: 12, color: colors.warningText },
 });

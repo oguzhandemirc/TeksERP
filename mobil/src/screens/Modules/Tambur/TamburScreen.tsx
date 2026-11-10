@@ -3355,6 +3355,7 @@ export default function TamburScreen() {
     const widthHint = wideWidthHint(roll);
     return (
       <TamburWideCut
+        zoomResetKey={`${activeJob?.stepSummary.workOrderId ?? ''}:${roll.rollId}`}
         info={{
           customerName,
           owner,

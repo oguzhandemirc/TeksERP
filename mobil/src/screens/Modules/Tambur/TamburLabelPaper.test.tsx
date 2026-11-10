@@ -48,4 +48,11 @@ describe('TamburLabelPaper — sistem alanı ↔ veri alanı', () => {
     fireEvent.press(r.getByTestId('onizleme-alan-weightKg'));
     expect(onEdit).toHaveBeenCalledWith('weightKg', expect.anything());
   });
+
+  it('1×te yakınlaştırma çipi yok; yakınlaştırma katmanı tek dokunuşla düzenlemeyi yutmaz', () => {
+    const { r, onEdit } = paper();
+    expect(r.queryByTestId('onizleme-zoom-sifirla')).toBeNull();
+    fireEvent.press(r.getByTestId('onizleme-alan-weightKg'));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
 });
