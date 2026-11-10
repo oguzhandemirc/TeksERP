@@ -18,6 +18,7 @@ import { KunyeCard } from "./detail-v3/KunyeCard";
 import { RouteStepline } from "./detail-v3/RouteStepline";
 import { ProducedV3 } from "./detail-v3/ProducedV3";
 import { OrderLinksV3 } from "./detail-v3/OrderLinksV3";
+import { MeterComparisonCard } from "./detail-v3/MeterComparisonCard";
 import "./detail-v3/work-order-detail-v3.css";
 import { TERIM } from "@/lib/terim";
 
@@ -141,6 +142,8 @@ export function WorkOrderDetailPage() {
                   </div>
                 </V3Section>
               )}
+
+              <MeterComparisonCard workOrderId={wo.id} />
 
               <V3Section title="Üretilen Nihai Toplar">
                 <ProducedV3 wo={wo} holdingText={holdingStep ? `${holdingStep.station?.name} adımında` : undefined} />

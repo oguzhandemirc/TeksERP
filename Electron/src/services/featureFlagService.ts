@@ -294,7 +294,7 @@ export interface FeatureFlags {
   financeAutoDraftFromShipmentEnabled: boolean;
   /** H7: hizmet faturası — ana anahtar + alt ayarlar (backend aynası; default false / OUT / DECLARED_WITH_WARNING / PER_SHIPMENT / SERVICE_DAY). */
   financeServiceBillingEnabled: boolean;
-  financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED";
+  financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED" | "MAX_DECLARED";
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   /** Brode fiyat birimi (backend aynası; default METER). */
   financeServiceBillingBrodeUnit: "METER" | "PIECE" | "STITCH";

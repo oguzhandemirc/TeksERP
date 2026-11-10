@@ -2484,6 +2484,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "OUT", label: "Çıkış metresi (önerilen)", hint: "Okuma yoksa giriş, o da yoksa bildirilen metre." },
           { value: "IN", label: "Giriş metresi", hint: "Okuma yoksa bildirilen metre." },
           { value: "DECLARED", label: "Bildirilen metre", hint: "Sayaç okuması kullanılmaz." },
+          {
+            value: "MAX_DECLARED",
+            label: "Beyan ile ölçülenin büyüğü (parti bazında, %0,5 tolerans)",
+            hint: "Fark %0,5'ten azsa beyan; partide kurşun ve tambur varsa ikisi de en yüksek ölçümle.",
+          },
         ],
       },
       {
