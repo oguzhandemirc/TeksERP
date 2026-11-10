@@ -136,6 +136,8 @@ Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramal
 
 **[ÇEKİRDEK]** Tablo hücresinin baş/sonundaki çizgi gürültüsünü (`| ¦ [ ]`) YALNIZ `motor/table.ts` `cellText`ten sil (sayı içi yutulmaz); basılı adet ≠ satır ve metresi okunamayan toplam satırı sessiz geçmez (parti kartı "PARTİ TOPLAMI TUTMUYOR … top" · `TOTAL_UNVERIFIED`), parti metresi basılı toplam kalır. · bekçi: `test_gelen_belge_motor` §19h–§19j <sub>(arşiv:2026-11-10 toplam satırı çizgi gürültüsü)</sub>
 
+**[ÇEKİRDEK]** Top satırı ve toplam satırı kg/metre hücresinde sayıdan BOŞLUKLA ayrık baş tireyi (`- 212,30`) çizgi say, YALNIZ `motor/table.ts` `measureText`ten sil; bitişik eksi (`-212,30`) ve diğer alanlar genel ayrıştırıcıda kalır. · bekçi: `test_gelen_belge_motor` §19k–§19k3 <sub>(arşiv:2026-11-10 top satırı baş tire)</sub>
+
 ## Canlı kare okuması (2026-11-10 kısa dosyadan taşındı)
 
 **[ÇEKİRDEK]** Canlı kare okumasını (`POST /api/gelen-belge/canli-okuma`, `gelen-belge-canli-okuma.service.ts`) SALT OKUMA tut: `clientOcr` tel biçimini katı doğrula (ihlal 400 `LIVE_FRAME_INVALID`), bugünkü motorla yalnız şablonun başlık alanlarını + değer kutusunu (karenin piksel çerçevesi) + `engineMs` döndür; tarama/taslak/şablon isabeti/audit YAZMA, GENEL yedeği "tanındı" sayma (template null), izni yükleme ucuyla aynı tut (`gelen-belge:write`), uç request-trace dışlamasında kalsın · bekçi: test_gelen_belge_canli_okuma <sub>(arşiv:2026-11-05 canlı okuma L1)</sub>

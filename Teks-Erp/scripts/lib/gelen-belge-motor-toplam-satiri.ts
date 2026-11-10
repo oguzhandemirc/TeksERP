@@ -125,10 +125,28 @@ export function toplamSatiri(check: Check, gercek: (ad: string) => OcrResult): v
   check("§19h3 sayı içindeki '|' temizlenmez: '3.9|35,00' 3935 okunmaz; metresi okunamayan toplam sessiz değil (TOTAL_UNVERIFIED blok 2)",
     !ri2.p.includes("P9918734:16:3935/TOTAL") && ri2.has("TOTAL_UNVERIFIED blok 2", "metresi okunamadı"), ri2.info);
 
-  // Bir top satırının metresi okunamadı ("- 212,30" → satır atlanır): parti metresi basılı toplamda kalır, ama adet (15 ≠ 16) ve
-  // metre farkı parti kartında görünür, atlanan satır uyarısı kalır (gerçek tarama GB1011260003)
+  // Top satırı ölçüsünün başındaki AYRIK tire tablo çizgisidir (gerçek tarama GB1011260003 "- 212,30"): 212,3 okunur, satır atlanmaz
+  const tire = clone(base);
+  setText(tire, "33,20 212,30|", ["33,20", "-", "212,30"]);
+  const rt = run(tire, tpl);
+  check("§19k ⭐ top satırında '- 212,30' (ayrık baş tire = çizgi): 212.3 okunur, P..34 16 satır, uyarısız (LINE_SKIPPED yok)",
+    rt.p === BEKLENEN && temiz(rt) && !rt.has("LINE_SKIPPED_NO_METERS") && rt.tables[0]!.blocks[1]!.rows.some((x) => x.cells.m?.value === "212.3"), rt.info);
+  // Toplam satırında da: "- 3.935,00" basılı toplam düşmez
+  const ttire = clone(base);
+  setText(ttire, "819,20 3.935,00", ["819,20", "- 3.935,00"]);
+  const rtt = run(ttire, tpl);
+  check("§19k2 toplam satırında '- 3.935,00': 3935 m basılı toplamdan, uyarısız", rtt.p === BEKLENEN && temiz(rtt), rtt.info);
+  // Dar kapsam: bitişik eksi ("-212,30") ayrık çizgi değildir, temizlenmez — genel ayrıştırıcı eksiyi korur, satır pozitif değil → atlanır
+  const bitisik = clone(base);
+  setText(bitisik, "33,20 212,30|", ["33,20", "-212,30"]);
+  const rbt = run(bitisik, tpl);
+  check("§19k3 bitişik eksi '-212,30' temizlenmez (ayrıştırıcı değişmedi): satır atlanır, LINE_SKIPPED_NO_METERS blok 2",
+    rbt.has("LINE_SKIPPED_NO_METERS", "blok 2") && rbt.p.includes("P9918734:15:"), rbt.info);
+
+  // Bir top satırının metresi okunamadı ("0,00" → satır atlanır): parti metresi basılı toplamda kalır, ama adet (15 ≠ 16) ve
+  // metre farkı parti kartında görünür, atlanan satır uyarısı kalır
   const eksi = clone(base);
-  setText(eksi, "33,20 212,30|", ["33,20", "-", "212,30"]);
+  setText(eksi, "33,20 212,30|", ["33,20", "0,00"]);
   const re = run(eksi, tpl);
   check("§19i ⭐ metresi okunamayan satır: P..34 15 satır, metre 3935 TOTAL; parti uyarısı 'tablo 15 top / belge 16 top' + metre farkı; LINE_SKIPPED_NO_METERS",
     re.p.includes("P9918734:15:3935/TOTAL:819.2/TOTAL:16") && re.pw.some((x) => x.includes("PARTİ TOPLAMI TUTMUYOR: P9918734") && x.includes("tablo 15 top / belge 16 top") && x.includes("belge 3935 m"))

@@ -85,9 +85,15 @@ function columnField(col: TableColumnSpec): FieldSpec {
 const RULE_EDGES = /^[|¦[\]]+\s*|\s*[|¦[\]]+$/g;
 const cellText = (text: string): string => text.trim().replace(RULE_EDGES, "");
 const isNumericCell = (text: string): boolean => isNumericText(cellText(text));
+// Top satırı ve toplam satırı ölçüsü (kg/metre) eksi olmaz (kullanıcı kararı): sayıdan BOŞLUKLA ayrık baş tire çizgi gürültüsüdür
+// ("- 212,30" → 212,3; GB1011260003). Yalnız bu hücrelerde; genel sayı ayrıştırıcı ve başka alanlar eksiyi korur.
+const MEASURE_KEYS = new Set(["kg", "m", "metre"]);
+const RULE_DASH = /^[-–—_]+\s+(?=\d)/;
+const measureText = (text: string): string => cellText(text).replace(RULE_DASH, "");
+const isMeasureCell = (text: string): boolean => isNumericText(measureText(text));
 
-function makeCell(col: TableColumnSpec, lines: OcrLine[]): TableCell {
-  const raw = lines.map((l) => cellText(l.text)).join(" ");
+function makeCell(col: TableColumnSpec, lines: OcrLine[], measure = MEASURE_KEYS.has(col.key)): TableCell {
+  const raw = measure ? measureText(lines.map((l) => cellText(l.text)).join(" ")) : lines.map((l) => cellText(l.text)).join(" ");
   const fr = evaluateCandidate(
     columnField(col),
     { raw, ocrConfidence: averageConfidence(lines.flatMap(lineElements)), labelSimilarity: 1, strategyIndex: 0, kind: "roi" },
@@ -141,14 +147,14 @@ const elementLine = (e: OcrElement): OcrLine => ({ text: e.text, rect: e.rect, c
 function numericParts(lines: ReadonlyArray<OcrLine>, label: OcrLine | undefined): OcrLine[] {
   const out: OcrLine[] = [];
   for (const line of lines) {
-    if (isNumericCell(line.text)) { out.push(line); continue; }
+    if (isMeasureCell(line.text)) { out.push(line); continue; }
     const els = lineElements(line);
     if (els.length < 2) continue;
     if (line === label) {
       let i = els.length;
-      while (i > 0 && isNumericCell(els[i - 1]!.text)) i--;
+      while (i > 0 && isMeasureCell(els[i - 1]!.text)) i--;
       if (i > 0) out.push(...els.slice(i).map(elementLine));
-    } else if (els.every((e) => isNumericCell(e.text))) {
+    } else if (els.every((e) => isMeasureCell(e.text))) {
       out.push(...els.map(elementLine));
     }
   }
@@ -169,10 +175,10 @@ function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTot
   const out: DeclaredTotals = { count: null, kg: null, m: null, rect: unionRect(row.lines.map((l) => l.rect)) };
   const leftovers: Array<{ value: string; x: number }> = [];
   for (const line of numericParts(row.lines, label)) {
-    if (!isNumericCell(line.text) || (label && line.rect.x <= label.rect.x)) continue;
+    if (!isMeasureCell(line.text) || (label && line.rect.x <= label.rect.x)) continue;
     const key = assignToColumn(line.rect, draft.columns, tolerance);
     const col = spec.columns.find((c) => c.key === key) ?? { key: "n", label: "n", type: "decimal" as const, headers: [] };
-    const value = makeCell(col, [line]).value;
+    const value = makeCell(col, [line], true).value;
     if (value === null) continue;
     if (key === "kg" && measureKeys.includes("kg")) out.kg = value;
     else if (key === "m" && measureKeys.includes("m")) out.m = value;
@@ -303,7 +309,7 @@ function findTotals(lines: OcrLine[], rows: Row[], spec: TableSpec): TotalsHit[]
   const tan = Math.tan((pageMedianAngle(lines) * Math.PI) / 180);
   const labelLines = lines.filter((l) => isTotalsLine(l, labels));
   const isLabel = new Set(labelLines);
-  const numeric = (l: OcrLine) => isNumericCell(l.text) || (lineElements(l).length > 1 && lineElements(l).every((e) => isNumericCell(e.text)));
+  const numeric = (l: OcrLine) => isMeasureCell(l.text) || (lineElements(l).length > 1 && lineElements(l).every((e) => isMeasureCell(e.text)));
   return labelLines.map((label) => {
     const cy = label.rect.y + label.rect.height / 2;
     const cx = label.rect.x + label.rect.width / 2;
@@ -333,7 +339,7 @@ function readTotals(hit: TotalsHit, draft: BlockDraft, spec: TableSpec): Declare
   const glued = gluedTotalsCount(labelPart(hit.label), totalsLabels(spec));
   const parts = numericParts(all, hit.label).filter((l) => l.rect.x > hit.label.rect.x).sort((a, b) => a.rect.x - b.rect.x);
   const decimal: TableColumnSpec = { key: "n", label: "n", type: "decimal", headers: [] };
-  const vals = [...(glued !== null ? [{ raw: glued, value: glued }] : []), ...parts.map((l) => ({ raw: cellText(l.text), value: makeCell(decimal, [l]).value }))];
+  const vals = [...(glued !== null ? [{ raw: glued, value: glued }] : []), ...parts.map((l) => ({ raw: measureText(l.text), value: makeCell(decimal, [l], true).value }))];
   const out: DeclaredTotals = { count: null, kg: null, m: null, rect: box };
   // Adet yerine yazılı TAM SAYI düşmeli ("241,00 MT" adet değildir — Kömürhan "TOPLAM 241,00 MT 734,00 KG 0,00 MT")
   const strict = vals.length >= order.length && order.every((k, i) => vals[i]!.value !== null && (k !== "count" || /^\d+$/.test(vals[i]!.raw)));
