@@ -9,6 +9,7 @@ import { applyDeclaredText, docDeclaredText, partyDeclaredText, shownDeclared, t
 import type { NoteParty } from '../../../../services/inboundDoc.service';
 import type { PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
+import { useIncomingShown } from './useIncomingShown';
 
 const LABEL: Record<DeclaredKind, string> = { item: 'Gelen kumaş', color: 'Gelen renk' };
 
@@ -48,6 +49,7 @@ function DeclaredTextBox({ kind, title, doc, edited, text, locked, testSuffix, o
 /** Tek partili form: belge satırının gelen kumaş / renk kutuları. */
 export function IncomingDeclaredRow({ row, wo, locked }: { row: DocRow; wo: WoRowsState; locked: boolean }) {
   const f = row.form!;
+  const kinds = useShownKinds();
   const box = (kind: DeclaredKind) => {
     const doc = docDeclaredText(row.detail, kind);
     const k = kind === 'item' ? { text: 'incomingItemText', edited: 'incomingItemEdited' } as const : { text: 'incomingColorText', edited: 'incomingColorEdited' } as const;
@@ -58,11 +60,13 @@ export function IncomingDeclaredRow({ row, wo, locked }: { row: DocRow; wo: WoRo
         onReset={() => wo.updateForm(row.noteId, { [k.text]: null, [k.edited]: false })} />
     );
   };
-  return <View style={declaredLayout.row} testID={`belge-gelen-beyan-${row.noteNo}`}>{box('item')}{box('color')}</View>;
+  if (kinds.length === 0) return null;
+  return <View style={declaredLayout.row} testID={`belge-gelen-beyan-${row.noteNo}`}>{kinds.map(box)}</View>;
 }
 
 /** Çok partili form: partinin gelen kumaş / renk kutuları (bölüm beyanı, yoksa belge geneli). */
 export function PartyDeclaredRow({ r, p, detail, noteNo, locked, onChange }: { r: PartyRow; p: NoteParty | undefined; detail: DocRow['detail']; noteNo: string; locked: boolean; onChange: (patch: Partial<PartyRow>) => void }) {
+  const kinds = useShownKinds();
   const box = (kind: DeclaredKind) => {
     const doc = partyDeclaredText(p, detail, kind);
     const k = kind === 'item' ? { text: 'incomingItemText', edited: 'itemEdited' } as const : { text: 'incomingColorText', edited: 'colorEdited' } as const;
@@ -72,7 +76,14 @@ export function PartyDeclaredRow({ r, p, detail, noteNo, locked, onChange }: { r
         onReset={() => onChange({ [k.text]: null, [k.edited]: false })} />
     );
   };
-  return <View style={declaredLayout.row}>{box('item')}{box('color')}</View>;
+  if (kinds.length === 0) return null;
+  return <View style={declaredLayout.row}>{kinds.map(box)}</View>;
+}
+
+/** Cihazda açık beyan kutuları (kapalı alan çizilmez, kaydedilmez). */
+function useShownKinds(): DeclaredKind[] {
+  const shown = useIncomingShown();
+  return (['item', 'color'] as const).filter((k) => shown(k));
 }
 
 const styles = StyleSheet.create({

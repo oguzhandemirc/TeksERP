@@ -33,7 +33,7 @@ export interface MultiPartyDraft {
   /** Sunucunun varsayılanı (belge tipi kuralı > fabrika) ve kaynağı; yok = eski taslak/sunucu (fabrika ayarı). */
   defaultMode?: MultiPartyMode;
   modeSource?: 'TEMPLATE' | 'FACTORY';
-  /** Kullanıcı bu belge için varsayılandan farklı kip seçti ("sizin seçiminiz"); varsayılana dönünce düşer. */
+  /** Kullanıcı bu belge için varsayılandan farklı kip seçti (şerit "Bu belge için: …" der); varsayılana dönünce düşer. */
   modeTouched?: boolean;
 }
 
@@ -59,16 +59,16 @@ export function initialMultiParty(view: NotePartiesView | null | undefined): Mul
   };
 }
 
-/** Kip seçimi: varsayılandan farklıysa "sizin seçiminiz", varsayılana dönüş dokunuşu siler. */
+/** Kip seçimi: varsayılandan farklıysa dokunulmuş sayılır, varsayılana dönüş dokunuşu siler. */
 export function chooseMode(m: MultiPartyDraft, mode: MultiPartyMode): MultiPartyDraft {
   return { ...m, mode, modeTouched: mode !== (m.defaultMode ?? m.mode) };
 }
 
-/** ③ Kurallar satırı: "3 parti → 3 iş emri" + kaynak ("şablon kuralı" | "fabrika ayarı" | "sizin seçiminiz"). */
-export function modeRuleLine(m: MultiPartyDraft): { text: string; sourceText: string; touched: boolean } {
+/** ③ Kip satırı: "3 parti → 3 iş emri" | elle seçildiyse "Bu belge için: Tek İE"; kaynak yazısı gösterilmez (2026-11-10). */
+export function modeRuleLine(m: MultiPartyDraft): { text: string; touched: boolean } {
   const n = m.rows.length;
-  if (m.modeTouched) return { text: `Bu belge için: ${MODE_SHORT[m.mode]}`, sourceText: 'sizin seçiminiz', touched: true };
-  return { text: `${n} parti → ${m.mode === 'PER_PARTY' ? n : 1} ${TERIM.terbiyeIsEmri.tekilKucuk}`, sourceText: m.modeSource === 'TEMPLATE' ? 'şablon kuralı' : 'fabrika ayarı', touched: false };
+  if (m.modeTouched) return { text: `Bu belge için: ${MODE_SHORT[m.mode]}`, touched: true };
+  return { text: `${n} parti → ${m.mode === 'PER_PARTY' ? n : 1} ${TERIM.terbiyeIsEmri.tekilKucuk}`, touched: false };
 }
 
 /** Kilit sebebi sekme başlığıyla (parti no, yoksa "Parti N") — görevli hangi sekmeye bakacağını görür. */
@@ -148,12 +148,10 @@ export function partyOutcome(
   return wo ? { kind: 'OPENED', workOrderNo: wo.workOrderNo } : null;
 }
 
-/** K1 (2026-11-06): fabrika varsayılanı "her parti ayrı" ise kip seçimi gösterilmez — kaç parti o kadar İE. */
-export const showModeChoice = (view: NotePartiesView): boolean => view.defaultMode !== 'PER_PARTY';
-
+/** Kip seçenekleri (belge şeridinin "Değiştir" sayfası — kip değiştirmenin TEK yolu). */
 export const MODE_LABELS: Record<MultiPartyMode, string> = {
   PER_PARTY: `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}`,
-  SINGLE: `Tek ${TERIM.terbiyeIsEmri.tekilKucuk} (partiler ayrı top)`,
+  SINGLE: `Tek ${TERIM.terbiyeIsEmri.tekilKucuk}`,
 };
 
 /**

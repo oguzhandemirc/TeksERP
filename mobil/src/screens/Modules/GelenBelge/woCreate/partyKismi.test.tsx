@@ -1,4 +1,4 @@
-// Çok blok D6 (2026-11-06): parti kartı künyesi (işlem + müşteri İE no), K1 "her parti ayrı" varsayılanında kip seçimi yok,
+// Çok blok D6 (2026-11-06): parti kartı künyesi (işlem + müşteri İE no), kip seçimi parti kartında hiç yok (şerit tek yol, 2026-11-10),
 // PER_PARTY kısmi başarı: düşen parti kartta nedeniyle görünür, satır açık kalır, yeniden gönderim YENİ token'la gider,
 // önceki denemede açılmış (existing) İE yeniden basılmaz.
 // Negatif sonda: `isDone` kısmi sonucu da kapalı sayarsa "satır açık kalır / yeniden gönderilir" vakası kırmızı.
@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithPaper } from '../../../../test/render';
 import type { InboundNoteDetail, NotePartiesView } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
-import { initialMultiParty, partyFacts, partyHeading, partyOutcome, partyResultSummary, showModeChoice } from './partyDraft';
+import { initialMultiParty, partyFacts, partyHeading, partyOutcome, partyResultSummary } from './partyDraft';
 import { initialRowForm, openedResult } from './woFromDoc';
 import PartyRows from './PartyRows';
 import { TERIM } from '../../../../lib/terim';
@@ -61,10 +61,6 @@ describe('parti kartı (saf)', () => {
     expect(partyResultSummary(full.kind === 'OPENED' ? full : null, [1])).toBeNull();
     expect(partyResultSummary(null, [1, 2])).toBeNull();
   });
-  it('⭐ K1: varsayılan "her parti ayrı" → kip seçimi yok; SINGLE varsayılanında seçim kalır', () => {
-    expect(showModeChoice(view())).toBe(false);
-    expect(showModeChoice(view({ defaultMode: 'SINGLE' }))).toBe(true);
-  });
   it('⭐ kısmi sonuç: parti başına açıldı/açılamadı; satır kapanmaz (isPartial), tam başarıda kapanır', () => {
     const r = openedResult(partial);
     expect(partyOutcome(r.kind === 'OPENED' ? r : null, 1)).toEqual({ kind: 'OPENED', workOrderNo: 'IE-1' });
@@ -82,14 +78,20 @@ describe('PartyRows (tablet)', () => {
     form: { ...initialRowForm(detail), multi: initialMultiParty(v) },
   });
   const noop = { setMulti: jest.fn() } as unknown as WoRowsState;
-  it('⭐ K1: PER_PARTY varsayılanında kip çipleri çizilmez; künye görünür', () => {
+  it('⭐ parti kartında kip düğmesi yok (hiçbir varsayılanda; şerit tek yol); künye görünür', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(null)} wo={noop} locked={false} />);
     expect(ui.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
+    expect(ui.queryByTestId('belge-parti-kip-GB-1-PER_PARTY')).toBeNull();
     expect(ui.getByText('İşlem: KDK APRE', HIDDEN)).toBeTruthy();
     expect(ui.getByText('Müşteri İE 24749', HIDDEN)).toBeTruthy();
     expect(ui.queryByTestId('belge-parti-ozet-GB-1')).toBeNull();
     const single = renderWithPaper(<PartyRows row={rowOf(null, view({ defaultMode: 'SINGLE' }))} wo={noop} locked={false} />);
-    expect(single.getByTestId('belge-parti-kip-GB-1-SINGLE')).toBeTruthy();
+    expect(single.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
+    expect(single.queryByTestId('belge-parti-kip-GB-1-PER_PARTY')).toBeNull();
+    expect(single.queryByText(/Her parti ayrı|Tek .*iş emri/)).toBeNull();
+    const touched = rowOf(null, view({ defaultMode: 'SINGLE' }));
+    touched.form!.multi = { ...touched.form!.multi!, mode: 'PER_PARTY', modeTouched: true };
+    expect(renderWithPaper(<PartyRows row={touched} wo={noop} locked={false} />).queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
   });
   it('⭐ kısmi sonuç: açılan parti kilitli + İE no, düşen parti nedeniyle ve düzenlenebilir', () => {
     const ui = renderWithPaper(<PartyRows row={rowOf(openedResult(partial))} wo={noop} locked={false} />);

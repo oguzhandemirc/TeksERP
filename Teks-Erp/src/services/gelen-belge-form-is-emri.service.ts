@@ -74,6 +74,8 @@ export interface FormWorkOrderInput {
    *  (`targetItemId`/`targetColorId`) bağımsızdır. */
   incomingItemText?: string | null;
   incomingColorText?: string | null;
+  /** Cihazda kapatılan gelen alanlar (2026-11-10): gövde değeri de belgeden türetilen de yazılmaz → satırda null. Yok = bugünkü. */
+  skipDeclared?: SkipDeclaredField[];
   /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
   routeTemplateId?: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
@@ -230,17 +232,28 @@ export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşt
 /** Onayın satır şekli: ayrı toplar TOP satırı (kendi kg'si), partiler ARABA özet satırı + parti kg/en'i, tek belge özet kg/en'i. */
 async function approvalLines(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean) {
   const kg = await incomingPlan(noteId, input, parties, separateRolls);
-  const doc = { itemText: given(input.incomingItemText, kg.declared.itemText), colorText: given(input.incomingColorText, kg.declared.colorText) };
-  if (!parties) return { summary: { kg: kg.summary, widthCm: kg.width, ...doc } };
+  const skip = skipped(input.skipDeclared);
+  const doc = { itemText: skip.item ? null : given(input.incomingItemText, kg.declared.itemText), colorText: skip.color ? null : given(input.incomingColorText, kg.declared.colorText) };
+  if (!parties) return { summary: { kg: skip.kg ? null : kg.summary, widthCm: skip.width ? null : kg.width, ...doc } };
   return {
     parties: parties.map((p) => {
       // Parti beyanı: gövde > bölüm beyanı > belge geneli (ayrı toplarda her top belge genelini taşır).
       const sec = kg.sections.get(p.blockNo);
-      const texts = { itemText: given(p.incomingItemText, sec?.itemText ?? doc.itemText), colorText: given(p.incomingColorText, sec?.colorText ?? doc.colorText) };
-      return { blockNo: p.blockNo, meters: p.meters, ...texts, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: kg.byBlock.get(p.blockNo) ?? null, widthCm: p.incomingWidth ?? kg.width, customerBatchNo: p.batchNo ?? null }) };
+      const texts = { itemText: skip.item ? null : given(p.incomingItemText, sec?.itemText ?? doc.itemText), colorText: skip.color ? null : given(p.incomingColorText, sec?.colorText ?? doc.colorText) };
+      // Ayrı topların kg'si topun kendi tartısıdır (gelen beyan değil) → kapatma onu etkilemez.
+      return { blockNo: p.blockNo, meters: p.meters, ...texts, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: skip.kg ? null : kg.byBlock.get(p.blockNo) ?? null, widthCm: skip.width ? null : p.incomingWidth ?? kg.width, customerBatchNo: p.batchNo ?? null }) };
     }),
     ...(separateRolls ? { separateRolls: true } : {}),
   };
+}
+
+/** Cihazda kapatılabilen gelen (beyan) alanları — gövde anahtar adlarıyla; parti no ve beyan metre kapatılamaz. */
+export const SKIP_DECLARED_FIELDS = ["incomingKg", "incomingWidth", "incomingItemText", "incomingColorText"] as const;
+export type SkipDeclaredField = (typeof SKIP_DECLARED_FIELDS)[number];
+
+function skipped(list: readonly SkipDeclaredField[] | undefined) {
+  const has = (k: SkipDeclaredField) => !!list?.includes(k);
+  return { kg: has("incomingKg"), width: has("incomingWidth"), item: has("incomingItemText"), color: has("incomingColorText") };
 }
 
 export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrderInput, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<FormWorkOrderResult> {

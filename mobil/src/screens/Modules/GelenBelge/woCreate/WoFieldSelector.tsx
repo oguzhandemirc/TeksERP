@@ -1,4 +1,4 @@
-// K30-D ⚙ "Alanlar": kullanıcı formda fazlalık gördüğü alanları kapatır (kişisel tercih). Zorunlular kilitli; kapatılan
+// K30-D ⚙ "Alanlar": kullanıcı formda fazlalık gördüğü alanları kapatır (kişisel tercih) + "Gelen değerler" (cihaz). Zorunlular kilitli; kapatılan
 // alan kaybolmaz, altta kapalı "Diğer alanlar (n)" bölümüne iner ve dokununca açılır.
 import React from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -6,6 +6,8 @@ import { Appbar, Button, Icon, Switch, Text, TouchableRipple } from 'react-nativ
 import ModuleSheet from '../../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { fieldLabel, selectorSections, type WoFieldDef, type WoFieldKey } from './woFieldCatalog';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
+import { DOC_INCOMING_FIELDS } from '../../../../store/docIncomingFields';
 
 export function FieldsButton({ onPress }: { onPress: () => void }) {
   return (
@@ -80,6 +82,7 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
         <SwitchRow title="Rota adımı notu" sub="Kapalıyken adımların boş not kutusu çizilmez (dolu not yine görünür)."
           value={stepNotesShown} onChange={onStepNotesShown} testID="ie-adim-notu-goster" />
       )}
+      <IncomingFieldsSection />
       {selectorSections().map(({ section, fields }) => (
         <View key={section} style={styles.group}>
           <Text style={styles.section}>{section}</Text>
@@ -92,13 +95,28 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
   );
 }
 
-function SwitchRow({ title, sub, value, onChange, testID }: { title: string; sub: string; value: boolean; onChange: (on: boolean) => void; testID: string }) {
+/** "Gelen değerler" (CİHAZ ayarı, 2026-11-10): kapalı gelen alan formda çizilmez, kayda girmez, sunucu belgeden de yazmaz. */
+function IncomingFieldsSection() {
+  const hidden = useDeviceSettingsStore((s) => s.docHiddenIncoming);
+  const setShown = useDeviceSettingsStore((s) => s.setDocIncomingShown);
+  return (
+    <View style={styles.group} testID="ie-gelen-degerler">
+      <Text style={styles.section}>Gelen değerler (bu cihaz)</Text>
+      <Text style={styles.rowSub}>Kapalı alan formda görünmez ve kayda girmez; belgede yazsa da kaydedilmez. Parti no ve metre hep açık.</Text>
+      {DOC_INCOMING_FIELDS.map((f) => (
+        <SwitchRow key={f.key} title={f.label} value={!hidden.includes(f.key)} onChange={(on) => void setShown(f.key, on)} testID={`ie-gelen-${f.key}`} />
+      ))}
+    </View>
+  );
+}
+
+function SwitchRow({ title, sub, value, onChange, testID }: { title: string; sub?: string; value: boolean; onChange: (on: boolean) => void; testID: string }) {
   return (
     <TouchableRipple onPress={() => onChange(!value)} style={styles.row} testID={testID} accessibilityLabel={title}>
       <View style={styles.rowInner}>
         <View style={styles.rowText}>
           <Text style={styles.rowTitle}>{title}</Text>
-          <Text style={styles.rowSub}>{sub}</Text>
+          {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
         </View>
         <Switch value={value} onValueChange={onChange} testID={`${testID}-anahtar`} />
       </View>

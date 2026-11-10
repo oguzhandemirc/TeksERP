@@ -1,8 +1,8 @@
 // Çok partili belge (S1): "Bu belgede N parti var" — parti no + metre düzenlenir, sunucunun canlı uyarıları gösterilir,
-// "Her parti ayrı iş emri | Tek iş emri" seçimi (varsayılan "her parti ayrı" ise seçim yok, K1 — belge şeridinin "Bu sefer değiştir"i açar). Tek partili belgede çizilmez.
+// kip seçimi burada YOK — belge şeridinin "Değiştir" düğmesi tek yol (2026-11-10, çift yol kaldırıldı). Tek partili belgede çizilmez.
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Chip, Icon, Text } from 'react-native-paper';
+import { Icon, Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { inboundDocService } from '../../../../services/inboundDoc.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
@@ -12,7 +12,7 @@ import { fmtKursunMeters } from '../readResult';
 import { DeclaredEditSheet, DeclaredField, declaredLayout } from './DeclaredField';
 import { docIncomingWidth } from './woFromDoc';
 import { PartyDeclaredRow } from './DocRowDeclaredText';
-import { chooseMode, MODE_LABELS, partyFacts, partyMeters, partyHeading, partyOutcome, partyResultSummary, showModeChoice, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
+import { partyFacts, partyMeters, partyHeading, partyOutcome, partyResultSummary, type MultiPartyDraft, type PartyOutcome, type PartyRow } from './partyDraft';
 import type { DocRow, WoRowsState } from './useWoRows';
 import PartyPlanFields from './PartyPlanFields';
 import type { PartyPlanCtx } from './partyPlan';
@@ -22,6 +22,7 @@ import { usePartyTabState } from './partyTabStore';
 import { PartyAllTable, PartyLockNote, PartyTabStrip } from './PartyTabBar';
 import { OurBatchAutoField, useOurBatchPreview } from './DocRowBatchFields';
 import { batchPreviewPlan } from './ourBatchPreview';
+import { useIncomingShown } from './useIncomingShown';
 
 /** Parti özeti `gelen-belge:read` ister; izin yoksa / düşerse satır tek partili kalır (bugünkü form). */
 export function useRowParties(row: DocRow, wo: WoRowsState, enabled: boolean): void {
@@ -78,15 +79,6 @@ export default function PartyRows({ row, wo, locked, plan }: { row: DocRow; wo: 
       )}
       {m.rows.map(pane)}
       {view.warnings.map((w) => <Text key={w} style={styles.warn}>• {w}</Text>)}
-      {(showModeChoice(view) || m.modeTouched) && (
-        <View style={styles.chips}>
-          {(['PER_PARTY', 'SINGLE'] as const).map((k) => (
-            <Chip key={k} selected={m.mode === k} onPress={() => set(chooseMode(m, k))} disabled={locked || !!result} style={styles.chip} testID={`belge-parti-kip-${row.noteNo}-${k}`}>
-              {MODE_LABELS[k]}
-            </Chip>
-          ))}
-        </View>
-      )}
     </View>
   );
 }
@@ -167,6 +159,7 @@ const fmt = (n: number | null | undefined) => (n != null ? fmtKursunMeters(n) : 
 /** Partinin beyan kutuları (tek partili formla aynı `DeclaredField`): parti no · metre · gelen kg · gelen en; sarı = belgeden. */
 function PartyDeclared({ r, p, docWidth, noteNo, locked, onChange }: { r: PartyRow; p: NoteParty | undefined; docWidth: number | null; noteNo: string; locked: boolean; onChange: (patch: Partial<PartyRow>) => void }) {
   const [edit, setEdit] = useState<PartyEdit>(null);
+  const shown = useIncomingShown();
   const id = `${noteNo}-${r.blockNo}`;
   const docMeters = p ? partyMeters(p) : null;
   const docKg = p?.suggestedKg != null && p.suggestedKg > 0 ? p.suggestedKg : null;
@@ -185,10 +178,10 @@ function PartyDeclared({ r, p, docWidth, noteNo, locked, onChange }: { r: PartyR
         onPress={() => setEdit('no')} disabled={locked} testID={`belge-parti-no-${id}`} />
       <DeclaredField label="Metre" value={fmt(r.meters)} unit="m" fromDoc={r.meters != null && r.meters === docMeters} missing={r.meters == null} emptyText="Yok — dokunun"
         onPress={() => setEdit('metre')} disabled={locked} testID={`belge-parti-metre-${id}`} />
-      <DeclaredField label="Gelen kg" value={fmt(r.incomingKg)} unit="kg" fromDoc={!r.kgEdited && r.incomingKg != null && r.incomingKg === docKg} emptyText="Belgede yok"
-        onPress={() => setEdit('kg')} disabled={locked} testID={`belge-parti-kg-${id}`} />
-      <DeclaredField label="Gelen en" value={fmt(width)} unit="cm" fromDoc={!r.widthEdited && docWidth != null} emptyText="Belgede yok"
-        onPress={() => setEdit('en')} disabled={locked} testID={`belge-parti-en-${id}`} />
+      {shown('kg') && <DeclaredField label="Gelen kg" value={fmt(r.incomingKg)} unit="kg" fromDoc={!r.kgEdited && r.incomingKg != null && r.incomingKg === docKg} emptyText="Belgede yok"
+        onPress={() => setEdit('kg')} disabled={locked} testID={`belge-parti-kg-${id}`} />}
+      {shown('width') && <DeclaredField label="Gelen en" value={fmt(width)} unit="cm" fromDoc={!r.widthEdited && docWidth != null} emptyText="Belgede yok"
+        onPress={() => setEdit('en')} disabled={locked} testID={`belge-parti-en-${id}`} />}
       {edit === 'no' && (
         <DeclaredEditSheet title={`${r.blockNo}. parti · Parti no`} kind="text" label="Parti no" maxLength={64} initial={r.batchNo} allowEmpty onDismiss={close}
           testID={`belge-parti-no-duzelt-${id}`} onSave={(t) => save({ batchNo: t.trim() })} />
@@ -221,6 +214,4 @@ const styles = StyleSheet.create({
   hidden: { display: 'none' },
   ok: { flex: 1, fontSize: typography.size.base, color: colors.successText, fontWeight: typography.weight.semibold },
   fail: { flex: 1, fontSize: typography.size.base, color: colors.dangerText, fontWeight: typography.weight.semibold },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: 56, justifyContent: 'center' },
 });

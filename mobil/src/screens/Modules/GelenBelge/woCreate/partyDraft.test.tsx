@@ -59,13 +59,13 @@ describe('parti taslağı (saf)', () => {
     expect(b).toMatchObject({ mode: 'SINGLE', kursunMeters: '4521', parties: [{ blockNo: 1, batchNo: null, meters: 586 }, { blockNo: 2, batchNo: 'P9918734', meters: 3935 }] });
     expect(withParties(b, m).kursunMeters).toBe('4521');
   });
-  it('⭐ T2 kip: dokunulmamış → kural metni + kaynak; farklı seçim → "sizin seçiminiz"; varsayılana dönüş dokunuşu siler', () => {
+  it('⭐ T2 kip: dokunulmamış → kural metni; farklı seçim → "Bu belge için: …"; kaynak yazısı yok; varsayılana dönüş dokunuşu siler', () => {
     const m = initialMultiParty(view({ defaultMode: 'PER_PARTY', defaultModeSource: 'TEMPLATE' }))!;
-    expect(modeRuleLine(m)).toEqual({ text: `2 parti → 2 ${TERIM.terbiyeIsEmri.tekilKucuk}`, sourceText: 'şablon kuralı', touched: false });
-    expect(modeRuleLine(initialMultiParty(view())!)).toEqual({ text: `2 parti → 1 ${TERIM.terbiyeIsEmri.tekilKucuk}`, sourceText: 'fabrika ayarı', touched: false });
+    expect(modeRuleLine(m)).toEqual({ text: `2 parti → 2 ${TERIM.terbiyeIsEmri.tekilKucuk}`, touched: false });
+    expect(modeRuleLine(initialMultiParty(view())!)).toEqual({ text: `2 parti → 1 ${TERIM.terbiyeIsEmri.tekilKucuk}`, touched: false });
     const mine = chooseMode(m, 'SINGLE');
     expect(mine.modeTouched).toBe(true);
-    expect(modeRuleLine(mine)).toEqual({ text: 'Bu belge için: Tek İE', sourceText: 'sizin seçiminiz', touched: true });
+    expect(modeRuleLine(mine)).toEqual({ text: 'Bu belge için: Tek İE', touched: true });
     expect(chooseMode(mine, 'PER_PARTY').modeTouched).toBe(false);
   });
   it('⭐ T2 gövde: kip dokunulmasa da gider (ekranda yazan olur); dokununca seçilen gider', () => {

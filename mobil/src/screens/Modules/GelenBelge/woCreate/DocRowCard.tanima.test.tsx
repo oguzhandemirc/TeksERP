@@ -1,10 +1,13 @@
-// Belge şeridi (2026-11-09 sadeleşme): yalnız iş gerektiren satırlar (tanınmadı + Tanıt · çok parti kipi + "Bu sefer değiştir")
+// Belge şeridi (2026-11-09 sadeleşme): yalnız iş gerektiren satırlar (tanınmadı + Tanıt · çok parti kipi + "Değiştir" düğmesi;
+// 2026-11-10: kip değiştirmenin TEK yolu şerit — parti altında kip düğmesi yok, parantezli kaynak yazısı yok, her kurulumda çizilir)
 // + beyan kutuları "Gelen kg" / "Gelen en" (İE hedefi değil; sarı = belgeden; yalnız elle değişince gövdeye girer).
-// Negatif sonda: tanınmış tek partili belgede şerit çizilirse ilk vaka; kg vurgusu kaldırılırsa kg vakası; gelen en elle
+// Negatif sonda: tanınmış tek partili belgede şerit çizilirse ilk vaka; parti kip düğmeleri / kaynak yazısı geri gelirse ya da
+// tanıma modeli yokken şerit düşerse çok parti vakaları; kg vurgusu kaldırılırsa kg vakası; gelen en elle
 // değişmeden gövdeye girerse en gövde vakası kırmızı.
 import React, { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { fireEvent } from '@testing-library/react-native';
+import { Button } from 'react-native-paper';
 import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { renderWithPaper } from '../../../../test/render';
 import type { ReadWatch } from '../readResult';
@@ -120,26 +123,72 @@ describe('belge şeridi — yalnız iş gerektiren satırlar', () => {
     expect(ui.queryByTestId('ie-tanima-GB-1')).toBeNull();
     expect(ui.getByTestId('tanit-sablon')).toHaveTextContent(/Güleçsoy/);
   });
-  it('⭐ çok parti: tek kip satırı "2 parti → 2 iş emri (şablon kuralı)"; "Bu sefer değiştir" → Tek İE "sizin seçiminiz", K1 seçimi görünür', () => {
+  it('⭐ çok parti: kip satırı parantezsiz "2 parti → 2 iş emri"; parti altında kip düğmesi yok; "Değiştir" düğmesi → Tek İE, varsayılana dönüş', () => {
     mockWatch = done({ tanima: TAUGHT });
     const setMulti = jest.fn();
     const ui = draw({ parties: { parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'PER_PARTY', defaultModeSource: 'TEMPLATE' }, setMulti });
     expect(ui.queryByTestId('ie-tanima-1')).toBeNull();
-    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/2 parti → 2 .*iş emri \(şablon kuralı\)/);
-    // K1: varsayılan her parti ayrı → formda kip seçimi yok.
-    expect(ui.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
-    fireEvent.press(ui.getByTestId('ie-tanima-kip-degistir'));
-    fireEvent.press(ui.getByTestId('ie-tanima-kip-SINGLE'));
+    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/^2 parti → 2 .*iş emri$/);
+    expectNoModeDup(ui);
+    pickMode(ui, 'SINGLE');
     expect(setMulti).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'SINGLE', modeTouched: true }));
-    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent('Bu belge için: Tek İE (sizin seçiminiz)');
-    expect(ui.getByTestId('belge-parti-kip-GB-1-SINGLE')).toBeTruthy();
-    // Varsayılana dönüş → kural metni geri gelir.
-    fireEvent.press(ui.getByTestId('ie-tanima-kip-degistir'));
-    fireEvent.press(ui.getByTestId('ie-tanima-kip-PER_PARTY'));
+    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/^Bu belge için: Tek İE$/);
+    expectNoModeDup(ui);
+    pickMode(ui, 'PER_PARTY');
     expect(setMulti).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'PER_PARTY', modeTouched: false }));
-    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/\(şablon kuralı\)/);
+    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/^2 parti → 2 .*iş emri$/);
   });
 });
+
+describe('çok parti kipi — tek yol şeritteki Değiştir düğmesi', () => {
+  it('⭐ Değiştir gerçek düğme (≥56dp); kip sayfası seçenekleri parantezsiz ("Tek iş emri"), varsayılan işaretli', () => {
+    mockWatch = done({ tanima: TAUGHT });
+    const ui = draw({ parties: { parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'SINGLE', defaultModeSource: 'TEMPLATE' } });
+    const btn = ui.getByTestId('ie-tanima-kip-degistir');
+    expect(btn).toHaveTextContent(/Değiştir$/);
+    expect(btn.props.accessibilityRole).toBe('button');
+    const paper = ui.UNSAFE_getAllByType(Button).find((b) => b.props.testID === 'ie-tanima-kip-degistir')!;
+    expect(['contained-tonal', 'outlined', 'contained']).toContain(paper.props.mode);
+    expect(StyleSheet.flatten(paper.props.contentStyle)).toMatchObject({ minHeight: 56 });
+    fireEvent.press(btn);
+    expect(ui.getByTestId('ie-tanima-kip-SINGLE')).toHaveTextContent(/Tek .*iş emriVarsayılan$/);
+    expect(ui.getByTestId('ie-tanima-kip-PER_PARTY')).toHaveTextContent(/Her parti ayrı .*iş emri$/);
+    expect(ui.queryByText(/\(/)).toBeNull();
+  });
+  it('⭐ Tek İE varsayılanlı kurulum (fabrika): şerit + Değiştir çizilir, kipi değiştirir; parti altında düğme yok', () => {
+    mockWatch = done({ tanima: TAUGHT });
+    const setMulti = jest.fn();
+    const ui = draw({ parties: { parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'SINGLE', defaultModeSource: 'FACTORY' }, setMulti });
+    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/^2 parti → 1 .*iş emri$/);
+    expectNoModeDup(ui);
+    pickMode(ui, 'PER_PARTY');
+    expect(setMulti).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'PER_PARTY', modeTouched: true }));
+    expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/^Bu belge için: Her parti ayrı İE$/);
+  });
+  it('⭐ tanıma modeli yok (eski sunucu / okuma bitmedi) + çok parti: kip satırı + Değiştir yine çizilir (kip seçimi kaybolmaz)', () => {
+    for (const w of [done({ tanitim: { durum: 'TANITILDI', sablonKodu: 'u-x', sablonAdi: 'Güleçsoy' } }), null]) {
+      mockWatch = w;
+      const setMulti = jest.fn();
+      const ui = draw({ parties: { parties: [party(1), party(2)], warnings: [], multi: true, defaultMode: 'SINGLE' }, setMulti });
+      expect(ui.getByTestId('ie-tanima-kural')).toHaveTextContent(/^2 parti → 1 .*iş emri$/);
+      pickMode(ui, 'PER_PARTY');
+      expect(setMulti).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'PER_PARTY' }));
+      ui.unmount();
+    }
+  });
+});
+
+type Ui = ReturnType<typeof draw>;
+/** Kip değiştirmenin tek yolu şerit: parti kartında kip düğmesi ve şeritte parantezli kaynak yazısı yok. */
+function expectNoModeDup(ui: Ui) {
+  expect(ui.queryByTestId('belge-parti-kip-GB-1-SINGLE')).toBeNull();
+  expect(ui.queryByTestId('belge-parti-kip-GB-1-PER_PARTY')).toBeNull();
+  expect(ui.queryByText(/sizin seçiminiz|şablon kuralı|fabrika ayarı|partiler ayrı top/)).toBeNull();
+}
+function pickMode(ui: Ui, k: 'SINGLE' | 'PER_PARTY') {
+  fireEvent.press(ui.getByTestId('ie-tanima-kip-degistir'));
+  fireEvent.press(ui.getByTestId(`ie-tanima-kip-${k}`));
+}
 
 const bg = (el: { props: { style?: unknown } }) => (StyleSheet.flatten(el.props.style as never) as { backgroundColor?: unknown } | undefined)?.backgroundColor;
 

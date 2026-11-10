@@ -25,7 +25,7 @@ import { docReadNotices, docReadPill, type DocNotice } from './docReadNotice';
 import RecognitionStrip from './RecognitionStrip';
 import { useReadWarningStore } from './readWarningStore';
 import { isWarningNotice, warningLines } from './warningLines';
-import { stripModel } from './stripModel';
+import { shownStrip, stripModel } from './stripModel';
 import type { DocRow, WoRowsState } from './useWoRows';
 
 export type DocRowVariant = 'list' | 'single';
@@ -138,7 +138,7 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           </View>
         </>
       )}
-      {strip && <RecognitionStrip model={strip} noteNo={no} multi={row.form?.multi} onMode={(m) => wo.setMulti(row.noteId, m)} />}
+      <RecognitionStrip model={shownStrip(strip, row.form?.multi, wo.saving || !!row.result)} noteNo={no} multi={row.form?.multi} onMode={(m) => wo.setMulti(row.noteId, m)} />
       <TeachStrip entry={teach} />
       <TeachPrompt entry={teach} readKey={readKey} unrecognized={unrecognized} onAnswer={onTeachAnswer} />
       <BandNotices notices={notices} act={act} no={no} />

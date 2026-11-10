@@ -20,7 +20,7 @@ import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { cancelDeliveryNote } from "../services/gelen-belge-iptal.service";
 import { previewDeliveryNoteCancel } from "../services/gelen-belge-iptal-onizleme.service";
 import { AUTO_WORK_ORDER_PERMISSIONS, assertRouteOverride, withAutoWorkOrders } from "../services/gelen-belge-oto-is-emri.service";
-import { createWorkOrderFromNote, formModeFieldShape } from "../services/gelen-belge-form-is-emri.service";
+import { SKIP_DECLARED_FIELDS, createWorkOrderFromNote, formModeFieldShape } from "../services/gelen-belge-form-is-emri.service";
 import { workOrderFormFieldShape } from "../controllers/workorder.controller";
 import { getNoteParties } from "../services/gelen-belge-cok-parti.service";
 import { applyBulkDeleteDeliveryNotes, BULK_DELETE_MAX, previewBulkDeleteDeliveryNotes } from "../services/gelen-belge-toplu-sil.service";
@@ -713,7 +713,8 @@ const FormWorkOrderBody = z.strictObject({
   kursunMeters: Money("Kurşun metresi"), incomingKg: z.number("Gelen kg sayı olmalı").positive("Gelen kg sıfırdan büyük olmalı").max(1_000_000).optional(),
   incomingWidth: IncomingWidth("Gelen en"),
   // 2026-11-09: belgenin gelen kumaş adı / rengi (müşteri BEYANI; İE hedefi targetItemId/targetColorId ayrı). null/"" = temizle.
-  incomingItemText: optText(160), incomingColorText: optText(120),
+  incomingItemText: optText(160), incomingColorText: optText(120), // skipDeclared: cihazda kapatılan gelen alanlar, belgeden de yazılmaz (2026-11-10)
+  skipDeclared: z.array(z.enum(SKIP_DECLARED_FIELDS, "Geçersiz gelen alan"), "Geçersiz gelen alan listesi").max(SKIP_DECLARED_FIELDS.length).optional(),
   // K29 S14b: yoksa rotasız (yalnız "Rota uygulaması: Okutmayla"; SIRALI'da servis onaydan ÖNCE 400 GELEN_BELGE_ROUTE_REQUIRED).
   routeTemplateId: Id.optional(),
   stepPlanning: z.array(z.strictObject({ sequence: z.number().int().min(1).max(200), plannedMachineId: Id.nullable().optional() }), "Geçersiz adım planı").max(200).optional(),
@@ -763,6 +764,7 @@ const FormWorkOrderBody = z.strictObject({
  *               incomingWidth: { type: number, exclusiveMinimum: 0, maximum: 10000, description: "Gelen en (cm, belgenin beyanı); yoksa şablon en alanı. Özet satırı widthCm'ine yazılır, topa geçmez; İE eni width ayrıdır" }
  *               incomingItemText: { type: string, maxLength: 160, nullable: true, description: "Gelen kumaş adı (müşteri beyanı); yoksa şablon desen alanı. Özet satırı itemText'ine yazılır; İE hedef kumaşı targetItemId ayrıdır (null/boş = beyan yok)" }
  *               incomingColorText: { type: string, maxLength: 120, nullable: true, description: "Gelen renk (müşteri beyanı); yoksa şablon renk alanı. Özet satırı colorText'ine yazılır; İE hedef rengi targetColorId ayrıdır" }
+ *               skipDeclared: { type: array, items: { type: string, enum: [incomingKg, incomingWidth, incomingItemText, incomingColorText] }, description: "Cihazda kapatılan gelen alanlar: gövde değeri de belgeden okunan da yazılmaz (özet ve parti satırlarında null). Yoksa bugünkü davranış" }
  *               routeTemplateId: { type: string, format: uuid, description: "Yoksa iş emri ROTASIZ açılır (adımlar istasyonda okutuldukça eklenir) — yalnız production.routeMode=SCAN; SIRALI'da 400 GELEN_BELGE_ROUTE_REQUIRED, belge onaylanmaz" }
  *               stepPlanning: { type: array, items: { type: object, properties: { sequence: { type: integer }, plannedMachineId: { type: string, format: uuid, nullable: true } } } }
  *               targetValues: { type: array, items: { type: object, properties: { propertyId: { type: string, format: uuid }, valueId: { type: string, format: uuid } } } }

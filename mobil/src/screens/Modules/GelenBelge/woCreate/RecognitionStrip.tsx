@@ -1,5 +1,5 @@
-// Belge şeridi (2026-11-09 sadeleşme): yalnız iş gerektiren satırlar — çok partide tek kompakt kip satırı (tanınmadı uyarısı
-// artık ortada soru: `TeachPrompt`) + "Bu sefer değiştir" (kip sayfası). Gösterecek satır yoksa hiç çizilmez (boş gri alan kalmaz). Metinler saf `stripModel`den.
+// Belge şeridi: çok partide tek kip satırı + "Değiştir" düğmesi (kip sayfası) — kip değiştirmenin TEK yolu (2026-11-10: parti
+// altındaki çift kip düğmeleri ve parantezli kaynak yazısı kaldırıldı). Satır yoksa hiç çizilmez. Metinler saf `stripModel`den.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
@@ -25,13 +25,11 @@ export default function RecognitionStrip({ model, noteNo, multi, onMode }: Props
       {rule && (
         <View style={styles.seg} testID="ie-tanima-3" accessibilityLabel={`İş emri kuralı: ${rule.text}`}>
           <Icon source="file-cog-outline" size={20} color={colors.textSecondary} />
-          <Text style={[styles.text, styles.grow]} testID="ie-tanima-kural">
-            {rule.text}
-            <Text style={rule.touched ? styles.mine : styles.source}>{` (${rule.sourceText})`}</Text>
-          </Text>
-          {rule.canChange && multi && (
-            <Button mode="text" onPress={() => setSheet(true)} contentStyle={styles.btn} testID="ie-tanima-kip-degistir">
-              {rule.touched ? 'Değiştir' : 'Bu sefer değiştir'}
+          <Text style={[styles.text, styles.grow]} testID="ie-tanima-kural">{rule.text}</Text>
+          {multi && (
+            <Button mode="contained-tonal" icon="swap-horizontal" onPress={() => setSheet(true)} disabled={!rule.canChange} style={styles.change}
+              contentStyle={styles.btn} accessibilityLabel="İş emri kipini değiştir" testID="ie-tanima-kip-degistir">
+              Değiştir
             </Button>
           )}
         </View>
@@ -41,10 +39,9 @@ export default function RecognitionStrip({ model, noteNo, multi, onMode }: Props
   );
 }
 
-/** Bu belge için kip: seçilen varsayılandan farklıysa şerit "sizin seçiminiz" der; varsayılana dönüş kuralı geri getirir. */
+/** Bu belge için kip: varsayılandan farklıysa şerit "Bu belge için: …" der; varsayılana dönüş kural satırını geri getirir. */
 function ModeSheet({ multi, onDismiss, onPick }: { multi: MultiPartyDraft; onDismiss: () => void; onPick: (k: MultiPartyMode) => void }) {
   const def = multi.defaultMode ?? multi.mode;
-  const src = multi.modeSource === 'TEMPLATE' ? 'şablon kuralı' : 'fabrika ayarı';
   return (
     <ModuleSheet visible size="sm" onDismiss={onDismiss} title="Bu belge için" subtitle={`${multi.rows.length} parti var`}
       footer={<View style={styles.actions}><Button onPress={onDismiss} contentStyle={styles.btn}>Vazgeç</Button></View>}>
@@ -56,7 +53,7 @@ function ModeSheet({ multi, onDismiss, onPick }: { multi: MultiPartyDraft; onDis
               <Icon source={multi.mode === k ? 'radiobox-marked' : 'radiobox-blank'} size={24} color={colors.brand} />
               <View style={styles.grow}>
                 <Text style={styles.text}>{MODE_LABELS[k]}</Text>
-                {k === def && <Text style={styles.source}>{`Varsayılan (${src})`}</Text>}
+                {k === def && <Text style={styles.source}>Varsayılan</Text>}
               </View>
             </View>
           </TouchableRipple>
@@ -76,8 +73,9 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 160 },
   text: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   source: { fontSize: typography.size.sm, fontWeight: typography.weight.regular, color: colors.textSecondary },
-  mine: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.brand },
   btn: { minHeight: 56 },
+  // Dar ekranda metnin yanına sığmazsa alt satıra iner (seg `flexWrap`); kendisi küçülüp kesilmez.
+  change: { flexShrink: 0, marginVertical: spacing.xs },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
   list: { gap: spacing.sm },
   option: { minHeight: 64, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },

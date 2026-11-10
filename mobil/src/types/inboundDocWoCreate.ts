@@ -2,6 +2,7 @@
 // sınırında olduğundan ayrı dosya; servis aynı adlarla yeniden dışa verir (çağıranlar değişmez).
 import type { CreateWorkOrderRoll } from './inboundDocRolls';
 import type { RollStage } from './models';
+import type { SkipDeclaredField } from '../store/docIncomingFields';
 
 /** Sözleşme 3: belgeden tek seferde terbiye iş emri (`POST /gelen-belge/irsaliyeler/:id/is-emri`). */
 export interface CreateWorkOrderFromNoteBody {
@@ -22,6 +23,8 @@ export interface CreateWorkOrderFromNoteBody {
    *  desen/renk'ini yazar; null = beyan yok). İE hedefi `targetItemId`/`targetColorId` AYRIDIR. Eski sunucu strict gövdeyle 400. */
   incomingItemText?: string | null;
   incomingColorText?: string | null;
+  /** Cihazda kapatılan gelen alanlar (2026-11-10): sunucu belgeden de yazmaz. YALNIZ boş değilse gider (eski sunucu strict gövdeyle 400). */
+  skipDeclared?: SkipDeclaredField[];
   /** Yok = rotasız iş emri (K29; yalnız rota uygulaması "Okutmayla", sunucu SIRALI'da 400 verir). */
   routeTemplateId?: string;
   stepPlanning?: { sequence: number; plannedMachineId?: string | null }[];

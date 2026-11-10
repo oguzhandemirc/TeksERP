@@ -10,7 +10,9 @@
 //   §3 ⭐ gövde beyanı ezer (null = yok)
 //   §4 ⭐ çok parti: parti satırı kendi bölüm beyanı; İE incoming farklıysa null, aynıysa değer
 //   §5 ⭐ okuma özeti incomingDeclared: KAPALI'da metin var öneri yok; ONER'de öğrenilmiş eşleme (alias) kartı önerir
-// Negatif sonda: summaryTargets itemText yazmayınca §2/§4 kırmızı (2026-11-09 elle ölçüldü).
+//   §6 ⭐ `skipDeclared` (2026-11-10, cihazda kapatılan gelen alanlar): beyanlı alan belgeden de gövdeden de yazılmaz (özet + parti
+//      satırı null), beyansız istek bugünkü gibi doldurur, bilinmeyen alan adı 400
+// Negatif sonda: summaryTargets itemText yazmayınca §2/§4 kırmızı (2026-11-09 elle ölçüldü); `skipped()` hep false dönünce §6 kırmızı.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -167,6 +169,42 @@ async function run(url: string): Promise<void> {
   check("§5 ⭐ ONER: öğrenilmiş eşleme (alias) kartı önerir; beyan metni ayrı alanda kalır", oner.incomingDeclared?.suggestedColor?.id === color && oner.suggestions.targetColor?.id === color && oner.incomingDeclared.colorText === raw, JSON.stringify(oner.incomingDeclared));
   const blind = await noteFormFields(n5, "BLIND");
   check("§5 BLIND: beyan bloğu yok", blind.incomingDeclared === undefined);
+
+  await skipDeclaredSection({ mkNote, body, formWo });
+}
+
+type Ctx = {
+  mkNote: (lines: Array<{ meters: number; weightKg?: number | null; blockNo?: number }>, totalsDeclared?: unknown, regionFields?: Record<string, string>) => Promise<string>;
+  body: (extra?: Record<string, unknown>) => Record<string, unknown>;
+  formWo: (id: string, b: unknown) => Promise<Resp>;
+};
+
+/** §6 cihazda kapatılan gelen alanlar: sunucu belgeden doldurmaz; beyansız istek bugünkü gibi. */
+async function skipDeclaredSection({ mkNote, body, formWo }: Ctx): Promise<void> {
+  console.log("§6 skipDeclared");
+  const ALL = ["incomingKg", "incomingWidth", "incomingItemText", "incomingColorText"];
+  const full = (id: string) => prisma.customerDeliveryNoteLine.findUnique({ where: { id }, select: { itemText: true, colorText: true, weightKg: true, widthCm: true } });
+  const fields = { desen: "Ham Bez", renk: "EKRU", en: "160" };
+  const base = await mkNote([{ meters: 100, weightKg: 40 }, { meters: 50, weightKg: 20 }], undefined, fields);
+  const rb = await formWo(base, body());
+  const lb = await full(summaryLineId(base));
+  check("§6 ⭐ beyansız (eski istemci): dört alan belgeden dolar (kg Σ 60, en 160, kumaş, renk)", rb.status === 201 && Number(lb?.weightKg) === 60 && Number(lb?.widthCm) === 160 && lb?.itemText === "Ham Bez" && lb.colorText === "EKRU", `${rb.status} ${rb.code ?? ""} ${JSON.stringify(lb)}`);
+  const all = await mkNote([{ meters: 100, weightKg: 40 }, { meters: 50, weightKg: 20 }], undefined, fields);
+  const ra = await formWo(all, body({ skipDeclared: ALL }));
+  const la = await full(summaryLineId(all));
+  check("§6 ⭐ dördü kapalı: özet satırında kg/en/kumaş/renk NULL (OCR'dan doldurulmaz)", ra.status === 201 && la?.weightKg === null && la.widthCm === null && la.itemText === null && la.colorText === null, `${ra.status} ${ra.code ?? ""} ${JSON.stringify(la)}`);
+  const some = await mkNote([{ meters: 150, weightKg: 30 }], undefined, fields);
+  const rs = await formWo(some, body({ skipDeclared: ["incomingColorText", "incomingWidth"], incomingColorText: "MAVİ", incomingWidth: 150 }));
+  const ls = await full(summaryLineId(some));
+  check("§6 ⭐ kısmi: kapalı renk/en gövdede gelse de yazılmaz; açık kg/kumaş belgeden", rs.status === 201 && ls?.colorText === null && ls.widthCm === null && Number(ls.weightKg) === 30 && ls.itemText === "Ham Bez", `${rs.status} ${rs.code ?? ""} ${JSON.stringify(ls)}`);
+  const multi = await mkNote([{ meters: 60, blockNo: 1, weightKg: 10 }, { meters: 40, blockNo: 2, weightKg: 8 }],
+    { blocks: [{ blockNo: 1, batchNo: `${TAG}S1`, itemText: "Kumaş A", colorText: "LACİVERT" }, { blockNo: 2, batchNo: `${TAG}S2`, itemText: "Kumaş B", colorText: "SİYAH" }] }, fields);
+  const rm = await formWo(multi, body({ mode: "SINGLE", skipDeclared: ["incomingItemText", "incomingKg"], parties: [{ blockNo: 1, meters: 60 }, { blockNo: 2, meters: 40, incomingItemText: "Elle", incomingKg: 9 }] }));
+  const [pa, pb] = await Promise.all([full(partyLineId(multi, 1)), full(partyLineId(multi, 2))]);
+  check("§6 ⭐ çok parti: kapalı kumaş/kg parti satırlarında NULL (gövde dahil), açık renk/en bölümden/belgeden", rm.status === 201 && pa?.itemText === null && pb?.itemText === null && pa.weightKg === null && pb.weightKg === null && pa.colorText === "LACİVERT" && pb.colorText === "SİYAH" && Number(pa.widthCm) === 160, `${rm.status} ${rm.code ?? ""} ${JSON.stringify([pa, pb])}`);
+  const bad = await mkNote([{ meters: 150 }], undefined, fields);
+  const rx = await formWo(bad, body({ skipDeclared: ["customerBatchNo"] }));
+  check("§6 parti no / metre kapatılamaz: bilinmeyen alan adı 400", rx.status === 400, `${rx.status} ${rx.code ?? ""}`);
 }
 
 async function cleanup(): Promise<void> {

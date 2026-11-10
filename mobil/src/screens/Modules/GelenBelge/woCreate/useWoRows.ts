@@ -18,6 +18,7 @@ import { applyMulti, applyParties, fillEmptyRowForm, isDone, isPartial, keptResu
 import { loadRecentOwners, rememberOwner } from './recentOwners';
 import { applyLiveLocks, liveLocksFor, liveUserKeysFor } from '../live/liveLocks';
 import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import {
   buildCreateBody,
   buildDraftPatch,
@@ -96,6 +97,7 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       gramajPropertyId: ctx.gramajPropertyId,
       passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
+      hiddenIncoming: useDeviceSettingsStore.getState().docHiddenIncoming,
     });
     const full = mergeExtra(body, ctx.extra);
     const opened = await inboundDocService.createWorkOrder(r.noteId, { ...full, ...confirmFlags(ctx.confirms) });

@@ -10,6 +10,8 @@
 //   §3 izin: `gelen-belge:write` ya da `customer:write` yeter; ikisi yoksa 403
 //   §4 idempotency: aynı token 2× tek kart · aynı token farklı ad 409 · pasife alınmış kartın token'ı 409
 //   §5 genel PATCH gövdesi `clientToken` yazamaz
+//   §6 (2026-11-10) seçicinin "Yeni ekle" formu: opsiyonel iletişim alanları karta yazılır; e-posta/vergi no kart
+//      doğrulamasından geçer; aynı vergi no 409; rol/kod/finans gövdede hâlâ 400
 // Negatif sonda (2026-11-04, ölçüldü; md5 ile geri): eşik 0,80→0,95 → §1 2 ❌; aday tavanı kaldırılınca §1 ❌; BLIND dalı
 // silinince §1 ❌; kayda vergi no eklenince §2 ❌; izne `customer:read` eklenince §3 ❌; replay boğazı atlanınca §4 ❌;
 // `alive` koşulsuz → §4 ❌; write-guard `customer` satırı silinince §5 ❌.
@@ -19,6 +21,7 @@
 // Sonda 2026-11-05 (§1c): `rank` anahtar eşiği 2→3 → §1c 2 ❌; aday `code` eşlemesi null → §1c 1 ❌.
 //   §1d OCR'a dayanıklı aday (2026-11-08): "QAB M" okuması kayıtlı "QAB"yi aday getirir; tavan 5 (`ocrNameCandidates`)
 // Sonda 2026-11-08 (§1d): `ocrNameCandidates` birleştirmesi çıkarılınca §1d 1 ❌; geri alındı, 28/28.
+// Sonda 2026-11-10 (§6): serviste `...extra` yayılımı kaldırılınca §6 5 ❌; gövde `.passthrough()` olunca §2 3 ❌; md5 ile geri, 36/36.
 // =============================================================================
 import { createHash, randomUUID } from "crypto";
 import type { AddressInfo } from "net";
@@ -206,8 +209,34 @@ async function run(url: string): Promise<void> {
 
   const dup = await call("POST", "/api/customers/quick-create", tkGb, { name: newName, clientToken: randomUUID() });
   check("§2 aynı ad yeni token: ad seddi 409 (mükerrer kart yok)", dup.status === 409, `${dup.status} ${dup.code ?? ""}`);
-  const extra = await call("POST", "/api/customers/quick-create", tkGb, { name: `EKALAN ${TAG}`, clientToken: randomUUID(), taxNumber: "1234567890" });
-  check("§2 gövde dar (.strict): fazladan alan 400", extra.status === 400, `${extra.status}`);
+  for (const bad of [{ isSupplierRole: true }, { code: `K${TAG}` }, { finance: { paymentTermDays: 30 } }]) {
+    const extra = await call("POST", "/api/customers/quick-create", tkGb, { name: `EKALAN ${TAG}`, clientToken: randomUUID(), ...bad });
+    check(`§2 gövde dar (.strict): rol/kod/finans 400 (${Object.keys(bad)[0]})`, extra.status === 400, `${extra.status}`);
+  }
+
+  // ── §6 seçicinin "Yeni ekle" formu: "Diğer" iletişim alanları (2026-11-10) ──
+  const taxNo = `9${String(Date.now()).slice(-9)}`;
+  const rich = { name: `DIGERALAN TEKSTIL ${TAG}`, clientToken: randomUUID(), taxNumber: taxNo, contactName: "Ali Veli", contactPhone: "0532 000 00 00",
+    email: "ali@ornek.com", city: "Bursa", district: "Osmangazi", address: "Organize Sanayi 1. Cad.", notes: "Belgeden eklendi" };
+  const r6 = await call("POST", "/api/customers/quick-create", tkGb, rich);
+  if (r6.data?.id) made.customers.push(r6.data.id);
+  const c6 = r6.data?.id ? await prisma.customer.findUnique({ where: { id: r6.data.id },
+    select: { taxNumber: true, contactName: true, contactPhone: true, email: true, city: true, district: true, address: true, notes: true, isCustomerRole: true, isSupplierRole: true } }) : null;
+  check("§6 ⭐ Diğer alanları karta yazılır (rol yine yalnız Müşteri)", r6.status === 201 && !!c6 && c6.taxNumber === taxNo && c6.contactName === "Ali Veli"
+    && c6.contactPhone === "0532 000 00 00" && c6.email === "ali@ornek.com" && c6.city === "Bursa" && c6.district === "Osmangazi"
+    && c6.address === "Organize Sanayi 1. Cad." && c6.notes === "Belgeden eklendi" && c6.isCustomerRole && !c6.isSupplierRole, `${r6.status} ${JSON.stringify(c6)}`);
+  const badMail = await call("POST", "/api/customers/quick-create", tkGb, { name: `EPOSTA HATALI ${TAG}`, clientToken: randomUUID(), email: "ali@" });
+  check("§6 geçersiz e-posta 400 (kart doğrulaması)", badMail.status === 400, `${badMail.status}`);
+  const badTax = await call("POST", "/api/customers/quick-create", tkGb, { name: `VERGI HATALI ${TAG}`, clientToken: randomUUID(), taxNumber: "12AB" });
+  check("§6 geçersiz vergi no 400", badTax.status === 400, `${badTax.status}`);
+  const dupTax = await call("POST", "/api/customers/quick-create", tkGb, { name: `VERGI MUKERRER ${TAG}`, clientToken: randomUUID(), taxNumber: taxNo });
+  check("§6 ⭐ aynı vergi no ikinci kart 409", dupTax.status === 409, `${dupTax.status}`);
+  const blank = await call("POST", "/api/customers/quick-create", tkGb, { name: `BOSALAN ${TAG}`, clientToken: randomUUID(), city: "  " });
+  if (blank.data?.id) made.customers.push(blank.data.id);
+  const cb = blank.data?.id ? await prisma.customer.findUnique({ where: { id: blank.data.id }, select: { city: true } }) : null;
+  check("§6 boş alan null yazılır", blank.status === 201 && cb?.city === null, `${blank.status} ${JSON.stringify(cb)}`);
+  const n6 = await prisma.customer.count({ where: { name: { in: [`EPOSTA HATALI ${TAG}`, `VERGI HATALI ${TAG}`, `VERGI MUKERRER ${TAG}`] } } });
+  check("§6 reddedilen gövdede kart doğmadı", n6 === 0, String(n6));
 
   // ── §5 genel gövde ─────────────────────────────────────────────────────────
   if (a.data?.id) {

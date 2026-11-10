@@ -7,6 +7,7 @@ import {
   type ScanMethodPref,
 } from '../services/hardwareScanner/resolveScanMethod';
 import { parseWoCreateKinds, WO_CREATE_KINDS_DEFAULT, type WoCreateKind } from './woCreateKinds';
+import { parseHiddenIncoming, setIncomingShown, type DocIncomingField } from './docIncomingFields';
 
 // =============================================================================
 // Cihaz-bazlı operatör ayarları. Sunucudan bağımsız — kamera donanım sorunu
@@ -30,6 +31,7 @@ const DOC_DESK_KEY = 'device_doc_desk';
 const DOC_DESK_CAPTURE_KEY = 'device_doc_desk_capture';
 const DOC_SCAN_ENGINE_KEY = 'device_doc_scan_engine';
 const DOC_TORCH_AUTO_KEY = 'device_doc_torch_auto';
+const DOC_HIDDEN_INCOMING_KEY = 'device_doc_hidden_incoming';
 const DOC_DESK_FRAME_MS_KEY = 'device_doc_desk_frame_ms';
 const WO_CREATE_KINDS_KEY = 'device_wo_create_kinds';
 const WO_ROUTE_ON_BUTTON_KEY = 'device_wo_route_on_button';
@@ -224,6 +226,8 @@ interface DeviceSettingsState {
   docScanEngine: DocScanEngine;
   /** Belge kameraları açılınca fener yansın mı (CİHAZDA: flaş ve masa ışığı cihaza/yere bağlı). Varsayılan AÇIK. */
   docTorchAuto: boolean;
+  /** Belgeden İE formunda KAPALI gelen (beyan) alanları (CİHAZDA; `docIncomingFields`). Varsayılan boş = hepsi açık. */
+  docHiddenIncoming: DocIncomingField[];
   /** İE oluştur türleri (Seçenekler; CİHAZDA). Varsayılan yalnız STANDARD = bugünkü davranış. */
   woCreateKinds: WoCreateKind[];
   /** "Rota seçimini Belge Okut tuşunda göster" (CİHAZDA). Varsayılan AÇIK = bugünkü rota seçici; kapalıyken saklı rota kullanılmaz. */
@@ -271,6 +275,7 @@ interface DeviceSettingsState {
   setDocTorchAuto: (v: boolean) => Promise<void>;
   setWoCreateKinds: (v: WoCreateKind[]) => Promise<void>;
   setWoRouteOnButton: (v: boolean) => Promise<void>;
+  setDocIncomingShown: (key: DocIncomingField, shown: boolean) => Promise<void>;
   setWoButtons: (v: WoButtons) => Promise<void>;
   setWoLastBatchHint: (v: boolean) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
@@ -336,6 +341,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   docDeskFrameMs: DOC_DESK_FRAME_MS_DEFAULT,
   docScanEngine: 'camera',
   docTorchAuto: DOC_TORCH_AUTO_DEFAULT,
+  docHiddenIncoming: [],
   woCreateKinds: [...WO_CREATE_KINDS_DEFAULT],
   woRouteOnButton: true,
   woButtons: 'both',
@@ -345,7 +351,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality, listColumns] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality, listColumns, hiddenIncoming] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -373,6 +379,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(DOC_TORCH_AUTO_KEY),
         storage.getItem(TAMBUR_LAST_QUALITY_KEY),
         storage.getItem(LIST_COLUMNS_KEY),
+        storage.getItem(DOC_HIDDEN_INCOMING_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -415,6 +422,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       docDeskFrameMs: parseDocDeskFrameMs(docDeskFrame),
       docScanEngine: parseDocScanEngine(docScanEngine),
       docTorchAuto: parseDocTorchAuto(docTorchAuto),
+      docHiddenIncoming: parseHiddenIncoming(hiddenIncoming),
       woCreateKinds: parseWoCreateKinds(woKinds),
       // Varsayılan AÇIK: yalnız birebir 'false' kapatır.
       woRouteOnButton: woRouteOnBtn !== 'false',
@@ -544,6 +552,15 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
     const next = parseWoCreateKinds(v.join(','));
     set({ woCreateKinds: next });
     await storage.setItem(WO_CREATE_KINDS_KEY, next.join(','));
+  },
+
+  setDocIncomingShown: async (key, shown) => {
+    let next: DocIncomingField[] = [];
+    set((s) => {
+      next = setIncomingShown(s.docHiddenIncoming, key, shown);
+      return { docHiddenIncoming: next };
+    });
+    await storage.setItem(DOC_HIDDEN_INCOMING_KEY, next.join(','));
   },
 
   setWoRouteOnButton: async (v) => {

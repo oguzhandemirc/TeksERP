@@ -20,9 +20,13 @@ import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
 import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
 import DocRowOwner from './DocRowOwner';
+import CustomerQuickAddSheet from './CustomerQuickAddSheet';
+import { useCanQuickCreateCustomer } from './useQuickCustomerAdd';
+import { NO_PERMISSION_TEXT } from './useCustomerFromDoc';
 import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
 import { IncomingKgField, IncomingWidthField } from './DocRowKg';
 import { IncomingDeclaredRow } from './DocRowDeclaredText';
+import { useIncomingShown } from './useIncomingShown';
 import { declaredLayout } from './DeclaredField';
 import { bandTone, type IssueKey } from './woIssues';
 import type { PartyPlanCtx } from './partyPlan';
@@ -85,6 +89,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
   useOpenRequest(openRequest, setPicker, setMeterOpen);
 
   const single = variant === 'single';
+  const shown = useIncomingShown();
   const f = row.form;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
   const locked = done || wo.saving;
@@ -111,8 +116,8 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
               {!f.rolls && (
                 <View style={declaredLayout.row}>
                   <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
-                  <IncomingKgField row={row} wo={wo} locked={locked} />
-                  <IncomingWidthField row={row} wo={wo} locked={locked} />
+                  {shown('kg') && <IncomingKgField row={row} wo={wo} locked={locked} />}
+                  {shown('width') && <IncomingWidthField row={row} wo={wo} locked={locked} />}
                 </View>
               )}
               {!f.rolls && (
@@ -189,6 +194,10 @@ interface PickersProps {
 
 function RowPickers({ row, wo, picker, setPicker, owners, customersLoading }: PickersProps) {
   const candidates = row.detail?.batchNoCandidates ?? [];
+  const canAdd = useCanQuickCreateCustomer();
+  const [adding, setAdding] = useState(false);
+  const allOwners = useMemo(() => [...owners.pinned, ...owners.rest], [owners]);
+  const pickOwner = (id: string) => wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null });
   return (
     <>
         <PickerModal
@@ -199,12 +208,26 @@ function RowPickers({ row, wo, picker, setPicker, owners, customersLoading }: Pi
           pinnedLabel="Son kullanılanlar"
           selectedValue={row.form?.ownerCustomerId ?? null}
           loading={customersLoading}
+          // Saha 2026-11-10: listede yoksa buradan yeni müşteri (yalnız ad; "Diğer" açılır). İzinsizde soluk + açıklama.
+          leadingAction={{
+            label: 'Yeni müşteri ekle',
+            sublabel: canAdd ? 'Listede yok — adını yazıp kaydedin' : NO_PERMISSION_TEXT,
+            icon: 'account-plus',
+            disabled: !canAdd,
+            onPress: () => { setPicker(null); setAdding(true); },
+          }}
           onSelect={(id) => {
             setPicker(null);
-            wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null });
+            pickOwner(id);
           }}
           onDismiss={() => setPicker(null)}
           emptyText="Aktif müşteri yok."
+        />
+        <CustomerQuickAddSheet
+          visible={adding}
+          options={allOwners}
+          onDismiss={() => { setAdding(false); setPicker('owner'); }}
+          onPicked={(id) => { setAdding(false); pickOwner(id); }}
         />
         <PickerModal
           visible={picker === 'batch'}

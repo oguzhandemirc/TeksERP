@@ -12,6 +12,7 @@ import type {
   ReadSummary,
 } from '../../../../services/inboundDoc.service';
 import { declaredBodyPart } from './incomingDeclared';
+import { skipDeclaredOf, type DocIncomingField } from '../../../../store/docIncomingFields';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft, type OpenedWo } from './partyDraft';
@@ -220,7 +221,11 @@ export const rowIssues = (f: RowForm): string[] => rowIssueList(f).map((i) => i.
 
 export function buildCreateBody(
   f: RowForm,
-  opts: { clientToken: string; routeTemplateId: string | null; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null },
+  opts: {
+    clientToken: string; routeTemplateId: string | null; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null;
+    /** Cihazda kapatılan gelen alanlar (`deviceSettingsStore.docHiddenIncoming`). */
+    hiddenIncoming?: readonly DocIncomingField[];
+  },
 ): CreateWorkOrderFromNoteBody {
   const body: CreateWorkOrderFromNoteBody = {
     clientToken: opts.clientToken,
@@ -243,7 +248,18 @@ export function buildCreateBody(
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.
   const base = f.multi ? withParties(body, f.multi) : f.rolls ? withRolls(body, f.rolls) : body;
-  return withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId });
+  return withoutHiddenIncoming(withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId }), opts.hiddenIncoming ?? []);
+}
+
+/**
+ * Kapalı gelen alanlar gövdeden (parti başına dahil) düşer ve `skipDeclared` ile sunucuya "belgeden de doldurma" denir —
+ * anahtarsız alanı sunucu belgedeki okunan değerle doldururdu. Hepsi açıkken gövde bayt-aynı (eski sunucu strict 400 vermesin).
+ */
+export function withoutHiddenIncoming(body: CreateWorkOrderFromNoteBody, hidden: readonly DocIncomingField[]): CreateWorkOrderFromNoteBody {
+  const skip = skipDeclaredOf(hidden);
+  if (skip.length === 0) return body;
+  const drop = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([k]) => !(skip as string[]).includes(k))) as T;
+  return { ...drop(body), ...(body.parties ? { parties: body.parties.map(drop) } : {}), skipDeclared: skip };
 }
 
 /** Taslak kaydı (ayrı onay kipi): yalnız değişen başlık alanları PATCH'e gider; boşsa çağrı yok. */
