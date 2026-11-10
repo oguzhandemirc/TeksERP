@@ -19,6 +19,8 @@ import {
   type LabelKind,
   type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
+import { isOptionSetKind } from "@/services/labelTemplateOptionService";
+import { CustomerLabelSetsSection, useCustomerLabelSets } from "./CustomerLabelSetsSection";
 
 interface Props {
   customerId: string;
@@ -31,6 +33,8 @@ const KINDS: LabelKind[] = ["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"];
  * Müşteriye özel etiket şablonu atamaları (CustomerTemplateRoute).
  * Çözüm zinciri: explicit > MÜŞTERİ > cihaz > bağlam varsayılanı — buradaki
  * atama, cihaz yönlendirmesinin ve genel varsayılanın önüne geçer.
+ * Ham/bitmiş top bağlamları çoklu sette (yıldız = bu tablodaki atama); set uçları
+ * yoksa (eski backend, 404) bugünkü tek seçim satırına dönülür.
  */
 export function CustomerTemplateRoutesPanel({ customerId }: Props) {
   const qc = useQueryClient();
@@ -61,6 +65,10 @@ export function CustomerTemplateRoutesPanel({ customerId }: Props) {
     },
   });
 
+  // Set PUT'u yıldızı CustomerTemplateRoute'a yazar → tek seçim önbelleği tazelenir.
+  const sets = useCustomerLabelSets(customerId, [routesKey]);
+  const setsShown = sets.status !== "missing";
+
   if (routesQuery.isLoading || templatesQuery.isLoading) {
     return <Skeleton className="h-40 w-full" />;
   }
@@ -77,8 +85,10 @@ export function CustomerTemplateRoutesPanel({ customerId }: Props) {
         aşamasına göre seçilir (yarı mamul top Ham etiketi basar).
       </p>
 
+      <CustomerLabelSetsSection sets={sets} />
+
       <ul className="divide-y rounded-md border">
-        {KINDS.map((kind) => (
+        {KINDS.filter((kind) => !(setsShown && isOptionSetKind(kind))).map((kind) => (
           <RouteRow
             key={kind}
             kind={kind}
