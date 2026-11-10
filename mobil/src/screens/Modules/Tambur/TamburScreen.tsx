@@ -117,14 +117,16 @@ import {
   type TamburMeasure,
 } from './measureSource';
 import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
-import TamburMeterTrail from './TamburMeterTrail';
+import TamburMeterTrail, { useRollMeterTrail } from './TamburMeterTrail';
 import TamburWideCut from './TamburWideCut';
 import TamburMeasureCard from './TamburMeasureCard';
 import { useTamburLivePreview } from './useTamburLivePreview';
-import { buildPreviewDraft, kesSubLabel, nextCutMode } from './labelPreviewMap';
+import { buildPreviewDraft, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
 import { draftKey, partyCards, showJobTabs, showPartyList, switchDraft } from './partyList';
 import TamburModeBitirBar from './TamburModeBitirBar';
-import { parseCutInput } from './meterTrail';
+import TamburCutSettingsCard from './TamburCutSettingsCard';
+import { collectCutReadings, kgAutoActive, measureVisibility } from './cutReadings';
+import { parseCutInput, rulerTotalM } from './meterTrail';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
@@ -158,6 +160,7 @@ import {
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale, AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow } from '../../../theme';
+import { palette } from '../../../theme/tokens';
 import { lifecycleBadge } from '../../../lib/item-lifecycle';
 import { MANUAL_MIN_REASON } from '../../../constants/manualReasons';
 import Sortable, {
@@ -557,6 +560,9 @@ export default function TamburScreen() {
   // tek bir gerçektir — iki ayrı hafıza tutmak operatörü şaşırtırdı.
   const cutMode = useDeviceSettingsStore((s) => s.tamburCutMode);
   const setCutMode = useDeviceSettingsStore((s) => s.setTamburCutMode);
+  // Kg kipi ayrı cihaz ayarı (2026-11-10); varsayılan manual = bugünkü davranış.
+  const kgMode = useDeviceSettingsStore((s) => s.tamburKgMode);
+  const setKgMode = useDeviceSettingsStore((s) => s.setTamburKgMode);
   
   const pendingRecutCleanupRef = useRef<{ remainingChild: Roll | null } | null>(null);
 
@@ -1088,6 +1094,8 @@ export default function TamburScreen() {
   const printTiming = useTamburPrintTiming();
   // Geniş tablet ana kesim (2026-11-10, hedef görsel): yalnız kart akışı; telefon/manuel/Top Kesme bugünkü düzende.
   const wideMain = !compact && !manualMode && !(recutResolvedRollId && recutRollMeta) && !!activeJob && !!selectedRoll;
+  // Geniş hata cetveli ölçeği için (metre şeridiyle aynı sorgu, önbellek ortak).
+  const rollTrail = useRollMeterTrail(selectedRoll?.rollId);
   const livePreview = useTamburLivePreview({
     rollId: wideMain ? selectedRoll?.rollId : null,
     orderLineId: work.voluntaryEntry.targetOrderLineId,
@@ -2246,20 +2254,29 @@ export default function TamburScreen() {
       toast: (t) => Toast.show(t),
     });
 
-  // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
+  // Footer "Kes" — metre manuel: input'taki uzunluk; otomatik: makineden. Kg otomatik (kg alanı varken): tartıdan.
+  // Önce okumalar, sonra TEK kesim; okuma düşerse kesim yok (fail-closed, toast okuyucuda).
   const handleKes = async () => {
-    if (cutMode === 'auto') {
-      if (!selectedRoll || measuring) return;
-      setMeasuring(true);
-      try {
-        const measured = await measureFromMachine(selectedRoll.currentQty);
-        if (measured == null) return; // okunamadı → hata gösterildi, kesim yapma
-        addVoluntaryCut(measured.value, measured);
-      } finally {
-        setMeasuring(false);
-      }
-    } else {
+    const kgAuto = kgAutoActive(kgMode, openCard.card.kg.visible);
+    if (cutMode !== 'auto' && !kgAuto) {
       addVoluntaryCut();
+      return;
+    }
+    if (!selectedRoll || measuring) return;
+    setMeasuring(true);
+    try {
+      const r = await collectCutReadings<MeterCapture>({
+        meterAuto: cutMode === 'auto',
+        kgAuto,
+        readMeter: () => measureFromMachine(selectedRoll.currentQty),
+        readKg: openCard.readKg,
+        stampKg: openFinal.stampKg,
+      });
+      if (!r) return;
+      if (r.capture) addVoluntaryCut(r.capture.value, r.capture);
+      else addVoluntaryCut();
+    } finally {
+      setMeasuring(false);
     }
   };
 
@@ -3307,6 +3324,18 @@ export default function TamburScreen() {
       qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
   };
 
+  // En ipucu = topun bilinen/miras eni (yalnız ipucu: dokunulmazsa kesime en gönderilmez, bugünkü davranış).
+  const wideWidthHint = (roll: TamburRollSummary) => widthHintText(roll.width, livePreview.preview?.sourceWidthCm) ?? openCard.card.width.placeholder;
+
+  /** Geniş ana kesim Kat / En / Kalite kartı — sağ sütunda Çıkan etiketlerin altında (kullanıcı 2026-11-10). */
+  const renderWideSettings = (roll: TamburRollSummary) => (
+    <TamburCutSettingsCard
+      fold={{ options: foldValues, value: work.foldType, onPick: (code) => setWork((w) => ({ ...w, foldType: code })) }}
+      width={openCard.card.width.visible ? { value: openFinal.widthText, onChange: openFinal.setWidthText, placeholder: wideWidthHint(roll) } : null}
+      quality={{ grades: qualityGrades, value: work.voluntaryEntry.qualityGrade, onPick: (g, a) => pickGrade(g as QualityGrade, a) }}
+    />
+  );
+
   /** Geniş ana kesim sol sütunu — değerler ve yazıcılar ekranın kesim state'inden (ikinci kaynak yok). */
   const renderWideCut = (roll: TamburRollSummary) => {
     const owner = openFinal.owner;
@@ -3315,9 +3344,7 @@ export default function TamburScreen() {
     const orders = activeJob?.context?.orders ?? [];
     const errs = roll.errors;
     const critCount = errs.filter((e) => defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL').length;
-    const widthField = openCard.card.width.visible
-      ? { value: openFinal.widthText, onChange: openFinal.setWidthText, placeholder: openCard.card.width.placeholder }
-      : null;
+    const widthHint = wideWidthHint(roll);
     return (
       <TamburWideCut
         info={{
@@ -3326,7 +3353,7 @@ export default function TamburScreen() {
           onPickCustomer: owner ? null : () => setKimePickerOpen(true),
           barcode: roll.barcode,
           itemLine: [roll.itemName, roll.colorName, roll.width != null ? `${roll.width} cm` : null].filter(Boolean).join(' · '),
-          trail: <TamburMeterTrail rollId={roll.rollId} pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0} tone="light" />,
+          trail: <TamburMeterTrail rollId={roll.rollId} pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0} tone="light" omitRemaining />,
           remaining: segmentPreview?.remaining ?? roll.currentQty,
           orders: orders.length > 0 ? { count: orders.length, onPress: () => setOrdersModalOpen(true) } : null,
         }}
@@ -3337,14 +3364,12 @@ export default function TamburScreen() {
             : {
                 count: errs.length,
                 critCount,
-                ruler: errs.length > 0 ? <DefectRuler errors={errs} defectTypes={defectTypes} rulerMax={rulerMaxForErrors(roll.currentQty, errs)} /> : null,
+                // Ölçek topun ölçülmüş tavanına (kurşun / kesilen+kalan), kesilen kısım mavi dolgu + "▲" (2026-11-10).
+                ruler: errs.length > 0 ? <DefectRuler errors={errs} defectTypes={defectTypes} rulerMax={rulerMaxForErrors(rulerTotalM(rollTrail.data, roll.currentQty), errs)} cutM={rollTrail.data?.cutSoFarM ?? 0} /> : null,
                 onOpen: () => setErrorsModalOpen(true),
                 onAdd: inspectionEnabled ? () => setDefectDrawerOpen(true) : null,
               }
         }
-        fold={{ options: foldValues, value: work.foldType, onPick: (code) => setWork((w) => ({ ...w, foldType: code })) }}
-        width={widthField}
-        quality={{ grades: qualityGrades, value: work.voluntaryEntry.qualityGrade, onPick: (g, a) => pickGrade(g as QualityGrade, a) }}
         preview={{
           preview: livePreview.preview,
           stale: livePreview.stale,
@@ -3353,8 +3378,11 @@ export default function TamburScreen() {
           forWhom: owner ? (openCard.card.consignee?.text ?? owner.name) : customerName,
           onOpenInfo: () => setLabelInfoOpen(true),
           length: { value: work.voluntaryEntry.length, set: setCutLength },
-          kg: { value: openFinal.kgText, set: openFinal.setKgText, onTart: openCard.card.kg.onTart },
-          width: { value: openFinal.widthText, set: openFinal.setWidthText, placeholder: openCard.card.width.placeholder },
+          kg: { value: openFinal.kgText, set: openFinal.setKgText },
+          width: { value: openFinal.widthText, set: openFinal.setWidthText, placeholder: widthHint },
+          itemName: { value: openFinal.texts.itemName, set: (v) => openFinal.texts.set({ itemName: v, colorName: openFinal.texts.colorName }) },
+          colorName: { value: openFinal.texts.colorName, set: (v) => openFinal.texts.set({ itemName: openFinal.texts.itemName, colorName: v }) },
+          batch: { value: openFinal.batch.value, set: openFinal.batch.setValue },
           quality: {
             grades: qualityGrades.map((g) => ({ code: g.code, name: g.name })),
             value: work.voluntaryEntry.qualityGrade,
@@ -3466,41 +3494,43 @@ export default function TamburScreen() {
       )}
     </>
   );
-  /** Geniş ana kesim: Ölçüm kartı + alt şeridin sağ grubu (kip · Bitir), aynı kenarda. */
+  /** Geniş ana kesim: Ölçüm kartı (yalnız Manuel alanlar; ikisi otomatikse yok) + alt şeridin sağ grubu (METRE · KG · Bitir). */
   const renderWideMeasure = () => {
-    const suggestion = splitSuggestion(openFinal.settings.splitLengthM, selectedRoll?.currentQty ?? 0);
+    const kgCard = openCard.card.kg;
+    const vis = measureVisibility(cutMode, kgMode, kgCard.visible);
+    const suggestion = vis.meterBox ? splitSuggestion(openFinal.settings.splitLengthM, selectedRoll?.currentQty ?? 0) : null;
     const endMode = !shouldAutoPrintAfterCut(openFinal.settings);
+    const endHint = endMode ? <Text style={styles.wideCardMeta}>Etiket iş bitince basılır</Text> : null;
     return (
       <>
-        <TamburMeasureCard
-          mode={cutMode}
-          length={{ value: work.voluntaryEntry.length, onChange: setCutLength, onClear: clearCutLength, placeholder: 'Boş = kalanı kes' }}
-          kg={
-            openCard.card.kg.visible
-              ? { value: openFinal.kgText, onChange: openFinal.setKgText, required: openCard.card.kg.required, onTart: openCard.card.kg.onTart, tartBusy: openCard.card.kg.tartBusy }
-              : null
-          }
-          extras={
-            suggestion || endMode ? (
-              <View style={styles.wideExtras}>
-                {suggestion ? (
-                  <Chip
-                    icon="ruler"
-                    compact
-                    onPress={() => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: suggestion } }))}
-                    testID="tambur-bolme-onerisi"
-                  >
-                    {`Bölme ${suggestion} m`}
-                  </Chip>
-                ) : null}
-                {endMode ? <Text style={styles.wideCardMeta}>Etiket iş bitince basılır</Text> : null}
-              </View>
-            ) : null
-          }
-        />
+        {vis.card ? (
+          <TamburMeasureCard
+            length={vis.meterBox ? { value: work.voluntaryEntry.length, onChange: setCutLength, onClear: clearCutLength, placeholder: 'kalanı kes' } : null}
+            kg={vis.kgBox ? { value: openFinal.kgText, onChange: openFinal.setKgText, required: kgCard.required, onTart: kgCard.onTart, tartBusy: kgCard.tartBusy } : null}
+            extras={
+              suggestion || endHint ? (
+                <View style={styles.wideExtras}>
+                  {suggestion ? (
+                    <Chip
+                      icon="ruler"
+                      compact
+                      onPress={() => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: suggestion } }))}
+                      testID="tambur-bolme-onerisi"
+                    >
+                      {`Bölme ${suggestion} m`}
+                    </Chip>
+                  ) : null}
+                  {endHint}
+                </View>
+              ) : null
+            }
+          />
+        ) : (
+          endHint
+        )}
         <TamburModeBitirBar
-          mode={cutMode}
-          onToggle={() => void setCutMode(nextCutMode(cutMode))}
+          meter={{ mode: cutMode, onToggle: () => void setCutMode(nextCutMode(cutMode)) }}
+          kg={kgCard.visible ? { mode: kgMode, onToggle: () => void setKgMode(nextCutMode(kgMode)) } : null}
           busy={cutOpenFabricMutation.isPending || measuring}
           onBitir={bitirOpenFabric}
           bitirLoading={finalizeOpenFabricMutation.isPending}
@@ -3554,6 +3584,7 @@ export default function TamburScreen() {
                 }
           }
         />
+        {selectedRoll ? renderWideSettings(selectedRoll) : null}
         {renderWideMeasure()}
       </View>
     );
@@ -4693,7 +4724,7 @@ export default function TamburScreen() {
                 kesLoading={cutOpenFabricMutation.isPending || measuring}
                 kesDisabled={!work.voluntaryEntry.qualityGrade}
                 kesLabel="Kes & Etiket Bas"
-                kesSubLabel={kesSubLabel(cutMode, work.voluntaryEntry.length, selectedRoll.currentQty)}
+                kesSubLabel={kesSubLabel(cutMode, work.voluntaryEntry.length, selectedRoll.currentQty, !!work.voluntaryEntry.qualityGrade)}
                 wideLeft
               />
             </>
@@ -8498,12 +8529,16 @@ function DefectRuler({
   errors,
   defectTypes,
   rulerMax,
+  cutM = 0,
 }: {
   errors: TamburRollDefect[];
   defectTypes: DefectType[];
   rulerMax: number;
+  /** Kesilen kısım (0'dan) — mavi dolgu + konum işareti; 0 = çizilmez. */
+  cutM?: number;
 }) {
   const [w, setW] = useState(0);
+  const cutX = cutM > 0 ? (Math.min(cutM, rulerMax) / rulerMax) * w : 0;
   const isCritical = (e: TamburRollDefect) =>
     defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
 
@@ -8572,6 +8607,14 @@ function DefectRuler({
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
     >
       <View style={styles.rulerTrack} />
+      {cutX > 0 && (
+        <>
+          <View style={[styles.rulerTrack, styles.rulerCutFill, { width: cutX, right: undefined }]} testID="tambur-cetvel-kesilen" />
+          <Text style={[styles.rulerCutMark, { left: Math.max(0, Math.min(cutX - 22, w - 44)) }]} numberOfLines={1}>
+            {`${fmtMeter(Math.round(cutM * 10) / 10)} ▲`}
+          </Text>
+        </>
+      )}
 
       {/* Uç ölçek: sol 0, sağ = seçili topun uzunluğu (metre). */}
       {w > 0 && (
@@ -9629,6 +9672,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   rulerEndLabelLeft: { left: 0 },
+  rulerCutFill: { top: 24, height: 7, backgroundColor: palette.blue[600] },
+  rulerCutMark: { position: 'absolute', bottom: 0, width: 44, textAlign: 'center', fontSize: 11, fontWeight: '800', color: palette.blue[700] },
   rulerEndLabelRight: { right: 0 },
 
   // Kesim — uzunluk input + temizleme tuşu

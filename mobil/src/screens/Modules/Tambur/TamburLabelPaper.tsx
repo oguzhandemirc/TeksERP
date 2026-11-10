@@ -6,6 +6,7 @@ import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { TamburLabelPreview, TamburPreviewElement } from '../../../services/tambur.service';
 import { colors, palette } from '../../../theme/tokens';
+import type { EditAnchor } from './TamburInlineEditor';
 
 export interface PaperRow {
   key: string | null;
@@ -20,8 +21,11 @@ export interface TamburLabelPaperProps {
   /** Önizleme yokken (eski backend / ilk yükleme) gösterilecek satırlar. */
   fallbackRows: PaperRow[];
   isEditable: (key: string | null) => boolean;
-  onEdit: (key: string) => void;
+  /** Çapa: dokunulan elemanın kâğıt üstündeki yeri (yerinde düzenleme kutusu oraya açılır). */
+  onEdit: (key: string, anchor: EditAnchor) => void;
   stale: boolean;
+  /** Kâğıdın üstüne çizilen yerinde düzenleme kutusu (kâğıt px boyutu verilir). */
+  overlay?: (paper: { w: number; h: number }) => React.ReactNode;
 }
 
 const FALLBACK_MM = { w: 100, h: 60 };
@@ -54,7 +58,7 @@ function Barcode({ widthPx, heightPx, humanPx, human }: { widthPx: number; heigh
   );
 }
 
-function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewElement; s: number; paperW: number; editable: boolean; onEdit: () => void }) {
+function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewElement; s: number; paperW: number; editable: boolean; onEdit: (a: EditAnchor) => void }) {
   switch (el.type) {
     case 'line':
       return <View style={{ position: 'absolute', left: el.x * s, top: el.y * s, width: el.wMm * s, height: Math.max(1, el.hMm * s), backgroundColor: palette.black }} />;
@@ -88,7 +92,7 @@ function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewEle
       return (
         <View style={{ position: 'absolute', left: el.x * s, top: el.y * s }}>
           {editable ? (
-            <TouchableRipple onPress={onEdit} accessibilityLabel={`Düzenle: ${el.text}`} style={{ borderWidth: 2, borderColor: EDIT_BORDER }}>
+            <TouchableRipple onPress={() => onEdit({ x: el.x * s, y: el.y * s, h: el.hMm * s, align: 'left' })} accessibilityLabel={`Düzenle: ${el.text}`} style={{ borderWidth: 2, borderColor: EDIT_BORDER }}>
               {body}
             </TouchableRipple>
           ) : (
@@ -118,7 +122,7 @@ function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewEle
         <View style={[{ position: 'absolute', top: el.y * s - fontSize * 0.1 }, pos, el.rot ? { transform: [{ rotate: `${el.rot}deg` }] } : null]}>
           {editable ? (
             <TouchableRipple
-              onPress={onEdit}
+              onPress={() => onEdit({ x: el.x * s, y: el.y * s, h: fontSize * 1.15, align: el.align })}
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               style={styles.editHit}
               accessibilityLabel={`Düzenle: ${el.text}`}
@@ -135,7 +139,7 @@ function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewEle
   }
 }
 
-export default function TamburLabelPaper({ preview, fallbackRows, isEditable, onEdit, stale }: TamburLabelPaperProps) {
+export default function TamburLabelPaper({ preview, fallbackRows, isEditable, onEdit, stale, overlay }: TamburLabelPaperProps) {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -158,19 +162,20 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
               ? preview.elements.map((el, i) => {
                   const key = el.type === 'text' || el.type === 'banner' ? el.bind : null;
                   const editable = isEditable(key);
-                  return <ElementView key={i} el={el} s={s} paperW={wMm} editable={editable} onEdit={() => key && onEdit(key)} />;
+                  return <ElementView key={i} el={el} s={s} paperW={wMm} editable={editable} onEdit={(a) => key && onEdit(key, a)} />;
                 })
               : (
                 <View style={styles.rowsPad}>
                   {(rows ?? []).map((r, i) => {
                     const editable = isEditable(r.key);
+                    const rowH = (r.big ? 5 : 3.4) * s * 1.3 + 4;
                     const t = (
                       <Text style={[styles.rowText, r.big && styles.rowBig, r.muted && styles.rowMuted, { fontSize: (r.big ? 5 : 3.4) * s }]} numberOfLines={1}>
                         {r.text}
                       </Text>
                     );
                     return editable && r.key ? (
-                      <TouchableRipple key={i} onPress={() => onEdit(r.key as string)} style={[styles.editHit, styles.rowHit]} testID={`onizleme-alan-${r.key}`}>
+                      <TouchableRipple key={i} onPress={() => onEdit(r.key as string, { x: 10, y: 10 + i * rowH, h: rowH, align: 'left' })} style={[styles.editHit, styles.rowHit]} testID={`onizleme-alan-${r.key}`}>
                         {t}
                       </TouchableRipple>
                     ) : (
@@ -179,6 +184,7 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
                   })}
                 </View>
               )}
+            {overlay?.({ w: wMm * s, h: hMm * s })}
           </View>
         )}
       </View>

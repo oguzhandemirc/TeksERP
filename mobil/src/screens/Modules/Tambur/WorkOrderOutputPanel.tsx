@@ -22,9 +22,9 @@
 // "yenile"ye basmak zorunda kalır (2026-08-04'te `RecentOutputModal`'da
 // birebir bu yaşandı).
 // =============================================================================
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Icon, IconButton, TouchableRipple, ActivityIndicator, Button } from 'react-native-paper';
+import { Text, Icon, IconButton, TouchableRipple, ActivityIndicator, Button, Menu } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 
 import { tamburService } from '../../../services/tambur.service';
@@ -35,6 +35,7 @@ import { unprintedRolls } from './finalLabel';
 import { labelTextFixLockReason } from './labelTextFix';
 import { colors } from '../../../theme/tokens';
 import { MEASURE_LABEL, measureToneOf } from './measureSource';
+import { kgCellText, outputSummaryText, outputTotals } from './outputSummary';
 import type { LastTamburMeasure } from './TamburMeasureStrip';
 
 const LAST_TONE = { GREEN: colors.successText, AMBER: colors.warningText, RED: colors.dangerText, NONE: colors.textSecondary } as const;
@@ -42,6 +43,59 @@ const LAST_TONE = { GREEN: colors.successText, AMBER: colors.warningText, RED: c
 /** "SS:dd" — panelde tarih GEREKMEZ: kapsam zaten tek iş emri. */
 function hhmm(v: string | Date | null | undefined): string {
   return formatFactory(v, 'HH:mm');
+}
+
+/** Tek satır: saat · barkod · metre · kg · [bas] [geri al]. Etiket düzeltme satır menüsünde (dokun / uzun bas). */
+function OutputRow({ r, menuOpen, onMenu, onPrint, onUndo, onFixLabel }: {
+  r: Roll;
+  menuOpen: boolean;
+  onMenu?: (open: boolean) => void;
+  onPrint: (roll: Roll) => void;
+  onUndo: (roll: Roll) => void;
+  onFixLabel?: (roll: Roll) => void;
+}) {
+  const lock = labelTextFixLockReason(r.status);
+  const row = (
+    <TouchableRipple
+      onPress={onMenu ? () => onMenu(true) : undefined}
+      onLongPress={onMenu ? () => onMenu(true) : undefined}
+      disabled={!onMenu}
+      style={s.row}
+      accessibilityHint={onMenu ? 'Etiket bilgisini düzeltmek için dokunun' : undefined}
+      testID={`wo-output-satir-${r.id}`}
+    >
+      <View style={s.rowInner}>
+        <Text style={s.rowTime}>{hhmm(r.createdAt)}</Text>
+        <Text style={s.rowBarcode} numberOfLines={1}>
+          {r.barcode ?? '—'}
+        </Text>
+        {onFixLabel && lock ? (
+          <View accessibilityLabel={lock} testID={`wo-output-etiket-kilit-${r.id}`}>
+            <Icon source="lock-outline" size={16} color={colors.textMuted} />
+          </View>
+        ) : null}
+        <Text style={s.rowQty}>{Number(r.initialQty ?? 0).toFixed(1)} m</Text>
+        <Text style={[s.rowQty, s.rowKg]} testID={`wo-output-kg-${r.id}`}>{kgCellText(r.weightKg)}</Text>
+        <IconButton icon="printer" size={26} iconColor="#1e40af" containerColor="#eef2ff" mode="contained-tonal" onPress={() => onPrint(r)} style={s.rowBtn} accessibilityLabel="Etiketi bas" />
+        <IconButton icon="undo-variant" size={26} iconColor="#b45309" containerColor="#fef3c7" mode="contained-tonal" onPress={() => onUndo(r)} style={s.rowBtn} accessibilityLabel="Geri al" />
+      </View>
+    </TouchableRipple>
+  );
+  if (!onMenu || !onFixLabel) return row;
+  return (
+    <Menu visible={menuOpen} onDismiss={() => onMenu(false)} anchor={row} anchorPosition="bottom">
+      <Menu.Item
+        leadingIcon={lock ? 'lock-outline' : 'tag-edit-outline'}
+        title={lock ? `Etiket düzeltilemez — ${lock}` : 'Etiket bilgisini düzelt'}
+        disabled={!!lock}
+        onPress={() => {
+          onMenu(false);
+          onFixLabel(r);
+        }}
+        testID={`wo-output-etiket-duzelt-${r.id}`}
+      />
+    </Menu>
+  );
 }
 
 export default function WorkOrderOutputPanel({
@@ -100,11 +154,9 @@ export default function WorkOrderOutputPanel({
 
   const unprinted = useMemo(() => unprintedRolls(rolls), [rolls]);
 
-  const totals = useMemo(() => {
-    let meters = 0;
-    for (const r of rolls) meters += Number(r.initialQty ?? 0);
-    return { count: rolls.length, meters };
-  }, [rolls]);
+  const totals = useMemo(() => outputTotals(rolls), [rolls]);
+  // Etiket düzeltme satırdan kalktı (2026-11-10): satıra dokun / uzun bas → menü. Satır yine BASKI YAPMAZ.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
 
   // KATLANABİLİR (2026-08-12 saha isteği): manuel metre girişi açıkken sağ
   // sütunda yer kalmıyor — başlığa dokununca liste kapanır, yalnız başlık +
@@ -131,9 +183,9 @@ export default function WorkOrderOutputPanel({
           <Text style={s.headerTitle}>{title}</Text>
           {/* KAPALIYKEN sayaçlar başlık satırına taşınır — saha isteği:
               "kapalı konumdayken top ve basılan m yine gözüksün". */}
-          {collapsed ? (
-            <Text style={s.headerTotals}>
-              {totals.count} top · {totals.meters.toFixed(1)} m
+          {collapsed || fill ? (
+            <Text style={s.headerTotals} testID="wo-output-ozet">
+              {outputSummaryText(totals)}
             </Text>
           ) : null}
           <View style={{ flex: 1 }} />
@@ -162,6 +214,7 @@ export default function WorkOrderOutputPanel({
         <>
       {/* ÜST SAYAÇ — operatörün en çok baktığı iki sayı. "Kalan"la
           karıştırılmasın diye etiket açıkça "Basılan". */}
+      {fill ? null : (
       <View style={s.totals}>
         <View style={s.totalBox}>
           <Text style={s.totalValue}>{totals.count}</Text>
@@ -173,6 +226,7 @@ export default function WorkOrderOutputPanel({
           <Text style={s.totalLabel}>m basılan</Text>
         </View>
       </View>
+      )}
 
       {onPrintUnprinted && unprinted.length > 0 ? (
         <Button
@@ -200,55 +254,15 @@ export default function WorkOrderOutputPanel({
             // ⚠️ SATIRA DOKUNMAK BASKI DEĞİL (2026-08-12 saha şikâyeti: listeye
             // her dokunuş kâğıt bastırıyordu). Baskı YALNIZ yazıcı tuşundan —
             // satırın kendisi pasif; tuşlar eldiven boyuna büyütüldü.
-            <View key={r.id} style={s.row}>
-              <View style={s.rowInner}>
-                <Text style={s.rowTime}>{hhmm(r.createdAt)}</Text>
-                <Text style={s.rowBarcode} numberOfLines={1}>
-                  {r.barcode ?? '—'}
-                </Text>
-                <Text style={s.rowQty}>{Number(r.initialQty ?? 0).toFixed(1)} m</Text>
-                <IconButton
-                  icon="printer"
-                  size={26}
-                  iconColor="#1e40af"
-                  containerColor="#eef2ff"
-                  mode="contained-tonal"
-                  onPress={() => onPrint(r)}
-                  style={s.rowBtn}
-                  accessibilityLabel="Etiketi bas"
-                />
-                {onFixLabel ? (
-                  labelTextFixLockReason(r.status) ? (
-                    // Sevkli/kapanmış top: düğme yerine kilit — neden okunur, dokunuş yok.
-                    <View style={s.lockBox} accessibilityLabel={labelTextFixLockReason(r.status) ?? undefined} testID={`wo-output-etiket-kilit-${r.id}`}>
-                      <Icon source="lock-outline" size={22} color={colors.textMuted} />
-                    </View>
-                  ) : (
-                    <IconButton
-                      icon="tag-edit-outline"
-                      size={26}
-                      iconColor={colors.textOnDark}
-                      containerColor={colors.successDark}
-                      mode="contained"
-                      onPress={() => onFixLabel(r)}
-                      style={s.fixBtn}
-                      accessibilityLabel="Etiket bilgisini düzelt"
-                      testID={`wo-output-etiket-duzelt-${r.id}`}
-                    />
-                  )
-                ) : null}
-                <IconButton
-                  icon="undo-variant"
-                  size={26}
-                  iconColor="#b45309"
-                  containerColor="#fef3c7"
-                  mode="contained-tonal"
-                  onPress={() => onUndo(r)}
-                  style={s.rowBtn}
-                  accessibilityLabel="Geri al"
-                />
-              </View>
-            </View>
+            <OutputRow
+              key={r.id}
+              r={r}
+              menuOpen={menuFor === r.id}
+              onMenu={onFixLabel ? (open) => setMenuFor(open ? r.id : null) : undefined}
+              onPrint={onPrint}
+              onUndo={onUndo}
+              onFixLabel={onFixLabel}
+            />
           ))}
         </ScrollView>
       )}
@@ -336,8 +350,7 @@ const s = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   rowBtn: { margin: 0, marginVertical: 4, width: 48, height: 48, borderRadius: 10 },
-  fixBtn: { margin: 0, width: 56, height: 56, borderRadius: 10 },
-  lockBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  rowKg: { minWidth: 64, textAlign: 'right', color: colors.textSecondary },
   empty: { paddingVertical: 18, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#94a3b8' },
 });

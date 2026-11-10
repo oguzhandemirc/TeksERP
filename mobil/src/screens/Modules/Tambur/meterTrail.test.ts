@@ -1,5 +1,5 @@
 // Tambur metre şeridi saf katmanı: metin parçaları, aşım hesabı (engel değil), girdi ayrıştırma.
-import { cutOverage, fmtM, meterTrailParts, meterTrailText, overageWarningText, parseCutInput, type RollMeterTrail } from './meterTrail';
+import { cutOverage, fmtM, meterTrailParts, meterTrailText, overageWarningText, parseCutInput, rulerTotalM, type RollMeterTrail } from './meterTrail';
 
 const BASE: RollMeterTrail = {
   rollId: 'r1',
@@ -33,6 +33,23 @@ describe('meterTrailText', () => {
   it('ondalık Türkçe virgülle, tek basamak', () => {
     expect(fmtM(12.25)).toBe('12,3');
     expect(fmtM(547.96)).toBe('548');
+  });
+});
+
+describe('omitRemaining (geniş bilgi kartı)', () => {
+  it('"Kalan ≈" düşer, "Aşım" uyarısı kalır', () => {
+    expect(meterTrailParts(BASE, { omitRemaining: true })).toEqual(['Beyan 500 m', 'Kurşun 548 m', 'Kesilen 320 m']);
+    expect(meterTrailParts({ ...BASE, cutSoFarM: 560, remainingM: -12 }, { omitRemaining: true })?.[3]).toBe('Aşım +12 m');
+  });
+});
+
+describe('rulerTotalM (hata cetveli üst sınırı)', () => {
+  it('kurşun ölçümü kesilen+kalandan büyükse kurşun (hedef: 300)', () => {
+    expect(rulerTotalM({ ...BASE, prior: { ...BASE.prior!, meters: 300 }, referenceM: 300, cutSoFarM: 130 }, 120)).toBe(300);
+  });
+  it('kesilen + kalan büyükse o; uç yoksa kalan', () => {
+    expect(rulerTotalM({ ...BASE, prior: null, referenceM: null, cutSoFarM: 130 }, 170)).toBe(300);
+    expect(rulerTotalM(null, 170)).toBe(170);
   });
 });
 

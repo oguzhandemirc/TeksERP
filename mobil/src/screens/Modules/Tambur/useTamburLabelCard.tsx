@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { useMachinePeripherals, primaryScaleFor } from '../../../hooks/useMachinePeripherals';
-import { readScaleOnce } from '../../../services/hal/readScale';
 import { consigneeChoiceText } from './consignee';
+import { readKgForCut } from './cutReadings';
+import type { KgStamp } from './finalLabel';
 import { kgFieldVisible, labelCardRows, widthFieldVisible } from './labelCard';
 import TamburConsigneePicker from './TamburConsigneePicker';
 import type { TamburLabelCardProps } from './TamburFinalLabelStrip';
@@ -25,7 +26,7 @@ export interface LabelCardInput {
 
 const fmt = (n: number) => String(n).replace('.', ',');
 
-export function useTamburLabelCard(i: LabelCardInput): { card: TamburLabelCardProps; overlay: React.ReactNode } {
+export function useTamburLabelCard(i: LabelCardInput): { card: TamburLabelCardProps; overlay: React.ReactNode; readKg: () => Promise<KgStamp | null> } {
   const { final } = i;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tartBusy, setTartBusy] = useState(false);
@@ -34,18 +35,13 @@ export function useTamburLabelCard(i: LabelCardInput): { card: TamburLabelCardPr
   const fields = final.preview?.fields ?? null;
   const owner = final.owner;
   const kgVisible = kgFieldVisible(fields, final.settings.weighRequired);
+  // Tart ve Kg Otomatik kesimi AYNI okuma yolundan (readKgForCut → readScaleOnce).
+  const readKg = () => readKgForCut(scale, (t) => Toast.show(t));
   const tart = async () => {
     setTartBusy(true);
     try {
-      const read = await readScaleOnce(scale, {
-        onPairing: (m) => Toast.show({ type: 'info', text1: m.title, text2: m.detail, visibilityTime: 8000 }),
-      });
-      if (!read.ok) {
-        Toast.show({ type: 'error', text1: read.error.title, text2: read.error.detail, visibilityTime: 6000 });
-        return;
-      }
-      if (read.notice) Toast.show({ type: 'info', text1: read.notice.title, text2: read.notice.detail, visibilityTime: 6000 });
-      final.stampKg({ kg: read.kg, source: read.source });
+      const k = await readKg();
+      if (k) final.stampKg(k);
     } finally {
       setTartBusy(false);
     }
@@ -96,5 +92,5 @@ export function useTamburLabelCard(i: LabelCardInput): { card: TamburLabelCardPr
       onDismiss={() => setPickerOpen(false)}
     />
   ) : null;
-  return { card, overlay };
+  return { card, overlay, readKg };
 }

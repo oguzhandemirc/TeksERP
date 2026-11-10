@@ -35,6 +35,8 @@ export interface TamburLabelPreview {
   templateName: string | null;
   widthMm: number;
   heightMm: number;
+  /** Taslaksız (miras) en — ekrandaki En kutusunun ipucu; kesime gönderilmez. */
+  sourceWidthCm: number | null;
   /** Kanvas varyantı → konumlu elemanlar; akış şablonunda null. */
   elements: TamburPreviewElement[] | null;
   /** Akış şablonu (ya da şablonsuz yedek) → sıralı satırlar. */
@@ -57,6 +59,11 @@ export function applyTamburDraft(payload: LabelPayload, draft: TamburLabelDraft)
     widthCm: draft.widthCm != null && draft.widthCm > 0 ? draft.widthCm : payload.widthCm,
     qualityGrade: draft.qualityGrade ?? "",
   };
+}
+
+/** Taslak uygulanmadan önceki (miras) en; yoksa/≤0 null. Saf. */
+export function sourceWidthOf(payload: LabelPayload): number | null {
+  return payload.widthCm != null && payload.widthCm > 0 ? payload.widthCm : null;
 }
 
 /** Kanvas elemanlarını çizilebilir biçime çevirir — metin baskı fonksiyonlarından. Saf. */

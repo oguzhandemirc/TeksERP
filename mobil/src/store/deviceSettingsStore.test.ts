@@ -64,6 +64,21 @@ describe('deviceSettingsStore — metraj giriş tercihi', () => {
     expect(useDeviceSettingsStore.getState().tamburCutMode).toBe('auto');
   });
 
+  it('Tambur kg kipi: varsayılan manual (bugünkü davranış); yazılır ve geri gelir; bozuk → manual', async () => {
+    const disk = fakeDisk();
+    useDeviceSettingsStore.setState({ tamburKgMode: 'auto' });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburKgMode).toBe('manual');
+    await useDeviceSettingsStore.getState().setTamburKgMode('auto');
+    expect(disk['device_tambur_kg_mode']).toBe('auto');
+    useDeviceSettingsStore.setState({ tamburKgMode: 'manual', isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburKgMode).toBe('auto');
+    disk['device_tambur_kg_mode'] = 'ÇÖP';
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburKgMode).toBe('manual');
+  });
+
   it('state ANINDA döner (disk yazımı beklenmez — anahtar takılmasın)', () => {
     fakeDisk();
     void useDeviceSettingsStore.getState().setKk1ManualEntry(true);

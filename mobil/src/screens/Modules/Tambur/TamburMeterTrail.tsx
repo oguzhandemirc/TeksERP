@@ -24,9 +24,10 @@ export function useRollMeterTrail(rollId: string | null | undefined) {
   });
 }
 
-export function TamburMeterTrailView({ trail, pendingM, tone = 'dark' }: { trail: RollMeterTrail | null | undefined; pendingM: number; tone?: 'dark' | 'light' }) {
+type TrailViewProps = { trail: RollMeterTrail | null | undefined; pendingM: number; tone?: 'dark' | 'light'; omitRemaining?: boolean };
+export function TamburMeterTrailView({ trail, pendingM, tone = 'dark', omitRemaining }: TrailViewProps) {
   const light = tone === 'light';
-  const parts = meterTrailParts(trail);
+  const parts = meterTrailParts(trail, { omitRemaining });
   if (!parts) return null;
   const over = cutOverage(trail, pendingM);
   return (
@@ -48,9 +49,9 @@ export function TamburMeterTrailView({ trail, pendingM, tone = 'dark' }: { trail
   );
 }
 
-export default function TamburMeterTrail({ rollId, pendingM, tone }: { rollId: string | null | undefined; pendingM: number; tone?: 'dark' | 'light' }) {
+export default function TamburMeterTrail({ rollId, ...rest }: Omit<TrailViewProps, 'trail'> & { rollId: string | null | undefined }) {
   const q = useRollMeterTrail(rollId);
-  return <TamburMeterTrailView trail={q.data ?? null} pendingM={pendingM} tone={tone} />;
+  return <TamburMeterTrailView trail={q.data ?? null} {...rest} />;
 }
 
 // Koyu (#0f172a) bant üstünde okunur sarı; ikincil metin ≥12.

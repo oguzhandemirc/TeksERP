@@ -14,7 +14,7 @@ import { resolveLabelRouting } from "../helpers/label-routing.resolver";
 import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { readCanvasLayout } from "../../config/label-elements";
 import { templateTextLinesKeyed } from "../helpers/native-label.shared";
-import { applyTamburDraft, composeCanvasElements, type TamburLabelDraft, type TamburLabelPreview } from "./label-preview-compose";
+import { applyTamburDraft, composeCanvasElements, sourceWidthOf, type TamburLabelDraft, type TamburLabelPreview } from "./label-preview-compose";
 
 export type { TamburLabelDraft, TamburLabelPreview, TamburPreviewElement } from "./label-preview-compose";
 
@@ -52,6 +52,7 @@ export async function getTamburLabelPreview(args: {
       },
     },
   });
+  const sourceWidthCm = sourceWidthOf(base.data);
   const payload = applyTamburDraft(base.data, args.draft);
   if (args.consigneeId && roll.ownerCustomerId) {
     const c = await prisma.customerConsignee.findFirst({
@@ -81,6 +82,7 @@ export async function getTamburLabelPreview(args: {
       templateName: t?.name ?? null,
       widthMm,
       heightMm,
+      sourceWidthCm,
       elements: composeCanvasElements(layout.elements, payload, {
         // Önizleme yazıcı dilinden BAĞIMSIZ: HTML render'ının eleman kümesi (kullanıcı kararı 2026-11-10).
         language: "RASTER_HTML",
@@ -96,6 +98,7 @@ export async function getTamburLabelPreview(args: {
     templateName: t?.name ?? null,
     widthMm: Number(routing.format.widthMm) || 100,
     heightMm: Number(routing.format.heightMm) || 60,
+    sourceWidthCm,
     elements: null,
     rows: templateTextLinesKeyed(payload, t).map((r) => ({ key: r.key, text: r.text, size: r.size, bold: r.bold })),
   };

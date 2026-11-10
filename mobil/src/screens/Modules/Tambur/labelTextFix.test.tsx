@@ -94,15 +94,26 @@ describe('WorkOrderOutputPanel etiket düzelt düğmesi', () => {
   const mk = (id: string, status: Roll['status']) =>
     ({ id, barcode: `B-${id}`, status, initialQty: 10, currentQty: 10, createdAt: '2026-11-09T10:00:00Z' }) as unknown as Roll;
 
-  it('canlı topta düğme onFixLabel çağırır; sevkli topta kilit, düğme yok', async () => {
-    tsvc.recentOutputRolls.mockResolvedValue({ success: true, data: [mk('a', 'WAREHOUSE'), mk('b', 'SHIPPED')] });
+  it('satırda yalnız bas + geri al; düzelt satır menüsünde (dokun / uzun bas); sevkli topta kilit + menü öğesi kapalı', async () => {
+    tsvc.recentOutputRolls.mockResolvedValue({ success: true, data: [{ ...mk('a', 'WAREHOUSE'), weightKg: 12.5 }, mk('b', 'SHIPPED')] });
     const onFix = jest.fn();
-    const r = renderWithPaper(<WorkOrderOutputPanel workOrderId="wo1" onPrint={noop} onUndo={noop} onFixLabel={onFix} />);
-    await waitFor(() => expect(r.getByTestId('wo-output-etiket-duzelt-a')).toBeTruthy());
-    expect(r.queryByTestId('wo-output-etiket-duzelt-b')).toBeNull();
+    const r = renderWithPaper(<WorkOrderOutputPanel workOrderId="wo1" fill onPrint={noop} onUndo={noop} onFixLabel={onFix} />);
+    await waitFor(() => expect(r.getByText('B-a')).toBeTruthy());
+    expect(r.queryByTestId('wo-output-etiket-duzelt-a')).toBeNull();
+    expect(r.getAllByLabelText('Etiketi bas')).toHaveLength(2);
+    expect(r.getAllByLabelText('Geri al')).toHaveLength(2);
+    expect(r.getByTestId('wo-output-kg-a')).toHaveTextContent('12.5 kg');
+    expect(r.getByTestId('wo-output-kg-b')).toHaveTextContent('—');
+    expect(r.getByTestId('wo-output-ozet')).toHaveTextContent('2 top · 20.0 m · 12.5 kg');
     expect(r.getByTestId('wo-output-etiket-kilit-b')).toBeTruthy();
+    fireEvent(r.getByTestId('wo-output-satir-a'), 'longPress');
+    await waitFor(() => expect(r.getByTestId('wo-output-etiket-duzelt-a')).toBeTruthy());
     fireEvent.press(r.getByTestId('wo-output-etiket-duzelt-a'));
     expect(onFix).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }));
+    fireEvent.press(r.getByTestId('wo-output-satir-b'));
+    await waitFor(() => expect(r.getByTestId('wo-output-etiket-duzelt-b')).toBeTruthy());
+    fireEvent.press(r.getByTestId('wo-output-etiket-duzelt-b'));
+    expect(onFix).toHaveBeenCalledTimes(1);
   });
 
   it('onFixLabel verilmezse düğme hiç çizilmez (eski çağıranlar aynı)', async () => {

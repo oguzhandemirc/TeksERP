@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LabelElement } from "../src/config/label-elements";
 import { buildCanvasLabelHtml } from "../src/services/helpers/label-canvas-html.helper";
-import { applyTamburDraft, composeCanvasElements } from "../src/services/tambur/label-preview-compose";
+import { applyTamburDraft, composeCanvasElements, sourceWidthOf } from "../src/services/tambur/label-preview-compose";
 import type { LabelPayload } from "../src/types/label.types";
 import { FORMAT, PAYLOAD } from "./lib/etiket-musteri-kodu-fikstur";
 
@@ -50,6 +50,8 @@ async function main(): Promise<void> {
   check("§1 boş metre = kalanı kes (ana kalan)", e.lengthMeters === 170);
   check("§1 tartılmamış çocukta kg yok (ana kg sızmaz)", e.weightKg === null);
   check("§1 boş en = kaynak en", e.widthCm === 300);
+  check("§1 miras en ipucu taslaktan bağımsız", sourceWidthOf(PARENT) === 300);
+  check("§1 en yoksa ipucu null", sourceWidthOf({ ...PARENT, widthCm: null } as LabelPayload) === null);
   check("§1 kalitesiz taslak boş kod", e.qualityGrade === "");
 
   console.log("\n[§2] composeCanvasElements ↔ HTML render");

@@ -49,6 +49,9 @@ function props(over: Partial<TamburLabelPreviewCardProps> = {}): TamburLabelPrev
     length: { value: '', set: jest.fn() },
     kg: { value: '', set: jest.fn() },
     width: { value: '', set: jest.fn() },
+    itemName: { value: '', set: jest.fn() },
+    colorName: { value: '', set: jest.fn() },
+    batch: { value: '', set: jest.fn() },
     quality: { grades: [{ code: 'Q1', name: '1. Kalite' }, { code: 'A1', name: 'A1' }], value: 'Q1', pick: jest.fn() },
     onCustomer: jest.fn(),
     ...over,
@@ -70,20 +73,41 @@ describe('TamburLabelPreviewCard', () => {
     expect(r.getByText('yeni barkod — kesimde verilir')).toBeTruthy();
   });
 
-  it('metreye dokun → düzenle → Kaydet: kesimin uzunluk yazıcısı çağrılır', async () => {
+  it('metreye dokun → kutu YERİNDE açılır (modal yok) → ✓: kesimin uzunluk yazıcısı çağrılır', async () => {
     const p = props();
     const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
     layout(r);
     fireEvent.press(r.getByTestId('onizleme-alan-lengthMeters'));
     await flush();
-    fireEvent.changeText(r.getByTestId('onizleme-sayi'), '12,5');
+    expect(r.getByTestId('onizleme-yerinde-kutu')).toBeTruthy();
+    fireEvent.changeText(r.getByTestId('onizleme-yerinde'), '12,5');
     await flush();
-    fireEvent.press(r.getByTestId('onizleme-kaydet'));
+    fireEvent.press(r.getByTestId('onizleme-onay'));
     await flush();
     expect(p.length.set).toHaveBeenCalledWith('12,5');
+    expect(r.queryByTestId('onizleme-yerinde-kutu')).toBeNull();
   });
 
-  it('kaliteye dokun → seç: kalite yazıcısı; ada dokun → etiket bilgisi penceresi', async () => {
+  it('ada dokun → yerinde metin kutusu (pencere açılmaz); klavye "bitti" ad yazıcısını çağırır; ✕ ilk değere döner', async () => {
+    const p = props();
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    layout(r);
+    fireEvent.press(r.getByTestId('onizleme-alan-itemName'));
+    await flush();
+    expect(p.onOpenInfo).not.toHaveBeenCalled();
+    fireEvent.changeText(r.getByTestId('onizleme-yerinde'), 'TÜL PERDE');
+    fireEvent(r.getByTestId('onizleme-yerinde'), 'submitEditing');
+    await flush();
+    expect(p.itemName.set).toHaveBeenCalledWith('TÜL PERDE');
+    fireEvent.press(r.getByTestId('onizleme-alan-itemName'));
+    await flush();
+    fireEvent.press(r.getByTestId('onizleme-vazgec'));
+    await flush();
+    expect(p.itemName.set).toHaveBeenCalledTimes(1);
+    expect(r.queryByTestId('onizleme-yerinde-kutu')).toBeNull();
+  });
+
+  it('kaliteye dokun → seç: kalite yazıcısı', async () => {
     const p = props();
     const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
     layout(r);
@@ -92,8 +116,6 @@ describe('TamburLabelPreviewCard', () => {
     fireEvent.press(r.getByText('A1'));
     await flush();
     expect(p.quality.pick).toHaveBeenCalledWith('A1');
-    fireEvent.press(r.getByTestId('onizleme-alan-itemName'));
-    expect(p.onOpenInfo).toHaveBeenCalled();
   });
 
   it('otomatik ölçümde metre alanı dokunulamaz', () => {
@@ -110,7 +132,7 @@ describe('TamburLabelPreviewCard', () => {
   });
 
   it('dispatchEdit: alıcı/müşteri kendi seçicisini açar', () => {
-    const p = { onOpenInfo: jest.fn(), onConsignee: jest.fn(), onCustomer: jest.fn() };
+    const p = { onConsignee: jest.fn(), onCustomer: jest.fn() };
     const open = jest.fn();
     dispatchEdit('consignee', p, open);
     dispatchEdit('customer', p, open);
@@ -122,14 +144,26 @@ describe('TamburLabelPreviewCard', () => {
 });
 
 describe('alt şerit (geniş ana kesim)', () => {
-  it('sağ grup: kip düğmesi o anki kipi gösterir, dokununca geçiş ister; Bitir aynı grupta', () => {
-    const onToggle = jest.fn();
-    const onBitir = jest.fn();
-    const r = renderWithPaper(<TamburModeBitirBar mode="manual" onToggle={onToggle} busy={false} onBitir={onBitir} bitirLoading={false} />);
-    expect(r.getByText('ÖLÇÜM')).toBeTruthy();
+  it('sağ grup: METRE ve KG kip düğmeleri ayrı, her biri kendi geçişini ister; Bitir aynı grupta', () => {
+    const meter = jest.fn();
+    const kg = jest.fn();
+    const r = renderWithPaper(
+      <TamburModeBitirBar meter={{ mode: 'manual', onToggle: meter }} kg={{ mode: 'auto', onToggle: kg }} busy={false} onBitir={jest.fn()} bitirLoading={false} />,
+    );
+    expect(r.getByText('METRE')).toBeTruthy();
+    expect(r.getByText('KG')).toBeTruthy();
     expect(r.getByText('Manuel')).toBeTruthy();
+    expect(r.getByText('Otomatik')).toBeTruthy();
+    expect(r.getByText('Bitir')).toBeTruthy();
     fireEvent.press(r.getByTestId('tambur-kip-dugmesi'));
-    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(meter).toHaveBeenCalledTimes(1);
+    fireEvent.press(r.getByTestId('tambur-kg-kip-dugmesi'));
+    expect(kg).toHaveBeenCalledTimes(1);
+  });
+
+  it('kg alanı yoksa KG düğmesi çizilmez', () => {
+    const r = renderWithPaper(<TamburModeBitirBar meter={{ mode: 'auto', onToggle: jest.fn() }} kg={null} busy={false} onBitir={jest.fn()} bitirLoading={false} />);
+    expect(r.queryByTestId('tambur-kg-kip-dugmesi')).toBeNull();
   });
 
   it('sol grup: Kartela + "Kes & Etiket Bas" ikinci satırıyla; Bitir ve Etiket bilgisi yok', () => {

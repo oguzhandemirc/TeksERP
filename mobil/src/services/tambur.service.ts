@@ -328,6 +328,8 @@ export interface TamburLabelPreview {
   templateName: string | null;
   widthMm: number;
   heightMm: number;
+  /** Miras en (taslaksız) — En kutusunun ipucu; eski backend göndermez. */
+  sourceWidthCm?: number | null;
   elements: TamburPreviewElement[] | null;
   rows: { key: string | null; text: string; size: string; bold: boolean }[] | null;
 }

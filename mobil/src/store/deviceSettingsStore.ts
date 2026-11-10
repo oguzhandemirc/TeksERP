@@ -22,6 +22,7 @@ const TAMBUR_RESET_KARTELA_KEY = 'tambur_reset_kartela_after_cut';
 const TAMBUR_LAST_QUALITY_KEY = 'tambur_last_quality_code';
 const LIST_COLUMNS_KEY = 'device_list_columns';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
+const TAMBUR_KG_MODE_KEY = 'device_tambur_kg_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
@@ -112,6 +113,8 @@ interface DeviceSettingsState {
    *  AYNI tercihi paylaşır (bilinçli): seçim aslında "bu istasyonda metre
    *  makinesi çalışıyor mu" gerçeğini yansıtır, o da tek bir gerçektir. */
   tamburCutMode: MeterEntryMode;
+  /** Tambur kesim kg'si: elle mi, Kes anında tartıdan mı (2026-11-10). Varsayılan 'manual' = bugünkü davranış. */
+  tamburKgMode: MeterEntryMode;
   /**
    * Tambur kesiminde bir çıktı alındıktan sonra KALİTE sıfırlansın mı?
    *   true  → her kesimden sonra "1. Kalite"ye döner (yanlışlıkla A1 basılmasın).
@@ -255,6 +258,7 @@ interface DeviceSettingsState {
   setTamburOutputCollapsed: (v: boolean) => Promise<void>;
   setKk1ManualEntry: (v: boolean) => Promise<void>;
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
+  setTamburKgMode: (v: MeterEntryMode) => Promise<void>;
   setTamburResetQualityAfterCut: (v: boolean) => Promise<void>;
   setTamburLastQualityCode: (v: string | null) => Promise<void>;
   /** null → o ekranın kaydı silinir (varsayılana dön); diğer ekranlara dokunulmaz. */
@@ -325,6 +329,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   lastRouteTemplateId: null,
   kk1ManualEntry: false,
   tamburCutMode: 'manual',
+  tamburKgMode: 'manual',
   tamburResetQualityAfterCut: false,
   tamburResetKartelaAfterCut: true,
   tamburLastQualityCode: null,
@@ -351,7 +356,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality, listColumns, hiddenIncoming] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality, listColumns, hiddenIncoming, kgMode] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -380,6 +385,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(TAMBUR_LAST_QUALITY_KEY),
         storage.getItem(LIST_COLUMNS_KEY),
         storage.getItem(DOC_HIDDEN_INCOMING_KEY),
+        storage.getItem(TAMBUR_KG_MODE_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -388,6 +394,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       tamburOutputCollapsed: outputCollapsed === 'true',
       // Bilinmeyen/bozuk değer → varsayılan 'manual' (kayıt yoksa da öyle).
       tamburCutMode: tamburMode === 'auto' ? 'auto' : 'manual',
+      tamburKgMode: kgMode === 'auto' ? 'auto' : 'manual',
       // Varsayılan KAPALI (bugünkü davranış: kalite korunur) — yalnız birebir
       // 'true' sıfırlamayı açar.
       tamburResetQualityAfterCut: tamburResetQuality === 'true',
@@ -472,6 +479,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setTamburCutMode: async (v) => {
     set({ tamburCutMode: v });
     await storage.setItem(TAMBUR_CUT_MODE_KEY, v);
+  },
+
+  setTamburKgMode: async (v) => {
+    set({ tamburKgMode: v });
+    await storage.setItem(TAMBUR_KG_MODE_KEY, v);
   },
 
   setTamburResetQualityAfterCut: async (v) => {

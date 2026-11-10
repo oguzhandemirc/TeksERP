@@ -171,12 +171,17 @@ function useTamburLabelPreview(rollId: string | null | undefined, customerId: st
 
 /** Tartım (kaynak damgalı) + ölçülen en; yeni top = boş kutular (önceki topun değeri sızmaz). */
 function useTamburMeasuredInputs(rollId: string | null | undefined, settings: TamburLabelSettings) {
-  const [kgText, setKgText] = useState('');
-  const [kgStamp, setKgStamp] = useState<KgStamp | null>(null);
+  const [kgText, setKgTextState] = useState('');
   const [widthText, setWidthText] = useState('');
+  // Kg okuyucuları ref'ten: otomatik kg'de tartı damgası ile kesim AYNI olayda (render beklenmeden) gider.
+  const kgRef = useRef<{ text: string; stamp: KgStamp | null }>({ text: '', stamp: null });
+  const setKgText = (t: string) => {
+    kgRef.current = { ...kgRef.current, text: t };
+    setKgTextState(t);
+  };
   useEffect(() => {
-    setKgText('');
-    setKgStamp(null);
+    kgRef.current = { text: '', stamp: null };
+    setKgTextState('');
     setWidthText('');
   }, [rollId]);
   const widthError = (): string | null => (Number.isNaN(parseWidthCm(widthText)) ? 'En 0–1000 cm arası bir sayı olmalı.' : null);
@@ -186,16 +191,17 @@ function useTamburMeasuredInputs(rollId: string | null | undefined, settings: Ta
     widthText,
     setWidthText,
     stampKg: (read: KgStamp) => {
-      setKgStamp(read);
-      setKgText(String(read.kg).replace('.', ','));
+      const text = String(read.kg).replace('.', ',');
+      kgRef.current = { text, stamp: read };
+      setKgTextState(text);
     },
     weightKg: () => {
-      const kg = parseKg(kgText);
+      const kg = parseKg(kgRef.current.text);
       return kg == null || Number.isNaN(kg) ? undefined : kg;
     },
-    error: () => weightError(settings, kgText) ?? widthError(),
+    error: () => weightError(settings, kgRef.current.text) ?? widthError(),
     extras: (): Pick<LabelTextsBody, 'weightSource' | 'widthCm'> => {
-      const src = kgSource(kgStamp, kgText);
+      const src = kgSource(kgRef.current.stamp, kgRef.current.text);
       const w = parseWidthCm(widthText);
       return { ...(src ? { weightSource: src } : {}), ...(w != null && !Number.isNaN(w) ? { widthCm: w } : {}) };
     },

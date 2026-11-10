@@ -20,7 +20,8 @@ function finite(v: unknown): v is number {
 }
 
 /** Şerit parçaları; gösterecek ölçü yoksa (beyan da önceki ölçüm de yok) null. */
-export function meterTrailParts(trail: RollMeterTrail | null | undefined): string[] | null {
+/** omitRemaining: "Kalan ≈" parçası düşer (geniş kartta yeşil karo zaten söyler); "Aşım" uyarısı kalır. */
+export function meterTrailParts(trail: RollMeterTrail | null | undefined, opts?: { omitRemaining?: boolean }): string[] | null {
   if (!trail) return null;
   const prior = trail.prior && finite(trail.prior.meters) ? trail.prior : null;
   if (!finite(trail.declaredM) && !prior) return null;
@@ -32,7 +33,9 @@ export function meterTrailParts(trail: RollMeterTrail | null | undefined): strin
   }
   parts.push(`Kesilen ${fmtM(finite(trail.cutSoFarM) ? trail.cutSoFarM : 0)} m`);
   if (finite(trail.remainingM)) {
-    parts.push(trail.remainingM < -OVER_EPS ? `Aşım +${fmtM(-trail.remainingM)} m` : `Kalan ≈ ${fmtM(Math.max(0, trail.remainingM))} m`);
+    const over = trail.remainingM < -OVER_EPS;
+    if (opts?.omitRemaining && !over) return parts;
+    parts.push(over ? `Aşım +${fmtM(-trail.remainingM)} m` : `Kalan ≈ ${fmtM(Math.max(0, trail.remainingM))} m`);
   }
   return parts;
 }
@@ -57,4 +60,16 @@ export function cutOverage(trail: RollMeterTrail | null | undefined, pendingM: n
 
 export function overageWarningText(overM: number): string {
   return `Önceki ölçümü aşıyor (+${fmtM(overM)} m) — kesim kaydedilir, fazlası faturaya girer`;
+}
+
+/** Hata cetveli üst sınırı (geniş ekran): topun ölçülmüş tavanı — kurşun/önceki ölçüm, referans ya da
+ *  kesilen + kalan; hangisi büyükse. Uç yoksa kalan. Hata konumları ayrıca çağıranda dahil edilir. */
+export function rulerTotalM(trail: RollMeterTrail | null | undefined, currentQty: number): number {
+  const cand = [currentQty > 0 ? currentQty : 0];
+  if (trail) {
+    if (trail.prior && finite(trail.prior.meters)) cand.push(trail.prior.meters);
+    if (finite(trail.referenceM)) cand.push(trail.referenceM);
+    cand.push((finite(trail.cutSoFarM) ? trail.cutSoFarM : 0) + Math.max(0, currentQty));
+  }
+  return Math.max(...cand);
 }
