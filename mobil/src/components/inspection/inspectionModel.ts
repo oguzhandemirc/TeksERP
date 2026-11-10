@@ -97,6 +97,14 @@ export function rulerMaxFor(maxMeter: number | undefined, defects: InspectionDef
   return Math.max(m, 1);
 }
 
+/**
+ * Cetvel bölümü hata yokken ne çizer: `alwaysRuler` konağında (kurşun) boş 0…top boyu cetveli + "(0)" başlık,
+ * diğer konaklarda bugünkü "Henüz hata yok" boş durumu.
+ */
+export function rulerSectionMode(defectCount: number, alwaysRuler: boolean): 'ruler' | 'empty' {
+  return defectCount > 0 || alwaysRuler ? 'ruler' : 'empty';
+}
+
 export function isCriticalDefect(e: InspectionDefect, defectTypes: DefectType[]): boolean {
   return defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
 }

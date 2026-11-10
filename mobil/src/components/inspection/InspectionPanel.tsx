@@ -22,6 +22,7 @@ import PriorDefectList from './PriorDefectList';
 import {
   isCriticalDefect,
   rulerMaxFor,
+  rulerSectionMode,
   validateDefectInput,
   type InspectionDefect,
   type InspectionDefectInput,
@@ -66,6 +67,8 @@ export interface InspectionPanelProps {
   meterAutoActivate?: boolean;
   /** Cetvel boşken metin; metresiz kayıt tutan konak "hata yok" demesin diye verir. */
   rulerEmptyText?: string;
+  /** true: hata yokken de boş metre cetveli + "Hata Noktaları (0)" çizilir (boş durum yazısı yerine). */
+  rulerAlways?: boolean;
 }
 
 interface RulerSectionProps {
@@ -76,13 +79,14 @@ interface RulerSectionProps {
   readOnly: boolean;
   onMarkerPress: (ids: string[]) => void;
   emptyText?: string;
+  alwaysRuler: boolean;
 }
 
 // Kayıtlı hatalar — metre cetveli; tik'e dokun → o noktadaki hata(lar)ı sil.
-function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress, emptyText }: RulerSectionProps) {
+function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress, emptyText, alwaysRuler }: RulerSectionProps) {
   const critCount = ownDefects.reduce((n, d) => n + (isCriticalDefect(d, defectTypes) ? 1 : 0), 0);
   const allDefects = [...priorDefects, ...ownDefects];
-  if (allDefects.length === 0) {
+  if (rulerSectionMode(allDefects.length, alwaysRuler) === 'empty') {
     return (
       <View style={styles.emptyDefects}>
         <Icon source="check-circle-outline" size={28} color={palette.slate[300]} />
@@ -91,7 +95,7 @@ function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnl
     );
   }
   return (
-    <Surface style={styles.section} elevation={1}>
+    <Surface style={styles.section} elevation={1} testID="inspection-ruler">
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>Hata Noktaları ({ownDefects.length})</Text>
         {priorDefects.length > 0 && (
@@ -164,6 +168,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
           readOnly={readOnly}
           onMarkerPress={setDeleteIds}
           emptyText={props.rulerEmptyText}
+          alwaysRuler={props.rulerAlways === true}
         />
       </View>
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}

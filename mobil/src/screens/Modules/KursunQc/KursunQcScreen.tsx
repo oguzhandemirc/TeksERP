@@ -101,6 +101,7 @@ import { kursunFinishRollId, type KursunFinishVars } from '../../../offline/kurs
 import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
 import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachinePeripherals';
 import { findTarget, targetChipText } from './gramajTap';
+import { usePropAnswers } from './usePropAnswers';
 import { useAuthStore } from '../../../store/authStore';
 import { palette } from '../../../theme/tokens';
 import PlannedMachineBadge from './PlannedMachineBadge';
@@ -362,30 +363,14 @@ export default function KursunQcScreen() {
   // birini unutmasına açık olurdu.
   //
   // ⚠️ TOP BAŞINA sıfırlanır: bir topta işaretlenen özellik sıradaki topa
-  // taşınırsa operatör hiç dokunmadan ikinci topa da yazılır.
-  const [propAnswers, setPropAnswers] = useState<Record<string, true | string>>({});
-  useEffect(() => {
-    setPropAnswers({});
-  }, [activeJob?.selectedRollId, activeCardId]);
-
-  /** BAYRAK çipi: aç/kapa. */
-  const toggleFlagProp = (id: string) =>
-    setPropAnswers((prev) => {
-      const next = { ...prev };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-
-  /** SEÇİM çipi: aynı değere tekrar basmak seçimi KALDIRIR (opsiyonelde
-   *  vazgeçebilmeli); farklı değere basmak DEĞİŞTİRİR (tek seçim). */
-  const pickValueProp = (id: string, code: string) =>
-    setPropAnswers((prev) => {
-      const next = { ...prev };
-      if (next[id] === code) delete next[id];
-      else next[id] = code;
-      return next;
-    });
+  // taşınırsa operatör hiç dokunmadan ikinci topa da yazılır. Sıfırlanınca SEÇİM
+  // özelliklerinde İE hedefi ön seçilir; operatörün dokunduğu özellik (touched)
+  // aynı topta hedef tazelense de ezilmez.
+  const {
+    answers: propAnswers,
+    toggleFlag: toggleFlagProp,
+    pickValue: pickValueProp,
+  } = usePropAnswers(pickableProps, activeJob?.stepSummary.targetValues, `${activeCardId ?? ''}|${activeJob?.selectedRollId ?? ''}`);
 
   const missingRequiredProps = useMemo(
     () => pickableProps.filter((p) => p.mode === 'REQUIRED' && !propAnswers[p.propertyId]),
@@ -1257,19 +1242,19 @@ export default function KursunQcScreen() {
         </Surface>
       )}
 
-      <DocSiblingsStrip
-        siblings={docSiblings.siblings}
-        activeCardBarcode={activeJob?.cardBarcode ?? null}
-        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
-        onDismiss={docSiblings.clear}
-      />
-
       {/* Açık iş emri sekmeleri — Okut + Liste (Açık Kartlar) artık header'ın
           2. katında (phoneSecondRow), burada tekrar etmez. Telefonda KENDİ
           tam-genişlik satırı (tek satır çip); tablette de tek satır. */}
       {openJobs.length > 0 && (
         <View style={styles.topArea}>
           <View style={styles.tabRow}>
+            {/* Belgedeki diğer partiler İE çipiyle aynı satırda kompakt seçici (eski ayrı şerit kalktı). */}
+            <DocSiblingsStrip
+              siblings={docSiblings.siblings}
+              activeCardBarcode={activeJob?.cardBarcode ?? null}
+              onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+              style={styles.partySelector}
+            />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1657,6 +1642,8 @@ export default function KursunQcScreen() {
                     onDelete={handleDeleteError}
                     maxMeter={selectedRoll.currentQty}
                     compact={compact}
+                    // Hata yokken de 0…top boyu cetveli (Tambur'daki ölçek gibi); boş durum yazısı yok.
+                    rulerAlways
                   >
                     <MeasuredWidthField state={measuredWidth} hidden={selectedRoll.qc2Completed} />
                     {processCard}
@@ -2683,6 +2670,7 @@ const styles = StyleSheet.create({
   },
   // Sekme ScrollView'i kalan alanı kaplar — taşan sekmeler yatay kayar.
   tabScrollArea: { flex: 1 },
+  partySelector: { marginHorizontal: 6, marginTop: 0, alignSelf: 'center' },
   // flexGrow + flex-end: az sekme varken sağa dayanır (refresh'in soluna),
   // yeni sekme sağ uca eklenir; taştığında normal yatay kaydırma.
   tabScroll: {

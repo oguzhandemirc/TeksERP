@@ -71,12 +71,6 @@ function formatMeters(m: number): string {
   return Number.isInteger(m) ? String(m) : m.toFixed(1).replace('.', ',');
 }
 
-/** Şerit metni: "Bu belgede 3 parti var · açılan: P1 (YIKAMA)". */
-export function siblingStripText(siblings: StationLookupWorkOrder[], opened: StationLookupWorkOrder): string {
-  const process = opened.processText ? ` (${opened.processText})` : '';
-  return `Bu belgede ${siblings.length} parti var · açılan: ${partyLabel(opened)}${process}`;
-}
-
 /** Liste satırının alt metni (eski sunucu): parti no'ları · belge no'ları (fiş no öncelikli). */
 export function workOrderSubtitle(w: StationLookupWorkOrder): string {
   const docs = w.documents.map((d) => d.senderDocNo ?? d.noteNo);
@@ -130,4 +124,29 @@ export function verifyScoreText(w: StationLookupWorkOrder): string | null {
   if (!v) return null;
   if (v.score === null) return 'Puan yok';
   return v.threshold > 0 ? `%${v.score} · eşik %${v.threshold}` : `%${v.score}`;
+}
+
+/** Kompakt parti seçicisinin segmentle çizebileceği en çok parti; fazlası PickerModal'a düşer. */
+export const PARTY_SEGMENT_MAX = 3;
+
+export type PartySelectorModel =
+  | null
+  | {
+      mode: 'segment' | 'picker';
+      opened: StationLookupWorkOrder;
+      options: { workOrder: StationLookupWorkOrder; label: string; selected: boolean }[];
+    };
+
+/**
+ * Belgeden açılan işin parti seçicisi (2026-11-10, eski "Bu belgede N parti var" şeridinin yerine): tek parti ya da
+ * aktif kart belgeden açılan değilse çizilmez; ≤3 parti segment, fazlası "Parti P1 ▾" seçici.
+ */
+export function partySelectorModel(siblings: StationLookupWorkOrder[], activeCardBarcode: string | null): PartySelectorModel {
+  const opened = activeCardBarcode ? siblings.find((w) => w.cardBarcode === activeCardBarcode) : undefined;
+  if (siblings.length < 2 || !opened) return null;
+  return {
+    mode: siblings.length > PARTY_SEGMENT_MAX ? 'picker' : 'segment',
+    opened,
+    options: siblings.map((w) => ({ workOrder: w, label: partyLabel(w), selected: w.id === opened.id })),
+  };
 }

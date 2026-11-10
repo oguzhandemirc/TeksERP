@@ -101,3 +101,20 @@ describe('InspectionPanel — 4 puan modu', () => {
     expect(r.getByTestId('inspection-no-width')).toHaveTextContent('Ürün kartında en yok; puan/100 hesaplanmaz');
   });
 });
+
+describe('InspectionPanel — hata yokken cetvel (rulerAlways)', () => {
+  it('⭐ rulerAlways: boş cetvel + "Hata Noktaları (0)", boş durum yazısı yok', async () => {
+    const { r } = setup({ rulerAlways: true, maxMeter: 3935 });
+    await act(async () => {});
+    expect(r.getByTestId('inspection-ruler')).toBeOnTheScreen();
+    expect(r.getByText('Hata Noktaları (0)')).toBeOnTheScreen();
+    expect(r.queryByText('Henüz hata yok')).toBeNull();
+  });
+
+  it('varsayılan konak (rulerAlways yok): bugünkü "Henüz hata yok" boş durumu', async () => {
+    const { r } = setup();
+    await act(async () => {});
+    expect(r.queryByTestId('inspection-ruler')).toBeNull();
+    expect(r.getByText('Henüz hata yok')).toBeOnTheScreen();
+  });
+});
