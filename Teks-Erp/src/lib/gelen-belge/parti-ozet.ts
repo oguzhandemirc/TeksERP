@@ -139,7 +139,11 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
     if (p.declaredTopCount !== null && p.declaredTopCount !== p.lineCount) p.warnings.push(`Parti ${name}: belgede ${p.declaredTopCount} TOP yazıyor, ${p.lineCount} satır var.`);
     // Basılı toplam birincil, satırlar teyit: fark "PARTİ TOPLAMI TUTMUYOR" olarak görünür (2026-11-10)
     const off = (d: number | null, v: number | null) => d !== null && v !== null && Math.abs(d - v) > Math.max(0.001, d * TOL);
+    // Basılı adet ↔ satır (metresi okunamayan satır taslağa girmez; 214279): başlık TOP'u aynı sayıyı zaten söylediyse tekrarlanmaz
+    const declaredCount = num(d?.count);
+    const countOff = declaredCount !== null && declaredCount !== p.lineCount && p.declaredTopCount !== declaredCount;
     const diff = [
+      ...(countOff ? [`tablo ${p.lineCount} top / belge ${declaredCount} top`] : []),
       ...(off(p.declaredMeters, meters) ? [`tablo ${meters} m / belge ${p.declaredMeters} m`] : []),
       ...(off(num(d?.kg), p.weightKg) ? [`tablo ${p.weightKg} kg / belge ${num(d?.kg)} kg`] : []),
     ];

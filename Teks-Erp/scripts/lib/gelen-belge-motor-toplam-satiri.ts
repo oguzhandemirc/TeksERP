@@ -42,6 +42,14 @@ function shift(o: OcrResult, group: OcrLine[], to: { x: number; y: number }): vo
   const dx = to.x - Math.min(...group.map((l) => l.rect.x)), dy = to.y - Math.min(...group.map((l) => l.rect.y));
   for (const l of group) { l.rect.x += dx; l.rect.y += dy; l.elements.forEach((e) => { e.rect.x += dx; e.rect.y += dy; }); }
 }
+/** Satır yazısını ve kelimelerini değiştir (kutular aynı; kelime sayısı değişirse son kelimenin kutusu paylaştırılır). */
+function setText(o: OcrResult, text: string, words: string[]): void {
+  const l = lines(o).find((x) => x.text === text)!;
+  const els = l.elements;
+  const last = els[els.length - 1]!;
+  l.text = words.join(" ");
+  l.elements = words.map((w, i) => ({ ...(els[i] ?? last), text: w, rect: { ...(els[i] ?? last).rect } }));
+}
 const drop = (o: OcrResult, pred: (l: OcrLine) => boolean) => { o.blocks = o.blocks.map((b) => ({ ...b, lines: b.lines.filter((l) => !pred(l)) })); };
 
 function run(ocr: OcrResult, tpl: DocumentTemplate) {
@@ -51,7 +59,8 @@ function run(ocr: OcrResult, tpl: DocumentTemplate) {
   const p = parties.map((x) => `${x.batchNo}:${x.lineCount}:${x.suggestedMeters}/${x.suggestedMetersSource}:${x.suggestedKg}/${x.kgSource}:${d.header.totalsDeclared.blocks.find((b) => b.blockNo === x.blockNo)?.count ?? "-"}`);
   const w = d.header.warnings;
   const has = (code: string, inc?: string) => w.some((x) => x.startsWith(code) && (inc === undefined || x.includes(inc)));
-  return { p: p.join(" | "), w, has, tables: ex.regions[0]!.tables, info: JSON.stringify({ p, w: w.map((x) => x.slice(0, 110)) }) };
+  const pw = parties.flatMap((x) => x.warnings);
+  return { p: p.join(" | "), w, pw, has, tables: ex.regions[0]!.tables, info: JSON.stringify({ p, w: w.map((x) => x.slice(0, 110)), pw }) };
 }
 
 const BEKLENEN = "P9918733:5:586/TOTAL:141.7/TOTAL:5 | P9918734:16:3935/TOTAL:819.2/TOTAL:16";
@@ -99,6 +108,37 @@ export function toplamSatiri(check: Check, gercek: (ad: string) => OcrResult): v
   drop(iki, (l) => (l.rect.y > 1800 && l.rect.y < 1830) || (l.rect.y > 960 && l.rect.y < 990));
   const ri = run(iki, tpl);
   check("§19f iki partide adet tutmuyor: okuma sırası yedeği + TABLE_TOTALS_BY_ORDER uyarısı", ri.has("TABLE_TOTALS_BY_ORDER"), ri.info);
+
+  // Toplam değerinin sonunda tablo çizgisi (gerçek tarama GB1011260003: "819,20 3.935,00|") — kg/m düşmez, sonuç aynı
+  const cizgi = clone(base);
+  setText(cizgi, "819,20 3.935,00", ["819,20", "3.935,00|"]);
+  const rc = run(cizgi, tpl);
+  check("§19h ⭐ toplam değerinde sondaki tablo çizgisi ('3.935,00|'): 3935 m / 819,2 kg basılı toplamdan, uyarısız", rc.p === BEKLENEN && temiz(rc), rc.info);
+  const bas = clone(base);
+  setText(bas, "819,20 3.935,00", ["¦819,20", "[3.935,00]"]);
+  const rb = run(bas, tpl);
+  check("§19h2 baş/son '¦' '[' ']' çizgi gürültüsü de sayıyı düşürmez", rb.p === BEKLENEN && temiz(rb), rb.info);
+  // Sayının İÇİNDEKİ karakter yutulmaz: "3.9|35,00" sayı değildir → 3935 uydurulmaz
+  const ic = clone(base);
+  setText(ic, "819,20 3.935,00", ["819,20", "3.9|35,00"]);
+  const ri2 = run(ic, tpl);
+  check("§19h3 sayı içindeki '|' temizlenmez: '3.9|35,00' 3935 okunmaz; metresi okunamayan toplam sessiz değil (TOTAL_UNVERIFIED blok 2)",
+    !ri2.p.includes("P9918734:16:3935/TOTAL") && ri2.has("TOTAL_UNVERIFIED blok 2", "metresi okunamadı"), ri2.info);
+
+  // Bir top satırının metresi okunamadı ("- 212,30" → satır atlanır): parti metresi basılı toplamda kalır, ama adet (15 ≠ 16) ve
+  // metre farkı parti kartında görünür, atlanan satır uyarısı kalır (gerçek tarama GB1011260003)
+  const eksi = clone(base);
+  setText(eksi, "33,20 212,30|", ["33,20", "-", "212,30"]);
+  const re = run(eksi, tpl);
+  check("§19i ⭐ metresi okunamayan satır: P..34 15 satır, metre 3935 TOTAL; parti uyarısı 'tablo 15 top / belge 16 top' + metre farkı; LINE_SKIPPED_NO_METERS",
+    re.p.includes("P9918734:15:3935/TOTAL:819.2/TOTAL:16") && re.pw.some((x) => x.includes("PARTİ TOPLAMI TUTMUYOR: P9918734") && x.includes("tablo 15 top / belge 16 top") && x.includes("belge 3935 m"))
+      && re.has("LINE_SKIPPED_NO_METERS", "blok 2"), re.info);
+  // Basılı metre de okunamadıysa (çizgi gürültüsünün eski hâli) adet farkı yine sessiz kalmaz
+  const ikisi = clone(eksi);
+  setText(ikisi, "819,20 3.935,00", ["819,20", "3.9|35,00"]);
+  const r2 = run(ikisi, tpl);
+  check("§19j basılı metre okunamadı + satır atlandı: parti uyarısı yine 'tablo 15 top / belge 16 top'",
+    r2.pw.some((x) => x.includes("PARTİ TOPLAMI TUTMUYOR: P9918734") && x.includes("tablo 15 top / belge 16 top")) && r2.has("TOTAL_UNVERIFIED blok 2") && r2.has("LINE_SKIPPED_NO_METERS"), r2.info);
 
   // Şablonda toplam satırı etiketi yoksa motor etiketi uydurmaz (koda sabit 'T.Adet' YOK): toplam okunmaz → TOTAL_UNVERIFIED
   const rn = run(base, mlkitSablon(false));

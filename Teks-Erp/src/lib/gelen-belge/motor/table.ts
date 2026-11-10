@@ -80,9 +80,14 @@ function columnField(col: TableColumnSpec): FieldSpec {
   return { key: col.key, label: col.label, type: col.type, pattern: col.pattern, strategies: [] };
 }
 
+// Hücre kenarındaki "|" "¦" "[" "]" tablo çizgisidir, rakam değil ("212,30|" → 212.301; "3.935,00|" toplamı düşürüyordu, 214279).
+// YALNIZ baş/son: sayının içindeki karakter ("3.9|35,00") yutulmaz. Tablo hücresi okuması ve sayı sınaması bu tek temizleyiciden.
+const RULE_EDGES = /^[|¦[\]]+\s*|\s*[|¦[\]]+$/g;
+const cellText = (text: string): string => text.trim().replace(RULE_EDGES, "");
+const isNumericCell = (text: string): boolean => isNumericText(cellText(text));
+
 function makeCell(col: TableColumnSpec, lines: OcrLine[]): TableCell {
-  // Hücre kenarındaki "|" tablo çizgisidir, rakam değil ("212,30|" → 212.301 olurdu; 214279).
-  const raw = lines.map((l) => l.text.trim().replace(/^\|+\s*|\s*\|+$/g, "")).join(" ");
+  const raw = lines.map((l) => cellText(l.text)).join(" ");
   const fr = evaluateCandidate(
     columnField(col),
     { raw, ocrConfidence: averageConfidence(lines.flatMap(lineElements)), labelSimilarity: 1, strategyIndex: 0, kind: "roi" },
@@ -136,14 +141,14 @@ const elementLine = (e: OcrElement): OcrLine => ({ text: e.text, rect: e.rect, c
 function numericParts(lines: ReadonlyArray<OcrLine>, label: OcrLine | undefined): OcrLine[] {
   const out: OcrLine[] = [];
   for (const line of lines) {
-    if (isNumericText(line.text)) { out.push(line); continue; }
+    if (isNumericCell(line.text)) { out.push(line); continue; }
     const els = lineElements(line);
     if (els.length < 2) continue;
     if (line === label) {
       let i = els.length;
-      while (i > 0 && isNumericText(els[i - 1]!.text)) i--;
+      while (i > 0 && isNumericCell(els[i - 1]!.text)) i--;
       if (i > 0) out.push(...els.slice(i).map(elementLine));
-    } else if (els.every((e) => isNumericText(e.text))) {
+    } else if (els.every((e) => isNumericCell(e.text))) {
       out.push(...els.map(elementLine));
     }
   }
@@ -158,12 +163,13 @@ function numericParts(lines: ReadonlyArray<OcrLine>, label: OcrLine | undefined)
 function readDeclared(row: Row, draft: BlockDraft, spec: TableSpec): DeclaredTotals {
   const tolerance = Math.max(...draft.columns.map((c) => c.rect.width)) * 0.75;
   const measureKeys = spec.columns.filter((c) => c.key === "kg" || c.key === "m").map((c) => c.key);
-  const labels = spec.totals?.labels ?? [];
+  // Eski şablon etiketi adetle kayıtlı olabilir ("T.Adet 5"): bitişik adet ("T.Adet16") yedeği de etiket kısmıyla eşler
+  const labels = totalsLabels(spec);
   const label = row.lines.find((l) => isTotalsLabel(l.text, labels));
   const out: DeclaredTotals = { count: null, kg: null, m: null, rect: unionRect(row.lines.map((l) => l.rect)) };
   const leftovers: Array<{ value: string; x: number }> = [];
   for (const line of numericParts(row.lines, label)) {
-    if (!isNumericText(line.text) || (label && line.rect.x <= label.rect.x)) continue;
+    if (!isNumericCell(line.text) || (label && line.rect.x <= label.rect.x)) continue;
     const key = assignToColumn(line.rect, draft.columns, tolerance);
     const col = spec.columns.find((c) => c.key === key) ?? { key: "n", label: "n", type: "decimal" as const, headers: [] };
     const value = makeCell(col, [line]).value;
@@ -277,7 +283,7 @@ interface TotalsHit {
 function labelPart(line: OcrLine): string {
   const els = lineElements(line);
   let i = els.length;
-  while (i > 0 && isNumericText(els[i - 1]!.text)) i--;
+  while (i > 0 && isNumericCell(els[i - 1]!.text)) i--;
   return i > 0 && i < els.length ? els.slice(0, i).map((e) => e.text).join(" ") : line.text;
 }
 
@@ -297,7 +303,7 @@ function findTotals(lines: OcrLine[], rows: Row[], spec: TableSpec): TotalsHit[]
   const tan = Math.tan((pageMedianAngle(lines) * Math.PI) / 180);
   const labelLines = lines.filter((l) => isTotalsLine(l, labels));
   const isLabel = new Set(labelLines);
-  const numeric = (l: OcrLine) => isNumericText(l.text) || (lineElements(l).length > 1 && lineElements(l).every((e) => isNumericText(e.text)));
+  const numeric = (l: OcrLine) => isNumericCell(l.text) || (lineElements(l).length > 1 && lineElements(l).every((e) => isNumericCell(e.text)));
   return labelLines.map((label) => {
     const cy = label.rect.y + label.rect.height / 2;
     const cx = label.rect.x + label.rect.width / 2;
@@ -327,7 +333,7 @@ function readTotals(hit: TotalsHit, draft: BlockDraft, spec: TableSpec): Declare
   const glued = gluedTotalsCount(labelPart(hit.label), totalsLabels(spec));
   const parts = numericParts(all, hit.label).filter((l) => l.rect.x > hit.label.rect.x).sort((a, b) => a.rect.x - b.rect.x);
   const decimal: TableColumnSpec = { key: "n", label: "n", type: "decimal", headers: [] };
-  const vals = [...(glued !== null ? [{ raw: glued, value: glued }] : []), ...parts.map((l) => ({ raw: l.text.trim(), value: makeCell(decimal, [l]).value }))];
+  const vals = [...(glued !== null ? [{ raw: glued, value: glued }] : []), ...parts.map((l) => ({ raw: cellText(l.text), value: makeCell(decimal, [l]).value }))];
   const out: DeclaredTotals = { count: null, kg: null, m: null, rect: box };
   // Adet yerine yazılı TAM SAYI düşmeli ("241,00 MT" adet değildir — Kömürhan "TOPLAM 241,00 MT 734,00 KG 0,00 MT")
   const strict = vals.length >= order.length && order.every((k, i) => vals[i]!.value !== null && (k !== "count" || /^\d+$/.test(vals[i]!.raw)));
@@ -361,6 +367,12 @@ function attachTotals(hits: TotalsHit[], drafts: BlockDraft[], blocks: TableBloc
     blocks[i]!.declared = d;
     // Tek açık blok kaldıysa bağ kesindir (fark varsa TOTAL_MISMATCH/PARTİ TOPLAMI söyler); seçim varken sıra yedeği uyarılır.
     if (choices > 1) warnings.push(`TABLE_TOTALS_BY_ORDER blok ${blocks[i]!.blockNo}: "${text}" toplam satırının adedi hiçbir partinin satır sayısını tutmadı; okuma sırasıyla bağlandı — partiyi kontrol edin`);
+  }
+  // Toplam satırı bağlandı ama metresi okunamadı: parti metresi sessizce Σ satıra düşmesin (214279 "3.935,00|")
+  if (spec.columns.some((c) => c.key === "m")) {
+    for (const b of blocks) {
+      if (b.declared && b.declared.m === null && b.rows.length > 0) warnings.push(`TOTAL_UNVERIFIED blok ${b.blockNo}: toplam satırının metresi okunamadı — parti metresi satır toplamından, belgeyle karşılaştırın`);
+    }
   }
   return warnings;
 }

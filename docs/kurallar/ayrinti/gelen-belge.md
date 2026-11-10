@@ -134,6 +134,8 @@ Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramal
 
 **[ÇEKİRDEK]** Kelimeleri ayrı tablo kolonlarına düşen OCR satırını (başlık "Kilo Metre", hücre "13,70 54,4") kelimelerine böl; tablo hücresi kenarındaki "|" çizgidir, rakam sayma. · bekçi: `test_gelen_belge_motor` §19b
 
+**[ÇEKİRDEK]** Tablo hücresinin baş/sonundaki çizgi gürültüsünü (`| ¦ [ ]`) YALNIZ `motor/table.ts` `cellText`ten sil (sayı içi yutulmaz); basılı adet ≠ satır ve metresi okunamayan toplam satırı sessiz geçmez (parti kartı "PARTİ TOPLAMI TUTMUYOR … top" · `TOTAL_UNVERIFIED`), parti metresi basılı toplam kalır. · bekçi: `test_gelen_belge_motor` §19h–§19j <sub>(arşiv:2026-11-10 toplam satırı çizgi gürültüsü)</sub>
+
 ## Canlı kare okuması (2026-11-10 kısa dosyadan taşındı)
 
 **[ÇEKİRDEK]** Canlı kare okumasını (`POST /api/gelen-belge/canli-okuma`, `gelen-belge-canli-okuma.service.ts`) SALT OKUMA tut: `clientOcr` tel biçimini katı doğrula (ihlal 400 `LIVE_FRAME_INVALID`), bugünkü motorla yalnız şablonun başlık alanlarını + değer kutusunu (karenin piksel çerçevesi) + `engineMs` döndür; tarama/taslak/şablon isabeti/audit YAZMA, GENEL yedeği "tanındı" sayma (template null), izni yükleme ucuyla aynı tut (`gelen-belge:write`), uç request-trace dışlamasında kalsın · bekçi: test_gelen_belge_canli_okuma <sub>(arşiv:2026-11-05 canlı okuma L1)</sub>
