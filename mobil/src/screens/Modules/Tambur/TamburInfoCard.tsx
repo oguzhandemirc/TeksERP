@@ -66,19 +66,20 @@ export default function TamburInfoCard(p: TamburInfoCardProps) {
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: palette.orange[600], borderRadius: 14, overflow: 'hidden' },
+  // Açık kehribar zemin (GK 2026-11-11: turuncu beğenilmedi): siyah müşteri + lacivert kumaş okunur, beyaz kartlardan ayrışır.
+  card: { backgroundColor: palette.amber[100], borderWidth: 1, borderColor: palette.amber[300], borderRadius: 14, overflow: 'hidden' },
   row1: { flexDirection: 'row', alignItems: 'stretch' },
-  idLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 14, paddingHorizontal: 14, paddingTop: 6 },
+  idLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 14, paddingHorizontal: 14, paddingTop: 4 },
   cust: { borderRadius: 8, maxWidth: '45%' },
   custName: { fontSize: 24, fontWeight: '900', color: palette.black },
   ownTag: { fontSize: 13, fontWeight: '800', color: palette.blue[950], letterSpacing: 0.5 },
   itemLine: { fontSize: 16, fontWeight: '700', color: palette.blue[950], flexShrink: 1 },
-  row2: { paddingHorizontal: 14, paddingBottom: 6 },
-  // Karo kartın üst ve sağ kenarına dayalı; yüksekliği satır 1 kadar.
+  row2: { paddingHorizontal: 14, paddingBottom: 5 },
+  // Karo kartın üst ve sağ kenarına dayalı; değer + birim TEK satır → karo ad satırı kadar alçak, iki satır arası boşluk kalmaz.
   tiles: { flexDirection: 'row', alignItems: 'stretch' },
-  tile: { minWidth: 104, paddingHorizontal: 12, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },
+  tile: { minWidth: 104, paddingHorizontal: 12, paddingVertical: 2, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', columnGap: 5 },
   tileLast: { borderBottomLeftRadius: 12 },
-  tileInner: { alignItems: 'center' },
+  tileInner: { flexDirection: 'row', alignItems: 'baseline', columnGap: 5 },
   tileGreen: { backgroundColor: palette.emerald[700] },
   tileDanger: { backgroundColor: palette.red[700] },
   tileOrders: { backgroundColor: palette.amber[600], minWidth: 72, borderBottomLeftRadius: 12 },
