@@ -19,6 +19,7 @@ function Badge({ count }: { count: number }) {
 function BarChip({
   icon,
   label,
+  count,
   onPress,
   active,
   stacked,
@@ -28,6 +29,7 @@ function BarChip({
 }: {
   icon: string;
   label: string;
+  count?: number;
   onPress: () => void;
   active?: boolean;
   stacked: boolean;
@@ -48,13 +50,20 @@ function BarChip({
         testID={testID}
       >
         <View style={stacked ? styles.innerStacked : styles.innerRow}>
-          <Icon source={icon} size={stacked ? 20 : 18} color={active ? palette.amber[900] : colors.textOnDark} />
+          {/* Dar düzende sayaç ikon yuvasına geçer: etiket tek satır kalır, düğmeler eşit yükseklikte (saha 2026-11-10). */}
+          {stacked && count !== undefined ? (
+            <Text style={[styles.countText, active && styles.textOn]} testID={`${testID}-count`}>
+              {count}
+            </Text>
+          ) : (
+            <Icon source={icon} size={stacked ? 20 : 18} color={active ? palette.amber[900] : colors.textOnDark} />
+          )}
           {/* Dar düzende etiket kesilmez: iki satıra sarar (saha 2026-11-10). */}
           <Text
             style={[styles.text, stacked && styles.textStacked, active && styles.textOn]}
             numberOfLines={stacked ? 2 : 1}
           >
-            {label}
+            {stacked || count === undefined ? label : `${label} · ${count}`}
           </Text>
         </View>
       </TouchableRipple>
@@ -82,6 +91,7 @@ export default function StationActionBar({ actions, testIDPrefix = 'station-bar'
           key={a.id}
           icon={a.icon}
           label={a.label}
+          count={a.count}
           onPress={a.onPress}
           active={a.active}
           stacked={narrow}
@@ -125,7 +135,7 @@ export default function StationActionBar({ actions, testIDPrefix = 'station-bar'
             >
               <View style={styles.menuRowInner}>
                 <Icon source={a.icon} size={24} color={a.active ? palette.amber[900] : palette.slate[700]} />
-                <Text style={styles.menuRowText}>{a.label}</Text>
+                <Text style={styles.menuRowText}>{a.count === undefined ? a.label : `${a.label} · ${a.count}`}</Text>
                 {(a.badge ?? 0) > 0 && (
                   <View style={styles.menuBadge}>
                     <Text style={styles.badgeText}>{a.badge}</Text>
@@ -168,6 +178,7 @@ const styles = StyleSheet.create({
   },
   text: { color: colors.textOnDark, fontWeight: '700', fontSize: 13 },
   textStacked: { textAlign: 'center', lineHeight: 16 },
+  countText: { color: colors.textOnDark, fontWeight: '800', fontSize: 17, lineHeight: 20 },
   textOn: { color: palette.amber[900], fontWeight: '800' },
   badge: {
     position: 'absolute',

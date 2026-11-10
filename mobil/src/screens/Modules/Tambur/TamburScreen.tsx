@@ -3501,7 +3501,8 @@ export default function TamburScreen() {
         {
           id: 'openJobs',
           icon: 'clipboard-list-outline',
-          label: `Açık İşler · ${openJobs.length}`,
+          label: 'Açık İşler',
+          count: openJobs.length,
           priority: 1,
           visible: true,
           onPress: () => setRightDrawerOpen(true),

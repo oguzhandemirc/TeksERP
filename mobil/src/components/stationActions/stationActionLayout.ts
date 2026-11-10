@@ -14,6 +14,8 @@ export interface StationAction {
   onPress: () => void;
   /** >0 → rozet (çubukta düğmede, menüde satırda; gizlideyse "Diğer"de nokta). */
   badge?: number;
+  /** Sayaç (ör. açık iş adedi): dar düzende ikon yuvasında rakam, geniş düzende ve menüde "Etiket · N". */
+  count?: number;
   /** Açık bir MODU temsil eder (durum chip'i) — dolu amber. */
   active?: boolean;
 }

@@ -88,6 +88,19 @@ describe('StationActionBar', () => {
     expect(actions.find((a) => a.id === 'doc')!.onPress).toHaveBeenCalledTimes(1);
   });
 
+  it('sayaç: dar düzende ikon yuvasında rakam + tek etiket; geniş düzende "Etiket · N"', async () => {
+    const actions = build({ openJobs: { label: 'Açık İşler', count: 2 } });
+    const narrow = renderWithPaper(<StationActionBar actions={actions} testIDPrefix="b" />);
+    expect(narrow.getByTestId('b-openJobs-count')).toHaveTextContent('2');
+    expect(narrow.getByText('Açık İşler')).toBeTruthy();
+    expect(narrow.queryByText('Açık İşler · 2')).toBeNull();
+    narrow.unmount();
+    mockDims = { width: 800, height: 480, scale: 1, fontScale: 1 };
+    const wide = renderWithPaper(<StationActionBar actions={actions} testIDPrefix="b" />);
+    expect(wide.queryByTestId('b-openJobs-count')).toBeNull();
+    expect(wide.getByText('Açık İşler · 2')).toBeTruthy();
+  });
+
   it('geniş (800 dp): bugünkü düzen — hepsi satırda, Diğer yok', async () => {
     mockDims = { width: 800, height: 480, scale: 1, fontScale: 1 };
     const r = renderWithPaper(<StationActionBar actions={build()} testIDPrefix="b" />);
