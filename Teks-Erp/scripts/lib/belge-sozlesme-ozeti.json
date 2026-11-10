@@ -3732,7 +3732,7 @@
   }
  },
  "SHIPMENT_DISPATCH": {
-  "contractVersion": 3,
+  "contractVersion": 4,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -4360,6 +4360,10 @@
    },
    "toplamlar.top_adedi": {
     "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.yuk_ozeti": {
+    "tur": "metin",
     "sinif": "musteri"
    }
   }

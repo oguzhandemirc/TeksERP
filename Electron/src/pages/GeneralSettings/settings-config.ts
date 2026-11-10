@@ -944,6 +944,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken tablette Paketleme ekranında “Çuvalsız Sevk” düğmesi çıkar: toplar okutulur, yük “Dökme” ya da “Araba <no>” olarak seçilir ve irsaliyeye “Dökme – N top” / “Araba A-12 – N top” diye basılır. Kapalıyken (varsayılan) sevk yalnız çuvalla yapılır.",
       },
       {
+        key: "shipmentHandheldCreateEnabled",
+        title: "El terminalinden sevk kurma",
+        summary: "Sevk Çıkışı'nda (telefon/el terminali) cari seç → okut → çuval aç → sevk et; karışık yük; çuvalsız sevk açık olmalı.",
+        defaultOn: false,
+        audience: ["Sevkiyat"],
+        desc: "Açıkken telefon/el terminalinde Sevk Çıkışı ekranında önce cari seçilir, toplar okutulur (çuval seçiliyse çuvala, değilse çuvalsız), gerekirse yeni çuval açılıp elle kg girilir ve Sevk Et ile irsaliye o anda çıkar. Aynı sevkiyatta çuval ile çuvalsız top birlikte gidebilir (karışık yük); boş çuvallar sevkte düşer. Çalışması için “Çuvalsız sevk (dökme / araba)” açık, “sevk öncesi tartı zorunlu” kapalı olmalıdır. Kapalıyken (varsayılan) Sevk Çıkışı bugünkü gibidir.",
+      },
+      {
         key: "shipmentUndoSameDayOnly",
         title: "Sevk geri almayı aynı günle sınırla",
         summary: "Yalnız bugün sevk edilmiş sevkiyatlar geri alınabilir.",

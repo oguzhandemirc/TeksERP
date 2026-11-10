@@ -116,6 +116,7 @@
     "shipmentConfirmationEnabled": true,
     "shipmentManualSackCountEnabled": true,
     "shipmentLooseLoadEnabled": true,
+    "shipmentHandheldCreateEnabled": true,
     "shipmentUndoSameDayOnly": true,
     "shippingOrderRequirement": "block",
     "shippingOrderCoverage": "block",

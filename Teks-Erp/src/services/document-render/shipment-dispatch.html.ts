@@ -69,6 +69,7 @@ const LABELS = {
     direction: "Yön",
     domestic: "Yurtiçi",
     sackTotal: "Çuval Adedi",
+    loadSummary: "Yük",
     sackSystem: "sistemde",
     export: "Yurtdışı",
     customsNo: "Gümrük/İhracat No",
@@ -127,6 +128,7 @@ const LABELS = {
     date: "Date",
     direction: "Destination",
     sackTotal: "Package Count",
+    loadSummary: "Load",
     sackSystem: "in system",
     domestic: "Domestic",
     export: "Export",
@@ -314,6 +316,8 @@ export interface ShipmentDispatchDoc {
      * yazıldığı için fark meşrudur ve o fark bilginin kendisidir.
      */
     manualSackCount?: number | null;
+    /** Karışık yük özeti ("2 çuval (8 top) + 3 top dökme") — yalnız çuval + dökme karışıkken; yoksa anahtar yok. */
+    loadSummary?: string;
   };
 }
 
@@ -529,6 +533,7 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
     // saydığı kayıt adedi parantezde. Biri diğerinin yerine geçmez — sahada
     // 10 çuval tek çuval kaydına yazıldığı için fark meşrudur ve fark bilgidir.
     t.manualSackCount != null ? item("sackTotal", L.sackTotal, `${t.manualSackCount}`) : null,
+    t.loadSummary ? item("loadSummary", L.loadSummary, t.loadSummary) : null,
   ].filter((x): x is HeaderItem => x !== null);
 
   const vehicle: HeaderItem[] = sectionOn(cfg.sections, "vehicleInfo")

@@ -200,7 +200,7 @@ export {
   readMobileOfflineLockDefer, readRememberLastUser, readMobileIdleLockMinutes, readAbsoluteSessionCapDays,
 } from "./session";
 export {
-  readShipmentManualSackCountEnabled, readShipmentLooseLoadEnabled, readShipmentConfirmationEnabled, readShipmentUndoSameDayOnly,
+  readShipmentManualSackCountEnabled, readShipmentLooseLoadEnabled, readShipmentHandheldCreateEnabled, readShipmentConfirmationEnabled, readShipmentUndoSameDayOnly,
   readShippingOrderRequirement, readItemPhaseOutNewOrder, readItemPhaseOutLineQty, readItemPhaseOutNewPlan,
   readShippingWeighRequiredEnabled, readShippingManualWeightRestrictedEnabled, readShippingInvoiceMode, readShippingDocItemNameMode,
   readShippingDocCekiNameMode, readShippingOrderCoverage, readShippingDocProductColorSplit, readShippingAllocWidthToleranceEnabled,

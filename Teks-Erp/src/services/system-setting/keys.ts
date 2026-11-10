@@ -521,6 +521,9 @@ export const SETTING_KEYS = {
   SHIPMENT_MANUAL_SACK_COUNT_ENABLED: "shipping.manualSackCountEnabled",
   /** Çuvalsız sevk (dökme / araba yükü). Default false: tablet kipi görünmez, yük birimi alanı 400. */
   SHIPMENT_LOOSE_LOAD_ENABLED: "shipping.looseLoadEnabled",
+  /** El terminalinden (Sevk Çıkışı) sevk kurma — v2 uçları (`/shipments/handheld`, `/scan`, `/sacks`, `/handheld-dispatch`).
+   *  Default false: uçlar 403 HANDHELD_DISABLED (sunucu kapısı), eski yollar etkilenmez. Ön koşul looseLoadEnabled. */
+  SHIPMENT_HANDHELD_CREATE_ENABLED: "shipping.handheldCreateEnabled",
   /** Sevk geri alma (storno) YALNIZ aynı fabrika gününde mi yapılabilsin. Default false
    *  (KAPALI = zaman sınırı YOK). Açıkken `dispatchedAt` bugünün fabrika günü başlangıcından
    *  (Europe/Istanbul) önceyse 409. Fatura ve iade koşulları bu ayardan BAĞIMSIZ ve her

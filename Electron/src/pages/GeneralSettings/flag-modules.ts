@@ -260,6 +260,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shipmentConfirmationEnabled: "cekirdek",
   shipmentManualSackCountEnabled: "cekirdek",
   shipmentLooseLoadEnabled: "cekirdek",
+  shipmentHandheldCreateEnabled: "cekirdek",
   shipmentUndoSameDayOnly: "cekirdek",
   shippingOrderRequirement: "cekirdek",
   itemPhaseOutNewOrder: "cekirdek",

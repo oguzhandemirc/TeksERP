@@ -103,38 +103,48 @@ export async function weighSack(this: ShippingServiceThis,
 
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);
-      // ÖLÇÜM DEFTERİ (2026-09-11): yeniden tartı eskiden `weightKg`in ÜSTÜNE
-      // yazıyordu ve irsaliyeye giden BRÜT kg'ın önceki değeri hiçbir kalıcı
-      // kolonda kalmıyordu. Önceki değeri okuyup olay tipini ondan çözüyoruz.
-      const onceki = await tx.sack.findUnique({
-        where: { id: data.sackId },
-        select: { weightKg: true },
-      });
-      const stamp = new Date();
-      await tx.sack.update({
-        where: { id: data.sackId },
-        data: {
-          weightKg: new Prisma.Decimal(data.weightKg!),
-          weightSource: resolvedSource,
-          weighedBy: userId ? { connect: { id: userId } } : { disconnect: true },
-          weighedAt: stamp,
-        },
-      });
-      await tx.sackWeighing.create({
-        data: {
-          sackId: data.sackId,
-          kind: onceki?.weightKg == null ? SackWeighingKind.WEIGHED : SackWeighingKind.REWEIGHED,
-          weightKg: new Prisma.Decimal(data.weightKg!),
-          weightSource: resolvedSource,
-          weighedById: userId ?? null,
-          weighedAt: stamp,
-        },
-      });
+      await writeSackWeightTx(tx, { sackId: data.sackId, weightKg: data.weightKg!, source: resolvedSource, userId });
     });
     // Kaynak hem KOLONA (sorgulanabilir, kalıcı) hem AUDİT'e (kim/ne zaman bağlamıyla)
     // yazılır. Kolon iç izdir: belgeye/etikete BASILMAZ (bkz. schema.prisma doc).
     return this.finishWeigh(data, resolvedSource, userId);
   }
+
+export type SackWeightWrite = "WEIGHED" | "REWEIGHED" | "CLEARED" | "NOOP";
+
+/**
+ * Çuval kg'sini yazar — TEK YAZAR: kolon + ölçüm defteri (`SackWeighing` WEIGHED · REWEIGHED · CLEARED) aynı adımda.
+ * Çağıran çuval satırını kilitlemiş olmalı (havuz: `touchWarehouseSackTx`; el terminali: sevkiyat + FOR UPDATE).
+ * `weightKg: null` kg'yi kaldırır (CLEARED). `skipIfSame` yalnız el terminalinin durum-idempotent yoludur:
+ * aynı değer tekrar gelirse satır yazılmaz (havuz tartısı her basışı REWEIGHED olarak deftere yazar, değişmedi).
+ */
+export async function writeSackWeightTx(
+  tx: Prisma.TransactionClient,
+  p: { sackId: string; weightKg: number | null; source: SackWeightSource; userId?: string; skipIfSame?: boolean },
+): Promise<SackWeightWrite> {
+  // ÖLÇÜM DEFTERİ (2026-09-11): yeniden tartı eskiden `weightKg`in ÜSTÜNE
+  // yazıyordu ve irsaliyeye giden BRÜT kg'ın önceki değeri hiçbir kalıcı
+  // kolonda kalmıyordu. Önceki değeri okuyup olay tipini ondan çözüyoruz.
+  const onceki = await tx.sack.findUnique({ where: { id: p.sackId }, select: { weightKg: true, weightSource: true } });
+  const stamp = new Date();
+  if (p.weightKg === null) {
+    if (onceki?.weightKg == null) return "NOOP";
+    await tx.sack.update({ where: { id: p.sackId }, data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null } });
+    await tx.sackWeighing.create({
+      data: { sackId: p.sackId, kind: SackWeighingKind.CLEARED, weightKg: null, weightSource: onceki.weightSource, weighedById: p.userId ?? null, weighedAt: stamp, notes: `Elle kaldırıldı — önceki ${onceki.weightKg.toString()} kg` },
+    });
+    return "CLEARED";
+  }
+  const kg = new Prisma.Decimal(p.weightKg);
+  if (p.skipIfSame && onceki?.weightKg != null && onceki.weightKg.equals(kg) && onceki.weightSource === p.source) return "NOOP";
+  await tx.sack.update({
+    where: { id: p.sackId },
+    data: { weightKg: kg, weightSource: p.source, weighedBy: p.userId ? { connect: { id: p.userId } } : { disconnect: true }, weighedAt: stamp },
+  });
+  const kind = onceki?.weightKg == null ? SackWeighingKind.WEIGHED : SackWeighingKind.REWEIGHED;
+  await tx.sackWeighing.create({ data: { sackId: p.sackId, kind, weightKg: kg, weightSource: p.source, weighedById: p.userId ?? null, weighedAt: stamp } });
+  return kind;
+}
 
 export async function finishWeigh(
     data: { sackId: string; weightKg?: number | null },

@@ -76,12 +76,31 @@ const KIND_WORD: Record<LoadUnitKind, string> = { SACK: "çuval", BULK: "dökme 
 /**
  * Aynı sevkiyatta tek yük türü (karışık sevk ertelendi, kullanıcı kararı 2026-11-06 md. 6): canlı birimlerin
  * türü gelenle aynı olmalı; boş sevkiyat her türü alır. Çağıran sevkiyatı kilitlemiş olmalı.
+ * `allowSackWithBulk` YALNIZ el terminali yolunun (`shipping/handheld-load.ts`) seçeneğidir: çuval + tek dökme
+ * birlikte durabilir (SPEC v2 md. 5); araba hiçbir karışıma girmez, dökme tekilliğini unique index korur.
  */
-export function assertLoadKindCompatible(existing: readonly LoadUnitKind[], incoming: LoadUnitKind): void {
-  const other = existing.find((k) => k !== incoming);
+export function assertLoadKindCompatible(
+  existing: readonly LoadUnitKind[],
+  incoming: LoadUnitKind,
+  opts: { allowSackWithBulk?: boolean } = {},
+): void {
+  const mixable = (k: LoadUnitKind) => k === LoadUnitKind.SACK || k === LoadUnitKind.BULK;
+  const other = existing.find((k) => k !== incoming && !(opts.allowSackWithBulk === true && mixable(k) && mixable(incoming)));
   if (!other) return;
   throw AppError.conflict(
     `Bu sevkiyatta ${KIND_WORD[other]} var; aynı sevkiyata ${KIND_WORD[incoming]} eklenemez (karışık yük bu sürümde yok). Ayrı sevkiyat kurun.`,
     { code: "LOAD_UNIT_KIND_MIXED", existing: other, incoming },
   );
+}
+
+/**
+ * Karışık yükün (çuval + dökme; yalnız el terminali yolu) belge özeti: "2 çuval (8 top) + 3 top dökme".
+ * Tek türlü yükte `null` → snapshot'a anahtar HİÇ yazılmaz (bugünkü irsaliyeler bayt-eşit kalır).
+ */
+export function loadSummaryText(units: { unitKind: LoadUnitKind; rollCount: number }[]): string | null {
+  const sacks = units.filter((u) => u.unitKind === LoadUnitKind.SACK);
+  const bulkRolls = units.filter((u) => u.unitKind === LoadUnitKind.BULK).reduce((n, u) => n + u.rollCount, 0);
+  if (sacks.length === 0 || bulkRolls === 0) return null;
+  const sackRolls = sacks.reduce((n, u) => n + u.rollCount, 0);
+  return `${sacks.length} çuval (${sackRolls} top) + ${bulkRolls} top dökme`;
 }

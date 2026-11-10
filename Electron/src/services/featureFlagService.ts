@@ -510,6 +510,8 @@ export interface FeatureFlags {
   shipmentManualSackCountEnabled: boolean;
   /** Çuvalsız sevk (dökme / araba) açık mı (false=default). Kapalıyken tablet kipi görünmez. */
   shipmentLooseLoadEnabled: boolean;
+  /** Sevk Çıkışı'nda (el terminali) hazır toplardan sevk kurma (false=default). Ön koşul çuvalsız sevk. */
+  shipmentHandheldCreateEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi yapılabilsin (false=default,
    *  yani tarih sınırı YOK). Faturalanmış ve iade alınmış sevkiyat koşulları bu ayardan
    *  BAĞIMSIZ, her zaman geçerlidir — bu yalnız ek bir daraltma. Backend ENFORCE eder. */

@@ -179,6 +179,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   shipmentConfirmationEnabled: A(true),
   shipmentManualSackCountEnabled: A(true),
   shipmentLooseLoadEnabled: A(true),
+  shipmentHandheldCreateEnabled: A(true),
   shipmentUndoSameDayOnly: A(true),
   shippingOrderRequirement: A("block"),
   shippingOrderCoverage: A("block"),

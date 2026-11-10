@@ -467,6 +467,8 @@ export const updateSchema = z.strictObject({
   shipmentManualSackCountEnabled: z.boolean().optional(),
   // shipping.looseLoadEnabled — çuvalsız sevk (dökme/araba; default false).
   shipmentLooseLoadEnabled: z.boolean().optional(),
+  // shipping.handheldCreateEnabled — Sevk Çıkışı'nda el terminalinden sevk kurma (default false).
+  shipmentHandheldCreateEnabled: z.boolean().optional(),
   // shipping.undoDispatchSameDayOnly — sevk geri almayı aynı günle sınırla
   // (default false = sınırsız). Backend ENFORCE (undoDispatch).
   shipmentUndoSameDayOnly: z.boolean().optional(),

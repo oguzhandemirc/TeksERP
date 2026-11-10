@@ -51,7 +51,7 @@ import {
   exportCodeForDestination,
 } from "../helpers/shipment-destination.helper";
 import { ACTIVE_SACK_ALLOCATION } from "../helpers/sack-allocation.helper";
-import { LIVE_LOAD_UNIT_WHERE } from "../helpers/load-unit.helper";
+import { LIVE_LOAD_UNIT_WHERE, loadSummaryText } from "../helpers/load-unit.helper";
 import { DELIVERY_TO_SELECT, deliveryToSnapshot } from "../helpers/shipment-delivery.helper";
 
 /** Belge özeti: dökme/arabada birim türü + etiket; çuvalda HİÇ anahtar yok (eski snapshot ile bayt-eşit). */
@@ -361,6 +361,8 @@ async function collectShipmentDocContent(
   const orderNos = [...new Set(sh.orders.map((o) => o.order.orderNumber))].join(", ");
   // Teslim yeri (K18) DOĞARKEN donar; yoksa anahtar HİÇ yazılmaz (snapshot bayt bayt bugünkü).
   const deliveryTo = deliveryToSnapshot(sh);
+  // Karışık yük özeti (el terminali, çuval + dökme) — yalnız karışıkta yazılır; tek türlü snapshot bayt-eşit.
+  const loadSummary = loadSummaryText(sacksGross.map((sk) => ({ unitKind: sk.unitKind, rollCount: sk.rolls.length })));
 
   return {
     // branchCode = şube ihracat kodu; customerExportCode = şirket ihracat kodu.
@@ -384,6 +386,7 @@ async function collectShipmentDocContent(
       // kaydına yazıldığı için ikisi meşru olarak farklıdır ve fark BİLGİDİR.
       // null = beyan yok → belgede yalnız sistemin rakamı çıkar.
       manualSackCount: sh.manualSackCount,
+      ...(loadSummary ? { loadSummary } : {}),
     },
   };
 }

@@ -229,6 +229,8 @@ function buildContext(
       kg: asNumber(t.totalKg),
       cuval_adedi: asNumber(t.sackCount),
       cuval_beyan_adedi: asNumber(t.manualSackCount),
+      // Karışık yük özeti (el terminali) — tek türlü yükte null, şablon satırı basmaz.
+      yuk_ozeti: asText(t.loadSummary),
     }),
     ayar: {
       ...(plainJson(config) as unknown as Record<string, ContextValue>),
@@ -262,7 +264,7 @@ function internalFlags(optIn: ReadonlySet<string>): Record<string, boolean> {
 export const shipmentDispatchContract: DocumentContract<DispatchNoteConfig, DispatchLiveOptions> = {
   docType: "SHIPMENT_DISPATCH",
   hedef: "musteri",
-  contractVersion: 3, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi
+  contractVersion: 4, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi · 4: toplamlar.yuk_ozeti (karışık yük)
   kokler: ROOT_FIELDS,
   tablolar: TABLE_DEFS,
   ayarSemasi: CONFIG_SCHEMA,

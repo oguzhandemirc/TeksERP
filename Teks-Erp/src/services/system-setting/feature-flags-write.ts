@@ -1244,6 +1244,18 @@ export async function setFeatureFlags(
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "shipmentHandheldCreateEnabled")) {
+      if (typeof input.shipmentHandheldCreateEnabled !== "boolean") {
+        throw AppError.badRequest("shipmentHandheldCreateEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPMENT_HANDHELD_CREATE_ENABLED,
+        input.shipmentHandheldCreateEnabled,
+        "Sevk Çıkışı'nda (el terminali) cari seç → okut → çuval aç → sevk et",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "shipmentConfirmationEnabled")) {
       if (typeof input.shipmentConfirmationEnabled !== "boolean") {
         throw AppError.badRequest("shipmentConfirmationEnabled boolean olmalı");

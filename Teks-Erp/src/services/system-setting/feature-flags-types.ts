@@ -289,6 +289,8 @@ export interface FeatureFlags {
   shipmentManualSackCountEnabled: boolean;
   /** Çuvalsız sevk — toplar dökme ya da araba ile çıkar (default false). */
   shipmentLooseLoadEnabled: boolean;
+  /** Sevk Çıkışı'nda (el terminali) hazır toplardan sevk kurma (default false; ön koşul shipmentLooseLoadEnabled). */
+  shipmentHandheldCreateEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi (default false = sınırsız).
    *  Faturasız + iadesiz koşulları bundan bağımsız her zaman geçerlidir. */
   shipmentUndoSameDayOnly: boolean;
