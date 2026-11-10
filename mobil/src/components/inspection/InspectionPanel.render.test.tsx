@@ -118,3 +118,33 @@ describe('InspectionPanel — hata yokken cetvel (rulerAlways)', () => {
     expect(r.getByText('Henüz hata yok')).toBeOnTheScreen();
   });
 });
+
+describe('InspectionPanel — top boyunu aşan metre', () => {
+  it('⭐ warn: kayıt gider + sarı satır, engel yok', async () => {
+    const { r, onDefect } = setup({ meterInput: '540', maxMeter: 500, overMaxMode: 'warn' });
+    await act(async () => {});
+    expect(r.getByText('Top beyandan uzun görünüyor (540 > 500 m)')).toBeOnTheScreen();
+    fireEvent.press(r.getByTestId('inspection-type-t-leke'));
+    expect(onDefect).toHaveBeenCalledWith({ meter: 540, defectTypeId: 't-leke' });
+  });
+  it('negatif sonda: varsayılan kip engeller, uyarı satırı yok', async () => {
+    const { r, onDefect } = setup({ meterInput: '540', maxMeter: 500 });
+    await act(async () => {});
+    expect(r.queryByTestId('inspection-over-max')).toBeNull();
+    fireEvent.press(r.getByTestId('inspection-type-t-leke'));
+    expect(onDefect).not.toHaveBeenCalled();
+  });
+});
+
+describe('overMaxMode konak bağı', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('path') as typeof import('path');
+  const read = (rel: string) => fs.readFileSync(path.join(__dirname, '..', '..', 'screens', 'Modules', rel), 'utf8');
+  it('kurşun warn taşır; Tambur çekmecesi ve Muayene bugünkü engeli korur', () => {
+    expect(read('KursunQc/KursunQcScreen.tsx')).toMatch(/overMaxMode="warn"/);
+    expect(read('Tambur/TamburDefectDrawer.tsx')).not.toMatch(/overMaxMode/);
+    expect(read('Muayene/InspectionScreen.tsx')).not.toMatch(/overMaxMode/);
+  });
+});

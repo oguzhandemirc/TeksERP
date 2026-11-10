@@ -90,6 +90,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[PROFİL]** Brode "Adet" girişini YALNIZ `pieceInput` gelince çiz (sayaç açık + `BRODE` + `finance.serviceBilling.brodeUnit` PIECE/STITCH; `brodePieceInputOf`); adet `meterOut.pieceCount`e; boş adette dur; METER/eski backend'de alan yok.
 - **[ÇEKİRDEK]** Sayacı kuyruğa KALICI yazımdan sonra ve sapma modalı kapalıyken sıfırla (`resetCounterAfterDurable` + `persistStationQueueNow`); OFF'ta `completeQc2` gövdesine `meterOut` yazma; PIN yalnız çevrimiçi `pin-ack` gövdesinde.
 - **[ÇEKİRDEK]** Doğrulanmamış RESETTING sayacın sonraki okumasını metre sayma; cihaz başına kalıcı "sıfırlanmadı" işaretiyle elle yola düşür; sunucu sayaç değerini reddederse aynı dokunuşu aynı değerle elle/sebep modalında sürdür.
+- **[ÇEKİRDEK]** Top metresini aşan hata metresini kurşunda ENGELLEME: `InspectionPanel overMaxMode="warn"` kaydeder + sarı "Top beyandan uzun görünüyor" satırı basar; Tambur çekmecesi ve Muayene varsayılan `block`ta kalır. <sub>(arşiv:2026-11-10 Beyan ↔ ölçülen metre)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 

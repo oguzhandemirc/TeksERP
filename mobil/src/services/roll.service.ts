@@ -7,6 +7,17 @@ import type {
   KursunFinishRequest,
 } from '../types/models';
 
+/** `GET /rolls/:id/meter-trail` — alan adları backend sözleşmesiyle birebir (beyan ↔ ölçülen metre). */
+export interface RollMeterTrail {
+  rollId: string;
+  declaredM: number | null;
+  prior: { kind: 'KURSUN_OUT' | 'STATION_OUT'; stationName: string; meters: number; at: string } | null;
+  referenceM: number | null;
+  cutSoFarM: number;
+  remainingM: number | null;
+  overReference: boolean;
+}
+
 export interface RollStats {
   totalCount: number;
   /** Filtreye uyan tüm rolların `currentQty` toplamı — metre. */
@@ -417,4 +428,11 @@ export const rollService = {
     apiClient
       .post<ApiResponse<Roll>>(`/rolls/${rollId}/kursun-finish`, data)
       .then((r) => r.data),
+
+  /** Tambur metre şeridi. Eski backend (404) / izin yok (403) / ağ hatası → null: şerit sessizce gizlenir. */
+  meterTrail: (rollId: string): Promise<RollMeterTrail | null> =>
+    apiClient
+      .get<ApiResponse<RollMeterTrail>>(`/rolls/${rollId}/meter-trail`)
+      .then((r) => r.data?.data ?? null)
+      .catch(() => null),
 };

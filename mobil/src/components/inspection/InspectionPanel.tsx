@@ -21,13 +21,16 @@ import InspectionSummaryStrip, { type InspectionSummary } from './InspectionSumm
 import PriorDefectList from './PriorDefectList';
 import {
   isCriticalDefect,
+  overMaxWarning,
   rulerMaxFor,
   rulerSectionMode,
   validateDefectInput,
+  validationMaxMeter,
   type InspectionDefect,
   type InspectionDefectInput,
   type InspectionPriorDefect,
   type InspectionSizeClass,
+  type OverMaxMode,
 } from './inspectionModel';
 
 export {
@@ -55,6 +58,8 @@ export interface InspectionPanelProps {
   onDelete: (id: string) => void;
   /** Topun boyu (mt): cetvel ölçeği + "metraj kumaşı aşamaz" istemci ikizi. */
   maxMeter?: number;
+  /** Top boyunu aşan metre: 'block' (varsayılan, bugünkü) engeller; 'warn' kaydeder + sarı satır (kurşun). */
+  overMaxMode?: OverMaxMode;
   /** Telefonda yerel klavye (tablette ekran numpad'i). */
   compact?: boolean;
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
@@ -122,6 +127,18 @@ function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnl
   );
 }
 
+// "Top beyandan uzun" — yalnız warn kipinde; block kipinde aşan metre zaten kayda gitmez.
+function OverMaxRow({ meterInput, ownDefects, maxMeter }: { meterInput: string; ownDefects: InspectionDefect[]; maxMeter?: number }) {
+  const text = overMaxWarning(meterInput, ownDefects, maxMeter);
+  if (!text) return null;
+  return (
+    <View style={styles.overWarn} testID="inspection-over-max">
+      <Icon source="alert-outline" size={16} color={palette.amber[700]} />
+      <Text style={styles.overWarnText}>{text}</Text>
+    </View>
+  );
+}
+
 export default function InspectionPanel(props: InspectionPanelProps) {
   const { defectTypes, ownDefects, priorDefects = [], sizeClassMode = false, readOnly = false } = props;
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
@@ -136,7 +153,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
     if (readOnly) return;
     // 4 puan muayenesi: metre boşsa kayıt konumsuz düşer (plan §4.1 md. 2).
     const unplaced = props.meterOptional === true && props.meterInput.trim() === '';
-    const v = unplaced ? ({ ok: true, meter: null } as const) : validateDefectInput(props.meterInput, defectTypeId, ownDefects, props.maxMeter);
+    const v = unplaced ? ({ ok: true, meter: null } as const) : validateDefectInput(props.meterInput, defectTypeId, ownDefects, validationMaxMeter(props.maxMeter, props.overMaxMode));
     if (!v.ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Toast.show({ type: 'error', text1: v.title, text2: v.detail });
@@ -188,6 +205,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
             meterOptional={props.meterOptional}
           />
         )}
+        {props.overMaxMode === 'warn' && <OverMaxRow meterInput={props.meterInput} ownDefects={ownDefects} maxMeter={props.maxMeter} />}
         {props.summary && <InspectionSummaryStrip summary={props.summary} />}
         {props.children}
       </View>
@@ -217,4 +235,6 @@ const styles = StyleSheet.create({
   critBadgeText: { color: palette.red[700], letterSpacing: 0.2 },
   priorBadge: { backgroundColor: palette.slate[100], borderColor: palette.slate[300] },
   priorBadgeText: { color: palette.slate[500] },
+  overWarn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.amber[50], borderColor: palette.amber[300], borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  overWarnText: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: palette.amber[900] },
 });

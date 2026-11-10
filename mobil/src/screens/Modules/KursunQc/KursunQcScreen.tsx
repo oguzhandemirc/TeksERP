@@ -1648,6 +1648,8 @@ export default function KursunQcScreen() {
                     onDefect={handleReportDefect}
                     onDelete={handleDeleteError}
                     maxMeter={selectedRoll.currentQty}
+                    // Beyandan uzun top kurşunda ENGELLENMEZ: kayıt + sarı uyarı (fatura max(beyan, ölçülen)).
+                    overMaxMode="warn"
                     compact={compact}
                     // Hata yokken de 0…top boyu cetveli (Tambur'daki ölçek gibi); boş durum yazısı yok.
                     rulerAlways

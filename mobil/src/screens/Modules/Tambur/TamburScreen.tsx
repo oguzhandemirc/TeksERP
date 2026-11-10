@@ -116,6 +116,8 @@ import {
   type TamburMeasure,
 } from './measureSource';
 import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
+import TamburMeterTrail from './TamburMeterTrail';
+import { parseCutInput } from './meterTrail';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
@@ -4362,6 +4364,11 @@ export default function TamburScreen() {
                     {selectedRoll.colorName ? ` · ${selectedRoll.colorName}` : ''}
                     {selectedRoll.width != null ? ` · ${selectedRoll.width} cm` : ''}
                   </Text>
+                  {/* Beyan ↔ ölçülen şeridi: bilgi + aşım uyarısı, kesimi ENGELLEMEZ; uç yoksa çizilmez. */}
+                  <TamburMeterTrail
+                    rollId={selectedRoll.rollId}
+                    pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0}
+                  />
                 </View>
 
                 {/* mt kalan / katlama / sipariş kutu grubu. Telefonda başlığın
