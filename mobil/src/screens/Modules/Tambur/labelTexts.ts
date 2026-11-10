@@ -7,6 +7,14 @@ export const LABEL_TEXT_MAX = 80;
 /** İE geneli düzeltmenin (labelOverrides) bu pencerede artık gösterilmeyen ad anahtarları — yerini topun değeri aldı. */
 export const NAME_OVERRIDE_KEYS: ReadonlySet<string> = new Set(['deliveryNoteItemText', 'deliveryNoteColorText', 'itemName', 'colorName']);
 
+/** İE geneli "Parti no" (`batchNumber`, bizim parti) — üstte topun parti alanı (Roll.labelBatchNo) varken pencerede ikinci "Parti no" olmasın. */
+export const BATCH_OVERRIDE_KEY = 'batchNumber';
+
+/** Pencerenin sağ sütununda gösterilecek İE geneli anahtarlar: ad/renk hep düşer; parti alanı açıkken `batchNumber` da düşer. */
+export function visibleOverrideKeys<T extends { key: string }>(keys: readonly T[], batchFieldShown: boolean): T[] {
+  return keys.filter((k) => !NAME_OVERRIDE_KEYS.has(k.key) && !(batchFieldShown && k.key === BATCH_OVERRIDE_KEY));
+}
+
 export interface LabelTextsState {
   /** Yapışkanlığın kapsamı (iş emri id; yoksa çözülen müşteri). Değişince sıfırlanır. */
   scopeKey: string | null;

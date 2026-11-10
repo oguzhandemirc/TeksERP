@@ -19,7 +19,8 @@ import { Text, TouchableRipple } from 'react-native-paper';
 import AppModal, { type AppModalProps } from './AppModal';
 import { colors, radius, shadow, spacing, typography } from '../theme';
 
-export const MODULE_SHEET_MAX_WIDTH = { md: 780, sm: 520 } as const;
+// xl: tüm alanları aynı anda gösteren geniş pencere (Tambur etiket bilgisi, 2026-11-10) — yatay tablette ≈%92.
+export const MODULE_SHEET_MAX_WIDTH = { md: 780, sm: 520, xl: 1600 } as const;
 export type ModuleSheetSize = keyof typeof MODULE_SHEET_MAX_WIDTH;
 
 /** Saf: pencere genişliği → kart genişliği: min(%92, tavan, ekran−32). Yatay 10" tablette 780, telefon dikeyde ekran−32. */

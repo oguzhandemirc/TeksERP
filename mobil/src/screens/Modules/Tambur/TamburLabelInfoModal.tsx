@@ -1,10 +1,11 @@
 // Etiket bilgisi (Gülkesim 2026-11-09): tamburcu müşteriyi arayıp etikete basılacak kumaş adı / renk /
 // parti no'yu öğrenir; değer SONRAKİ toplara gider (topa kesimde yazılır, İE'de saklanmaz). Kumaşın gerçek adı değişmez.
-// İE geneli düzeltmenin ad/renk anahtarları burada gösterilmez; kalan anahtarlar (en vb.) "Diğer etiket alanları"nda.
+// İE geneli düzeltmenin ad/renk anahtarları burada gösterilmez; kalan anahtarlar (en vb.) sağ sütunda, hep açık (2026-11-10:
+// geniş tek pencere, katlanır bölüm yok). Üstteki parti alanı varken İE-geneli `batchNumber` satırı düşer (`visibleOverrideKeys`).
 // `mode="fix"`: kesilmiş TEK topun değerini sevk edilene kadar düzeltir (sebep zorunlu, `PATCH /rolls/:id/label-texts`).
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Button, Icon, Text, TouchableRipple } from 'react-native-paper';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Button, Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import ModuleSheet from '../../../components/ModuleSheet';
@@ -16,7 +17,7 @@ import { showScreenError } from '../../../lib/screenToast';
 import { colors, spacing } from '../../../theme/tokens';
 import { overridePatch } from './finalLabel';
 import { LABEL_BATCH_MAX } from './labelBatch';
-import { LABEL_TEXT_MAX, NAME_OVERRIDE_KEYS, emptyHint } from './labelTexts';
+import { LABEL_TEXT_MAX, NAME_OVERRIDE_KEYS, emptyHint, visibleOverrideKeys } from './labelTexts';
 import { useTamburLabelSuggestions, type TamburFinalLabelState } from './useTamburFinalLabel';
 import { labelTextFixBody, labelTextFixReasonError } from './labelTextFix';
 import { LabelFieldRow, OverrideRow, type FieldDraft } from './TamburLabelInfoRows';
@@ -86,7 +87,6 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
   const [picking, setPicking] = useState<FieldKey | null>(null);
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeText, setFreeText] = useState('');
-  const [othersOpen, setOthersOpen] = useState(false);
   const [ovDraft, setOvDraft] = useState<OverrideDraft>({});
 
   // Pencere her açılışta güncel yapışkan değerle başlar; öneriler tazelenir (yeni kesimin değeri listeye girsin).
@@ -98,7 +98,6 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
     } else {
       setDraft({ item: final!.texts.itemName, color: final!.texts.colorName, batch: final!.batch.value });
     }
-    setOthersOpen(false);
     void sugg.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -106,9 +105,12 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
   const ov = useQuery({
     queryKey: ['labels', 'wo-overrides', workOrderId],
     queryFn: () => tamburService.getLabelOverrides(workOrderId as string),
-    enabled: visible && othersOpen && !!workOrderId,
+    enabled: visible && !!workOrderId,
   });
-  const otherKeys = (ov.data?.keys ?? []).filter((k) => !NAME_OVERRIDE_KEYS.has(k.key));
+  const otherKeys = visibleOverrideKeys(ov.data?.keys ?? [], batchEnabled);
+  const { width: winW } = useWindowDimensions();
+  // Yatay tablette iki sütun (sonraki toplar | iş emrinin tüm topları); telefonda tek sütun + kaydırma.
+  const twoCol = !!workOrderId && winW >= 900;
   useEffect(() => {
     if (!ov.data) return;
     const d: OverrideDraft = {};
@@ -190,7 +192,7 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
     <ModuleSheet
       visible={visible}
       onDismiss={onDismiss}
-      size="sm"
+      size={workOrderId ? 'xl' : 'sm'}
       title={fix ? `Etiket bilgisini düzelt${fix.roll.barcode ? ` — ${fix.roll.barcode}` : ''}` : 'Etikete basılacak (sonraki toplar)'}
       subtitle={
         fix
@@ -198,8 +200,11 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
           : 'Değer sonraki kesimlerde aynen kalır. Boş kutu: kumaşın kendi adı/rengi basılır.'
       }
       footer={
-        <View style={s.actions}>
-          <Button mode="contained" buttonColor={colors.textSecondary} textColor={colors.textOnDark} onPress={onDismiss} contentStyle={s.btn}>Vazgeç</Button>
+        <View style={s.footerBar}>
+          <Button mode="contained" buttonColor={colors.danger} textColor={colors.textOnDark} onPress={onDismiss} contentStyle={s.btn}
+            testID="etiket-bilgisi-vazgec">
+            Vazgeç
+          </Button>
           <Button
             mode="contained"
             textColor={colors.textOnDark}
@@ -260,55 +265,53 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
         ) : null
       }
     >
-      {fields.map((key) => (
-        <LabelFieldRow
-          key={key}
-          label={FIELD_META[key].label}
-          value={draft[key]}
-          hint={emptyHint(fallback[key], FIELD_META[key].generic)}
-          onPress={() => setPicking(key)}
-          onClear={() => setDraft((d) => ({ ...d, [key]: '' }))}
-          testID={`etiket-${key}`}
-        />
-      ))}
-
-      {fix ? (
-        <View style={s.reasonBox}>
-          <ModalTextInput
-            mode="outlined"
-            label="Düzeltme sebebi (zorunlu)"
-            value={reason}
-            onChangeText={setReason}
-            maxLength={500}
-            placeholder="Örn. müşteri adı yanlış söylendi"
-            testID="etiket-duzelt-sebep"
-          />
-          {reason.length > 0 && reasonError ? <Text style={s.err}>{reasonError}</Text> : null}
-        </View>
-      ) : null}
-
-      {workOrderId ? (
-        <TouchableRipple onPress={() => setOthersOpen((o) => !o)} style={s.othersToggle} testID="etiket-diger-alanlar">
-          <View style={s.row}>
-            <Icon source={othersOpen ? 'chevron-up' : 'chevron-down'} size={22} color={colors.textSecondary} />
-            <Text style={s.othersLabel}>Diğer etiket alanları (iş emrinin tüm topları)</Text>
-          </View>
-        </TouchableRipple>
-      ) : null}
-      {othersOpen && workOrderId ? (
-        <View>
-          {ov.isLoading ? <Text style={s.sub}>Yükleniyor…</Text> : null}
-          {ov.isError ? <Text style={s.err}>Etiket alanları okunamadı.</Text> : null}
-          {otherKeys.map((k) => (
-            <OverrideRow
-              key={k.key}
-              field={k}
-              value={ovDraft[k.key] ?? { text: '', blank: false }}
-              onChange={(v) => setOvDraft((d) => ({ ...d, [k.key]: v }))}
+      <View style={twoCol ? s.cols : null}>
+        <View style={twoCol ? s.col : null}>
+          {workOrderId ? <Text style={s.colTitle}>Sonraki toplar</Text> : null}
+          {fields.map((key) => (
+            <LabelFieldRow
+              key={key}
+              label={FIELD_META[key].label}
+              value={draft[key]}
+              hint={emptyHint(fallback[key], FIELD_META[key].generic)}
+              onPress={() => setPicking(key)}
+              onClear={() => setDraft((d) => ({ ...d, [key]: '' }))}
+              testID={`etiket-${key}`}
             />
           ))}
+
+          {fix ? (
+            <View style={s.reasonBox}>
+              <ModalTextInput
+                mode="outlined"
+                label="Düzeltme sebebi (zorunlu)"
+                value={reason}
+                onChangeText={setReason}
+                maxLength={500}
+                placeholder="Örn. müşteri adı yanlış söylendi"
+                testID="etiket-duzelt-sebep"
+              />
+              {reason.length > 0 && reasonError ? <Text style={s.err}>{reasonError}</Text> : null}
+            </View>
+          ) : null}
         </View>
-      ) : null}
+
+        {workOrderId ? (
+          <View style={twoCol ? s.col : s.stacked} testID="etiket-diger-alanlar">
+            <Text style={s.colTitle}>İş emrinin tüm topları</Text>
+            {ov.isLoading ? <Text style={s.sub}>Yükleniyor…</Text> : null}
+            {ov.isError ? <Text style={s.err}>Etiket alanları okunamadı.</Text> : null}
+            {otherKeys.map((k) => (
+              <OverrideRow
+                key={k.key}
+                field={k}
+                value={ovDraft[k.key] ?? { text: '', blank: false }}
+                onChange={(v) => setOvDraft((d) => ({ ...d, [k.key]: v }))}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
     </ModuleSheet>
   );
 }
@@ -316,9 +319,12 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
 const s = StyleSheet.create({
   sub: { color: colors.textSecondary, marginBottom: spacing.sm },
   err: { color: colors.dangerText, marginBottom: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  othersToggle: { minHeight: 56, justifyContent: 'center', marginTop: spacing.sm },
-  othersLabel: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
+  cols: { flexDirection: 'row', gap: spacing.xl },
+  col: { flex: 1 },
+  stacked: { marginTop: spacing.md },
+  colTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5, color: colors.textSecondary, marginBottom: spacing.sm },
+  // Vazgeç solda (kırmızı), Kaydet sağda (birincil).
+  footerBar: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   freeBox: { gap: spacing.sm, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
   btn: { minHeight: 56 },
