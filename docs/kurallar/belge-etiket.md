@@ -79,6 +79,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] Topun bir seferlik şablonunu yalnız `rollTemplateApplies` yüklemiyle uygula (`labelTemplateKind` render bağlamına eşit ya da null; tekil, toplu, basım izi, düzenleme formu); kesimde/yeniden basımda seçimi `resolveLabelTemplateOptions` teklifine karşı doğrula (dışı 400 `LABEL_TEMPLATE_NOT_OFFERED`), varsayılanı topa null yaz, çocuğa miras geçirme (bekçi `test_label_template_choice`). <sub>(arşiv:2026-11-11 Çoklu etiket seti)</sub>
 
 - [ÇEKİRDEK] Kanvas alanının biçimi (`fmt`: ABD dönüşümü, sabit hane, sıfır dolgu, birim metni, saatsiz tarih) yalnız `label-units.formatFieldMeasure` + `label-field-values.fieldElementValue`ten; yalnız ölçü/tarih alanında, doğrulama `fieldFormatError` (fail-closed); `fmt`siz eleman bayt-aynı (bekçi `test_etiket_alan_bicimi`). <sub>(arşiv:2026-11-10 GK ihracat etiketi)</sub>
+- [ÇEKİRDEK] Kanvas HTML yolunda metni katlama: HTML (önizleme + RASTER_HTML basım) tam Unicode basar (Türkçe, Kiril); `asciiFold` yalnız yazıcı komut yolunda (PPLA/ZPL; PPLB cp1254); Tambur tablet önizlemesi şablon birim ayarını basımla aynı `payloadWithTemplateUnits` kapısından alsın; tarih `fmt.date` `D.MM.YYYY` · `DD.MM.YYYY` · `MM/DD/YYYY` (bekçiler `test_label_canvas_renderer`, `test_tambur_etiket_onizleme` §4, `test_etiket_alan_bicimi` §6). <sub>(arşiv:2026-11-11 EN/RU etiket dil açıkları)</sub>
 
 ### Belge şablon tasarımcısı (GrapesJS + LiquidJS; plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md`)
 

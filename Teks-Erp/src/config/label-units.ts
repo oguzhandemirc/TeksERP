@@ -49,6 +49,17 @@ export function readLabelUnitSettings(raw: unknown): LabelUnitSettings | null {
   return { system: r.system as LabelUnitSystem, decimals, decimalSep };
 }
 
+/** Şablonun birim ayarını payload'a taşır — basım (`withTemplateUnits`) ve Tambur tablet önizlemesi AYNI kapıdan.
+ *  Payload zaten taşıyorsa (stüdyo önizlemesi) o kazanır; ayarsız şablon aynı nesneyi döndürür (bayt-aynı). */
+export function payloadWithTemplateUnits<P extends { unitSettings?: LabelUnitSettings | null }>(
+  payload: P,
+  template: { unitSettings?: unknown } | null | undefined,
+): P {
+  if (payload.unitSettings !== undefined) return payload;
+  const units = readLabelUnitSettings(template?.unitSettings);
+  return units ? { ...payload, unitSettings: units } : payload;
+}
+
 /** Ayar bugünkü biçimle bayt-aynı mı (METRIC + varsayılan ondalık + virgül). */
 export function isDefaultUnitSettings(s: LabelUnitSettings | null | undefined): boolean {
   return !s || (s.system === "METRIC" && s.decimals == null && (s.decimalSep ?? ",") === ",");
@@ -94,8 +105,18 @@ export function formatMeasure(
 // =============================================================================
 
 export type FieldUsUnit = "yd" | "in" | "lb";
-export type FieldDateFormat = "D.MM.YYYY" | "DD.MM.YYYY";
-export const FIELD_DATE_FORMATS: readonly FieldDateFormat[] = ["D.MM.YYYY", "DD.MM.YYYY"];
+export type FieldDateFormat = "D.MM.YYYY" | "DD.MM.YYYY" | "MM/DD/YYYY";
+export const FIELD_DATE_FORMATS: readonly FieldDateFormat[] = ["D.MM.YYYY", "DD.MM.YYYY", "MM/DD/YYYY"];
+
+/** Fabrika günü "GG.AA.YYYY" (`factoryDateTr`) → seçilen biçim. MM/DD/YYYY = ABD ihracat etiketi. */
+export function formatFieldDate(dayTr: string, f: FieldDateFormat): string {
+  if (f === "D.MM.YYYY") return dayTr.replace(/^0/, "");
+  if (f === "MM/DD/YYYY") {
+    const [d, m, y] = dayTr.split(".");
+    return `${m}/${d}/${y}`;
+  }
+  return dayTr;
+}
 
 export interface FieldFormat {
   /** ABD birimine çevir — boyutla eşleşmeli (m→yd, cm→in, kg→lb). */
@@ -106,7 +127,7 @@ export interface FieldFormat {
   padInt?: number;
   /** Birim metni ("yds", "mt", "CM"); "" → birimsiz; yok → dönüşüm birimi ya da m/cm/kg. */
   unit?: string;
-  /** Yalnız tarih alanında: saatsiz fabrika günü; D = gün sıfırsız. */
+  /** Yalnız tarih alanında: saatsiz fabrika günü; D = gün sıfırsız; MM/DD/YYYY = ABD sırası. */
   date?: FieldDateFormat;
 }
 

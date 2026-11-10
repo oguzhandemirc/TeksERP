@@ -7,13 +7,16 @@
 //      barkod yer tutucu · alan elemanı bind taşır, sabit metin taşımaz · değersiz alan `empty` işaretli (yalnız önizleme)
 //      · sistemin kesimde atadığı alan (barkod metni) `auto`, `empty` DEĞİL (2026-11-11)
 //   §3 uç sözleşmesi: izin preview-fields ile aynı, route prisma import etmez, servis YAZMAZ
+//   §4 şablon geneli birim ayarı (unitSettings: ayırıcı/hane/sistem) basımla AYNI kapıdan (`payloadWithTemplateUnits`)
 // Negatif sonda (ölçüldü 2026-11-10): composeCanvasElements `elementText` yerine `fieldDisplayValue`
 // kullanınca §2 fmt kırmızı; applyTamburDraft barkodu korursa §1 kırmızı; SYSTEM_ASSIGNED_BINDS boşalınca
-// §2 sistem alanı kırmızı (ölçüldü 2026-11-11).
+// §2 sistem alanı kırmızı (ölçüldü 2026-11-11); servis `payloadWithTemplateUnits` çağrısı kaldırılınca §4
+// servis kırmızı, kapı ayarı yok sayınca §4 ayırıcı kırmızı (ölçüldü 2026-11-11).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LabelElement } from "../src/config/label-elements";
+import { payloadWithTemplateUnits } from "../src/config/label-units";
 import { buildCanvasLabelHtml } from "../src/services/helpers/label-canvas-html.helper";
 import { applyTamburDraft, composeCanvasElements, sourceWidthOf } from "../src/services/tambur/label-preview-compose";
 import type { LabelPayload } from "../src/types/label.types";
@@ -96,6 +99,27 @@ async function main(): Promise<void> {
   check("§3 servis yazmaz (create/update/delete/upsert yok)", !/\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(/.test(svc + pure));
   check("§3 metin baskı fonksiyonundan (elementText)", /elementText\(el, payload\)/.test(pure));
   check("§3 servis saf kompozisyonu çağırır", /composeCanvasElements\(/.test(svc) && /applyTamburDraft\(/.test(svc));
+
+  console.log("\n[§4] şablon birim ayarı (unitSettings) basımla aynı");
+  const T = { unitSettings: { system: "METRIC", decimals: 1, decimalSep: "." } };
+  const shown = payloadWithTemplateUnits(d, T);
+  const uEls = composeCanvasElements(ELEMENTS, shown, { language: "RASTER_HTML", heightMm: 58, dpi: 203 });
+  const uTexts = uEls.filter((x): x is Extract<typeof x, { type: "text" }> => x.type === "text");
+  check("§4 alan fmt'si şablonun ondalık ayırıcısını alır (7.66 yds)", uTexts.some((t) => t.text === "7.66 yds"), uTexts.map((t) => t.text).join(" | "));
+  check("§4 sıfır dolgu noktalı ayırıcıyla (07.00 mt)", uTexts.some((t) => t.text === "07.00 mt"));
+  const plain = composeCanvasElements([{ id: "w", type: "field", x: 1, y: 1, bind: "widthCm" }] as unknown as LabelElement[], payloadWithTemplateUnits({ ...d, widthCm: 54.7 } as LabelPayload, T), { language: "RASTER_HTML", heightMm: 58, dpi: 203 });
+  check("§4 fmt'siz ölçü şablon ayarıyla (54.7 cm)", plain.some((x) => x.type === "text" && x.text === "54.7 cm"), JSON.stringify(plain.map((x) => x.type === "text" ? x.text : x.type)));
+  // Basım yolu: renderLabel → withTemplateUnits → aynı payloadWithTemplateUnits (HTML buradan çizilir).
+  const uHtml = buildCanvasLabelHtml({ payload: shown, format: FORMAT, copies: 1, layout: { v: 1, elements: ELEMENTS }, barcodeSvg: "", qrSvg: "" });
+  const uMissing = uTexts.filter((t) => !uHtml.includes(t.text));
+  check("§4 birim ayarlı her metin basım HTML'inde birebir", uMissing.length === 0, uMissing.map((t) => t.text).join(", "));
+  check("§4 ayarsız şablonda payload aynı nesne (bayt-aynı)", payloadWithTemplateUnits(d, { unitSettings: null }) === d);
+  check("§4 payload'da ayar varsa o kazanır", payloadWithTemplateUnits({ ...d, unitSettings: null } as LabelPayload, T).unitSettings === null);
+  const svc4 = readFileSync(join(__dirname, "../src/services/tambur/label-preview.ts"), "utf8");
+  const reg = readFileSync(join(__dirname, "../src/services/helpers/label-renderer.registry.ts"), "utf8");
+  check("§4 kanvas kompozisyonu birimli payload'la", /composeCanvasElements\(layout\.elements, payloadWithTemplateUnits\(payload, t\),/.test(svc4));
+  check("§4 akış satırları birimli payload'la", /templateTextLinesKeyed\(payloadWithTemplateUnits\(payload, t\), t\)/.test(svc4));
+  check("§4 basım yolu aynı kapıdan (tek kaynak)", /payloadWithTemplateUnits\(input\.payload, input\.template\)/.test(reg));
 }
 
 main()

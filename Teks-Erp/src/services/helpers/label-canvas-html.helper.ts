@@ -12,7 +12,7 @@ import type { CanvasRenderInput } from "./label-canvas-native.helper";
 import { fieldDisplayValue, fieldElementValue, scanElementValue } from "./label-field-values";
 import { renderCode128Svg, renderQrSvg } from "./barcode-svg.helper";
 import { escapeHtml, applyCopies } from "./label-html.shared";
-import { asciiFold, qrFootprintDots, bannerValueText, resolveEplTextStyle, EPL_FONT, applyTextCase } from "./native-label.shared";
+import { qrFootprintDots, bannerValueText, resolveEplTextStyle, EPL_FONT, applyTextCase } from "./native-label.shared";
 import type { FieldElement, TextElement } from "../../config/label-elements";
 import { elementSupported, prepareElements, ICON_DEFAULT_MM } from "../../config/label-elements";
 import { labelIconSvg } from "../../config/label-icons";
@@ -25,10 +25,10 @@ export interface CanvasHtmlInput extends CanvasRenderInput {
 }
 
 // ORTAK PAYDA (kullanıcı kararı: eleman dilden dile FARKLI çıktı vermemeli):
-// HTML metni de native ile aynı davranır — Türkçe ASCII'ye katlanır, monospace
-// (yazıcı hücre modeli) kullanılır ve boyut native'in seçtiği kombinasyonun
+// HTML boyutu native ile aynıdır — monospace (yazıcı hücre modeli), boyut native'in seçtiği kombinasyonun
 // FİİLEN basılan yüksekliğidir (serbest mm değil). Kalınlık görünümünü genişlik
-// oranı (wr) verir — font-weight parite dışı bırakıldı.
+// oranı (wr) verir — font-weight parite dışı bırakıldı. METİN katlanmaz: HTML tam Unicode basar
+// (Türkçe/Kiril, EN/RU şablon 2026-11-11); asciiFold yalnız yazıcı komut yoluna aittir.
 function textDiv(el: FieldElement | TextElement, content: string, dpi: number): string {
   const dotsPerMm = (dpi || 203) / 25.4;
   let hDots: number;
@@ -66,7 +66,7 @@ function textDiv(el: FieldElement | TextElement, content: string, dpi: number): 
   if (transforms.length > 0) {
     parts.push(`transform:${transforms.join(" ")}`, "transform-origin:top left");
   }
-  return `<div style="${parts.join(";")}">${escapeHtml(asciiFold(content))}</div>`;
+  return `<div style="${parts.join(";")}">${escapeHtml(content)}</div>`;
 }
 
 export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
@@ -88,7 +88,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
                 const label = el.label?.trim();
                 return label ? `${label}: ${dv.value}` : dv.value;
               })();
-        // Harf dönüşümü (native/raster ile birebir) — sonra asciiFold + escape textDiv'de.
+        // Harf dönüşümü (native/raster ile birebir) — sonra escape textDiv'de.
         const content = rawContent != null ? applyTextCase(rawContent, el.textCase) : null;
         if (content) els.push(textDiv(el, content, format.dpi));
         break;
@@ -184,7 +184,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
           glyphMm = (24 * mul) / dotsPerMm;
           scaleX = hmul / mul;
         }
-        const val = asciiFold(bannerValueText(payload, el.unit !== false));
+        const val = bannerValueText(payload, el.unit !== false);
         const tf = `rotate(${rot}deg)${scaleX !== 1 ? ` scaleX(${scaleX})` : ""}`;
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">` +

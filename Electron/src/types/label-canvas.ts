@@ -74,8 +74,8 @@ export interface FieldElement extends ElementBase {
   align?: TextAlign;
   /** Harf dönüşümü (BÜYÜK/küçük). Yok → dokunma. */
   textCase?: TextCase;
-  /** Alan başına biçim — backend `config/label-units.ts FieldFormat` aynası. Editörde düzenleme
-   *  yüzeyi yok; JSON'da korunur, değer sunucuda biçimlenir. */
+  /** Alan başına biçim — backend `config/label-units.ts FieldFormat` aynası. Editörde yalnız tarih
+   *  biçimi seçilir (`field-date-format.ts`); kalanı JSON'da korunur, değer sunucuda biçimlenir. */
   fmt?: LabelFieldFormat;
 }
 
@@ -85,8 +85,12 @@ export interface LabelFieldFormat {
   decimals?: number;
   padInt?: number;
   unit?: string;
-  date?: "D.MM.YYYY" | "DD.MM.YYYY";
+  date?: LabelFieldDateFormat;
 }
+
+/** Backend `FIELD_DATE_FORMATS` aynası (bekçi `test_etiket_alan_bicimi` §6 ölçer). */
+export const FIELD_DATE_FORMATS = ["D.MM.YYYY", "DD.MM.YYYY", "MM/DD/YYYY"] as const;
+export type LabelFieldDateFormat = (typeof FIELD_DATE_FORMATS)[number];
 
 export interface TextElement extends ElementBase {
   type: "text";

@@ -18,6 +18,8 @@ import { achievedTextStyleMm, BC_BASE_MM, FONT_MM } from "./canvas-model";
 import { IconPropsSection } from "./IconPropsSection";
 import { ConditionSection } from "./ConditionSection";
 import { ScanSourceSection } from "./ScanSourceSection";
+import { fmtAfterBindChange } from "./field-date-format";
+import { FieldDateFormatSection } from "./FieldDateFormatSection";
 
 interface Props {
   element: LabelElement | null;
@@ -126,7 +128,7 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
       {el.type === "field" && (
         <div className="space-y-1">
           <Label className="text-[10px] text-muted-foreground">Veri alanı</Label>
-          <Select value={el.bind} onValueChange={(v) => onChange({ bind: v } as Partial<LabelElement>)}>
+          <Select value={el.bind} onValueChange={(v) => onChange({ bind: v, fmt: fmtAfterBindChange(el.fmt, v) } as Partial<LabelElement>)}>
             <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {catalog.map((f) => (
@@ -139,6 +141,7 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
           <Label className="text-[10px] text-muted-foreground">Başlık (boş = yalnız değer)</Label>
           <Input className="h-7 text-xs" value={el.label ?? ""} placeholder="örn. Müşteri"
             onChange={(e) => onChange({ label: e.target.value } as Partial<LabelElement>)} />
+          <FieldDateFormatSection element={el} onChange={onChange} />
         </div>
       )}
 
@@ -222,8 +225,8 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
             </div>
           </div>
           <p className="text-[10px] leading-snug text-muted-foreground">
-            ORTAK PAYDA: dört dil (PPLA/PPLB/ZPL/HTML) AYNI boyut kombinasyonunu ve
-            AYNI metni (Türkçe→ASCII) basar — eleman dilden dile farklı görünmez.
+            ORTAK PAYDA: dört dil (PPLA/PPLB/ZPL/HTML) AYNI boyut kombinasyonunu basar.
+            Metin HTML ve raster'da tam Unicode (Türkçe, Kiril); PPLB Türkçe, PPLA/ZPL ASCII'ye katlar.
             Genişlik oranı dar/geniş; "kalın" görünümü de oran verir. Köşe tutamacı:
             dikey=yükseklik, yatay=oran.
           </p>

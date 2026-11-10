@@ -4,16 +4,18 @@
 // =============================================================================
 //   §1 formatFieldMeasure: m→yd / cm→in dönüşümü, sabit hane, sıfır dolgu, birim metni
 //   §2 fieldElementValue: fmt'siz = fieldDisplayValue · değersiz alan biçimle de atlanır ·
-//      sayısal ezme biçimlenir, metin ezme aynen · saatsiz tarih (gün sıfırsız, fabrika günü)
+//      sayısal ezme biçimlenir, metin ezme aynen · saatsiz tarih (gün sıfırsız, fabrika günü, ABD MM/DD/YYYY)
 //   §3 fmt'siz şablon D4-F3 altın dosyasıyla BAYT-AYNI (5 render yolu)
 //   §4 4 dilde (HTML/PPLA/PPLB/ZPL) biçimli metin basılır
 //   §5 doğrulayıcı: bilinmeyen anahtar, metin alanında fmt, yanlış dönüşüm, aralık dışı → 400
+//   §6 panel aynası: Electron tarih biçimi listesi + tarih alanları backend ile birebir
 // Negatif sonda (ölçüldü 2026-11-10): `formatFieldMeasure` padInt dalı atlanınca §1/§4 kırmızı;
-// HTML emitter `fieldDisplayValue`a geri çevrilince §4 html kırmızı.
+// HTML emitter `fieldDisplayValue`a geri çevrilince §4 html kırmızı; `formatFieldDate` MM/DD dalı
+// kaldırılınca §2 ABD tarihi kırmızı (ölçüldü 2026-11-11).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fieldFormatError, formatFieldMeasure } from "../src/config/label-units";
+import { FIELD_DATE_FORMATS, FIELD_DATE_KEYS, fieldFormatError, formatFieldMeasure } from "../src/config/label-units";
 import { CanvasValidationError, validateCanvasLayout, type CanvasLayout, type LabelElement } from "../src/config/label-elements";
 import { fieldDisplayValue, fieldElementValue } from "../src/services/helpers/label-field-values";
 import type { LabelPayload } from "../src/types/label.types";
@@ -65,6 +67,11 @@ async function main(): Promise<void> {
   const d = fieldElementValue(P, { bind: "printedAt", fmt: { date: "D.MM.YYYY" } }).value;
   check("§2 tarih fabrika günü, gün sıfırsız (22:30Z → 5.05.2026)", d === "5.05.2026", d);
   check("§2 tarih DD.MM.YYYY → 05.05.2026", fieldElementValue(P, { bind: "printedAt", fmt: { date: "DD.MM.YYYY" } }).value === "05.05.2026");
+  // ABD sırası (2026-11-11): gün≠ay seçilir ki takas yakalansın; fabrika günü (22:30Z → ertesi gün).
+  const us = fieldElementValue({ ...P, printedAt: "2026-11-09T22:30:00.000Z" } as LabelPayload, { bind: "printedAt", fmt: { date: "MM/DD/YYYY" } }).value;
+  check("§2 tarih MM/DD/YYYY → 11/10/2026 (ay önce, fabrika günü)", us === "11/10/2026", us);
+  const usPad = fieldElementValue({ ...P, printedAt: "2026-03-04T10:00:00.000Z" } as LabelPayload, { bind: "printedAt", fmt: { date: "MM/DD/YYYY" } }).value;
+  check("§2 tarih MM/DD/YYYY sıfır dolgulu → 03/04/2026", usPad === "03/04/2026", usPad);
   check("§2 bozuk fmt render'da yok sayılır", fieldElementValue(P, { bind: "lengthMeters", fmt: { to: "lb" } }).value === fieldDisplayValue(P, "lengthMeters").value);
 
   console.log("\n[§3] fmt'siz şablon bayt-aynı (altın)");
@@ -101,7 +108,21 @@ async function main(): Promise<void> {
   check("§5 ölçüde date RED", rejects({ bind: "weightKg", fmt: { date: "D.MM.YYYY" } }));
   check("§5 tarihte decimals RED", rejects({ bind: "printedAt", fmt: { decimals: 1 } }));
   check("§5 uzun birim RED", rejects({ bind: "weightKg", fmt: { unit: "x".repeat(17) } }));
+  check("§5 MM/DD/YYYY kabul", !rejects({ bind: "printedAt", fmt: { date: "MM/DD/YYYY" } }));
+  check("§5 bilinmeyen tarih biçimi RED", rejects({ bind: "printedAt", fmt: { date: "YYYY-MM-DD" } }));
   check("§5 dizi fmt RED", fieldFormatError([], "weightKg") !== null);
+
+  console.log("\n[§6] panel aynası");
+  const listOf = (src: string, name: string): string[] => {
+    const m = src.match(new RegExp(`${name}[^=]*=\\s*\\[([^\\]]*)\\]`));
+    return m ? [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
+  };
+  const elTypes = readFileSync(join(__dirname, "../../Electron/src/types/label-canvas.ts"), "utf8");
+  const elPicker = readFileSync(join(__dirname, "../../Electron/src/pages/LabelTemplates/editor/field-date-format.ts"), "utf8");
+  const panelFormats = listOf(elTypes, "FIELD_DATE_FORMATS");
+  check("§6 panel tarih biçimleri = backend", JSON.stringify(panelFormats) === JSON.stringify(FIELD_DATE_FORMATS), panelFormats.join(", "));
+  const panelBinds = listOf(elPicker, "FIELD_DATE_BINDS");
+  check("§6 panel tarih alanları = backend", JSON.stringify([...panelBinds].sort()) === JSON.stringify([...FIELD_DATE_KEYS].sort()), panelBinds.join(", "));
 }
 
 main()

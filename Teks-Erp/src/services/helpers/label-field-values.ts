@@ -13,7 +13,7 @@
 import type { LabelPayload } from "../../types/label.types";
 import { formatNumber, formatDate } from "./label-html.shared";
 import {
-  FIELD_DATE_KEYS, FIELD_MEASURE_DIM, formatFieldMeasure, formatMeasure, isDefaultUnitSettings, readFieldFormat,
+  FIELD_DATE_KEYS, FIELD_MEASURE_DIM, formatFieldDate, formatFieldMeasure, formatMeasure, isDefaultUnitSettings, readFieldFormat,
   type LabelUnitSettings, type MeasureDim,
 } from "../../config/label-units";
 import { factoryDateTr } from "../../constants/time";
@@ -99,8 +99,7 @@ export function fieldElementValue(payload: LabelPayload, el: { bind: string; fmt
     const iso = el.bind === "printedAt" ? payload.printedAt : payload.woundAt;
     const d = new Date(iso ?? "");
     if (Number.isNaN(d.getTime())) return base;
-    const day = factoryDateTr(d);
-    return { ...base, value: fmt.date === "D.MM.YYYY" ? day.replace(/^0/, "") : day };
+    return { ...base, value: formatFieldDate(factoryDateTr(d), fmt.date) };
   }
   return base;
 }

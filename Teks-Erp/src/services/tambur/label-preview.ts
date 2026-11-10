@@ -5,7 +5,8 @@
 // metni yerine aynı render'ın ÇİZİLEBİLİR elemanları döner: konum (mm) + BASILACAK METİN. Metin baskıyla aynı fonksiyonlardan (`prepareElements` +
 // `elementText`, akış şablonunda `templateTextLinesKeyed`); payload `getRollLabel` zinciri, şablon
 // preview-fields ile aynı karar (`resolveLabelRouting`, emanette sahip). Hiçbir şey YAZMAZ.
-// Çocuğun barkodu kesimde doğar → barkod elemanı yer tutucu (`value: null`).
+// Çocuğun barkodu kesimde doğar → barkod elemanı yer tutucu (`value: null`). Şablonun birim ayarı
+// (sistem/hane/ondalık ayırıcı) basımla AYNI kapıdan (`payloadWithTemplateUnits`); yoksa tablet "54,7", basım "54.7".
 // =============================================================================
 import prisma from "../../lib/prisma";
 import type { LabelPayload } from "../../types/label.types";
@@ -16,6 +17,7 @@ import { isOfferedTemplate, resolveLabelTemplateOptions } from "../helpers/label
 import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { readCanvasLayout } from "../../config/label-elements";
 import { templateTextLinesKeyed } from "../helpers/native-label.shared";
+import { payloadWithTemplateUnits } from "../../config/label-units";
 import { applyTamburDraft, composeCanvasElements, sourceWidthOf, type TamburLabelDraft, type TamburLabelPreview } from "./label-preview-compose";
 
 export type { TamburLabelDraft, TamburLabelPreview, TamburPreviewElement } from "./label-preview-compose";
@@ -104,7 +106,7 @@ function composePreview(
       widthMm,
       heightMm,
       sourceWidthCm,
-      elements: composeCanvasElements(layout.elements, payload, {
+      elements: composeCanvasElements(layout.elements, payloadWithTemplateUnits(payload, t), {
         // Önizleme yazıcı dilinden BAĞIMSIZ: HTML render'ının eleman kümesi (kullanıcı kararı 2026-11-10).
         language: "RASTER_HTML",
         heightMm,
@@ -122,7 +124,7 @@ function composePreview(
     heightMm: Number(routing.format.heightMm) || 60,
     sourceWidthCm,
     elements: null,
-    rows: templateTextLinesKeyed(payload, t).map((r) => ({ key: r.key, text: r.text, size: r.size, bold: r.bold })),
+    rows: templateTextLinesKeyed(payloadWithTemplateUnits(payload, t), t).map((r) => ({ key: r.key, text: r.text, size: r.size, bold: r.bold })),
     ...options,
   };
 }
