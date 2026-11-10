@@ -26,6 +26,7 @@ import itemRoutes from "./routes/item.routes";
 import serviceItemRoutes from "./routes/service-item.routes";
 import customerRoutes from "./routes/customer.routes";
 import customerBarcodeSeriesRoutes from "./routes/customer-barcode-series.routes";
+import customerConsigneeRoutes, { customerConsigneeOwnerRouter } from "./routes/customer-consignee.routes";
 import customerBranchListRoutes from "./routes/customer-branch-list.routes";
 import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
@@ -547,6 +548,8 @@ app.use("/api/items", itemRoutes);
 app.use("/api/service-items", serviceItemRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/customers/:id/barcode-series", customerBarcodeSeriesRoutes); // D4-F2 (customer.routes boyut tavanında)
+app.use("/api/customers/:id/consignees", customerConsigneeOwnerRouter); // alıcı kataloğu (2026-11-10)
+app.use("/api/customer-consignees", customerConsigneeRoutes);
 app.use("/api/customer-branches", customerBranchListRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/machines", machineRouter);

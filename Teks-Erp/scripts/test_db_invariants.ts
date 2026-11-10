@@ -440,6 +440,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "service_items", index: "service_items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "hizmet adı mükerreri DB seddi — tombstone hariç" },
   { table: "service_items", index: "service_items_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (taşınan birleşme soyu seyrek)" },
   { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
+  // Alıcı kataloğu (20261110150000): sahip başına katlanmış ad tekil, mezar taşı hariç (customers emsali).
+  { table: "customer_consignees", index: "customer_consignees_customerId_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "alıcı adı mükerreri DB seddi (sahip başına) — tombstone hariç; ensure ON CONFLICT bu index'e dayanır" },
   // quality_grades — üretim rolü seddi (2026-09-13, karar ①, migration
   // 20260913120000). PREDICATE'te `isActive` VAR: pasif satır rolünü TARİH
   // olarak taşır, yoksa "1.KALITE'yi pasifleştirip 1K koy" geçişi önce eski

@@ -72,6 +72,9 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     // Genel fason F5 (2026-11-08): emanet çıkış belgesinin sahibi — referans bağ, tekillik yok (levent/lot sahibi ikizi).
     { kind: "MOVE", model: "ConsignmentDispatch", table: "consignment_dispatches", column: "ownerCustomerId", label: "Emanet çıkış belgesi (sahip)" },
     { kind: "MOVE", model: "Route", table: "routes", column: "customerId", label: "Rota şablonu" },
+    // 2026-11-10 alıcı kataloğu: aynı katlanmış adlı alıcılar taşımadan ÖNCE hedefinkine birleşir
+    // (`foldConsigneesOnCustomerMergeTx`); kalan satırlar (mezar taşları dahil) partial unique'e girmeden taşınır.
+    { kind: "MOVE", model: "CustomerConsignee", table: "customer_consignees", column: "customerId", label: "Alıcı (etiket)" },
     {
       kind: "CONFLICT",
       model: "CustomerBranch",

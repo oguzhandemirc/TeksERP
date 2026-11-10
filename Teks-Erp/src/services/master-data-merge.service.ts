@@ -25,6 +25,7 @@
 // İDDİA olurdu. Aynı gerekçe `Roll.lastLabelSnapshot`, `Manifest.snapshot`,
 // `TravelerCard.snapshot` ve `SystemLog` için de geçerli.
 
+import { foldConsigneesOnCustomerMergeTx } from "./customer-consignee-merge.service";
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { syncSubcontractorRoleTx } from "./subcontractor-management.service";
@@ -741,6 +742,8 @@ export class MasterDataMergeService {
 
         // 4) Yan etki işaretleri — TAŞIMADAN ÖNCE.
         await markSideEffectsTx(tx, entity, sourceIds);
+        // Alıcı kataloğu: hedefte aynı adla canlı alıcısı olan kaynak alıcı ona birleşir (kalanlar MOVE ile taşınır).
+        if (entity === "customer") await foldConsigneesOnCustomerMergeTx(tx, survivor.id, sourceIds, params.userId ?? null);
 
         // 5) Çakışma çözümü + 6) düz taşımalar.
         const movedRows: Array<{ table: string; column: string; count: number }> = [];

@@ -616,6 +616,8 @@ export class LabelTemplateService {
       // Müşteri atamaları da temizlenir — öksüz atama müşteriyi sessizce default'a
       // düşürmesin (cihaz route temizliğiyle simetrik).
       await tx.customerTemplateRoute.deleteMany({ where: { templateId: id } });
+      // Alıcı şablonu da (K4): öksüz bağ alıcıyı sessizce müşteri kuralına düşürsün, silinmiş şablona değil.
+      await tx.customerConsignee.updateMany({ where: { labelTemplateId: id }, data: { labelTemplateId: null } });
       await tx.labelTemplate.update({
         where: { id },
         data: { deletedAt: new Date(), isActive: false, name: freedName },
@@ -960,6 +962,8 @@ export class LabelTemplateService {
     if (ctx > 0) return true;
     const cust = await prisma.customerTemplateRoute.count({ where: { templateId } });
     if (cust > 0) return true;
+    const consignee = await prisma.customerConsignee.count({ where: { labelTemplateId: templateId, mergedIntoId: null } });
+    if (consignee > 0) return true;
     const dev = await prisma.peripheralTemplateRoute.count({ where: { templateId } });
     return dev > 0;
   }
