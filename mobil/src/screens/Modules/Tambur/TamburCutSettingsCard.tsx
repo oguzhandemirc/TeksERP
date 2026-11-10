@@ -3,7 +3,7 @@
 // Dokunma hedefleri ≥56dp. Saf görünüm — state ekranın.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Menu, Text, TouchableRipple } from 'react-native-paper';
+import { Icon, Menu, TouchableRipple } from 'react-native-paper';
 import TruncatedText from '../../../components/TruncatedText';
 import { colors, palette, shadow } from '../../../theme/tokens';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
@@ -71,9 +71,7 @@ export default function TamburCutSettingsCard(p: TamburCutSettingsProps) {
       >
         <View style={s.btnInner}>
           <Icon source="swap-vertical" size={20} color={palette.white} />
-          <Text style={[s.btnText, s.foldText]} numberOfLines={1}>
-            {fold?.name ?? 'Kat seç'}
-          </Text>
+          <TruncatedText style={[s.btnText, s.foldText]}>{fold?.name ?? 'Kat seç'}</TruncatedText>
         </View>
       </TouchableRipple>
       <View style={s.qualityCol}>
