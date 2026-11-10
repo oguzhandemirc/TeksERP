@@ -26,6 +26,8 @@ import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import StationActionBar from '../../../components/stationActions/StationActionBar';
+import type { StationAction } from '../../../components/stationActions/stationActionLayout';
 import StationActionButton from '../../../components/StationActionButton';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
@@ -1337,39 +1339,43 @@ export default function KursunQcScreen() {
   // etiketli chip (secondRow) — hepsi drawer açmadan doğrudan erişilir.
   // Açık Kartlar'da acil varsa rozet döner.
   const openCardsCount = openCardsQuery.data?.data?.length ?? 0;
-  const phoneSecondRow = (
-    <>
-      <HeaderChip
-        icon="clipboard-list-outline"
-        label={`Açık İşler · ${openJobs.length}`}
-        onPress={() => setRightDrawerOpen(true)}
-        fill
-      />
-      <HeaderChip
-        icon="format-list-bulleted"
-        label={`Açık Kartlar · ${openCardsCount}`}
-        onPress={() => drawerQueue.run(() => setListModalOpen(true))}
-        badge={<UrgentBadge count={urgentCount} />}
-        fill
-      />
-      {!hardware && (
-        <HeaderChip
-          icon="camera"
-          label="Tara"
-          onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-          fill
-        />
-      )}
-      {docLookup.enabled && (
-        <HeaderChip
-          icon="file-document-outline"
-          label="Belge"
-          onPress={() => drawerQueue.run(() => docLookup.setOpen(true))}
-          fill
-        />
-      )}
-    </>
-  );
+  // Telefon 2. kat — TEK dizi, çubuk + "Diğer" StationActionBar'da türer (Tambur ile ortak).
+  const phoneActions: StationAction[] = [
+    {
+      id: 'openJobs',
+      icon: 'clipboard-list-outline',
+      label: `Açık İşler · ${openJobs.length}`,
+      priority: 1,
+      visible: true,
+      onPress: () => setRightDrawerOpen(true),
+    },
+    {
+      id: 'list',
+      icon: 'format-list-bulleted',
+      label: `Açık Kartlar · ${openCardsCount}`,
+      priority: 2,
+      visible: true,
+      badge: urgentCount,
+      onPress: () => drawerQueue.run(() => setListModalOpen(true)),
+    },
+    {
+      id: 'scan',
+      icon: 'camera',
+      label: 'Tara',
+      priority: 3,
+      visible: !hardware,
+      onPress: () => drawerQueue.run(() => setScannerOpen(true)),
+    },
+    {
+      id: 'doc',
+      icon: 'file-document-outline',
+      label: 'Belge okut',
+      priority: 4,
+      visible: docLookup.enabled,
+      onPress: () => drawerQueue.run(() => docLookup.setOpen(true)),
+    },
+  ];
+  const phoneSecondRow = <StationActionBar actions={phoneActions} testIDPrefix="kursun-bar" />;
 
   const headerExtras = (
     <View style={styles.headerExtrasRow}>

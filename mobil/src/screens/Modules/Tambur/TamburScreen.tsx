@@ -37,6 +37,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import StationActionBar from '../../../components/stationActions/StationActionBar';
+import type { StationAction } from '../../../components/stationActions/stationActionLayout';
 import AppMenu from '../../../components/AppMenu';
 import { tamburHeaderActions, type TamburHeaderAction } from './headerActions';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
@@ -287,7 +289,6 @@ function HeaderChip({
   label,
   onPress,
   accent,
-  fill,
   active,
   iconOnly,
 }: {
@@ -295,8 +296,6 @@ function HeaderChip({
   label: string;
   onPress: () => void;
   accent?: boolean;
-  /** true: 2. kat satırını (secondRow) eşit paylaşır — taşmaz, kaydırma gerekmez. */
-  fill?: boolean;
   /**
    * AÇIK bir MODU temsil eden chip (aksiyon değil, durum): dolu amber zemin +
    * koyu yazı. Aksiyon chip'lerinin translucent dilinden bilinçli olarak ayrışır
@@ -313,7 +312,6 @@ function HeaderChip({
       style={[
         styles.headerChip,
         accent && styles.headerChipAccent,
-        fill && styles.headerChipFill,
         active && styles.headerChipOn,
       ]}
       borderless
@@ -325,7 +323,6 @@ function HeaderChip({
       <View
         style={[
           styles.headerChipInner,
-          fill && styles.headerChipInnerFill,
           iconOnly && styles.headerChipInnerIcon,
         ]}
       >
@@ -3480,70 +3477,85 @@ export default function TamburScreen() {
     );
   };
 
-  // Telefonda "Açık İşler" (operatörün açtığı kart sekmeleri), "Açık Kartlar"
-  // ve "Tara" erişimi Kurşun/Ham Giriş ile aynı desende: header'da sıkışan tek
-  // ikon yerine, başlığın ALTINDAKİ 2. katta yan yana üç etiketli chip
-  // (secondRow) — hepsi drawer açmadan doğrudan erişilir. Çıkanlar/Kesme
-  // telefonda drawer içinde kalır.
-  // MANUEL MODDA kart chip'leri (Açık İşler / Açık Kartlar / Tara) ÇİZİLMEZ:
-  // üçü de refakat kartına dayanır, modda hiçbiri işletilmez ve basıldığında
-  // görünmeyen bir iş açarlar. Yerine moddan çıkış chip'i gelir — dar telefon
-  // satırında mod anahtarı okunabilir kalsın diye (aksi hâlde 5 chip eşit
-  // bölüşür ve etiketler tek harfe kırpılır).
-  const phoneSecondRow = manualMode ? (
-    <>
-      <HeaderChip
-        icon="hand-back-right"
-        label="MANUEL MOD AÇIK — kapat"
-        onPress={toggleManualMode}
-        active
-        fill
-      />
-      {/* Serbest Etiket telefonda da çizilmez — manuel modda sadeleştirme
-          (2026-08-04); Çıkanlar drawer'ın içinden erişilebilir. */}
-    </>
-  ) : (
-    <>
-      <HeaderChip
-        icon="clipboard-list-outline"
-        label={`Açık İşler · ${openJobs.length}`}
-        onPress={() => setRightDrawerOpen(true)}
-        fill
-      />
-      <HeaderChip
-        icon="format-list-bulleted"
-        label="Açık Kartlar"
-        onPress={() => openList()}
-        fill
-      />
-      <HeaderChip icon={hardware ? 'barcode-scan' : 'camera'} label="Tara" onPress={() => openScanner()} fill />
-      {docLookup.enabled && (
-        <HeaderChip icon="file-document-outline" label="Belge" onPress={() => drawerQueue.run(() => docLookup.setOpen(true))} fill />
-      )}
-      {canLinkOrders && activeJob && (
-        <HeaderChip
-          icon="link-variant"
-          label="Sipariş Bağla"
-          onPress={() => setOrderLinkOpen(true)}
-          fill
-        />
-      )}
-      <HeaderChip
-        icon="tag-multiple"
-        label="Serbest Etiket"
-        onPress={() => openStandalone()}
-        fill
-      />
-      {canFieldFix && (
-        <HeaderChip
-          icon="hand-back-right-outline"
-          label="Manuel Ekle"
-          onPress={toggleManualMode}
-          fill
-        />
-      )}
-    </>
-  );
+  // Telefon 2. kat aksiyonları — TEK dizi; çubuk + "Diğer" menüsü StationActionBar'da
+  // türer. El terminalinde (dar) öncelikli üçü çubukta: Açık İşler (kart sekmeleri,
+  // her geçişte), Belge okut (GK'de iş belgeden bulunur), Tara (kart okutma);
+  // Belge kapalıysa Açık Kartlar yükselir. Seyrekler (Sipariş Bağla yalnız aktif
+  // işte, Manuel Ekle yetkili, Serbest Etiket) "Diğer"e iner.
+  // MANUEL MODDA kart aksiyonları (Açık İşler / Açık Kartlar / Tara / Belge) ÇİZİLMEZ:
+  // refakat kartına dayanırlar, basıldığında görünmeyen bir iş açarlar. Yerine
+  // moddan çıkış chip'i tek başına gelir (Serbest Etiket de modda sadeleşir, 2026-08-04).
+  const phoneActions: StationAction[] = manualMode
+    ? [
+        {
+          id: 'manualExit',
+          icon: 'hand-back-right',
+          label: 'MANUEL MOD AÇIK — kapat',
+          priority: 0,
+          visible: true,
+          active: true,
+          onPress: toggleManualMode,
+        },
+      ]
+    : [
+        {
+          id: 'openJobs',
+          icon: 'clipboard-list-outline',
+          label: `Açık İşler · ${openJobs.length}`,
+          priority: 1,
+          visible: true,
+          onPress: () => setRightDrawerOpen(true),
+        },
+        {
+          id: 'list',
+          icon: 'format-list-bulleted',
+          label: 'Açık Kartlar',
+          priority: 4,
+          visible: true,
+          onPress: () => openList(),
+        },
+        {
+          id: 'scan',
+          icon: hardware ? 'barcode-scan' : 'camera',
+          label: 'Tara',
+          priority: 3,
+          visible: true,
+          onPress: () => openScanner(),
+        },
+        {
+          id: 'doc',
+          icon: 'file-document-outline',
+          label: 'Belge okut',
+          priority: 2,
+          visible: docLookup.enabled,
+          onPress: () => drawerQueue.run(() => docLookup.setOpen(true)),
+        },
+        {
+          id: 'orderLink',
+          icon: 'link-variant',
+          label: 'Sipariş Bağla',
+          priority: 5,
+          visible: canLinkOrders && !!activeJob,
+          onPress: () => setOrderLinkOpen(true),
+        },
+        {
+          id: 'standalone',
+          icon: 'tag-multiple',
+          label: 'Serbest Etiket',
+          priority: 7,
+          visible: true,
+          onPress: () => openStandalone(),
+        },
+        {
+          id: 'manual',
+          icon: 'hand-back-right-outline',
+          label: 'Manuel Ekle',
+          priority: 6,
+          visible: canFieldFix,
+          onPress: toggleManualMode,
+        },
+      ];
+  const phoneSecondRow = <StationActionBar actions={phoneActions} testIDPrefix="tambur-bar" />;
 
   // Tablet başlık aksiyonları — tek tablo; yerleşim kararı saf `tamburHeaderActions`ta.
   const { width: headerWinW } = useWindowDimensions();
@@ -8915,9 +8927,6 @@ const styles = StyleSheet.create({
   },
   // İkon-only: kare orantı, dokunma hedefi korunur (etiket yok ama alan aynı).
   headerChipInnerIcon: { paddingHorizontal: 11, gap: 0 },
-  // secondRow'da (telefon) 3 chip eşit paylaşır — taşmaz, kaydırma gerekmez.
-  headerChipFill: { flex: 1, marginLeft: 0 },
-  headerChipInnerFill: { justifyContent: 'center' },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   // AÇIK MOD chip'i (Manuel Ekle) — translucent aksiyon dilinden bilinçli
   // ayrışma: dolu amber + koyu yazı. Durum, aksiyon değil.
