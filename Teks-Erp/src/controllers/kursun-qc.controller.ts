@@ -105,11 +105,6 @@ const reopenStepSchema = z.object({
   stepId: z.string().uuid("Geçersiz adım ID"),
 });
 
-const reopenRollSchema = z.object({
-  rollId: z.string().uuid("Geçersiz top ID"),
-  stepId: z.string().uuid("Geçersiz adım ID"),
-});
-
 const reorderQueueSchema = z.object({
   items: z
     .array(
@@ -138,7 +133,6 @@ export class KursunQcController {
     this.deleteError = this.deleteError.bind(this);
     this.finishStep = this.finishStep.bind(this);
     this.reopenStep = this.reopenStep.bind(this);
-    this.reopenRoll = this.reopenRoll.bind(this);
     this.recordMeterReading = this.recordMeterReading.bind(this);
     this.pinAckMeterReading = this.pinAckMeterReading.bind(this);
     this.officeAckMeterReading = this.officeAckMeterReading.bind(this);
@@ -272,17 +266,6 @@ export class KursunQcController {
     try {
       const body = reopenStepSchema.parse(req.body);
       const result = await this.service.reopenStep(body, req.user?.userId);
-      res.status(200).json(result);
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /** POST /api/kursun-qc/reopen-roll — açık adımda tamamlanmış tek topu yeniden açar. */
-  async reopenRoll(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = reopenRollSchema.parse(req.body);
-      const result = await this.service.reopenRoll(body, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);

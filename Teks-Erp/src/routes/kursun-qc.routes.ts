@@ -4,6 +4,7 @@
 
 import { Router } from "express";
 import { KursunQcController } from "../controllers/kursun-qc.controller";
+import { reopenKursunRoll } from "../controllers/kursun-roll-reopen.controller";
 import { takeForeignMachine } from "../controllers/kursun-foreign-machine.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
@@ -493,7 +494,7 @@ router.post(
   "/reopen-roll",
   verifyToken,
   requireAnyPermission("quality:write", "mobile:kk2-kursun"),
-  controller.reopenRoll
+  reopenKursunRoll
 );
 
 /**
