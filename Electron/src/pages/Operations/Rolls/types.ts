@@ -164,6 +164,10 @@ export interface Roll {
   customerBatchNo?: string | null;
   /** Etiketteki müşteri — SAHİPLİK DEĞİL (yalnız detay). */
   labelCustomer?: { id: string; name: string } | null;
+  /** Emanet topun etiketindeki alıcı (2026-11-10, detay ucu) — eski sunucu göndermez. */
+  labelConsignee?: { id: string; name: string } | null;
+  /** Kg'nin kaynağı (2026-11-10) — kantar / elle / simüle; eski satırda null. */
+  weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
   /** Ata top (Tambur kesimi vb.) — yalnız detay. */
   parent?: { id: string; barcode: string | null } | null;
   /** Bizim parti + iş emri — yalnız detay. */

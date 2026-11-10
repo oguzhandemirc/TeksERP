@@ -10,6 +10,8 @@ import type { Roll } from "../types";
 import { CardRow, CardSection } from "./CardSection";
 
 const num = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false });
+/** Kg kaynağı rozeti (2026-11-10) — iç izdir; belgeye basılmaz. Eski satırda kaynak yok → rozet yok. */
+const WEIGHT_SOURCE_LABELS: Record<"SCALE" | "MANUAL" | "SIMULATED", string> = { SCALE: "Kantar", MANUAL: "Elle", SIMULATED: "Simüle" };
 
 function StatusBadges({ roll }: { roll: Roll }) {
   return (
@@ -82,7 +84,16 @@ export function RollIdentitySection({ roll }: { roll: Roll }) {
           {roll.initialQty > 0 && <AnimatedProgress value={(roll.currentQty / roll.initialQty) * 100} className="mt-1 h-1" />}
         </CardRow>
         <CardRow label="En">{roll.width != null ? `${roll.width} cm` : null}</CardRow>
-        <CardRow label="Ağırlık">{roll.weightKg != null ? `${num(roll.weightKg)} kg` : null}</CardRow>
+        <CardRow label="Ağırlık">
+          {roll.weightKg != null ? (
+            <>
+              {num(roll.weightKg)} kg
+              {roll.weightSource && (
+                <Badge variant="muted" className="ml-2 text-[10px]" data-testid="roll-identity-weight-source">{WEIGHT_SOURCE_LABELS[roll.weightSource]}</Badge>
+              )}
+            </>
+          ) : null}
+        </CardRow>
         <CardRow label="Kalite">{roll.qualityGrade}</CardRow>
         <CardRow label="Aşama" testId="roll-identity-stage">{roll.stage ? rollStageLabels[roll.stage] : null}</CardRow>
         <CardRow label="Biçim"><Badge variant="muted" className="text-[10px]">{roll.form === "ACIK" ? "Açık Kumaş" : "Top"}</Badge></CardRow>

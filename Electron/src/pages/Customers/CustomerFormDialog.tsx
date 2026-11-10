@@ -29,6 +29,7 @@ import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
 import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
 import { CustomerTamburLabelSettings } from "./CustomerTamburLabelSettings";
 import { CustomerStandaloneLabelsPanel } from "./CustomerStandaloneLabelsPanel";
+import { CustomerConsigneesPanel } from "./consignees/CustomerConsigneesPanel";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { CariHoldPanel } from "@/pages/Finance/CariHold/CariHoldPanel";
 import { CustomerBarcodeSeriesPanel } from "./BarcodeSeries/CustomerBarcodeSeriesPanel";
@@ -71,7 +72,8 @@ export function CustomerFormDialog({
   const financeAccess = useCustomerFinanceAccess();
   // D4-F2: müşteri barkod serisi uçları emanet modül kapısının arkasında — izinsiz/kapalıda sorgu atılmaz.
   const { hasPermission } = useRoleAccess();
-  const seriesVisible = (useFeatureFlags().data?.data?.emanetEnabled ?? false) && hasPermission("customer:read");
+  const emanetEnabled = useFeatureFlags().data?.data?.emanetEnabled ?? false;
+  const seriesVisible = emanetEnabled && hasPermission("customer:read");
   const defaults: CustomerFormValues = initial
     ? {
         ...financeFormDefaults,
@@ -391,6 +393,12 @@ export function CustomerFormDialog({
                       <h4 className="text-sm font-semibold">Tambur / Etiket</h4>
                       <CustomerTamburLabelSettings customer={initial} />
                     </section>
+                    {emanetEnabled && (
+                      <section className="space-y-2 border-t pt-4">
+                        <h4 className="text-sm font-semibold">Etiket alıcıları (emanet)</h4>
+                        <CustomerConsigneesPanel customerId={initial.id} />
+                      </section>
+                    )}
                     <section className="space-y-2 border-t pt-4">
                       <h4 className="text-sm font-semibold">Serbest etiketler</h4>
                       <CustomerStandaloneLabelsPanel customerId={initial.id} />

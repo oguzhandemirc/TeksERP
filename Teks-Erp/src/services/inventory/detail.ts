@@ -69,6 +69,7 @@ export async function findRollById(this: InventoryServiceThis, id: string): Prom
         // TOP KARTI (2026-11-10): sahiplik (emanet) ≠ etiket müşterisi; köken (ata top) ve parti/iş emri — to-one, N+1 yok.
         ownerCustomer: ROLL_LIST_INCLUDE.ownerCustomer,
         labelCustomer: { select: { id: true, name: true } },
+        labelConsignee: { select: { id: true, name: true } },
         parent: { select: { id: true, barcode: true } },
         batch: { select: { id: true, batchNumber: true, workOrder: { select: { id: true, workOrderNumber: true } } } },
         // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.

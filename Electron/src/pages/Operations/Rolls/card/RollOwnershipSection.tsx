@@ -1,10 +1,10 @@
 // SAHİPLİK — "bu mal kimin?" (kullanıcı 2026-11-10: kartta okunmuyordu). Sahip `ownerCustomer`dır; etiket müşterisi
-// (`labelCustomer`) yalnız etikete basılan addır, sahiplik DEĞİL — ayrı satırda ve öyle adlandırılır.
+// (`labelCustomer`) ve alıcı (`labelConsignee`, müşterimizin müşterisi) yalnız etikete basılan addır, sahiplik DEĞİL.
 import { Building2, UserRound } from "lucide-react";
 import type { Roll } from "../types";
 
 interface Props {
-  roll: Pick<Roll, "ownerCustomer" | "labelCustomer">;
+  roll: Pick<Roll, "ownerCustomer" | "labelCustomer" | "labelConsignee">;
   /** Emanet kapalı kurulumda "Bizim mal" satırı çizilmez (bugünkü görünüm); sahipli top her zaman gösterilir. */
   emanetEnabled: boolean;
 }
@@ -12,7 +12,8 @@ interface Props {
 export function RollOwnershipSection({ roll, emanetEnabled }: Props) {
   const owner = roll.ownerCustomer ?? null;
   const label = roll.labelCustomer ?? null;
-  if (!owner && !emanetEnabled && !label) return null;
+  const consignee = roll.labelConsignee ?? null;
+  if (!owner && !emanetEnabled && !label && !consignee) return null;
   return (
     <div className="space-y-1.5" data-testid="roll-card-ownership">
       {owner ? (
@@ -27,6 +28,11 @@ export function RollOwnershipSection({ roll, emanetEnabled }: Props) {
       {label && (
         <div data-testid="roll-label-customer" className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <UserRound className="h-3.5 w-3.5" /> Etiketteki müşteri: <span className="font-medium text-foreground">{label.name}</span>
+        </div>
+      )}
+      {consignee && (
+        <div data-testid="roll-label-consignee" className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+          <UserRound className="h-3.5 w-3.5" /> Etiketteki alıcı: <span className="font-medium text-foreground">{consignee.name}</span>
         </div>
       )}
     </div>

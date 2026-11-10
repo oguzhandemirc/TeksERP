@@ -2,6 +2,7 @@
 // etiket müşterisi sahiplik DEĞİL (ayrı satır); son hareketler en yeni 5; liste rozeti + müşteri parti no.
 // Negatif sonda (2026-11-10): RollOwnershipSection'da `owner ?` dalı `false ?` yapılınca §1a ❌; CardRow'un boş
 //   değer erken dönüşü kaldırılınca §2b/§3b/§4 ❌; RollRecentEvents'te `.reverse()` düşürülünce §5a ❌; hepsi geri alındı.
+// 2026-11-10 ek: alıcı satırı `consignee &&` → `false &&` yapılınca §1d ❌; rozet etiketi sabit "Kantar" yapılınca §4c ❌.
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Roll } from "../types";
@@ -37,6 +38,12 @@ describe("sahiplik", () => {
     expect(screen.getByTestId("roll-label-customer").textContent).toContain("Etiketteki müşteri: ETİKET A.Ş.");
     expect(screen.getByTestId("roll-owner-own")).toBeTruthy();
     expect(screen.queryByTestId("roll-owner-consigned")).toBeNull();
+  });
+  it("§1d alıcı (2026-11-10) ayrı satır; eski sunucu (alan yok) satır çizmez", () => {
+    const { rerender } = render(<RollOwnershipSection roll={mk({ ownerCustomer: { id: "c", name: "HHL MC" }, labelConsignee: { id: "k", name: "ACME USA" } })} emanetEnabled />);
+    expect(screen.getByTestId("roll-label-consignee").textContent).toContain("Etiketteki alıcı: ACME USA");
+    rerender(<RollOwnershipSection roll={mk({ ownerCustomer: { id: "c", name: "HHL MC" } })} emanetEnabled />);
+    expect(screen.queryByTestId("roll-label-consignee")).toBeNull();
   });
 });
 
@@ -92,6 +99,14 @@ describe("kimlik", () => {
     expect(screen.queryByText("Ağırlık")).toBeNull();
     rerender(<RollIdentitySection roll={mk({ weightKg: 12.5 })} />);
     expect(screen.getByText("Ağırlık")).toBeTruthy();
+  });
+  it("§4c kg kaynak rozeti: Kantar/Elle/Simüle; kaynaksız eski satırda rozet yok", () => {
+    const { rerender } = render(<RollIdentitySection roll={mk({ weightKg: 12.5, weightSource: "SCALE" })} />);
+    expect(screen.getByTestId("roll-identity-weight-source").textContent).toBe("Kantar");
+    rerender(<RollIdentitySection roll={mk({ weightKg: 12.5, weightSource: "SIMULATED" })} />);
+    expect(screen.getByTestId("roll-identity-weight-source").textContent).toBe("Simüle");
+    rerender(<RollIdentitySection roll={mk({ weightKg: 12.5, weightSource: null })} />);
+    expect(screen.queryByTestId("roll-identity-weight-source")).toBeNull();
   });
   it("§4b aşama: eski sunucu (alan yok) satır çizmez; varsa Türkçe etiket", () => {
     const { rerender } = render(<RollIdentitySection roll={mk()} />);
