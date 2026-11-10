@@ -17,6 +17,7 @@
 
 import type { FontSize } from "./label-fields";
 import { getLabelIcon } from "./label-icons";
+import { fieldFormatError, type FieldFormat } from "./label-units";
 
 /** Kanvas şema sürümü — LabelTemplateVariant.elements = { v: 1, elements: [...] }. */
 export const CANVAS_SCHEMA_VERSION = 1;
@@ -115,6 +116,9 @@ export interface FieldElement extends ElementBase {
   align?: TextAlign;
   /** Harf dönüşümü (BÜYÜK/küçük). Yok → dokunma. */
   textCase?: TextCase;
+  /** Alan başına biçim (ölçü dönüşümü/sabit hane/sıfır dolgu/birim metni, saatsiz tarih) —
+   *  `label-units.FieldFormat`; yok → bugünkü metin. Doğrulama `fieldFormatError`. */
+  fmt?: FieldFormat;
 }
 
 export interface TextElement extends ElementBase {
@@ -432,6 +436,10 @@ export function validateCanvasLayout(
         }
         if (el.label !== undefined && typeof el.label !== "string") {
           bad(`'${el.id}' label metin olmalı`);
+        }
+        if (el.fmt !== undefined) {
+          const fmtErr = fieldFormatError(el.fmt, el.bind as string);
+          if (fmtErr) bad(`'${el.id}' ${fmtErr}`);
         }
         break;
       case "text":

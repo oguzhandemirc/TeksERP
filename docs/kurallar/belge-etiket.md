@@ -77,6 +77,8 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] Top etiketinin türünü yalnız `Roll.stage`ten türet (`roll-stage.helper` `resolveRollLabelKind`: RAW/SEMI_FINISHED → ROLL_RAW, FINISHED → ROLL_FINISHED; açık `kind` elle seçimdir ve kazanır); renkten, istasyondan, statüden tahmin etme — tekil, toplu, print-event ve çuval bayatlaması aynı helper (bekçi `test_roll_asama_etiket`). <sub>(arşiv:2026-11-10 Top aşaması)</sub>
 - [ÇEKİRDEK] Topun etiketini elle düzenlemeyi yalnız `roll-label-edit.service` yazsın (üç etiket kolonu kendi sahibine, kalan alanlar `Roll.labelOverrides`a, yalnız GÖSTERİM: ölçü/cari/katalog değişmez); görünür değeri `fieldDisplayValue` önce `displayOverrides`tan okusun; topun `labelTemplateId`si şablon zincirinin önünde dursun (tekil + toplu); yazım `labelEditedAt` sürüm claim'iyle, taslak önizleme aynı birleştiriciden (bekçi `test_roll_label_edit`). <sub>(arşiv:2026-11-10 Top etiketi elle düzenleme)</sub>
 
+- [ÇEKİRDEK] Kanvas alanının biçimi (`fmt`: ABD dönüşümü, sabit hane, sıfır dolgu, birim metni, saatsiz tarih) yalnız `label-units.formatFieldMeasure` + `label-field-values.fieldElementValue`ten; yalnız ölçü/tarih alanında, doğrulama `fieldFormatError` (fail-closed); `fmt`siz eleman bayt-aynı (bekçi `test_etiket_alan_bicimi`). <sub>(arşiv:2026-11-10 GK ihracat etiketi)</sub>
+
 ### Belge şablon tasarımcısı (GrapesJS + LiquidJS; plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md`)
 
 - [ÇEKİRDEK] Sistem şablonu (TS renderer `document-render/*`) SALT-OKUNUR: önizlenir/kopyalanır; düzenleme "Kopyala ve düzenle" ile Liquid eşleniği kopyasında (eşleniksiz tür 409 `NO_SYSTEM_EQUIVALENT`).

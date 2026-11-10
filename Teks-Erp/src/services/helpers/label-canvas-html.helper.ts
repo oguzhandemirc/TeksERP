@@ -9,7 +9,7 @@
 // =============================================================================
 
 import type { CanvasRenderInput } from "./label-canvas-native.helper";
-import { fieldDisplayValue, scanElementValue } from "./label-field-values";
+import { fieldDisplayValue, fieldElementValue, scanElementValue } from "./label-field-values";
 import { renderCode128Svg, renderQrSvg } from "./barcode-svg.helper";
 import { escapeHtml, applyCopies } from "./label-html.shared";
 import { asciiFold, qrFootprintDots, bannerValueText, resolveEplTextStyle, EPL_FONT, applyTextCase } from "./native-label.shared";
@@ -83,7 +83,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
           el.type === "text"
             ? el.text
             : (() => {
-                const dv = fieldDisplayValue(payload, el.bind);
+                const dv = fieldElementValue(payload, el);
                 if (!dv.present) return null;
                 const label = el.label?.trim();
                 return label ? `${label}: ${dv.value}` : dv.value;

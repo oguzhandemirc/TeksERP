@@ -12,7 +12,11 @@
 
 import type { LabelPayload } from "../../types/label.types";
 import { formatNumber, formatDate } from "./label-html.shared";
-import { formatMeasure, isDefaultUnitSettings, type LabelUnitSettings, type MeasureDim } from "../../config/label-units";
+import {
+  FIELD_DATE_KEYS, FIELD_MEASURE_DIM, formatFieldMeasure, formatMeasure, isDefaultUnitSettings, readFieldFormat,
+  type LabelUnitSettings, type MeasureDim,
+} from "../../config/label-units";
+import { factoryDateTr } from "../../constants/time";
 
 /** Alanın etiketteki yerleşim rolü. scan = barkod/QR (sabit sol kolon, metin değil);
  *  headline = büyük vurgulu (ürün adı / metraj); row = normal "Etiket: değer" satırı. */
@@ -70,6 +74,35 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
   const ov = payload.displayOverrides;
   if (ov && Object.prototype.hasOwnProperty.call(ov, key)) return overriddenValue(payload, key, ov[key] ?? "");
   return sourceFieldValue(payload, key);
+}
+
+/**
+ * Kanvas `field` elemanının değeri — eleman `fmt` taşıyorsa ona göre biçimlenir (dönüşüm, sabit hane,
+ * sıfır dolgu, birim metni, saatsiz tarih); `fmt`siz eleman `fieldDisplayValue` ile bayt-aynı. Varlık
+ * (present) ve rol hep kaynaktan: değersiz alan biçimle de ATLANIR. HTML + native + raster bunu çağırır.
+ */
+export function fieldElementValue(payload: LabelPayload, el: { bind: string; fmt?: unknown }): FieldValue {
+  const base = fieldDisplayValue(payload, el.bind);
+  const fmt = el.fmt === undefined ? null : readFieldFormat(el.fmt, el.bind);
+  if (!fmt || !base.present) return base;
+  const dim = FIELD_MEASURE_DIM[el.bind];
+  if (dim) {
+    const ov = payload.displayOverrides;
+    const raw = ov && Object.prototype.hasOwnProperty.call(ov, el.bind)
+      ? Number((ov[el.bind] ?? "").trim().replace(",", "."))
+      : Number((payload as unknown as Record<string, unknown>)[el.bind]);
+    // Elle yazılmış sayı olmayan ezme yazıldığı gibi kalır.
+    if (!Number.isFinite(raw)) return base;
+    return { ...base, value: formatFieldMeasure(raw, dim, fmt, payload.unitSettings?.decimalSep ?? ",") };
+  }
+  if (fmt.date && FIELD_DATE_KEYS.has(el.bind)) {
+    const iso = el.bind === "printedAt" ? payload.printedAt : payload.woundAt;
+    const d = new Date(iso ?? "");
+    if (Number.isNaN(d.getTime())) return base;
+    const day = factoryDateTr(d);
+    return { ...base, value: fmt.date === "D.MM.YYYY" ? day.replace(/^0/, "") : day };
+  }
+  return base;
 }
 
 // Ölçü ezmesi sayıysa şablonun birimiyle biçimlenir ("22,5" → "22,5 m"); değilse yazıldığı gibi basılır.

@@ -74,6 +74,18 @@ export interface FieldElement extends ElementBase {
   align?: TextAlign;
   /** Harf dönüşümü (BÜYÜK/küçük). Yok → dokunma. */
   textCase?: TextCase;
+  /** Alan başına biçim — backend `config/label-units.ts FieldFormat` aynası. Editörde düzenleme
+   *  yüzeyi yok; JSON'da korunur, değer sunucuda biçimlenir. */
+  fmt?: LabelFieldFormat;
+}
+
+/** Backend `FieldFormat` aynası (ölçü dönüşümü · sabit hane · sıfır dolgu · birim metni · saatsiz tarih). */
+export interface LabelFieldFormat {
+  to?: "yd" | "in" | "lb";
+  decimals?: number;
+  padInt?: number;
+  unit?: string;
+  date?: "D.MM.YYYY" | "DD.MM.YYYY";
 }
 
 export interface TextElement extends ElementBase {

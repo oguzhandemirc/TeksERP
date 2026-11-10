@@ -35,7 +35,7 @@ import {
   alignOffsetDots,
   applyTextCase,
 } from "./native-label.shared";
-import { fieldDisplayValue, scanElementValue } from "./label-field-values";
+import { fieldDisplayValue, fieldElementValue, scanElementValue } from "./label-field-values";
 import {
   elementSupported,
   prepareElements,
@@ -88,7 +88,7 @@ export function elementText(el: FieldElement | TextElement, payload: LabelPayloa
   if (el.type === "text") {
     out = el.text;
   } else {
-    const dv = fieldDisplayValue(payload, el.bind);
+    const dv = fieldElementValue(payload, el);
     if (!dv.present) return null;
     const label = el.label?.trim();
     out = label ? `${label}: ${dv.value}` : dv.value;
