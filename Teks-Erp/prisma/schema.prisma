@@ -710,49 +710,53 @@ model User {
 
   // Faz A2 künye ters ilişkileri (User KENDİ KENDİNE de referans verir:
   // 'bu hesabı kim açtı' — self-relation, adlandırılmış olduğu için geçerli).
-  createdUsers                    User[]                    @relation("UserCreatedBy")
-  updatedUsers                    User[]                    @relation("UserUpdatedBy")
-  createdPermissionTemplates      PermissionTemplate[]      @relation("PermissionTemplateCreatedBy")
-  updatedPermissionTemplates      PermissionTemplate[]      @relation("PermissionTemplateUpdatedBy")
-  createdCustomerItemAliass       CustomerItemAlias[]       @relation("CustomerItemAliasCreatedBy")
-  updatedCustomerItemAliass       CustomerItemAlias[]       @relation("CustomerItemAliasUpdatedBy")
-  createdCustomerColorAliass      CustomerColorAlias[]      @relation("CustomerColorAliasCreatedBy")
-  updatedCustomerColorAliass      CustomerColorAlias[]      @relation("CustomerColorAliasUpdatedBy")
-  createdCustomerItemColorAliass  CustomerItemColorAlias[]  @relation("CustomerItemColorAliasCreatedBy")
-  updatedCustomerItemColorAliass  CustomerItemColorAlias[]  @relation("CustomerItemColorAliasUpdatedBy")
-  createdSubcontractorCategorys   SubcontractorCategory[]   @relation("SubcontractorCategoryCreatedBy")
-  updatedSubcontractorCategorys   SubcontractorCategory[]   @relation("SubcontractorCategoryUpdatedBy")
-  createdTravelerCardTemplates    TravelerCardTemplate[]    @relation("TravelerCardTemplateCreatedBy")
-  updatedTravelerCardTemplates    TravelerCardTemplate[]    @relation("TravelerCardTemplateUpdatedBy")
-  createdDocumentProfiles         DocumentProfile[]         @relation("DocumentProfileCreatedBy")
-  updatedDocumentProfiles         DocumentProfile[]         @relation("DocumentProfileUpdatedBy")
-  createdCustomerStandaloneLabels CustomerStandaloneLabel[] @relation("CustomerStandaloneLabelCreatedBy")
-  updatedCustomerStandaloneLabels CustomerStandaloneLabel[] @relation("CustomerStandaloneLabelUpdatedBy")
-  createdWorkOrders               WorkOrder[]               @relation("WorkOrderCreatedBy")
-  updatedWorkOrders               WorkOrder[]               @relation("WorkOrderUpdatedBy")
-  createdShipments                Shipment[]                @relation("ShipmentCreatedBy")
-  updatedShipments                Shipment[]                @relation("ShipmentUpdatedBy")
+  createdUsers                        User[]                        @relation("UserCreatedBy")
+  updatedUsers                        User[]                        @relation("UserUpdatedBy")
+  createdPermissionTemplates          PermissionTemplate[]          @relation("PermissionTemplateCreatedBy")
+  updatedPermissionTemplates          PermissionTemplate[]          @relation("PermissionTemplateUpdatedBy")
+  createdCustomerItemAliass           CustomerItemAlias[]           @relation("CustomerItemAliasCreatedBy")
+  updatedCustomerItemAliass           CustomerItemAlias[]           @relation("CustomerItemAliasUpdatedBy")
+  createdCustomerColorAliass          CustomerColorAlias[]          @relation("CustomerColorAliasCreatedBy")
+  updatedCustomerColorAliass          CustomerColorAlias[]          @relation("CustomerColorAliasUpdatedBy")
+  createdCustomerItemColorAliass      CustomerItemColorAlias[]      @relation("CustomerItemColorAliasCreatedBy")
+  updatedCustomerItemColorAliass      CustomerItemColorAlias[]      @relation("CustomerItemColorAliasUpdatedBy")
+  createdSubcontractorCategorys       SubcontractorCategory[]       @relation("SubcontractorCategoryCreatedBy")
+  updatedSubcontractorCategorys       SubcontractorCategory[]       @relation("SubcontractorCategoryUpdatedBy")
+  createdTravelerCardTemplates        TravelerCardTemplate[]        @relation("TravelerCardTemplateCreatedBy")
+  updatedTravelerCardTemplates        TravelerCardTemplate[]        @relation("TravelerCardTemplateUpdatedBy")
+  createdDocumentProfiles             DocumentProfile[]             @relation("DocumentProfileCreatedBy")
+  updatedDocumentProfiles             DocumentProfile[]             @relation("DocumentProfileUpdatedBy")
+  createdCustomerStandaloneLabels     CustomerStandaloneLabel[]     @relation("CustomerStandaloneLabelCreatedBy")
+  updatedCustomerStandaloneLabels     CustomerStandaloneLabel[]     @relation("CustomerStandaloneLabelUpdatedBy")
+  createdLabelTemplateGlobalOptions   LabelTemplateGlobalOption[]   @relation("LabelTemplateGlobalOptionCreatedBy")
+  updatedLabelTemplateGlobalOptions   LabelTemplateGlobalOption[]   @relation("LabelTemplateGlobalOptionUpdatedBy")
+  createdCustomerLabelTemplateOptions CustomerLabelTemplateOption[] @relation("CustomerLabelTemplateOptionCreatedBy")
+  updatedCustomerLabelTemplateOptions CustomerLabelTemplateOption[] @relation("CustomerLabelTemplateOptionUpdatedBy")
+  createdWorkOrders                   WorkOrder[]                   @relation("WorkOrderCreatedBy")
+  updatedWorkOrders                   WorkOrder[]                   @relation("WorkOrderUpdatedBy")
+  createdShipments                    Shipment[]                    @relation("ShipmentCreatedBy")
+  updatedShipments                    Shipment[]                    @relation("ShipmentUpdatedBy")
   /// Bu kullanıcının koşturduğu toplu içe aktarımlar (bkz. ImportRun).
-  importRuns                      ImportRun[]               @relation("ImportRunUser")
+  importRuns                          ImportRun[]                   @relation("ImportRunUser")
   /// Birleştirme künyesi ters ilişkileri (kim birleştirdi).
-  mergedCustomers                 Customer[]                @relation("CustomerMergedBy")
-  mergedItems                     Item[]                    @relation("ItemMergedBy")
-  duplicateReviewsDecided         DuplicateReview[]         @relation("DuplicateReviewDecidedBy")
-  mergedColors                    Color[]                   @relation("ColorMergedBy")
-  mergedSubcontractors            Subcontractor[]           @relation("SubcontractorMergedBy")
+  mergedCustomers                     Customer[]                    @relation("CustomerMergedBy")
+  mergedItems                         Item[]                        @relation("ItemMergedBy")
+  duplicateReviewsDecided             DuplicateReview[]             @relation("DuplicateReviewDecidedBy")
+  mergedColors                        Color[]                       @relation("ColorMergedBy")
+  mergedSubcontractors                Subcontractor[]               @relation("SubcontractorMergedBy")
   /// Destek talebi künyesi (kim açtı).
-  supportTickets                  SupportTicket[]           @relation("SupportTicketCreatedBy")
+  supportTickets                      SupportTicket[]               @relation("SupportTicketCreatedBy")
   /// İlk kurulum sözleşme kabulleri (kim kabul etti — Ek-7).
-  licenseAcceptances              LicenseAcceptance[]       @relation("LicenseAcceptanceAcceptedBy")
-  updateApprovals                 UpdateApproval[]          @relation("UpdateApprovalApprovedBy")
+  licenseAcceptances                  LicenseAcceptance[]           @relation("LicenseAcceptanceAcceptedBy")
+  updateApprovals                     UpdateApproval[]              @relation("UpdateApprovalApprovedBy")
   /// İki kişilik kimlik sıfırlama: hedef · talep eden · karar veren.
-  credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
-  credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
-  credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
-  createdEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeCreatedBy")
-  updatedEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeUpdatedBy")
+  credentialResetTargets              CredentialResetRequest[]      @relation("CredentialResetTarget")
+  credentialResetsRequested           CredentialResetRequest[]      @relation("CredentialResetRequestedBy")
+  credentialResetsDecided             CredentialResetRequest[]      @relation("CredentialResetDecidedBy")
+  createdEIrsaliyeler                 EIrsaliye[]                   @relation("EIrsaliyeCreatedBy")
+  updatedEIrsaliyeler                 EIrsaliye[]                   @relation("EIrsaliyeUpdatedBy")
   /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
-  printJobs                       PrintJob[]                @relation("PrintJobUser")
+  printJobs                           PrintJob[]                    @relation("PrintJobUser")
 
   rollInspectionsInspected    RollInspection[]              @relation("RollInspectionInspectedBy")
   rollInspectionsSuperseded   RollInspection[]              @relation("RollInspectionSupersededBy")
@@ -3983,17 +3987,20 @@ model Roll {
   /// Etiketin ALICISI (müşterimizin müşterisi; `CustomerConsignee`). `labelCustomerId` (etiket müşterisi) ve
   /// `ownerCustomerId` (malın sahibi) DEĞİL. Tambur kesiminde yazılır, MİRAS GEÇMEZ (`labelItemName` emsali);
   /// düzeltme yalnız `PATCH /rolls/:id/label-texts`; BaseController yazamaz. NULL = sahibin kendisi için.
-  labelConsigneeId String?           @db.Uuid
+  labelConsigneeId  String?           @db.Uuid
   /// Panel "Etiketi düzenle": bu topun etiketine ELLE yazılan alanlar { bindAnahtarı: metin } ("" = boş bas).
   /// Yalnız gösterimdir — ölçü kolonları (currentQty/weightKg/width) ve cari/katalog DEĞİŞMEZ. İzinli anahtarlar
   /// `config/roll-label-edit.ts`; tek yazar `roll-label-edit.service` (PUT /labels/rolls/:id/overrides). NULL = yok.
-  labelOverrides   Json?
+  labelOverrides    Json?
   /// Bu topun etiketi için BİR SEFERLİK şablon — çözümleme zincirinin önünde; şablon atamalarını değiştirmez.
-  labelTemplateId  String?           @db.Uuid
+  labelTemplateId   String?           @db.Uuid
+  /// `labelTemplateId`nin hangi bağlam (aşama) için seçildiği: aşama değişince seçim uygulanmaz, varsayılana
+  /// döner (yüklem `rollTemplateApplies`). NULL = eski kayıt → her bağlamda uygulanır (bayt-aynı).
+  labelTemplateKind LabelKind?
   /// Son etiket düzenlemesinin anı — PUT'un iyimser sürüm belirteci (araya giren yazar 409). NULL = hiç düzenlenmedi.
-  labelEditedAt    DateTime?         @db.Timestamptz
+  labelEditedAt     DateTime?         @db.Timestamptz
   /// `weightKg`nin kaynağı (iç iz, etikete basılmaz). Enum çuvalla ORTAK. NULL = kg yok ya da eski kayıt.
-  weightSource     SackWeightSource?
+  weightSource      SackWeightSource?
 
   /// İstemcinin BEYAN ETTİĞİ giriş anı — operatörün "Kaydet"e bastığı an.
   ///
@@ -4551,50 +4558,55 @@ model Customer {
   /// Etiketteki en kaynağı (Gülkesim S5, cevap 7): NULL = bugünkü (topun güncel eni) ·
   /// INCOMING = gelen en (ilk en ölçümünden önceki) · MEASURED = ölçülen en (tablet en ister).
   /// VarChar (enum değil): küme büyüyebilir; doğrulama `customer.service`.
-  labelWidthSource        String?  @db.VarChar(16)
+  labelWidthSource         String?  @db.VarChar(16)
   /// Tamburda tartım (cevap 31): açıksa bu müşterinin topu tamburda kg girilmeden kesilmez.
-  tamburWeighRequired     Boolean  @default(false)
+  tamburWeighRequired      Boolean  @default(false)
   /// Tambur bölme ölçüsü önerisi (m, cevap 9) — tablet kesim metresine öneri; NULL = öneri yok.
-  tamburSplitLengthM      Decimal? @db.Decimal(10, 2)
+  tamburSplitLengthM       Decimal? @db.Decimal(10, 2)
   /// Etikete müşteri parti no basılır (Gülkesim 2026-11-06): açıksa tamburda "Etiket parti no"
   /// alanı görünür ve kesilen topa `Roll.labelBatchNo` yazılır. Kapalı = bugünkü davranış.
-  tamburLabelBatchEnabled Boolean  @default(false)
+  tamburLabelBatchEnabled  Boolean  @default(false)
+  /// Etiket seçicide "herkes için" (global) şablon seti de listelensin mi (çoklu etiket seti, 2026-11-11).
+  /// Set boşken etkisiz. Tek yazar `PUT /customers/:id/label-template-options`; genel gövde YAZAMAZ (write-guard).
+  labelShowGlobalTemplates Boolean  @default(true)
 
   // Relations
   orders                Order[]
-  defaultRoutes         Route[]                   @relation("CustomerDefaultRoutes")
+  defaultRoutes         Route[]                       @relation("CustomerDefaultRoutes")
   /// Etiketinde bu müşteri yazan toplar — SAHİPLİK DEĞİL (bkz. `Roll.labelCustomerId`).
-  labelledRolls         Roll[]                    @relation("RollLabelCustomer")
+  labelledRolls         Roll[]                        @relation("RollLabelCustomer")
   /// G3 emanet: bu müşterinin malı olan toplar / leventler / iplik lotları.
-  ownedRolls            Roll[]                    @relation("RollOwner")
-  workOrders            WorkOrder[]               @relation("WorkOrderCustomer")
-  ownedWarpBeams        WarpBeam[]                @relation("WarpBeamOwner")
+  ownedRolls            Roll[]                        @relation("RollOwner")
+  workOrders            WorkOrder[]                   @relation("WorkOrderCustomer")
+  ownedWarpBeams        WarpBeam[]                    @relation("WarpBeamOwner")
   /// F5: emanet malın sahibine çıkış belgeleri.
-  consignmentDispatches ConsignmentDispatch[]     @relation("ConsignmentDispatchOwner")
-  ownedYarnLots         YarnLot[]                 @relation("YarnLotOwner")
+  consignmentDispatches ConsignmentDispatch[]         @relation("ConsignmentDispatchOwner")
+  ownedYarnLots         YarnLot[]                     @relation("YarnLotOwner")
   branches              CustomerBranch[]
   itemAliases           CustomerItemAlias[]
   colorAliases          CustomerColorAlias[]
   itemColorAliases      CustomerItemColorAlias[]
   shipments             Shipment[]
   /// Teslim yeri olarak gösterildiği sevkiyatlar (K18) — cari kimliği tek, rol bayrağı YOK.
-  deliveryShipments     Shipment[]                @relation("ShipmentDeliveryCustomer")
+  deliveryShipments     Shipment[]                    @relation("ShipmentDeliveryCustomer")
   sacks                 Sack[]
   packingGroups         PackingGroup[]
   rollReturns           RollReturn[]
   /// Bu firmadan alınan mal kabul fişleri (tedarikçi rolü — CompanyType.SUPPLIER).
-  goodsReceipts         GoodsReceipt[]            @relation("GoodsReceiptSupplier")
+  goodsReceipts         GoodsReceipt[]                @relation("GoodsReceiptSupplier")
   // Paket D (ticaret) — müşteri fiyat istisnaları + tedarikçi olarak alış siparişleri.
   itemPrices            ItemPrice[]
-  purchaseOrders        PurchaseOrder[]           @relation("PurchaseOrderSupplier")
-  suppliedWarpBeams     WarpBeam[]                @relation("WarpBeamSupplier")
-  yarnLots              YarnLot[]                 @relation("YarnLotSupplier")
+  purchaseOrders        PurchaseOrder[]               @relation("PurchaseOrderSupplier")
+  suppliedWarpBeams     WarpBeam[]                    @relation("WarpBeamSupplier")
+  yarnLots              YarnLot[]                     @relation("YarnLotSupplier")
   directShipments       DirectShipment[]
   templateRoutes        CustomerTemplateRoute[]
   standaloneLabels      CustomerStandaloneLabel[]
-  documentProfile       DocumentProfile?          @relation("CustomerDocProfile", fields: [documentProfileId], references: [id])
+  /// Bu müşterinin ek etiket şablonu seçenekleri (varsayılan `CustomerTemplateRoute`ta).
+  labelTemplateOptions  CustomerLabelTemplateOption[]
+  documentProfile       DocumentProfile?              @relation("CustomerDocProfile", fields: [documentProfileId], references: [id])
   /// Bu carinin fason PROFİLİ (varsa) — "Fason iş yapar" rolü; bkz. Subcontractor.customerId.
-  subcontractor         Subcontractor?            @relation("SubcontractorCustomerProfile")
+  subcontractor         Subcontractor?                @relation("SubcontractorCustomerProfile")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -9989,10 +10001,12 @@ model LabelTemplate {
   variants                LabelTemplateVariant[]
   customerRoutes          CustomerTemplateRoute[]
   customerStandaloneLinks CustomerStandaloneLabel[]
+  globalOptions           LabelTemplateGlobalOption[]
+  customerOptions         CustomerLabelTemplateOption[]
   consignees              CustomerConsignee[]
   contextDefaults         LabelContextDefault[]
   /// Bir seferlik şablon seçilmiş toplar (`Roll.labelTemplateId`).
-  rolls                   Roll[]                    @relation("RollLabelTemplate")
+  rolls                   Roll[]                        @relation("RollLabelTemplate")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -10114,6 +10128,57 @@ model LabelContextDefault {
 
   @@index([templateId])
   @@map("label_context_defaults")
+}
+
+/// GLOBAL etiket seti (PİVOT, 2026-11-11) — herkes için ek şablon seçenekleri, bağlam (kind) başına sıralı.
+/// Varsayılan BURADA DEĞİL: `LabelContextDefault`; kullanılabilir liste = varsayılan ∪ bu satırlar
+/// (`helpers/label-template-options.ts`). Replace = izinli hard delete (yapılandırma pivotu).
+/// Şablon kalıcı silinirken (deletedAt) satırı `label-template.service.hardDelete` siler; Cascade fiziksel silme içindir.
+model LabelTemplateGlobalOption {
+  id         String        @id @default(uuid()) @db.Uuid
+  kind       LabelKind
+  templateId String        @db.Uuid
+  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder  Int           @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ — FK index BİLİNÇLİ YOK (künye emsali).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabelTemplateGlobalOptionCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabelTemplateGlobalOptionUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([kind, templateId])
+  @@index([templateId])
+  @@map("label_template_global_options")
+}
+
+/// MÜŞTERİ etiket seti (PİVOT, 2026-11-11) — o müşteriye ek şablon seçenekleri, bağlam başına sıralı.
+/// Varsayılan BURADA DEĞİL: `CustomerTemplateRoute`. Birleştirmede UNION (`merge-map.customer.ts`).
+model CustomerLabelTemplateOption {
+  id         String        @id @default(uuid()) @db.Uuid
+  customerId String        @db.Uuid
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  kind       LabelKind
+  templateId String        @db.Uuid
+  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder  Int           @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ — FK index BİLİNÇLİ YOK (künye emsali).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerLabelTemplateOptionCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerLabelTemplateOptionUpdatedBy", fields: [updatedById], references: [id])
+
+  // customerId ön eki unique'in index'idir ([DB-12]); ayrı @@index([customerId]) açılmaz.
+  @@unique([customerId, kind, templateId])
+  @@index([templateId])
+  @@map("customer_label_template_options")
 }
 
 /// WorkOrder ↔ FabricProperty M:N — planlamacının iş emri için belirlediği

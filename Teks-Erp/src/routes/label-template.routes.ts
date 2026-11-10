@@ -17,6 +17,7 @@ import { Router } from "express";
 import { LabelTemplateController } from "../controllers/label-template.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import { globalLabelOptionRoutes } from "./label-template-option.routes";
 
 const controller = new LabelTemplateController();
 const router = Router();
@@ -106,6 +107,8 @@ router.get("/catalog", verifyToken, requirePermission("label-template:read"), co
  */
 router.get("/context-defaults", verifyToken, requirePermission("label-template:read"), controller.listContextDefaults);
 router.put("/context-defaults", verifyToken, requirePermission("label-template:write"), controller.setContextDefault);
+// Çoklu etiket seti (global) — `/:id`den ÖNCE bağlanır.
+router.use("/global-options", globalLabelOptionRoutes);
 
 /**
  * @openapi

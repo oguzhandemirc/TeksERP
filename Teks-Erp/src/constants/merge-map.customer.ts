@@ -154,6 +154,16 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       policy: "UNION",
       why: "Saf M:N kolaylık bağı — birleşim kayıpsız ve doğru anlam.",
     },
+    {
+      kind: "CONFLICT",
+      model: "CustomerLabelTemplateOption",
+      table: "customer_label_template_options",
+      column: "customerId",
+      label: "Etiket şablonu seçeneği",
+      uniqueOn: ["customerId", "kind", "templateId"],
+      policy: "UNION",
+      why: "Ek seçenek listesi — birleşim kayıpsız; varsayılan `CustomerTemplateRoute`ta (SKIP, survivor'ınki) kalır.",
+    },
     // —— Ticaret / ön muhasebe bacağı ——————————————————————————————————————
     // Bu dört FK ana veri birleştirmesinden SONRA main'e girdi (finans + satın
     // alma paketleri) ve haritaya hiç yazılmamıştı: birleştirme onları sessizce

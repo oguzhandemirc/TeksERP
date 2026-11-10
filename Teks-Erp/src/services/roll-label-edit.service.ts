@@ -12,7 +12,6 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { LabelService } from "./label.service";
-import { readCanvasLayout } from "../config/label-elements";
 import {
   ROLL_LABEL_COLUMN_KEYS,
   ROLL_LABEL_EDIT_FIELDS,
@@ -21,7 +20,7 @@ import {
 } from "../config/roll-label-edit";
 import { effectiveRollLabelEdit, mergeRollLabelEdit, sameRollLabelEdit, type RollLabelEditState } from "./helpers/roll-label-edit.helper";
 import { fieldDisplayValue } from "./helpers/label-field-values";
-import { getKindExclusiveKeys } from "./helpers/label-context-fit";
+import { boundKeysOf, foreignKeys, usableForRoll } from "./helpers/label-template-usable.helper";
 import { resolveLabelRouting } from "./helpers/label-routing.resolver";
 import { rollLabelKindOf } from "./helpers/roll-stage.helper";
 import { LABEL_TEXT_LOCKED_STATUSES, labelTextFixBlock } from "./inventory/label-texts";
@@ -79,33 +78,6 @@ export interface RollLabelEditInput {
   /** Etiket alıcısı (kayıtlı): undefined dokunma · null sahibin kendisi · id. */
   consigneeId?: string | null;
   expectedEditedAt?: string | null;
-}
-
-/** Kanvas varyantlarının + akış alan listesinin bağladığı anahtarlar (koşullu eleman dahil: inputu gösterilir). */
-function boundKeysOf(t: { fields: unknown; variants: { elements: unknown }[] }): Set<string> {
-  const keys = new Set<string>();
-  for (const v of t.variants) {
-    for (const el of readCanvasLayout(v.elements)?.elements ?? []) {
-      if (el.type === "field" && typeof el.bind === "string") keys.add(el.bind);
-    }
-  }
-  if (Array.isArray(t.fields)) {
-    for (const f of t.fields as Array<{ key?: unknown; isVisible?: unknown }>) {
-      if (typeof f.key === "string" && f.isVisible !== false) keys.add(f.key);
-    }
-  }
-  return keys;
-}
-
-const FOREIGN_KINDS = [LabelKind.SACK, LabelKind.MACHINE, LabelKind.WARP_BEAM, LabelKind.SWATCH];
-const foreignKeys = (): Set<string> => new Set(FOREIGN_KINDS.flatMap((k) => [...getKindExclusiveKeys(k)]));
-
-/** Top etiketine seçilebilir şablon: aktif, silinmemiş, serbest değil, türü uyumlu, başka bağlamın alanını bağlamıyor. */
-function usableForRoll(t: Pick<LabelTemplate, "isActive" | "deletedAt" | "standalone" | "kind">, bound: Set<string>, kind: LabelKind, foreign: Set<string>): boolean {
-  if (!t.isActive || t.deletedAt != null || t.standalone) return false;
-  if (t.kind != null && t.kind !== kind) return false;
-  for (const k of bound) if (foreign.has(k)) return false;
-  return true;
 }
 
 const ROLL_EDIT_SELECT = {

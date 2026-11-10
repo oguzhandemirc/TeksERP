@@ -107,6 +107,8 @@ export const TABLE_LABELS: Record<string, string> = {
   LABEL_TEMPLATE: "Etiket Şablonu",
   CUSTOMER_STANDALONE_LABEL: "Müşteriye Özel Serbest Etiket",
   CUSTOMER_TEMPLATE_ROUTE: "Müşteri–Şablon Yönlendirmesi",
+  CUSTOMER_LABEL_TEMPLATE_OPTION: "Müşteri Etiket Seti",
+  LABEL_TEMPLATE_GLOBAL_OPTION: "Herkes İçin Etiket Seti",
   TRAVELER_CARD_TEMPLATE: "Refakat Kartı Şablonu",
   FREE_DOCUMENT: "Serbest Belge",
   LABEL_TEMPLATE_VARIANT: "Etiket Şablon Varyantı",

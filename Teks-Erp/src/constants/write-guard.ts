@@ -13,7 +13,8 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   // Kurşun gram fiyatı yalnız `PUT /station-capabilities/:id/kursun` boğazından (para birimi + CHECK doğrulaması orada).
   station: ["kursunGramPrice", "kursunGramCurrency"],
   // İdempotency anahtarı yalnız hızlı kayıt boğazından (`customer-quick-create.service.ts` `quickCreate`, tokenReplay); genel gövde yazamaz.
-  customer: ["clientToken"],
+  // Çoklu etiket seti: "herkes için seti göster" yalnız `PUT /customers/:id/label-template-options` boğazından.
+  customer: ["clientToken", "labelShowGlobalTemplates"],
   // Hizmet kartı: genel gövde yalnız ad + birim yazar (servis allowlist'iyle aynı); kod doğuşta, durum yaşam döngüsü ucundan, birleştirme kendi boğazından.
   serviceItem: [
     "code", "isActive", "lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason",

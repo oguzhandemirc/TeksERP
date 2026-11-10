@@ -339,6 +339,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   labelColorName: "Etiket rengi",
   labelConsigneeId: "Etiket alıcısı",
   labelTemplateId: "Etiket şablonu (bir seferlik)",
+  labelTemplateKind: "Etiket şablonunun bağlamı",
+  labelShowGlobalTemplates: "Herkes için etiket setini göster",
   labelCustomerId: "Etiket müşterisi",
   weightSource: "Kg kaynağı",
   machineStopEnabled: "Duruş bildirimi",

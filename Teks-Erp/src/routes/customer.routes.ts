@@ -18,6 +18,7 @@ const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:f
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";
+import { customerLabelOptionRoutes } from "./label-template-option.routes";
 import standaloneLabelRoutes from "./customer-standalone-label.routes";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -81,6 +82,7 @@ router.use("/:customerId/branches", branchRoutes);
 router.use("/:customerId", aliasRoutes);
 // /api/customers/:customerId/template-routes — müşteriye özel etiket şablonu ataması
 router.use("/:customerId", templateRouteRoutes);
+router.use("/:customerId/label-template-options", customerLabelOptionRoutes);
 // /api/customers/:customerId/standalone-labels — müşteriye bağlı serbest etiketler (M:N; rota DEĞİL)
 router.use("/:customerId", standaloneLabelRoutes);
 

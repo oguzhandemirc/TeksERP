@@ -58,6 +58,7 @@ import { mmToDots } from "./helpers/native-label.shared";
 import { isRasterLanguage, renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
 import { rasterPreviewHtml } from "./helpers/raster/raster-bmp";
 import { p2002TargetParts } from "../utils/p2002";
+import { templateInOptionSets } from "./helpers/label-template-options.helper";
 
 const TABLE = "LABEL_TEMPLATE";
 
@@ -76,6 +77,35 @@ function rethrowDefaultConflict(e: unknown): never {
   }
   throw e;
 }
+
+/**
+ * Bağlam varsayılanının TEK tx yazarı — eski uç (`setContextDefault`) ve global set PUT'u
+ * (`label-template-option.service`) aynı gövdeyi çağırır. null → varsayılan kalkar.
+ * Çift-yazım (geri uyum): eski `isDefault` kolonu kind-kapsamlı, yalnız eşleşen legacy kind'da senkronlanır.
+ */
+export async function writeContextDefaultTx(
+  tx: Prisma.TransactionClient,
+  kind: LabelKind,
+  template: { id: string; kind: LabelKind | null } | null,
+): Promise<void> {
+  if (!template) {
+    await tx.labelContextDefault.deleteMany({ where: { kind } });
+    await tx.labelTemplate.updateMany({ where: { kind, isDefault: true }, data: { isDefault: false } });
+    return;
+  }
+  await tx.labelContextDefault.upsert({
+    where: { kind },
+    create: { kind, templateId: template.id },
+    update: { templateId: template.id },
+  });
+  await tx.labelTemplate.updateMany({ where: { kind, isDefault: true, NOT: { id: template.id } }, data: { isDefault: false } });
+  if (template.kind === kind) {
+    await tx.labelTemplate.update({ where: { id: template.id }, data: { isDefault: true } });
+  }
+}
+
+/** Varsayılan çakışması (partial unique) → 409; diğer hatalar aynen. */
+export { rethrowDefaultConflict };
 
 /**
  * ATAMA GUARD'ı (statik etiket kuralı) — bir şablon rulo/kartela bağlamına atanırken
@@ -616,6 +646,10 @@ export class LabelTemplateService {
       // Müşteri atamaları da temizlenir — öksüz atama müşteriyi sessizce default'a
       // düşürmesin (cihaz route temizliğiyle simetrik).
       await tx.customerTemplateRoute.deleteMany({ where: { templateId: id } });
+      // Çoklu etiket seti satırları da (silme fiziksel değil → FK Cascade tetiklenmez; burada elle). Bu
+      // audit'li eylemde yaşar: ayrı helper'a çıkarılınca audit'siz yazıcı dosyası olur (test_audit_muafiyeti §7).
+      await tx.labelTemplateGlobalOption.deleteMany({ where: { templateId: id } });
+      await tx.customerLabelTemplateOption.deleteMany({ where: { templateId: id } });
       // Alıcı şablonu da (K4): öksüz bağ alıcıyı sessizce müşteri kuralına düşürsün, silinmiş şablona değil.
       await tx.customerConsignee.updateMany({ where: { labelTemplateId: id }, data: { labelTemplateId: null } });
       await tx.labelTemplate.update({
@@ -962,6 +996,8 @@ export class LabelTemplateService {
     if (ctx > 0) return true;
     const cust = await prisma.customerTemplateRoute.count({ where: { templateId } });
     if (cust > 0) return true;
+    // Çoklu etiket seti: sette duran şablon da atanmıştır (statik kaydedilemez).
+    if (await templateInOptionSets(templateId)) return true;
     const consignee = await prisma.customerConsignee.count({ where: { labelTemplateId: templateId, mergedIntoId: null } });
     if (consignee > 0) return true;
     const dev = await prisma.peripheralTemplateRoute.count({ where: { templateId } });
@@ -1013,10 +1049,7 @@ export class LabelTemplateService {
     userId?: string,
   ): Promise<ApiResponse<{ kind: LabelKind; templateId: string | null }>> {
     if (!templateId) {
-      await prisma.$transaction(async (tx) => {
-        await tx.labelContextDefault.deleteMany({ where: { kind } });
-        await tx.labelTemplate.updateMany({ where: { kind, isDefault: true }, data: { isDefault: false } });
-      });
+      await prisma.$transaction((tx) => writeContextDefaultTx(tx, kind, null));
       await AuditService.log({
         userId, action: "UPDATE", tableName: TABLE, recordId: kind,
         newData: { event: "SET_CONTEXT_DEFAULT", kind, templateId: null },
@@ -1034,19 +1067,7 @@ export class LabelTemplateService {
     // şablon reddedilir — bkz. `helpers/label-context-fit.ts`.
     await assertTemplateAssignable(templateId, kind);
 
-    await prisma.$transaction(async (tx) => {
-      await tx.labelContextDefault.upsert({
-        where: { kind },
-        create: { kind, templateId },
-        update: { templateId },
-      });
-      // Çift-yazım (geri uyum): eski kolon kind-kapsamlı — yalnız eşleşen legacy
-      // kind'da senkronlanabilir.
-      await tx.labelTemplate.updateMany({ where: { kind, isDefault: true, NOT: { id: templateId } }, data: { isDefault: false } });
-      if (template.kind === kind) {
-        await tx.labelTemplate.update({ where: { id: templateId }, data: { isDefault: true } });
-      }
-    }).catch(rethrowDefaultConflict);
+    await prisma.$transaction((tx) => writeContextDefaultTx(tx, kind, { id: templateId, kind: template.kind })).catch(rethrowDefaultConflict);
 
     await AuditService.log({
       userId, action: "UPDATE", tableName: TABLE, recordId: templateId,
