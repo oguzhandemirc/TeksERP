@@ -100,3 +100,24 @@ export function widthHintText(rollWidth: number | null | undefined, sourceWidthC
 export function nextCutMode(mode: 'manual' | 'auto'): 'manual' | 'auto' {
   return mode === 'manual' ? 'auto' : 'manual';
 }
+
+const FIELD_NAMES: Record<string, string> = {
+  itemName: 'Ürün adı',
+  deliveryNoteItemText: 'Ürün adı',
+  colorName: 'Renk',
+  deliveryNoteColorText: 'Renk',
+  labelBatchNo: 'Parti no',
+  customerBatchNo: 'Parti no',
+  lengthMeters: 'Metre',
+  weightKg: 'Kg',
+  widthCm: 'En',
+  qualityGrade: 'Kalite',
+  customerName: 'Müşteri',
+  consigneeName: 'Alıcı',
+};
+
+/** Önizlemede değersiz alanın yazısı (yalnız önizleme; basımda boş alan bugünkü gibi çizilmez): etiketi ya da alan adı + "— boş". */
+export function emptyFieldText(label: string, bind: string | null): string {
+  const name = label.trim().replace(/:$/, '') || (bind ? FIELD_NAMES[bind] : null) || 'Alan';
+  return `${name} — boş`;
+}

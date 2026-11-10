@@ -1,6 +1,6 @@
 // Canlı etiket önizlemesi saf eşlemesi: alan → düzenleyici, dokunulamazlar, taslak ve Kes ikinci satırı.
 import { editorRect } from './TamburInlineEditor';
-import { buildPreviewDraft, editorForKey, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
+import { buildPreviewDraft, editorForKey, emptyFieldText, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
 
 const own = { owner: false, batchEnabled: true, manualLength: true };
 
@@ -86,5 +86,13 @@ describe('editorRect (yerinde düzenleme kutusu)', () => {
     expect(editorRect({ x: 20, y: 100, h: 20, align: 'left' }, paper)).toEqual({ left: 20, top: 84, width: 300, height: 52 });
     expect(editorRect({ x: 590, y: 100, h: 20, align: 'left' }, paper).left).toBe(300);
     expect(editorRect({ x: 580, y: 340, h: 20, align: 'right' }, paper)).toEqual({ left: 280, top: 298, width: 300, height: 52 });
+  });
+});
+
+describe('emptyFieldText (yalnız önizleme)', () => {
+  it('alan etiketi ya da alan adı + "— boş"', () => {
+    expect(emptyFieldText('', 'weightKg')).toBe('Kg — boş');
+    expect(emptyFieldText('Lot:', 'labelBatchNo')).toBe('Lot — boş');
+    expect(emptyFieldText('', 'bilinmeyen')).toBe('Alan — boş');
   });
 });

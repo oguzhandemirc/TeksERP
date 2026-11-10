@@ -23,7 +23,8 @@ export interface TamburLabelDraft {
 }
 
 export type TamburPreviewElement =
-  | { type: "text"; x: number; y: number; hMm: number; bold: boolean; align: "left" | "center" | "right"; rot: number; wr: number; text: string; bind: string | null }
+  // empty: değeri olmayan veri alanı — YALNIZ önizlemede işaretlenir (basımda bugünkü gibi hiç çizilmez); text = alan etiketi.
+  | { type: "text"; x: number; y: number; hMm: number; bold: boolean; align: "left" | "center" | "right"; rot: number; wr: number; text: string; bind: string | null; empty?: true }
   | { type: "line" | "box"; x: number; y: number; wMm: number; hMm: number; thickMm: number }
   | { type: "code128"; x: number; y: number; wMm: number; hMm: number; human: boolean; humanHMm: number; value: string | null }
   | { type: "qr"; x: number; y: number; sizeMm: number }
@@ -80,7 +81,8 @@ export function composeCanvasElements(
       case "field":
       case "text": {
         const text = elementText(el, payload);
-        if (!text) break;
+        const empty = !text && el.type === "field";
+        if (!text && !empty) break;
         out.push({
           type: "text", x: el.x, y: el.y,
           hMm: el.hMm ?? LEGACY_FONT_MM[el.font ?? "md"] ?? 2.2,
@@ -88,8 +90,9 @@ export function composeCanvasElements(
           align: el.align ?? "left",
           rot: el.rot ?? 0,
           wr: el.wr ?? 1,
-          text,
+          text: empty && el.type === "field" ? el.label?.trim() ?? "" : text ?? "",
           bind: el.type === "field" ? el.bind : null,
+          ...(empty ? { empty: true as const } : {}),
         });
         break;
       }

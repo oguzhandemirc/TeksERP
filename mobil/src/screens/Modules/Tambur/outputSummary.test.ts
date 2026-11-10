@@ -13,3 +13,4 @@ describe('outputSummary', () => {
     expect(kgCellText(2.5)).toBe('2.5 kg');
   });
 });
+

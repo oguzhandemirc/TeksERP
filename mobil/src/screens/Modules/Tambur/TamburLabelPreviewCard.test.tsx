@@ -118,6 +118,23 @@ describe('TamburLabelPreviewCard', () => {
     expect(p.quality.pick).toHaveBeenCalledWith('A1');
   });
 
+});
+
+describe('TamburLabelPreviewCard — boş alan, otomatik ve ağ hatası', () => {
+  it('değeri boş alan önizlemede kırmızı "— boş" olarak görünür ve yine yerinde düzenlenir', async () => {
+    const withEmpty = { ...preview, elements: [...(preview.elements ?? []), { type: 'text', x: 60, y: 20, hMm: 3, bold: false, align: 'left', rot: 0, wr: 1, text: '', bind: 'weightKg', empty: true }] } as TamburLabelPreview;
+    const p = props({ preview: withEmpty });
+    const r = renderWithPaper(<TamburLabelPreviewCard {...p} />);
+    layout(r);
+    expect(r.getByTestId('onizleme-bos-weightKg')).toHaveTextContent('Kg — boş');
+    fireEvent.press(r.getByTestId('onizleme-alan-weightKg'));
+    await flush();
+    fireEvent.changeText(r.getByTestId('onizleme-yerinde'), '12');
+    fireEvent.press(r.getByTestId('onizleme-onay'));
+    await flush();
+    expect(p.kg.set).toHaveBeenCalledWith('12');
+  });
+
   it('otomatik ölçümde metre alanı dokunulamaz', () => {
     const r = renderWithPaper(<TamburLabelPreviewCard {...props({ ctx: { owner: false, batchEnabled: false, manualLength: false } })} />);
     layout(r);
@@ -155,6 +172,9 @@ describe('alt şerit (geniş ana kesim)', () => {
     expect(r.getByText('Manuel')).toBeTruthy();
     expect(r.getByText('Otomatik')).toBeTruthy();
     expect(r.getByText('Bitir')).toBeTruthy();
+    // Otomatik kipte küçük vurgu (yeşil nokta), manuelde yok.
+    expect(r.getByTestId('tambur-kg-kip-dugmesi-oto')).toBeTruthy();
+    expect(r.queryByTestId('tambur-kip-dugmesi-oto')).toBeNull();
     fireEvent.press(r.getByTestId('tambur-kip-dugmesi'));
     expect(meter).toHaveBeenCalledTimes(1);
     fireEvent.press(r.getByTestId('tambur-kg-kip-dugmesi'));

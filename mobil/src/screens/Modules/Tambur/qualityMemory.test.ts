@@ -1,4 +1,4 @@
-import { rememberedGrade, shortGradeLabel } from './qualityMemory';
+import { rememberedGrade, shortGradeLabel, startGrade } from './qualityMemory';
 
 describe('shortGradeLabel', () => {
   it('sondaki parantezli açıklamayı düşer', () => {
@@ -25,5 +25,20 @@ describe('rememberedGrade', () => {
     expect(rememberedGrade('FIRE', grades)).toBeNull();
     expect(rememberedGrade(null, grades)).toBeNull();
     expect(rememberedGrade('', grades)).toBeNull();
+  });
+});
+
+describe('startGrade (başlangıç kalitesi)', () => {
+  const g = [{ code: 'Q1' }, { code: 'Q2' }, { code: 'A1' }];
+  it('bu cihazda son seçilen kalite önce gelir', () => {
+    expect(startGrade(g[2], g[0], g, false)).toBe(g[2]);
+  });
+  it('ilk kullanımda (hatırlanan yok) en iyi kalite: FIRST rolü, o da yoksa katalogun ilki', () => {
+    expect(startGrade(null, g[1], g, false)).toBe(g[1]);
+    expect(startGrade(null, null, g, false)).toBe(g[0]);
+  });
+  it('"kesimden sonra sıfırla" açıkken hatırlanan atlanır; katalog boşsa null (Kes "önce kalite seçin")', () => {
+    expect(startGrade(g[2], g[0], g, true)).toBe(g[0]);
+    expect(startGrade(null, null, [], false)).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
-import WorkOrderOutputPanel from './WorkOrderOutputPanel';
+import WorkOrderOutputPanel, { refreshSpinner } from './WorkOrderOutputPanel';
 import { labelTextFixBody, labelTextFixLockReason, labelTextFixReasonError } from './labelTextFix';
 import { tamburService } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
@@ -121,5 +121,14 @@ describe('WorkOrderOutputPanel etiket düzelt düğmesi', () => {
     const r = renderWithPaper(<WorkOrderOutputPanel workOrderId="wo1" onPrint={noop} onUndo={noop} />);
     await waitFor(() => expect(r.getByText('B-a')).toBeTruthy());
     expect(r.queryByTestId('wo-output-etiket-duzelt-a')).toBeNull();
+  });
+});
+
+// Çıkan etiketler yenilemesi: 15 sn yoklama SESSİZ — spinner yalnız operatör ↻'e bastığında (2026-11-11).
+describe('refreshSpinner', () => {
+  it('arka plan yoklamasında spinner yok; elle yenilemede var', () => {
+    expect(refreshSpinner(false, true)).toBe(false);
+    expect(refreshSpinner(true, true)).toBe(true);
+    expect(refreshSpinner(true, false)).toBe(false);
   });
 });

@@ -12,3 +12,14 @@ export function rememberedGrade<T extends { code: string }>(code: string | null 
   if (!code) return null;
   return grades.find((g) => g.code === code) ?? null;
 }
+
+/** Başlangıç kalitesi (2026-11-11): bu cihazda son seçilen (sıfırlama kapalıysa) → katalogun FIRST rolü → katalogun
+ *  ilk satırı (en iyi). Katalog boşsa null — Kes yalnız o zaman "önce kalite seçin" der. */
+export function startGrade<T extends { code: string }>(
+  last: T | null | undefined,
+  first: T | null | undefined,
+  grades: readonly T[],
+  resetAfterCut: boolean,
+): T | null {
+  return (!resetAfterCut && last) || first || grades[0] || null;
+}

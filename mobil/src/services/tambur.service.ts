@@ -316,7 +316,7 @@ export interface TamburLabelPreviewFields {
 
 /** POST /tambur/label-preview — kesimde doğacak çocuğun etiketi (HTML render elemanları, mm). */
 export type TamburPreviewElement =
-  | { type: 'text'; x: number; y: number; hMm: number; bold: boolean; align: 'left' | 'center' | 'right'; rot: number; wr: number; text: string; bind: string | null }
+  | { type: 'text'; x: number; y: number; hMm: number; bold: boolean; align: 'left' | 'center' | 'right'; rot: number; wr: number; text: string; bind: string | null; empty?: true }
   | { type: 'line' | 'box'; x: number; y: number; wMm: number; hMm: number; thickMm: number }
   | { type: 'code128'; x: number; y: number; wMm: number; hMm: number; human: boolean; humanHMm: number; value: string | null }
   | { type: 'qr'; x: number; y: number; sizeMm: number }

@@ -45,6 +45,14 @@ function hhmm(v: string | Date | null | undefined): string {
   return formatFactory(v, 'HH:mm');
 }
 
+/** Arka plan yoklaması (başka tablet/vardiya kesimleri). Bu tabletin kesim/geri al/basımı ayrıca invalidate eder. */
+export const WO_OUTPUT_POLL_MS = 15_000;
+
+/** Yenile spinner'ı yalnız operatör ↻'e bastıysa; 15 sn'lik sessiz yoklamada ikon titremez. */
+export function refreshSpinner(manual: boolean, fetching: boolean): boolean {
+  return manual && fetching;
+}
+
 /** Tek satır: saat · barkod · metre · kg · [bas] [geri al]. Etiket düzeltme satır menüsünde (dokun / uzun bas). */
 function OutputRow({ r, menuOpen, onMenu, onPrint, onUndo, onFixLabel }: {
   r: Roll;
@@ -74,8 +82,8 @@ function OutputRow({ r, menuOpen, onMenu, onPrint, onUndo, onFixLabel }: {
             <Icon source="lock-outline" size={16} color={colors.textMuted} />
           </View>
         ) : null}
-        <Text style={s.rowQty}>{Number(r.initialQty ?? 0).toFixed(1)} m</Text>
-        <Text style={[s.rowQty, s.rowKg]} testID={`wo-output-kg-${r.id}`}>{kgCellText(r.weightKg)}</Text>
+        <Text style={[s.rowQty, s.rowM]} numberOfLines={1}>{Number(r.initialQty ?? 0).toFixed(1)} m</Text>
+        <Text style={[s.rowQty, s.rowKg]} numberOfLines={1} testID={`wo-output-kg-${r.id}`}>{kgCellText(r.weightKg)}</Text>
         <IconButton icon="printer" size={26} iconColor="#1e40af" containerColor="#eef2ff" mode="contained-tonal" onPress={() => onPrint(r)} style={s.rowBtn} accessibilityLabel="Etiketi bas" />
         <IconButton icon="undo-variant" size={26} iconColor="#b45309" containerColor="#fef3c7" mode="contained-tonal" onPress={() => onUndo(r)} style={s.rowBtn} accessibilityLabel="Geri al" />
       </View>
@@ -134,9 +142,11 @@ export default function WorkOrderOutputPanel({
     // basmam gerekiyor"). İki katman: bu tabletin kesimleri mutation başarısında
     // invalidate edilir (ANINDA görünür, TamburScreen), başka tablet/vardiya
     // kesimleri bu yoklamayla en geç 15 sn'de düşer. Kart kapalıyken
-    // (enabled=false) yoklama hiç koşmaz.
-    refetchInterval: 15_000,
+    // (enabled=false) yoklama hiç koşmaz. SESSİZ (2026-11-11): arka plan yoklaması
+    // spinner göstermez; liste yapısal paylaşımla yalnız veri değişince yeniden çizilir.
+    refetchInterval: WO_OUTPUT_POLL_MS,
   });
+  const [manualRefresh, setManualRefresh] = useState(false);
 
   const rolls: Roll[] = useMemo(() => q.data?.data ?? [], [q.data]);
 
@@ -195,13 +205,16 @@ export default function WorkOrderOutputPanel({
             </Text>
           ) : null}
           {!collapsed &&
-            (q.isFetching ? (
+            (refreshSpinner(manualRefresh, q.isFetching) ? (
               <ActivityIndicator size={14} color="#1e40af" />
             ) : (
               <IconButton
                 icon="refresh"
                 size={16}
-                onPress={() => void q.refetch()}
+                onPress={() => {
+                  setManualRefresh(true);
+                  void q.refetch().finally(() => setManualRefresh(false));
+                }}
                 style={{ margin: 0 }}
                 accessibilityLabel="Yenile"
               />
@@ -274,7 +287,7 @@ export default function WorkOrderOutputPanel({
 
 const s = StyleSheet.create({
   bulkBtn: { marginHorizontal: 8, marginBottom: 6 },
-  wrapFill: { flex: 1, maxHeight: undefined, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  wrapFill: { flex: 1, minHeight: 0, maxHeight: undefined, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   wrap: {
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
@@ -350,7 +363,9 @@ const s = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   rowBtn: { margin: 0, marginVertical: 4, width: 48, height: 48, borderRadius: 10 },
-  rowKg: { minWidth: 64, textAlign: 'right', color: colors.textSecondary },
+  // Sabit sütunlar + sağa hizalı sayılar: "20.0 m" ile "500.0 kg" bitişmesin (2026-11-11).
+  rowM: { width: 76, textAlign: 'right' },
+  rowKg: { width: 84, marginLeft: 12, marginRight: 4, textAlign: 'right', color: colors.textSecondary },
   empty: { paddingVertical: 18, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#94a3b8' },
 });

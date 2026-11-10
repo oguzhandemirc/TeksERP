@@ -64,7 +64,7 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
   const onEdit = (key: string, anchor: EditAnchor) => {
     const ed = editorForKey(key, p.ctx);
     const shown = p.preview?.elements?.find((e) => e.type === 'text' && e.bind === key);
-    if (ed) dispatchEdit(ed, p, (e) => setEditing({ editor: e, anchor, shown: shown?.type === 'text' ? shown.text : '' }));
+    if (ed) dispatchEdit(ed, p, (e) => setEditing({ editor: e, anchor, shown: shown?.type === 'text' && !shown.empty ? shown.text : '' }));
   };
   const inline = editing && inlineKind(editing.editor) ? (editing.editor as InlineEditor) : null;
   const close = () => setEditing(null);

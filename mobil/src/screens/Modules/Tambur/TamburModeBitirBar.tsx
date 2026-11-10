@@ -23,9 +23,10 @@ export interface TamburModeBitirBarProps {
 }
 
 function ModeButton(p: { kicker: string; label: string; mode: Mode; onToggle: () => void; busy: boolean; testID: string }) {
-  const bg = p.mode === 'manual' ? palette.indigo[700] : palette.emerald[600];
+  // Kip düğmeleri nötr/ikincil (Bitir yeşil birincil kalır, 2026-11-11); Otomatikte yeşil nokta vurgusu.
+  const auto = p.mode === 'auto';
   return (
-    <View style={[s.mode, { backgroundColor: p.busy ? colors.surfaceSunken : bg }]}>
+    <View style={[s.mode, p.busy && s.modeBusy]}>
       <TouchableRipple
         onPress={
           p.busy
@@ -43,9 +44,12 @@ function ModeButton(p: { kicker: string; label: string; mode: Mode; onToggle: ()
       >
         <View style={s.center}>
           <Text style={s.kicker}>{p.kicker}</Text>
-          <Text style={s.value} numberOfLines={1}>
-            {measureModeLabel(p.mode)}
-          </Text>
+          <View style={s.valueRow}>
+            {auto ? <View style={s.autoDot} testID={`${p.testID}-oto`} /> : null}
+            <Text style={s.value} numberOfLines={1}>
+              {measureModeLabel(p.mode)}
+            </Text>
+          </View>
         </View>
       </TouchableRipple>
     </View>
@@ -64,9 +68,12 @@ export default function TamburModeBitirBar(p: TamburModeBitirBarProps) {
 
 const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
-  mode: { flex: 1, height: BAR_HEIGHT_TABLET, borderRadius: radius.md, overflow: 'hidden' },
+  mode: { flex: 1, height: BAR_HEIGHT_TABLET, borderRadius: radius.md, overflow: 'hidden', backgroundColor: palette.slate[100], borderWidth: 1, borderColor: palette.slate[300] },
+  modeBusy: { backgroundColor: colors.surfaceSunken, opacity: 0.6 },
+  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  autoDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.emerald[600] },
   inner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center' },
-  kicker: { fontSize: 12, fontWeight: '800', letterSpacing: 1, color: colors.textOnDark, opacity: 0.85 },
-  value: { fontSize: 20, fontWeight: '900', color: colors.textOnDark },
+  kicker: { fontSize: 12, fontWeight: '800', letterSpacing: 1, color: palette.slate[600] },
+  value: { fontSize: 20, fontWeight: '900', color: palette.slate[900] },
 });

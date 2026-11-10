@@ -24,25 +24,28 @@ export function useRollMeterTrail(rollId: string | null | undefined) {
   });
 }
 
-type TrailViewProps = { trail: RollMeterTrail | null | undefined; pendingM: number; tone?: 'dark' | 'light'; omitRemaining?: boolean };
+/** dark = koyu başlık bandı · light = beyaz kart · onOrange = geniş künye kartının koyu turuncu zemini. */
+type TrailTone = 'dark' | 'light' | 'onOrange';
+type TrailViewProps = { trail: RollMeterTrail | null | undefined; pendingM: number; tone?: TrailTone; omitRemaining?: boolean };
 export function TamburMeterTrailView({ trail, pendingM, tone = 'dark', omitRemaining }: TrailViewProps) {
   const light = tone === 'light';
+  const orange = tone === 'onOrange';
   const parts = meterTrailParts(trail, { omitRemaining });
   if (!parts) return null;
   const over = cutOverage(trail, pendingM);
   return (
-    <View style={s.root} testID="tambur-metre-serit">
+    <View style={[s.root, orange && s.rootTight]} testID="tambur-metre-serit">
       <View style={s.row}>
         {parts.map((p, i) => (
-          <Text key={p} style={[s.part, light && s.partLight]}>
+          <Text key={p} style={[s.part, light && s.partLight, orange && s.partOrange]}>
             {i > 0 ? `· ${p}` : p}
           </Text>
         ))}
       </View>
       {over != null && (
-        <View style={s.warn} testID="tambur-metre-asim">
-          <Icon source="alert-outline" size={14} color={light ? WARN_LIGHT : WARN} />
-          <Text style={[s.warnText, light && { color: WARN_LIGHT }]}>{overageWarningText(over)}</Text>
+        <View style={[s.warn, orange && s.warnPill]} testID="tambur-metre-asim">
+          <Icon source="alert-outline" size={14} color={orange ? palette.white : light ? WARN_LIGHT : WARN} />
+          <Text style={[s.warnText, light && { color: WARN_LIGHT }, orange && { color: palette.white }]}>{overageWarningText(over)}</Text>
         </View>
       )}
     </View>
@@ -64,6 +67,10 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 5 },
   part: { fontSize: 13, fontWeight: '600', color: palette.slate[300] },
   partLight: { fontSize: 15, color: palette.slate[600] },
+  rootTight: { marginTop: 0 },
+  partOrange: { fontSize: 15, fontWeight: '700', color: palette.slate[900] },
+  // Turuncu zeminde uyarı koyu kehribar hap içinde beyaz (kontrast ~8:1).
+  warnPill: { alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: palette.amber[900] },
   warn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   warnText: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: WARN },
 });

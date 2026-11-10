@@ -48,7 +48,7 @@ import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import { TARGET_LINE_PREFIX, TARGET_STOCK_VALUE, TargetButton, QualitySegment, targetButtonText } from './TamburCompactPickers';
-import { rememberedGrade, shortGradeLabel } from './qualityMemory';
+import { rememberedGrade, shortGradeLabel, startGrade } from './qualityMemory';
 import { RECENT_OUTPUT_SCREEN_KEY, resolveOutputColumns, toggleOutputColumn, type OutputColumnKey } from './recentOutputColumns';
 import { OutputColumnsButton, OutputColumnsPicker } from './OutputColumnsPicker';
 import { useTamburLabelCard } from './useTamburLabelCard';
@@ -901,15 +901,20 @@ export default function TamburScreen() {
   const lastGrade = useMemo(() => rememberedGrade(lastQualityCode, qualityGrades), [lastQualityCode, qualityGrades]);
   // Top Kesme sıfırlamalarında: hatırlanan kalite > varsayılan (1. Kalite).
   const recutStartQualityCode = (!resetQualityAfterCut && lastGrade?.code) || defaultQualityCode;
-  // Katalog/cihaz tercihi geç yüklenirse boş seçim hatırlanana çekilir; elle seçim varsa dokunulmaz.
+  // Boş seçim başlangıç kalitesine çekilir (son seçilen → FIRST → katalogun ilki; kullanıcı 2026-11-11) — Kes kalite
+  // yüzünden kapalı başlamasın. Katalog/cihaz tercihi geç yüklenince de çalışır; elle seçim varsa dokunulmaz.
+  const initialGrade = useMemo(
+    () => startGrade(lastGrade, defaultGrade, qualityGrades, resetQualityAfterCut),
+    [lastGrade, defaultGrade, qualityGrades, resetQualityAfterCut],
+  );
   useEffect(() => {
-    if (resetQualityAfterCut || !lastGrade) return;
+    if (!initialGrade) return;
     setWork((w) =>
       w.voluntaryEntry.qualityGrade
         ? w
-        : { ...w, voluntaryEntry: { ...w.voluntaryEntry, qualityGrade: lastGrade.code, qualityName: lastGrade.name } },
+        : { ...w, voluntaryEntry: { ...w.voluntaryEntry, qualityGrade: initialGrade.code, qualityName: initialGrade.name } },
     );
-  }, [lastGrade, resetQualityAfterCut]);
+  }, [initialGrade]);
   // KISA KESİM kalitesi de ROLDEN (`SECOND`) — `shortCutQuality.ts` ile aynı
   // kaynak; burada ikinci kez kod yazılsaydı iki yüzey sessizce ayrışırdı.
   const secondQualityCode = findGradeByRole(qualityGrades, 'SECOND')?.code ?? null;
@@ -3325,7 +3330,10 @@ export default function TamburScreen() {
   };
 
   // En ipucu = topun bilinen/miras eni (yalnız ipucu: dokunulmazsa kesime en gönderilmez, bugünkü davranış).
-  const wideWidthHint = (roll: TamburRollSummary) => widthHintText(roll.width, livePreview.preview?.sourceWidthCm) ?? openCard.card.width.placeholder;
+  const wideWidthHint = (roll: TamburRollSummary) => {
+    const w = widthHintText(roll.width, livePreview.preview?.sourceWidthCm);
+    return w ? `${w} cm` : 'En (cm)';
+  };
 
   /** Geniş ana kesim Kat / En / Kalite kartı — sağ sütunda Çıkan etiketlerin altında (kullanıcı 2026-11-10). */
   const renderWideSettings = (roll: TamburRollSummary) => (
@@ -3351,9 +3359,8 @@ export default function TamburScreen() {
           customerName,
           owner,
           onPickCustomer: owner ? null : () => setKimePickerOpen(true),
-          barcode: roll.barcode,
           itemLine: [roll.itemName, roll.colorName, roll.width != null ? `${roll.width} cm` : null].filter(Boolean).join(' · '),
-          trail: <TamburMeterTrail rollId={roll.rollId} pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0} tone="light" omitRemaining />,
+          trail: <TamburMeterTrail rollId={roll.rollId} pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0} tone="onOrange" omitRemaining />,
           remaining: segmentPreview?.remaining ?? roll.currentQty,
           orders: orders.length > 0 ? { count: orders.length, onPress: () => setOrdersModalOpen(true) } : null,
         }}

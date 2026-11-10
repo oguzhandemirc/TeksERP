@@ -1,4 +1,4 @@
-// Geniş tablet "Ölçüm" kartı (2026-11-10, kullanıcı kararı): yalnız MANUEL kipteki alanın kutusu çizilir (Metre ve/veya
+// Geniş tablet ölçüm kartı (2026-11-10/11, kullanıcı kararı; başlıksız): yalnız MANUEL kipteki alanın kutusu çizilir (Metre ve/veya
 // Kg). Kipler alt şeritteki METRE/KG düğmelerinde; ikisi de otomatikse kartı çağıran hiç çizmez. Dolu kutunun içinde
 // sağda ⊗ temizle; kg kutusunda Tart (varsa) bugünkü gibi.
 import React from 'react';
@@ -31,7 +31,6 @@ function clearIcon(value: string, onPress: () => void, testID: string, label: st
 export default function TamburMeasureCard({ length, kg, extras }: TamburMeasureCardProps) {
   return (
     <View style={s.card} testID="tambur-olcum-karti">
-      <Text style={s.title}>Ölçüm</Text>
       <View style={s.row}>
         {length && (
           <View style={s.col}>
@@ -83,8 +82,7 @@ export default function TamburMeasureCard({ length, kg, extras }: TamburMeasureC
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: palette.white, borderRadius: 14, padding: 12, gap: 6, borderWidth: 1, borderColor: palette.slate[200] },
-  title: { fontSize: 16, fontWeight: '800', color: palette.slate[900] },
+  card: { flexShrink: 0, backgroundColor: palette.white, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6, gap: 4, borderWidth: 1, borderColor: palette.slate[200] },
   row: { flexDirection: 'row', gap: 12 },
   col: { flex: 1, gap: 4 },
   label: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },

@@ -4,7 +4,7 @@
 // =============================================================================
 //   §1 applyTamburDraft: taslak metre/kg/en/kalite çocuğa; boş metre = kalanı kes; ana barkod BASILMAZ
 //   §2 composeCanvasElements: metin HTML render'ı ile AYNI (fmt biçimi dahil) · showIf taslak kaliteden ·
-//      barkod yer tutucu · alan elemanı bind taşır, sabit metin taşımaz
+//      barkod yer tutucu · alan elemanı bind taşır, sabit metin taşımaz · değersiz alan `empty` işaretli (yalnız önizleme)
 //   §3 uç sözleşmesi: izin preview-fields ile aynı, route prisma import etmez, servis YAZMAZ
 // Negatif sonda (ölçüldü 2026-11-10): composeCanvasElements `elementText` yerine `fieldDisplayValue`
 // kullanınca §2 fmt kırmızı; applyTamburDraft barkodu korursa §1 kırmızı.
@@ -74,7 +74,10 @@ async function main(): Promise<void> {
   check("§2 sağa hizalama korunur", texts.some((t) => t.bind === "weightKg" && t.align === "right"));
   check("§2 çizgi elemanı geçer", els.some((x) => x.type === "line"));
   const noKg = composeCanvasElements(ELEMENTS, applyTamburDraft(PARENT, {}), { language: "RASTER_HTML", heightMm: 58, dpi: 203 });
-  check("§2 kg yoksa kg elemanı çizilmez", !noKg.some((x) => x.type === "text" && x.bind === "weightKg"));
+  const kgEl = noKg.find((x) => x.type === "text" && x.bind === "weightKg");
+  check("§2 kg yoksa kg alanı BOŞ işaretli gelir (önizlemede görünsün)", !!kgEl && kgEl.type === "text" && kgEl.empty === true && kgEl.text === "");
+  check("§2 dolu alan boş işaretli değil", !texts.some((t) => t.empty));
+  check("§2 sabit metin boş işaretlenmez", !noKg.some((x) => x.type === "text" && x.bind === null && x.empty));
 
   console.log("\n[§3] uç sözleşmesi");
   const routes = readFileSync(join(__dirname, "../src/routes/tambur.routes.ts"), "utf8");

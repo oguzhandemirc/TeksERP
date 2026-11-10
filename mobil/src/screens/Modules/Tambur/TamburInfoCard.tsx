@@ -1,5 +1,5 @@
-// Geniş tablet bilgi kartı (2026-11-10, kullanıcı KESİN düzen): iki satır, sütun ayrımı yok.
-// Satır 1: müşteri adı · top no · kumaş + sağ üstte kompakt "mt kalan" karosu (yalnız satır 1 yüksekliğinde).
+// Geniş tablet künye kartı (2026-11-10/11, kullanıcı KESİN düzen): koyu turuncu zemin, iki satır, sütun ayrımı yok.
+// Satır 1: müşteri adı (siyah) · kumaş (koyu mavi) + sağ üstte kompakt "mt kalan" karosu; top kodu gösterilmez.
 // Satır 2: metre şeridi kartın tam genişliğinde (karo bu satırın yanını tutmaz). Kendi topta ada dokununca Kime?.
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -13,7 +13,6 @@ export interface TamburInfoCardProps {
   owner: { name: string } | null;
   /** Kendi topta Kime? seçicisini açar; emanette null (kilitli). */
   onPickCustomer: (() => void) | null;
-  barcode: string | null;
   itemLine: string;
   trail: React.ReactNode;
   remaining: number;
@@ -43,7 +42,6 @@ export default function TamburInfoCard(p: TamburInfoCardProps) {
           ) : (
             <View style={s.cust}>{name}</View>
           )}
-          {!!p.barcode && <Text style={s.barcode} numberOfLines={1}>{p.barcode}</Text>}
           {showOwnTag(p.owner, p.itemLine) && <Text style={s.ownTag}>{OWN_TAG}</Text>}
           <Text style={s.itemLine} numberOfLines={1}>{p.itemLine}</Text>
         </View>
@@ -68,15 +66,14 @@ export default function TamburInfoCard(p: TamburInfoCardProps) {
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: palette.white, borderRadius: 14, borderWidth: 1, borderColor: palette.slate[200], overflow: 'hidden' },
+  card: { backgroundColor: palette.orange[600], borderRadius: 14, overflow: 'hidden' },
   row1: { flexDirection: 'row', alignItems: 'stretch' },
-  idLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 14, paddingHorizontal: 14, paddingTop: 8 },
+  idLine: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 14, paddingHorizontal: 14, paddingTop: 6 },
   cust: { borderRadius: 8, maxWidth: '45%' },
-  custName: { fontSize: 24, fontWeight: '900', color: palette.slate[900] },
-  barcode: { fontSize: 20, fontWeight: '900', color: palette.slate[900] },
-  ownTag: { fontSize: 13, fontWeight: '800', color: palette.slate[700], letterSpacing: 0.5 },
-  itemLine: { fontSize: 15, color: palette.slate[600], flexShrink: 1 },
-  row2: { paddingHorizontal: 14, paddingBottom: 8 },
+  custName: { fontSize: 24, fontWeight: '900', color: palette.black },
+  ownTag: { fontSize: 13, fontWeight: '800', color: palette.blue[950], letterSpacing: 0.5 },
+  itemLine: { fontSize: 16, fontWeight: '700', color: palette.blue[950], flexShrink: 1 },
+  row2: { paddingHorizontal: 14, paddingBottom: 6 },
   // Karo kartın üst ve sağ kenarına dayalı; yüksekliği satır 1 kadar.
   tiles: { flexDirection: 'row', alignItems: 'stretch' },
   tile: { minWidth: 104, paddingHorizontal: 12, paddingVertical: 4, alignItems: 'center', justifyContent: 'center' },

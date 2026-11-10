@@ -7,6 +7,7 @@ import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { TamburLabelPreview, TamburPreviewElement } from '../../../services/tambur.service';
 import { colors, palette } from '../../../theme/tokens';
 import type { EditAnchor } from './TamburInlineEditor';
+import { emptyFieldText } from './labelPreviewMap';
 
 export interface PaperRow {
   key: string | null;
@@ -58,6 +59,51 @@ function Barcode({ widthPx, heightPx, humanPx, human }: { widthPx: number; heigh
   );
 }
 
+type TextEl = Extract<TamburPreviewElement, { type: 'text' }>;
+function TextElementView({ el, s, paperW, editable, onEdit }: { el: TextEl; s: number; paperW: number; editable: boolean; onEdit: (a: EditAnchor) => void }) {
+  const fontSize = Math.max(7, el.hMm * s);
+  // Çapa x: left → sol kenar; right → sağ kenar; center → orta (geniş kutu + ortalı metin).
+  const pos =
+    el.align === 'right'
+      ? { right: (paperW - el.x) * s }
+      : el.align === 'center'
+        ? { left: el.x * s - paperW * s, width: paperW * s * 2, alignItems: 'center' as const }
+        : { left: el.x * s };
+  // Değersiz alan yalnız önizlemede kırmızı kesikli çerçeve + "… — boş" (kullanıcı 2026-11-11).
+  const txt = (
+    <Text
+      style={[
+        { fontSize, lineHeight: fontSize * 1.15, fontWeight: el.bold ? '700' : '400', color: palette.black, fontFamily: 'monospace' },
+        el.empty && styles.emptyText,
+      ]}
+      numberOfLines={1}
+      testID={el.empty ? `onizleme-bos-${el.bind}` : undefined}
+    >
+      {el.empty ? emptyFieldText(el.text, el.bind) : el.text}
+    </Text>
+  );
+  const hitStyle = el.empty ? styles.emptyHit : styles.editHit;
+  return (
+    <View style={[{ position: 'absolute', top: el.y * s - fontSize * 0.1 }, pos, el.rot ? { transform: [{ rotate: `${el.rot}deg` }] } : null]}>
+      {editable ? (
+        <TouchableRipple
+          onPress={() => onEdit({ x: el.x * s, y: el.y * s, h: fontSize * 1.15, align: el.align })}
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+          style={hitStyle}
+          accessibilityLabel={`Düzenle: ${el.empty ? emptyFieldText(el.text, el.bind) : el.text}`}
+          testID={`onizleme-alan-${el.bind}`}
+        >
+          {txt}
+        </TouchableRipple>
+      ) : el.empty ? (
+        <View style={styles.emptyHit}>{txt}</View>
+      ) : (
+        txt
+      )}
+    </View>
+  );
+}
+
 function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewElement; s: number; paperW: number; editable: boolean; onEdit: (a: EditAnchor) => void }) {
   switch (el.type) {
     case 'line':
@@ -101,41 +147,8 @@ function ElementView({ el, s, paperW, editable, onEdit }: { el: TamburPreviewEle
         </View>
       );
     }
-    case 'text': {
-      const fontSize = Math.max(7, el.hMm * s);
-      // Çapa x: left → sol kenar; right → sağ kenar; center → orta (geniş kutu + ortalı metin).
-      const pos =
-        el.align === 'right'
-          ? { right: (paperW - el.x) * s }
-          : el.align === 'center'
-            ? { left: el.x * s - paperW * s, width: paperW * s * 2, alignItems: 'center' as const }
-            : { left: el.x * s };
-      const txt = (
-        <Text
-          style={{ fontSize, lineHeight: fontSize * 1.15, fontWeight: el.bold ? '700' : '400', color: palette.black, fontFamily: 'monospace' }}
-          numberOfLines={1}
-        >
-          {el.text}
-        </Text>
-      );
-      return (
-        <View style={[{ position: 'absolute', top: el.y * s - fontSize * 0.1 }, pos, el.rot ? { transform: [{ rotate: `${el.rot}deg` }] } : null]}>
-          {editable ? (
-            <TouchableRipple
-              onPress={() => onEdit({ x: el.x * s, y: el.y * s, h: fontSize * 1.15, align: el.align })}
-              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              style={styles.editHit}
-              accessibilityLabel={`Düzenle: ${el.text}`}
-              testID={`onizleme-alan-${el.bind}`}
-            >
-              {txt}
-            </TouchableRipple>
-          ) : (
-            txt
-          )}
-        </View>
-      );
-    }
+    case 'text':
+      return <TextElementView el={el} s={s} paperW={paperW} editable={editable} onEdit={onEdit} />;
   }
 }
 
@@ -156,6 +169,9 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
   return (
     <View style={styles.wrap}>
       <View style={styles.area} onLayout={onLayout} testID="tambur-etiket-onizleme">
+        {/* Kâğıt MUTLAK katmanda: alanın yüksekliğini kâğıt belirlemesin (aksi hâlde kâğıt büyüyünce alan da büyür,
+            kaydırma içeriği alt şeridin altına taşar — cihaz 2026-11-11). Alan = kalan yer; kâğıt ona sığar. */}
+        <View style={styles.paperLayer} pointerEvents="box-none">
         {s > 0 && (
           <View style={[styles.paper, { width: wMm * s, height: hMm * s }]}>
             {preview?.elements
@@ -187,6 +203,7 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
             {overlay?.({ w: wMm * s, h: hMm * s })}
           </View>
         )}
+        </View>
       </View>
       {stale && (
         <View style={styles.staleRow}>
@@ -200,7 +217,8 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, gap: 4 },
-  area: { flex: 1, minHeight: 120, alignItems: 'center', justifyContent: 'center' },
+  area: { flex: 1, minHeight: 120 },
+  paperLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   paper: {
     backgroundColor: palette.white,
     borderRadius: 6,
@@ -213,6 +231,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
+  emptyHit: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: palette.red[600], borderRadius: 3, paddingHorizontal: 3, backgroundColor: palette.red[50] },
+  emptyText: { color: palette.red[700], fontStyle: 'italic' },
   editHit: { backgroundColor: EDIT_BG, borderBottomWidth: 2, borderBottomColor: EDIT_BORDER, borderRadius: 3, paddingHorizontal: 2 },
   rowsPad: { padding: 10, gap: 4 },
   rowHit: { alignSelf: 'flex-start' },
