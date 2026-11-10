@@ -44,7 +44,7 @@ export function isCursorRequested(req: Request): boolean {
 /** Liste sözlüğü — bu adlar süzgeç DEĞİL, sayfalama/sıralama/arama/tarih/cursor bayraklarıdır; çıplak gelmeleri meşru. */
 export const LIST_QUERY_RESERVED: ReadonlySet<string> = new Set([
   "page", "pageSize", "sortBy", "sortOrder", "search", "dateField", "dateFrom", "dateTo",
-  "cursor", "limit", "mode", "withTotal", "withSummary", "withArchived", "withOrderDetail", "includeInactive",
+  "cursor", "limit", "mode", "withTotal", "withSummary", "withArchived", "withOrderDetail", "withMeterSummary", "includeInactive",
 ]);
 
 /**

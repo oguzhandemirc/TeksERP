@@ -1,6 +1,6 @@
 // İş Emirleri tek satır filtre çubuğu + kayıt sözleşmesi (2026-11-07 dalga 1).
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
@@ -62,9 +62,19 @@ describe("İş Emirleri — tek satır", () => {
     expect(t.setShowCompleted).toHaveBeenCalledWith(false);
   });
 
+  it("⭐ 'Beyandan uzun' '+ Filtre'de; seçilince URL'ye filter[meterCheck]=LONGER yazar, Temizle siler", () => {
+    const t = setup("/?search=x");
+    fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
+    act(() => { fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitemcheckbox", { name: "Beyandan uzun" })); });
+    expect(t.url()).toBe("?search=x&filter[meterCheck]=LONGER");
+    expect(screen.getByTestId("filter-chip-metreUzun").dataset.active).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Temizle" }));
+    expect(t.url()).toBe("?search=x");
+  });
+
   it("kayıt allowlist'i: Durum/konum + fason yeri + tanımlar; varsayılan son 30 gün açılış", () => {
     const cfg = workOrderPersistConfig(FILTERS);
-    for (const k of ["filter[status]", "filter[konumIstasyon]", "filter[konumSinifi]", "filter[fasonFirma]", "filter[type]", "filter[customerId]"]) expect(isPersistedKey(k, cfg)).toBe(true);
+    for (const k of ["filter[meterCheck]", "filter[status]", "filter[konumIstasyon]", "filter[konumSinifi]", "filter[fasonFirma]", "filter[type]", "filter[customerId]"]) expect(isPersistedKey(k, cfg)).toBe(true);
     expect(isPersistedKey("filter[eski]", cfg)).toBe(false);
     expect(cfg.defaultDate).toEqual({ field: "createdAt", preset: "last30" });
   });

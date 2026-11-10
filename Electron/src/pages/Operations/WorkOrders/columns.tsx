@@ -12,6 +12,7 @@ import { LocationCell } from "./LocationCell";
 import { locationText } from "./location";
 import { TERIM } from "@/lib/terim";
 import { FasonTag } from "./FasonTag";
+import { METER_CELL_BADGE_CLASS, meterCellText, meterCellView } from "./meter-cell";
 
 // İlerleme = üretimden ÇIKAN ÷ üretime GİREN (detay sağlık şeridiyle birebir aynı).
 // Hedef metraj %99 girilmediğinden hedef-bazlı oran kullanılmaz. Tamamlanan-adım
@@ -218,6 +219,22 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     cell: ({ row }) => {
       const text = orderedText(row.original);
       return text ? <span className="tabular-nums text-xs">{text}</span> : <span className="text-muted-foreground">—</span>;
+    },
+  },
+  {
+    // METRE (GK 2026-11-10): beyan ↔ ölçülen İE toplamı; uzun turuncu rozet, kısa gri rozet, gerisi sade gri.
+    id: "meter",
+    header: "Metre",
+    meta: { label: "Metre", exportValue: (wo: WorkOrder) => meterCellText(wo.meterSummary) },
+    cell: ({ row }) => {
+      const v = meterCellView(row.original.meterSummary);
+      if (!v) return <span className="text-muted-foreground">—</span>;
+      if (!v.badge) return <span className="whitespace-nowrap tabular-nums text-xs text-muted-foreground" title={v.title}>{v.text}</span>;
+      return (
+        <Badge variant="muted" className={`whitespace-nowrap px-1.5 text-[11px] tabular-nums ${METER_CELL_BADGE_CLASS[v.tone === "longer" ? "longer" : "shorter"]}`} title={v.title}>
+          {v.text}
+        </Badge>
+      );
     },
   },
   {

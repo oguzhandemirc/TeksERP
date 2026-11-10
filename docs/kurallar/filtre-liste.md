@@ -56,6 +56,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Kesim çocuklarına `createdMachineId` damgala (cutWarehouseRoll · finalizeWarehouseCut · cutOpenFabric · finalizeOpenFabric); yoksa "Bu makine" süzgeci kesimleri görmez.
 - **[ÇEKİRDEK]** Süzgeci ELLE okuyan liste ucu sorguyu `.strict()` Zod şemasıyla okur: tanınmayan parametre 400; istemcinin gönderdiği ad desteklenir (fatura listesi `shipmentId` CSV `readIdCondition`, `limit` = `pageSize`).
 - [ÇEKİRDEK] Sipariş "Nerede?" türetmesi YALNIZ `order-where.helper`da, sekme/firma/gün süzgeci YALNIZ `order-where-filter.helper`da (bellek `deriveOrderWhere` ↔ Prisma `orderWhereFilterParts` boğaz-ikiz); cümleyi panel tek saf fonksiyonda kurar (`order-where-text.ts`); liste satırına sayfa başına sabit sorguyla eklenir, sipariş başına sorgu yazma; üretim kapalıyken üretim-türevi süzgeç 403.
+- **[ÇEKİRDEK]** İE listesi metre özetini yalnız `withMeterSummary=true` ile ekle ve `meter-comparison.service` `workOrderMeterSummaries` (tek kenar sorgusu + tek `resolvePartyMeters`, toplam `meterTotalsOf`) ile kur; "Beyandan uzun" (`filter[meterCheck]=LONGER`, tanınmayan 400) `buildListWhere`in sonunda taban where'in adaylarını (≤2000, üstü 400 `METER_FILTER_TOO_BROAD`) çözücüden geçirip `id IN` ekler — ikinci formül ya da İE başına sorgu yazma · bekçi: `test_ie_liste_metre` <sub>(arşiv:2026-11-10 İE listesi metre sütunu)</sub>
 
 ## Panel (Electron)
 

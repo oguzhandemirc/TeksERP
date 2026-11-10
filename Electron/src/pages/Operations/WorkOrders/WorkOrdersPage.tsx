@@ -99,7 +99,7 @@ export function WorkOrdersPage() {
 
   const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
-    fetchFn: workOrderService.listCursor,
+    fetchFn: workOrderService.listCursorWithMeter,
     columns: workOrderColumns,
     defaultPageSize: 50,
     forceFilters,

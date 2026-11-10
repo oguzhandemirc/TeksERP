@@ -1,6 +1,7 @@
 import type { MaterialProvider, RollStage, RollStatus, StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type { WorkOrderLocation } from "./location";
+import type { WorkOrderMeterSummary } from "./meter-cell";
 
 /** findById response'unda her adım için anlık rulo özeti. List view'de boş gelir. */
 export interface StepRollSummary {
@@ -136,6 +137,8 @@ export interface WorkOrder {
   /** Liste response'unda — bağlı sipariş satırlarının toplam talep metrajı (m).
    *  Stok üretiminde / siparişe bağlı değilken 0. Çıkan/giren ile sipariş kıyası için. */
   orderedMeters?: number;
+  /** Liste response'unda (`withMeterSummary=true`) — beyan ↔ ölçülen İE toplamı; partisizde null, eski backend'de yok. */
+  meterSummary?: WorkOrderMeterSummary | null;
   /** Liste response'unda — şu an mal tutulan fason istasyon adları (genelde tek;
    *  AT_SUBCONTRACTOR toplar). Boş = şu an fasonda mal yok. "Şu an: Boyahane" rozeti. */
   currentFasonStations?: string[];
