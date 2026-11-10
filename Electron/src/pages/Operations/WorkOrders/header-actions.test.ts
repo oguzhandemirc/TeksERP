@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest";
 import {
   HEADER_ACTION_GROUPS,
+  SHEET_ACTION_GROUPS,
+  sheetActionVisibility,
   headerActionVisibility,
   layoutHeaderActions,
   type HeaderActionId,
@@ -62,5 +64,24 @@ describe("İE başlık eylem grupları", () => {
     const i = headerActionVisibility(wo("IN_PROGRESS"), ["workorder:write"]);
     expect(i.complete).toBe(true);
     expect(i.unlinkOrder).toBe(false);
+  });
+});
+
+describe("İE yan panel eylem grupları (aynı görünürlük kaynağı)", () => {
+  it("§S1 başlığın her eylemi + edit + printHistory TAM BİR panel grubunda", () => {
+    const seen = SHEET_ACTION_GROUPS.flatMap((g) => g.actions);
+    expect([...seen].sort()).toEqual([...ALL, "edit", "printHistory"].sort());
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  it("§S2 panel görünürlüğü başlığınkini birebir taşır; edit düzenleme yolu ister, printHistory baskı izni", () => {
+    const w = wo("IN_PROGRESS");
+    const perms = ["workorder:write"];
+    const s = sheetActionVisibility(w, perms, true);
+    for (const a of ALL) expect(s[a]).toBe(headerActionVisibility(w, perms)[a]);
+    expect(s.edit).toBe(true);
+    expect(s.printHistory).toBe(false);
+    expect(sheetActionVisibility(w, perms, false).edit).toBe(false);
+    expect(sheetActionVisibility(w, ["system:print-history"], true)).toMatchObject({ printHistory: true, edit: false });
   });
 });

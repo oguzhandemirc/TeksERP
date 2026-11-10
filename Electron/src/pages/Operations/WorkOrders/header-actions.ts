@@ -1,6 +1,7 @@
-// İE detay başlığının eylem yerleşimi — saf (JSX'siz): her eylemin görünürlüğü + grup → öğe eşlemesi.
-// Görünürlük koşulları eski düz düğmelerle birebir; yalnız yerleşim değişir (boş grup çizilmez, tek öğeli grup düz düğme).
+// İE eylem yerleşimi — saf (JSX'siz): görünürlük + grup → öğe eşlemesi; detay başlığı VE liste yan paneli buradan.
+// Görünürlük koşulları tek yerde; yüzeyler yalnız grup kümesinde ayrışır (boş grup çizilmez, tek öğeli grup düz düğme).
 import { matchesPermission } from "@/types/auth";
+import { SYSTEM_PRINT_HISTORY_ACCESS } from "@/lib/permissions";
 import { canUnlinkOrder } from "./unlink-order";
 import type { WorkOrder } from "./types";
 
@@ -18,13 +19,17 @@ export type HeaderActionId =
 
 export type HeaderGroupId = "uretim" | "degistir" | "kayitlar" | "durum";
 
-export interface HeaderGroup {
-  id: HeaderGroupId;
+export interface ActionGroup<A extends string, G extends string> {
+  id: G;
   label: string;
-  actions: readonly HeaderActionId[];
-  /** Menüde bunlardan önce ayırıcı çizilir (yıkıcı eylemler en altta, ayrı). */
-  destructive?: readonly HeaderActionId[];
+  actions: readonly A[];
+  /** Yıkıcı öğe (kırmızı); `separateFrom` verilmezse ayırıcı da bunlardan önce çizilir. */
+  destructive?: readonly A[];
+  /** Menüde bunların ilk görüneninden önce ayırıcı çizilir. */
+  separateFrom?: readonly A[];
 }
+
+export type HeaderGroup = ActionGroup<HeaderActionId, HeaderGroupId>;
 
 export const HEADER_ACTION_GROUPS: readonly HeaderGroup[] = [
   { id: "uretim", label: "Üretim", actions: ["addBatch", "fasonReceive", "linkOrder", "unlinkOrder"] },
@@ -67,15 +72,58 @@ export function headerActionVisibility(wo: WoForActions, permissions: readonly s
   };
 }
 
-export type HeaderSlot =
-  | { kind: "button"; group: HeaderGroupId; action: HeaderActionId }
-  | { kind: "menu"; group: HeaderGroupId; label: string; items: HeaderMenuItem[] };
+export type ActionMenuItem<A extends string> = { kind: "item"; action: A; destructive: boolean } | { kind: "separator" };
+export type ActionSlot<A extends string, G extends string> =
+  | { kind: "button"; group: G; action: A }
+  | { kind: "menu"; group: G; label: string; items: ActionMenuItem<A>[] };
 
-export type HeaderMenuItem = { kind: "item"; action: HeaderActionId; destructive: boolean } | { kind: "separator" };
+export type HeaderSlot = ActionSlot<HeaderActionId, HeaderGroupId>;
+export type HeaderMenuItem = ActionMenuItem<HeaderActionId>;
 
 export function layoutHeaderActions(visible: HeaderActionVisibility): HeaderSlot[] {
-  const slots: HeaderSlot[] = [];
-  for (const g of HEADER_ACTION_GROUPS) {
+  return layoutActionGroups(HEADER_ACTION_GROUPS, visible);
+}
+
+// ── Liste yan paneli (quick view): üç düğme — "Detayı Aç" (grupsuz) + Düzenle ▾ + Diğer ▾ ──
+export type SheetActionId = HeaderActionId | "edit" | "printHistory";
+export type SheetGroupId = "duzenle" | "diger";
+export type SheetActionVisibility = Record<SheetActionId, boolean>;
+
+export const SHEET_ACTION_GROUPS: readonly ActionGroup<SheetActionId, SheetGroupId>[] = [
+  { id: "duzenle", label: "Düzenle", actions: ["edit", "linkOrder", "unlinkOrder", "changeColor", "changeWidth", "addBatch"] },
+  {
+    id: "diger",
+    label: "Diğer",
+    actions: ["fasonReceive", "documents", "events", "printHistory", "complete", "cancel"],
+    separateFrom: ["complete", "cancel"],
+    destructive: ["cancel"],
+  },
+];
+
+/** Başlık görünürlüğü + panelin iki ek öğesi; `editable` = çağıran düzenleme yolu verdi mi. */
+export function sheetActionVisibility(
+  wo: WoForActions,
+  permissions: readonly string[],
+  editable: boolean,
+): SheetActionVisibility {
+  return {
+    ...headerActionVisibility(wo, permissions),
+    edit: editable && canEditWorkOrder(wo, permissions),
+    // Baskı geçmişi sayfasıyla AYNI izin kümesi (PrintHistoryLink ile eş).
+    printHistory: SYSTEM_PRINT_HISTORY_ACCESS.some((p) => matchesPermission(permissions, p)),
+  };
+}
+
+export function layoutSheetActions(visible: SheetActionVisibility): ActionSlot<SheetActionId, SheetGroupId>[] {
+  return layoutActionGroups(SHEET_ACTION_GROUPS, visible);
+}
+
+export function layoutActionGroups<A extends string, G extends string>(
+  groups: readonly ActionGroup<A, G>[],
+  visible: Record<A, boolean>,
+): ActionSlot<A, G>[] {
+  const slots: ActionSlot<A, G>[] = [];
+  for (const g of groups) {
     const shown = g.actions.filter((a) => visible[a]);
     if (shown.length === 0) continue;
     const [only] = shown;
@@ -83,12 +131,13 @@ export function layoutHeaderActions(visible: HeaderActionVisibility): HeaderSlot
       slots.push({ kind: "button", group: g.id, action: only });
       continue;
     }
-    const destructive = new Set(g.destructive ?? []);
-    const items: HeaderMenuItem[] = [];
+    const destructive = new Set<A>(g.destructive ?? []);
+    const separateFrom = new Set<A>(g.separateFrom ?? g.destructive ?? []);
+    const items: ActionMenuItem<A>[] = [];
     let separated = false;
     for (const a of shown) {
       const d = destructive.has(a);
-      if (d && !separated && items.length > 0) {
+      if (separateFrom.has(a) && !separated && items.length > 0) {
         items.push({ kind: "separator" });
         separated = true;
       }
