@@ -58,6 +58,8 @@ export interface RecordRollDefectsInput {
   defects: readonly DefectRowInput[];
   /** Metre üst sınırı; verilmezse topun güncel metrajı. */
   maxMeter?: number;
+  /** Kural 4 (GK metre, 2026-11-10): kurşunda topun kayıtlı metresini aşan konum ENGELLENMEZ (iz okumada türetilir). */
+  allowBeyondLength?: boolean;
   /** Tekil yolda istemci kimliği (offline idempotency); PK çakışması çağırana bırakılır. */
   id?: string;
 }
@@ -77,7 +79,7 @@ async function prepareDefectsTx(tx: Tx, input: RecordRollDefectsInput) {
   }
   const max = input.maxMeter ?? Number(roll.currentQty);
   for (const d of input.defects) {
-    if (!(d.startMeter >= 0) || d.startMeter > max) {
+    if (!(d.startMeter >= 0) || (!input.allowBeyondLength && d.startMeter > max)) {
       throw AppError.badRequest(`Hata metresi (${d.startMeter}) 0 ile ${max} arasında olmalı`, { code: "INVALID_DEFECT_METER" });
     }
   }

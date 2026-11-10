@@ -401,7 +401,7 @@ export async function setFeatureFlags(
       if (typeof v !== "string" || !SERVICE_BILLING_METER_BASES.includes(v as ServiceBillingMeterBasis)) {
         throw AppError.badRequest(`financeServiceBillingMeterBasis şunlardan biri olmalı: ${SERVICE_BILLING_METER_BASES.join(", ")}`);
       }
-      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, v, "Hizmet faturası metre tabanı — çıkış · giriş · bildirilen", userId);
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, v, "Hizmet faturası metre tabanı — çıkış · giriş · bildirilen · parti beyanı/ölçülenin büyüğü", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingMissingMeter")) {
       const v = input.financeServiceBillingMissingMeter;

@@ -103,6 +103,7 @@ import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
 import { recordRollDefectTx } from "./helpers/roll-defect.helper";
+import { beyondDeclaredDefectWarning, rollDeclaredMeters } from "./helpers/meter-compare.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE, isActionableRollError } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
 
@@ -886,6 +887,7 @@ export class KursunQcService {
           defectTypeId: data.defectTypeId,
           userId,
           stationGate: "FLOW",
+          allowBeyondLength: true,
         }),
       );
     } catch (e) {
@@ -917,10 +919,14 @@ export class KursunQcService {
       },
     });
 
+    // Kural 4: beyanı aşan konum kayıt engeli değil — sarı uyarı; iz `meter-compare.helper` okumasında.
+    const declared = (await rollDeclaredMeters([data.rollId])).get(data.rollId);
+    const beyond = declared !== undefined && new Prisma.Decimal(data.startMeter).gt(declared);
     return {
       success: true,
       data: err,
       message: `${created.errorType} · ${data.startMeter}. metrede`,
+      ...(beyond ? { warnings: [beyondDeclaredDefectWarning(data.startMeter, Number(declared))] } : {}),
     };
   }
 

@@ -300,7 +300,7 @@ export const updateSchema = z.strictObject({
   financeAutoDraftFromShipmentEnabled: z.boolean().optional(),
   /** H7: hizmet faturası — ana anahtar + enum alt ayarlar (servis kümeleriyle birebir; PERIOD_END → dönem sonu taslağı, H8). */
   financeServiceBillingEnabled: z.boolean().optional(),
-  financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED"]).optional(),
+  financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED", "MAX_DECLARED"]).optional(),
   financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
   financeServiceBillingBrodeUnit: z.enum(["METER", "PIECE", "STITCH"]).optional(),
   financeServiceBillingStepWorks: z.boolean().optional(),

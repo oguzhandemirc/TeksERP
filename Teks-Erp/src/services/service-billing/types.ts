@@ -41,6 +41,11 @@ export interface ServiceDraftWorkRow {
    * iş taslağa GİRMEZ; listede yalnız bilgi satırı. Canlı katalog okunmaz.
    */
   excludedReason: "REWORK_OUR_FAULT" | null;
+  /**
+   * GK metre (2026-11-10): yalnız `finance.serviceBilling.meterBasis = MAX_DECLARED` iken — işin parti payı olarak beyan,
+   * partinin en büyük ölçümü ve faturalanan metre (kural 1–2); diğer tabanlarda anahtar YOK (bayt-aynı).
+   */
+  meterCompare?: { declaredM: number | null; measuredM: number | null; billedM: number; basis: "DECLARED" | "MEASURED" };
 }
 
 /** F4/F9 ek alanları — mevcut taslak yanıtlarına eklenir (yoksa eski davranış). */

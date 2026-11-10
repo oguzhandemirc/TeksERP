@@ -9,6 +9,7 @@ import { requireEmanetEnabled, requireProductionEnabled } from "../middlewares/m
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { listRollOwnerCustomers } from "../services/roll-owner.service";
+import { getRollMeterTrail } from "../services/meter-comparison.service";
 import { RollCustomerCodeService } from "../services/roll-customer-code.service";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
@@ -527,6 +528,31 @@ router.get("/:id", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL
 // kullaniyor ve saha kullanicilarina yeni bir izin atatmak, atanmasi unutulacak
 // bir adim daha demekti (2026-08-01 kursun bypass vakasi).
 router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", "roll:history", ...MOBILE_ROLL_READ), controller.getRollHistory);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/meter-trail:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Tambur metre şeridi — topun beyanı, önceki ölçümü (kurşun çıkışı → başka ölçen istasyon), kesilen ve kalan
+ *     description: Simüle okumalar ölçüme girmez; kesim referansı aşınca `overReference=true` (engel değil, uyarı).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ rollId, declaredM, prior: { kind: KURSUN_OUT|STATION_OUT, stationName, meters, at } | null, referenceM, cutSoFarM, remainingM, overReference }" }
+ *       404: { description: Top bulunamadı }
+ */
+router.get("/:id/meter-trail", verifyToken, requireAnyPermission("roll:read", "mobile:tambur", "mobile:kk2-kursun"), async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await getRollMeterTrail(req.params.id) });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

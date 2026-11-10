@@ -417,7 +417,10 @@ async function step7(): Promise<void> {
   const replay = await report(120, firstId);
   check("§7 aynı clientErrorId yeniden gönderim → aynı hata kaydı (idempotent)", replay.status === 201 && (replay.data as { id?: string } | undefined)?.id === firstId, `${replay.status} ${replay.code ?? ""}`);
   const over = await report(9999);
-  check("§7 top metresini aşan konum → 400 INVALID_DEFECT_METER", over.status === 400 && over.code === "INVALID_DEFECT_METER", `${over.status} ${over.code ?? ""}`);
+  // Kural 4 (GK metre, 2026-11-10): kurşunda topun metresini aşan konum engel değil — kayıt alınır (iz İE metre karşılaştırmasında).
+  check("§7 top metresini aşan konum → 201 (engel yok, kural 4)", over.status === 201 && meterOf(over) === 9999, `${over.status} ${over.code ?? ""}`);
+  const overId = (over.data as { id?: string } | undefined)?.id;
+  if (overId) await prisma.rollError.delete({ where: { id: overId } });
   const rows = await prisma.rollError.findMany({ where: { rollId: ctx.rollId }, orderBy: { startMeter: "asc" }, select: { startMeter: true, origin: true, isProcessed: true, detectedAtStepId: true, defectTypeId: true } });
   check("§7 ⭐ topta iki hata metrajı: kurşun adımında, PROCESS, işlenmemiş (tamburda karara bağlanacak)",
     rows.length === 2 && JSON.stringify(rows.map((r) => Number(r.startMeter))) === "[120,1830]" && rows.every((r) => r.origin === "PROCESS" && !r.isProcessed && r.detectedAtStepId === ctx.kursunStepId && r.defectTypeId === ctx.defectTypeId),

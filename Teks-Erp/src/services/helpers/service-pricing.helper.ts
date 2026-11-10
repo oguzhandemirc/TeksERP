@@ -27,6 +27,7 @@ import { gramPriceCurrentWarning, gramPriceCustomerLaterWarning, gramPriceEntere
 import { loadServiceTierPrices, pickServicePrice, tierKey, tierMissingWarning } from "./service-price-pick.helper";
 import { missingQuantityWarning, priceUnitMatches, serviceWorkQuantity, serviceWorkUnit } from "./service-quantity.helper";
 import { readFinanceKursunGramPriceBasis, type KursunGramPriceBasis } from "../system-setting.service";
+import { markFlagFamily, withPartyScale, type PartyScalableWork } from "./service-party-meter.helper";
 
 /** `kursun-qc.service` reopenStep damga sebebi — yeniden açılan adım yeni hizmettir. */
 const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
@@ -34,8 +35,8 @@ const KURSUN_REOPEN_REASON = "KURSUN_REOPEN";
 export type ServiceMeterBasis = "OUT" | "IN" | "DECLARED" | "CUT" | "RECEIVED" | "WOVEN";
 export type ServiceGramajSource = "APPLIED" | "WO_TARGET" | "NONE";
 
-/** Tek iş (top × adım) — fatura bağı (H7) bu satırdan doğar. */
-export interface ServiceRollWork {
+/** Tek iş (top × adım) — fatura bağı (H7) bu satırdan doğar. `meterCompare` yalnız `MAX_DECLARED` tabanında: işin parti payı (beyan / ölçülen / faturalanan); diğer tabanlarda anahtar yok. */
+export interface ServiceRollWork extends Pick<PartyScalableWork, "meterCompare"> {
   rollId: string;
   /** Bayrak işinde adım bilinmeyebilir (kesim depoda, ölçümsüz iş) — bağ anahtarı NULLS NOT DISTINCT. */
   workOrderStepId: string | null;
@@ -130,8 +131,9 @@ async function loadReadings(works: Array<{ rollId: string; workOrderStepId: stri
 
 /** H7 seçenekleri — verilmezse H6 davranışı (OUT → IN → DECLARED, uyarısız, hizmet anına fiyat). */
 export interface ServiceResolveOptions {
-  /** Faturalanan metre tabanı: OUT zinciri OUT → IN → DECLARED; IN zinciri IN → DECLARED; DECLARED yalnız beyan. */
-  meterBasis?: "OUT" | "IN" | "DECLARED";
+  /** Faturalanan metre tabanı: OUT zinciri OUT → IN → DECLARED; IN zinciri IN → DECLARED; DECLARED yalnız beyan;
+   *  MAX_DECLARED = OUT zinciriyle keşif + parti metresine (kural 1–2, `meter-compare.helper`) oranla dağıtım. */
+  meterBasis?: "OUT" | "IN" | "DECLARED" | "MAX_DECLARED";
   /** Seçilen okuma yoksa: beyanla yaz + uyar ya da işi taslaktan çıkar (uyarıyla). */
   missingMeter?: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   /** Verilirse bütün fiyatlar bu ana çözülür (priceDate = DISPATCH_DAY). */
@@ -199,21 +201,21 @@ export function simulatedStepWarning(count: number): string {
 }
 
 /** Kurşun dışı bayrak işleri (H10) iş satırına; K4 (D4-B2): simüle kesim metresi düşer, uyarı taslakta/önizlemede görünür. */
-async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; brodeUnit: ServiceQtyUnit; db: Db; warnings: string[] }): Promise<{ works: ServiceRollWork[]; claims: Array<{ rollId: string; propertyId: string }> }> {
-  const { db, warnings } = ctx;
-  const flag = await listFlagServiceWorks(rollIds, basis, { shippedRollIds: ctx.shippedRollIds, db });
-  if (flag.simulatedCutRollIds.length > 0) warnings.push(simulatedCutWarning(flag.simulatedCutRollIds.length));
+async function loadFlagWorks(rollIds: string[], basis: "OUT" | "IN" | "DECLARED", ctx: { shippedRollIds?: Set<string>; brodeUnit: ServiceQtyUnit; db: Db; warnings: string[]; partyScaleWith?: ServiceRollWork[] }): Promise<{ works: ServiceRollWork[]; claims: Array<{ rollId: string; propertyId: string }> }> {
+  const flag = await listFlagServiceWorks(rollIds, basis, { shippedRollIds: ctx.shippedRollIds, db: ctx.db });
+  if (flag.simulatedCutRollIds.length > 0) ctx.warnings.push(simulatedCutWarning(flag.simulatedCutRollIds.length));
   // Adımsız bayrak işi (CUT/DECLARED) özelliğiyle adım işini bastırır (F3 bayrak önceliği).
   const claims = flag.works.filter((f) => f.workOrderStepId === null).map((f) => ({ rollId: f.rollId, propertyId: f.propertyId }));
-  const works = flag.works.map((f): ServiceRollWork => {
+  // MAX_DECLARED: kurşun işleriyle birlikte parti metresine ölçeklenir (varsayılan tabanlarda `partyScaleWith` yok).
+  const works = await withPartyScale(ctx.partyScaleWith, flag.works.map((f): ServiceRollWork => {
     const qtyUnit = serviceWorkUnit(f.propertyCode, ctx.brodeUnit);
-    return {
+    return markFlagFamily<ServiceRollWork>({
       rollId: f.rollId, workOrderStepId: f.workOrderStepId, source: "PROPERTY", valueId: f.valueId, valueName: f.propertyName, gramajFrom: "NONE",
       ...(f.valueName ? { tierLabel: `${f.propertyName} ${f.valueName}` } : {}),
       serviceItemId: f.serviceItemId, meters: f.meters, meterBasis: f.meterBasis, readingId: f.readingId, serviceAt: f.serviceAt, unitPrice: null,
       qtyUnit, quantity: serviceWorkQuantity(f, qtyUnit),
-    };
-  });
+    }, f.propertyId);
+  }), { brodeUnit: ctx.brodeUnit, db: ctx.db, loadReadings });
   return { works, claims };
 }
 
@@ -330,7 +332,7 @@ export async function resolveServiceItemsForRolls(params: {
   });
   const valueMap = await loadValueServiceMap([...new Set(draft.map((d) => d.valueId).filter((v): v is string => v !== null))], db);
   const { out: readings, firstOut } = await loadReadings(apps, db);
-  const basis = opt.meterBasis ?? "OUT";
+  const basis: "OUT" | "IN" | "DECLARED" = opt.meterBasis === undefined || opt.meterBasis === "MAX_DECLARED" ? "OUT" : opt.meterBasis;
 
   const allWorks: ServiceRollWork[] = draft.map(({ a, valueId, valueName, gramajFrom }) => {
     const out = basis === "OUT" ? readings.get(`${a.rollId}:${a.workOrderStepId}:${MeterPhase.OUT}`) : undefined;
@@ -348,7 +350,7 @@ export async function resolveServiceItemsForRolls(params: {
       quantity: picked ? picked.r.meters : a.meters,
     };
   });
-  const flag = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings });
+  const flag = await loadFlagWorks(rollIds, basis, { shippedRollIds: opt.shippedRollIds, brodeUnit: opt.brodeUnit ?? "METER", db, warnings, partyScaleWith: opt.meterBasis === "MAX_DECLARED" ? allWorks : undefined });
   const stepWorks = opt.stepWorks ? await loadStepWorks(rollIds, basis, { claimed: [...allWorks, ...flag.works], flagClaims: flag.claims, db, warnings }) : [];
   const weavingWorks = opt.weavingWorks ? await loadWeavingRollWorks(rollIds, { keyOf: serviceWorkKey, claimed: [...allWorks, ...flag.works, ...stepWorks], db, warnings }) : [];
   // F9: bizim hatamızdan yeniden işlem İE'sinin işi (adım · bayrak · kurşun) faturaya girmez, uyarıyla görünür.

@@ -9,6 +9,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderConsumableUsage } from "../services/consumable-usage.service";
+import { getWorkOrderMeterComparison } from "../services/meter-comparison.service";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
@@ -735,6 +736,31 @@ router.get("/:id/kursun-gramaj", verifyToken, requireAnyPermission("workorder:wr
  *       200: { description: "{ kursun: { target, rows, totals }, deliveryNoteGramaj? } — deliveryNoteGramaj yalnız gelen belge modülü açıkken (H9b; gelen belgesiz İE'de null)" }
  */
 router.get("/:id/process-summary", verifyToken, requirePermission("workorder:read"), getWorkOrderSummary);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/meter-comparison:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Beyan ↔ ölçülen metre — parti başına beyan, kurşun çıkan, tambura giren, tamburdan çıkan, fark ve faturalanan
+ *     description: Faturalanan = partinin en büyük ölçümü beyandan %0,5 ve daha fazla uzunsa ölçülen, değilse beyan. Simüle okumalar ölçüme girmez.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ tolerancePct, parties[{ partyKey, batchNo, declaredM, declaredSource, kursunOutM, tamburInM, tamburCutM, measuredMaxM, billedM, billedBasis, diffM, diffPct, withinTolerance, longerThanDeclared, defectsBeyondDeclared[] }], totals }" }
+ *       404: { description: İş emri bulunamadı }
+ */
+router.get("/:id/meter-comparison", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, data: await getWorkOrderMeterComparison(req.params.id) });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

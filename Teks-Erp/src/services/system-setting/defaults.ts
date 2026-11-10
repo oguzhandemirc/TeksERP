@@ -102,8 +102,9 @@ export const DEFAULT_PRODUCTION_SCAN_ROUTE_STATIONS: ProductionScanRouteStations
 export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE: boolean = true;
 
 /** H7: hizmet faturası alt ayarları — enum üçlüsü (type + dizi + varsayılan); varsayılan = bugünkü davranış. */
-export type ServiceBillingMeterBasis = "OUT" | "IN" | "DECLARED";
-export const SERVICE_BILLING_METER_BASES: ServiceBillingMeterBasis[] = ["OUT", "IN", "DECLARED"];
+/** MAX_DECLARED (GK metre, 2026-11-10): parti başına beyan ile en büyük ölçümün büyüğü (%0,5 tolerans) — `meter-compare.helper`. */
+export type ServiceBillingMeterBasis = "OUT" | "IN" | "DECLARED" | "MAX_DECLARED";
+export const SERVICE_BILLING_METER_BASES: ServiceBillingMeterBasis[] = ["OUT", "IN", "DECLARED", "MAX_DECLARED"];
 export const DEFAULT_SERVICE_BILLING_METER_BASIS: ServiceBillingMeterBasis = "OUT";
 export type ServiceBillingMissingMeter = "DECLARED_WITH_WARNING" | "BLOCK_LINE";
 export const SERVICE_BILLING_MISSING_METER_MODES: ServiceBillingMissingMeter[] = ["DECLARED_WITH_WARNING", "BLOCK_LINE"];
