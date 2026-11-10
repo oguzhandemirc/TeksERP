@@ -56,7 +56,7 @@
 | `Teks-Erp/scripts/test_label_preview_single_copy.ts` | Etiket önizlemesinin kopya adedini (label.copies) DEVRALMAMASI — raster/HTML/komut üç dalında da tek kopya. | ✓ |  |  |
 | `Teks-Erp/scripts/test_label_rawcode.ts` | Uzman raw-code override motoru: {{alan}} ikamesi, bilinmeyen anahtar → boş, dil bazlı sanitize, readTemplateRawCode + preview. |  |  |  |
 | `Teks-Erp/scripts/test_label_routing_resolver.ts` | Birleşik etiket yönlendirme öncelik matrisi: dil override, şablon (explicit>route>default), format (cihaz medyası>sistem), cihaz seçimi (explicit>devi | ✓ |  |  |
-| `Teks-Erp/scripts/test_label_snapshot_audit_split.ts` | Niyet kaydı (seedRollLabelSnapshot, audit YOK) ile fiziksel baskı audit'i (recordPrintEvent → tam bir LABEL_PRINTED) ayrımı; delta 0 vs +1. | ✓ |  |  |
+| `Teks-Erp/scripts/test_label_snapshot_audit_split.ts` | Niyet kaydı (seedRollLabelSnapshot, audit YOK) ile fiziksel baskı audit'i (recordPrintEvent → tam bir LABEL_PRINTED) ayrımı; delta 0 vs +1. Basım anı değerleri ayrı `printed` bloğunda (metre/kalite/en/kg/parti), üst düzey anahtar değişmez (§4; sonda: weightKg satırı silinince 4c ❌). | ✓ |  |  |
 | `Teks-Erp/scripts/test_label_template_io.ts` | Şablon dışa/içe aktarım JSON zarfı round-trip + çoğaltma (exportTemplate/importTemplate/duplicateTemplate) ve parseCanvas bind whitelist'i. | ✓ |  |  |
 | `Teks-Erp/scripts/test_label_template_layout.ts` | Şablon-başına yerleşim (qrScale/lineStepMm): null → dile özel varsayılan (byte-compat), dolu → değer yansır + makul aralığa clamp; üç native dilde. |  |  |  |
 | `Teks-Erp/scripts/test_label_variant_selection.ts` | Boyut varyantı seçimi (pickVariant): ±1mm tolerans, exact > primary-fallback > en-eski-fallback > null; orientation normalize EDİLMEZ. |  |  |  |

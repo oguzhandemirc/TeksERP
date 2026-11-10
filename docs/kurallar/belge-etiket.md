@@ -118,6 +118,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] Donmuş belge HTML değil JSON (`PrintedDocument.snapshot` = company + docConfigOverride + doc); donan AYAR, kod değil → renderer'a görünür ekleme OPT-IN doğar.
 - [ÇEKİRDEK] Belgedeki sayı yalnız `docNum(snapshot)` (ticari yuvarlama, PDF = Excel); rejim donmuş zarfta (`numberRounding`, tek yazar `envelopeHead`); damgasız belge eski yuvarlamayla; "Güncel şablonla bas" damgayı tazelemez; CSS ölçüsü `cssFixed`; çıplak `toFixed` yok.
 - [ÇEKİRDEK] A4→A5 tek `scale()` YASAK, iki oran (genişlik ~0.68, yazı ~0.85), A4 bayt-bayt; profiller `doc-density.ts` (altı belge) + `fason-ceki.density.ts` + `traveler-card.density.ts`; belge kendi A4 sayısını verir, `scaleW`/`scaleF` uygular.
+- [ÇEKİRDEK] Top etiketinin basım anı değerleri (`lastLabelSnapshot.printed`: metre, kalite, kumaş/renk, parti no, bizim parti, kg, en, kat, alıcı) YALNIZ `buildPrintedValues`ten ayrı blokta yazılır; üst düzey niyet anahtarlarına dokunulmaz, RollProperty girmez, okuyucu bloksuz eski snapshot'ta kırılmaz. <sub>(arşiv:2026-11-10 Top kartı tablosu)</sub>
 - [ÇEKİRDEK] Fason çekisinde parti TEKİL `batchNumber`, kabul makbuzunda ÇOĞUL `batchNumbers`; çekide parti TOP başına; eski donmuş belge geriye dönük doldurulmaz, tazeleme yalnız reissue.
 
 ### Yasaklar
@@ -146,6 +147,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 
 - [ÇEKİRDEK] "PDF Kaydet" penceresi (`electron/ipc/pdf.ipc.ts`) JS KAPALI, preload'suz, ayrık oturum `tekserp-pdf` (yalnız data:/blob:/about: + `tekserp-pdf://doc/`, izin isteği RED); gezinme/webview/yeni pencere engelli, OS'e adres devretmez; dış kaynak PDF/ekran/baskıda yüklenmez.
 - [ÇEKİRDEK] "PDF Kaydet" belgeyi URL'ye gömmez, diske yazmaz (`tekserp-pdf://doc/<uuid>`); bayt kapısı (`Electron/shared/pdf-limits.ts`) kaydet diyaloğundan ÖNCE; tek kuyruk, süre sınırlı; hata sabit Türkçe + `ERR_` kodu, ham Chromium mesajı dönmez.
+- [ÇEKİRDEK] Top kartında asıl bilgilerin TEK kaynağı "Top bilgileri" tablosudur (`Rolls/card/RollInfoTable`); alt bölüm aynı satırı tekrarlamaz, köken/konum "Diğer ayrıntılar"da katlanır, işlem özellikleri veri güdümlü (değerli → kendi satırı, işaret → "İşlemler"). <sub>(arşiv:2026-11-10 Top kartı tablosu)</sub>
 - [ÇEKİRDEK] Türe özgü araç çubuğu kalemi `PrintedDocDialog`a GÖMÜLMEZ, slotla gelir (`toolbarPrintMenu` · `toolbarDownloads` · `optionsExtras` · `infoBar` · `printParams`).
 - [ÇEKİRDEK] Sevk irsaliyesinin TEK yüzeyi `ShipmentDocDialog`; `allowDraft` sevkiyat durumundan türer; `reissueOnlyWhenReconstructed` düşürülmez.
 - [ÇEKİRDEK] Toplu belge listesi TEK kaynak `GET /work-orders/:id/documents`; tür kutuları bulunanlardan; Yazdır = tek iş (`print-merge.ts`), PDF Kaydet = her belge ayrı dosya.

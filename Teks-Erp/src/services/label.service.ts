@@ -2485,7 +2485,31 @@ function buildDenormalizedSnapshot(
   }
   // İç alan: basılan etiketin alıcısı ("son baskı" izi; render alıcıyı topun kolonundan taze okur).
   if (labelData.consigneeId) snap.consigneeId = labelData.consigneeId;
-  return snap as Prisma.InputJsonValue;
+  return { ...snap, printed: buildPrintedValues(labelData) } as Prisma.InputJsonValue;
+}
+
+/**
+ * Basım anı DEĞERLERİ (top kartı "basılan değerler") — ayrı `printed` bloğunda: üst düzey anahtarları
+ * niyet/afiş okuyucuları (getRollLabel, etiketiOku) okur, onlara dokunulmaz. Boş alan yazılmaz; eski
+ * snapshot'ta blok yoktur. Özellikler (RollProperty) etikette basılmadığından GİRMEZ.
+ */
+function buildPrintedValues(labelData: LabelPayload): Record<string, string | number> {
+  const out: Record<string, string | number> = { lengthMeters: labelData.lengthMeters };
+  const put = (k: string, v: string | number | null | undefined) => {
+    if (v === null || v === undefined || v === "") return;
+    out[k] = v;
+  };
+  put("itemName", labelData.itemName);
+  put("colorName", labelData.colorName);
+  put("qualityGrade", labelData.qualityGrade);
+  put("batchNumber", labelData.batchNumber);
+  // Etiketin "Parti" yuvasıyla aynı öncelik (label-field-values: labelBatchNo > gelen belge partisi).
+  put("labelBatchNo", (labelData.labelBatchNo ?? "").trim() || labelData.deliveryNoteBatchNo);
+  put("weightKg", labelData.weightKg);
+  put("widthCm", labelData.widthCm);
+  put("foldType", labelData.foldType);
+  put("consigneeName", labelData.consigneeName);
+  return out;
 }
 
 /**

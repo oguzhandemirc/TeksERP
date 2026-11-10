@@ -23,6 +23,8 @@ interface Props {
   roll: Roll;
   /** Başarılı düzeltmeden sonra detay tazelenir. */
   onSaved?: () => void;
+  /** false: değerler başka yerde (top kartı "Top bilgileri" tablosu) — kart yalnız Düzelt şeridi; yazma izni yoksa çizilmez. */
+  showValues?: boolean;
 }
 
 /**
@@ -30,11 +32,12 @@ interface Props {
  * kadar düzeltilir (`PATCH /api/rolls/:id/label-texts`, sebep zorunlu). Boş alan = kumaşın kendi
  * adı/rengi basılır. Yeniden baskı mevcut "Etiket" düğmesinden yapılır.
  */
-export function RollLabelTextsCard({ roll, onSaved }: Props) {
+export function RollLabelTextsCard({ roll, onSaved, showValues = true }: Props) {
   const { hasPermission } = useRoleAccess();
   const canWrite = hasPermission("roll:write") || hasPermission("label:edit");
   const lock = labelTextsLockReason(roll.status);
   const [open, setOpen] = useState(false);
+  if (!showValues && !canWrite) return null;
 
   return (
     <Card>
@@ -57,14 +60,14 @@ export function RollLabelTextsCard({ roll, onSaved }: Props) {
             </Button>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+        {showValues && <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           <div className="text-xs text-muted-foreground">Kumaş adı</div>
           <div>{roll.labelItemName ?? <span className="text-muted-foreground">Kendi adı ({roll.item?.name ?? "—"})</span>}</div>
           <div className="text-xs text-muted-foreground">Renk</div>
           <div>{roll.labelColorName ?? <span className="text-muted-foreground">Kendi rengi ({roll.color?.name ?? "—"})</span>}</div>
           <div className="text-xs text-muted-foreground">Müşteri parti</div>
           <div>{roll.labelBatchNo ?? <span className="text-muted-foreground">—</span>}</div>
-        </div>
+        </div>}
         {canWrite && lock && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="etiket-bilgisi-kilit">
             <Lock className="h-3 w-3" /> {lock}

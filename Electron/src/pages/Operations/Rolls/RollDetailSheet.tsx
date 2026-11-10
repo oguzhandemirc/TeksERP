@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Tag, Pencil, Ruler, Wrench } from "lucide-react";
+import { Tag, Pencil, Ruler, Wrench, ChevronRight } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 import { RollTraceLink } from "./RollTraceLink";
 import { RollMeasurementsCard } from "./measurements/RollMeasurementsCard";
 import { RollIdentitySection } from "./card/RollIdentitySection";
-import { RollOwnershipSection } from "./card/RollOwnershipSection";
+import { RollInfoTable } from "./card/RollInfoTable";
 import { RollOriginSection } from "./card/RollOriginSection";
 import { RollLocationSection } from "./card/RollLocationSection";
 import { RollStateCards } from "./card/RollStateCards";
@@ -35,14 +35,19 @@ interface Props {
 }
 
 /**
- * TOP KARTI (2026-11-10, kullanıcı: "bu ürün kimin onu bile anlayamıyorum") — envanter detay kartı bölümleri:
- * Kimlik · Sahiplik · Nereden geldi · Nerede/ne durumda · Son hareketler. Veri yoksa satır/bölüm çizilmez.
+ * TOP KARTI — barkod başlığı + "Top bilgileri" tablosu (asıl bilgiler tek kaynak, 2026-11-10) · durum kartları ·
+ * son hareketler · etiket/kalite kartları; köken ve konum ayrıntıları katlanır "Diğer ayrıntılar"da.
  */
 export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const [labelRollId, setLabelRollId] = useState<string | null>(null);
   const [editRollId, setEditRollId] = useState<string | null>(null);
   const [rescueRollId, setRescueRollId] = useState<string | null>(null);
   const [qtyAdjustOpen, setQtyAdjustOpen] = useState(false);
+  // Ana top bağlantısı: o topun kartı bu kartın üstünde açılır (kapatınca buraya dönülür).
+  const [linkedRoll, setLinkedRoll] = useState<Roll | null>(null);
+  const openLinkedRoll = (id: string) => {
+    void rollService.getById(id).then((res) => { if (res.data) setLinkedRoll(res.data); });
+  };
   const { hasPermission } = useRoleAccess();
   const canManualAdjust = hasPermission("roll:manual-adjust");
   const emanetEnabled = useEmanetEnabled();
@@ -116,30 +121,37 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
 
         {r && roll && (
           <div className="mt-4 space-y-4">
-            {/* Sahiplik en üstte: "bu mal kimin?" kartın ilk cevabı. */}
-            <RollOwnershipSection roll={r} emanetEnabled={emanetEnabled} />
             <RollIdentitySection roll={r} />
-            {/* İptal edilmiş topta asıl soru "neden ölü, düzeltebilir miyim" — kimliğin hemen ardında. */}
+            <RollInfoTable roll={r} emanetEnabled={emanetEnabled} onOpenRoll={openLinkedRoll} />
+            {/* İptal edilmiş topta asıl soru "neden ölü, düzeltebilir miyim" — tablonun hemen ardında. */}
             {detail?.status === "CANCELLED" && <RollCancelCard roll={detail} />}
-            <RollOriginSection roll={r} />
-            <RollLocationSection roll={r} />
             <RollStateCards r={r} detail={detail} roll={roll} detailLoading={detailQuery.isLoading} />
             {canSeeHistory && (
               <RollRecentEvents events={historyQuery.data?.data?.events} isLoading={historyQuery.isLoading} isError={historyQuery.isError} />
             )}
-            {/* Etikete basılan ad/renk/parti — sevk edilene kadar "Düzelt". */}
-            <RollLabelTextsCard roll={r} onSaved={() => void detailQuery.refetch()} />
+            {/* Etikete basılan ad/renk/parti tabloda; burada yalnız "Düzelt" (sevk edilene kadar). */}
+            <RollLabelTextsCard roll={r} showValues={false} onSaved={() => void detailQuery.refetch()} />
             <RollInspectionCard rollId={r.id} barcode={r.barcode ?? null} />
             <LabTestsCard rollId={r.id} />
             {canSeeHistory && historyQuery.data?.data?.measurements && (
               <RollMeasurementsCard measurements={historyQuery.data.data.measurements} onChanged={() => void historyQuery.refetch()} />
             )}
-            <div className="text-[11px] text-muted-foreground">
-              Oluşturma: {safeFormat(r.createdAt, "dd.MM.yyyy HH:mm")} · Son güncelleme: {safeFormat(r.updatedAt, "dd.MM.yyyy HH:mm")}
-            </div>
+            <details className="group rounded-md border" data-testid="roll-card-more">
+              <summary className="flex cursor-pointer list-none items-center gap-1 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" /> Diğer ayrıntılar
+              </summary>
+              <div className="space-y-4 px-3 pb-3">
+                <RollOriginSection roll={r} />
+                <RollLocationSection roll={r} />
+                <div className="text-[11px] text-muted-foreground">
+                  Oluşturma: {safeFormat(r.createdAt, "dd.MM.yyyy HH:mm")} · Son güncelleme: {safeFormat(r.updatedAt, "dd.MM.yyyy HH:mm")}
+                </div>
+              </div>
+            </details>
           </div>
         )}
       </SheetContent>
+      {open && linkedRoll && <RollDetailSheet roll={linkedRoll} open onOpenChange={(o) => !o && setLinkedRoll(null)} />}
     </Sheet>
   );
 }

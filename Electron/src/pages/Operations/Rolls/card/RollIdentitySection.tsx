@@ -1,17 +1,12 @@
-// KİMLİK — barkod (QR) + durum rozetleri, ürün/renk/en, metre (ilk/kalan), kg, kalite, biçim/kat/özellikler.
-import { AlertTriangle, Package } from "lucide-react";
+// KİMLİK BAŞLIĞI — barkod (QR) + müşteri kodu + durum rozetleri. Ürün/metre/kg/kalite/özellikler "Top bilgileri"
+// tablosundadır (RollInfoTable, 2026-11-10 tek kaynak).
+import { AlertTriangle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AnimatedProgress } from "@/components/motion";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
-import { rollStageLabels, rollStatusLabels } from "@/types/enums";
+import { rollStatusLabels } from "@/types/enums";
 import type { Roll } from "../types";
-import { CardRow, CardSection } from "./CardSection";
-
-const num = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false });
-/** Kg kaynağı rozeti (2026-11-10) — iç izdir; belgeye basılmaz. Eski satırda kaynak yok → rozet yok. */
-const WEIGHT_SOURCE_LABELS: Record<"SCALE" | "MANUAL" | "SIMULATED", string> = { SCALE: "Kantar", MANUAL: "Elle", SIMULATED: "Simüle" };
 
 function StatusBadges({ roll }: { roll: Roll }) {
   return (
@@ -64,49 +59,5 @@ function BarcodeCard({ roll }: { roll: Roll }) {
 }
 
 export function RollIdentitySection({ roll }: { roll: Roll }) {
-  const props = roll.properties ?? [];
-  return (
-    <>
-      <BarcodeCard roll={roll} />
-      <CardSection title="Kimlik" icon={Package} testId="roll-card-identity">
-        <CardRow label="Kumaş" testId="roll-identity-item">{roll.item?.name}</CardRow>
-        <CardRow label="Renk">
-          {roll.color && (
-            <span className="flex items-center gap-1.5">
-              {roll.color.hex && <span className="h-3 w-3 rounded-full" style={{ backgroundColor: roll.color.hex }} />}
-              {roll.color.name}
-            </span>
-          )}
-        </CardRow>
-        <CardRow label="Metre" testId="roll-identity-qty">
-          <span className="text-base font-semibold tabular-nums">{num(roll.currentQty)} m</span>
-          {roll.currentQty !== roll.initialQty && <span className="ml-2 text-muted-foreground">ilk {num(roll.initialQty)} m</span>}
-          {roll.initialQty > 0 && <AnimatedProgress value={(roll.currentQty / roll.initialQty) * 100} className="mt-1 h-1" />}
-        </CardRow>
-        <CardRow label="En">{roll.width != null ? `${roll.width} cm` : null}</CardRow>
-        <CardRow label="Ağırlık">
-          {roll.weightKg != null ? (
-            <>
-              {num(roll.weightKg)} kg
-              {roll.weightSource && (
-                <Badge variant="muted" className="ml-2 text-[10px]" data-testid="roll-identity-weight-source">{WEIGHT_SOURCE_LABELS[roll.weightSource]}</Badge>
-              )}
-            </>
-          ) : null}
-        </CardRow>
-        <CardRow label="Kalite">{roll.qualityGrade}</CardRow>
-        <CardRow label="Aşama" testId="roll-identity-stage">{roll.stage ? rollStageLabels[roll.stage] : null}</CardRow>
-        <CardRow label="Biçim"><Badge variant="muted" className="text-[10px]">{roll.form === "ACIK" ? "Açık Kumaş" : "Top"}</Badge></CardRow>
-        <CardRow label="Kat">{roll.foldType}</CardRow>
-        <CardRow label="Özellikler">
-          {props.length > 0 && (
-            <span className="flex flex-wrap gap-1">
-              {/* SEÇİM tipli özellikte DEĞER de basılır ("Gramaj: 50 gr"). */}
-              {props.map((p) => <Badge key={p.propertyId} variant="muted" className="text-[10px]">{p.value ? `${p.property.name}: ${p.value.name}` : p.property.name}</Badge>)}
-            </span>
-          )}
-        </CardRow>
-      </CardSection>
-    </>
-  );
+  return <BarcodeCard roll={roll} />;
 }

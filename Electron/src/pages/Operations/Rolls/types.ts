@@ -168,8 +168,8 @@ export interface Roll {
   labelConsignee?: { id: string; name: string } | null;
   /** Kg'nin kaynağı (2026-11-10) — kantar / elle / simüle; eski satırda null. */
   weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
-  /** Ata top (Tambur kesimi vb.) — yalnız detay. */
-  parent?: { id: string; barcode: string | null } | null;
+  /** Ata top (Tambur kesimi vb.) — yalnız detay; metreleri top kartı tablosu için (eski sunucu göndermez). */
+  parent?: { id: string; barcode: string | null; initialQty?: number; currentQty?: number } | null;
   /** Bizim parti + iş emri — yalnız detay. */
   batch?: { id: string; batchNumber: string; workOrder: { id: string; workOrderNumber: string } | null } | null;
   /** En yakın atanın gelen belge satırı — yalnız detay; `inherited` = satır atada. */
@@ -257,6 +257,23 @@ export interface RollLabelSnapshot {
   printedAt: string;
   operatorId: string | null;
   operatorName: string | null;
+  stock?: boolean;
+  /** Basım anı değerleri (2026-11-10) — eski snapshot'ta YOK; okuyucu üst düzey adlara düşer. */
+  printed?: RollLabelPrintedValues;
+}
+
+/** `lastLabelSnapshot.printed` — etikette basılan değerler (yalnız dolu alanlar yazılır). */
+export interface RollLabelPrintedValues {
+  lengthMeters?: number;
+  itemName?: string;
+  colorName?: string;
+  qualityGrade?: string;
+  batchNumber?: string;
+  labelBatchNo?: string;
+  weightKg?: number;
+  widthCm?: number;
+  foldType?: string;
+  consigneeName?: string;
 }
 
 export interface RollOperationLogEntry {
