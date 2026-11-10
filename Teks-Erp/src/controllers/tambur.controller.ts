@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { stationSearchQuerySchema } from "../services/helpers/workorder-doc-search.helper";
 import { scanRoutedQuerySchema } from "../services/helpers/scan-route-open-cards.helper";
+import { measuredWidthCmSchema } from "../services/helpers/measured-width.helper";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import { TamburService } from "../services/tambur.service";
@@ -47,6 +48,10 @@ const labelBatchNoField = z.string().max(64, "Etiket parti no en çok 64 karakte
 // Etikete basılacak kumaş adı / renk (topun kendi değeri; ayara bağlı değil) — aynı strip tuzağı.
 const labelItemNameField = z.string().max(80, "Etiket kumaş adı en çok 80 karakter").nullish();
 const labelColorNameField = z.string().max(80, "Etiket rengi en çok 80 karakter").nullish();
+// Emanet top etiket alıcısı (tablet önce `ensure` çağırır; sahip doğrulaması serviste) — aynı strip tuzağı.
+const labelConsigneeIdField = z.string().uuid("Geçersiz alıcı ID").nullish();
+// Kg kaynağı beyanı — yalnız kg ile; simüle kapısı serviste (`resolveTamburWeightSource`).
+const weightSourceField = z.enum(["SCALE", "MANUAL", "SIMULATED"], { message: "Kg kaynağı SCALE, MANUAL ya da SIMULATED olmalı" }).nullish();
 
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
 export const finalizeSchema = z.object({
@@ -61,6 +66,7 @@ export const finalizeSchema = z.object({
         measure: meterSourceSchema.nullish(),
         // Tamburda tartım (S5) — bu parçanın kg'ı; müşteri tartım istiyorsa zorunlu.
         weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+        weightSource: weightSourceField,
       })
     )
     // Cap: her segment tx içinde ayrı roll.create + rollProperty + rollOperation
@@ -93,9 +99,12 @@ export const finalizeSchema = z.object({
   markedForKartela: z.boolean().optional(),
   // Otomatik kalan kuyruk parçasının kg'ı (S5 tartım kapısı).
   remainingWeightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  remainingWeightSource: weightSourceField,
   labelBatchNo: labelBatchNoField,
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  widthCm: measuredWidthCmSchema,
   // Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH sonrası aynı istek
   // bu bayrakla tekrarlanır. bkz. constants/tambur-plan-gate.ts.
   confirmMismatch: z.boolean().optional(),
@@ -139,6 +148,9 @@ export const cutOpenFabricSchema = z.object({
   labelBatchNo: labelBatchNoField,
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
   // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
   // düşerse mobil onayı gönderir, backend hiç görmez ve operatör onayladığı hâlde
   // 409'a çarpar (varianceReason dersinin aynısı).
@@ -181,6 +193,9 @@ export const finalizeOpenFabricSchema = z.object({
   labelBatchNo: labelBatchNoField,
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
 });
 
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
@@ -208,6 +223,9 @@ export const cutWarehouseRollSchema = z.object({
   labelBatchNo: labelBatchNoField,
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
 });
 
 // Kurşun Dağıtım (bypass) kapanışı — Tambur tabletinde refakat kartı okutulur,
@@ -275,6 +293,9 @@ export const finalizeWarehouseCutSchema = z.object({
   labelBatchNo: labelBatchNoField,
   labelItemName: labelItemNameField,
   labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
 });
 
 export class TamburController {

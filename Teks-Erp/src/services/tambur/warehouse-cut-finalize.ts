@@ -46,7 +46,8 @@ import {
   StationKind,
 } from "@prisma/client";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
 
@@ -68,6 +69,12 @@ export async function finalizeWarehouseCut(
       labelBatchNo?: string | null;
       labelItemName?: string | null;
       labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -140,6 +147,18 @@ export async function finalizeWarehouseCut(
       action !== "discard" && Number(parent.currentQty) > 0
         ? resolveRollLabelTexts(data)
         : { labelItemName: null, labelColorName: null };
+    // Kalan topun kg kaynağı + emanet alıcısı + en (K7) + niyet (emanet → sahip) — yalnız top doğuyorsa.
+    const remainingBorn = action !== "discard" && Number(parent.currentQty) > 0;
+    const remainingWeightSource = remainingBorn
+      ? await resolveTamburWeightSource({ weightKg: remainingWeightKg, weightSource: data.weightSource, stamp: { machineId: sessionMachineId } })
+      : null;
+    const remainingConsigneeId = remainingBorn
+      ? await resolveTamburConsignee({ labelConsigneeId: data.labelConsigneeId, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+      : null;
+    const remainingWidth = remainingBorn
+      ? await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm)
+      : { width: parent.width, trace: null };
+    const remainingIntent = ownerTailIntent(parent.ownerCustomerId);
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
     //
@@ -245,13 +264,15 @@ export async function finalizeWarehouseCut(
             barcode: childBarcode,
             itemId: parent.itemId,
             colorId: parent.colorId,
-            width: parent.width,
+            width: remainingWidth.width,
             // KAT — bu "kalan" parçadır, aynı sarımın devamı: parent'ın katını
             // DEVRALIR (kesilen parça yeni değer alabilir, kalan almaz).
             foldType: parent.foldType,
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
+            weightSource: remainingWeightSource,
+            labelConsigneeId: remainingConsigneeId,
             labelBatchNo: remainingLabelBatchNo,
             labelItemName: labelTexts.labelItemName,
             labelColorName: labelTexts.labelColorName,
@@ -274,8 +295,9 @@ export async function finalizeWarehouseCut(
             stage: parent.stage, // Top Kesme çocuğu atanın aşamasını alır
             createdById: userId ?? null,
             createdMachineId: sessionMachineId ?? null,
-            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
-            lastLabelSnapshot: { stock: true },
+            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi; emanet topta sahip (sahip kilidi).
+            lastLabelSnapshot: remainingIntent.lastLabelSnapshot,
+            labelCustomerId: remainingIntent.labelCustomerId,
             },
         });
         if (propertySnapshot.length > 0) {
@@ -438,6 +460,7 @@ export async function finalizeWarehouseCut(
         remainingQty: result.remainingQty,
         defter: result.defter,
         notes: data.notes ?? null,
+        ...(remainingWidth.trace ? { measuredWidth: remainingWidth.trace } : {}),
         ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });

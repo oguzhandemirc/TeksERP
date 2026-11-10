@@ -1,16 +1,18 @@
 // =============================================================================
 // TAMBUR MÜŞTERİ AYARLARI — tartım zorunluluğu, bölme önerisi, en kaynağı (Gülkesim S5)
 // =============================================================================
-// Ayar müşteri kartındadır; müşteri = kesimin etiket müşterisi (Kime?), yoksa malın
-// sahibi. Tartım kapısı top doğuran HER tambur yolunda (iki kesim + iki 'Bitir' kalanı +
+// Ayar müşteri kartındadır; müşteri = malın sahibi (emanet), yoksa kesimin etiket müşterisi
+// (Kime?) — 2026-11-10 sırası çevrildi. Tartım kapısı top doğuran HER tambur yolunda (iki kesim + iki 'Bitir' kalanı +
 // segmentli finalize) AYNI helper'dan geçer — biri unutulursa zorunlu müşterinin topu kg'sız doğar.
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, SackWeightSource } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { normalizeLabelBatchNo } from "./label-batch-no.helper";
 import { resolveDeliveryNoteLinesForRolls } from "./roll-delivery-note-line.helper";
 import { readLabelWidthSource, type LabelWidthSource } from "./label-width-source.helper";
+import { resolveConsigneeChain } from "../customer-consignee.service";
+import { resolveWeightSource, type WeightSourceStamp } from "./weight-source-gate.helper";
 import { readTamburLabelPrintTiming, type TamburLabelPrintTiming } from "../system-setting.service";
 
 export interface TamburCustomerSettings {
@@ -24,9 +26,45 @@ export interface TamburCustomerSettings {
 
 const EMPTY: TamburCustomerSettings = { customerId: null, widthSource: null, weighRequired: false, splitLengthM: null, labelBatchEnabled: false };
 
-/** Ayarın sahibi müşteri: etiket müşterisi (Kime?) ?? malın sahibi. */
+/** Ayarın sahibi müşteri: malın sahibi (emanet) ?? etiket müşterisi (Kime?) — eski APK'nın yanlış hedefine karşı sed. */
 export function tamburSettingsCustomerId(targetCustomerId: string | null | undefined, ownerCustomerId: string | null | undefined): string | null {
-  return targetCustomerId ?? ownerCustomerId ?? null;
+  return ownerCustomerId ?? targetCustomerId ?? null;
+}
+
+/**
+ * Kesimde yazılacak alıcı (`Roll.labelConsigneeId`): kayıt ayar müşterisinin olmalı (400
+ * `CONSIGNEE_OWNER_MISMATCH`), mezar taşı hedefine çözülür, pasif 409 `CONSIGNEE_INACTIVE`. Boş → null.
+ */
+export async function resolveTamburConsignee(args: {
+  labelConsigneeId: string | null | undefined;
+  targetCustomerId: string | null | undefined;
+  ownerCustomerId: string | null | undefined;
+}): Promise<string | null> {
+  if (!args.labelConsigneeId) return null;
+  const c = await resolveConsigneeChain(args.labelConsigneeId);
+  if (!c) throw AppError.badRequest("Alıcı bulunamadı", { code: "CONSIGNEE_NOT_FOUND" });
+  const customerId = tamburSettingsCustomerId(args.targetCustomerId, args.ownerCustomerId);
+  if (!customerId || c.customerId !== customerId) {
+    throw AppError.badRequest("Alıcı bu topun müşterisine ait değil.", { code: "CONSIGNEE_OWNER_MISMATCH", consigneeId: c.id });
+  }
+  if (!c.isActive) throw AppError.conflict(`"${c.name}" alıcısı pasif — panelden aktifleştirin ya da başka alıcı seçin.`, { code: "CONSIGNEE_INACTIVE", consigneeId: c.id });
+  return c.id;
+}
+
+/**
+ * Kesimin kg kaynağı: kg yoksa null (kaynak verilmişse 400 `WEIGHT_SOURCE_WITHOUT_KG`); kaynaksız kg (eski APK)
+ * MANUAL; beyan tek boğazdan (`resolveWeightSource`) çözülür — simüle kantar bayrak kapalıyken 400.
+ */
+export async function resolveTamburWeightSource(args: {
+  weightKg: Prisma.Decimal | null;
+  weightSource: SackWeightSource | null | undefined;
+  stamp?: WeightSourceStamp | null;
+}): Promise<SackWeightSource | null> {
+  if (args.weightKg == null) {
+    if (args.weightSource) throw AppError.badRequest("Kg kaynağı kg'sız gönderilemez.", { code: "WEIGHT_SOURCE_WITHOUT_KG" });
+    return null;
+  }
+  return resolveWeightSource(args.weightSource ?? SackWeightSource.MANUAL, args.stamp, "kg'yi elle girin");
 }
 
 export async function loadTamburCustomerSettings(customerId: string | null): Promise<TamburCustomerSettings> {
@@ -98,10 +136,15 @@ export interface TamburLabelSettingsView extends TamburCustomerSettings {
   ownerCustomer: { id: string; name: string } | null;
   /** Topun gelen belge müşteri partisi (ata zinciriyle, tek çözücü) — tablette parti no varsayılanı. Satırsız/topsuz: null. */
   deliveryNoteBatchNo: string | null;
+  /** Gelen belgedeki kumaş adı / renk (tek çözücü) — tablet Etikette kartında "belgede: …" ipucu. */
+  deliveryNoteItemText: string | null;
+  deliveryNoteColorText: string | null;
+  /** Emanet top: etiket müşterisi sahibe kilitli (Kime? seçilemez; yalnız alıcı). */
+  ownerLocked: boolean;
 }
 
 /**
- * Tablet kesim ekranının ayar okuması: açık müşteri (Kime?) verildiyse o, yoksa topun sahibi.
+ * Tablet kesim ekranının ayar okuması: topun sahibi (emanet) varsa o, yoksa açık müşteri (Kime?).
  * Top bulunamazsa 404 — yanlış id sessizce "ayarsız" dönmesin.
  */
 export async function getTamburLabelSettings(args: {
@@ -111,13 +154,21 @@ export async function getTamburLabelSettings(args: {
   let ownerCustomerId: string | null = null;
   let ownerCustomer: { id: string; name: string } | null = null;
   let deliveryNoteBatchNo: string | null = null;
+  let deliveryNoteItemText: string | null = null;
+  let deliveryNoteColorText: string | null = null;
   if (args.rollId) {
     const roll = await prisma.roll.findUnique({ where: { id: args.rollId }, select: { ownerCustomerId: true, ownerCustomer: { select: { id: true, name: true } } } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
     ownerCustomerId = roll.ownerCustomerId;
     ownerCustomer = roll.ownerCustomer ?? null;
-    deliveryNoteBatchNo = (await resolveDeliveryNoteLinesForRolls([args.rollId])).get(args.rollId)?.customerBatchNo?.trim() || null;
+    const line = (await resolveDeliveryNoteLinesForRolls([args.rollId])).get(args.rollId);
+    deliveryNoteBatchNo = line?.customerBatchNo?.trim() || null;
+    deliveryNoteItemText = line?.itemText?.trim() || null;
+    deliveryNoteColorText = line?.colorText?.trim() || null;
   }
   const settings = await loadTamburCustomerSettings(tamburSettingsCustomerId(args.customerId, ownerCustomerId));
-  return { ...settings, printTiming: await readTamburLabelPrintTiming(), ownerCustomer, deliveryNoteBatchNo };
+  return {
+    ...settings, printTiming: await readTamburLabelPrintTiming(), ownerCustomer, deliveryNoteBatchNo,
+    deliveryNoteItemText, deliveryNoteColorText, ownerLocked: ownerCustomerId != null,
+  };
 }

@@ -640,6 +640,7 @@ router.post(
  *               width:        { type: number, nullable: true }
  *               qualityGrade: { type: string }
  *               weightKg:     { type: number }
+ *               weightSource: { type: string, enum: [SCALE, MANUAL, SIMULATED], nullable: true, description: "Kg kaynağı; yalnız kg ile (kaynaksız kg MANUAL)" }
  *     responses:
  *       201: { description: "Top oluşturuldu ve Tambur adımına bağlandı" }
  *       400: { description: "Geçersiz gövde / sebep-metraj eksik / ürün çözülemedi / ağırlık girişi kapalı" }
@@ -706,6 +707,7 @@ router.post(
  *               qualityGrade:      { type: string, description: "Katalog kodu; verilmezse kalite Belirsiz" }
  *               width:             { type: number, nullable: true }
  *               weightKg:          { type: number }
+ *               weightSource:      { type: string, enum: [SCALE, MANUAL, SIMULATED], nullable: true, description: "Kg kaynağı; yalnız kg ile. Simüle kantar bayrak kapalıyken 400 SIMULATED_WEIGHT_DISABLED" }
  *               targetOrderLineId: { type: string, format: uuid, nullable: true, description: "Etiket niyeti — müşteriye önceliklidir" }
  *               targetCustomerId:  { type: string, format: uuid, nullable: true }
  *               markedForKartela:  { type: boolean }
@@ -864,9 +866,13 @@ router.post(
  *               cutLength: { type: number }
  *               clientToken: { type: string, format: uuid }
  *               measure: { $ref: '#/components/schemas/TamburMeasureBody' }
+ *               labelConsigneeId: { type: string, format: uuid, nullable: true, description: "Emanet top alıcısı (sahibin alıcısı; beş kesim/bitir yolunda aynı alan)" }
+ *               weightSource: { type: string, enum: [SCALE, MANUAL, SIMULATED], nullable: true, description: "Kg kaynağı; yalnız kg ile" }
+ *               widthCm: { type: number, nullable: true, description: "Ölçülen en (cm) — mirası ezer; sınır miras en + Tambur en eşiği" }
  *     responses:
  *       201: { description: Kesim başarılı, child barkodlu top oluştu }
- *       400: { description: Parent açık kumaş / status WAREHOUSE değil / metre yetmiyor }
+ *       400: { description: "Parent açık kumaş / status WAREHOUSE değil / metre yetmiyor · CONSIGNEE_OWNER_MISMATCH · SIMULATED_WEIGHT_DISABLED · WEIGHT_SOURCE_WITHOUT_KG · WIDTH_OUT_OF_RANGE" }
+ *       409: { description: "LABEL_TARGET_NOT_OWNER (emanet top yalnız sahibi adına) · CONSIGNEE_INACTIVE" }
  */
 router.post(
   "/:id/cut-warehouse",
@@ -971,7 +977,7 @@ router.post(
  *     tags: [Tambur]
  *     summary: Kesim ekranı için müşteri tambur/etiket ayarları + basım zamanı
  *     description: |
- *       Müşteri = `customerId` (Kime?) verildiyse o, yoksa `rollId`'nin sahibi. Döner:
+ *       Müşteri = `rollId`'nin sahibi (emanet) varsa o, yoksa `customerId` (Kime?). Döner:
  *       en kaynağı (null = güncel en), tartım zorunlu mu, bölme ölçüsü önerisi (m), fabrika
  *       ayarı `tambur.labelPrintTiming` (EACH | END). Gülkesim S5.
  *     security: [{ bearerAuth: [] }]
@@ -983,7 +989,7 @@ router.post(
  *         name: customerId
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming, ownerCustomer, deliveryNoteBatchNo (topun gelen belge müşteri partisi — tablet parti no varsayılanı; yoksa null) }" }
+ *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming, ownerCustomer, deliveryNoteBatchNo (topun gelen belge müşteri partisi — tablet parti no varsayılanı; yoksa null), deliveryNoteItemText, deliveryNoteColorText (belgedeki kumaş adı / renk; yoksa null), ownerLocked (emanet top: etiket müşterisi sahibe kilitli) }" }
  *       404: { description: Top bulunamadı }
  */
 const labelSettingsQuery = z.object({
@@ -1013,7 +1019,8 @@ router.get(
  *     description: |
  *       Müşteri kümesi = İE müşterisi ∪ İE partilerindeki topların sahibi (fason); `rollId` verilirse
  *       topun sahibi/etiket müşterisi ve partisinin İE'si. Listeler tekil, en son kullanılan önce, en çok 20.
- *       `last` = bu İE'de bu alanlardan birini taşıyan en son topun değerleri (tablet yapışkan değeri).
+ *       `last` = bu İE'de bu alanlardan birini taşıyan en son topun değerleri (tablet yapışkan değeri; alıcı dahil).
+ *       `consigneeId` verilirse listeler yalnız o alıcının toplarından (emanet: alıcı başına ad/renk).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query
@@ -1022,8 +1029,11 @@ router.get(
  *       - in: query
  *         name: rollId
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: consigneeId
+ *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: "{ workOrderId, customerIds, itemNames, colorNames, batchNos, last }" }
+ *       200: { description: "{ workOrderId, customerIds, itemNames, colorNames, batchNos, last{…, consigneeId, consigneeName} }" }
  *       400: { description: İkisi de yok }
  *       404: { description: İş emri / top bulunamadı }
  */
@@ -1031,6 +1041,7 @@ const labelSuggestionsQuery = z
   .object({
     workOrderId: z.string().uuid("Geçersiz iş emri ID").optional(),
     rollId: z.string().uuid("Geçersiz top ID").optional(),
+    consigneeId: z.string().uuid("Geçersiz alıcı ID").optional(),
   })
   .refine((q) => !!q.workOrderId || !!q.rollId, { message: "workOrderId ya da rollId gerekli" });
 router.get(

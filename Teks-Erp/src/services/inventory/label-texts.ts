@@ -2,7 +2,7 @@
 // Inventory Service / label-texts — topun etiket ad/renk/parti no düzeltmesi
 // =============================================================================
 // Tamburda topa yazılan müşteri etiket değerleri (`Roll.labelItemName` /
-// `labelColorName` / `labelBatchNo`) top sevk edilene kadar düzeltilebilir
+// `labelColorName` / `labelBatchNo` / `labelConsigneeId`) top sevk edilene kadar düzeltilebilir
 // (Gülkesim 2026-11-09). Durum alanıdır: eski değer audit'te kalır, defter yok
 // (satır silinince raporlanan hiçbir sayı değişmez). Uç: PATCH /api/rolls/:id/label-texts.
 // =============================================================================
@@ -15,6 +15,7 @@ import type { ApiResponse } from "../../types/api.types";
 import { K18_DEAD_STATUSES } from "../batch.service";
 import { SHIP_READY_GONE_STATUSES } from "../helpers/ship-readiness.helper";
 import { normalizeLabelBatchNo, normalizeRollLabelText } from "../helpers/label-batch-no.helper";
+import { resolveTamburConsignee } from "../helpers/tambur-customer-settings.helper";
 
 /** Fiziksel olarak fabrikadan çıkmış top: müşteriye sevk (tek kaynak `SHIP_READY_GONE_STATUSES`) + fason/kartela sevki. */
 const LABEL_TEXT_SHIPPED: readonly RollStatus[] = [
@@ -54,6 +55,8 @@ export interface LabelTextsFixInput {
   labelItemName?: string | null;
   labelColorName?: string | null;
   labelBatchNo?: string | null;
+  /** Etiket alıcısı (emanet top): `undefined` dokunma · null sahibe dön · id yaz (sahibin alıcısı olmalı). */
+  labelConsigneeId?: string | null;
   reason: string;
 }
 
@@ -62,6 +65,7 @@ export interface LabelTextsFixResult {
   labelItemName: string | null;
   labelColorName: string | null;
   labelBatchNo: string | null;
+  labelConsigneeId: string | null;
   changed: boolean;
 }
 
@@ -80,22 +84,31 @@ export async function fixRollLabelTexts(
     labelColorName: patchText(data.labelColorName, "Etiket rengi"),
     labelBatchNo: normalizeLabelBatchNo(data.labelBatchNo),
   };
-  if (next.labelItemName === undefined && next.labelColorName === undefined && next.labelBatchNo === undefined) {
+  if (next.labelItemName === undefined && next.labelColorName === undefined && next.labelBatchNo === undefined && data.labelConsigneeId === undefined) {
     throw AppError.badRequest("Düzeltilecek en az bir etiket alanı gönderilmeli.", { code: "LABEL_TEXT_EMPTY_PATCH" });
   }
 
   const roll = await prisma.roll.findUnique({
     where: { id: rollId },
-    select: { id: true, barcode: true, status: true, labelItemName: true, labelColorName: true, labelBatchNo: true },
+    select: {
+      id: true, barcode: true, status: true, labelItemName: true, labelColorName: true, labelBatchNo: true,
+      labelConsigneeId: true, ownerCustomerId: true, labelCustomerId: true,
+    },
   });
   if (!roll) throw AppError.notFound("Top bulunamadı");
   const block = labelTextFixBlock(roll.status);
   if (block) throw AppError.conflict(block.reason, { code: block.code });
+  // Alıcı: kesim yollarıyla aynı çözücü (sahip doğrulaması, mezar taşı → hedef, pasif 409).
+  const nextConsignee = data.labelConsigneeId === undefined
+    ? undefined
+    : await resolveTamburConsignee({ labelConsigneeId: data.labelConsigneeId, targetCustomerId: roll.labelCustomerId, ownerCustomerId: roll.ownerCustomerId });
 
-  const old = { labelItemName: roll.labelItemName, labelColorName: roll.labelColorName, labelBatchNo: roll.labelBatchNo };
+  const old = {
+    labelItemName: roll.labelItemName, labelColorName: roll.labelColorName, labelBatchNo: roll.labelBatchNo, labelConsigneeId: roll.labelConsigneeId,
+  };
   const changes: Partial<typeof old> = {};
-  for (const k of ["labelItemName", "labelColorName", "labelBatchNo"] as const) {
-    const v = next[k];
+  for (const k of ["labelItemName", "labelColorName", "labelBatchNo", "labelConsigneeId"] as const) {
+    const v = k === "labelConsigneeId" ? nextConsignee : next[k];
     if (v !== undefined && v !== old[k]) changes[k] = v;
   }
   const final = { ...old, ...changes };

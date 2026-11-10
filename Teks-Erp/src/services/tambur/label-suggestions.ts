@@ -21,7 +21,7 @@ export interface TamburLabelSuggestions {
   itemNames: string[];
   colorNames: string[];
   batchNos: string[];
-  last: { itemName: string | null; colorName: string | null; batchNo: string | null } | null;
+  last: { itemName: string | null; colorName: string | null; batchNo: string | null; consigneeId: string | null; consigneeName: string | null } | null;
 }
 
 /** İE (ya da top üzerinden İE) + müşteri kümesi: İE müşterisi ∪ İE partilerindeki topların sahibi (fason). */
@@ -67,18 +67,21 @@ function distinctOrdered(rows: ReadonlyArray<Record<LabelField, string | null>>,
   return out;
 }
 
-export async function getTamburLabelSuggestions(args: { workOrderId?: string | null; rollId?: string | null }): Promise<TamburLabelSuggestions> {
+/** `consigneeId` verilirse öneriler o alıcının toplarından (emanet: alıcı başına ad/renk); yoksa sahip/İE kapsamı. */
+export async function getTamburLabelSuggestions(args: { workOrderId?: string | null; rollId?: string | null; consigneeId?: string | null }): Promise<TamburLabelSuggestions> {
   const { workOrderId, customerIds } = await resolveScope(args);
   const or: Prisma.RollWhereInput[] = [];
   if (customerIds.length > 0) {
     or.push({ ownerCustomerId: { in: customerIds } }, { labelCustomerId: { in: customerIds } });
   }
   if (workOrderId) or.push({ batch: { workOrderId } });
-  if (or.length === 0) {
+  if (or.length === 0 && !args.consigneeId) {
     return { workOrderId, customerIds, itemNames: [], colorNames: [], batchNos: [], last: null };
   }
   const since = new Date(Date.now() - LABEL_SUGGESTION_DAYS * 24 * 60 * 60 * 1000);
-  const scope: Prisma.RollWhereInput = { createdAt: { gte: since }, OR: or };
+  const scope: Prisma.RollWhereInput = args.consigneeId
+    ? { createdAt: { gte: since }, labelConsigneeId: args.consigneeId }
+    : { createdAt: { gte: since }, OR: or };
   // Tek sorgu + bellekte tekilleştirme: tavan, öneri listesi için yeterli derinlik (20 tekil × 3 alan).
   const rows = await prisma.roll.findMany({
     where: {
@@ -97,12 +100,17 @@ export async function getTamburLabelSuggestions(args: { workOrderId?: string | n
     const r = await prisma.roll.findFirst({
       where: {
         batch: { workOrderId },
-        OR: [{ labelItemName: { not: null } }, { labelColorName: { not: null } }, { labelBatchNo: { not: null } }],
+        OR: [{ labelItemName: { not: null } }, { labelColorName: { not: null } }, { labelBatchNo: { not: null } }, { labelConsigneeId: { not: null } }],
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { labelItemName: true, labelColorName: true, labelBatchNo: true },
+      select: { labelItemName: true, labelColorName: true, labelBatchNo: true, labelConsigneeId: true, labelConsignee: { select: { name: true } } },
     });
-    if (r) last = { itemName: r.labelItemName, colorName: r.labelColorName, batchNo: r.labelBatchNo };
+    if (r) {
+      last = {
+        itemName: r.labelItemName, colorName: r.labelColorName, batchNo: r.labelBatchNo,
+        consigneeId: r.labelConsigneeId, consigneeName: r.labelConsignee?.name ?? null,
+      };
+    }
   }
   return { workOrderId, customerIds, itemNames, colorNames, batchNos, last };
 }

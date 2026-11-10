@@ -25,6 +25,11 @@ import { buildIntentSnapshot } from "../label.service";
 export interface LabelIntentInput {
   targetOrderLineId?: string | null;
   targetCustomerId?: string | null;
+  /**
+   * Topun sahibi (EMANET `Roll.ownerCustomerId`). Doluysa etiket müşterisi KİLİTLİDİR: başka müşteri /
+   * başka müşterinin sipariş kalemi 409 `LABEL_TARGET_NOT_OWNER`; boş hedef (Stok) sahibe çözülür.
+   */
+  ownerCustomerId?: string | null;
 }
 
 /** Çözülmüş niyet — `buildIntentSnapshot`'ın girdi şekli. */
@@ -55,6 +60,20 @@ export function labelCustomerIdOf(intent: ResolvedLabelIntent): string | null {
  * eklendi (additive; mevcut istemciler mesajı okumaya devam eder).
  */
 export async function resolveLabelIntent(data: LabelIntentInput): Promise<ResolvedLabelIntent> {
+  const intent = await resolveTargetIntent(data);
+  const owner = data.ownerCustomerId ?? null;
+  if (!owner) return intent;
+  if (intent.stock) return { customerId: owner };
+  if (labelCustomerIdOf(intent) !== owner) {
+    throw AppError.conflict("Emanet top yalnız malın sahibi adına etiketlenir — Kime? alanını sahibe çevirin.", {
+      code: "LABEL_TARGET_NOT_OWNER",
+      ownerCustomerId: owner,
+    });
+  }
+  return intent;
+}
+
+async function resolveTargetIntent(data: LabelIntentInput): Promise<ResolvedLabelIntent> {
   if (data.targetOrderLineId) {
     const ol = await prisma.orderLine.findUnique({
       where: { id: data.targetOrderLineId },

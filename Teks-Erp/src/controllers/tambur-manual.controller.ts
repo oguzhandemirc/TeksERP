@@ -104,6 +104,8 @@ export const manualRollSchema = z.object({
     .positive("Ağırlık pozitif olmalı")
     .max(999_999, "Ağırlık gerçekçi değil")
     .optional(),
+  // Kg kaynağı beyanı (yalnız kg ile; simüle kapısı serviste). Strict şemada şart.
+  weightSource: z.enum(["SCALE", "MANUAL", "SIMULATED"], { message: "Kg kaynağı SCALE, MANUAL ya da SIMULATED olmalı" }).nullish(),
   // D4-B1: metrajın ölçüm kaynağı (eski APK göndermez; `tambur.olcumKaynagiZorunlu` açıkken zorunlu).
   measure: meterSourceSchema.nullish(),
 }).strict();
@@ -142,6 +144,8 @@ export const produceSchema = z.object({
     .positive("Ağırlık pozitif olmalı")
     .max(999_999, "Ağırlık gerçekçi değil")
     .optional(),
+  // Kg kaynağı beyanı (yalnız kg ile; simüle kapısı serviste). Strict şemada şart.
+  weightSource: z.enum(["SCALE", "MANUAL", "SIMULATED"], { message: "Kg kaynağı SCALE, MANUAL ya da SIMULATED olmalı" }).nullish(),
   // KAT — kalıcı kolon (Roll.foldType). ⚠️ 2026-08-04te bu alan bir süre
   // ŞEMADA YOKTU: mobil "Manuel Mod" katı operatöre SORUYOR ve gönderiyordu,
   // Zod ise tanımadığı anahtarı SESSİZCE SİLİYORDU (z.object varsayılanı

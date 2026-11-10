@@ -6,7 +6,7 @@
 //   §2 ayar KAPALI: değersiz kesim geçer (bugünkü) · değerli kesim 400 LABEL_BATCH_NOT_ENABLED, top düşmez
 //   §3 ayar AÇIK: dört kesim yolu + segmentli finalize değeri (kırpılmış) çocuğa yazar; boş → null
 //   §4 MİRAS YOK: değersiz ikinci kesim önceki değeri devralmaz (yapışkanlık istemcide)
-//   §5 Kime? müşterisi sahibi ezer (ayar o müşteriden)
+//   §5 emanet topta ayar sahipten (2026-11-10); Kime?=başka müşteri 409 sahip kilidi
 //   §6 düzeltme PATCH /rolls/:id/label motoru: değiştir · null temizle · undefined dokunma; labelDirty + audit
 //   §7 Zod şemaları alanı TAŞIR (strip tuzağı) + 64 üstü red
 //   §8 etiket: katalog ROLL_RAW+ROLL_FINISHED, fieldDisplayValue boşta present:false, varsayılan native
@@ -150,13 +150,15 @@ async function main(): Promise<void> {
   const lbs = await Promise.all((f3.data?.splitRolls ?? []).map((r) => lbOf(r.id)));
   check("§3 segmentli finalize her parçaya 'J2'", lbs.length === 2 && lbs.every((x) => x === "J2"), JSON.stringify(lbs));
 
-  console.log("\n[§5] Kime? müşterisi sahibi ezer");
+  console.log("\n[§5] emanet topta ayar SAHİPTEN (2026-11-10; eskiden Kime? ezerdi)");
   const w3 = await warehouseRoll(owner);
-  check("§5 Kime?=ayarsız müşteri → değerli kesim 400", (await errCode(tambur.cutWarehouseRoll(w3, { cutLength: 10, targetCustomerId: target, labelBatchNo: "J1" }, actor.id))) === "400:LABEL_BATCH_NOT_ENABLED");
+  check("§5 Kime?=başka müşteri → 409 LABEL_TARGET_NOT_OWNER (ayar sahipten, kapı geçildi)", (await errCode(tambur.cutWarehouseRoll(w3, { cutLength: 10, targetCustomerId: target, labelBatchNo: "J1" }, actor.id))) === "409:LABEL_TARGET_NOT_OWNER");
   const v = await getTamburLabelSettings({ rollId: w3 });
   check("§8 label-settings sahibin labelBatchEnabled=true", v.labelBatchEnabled === true);
   const v2 = await getTamburLabelSettings({ rollId: w3, customerId: target });
-  check("§8 label-settings Kime? ayarsız → false", v2.labelBatchEnabled === false);
+  check("§8 label-settings emanet topta Kime? verilse de sahibin ayarı (true)", v2.labelBatchEnabled === true);
+  const v3 = await getTamburLabelSettings({ customerId: target });
+  check("§8 label-settings topsuz Kime? ayarsız → false", v3.labelBatchEnabled === false);
 
   console.log("\n[§6] düzeltme (PATCH /rolls/:id/label motoru)");
   const child = r2.data!.childRoll.id;

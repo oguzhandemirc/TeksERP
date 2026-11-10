@@ -53,7 +53,8 @@ import {
 import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
 import { TERIM } from "../../constants/terim";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
 
@@ -82,6 +83,12 @@ export async function finalizeOpenFabric(
       labelBatchNo?: string | null;
       labelItemName?: string | null;
       labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -193,6 +200,18 @@ export async function finalizeOpenFabric(
       action !== "discard" && Number(parent.currentQty) > 0
         ? resolveRollLabelTexts(data)
         : { labelItemName: null, labelColorName: null };
+    // Kalan topun kg kaynağı + emanet alıcısı + en (K7) + niyet (emanet → sahip) — yalnız top doğuyorsa.
+    const remainingBorn = action !== "discard" && Number(parent.currentQty) > 0;
+    const remainingWeightSource = remainingBorn
+      ? await resolveTamburWeightSource({ weightKg: remainingWeightKg, weightSource: data.weightSource, stamp: { machineId: machineId } })
+      : null;
+    const remainingConsigneeId = remainingBorn
+      ? await resolveTamburConsignee({ labelConsigneeId: data.labelConsigneeId, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+      : null;
+    const remainingWidth = remainingBorn
+      ? await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm)
+      : { width: parent.width, trace: null };
+    const remainingIntent = ownerTailIntent(parent.ownerCustomerId);
     // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
     // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
     const childQualityGrade: string = await resolveRemainingGradeCode(
@@ -291,7 +310,7 @@ export async function finalizeOpenFabric(
             barcode: childBarcode,
             itemId: parent.itemId,
             colorId: parent.colorId,
-            width: parent.width,
+            width: remainingWidth.width,
             // KAT — `actualFoldType` bu fonksiyonda zaten hesaplı (operatör
             // kararı, yoksa WO planı); eskiden YALNIZ RollOperation.metadata'ya
             // yazılıyordu, artık topun kendi kolonuna da yazılır.
@@ -299,6 +318,8 @@ export async function finalizeOpenFabric(
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
+            weightSource: remainingWeightSource,
+            labelConsigneeId: remainingConsigneeId,
             labelBatchNo: remainingLabelBatchNo,
             labelItemName: labelTexts.labelItemName,
             labelColorName: labelTexts.labelColorName,
@@ -321,8 +342,9 @@ export async function finalizeOpenFabric(
             stage: stageForProductionExit(parent.currentStep?.outputStage),
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
-            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
-            lastLabelSnapshot: { stock: true },
+            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi; emanet topta sahip (sahip kilidi).
+            lastLabelSnapshot: remainingIntent.lastLabelSnapshot,
+            labelCustomerId: remainingIntent.labelCustomerId,
             },
         });
         if (propertySnapshot.length > 0) {
@@ -429,6 +451,7 @@ export async function finalizeOpenFabric(
             remainingChildQuality: wantChild ? childQualityGrade : null,
             remainingQty,
             notes: data.notes ?? null,
+            ...(remainingWidth.trace ? { measuredWidth: remainingWidth.trace } : {}),
             plannedFoldType,
             actualFoldType,
             overriddenFoldType,

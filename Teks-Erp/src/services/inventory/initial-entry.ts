@@ -171,6 +171,8 @@ export async function createInitialEntryFresh(
       colorId?: string | null;
       initialQty: number;
       weightKg?: number;
+      /** Kg kaynağı (tambur manuel yolu çözer; diğer çağıranlar boş bırakır). */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
       qualityGrade?: string;
       width?: number | null;  // En (cm) — opsiyonel, ölçülmediyse null
       propertyIds?: string[];
@@ -720,6 +722,7 @@ export async function createInitialEntryFresh(
             initialQty: data.initialQty,
             currentQty: data.initialQty,
             weightKg: data.weightKg ?? null,
+            weightSource: data.weightSource ?? null,
             status: initialStatus,
             stage: initialStage,
             qualityGrade: qualityGradeCode,

@@ -24,6 +24,8 @@ export interface RollDeliveryNoteLine {
   itemText: string | null;
   colorText: string | null;
   senderRollNo: string | null;
+  /** Satırın beyan eni (cm) — yalnız TOP satırında; ARABA özet eni tek topa ait değildir (null). Tambur en varsayılanı (K7). */
+  widthCm: number | null;
   /** Satırın ham işlem metni; satırda yoksa belge başlığınınki (H9 kuralı, `effectiveProcessText`) — H9b İE gramaj önerisi. */
   processText: string | null;
   /** Belgenin onaylı gönderen carisi (PROCESS sözlüğünün gönderene özel satırı için). */
@@ -44,13 +46,13 @@ export async function resolveDeliveryNoteLinesForRolls(rollIds: readonly string[
     const probeIds = [...new Set(pending.values())];
     const lines = await db.customerDeliveryNoteLine.findMany({
       where: { rollId: { in: probeIds } },
-      select: { id: true, rollId: true, noteId: true, itemText: true, colorText: true, senderRollNo: true, processText: true, note: { select: { noteNo: true, processText: true, senderCustomerId: true, ownerCustomerId: true, customerBatchNo: true, senderDocNo: true } } },
+      select: { id: true, rollId: true, noteId: true, lineKind: true, widthCm: true, itemText: true, colorText: true, senderRollNo: true, processText: true, note: { select: { noteNo: true, processText: true, senderCustomerId: true, ownerCustomerId: true, customerBatchNo: true, senderDocNo: true } } },
     });
     const byRoll = new Map(lines.map((l) => [l.rollId!, l]));
     const unresolved: Array<[string, string]> = [];
     for (const [origin, probe] of pending) {
       const l = byRoll.get(probe);
-      if (l) out.set(origin, { sourceRollId: probe, lineId: l.id, noteId: l.noteId, noteNo: l.note.noteNo, itemText: l.itemText, colorText: l.colorText, senderRollNo: l.senderRollNo, processText: effectiveProcessText(l.processText, l.note.processText), senderCustomerId: l.note.senderCustomerId, ownerCustomerId: l.note.ownerCustomerId, customerBatchNo: l.note.customerBatchNo, senderDocNo: l.note.senderDocNo });
+      if (l) out.set(origin, { sourceRollId: probe, lineId: l.id, noteId: l.noteId, noteNo: l.note.noteNo, itemText: l.itemText, colorText: l.colorText, senderRollNo: l.senderRollNo, widthCm: l.lineKind === "TOP" && l.widthCm != null ? Number(l.widthCm) : null, processText: effectiveProcessText(l.processText, l.note.processText), senderCustomerId: l.note.senderCustomerId, ownerCustomerId: l.note.ownerCustomerId, customerBatchNo: l.note.customerBatchNo, senderDocNo: l.note.senderDocNo });
       else unresolved.push([origin, probe]);
     }
     if (unresolved.length === 0) break;

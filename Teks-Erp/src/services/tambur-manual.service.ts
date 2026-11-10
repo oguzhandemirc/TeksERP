@@ -97,6 +97,7 @@ import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
+import { resolveTamburWeightSource } from "./helpers/tambur-customer-settings.helper";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./helpers/step-capability.helper";
 import { lengthWarning } from "./helpers/measurement-threshold.helper";
@@ -908,6 +909,8 @@ export class TamburManualService {
       width?: number | null;
       qualityGrade?: string;
       weightKg?: number;
+      /** Kg kaynağı beyanı; kaynaksız kg MANUAL (tek boğaz `resolveTamburWeightSource`). */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
       /**
        * Topun bağlanacağı PARTİ (2026-08-04 saha bulgusu).
        *
@@ -936,6 +939,9 @@ export class TamburManualService {
     const early = await this.manualRollAttachedReplay(input).replayIfAny(input.clientToken);
     if (early) return early;
     await assertTamburMeasuresAllowed([input.measure]);
+    const weightSource = await resolveTamburWeightSource({
+      weightKg: input.weightKg != null ? new Prisma.Decimal(input.weightKg) : null, weightSource: input.weightSource, stamp: { machineId: ctx.machineId },
+    });
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
@@ -1085,6 +1091,7 @@ export class TamburManualService {
         colorId,
         initialQty: input.initialQty,
         weightKg: input.weightKg,
+        weightSource,
         qualityGrade: input.qualityGrade,
         // EN: operatöre SORULMAZ, iş emrinden MİRAS alınır (2026-08-04 kararı).
         // Gerekçe ürün/renkle aynı: bu top ŞU iş emrinin malı ve o iş emrinin eni
@@ -1461,6 +1468,8 @@ export class TamburManualService {
       qualityGrade?: string;
       width?: number | null;
       weightKg?: number;
+      /** Kg kaynağı beyanı; kaynaksız kg MANUAL (tek boğaz `resolveTamburWeightSource`). */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
       /** Etiket niyeti — "Kime?" bölümü. İkisi de boşsa stok (müşterisiz). */
       targetOrderLineId?: string | null;
       targetCustomerId?: string | null;
@@ -1480,6 +1489,9 @@ export class TamburManualService {
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
     await assertTamburMeasuresAllowed([input.measure]);
+    const weightSource = await resolveTamburWeightSource({
+      weightKg: input.weightKg != null ? new Prisma.Decimal(input.weightKg) : null, weightSource: input.weightSource, stamp: { machineId: ctx.machineId },
+    });
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
@@ -1527,6 +1539,7 @@ export class TamburManualService {
           colorId: input.colorId ?? null,
           initialQty: input.initialQty,
           weightKg: input.weightKg,
+          weightSource,
           qualityGrade: input.qualityGrade,
           width: input.width ?? null,
           clientToken: input.clientToken,

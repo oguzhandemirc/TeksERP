@@ -18,7 +18,6 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import {
   readShippingManualWeightRestrictedEnabled,
-  readSimulatedWeightEnabled,
 } from "../system-setting.service";
 import {
   assertManualWeightAllowed,
@@ -28,7 +27,7 @@ import {
 } from "../helpers/shipment-locks.helper";
 import { ApiResponse } from "../../types/api.types";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
-import { ekranYolu } from "../../constants/panel-ekran-yolu";
+import { resolveWeightSource } from "../helpers/weight-source-gate.helper";
 import type { ShippingServiceThis } from "./shared";
 
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
@@ -81,34 +80,13 @@ export async function weighSack(this: ShippingServiceThis,
         permissions: opts?.permissions,
       });
     }
-    // ⚠️ `simulated` blok DIŞINDA: kolona ÇÖZÜLMÜŞ kaynak yazılacak, beyan edilen
-    // değil. Aksi halde bayrak AÇIKKEN (demo/eğitim) sunucu çapraz kontrolü cihazı
-    // simüle bulup isteği GEÇİRDİĞİNDE kolona "SCALE" yazılırdı — yani kolonun tek
-    // varlık sebebi (simüle 47.3 ≠ gerçek 47.3) kaybolurdu.
-    let simulated = declaredSource === "SIMULATED";
-    if (declaredSource !== "MANUAL") {
-      if (!simulated && (stamp?.machineId || stamp?.stationId)) {
-        const scale = await prisma.peripheralDevice.findFirst({
-          where: {
-            kind: "SCALE",
-            isActive: true,
-            deletedAt: null,
-            ...(stamp.machineId
-              ? { machineId: stamp.machineId }
-              : { stationId: stamp.stationId!, machineId: null }),
-          },
-          orderBy: { createdAt: "asc" },
-          select: { simulate: true },
-        });
-        if (scale?.simulate) simulated = true;
-      }
-      if (simulated && !(await readSimulatedWeightEnabled())) {
-        throw AppError.badRequest(
-          `Simüle kantarla tartı kaydedilemez — ${ekranYolu("donanim")} ekranındaki Cihaz Kaydı'ndan bu kantarın ` +
-            '"simülasyon" bayrağını kapatın, ya da ⋮ → "Elle kg gir" ile girin.'
-        );
-      }
-    }
+    // Kolona ÇÖZÜLMÜŞ kaynak yazılır, beyan edilen değil (bayrak açıkken simüle cihaz geçse de SIMULATED kalır);
+    // çözüm + simüle kapısı tek boğaz `weight-source-gate.helper` (tambur kesimi de aynısını kullanır).
+    const resolvedSource: SackWeightSource = await resolveWeightSource(
+      declaredSource as SackWeightSource,
+      stamp,
+      '⋮ → "Elle kg gir" ile girin',
+    );
 
     const sack = await prisma.sack.findUnique({ where: { id: data.sackId }, select: { id: true, shipmentId: true } });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
@@ -121,9 +99,7 @@ export async function weighSack(this: ShippingServiceThis,
     // ÇÖZÜLMÜŞ kaynak — beyan edilen DEĞİL. Sunucu cihazı simüle bulduysa (ve bayrak
     // açık olduğu için istek geçtiyse) kolona SIMULATED yazılır; aksi halde kolon
     // "SCALE" der ve simüle 47.3 ile gerçek 47.3 yine ayırt edilemezdi.
-    const resolvedSource: SackWeightSource = simulated
-      ? SackWeightSource.SIMULATED
-      : (declaredSource as SackWeightSource);
+
 
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);

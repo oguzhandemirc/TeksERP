@@ -247,6 +247,8 @@ export const labelTextsFixSchema = z.object({
   labelItemName:  z.string().max(80, "Etiket kumaş adı en çok 80 karakter").nullish(),
   labelColorName: z.string().max(80, "Etiket rengi en çok 80 karakter").nullish(),
   labelBatchNo:   z.string().max(64, "Etiket parti no en çok 64 karakter").nullish(),
+  // Emanet top alıcısı: null = sahibin kendisine dön; id = sahibin alıcısı (serviste doğrulanır).
+  labelConsigneeId: z.string().uuid("Geçersiz alıcı ID").nullish(),
   reason:         z.string().trim().min(3, "Düzeltme sebebi (en az 3 karakter) zorunludur").max(500),
 });
 

@@ -44,7 +44,7 @@ import {
 import {
   VARIANCE_SOURCES,
 } from "../../constants/variance-reasons";
-import { WarehouseEventType, RollVarianceKind } from "@prisma/client";
+import { WarehouseEventType, RollVarianceKind, type SackWeightSource } from "@prisma/client";
 import { resolveFoldTypeForWrite } from "../helpers/fold-type";
 import { assertRollMatchesPlan, recordPlanDeviationTx } from "../helpers/tambur-plan-gate.helper";
 import {
@@ -65,7 +65,8 @@ import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "../helpers/roll-error-scope.helper";
 import { TERIM } from "../../constants/terim";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { isConsignedRoll } from "../helpers/stock-ownership.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors } from "./shared";
@@ -107,6 +108,8 @@ export interface CutInput {
   measure?: MeterSourceInput | null;
   /** S5: parçanın tartım kg'ı; müşteri tartım istiyorsa WAREHOUSE parçasında zorunlu. */
   weightKg?: number | null;
+  /** Kg kaynağı beyanı; kaynaksız kg MANUAL yazılır. */
+  weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
 }
 
 /**
@@ -146,6 +149,12 @@ export async function finalize(
       labelBatchNo?: string | null;
       labelItemName?: string | null;
       labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kalan kuyruk parçasının kg kaynağı. */
+      remainingWeightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -491,6 +500,8 @@ export async function finalize(
       /** S5 tartım: istemcinin verdiği kg (kapıdan önce ham). */
       rawWeightKg: number | null;
       weightKg: Prisma.Decimal | null;
+      rawWeightSource: SackWeightSource | null;
+      weightSource: SackWeightSource | null;
     };
 
     // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
@@ -513,6 +524,8 @@ export async function finalize(
         measure: c.measure ?? null,
         rawWeightKg: c.weightKg ?? null,
         weightKg: null,
+        rawWeightSource: c.weightSource ?? null,
+        weightSource: null,
       });
       offsetD = nextOffsetD;
     }
@@ -535,6 +548,8 @@ export async function finalize(
         measure: null,
         rawWeightKg: data.remainingWeightKg ?? null,
         weightKg: null,
+        rawWeightSource: data.remainingWeightSource ?? null,
+        weightSource: null,
       });
     }
     // Etiket parti no — müşteri ayarı kapalıyken değer 400 (kesim yollarıyla aynı kapı).
@@ -554,6 +569,16 @@ export async function finalize(
         ownerCustomerId: roll.ownerCustomerId,
       });
     }
+    // Kg kaynağı (tek boğaz; simüle kantar bayrak kapalıyken 400) + emanet alıcısı + niyet + en — tx'ten önce.
+    for (const seg of segments) {
+      seg.weightSource = await resolveTamburWeightSource({ weightKg: seg.weightKg, weightSource: seg.rawWeightSource, stamp: { machineId } });
+    }
+    const childLabelConsigneeId = await resolveTamburConsignee({
+      labelConsigneeId: data.labelConsigneeId, targetCustomerId: null, ownerCustomerId: roll.ownerCustomerId,
+    });
+    const childIntent = ownerTailIntent(roll.ownerCustomerId);
+    const baseChildWidth = wo?.width ?? (await inheritedChildWidth(roll.id, roll.width));
+    const measuredChildWidth = await resolveTamburChildWidth(baseChildWidth, data.widthCm);
 
     // Split çocuğu FRESH kısa barkod alır (soy-ağacı parentRollId'de tutulur;
     // eski `parent+KS+suffix` biçimi hem uzundu hem hiçbir yerde parse edilmiyordu).
@@ -707,9 +732,10 @@ export async function finalize(
       // ölçüm yukarıdaki blokta; barkodu burada üretmek sayaç kilidini bu tx'in
       // sonuna kadar tutardı.)
       // Çocuk eni kaynağı fabrika ayarı (D4-E3; varsayılan bugünkü `wo.width ?? roll.width`).
-      const childWidth = await pickFinalizeChildWidthTx(tx, {
-        parentRollId: roll.id, parentWidth: roll.width, woWidth: wo?.width ?? null,
-      });
+      // K7: ölçülen en mirası ezer; ayar kaynağı boşsa gelen belge TOP satırının eni.
+      const childWidth = measuredChildWidth.trace
+        ? measuredChildWidth.width
+        : (await pickFinalizeChildWidthTx(tx, { parentRollId: roll.id, parentWidth: roll.width, woWidth: wo?.width ?? null })) ?? baseChildWidth;
       const cutMeasures: CutReadingInput[] = [];
       for (const [segIndex, seg] of segments.entries()) {
         const splitBarcode = segmentBarcodes[segIndex]!;
@@ -724,6 +750,8 @@ export async function finalize(
             initialQty: seg.qty,
             currentQty: seg.qty,
             weightKg: seg.weightKg,
+            weightSource: seg.weightSource,
+            labelConsigneeId: childLabelConsigneeId,
             labelBatchNo,
             labelItemName: labelTexts.labelItemName,
             labelColorName: labelTexts.labelColorName,
@@ -758,9 +786,10 @@ export async function finalize(
             // fire/scrap işaretlenmez (zaten sevke uygun değil).
             markedForKartela:
               (data.markedForKartela ?? false) && seg.status === RollStatus.WAREHOUSE,
-            // finalize toplu kesim — per-segment müşteri niyeti yok → stok etiketi.
-            // (Müşteri istenirse baskı anında seed edilir.)
-            lastLabelSnapshot: { stock: true },
+            // finalize toplu kesim — per-segment müşteri niyeti yok → stok etiketi; emanet topta
+            // sahibin niyeti (sahip kilidi). Ayna snapshot ile AYNI create'te.
+            lastLabelSnapshot: childIntent.lastLabelSnapshot,
+            labelCustomerId: childIntent.labelCustomerId,
           },
           include: {
             item: true,
@@ -830,6 +859,7 @@ export async function finalize(
             source: seg.auditSource,
             relatedErrorIds: seg.auditErrorIds,
             splitFromRollId: data.rollId,
+            ...(measuredChildWidth.trace ? { measuredWidth: measuredChildWidth.trace } : {}),
             ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
             inheritedOpCount: inheritedOps.length,
           },

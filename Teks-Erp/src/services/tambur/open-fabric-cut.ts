@@ -57,7 +57,8 @@ import { buildIntentSnapshot } from "../label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "../helpers/label-intent.helper";
 import { generateRollBarcodeTx } from "../helpers/roll-barcode.helper";
 import { TERIM } from "../../constants/terim";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
@@ -104,6 +105,12 @@ export async function cutOpenFabricInner(
       labelBatchNo?: string | null;
       labelItemName?: string | null;
       labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -144,6 +151,12 @@ export async function cutOpenFabricInner(
     });
     // Etikete basılacak kumaş adı / renk — topun kendi değeri (miras yok), ayara bağlı değil.
     const labelTexts = resolveRollLabelTexts(data);
+    // Kg kaynağı (tek boğaz) + emanet alıcısı + en (miras/belge/ölçülen, K7) — tx'ten önce.
+    const cutWeightSource = await resolveTamburWeightSource({ weightKg: cutWeightKg, weightSource: data.weightSource, stamp: { machineId: sessionMachineId } });
+    const cutConsigneeId = await resolveTamburConsignee({
+      labelConsigneeId: data.labelConsigneeId, targetCustomerId: data.targetCustomerId, ownerCustomerId: parent.ownerCustomerId,
+    });
+    const cutWidth = await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm);
     // Barkod-reddi KALDIRILDI (2026-07-16): Tambur adımındaki HER top kesilebilir —
     // barkodsuz açık kumaş VE Konumu-Düzelt ile buraya gelmiş barkodlu TOP. Barkod artık
     // dispatch anahtarı değil, yalnız çocuk-etiketleme semantiği (çocuk hep taze "F" barkod).
@@ -227,7 +240,7 @@ export async function cutOpenFabricInner(
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcodeTx(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
-    const cutIntent = await resolveLabelIntent(data);
+    const cutIntent = await resolveLabelIntent({ ...data, ownerCustomerId: parent.ownerCustomerId });
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
 
@@ -281,7 +294,7 @@ export async function cutOpenFabricInner(
         clientToken: data.clientToken ?? null,
         itemId: parent.itemId,
         colorId: parent.colorId,
-        width: parent.width,
+        width: cutWidth.width,
         // KAT — kesim anında seçilen değer KAZANIR (kullanıcı kararı: "top
         // kesilerek yeni bir kat değeri kazanabilir"). `undefined` = istemci
         // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
@@ -293,6 +306,8 @@ export async function cutOpenFabricInner(
         initialQty: data.lengthMeters,
         currentQty: data.lengthMeters,
         weightKg: cutWeightKg,
+        weightSource: cutWeightSource,
+        labelConsigneeId: cutConsigneeId,
         labelBatchNo: cutLabelBatchNo,
         labelItemName: labelTexts.labelItemName,
         labelColorName: labelTexts.labelColorName,
@@ -484,6 +499,7 @@ export async function cutOpenFabricInner(
         barcode: result.child.barcode,
         parentRemainingQty: result.newParentQty,
         notes: data.notes ?? null,
+        ...(cutWidth.trace ? { measuredWidth: cutWidth.trace } : {}),
         ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });

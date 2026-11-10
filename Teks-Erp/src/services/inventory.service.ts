@@ -100,6 +100,8 @@ export class InventoryService {
       colorId?: string | null;
       initialQty: number;
       weightKg?: number;
+      /** Kg kaynağı (tambur manuel yolu çözer; diğer çağıranlar boş bırakır). */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
       qualityGrade?: string;
       width?: number | null;  // En (cm) — opsiyonel, ölçülmediyse null
       propertyIds?: string[];
