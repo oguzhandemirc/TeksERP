@@ -190,11 +190,13 @@ describe('DocScanScreen — ML Kit belge tarayıcısı', () => {
     expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Belge tarayıcı açılamadı; kamera açıldı' }));
   });
 
-  it('tarayıcı yok (eski APK / modül inmemiş) → sessizce kendi kameramız', async () => {
+  it('⭐ tarayıcı yok (eski APK / modül inmemiş) → kendi kameramız + sebepli bilgi bildirimi (sessiz düşüş yok)', async () => {
     const r = renderWithPaper(<DocScanScreen />);
     fireEvent.press(r.getByTestId('belge-tara-sayfa-ekle'));
     expect(await r.findByTestId('sayfa-kamera')).toBeTruthy();
-    expect(Toast.show).not.toHaveBeenCalled();
+    expect(Toast.show).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'info', text1: 'Google tarayıcı bu cihazda hazır değil — kamera açıldı', text2: expect.any(String) }),
+    );
   });
 
   it('"Klasik kamera" düğmesi tarayıcıyı hiç denemeden kamerayı açar', async () => {

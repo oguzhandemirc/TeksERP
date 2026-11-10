@@ -6,8 +6,9 @@ const jpeg = (tag: string) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0
 const raw = (tag: string) => ({ uri: `file:///${tag}.jpg`, base64: jpeg(tag), width: 1950, height: 2600, bytes: 1 });
 
 describe('acquirePages', () => {
-  it('unavailable → kamera (hatasız)', async () => {
-    await expect(acquirePages(0, async () => ({ kind: 'unavailable', reason: 'module_missing' }))).resolves.toEqual({ route: 'camera' });
+  it('⭐ unavailable → kamera + sebep (sessiz düşüş yok; toast sebebi gösterir)', async () => {
+    await expect(acquirePages(0, async () => ({ kind: 'unavailable', reason: 'module_missing' }))).resolves.toEqual({ route: 'camera', unavailable: 'module_missing' });
+    await expect(acquirePages(0, async () => ({ kind: 'unavailable', reason: 'no_module' }))).resolves.toEqual({ route: 'camera', unavailable: 'no_module' });
   });
   it('error → kamera + ileti', async () => {
     await expect(acquirePages(0, async () => ({ kind: 'error', message: 'boom' }))).resolves.toEqual({ route: 'camera', error: 'boom' });

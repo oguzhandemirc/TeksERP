@@ -68,16 +68,25 @@ function isRawPage(p: unknown): p is RawScannedPage {
   );
 }
 
-/** Tarayıcıyı aç: önce uygunluk (modül inmemişse native indirmeyi arka plana bırakır), sonra tarama. */
-export async function scanWithDocScanner(req: ScanRequest): Promise<ScannerOutcome> {
+/** Uygunluk yoklaması (modül inmemişse native indirmeyi arka plana bırakır). Modül yoksa `no_module`; hiç fırlatmaz. */
+export async function checkDocScanner(): Promise<{ available: boolean; reason: string }> {
   const m = nativeModule();
-  if (!m) return { kind: 'unavailable', reason: 'no_module' };
+  if (!m) return { available: false, reason: 'no_module' };
   try {
     const a = await m.availabilityAsync(AVAILABILITY_TIMEOUT_MS);
-    if (!a || a.available !== true) return { kind: 'unavailable', reason: a?.reason ?? 'unknown' };
+    if (!a || a.available !== true) return { available: false, reason: a?.reason ?? 'unknown' };
+    return { available: true, reason: a.reason ?? 'ok' };
   } catch {
-    return { kind: 'unavailable', reason: 'error' };
+    return { available: false, reason: 'error' };
   }
+}
+
+/** Tarayıcıyı aç: önce uygunluk, sonra tarama. */
+export async function scanWithDocScanner(req: ScanRequest): Promise<ScannerOutcome> {
+  const a = await checkDocScanner();
+  if (!a.available) return { kind: 'unavailable', reason: a.reason };
+  const m = nativeModule();
+  if (!m) return { kind: 'unavailable', reason: 'no_module' };
   try {
     const quality = Math.round(Math.min(1, Math.max(0.5, req.quality)) * 100);
     const r = await m.scanAsync({ pageLimit: req.pageLimit, longEdge: req.longEdge, maxBytes: req.maxBytes, quality, startTimeoutMs: START_TIMEOUT_MS });
