@@ -30,6 +30,7 @@ import { finalBarcodeType } from "./roll-finalize.helper";
 import { reserveRollBarcodesTx } from "./roll-barcode.helper";
 import { collectRollStepScopeTx } from "./roll-step-scope.helper";
 import { recomputeStepStatus } from "./roll-step.helper";
+import { reentryStageData } from "./roll-stage.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -254,6 +255,8 @@ export async function applyRollDispositionsTx(
       where: { id: { in: ids }, status: RollStatus.IN_PRODUCTION, shipmentId: null, sackId: null },
       data: {
         status: target,
+        // Top aşaması: Depoya/A1'e kapanış bitmiş yazar, Stoğa geri/fire/iptal değiştirmez.
+        ...reentryStageData(target),
         currentStepId: null,
         ...(clearBatch ? { batchId: null } : {}),
         ...(quality ? { qualityGradeId: quality.id, qualityGrade: quality.code } : {}),

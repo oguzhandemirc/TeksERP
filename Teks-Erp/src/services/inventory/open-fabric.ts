@@ -6,6 +6,7 @@
 // dışa açık ad yalnız cepheden (`../inventory.service`) okunur.
 // =============================================================================
 
+import { lowestStage, stageForStepBirth } from "../helpers/roll-stage.helper";
 import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
@@ -170,6 +171,9 @@ export async function createOpenFabricFresh(this: InventoryServiceThis,
       // doğum emanet deposuna (fason kabulüyle aynı boğaz, F1b), sahipsiz bugünkü varsayılana.
       const openFabricOwnerId = await resolveOwnerFromReceiptTx(tx, receipt.id);
       const openFabricWarehouseId = await resolveBirthWarehouseIdTx(tx, null, openFabricOwnerId);
+      // Top aşaması: adım söylemezse makbuz kaynak toplarının en düşük aşaması (üretim içi doğum).
+      const sourceStages = await tx.subcontractorReceiptItem.findMany({ where: { receiptId: receipt.id }, select: { newRoll: { select: { stage: true } } } });
+      const openFabricStage = stageForStepBirth(step.outputStage, lowestStage(sourceStages.map((i) => i.newRoll.stage)));
       const created = await tx.roll.create({
         data: {
           barcode: null,
@@ -186,6 +190,7 @@ export async function createOpenFabricFresh(this: InventoryServiceThis,
           qualityGrade: null,
           qualityGradeId: null,
           entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
+          stage: openFabricStage,
           createdById: userId ?? null,
           // GİRİŞ İSTASYONU — adım elde (Kurşun/KK2), kaynağı odur.
           entryStationId: resolveEntryStationId({ stepStationId: step.stationId }),

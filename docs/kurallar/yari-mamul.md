@@ -26,6 +26,7 @@
 ### Kararlar
 
 - **[PROFİL]** Yarı mamul için ayrı DEPO açılmaz — değişen yalnız GÖRÜNÜMdür (ayrı sekme/kolon); statü, `entrySource` ve stok mekaniği ham stokla aynı kalır. Fabrikada ayrı deponun fiziksel karşılığı yok. <sub>(CLAUDE.md:92)</sub>
+- **[ÇEKİRDEK]** Yarı mamul girişi `stage=SEMI_FINISHED` doğar ve ROLL_RAW etiketi basar (ayrı ROLL_SEMI türü yok); aşama `entrySource`un yerine geçmez — sekme yine `entrySource`tan (bekçi `test_roll_asama_dogus` §2). <sub>(arşiv:2026-11-10 Top aşaması)</sub>
 
 ## Panel (Electron)
 
@@ -79,7 +80,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_goods_receipt`, `test_production_flow_columns`, `test_semi_finished_entry`, `test_semi_finished_surfaces`
+Backend: `test_roll_asama_dogus`, `test_goods_receipt`, `test_production_flow_columns`, `test_semi_finished_entry`, `test_semi_finished_surfaces`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

@@ -6,6 +6,7 @@
 // dışa açık ad yalnız cepheden (`../inventory.service`) okunur.
 // =============================================================================
 
+import { reentryStageData } from "../helpers/roll-stage.helper";
 import { ACTIVE_MOVEMENT } from "../helpers/roll-movement.helper";
 import prisma from "../../lib/prisma";
 import { postRescueEntryTx } from "../helpers/production-entry-ledger.helper";
@@ -196,6 +197,7 @@ export async function rescueStuckRoll(
         // Depo damgası ORTAK YÜKLEMDEN (terfi yolu `warehouseId`ye dokunmuyordu).
         data: {
           status: RollStatus.WAREHOUSE,
+          ...reentryStageData(RollStatus.WAREHOUSE),
           currentStepId: null,
           ...(await warehouseStampTx(tx, roll.warehouseId)),
         },

@@ -271,6 +271,7 @@ export async function finalizeWarehouseCut(
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
             entryStationId: resolveEntryStationId({ sessionStationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            stage: parent.stage, // Top Kesme çocuğu atanın aşamasını alır
             createdById: userId ?? null,
             createdMachineId: sessionMachineId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.

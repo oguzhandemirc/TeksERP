@@ -72,6 +72,7 @@ import {
   ReasonPresetKind,
   RollEntrySource,
   type RollMeterReading,
+  RollStage,
   RollStatus,
   StationKind,
   WorkOrderStatus,
@@ -1111,6 +1112,8 @@ export class TamburManualService {
         // değil mi) topun `currentStep`/iş emri bağından ZATEN okunuyor, ayrıca
         // audit olayları da ayrı (`TAMBUR_MANUAL_ROLL` ↔ `TAMBUR_MANUAL_PRODUCE`).
         forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+        // Tamburda elle eklenen top işlenmiş maldır → bitmiş aşama (renkten bağımsız, top aşaması 2026-11-10).
+        stage: RollStage.FINISHED,
         // Açık iş emrinin ürettiği top — mevcut malı yürütür (E): "Tükenene kadar" kartta da akar.
         itemUsage: "EXISTING_GOODS",
         // Sebep artık TOPUN ÜZERİNDE kalıcı kolonda (audit'e ek olarak): audit
@@ -1538,6 +1541,7 @@ export class TamburManualService {
           // bu iki satırda (yukarıdaki iz #1).
           forcedStatus: RollStatus.WAREHOUSE,
           forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+          stage: RollStage.FINISHED,
           // Açık iş emrinin ürettiği top — mevcut malı yürütür (E): "Tükenene kadar" kartta da akar.
           itemUsage: "EXISTING_GOODS",
           // Sebep kalıcı kolonda (audit'e EK olarak — audit arşivleniyor).

@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AnimatedProgress } from "@/components/motion";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
-import { rollStatusLabels } from "@/types/enums";
+import { rollStageLabels, rollStatusLabels } from "@/types/enums";
 import type { Roll } from "../types";
 import { CardRow, CardSection } from "./CardSection";
 
@@ -84,6 +84,7 @@ export function RollIdentitySection({ roll }: { roll: Roll }) {
         <CardRow label="En">{roll.width != null ? `${roll.width} cm` : null}</CardRow>
         <CardRow label="Ağırlık">{roll.weightKg != null ? `${num(roll.weightKg)} kg` : null}</CardRow>
         <CardRow label="Kalite">{roll.qualityGrade}</CardRow>
+        <CardRow label="Aşama" testId="roll-identity-stage">{roll.stage ? rollStageLabels[roll.stage] : null}</CardRow>
         <CardRow label="Biçim"><Badge variant="muted" className="text-[10px]">{roll.form === "ACIK" ? "Açık Kumaş" : "Top"}</Badge></CardRow>
         <CardRow label="Kat">{roll.foldType}</CardRow>
         <CardRow label="Özellikler">

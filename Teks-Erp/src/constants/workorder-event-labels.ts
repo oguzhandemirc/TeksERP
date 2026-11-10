@@ -47,6 +47,7 @@ export const WORK_ORDER_STEP_FIELD_LABEL: Record<string, string> = {
   requiredCategoryId: "Fason kategorisi",
   plannedSubcontractorId: "Planlanan fasoncu",
   dispatchWithoutColor: "Sevk rengi",
+  outputStage: "Çıktı aşaması",
 };
 
 /** Toplara uygulanan plan düzeltmesi (ROLL_ATTRIBUTES_APPLIED). */

@@ -85,6 +85,16 @@ enum ItemType {
   SERVICE
 }
 
+/// Topun ÜRETİM AŞAMASI (2026-11-10): RAW ham · SEMI_FINISHED yarı mamul · FINISHED bitmiş.
+/// Doğuşta yazılır (tek kaynak `services/helpers/roll-stage.helper.ts`); etiket türü
+/// (ROLL_RAW/ROLL_FINISHED) bu kolondan türer, renkten DEĞİL. `entrySource` nereden
+/// geldiğini, `status` nerede durduğunu, `stage` hangi aşamada olduğunu söyler.
+enum RollStage {
+  RAW
+  SEMI_FINISHED
+  FINISHED
+}
+
 /// Top'un sisteme nasıl girdiğini ifade eder — raporlama ayrımı için kritik.
 /// itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
 enum RollEntrySource {
@@ -1768,6 +1778,9 @@ model RouteStep {
   /// Şablon varsayılanı — iş emri açılışında `WorkOrderStep.dispatchWithoutColor`a
   /// kopyalanır. Gerekçe için oradaki nota bak (2026-08-17 "ekru" kuralı).
   dispatchWithoutColor   Boolean @default(false)
+  /// Şablon varsayılanı: bu adımın ÇIKTI AŞAMASI; İE açılışında `WorkOrderStep.outputStage`e
+  /// kopyalanır. null = otomatik (ara adımda atanın aşaması, son adımda/depoya inişte FINISHED).
+  outputStage            RollStage?
   /// Şablon varsayılanı: bu adımın önerilen makinesi (Gülkesim 2026-11-02, kurşun makinesi).
   /// İE açılışında `WorkOrderStep.plannedMachineId`ye klonlanır; yalnız ÖNERİ.
   plannedMachineId       String? @db.Uuid
@@ -3895,6 +3908,8 @@ model Roll {
   // Top'un sisteme nasıl girdiği — raporlama ayrımı için.
   // itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
   entrySource RollEntrySource @default(SUPPLIER_RECEIPT)
+  /// Üretim aşaması (2026-11-10) — doğuşta `roll-stage.helper` ile yazılır; etiket türü buradan.
+  stage       RollStage       @default(RAW)
 
   /// Elle eklenen topun SEBEBİ — "neden var" sorusunun cevabı.
   ///
@@ -5358,6 +5373,10 @@ model WorkOrderStep {
   /// ve etiket eskisi gibi çalışır. Gerçek renk kabulde personel tarafından
   /// beyan edilir (fason kabul ekranında renk alanı zaten var).
   dispatchWithoutColor Boolean @default(false)
+
+  /// Adımın ÇIKTI AŞAMASI (2026-11-10, `RouteStep.outputStage` kopyası). null = otomatik:
+  /// ara adım doğumu atanın aşamasını, son adım/depoya iniş FINISHED yazar (`roll-stage.helper`).
+  outputStage RollStage?
 
   /// PLANLANAN makine (Gülkesim 2026-11-02): yalnız ÖNERİ ve sıra bilgisi — engel/uyarı YOK.
   /// Fiilî makine bugünkü gibi okutan tabletin oturumundan (`RollMovement/RollOperation.machineId`).

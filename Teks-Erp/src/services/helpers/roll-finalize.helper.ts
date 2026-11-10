@@ -7,6 +7,7 @@
 // limbosu yok. Tambur kendi çocuk-üretim akışını korur; bu helper yalnız MEVCUT
 // topları son adımda finalize eder.
 // =============================================================================
+import { stageForProductionExit } from "./roll-stage.helper";
 import { WarehouseEventType, Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
 import { warehouseStampTx } from "./warehouse.helper";
@@ -154,9 +155,19 @@ export async function finalizeRollsAtLastStep(
    * girişini terslemek için bu damgayı kullanır. Adımı bilmeyen çağıran
    * (kurtarma yolu) geçmez; o satırlar damgasız kalır ve geçiş dalıyla bulunur.
    */
-  opts?: { workOrderStepId?: string | null },
+  opts?: {
+    workOrderStepId?: string | null;
+    /** Yalnız AŞAMA için okunan adım (defter damgası yazılmaz) — `workOrderStepId` yoksa. */
+    stageStepId?: string | null;
+  },
 ): Promise<FinalizedRoll[]> {
   if (rollIds.length === 0) return [];
+  // Top aşaması: son adımın çıktı aşaması, söylemezse bitmiş (`stageForProductionExit`).
+  const stageStepId = opts?.workOrderStepId ?? opts?.stageStepId ?? null;
+  const stageStep = stageStepId
+    ? await tx.workOrderStep.findUnique({ where: { id: stageStepId }, select: { outputStage: true } })
+    : null;
+  const exitStage = stageForProductionExit(stageStep?.outputStage);
   const rolls = await tx.roll.findMany({
     where: { id: { in: rollIds } },
     select: {
@@ -212,6 +223,7 @@ export async function finalizeRollsAtLastStep(
       where: { id: r.id },
       data: {
         status,
+        stage: exitStage,
         currentStepId: null,
         form: RollForm.ACIK,
         ...stampedWarehouse,

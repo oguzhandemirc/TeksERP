@@ -10,7 +10,7 @@
 // replay olur; ikinci top/İE doğmaz. Okuma kapısı yalnız SÜREN okumadır: düşen/okuyucusuz belgede operatörün elle girdiği
 // değerlerle kayıt yapılır (uyarıyla).
 // =============================================================================
-import { DeliveryNoteStatus } from "@prisma/client";
+import { DeliveryNoteStatus, type RollStage } from "@prisma/client";
 import prisma from "../lib/prisma";
 import type { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
@@ -119,6 +119,8 @@ export interface FormWorkOrderStep {
   plannedSubcontractorId?: string | null;
   plannedMachineId?: string | null;
   dispatchWithoutColor?: boolean;
+  /** Top aşaması 2026-11-10 — null = otomatik. */
+  outputStage?: RollStage | null;
 }
 
 /**

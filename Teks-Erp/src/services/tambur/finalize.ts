@@ -6,6 +6,7 @@
 // dışa açık ad yalnız cepheden (`../tambur.service`) okunur.
 // =============================================================================
 
+import { stageForProductionExit } from "../helpers/roll-stage.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { consumeForOperationTx } from "../helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
@@ -176,6 +177,8 @@ export async function finalize(
             // stationId 2026-08-05te EKLENDI: kesim cocuklarinin entryStationId
             // damgasi buradan cozulur. Ek sorgu YOK — ayni select.
             stationId: true,
+            // Top aşaması: çocuk adımın çıktı aşamasını alır, null → bitmiş (`stageForProductionExit`).
+            outputStage: true,
             station: { select: { kind: true } },
             workOrder: {
               select: {
@@ -750,6 +753,7 @@ export async function finalize(
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
             entryStationId: resolveEntryStationId({ stepStationId: roll.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            stage: stageForProductionExit(roll.currentStep?.outputStage),
             // Sadece depoya giden (WAREHOUSE) çıktılar kartelalık işaretlenir;
             // fire/scrap işaretlenmez (zaten sevke uygun değil).
             markedForKartela:

@@ -7,6 +7,7 @@
 // =============================================================================
 /* eslint-disable max-lines -- devralınan gövde kelimesi kelimesine taşındı; ailenin max-lines katkısı bölme öncesi gibi TEK (tambur/finalize.ts sayılır) */
 
+import { stageForProductionExit } from "../helpers/roll-stage.helper";
 import { consumeForOperationTx } from "../helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "../helpers/property-revoke.helper";
@@ -317,6 +318,7 @@ export async function finalizeOpenFabric(
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
             entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            stage: stageForProductionExit(parent.currentStep?.outputStage),
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
             // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.

@@ -14,7 +14,7 @@
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
 import { LabelService } from "../src/services/label.service";
-import { WorkOrderStatus, RollStatus } from "@prisma/client";
+import { WorkOrderStatus, RollStatus, RollStage } from "@prisma/client";
 
 let pass = 0,
   fail = 0;
@@ -109,6 +109,8 @@ async function setup(): Promise<string[]> {
         barcode,
         itemId: cfg.itemId ?? ITEM,
         colorId: cfg.colorId,
+        // Etiket türü aşamadan (2026-11-10): RAW/FINISHED matrisi renkli = bitmiş eşlemesini korur.
+        stage: cfg.colorId == null ? RollStage.RAW : RollStage.FINISHED,
         status: RollStatus.WAREHOUSE,
         currentQty: 100,
         initialQty: 100,

@@ -93,6 +93,12 @@ describe("kimlik", () => {
     rerender(<RollIdentitySection roll={mk({ weightKg: 12.5 })} />);
     expect(screen.getByText("Ağırlık")).toBeTruthy();
   });
+  it("§4b aşama: eski sunucu (alan yok) satır çizmez; varsa Türkçe etiket", () => {
+    const { rerender } = render(<RollIdentitySection roll={mk()} />);
+    expect(screen.queryByTestId("roll-identity-stage")).toBeNull();
+    rerender(<RollIdentitySection roll={mk({ stage: "FINISHED" })} />);
+    expect(screen.getByTestId("roll-identity-stage").textContent).toContain("Bitmiş");
+  });
 });
 
 describe("son hareketler", () => {

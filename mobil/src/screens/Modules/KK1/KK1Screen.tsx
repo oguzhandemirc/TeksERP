@@ -2619,7 +2619,6 @@ export default function KK1Screen() {
       <LabelPrinter
         key={activePrintRoll?.id ?? 'idle'}
         roll={activePrintRoll}
-        kind="ROLL_RAW"
         copies={activePrintJob?.copies}
         onDone={handlePrintDone}
         onResult={handlePrintResult}

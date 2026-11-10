@@ -22,6 +22,7 @@ import {
   WorkOrder,
   Prisma,
   type MaterialProvider,
+  type RollStage,
 } from "@prisma/client";
 import {
   type WorkOrderPlaceOptions,
@@ -660,6 +661,7 @@ export class WorkOrderService {
       plannedSubcontractorId?: string | null;
       /** 2026-08-17 — adım fasona renksiz gitsin ("ekru" kuralı). */
       dispatchWithoutColor?: boolean;
+      outputStage?: RollStage | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {

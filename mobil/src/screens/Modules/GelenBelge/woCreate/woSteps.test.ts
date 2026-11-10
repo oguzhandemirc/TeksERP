@@ -97,6 +97,19 @@ describe('woSteps', () => {
   });
 });
 
+describe('çıktı aşaması (outputStage, 2026-11-10)', () => {
+  it('⭐ şablon adımının açık aşaması düzenlenmiş gövdede taşınır; otomatik (null) anahtarsız; eklenen adım otomatik', () => {
+    const r = { ...route, steps: route.steps!.map((x) => (x.id === 's2' ? { ...x, outputStage: 'SEMI_FINISHED' } : x)) } as ProductionRoute;
+    let s = stepsFromRoute(r);
+    s = addStep(s, st('kk') as never, 'n1');
+    const body = buildStepsBody(s);
+    expect(body[1]).toMatchObject({ stationId: 'fas', outputStage: 'SEMI_FINISHED' });
+    expect('outputStage' in body[0]!).toBe(false);
+    expect('outputStage' in body[3]!).toBe(false);
+    expect(effectiveRoute(r, s).steps![1]!.outputStage).toBe('SEMI_FINISHED');
+  });
+});
+
 describe('K30-D ek gövde (buildExtraBody)', () => {
   it('⭐ dokunulmayan tür / özellik / adım / makine gövdeye GİTMEZ', () => {
     const b = buildExtraBody(extras({ steps: stepsFromRoute(route) }), { hasTambur: true, route });

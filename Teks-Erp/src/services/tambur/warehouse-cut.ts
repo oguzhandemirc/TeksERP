@@ -303,6 +303,7 @@ export async function cutWarehouseRollInner(
         // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
         entryStationId: resolveEntryStationId({ sessionStationId }),
         entrySource: RollEntrySource.TAMBUR_SPLIT,
+        stage: parent.stage, // Top Kesme çocuğu atanın aşamasını alır
         createdById: userId ?? null,
         createdMachineId: sessionMachineId ?? null,
         // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa

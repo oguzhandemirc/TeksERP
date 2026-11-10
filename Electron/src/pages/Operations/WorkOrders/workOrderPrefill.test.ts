@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeStepsToCreatePayload } from "./workOrderPrefill";
+import { routeStepsToCreatePayload, stepsToCustom } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 function step(over: Partial<DesignerStep>): DesignerStep {
@@ -68,5 +68,19 @@ describe("routeStepsToCreatePayload (rota şablonu kaydetme payload'ı)", () => 
 
   it("boş liste → boş payload", () => {
     expect(routeStepsToCreatePayload([])).toEqual([]);
+  });
+});
+
+describe("çıktı aşaması (outputStage, 2026-11-10) — elle kurulan allowlist", () => {
+  it("bilinmiyorsa (undefined) özel rota gövdesine YAZILMAZ: sunucu adımın aşamasını korur", () => {
+    expect("outputStage" in stepsToCustom([step({})])[0]!).toBe(false);
+  });
+  it("biliniyorsa gönderilir; null = otomatik de gönderilir", () => {
+    expect(stepsToCustom([step({ outputStage: "SEMI_FINISHED" })])[0]!.outputStage).toBe("SEMI_FINISHED");
+    expect(stepsToCustom([step({ outputStage: null })])[0]!.outputStage).toBeNull();
+  });
+  it("şablon kaydı: açık aşama taşınır, otomatikte gövde eskisiyle aynı", () => {
+    expect(routeStepsToCreatePayload([step({ outputStage: "FINISHED" })])[0]!.outputStage).toBe("FINISHED");
+    expect("outputStage" in routeStepsToCreatePayload([step({ outputStage: null })])[0]!).toBe(false);
   });
 });

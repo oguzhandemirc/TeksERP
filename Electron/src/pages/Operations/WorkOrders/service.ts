@@ -4,6 +4,7 @@ import type { ApiResponse, ListScope } from "@/types/api";
 import { buildScopeQueryString } from "@/lib/query-builder";
 import type { PrintJobAttachment } from "@/services/printJobService";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
+import type { RollStage } from "@/types/enums";
 import type {
   WorkOrder,
   TargetPropertyChangeImpact,
@@ -641,6 +642,8 @@ export interface QuickStartPayload {
     plannedSubcontractorId?: string | null;
     notes?: string | null;
     dispatchWithoutColor?: boolean;
+    /** Çıktı aşaması (2026-11-10) — yoksa şablon adımınınki kalır. */
+    outputStage?: RollStage | null;
   }[];
   /** İlk adım fason + firma çözülüyse: WO ile birlikte sevki de yap (çeki listesi). */
   dispatchFirstStep?: boolean;

@@ -8,6 +8,9 @@
 // master-data CRUD karşılığı — pasif istasyon/kategori/fason şablona sızmasın.)
 // =============================================================================
 
+import { RollStage } from "@prisma/client";
+import { keepStepOutputStage } from "./helpers/step-output-stage.helper";
+
 import prisma from "../lib/prisma";
 import { routeDecisionWarnings, withWarnings } from "./helpers/defect-decision.helper";
 import { BaseService, type BaseServiceConfig } from "./base.service";
@@ -20,6 +23,8 @@ import type { ApiResponse } from "../types/api.types";
 import type { Request } from "express";
 import { parseQueryParams } from "../utils/query-parser";
 import { assertShortcutFields, isShortcutQuery, listShortcutRoutes, withKursunStations } from "./helpers/route-shortcut.helper";
+
+const ROLL_STAGES: ReadonlySet<string> = new Set(Object.values(RollStage));
 
 /**
  * Route servis konfigürasyonu — TEK KAYNAK. Hem canlı wiring (route.routes.ts)
@@ -92,6 +97,8 @@ interface IncomingStep {
   defaultNotes?: string | null;
   /** "Fasona renksiz git" — iş emri açılışında WorkOrderStep'e klonlanır. */
   dispatchWithoutColor?: boolean;
+  /** Çıktı aşaması (2026-11-10) — null = otomatik; İE açılışında WorkOrderStep'e klonlanır. */
+  outputStage?: RollStage | null;
   /** 2026-08-06: adımın şablon hedefi. `plannedPropertyIds` DÜZ ID DİZİSİDİR — */
   plannedColorId?: string | null;
   /** serviste `{ create: [{ propertyId }] }` nested write'ına ÇEVRİLİR (aşağı). */
@@ -122,6 +129,8 @@ export class RouteService extends BaseService {
     "dispatchWithoutColor",
     // Gülkesim 2026-11-02: kurşun makinesi önerisi — İE adımına klonlanır.
     "plannedMachineId",
+    // Top aşaması 2026-11-10: adımın çıktı aşaması (null = otomatik) — İE adımına klonlanır.
+    "outputStage",
   ]);
 
   /** Dizi-form VE nested-write ({create:[...]}) formundan step nesnelerini çıkarır. */
@@ -151,6 +160,11 @@ export class RouteService extends BaseService {
           throw AppError.badRequest(`Rota adımında izin verilmeyen alan: ${k}`);
         }
       }
+    }
+
+    // outputStage: yalnız RollStage değeri ya da null (FAIL-CLOSED).
+    if (steps.some((s) => s.outputStage != null && !ROLL_STAGES.has(s.outputStage))) {
+      throw AppError.badRequest("Rota adımı çıktı aşaması geçersiz (RAW | SEMI_FINISHED | FINISHED ya da boş)");
     }
 
     // sequence: pozitif tam sayı + tekrarsız
@@ -386,6 +400,21 @@ export class RouteService extends BaseService {
   }
 
   /**
+   * Adımlar her kayıtta silinip yeniden yazılır; `outputStage`i bilmeyen ESKİ panel alanı
+   * göndermez → aynı sıra + istasyondaki eski değer korunur (gönderilen null = otomatik).
+   */
+  private async keepOutputStageOfOldClient(routeId: string, data: Record<string, unknown>): Promise<void> {
+    if (data.steps == null) return;
+    const steps = this.extractSteps(data.steps);
+    if (!steps || steps.length === 0 || steps.every((s) => "outputStage" in s)) return;
+    const old = await prisma.routeStep.findMany({
+      where: { routeId, outputStage: { not: null } },
+      select: { sequence: true, stationId: true, outputStage: true },
+    });
+    keepStepOutputStage(steps, old.map((o) => ({ sequence: o.sequence, stationId: o.stationId, outputStage: o.outputStage })));
+  }
+
+  /**
    * `plannedPropertyIds` (istemci sözleşmesi) → `plannedProperties.create`
    * (Prisma). Boş/eksik dizi nested write ÜRETMEZ: `{ create: [] }` göndermek
    * de çalışırdı ama gövdeye anlamsız bir operatör yazar ve "hiç dokunmadım"
@@ -422,6 +451,7 @@ export class RouteService extends BaseService {
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     const warnings = await routeDecisionWarnings(data.steps == null ? null : this.extractSteps(data.steps));
+    await this.keepOutputStageOfOldClient(id, data);
     await this.validateSteps(data);
     return withWarnings(await super.update(id, data, userId), warnings);
   }

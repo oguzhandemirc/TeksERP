@@ -1,6 +1,7 @@
 import { apiClient } from './api';
 import { buildQueryString } from '../utils/queryBuilder';
 import type { ApiResponse, PaginatedResponse, QueryParams } from '../types/api';
+import type { RollStage } from '../types/models';
 
 /** Üretim rota şablonu — Hızlı İş Emri'nde WO rotası seçimi için. */
 export interface ProductionRoute {
@@ -28,6 +29,8 @@ export interface ProductionRoute {
     dispatchWithoutColor?: boolean;
     /** Adımın şablondaki önerilen makinesi (Gülkesim 2026-11-02); sunucu açılışta bunu klonlar. Eski sunucu göndermez. */
     plannedMachineId?: string | null;
+    /** Çıktı aşaması (2026-11-10): null = otomatik; etiket türü topun aşamasından türer. Eski sunucu göndermez. */
+    outputStage?: RollStage | null;
     // 2026-08-06: adımın ŞABLON HEDEFİ — rota seçilince hedef renk/özellik
     // alanları buradan ön-doldurulur (öneridir, operatör değiştirebilir).
     // Eski backend bu alanları göndermez → undefined kalır, ön-doldurma olmaz.

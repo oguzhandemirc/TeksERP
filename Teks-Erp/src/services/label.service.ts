@@ -26,7 +26,8 @@ import {
   readScrapGradeLabelEnabled,
   readCompanyName,
 } from "./system-setting.service";
-import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
+import { LabelKind, PrinterLanguage, Prisma, RollStage, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
+import { resolveRollLabelKind, rollLabelKindOf } from "./helpers/roll-stage.helper";
 import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { loadActiveCustomerCodes } from "./helpers/roll-customer-code-read.helper";
@@ -797,11 +798,9 @@ export class LabelService {
 
   /**
    * Rolün etiket HTML'i — tek doğru kaynak. Hem mobil (expo-print) hem Electron
-   * (LabelPreview iframe) bu HTML'i tüketir. Kind otomatik tespit edilir:
-   * RENKSİZ (colorId == null) = ham kumaş → ROLL_RAW, aksi halde ROLL_FINISHED.
-   * Renk = boyanmış = bitmiş; renksiz top hangi statüde olursa olsun (tedarikçi
-   * ham stoğu, tambur'da kesilen ham parça, ham talep eden müşteriye giden
-   * ham-bitmiş depo topu) ham etiketle basılır. Caller `?kind=` ile override eder.
+   * (LabelPreview iframe) bu HTML'i tüketir. Kind topun AŞAMASINDAN türer
+   * (`rollLabelKindOf`: FINISHED → ROLL_FINISHED, RAW/SEMI_FINISHED → ROLL_RAW);
+   * renk (`colorId`) karar vermez (2026-11-10). Caller `?kind=` ile override eder.
    */
   /**
    * Ortak render girdisi — payload + kind (ROLL_RAW/FINISHED) + default template +
@@ -827,23 +826,22 @@ export class LabelService {
     // FİRE KAPISI — kâğıt üreten HER yol buradan geçer (bkz. assertScrapLabelAllowed).
     await assertScrapLabelAllowed(payload.qualityGrade, opts?.confirmScrap);
 
-    // colorId: preloaded'da Aşama-A roll'unda zaten var → ikinci sorgu YOK.
+    // stage: preloaded'da Aşama-A roll'unda zaten var → ikinci sorgu YOK.
     // (preloaded'da roll eksikse — beklenmez — güvenli tarafta sorguya düş.)
-    let colorId: string | null;
+    let stage: RollStage;
     const preRoll = preloaded?.rollById.get(rollId);
     if (preRoll) {
-      colorId = preRoll.colorId;
+      stage = preRoll.stage;
     } else {
       const r = await prisma.roll.findUnique({
         where: { id: rollId },
-        select: { colorId: true },
+        select: { stage: true },
       });
       if (!r) throw AppError.notFound("Top bulunamadı");
-      colorId = r.colorId;
+      stage = r.stage;
     }
 
-    const kind: LabelKind =
-      kindOverride ?? (colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
+    const kind: LabelKind = resolveRollLabelKind(stage, kindOverride);
 
     // Bulk → preloaded SABİT template+format (Electron toplu baskı; cihaz bağlamı yok).
     // Tekil → birleşik yönlendirme: cihaz→{format, template, dil}. Cihaz eşleşmezse
@@ -2304,7 +2302,7 @@ export class LabelService {
   ): Promise<ApiResponse<{ recorded: true }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, barcode: true, status: true, colorId: true, labelPrintedAt: true },
+      select: { id: true, barcode: true, status: true, stage: true, labelPrintedAt: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
@@ -2317,7 +2315,7 @@ export class LabelService {
     let resolvedMeta: Record<string, unknown> = {};
     try {
       const payload = (await this.getRollLabel(rollId, opts)).data;
-      const kind: LabelKind = roll.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED;
+      const kind: LabelKind = rollLabelKindOf(roll.stage);
       const routing = await resolveLabelRouting({
         kind,
         customerId: payload.customerId ?? null,

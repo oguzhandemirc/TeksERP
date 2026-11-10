@@ -7,11 +7,12 @@
 //   2. rawDestination='STOCK'     → çocuk STOCK + renksiz (üretime geri döner).
 //   3. rawDestination='WAREHOUSE' → çocuk WAREHOUSE + renksiz (sevke hazır ham).
 //   4. STOCK çocuk WO-bağlama filtresine (status===STOCK) uygun.
-//   5. Etiket türü colorId==null → ROLL_RAW (ham STOCK, ham WAREHOUSE), renkli → ROLL_FINISHED.
+//   5. Etiket türü topun AŞAMASINDAN (2026-11-10): ham atadan kesilen çocuk (STOCK ya da WAREHOUSE)
+//      atanın aşamasını (RAW) alır → ROLL_RAW; bitmiş (stage FINISHED) top → ROLL_FINISHED.
 //   6. finalizeWarehouseCut ham STOCK parent'ı arşivler (guard gevşetildi).
 //   7. IN_PRODUCTION top kesime reddedilir (guard hâlâ koruyor).
 
-import { RollStatus, RollEntrySource } from "@prisma/client";
+import { RollStatus, RollEntrySource, RollStage } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { LabelService } from "../src/services/label.service";
@@ -95,7 +96,7 @@ async function main() {
   check("Ham WAREHOUSE çocuk → etiket ROLL_RAW", lblRawWh.data.kind === "ROLL_RAW",
     `kind=${lblRawWh.data.kind}`);
 
-  // Renkli (colorId dolu) bir top → ROLL_FINISHED kontrolü
+  // Bitmiş (stage FINISHED) top → ROLL_FINISHED kontrolü (renk artık karar vermez)
   const color = await prisma.color.findFirst({ select: { id: true } });
   if (color) {
     const coloredRoll = await prisma.roll.create({
@@ -107,6 +108,7 @@ async function main() {
         initialQty: 10,
         currentQty: 10,
         status: RollStatus.WAREHOUSE,
+        stage: RollStage.FINISHED,
         qualityGrade: "1.KALITE",
         entrySource: RollEntrySource.TAMBUR_SPLIT,
       },
@@ -114,7 +116,7 @@ async function main() {
     });
     created.push(coloredRoll.id);
     const lblColored = await labels.getRollLabelHtml(coloredRoll.id);
-    check("Renkli top → etiket ROLL_FINISHED", lblColored.data.kind === "ROLL_FINISHED",
+    check("Bitmiş (FINISHED) top → etiket ROLL_FINISHED", lblColored.data.kind === "ROLL_FINISHED",
       `kind=${lblColored.data.kind}`);
   } else {
     console.log("ℹ️  Renk yok — renkli-FINISHED testi atlandı.");

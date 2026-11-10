@@ -22,6 +22,7 @@ import { capCanApplyColor, isTargetableProperty } from "@/pages/StationCapabilit
 import type { DesignerStep } from "./RouteDesignerDialog";
 import { StepParamBoxView, StepPropertyChips } from "./StepPropertyChips";
 import { TERIM } from "@/lib/terim";
+import { outputStageLabel } from "@/components/route/OutputStageButtons";
 
 export interface RouteTargetBinding {
   colorId: string | null;
@@ -264,6 +265,10 @@ export function RouteStepDetail({
           </div>
         )}
       </div>
+
+      {step.outputStage && (
+        <div className="text-[11px] text-muted-foreground">Çıktı aşaması: {outputStageLabel(step.outputStage)} (rota şablonundan)</div>
+      )}
 
       {step.stationId &&
         (capQ.isLoading ? (

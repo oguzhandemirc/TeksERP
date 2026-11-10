@@ -1,4 +1,4 @@
-import type { MaterialProvider, RollStatus, StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
+import type { MaterialProvider, RollStage, RollStatus, StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type { WorkOrderLocation } from "./location";
 
@@ -83,6 +83,8 @@ export interface WorkOrderStepLite {
   dispatchWithoutColor?: boolean;
   /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri). */
   plannedMachineId?: string | null;
+  /** Çıktı aşaması (2026-11-10) — null = otomatik; eski sunucu göndermez. */
+  outputStage?: RollStage | null;
   /** K29: 'SCAN' = adım sahada istasyon okutmasıyla eklendi (plan değil). findById döner. */
   addedVia?: string | null;
   /** Atlanma nedeni (SKIPPED adımda): SCAN_SKIP = okutmayla atlandı. */

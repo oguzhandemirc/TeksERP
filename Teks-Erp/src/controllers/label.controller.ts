@@ -198,8 +198,8 @@ export class LabelController {
 
   /**
    * Roll etiketinin tam HTML'i. Mobil expo-print bunu basar, Electron iframe
-   * srcDoc ile preview gösterir. Kind otomatik (renksiz STOCK SUPPLIER → RAW,
-   * aksi FINISHED); `?kind=ROLL_RAW|ROLL_FINISHED` ile override.
+   * srcDoc ile preview gösterir. Kind topun aşamasından (`rollLabelKindOf`: bitmiş →
+   * FINISHED, ham/yarı mamul → RAW); `?kind=ROLL_RAW|ROLL_FINISHED` ile override.
    *
    * Response: text/html (raw), JSON sarmalama yok — iframe ve Print için direkt.
    */

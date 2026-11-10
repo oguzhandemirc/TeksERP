@@ -20,6 +20,7 @@ import { RouteDesignerTemplatePanel } from "./RouteDesignerTemplatePanel";
 import { useDesignerSteps } from "./useDesignerSteps";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import { TERIM } from "@/lib/terim";
+import type { RollStage } from "@/types/enums";
 
 export interface DesignerStep {
   clientId: string;
@@ -40,6 +41,8 @@ export interface DesignerStep {
   dispatchWithoutColor?: boolean;
   /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri) — kurşun adımı kartında seçilir. */
   plannedMachineId?: string | null;
+  /** Çıktı aşaması (2026-11-10) — undefined = bilinmiyor (gönderilmez, sunucu korur); null = otomatik. */
+  outputStage?: RollStage | null;
 }
 
 export interface CustomRouteStep {
@@ -52,6 +55,8 @@ export interface CustomRouteStep {
   dispatchWithoutColor?: boolean;
   /** undefined = gönderme (sunucu mevcut öneriyi korur); null = temizle. */
   plannedMachineId?: string | null;
+  /** undefined = gönderme (sunucu mevcut aşamayı korur); null = otomatik. */
+  outputStage?: RollStage | null;
 }
 
 export type RouteDesignerResult =
@@ -136,6 +141,8 @@ export function RouteDesignerDialog({
           // "Fasona renksiz git" şablona da yazılır — yoksa şablondan açılan her
           // iş emrinde kutu yeniden işaretlenmek zorunda kalır.
           dispatchWithoutColor: s.dispatchWithoutColor ?? false,
+          // Çıktı aşaması şablondan geldiyse yeni şablona da taşınır; yoksa otomatik.
+          outputStage: s.outputStage ?? null,
         })),
       };
       return routeService.create(payload as unknown as Partial<ProductionRoute>);

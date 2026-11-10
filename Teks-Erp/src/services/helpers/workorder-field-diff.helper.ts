@@ -6,7 +6,7 @@
 // =============================================================================
 
 import { sequentialTx } from "./tx-sequential-relations.helper";
-import { Prisma, WorkOrderType, type MaterialProvider } from "@prisma/client";
+import { Prisma, WorkOrderType, type MaterialProvider, type RollStage } from "@prisma/client";
 import { MATERIAL_PROVIDER_LABEL } from "../../constants/material-provider";
 import { factoryDateTr } from "../../constants/time";
 import {
@@ -114,6 +114,7 @@ export interface StepSnapshot {
   plannedSubcontractorId: string | null;
   subcontractorName: string | null;
   dispatchWithoutColor: boolean;
+  outputStage: RollStage | null;
 }
 
 /** İş emrinin (ya da tek adımın) plan anlık görüntüsü, sıra düzeninde. */
@@ -123,7 +124,7 @@ export async function readStepSnapshotsTx(tx: Tx, workOrderId: string, stepId?: 
     orderBy: { stepSequence: "asc" },
     select: {
       id: true, stepSequence: true, notes: true, requiredCategoryId: true,
-      plannedSubcontractorId: true, dispatchWithoutColor: true,
+      plannedSubcontractorId: true, dispatchWithoutColor: true, outputStage: true,
       station: { select: { name: true } },
       requiredCategory: { select: { name: true } },
       plannedSubcontractor: { select: { name: true } },
@@ -134,11 +135,14 @@ export async function readStepSnapshotsTx(tx: Tx, workOrderId: string, stepId?: 
     requiredCategoryId: r.requiredCategoryId, categoryName: r.requiredCategory?.name ?? null,
     plannedSubcontractorId: r.plannedSubcontractorId, subcontractorName: r.plannedSubcontractor?.name ?? null,
     dispatchWithoutColor: r.dispatchWithoutColor,
+    outputStage: r.outputStage,
   }));
 }
 
 const routeLabel = (steps: StepSnapshot[]) => steps.map((s) => s.stationName).join(" → ").slice(0, 1000);
 const sendLabel = (v: boolean) => (v ? "Renksiz sevk" : "Renkli sevk");
+const STAGE_LABEL: Record<RollStage, string> = { RAW: "Ham", SEMI_FINISHED: "Yarı mamul", FINISHED: "Bitmiş" };
+const stageLabel = (v: RollStage | null) => (v ? STAGE_LABEL[v] : "Otomatik");
 
 /** Aynı adımın iki hâli arasındaki plan alanı farkları. */
 function stepFieldChanges(a: StepSnapshot, b: StepSnapshot): WorkOrderFieldChange[] {
@@ -156,6 +160,9 @@ function stepFieldChanges(a: StepSnapshot, b: StepSnapshot): WorkOrderFieldChang
   if (a.dispatchWithoutColor !== b.dispatchWithoutColor) {
     out.push({ field: "dispatchWithoutColor", from: String(a.dispatchWithoutColor), to: String(b.dispatchWithoutColor),
       fromLabel: sendLabel(a.dispatchWithoutColor), toLabel: sendLabel(b.dispatchWithoutColor) });
+  }
+  if (a.outputStage !== b.outputStage) {
+    out.push({ field: "outputStage", from: a.outputStage, to: b.outputStage, fromLabel: stageLabel(a.outputStage), toLabel: stageLabel(b.outputStage) });
   }
   return out;
 }

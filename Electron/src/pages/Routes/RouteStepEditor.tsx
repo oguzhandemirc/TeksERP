@@ -28,6 +28,7 @@ import type { Station } from "@/pages/Stations/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { RouteStepTargets } from "./RouteStepTargets";
+import { OutputStageButtons } from "@/components/route/OutputStageButtons";
 import { newClientId, type RouteStepFormValues } from "./schema";
 import { PlannedMachineButtons } from "@/components/kursun/PlannedMachineButtons";
 import { loadAllForPicker } from "@/lib/picker-loader";
@@ -267,6 +268,12 @@ function StepRow({ step, index, onStationPick, onUpdate, onRemove }: RowProps) {
               value={step.plannedMachineId ?? null}
               onChange={(v) => onUpdate({ plannedMachineId: v })}
             />
+          </div>
+        )}
+
+        {step.stationId && (
+          <div className="sm:col-span-2">
+            <OutputStageButtons value={step.outputStage ?? null} onChange={(v) => onUpdate({ outputStage: v })} />
           </div>
         )}
 

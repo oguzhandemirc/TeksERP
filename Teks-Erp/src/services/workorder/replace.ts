@@ -25,6 +25,7 @@ import {
   WorkOrder,
   WorkOrderStatus,
   Prisma,
+  type RollStage,
 } from "@prisma/client";
 import {
   readStepSnapshotsTx,
@@ -145,6 +146,10 @@ export async function replace(
       plannedMachineId?: string | null;
       /** Yalnız YENİ doğan adımda kullanılan şablon önerisi. */
       templateMachineId?: string | null;
+      /** Çıktı aşaması; undefined = mevcut adımda KORU (alanı bilmeyen eski istemci silmesin). */
+      outputStage?: RollStage | null;
+      /** Yalnız YENİ doğan adımda kullanılan şablon çıktı aşaması. */
+      templateOutputStage?: RollStage | null;
     }[] = [];
 
     if (data.routeTemplateId) {
@@ -189,6 +194,8 @@ export async function replace(
           dispatchWithoutColor: overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false,
           plannedMachineId: overlay?.plannedMachineId,
           templateMachineId: s.plannedMachineId ?? null,
+          outputStage: overlay?.outputStage,
+          templateOutputStage: s.outputStage ?? null,
         };
       });
       const tplFiltered = await filterTemplatePlannedMachines(
@@ -210,6 +217,7 @@ export async function replace(
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
         dispatchWithoutColor: s.dispatchWithoutColor ?? false,
         plannedMachineId: s.plannedMachineId,
+        outputStage: s.outputStage,
       }));
     }
 
@@ -559,6 +567,7 @@ export async function replace(
           stepSequence: true,
           status: true,
           stationId: true,
+          outputStage: true,
           _count: {
             select: {
               // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): geri alınmış hareket ve operasyon da
@@ -681,6 +690,8 @@ export async function replace(
               ...(incoming.plannedMachineId !== undefined
                 ? { plannedMachineId: incoming.plannedMachineId }
                 : old.stationId !== incoming.stationId ? { plannedMachineId: null } : {}),
+              // Çıktı aşaması verilmediyse (eski istemci) korunur.
+              ...(incoming.outputStage !== undefined ? { outputStage: incoming.outputStage } : {}),
             },
           });
         } else {
@@ -694,6 +705,12 @@ export async function replace(
               plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
               dispatchWithoutColor: incoming.dispatchWithoutColor ?? false,
               plannedMachineId: incoming.plannedMachineId ?? incoming.templateMachineId ?? null,
+              // Açık değer > şablon > (id'siz eski istemci) aynı sıra + istasyondaki eski değer.
+              outputStage: incoming.outputStage !== undefined
+                ? incoming.outputStage
+                : incoming.templateOutputStage !== undefined
+                  ? incoming.templateOutputStage
+                  : (existingStepRows.find((o) => o.stepSequence === stepSequence && o.stationId === incoming.stationId)?.outputStage ?? null),
             },
           });
         }

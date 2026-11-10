@@ -351,7 +351,7 @@ export async function kursunFinish(
         // Sonraki step yok — rota bu (Tambur-dışı) açık-kumaş adımıyla bitiyor. Artık
         // MEŞRU: top FİNAL'e çekilir (kaliteye göre WAREHOUSE; finalizeRollsAtLastStep),
         // currentStepId=null, form=ACIK, barkodsuz açık kumaşa barkod üretilir. PRODUCED YOK.
-        await finalizeRollsAtLastStep(tx, [rollId]);
+        await finalizeRollsAtLastStep(tx, [rollId], { stageStepId: stepId });
       }
 
       await recomputeStepStatus(tx, stepId);

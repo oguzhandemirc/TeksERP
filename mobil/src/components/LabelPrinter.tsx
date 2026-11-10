@@ -32,9 +32,9 @@ import { useCustomerCodeMissingExit } from './customerCode/useCustomerCodeMissin
 interface Props {
   /** Etiketi basılacak top. null ise hiçbir şey yapılmaz. */
   roll: Roll | null;
-  /** Etiket türü — KK1 → ROLL_RAW, Tambur → ROLL_FINISHED. Backend hangi
-   *  default şablonun uygulanacağını belirler. */
-  kind: 'ROLL_RAW' | 'ROLL_FINISHED';
+  /** Etiket türü ELLE seçimi. Verilmezse sunucu topun aşamasından türetir
+   *  (2026-11-10: ham/yarı mamul → ROLL_RAW, bitmiş → ROLL_FINISHED). */
+  kind?: 'ROLL_RAW' | 'ROLL_FINISHED';
   /** Baskı-anında müşteri bağlamı (gevşek model: top→sipariş bağı yok).
    *  orderLineId → tam sipariş + override; customerId → manuel müşteri;
    *  stock → explicit "Stok/müşterisiz" (backend müşteriyi zorla null bırakır,
@@ -196,7 +196,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
         if (viaBt && btPrinterAddr) {
           // Cihazın diline göre native (PPLA/PPLB/ZPL) — kayıttaki yazıcı belirler
           // (backend resolveLabelRouting; cihaz kaydı yoksa RASTER_HTML → aşağıda
-          // fail-closed). kind: KK1 ham / Tambur bitmiş paritesi. rasterCapable=flag →
+          // fail-closed). kind yoksa sunucu topun aşamasından seçer. rasterCapable=flag →
           // açıkken backend cihazın rasterMode'unu onurlandırır (raster GW bitmap, base64).
           phase = 'fetch';
           const native = await labelService.getRollNative(
@@ -234,7 +234,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
           phase = 'fetch';
           const r = await apiClient.get<string>(`/labels/rolls/${jobRoll.id}/html`, {
             params: {
-              kind: jobKind,
+              ...(jobKind ? { kind: jobKind } : {}),
               ...(jobContext?.orderLineId ? { orderLineId: jobContext.orderLineId } : {}),
               ...(jobContext?.customerId ? { customerId: jobContext.customerId } : {}),
               ...(jobContext?.stock ? { stock: "1" } : {}),

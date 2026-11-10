@@ -47,13 +47,14 @@ export const labelService = {
    */
   getRollNative: (
     rollId: string,
-    kind: 'ROLL_RAW' | 'ROLL_FINISHED',
+    // Yoksa gönderilmez → sunucu topun AŞAMASINDAN türetir (2026-11-10); verilirse elle seçim kazanır.
+    kind: 'ROLL_RAW' | 'ROLL_FINISHED' | undefined,
     // copies: etiket adedi — yalnız STATION modunda verilir; yoksa sunucu çözer.
     ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean; copies?: number },
     rasterCapable?: boolean,
   ): Promise<{ content: string; encoding: 'text' | 'base64'; language: string }> => {
     const params = {
-      kind,
+      ...(kind ? { kind } : {}),
       ...(ctx?.copies !== undefined ? { copies: String(ctx.copies) } : {}),
       ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
       ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),

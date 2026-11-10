@@ -63,7 +63,8 @@ router.get(
  *       sorunu yapısal olarak çözülür. Barcode (Code128) + QR SVG inline
  *       gömülür, admin Electron'da yaptığı şablon değişikliği anlık yansır.
  *
- *       Kind otomatik tespit edilir; `?kind=ROLL_RAW|ROLL_FINISHED` ile zorla.
+ *       Kind topun aşamasından türer (bitmiş → ROLL_FINISHED, ham/yarı mamul → ROLL_RAW;
+ *       renk karar vermez); `?kind=ROLL_RAW|ROLL_FINISHED` ile zorla.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -97,7 +98,7 @@ router.get(
  *       Faz-1: yalnız ÜRETİLİR (saf string; inceleme/önizleme/gelecek native baskı için);
  *       ham-bayt gönderim simüle (donanım I/O Faz-2). Format profili (medya + güvenlik payı)
  *       `/html` ile aynı resolver'dan: `?peripheralId=` / `?machineId=` veya istasyon (mobil oto).
- *       `?kind=ROLL_RAW|ROLL_FINISHED` ile etiket türü zorlanır (verilmezse top renginden
+ *       `?kind=ROLL_RAW|ROLL_FINISHED` ile etiket türü zorlanır (verilmezse topun aşamasından
  *       türetilir — `/html` ile aynı davranış; KK1 ham / Tambur bitmiş paritesi).
  *     security: [{ bearerAuth: [] }]
  *     parameters:

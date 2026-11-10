@@ -9,6 +9,7 @@ import type { ProductionRoute } from "./types";
 import { type RouteFormValues } from "./schema";
 import type { RoutesNavState } from "@/pages/Operations/WorkOrders/oie/nav";
 import { TERIM } from "@/lib/terim";
+import type { RollStage } from "@/types/enums";
 
 interface StepCreate {
   stationId: string;
@@ -18,6 +19,8 @@ interface StepCreate {
   plannedSubcontractorId: string | null;
   /** Önerilen makine (yalnız öneri) — backend adımın istasyonuna ait olmasını doğrular. */
   plannedMachineId: string | null;
+  /** Çıktı aşaması — her zaman gönderilir (anahtar yoksa backend eski değeri korur). */
+  outputStage: RollStage | null;
   /** Şablon hedefi. Backend `plannedPropertyIds`'i pivot nested write'ına ÇEVİRİR
    *  — istemci ham Prisma yazımı göndermez (mass-assignment allowlist'i). */
   plannedColorId: string | null;
@@ -47,6 +50,7 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
     requiredCategoryId: s.requiredCategoryId ?? null,
     plannedSubcontractorId: s.plannedSubcontractorId ?? null,
     plannedMachineId: s.plannedMachineId ?? null,
+    outputStage: s.outputStage ?? null,
     plannedColorId: s.plannedColorId ?? null,
     plannedPropertyIds: s.plannedPropertyIds ?? [],
   }));

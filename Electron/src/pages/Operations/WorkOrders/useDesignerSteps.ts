@@ -175,6 +175,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
           requiredCategoryId: s.requiredCategoryId ?? base.requiredCategoryId,
           plannedSubcontractorId: s.plannedSubcontractorId ?? null,
           plannedMachineId: s.plannedMachineId ?? null,
+          outputStage: s.outputStage ?? null,
         };
       });
       // Fason adımlarına (şablonda firma kayıtlı DEĞİLSE) kategorinin favori

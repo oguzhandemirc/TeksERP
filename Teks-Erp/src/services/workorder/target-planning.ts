@@ -20,6 +20,7 @@ import {
   WorkOrder,
   WorkOrderStatus,
   RollStatus,
+  type RollStage,
 } from "@prisma/client";
 import {
   claimWorkOrderStatusTx,
@@ -268,6 +269,8 @@ export async function updateStepPlanning(
       plannedSubcontractorId?: string | null;
       /** 2026-08-17 — adım fasona renksiz gitsin ("ekru" kuralı). */
       dispatchWithoutColor?: boolean;
+      /** Top aşaması 2026-11-10 — adımın çıktı aşaması; undefined = dokunma, null = otomatik. */
+      outputStage?: RollStage | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -351,6 +354,7 @@ export async function updateStepPlanning(
           requiredCategoryId: data.requiredCategoryId,
           plannedSubcontractorId: data.plannedSubcontractorId,
           dispatchWithoutColor: data.dispatchWithoutColor,
+          outputStage: data.outputStage,
         },
       });
       if (claim.count === 0) {

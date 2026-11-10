@@ -22,7 +22,7 @@
 // ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `markSackContentChangedTx` gövdesi koşulsuz `return`e çevrildi (içerik
 //    değişince kg sıfırlama + `labelDirty` damgası öldü) -> 1 kontrol KIRMIZI.
 //    Geri alındığında yeşil.
-import { LabelKind, RollStatus, RollEntrySource, ShipmentStatus } from "@prisma/client";
+import { LabelKind, RollStage, RollStatus, RollEntrySource, ShipmentStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";
@@ -75,6 +75,8 @@ async function main(): Promise<void> {
         barcode: `TST-SPL-${ts}-${Math.floor(Math.random() * 1e9)}`,
         itemId: item.id, colorId: colored ? color.id : null, width: 141,
         initialQty: qty, currentQty: qty, status: RollStatus.WAREHOUSE, qualityGrade: "1.KALITE",
+        // Etiket türü aşamadan (2026-11-10): bu bekçinin "renkli = bitmiş" fixture'ı aşamayla açık yazılır.
+        stage: colored ? RollStage.FINISHED : RollStage.RAW,
         entrySource: RollEntrySource.SUPPLIER_RECEIPT,
       },
       select: { id: true, barcode: true },

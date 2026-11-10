@@ -274,6 +274,20 @@ export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
   WEAVING: "Dokuma (Tezgahtan)",
 };
 
+// Backend `enum RollStage` aynası (2026-11-10): topun üretim aşaması — etiket türü buradan türer.
+export const RollStage = {
+  RAW: "RAW",
+  SEMI_FINISHED: "SEMI_FINISHED",
+  FINISHED: "FINISHED",
+} as const;
+export type RollStage = (typeof RollStage)[keyof typeof RollStage];
+
+export const rollStageLabels: Record<RollStage, string> = {
+  RAW: "Ham",
+  SEMI_FINISHED: "Yarı mamul",
+  FINISHED: "Bitmiş",
+};
+
 
 // ── TEZGAH KÜNYESİ (dokuma P4, 2026-09-13) ───────────────────────────────────
 // ⚠️ Backend `enum LoomShedType` (schema.prisma) ile BİREBİR.

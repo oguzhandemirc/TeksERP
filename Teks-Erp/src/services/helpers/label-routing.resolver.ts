@@ -10,6 +10,8 @@
 //   format : cihaz medyası (peripheral.labelWidthMm vd.) > sistem varsayılan medyası
 //   şablon : explicit templateId > peripheral.templateRoutes[kind] > kind default (isDefault) > null
 //
+// `kind` çağırandan gelir; top etiketi için TEK türetici `rollLabelKindOf(roll.stage)`
+// (`roll-stage.helper.ts`, 2026-11-10) — renkten kind türetilmez.
 // Cihaz eşleşmezse: tümüyle bugünkü davranış (resolveLabelFormat + kind default
 // şablon) — BAYT-stabil geri uyum.
 // =============================================================================

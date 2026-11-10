@@ -24,7 +24,7 @@ interface Props {
   customerId: string;
 }
 
-/** Panel sırası: Ham → Bitmiş → Kartela. */
+/** Panel sırası: Ham → Bitmiş → Kartela. Top etiketinin türü topun AŞAMASINDAN türer (2026-11-10), istasyondan/renkten değil. */
 const KINDS: LabelKind[] = ["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"];
 
 /**
@@ -73,7 +73,8 @@ export function CustomerTemplateRoutesPanel({ customerId }: Props) {
       <p className="text-xs text-muted-foreground">
         Bu müşteri için basılan etiketlerde kullanılacak şablonlar. Atama; cihaz
         yönlendirmesinin ve genel varsayılanın önüne geçer. Boş bırakılan bağlamda
-        genel varsayılan kullanılır.
+        genel varsayılan kullanılır. Top etiketinde Ham ya da Bitmiş şablonu topun
+        aşamasına göre seçilir (yarı mamul top Ham etiketi basar).
       </p>
 
       <ul className="divide-y rounded-md border">

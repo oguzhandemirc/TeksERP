@@ -1,6 +1,7 @@
 // Belgeden terbiye iş emri gövdesi + yanıtı (`POST /gelen-belge/irsaliyeler/:id/is-emri`) — `inboundDoc.service.ts` 300 satır
 // sınırında olduğundan ayrı dosya; servis aynı adlarla yeniden dışa verir (çağıranlar değişmez).
 import type { CreateWorkOrderRoll } from './inboundDocRolls';
+import type { RollStage } from './models';
 
 /** Sözleşme 3: belgeden tek seferde terbiye iş emri (`POST /gelen-belge/irsaliyeler/:id/is-emri`). */
 export interface CreateWorkOrderFromNoteBody {
@@ -78,6 +79,8 @@ export interface CreateWorkOrderFromNoteBody {
     plannedSubcontractorId?: string;
     plannedMachineId?: string;
     dispatchWithoutColor?: boolean;
+    /** Şablon adımının çıktı aşaması (yalnız açık değer; yoksa sunucu otomatik). */
+    outputStage?: RollStage;
   }[];
 }
 

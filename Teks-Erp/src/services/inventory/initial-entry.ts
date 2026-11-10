@@ -48,9 +48,11 @@ import {
   Roll,
   RollStatus,
   RollEntrySource,
+  RollStage,
   ItemType,
   WarehouseEventType,
 } from "@prisma/client";
+import { birthStageForEntry } from "../helpers/roll-stage.helper";
 import {
   STEP_QUALITY_SELECT,
   stepCanApplyQuality,
@@ -231,6 +233,8 @@ export async function createInitialEntryFresh(
        * söylenmediğinde çalışır.
        */
       forcedEntrySource?: RollEntrySource;
+      /** Topun AŞAMASI — verilmezse `birthStageForEntry` (yarı mamul girişi > bitmiş stok > ham). */
+      stage?: RollStage;
       /**
        * BU TOP HANGİ İNDİRMEDEN (dokuma P3/§3.8b) — yalnız `forcedEntrySource: WEAVING`
        * ile anlamlı; verilmezse NULL kalır ("atanmamış", tahmin edilmez). Bağ tx
@@ -520,6 +524,7 @@ export async function createInitialEntryFresh(
     // girecek (STOCK'ta bekler, KK1/Kurşun/Tambur'da işlenir).
     const initialStatus =
       opts?.forcedStatus ?? (data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK);
+    const initialStage = birthStageForEntry({ explicit: opts?.stage, entrySource, status: initialStatus });
 
     // Barkod SUNUCU'da sıralı atanır (tx öncesi generateRollBarcodeTx) — offline istemci
     // sırayı bilemez. Tip damgası STATÜDEN türer ("F" = final/depoya inen, "H" = ham):
@@ -716,6 +721,7 @@ export async function createInitialEntryFresh(
             currentQty: data.initialQty,
             weightKg: data.weightKg ?? null,
             status: initialStatus,
+            stage: initialStage,
             qualityGrade: qualityGradeCode,
             qualityGradeId,
             width: data.width ?? null,

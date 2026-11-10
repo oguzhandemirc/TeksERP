@@ -22,6 +22,7 @@
 // "her baskıda çıkan alanlar"dır.
 // =============================================================================
 import { LabelKind, Prisma } from "@prisma/client";
+import { rollLabelKindOf } from "./roll-stage.helper";
 
 import prisma from "../../lib/prisma";
 import { collectBoundKeys } from "./label-context-fit";
@@ -77,8 +78,8 @@ export async function sackFieldsAppearOnLabel(
  * bayrağı `Sack.labelDirty` ayrıca yazılır).
  *
  * Etkin şablon = `CustomerTemplateRoute(müşteri, kind)` ?? bağlam varsayılanı.
- * Top kind'ı renginden türer (renksiz → ROLL_RAW, renkli → ROLL_FINISHED,
- * `label-routing.resolver` ile aynı kural); ÇUVAL için kind = SACK.
+ * Top kind'ı AŞAMASINDAN türer (`rollLabelKindOf`; baskı yoluyla aynı tek kaynak);
+ * ÇUVAL için kind = SACK.
  * Eski ve yeni müşterinin rotası aynı şablona çıkıyorsa (çoğu kurulumda ikisi de
  * rotasız) HİÇBİR ŞEY yapılmaz — gereksiz "yeniden bas" uyarısı operatörü körleştirir.
  *
@@ -96,13 +97,13 @@ export async function markSackLabelsStaleOnCustomerChangeTx(
 ): Promise<number> {
   const rolls = await tx.roll.findMany({
     where: { sackId },
-    select: { id: true, colorId: true },
+    select: { id: true, stage: true },
   });
 
   // ÇUVAL kind'ı her zaman sorgulanır (çuvalın kendi etiketi topların varlığından
   // BAĞIMSIZ — boş çuvalın da basılı etiketi olabilir), top kind'ları içerikten.
   const rollKinds = [
-    ...new Set(rolls.map((r) => (r.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED))),
+    ...new Set(rolls.map((r) => rollLabelKindOf(r.stage))),
   ];
   const kinds = [...new Set([...rollKinds, LabelKind.SACK])];
   const routesFor = async (cid: string | null): Promise<Map<LabelKind, string>> => {
@@ -127,7 +128,7 @@ export async function markSackLabelsStaleOnCustomerChangeTx(
   }
 
   const affected = rolls
-    .filter((r) => changed.has(r.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED))
+    .filter((r) => changed.has(rollLabelKindOf(r.stage)))
     .map((r) => r.id);
   if (affected.length === 0) return 0;
   // Yalnız henüz işaretsizleri güncelle (count gerçek değişimi yansıtsın).

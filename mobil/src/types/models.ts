@@ -114,6 +114,9 @@ export type RollEntrySource =
   // 2026-09-13 (dokuma P3): tezgahtan inip KK1'de doğan top.
   | 'WEAVING';
 
+// Backend `enum RollStage` aynası (2026-11-10): topun üretim aşaması; `test_mobil_enum_aynasi` ölçer.
+export type RollStage = 'RAW' | 'SEMI_FINISHED' | 'FINISHED';
+
 // Backend `MachineDataSource` enum'unun BİREBİR aynası (2026-09-14, tablet doff
 // dilimi öncülü): tezgah sayacı / koşum / duruş kaynağı — kim söyledi? Ekran
 // her yükte GÖNDERİR (`@default` yok), uydurma değer `SIMULATED` beyanıyla
@@ -480,6 +483,8 @@ export interface Roll {
   qualityGrade: string;
   status: RollStatus;
   entrySource?: RollEntrySource;
+  /** Üretim aşaması (2026-11-10) — etiket türü buradan; eski sunucuda yok. */
+  stage?: RollStage;
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"); NULL = kayıtlı değil. */
   foldType?: string | null;
   /** Etikete basılan müşteri kumaş adı / rengi / parti no (tamburda topa yazılır); eski sunucuda yok. */

@@ -4,7 +4,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import type { WorkOrderType } from "@prisma/client";
+import type { RollStage, WorkOrderType } from "@prisma/client";
 import { WorkOrderService } from "../services/workorder.service";
 import { workOrderLinkService } from "../services/workorder-link.service";
 import { workOrderRollDetachService } from "../services/workorder-roll-detach.service";
@@ -24,6 +24,10 @@ export const targetValueItemSchema = z.object({
   valueId: z.string().uuid("Geçersiz değer ID"),
 }).strict();
 
+/** Top aşaması 2026-11-10: adımın çıktı aşaması; null = otomatik, yok = dokunma/koru. */
+const ROLL_STAGES = ["RAW", "SEMI_FINISHED", "FINISHED"] as const satisfies readonly RollStage[];
+const outputStageSchema = z.enum(ROLL_STAGES, "Çıktı aşaması: Ham, Yarı mamul ya da Bitmiş olmalı").nullable().optional();
+
 /** Özel rota adımı alanları — klasik create/quick-start ve gelen belge formu (K30-D) aynı şekli kullanır. */
 const workOrderStepFields = {
   stationId:              z.string().uuid("Geçersiz istasyon ID"),
@@ -36,6 +40,7 @@ const workOrderStepFields = {
   // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
   //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
   dispatchWithoutColor:   z.boolean().optional(),
+  outputStage:            outputStageSchema,
 };
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
@@ -87,6 +92,7 @@ const workOrderCoreShape = {
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
       //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
       dispatchWithoutColor:   z.boolean().optional(),
+      outputStage:            outputStageSchema,
     }))
     .optional(),
   orderLineAllocations: z
@@ -290,6 +296,7 @@ const updateStepPlanningSchema = z.object({
   plannedSubcontractorId: z.string().uuid().nullable().optional(),
   // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
   dispatchWithoutColor: z.boolean().optional(),
+  outputStage:          outputStageSchema,
 });
 
 // ── Sipariş bağlama + hedef düzeltme şemaları (2026-08-17) ───────────────────
@@ -416,6 +423,7 @@ const replaceWorkOrderSchema = z.object({
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
       //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
       dispatchWithoutColor:   z.boolean().optional(),
+      outputStage:            outputStageSchema,
     }))
     .optional(),
   stepPlanning: z
@@ -430,6 +438,7 @@ const replaceWorkOrderSchema = z.object({
       // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
       //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
       dispatchWithoutColor:   z.boolean().optional(),
+      outputStage:            outputStageSchema,
     }))
     .optional(),
   orderLineAllocations: z

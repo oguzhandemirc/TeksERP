@@ -20,6 +20,7 @@ import {
   Roll,
   RollStatus,
   RollEntrySource,
+  RollStage,
 } from "@prisma/client";
 import {
   type PropertySelection,
@@ -161,6 +162,8 @@ export class InventoryService {
        * söylenmediğinde çalışır.
        */
       forcedEntrySource?: RollEntrySource;
+      /** Doğuş aşaması (açık değer kazanır; yoksa `birthStageForEntry` giriş kaynağı + statüden türetir). */
+      stage?: RollStage;
       /**
        * BU TOP HANGİ İNDİRMEDEN (dokuma P3/§3.8b) — yalnız `forcedEntrySource: WEAVING`
        * ile anlamlı; verilmezse NULL kalır ("atanmamış", tahmin edilmez). Bağ tx

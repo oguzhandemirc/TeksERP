@@ -1,4 +1,4 @@
-import type { RollStatus, RollOperationType } from "@/types/enums";
+import type { RollStage, RollStatus, RollOperationType } from "@/types/enums";
 
 export interface RollColor {
   id: string;
@@ -87,6 +87,8 @@ export interface Roll {
   markedForKartela?: boolean;
   /** Etiket bayat mı — veri/metraj düzeltildi ama fiziksel etiket yeniden basılmadı. */
   labelDirty?: boolean;
+  /** Üretim aşaması (2026-11-10) — etiket türü buradan türer; eski sunucu göndermez. */
+  stage?: RollStage;
   /**
    * Etiketin BASILDIĞI an. `labelDirty` ile farklı soru: o "basılı etiket
    * veriyle uyuşuyor mu", bu "ortada fiziksel bir kâğıt VAR mı". İptal edilmiş

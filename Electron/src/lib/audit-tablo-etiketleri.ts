@@ -370,6 +370,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
   ORDER_DESTINATION_BACKFILL: "Sipariş yönü geriye dönük dolduruldu (betik)",
   ROLL_STATUS_EVENTS_BACKFILL: "Top durum defterine eski iptaller dolduruldu (betik)",
+  ROLL_STAGE_BACKFILL: "Top aşaması geriye dönük dolduruldu (betik)",
   get WORK_ORDER_EVENTS_BACKFILL() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} hareket defterine geçmiş dolduruldu (betik)`; },
   TERM_CATALOG_TEXT_MIGRATED: "Görünen ad değişikliği katalog satırlarına işlendi (betik)",
 

@@ -570,12 +570,8 @@ export default function TamburScreen() {
   const copiesBar = labelCopies.enabled
     ? { count: labelCopies.count, onInc: labelCopies.inc, onDec: labelCopies.dec }
     : undefined;
-  // Etiket TÜRÜ normalde RENKTEN çözülür (renksiz = ham kumaş → ROLL_RAW).
-  // Manuel Mod BİTMİŞ ürün üretir ve renk OPSİYONELDİR → renksiz manuel top ham
-  // etiketle basılırdı. Bu yüzden tür baskı İŞİNE bağlanır: null = renkten çöz
-  // (eski davranış, tüm mevcut yollar), değer = o iş için sabitlenmiş tür.
-  // Global "manuel moddayken hep ROLL_FINISHED" YANLIŞ olurdu — mod açıkken
-  // "Çıkanlar"dan yeniden basılan ESKİ bir ham top da bitmiş etiket alırdı.
+  // Etiket TÜRÜNÜ sunucu topun AŞAMASINDAN seçer (2026-11-10); tablet tahmin etmez.
+  // null = sunucuya bırak (tüm mevcut yollar); değer yalnız ELLE seçim içindir.
   const [printKind, setPrintKind] = useState<'ROLL_RAW' | 'ROLL_FINISHED' | null>(null);
   /** Fire kalitede ELLE baskı onayı bekleyen iş (bkz. startPrint fire kapısı). */
   const [scrapPrintConfirm, setScrapPrintConfirm] = useState<{
@@ -1309,32 +1305,12 @@ export default function TamburScreen() {
   const queueLabel = (roll: Roll, defaultLineId: string | null = null) =>
     setPendingTargetRolls((q) => [...q, { roll, defaultLineId }]);
 
-  /**
-   * Etiket türünü topun KENDİ kimliğinden çöz — renginden DEĞİL.
-   *
-   * Varsayılan (null) yol türü RENKTEN çıkarır: renksiz = ham kumaş → ROLL_RAW.
-   * Bu, istasyondan çıkan ham kesim parçaları için doğrudur ama depoya inmiş bir
-   * top için sessizce YANLIŞTIR: renksiz (ham beyaz) bitmiş bir topun etiketi ham
-   * etiket olarak basılır. Yeni üretimde bu tuzağa `startPrint(roll,'ROLL_FINISHED')`
-   * ile giriliyordu; YENİDEN BASIMDA ise açıkta kalıyordu — "Çıkanlar"dan basılan
-   * WAREHOUSE topu türü yine renkten çözüyordu.
-   *
-   * Kural backend ile aynı kaynağa dayanır: `finalBarcodeType` satılabilire
-   * (WAREHOUSE/A1_STOCK) inen topu "F" (final) damgalar. Yani barkodunda F yazan
-   * top bitmiş etiket alır — iki yüzey artık aynı şeyi söyler.
-   *
-   * `null` dönüşü BİLİNÇLİ: depoya inmemiş top (üretime devam eden ham kesim
-   * parçası) için eski davranış birebir korunur.
-   */
-  const printKindForRoll = (roll: Roll): 'ROLL_RAW' | 'ROLL_FINISHED' | null =>
-    roll.status === 'WAREHOUSE' || roll.status === 'A1_STOCK' ? 'ROLL_FINISHED' : null;
-
   // "Etiketi Tekrar Bas" — varolan etiketi AYNEN bas, "kime?" SORMA.
   // labelContext=undefined → backend topun mevcut snapshot/effective etiketini
   // basar (yeni hedef seçilmez). Müşteri değiştirmek = "Etiket Değiştir" akışı.
   const reprintLabel = (roll: Roll) => {
     setLabelContext(undefined);
-    startPrint(roll, printKindForRoll(roll));
+    startPrint(roll);
   };
 
   // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. labelContext={stock:true}
@@ -1342,7 +1318,7 @@ export default function TamburScreen() {
   // reprint'inde tek dokunuşta müşterisiz etiket.
   const reprintLabelStock = (roll: Roll) => {
     setLabelContext({ stock: true });
-    startPrint(roll, printKindForRoll(roll));
+    startPrint(roll);
   };
 
   // ── Mutations ──
@@ -1476,16 +1452,12 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        // Tür topun kendi kimliğinden (bkz. printKindForRoll): depoya inen renksiz
-
-        // çocuk da bitmiş etiket alır. Üretime devam eden STOCK parçasında null
-
-        // döner → renkten çözülen eski davranış birebir korunur.
+        // Tür sunucuda topun aşamasından çözülür (depoya inen çocuk Bitmiş doğar).
 
         // S5: basım zamanı END ise tek tek basılmaz — "Bu işten çıkanlar" → "Basılmayanları bas".
         openFinal.setKgText('');
         if (shouldAutoPrintAfterCut({ printTiming })) {
-          startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+          startPrint(data.childRoll, null, { auto: true });
         } else {
           Toast.show({ type: 'info', text1: 'Etiket iş bitince basılacak', text2: 'Bu işten çıkanlar → Basılmayanları bas' });
         }
@@ -1790,15 +1762,11 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        // Tür topun kendi kimliğinden (bkz. printKindForRoll): depoya inen renksiz
-
-        // çocuk da bitmiş etiket alır. Üretime devam eden STOCK parçasında null
-
-        // döner → renkten çözülen eski davranış birebir korunur.
+        // Tür sunucuda topun aşamasından çözülür (depoya inen çocuk Bitmiş doğar).
 
         recutFinal.setKgText('');
         if (shouldAutoPrintAfterCut({ printTiming })) {
-          startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+          startPrint(data.childRoll, null, { auto: true });
         } else {
           Toast.show({ type: 'info', text1: 'Etiket iş bitince basılacak', text2: 'Bu işten çıkanlar → Basılmayanları bas' });
         }
@@ -1958,8 +1926,7 @@ export default function TamburScreen() {
             : { stock: true },
       );
       // LabelPrinter topun yalnız `id`'sini kullanır; gövde yanıttan kurulur
-      // (ek istek yok). Tür SABİTLENİR: manuel mod bitmiş ürün üretir, renksiz
-      // olsa bile ham etiket basılmamalı (bkz. printKind gerekçesi).
+      // (ek istek yok). Tür sunucuda: manuel mod çıktısı Bitmiş aşamada doğar.
       startPrint(
         {
           id: d.rollId,
@@ -1974,7 +1941,7 @@ export default function TamburScreen() {
           status: 'WAREHOUSE',
           markedForKartela: d.markedForKartela,
         },
-        'ROLL_FINISHED',
+        null,
         { auto: true },
       );
       // Metraj sıfırlanır (sıradaki top), ürün/renk/sebep KALIR: aynı sebeple
@@ -3361,7 +3328,7 @@ export default function TamburScreen() {
             // Kayıtlı etiket niyetiyle bas — "Kime?" TEKRAR SORULMAZ (kesim
             // akışlarındaki kuralın aynısı; hedef zaten topun üstünde).
             setLabelContext(undefined);
-            startPrint(r, printKindForRoll(r));
+            startPrint(r);
           }}
           onUndo={(r: Roll) => setPanelUndoTarget(r)}
           onFixLabel={(r: Roll) => setLabelFixRoll(r)}
@@ -5192,17 +5159,11 @@ export default function TamburScreen() {
       )}
 
       {/* Aktif yazdırma — LabelPrinter expo-print ile PDF/sistem yazdırma açar.
-          VARSAYILAN tür renkten çözülür: renksiz top = ham kumaş → ham etiket
-          (ROLL_RAW); renkli/boyanmış = bitmiş (ROLL_FINISHED). Tambur ham kesim
-          parçaları renksiz olduğundan ham etiketle basılır.
-          İSTİSNA: Manuel Mod çıktısı BİTMİŞ üründür (backend statüyü açıkça
-          WAREHOUSE yazar) — renksiz olsa da bitmiş etiket basılmalı; o iş türü
-          `startPrint(roll, 'ROLL_FINISHED')` ile sabitler (printKind). */}
+          Tür verilmezse sunucu topun aşamasından seçer (ham/yarı mamul → ham,
+          bitmiş → bitmiş etiket); printKind yalnız elle seçimdir. */}
       <LabelPrinter
         roll={activePrintRoll}
-        kind={
-          printKind ?? (activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED')
-        }
+        kind={printKind ?? undefined}
         labelContext={labelContext}
         confirmScrap={printConfirmScrap}
         copies={printCopies}
@@ -5433,9 +5394,8 @@ export default function TamburScreen() {
           setLabelContext(
             ctx.orderLineId || ctx.customerId || ctx.stock ? ctx : undefined,
           );
-          // Tür yine topun kendi kimliğinden — "Yeni Etiket" hedefi değiştirir,
-          // topun ham/bitmiş olmasını değiştirmez (bkz. printKindForRoll).
-          startPrint(r, printKindForRoll(r));
+          // "Yeni Etiket" hedefi değiştirir; tür sunucuda topun aşamasından çözülür.
+          startPrint(r);
         }}
       />
 
