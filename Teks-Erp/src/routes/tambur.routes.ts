@@ -13,6 +13,7 @@ import { correctCutReading } from "../services/tambur-meter-correct.service";
 import { getTamburLabelSettings } from "../services/helpers/tambur-customer-settings.helper";
 import { getTamburLabelSuggestions } from "../services/tambur/label-suggestions";
 import { getTamburLabelPreviewFields } from "../services/tambur/label-preview-fields";
+import { getTamburLabelPreview } from "../services/tambur/label-preview";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -1091,6 +1092,58 @@ router.get(
     try {
       const q = labelPreviewFieldsQuery.parse(req.query);
       res.json({ success: true, data: await getTamburLabelPreviewFields({ ...q, deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null }) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-preview:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Kesimde doğacak çocuğun etiketi — taslak değerlerle çizilebilir önizleme (yazmaz)
+ *     description: |
+ *       Payload `getRollLabel` zinciri, şablon preview-fields ile aynı karar (emanette sahip). Kanvas varyantında
+ *       konumlu elemanlar (metin baskıyla aynı fonksiyonlardan), akış şablonunda sıralı satırlar. Çocuk barkodu
+ *       kesimde doğar → barkod elemanı yer tutucu.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ kind, templateId, templateName, widthMm, heightMm, elements | null, rows | null }" }
+ *       404: { description: Top bulunamadı }
+ */
+const optNum = z.number().finite().nonnegative().max(100000).nullish();
+const optText = z.string().max(200).nullish();
+const labelPreviewBody = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  orderLineId: z.string().uuid("Geçersiz sipariş satırı ID").nullish(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+  consigneeId: z.string().uuid("Geçersiz alıcı ID").nullish(),
+  draft: z
+    .object({
+      lengthMeters: optNum,
+      weightKg: optNum,
+      widthCm: optNum,
+      qualityGrade: z.string().max(40).nullish(),
+      labelItemName: optText,
+      labelColorName: optText,
+      labelBatchNo: optText,
+    })
+    .strict()
+    .default({}),
+});
+router.post(
+  "/label-preview",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const b = labelPreviewBody.parse(req.body ?? {});
+      res.json({
+        success: true,
+        data: await getTamburLabelPreview({ ...b, deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null }),
+      });
     } catch (err) {
       next(err);
     }

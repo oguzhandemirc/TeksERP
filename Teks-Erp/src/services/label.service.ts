@@ -312,7 +312,14 @@ export class LabelService {
    */
   async getRollLabel(
     rollId: string,
-    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; labelEdit?: RollLabelDraft | null },
+    opts?: {
+      orderLineId?: string | null;
+      customerId?: string | null;
+      stock?: boolean;
+      labelEdit?: RollLabelDraft | null;
+      /** Tambur kesim önizlemesi: barkodsuz açık kumaşın doğacak çocuğu çizilir (kâğıt üretmez). */
+      allowMissingBarcode?: boolean;
+    },
     // Toplu basım bağlamı (getBulkRollLabelsHtml). Verilirse DB sorguları yerine
     // önceden çekilmiş Map'lerden okunur; verilmezse (tek-top yolu) eski sorgular.
     preloaded?: BulkLabelContext
@@ -321,7 +328,7 @@ export class LabelService {
       preloaded?.rollById.get(rollId) ??
       (await prisma.roll.findUnique({ where: { id: rollId }, include: ROLL_LABEL_INCLUDE }));
     if (!roll) throw AppError.notFound("Top bulunamadı");
-    if (!roll.barcode) {
+    if (!roll.barcode && opts?.allowMissingBarcode !== true) {
       throw AppError.badRequest(
         "Bu Roll için etiket basılamaz — açık kumaş Roll'ları (Kurşun/KK2 öncesi) fiziksel etiket almaz."
       );
@@ -472,7 +479,7 @@ export class LabelService {
 
     const payload: LabelPayload = {
       rollId: roll.id,
-      barcode: roll.barcode,
+      barcode: roll.barcode ?? "",
       status: roll.status,
       qualityGrade: roll.qualityGrade ?? "",
       widthCm: roll.width !== null ? Number(roll.width) : null,

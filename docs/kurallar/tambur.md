@@ -106,6 +106,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Kısa kesim kuralı TAMAMI `Tambur/shortCutQuality.ts`te (üç yol aynı fonksiyon); yalnız varsayılan kaliteyle ateşler; eşik üstünde yalnız otomatik A1 geri döner (`shortCutRevert`); A1 katalogda yoksa fail-closed.
 - **[ÇEKİRDEK]** Tambur'da hata girişini `inspectionEnabled` çekmecesinden aç (kapalıysa düğme yok); karar rehberini her zaman göster.
 - **[ÇEKİRDEK]** Yeni Tambur istasyonunu muayenesiz doğur (`inspectionDefaultForKind(TAMBUR)=false`, panel formu aynı); mevcut satıra dokunma, muayeneli düzen yöneticinin bilinçli seçimidir. <sub>(arşiv:2026-11-09 Tambur muayene varsayılanı)</sub>
+- **[ÇEKİRDEK]** Geniş tablette "Etiket önizlemesi" kesimde doğacak çocuğun etiketini `POST /tambur/label-preview`ten çizer (HTML render elemanları, yazıcı dilinden bağımsız, yazmaz); dokunulan alan kesimin AYNI state'ine yazar (`labelPreviewMap`), uç hatasında son görüntü + uyarı, kesimi ENGELLEMEZ (bekçi `test_tambur_etiket_onizleme`). <sub>(arşiv:2026-11-10 Tambur ekranı + etiket önizlemesi)</sub>
 - **[ÇEKİRDEK]** Metre şeridini (`TamburMeterTrail`, `GET /rolls/:id/meter-trail`) başlık bandının kimlik sütununa koy; aşım uyarısı bilgidir, kesimi ENGELLEMEZ; uç hatasında (404/403/ağ) şerit sessizce gizlenir; saf hesap `Tambur/meterTrail.ts`. <sub>(arşiv:2026-11-10 Beyan ↔ ölçülen metre)</sub>
 
 ### Yasaklar
