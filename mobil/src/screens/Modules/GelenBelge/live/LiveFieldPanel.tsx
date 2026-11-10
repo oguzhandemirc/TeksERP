@@ -11,7 +11,8 @@ import TruncatedText from '../../../../components/TruncatedText';
 import { SectionBand, StatusPill, type PillTone } from '../../../../components/form';
 import { colors, radius, spacing } from '../../../../theme';
 import { isLiveInfoOnly } from './liveLocks';
-import { isLiveSettled, liveFieldStatus, liveSuggestion, type LiveField, type LiveVoteState } from './liveVote';
+import { liveProgress } from './liveSummary';
+import { liveFieldStatus, liveSuggestion, type LiveField, type LiveVoteState } from './liveVote';
 
 interface Props {
   vote: LiveVoteState;
@@ -38,8 +39,7 @@ export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
     draftRef.current = v;
     setDraft(v);
   };
-  const locked = vote.fields.filter((f) => isLiveSettled(f) && !isLiveInfoOnly(f.key)).length;
-  const total = vote.fields.filter((f) => !isLiveInfoOnly(f.key)).length;
+  const { settled: locked, total } = liveProgress(vote);
 
   const open = (f: LiveField) => {
     type(f.lock?.value ?? f.candidate ?? '');
