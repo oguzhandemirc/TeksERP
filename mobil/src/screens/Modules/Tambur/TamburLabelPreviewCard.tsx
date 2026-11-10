@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import PickerModal from '../../../components/PickerModal';
+import TruncatedText from '../../../components/TruncatedText';
 import type { TamburLabelPreview } from '../../../services/tambur.service';
 import { colors, palette } from '../../../theme/tokens';
 import { editorForKey, inlineKind, type InlineEditor, type PreviewEditContext, type PreviewEditor } from './labelPreviewMap';
@@ -96,9 +97,9 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
     <View style={s.card}>
       <View style={s.head}>
         <Text style={s.title}>Etiket önizlemesi</Text>
-        <Text style={s.meta} numberOfLines={1}>
+        <TruncatedText style={s.meta}>
           {[p.preview?.templateName, `kimin için: ${p.forWhom}`].filter(Boolean).join(' · ')}
-        </Text>
+        </TruncatedText>
         <View style={{ flex: 1 }} />
         <TemplateChange offer={p.templateOffer} selectedId={p.selectedTemplateId} onPick={p.onPickTemplate} onOpenInfo={p.onOpenInfo} />
       </View>
