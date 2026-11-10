@@ -10,7 +10,7 @@ import { RollOriginSection } from "./RollOriginSection";
 import { RollLocationSection } from "./RollLocationSection";
 import { RollRecentEvents, RECENT_EVENT_COUNT } from "./RollRecentEvents";
 import { RollIdentitySection } from "./RollIdentitySection";
-import { ConsignedBadge, customerBatchOf } from "../columns";
+import { customerBatchOf } from "../columns";
 
 const base = {
   id: "r1", barcode: "T1", itemId: "i", colorId: null, initialQty: 100, currentQty: 80, weightKg: null, width: null,
@@ -112,12 +112,6 @@ describe("son hareketler", () => {
 });
 
 describe("liste", () => {
-  it("§6a emanet rozeti 'Emanet · müşteri'; sahipsizde çizilmez", () => {
-    const { container, rerender } = render(<ConsignedBadge owner={{ id: "c", name: "HHL MC" }} />);
-    expect(screen.getByTestId("roll-consigned-badge").textContent).toBe("Emanet · HHL MC");
-    rerender(<ConsignedBadge owner={null} />);
-    expect(container.innerHTML).toBe("");
-  });
   it("§6b müşteri parti no: etiket partisi önce, yoksa gelen belgeden; ikisi de yoksa null", () => {
     expect(customerBatchOf({ labelBatchNo: "J1", customerBatchNo: "P-9" })).toBe("J1");
     expect(customerBatchOf({ labelBatchNo: null, customerBatchNo: "P-9" })).toBe("P-9");

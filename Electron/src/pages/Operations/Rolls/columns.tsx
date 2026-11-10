@@ -155,16 +155,6 @@ export const CUSTOMER_BATCH_HINT = "Müşterinin kendi parti numarası (gelen be
 export const customerBatchOf = (r: Pick<Roll, "labelBatchNo" | "customerBatchNo">): string | null =>
   r.labelBatchNo?.trim() || r.customerBatchNo?.trim() || null;
 
-/** "Emanet · <müşteri>" — sahipsiz (bizim mal) topta hiçbir şey çizilmez. */
-export function ConsignedBadge({ owner }: { owner: Roll["ownerCustomer"] }) {
-  if (!owner) return null;
-  return (
-    <Badge variant="outline" data-testid="roll-consigned-badge" className="border-amber-400 bg-amber-50 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-      Emanet · {owner.name}
-    </Badge>
-  );
-}
-
 /** SEÇİM tipli özellikte DEĞER de yazılır (RollDetailSheet ile aynı kural) — hücre + dışa aktarım. */
 const rollPropertyText = (p: NonNullable<Roll["properties"]>[number]): string =>
   p.value ? `${p.property.name}: ${p.value.name}` : p.property.name;
@@ -187,13 +177,8 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     id: "item",
     header: "Kumaş",
     meta: { label: "Kumaş", exportValue: (r) => r.item?.name ?? "" },
-    // Emanet (müşteri malı) rozeti ad hücresinde — "Sahibi" sütunu kapalı/gizli olsa da satırda okunur (2026-11-10).
-    cell: ({ row }) => (
-      <span className="inline-flex flex-wrap items-center gap-1">
-        <span className="text-xs font-medium">{row.original.item?.name ?? "—"}</span>
-        <ConsignedBadge owner={row.original.ownerCustomer} />
-      </span>
-    ),
+    // Sahip yalnız "Sahibi" sütununda; ad hücresinde tekrar edilmez (kullanıcı 2026-11-10).
+    cell: ({ row }) => <span className="text-xs font-medium">{row.original.item?.name ?? "—"}</span>,
   },
   {
     id: "color",
