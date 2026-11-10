@@ -7,7 +7,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { TamburLabelPreview, TamburPreviewElement } from '../../../services/tambur.service';
-import { colors, palette, radius, shadow, spacing } from '../../../theme/tokens';
+import { colors, palette, radius, shadow, spacing, typography } from '../../../theme/tokens';
 import type { EditAnchor } from './TamburInlineEditor';
 import { AUTO_FIELD_TEXT, emptyFieldText, isSystemAssignedField } from './labelPreviewMap';
 import { clampPaperPan, clampPaperZoom, doubleTapZoom, fitPaperScale, paperPanLimit, PAPER_ZOOM_MIN } from './labelPaperFit';
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadow.sm,
   },
-  zoomChipText: { color: palette.white, fontSize: 16, fontWeight: '800' },
+  zoomChipText: { color: palette.white, fontSize: typography.size.base, fontWeight: typography.weight.bold },
   staleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   staleText: { fontSize: 12, color: colors.warningText },
 });

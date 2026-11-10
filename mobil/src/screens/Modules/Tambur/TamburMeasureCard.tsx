@@ -4,7 +4,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Button } from 'react-native-paper';
-import { palette } from '../../../theme/tokens';
+import { palette, spacing } from '../../../theme/tokens';
+import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 import TamburUnitInput from './TamburUnitInput';
 
 export interface TamburMeasureCardProps {
@@ -52,7 +53,7 @@ export default function TamburMeasureCard({ length, kg, extras }: TamburMeasureC
               />
             </View>
             {kg.onTart ? (
-              <Button mode="outlined" icon="scale" onPress={kg.onTart} disabled={kg.tartBusy} loading={kg.tartBusy} testID="tambur-tart" contentStyle={{ height: 52 }}>
+              <Button mode="contained" icon="scale" buttonColor={palette.slate[700]} textColor={palette.white} onPress={kg.onTart} disabled={kg.tartBusy} loading={kg.tartBusy} testID="tambur-tart" style={s.tart} contentStyle={{ height: 56 }}>
                 Tart
               </Button>
             ) : null}
@@ -66,9 +67,12 @@ export default function TamburMeasureCard({ length, kg, extras }: TamburMeasureC
 
 const s = StyleSheet.create({
   // Açık gri zemin + beyaz çerçevesiz kutular (kullanıcı 2026-11-11 tur-4).
-  card: { flexShrink: 0, backgroundColor: palette.slate[100], borderRadius: 14, paddingHorizontal: 10, paddingVertical: 8, gap: 6 },
-  row: { flexDirection: 'row', gap: 12 },
+  // Köşe 14: ekrandaki kardeş kartlarla (bilgi · hata · önizleme · çıkan etiketler) aynı seviye.
+  card: { flexShrink: 0, backgroundColor: palette.slate[100], borderRadius: 14, padding: spacing.sm, gap: spacing.sm },
+  row: { flexDirection: 'row', gap: spacing.sm },
   col: { flex: 1 },
   grow: { flex: 1 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Tart dolu nötr koyu (outlined düğme yok — tasarım istemi §1); kip düğmeleriyle aynı ton.
+  tart: { borderRadius: ACTION_BUTTON_RADIUS },
 });

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { IconButton, Text } from 'react-native-paper';
 import NumpadInput from '../../../components/NumpadInput';
-import { palette, shadow } from '../../../theme/tokens';
+import { colors, palette, shadow, spacing, typography } from '../../../theme/tokens';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 
 export interface TamburUnitInputProps {
@@ -88,15 +88,15 @@ const s = StyleSheet.create({
     borderRadius: ACTION_BUTTON_RADIUS,
     borderWidth: 2,
     borderColor: 'transparent',
-    paddingRight: 12,
+    paddingRight: spacing.md,
     ...shadow.sm,
     elevation: 1,
   },
   // Çerçeve yalnız odakta (tuş takımı hedefi) — NumpadInput'un indigo vurgusuyla aynı renk.
   boxFocused: { borderColor: palette.indigo[600] },
-  input: { flex: 1, minWidth: 0, backgroundColor: 'transparent', fontSize: 24, fontWeight: '700', height: 52 },
-  content: { paddingLeft: 12, paddingRight: 4, paddingTop: 0, paddingBottom: 0 },
+  input: { flex: 1, minWidth: 0, backgroundColor: 'transparent', fontSize: typography.size.xxl, fontWeight: typography.weight.bold, height: 52 },
+  content: { paddingLeft: spacing.md, paddingRight: spacing.xs, paddingTop: 0, paddingBottom: 0 },
   clear: { margin: 0 },
-  unit: { fontSize: 18, fontWeight: '600', color: palette.slate[500], marginLeft: 2 },
-  req: { color: palette.red[600], fontWeight: '800' },
+  unit: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.textMuted },
+  req: { color: palette.red[600], fontWeight: typography.weight.bold },
 });

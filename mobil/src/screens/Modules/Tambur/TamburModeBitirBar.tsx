@@ -74,7 +74,7 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
   mode: { flex: 1, height: BAR_HEIGHT_TABLET, borderRadius: ACTION_BUTTON_RADIUS, overflow: 'hidden', backgroundColor: MODE_BG },
   modeBusy: { opacity: 0.55 },
-  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  valueRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   // Koyu zeminde parlak yeşil + ince açık halka → görünür.
   autoDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.emerald[500], borderWidth: 1, borderColor: palette.emerald[100] },
   inner: { flex: 1, alignItems: 'center', justifyContent: 'center' },

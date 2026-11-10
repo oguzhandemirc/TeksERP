@@ -35,7 +35,7 @@ import type { Roll } from '../../../types/models';
 import { formatFactory } from '../../../lib/factory-time';
 import { unprintedRolls } from './finalLabel';
 import { labelTextFixLockReason } from './labelTextFix';
-import { colors } from '../../../theme/tokens';
+import { colors, palette } from '../../../theme/tokens';
 import { MEASURE_LABEL, measureToneOf } from './measureSource';
 import { kgCellText, outputSummaryText, outputTotals } from './outputSummary';
 import type { LastTamburMeasure } from './TamburMeasureStrip';
@@ -70,7 +70,7 @@ function RefreshButton({ spinning, onPress }: { spinning: boolean; onPress: () =
       <IconButton
         icon="refresh"
         size={26}
-        iconColor="#1e40af"
+        iconColor={palette.blue[800]}
         onPress={spinning ? undefined : onPress}
         style={s.headerBtn}
         accessibilityLabel={spinning ? 'Yenileniyor' : 'Yenile'}
@@ -233,7 +233,6 @@ export default function WorkOrderOutputPanel({
         accessibilityLabel={collapsed ? `${title} — aç` : `${title} — kapat`}
       >
         <View style={s.header}>
-          <Icon source="tray-arrow-up" size={20} color="#1e40af" />
           <Text style={s.headerTitle}>{title}</Text>
           {/* KAPALIYKEN sayaçlar başlık satırına taşınır — saha isteği:
               "kapalı konumdayken top ve basılan m yine gözüksün". */}

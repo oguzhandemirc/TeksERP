@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Menu, TouchableRipple } from 'react-native-paper';
 import TruncatedText from '../../../components/TruncatedText';
-import { colors, palette, shadow } from '../../../theme/tokens';
+import { colors, palette, shadow, spacing } from '../../../theme/tokens';
 import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 import type { QualityOption } from './TamburCompactPickers';
 import { nextFoldCode } from './foldCycle';
@@ -98,9 +98,9 @@ export default function TamburCutSettingsCard(p: TamburCutSettingsProps) {
 
 const s = StyleSheet.create({
   // Ölçüm kartıyla aynı açık gri zemin: beyaz çerçevesiz En kutusu ve Kalite düğmesi bu zeminde seçilir.
-  card: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: palette.slate[100], borderRadius: 14, padding: 8 },
-  btn: { minHeight: 56, borderRadius: ACTION_BUTTON_RADIUS, justifyContent: 'center', paddingHorizontal: 10 },
-  btnInner: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
+  card: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: palette.slate[100], borderRadius: 14, padding: spacing.sm },
+  btn: { minHeight: 56, borderRadius: ACTION_BUTTON_RADIUS, justifyContent: 'center', paddingHorizontal: spacing.md },
+  btnInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, justifyContent: 'center' },
   btnText: { fontSize: 18, fontWeight: '800', color: palette.slate[900], flexShrink: 1 },
   foldBtn: { flex: 1, backgroundColor: palette.blue[800] },
   foldText: { color: palette.white },
