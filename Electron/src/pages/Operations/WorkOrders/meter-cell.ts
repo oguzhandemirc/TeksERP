@@ -14,7 +14,7 @@ export interface WorkOrderMeterSummary {
 
 export interface MeterCellView {
   tone: MeterDiffTone;
-  /** Hücre ve dışa aktarım metni: "241 m" · "241 → 300 (+59)" · "241 → 230 (−11)". */
+  /** Hücre ve dışa aktarım metni: "Giren 241 · Çıkan 300 · +59 m" (tabletle aynı dil). */
   text: string;
   /** Rozet mi (uzun/kısa) yoksa sade gri metin mi. */
   badge: boolean;
@@ -24,20 +24,24 @@ export interface MeterCellView {
 const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
 const m = (n: number | null) => (n == null ? "—" : `${fmt(n)} m`);
 
-/** Uzunda sağ taraf FATURALANAN (çok partide yalnız uzun partiler artar); kısada beyan + fark (tek partide ölçülen). */
+/** "Giren" = beyan, "Çıkan" = en yüksek ölçüm (yoksa "—"); fark: uzunda faturaya eklenen (billed − beyan, hep artı), kısada ölçülen − beyan. */
 export function meterCellView(s: WorkOrderMeterSummary | null | undefined): MeterCellView | null {
   if (!s) return null;
   const tone = classifyMeterDiff(s);
   const title = `Beyan ${m(s.declaredM)} · Ölçülen ${m(s.measuredMaxM)} · Faturalanan ${m(s.billedM)}`;
-  if (tone === "longer" && s.declaredM != null && s.billedM != null) {
-    return { tone, badge: true, title, text: `${fmt(s.declaredM)} → ${fmt(s.billedM)} (+${fmt(s.billedM - s.declaredM)})` };
+  const out = s.measuredMaxM == null ? "—" : fmt(s.measuredMaxM);
+  if (s.declaredM == null) {
+    const base = s.measuredMaxM ?? s.billedM;
+    return base == null ? null : { tone: "none", badge: false, title, text: `Çıkan ${fmt(base)}` };
   }
-  if (tone === "shorter" && s.declaredM != null && s.diffM != null) {
-    return { tone, badge: true, title, text: `${fmt(s.declaredM)} → ${fmt(s.declaredM + s.diffM)} (−${fmt(Math.abs(s.diffM))})` };
+  const head = `Giren ${fmt(s.declaredM)} · Çıkan ${out}`;
+  if (tone === "longer" && s.billedM != null) {
+    return { tone, badge: true, title, text: `${head} · +${fmt(s.billedM - s.declaredM)} m` };
   }
-  const base = s.declaredM ?? s.measuredMaxM ?? s.billedM;
-  if (base == null) return null;
-  return { tone: tone === "longer" || tone === "shorter" ? "within" : tone, badge: false, title, text: `${fmt(base)} m` };
+  if (tone === "shorter" && s.diffM != null) {
+    return { tone, badge: true, title, text: `${head} · −${fmt(Math.abs(s.diffM))} m` };
+  }
+  return { tone: tone === "longer" || tone === "shorter" ? "within" : tone, badge: false, title, text: head };
 }
 
 export const meterCellText = (s: WorkOrderMeterSummary | null | undefined): string => meterCellView(s)?.text ?? "";
