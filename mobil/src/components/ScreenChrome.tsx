@@ -57,6 +57,8 @@ interface Props {
   profileExtras?: React.ReactNode;
   /** İçeriğin üstündeki şerit yuvası (tezgah alarmı). İstasyon ekranında bildirim şeridi bunun ALTINA gelir. */
   topStrip?: React.ReactNode;
+  /** true: alt safe-area boşluğu bırakılmaz — dipteki eylem çubuğu ekrana yapışır (geniş tablet Tambur, 2026-11-10). */
+  flushBottom?: boolean;
   children: React.ReactNode;
 }
 
@@ -73,6 +75,7 @@ export default function ScreenChrome({
   titleRowExtras,
   profileExtras,
   topStrip,
+  flushBottom,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -306,7 +309,7 @@ export default function ScreenChrome({
           ekranları (sticky footer'lar dahil) bundan faydalanır. */}
       {topStrip}
       {isSessionScreen(route.name as MobileScreenKey) && <NotificationStrip />}
-      <View style={[styles.content, { paddingBottom: insets.bottom }]}>{children}</View>
+      <View style={[styles.content, { paddingBottom: flushBottom ? 0 : insets.bottom }]}>{children}</View>
 
       {/* Makine seçme modalı (profil menüsü → Makine değiştir). Menü kapansa da
           yaşasın diye burada — menü içinde olsaydı kapanınca unmount olurdu. */}

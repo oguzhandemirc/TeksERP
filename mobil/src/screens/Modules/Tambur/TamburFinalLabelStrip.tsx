@@ -3,10 +3,10 @@
 // alanları, kg (Tart / elle) ve en kutusu. Kart tek kaynaktır; dokununca etiket bilgisi penceresi açılır.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Chip, Icon, Text, TouchableRipple } from 'react-native-paper';
+import { Button, Chip, Icon, Text, TouchableRipple } from 'react-native-paper';
 import TruncatedText from '../../../components/TruncatedText';
 import NumpadInput from '../../../components/NumpadInput';
-import { colors, spacing } from '../../../theme/tokens';
+import { colors, radius, spacing } from '../../../theme/tokens';
 import type { TamburLabelSettings } from '../../../services/tambur.service';
 import { shouldAutoPrintAfterCut, splitSuggestion } from './finalLabel';
 import type { LabelCardRow } from './labelCard';
@@ -74,35 +74,44 @@ function Consignee({ c }: { c: TamburLabelCardProps }) {
         <Icon source="account-arrow-right-outline" size={22} color={colors.brand} />
         <Text style={s.whoLabel}>Etiket kimin için</Text>
         <TruncatedText style={s.whoText}>{consignee.text}</TruncatedText>
-        <Icon source="chevron-down" size={22} color={colors.brand} />
+        <Button mode="contained-tonal" icon="swap-horizontal" onPress={consignee.onPress} style={s.actionBtn}
+          contentStyle={s.actionBtnContent} labelStyle={s.actionBtnLabel} testID="tambur-alici-degistir"
+          accessibilityLabel="Etiket kimin için: değiştir">
+          Değiştir
+        </Button>
       </View>
     </TouchableRipple>
   );
 }
 
+// Değerler gür: her alan küçük soluk üst-başlık + kalın büyük değer bloğu (saha 2026-11-10).
 function Fields({ c }: { c: TamburLabelCardProps }) {
   return (
-    <TouchableRipple onPress={c.onPress} style={s.fields} testID="tambur-etiket-ozet" accessibilityRole="button"
-      accessibilityLabel="Etikette basılacaklar. Değiştirmek için dokunun">
-      <View>
-        <View style={s.summaryRow}>
+    <View style={s.fieldsBlock}>
+      <TouchableRipple onPress={c.onPress} style={s.fields} testID="tambur-etiket-ozet" accessibilityRole="button"
+        accessibilityLabel="Etikette basılacaklar. Değiştirmek için dokunun">
+        <View>
           <Text style={s.cardTitle}>ETİKETTE</Text>
-          {c.templateName ? <TruncatedText style={s.template}>{`Şablon: ${c.templateName}`}</TruncatedText> : null}
-          <Icon source="pencil" size={20} color={colors.brand} />
+          {c.rows ? (
+            <View style={s.rows}>
+              {c.rows.map((r) => (
+                <View key={r.key} style={s.fieldCell} testID={`tambur-etikette-${r.key}`} accessibilityLabel={`${r.label}: ${r.value}`}>
+                  <Text style={s.fieldLabel}>{r.label}</Text>
+                  <Text style={[s.fieldValue, r.muted && s.muted]}>{r.value}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={s.summaryText} numberOfLines={2}>{c.summaryText}</Text>
+          )}
         </View>
-        {c.rows ? (
-          <View style={s.rows}>
-            {c.rows.map((r) => (
-              <Text key={r.key} style={[s.rowText, r.muted && s.muted]} testID={`tambur-etikette-${r.key}`}>
-                {`${r.label}: ${r.value}`}
-              </Text>
-            ))}
-          </View>
-        ) : (
-          <Text style={s.summaryText} numberOfLines={2}>{c.summaryText}</Text>
-        )}
-      </View>
-    </TouchableRipple>
+      </TouchableRipple>
+      <Button mode="contained-tonal" icon="tag-text-outline" onPress={c.onPress} style={s.actionBtn}
+        contentStyle={s.actionBtnContent} labelStyle={s.actionBtnLabel} testID="tambur-etiket-degistir"
+        accessibilityLabel={c.templateName ? `Etiketi değiştir (şu an: ${c.templateName})` : 'Etiketi değiştir'}>
+        Etiketi değiştir
+      </Button>
+    </View>
   );
 }
 
@@ -196,16 +205,43 @@ const s = StyleSheet.create({
   summaryText: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.text },
   kg: { width: 130 },
   hint: { fontSize: 13, color: colors.textSecondary },
-  card: { backgroundColor: colors.surfaceMuted, paddingHorizontal: 14, paddingVertical: spacing.xs, gap: spacing.xs },
-  who: { minHeight: 56, justifyContent: 'center' },
+  card: { backgroundColor: colors.surfaceMuted, paddingHorizontal: 14, paddingVertical: spacing.sm, gap: spacing.sm },
+  // İki ayrı yüzey (ton farkı): "kimin için" marka tonu, "Etikette" beyaz kart.
+  who: {
+    minHeight: 56,
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+    borderWidth: 1,
+    borderColor: colors.brandContainer,
+    borderRadius: radius.md,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
   whoLabel: { fontSize: 13, color: colors.textSecondary },
   whoText: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.text },
-  fields: { minHeight: 56, justifyContent: 'center' },
-  cardTitle: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  template: { flex: 1, fontSize: 13, color: colors.textSecondary, textAlign: 'right' },
-  rows: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: 2 },
-  rowText: { fontSize: 15, color: colors.text },
-  muted: { color: colors.textSecondary },
+  actionBtn: { borderRadius: radius.md },
+  actionBtnContent: { minHeight: 48, paddingHorizontal: spacing.xs },
+  actionBtnLabel: { fontSize: 15, fontWeight: '700' },
+  fieldsBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  fields: { flex: 1, minHeight: 56, justifyContent: 'center' },
+  cardTitle: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: colors.textMuted, marginBottom: 2 },
+  rows: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.xs },
+  fieldCell: { minWidth: 64 },
+  fieldLabel: { fontSize: 12, color: colors.textSecondary },
+  fieldValue: { fontSize: 20, fontWeight: '800', color: colors.text },
+  muted: { color: colors.textMuted, fontWeight: '600' },
   inputs: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   tart: { minHeight: 56, justifyContent: 'center' },
   cardWide: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },

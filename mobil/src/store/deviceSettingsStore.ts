@@ -18,6 +18,7 @@ const LAST_ROUTE_KEY = 'device_quick_wo_last_route';
 const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
 const TAMBUR_RESET_QUALITY_KEY = 'tambur_reset_quality_after_cut';
 const TAMBUR_RESET_KARTELA_KEY = 'tambur_reset_kartela_after_cut';
+const TAMBUR_LAST_QUALITY_KEY = 'tambur_last_quality_code';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
@@ -136,6 +137,11 @@ interface DeviceSettingsState {
    */
   tamburResetKartelaAfterCut: boolean;
   /**
+   * Operatörün Tambur'da EN SON elle bastığı kalite kodu (saha 2026-11-10): kesimden sonra, topa/karta
+   * geçince ve uygulama yeniden açılınca seçili kalır. null = hatırlanan yok; katalogda yoksa ekran seçimsiz kalır.
+   */
+  tamburLastQualityCode: string | null;
+  /**
    * Tambur "MANUEL EKLE" modu: true → ekran refakat kartı BEKLEMEZ, operatör
    * ürün/metraj/müşteri seçip topu doğrudan BİTMİŞ DEPO'ya yazar
    * (`POST /tambur/manual/produce`). false → normal akış (kart okutulur).
@@ -243,6 +249,7 @@ interface DeviceSettingsState {
   setKk1ManualEntry: (v: boolean) => Promise<void>;
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
   setTamburResetQualityAfterCut: (v: boolean) => Promise<void>;
+  setTamburLastQualityCode: (v: string | null) => Promise<void>;
   setTamburResetKartelaAfterCut: (v: boolean) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
   setScanSoundEnabled: (v: boolean) => Promise<void>;
@@ -294,6 +301,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   tamburCutMode: 'manual',
   tamburResetQualityAfterCut: false,
   tamburResetKartelaAfterCut: true,
+  tamburLastQualityCode: null,
   tamburManualMode: false,
   tamburOutputCollapsed: false,
   scanSoundEnabled: true,
@@ -315,7 +323,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -341,6 +349,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(HARDWARE_LINK_KEY),
         storage.getItem(WO_LAST_BATCH_HINT_KEY),
         storage.getItem(DOC_TORCH_AUTO_KEY),
+        storage.getItem(TAMBUR_LAST_QUALITY_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -355,6 +364,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // Varsayılan AÇIK → yalnız birebir 'false' yapışkanlığı geri getirir
       // (scanSoundEnabled ile aynı ters yön; güvenli taraf "sıfırla").
       tamburResetKartelaAfterCut: tamburResetKartela !== 'false',
+      tamburLastQualityCode: lastQuality?.trim() ? lastQuality.trim() : null,
       // Güvenli varsayılan KAPALI: yalnız birebir 'true' modu açar (bozuk değer
       // kart-atlayan modu sessizce açmasın).
       tamburManualMode: tamburManual === 'true',
@@ -435,6 +445,13 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setTamburResetQualityAfterCut: async (v) => {
     set({ tamburResetQualityAfterCut: v });
     await storage.setItem(TAMBUR_RESET_QUALITY_KEY, v ? 'true' : 'false');
+  },
+
+  setTamburLastQualityCode: async (v) => {
+    const code = v?.trim() ? v.trim() : null;
+    set({ tamburLastQualityCode: code });
+    if (code) await storage.setItem(TAMBUR_LAST_QUALITY_KEY, code);
+    else await storage.deleteItem(TAMBUR_LAST_QUALITY_KEY);
   },
 
   setTamburResetKartelaAfterCut: async (v) => {

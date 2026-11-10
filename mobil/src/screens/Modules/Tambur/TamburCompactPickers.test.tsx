@@ -55,6 +55,14 @@ describe('TargetButton / QualitySegment', () => {
     fireEvent.press(r.getByTestId('tambur-kalite-K1'));
     expect(onPick).toHaveBeenLastCalledWith(grades[0], true);
   });
+
+  it('kalite düğmesinde sondaki parantezli açıklama görünmez; tam ad erişilebilirlik etiketinde', () => {
+    const grades = [{ id: '2', code: 'A1', name: 'A1 (Alt Kalite)' }];
+    const r = renderWithPaper(<QualitySegment grades={grades} value={null} onPick={noop} />);
+    expect(r.getByText('A1')).toBeTruthy();
+    expect(r.queryByText('A1 (Alt Kalite)')).toBeNull();
+    expect(r.getByTestId('tambur-kalite-A1').props.accessibilityLabel).toBe('A1 (Alt Kalite)');
+  });
 });
 
 describe('Etikette kartı — geniş tablet', () => {

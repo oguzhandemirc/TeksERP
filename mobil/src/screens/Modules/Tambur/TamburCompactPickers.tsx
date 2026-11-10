@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { Icon, Text, TouchableRipple } from 'react-native-paper';
 import TruncatedText from '../../../components/TruncatedText';
 import { colors, radius, spacing } from '../../../theme/tokens';
+import { shortGradeLabel } from './qualityMemory';
 
 /** PickerModal'daki "Stok (müşterisiz)" satırının değeri — gerçek id ile çakışmasın diye ayraçlı. */
 export const TARGET_STOCK_VALUE = '__kime_stok__';
@@ -67,8 +68,9 @@ export function QualitySegment({
             testID={`tambur-kalite-${g.code}`}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
+            accessibilityLabel={g.name}
           >
-            <TruncatedText style={[s.segText, active && s.segTextActive]}>{g.name}</TruncatedText>
+            <TruncatedText style={[s.segText, active && s.segTextActive]}>{shortGradeLabel(g.name)}</TruncatedText>
           </TouchableRipple>
         );
       })}

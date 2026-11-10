@@ -45,6 +45,7 @@ import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import { TARGET_LINE_PREFIX, TARGET_STOCK_VALUE, TargetButton, QualitySegment, targetButtonText } from './TamburCompactPickers';
+import { rememberedGrade, shortGradeLabel } from './qualityMemory';
 import { useTamburLabelCard } from './useTamburLabelCard';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -474,6 +475,9 @@ export default function TamburScreen() {
   const { has: hasPermission } = usePermissions();
   // Cihaz tercihi (sunucuya gitmez): kesimden sonra kalite 1. Kaliteye dönsün mü?
   const resetQualityAfterCut = useDeviceSettingsStore((st) => st.tamburResetQualityAfterCut);
+  // Son elle basılan kalite cihazda kalıcı (saha 2026-11-10): kesim, top/kart geçişi ve yeniden açılışta seçili kalır.
+  const lastQualityCode = useDeviceSettingsStore((st) => st.tamburLastQualityCode);
+  const setLastQualityCode = useDeviceSettingsStore((st) => st.setTamburLastQualityCode);
   // KISA KESİM → OTOMATİK A1 (kural: shortCutQuality.ts). Bayrak + eşik artık
   // FABRİKA ayarıdır (feature-flags); cihaz yalnız 3-durumlu override taşır ve
   // ikisini `resolveShortCutConfig` birleştirir — "hangisi geçerli" sorusunun
@@ -880,6 +884,18 @@ export default function TamburScreen() {
   );
   const defaultQualityCode = defaultGrade?.code ?? '';
   const defaultQualityName = defaultGrade?.name ?? '';
+  const lastGrade = useMemo(() => rememberedGrade(lastQualityCode, qualityGrades), [lastQualityCode, qualityGrades]);
+  // Top Kesme sıfırlamalarında: hatırlanan kalite > varsayılan (1. Kalite).
+  const recutStartQualityCode = (!resetQualityAfterCut && lastGrade?.code) || defaultQualityCode;
+  // Katalog/cihaz tercihi geç yüklenirse boş seçim hatırlanana çekilir; elle seçim varsa dokunulmaz.
+  useEffect(() => {
+    if (resetQualityAfterCut || !lastGrade) return;
+    setWork((w) =>
+      w.voluntaryEntry.qualityGrade
+        ? w
+        : { ...w, voluntaryEntry: { ...w.voluntaryEntry, qualityGrade: lastGrade.code, qualityName: lastGrade.name } },
+    );
+  }, [lastGrade, resetQualityAfterCut]);
   // KISA KESİM kalitesi de ROLDEN (`SECOND`) — `shortCutQuality.ts` ile aynı
   // kaynak; burada ikinci kez kod yazılsaydı iki yüzey sessizce ayrışırdı.
   const secondQualityCode = findGradeByRole(qualityGrades, 'SECOND')?.code ?? null;
@@ -1077,7 +1093,9 @@ export default function TamburScreen() {
     // Plan katalogda yoksa (silinmiş/pasif değer) yine de PLANI KORU: iş emrinin
     // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
     const defaultFold: TamburFoldType | null = known ?? planned ?? preferredFoldCode(foldValues);
-    setWork({ ...EMPTY_WORK, foldType: defaultFold });
+    // Hatırlanan kalite yeni topa taşınır; "kesimden sonra 1. Kaliteye dön" açıksa bugünkü gibi seçimsiz başlar.
+    const keep = !resetQualityAfterCut && lastGrade ? { qualityGrade: lastGrade.code, qualityName: lastGrade.name } : {};
+    setWork({ ...EMPTY_WORK, foldType: defaultFold, voluntaryEntry: { ...EMPTY_VOLUNTARY_ENTRY, ...keep } });
     redecideOwnerTarget();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sıfırlayıcı ref temizler, tetik değildir
   }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType, foldValues]);
@@ -1899,7 +1917,7 @@ export default function TamburScreen() {
         setRecutResolvedRollId(null);
         setRecutRollMeta(null);
         setRecutCutLength('');
-        setRecutQualityGrade(defaultQualityCode);
+        setRecutQualityGrade(recutStartQualityCode);
         setRecutLastParentRoll(null);
         qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -3104,6 +3122,7 @@ export default function TamburScreen() {
     // Elle seçim = kontrol operatörde; kısa-kesim kuralı bu seçimi geri almaz
     // (yeni uzunluk yazılana dek yeniden de ateşlemez — kural yalnız varsayılan seçiliyken çalışır).
     shortCutAutoMainRef.current = false;
+    void setLastQualityCode(active ? null : qg.code);
     setWork((w) => ({
       ...w,
       voluntaryEntry: {
@@ -3202,7 +3221,7 @@ export default function TamburScreen() {
                     active && styles.listOptionTextActive,
                   ]}
                 >
-                  {qg.name}
+                  {shortGradeLabel(qg.name)}
                 </Text>
               </TouchableRipple>
             );
@@ -3226,7 +3245,7 @@ export default function TamburScreen() {
     setRecutTargetCustomerId(null);
     setRecutTargetCustomerName(undefined);
     setRecutCutLength('');
-    setRecutQualityGrade(defaultQualityCode);
+    setRecutQualityGrade(recutStartQualityCode);
     setRecutRawDestination('STOCK');
     setRecutLastParentRoll(null);
     // Kartelalık işareti akışa özgüdür — X ile kapatınca da sıfırla; yoksa
@@ -3591,6 +3610,7 @@ export default function TamburScreen() {
       hidePlaceChip={compact}
       titleRowExtras={<MachineStopChip control={machineStop} />}
       topStrip={<MachineStopBand control={machineStop} />}
+      flushBottom={!compact}
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
@@ -4138,6 +4158,7 @@ export default function TamburScreen() {
                         onPick={(g) => {
                           shortCutAutoRecutRef.current = false;
                           setRecutQualityGrade(g.code);
+                          void setLastQualityCode(g.code);
                         }}
                       />
                     </View>
@@ -4200,6 +4221,7 @@ export default function TamburScreen() {
                                 // Elle seçim = kontrol operatörde (ana kesimle aynı).
                                 shortCutAutoRecutRef.current = false;
                                 setRecutQualityGrade(qg.code);
+                                void setLastQualityCode(qg.code);
                               }}
                               style={[
                                 styles.listOption,
@@ -4215,7 +4237,7 @@ export default function TamburScreen() {
                                   active && styles.listOptionTextActive,
                                 ]}
                               >
-                                {qg.name}
+                                {shortGradeLabel(qg.name)}
                               </Text>
                             </TouchableRipple>
                           );
@@ -4938,7 +4960,7 @@ export default function TamburScreen() {
             setRecutResolvedRollId(null);
             setRecutRollMeta(null);
             setRecutCutLength('');
-            setRecutQualityGrade(defaultQualityCode);
+            setRecutQualityGrade(recutStartQualityCode);
             setRecutLastParentRoll(null);
             qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -9734,7 +9756,9 @@ const styles = StyleSheet.create({
   paneEmptyHint: { fontSize: 12, color: '#cbd5e1', textAlign: 'center' },
 
   numpadHost: {
+    // Alt kenar boşluğu yok: ekran dibine yapışır, Kes çubuğuyla aynı alt hiza (padding 8 = çubuğun alt dolgusu).
     margin: 8,
+    marginBottom: 0,
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 8,

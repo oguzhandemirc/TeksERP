@@ -124,22 +124,34 @@ describe('TamburFinalLabelStrip — Etikette kartı (2026-11-10)', () => {
       labelSummary={{ text: 'ESKİ ÖZET', onPress: noop }} card={c} />,
   );
 
-  it('kart özetin yerini alır: şablon adı + yalnız verilen satırlar; kendi topta "kimin için" yok', () => {
+  it('kart özetin yerini alır: yalnız verilen satırlar (başlık + değer bloğu); kendi topta "kimin için" yok', () => {
     const r = strip(card());
     expect(r.getByTestId('tambur-etikette-kart')).toBeTruthy();
-    expect(r.getByText('Şablon: Final Top Etiketi')).toBeTruthy();
-    expect(r.getByTestId('tambur-etikette-consigneeName').props.children).toBe('Alıcı: ABC');
-    expect(r.getByTestId('tambur-etikette-widthCm').props.children).toBe('En: —');
+    expect(r.getByTestId('tambur-etikette-consigneeName').props.accessibilityLabel).toBe('Alıcı: ABC');
+    expect(r.getByText('ABC')).toBeTruthy();
+    expect(r.getByTestId('tambur-etikette-widthCm').props.accessibilityLabel).toBe('En: —');
     expect(r.queryByText('ESKİ ÖZET')).toBeNull();
     expect(r.queryByTestId('tambur-alici-sec')).toBeNull();
   });
 
-  it('emanette "kimin için" satırı görünür ve dokununca seçici açılır', () => {
+  it('emanette "kimin için" satırı görünür; satır da "Değiştir" düğmesi de seçiciyi açar', () => {
     const onPress = jest.fn();
     const r = strip(card({ consignee: { text: 'HHL MC (malın sahibi)', onPress } }));
     expect(r.getByText('HHL MC (malın sahibi)')).toBeTruthy();
     fireEvent.press(r.getByTestId('tambur-alici-sec'));
-    expect(onPress).toHaveBeenCalled();
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(r.getByText('Değiştir')).toBeTruthy();
+    fireEvent.press(r.getByTestId('tambur-alici-degistir'));
+    expect(onPress).toHaveBeenCalledTimes(2);
+  });
+
+  it('"Şablon: …" yazısı yok; yerine "Etiketi değiştir" düğmesi etiket bilgisi/şablon penceresini açar', () => {
+    const onPress = jest.fn();
+    const r = strip(card({ onPress }));
+    expect(r.queryByText(/Şablon:/)).toBeNull();
+    expect(r.getByText('Etiketi değiştir')).toBeTruthy();
+    fireEvent.press(r.getByTestId('tambur-etiket-degistir'));
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 
   it('eski backend (rows null) → özet metni kartın içinde', () => {

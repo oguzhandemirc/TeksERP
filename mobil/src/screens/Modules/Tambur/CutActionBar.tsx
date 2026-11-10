@@ -98,7 +98,7 @@ export default function CutActionBar({
   onOpenLabelInfo,
 }: Props) {
   return (
-    <Surface style={styles.bar} elevation={3}>
+    <Surface style={[styles.bar, !compact && styles.barFlush]} elevation={3}>
       {/* Telefonda dört öğe tek satıra sığmaz → seçici kendi satırında, üstte. */}
       {copies && compact && (
         <View style={styles.copiesRow}>
@@ -419,6 +419,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
+  // Geniş tablette ekran alt boşluk bırakmaz (ScreenChrome flushBottom); çubuk dibe yapışır, numpad ile aynı alt hiza.
+  barFlush: { paddingBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
   copiesRow: {
     flexDirection: 'row',
