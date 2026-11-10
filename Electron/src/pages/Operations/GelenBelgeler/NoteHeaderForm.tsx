@@ -1,7 +1,8 @@
 // "Belge bilgileri" kartı: sahip/gönderen DOĞRUDAN MODAL seçici + eşleme önerisi; ikincil alanlar katlanır "Diğer bilgiler"de.
 // Metin alanları odak çıkınca yazılır (PATCH yalnız değişeni).
 import { useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
@@ -9,12 +10,15 @@ import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { SuggestionChips } from "./SuggestionChips";
 import { hasSameBatch } from "./SameBatchStrip";
 import { retentionDocNoWarning, retentionModeFor } from "./photoRetention";
+import { FisNoDuzeltDialog } from "./FisNoDuzeltDialog";
 import type { DeliveryNoteDetail, HeaderPatch, NoteMatchSuggestions } from "./types";
 
 interface Props {
   note: DeliveryNoteDetail;
   suggestions: NoteMatchSuggestions | undefined;
   editable: boolean;
+  /** Onaylı belgede fiş no / tarih düzeltme (izinli + APPROVED/PARTIAL); taslak formu zaten yazılabilir. */
+  canFixIdentity?: boolean;
   onPatch: (p: HeaderPatch) => void;
 }
 
@@ -62,7 +66,21 @@ function TextInput({ note, field, editable, onBlur, highlight }: { note: Deliver
   );
 }
 
-export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) {
+/** Onaylı belgede kilitli fiş alanlarının yanındaki küçük "Düzelt" düğmesi + diyaloğu. */
+function IdentityFixAction({ note }: { note: DeliveryNoteDetail }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex items-end md:col-span-2">
+      <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setOpen(true)} data-testid="fis-no-duzelt">
+        <Pencil className="h-3.5 w-3.5" aria-hidden />
+        Fiş no / tarih düzelt
+      </Button>
+      <FisNoDuzeltDialog note={note} open={open} onOpenChange={setOpen} />
+    </div>
+  );
+}
+
+export function NoteHeaderForm({ note, suggestions, editable, canFixIdentity = false, onPatch }: Props) {
   // K28: fotoğraf onaydan sonra küçülür/silinir → belge no'yu şimdi kontrol ettir (yalnız düzenlenebilir taslakta).
   const docNoWarning = editable ? retentionDocNoWarning(retentionModeFor(note)) : null;
   const [otherOpen, setOtherOpen] = useState(() => otherInfoNeedsAttention(note));
@@ -102,6 +120,7 @@ export function NoteHeaderForm({ note, suggestions, editable, onPatch }: Props) 
             />
           </Field>
         </div>
+        {canFixIdentity && !editable && <IdentityFixAction note={note} />}
       </div>
       <details open={otherOpen} onToggle={(e) => setOtherOpen(e.currentTarget.open)} className="group border-t pt-3" data-testid="note-other-info">
         <summary className="flex cursor-pointer select-none list-none items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">

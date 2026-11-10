@@ -63,7 +63,7 @@ export function NotePeerStrips({ note }: { note: DuplicateDocNoDetailFields & { 
 }
 
 /** Onay diyaloğundaki 409 kutusu: önceki belgeyi aç ya da "Yine de onayla". */
-export function DuplicateDocNoConfirm({ conflict, busy, onConfirm }: { conflict: DuplicateDocNoNotice; busy: boolean; onConfirm: () => void }) {
+export function DuplicateDocNoConfirm({ conflict, busy, onConfirm, confirmLabel = "Yine de onayla" }: { conflict: DuplicateDocNoNotice; busy: boolean; onConfirm: () => void; confirmLabel?: string }) {
   const first = conflict.peers[0];
   const label = conflict.peers.map((p) => p.noteNo).join(", ") || "başka bir belge";
   return (
@@ -78,7 +78,7 @@ export function DuplicateDocNoConfirm({ conflict, busy, onConfirm }: { conflict:
             <Link to={`${DETAIL_BASE}/${first.id}`} data-testid="duplicate-doc-no-open">Önceki belgeyi aç</Link>
           </Button>
         )}
-        <Button size="sm" variant="secondary" disabled={busy} onClick={onConfirm} data-testid="duplicate-doc-no-force">Yine de onayla</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={onConfirm} data-testid="duplicate-doc-no-force">{confirmLabel}</Button>
       </div>
     </div>
   );

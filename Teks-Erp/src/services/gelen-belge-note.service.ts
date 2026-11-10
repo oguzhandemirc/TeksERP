@@ -114,7 +114,7 @@ function auditHeader(n: { noteNo: string; status: string; sourceKind: string; ow
     customerBatchNo: n.customerBatchNo, customerOrderNo: n.customerOrderNo, processText: n.processText, pageCount: n.pageCount, declaredTopCount: n.declaredTopCount,
   };
 }
-function parseDay(v: string | null | undefined): Date | null {
+export function parseDay(v: string | null | undefined): Date | null {
   if (v === undefined || v === null || v === "") return null;
   const d = new Date(`${v}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {

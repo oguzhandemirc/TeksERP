@@ -15,6 +15,7 @@ import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { fixNoteIdentity } from "../services/gelen-belge-kunye-duzelt.service";
 import { addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine, getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine } from "../services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { cancelDeliveryNote } from "../services/gelen-belge-iptal.service";
@@ -132,6 +133,12 @@ const UpdateBody = z.strictObject({
   kursunMeters: Money("Kurşun metresi").nullable().optional(),
   kursunMetersReviewed: z.literal(true, "Gözden geçirme işareti yalnız true olabilir").optional(),
 });
+// Onaylı belgede künye düzeltmesi: YALNIZ fiş no + fiş tarihi; başka anahtar katı şemada 400 (başlığın geri kalanı donuk).
+const IdentityFixBody = z.strictObject({
+  senderDocNo: optText(64),
+  senderDocDate: Day.nullable().optional(),
+  confirmDuplicateDocNo: z.boolean().optional(),
+}).refine((b) => b.senderDocNo !== undefined || b.senderDocDate !== undefined, "Fiş no ya da fiş tarihi verilmeli");
 const LinesBody = z.strictObject({
   // Parti kimliği: zaman aşımı tekrarı aynı token'la gelir, satırlar ikilenmez (`lineBatchReplay`).
   clientToken: z.uuid("İşlem kimliği geçersiz").nullable().optional(),
@@ -269,6 +276,27 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
  *       200: { description: "{ id, noteNo }" }
+ * /api/gelen-belge/irsaliyeler/{id}/kunye:
+ *   patch:
+ *     tags: [Gelen belge]
+ *     summary: Onaylı (APPROVED/PARTIAL) belgede YALNIZ fiş no + fiş tarihi düzelt — başka anahtar 400; taslak/iptal/onaylanıyor 409 DELIVERY_NOTE_IDENTITY_NOT_FIXABLE; eşzamanlı ikinci düzeltme 409 DELIVERY_NOTE_CHANGED; mükerrer no onay kapısıyla aynı (BLOCK 409 DELIVERY_NOTE_DUPLICATE_DOC_NO · WARN 409 DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE + peers, confirmDuplicateDocNo ile geçer)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             properties:
+ *               senderDocNo: { type: string, maxLength: 64, nullable: true }
+ *               senderDocDate: { type: string, format: date, nullable: true }
+ *               confirmDuplicateDocNo: { type: boolean }
+ *     responses:
+ *       200: { description: "Belge detayı (GET ile aynı) + WARN onayıyla geçildiyse üst düzey warnings" }
+ *       400: { description: "Başka alan · boş gövde · DELIVERY_NOTE_DATE_INVALID" }
+ *       409: { description: "DELIVERY_NOTE_IDENTITY_NOT_FIXABLE · DELIVERY_NOTE_CHANGED · DELIVERY_NOTE_DUPLICATE_DOC_NO · DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE" }
  * /api/gelen-belge/irsaliyeler/{id}/satirlar:
  *   post:
  *     tags: [Gelen belge]
@@ -602,6 +630,10 @@ router.get("/irsaliyeler", requirePermission("gelen-belge:read"), wrap(async (re
 router.post("/irsaliyeler", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 201, data: await createDeliveryNote(CreateBody.parse(req.body), req.user!.userId) })));
 router.get("/irsaliyeler/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDeliveryNote(Id.parse(req.params.id)) })));
 router.patch("/irsaliyeler/:id", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await updateDeliveryNote(Id.parse(req.params.id), UpdateBody.parse(req.body), req.user!.userId) })));
+router.patch("/irsaliyeler/:id/kunye", requirePermission("gelen-belge:write"), wrap(async (req) => {
+  const { note, warnings } = await fixNoteIdentity(Id.parse(req.params.id), IdentityFixBody.parse(req.body), req.user!.userId);
+  return { status: 200, data: note, warnings };
+}));
 router.delete("/irsaliyeler/:id", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await deleteDeliveryNote(Id.parse(req.params.id), req.user!.userId) })));
 router.post("/irsaliyeler/:id/satirlar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   // Tek satır gövdesi de kabul: `{ meters, … }` → `{ lines: [ … ] }` (panel tek satır ekler, Excel toplu yollar).

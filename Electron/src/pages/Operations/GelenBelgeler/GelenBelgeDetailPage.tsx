@@ -21,7 +21,7 @@ import { CancelReasonLine } from "./CancelNoteAction";
 import { DetailAttentionBox } from "./DetailAttentionBox";
 import { DetailMoreMenu } from "./DetailMoreMenu";
 import { buildReviewQueue, lineRect } from "./review-queue";
-import { isApprovable, isEditable, isWorkOrderOpenable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT } from "./noteStatus";
+import { isApprovable, isEditable, isIdentityFixable, isWorkOrderOpenable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT } from "./noteStatus";
 import { useNoteDetail } from "./useNoteDetail";
 import { ProcessGramajPanel } from "./ProcessGramajPanel";
 import { useProcessGramaj } from "./processChoices";
@@ -109,7 +109,7 @@ export function IncomingDocumentDetailPage() {
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             <ScanViewer scans={n.scans} highlight={sel ? lineRect(sel) : null} highlightScanId={sel?.scanId ?? null} selectionKey={sel?.id ?? null} />
             <div className="flex min-w-0 flex-col gap-4">
-              <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} onPatch={(p) => header.mutate(p)} />
+              <NoteHeaderForm note={n} suggestions={suggestions.data} editable={editable} canFixIdentity={isIdentityFixable(n.status) && hasPermission("gelen-belge:write")} onPatch={(p) => header.mutate(p)} />
               {/* iptalde toplar düştü; hüküm anlamsız. TUTMUYOR hükmü "Dikkat" kutusunda, burada blok ayrıntısı kalır. */}
               {n.status !== "CANCELLED" && <TotalsStrip check={n.totalsCheck} approvable={isApprovable(n.status)} partiesShown={multiParty} verdictInAttention />}
               {perDoc && <BatchNoPicker note={n} editable={editable} onPatch={(p) => header.mutate(p)} />}

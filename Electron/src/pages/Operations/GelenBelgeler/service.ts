@@ -55,6 +55,12 @@ export async function updateNoteHeader(id: string, patch: HeaderPatch): Promise<
   return (await apiClient.patch<ApiResponse<unknown>>(`${BASE}/irsaliyeler/${id}`, patch)).data.data;
 }
 
+/** Onaylı belgede künye düzeltmesi: YALNIZ fiş no + fiş tarihi (sunucu başka anahtarı 400'ler); WARN eşinde 409 + peers.
+ *  Hata diyalogda satır içinde gösterilir — apiClient toast'ı bastırılır (tek hata yüzeyi). */
+export async function fixNoteIdentity(id: string, body: { senderDocNo?: string | null; senderDocDate?: string | null; confirmDuplicateDocNo?: true }): Promise<DeliveryNoteDetail> {
+  return (await apiClient.patch<ApiResponse<DeliveryNoteDetail>>(`${BASE}/irsaliyeler/${id}/kunye`, body, { suppressErrorToast: true })).data.data;
+}
+
 export async function deleteDraftNote(id: string): Promise<unknown> {
   return (await apiClient.delete<ApiResponse<unknown>>(`${BASE}/irsaliyeler/${id}`)).data.data;
 }
