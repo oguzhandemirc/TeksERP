@@ -18,6 +18,13 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Etiket alıcısı kataloğu (tambur emanet, 2026-11-10)
+  "POST /api/customers/:id/consignees/ensure": e("bir etiket alıcısı ekledi", "bir etiket alıcısı eklemeye çalıştı"),
+  "PATCH /api/customer-consignees/:id": e("bir etiket alıcısını yeniden adlandırdı", "bir etiket alıcısını yeniden adlandırmaya çalıştı"),
+  "POST /api/customer-consignees/:id/deactivate": e("bir etiket alıcısını pasife aldı", "bir etiket alıcısını pasife almaya çalıştı"),
+  "POST /api/customer-consignees/:id/activate": e("bir etiket alıcısını aktifleştirdi", "bir etiket alıcısını aktifleştirmeye çalıştı"),
+  "PUT /api/customer-consignees/:id/label-template": e("bir etiket alıcısının şablonunu değiştirdi", "bir etiket alıcısının şablonunu değiştirmeye çalıştı"),
+  "POST /api/customer-consignees/:id/merge": e("iki etiket alıcısını birleştirdi", "iki etiket alıcısını birleştirmeye çalıştı"),
   // ── Emanet çıkış belgesi (genel fason F5, 2026-11-08)
   "POST /api/consignment-dispatches/preview": e("emanet çıkış önizlemesi aldı", "emanet çıkış önizlemesi almaya çalıştı"),
   "POST /api/consignment-dispatches": e("emanet levent/ipliği sahibine çıkardı", "emanet levent/ipliği sahibine çıkarmaya çalıştı"),

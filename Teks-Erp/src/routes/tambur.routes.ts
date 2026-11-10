@@ -12,6 +12,7 @@ import { z } from "zod";
 import { correctCutReading } from "../services/tambur-meter-correct.service";
 import { getTamburLabelSettings } from "../services/helpers/tambur-customer-settings.helper";
 import { getTamburLabelSuggestions } from "../services/tambur/label-suggestions";
+import { getTamburLabelPreviewFields } from "../services/tambur/label-preview-fields";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -1052,6 +1053,44 @@ router.get(
     try {
       const q = labelSuggestionsQuery.parse(req.query);
       res.json({ success: true, data: await getTamburLabelSuggestions(q) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-preview-fields:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Kesimde doğacak çocuğun etiket şablonu ve basılacak alanları (Etikette kartı)
+ *     description: |
+ *       Şablon baskıyla aynı zincirden çözülür (alıcı > müşteri > cihaz > bağlam varsayılanı); müşteri =
+ *       topun sahibi (emanet) yoksa `customerId`. Kanvas varyantında bağlı alan elemanları, akış şablonunda
+ *       görünür alanlar; barkod/QR/tarih atılır. Şablon çözülmezse `fields: null` (tablet özete düşer).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: rollId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: consigneeId, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ kind, templateId, templateName, fields: [{ key, label }] | null }" }
+ *       404: { description: Top bulunamadı }
+ */
+const labelPreviewFieldsQuery = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  customerId: z.string().uuid("Geçersiz müşteri ID").optional(),
+  consigneeId: z.string().uuid("Geçersiz alıcı ID").optional(),
+});
+router.get(
+  "/label-preview-fields",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const q = labelPreviewFieldsQuery.parse(req.query);
+      res.json({ success: true, data: await getTamburLabelPreviewFields({ ...q, deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null }) });
     } catch (err) {
       next(err);
     }

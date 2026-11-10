@@ -93,6 +93,10 @@ export interface LabelPayload {
   deliveryNoteColorText?: string | null;
   /** Gelen belge satırındaki müşteri top numarası (H9 `musteriTopNo`; Tambur çocuğu atanınkini taşır). Yoksa ALAN YOK. */
   deliveryNoteRollNo?: string | null;
+  /** Emanet topun etiket alıcısı (`Roll.labelConsignee.name`); alıcısız topta yok. */
+  consigneeName?: string | null;
+  /** İç alan (basılmaz): alıcı id'si — denormalize snapshot'a yazılır. */
+  consigneeId?: string | null;
   /** Gelen belgenin müşteri parti no'su (ata zinciriyle, tek çözücü). Yoksa ALAN YOK (payload bayt-aynı). */
   deliveryNoteBatchNo?: string | null;
   /** Topa bağlı AKTİF müşteri barkodu (D4-F1 `RollCustomerCode`, revokedAt null). Kodsuz topta ALAN YOK (payload bayt-aynı). */

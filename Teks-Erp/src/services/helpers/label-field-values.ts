@@ -132,6 +132,9 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Müşteri barkodu (D4-F3) — metin olarak opt-in; kodsuz topta boş → satır basılmaz.
     case "customerCode":
       return str(payload.customerCode);
+    // Emanet alıcısı (2026-11-10) — alıcısız topta boş → satır basılmaz.
+    case "consigneeName":
+      return str(payload.consigneeName);
 
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.

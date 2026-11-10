@@ -118,6 +118,7 @@ export const CUD_TABLOLARI = [
   "SENDER_TEMPLATE", "DELIVERY_NOTE_CUSTOMER_DEFAULT",
   "ROLL_METER_ACK", "ROLL_METER_STOCK_APPLY", "ROLL_CUSTOMER_CODE", "CUSTOMER_BARCODE_SERIES", "CARI_HOLD",
   "MACHINE_COST_RATE", "SERVICE_CONSUMABLE_NORM", "EXPENSE_ALLOCATION", "SERVICE_ITEM",
+  "CUSTOMER_CONSIGNEE",
 ] as const;
 
 const OLAY_SABLONLARI: Record<string, Sablon> = {
@@ -138,6 +139,14 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "ROLL:CANCEL_RESTORED": olay("belirtme", "iptalden geri getirdi"),
   "ROLL:LABEL_TEXT_FIX": olay("ilgi", "etiket adını/rengini/parti nosunu düzeltti"),
   "ROLL:TAMBUR_UNDO_SINGLE": olay("ilgi", "tambur kaydını geri aldı"),
+  // Etiket alıcısı (tambur emanet, 2026-11-10)
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_ENSURE": olay("belirtme", "ekledi"),
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_REACTIVATE_BY_ENSURE": olay("belirtme", "yeniden etkinleştirdi"),
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_RENAME": olay("belirtme", "yeniden adlandırdı"),
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_DEACTIVATE": olay("belirtme", "pasife aldı"),
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_ACTIVATE": olay("belirtme", "aktifleştirdi"),
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_TEMPLATE": olay("ilgi", "etiket şablonunu değiştirdi"),
+  "CUSTOMER_CONSIGNEE:CONSIGNEE_MERGE": olay("belirtme", "başka bir alıcıyla birleştirdi"),
   // Sipariş
   "ORDER:ORDER_LINE_COLOR_CHANGED": olayFarkli("ilgi", "satır rengini değiştirdi"),
   // Sayım

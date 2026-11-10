@@ -84,6 +84,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   CHEQUE_DELIVERY_NOTE: onEkli("çek teslim", sIyelik("bordro", "u", "a")),
   CREDENTIAL_RESET_REQUEST: onEkli("kimlik sıfırlama", iyelik("taleb", "i", "e", "i")),
   CUSTOMER_BRANCH: onEkli("müşteri", sIyelik("şube", "i", "e")),
+  CUSTOMER_CONSIGNEE: onEkli("etiket", sIyelik("alıcı", "ı", "a")),
   CUSTOMER_COLOR_ALIAS: onEkli("müşteri renk", iyelik("kod", "u", "a", "u")),
   DEFECT_TYPE: onEkli("hata", iyelik("tip", "i", "e", "i")),
   FACTORY_TIMEZONE_PERIOD: onEkli("saat dilimi", iyelik("dönem", "i", "e", "i")),

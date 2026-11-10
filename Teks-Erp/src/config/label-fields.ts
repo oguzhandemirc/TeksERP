@@ -64,6 +64,8 @@ export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
   { key: "deliveryNoteColorText", defaultLabel: "Renk (müşteri belgesindeki)",  type: "text", defaultVisible: false },
   { key: "deliveryNoteRollNo",    defaultLabel: "Müşteri top no",               type: "text", defaultVisible: false },
   { key: "customerCode",          defaultLabel: "Müşteri barkodu",              type: "text", defaultVisible: false },
+  // Emanet topun alıcısı (müşterimizin müşterisi, `Roll.labelConsigneeId`) — OPT-IN; alıcısız topta boş.
+  { key: "consigneeName",         defaultLabel: "Alıcı",                        type: "text", defaultVisible: false },
   { key: "printedAt",       defaultLabel: "Baskı Tarihi",      type: "date" },
 ] as const;
 
@@ -109,6 +111,8 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "deliveryNoteColorText", defaultLabel: "Renk (müşteri belgesindeki)",  type: "text", defaultVisible: false },
   { key: "deliveryNoteRollNo",    defaultLabel: "Müşteri top no",               type: "text", defaultVisible: false },
   { key: "customerCode",          defaultLabel: "Müşteri barkodu",              type: "text", defaultVisible: false },
+  // Emanet topun alıcısı (müşterimizin müşterisi, `Roll.labelConsigneeId`) — OPT-IN; alıcısız topta boş.
+  { key: "consigneeName",         defaultLabel: "Alıcı",                        type: "text", defaultVisible: false },
   { key: "printedAt",        defaultLabel: "Baskı Tarihi",           type: "date" },
 ] as const;
 

@@ -66,7 +66,7 @@ import {
 } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
-import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
+import { resolveLabelRouting, findContextDefaultTemplate, consigneeTemplateUsable } from "./helpers/label-routing.resolver";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { assertContextRenderable } from "./helpers/label-context-fit";
 import {
@@ -200,6 +200,8 @@ const ROLL_LABEL_INCLUDE = {
     // labelOverrides: İE etiket bilgisi (Gülkesim S5) — tekil + toplu yol aynı include'dan okur.
     select: { batchNumber: true, workOrder: { select: { workOrderNumber: true, labelOverrides: true } } },
   },
+  // Emanet alıcısı (2026-11-10) — OPT-IN `consigneeName` alanı + denormalize snapshot'ta iç `consigneeId`.
+  labelConsignee: { select: { id: true, name: true } },
 } satisfies Prisma.RollInclude;
 
 type RollWithLabelIncludes = Prisma.RollGetPayload<{ include: typeof ROLL_LABEL_INCLUDE }>;
@@ -228,6 +230,8 @@ interface BulkLabelContext {
   /** `${kind}|${customerId}` → müşteriye özel şablon+varyant (yalnız route'u OLAN
    *  müşteriler; tekil yoldaki CustomerTemplateRoute halkasının batch karşılığı). */
   customerTemplateByKey: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
+  /** consigneeId → alıcıya bağlı şablon+varyant (yalnız şablonu OLAN alıcılar; müşteri halkasından önce). */
+  consigneeTemplateById?: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
   copies: number;
   /** Açık hata notları (KQ-D8) — toplu basımda TEK sorgu; hatasız top haritada yok. */
   openDefectNotes?: Map<string, string>;
@@ -493,6 +497,11 @@ export class LabelService {
     // Müşteri barkodu (D4-F3): yalnız kodlu topta alan EKLENİR (kodsuz topta payload bayt-aynı).
     const customerCode = (preloaded?.customerCodes ?? (await loadActiveCustomerCodes([roll.id]))).get(roll.id);
     if (customerCode) payload.customerCode = customerCode;
+    // Emanet alıcısı: yalnız alıcılı topta alan EKLENİR (alıcısız topta payload bayt-aynı).
+    if (roll.labelConsignee) {
+      payload.consigneeName = roll.labelConsignee.name;
+      payload.consigneeId = roll.labelConsignee.id;
+    }
 
     // Etiketteki en kaynağı — müşteri ayarı (etiket müşterisi ?? malın sahibi); NULL = bugünkü güncel en.
     const settingsCustomerId = customerId ?? roll.ownerCustomerId ?? null;
@@ -857,9 +866,10 @@ export class LabelService {
     if (preloaded) {
       // Müşteri-şablon halkasının bulk karşılığı: route'u olan müşterinin topu
       // kendi şablonuyla basılır (tekil yolla AYNI öncelik: müşteri > cihaz > default).
-      const custom = payload.customerId
-        ? preloaded.customerTemplateByKey.get(`${kind}|${payload.customerId}`)
-        : undefined;
+      // Sıra tekil yolla AYNI: alıcı şablonu > müşteri route > cihaz/bağlam (consigneeTemplateUsable ortak yüklem).
+      const byConsignee = payload.consigneeId ? preloaded.consigneeTemplateById?.get(payload.consigneeId) : undefined;
+      const custom = (byConsignee && consigneeTemplateUsable(byConsignee.template, kind) ? byConsignee : undefined)
+        ?? (payload.customerId ? preloaded.customerTemplateByKey.get(`${kind}|${payload.customerId}`) : undefined);
       template = custom?.template ?? preloaded.templateByKind[kind] ?? null;
       variant = custom ? custom.variant : preloaded.variantByKind[kind] ?? null;
       format = preloaded.format;
@@ -874,6 +884,8 @@ export class LabelService {
         // Müşteri şablonu halkası — payload ÖNCE çözüldü (explicit-only):
         // stok/müşterisiz baskıda null → halka hiç sorgulanmaz.
         customerId: payload.customerId ?? null,
+        // Alıcı şablonu halkası (emanet top) — müşteri halkasından önce.
+        consigneeId: payload.consigneeId ?? null,
       });
       template = routing.template;
       variant = routing.variant;
@@ -1470,10 +1482,25 @@ export class LabelService {
       }
     }
 
+    // §2-D: alıcı şablonları tek sorguda (tekil yoldaki alıcı halkasının batch karşılığı).
+    const consigneeTemplateById = new Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>();
+    const consigneeIds = [...new Set(rolls.map((r) => r.labelConsigneeId).filter((x): x is string => !!x))];
+    if (consigneeIds.length > 0) {
+      const rows = await prisma.customerConsignee.findMany({
+        where: { id: { in: consigneeIds }, labelTemplateId: { not: null } },
+        select: { id: true, labelTemplate: { include: { variants: true } } },
+      });
+      for (const c of rows) {
+        if (!c.labelTemplate) continue;
+        const picked = pickVariant(c.labelTemplate.variants, { widthMm: format.widthMm, heightMm: format.heightMm });
+        consigneeTemplateById.set(c.id, { template: c.labelTemplate, variant: picked.variant });
+      }
+    }
+
     const openDefectNotes = await loadOpenDefectNotes(ids);
     const deliveryNoteLines = await resolveDeliveryNoteLinesForRolls(ids);
     const customerCodes = await loadActiveCustomerCodes(ids);
-    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, openDefectNotes, deliveryNoteLines, customerCodes, rasterMode: finishedRouting.rasterMode };
+    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, consigneeTemplateById, copies, openDefectNotes, deliveryNoteLines, customerCodes, rasterMode: finishedRouting.rasterMode };
   }
 
   /**
@@ -2311,7 +2338,7 @@ export class LabelService {
 
     // Çözülen şablon/varyant izi (BEST-EFFORT): reprint şablonu DONDURMADIĞINDAN
     // "o an hangi atama geçerliydi" audit'ten okunur — baskı davranışıyla aynı
-    // zincir (müşteri > cihaz > bağlam default). Hata isteği düşürmez.
+    // zincir (alıcı > müşteri > cihaz > bağlam default). Hata isteği düşürmez.
     let resolvedMeta: Record<string, unknown> = {};
     try {
       const payload = (await this.getRollLabel(rollId, opts)).data;
@@ -2319,6 +2346,7 @@ export class LabelService {
       const routing = await resolveLabelRouting({
         kind,
         customerId: payload.customerId ?? null,
+        consigneeId: payload.consigneeId ?? null,
         peripheralId: opts?.peripheralId ?? null,
         deviceId: opts?.deviceId ?? null,
         machineId: opts?.machineId ?? null,
@@ -2455,6 +2483,8 @@ function buildDenormalizedSnapshot(
   } else {
     snap.stock = true;
   }
+  // İç alan: basılan etiketin alıcısı ("son baskı" izi; render alıcıyı topun kolonundan taze okur).
+  if (labelData.consigneeId) snap.consigneeId = labelData.consigneeId;
   return snap as Prisma.InputJsonValue;
 }
 

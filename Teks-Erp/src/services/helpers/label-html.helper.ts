@@ -38,7 +38,7 @@ import { buildLandscapeRollLabelHtml } from "./label-html-landscape.helper";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 /** Şablonda AÇIKÇA işaretlenmedikçe basılmayan serbest satırlar. */
-const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode"]);
+const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"]);
 
 // Resolver (label-format.resolver) bunları buradan import ediyor → re-export.
 export { DEFAULT_LABEL_FORMAT };
@@ -129,6 +129,7 @@ function buildPortraitRollLabelHtml(
     { key: "deliveryNoteColorText", value: payload.deliveryNoteColorText ? escapeHtml(payload.deliveryNoteColorText) : "", def: "Müşteri rengi" },
     { key: "deliveryNoteRollNo", value: payload.deliveryNoteRollNo ? escapeHtml(payload.deliveryNoteRollNo) : "", def: "Müşteri top no" },
     { key: "customerCode", value: payload.customerCode ? escapeHtml(payload.customerCode) : "", def: "Müşteri barkodu" },
+    { key: "consigneeName", value: payload.consigneeName ? escapeHtml(payload.consigneeName) : "", def: "Alıcı" },
   ]
     // `openDefects` (KQ-D8) ve müşteri belge metni (E3) OPT-IN: şablonsuz düzende de basılmaz.
     // `labelBatchNo` sonradan eklendi: eski kayıtlı şablonda alan yok → AÇIK say (kartelaMark emsali).
