@@ -1,12 +1,12 @@
 // =============================================================================
 // İş Emirleri (tablet) — sütun aç/kapa tercihleri (SAF; testli)
 // =============================================================================
-// "İE no" ve "Şu an nerede" ZORUNLU (kapatılamaz). Varsayılan açık: İE no, tür, müşteri, kumaş, top, şu an nerede, durum.
-// Saklanan biçim `{ v: 2, visible: [...] }` (v1 okunur ve Tür/Top eklenerek yükseltilir); bilinmeyen anahtar atılır, zorunlu sütun her zaman eklenir, bozuk kayıt
+// "İE no" ve "Şu an nerede" ZORUNLU (kapatılamaz). Varsayılan açık: İE no, tür, müşteri, kumaş, top, metre, şu an nerede, durum.
+// Saklanan biçim `{ v: 3, visible: [...] }` (v1 Tür/Top/Metre, v2 Metre eklenerek bir kez yükseltilir); bilinmeyen anahtar atılır, zorunlu sütun her zaman eklenir, bozuk kayıt
 // varsayılana düşer (fail-safe: tercih okunamadı diye ekran boş tablo göstermez).
 // =============================================================================
 
-export type ColumnKey = 'no' | 'tur' | 'musteri' | 'kumas' | 'konum' | 'durum' | 'parti' | 'top' | 'topMetre' | 'tarih';
+export type ColumnKey = 'no' | 'tur' | 'musteri' | 'kumas' | 'konum' | 'durum' | 'parti' | 'top' | 'topMetre' | 'metre' | 'tarih';
 
 export interface ColumnDef {
   key: ColumnKey;
@@ -25,13 +25,14 @@ export const COLUMNS: readonly ColumnDef[] = [
   { key: 'parti', label: 'Parti', required: false, flex: 1 },
   { key: 'top', label: 'Top', required: false, flex: 0.7 },
   { key: 'topMetre', label: 'Top / metre', required: false, flex: 1.2 },
+  { key: 'metre', label: 'Giren · çıkan m', required: false, flex: 1.6 },
   { key: 'konum', label: 'Şu an nerede', required: true, flex: 2.2 },
   { key: 'durum', label: 'Durum', required: false, flex: 1.1 },
   { key: 'tarih', label: 'Tarih', required: false, flex: 0.9 },
 ];
 
 export const REQUIRED_COLUMNS: readonly ColumnKey[] = COLUMNS.filter((c) => c.required).map((c) => c.key);
-export const DEFAULT_VISIBLE: readonly ColumnKey[] = ['no', 'tur', 'musteri', 'kumas', 'top', 'konum', 'durum'];
+export const DEFAULT_VISIBLE: readonly ColumnKey[] = ['no', 'tur', 'musteri', 'kumas', 'top', 'metre', 'konum', 'durum'];
 
 const KNOWN = new Set<string>(COLUMNS.map((c) => c.key));
 
@@ -41,10 +42,11 @@ export function parseStoredColumns(raw: string | null | undefined): ColumnKey[] 
   if (raw) {
     try {
       const v = JSON.parse(raw) as { v?: unknown; visible?: unknown };
-      if (v && (v.v === 1 || v.v === 2) && Array.isArray(v.visible)) {
+      if (v && (v.v === 1 || v.v === 2 || v.v === 3) && Array.isArray(v.visible)) {
         const saved = v.visible.filter((k): k is string => typeof k === 'string');
         // v1 kayıtta Tür/Top sütunu yoktu (eskiden İE no ve konum hücresinin içindeydi): bilgi kaybolmasın diye bir kez eklenir.
-        list = v.v === 1 ? [...saved, 'tur', 'top'] : saved;
+        // Metre (beyan ↔ ölçülen) v3'te geldi; v1/v2 kaydına bir kez eklenir, sonra kullanıcı kapatabilir.
+        list = v.v === 1 ? [...saved, 'tur', 'top', 'metre'] : v.v === 2 ? [...saved, 'metre'] : saved;
       }
     } catch {
       list = DEFAULT_VISIBLE;
@@ -67,7 +69,7 @@ export function toggleColumn(visible: readonly ColumnKey[], key: ColumnKey): Col
 }
 
 export function serializeColumns(visible: readonly ColumnKey[]): string {
-  return JSON.stringify({ v: 2, visible: normalizeColumns(visible) });
+  return JSON.stringify({ v: 3, visible: normalizeColumns(visible) });
 }
 
 /** Kullanıcı başına cihaz anahtarı (SecureStore anahtar alfabesi: harf, rakam, `.`, `-`, `_`). */

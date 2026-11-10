@@ -8,6 +8,7 @@ import { factoryDayEndIso, factoryDayStartIso } from '../../../lib/factory-time'
 import { calendarKey, type DateRange } from '../../../components/filters/rollHistoryFilter';
 import { stationToneFor, type StationTone } from '../../../theme/stationTone';
 import { TERIM } from '../../../lib/terim';
+import type { WorkOrderMeterSummary } from '../../../services/workOrder.service';
 
 export interface LocationStation {
   istasyonId: string;
@@ -42,6 +43,8 @@ export interface WorkOrderListRow {
   inputMeters?: number;
   producedMeters?: number;
   konum?: WorkOrderLocation;
+  /** Yalnız `withMeterSummary=true` istenince; partisiz İE → null. */
+  meterSummary?: WorkOrderMeterSummary | null;
 }
 
 /** Rozet: büyük, istasyon renginde dolgulu; renk tek taşıyıcı değil — metin her zaman yazar. */

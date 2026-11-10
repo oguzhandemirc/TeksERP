@@ -50,10 +50,10 @@ export default function IsEmirleriScreen() {
   const scan = useScanAction(routeOnButton);
   // Ayar kapalıyken tuştaki rota forma (ve yüke) HİÇ geçmez; kart rotası formda çözülür.
   const open = (manual: boolean) => setStage({ route: initialFormRoute({ buttonRoute: buttonRouteFor(routeOnButton, scan.type), cardRoute: null, scanMode: scan.scanMode === true }), manual, n: Date.now() });
-  const list = useWorkOrderList(filters);
+  const cols = useColumnPrefs();
+  const list = useWorkOrderList(filters, cols.visible.includes('metre'));
   const refresh = useManualRefresh(() => list.refetch(), 'İş emirleri güncellendi');
   const { stations, loading: stationsLoading } = useLocationStations();
-  const cols = useColumnPrefs();
   // Terbiye | Dokuma: dokuma rejimi kapalıysa (ya da okuma izni yoksa) anahtar yok, başlık bugünkü düz metin.
   const tur = useIsEmriTuru();
   const anahtar = tur.gorunur ? <IsEmriTuruAnahtari etkin={tur.etkin} onSec={tur.sec} /> : undefined;

@@ -15,6 +15,7 @@ import { QUERY_PROBLEM_TEXT, type QueryProblem } from '../../../utils/queryState
 import { WORK_ORDER_STATUS_COLOR, WORK_ORDER_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { visibleDefs, type ColumnDef, type ColumnKey } from './columns';
+import { MeterLine } from '../HizliIsEmri/WorkOrderMeter';
 import { batchText, customerText, fabricText, locationBadge, rollMeterText, typeBadgeText, type EmptyAction, type WorkOrderListRow } from './workOrderRow';
 
 export const WIDE_MIN = 720;
@@ -135,8 +136,8 @@ function Row({ row, defs, wide, onOpen }: { row: WorkOrderListRow; defs: ColumnD
   );
 }
 
-/** Kart dışı kalan isteğe bağlı sütunlar (parti, top/metre, tarih) açıksa küçük 4. satırda. */
-const COMPACT_EXTRA: readonly ColumnKey[] = ['parti', 'topMetre', 'tarih'];
+/** Kart dışı kalan isteğe bağlı sütunlar (parti, top/metre, giren·çıkan metre, tarih) açıksa küçük 4. satırda. */
+const COMPACT_EXTRA: readonly ColumnKey[] = ['parti', 'topMetre', 'metre', 'tarih'];
 
 function CompactRow({ row, defs, onOpen }: { row: WorkOrderListRow; defs: ColumnDef[]; onOpen: (id: string) => void }) {
   const on = (k: ColumnKey) => defs.some((d) => d.key === k);
@@ -197,6 +198,8 @@ function Cell({ k, row }: { k: ColumnKey; row: WorkOrderListRow }) {
       return <Text style={styles.text} numberOfLines={1}>{batchText(row)}</Text>;
     case 'topMetre':
       return <Text style={styles.text} numberOfLines={1}>{rollMeterText(row)}</Text>;
+    case 'metre':
+      return <MeterLine summary={row.meterSummary} testID={`ie-metre-${row.id}`} dash />;
     case 'tarih':
       return <Text style={styles.sub} numberOfLines={1}>{formatCalendarDay(row.createdAt, 'dd.MM.yy')}</Text>;
     case 'durum':

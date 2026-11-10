@@ -6,7 +6,8 @@ import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import PullToRefreshView from '../../../components/PullToRefreshView';
 
-import { workOrderService } from '../../../services/workOrder.service';
+import { workOrderService, type WorkOrderMeterSummary } from '../../../services/workOrder.service';
+import { MeterLine } from './WorkOrderMeter';
 import type { WorkOrder } from '../../../types/models';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import {
@@ -55,7 +56,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
           filters: status ? { status } : undefined,
           withTotal: !pageParam,
         },
-        { withOrderDetail: true },
+        { withOrderDetail: true, withMeterSummary: true },
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.nextCursor : undefined),
@@ -114,6 +115,7 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
                 {batchLine}
               </Text>
             ) : null}
+            <MeterLine summary={(item as { meterSummary?: WorkOrderMeterSummary | null }).meterSummary} testID={`is-emri-metre-${item.id}`} />
           </View>
           <Icon source="chevron-right" size={22} color={colors.textMuted} />
         </View>

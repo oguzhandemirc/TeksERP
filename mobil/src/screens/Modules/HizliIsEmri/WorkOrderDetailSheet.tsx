@@ -33,6 +33,7 @@ import { formatFactory } from '../../../lib/factory-time';
 import { isCustomerGoodsWo } from '../IsEmirleri/workOrderRow';
 import { detailColumns, incomingView, singlePieceNote, visibleAttachedRolls, targetView, summaryItems, routeChips, routeNotes, actionPlacement, type DetailRow, type StepTone, type FixKind3 } from './workOrderDetailView';
 import WorkOrderIncomingCard from './WorkOrderIncomingCard';
+import { WorkOrderMeterCard } from './WorkOrderMeter';
 
 const TONE: Record<StepTone, { bg: string; fg: string }> = {
   info: { bg: colors.infoContainer, fg: colors.infoText },
@@ -366,6 +367,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
               <InfoCard title="Hedef" rows={view.target.rows} fixByLabel={view.target.fixByLabel} targetByLabel={view.target.targetByLabel} onFix={openFix} testID="ie-detay-hedef" flex={cols === 2 ? 1 : undefined} />
             </View>
           ) : null}
+
+          {wo ? <WorkOrderMeterCard workOrderId={wo.id} /> : null}
 
           {/* Rota — yatay adım çipleri */}
           {view && view.chips.length > 0 ? (

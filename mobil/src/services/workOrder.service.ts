@@ -226,6 +226,37 @@ export interface DetachCandidate {
   blockers: string[];
 }
 
+/** Liste ucunun `withMeterSummary=true` satır alanı (backend `meter-comparison.service` aynası). */
+export interface WorkOrderMeterSummary {
+  declaredM: number | null;
+  measuredMaxM: number | null;
+  billedM: number | null;
+  diffM: number | null;
+  diffPct: number | null;
+  withinTolerance: boolean;
+  longerThanDeclared: boolean;
+}
+
+export interface MeterParty {
+  partyKey: string;
+  batchNo: string | null;
+  declaredM: number | null;
+  kursunOutM: number | null;
+  tamburInM: number | null;
+  tamburCutM: number | null;
+  measuredMaxM: number | null;
+  billedM: number | null;
+  diffM: number | null;
+  longerThanDeclared: boolean;
+}
+
+/** `GET /work-orders/:id/meter-comparison` yanıtı (okunan alanlar). */
+export interface WorkOrderMeterComparison {
+  tolerancePct: number;
+  parties: MeterParty[];
+  totals: { declaredM: number | null; measuredMaxM: number | null; billedM: number | null; diffM: number | null };
+}
+
 export const workOrderService = {
   // withOrderDetail=true → orderLinks (customer + ürün), targetColor, dispatchedTotalQty
   // alanları zenginleştirilir. Fason Sevk picker'ı için kullanılır.
@@ -255,7 +286,7 @@ export const workOrderService = {
    */
   getAllCursor: (
     params: WorkOrderCursorParams,
-    options?: { withOrderDetail?: boolean; hasOpenExternalStep?: boolean; signal?: AbortSignal },
+    options?: { withOrderDetail?: boolean; hasOpenExternalStep?: boolean; withMeterSummary?: boolean; signal?: AbortSignal },
   ): Promise<WorkOrderCursorPage> => {
     const sp = new URLSearchParams();
     sp.set('mode', 'cursor');
@@ -275,10 +306,16 @@ export const workOrderService = {
     }
     if (options?.withOrderDetail) sp.set('withOrderDetail', 'true');
     if (options?.hasOpenExternalStep) sp.set('hasOpenExternalStep', 'true');
+    // Satır başına `meterSummary` (beyan ↔ ölçülen metre); OPT-IN, eski sunucu parametreyi yok sayar.
+    if (options?.withMeterSummary) sp.set('withMeterSummary', 'true');
     return apiClient
       .get<WorkOrderCursorPage>(`/work-orders?${sp.toString()}`, { signal: options?.signal })
       .then((r) => r.data);
   },
+
+  /** Beyan ↔ ölçülen metre, parti başına (izin `workorder:read` | `mobile:hizli-is-emri`). */
+  meterComparison: (id: string): Promise<WorkOrderMeterComparison> =>
+    apiClient.get<ApiResponse<WorkOrderMeterComparison>>(`/work-orders/${id}/meter-comparison`).then((r) => r.data.data as WorkOrderMeterComparison),
 
   getById: (id: string): Promise<ApiResponse<WorkOrder>> =>
     apiClient.get<ApiResponse<WorkOrder>>(`/work-orders/${id}`).then((r) => r.data),
