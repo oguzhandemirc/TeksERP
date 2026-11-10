@@ -44,6 +44,7 @@ import { showStopOpenEntryWarning } from '../../../components/machine-stop/entry
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
+import { TARGET_LINE_PREFIX, TARGET_STOCK_VALUE, TargetButton, QualitySegment, targetButtonText } from './TamburCompactPickers';
 import { useTamburLabelCard } from './useTamburLabelCard';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -2743,6 +2744,17 @@ export default function TamburScreen() {
 
   // Çerçeveli (pinned) grup — recut: topa uyan açık sipariş SATIRLARI (value=lineId);
   // ana akış: bu iş emrinde siparişi olan müşteriler (value=customerId).
+  // Geniş tablette Kime? tek düğmedir (K5): Stok ve İE sipariş satırları da bu pickerın çerçeveli grubuna girer.
+  const targetStockOption: PickerOption = { value: TARGET_STOCK_VALUE, label: 'Stok (müşterisiz)', sublabel: 'Etiket müşteri bilgisi olmadan basılır' };
+  const targetOrderLineOptions = useMemo<PickerOption[]>(
+    () =>
+      manualMode
+        ? []
+        : (activeJob?.context?.orders ?? []).flatMap((o) =>
+            o.lines.map((l) => ({ value: `${TARGET_LINE_PREFIX}${l.lineId}`, label: o.customerName, sublabel: l.itemName })),
+          ),
+    [manualMode, activeJob],
+  );
   const kimePinnedOptions = useMemo<PickerOption[]>(() => {
     if (recutRollMeta) {
       return recutLineOptions.map((l) => ({
@@ -2764,6 +2776,18 @@ export default function TamburScreen() {
   }, [recutRollMeta, recutLineOptions, customersQuery.data, orderCustomerIds]);
 
   const handleKimeSelect = (value: string) => {
+    if (value === TARGET_STOCK_VALUE) {
+      clearToStock();
+      return;
+    }
+    if (!recutRollMeta && value.startsWith(TARGET_LINE_PREFIX)) {
+      const lineId = value.slice(TARGET_LINE_PREFIX.length);
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: { ...w.voluntaryEntry, targetOrderLineId: lineId, targetCustomerId: null, targetCustomerName: undefined },
+      }));
+      return;
+    }
     if (recutRollMeta) {
       // Pinned = sipariş satırı (value=lineId); ana liste = müşteri (value=customerId).
       // İkisi karşılıklı dışlar; aynı değere 2. kez basınca seçim kalkar.
@@ -2878,6 +2902,29 @@ export default function TamburScreen() {
         </Text>
       </View>
     </TouchableRipple>
+  );
+
+  // Geniş tablet (K5): Kime? tek düğme; metin sipariş satırı > müşteri > Stok.
+  const mainTargetLineLabel = (() => {
+    const id = work.voluntaryEntry.targetOrderLineId;
+    if (!id) return null;
+    for (const o of activeJob?.context?.orders ?? []) {
+      const l = o.lines.find((x) => x.lineId === id);
+      if (l) return `${o.customerName} · ${l.itemName}`;
+    }
+    return null;
+  })();
+  const recutTargetLine = recutTargetLineId ? recutLineOptions.find((l) => l.lineId === recutTargetLineId) : undefined;
+  const targetButton = (
+    <TargetButton
+      text={
+        recutRollMeta
+          ? targetButtonText({ lineLabel: recutTargetLine ? `${recutTargetLine.customerName} · ${recutTargetLine.orderNumber}` : null, customerName: recutTargetCustomerName })
+          : targetButtonText({ lineLabel: mainTargetLineLabel, customerName: work.voluntaryEntry.targetCustomerName })
+      }
+      stock={stokActive}
+      onPress={() => setKimePickerOpen(true)}
+    />
   );
 
   // ── Kesim formunun ORTAK parçaları (ana kesim ⟷ MANUEL MOD) ───────────────
@@ -3004,7 +3051,7 @@ export default function TamburScreen() {
               key={m}
               borderless
               onPress={() => void setCutMode(m)}
-              style={[styles.cutModeChip, active && styles.cutModeChipActive]}
+              style={[styles.cutModeChip, !compact && styles.cutModeChipWide, active && styles.cutModeChipActive]}
             >
               <Text
                 style={[
@@ -3053,6 +3100,45 @@ export default function TamburScreen() {
     );
   };
 
+  const pickGrade = (qg: QualityGrade, active: boolean) => {
+    // Elle seçim = kontrol operatörde; kısa-kesim kuralı bu seçimi geri almaz
+    // (yeni uzunluk yazılana dek yeniden de ateşlemez — kural yalnız varsayılan seçiliyken çalışır).
+    shortCutAutoMainRef.current = false;
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        qualityGrade: active ? '' : qg.code,
+        qualityName: active ? undefined : qg.name,
+      },
+    }));
+  };
+  /** Geniş tablet (K5): Kime düğmesi | Kalite segmenti tek satır; müşteri hedefinde müşteriye özel ad satırı. */
+  const renderKimeKaliteWide = (opts: {
+    owner?: { id: string; name: string } | null;
+    grades: QualityGrade[];
+    gradeNote?: string | null;
+  }) => {
+    const targeted = !!work.voluntaryEntry.targetOrderLineId || !!work.voluntaryEntry.targetCustomerId;
+    return (
+      <>
+        <View style={styles.kimeKaliteRowWide}>
+          {opts.owner ? <OwnerLockColumn owner={opts.owner} inline /> : targetButton}
+          <QualitySegment grades={opts.grades} value={work.voluntaryEntry.qualityGrade} onPick={(g, a) => pickGrade(g as QualityGrade, a)} />
+        </View>
+        {!!opts.gradeNote && <Text style={styles.gradeNote}>{opts.gradeNote}</Text>}
+        {/* Müşteriye özel ad yalnız bir müşteri hedeflenince anlamlı; Stok'ta satır yer kaplamaz. */}
+        {!opts.owner && targeted ? (
+          <LabelNamePreview
+            rollId={selectedRoll?.rollId ?? null}
+            orderLineId={work.voluntaryEntry.targetOrderLineId ?? null}
+            customerId={work.voluntaryEntry.targetCustomerId ?? null}
+          />
+        ) : null}
+      </>
+    );
+  };
+
   /**
    * "Kime?" + "Kalite" YAN YANA; her biri kendi içinde dikey liste. Kime uzarsa
    * kendi sütununda scroll olur, Kalite'yi etkilemez.
@@ -3068,7 +3154,9 @@ export default function TamburScreen() {
     orderShortcuts?: React.ReactNode;
     grades: QualityGrade[];
     gradeNote?: string | null;
-  }) => (
+  }) => {
+    if (!compact) return renderKimeKaliteWide(opts);
+    return (
     <View style={styles.kimeKaliteRow}>
       {opts.owner ? (
         <OwnerLockColumn owner={opts.owner} />
@@ -3099,20 +3187,7 @@ export default function TamburScreen() {
               <TouchableRipple
                 key={qg.id}
                 borderless
-                onPress={() => {
-                  // Elle seçim = kontrol operatörde; kısa-kesim kuralı bu
-                  // seçimi geri almaz (yeni uzunluk yazılana dek yeniden de
-                  // ateşlemez — kural yalnız varsayılan seçiliyken çalışır).
-                  shortCutAutoMainRef.current = false;
-                  setWork((w) => ({
-                    ...w,
-                    voluntaryEntry: {
-                      ...w.voluntaryEntry,
-                      qualityGrade: active ? '' : qg.code,
-                      qualityName: active ? undefined : qg.name,
-                    },
-                  }));
-                }}
+                onPress={() => pickGrade(qg, active)}
                 style={[
                   styles.listOption,
                   active && styles.listOptionActive,
@@ -3136,7 +3211,8 @@ export default function TamburScreen() {
         {!!opts.gradeNote && <Text style={styles.gradeNote}>{opts.gradeNote}</Text>}
       </View>
     </View>
-  );
+    );
+  };
 
   const resetRecut = () => {
     // X kapat: kesim yapıldıysa parent etiketini otomatik basım kuyruğuna at —
@@ -3359,6 +3435,7 @@ export default function TamburScreen() {
       {activeJob && (
         <WorkOrderOutputPanel
           workOrderId={activeJob.stepSummary.workOrderId}
+          lastMeasure={compact ? null : lastMeasure}
           onPrint={(r: Roll) => {
             // Kayıtlı etiket niyetiyle bas — "Kime?" TEKRAR SORULMAZ (kesim
             // akışlarındaki kuralın aynısı; hedef zaten topun üstünde).
@@ -3925,13 +4002,13 @@ export default function TamburScreen() {
                 </View>
               </Surface>
 
-              {/* WO akışıyla aynı düzen: kaydırılabilir form + sticky footer */}
+              {/* WO akışıyla aynı düzen: form + sticky footer; geniş tablette form ekrana sığar (K5). */}
               <ScrollView
                 style={{ flex: 1 }}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={compact ? styles.scrollContent : styles.scrollContentWide}
                 keyboardShouldPersistTaps="handled"
               >
-                <Surface style={styles.section} elevation={1}>
+                <Surface style={[styles.section, !compact && styles.sectionWide]} elevation={1}>
                   {/* Uzunluk girişi + Manuel/Otomatik toggle yan yana */}
                   <View style={styles.lengthModeRow}>
                     <View style={styles.lengthCol}>
@@ -3979,7 +4056,7 @@ export default function TamburScreen() {
                             key={m}
                             borderless
                             onPress={() => void setRecutMode(m)}
-                            style={[styles.cutModeChip, active && styles.cutModeChipActive]}
+                            style={[styles.cutModeChip, !compact && styles.cutModeChipWide, active && styles.cutModeChipActive]}
                           >
                             <Text
                               style={[
@@ -4051,7 +4128,20 @@ export default function TamburScreen() {
                       keser; footer "Kes — Kalanı Kes (X mt)" ile bunu söyler
                       (normal akışla aynı). */}
 
-                  {/* Kime + Kalite yan yana iki sütun; her sütun kendi dikey listesi */}
+                  {/* Geniş tablet (K5): Kime düğmesi | Kalite segmenti tek satır; telefonda iki dikey sütun. */}
+                  {!compact ? (
+                    <View style={styles.kimeKaliteRowWide}>
+                      {recutFinal.owner ? <OwnerLockColumn owner={recutFinal.owner} inline /> : targetButton}
+                      <QualitySegment
+                        grades={qualityGrades}
+                        value={recutQualityGrade}
+                        onPick={(g) => {
+                          shortCutAutoRecutRef.current = false;
+                          setRecutQualityGrade(g.code);
+                        }}
+                      />
+                    </View>
+                  ) : (
                   <View style={styles.kimeKaliteRow}>
                     {recutFinal.owner ? <OwnerLockColumn owner={recutFinal.owner} /> : null}
                     <View style={[styles.kimeCol, recutFinal.owner ? styles.hidden : null]}>
@@ -4133,6 +4223,7 @@ export default function TamburScreen() {
                       </View>
                     </View>
                   </View>
+                  )}
                 </Surface>
               </ScrollView>
 
@@ -4149,6 +4240,7 @@ export default function TamburScreen() {
                 onSuggest={handleRecutLengthChange}
                 labelSummary={{ text: recutLabelSummary, onPress: () => setLabelInfoOpen(true) }}
                 card={recutCard.card}
+                wide={!compact}
               />
               {recutCard.overlay}
               <TamburMeasureStrip last={lastMeasure} />
@@ -4256,26 +4348,7 @@ export default function TamburScreen() {
                     <Text style={styles.headerBoxSub}>mt kalan</Text>
                   </View>
 
-                  {/* İş emrinde belirlenen katlama — metre kutusunun yanında, mor.
-                      SABİT referans: iş emrinin planı (plannedFoldType). Aşağıdaki
-                      düzenlenebilir kat chip'lerinden BAĞIMSIZ — operatör chip'i
-                      değiştirse bile burası iş emrinin değerini gösterir.
-                      "2 Kat / sarım" şeklinde okunur. */}
-                  <View
-                    style={[
-                      styles.headerBox,
-                      styles.headerBoxFold,
-                      compact && styles.headerBoxFlex,
-                    ]}
-                  >
-                    <Text style={styles.headerBoxValue}>
-                      {activeJob?.context?.plannedFoldType === '4-KAT'
-                        ? '4 Kat'
-                        : '2 Kat'}
-                    </Text>
-                    <Text style={styles.headerBoxSub}>sarım</Text>
-                  </View>
-
+                  {/* "Kat sarım" kutusu kaldırıldı (K5): aşağıdaki kat seçimi aynı bilgiyi taşır. */}
                   {/* Siparişler — modal trigger */}
                   {!!activeJob?.context?.orders &&
                     activeJob.context.orders.length > 0 && (
@@ -4337,9 +4410,10 @@ export default function TamburScreen() {
                 </TouchableRipple>
               )}
 
+              {/* Geniş tablette içerik ekrana sığar (K5); ScrollView yalnız büyük yazı ölçeğinde emniyet. */}
               <ScrollView
                 style={{ flex: 1 }}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={compact ? styles.scrollContent : styles.scrollContentWide}
                 keyboardShouldPersistTaps="handled"
               >
                 {/* Hata noktaları — metre cetveli. Çok nokta olsa da tek bakışta
@@ -4369,7 +4443,7 @@ export default function TamburScreen() {
                       borderless
                       style={styles.defectGuideSection}
                     >
-                      <View style={{ gap: 6 }}>
+                      <View style={compact ? { gap: 6 } : styles.defectRowWide}>
                         <View style={styles.defectGuideTitleRow}>
                           <Text style={styles.defectGuideTitle}>
                             Hata Noktaları ({errs.length})
@@ -4381,14 +4455,17 @@ export default function TamburScreen() {
                               </Text>
                             </View>
                           )}
-                          <View style={{ flex: 1 }} />
-                          <Icon source="chevron-right" size={18} color="#94a3b8" />
+                          {compact && <View style={{ flex: 1 }} />}
+                          {compact && <Icon source="chevron-right" size={18} color="#94a3b8" />}
                         </View>
-                        <DefectRuler
-                          errors={errs}
-                          defectTypes={defectTypes}
-                          rulerMax={rulerMaxForErrors(selectedRoll.currentQty, errs)}
-                        />
+                        <View style={compact ? undefined : styles.defectRulerWide}>
+                          <DefectRuler
+                            errors={errs}
+                            defectTypes={defectTypes}
+                            rulerMax={rulerMaxForErrors(selectedRoll.currentQty, errs)}
+                          />
+                        </View>
+                        {!compact && <Icon source="chevron-right" size={22} color={colors.textMuted} />}
                       </View>
                     </TouchableRipple>
                   );
@@ -4396,9 +4473,10 @@ export default function TamburScreen() {
 
                 {/* Kesim — operatör fiziksel kesim yapar, anında sisteme girer.
                     Her "Top Oluştur" tıklaması child Roll oluşturur + etiket basar. */}
-                <Surface style={styles.section} elevation={1}>
-                  {/* Katlama (2/4 kat) — başlıksız, bölümün en üstünde. */}
-                  <View style={styles.foldInlineRow}>
+                <Surface style={[styles.section, !compact && styles.sectionWide]} elevation={1}>
+                  {/* Katlama (2/4 kat) — telefonda bölümün en üstünde; geniş tablette metre satırının başında (K5). */}
+                  <View style={compact ? undefined : styles.cutRowWide}>
+                  <View style={compact ? styles.foldInlineRow : styles.foldWide}>
                     {/* Seçenekler KATALOGDAN (2026-08-10). Seçilen kod hem topa
                         yazılır hem METRE cihazının rolüyle BİREBİR eşleştirilir. */}
                     {foldValues.map((ft) => {
@@ -4410,7 +4488,7 @@ export default function TamburScreen() {
                           // Biri her zaman seçili kalmalı → aktif chip'e basınca
                           // boşa düşmez; sadece diğerine geçiş yapılır.
                           onPress={() => setWork((w) => ({ ...w, foldType: ft.code }))}
-                          style={[styles.foldChipSm, active && styles.foldChipActive]}
+                          style={[styles.foldChipSm, !compact && styles.foldChipWide, active && styles.foldChipActive]}
                         >
                           <Text
                             style={[
@@ -4427,7 +4505,8 @@ export default function TamburScreen() {
 
                   {/* Uzunluk girişi + Manuel/Otomatik metraj kaynağı — MANUEL
                       MOD ile ORTAK blok (aynı bileşen, aynı state; kopya değil). */}
-                  {renderCutLength('Boş = kalanı kes (metre)')}
+                  <View style={compact ? undefined : { flex: 1 }}>{renderCutLength('Boş = kalanı kes (metre)')}</View>
+                  </View>
 
                   {/* Kime? + Kalite — MANUEL MOD ile ORTAK blok. Tek fark
                       sipariş kısayolları: kart akışında iş emrinin sipariş
@@ -4507,9 +4586,11 @@ export default function TamburScreen() {
                 labelSummary={{ text: openLabelSummary, onPress: () => setLabelInfoOpen(true) }}
                 onSuggest={(t) => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: t } }))}
                 card={openCard.card}
+                wide={!compact}
               />
               {openCard.overlay}
-              <TamburMeasureStrip last={lastMeasure} />
+              {/* Geniş tablette son kesim "Bu işten çıkanlar" başlığında (K5). */}
+              {compact && <TamburMeasureStrip last={lastMeasure} />}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -5237,14 +5318,24 @@ export default function TamburScreen() {
         visible={kimePickerOpen}
         title={recutRollMeta ? 'Müşteri / Sipariş Seç' : 'Müşteri Seç (tüm müşteriler)'}
         options={kimeOptions}
-        pinnedOptions={kimePinnedOptions}
+        pinnedOptions={
+          compact
+            ? kimePinnedOptions
+            : [targetStockOption, ...(recutRollMeta ? [] : targetOrderLineOptions), ...kimePinnedOptions]
+        }
         pinnedLabel={
-          recutRollMeta ? 'Bu topa uyan açık siparişler' : `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişi olan müşteriler`
+          !compact
+            ? recutRollMeta ? 'Stok · bu topa uyan açık siparişler' : `Stok · bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişleri`
+            : recutRollMeta ? 'Bu topa uyan açık siparişler' : `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişi olan müşteriler`
         }
         selectedValue={
           recutRollMeta
-            ? recutTargetLineId ?? recutTargetCustomerId
-            : work.voluntaryEntry.targetCustomerId
+            ? recutTargetLineId ?? recutTargetCustomerId ?? (compact ? null : TARGET_STOCK_VALUE)
+            : compact
+              ? work.voluntaryEntry.targetCustomerId
+              : work.voluntaryEntry.targetOrderLineId
+                ? `${TARGET_LINE_PREFIX}${work.voluntaryEntry.targetOrderLineId}`
+                : work.voluntaryEntry.targetCustomerId ?? TARGET_STOCK_VALUE
         }
         numColumns={compact ? 1 : 2}
         onSelect={handleKimeSelect}
@@ -7387,6 +7478,7 @@ function BranchGroupedRollList({
   if (groups.length <= 1) {
     return (
       <FlashList
+        testID="tambur-rulo-listesi"
         data={rolls}
         keyExtractor={(r) => r.rollId}
         refreshing={refreshing}
@@ -7407,6 +7499,7 @@ function BranchGroupedRollList({
   // ≥2 parti → her parti renkli çerçeveli grup kartında.
   return (
     <FlashList
+      testID="tambur-rulo-listesi"
       data={groups}
       keyExtractor={(g) => g.key}
       refreshing={refreshing}
@@ -9123,6 +9216,16 @@ const styles = StyleSheet.create({
   },
   // Kime + Kalite YAN YANA iki sütun; her sütun kendi içinde dikey liste.
   kimeKaliteRow: { flexDirection: 'row', gap: 10, marginBottom: 8, alignItems: 'flex-start' },
+  // Geniş tablet (K5): Kime düğmesi | Kalite segmenti tek satır.
+  kimeKaliteRowWide: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  // Geniş tablet (K5): kat · metre · temizle · Manuel/Otomatik tek satır.
+  cutRowWide: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  foldWide: { flexDirection: 'row', gap: 6, width: 200 },
+  foldChipWide: { flex: 1, minHeight: 56, justifyContent: 'center' },
+  defectRowWide: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  defectRulerWide: { flex: 1 },
+  scrollContentWide: { padding: 8, gap: 8 },
+  sectionWide: { padding: 10, gap: 8 },
   kimeCol: { flex: 3 },
   kaliteCol: { flex: 2 },
   cutSubLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 },
@@ -9283,6 +9386,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   cutModeChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6 },
+  cutModeChipWide: { minHeight: 52, justifyContent: 'center' },
   cutModeChipActive: { backgroundColor: '#7c3aed' },
   cutModeChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
   cutModeChipTextActive: { color: '#fff' },
@@ -9817,7 +9921,17 @@ const cameraStyles = StyleSheet.create({
 });
 
 /** Emanet topun sabit sahibi (2026-11-10): Kime? yerine; sunucu başka hedefi 409 ile reddeder. */
-function OwnerLockColumn({ owner }: { owner: { id: string; name: string } }) {
+function OwnerLockColumn({ owner, inline = false }: { owner: { id: string; name: string }; inline?: boolean }) {
+  // Geniş tablette tek satır (K5): başlık ve ipucu satırı düşer, bilgi erişilebilirlik etiketinde kalır.
+  if (inline) {
+    return (
+      <View style={[ownerStyles.row, ownerStyles.inline]} testID="tambur-sahip" accessibilityLabel={`Malın sahibi ${owner.name}, etiket sahibine basılır`}>
+        <Icon source="lock" size={20} color={colors.warningDark} />
+        <Text style={ownerStyles.inlineLabel}>Sahibi</Text>
+        <TruncatedText style={ownerStyles.name}>{owner.name}</TruncatedText>
+      </View>
+    );
+  }
   return (
     <View style={[styles.kimeCol, ownerStyles.box]} testID="tambur-sahip" accessibilityLabel={`Malın sahibi ${owner.name}, etiket sahibine basılır`}>
       <Text style={styles.cutSubLabel}>Sahibi</Text>
@@ -9835,4 +9949,6 @@ const ownerStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 56, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.warningContainer },
   name: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.warningDark },
   hint: { fontSize: 12, color: colors.textSecondary },
+  inline: { flex: 1 },
+  inlineLabel: { fontSize: 13, fontWeight: '700', color: colors.warningDark },
 });

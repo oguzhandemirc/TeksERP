@@ -34,6 +34,10 @@ import { formatFactory } from '../../../lib/factory-time';
 import { unprintedRolls } from './finalLabel';
 import { labelTextFixLockReason } from './labelTextFix';
 import { colors } from '../../../theme/tokens';
+import { MEASURE_LABEL, measureToneOf } from './measureSource';
+import type { LastTamburMeasure } from './TamburMeasureStrip';
+
+const LAST_TONE = { GREEN: colors.successText, AMBER: colors.warningText, RED: colors.dangerText, NONE: colors.textSecondary } as const;
 
 /** "SS:dd" — panelde tarih GEREKMEZ: kapsam zaten tek iş emri. */
 function hhmm(v: string | Date | null | undefined): string {
@@ -46,6 +50,7 @@ export default function WorkOrderOutputPanel({
   onUndo,
   onPrintUnprinted,
   onFixLabel,
+  lastMeasure = null,
 }: {
   workOrderId: string | null;
   /** Etiketi yeniden bas — parent'ın yazıcı akışına verir. */
@@ -56,6 +61,8 @@ export default function WorkOrderOutputPanel({
   onPrintUnprinted?: (rolls: Roll[]) => void;
   /** Etiket ad/renk/parti düzeltmesi (sevk edilene kadar); verilmezse düğme çizilmez. */
   onFixLabel?: (roll: Roll) => void;
+  /** Geniş tablette son kesim (metre + kaynak) başlıkta; ayrı ölçüm şeridi çizilmez (K5). */
+  lastMeasure?: LastTamburMeasure | null;
 }) {
   const q = useQuery({
     queryKey: ['tambur', 'wo-output', workOrderId],
@@ -124,6 +131,11 @@ export default function WorkOrderOutputPanel({
             </Text>
           ) : null}
           <View style={{ flex: 1 }} />
+          {lastMeasure ? (
+            <Text style={[s.lastMeasure, { color: LAST_TONE[measureToneOf(lastMeasure.source)] }]} testID="tambur-olcum-serit">
+              {`son: ${lastMeasure.barcode ? `${lastMeasure.barcode.slice(-4)} · ` : ''}${lastMeasure.meters.toFixed(1)} m · ${MEASURE_LABEL[lastMeasure.source]}`}
+            </Text>
+          ) : null}
           {!collapsed &&
             (q.isFetching ? (
               <ActivityIndicator size={14} color="#1e40af" />
@@ -177,7 +189,7 @@ export default function WorkOrderOutputPanel({
           <Text style={s.emptyText}>Bu işten henüz top çıkmadı</Text>
         </View>
       ) : (
-        <ScrollView ref={listRef} style={s.list} nestedScrollEnabled>
+        <ScrollView ref={listRef} style={s.list} nestedScrollEnabled testID="tambur-cikanlar-listesi">
           {rolls.map((r) => (
             // ⚠️ SATIRA DOKUNMAK BASKI DEĞİL (2026-08-12 saha şikâyeti: listeye
             // her dokunuş kâğıt bastırıyordu). Baskı YALNIZ yazıcı tuşundan —
@@ -260,6 +272,7 @@ const s = StyleSheet.create({
     paddingVertical: 4,
   },
   headerTitle: { fontSize: 13, fontWeight: '800', color: '#1e40af' },
+  lastMeasure: { fontSize: 14, fontWeight: '700' },
   headerTotals: {
     fontSize: 13,
     fontWeight: '800',
