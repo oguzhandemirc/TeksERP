@@ -47,8 +47,19 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
     onFocusChange,
     ...rest
   },
-  ref
+  forwardedRef
 ) {
+  // İç ref: tuş takımı kapanınca native odağı bırakmak için (aşağıda); dış ref'e de iletilir.
+  const innerRef = useRef<RNTextInput | null>(null);
+  const ref = useCallback(
+    (node: RNTextInput | null) => {
+      innerRef.current = node;
+      if (typeof forwardedRef === 'function') forwardedRef(node);
+      else if (forwardedRef) forwardedRef.current = node;
+    },
+    [forwardedRef]
+  );
+
   // Stable callbacks via destructure (her ikisi de provider'da useCallback([])'lı).
   //
   // ⚠️ OPSİYONEL BAĞLAM (2026-08-04 saha çökmesi): `AppModal` içeriğini portal
@@ -106,6 +117,14 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
     });
   }, [openTarget, nativeMode, id, numpadLabel, allowDecimal, numpadMaxLength]);
 
+  // Tuş takımı (Tamam / dış dokunuş) kapanınca TextInput native odağı koruyordu → aynı kutuya ikinci dokunuşta
+  // onFocus tetiklenmiyor, tuş takımı açılmıyordu (GK 2026-11-11). Hedef bu kutudan düşünce odağı bırak.
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    if (wasActiveRef.current && !isActive && !nativeMode) innerRef.current?.blur?.();
+    wasActiveRef.current = isActive;
+  }, [isActive, nativeMode]);
+
   // autoActivate: mount edildiğinde + props değiştiğinde numpad'i bu input'a
   // bağla. Kullanıcı input'a dokunmadan tuşlara basabilir.
   useEffect(() => {
@@ -152,6 +171,11 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
       value={value}
       onChangeText={onChangeText}
       onFocus={handleFocus}
+      // İkinci savunma: odak zaten bizdeyse onFocus gelmez; her basış hedefi (yeniden) açar. openTarget idempotent.
+      onPressIn={(e) => {
+        handleFocus();
+        rest.onPressIn?.(e);
+      }}
       showSoftInputOnFocus={false}
       // Aktif görünüm native focus yerine numpad target'ına bağlı —
       // iOS native focus zaman aşımına uğrasa bile indigo outline kalır
