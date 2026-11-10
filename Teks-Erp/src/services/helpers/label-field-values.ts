@@ -67,6 +67,27 @@ const isOptInTextKey = (key: string): key is OptInTextKey => (OPT_IN_TEXT_KEYS a
  * Roller: barcode/qrCode=scan; itemName + metraj=headline; gerisi=row.
  */
 export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValue {
+  const ov = payload.displayOverrides;
+  if (ov && Object.prototype.hasOwnProperty.call(ov, key)) return overriddenValue(payload, key, ov[key] ?? "");
+  return sourceFieldValue(payload, key);
+}
+
+// Ölçü ezmesi sayıysa şablonun birimiyle biçimlenir ("22,5" → "22,5 m"); değilse yazıldığı gibi basılır.
+const MEASURE_DIM: Record<string, MeasureDim> = { widthCm: "cm", lengthMeters: "m", weightKg: "kg" };
+
+/** Elle yazılmış alan: rol kaynaktan korunur, "" → present:false (alan boş basılır). */
+function overriddenValue(payload: LabelPayload, key: string, raw: string): FieldValue {
+  const role = sourceFieldValue(payload, key).role;
+  const v = raw.trim();
+  const dim = MEASURE_DIM[key];
+  if (dim && v !== "") {
+    const n = Number(v.replace(",", "."));
+    if (Number.isFinite(n)) return measure(n, dim, payload.unitSettings, role);
+  }
+  return str(v, role);
+}
+
+function sourceFieldValue(payload: LabelPayload, key: string): FieldValue {
   if (isOptInTextKey(key)) return str(payload[key]);
   switch (key) {
     case "barcode":

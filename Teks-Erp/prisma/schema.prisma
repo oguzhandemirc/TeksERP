@@ -3984,6 +3984,14 @@ model Roll {
   /// `ownerCustomerId` (malın sahibi) DEĞİL. Tambur kesiminde yazılır, MİRAS GEÇMEZ (`labelItemName` emsali);
   /// düzeltme yalnız `PATCH /rolls/:id/label-texts`; BaseController yazamaz. NULL = sahibin kendisi için.
   labelConsigneeId String?           @db.Uuid
+  /// Panel "Etiketi düzenle": bu topun etiketine ELLE yazılan alanlar { bindAnahtarı: metin } ("" = boş bas).
+  /// Yalnız gösterimdir — ölçü kolonları (currentQty/weightKg/width) ve cari/katalog DEĞİŞMEZ. İzinli anahtarlar
+  /// `config/roll-label-edit.ts`; tek yazar `roll-label-edit.service` (PUT /labels/rolls/:id/overrides). NULL = yok.
+  labelOverrides   Json?
+  /// Bu topun etiketi için BİR SEFERLİK şablon — çözümleme zincirinin önünde; şablon atamalarını değiştirmez.
+  labelTemplateId  String?           @db.Uuid
+  /// Son etiket düzenlemesinin anı — PUT'un iyimser sürüm belirteci (araya giren yazar 409). NULL = hiç düzenlenmedi.
+  labelEditedAt    DateTime?         @db.Timestamptz
   /// `weightKg`nin kaynağı (iç iz, etikete basılmaz). Enum çuvalla ORTAK. NULL = kg yok ya da eski kayıt.
   weightSource     SackWeightSource?
 
@@ -4365,6 +4373,7 @@ model Roll {
   /// Sevk kapısı: dolu ise yalnız o müşteriye çıkar (`assertOwnerMatchesTx`, 409 OWNER_MISMATCH).
   ownerCustomer        Customer?                   @relation("RollOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
   labelConsignee       CustomerConsignee?          @relation("RollLabelConsignee", fields: [labelConsigneeId], references: [id], onDelete: Restrict)
+  labelTemplate        LabelTemplate?              @relation("RollLabelTemplate", fields: [labelTemplateId], references: [id], onDelete: Restrict)
   /// D4-F1: müşteriye tanımlı barkod eşlemeleri (aktif en çok bir; geçmiş damgalı satırlar).
   customerCodes        RollCustomerCode[]
   properties           RollProperty[]
@@ -4459,6 +4468,7 @@ model Roll {
   @@index([ownerCustomerId])
   // Alıcı → top (son kullanım sıralaması + MV-06 canlı top kapısı).
   @@index([labelConsigneeId, createdAt])
+  @@index([labelTemplateId])
   // Kalite/fire/fason karnelerinin dönem taraması (`finalizedAt BETWEEN a AND b`).
   // PARTIAL (WHERE "finalizedAt" IS NOT NULL) — migration 20260809090000. Yalnız
   // üretimi bitmiş toplar damgalanır (ham stok + üretimdekiler NULL), yani index
@@ -9977,6 +9987,8 @@ model LabelTemplate {
   customerStandaloneLinks CustomerStandaloneLabel[]
   consignees              CustomerConsignee[]
   contextDefaults         LabelContextDefault[]
+  /// Bir seferlik şablon seçilmiş toplar (`Roll.labelTemplateId`).
+  rolls                   Roll[]                    @relation("RollLabelTemplate")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

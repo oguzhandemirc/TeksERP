@@ -70,6 +70,8 @@ export async function findRollById(this: InventoryServiceThis, id: string): Prom
         ownerCustomer: ROLL_LIST_INCLUDE.ownerCustomer,
         labelCustomer: { select: { id: true, name: true } },
         labelConsignee: { select: { id: true, name: true } },
+        // Etiket düzenlemesi (2026-11-10): kartta "bir seferlik şablon" adı.
+        labelTemplate: { select: { id: true, name: true } },
         parent: { select: { id: true, barcode: true, initialQty: true, currentQty: true } },
         batch: { select: { id: true, batchNumber: true, workOrder: { select: { id: true, workOrderNumber: true } } } },
         // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.

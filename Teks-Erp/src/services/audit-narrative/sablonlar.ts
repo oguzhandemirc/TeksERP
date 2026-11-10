@@ -138,6 +138,7 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   get "ROLL:ROLL_DETACHED_FROM_WO"() { return olay("belirtme", `${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} ayırdı`); },
   "ROLL:CANCEL_RESTORED": olay("belirtme", "iptalden geri getirdi"),
   "ROLL:LABEL_TEXT_FIX": olay("ilgi", "etiket adını/rengini/parti nosunu düzeltti"),
+  "ROLL:ROLL_LABEL_EDIT": olay("ilgi", "etiketini elle düzenledi"),
   "ROLL:TAMBUR_UNDO_SINGLE": olay("ilgi", "tambur kaydını geri aldı"),
   // Etiket alıcısı (tambur emanet, 2026-11-10)
   "CUSTOMER_CONSIGNEE:CONSIGNEE_ENSURE": olay("belirtme", "ekledi"),

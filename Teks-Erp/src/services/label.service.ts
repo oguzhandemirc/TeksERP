@@ -81,6 +81,8 @@ import {
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { applyLabelOverrides, applyRollLabelTexts, readLabelOverrides } from "../config/label-overrides";
+import { applyRollLabelOverrides } from "../config/roll-label-edit";
+import { effectiveRollLabelEdit, type RollLabelDraft } from "./helpers/roll-label-edit.helper";
 import { readLabelWidthSource, resolveLabelWidthCm } from "./helpers/label-width-source.helper";
 import { renderLabel, renderedBytes, shouldRasterize, withTemplateUnits, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
 import { renderCanvasRaster, type RasterLanguage } from "./helpers/raster/raster-render";
@@ -145,6 +147,8 @@ export interface RollLabelRenderOpts {
   /** İstemci raster (binary/base64) baytları KABUL EDİYOR mu (encoding=b64 gönderdi).
    *  false/yok → eski istemci: raster cihazda bile komut üretilir (bozulmaz). */
   rasterCapable?: boolean;
+  /** Kaydetmeden önizleme: etiket düzenleme taslağı (`POST /rolls/:id/preview`). Basım yolları GEÇMEZ. */
+  labelEdit?: RollLabelDraft | null;
 }
 
 
@@ -232,6 +236,8 @@ interface BulkLabelContext {
   customerTemplateByKey: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
   /** consigneeId → alıcıya bağlı şablon+varyant (yalnız şablonu OLAN alıcılar; müşteri halkasından önce). */
   consigneeTemplateById?: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
+  /** templateId → topların bir seferlik şablonu+varyantı (`Roll.labelTemplateId`; zincirin önünde). */
+  rollTemplateById?: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
   copies: number;
   /** Açık hata notları (KQ-D8) — toplu basımda TEK sorgu; hatasız top haritada yok. */
   openDefectNotes?: Map<string, string>;
@@ -241,6 +247,22 @@ interface BulkLabelContext {
   customerCodes?: Map<string, string>;
   /** Cihaz raster modu (finishedRouting'den) — bulk raster; false → bugünkü komut. */
   rasterMode: boolean;
+}
+
+/**
+ * Toplu yolda topun şablonu — sıra tekil `resolveLabelRouting` ile AYNI: topun bir seferlik şablonu >
+ * alıcı şablonu > müşteri route; hiçbiri yoksa çağıran bağlam default'una düşer.
+ */
+function pickBulkRollTemplate(
+  ctx: BulkLabelContext,
+  payload: LabelPayload,
+  kind: LabelKind,
+): { template: LabelTemplate; variant: LabelTemplateVariant | null } | undefined {
+  const byRoll = payload.rollLabelTemplateId ? ctx.rollTemplateById?.get(payload.rollLabelTemplateId) : undefined;
+  const byConsignee = payload.consigneeId ? ctx.consigneeTemplateById?.get(payload.consigneeId) : undefined;
+  return (byRoll && consigneeTemplateUsable(byRoll.template, kind) ? byRoll : undefined)
+    ?? (byConsignee && consigneeTemplateUsable(byConsignee.template, kind) ? byConsignee : undefined)
+    ?? (payload.customerId ? ctx.customerTemplateByKey.get(`${kind}|${payload.customerId}`) : undefined);
 }
 
 /**
@@ -290,7 +312,7 @@ export class LabelService {
    */
   async getRollLabel(
     rollId: string,
-    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; labelEdit?: RollLabelDraft | null },
     // Toplu basım bağlamı (getBulkRollLabelsHtml). Verilirse DB sorguları yerine
     // önceden çekilmiş Map'lerden okunur; verilmezse (tek-top yolu) eski sorgular.
     preloaded?: BulkLabelContext
@@ -519,8 +541,13 @@ export class LabelService {
     // İE etiket bilgisi (eksik alan / düzeltme / boş bas) — kaynak değerlerin ÜSTÜNE, en son.
     const overrides = readLabelOverrides(roll.batch?.workOrder?.labelOverrides);
     if (Object.keys(overrides).length > 0) applyLabelOverrides(payload, overrides);
-    // Topun kendi etiket adı/rengi (tamburda kesimde seçilen) zincirin en önünde; null → payload bayt-aynı.
-    applyRollLabelTexts(payload, roll);
+    // Topun etiket düzenlemesi (kolonlar + elle yazılan alanlar; taslak önizlemede yama) — zincirin en önünde.
+    const edit = effectiveRollLabelEdit(roll, opts?.labelEdit);
+    payload.labelBatchNo = edit.columns.labelBatchNo;
+    applyRollLabelTexts(payload, { labelItemName: edit.columns.labelItemName, labelColorName: edit.columns.labelColorName });
+    applyRollLabelOverrides(payload, edit.overrides);
+    const oneTimeTemplateId = opts?.labelEdit?.templateId !== undefined ? opts.labelEdit.templateId : roll.labelTemplateId;
+    if (oneTimeTemplateId) payload.rollLabelTemplateId = oneTimeTemplateId;
 
     return { success: true, data: payload };
   }
@@ -864,12 +891,7 @@ export class LabelService {
     // F179: native hedef adresi yalnız tekil (non-preloaded) yönlendirmede çözülür.
     let routingPeripheral: { peripheralId: string | null; address: string | null; port: number | null } | null = null;
     if (preloaded) {
-      // Müşteri-şablon halkasının bulk karşılığı: route'u olan müşterinin topu
-      // kendi şablonuyla basılır (tekil yolla AYNI öncelik: müşteri > cihaz > default).
-      // Sıra tekil yolla AYNI: alıcı şablonu > müşteri route > cihaz/bağlam (consigneeTemplateUsable ortak yüklem).
-      const byConsignee = payload.consigneeId ? preloaded.consigneeTemplateById?.get(payload.consigneeId) : undefined;
-      const custom = (byConsignee && consigneeTemplateUsable(byConsignee.template, kind) ? byConsignee : undefined)
-        ?? (payload.customerId ? preloaded.customerTemplateByKey.get(`${kind}|${payload.customerId}`) : undefined);
+      const custom = pickBulkRollTemplate(preloaded, payload, kind);
       template = custom?.template ?? preloaded.templateByKind[kind] ?? null;
       variant = custom ? custom.variant : preloaded.variantByKind[kind] ?? null;
       format = preloaded.format;
@@ -878,7 +900,8 @@ export class LabelService {
       const routing = await resolveLabelRouting({
         kind,
         peripheralId: opts?.peripheralId,
-        templateId: opts?.templateId,
+        // Topun bir seferlik şablonu zincirin önünde (taslakta taslağınki); yoksa istekteki explicit şablon.
+        templateId: payload.rollLabelTemplateId ?? opts?.templateId,
         machineId: opts?.machineId,
         deviceId: opts?.deviceId,
         // Müşteri şablonu halkası — payload ÖNCE çözüldü (explicit-only):
@@ -1497,10 +1520,24 @@ export class LabelService {
       }
     }
 
+    // Bir seferlik top şablonları tek sorguda (kalıcı silinmiş şablon çözülmez — tekil yolla aynı).
+    const rollTemplateById = new Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>();
+    const rollTemplateIds = [...new Set(rolls.map((r) => r.labelTemplateId).filter((x): x is string => !!x))];
+    if (rollTemplateIds.length > 0) {
+      const rows = await prisma.labelTemplate.findMany({
+        where: { id: { in: rollTemplateIds }, deletedAt: null },
+        include: { variants: true },
+      });
+      for (const t of rows) {
+        const picked = pickVariant(t.variants, { widthMm: format.widthMm, heightMm: format.heightMm });
+        rollTemplateById.set(t.id, { template: t, variant: picked.variant });
+      }
+    }
+
     const openDefectNotes = await loadOpenDefectNotes(ids);
     const deliveryNoteLines = await resolveDeliveryNoteLinesForRolls(ids);
     const customerCodes = await loadActiveCustomerCodes(ids);
-    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, consigneeTemplateById, copies, openDefectNotes, deliveryNoteLines, customerCodes, rasterMode: finishedRouting.rasterMode };
+    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, consigneeTemplateById, rollTemplateById, copies, openDefectNotes, deliveryNoteLines, customerCodes, rasterMode: finishedRouting.rasterMode };
   }
 
   /**
@@ -2345,6 +2382,7 @@ export class LabelService {
       const kind: LabelKind = rollLabelKindOf(roll.stage);
       const routing = await resolveLabelRouting({
         kind,
+        templateId: payload.rollLabelTemplateId ?? null,
         customerId: payload.customerId ?? null,
         consigneeId: payload.consigneeId ?? null,
         peripheralId: opts?.peripheralId ?? null,

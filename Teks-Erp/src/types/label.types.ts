@@ -103,6 +103,11 @@ export interface LabelPayload {
   customerCode?: string | null;
   /** Şablonun birim sistemi (Gülkesim S5) — `renderLabel` şablondan taşır; yok = bugünkü metrik biçim. */
   unitSettings?: LabelUnitSettings | null;
+  /** Topa ELLE yazılan etiket alanları (bind anahtarı → metin; "" = boş bas) — `fieldDisplayValue` önce okur.
+   *  Yalnız gösterim; düzenlenmemiş topta ALAN YOK (payload bayt-aynı). Kaynak `Roll.labelOverrides`. */
+  displayOverrides?: Record<string, string>;
+  /** Topun bir seferlik şablonu (`Roll.labelTemplateId`); seçilmemişse ALAN YOK. */
+  rollLabelTemplateId?: string;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---

@@ -338,6 +338,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   labelItemName: "Etiket kumaş adı",
   labelColorName: "Etiket rengi",
   labelConsigneeId: "Etiket alıcısı",
+  labelTemplateId: "Etiket şablonu (bir seferlik)",
+  labelCustomerId: "Etiket müşterisi",
   weightSource: "Kg kaynağı",
   machineStopEnabled: "Duruş bildirimi",
   stationKinds: "İstasyon türleri",

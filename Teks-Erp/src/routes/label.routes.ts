@@ -18,6 +18,7 @@ import { LabelController } from "../controllers/label.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { LabelOverrideService } from "../services/label-override.service";
+import { RollLabelEditService } from "../services/roll-label-edit.service";
 
 const MOBILE_LABEL_PRINTERS = ["mobile:kk1", "mobile:tambur", "mobile:tarti-paket"] as const;
 
@@ -173,6 +174,32 @@ router.get(
   verifyToken,
   requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
   controller.getRollPreview,
+);
+
+/**
+ * @openapi
+ * /api/labels/rolls/{id}/preview:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Etiket düzenleme TASLAĞIYLA önizleme (kaydetmeden; GET önizlemeyle aynı yanıt)
+ *     description: |
+ *       Gövde `{ templateId?, fields?, customerId?, stock?, confirmScrap?, peripheralId? }` — `fields` PUT
+ *       `/rolls/{id}/overrides` ile aynı yama kuralı ve aynı doğrulama (bilinmeyen anahtar 400). Hiçbir şey yazmaz.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ mode, language, content, kind, meta }" }
+ *       400: { description: Bilinmeyen alan / geçersiz değer }
+ */
+router.post(
+  "/rolls/:id/preview",
+  verifyToken,
+  requirePermission("label:read"),
+  controller.previewRollDraft,
 );
 
 /**
@@ -963,6 +990,96 @@ router.get(
   verifyToken,
   requireAnyPermission("label:print", "label-template:read", ...MOBILE_LABEL_PRINTERS),
   controller.getStandaloneTemplateHtml,
+);
+
+// ── Top etiketi elle düzenleme (panel "Etiketi düzenle") — basmadan kaydeder; basım yolları topa yazılanı kullanır.
+const rollLabelEditService = new RollLabelEditService();
+const rollIdParam = z.object({ id: z.string().uuid("Geçersiz top ID") });
+const rollLabelEditBody = z.object({
+  templateId: z.string().uuid("Geçersiz şablon ID").nullable().optional(),
+  fields: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+  customer: z.union([z.object({ customerId: z.string().uuid("Geçersiz müşteri ID") }), z.object({ stock: z.literal(true) })]).optional(),
+  consigneeId: z.string().uuid("Geçersiz alıcı ID").nullable().optional(),
+  expectedEditedAt: z.string().datetime({ offset: true }).nullable().optional(),
+});
+
+/**
+ * @openapi
+ * /api/labels/rolls/{id}/edit-form:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Etiket düzenleme formu — alanlar (bugünkü değer + elle yazıldı mı), seçilebilir şablonlar, sürüm belirteci
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ fields, templates, templateId, chainTemplateId, labelEditedAt, locked, customerId, consigneeId }" }
+ *       404: { description: Top bulunamadı }
+ */
+router.get(
+  "/rolls/:id/edit-form",
+  verifyToken,
+  requirePermission("label:read"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = rollIdParam.parse(req.params);
+      const peripheralId = typeof req.query.peripheralId === "string" ? req.query.peripheralId : null;
+      res.status(200).json(await rollLabelEditService.getEditForm(id, { peripheralId }));
+    } catch (e) { next(e); }
+  },
+);
+
+/**
+ * @openapi
+ * /api/labels/rolls/{id}/overrides:
+ *   put:
+ *     tags: [Labels]
+ *     summary: Topun etiketini kaydet (bir seferlik şablon + elle yazılan alanlar) — BASMAZ
+ *     description: |
+ *       `fields` yamadır: anahtar yok = dokunma, null = kaynağa dön, metin = yaz ("" = boş bas). Anahtarlar top
+ *       etiket alan kataloğundan (`config/roll-label-edit.ts`); bilinmeyen 400 `LABEL_EDIT_KEY_UNKNOWN`.
+ *       Ölçü alanları (metraj/kg/en) yalnız etikette görünür, topun ölçüsü değişmez; serbest müşteri/renk metni
+ *       cari/katalog kaydına yazılmaz. `templateId` silinmiş/pasif/serbest/başka bağlam şablonu 400
+ *       `LABEL_TEMPLATE_NOT_USABLE`. `expectedEditedAt` iyimser sürümdür; araya yazan varsa 409 `LABEL_EDIT_STALE`.
+ *       Aynı yamanın tekrarı 200 `changed:false`. Sevkli/ölü top 409 `ROLL_SHIPPED`/`ROLL_DEAD`.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               templateId: { type: string, format: uuid, nullable: true }
+ *               fields: { type: object, additionalProperties: { type: string, nullable: true } }
+ *               customer: { type: object, description: "{ customerId } ya da { stock: true }" }
+ *               consigneeId: { type: string, format: uuid, nullable: true }
+ *               expectedEditedAt: { type: string, format: date-time, nullable: true }
+ *     responses:
+ *       200: { description: Güncel düzenleme formu + changed }
+ *       400: { description: Bilinmeyen alan / geçersiz değer / uygun olmayan şablon }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: LABEL_EDIT_STALE · ROLL_SHIPPED · ROLL_DEAD }
+ */
+router.put(
+  "/rolls/:id/overrides",
+  verifyToken,
+  requireAnyPermission("label:edit", "roll:write"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = rollIdParam.parse(req.params);
+      const body = rollLabelEditBody.parse(req.body ?? {});
+      res.status(200).json(await rollLabelEditService.save(id, body, req.user?.userId));
+    } catch (e) { next(e); }
+  },
 );
 
 // ── İş emri etiket bilgisi (Gülkesim S5) — İE açan panelden, tamburcu tabletten yazar.
