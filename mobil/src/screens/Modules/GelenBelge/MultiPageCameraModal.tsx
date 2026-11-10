@@ -77,8 +77,15 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
     <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
   );
 
-  const counter = n ? `${n} sayfa çekildi (en çok ${capacity})` : single ? MULTI_CAMERA_HINT : `Sayfa ${firstPageNo} — ${MULTI_CAMERA_HINT}`;
-  const fill = compact ? styles.btnFill : undefined;
+  // Çok sayfalı belgede sıradaki sayfanın numarası açıkça söylenir ("Sayfa 1" belge numarası sanılıyordu, saha 2026-11-10).
+  const counter = n
+    ? `${n} sayfa çekildi — sıradaki ${firstPageNo + n}. sayfa ya da Tamam`
+    : single ? MULTI_CAMERA_HINT : `${firstPageNo}. sayfayı çekin — ${MULTI_CAMERA_HINT}`;
+  const finishBtn = (
+    <Button mode="contained" buttonColor={colors.info} textColor={colors.textOnDark} icon="check" onPress={cap.finish} contentStyle={styles.btn} disabled={n === 0 || busy || cap.shooting} testID="belge-cok-tamam">
+      {`Tamam (${n})`}
+    </Button>
+  );
 
   return (
     <AppModal visible={visible} onDismiss={dismiss} swipeToDismiss={false} contentStyle={[styles.sheet, { width: width * 0.94, height: height * 0.9 }]}>
@@ -99,19 +106,19 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
         <Text style={styles.onDark} testID="belge-cok-sayac">
           {cap.confirmDiscard ? `${n} çekim silinecek — kapatmak için Vazgeç'e tekrar basın` : counter}
         </Text>
-        {/* Vazgeç solda kırmızı, onay yeşil sağda; dar ekranda düğmeler satırı paylaşır, taşmaz (saha 2026-11-10). */}
+        {/* Vazgeç en solda kırmızı, Çek en sağda yeşil; dar ekranda Tamam alt satırda tam genişlik — etiketler kısalmaz (saha 2026-11-10). */}
         <View style={styles.actions}>
-          <Button mode="contained" buttonColor={colors.danger} textColor={colors.textOnDark} onPress={dismiss} style={fill} contentStyle={styles.btn} disabled={busy} testID="belge-cok-vazgec">
+          <Button mode="contained" buttonColor={colors.danger} textColor={colors.textOnDark} onPress={dismiss} contentStyle={styles.btn} disabled={busy} testID="belge-cok-vazgec">
             Vazgeç
           </Button>
           <View style={styles.spacer} />
+          {!single && !compact && finishBtn}
           <Button
-            mode={single ? 'contained' : 'contained-tonal'}
-            buttonColor={single ? colors.success : undefined}
-            textColor={single ? colors.textOnDark : undefined}
+            mode="contained"
+            buttonColor={colors.success}
+            textColor={colors.textOnDark}
             icon="camera"
             onPress={cap.capture}
-            style={fill}
             contentStyle={styles.btn}
             loading={cap.shooting}
             disabled={cap.shooting || busy || !permission?.granted || n >= capacity}
@@ -119,12 +126,8 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
           >
             Çek
           </Button>
-          {!single && (
-            <Button mode="contained" buttonColor={colors.success} textColor={colors.textOnDark} icon="check" onPress={cap.finish} style={fill} contentStyle={styles.btn} disabled={n === 0 || busy || cap.shooting} testID="belge-cok-tamam">
-              {`Tamam (${n})`}
-            </Button>
-          )}
         </View>
+        {!single && compact && finishBtn}
       </View>
     </AppModal>
   );
@@ -171,6 +174,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   spacer: { flex: 1 },
   btn: { minHeight: 56, paddingHorizontal: spacing.md },
-  btnFill: { flexShrink: 1 },
   onDark: { color: colors.textOnDark, fontSize: typography.size.base },
 });

@@ -75,6 +75,13 @@ describe('MultiPageCameraModal', () => {
     expect(onDone.mock.calls[0]![0]).toHaveLength(1);
   });
 
+  it('düğme sırası: Vazgeç en solda, Çek en sağda (Tamam arada)', () => {
+    const { r } = setup();
+    const order = r.UNSAFE_root.findAll((n: { type: unknown; props: { testID?: unknown } }) => typeof n.props.testID === 'string' && /^belge-cok-(vazgec|tamam|cek)$/.test(n.props.testID) && typeof n.type === 'string');
+    const ids = order.map((n: { props: { testID: string } }): string => n.props.testID).filter((id: string, i: number, a: string[]) => a.indexOf(id) === i);
+    expect(ids).toEqual(['belge-cok-vazgec', 'belge-cok-tamam', 'belge-cok-cek']);
+  });
+
   it('tek çekimlik: sayfa no yazmaz, Tamam düğmesi yok', () => {
     const { r } = setup(1);
     expect(r.getByTestId('belge-cok-sayac')).not.toHaveTextContent(/Sayfa/);
