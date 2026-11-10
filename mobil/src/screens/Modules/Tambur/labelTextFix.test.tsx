@@ -6,7 +6,8 @@ import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
-import WorkOrderOutputPanel, { refreshSpinner } from './WorkOrderOutputPanel';
+import Toast from 'react-native-toast-message';
+import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import { labelTextFixBody, labelTextFixLockReason, labelTextFixReasonError } from './labelTextFix';
 import { tamburService } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
@@ -124,11 +125,30 @@ describe('WorkOrderOutputPanel etiket düzelt düğmesi', () => {
   });
 });
 
-// Çıkan etiketler yenilemesi: 15 sn yoklama SESSİZ — spinner yalnız operatör ↻'e bastığında (2026-11-11).
-describe('refreshSpinner', () => {
-  it('arka plan yoklamasında spinner yok; elle yenilemede var', () => {
-    expect(refreshSpinner(false, true)).toBe(false);
-    expect(refreshSpinner(true, true)).toBe(true);
-    expect(refreshSpinner(true, false)).toBe(false);
+// Çıkan etiketler yenilemesi: 15 sn yoklama SESSİZ — tost yalnız operatör ↻'e bastığında (2026-11-11).
+describe('Çıkan etiketler ↻ elle yenileme', () => {
+  const mk = (id: string, status: Roll['status']) =>
+    ({ id, barcode: `B-${id}`, status, initialQty: 10, currentQty: 10, createdAt: '2026-11-09T10:00:00Z' }) as unknown as Roll;
+
+  it('ilk yükleme tostsuz; ↻ → dönüş bitince "yenilendi" tostu', async () => {
+    const show = jest.spyOn(Toast, 'show').mockImplementation(() => undefined);
+    tsvc.recentOutputRolls.mockResolvedValue({ success: true, data: [mk('a', 'WAREHOUSE')] });
+    const r = renderWithPaper(<WorkOrderOutputPanel workOrderId="wo1" onPrint={noop} onUndo={noop} />);
+    await waitFor(() => expect(r.getByText('B-a')).toBeTruthy());
+    expect(show).not.toHaveBeenCalled();
+    fireEvent.press(r.getByTestId('wo-output-yenile'));
+    await waitFor(() => expect(show).toHaveBeenCalledWith({ type: 'success', text1: 'Çıkan etiketler yenilendi' }), { timeout: 3000 });
+    show.mockRestore();
+  });
+
+  it('hata → "Yenilenemedi: <neden>" tostu', async () => {
+    const show = jest.spyOn(Toast, 'show').mockImplementation(() => undefined);
+    tsvc.recentOutputRolls.mockResolvedValueOnce({ success: true, data: [mk('a', 'WAREHOUSE')] });
+    const r = renderWithPaper(<WorkOrderOutputPanel workOrderId="wo1" onPrint={noop} onUndo={noop} />);
+    await waitFor(() => expect(r.getByText('B-a')).toBeTruthy());
+    tsvc.recentOutputRolls.mockRejectedValue(new Error('Sunucu hatası'));
+    fireEvent.press(r.getByTestId('wo-output-yenile'));
+    await waitFor(() => expect(show).toHaveBeenCalledWith({ type: 'error', text1: 'Yenilenemedi: Sunucu hatası' }), { timeout: 3000 });
+    show.mockRestore();
   });
 });

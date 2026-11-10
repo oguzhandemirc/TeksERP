@@ -26,6 +26,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Icon, IconButton, TouchableRipple, ActivityIndicator, Button, Menu } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Toast from 'react-native-toast-message';
 
 import { tamburService } from '../../../services/tambur.service';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -37,6 +39,8 @@ import { colors } from '../../../theme/tokens';
 import { MEASURE_LABEL, measureToneOf } from './measureSource';
 import { kgCellText, outputSummaryText, outputTotals } from './outputSummary';
 import type { LastTamburMeasure } from './TamburMeasureStrip';
+import { isLicenseNotified } from '../../../lib/license';
+import { REFRESH_MIN_SPIN_MS, manualRefreshToast, remainingSpinMs } from './outputRefresh';
 
 const LAST_TONE = { GREEN: colors.successText, AMBER: colors.warningText, RED: colors.dangerText, NONE: colors.textSecondary } as const;
 
@@ -48,10 +52,35 @@ function hhmm(v: string | Date | null | undefined): string {
 /** Arka plan yoklaması (başka tablet/vardiya kesimleri). Bu tabletin kesim/geri al/basımı ayrıca invalidate eder. */
 export const WO_OUTPUT_POLL_MS = 15_000;
 
-/** Yenile spinner'ı yalnız operatör ↻'e bastıysa; 15 sn'lik sessiz yoklamada ikon titremez. */
-export function refreshSpinner(manual: boolean, fetching: boolean): boolean {
-  return manual && fetching;
+/** ↻ elle basılınca döner (en az bir tur, yenileme sürdükçe); 15 sn'lik sessiz yoklamada ikon kıpırdamaz. */
+function RefreshButton({ spinning, onPress }: { spinning: boolean; onPress: () => void }) {
+  const rot = useSharedValue(0);
+  useEffect(() => {
+    if (spinning) {
+      rot.value = 0;
+      rot.value = withRepeat(withTiming(360, { duration: REFRESH_MIN_SPIN_MS, easing: Easing.linear }), -1, false);
+    } else {
+      cancelAnimation(rot);
+      rot.value = 0;
+    }
+  }, [spinning, rot]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.value}deg` }] }));
+  return (
+    <Animated.View style={style}>
+      <IconButton
+        icon="refresh"
+        size={26}
+        iconColor="#1e40af"
+        onPress={spinning ? undefined : onPress}
+        style={s.headerBtn}
+        accessibilityLabel={spinning ? 'Yenileniyor' : 'Yenile'}
+        testID="wo-output-yenile"
+      />
+    </Animated.View>
+  );
 }
+
+const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
 /** Tek satır: saat · barkod · metre · kg · [bas] [geri al]. Etiket düzeltme satır menüsünde (dokun / uzun bas). */
 function OutputRow({ r, menuOpen, onMenu, onPrint, onUndo, onFixLabel }: {
@@ -147,6 +176,21 @@ export default function WorkOrderOutputPanel({
     refetchInterval: WO_OUTPUT_POLL_MS,
   });
   const [manualRefresh, setManualRefresh] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+  // Yalnız elle basış: dönüş en az bir tur, bitince sonuç tostu. Yoklama bu yoldan geçmez (sessiz).
+  const runManualRefresh = async () => {
+    setManualRefresh(true);
+    const started = Date.now();
+    const res = await q.refetch();
+    await sleep(remainingSpinMs(started, Date.now()));
+    if (!mountedRef.current) return;
+    setManualRefresh(false);
+    const err = res.status === 'error' ? res.error : null;
+    // Lisans kapısı reddini interceptor zaten söyledi (showScreenError emsali).
+    if (err && isLicenseNotified(err)) return;
+    Toast.show(manualRefreshToast(err));
+  };
 
   const rolls: Roll[] = useMemo(() => q.data?.data ?? [], [q.data]);
 
@@ -189,7 +233,7 @@ export default function WorkOrderOutputPanel({
         accessibilityLabel={collapsed ? `${title} — aç` : `${title} — kapat`}
       >
         <View style={s.header}>
-          <Icon source="tray-arrow-up" size={16} color="#1e40af" />
+          <Icon source="tray-arrow-up" size={20} color="#1e40af" />
           <Text style={s.headerTitle}>{title}</Text>
           {/* KAPALIYKEN sayaçlar başlık satırına taşınır — saha isteği:
               "kapalı konumdayken top ve basılan m yine gözüksün". */}
@@ -204,22 +248,10 @@ export default function WorkOrderOutputPanel({
               {`son: ${lastMeasure.barcode ? `${lastMeasure.barcode.slice(-4)} · ` : ''}${lastMeasure.meters.toFixed(1)} m · ${MEASURE_LABEL[lastMeasure.source]}`}
             </Text>
           ) : null}
-          {!collapsed &&
-            (refreshSpinner(manualRefresh, q.isFetching) ? (
-              <ActivityIndicator size={14} color="#1e40af" />
-            ) : (
-              <IconButton
-                icon="refresh"
-                size={16}
-                onPress={() => {
-                  setManualRefresh(true);
-                  void q.refetch().finally(() => setManualRefresh(false));
-                }}
-                style={{ margin: 0 }}
-                accessibilityLabel="Yenile"
-              />
-            ))}
-          <Icon source={collapsed ? 'chevron-down' : 'chevron-up'} size={18} color="#64748b" />
+          {!collapsed && <RefreshButton spinning={manualRefresh} onPress={() => void runManualRefresh()} />}
+          <View style={s.chevron}>
+            <Icon source={collapsed ? 'chevron-down' : 'chevron-up'} size={26} color="#64748b" />
+          </View>
         </View>
       </TouchableRipple>
 
@@ -305,10 +337,13 @@ const s = StyleSheet.create({
     paddingRight: 4,
     paddingVertical: 4,
   },
-  headerTitle: { fontSize: 13, fontWeight: '800', color: '#1e40af' },
+  // Başlık şeridi büyütüldü (kullanıcı 2026-11-11): başlık 18, özet 17, ikonlar 26, dokunma alanı 48.
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#1e40af' },
+  headerBtn: { margin: 0, width: 48, height: 48 },
+  chevron: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   lastMeasure: { fontSize: 14, fontWeight: '700' },
   headerTotals: {
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: '800',
     color: '#0f172a',
     marginLeft: 8,
