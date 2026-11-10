@@ -3,7 +3,8 @@
 import React from 'react';
 import { fireEvent } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
-import TamburMeasureCard, { showClearIcon } from './TamburMeasureCard';
+import TamburMeasureCard from './TamburMeasureCard';
+import { showClearIcon } from './TamburUnitInput';
 import { measureVisibility } from './cutReadings';
 
 const len = (value: string, onClear = jest.fn()) => ({ value, onChange: jest.fn(), onClear, placeholder: 'kalanı kes' });

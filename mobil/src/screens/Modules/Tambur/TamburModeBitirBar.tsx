@@ -5,8 +5,10 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, TouchableRipple } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
-import { colors, palette, radius, spacing } from '../../../theme/tokens';
-import { BAR_HEIGHT_TABLET, BitirButton } from './CutActionBar';
+import { palette, spacing } from '../../../theme/tokens';
+import { ACTION_BUTTON_RADIUS, BAR_HEIGHT_TABLET, BitirButton } from './CutActionBar';
+
+const MODE_BG = palette.slate[700]; // #334155
 
 export function measureModeLabel(mode: 'manual' | 'auto'): string {
   return mode === 'manual' ? 'Manuel' : 'Otomatik';
@@ -23,7 +25,8 @@ export interface TamburModeBitirBarProps {
 }
 
 function ModeButton(p: { kicker: string; label: string; mode: Mode; onToggle: () => void; busy: boolean; testID: string }) {
-  // Kip düğmeleri nötr/ikincil (Bitir yeşil birincil kalır, 2026-11-11); Otomatikte yeşil nokta vurgusu.
+  // Kip düğmeleri koyu arduvaz dolgu (tur-4, 2026-11-11): Bitir yeşil · Kes mor · Kartela turuncu ile karışmaz.
+  // Kip adı büyük, kip değeri küçük; Otomatikte yeşil nokta.
   const auto = p.mode === 'auto';
   return (
     <View style={[s.mode, p.busy && s.modeBusy]}>
@@ -37,6 +40,7 @@ function ModeButton(p: { kicker: string; label: string; mode: Mode; onToggle: ()
               }
         }
         borderless
+        rippleColor="rgba(255,255,255,0.2)"
         style={s.inner}
         accessibilityRole="button"
         accessibilityLabel={`${p.label} ${measureModeLabel(p.mode)}. Değiştirmek için dokunun`}
@@ -68,12 +72,13 @@ export default function TamburModeBitirBar(p: TamburModeBitirBarProps) {
 
 const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
-  mode: { flex: 1, height: BAR_HEIGHT_TABLET, borderRadius: radius.md, overflow: 'hidden', backgroundColor: palette.slate[100], borderWidth: 1, borderColor: palette.slate[300] },
-  modeBusy: { backgroundColor: colors.surfaceSunken, opacity: 0.6 },
-  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  autoDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.emerald[600] },
+  mode: { flex: 1, height: BAR_HEIGHT_TABLET, borderRadius: ACTION_BUTTON_RADIUS, overflow: 'hidden', backgroundColor: MODE_BG },
+  modeBusy: { opacity: 0.55 },
+  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  // Koyu zeminde parlak yeşil + ince açık halka → görünür.
+  autoDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.emerald[500], borderWidth: 1, borderColor: palette.emerald[100] },
   inner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center' },
-  kicker: { fontSize: 12, fontWeight: '800', letterSpacing: 1, color: palette.slate[600] },
-  value: { fontSize: 20, fontWeight: '900', color: palette.slate[900] },
+  kicker: { fontSize: 22, fontWeight: '900', letterSpacing: 1, color: palette.white },
+  value: { fontSize: 13, fontWeight: '600', color: palette.slate[200] },
 });

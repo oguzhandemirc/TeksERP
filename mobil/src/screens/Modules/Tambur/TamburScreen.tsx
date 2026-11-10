@@ -3335,11 +3335,11 @@ export default function TamburScreen() {
     return w ? `${w} cm` : 'En (cm)';
   };
 
-  /** Geniş ana kesim Kat / En / Kalite kartı — sağ sütunda Çıkan etiketlerin altında (kullanıcı 2026-11-10). */
+  /** Geniş ana kesim Kat / Kalite / En kartı (En kutusu birimi kendi gösterir → yer tutucu çıplak sayı ya da "En") — sağ sütunda Çıkan etiketlerin altında (kullanıcı 2026-11-10). */
   const renderWideSettings = (roll: TamburRollSummary) => (
     <TamburCutSettingsCard
       fold={{ options: foldValues, value: work.foldType, onPick: (code) => setWork((w) => ({ ...w, foldType: code })) }}
-      width={openCard.card.width.visible ? { value: openFinal.widthText, onChange: openFinal.setWidthText, placeholder: wideWidthHint(roll) } : null}
+      width={openCard.card.width.visible ? { value: openFinal.widthText, onChange: openFinal.setWidthText, placeholder: widthHintText(roll.width, livePreview.preview?.sourceWidthCm) ?? 'En' } : null}
       quality={{ grades: qualityGrades, value: work.voluntaryEntry.qualityGrade, onPick: (g, a) => pickGrade(g as QualityGrade, a) }}
     />
   );

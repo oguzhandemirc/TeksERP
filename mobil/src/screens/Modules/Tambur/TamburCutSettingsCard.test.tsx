@@ -1,4 +1,4 @@
-// Kat · En · Kalite tek satırı: başlıksız; Kat tek düğme (dokun → sıradaki), Kalite tek düğme + açılır liste.
+// Kat · Kalite · En tek satırı: başlıksız; Kat tek düğme (dokun → sıradaki), Kalite tek düğme + açılır liste.
 import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
@@ -39,6 +39,13 @@ describe('TamburCutSettingsCard', () => {
     expect(r.getByTestId('tambur-en-cm').props.placeholder).toBe('En (cm)');
     expect(r.queryByText('Tambur (kat)')).toBeNull();
     expect(r.queryByText('Kalite')).toBeNull();
+  });
+
+  it('sıra Kat · Kalite · En; En kutusunda "cm" birimi (tur-4)', () => {
+    const { r } = card();
+    const ids = r.UNSAFE_root.findAll((n: { props: { testID?: string } }) => typeof n.props.testID === 'string' && /^tambur-(kat-dugmesi|kalite-dugmesi|en-cm)$/.test(n.props.testID)).map((n: { props: { testID?: string } }) => n.props.testID);
+    expect([...new Set(ids)]).toEqual(['tambur-kat-dugmesi', 'tambur-kalite-dugmesi', 'tambur-en-cm']);
+    expect(r.getByText('cm')).toBeTruthy();
   });
 
   it('kat düğmesi sıradaki kata geçer', () => {

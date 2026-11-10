@@ -1,14 +1,15 @@
-// Geniş ana kesim Kat · En · Kalite satırı (2026-11-11, kullanıcı): tek satır, başlıksız — değer kendini anlatır
-// ("4 Kat", "300 cm", "1. Kalite"). Kat tek düğme (dokun → sıradaki kat); Kalite tek düğme + açılır liste (Paper Menu).
+// Geniş ana kesim Kat · Kalite · En satırı (2026-11-11, kullanıcı; tur-4'te En en sağa): tek satır, başlıksız — değer
+// kendini anlatır ("4 Kat", "1. Kalite", "300 cm"). Üç kontrolün köşesi ACTION_BUTTON_RADIUS (Bitir ile aynı). Kat tek düğme (dokun → sıradaki kat); Kalite tek düğme + açılır liste (Paper Menu).
 // Dokunma hedefleri ≥56dp. Saf görünüm — state ekranın.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Menu, Text, TouchableRipple } from 'react-native-paper';
-import NumpadInput from '../../../components/NumpadInput';
 import TruncatedText from '../../../components/TruncatedText';
-import { colors, palette } from '../../../theme/tokens';
+import { colors, palette, shadow } from '../../../theme/tokens';
+import { ACTION_BUTTON_RADIUS } from './CutActionBar';
 import type { QualityOption } from './TamburCompactPickers';
 import { nextFoldCode } from './foldCycle';
+import TamburUnitInput from './TamburUnitInput';
 
 export interface TamburCutSettingsProps {
   fold: { options: { code: string; name: string }[]; value: string | null | undefined; onPick: (code: string) => void };
@@ -75,38 +76,38 @@ export default function TamburCutSettingsCard(p: TamburCutSettingsProps) {
           </Text>
         </View>
       </TouchableRipple>
+      <View style={s.qualityCol}>
+        <QualityDropdown q={p.quality} />
+      </View>
       {p.width && (
         <View style={s.widthCol}>
-          <NumpadInput
-            mode="outlined"
+          <TamburUnitInput
             value={p.width.value}
-            onChangeText={p.width.onChange}
-            numpadLabel="En (cm)"
-            allowDecimal
-            numpadMaxLength={6}
+            onChange={p.width.onChange}
+            unit="cm"
+            unitName="santimetre"
+            label="En"
             placeholder={p.width.placeholder}
-            style={s.input}
+            numpadMaxLength={6}
+            onClear={() => p.width?.onChange('')}
             testID="tambur-en-cm"
           />
         </View>
       )}
-      <View style={s.qualityCol}>
-        <QualityDropdown q={p.quality} />
-      </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  card: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: palette.white, borderRadius: 14, padding: 8, borderWidth: 1, borderColor: palette.slate[200] },
-  btn: { minHeight: 56, borderRadius: 10, justifyContent: 'center', paddingHorizontal: 10 },
+  // Ölçüm kartıyla aynı açık gri zemin: beyaz çerçevesiz En kutusu ve Kalite düğmesi bu zeminde seçilir.
+  card: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: palette.slate[100], borderRadius: 14, padding: 8 },
+  btn: { minHeight: 56, borderRadius: ACTION_BUTTON_RADIUS, justifyContent: 'center', paddingHorizontal: 10 },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   btnText: { fontSize: 18, fontWeight: '800', color: palette.slate[900], flexShrink: 1 },
   foldBtn: { flex: 1, backgroundColor: palette.blue[800] },
   foldText: { color: palette.white },
   widthCol: { flex: 1 },
   qualityCol: { flex: 1.3 },
-  qualityBtn: { borderWidth: 1, borderColor: palette.slate[300], backgroundColor: palette.slate[50] },
+  qualityBtn: { backgroundColor: palette.white, ...shadow.sm, elevation: 1 },
   dot: { width: 12, height: 12, borderRadius: 6 },
-  input: { fontSize: 20, fontWeight: '700' },
 });
