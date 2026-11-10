@@ -64,6 +64,9 @@ export interface InspectionPanelProps {
   compact?: boolean;
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
   children?: React.ReactNode;
+  /** Cetvel ile giriş arasına esnek boşluk: giriş bloğu (ve konağın altındaki düğme) kabın altına yaslanır.
+   *  Konak `flex:1` kolon olmalı; varsayılan kapalı (diğer ekranlar bugünkü gibi yukarıdan dizer). */
+  entryAtBottom?: boolean;
   /** K4P özet şeridi: sayım + sunucu önizlemesi (konak hesaplar/çeker; bileşen yalnız gösterir). */
   summary?: InspectionSummary;
   /** 4 puan: metre boşsa kayıt konumsuz (`meter: null`) düşer. */
@@ -188,6 +191,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
           alwaysRuler={props.rulerAlways === true}
         />
       </View>
+      {props.entryAtBottom === true && <View style={styles.entrySpacer} testID="inspection-entry-spacer" />}
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
       <View style={styles.entryFixed}>
         {!readOnly && (
@@ -223,6 +227,8 @@ export default function InspectionPanel(props: InspectionPanelProps) {
 const styles = StyleSheet.create({
   rulerBlock: { height: 112, paddingHorizontal: 8 },
   entryFixed: { paddingHorizontal: 8, gap: 10 },
+  // flex:1 → flexShrink 1, flexBasis 0: yer yoksa 0'a iner, içerik itilmez.
+  entrySpacer: { flex: 1, minHeight: 0 },
   section: { flex: 1, backgroundColor: palette.white, borderRadius: 12, padding: 14, gap: 8 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: palette.slate[900] },
   muted: { fontSize: 12, color: palette.slate[400], fontStyle: 'italic' },

@@ -148,3 +148,22 @@ describe('overMaxMode konak bağı', () => {
     expect(read('Muayene/InspectionScreen.tsx')).not.toMatch(/overMaxMode/);
   });
 });
+
+describe('InspectionPanel — giriş alta yaslı (GK kurşun, 2026-11-10)', () => {
+  it('varsayılan: esnek boşluk yok (diğer ekranlar bugünkü gibi yukarıdan dizer)', () => {
+    const { r } = setup();
+    expect(r.queryByTestId('inspection-entry-spacer')).toBeNull();
+  });
+  it('entryAtBottom: cetvel ile giriş arasında daralabilir esnek boşluk', () => {
+    const { r } = setup({ entryAtBottom: true, rulerAlways: true });
+    const spacer = r.getByTestId('inspection-entry-spacer');
+    expect(spacer.props.style).toMatchObject({ flex: 1, minHeight: 0 });
+    // Sıra: cetvel → boşluk → metre girişi (başparmak erişimi alt blokta).
+    const json = JSON.stringify(r.toJSON());
+    const iRuler = json.indexOf('inspection-ruler');
+    const iSpacer = json.indexOf('inspection-entry-spacer');
+    const iMeter = json.indexOf('"testID":"meter"');
+    expect(iRuler).toBeGreaterThanOrEqual(0);
+    expect(iRuler < iSpacer && iSpacer < iMeter).toBe(true);
+  });
+});
