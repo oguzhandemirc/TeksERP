@@ -12,7 +12,11 @@ export type TamburHeaderAction =
   | 'orderLink'
   | 'fieldFix'
   | 'manual'
-  | 'standalone';
+  | 'standalone'
+  | 'labelInfo'
+  | 'woDetail'
+  | 'refreshJob'
+  | 'closeJob';
 
 export interface TamburHeaderInput {
   width: number;
@@ -21,6 +25,10 @@ export interface TamburHeaderInput {
   canLinkOrders: boolean;
   canFieldFix: boolean;
   hasActiveJob: boolean;
+  /** Geniş ana kesimde "Etiket bilgisi" alt şeritten kalktı (2026-11-10) → her genişlikte "Diğer"de. */
+  labelInfo?: boolean;
+  /** Tek açık işte "İş emri listesi" kartı çizilmez (2026-11-10) → sekmenin detay/yenile/kapat'ı "Diğer"e. */
+  singleJobTab?: boolean;
 }
 
 /** Bu genişliğin altında seyrek aksiyonlar "Diğer" menüsüne katlanır. */
@@ -42,6 +50,14 @@ export function tamburHeaderActions(i: TamburHeaderInput): {
   if (i.canFieldFix) all.push('manual');
   if (!i.manualMode) all.push('standalone');
 
+  const pinned: TamburHeaderAction[] = [];
+  if (i.labelInfo && !i.manualMode) pinned.push('labelInfo');
+  if (i.singleJobTab && i.hasActiveJob && !i.manualMode) pinned.push('woDetail', 'refreshJob', 'closeJob');
+  const r = foldRare(i, all);
+  return { inline: r.inline, overflow: [...r.overflow, ...pinned] };
+}
+
+function foldRare(i: TamburHeaderInput, all: TamburHeaderAction[]): { inline: TamburHeaderAction[]; overflow: TamburHeaderAction[] } {
   if (i.width >= TAMBUR_HEADER_COLLAPSE_BELOW_DP) return { inline: all, overflow: [] };
 
   // AÇIK manuel mod bir DURUMDUR, aksiyon değil — menüye gizlenmez.
@@ -49,6 +65,6 @@ export function tamburHeaderActions(i: TamburHeaderInput): {
   if (!i.manualMode) foldable.add('manual');
   const overflow = all.filter((a) => foldable.has(a));
   // Menüde tek öğe kalırsa katlamak yer kazandırmaz.
-  if (overflow.length < 2) return { inline: all, overflow: [] };
+  if (overflow.length < 2 && !i.labelInfo && !i.singleJobTab) return { inline: all, overflow: [] };
   return { inline: all.filter((a) => !foldable.has(a)), overflow };
 }

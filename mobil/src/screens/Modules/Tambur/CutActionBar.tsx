@@ -49,7 +49,7 @@ const KARTELA_BG = colors.warningDark;
 const LABEL_INFO_BG = colors.infoDark;
 const BITIR_BG = colors.successDark;
 const BAR_HEIGHT = 60; // telefon
-const BAR_HEIGHT_TABLET = 80; // tablet — daha büyük dokunma hedefi (Kes/Kartela)
+export const BAR_HEIGHT_TABLET = 80; // tablet — daha büyük dokunma hedefi (Kes/Kartela)
 
 interface Props {
   compact: boolean;
@@ -81,6 +81,11 @@ interface Props {
   copies?: { count: number; onInc: () => void; onDec: () => void };
   /** "Etiket bilgisi" penceresini açar; verilmezse (iş emri yok) düğme çizilmez. */
   onOpenLabelInfo?: () => void;
+  /** Geniş tablet ana kesim (2026-11-10, kullanıcı onaylı): yalnız SOL grup — Kartela · Kes (+adet), sol sütun
+   *  genişliğinde; kip + Bitir sağ sütunda (`TamburModeBitirBar`). Verilmezse bar bugünkü düzende. */
+  wideLeft?: boolean;
+  /** Kes düğmesinin küçük ikinci satırı (varyant: "kalanı kes · X m" / "makineden ölç"). */
+  kesSubLabel?: string | null;
 }
 
 export default function CutActionBar({
@@ -96,7 +101,12 @@ export default function CutActionBar({
   bitirLoading,
   copies,
   onOpenLabelInfo,
+  wideLeft,
+  kesSubLabel,
 }: Props) {
+  if (wideLeft && !compact) {
+    return <WideLeftBar {...{ kartelaOn, onToggleKartela, kesLabel, kesSubLabel, onKes, kesDisabled, kesLoading, copies }} />;
+  }
   return (
     <Surface style={[styles.bar, !compact && styles.barFlush]} elevation={3}>
       {/* Telefonda dört öğe tek satıra sığmaz → seçici kendi satırında, üstte. */}
@@ -148,22 +158,48 @@ export default function CutActionBar({
   );
 }
 
+// Geniş ana kesim sol grubu: Kartela · Kes (+ikinci satır) · adet; sol sütun genişliğinde, zeminsiz.
+function WideLeftBar(p: Pick<Props, 'kartelaOn' | 'onToggleKartela' | 'kesLabel' | 'kesSubLabel' | 'onKes' | 'kesDisabled' | 'kesLoading' | 'copies'>) {
+  const { copies } = p;
+  return (
+    <View style={styles.barWideLeft}>
+      <View style={styles.row}>
+        <KartelaToggle on={p.kartelaOn} onToggle={p.onToggleKartela} compact={false} />
+        <KesButton
+          label={`${p.kesLabel}${labelCopiesSuffix(!!copies, copies?.count ?? 0)}`}
+          subLabel={p.kesSubLabel}
+          onPress={p.onKes}
+          disabled={p.kesDisabled}
+          loading={p.kesLoading}
+          compact={false}
+        />
+        {copies && (
+          <LabelCopiesStepper count={copies.count} onInc={copies.onInc} onDec={copies.onDec} height={BAR_HEIGHT_TABLET} tint={PURPLE} disabled={p.kesLoading} />
+        )}
+      </View>
+    </View>
+  );
+}
+
 // ───────────────────────── Bitir (Top Kesme kapanışı) ─────────────────────────
-function BitirButton({
+export function BitirButton({
   onPress,
   disabled,
   compact,
+  fill = false,
 }: {
   onPress: () => void;
   disabled: boolean;
   compact: boolean;
+  /** Eşit genişlikli grupta (geniş ana kesim sağ grubu) kalan payı alır. */
+  fill?: boolean;
 }) {
   return (
     <View
       style={[
         styles.toggle,
         {
-          width: compact ? 88 : 112,
+          ...(fill ? { flex: 1 } : { width: compact ? 88 : 112 }),
           height: compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET,
         },
         { backgroundColor: BITIR_BG, borderColor: BITIR_BG },
@@ -291,6 +327,8 @@ function KartelaToggle({
 }
 
 // ───────────────────────── Etiket bilgisi ─────────────────────────
+// ───────────────────────── Kip düğmesi (Manuel ⇄ Otomatik) ─────────────────────────
+/** O anki kipi gösterir; dokununca diğer kipe geçer (kaynak çağıranın `cutMode`u). */
 function LabelInfoButton({ onPress, compact }: { onPress: () => void; compact: boolean }) {
   return (
     <View
@@ -331,14 +369,32 @@ function LabelInfoButton({ onPress, compact }: { onPress: () => void; compact: b
 }
 
 // ───────────────────────── Kes (asıl aksiyon) ─────────────────────────
+// Kes metni: ana satır + (geniş ana kesimde) küçük ikinci satır, alt alta.
+function KesText(p: { label: string; subLabel?: string | null; loading: boolean; dimmed: boolean; compact: boolean }) {
+  return (
+    <View style={styles.kesTextCol}>
+      <Text style={[styles.kesLabel, { fontSize: p.compact ? 15 : 17 }, p.dimmed && styles.kesLabelDimmed]} numberOfLines={1}>
+        {p.loading ? 'Kesiliyor…' : p.label}
+      </Text>
+      {!p.loading && p.subLabel ? (
+        <Text style={[styles.kesSub, p.dimmed && styles.kesLabelDimmed]} numberOfLines={1}>
+          {p.subLabel}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function KesButton({
   label,
+  subLabel,
   onPress,
   disabled,
   loading,
   compact,
 }: {
   label: string;
+  subLabel?: string | null;
   onPress: () => void;
   disabled: boolean;
   loading: boolean;
@@ -383,7 +439,7 @@ function KesButton({
         ]}
         accessibilityRole="button"
         accessibilityState={{ disabled: blocked }}
-        accessibilityLabel={loading ? 'Kesiliyor' : label}
+        accessibilityLabel={loading ? 'Kesiliyor' : subLabel ? `${label}, ${subLabel}` : label}
       >
         <View style={styles.kesContent}>
           {loading ? (
@@ -395,16 +451,7 @@ function KesButton({
               color={dimmed ? colors.textMuted : colors.textOnDark}
             />
           )}
-          <Text
-            style={[
-              styles.kesLabel,
-              { fontSize: compact ? 15 : 17 },
-              dimmed && styles.kesLabelDimmed,
-            ]}
-            numberOfLines={1}
-          >
-            {loading ? 'Kesiliyor…' : label}
-          </Text>
+          <KesText label={label} subLabel={subLabel} loading={loading} dimmed={dimmed} compact={compact} />
         </View>
       </TouchableRipple>
     </Animated.View>
@@ -421,6 +468,8 @@ const styles = StyleSheet.create({
   },
   // Geniş tablette ekran alt boşluk bırakmaz (ScreenChrome flushBottom); çubuk dibe yapışır, numpad ile aynı alt hiza.
   barFlush: { paddingBottom: spacing.sm },
+  // Geniş ana kesim sol grubu: sütun ızgarasıyla hizalı (kartlarla aynı 12 dp kenar), zeminsiz.
+  barWideLeft: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, paddingTop: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
   copiesRow: {
     flexDirection: 'row',
@@ -469,5 +518,7 @@ const styles = StyleSheet.create({
   kesBlocked: { backgroundColor: colors.surfaceSunken },
   kesContent: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   kesLabel: { color: colors.textOnDark, fontWeight: '700', letterSpacing: 0.2 },
+  kesTextCol: { flexShrink: 1, alignItems: 'center' },
+  kesSub: { color: colors.textOnDark, fontSize: 13, fontWeight: '600', opacity: 0.85 },
   kesLabelDimmed: { color: colors.textMuted },
 });

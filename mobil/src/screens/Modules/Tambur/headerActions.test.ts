@@ -41,4 +41,33 @@ describe('tamburHeaderActions', () => {
       expect(all).toHaveLength(9);
     }
   });
+
+  it('etiket bilgisi (geniş ana kesim) her genişlikte "Diğer"de, satıra çıkmaz', () => {
+    for (const width of [1280, 1600]) {
+      const r = tamburHeaderActions({ ...base, width, labelInfo: true });
+      expect(r.inline).not.toContain('labelInfo');
+      expect(r.overflow[r.overflow.length - 1]).toBe('labelInfo');
+    }
+  });
+
+  it('etiket bilgisi varken tek seyrek aksiyon da menüde toplanır (menü zaten var)', () => {
+    const r = tamburHeaderActions({ ...base, width: 1280, canLinkOrders: false, canFieldFix: false, labelInfo: true });
+    expect(r.overflow).toEqual(['standalone', 'labelInfo']);
+  });
+
+  it('manuel modda etiket bilgisi eklenmez', () => {
+    const r = tamburHeaderActions({ ...base, width: 1280, manualMode: true, labelInfo: true });
+    expect([...r.inline, ...r.overflow]).not.toContain('labelInfo');
+  });
+
+  it('tek açık işte sekmenin detay/yenile/kapat eylemleri "Diğer"e iner', () => {
+    const r = tamburHeaderActions({ ...base, width: 1280, labelInfo: true, singleJobTab: true });
+    expect(r.overflow.slice(-4)).toEqual(['labelInfo', 'woDetail', 'refreshJob', 'closeJob']);
+    expect(r.inline).not.toContain('closeJob');
+  });
+
+  it('açık iş yokken sekme eylemleri eklenmez', () => {
+    const r = tamburHeaderActions({ ...base, width: 1280, hasActiveJob: false, singleJobTab: true });
+    expect(r.overflow).not.toContain('closeJob');
+  });
 });

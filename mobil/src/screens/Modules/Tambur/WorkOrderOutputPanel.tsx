@@ -51,6 +51,8 @@ export default function WorkOrderOutputPanel({
   onPrintUnprinted,
   onFixLabel,
   lastMeasure = null,
+  title = 'Bu işten çıkanlar',
+  fill = false,
 }: {
   workOrderId: string | null;
   /** Etiketi yeniden bas — parent'ın yazıcı akışına verir. */
@@ -63,6 +65,10 @@ export default function WorkOrderOutputPanel({
   onFixLabel?: (roll: Roll) => void;
   /** Geniş tablette son kesim (metre + kaynak) başlıkta; ayrı ölçüm şeridi çizilmez (K5). */
   lastMeasure?: LastTamburMeasure | null;
+  /** Başlık metni (geniş tablet hedef görselinde "Çıkan etiketler"). */
+  title?: string;
+  /** Geniş tablet sağ sütun: kalan yüksekliği doldurur (260 tavanı yok). */
+  fill?: boolean;
 }) {
   const q = useQuery({
     queryKey: ['tambur', 'wo-output', workOrderId],
@@ -110,7 +116,7 @@ export default function WorkOrderOutputPanel({
   if (!workOrderId) return null;
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, fill && s.wrapFill]}>
       {/* Başlık satırının TAMAMI aç/kapa tetiğidir (eldivenli parmak için
           geniş hedef); sağdaki yenile tuşu kendi dokunuşunu yutar. */}
       <TouchableRipple
@@ -118,11 +124,11 @@ export default function WorkOrderOutputPanel({
         rippleColor="rgba(30,64,175,0.10)"
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed }}
-        accessibilityLabel={collapsed ? 'Bu işten çıkanlar — aç' : 'Bu işten çıkanlar — kapat'}
+        accessibilityLabel={collapsed ? `${title} — aç` : `${title} — kapat`}
       >
         <View style={s.header}>
           <Icon source="tray-arrow-up" size={16} color="#1e40af" />
-          <Text style={s.headerTitle}>Bu işten çıkanlar</Text>
+          <Text style={s.headerTitle}>{title}</Text>
           {/* KAPALIYKEN sayaçlar başlık satırına taşınır — saha isteği:
               "kapalı konumdayken top ve basılan m yine gözüksün". */}
           {collapsed ? (
@@ -254,6 +260,7 @@ export default function WorkOrderOutputPanel({
 
 const s = StyleSheet.create({
   bulkBtn: { marginHorizontal: 8, marginBottom: 6 },
+  wrapFill: { flex: 1, maxHeight: undefined, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   wrap: {
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',

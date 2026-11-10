@@ -314,6 +314,34 @@ export interface TamburLabelPreviewFields {
   fields: { key: string; label: string }[] | null;
 }
 
+/** POST /tambur/label-preview — kesimde doğacak çocuğun etiketi (HTML render elemanları, mm). */
+export type TamburPreviewElement =
+  | { type: 'text'; x: number; y: number; hMm: number; bold: boolean; align: 'left' | 'center' | 'right'; rot: number; wr: number; text: string; bind: string | null }
+  | { type: 'line' | 'box'; x: number; y: number; wMm: number; hMm: number; thickMm: number }
+  | { type: 'code128'; x: number; y: number; wMm: number; hMm: number; human: boolean; humanHMm: number; value: string | null }
+  | { type: 'qr'; x: number; y: number; sizeMm: number }
+  | { type: 'banner'; x: number; y: number; wMm: number; hMm: number; rot: number; text: string; bind: 'lengthMeters' };
+
+export interface TamburLabelPreview {
+  kind: string;
+  templateId: string | null;
+  templateName: string | null;
+  widthMm: number;
+  heightMm: number;
+  elements: TamburPreviewElement[] | null;
+  rows: { key: string | null; text: string; size: string; bold: boolean }[] | null;
+}
+
+export interface TamburLabelPreviewDraft {
+  lengthMeters?: number | null;
+  weightKg?: number | null;
+  widthCm?: number | null;
+  qualityGrade?: string | null;
+  labelItemName?: string | null;
+  labelColorName?: string | null;
+  labelBatchNo?: string | null;
+}
+
 /** GET /tambur/label-suggestions yanıtı — müşterinin son 180 gündeki etiket değerleri, en son önce. */
 export interface TamburLabelSuggestions {
   workOrderId: string | null;
@@ -527,6 +555,22 @@ export const tamburService = {
         throw e;
       });
   },
+
+  /** Canlı etiket önizlemesi (yazmaz). Eski backend 404 → null (kart alan listesine düşer). */
+  labelPreview: (body: {
+    rollId: string;
+    orderLineId?: string | null;
+    customerId?: string | null;
+    consigneeId?: string | null;
+    draft: TamburLabelPreviewDraft;
+  }): Promise<TamburLabelPreview | null> =>
+    apiClient
+      .post<ApiResponse<TamburLabelPreview>>('/tambur/label-preview', body)
+      .then((r) => r.data.data as TamburLabelPreview)
+      .catch((e: unknown) => {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }),
 
   /** Etiket kumaş adı / renk / parti no önerileri + bu İE'deki son değer. Eski backend 404 → çağıran boş listeye düşer. */
   labelSuggestions: (params: { workOrderId?: string | null; rollId?: string | null; consigneeId?: string | null }): Promise<TamburLabelSuggestions> => {

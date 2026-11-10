@@ -17,6 +17,7 @@ import {
   TouchableRipple,
   Icon,
   ActivityIndicator,
+  Chip,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import {
@@ -56,7 +57,7 @@ import ConfirmDialog from '../../../components/ConfirmDialog';
 import { labelSummaryText, type LabelTextsBody } from './labelTexts';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
 import { useOwnerDefaultTarget } from './ownerTarget';
-import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
+import { finalizeWeightError, shouldAutoPrintAfterCut, splitSuggestion } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
 import { usePermissions } from '../../../hooks/usePermission';
@@ -94,7 +95,7 @@ import {
   useScrapGradeLabelEnabled,
   useScanRouteMode,
 } from '../../../hooks/useFeatureFlags';
-import { NumpadHost } from '../../../components/NumpadProvider';
+import { NumpadHost, NumpadModalHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import RollFilterBar from '../../../components/filters/RollFilterBar';
@@ -117,6 +118,12 @@ import {
 } from './measureSource';
 import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
 import TamburMeterTrail from './TamburMeterTrail';
+import TamburWideCut from './TamburWideCut';
+import TamburMeasureCard from './TamburMeasureCard';
+import { useTamburLivePreview } from './useTamburLivePreview';
+import { buildPreviewDraft, kesSubLabel, nextCutMode } from './labelPreviewMap';
+import { draftKey, partyCards, showJobTabs, showPartyList, switchDraft } from './partyList';
+import TamburModeBitirBar from './TamburModeBitirBar';
 import { parseCutInput } from './meterTrail';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
@@ -1079,6 +1086,23 @@ export default function TamburScreen() {
     targetCustomerName: recutTargetCustomerName ?? null,
   });
   const printTiming = useTamburPrintTiming();
+  // Geniş tablet ana kesim (2026-11-10, hedef görsel): yalnız kart akışı; telefon/manuel/Top Kesme bugünkü düzende.
+  const wideMain = !compact && !manualMode && !(recutResolvedRollId && recutRollMeta) && !!activeJob && !!selectedRoll;
+  const livePreview = useTamburLivePreview({
+    rollId: wideMain ? selectedRoll?.rollId : null,
+    orderLineId: work.voluntaryEntry.targetOrderLineId,
+    customerId: work.voluntaryEntry.targetCustomerId,
+    consigneeId: openFinal.texts.consigneeId,
+    draft: buildPreviewDraft({
+      lengthText: cutMode === 'manual' ? work.voluntaryEntry.length : '',
+      kgText: openFinal.kgText,
+      widthText: openFinal.widthText,
+      qualityCode: work.voluntaryEntry.qualityGrade,
+      itemName: openFinal.texts.itemName,
+      colorName: openFinal.texts.colorName,
+      batch: openFinal.batch,
+    }),
+  });
 
   // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
   // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
@@ -1088,7 +1112,24 @@ export default function TamburScreen() {
   // ikiliye indiriyordu. Katalog büyüyünce 6-KAT planlanmış bir iş emrinde
   // ekran sessizce 2-KAT'ı seçili gösterirdi — operatör fark etmezse top
   // YANLIŞ katla kaydedilir ve yanlış metreyle ölçülürdü.
+  // Parti/top geçişinde taslak belleği (2026-11-10, kullanıcı onaylı): ayrılınan topun SON hali (metre, kat, kalite,
+  // hedef, kg, en) saklanır, geri dönünce aynen gelir; oturum içi, kalıcı değil (partyList.switchDraft).
+  const draftMemRef = useRef(new Map<string, { work: RollWorkState; kgText: string; widthText: string }>());
+  const draftKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const nextKey = draftKey(activeCardId, activeJob?.selectedRollId);
+    const restored = switchDraft(draftMemRef.current, draftKeyRef.current, nextKey, {
+      work,
+      kgText: openFinal.kgText,
+      widthText: openFinal.widthText,
+    });
+    draftKeyRef.current = nextKey;
+    if (restored) {
+      setWork(restored.work);
+      openFinal.setKgText(restored.kgText);
+      openFinal.setWidthText(restored.widthText);
+      return;
+    }
     const planned = activeJob?.context?.plannedFoldType ?? null;
     const known = planned && foldValues.some((v) => v.code === planned) ? planned : null;
     // Plan katalogda yoksa (silinmiş/pasif değer) yine de PLANI KORU: iş emrinin
@@ -2962,57 +3003,79 @@ export default function TamburScreen() {
    *   diye: tuş içeride kalsaydı giriş alanı %50 eksi tuş genişliği olurdu.
    *   Kart akışında false → bugünkü düzen bit bit aynı.
    */
+  /** Kesim uzunluğunu yaz — kısa kesim kuralıyla; NumpadInput ve önizleme düzenleyicisi aynı yazıcıyı kullanır. */
+  const setCutLength = (v: string) => {
+    // KISA KESİM kuralı yazım ANINDA görünür çalışır: eşik altına inen
+    // uzunluk kaliteyi A1'e çevirir (yalnız 1. Kalite seçiliyken), eşik
+    // üstüne çıkan/temizlenen uzunluk OTOMATİK yazılmış A1'i geri alır.
+    // Hesap setWork DIŞINDA (updater saf kalsın — kamera flip dersi).
+    const len = parseFloat(v.trim().replace(',', '.'));
+    const current = work.voluntaryEntry.qualityGrade;
+    const sug = shortCutOverride({
+      enabled: shortCutEnabled,
+      thresholdM: shortCutThresholdM,
+      lengthM: len,
+      currentCode: current,
+      defaultCode: defaultQualityCode,
+      grades: qualityGrades,
+    });
+    // Boş/geçersiz uzunluk da geri döndürür: input silinip "kalanı kes"e
+    // dönülürse ekranda bayat bir otomatik-A1 kalmasın (kalanın kalitesi
+    // gönderim anında yeniden çözülür).
+    const revert =
+      shortCutRevert({
+        enabled: shortCutEnabled,
+        thresholdM: shortCutThresholdM,
+        lengthM: len,
+        currentCode: current,
+        autoApplied: shortCutAutoMainRef.current,
+        grades: qualityGrades,
+      }) ||
+      (!Number.isFinite(len) &&
+        shortCutAutoMainRef.current &&
+        secondQualityCode !== null &&
+        current === secondQualityCode);
+    if (sug) shortCutAutoMainRef.current = true;
+    else if (revert) shortCutAutoMainRef.current = false;
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        length: v,
+        ...(sug
+          ? { qualityGrade: sug.code, qualityName: sug.name }
+          : revert
+            ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
+            : {}),
+      },
+    }));
+  };
+  /** Uzunluğu temizle (otomatik yazılmış A1 de geri alınır). */
+  const clearCutLength = () => {
+    // Otomatik yazılmış A1 uzunlukla birlikte gider (bayat kalite kalmasın).
+    const revert =
+      shortCutAutoMainRef.current &&
+      secondQualityCode !== null &&
+      work.voluntaryEntry.qualityGrade === secondQualityCode;
+    if (revert) shortCutAutoMainRef.current = false;
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        length: '',
+        ...(revert
+          ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
+          : {}),
+      },
+    }));
+  };
+
   const renderCutLength = (placeholder: string, halfWidth = false) => {
     const input = (
       <NumpadInput
         mode="outlined"
         value={work.voluntaryEntry.length}
-        onChangeText={(v) => {
-          // KISA KESİM kuralı yazım ANINDA görünür çalışır: eşik altına inen
-          // uzunluk kaliteyi A1'e çevirir (yalnız 1. Kalite seçiliyken), eşik
-          // üstüne çıkan/temizlenen uzunluk OTOMATİK yazılmış A1'i geri alır.
-          // Hesap setWork DIŞINDA (updater saf kalsın — kamera flip dersi).
-          const len = parseFloat(v.trim().replace(',', '.'));
-          const current = work.voluntaryEntry.qualityGrade;
-          const sug = shortCutOverride({
-            enabled: shortCutEnabled,
-            thresholdM: shortCutThresholdM,
-            lengthM: len,
-            currentCode: current,
-            defaultCode: defaultQualityCode,
-            grades: qualityGrades,
-          });
-          // Boş/geçersiz uzunluk da geri döndürür: input silinip "kalanı kes"e
-          // dönülürse ekranda bayat bir otomatik-A1 kalmasın (kalanın kalitesi
-          // gönderim anında yeniden çözülür).
-          const revert =
-            shortCutRevert({
-              enabled: shortCutEnabled,
-              thresholdM: shortCutThresholdM,
-              lengthM: len,
-              currentCode: current,
-              autoApplied: shortCutAutoMainRef.current,
-              grades: qualityGrades,
-            }) ||
-            (!Number.isFinite(len) &&
-              shortCutAutoMainRef.current &&
-              secondQualityCode !== null &&
-              current === secondQualityCode);
-          if (sug) shortCutAutoMainRef.current = true;
-          else if (revert) shortCutAutoMainRef.current = false;
-          setWork((w) => ({
-            ...w,
-            voluntaryEntry: {
-              ...w.voluntaryEntry,
-              length: v,
-              ...(sug
-                ? { qualityGrade: sug.code, qualityName: sug.name }
-                : revert
-                  ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
-                  : {}),
-            },
-          }));
-        }}
+        onChangeText={setCutLength}
         numpadLabel="Kesim uzunluğu"
         allowDecimal
         autoActivate
@@ -3030,24 +3093,7 @@ export default function TamburScreen() {
         size={24}
         iconColor="#475569"
         containerColor="#e2e8f0"
-        onPress={() => {
-          // Otomatik yazılmış A1 uzunlukla birlikte gider (bayat kalite kalmasın).
-          const revert =
-            shortCutAutoMainRef.current &&
-            secondQualityCode !== null &&
-            work.voluntaryEntry.qualityGrade === secondQualityCode;
-          if (revert) shortCutAutoMainRef.current = false;
-          setWork((w) => ({
-            ...w,
-            voluntaryEntry: {
-              ...w.voluntaryEntry,
-              length: '',
-              ...(revert
-                ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
-                : {}),
-            },
-          }));
-        }}
+        onPress={clearCutLength}
         disabled={!work.voluntaryEntry.length}
         accessibilityLabel="Uzunluğu temizle"
         style={{ margin: 0 }}
@@ -3261,11 +3307,264 @@ export default function TamburScreen() {
       qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
   };
 
+  /** Geniş ana kesim sol sütunu — değerler ve yazıcılar ekranın kesim state'inden (ikinci kaynak yok). */
+  const renderWideCut = (roll: TamburRollSummary) => {
+    const owner = openFinal.owner;
+    const customerName = owner?.name ?? targetButtonText({ lineLabel: mainTargetLineLabel, customerName: work.voluntaryEntry.targetCustomerName });
+    const targeted = !!work.voluntaryEntry.targetOrderLineId || !!work.voluntaryEntry.targetCustomerId;
+    const orders = activeJob?.context?.orders ?? [];
+    const errs = roll.errors;
+    const critCount = errs.filter((e) => defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL').length;
+    const widthField = openCard.card.width.visible
+      ? { value: openFinal.widthText, onChange: openFinal.setWidthText, placeholder: openCard.card.width.placeholder }
+      : null;
+    return (
+      <TamburWideCut
+        info={{
+          customerName,
+          owner,
+          onPickCustomer: owner ? null : () => setKimePickerOpen(true),
+          barcode: roll.barcode,
+          itemLine: [roll.itemName, roll.colorName, roll.width != null ? `${roll.width} cm` : null].filter(Boolean).join(' · '),
+          trail: <TamburMeterTrail rollId={roll.rollId} pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0} tone="light" />,
+          remaining: segmentPreview?.remaining ?? roll.currentQty,
+          orders: orders.length > 0 ? { count: orders.length, onPress: () => setOrdersModalOpen(true) } : null,
+        }}
+        note={stepNoteStrip}
+        defects={
+          errs.length === 0 && !inspectionEnabled
+            ? null
+            : {
+                count: errs.length,
+                critCount,
+                ruler: errs.length > 0 ? <DefectRuler errors={errs} defectTypes={defectTypes} rulerMax={rulerMaxForErrors(roll.currentQty, errs)} /> : null,
+                onOpen: () => setErrorsModalOpen(true),
+                onAdd: inspectionEnabled ? () => setDefectDrawerOpen(true) : null,
+              }
+        }
+        fold={{ options: foldValues, value: work.foldType, onPick: (code) => setWork((w) => ({ ...w, foldType: code })) }}
+        width={widthField}
+        quality={{ grades: qualityGrades, value: work.voluntaryEntry.qualityGrade, onPick: (g, a) => pickGrade(g as QualityGrade, a) }}
+        preview={{
+          preview: livePreview.preview,
+          stale: livePreview.stale,
+          fallbackRows: (openCard.card.rows ?? []).map((r) => ({ key: r.key, text: `${r.label}: ${r.value}`, muted: r.muted })),
+          ctx: { owner: !!owner, batchEnabled: openFinal.batch.enabled, manualLength: cutMode === 'manual' },
+          forWhom: owner ? (openCard.card.consignee?.text ?? owner.name) : customerName,
+          onOpenInfo: () => setLabelInfoOpen(true),
+          length: { value: work.voluntaryEntry.length, set: setCutLength },
+          kg: { value: openFinal.kgText, set: openFinal.setKgText, onTart: openCard.card.kg.onTart },
+          width: { value: openFinal.widthText, set: openFinal.setWidthText, placeholder: openCard.card.width.placeholder },
+          quality: {
+            grades: qualityGrades.map((g) => ({ code: g.code, name: g.name })),
+            value: work.voluntaryEntry.qualityGrade,
+            pick: (code) => {
+              const g = qualityGrades.find((q) => q.code === code);
+              if (g) pickGrade(g, false);
+            },
+          },
+          onConsignee: openCard.card.consignee?.onPress,
+          onCustomer: () => setKimePickerOpen(true),
+          footer:
+            !owner && targeted ? (
+              <LabelNamePreview
+                rollId={roll.rollId}
+                orderLineId={work.voluntaryEntry.targetOrderLineId ?? null}
+                customerId={work.voluntaryEntry.targetCustomerId ?? null}
+              />
+            ) : null,
+        }}
+      />
+    );
+  };
+
+  /** Geniş ana kesim: iş sekmeleri (>1 iş) ya da yalnız belge kardeş seçicisi. */
+  const renderWideJobTabs = (job: NonNullable<typeof activeJob>) =>
+    showJobTabs(openJobs.length) ? (
+      // İş değiştirme bugünkü sekme çubuğuyla (yalnız >1 açık işte); tek işte detay/yenile/kapat "Diğer"de.
+      <View style={[styles.tabBar, styles.wideTabBar]}>
+        <DocSiblingsStrip
+          siblings={docSiblings.siblings}
+          activeCardBarcode={job.cardBarcode ?? null}
+          onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+          style={styles.partySelector}
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+          {openJobs.map((j) => (
+            <JobTab
+              key={j.cardId}
+              job={j}
+              active={j.cardId === activeCardId}
+              onPress={() => (j.cardId === activeCardId ? setWoDetailId(j.stepSummary.workOrderId ?? null) : setActiveCardId(j.cardId))}
+              onClose={() => closeJob(j.cardId)}
+            />
+          ))}
+        </ScrollView>
+        <View style={styles.tabRefreshWrap}>
+          <RefreshButton
+            onPress={activeRefresh.onRefresh}
+            refreshing={activeRefresh.refreshing}
+            isError={activeRefresh.isError}
+            errorMessage={activeRefresh.errorMessage}
+            successMessage={activeRefresh.successMessage}
+          />
+        </View>
+      </View>
+    ) : (
+      // Çok partili belgede kardeş iş emri seçici (tek partide kendisi çizilmez).
+      <DocSiblingsStrip
+        siblings={docSiblings.siblings}
+        activeCardBarcode={job.cardBarcode ?? null}
+        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+        style={styles.partySelector}
+      />
+    );
+
+  /** Geniş ana kesim "Parti listesi" (≤1 partide çizilmez) + partide birden çok top varsa top kuyruğu. */
+  const renderWidePartyList = (job: NonNullable<typeof activeJob>, parties: ReturnType<typeof partyCards>) => (
+    <>
+      {showPartyList(parties) && (
+        <View style={styles.wideCard} testID="tambur-parti-listesi">
+          <View style={styles.wideCardHead}>
+            <Text style={styles.wideCardTitle}>Parti listesi</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.wideCardMeta}>{`${parties.length} parti`}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.partyScroll}>
+            {parties.map((c) => (
+              <TouchableRipple
+                key={c.key}
+                onPress={c.selected ? undefined : () => selectRoll(c.rollId)}
+                style={[styles.partyTile, c.selected && styles.partyTileOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: c.selected }}
+                accessibilityLabel={`Parti ${c.label}, ${c.meters.toFixed(1)} metre`}
+                testID={`tambur-parti-${c.key}`}
+              >
+                <View>
+                  <Text style={[styles.partyTileTitle, c.selected && styles.partyTileTitleOn]} numberOfLines={1}>
+                    {c.label}
+                  </Text>
+                  <Text style={styles.partyTileSub}>{`${c.meters.toFixed(1)} m`}</Text>
+                </View>
+              </TouchableRipple>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+      {job.stepSummary.rolls.length > Math.max(parties.length, 1) && (
+        // Partide birden çok top varsa top seçimi bugünkü kuyrukla.
+        <View style={styles.wideQueue}>
+          <BranchGroupedRollList
+            rolls={job.stepSummary.rolls}
+            selectedRollId={job.selectedRollId}
+            onSelect={selectRoll}
+            refreshing={activeRefresh.refreshing}
+            onRefresh={activeRefresh.onRefresh}
+          />
+        </View>
+      )}
+    </>
+  );
+  /** Geniş ana kesim: Ölçüm kartı + alt şeridin sağ grubu (kip · Bitir), aynı kenarda. */
+  const renderWideMeasure = () => {
+    const suggestion = splitSuggestion(openFinal.settings.splitLengthM, selectedRoll?.currentQty ?? 0);
+    const endMode = !shouldAutoPrintAfterCut(openFinal.settings);
+    return (
+      <>
+        <TamburMeasureCard
+          mode={cutMode}
+          length={{ value: work.voluntaryEntry.length, onChange: setCutLength, onClear: clearCutLength, placeholder: 'Boş = kalanı kes' }}
+          kg={
+            openCard.card.kg.visible
+              ? { value: openFinal.kgText, onChange: openFinal.setKgText, required: openCard.card.kg.required, onTart: openCard.card.kg.onTart, tartBusy: openCard.card.kg.tartBusy }
+              : null
+          }
+          extras={
+            suggestion || endMode ? (
+              <View style={styles.wideExtras}>
+                {suggestion ? (
+                  <Chip
+                    icon="ruler"
+                    compact
+                    onPress={() => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: suggestion } }))}
+                    testID="tambur-bolme-onerisi"
+                  >
+                    {`Bölme ${suggestion} m`}
+                  </Chip>
+                ) : null}
+                {endMode ? <Text style={styles.wideCardMeta}>Etiket iş bitince basılır</Text> : null}
+              </View>
+            ) : null
+          }
+        />
+        <TamburModeBitirBar
+          mode={cutMode}
+          onToggle={() => void setCutMode(nextCutMode(cutMode))}
+          busy={cutOpenFabricMutation.isPending || measuring}
+          onBitir={bitirOpenFabric}
+          bitirLoading={finalizeOpenFabricMutation.isPending}
+        />
+      </>
+    );
+  };
+
+  /** Geniş ana kesim sağ sütunu: İş emri listesi (yalnız >1 iş) · top kuyruğu (>1 top) · Çıkan etiketler · Ölçüm. */
+  const renderWideRight = (job: NonNullable<typeof activeJob>) => {
+    const parties = partyCards(job.stepSummary.rolls, job.selectedRollId);
+    return (
+      <View style={styles.wideRight}>
+        {manualBarcodeEntry && (
+          <ScannerEntryBar
+            value={cardBarcode}
+            onChangeText={setCardBarcode}
+            placeholder="Refakat kartı barkodu okut/yaz..."
+            onResolve={handleResolveCard}
+            resolving={resolvingCard}
+            onScan={() => openScanner()}
+            onList={() => openList()}
+            tone="blue"
+            hardwareListening
+          />
+        )}
+        {renderWideJobTabs(job)}
+        {renderWidePartyList(job, parties)}
+        {woDetailId ? (
+          <React.Suspense fallback={null}>
+            <WorkOrderDetailSheet workOrderId={woDetailId} onClose={() => setWoDetailId(null)} onChanged={() => undefined} />
+          </React.Suspense>
+        ) : null}
+        <WorkOrderOutputPanel
+          title="Çıkan etiketler"
+          fill
+          workOrderId={job.stepSummary.workOrderId}
+          lastMeasure={lastMeasure}
+          onPrint={(r: Roll) => {
+            setLabelContext(undefined);
+            startPrint(r);
+          }}
+          onUndo={(r: Roll) => setPanelUndoTarget(r)}
+          onFixLabel={(r: Roll) => setLabelFixRoll(r)}
+          onPrintUnprinted={
+            shouldAutoPrintAfterCut({ printTiming })
+              ? undefined
+              : (rs: Roll[]) => {
+                  setLabelContext(undefined);
+                  setPendingPrintRolls(rs);
+                }
+          }
+        />
+        {renderWideMeasure()}
+      </View>
+    );
+  };
+
   const renderRightContent = () => {
     // MANUEL MOD: kart okutma çubuğu, açık iş sekmeleri ve top kuyruğu HİÇ
     // çizilmez — üçü de refakat kartına dayanır ve bu modda hiçbiri işletilmez.
     // Yerine ne olduğunu söyleyen bir panel + moddan çıkış (telefonda drawer'ın
     // içinden de ulaşılabilen ikinci kapı).
+    if (wideMain && activeJob) return renderWideRight(activeJob);
     if (manualMode) {
       return (
         <View style={styles.manualPane}>
@@ -3560,6 +3859,36 @@ export default function TamburScreen() {
       ];
   const phoneSecondRow = <StationActionBar actions={phoneActions} testIDPrefix="tambur-bar" />;
 
+  // İş emri Tambur adım notu şeridi — telefon/klasik ve geniş ana kesim aynı öğeyi çizer.
+  const stepNoteStrip = !!activeJob?.context?.stepNote?.trim() && (
+    <TouchableRipple
+      onPress={() => setNoteModalOpen(true)}
+      style={styles.noteStrip}
+    >
+      <View style={styles.noteStripInner}>
+        <Icon source="note-text-outline" size={16} color="#78350f" />
+        <Text style={styles.noteStripLabel}>Tambur Notu</Text>
+        <Text style={styles.noteStripText} numberOfLines={1}>
+          {activeJob.context.stepNote.trim()}
+        </Text>
+        <Icon source="chevron-right" size={16} color="#b45309" />
+      </View>
+    </TouchableRipple>
+  );
+  const bitirOpenFabric = () => {
+    if (!selectedRoll) return;
+    if (selectedRoll.currentQty > 0.05) {
+      setOpenFabricFinalizeOpen(true);
+    } else {
+      // Kalan yok → sorulacak bir şey de yok. `discard` gönderilir
+      // ama sapma satırı DOĞMAZ (qty 0 → `recordVarianceTx` atlar).
+      finalizeOpenFabricMutation.mutate({
+        rollId: selectedRoll.rollId,
+        remainingAction: 'discard',
+        foldType: work.foldType ?? null,
+      });
+    }
+  };
   // Tablet başlık aksiyonları — tek tablo; yerleşim kararı saf `tamburHeaderActions`ta.
   const { width: headerWinW } = useWindowDimensions();
   const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
@@ -3570,6 +3899,8 @@ export default function TamburScreen() {
     canLinkOrders,
     canFieldFix,
     hasActiveJob: !!activeJob,
+    labelInfo: wideMain,
+    singleJobTab: wideMain && !showJobTabs(openJobs.length),
   });
   const headerActionMeta = (
     a: TamburHeaderAction,
@@ -3601,6 +3932,14 @@ export default function TamburScreen() {
         };
       case 'standalone':
         return { icon: 'tag-multiple', label: 'Serbest Etiket', onPress: () => openStandalone() };
+      case 'labelInfo':
+        return { icon: 'tag-text-outline', label: 'Etiket bilgisi', onPress: () => setLabelInfoOpen(true) };
+      case 'woDetail':
+        return { icon: 'clipboard-text-outline', label: 'İş emri detayı', onPress: () => setWoDetailId(activeJob?.stepSummary.workOrderId ?? null) };
+      case 'refreshJob':
+        return { icon: 'refresh', label: 'İşi yenile', onPress: () => activeRefresh.onRefresh() };
+      case 'closeJob':
+        return { icon: 'close', label: 'İşi kapat', onPress: () => activeCardId && closeJob(activeCardId) };
     }
   };
   const renderHeaderAction = (a: TamburHeaderAction) => {
@@ -3697,7 +4036,7 @@ export default function TamburScreen() {
         }
       >
         {/* ════════ SOL: form ════════ */}
-        <View style={styles.formCol}>
+        <View style={[styles.formCol, wideMain && styles.formColWide]}>
           {manualMode ? (
             // ══ MANUEL EKLE — kartsız BİTMİŞ ürün ══════════════════════════
             // Top Kesme ile aynı sınıfta EXCLUSIVE bir mod: kabuk aynı (band +
@@ -4340,6 +4679,24 @@ export default function TamburScreen() {
                 Sağdaki kuyruktan birini seçin
               </Text>
             </View>
+          ) : wideMain ? (
+            <>
+              {renderWideCut(selectedRoll)}
+              {kartelaStrip}
+              {openCard.overlay}
+              <CutActionBar
+                compact={false}
+                kartelaOn={markAsKartela}
+                copies={copiesBar}
+                onToggleKartela={() => setMarkAsKartela((v) => !v)}
+                onKes={handleKes}
+                kesLoading={cutOpenFabricMutation.isPending || measuring}
+                kesDisabled={!work.voluntaryEntry.qualityGrade}
+                kesLabel="Kes & Etiket Bas"
+                kesSubLabel={kesSubLabel(cutMode, work.voluntaryEntry.length, selectedRoll.currentQty)}
+                wideLeft
+              />
+            </>
           ) : (
             <>
               {/* Sticky header — kalan metre + siparişler butonu prominent */}
@@ -4438,21 +4795,7 @@ export default function TamburScreen() {
               {/* İş emri Tambur adım notu — sticky şerit (header'ın hemen altında,
                   ScrollView dışında → kesim için aşağı kaydırınca kaybolmaz).
                   İlk satır dokunmadan görünür; dokun → tam not modal'i. */}
-              {!!activeJob?.context?.stepNote?.trim() && (
-                <TouchableRipple
-                  onPress={() => setNoteModalOpen(true)}
-                  style={styles.noteStrip}
-                >
-                  <View style={styles.noteStripInner}>
-                    <Icon source="note-text-outline" size={16} color="#78350f" />
-                    <Text style={styles.noteStripLabel}>Tambur Notu</Text>
-                    <Text style={styles.noteStripText} numberOfLines={1}>
-                      {activeJob.context.stepNote.trim()}
-                    </Text>
-                    <Icon source="chevron-right" size={16} color="#b45309" />
-                  </View>
-                </TouchableRipple>
-              )}
+              {stepNoteStrip}
 
               {/* Geniş tablette içerik ekrana sığar (K5); ScrollView yalnız büyük yazı ölçeğinde emniyet. */}
               <ScrollView
@@ -4641,19 +4984,7 @@ export default function TamburScreen() {
                 copies={copiesBar}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onKes={handleKes}
-                onBitir={() => {
-                  if (selectedRoll.currentQty > 0.05) {
-                    setOpenFabricFinalizeOpen(true);
-                  } else {
-                    // Kalan yok → sorulacak bir şey de yok. `discard` gönderilir
-                    // ama sapma satırı DOĞMAZ (qty 0 → `recordVarianceTx` atlar).
-                    finalizeOpenFabricMutation.mutate({
-                      rollId: selectedRoll.rollId,
-                      remainingAction: 'discard',
-                      foldType: work.foldType ?? null,
-                    });
-                  }
-                }}
+                onBitir={bitirOpenFabric}
                 bitirLoading={finalizeOpenFabricMutation.isPending}
                 // cutOpenFabric offline-aware değil → isPending'de kilitlenir.
                 // Otomatik modda makineden okuma uçuşurken de (measuring) kilitli.
@@ -4677,13 +5008,15 @@ export default function TamburScreen() {
 
         {/* ════════ SAĞ: card scan + tab + roll list + numpad ════════ */}
         {!compact && (
-          <View style={styles.rightCol}>
+          <View style={[styles.rightCol, wideMain && styles.rightColWide]}>
             {renderRightContent()}
             {/* Otomatik modda yazılacak bir şey yok → numpad gizlenir. Recut
                 akışı aktifse onun modu (recutMode), değilse açık-kumaş (cutMode). */}
-            {(recutRollMeta ? recutMode : cutMode) === 'manual' && (
+            {!wideMain && (recutRollMeta ? recutMode : cutMode) === 'manual' && (
               <NumpadHost style={styles.numpadHost} />
             )}
+            {/* Geniş ana kesim: sağ sütun kartlarla dolu → numpad alt sayfada açılır. */}
+            {wideMain && <NumpadModalHost />}
           </View>
         )}
 
@@ -8946,6 +9279,9 @@ const styles = StyleSheet.create({
   reprintBadge: { position: 'absolute', top: 4, right: 2, backgroundColor: '#dc2626' },
 
   formCol: { flex: 1.4 },
+  // Geniş ana kesim: hedef görseldeki ~54/46 oranı; zemin gri, kartlar beyaz.
+  formColWide: { flex: 1.2 },
+  rightColWide: { backgroundColor: colors.surfaceMuted, borderLeftWidth: 0 },
   // Compact (telefon) — form üstü sağa yaslı sağ panel tetiği
   compactTriggerBar: {
     flexDirection: 'row',
@@ -9807,6 +10143,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   tabScroll: { paddingHorizontal: 6, gap: 6, alignItems: 'center' },
+  // Geniş ana kesim sağ sütunu (2026-11-10, hedef görsel).
+  wideRight: { flex: 1, gap: 10, padding: 12 },
+  wideCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 12, gap: 8, borderWidth: 1, borderColor: colors.border },
+  wideCardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  wideCardTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  wideCardMeta: { fontSize: 13, color: colors.textMuted },
+  wideQueue: { maxHeight: 200, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  wideExtras: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  wideTabBar: { borderRadius: 14 },
+  partyScroll: { gap: 8, paddingVertical: 2 },
+  partyTile: { minWidth: 150, minHeight: 64, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: 'center' },
+  partyTileOn: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
+  partyTileTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  partyTileTitleOn: { color: colors.brandDark },
+  partyTileSub: { fontSize: 14, color: colors.textSecondary },
   partySelector: { marginHorizontal: 6, marginTop: 0, alignSelf: 'center' },
   hidden: { display: 'none' },
   tabRefreshWrap: {

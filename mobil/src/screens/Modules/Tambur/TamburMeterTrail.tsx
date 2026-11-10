@@ -24,7 +24,8 @@ export function useRollMeterTrail(rollId: string | null | undefined) {
   });
 }
 
-export function TamburMeterTrailView({ trail, pendingM }: { trail: RollMeterTrail | null | undefined; pendingM: number }) {
+export function TamburMeterTrailView({ trail, pendingM, tone = 'dark' }: { trail: RollMeterTrail | null | undefined; pendingM: number; tone?: 'dark' | 'light' }) {
+  const light = tone === 'light';
   const parts = meterTrailParts(trail);
   if (!parts) return null;
   const over = cutOverage(trail, pendingM);
@@ -32,33 +33,36 @@ export function TamburMeterTrailView({ trail, pendingM }: { trail: RollMeterTrai
     <View style={s.root} testID="tambur-metre-serit">
       <View style={s.row}>
         {parts.map((p, i) => (
-          <Text key={p} style={s.part}>
+          <Text key={p} style={[s.part, light && s.partLight]}>
             {i > 0 ? `· ${p}` : p}
           </Text>
         ))}
       </View>
       {over != null && (
         <View style={s.warn} testID="tambur-metre-asim">
-          <Icon source="alert-outline" size={14} color={WARN} />
-          <Text style={s.warnText}>{overageWarningText(over)}</Text>
+          <Icon source="alert-outline" size={14} color={light ? WARN_LIGHT : WARN} />
+          <Text style={[s.warnText, light && { color: WARN_LIGHT }]}>{overageWarningText(over)}</Text>
         </View>
       )}
     </View>
   );
 }
 
-export default function TamburMeterTrail({ rollId, pendingM }: { rollId: string | null | undefined; pendingM: number }) {
+export default function TamburMeterTrail({ rollId, pendingM, tone }: { rollId: string | null | undefined; pendingM: number; tone?: 'dark' | 'light' }) {
   const q = useRollMeterTrail(rollId);
-  return <TamburMeterTrailView trail={q.data ?? null} pendingM={pendingM} />;
+  return <TamburMeterTrailView trail={q.data ?? null} pendingM={pendingM} tone={tone} />;
 }
 
 // Koyu (#0f172a) bant üstünde okunur sarı; ikincil metin ≥12.
 const WARN = palette.amber[300];
+// Beyaz kart (geniş tablet bilgi kartı, 2026-11-10) üstünde okunur ton.
+const WARN_LIGHT = palette.amber[700];
 
 const s = StyleSheet.create({
   root: { marginTop: 3, gap: 2 },
   row: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 5 },
   part: { fontSize: 13, fontWeight: '600', color: palette.slate[300] },
+  partLight: { fontSize: 15, color: palette.slate[600] },
   warn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   warnText: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: WARN },
 });
