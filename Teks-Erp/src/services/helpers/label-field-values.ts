@@ -56,11 +56,18 @@ function measure(
   return { value: formatMeasure(n, dim, units), present: true, role };
 }
 
+// OPT-IN düz metin satırları — kaynağı olmayan topta boş → satır basılmaz: açık hata notu (KQ-D8) ·
+// müşteri belgesindeki kumaş/renk/top no (E3, H9) · müşteri barkodu (D4-F3) · emanet alıcısı (2026-11-10).
+const OPT_IN_TEXT_KEYS = ["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"] as const;
+type OptInTextKey = (typeof OPT_IN_TEXT_KEYS)[number];
+const isOptInTextKey = (key: string): key is OptInTextKey => (OPT_IN_TEXT_KEYS as readonly string[]).includes(key);
+
 /**
  * payload + field key → görüntü değeri/rol. Bilinmeyen key → present:false (atlanır).
  * Roller: barcode/qrCode=scan; itemName + metraj=headline; gerisi=row.
  */
 export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValue {
+  if (isOptInTextKey(key)) return str(payload[key]);
   switch (key) {
     case "barcode":
     case "qrCode":
@@ -117,24 +124,6 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Kartelalık damgası — yalnız top işaretliyse anlamlı (headline vurgu).
     case "kartelaMark":
       return { value: "KARTELALIK", present: payload.markedForKartela === true, role: "headline" };
-
-    // Açık hata notu (KQ-D8) — hatasız topta boş → satır basılmaz.
-    case "openDefects":
-      return str(payload.openDefects);
-    // Müşteri belgesindeki kumaş/renk metni (E3) — gelen belgesiz topta boş → satır basılmaz.
-    case "deliveryNoteItemText":
-      return str(payload.deliveryNoteItemText);
-    case "deliveryNoteColorText":
-      return str(payload.deliveryNoteColorText);
-    // Müşteri top no (H9) — gelen belgesiz topta boş → satır basılmaz.
-    case "deliveryNoteRollNo":
-      return str(payload.deliveryNoteRollNo);
-    // Müşteri barkodu (D4-F3) — metin olarak opt-in; kodsuz topta boş → satır basılmaz.
-    case "customerCode":
-      return str(payload.customerCode);
-    // Emanet alıcısı (2026-11-10) — alıcısız topta boş → satır basılmaz.
-    case "consigneeName":
-      return str(payload.consigneeName);
 
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.
