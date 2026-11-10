@@ -1,6 +1,6 @@
 // Canlı etiket önizlemesi saf eşlemesi: alan → düzenleyici, dokunulamazlar, taslak ve Kes ikinci satırı.
 import { editorRect } from './TamburInlineEditor';
-import { buildPreviewDraft, editorForKey, emptyFieldText, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
+import { buildPreviewDraft, editorForKey, emptyFieldText, isSystemAssignedField, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
 
 const own = { owner: false, batchEnabled: true, manualLength: true };
 
@@ -94,5 +94,19 @@ describe('emptyFieldText (yalnız önizleme)', () => {
     expect(emptyFieldText('', 'weightKg')).toBe('Kg — boş');
     expect(emptyFieldText('Lot:', 'labelBatchNo')).toBe('Lot — boş');
     expect(emptyFieldText('', 'bilinmeyen')).toBe('Alan — boş');
+  });
+});
+
+describe('isSystemAssignedField — kesimde sistemin atadığı alan "boş" değildir', () => {
+  it('backend auto işareti ya da (eski backend) sistem bind\'ında boş alan', () => {
+    expect(isSystemAssignedField({ bind: 'barcode', auto: true })).toBe(true);
+    expect(isSystemAssignedField({ bind: 'barcode', empty: true })).toBe(true);
+    expect(isSystemAssignedField({ bind: 'printedAt', empty: true })).toBe(true);
+  });
+  it('veri alanı (En, Kg) ve dolu sistem alanı sistem-atamalı sayılmaz', () => {
+    expect(isSystemAssignedField({ bind: 'weightKg', empty: true })).toBe(false);
+    expect(isSystemAssignedField({ bind: 'widthCm', empty: true })).toBe(false);
+    expect(isSystemAssignedField({ bind: 'printedAt' })).toBe(false);
+    expect(isSystemAssignedField({ bind: null, empty: true })).toBe(false);
   });
 });

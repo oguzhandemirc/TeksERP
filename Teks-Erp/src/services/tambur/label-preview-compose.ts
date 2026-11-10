@@ -24,7 +24,8 @@ export interface TamburLabelDraft {
 
 export type TamburPreviewElement =
   // empty: değeri olmayan veri alanı — YALNIZ önizlemede işaretlenir (basımda bugünkü gibi hiç çizilmez); text = alan etiketi.
-  | { type: "text"; x: number; y: number; hMm: number; bold: boolean; align: "left" | "center" | "right"; rot: number; wr: number; text: string; bind: string | null; empty?: true }
+  // auto: değeri kesimde SİSTEMİN atadığı alan (barkod metni, basım tarihi) — eksik değil, elle girilmez (2026-11-11).
+  | { type: "text"; x: number; y: number; hMm: number; bold: boolean; align: "left" | "center" | "right"; rot: number; wr: number; text: string; bind: string | null; empty?: true; auto?: true }
   | { type: "line" | "box"; x: number; y: number; wMm: number; hMm: number; thickMm: number }
   | { type: "code128"; x: number; y: number; wMm: number; hMm: number; human: boolean; humanHMm: number; value: string | null }
   | { type: "qr"; x: number; y: number; sizeMm: number }
@@ -43,6 +44,9 @@ export interface TamburLabelPreview {
   /** Akış şablonu (ya da şablonsuz yedek) → sıralı satırlar. */
   rows: Array<{ key: string | null; text: string; size: string; bold: boolean }> | null;
 }
+
+/** Değeri kesim anında sistemin atadığı alanlar: önizlemede değersiz olmaları beklenendir, "boş" uyarısı değildir. */
+export const SYSTEM_ASSIGNED_BINDS: ReadonlySet<string> = new Set(["barcode", "qrCode", "printedAt", "woundAt"]);
 
 /** Eski kademeli font yüksekliği (mm, ~203 dpi) — `hMm` olmayan eski elemanlar için yaklaşık. */
 const LEGACY_FONT_MM: Record<string, number> = { sm: 1.5, md: 2.2, lg: 3.0, xl: 4.2 };
@@ -81,8 +85,10 @@ export function composeCanvasElements(
       case "field":
       case "text": {
         const text = elementText(el, payload);
-        const empty = !text && el.type === "field";
-        if (!text && !empty) break;
+        const unset = !text && el.type === "field";
+        const auto = unset && SYSTEM_ASSIGNED_BINDS.has(el.bind);
+        const empty = unset && !auto;
+        if (!text && !unset) break;
         out.push({
           type: "text", x: el.x, y: el.y,
           hMm: el.hMm ?? LEGACY_FONT_MM[el.font ?? "md"] ?? 2.2,
@@ -93,6 +99,7 @@ export function composeCanvasElements(
           text: empty && el.type === "field" ? el.label?.trim() ?? "" : text ?? "",
           bind: el.type === "field" ? el.bind : null,
           ...(empty ? { empty: true as const } : {}),
+          ...(auto ? { auto: true as const } : {}),
         });
         break;
       }

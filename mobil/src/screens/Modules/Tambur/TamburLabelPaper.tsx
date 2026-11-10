@@ -7,7 +7,7 @@ import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { TamburLabelPreview, TamburPreviewElement } from '../../../services/tambur.service';
 import { colors, palette } from '../../../theme/tokens';
 import type { EditAnchor } from './TamburInlineEditor';
-import { emptyFieldText } from './labelPreviewMap';
+import { AUTO_FIELD_TEXT, emptyFieldText, isSystemAssignedField } from './labelPreviewMap';
 import { fitPaperScale } from './labelPaperFit';
 
 export interface PaperRow {
@@ -70,33 +70,39 @@ function TextElementView({ el, s, paperW, editable, onEdit }: { el: TextEl; s: n
       : el.align === 'center'
         ? { left: el.x * s - paperW * s, width: paperW * s * 2, alignItems: 'center' as const }
         : { left: el.x * s };
-  // Değersiz alan yalnız önizlemede kırmızı kesikli çerçeve + "… — boş" (kullanıcı 2026-11-11).
+  // Değersiz alan yalnız önizlemede kırmızı kesikli çerçeve + "… — boş" (kullanıcı 2026-11-11). Sistemin kesimde atadığı
+  // alan (barkod metni, tarih) eksik değildir: gri italik "kesimde atanır", dokunulamaz.
+  const auto = isSystemAssignedField(el);
+  const empty = !!el.empty && !auto;
+  const canEdit = editable && !auto;
+  const shown = auto ? AUTO_FIELD_TEXT : empty ? emptyFieldText(el.text, el.bind) : el.text;
   const txt = (
     <Text
       style={[
         { fontSize, lineHeight: fontSize * 1.15, fontWeight: el.bold ? '700' : '400', color: palette.black, fontFamily: 'monospace' },
-        el.empty && styles.emptyText,
+        empty && styles.emptyText,
+        auto && styles.autoText,
       ]}
       numberOfLines={1}
-      testID={el.empty ? `onizleme-bos-${el.bind}` : undefined}
+      testID={auto ? `onizleme-oto-${el.bind}` : empty ? `onizleme-bos-${el.bind}` : undefined}
     >
-      {el.empty ? emptyFieldText(el.text, el.bind) : el.text}
+      {shown}
     </Text>
   );
-  const hitStyle = el.empty ? styles.emptyHit : styles.editHit;
+  const hitStyle = empty ? styles.emptyHit : styles.editHit;
   return (
     <View style={[{ position: 'absolute', top: el.y * s - fontSize * 0.1 }, pos, el.rot ? { transform: [{ rotate: `${el.rot}deg` }] } : null]}>
-      {editable ? (
+      {canEdit ? (
         <TouchableRipple
           onPress={() => onEdit({ x: el.x * s, y: el.y * s, h: fontSize * 1.15, align: el.align })}
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
           style={hitStyle}
-          accessibilityLabel={`Düzenle: ${el.empty ? emptyFieldText(el.text, el.bind) : el.text}`}
+          accessibilityLabel={`Düzenle: ${shown}`}
           testID={`onizleme-alan-${el.bind}`}
         >
           {txt}
         </TouchableRipple>
-      ) : el.empty ? (
+      ) : empty ? (
         <View style={styles.emptyHit}>{txt}</View>
       ) : (
         txt
@@ -235,6 +241,7 @@ const styles = StyleSheet.create({
   },
   emptyHit: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: palette.red[600], borderRadius: 3, paddingHorizontal: 3, backgroundColor: palette.red[50] },
   emptyText: { color: palette.red[700], fontStyle: 'italic' },
+  autoText: { color: palette.slate[400], fontStyle: 'italic' },
   editHit: { backgroundColor: EDIT_BG, borderBottomWidth: 2, borderBottomColor: EDIT_BORDER, borderRadius: 3, paddingHorizontal: 2 },
   rowsPad: { padding: 10, gap: 4 },
   rowHit: { alignSelf: 'flex-start' },

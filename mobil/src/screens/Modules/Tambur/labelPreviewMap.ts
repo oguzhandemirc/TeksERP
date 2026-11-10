@@ -116,6 +116,18 @@ const FIELD_NAMES: Record<string, string> = {
   consigneeName: 'Alıcı',
 };
 
+/** Değeri kesimde sistemin atadığı alanlar — backend `SYSTEM_ASSIGNED_BINDS` aynası (eski backend `auto` göndermez). */
+const SYSTEM_ASSIGNED_BINDS: ReadonlySet<string> = new Set(['barcode', 'qrCode', 'printedAt', 'woundAt']);
+
+/** Önizleme alanı sistem atamalı mı: `auto` işareti ya da (eski backend) sistem bind'ında değersiz alan. Düzenlenmez, gri çizilir. */
+export function isSystemAssignedField(el: { bind: string | null; empty?: true; auto?: true }): boolean {
+  if (el.auto) return true;
+  return !!el.empty && !!el.bind && SYSTEM_ASSIGNED_BINDS.has(el.bind);
+}
+
+/** Sistem atamalı değersiz alanın önizleme yazısı. */
+export const AUTO_FIELD_TEXT = 'kesimde atanır';
+
 /** Önizlemede değersiz alanın yazısı (yalnız önizleme; basımda boş alan bugünkü gibi çizilmez): etiketi ya da alan adı + "— boş". */
 export function emptyFieldText(label: string, bind: string | null): string {
   const name = label.trim().replace(/:$/, '') || (bind ? FIELD_NAMES[bind] : null) || 'Alan';

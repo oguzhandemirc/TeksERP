@@ -5,9 +5,11 @@
 //   §1 applyTamburDraft: taslak metre/kg/en/kalite çocuğa; boş metre = kalanı kes; ana barkod BASILMAZ
 //   §2 composeCanvasElements: metin HTML render'ı ile AYNI (fmt biçimi dahil) · showIf taslak kaliteden ·
 //      barkod yer tutucu · alan elemanı bind taşır, sabit metin taşımaz · değersiz alan `empty` işaretli (yalnız önizleme)
+//      · sistemin kesimde atadığı alan (barkod metni) `auto`, `empty` DEĞİL (2026-11-11)
 //   §3 uç sözleşmesi: izin preview-fields ile aynı, route prisma import etmez, servis YAZMAZ
 // Negatif sonda (ölçüldü 2026-11-10): composeCanvasElements `elementText` yerine `fieldDisplayValue`
-// kullanınca §2 fmt kırmızı; applyTamburDraft barkodu korursa §1 kırmızı.
+// kullanınca §2 fmt kırmızı; applyTamburDraft barkodu korursa §1 kırmızı; SYSTEM_ASSIGNED_BINDS boşalınca
+// §2 sistem alanı kırmızı (ölçüldü 2026-11-11).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +38,7 @@ const ELEMENTS = [
   { id: "kg", type: "field", x: 97, y: 18, hMm: 4.4, bind: "weightKg", align: "right", fmt: { unit: "kg", decimals: 2 } },
   { id: "q2", type: "text", x: 3, y: 30, hMm: 3, text: "2. KALITE", showIf: { field: "qualityGrade", op: "in", values: ["2.KALITE"] } },
   { id: "bc", type: "code128", x: 3, y: 28, hMm: 12, human: true },
+  { id: "bcText", type: "field", x: 3, y: 42, hMm: 3, bind: "barcode" },
 ] as unknown as LabelElement[];
 
 async function main(): Promise<void> {
@@ -77,6 +80,9 @@ async function main(): Promise<void> {
   const kgEl = noKg.find((x) => x.type === "text" && x.bind === "weightKg");
   check("§2 kg yoksa kg alanı BOŞ işaretli gelir (önizlemede görünsün)", !!kgEl && kgEl.type === "text" && kgEl.empty === true && kgEl.text === "");
   check("§2 dolu alan boş işaretli değil", !texts.some((t) => t.empty));
+  const bcText = noKg.find((x) => x.type === "text" && x.bind === "barcode");
+  check("§2 sistem alanı (barkod metni) auto işaretli, boş DEĞİL", !!bcText && bcText.type === "text" && bcText.auto === true && bcText.empty === undefined, JSON.stringify(bcText));
+  check("§2 veri alanı auto işaretlenmez", !!kgEl && kgEl.type === "text" && kgEl.auto === undefined);
   check("§2 sabit metin boş işaretlenmez", !noKg.some((x) => x.type === "text" && x.bind === null && x.empty));
 
   console.log("\n[§3] uç sözleşmesi");
