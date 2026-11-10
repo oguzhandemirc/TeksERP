@@ -101,6 +101,16 @@ describe('StationActionBar', () => {
     expect(wide.getByText('Açık İşler · 2')).toBeTruthy();
   });
 
+  it('dar: her etiket tek satır ve sığmazsa küçülür (düğmeler eşit yükseklik)', () => {
+    const actions = build({ openJobs: { label: 'Açık İşler', count: 2 } });
+    const r = renderWithPaper(<StationActionBar actions={actions} testIDPrefix="b" />);
+    for (const label of ['Açık İşler', 'Tara', 'Belge okut', 'Diğer']) {
+      const t = r.getByText(label);
+      expect(t.props.numberOfLines).toBe(1);
+      expect(t.props.adjustsFontSizeToFit).toBe(true);
+    }
+  });
+
   it('geniş (800 dp): bugünkü düzen — hepsi satırda, Diğer yok', async () => {
     mockDims = { width: 800, height: 480, scale: 1, fontScale: 1 };
     const r = renderWithPaper(<StationActionBar actions={build()} testIDPrefix="b" />);

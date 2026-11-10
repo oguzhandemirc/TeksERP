@@ -58,10 +58,12 @@ function BarChip({
           ) : (
             <Icon source={icon} size={stacked ? 20 : 18} color={active ? palette.amber[900] : colors.textOnDark} />
           )}
-          {/* Dar düzende etiket kesilmez: iki satıra sarar (saha 2026-11-10). */}
+          {/* Dar düzende her düğme SABİT yükseklik: etiket tek satır, sığmazsa küçülür (kesilmez, sarmaz) — saha 2026-11-10. */}
           <Text
             style={[styles.text, stacked && styles.textStacked, active && styles.textOn]}
-            numberOfLines={stacked ? 2 : 1}
+            numberOfLines={1}
+            adjustsFontSizeToFit={stacked}
+            minimumFontScale={0.7}
           >
             {stacked || count === undefined ? label : `${label} · ${count}`}
           </Text>
@@ -150,6 +152,9 @@ export default function StationActionBar({ actions, testIDPrefix = 'station-bar'
   );
 }
 
+/** Dar düzen düğme yüksekliği = dikey dolgu 2×6 + ikon/sayı 20 + aralık 2 + tek satır etiket 16 (+ 6 pay); hepsi eşit. */
+const STACKED_CHIP_HEIGHT = 62;
+
 const styles = StyleSheet.create({
   chipWrap: { flex: 1 },
   chip: {
@@ -174,7 +179,7 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: 4,
     paddingVertical: 6,
-    minHeight: 56,
+    height: STACKED_CHIP_HEIGHT,
   },
   text: { color: colors.textOnDark, fontWeight: '700', fontSize: 13 },
   textStacked: { textAlign: 'center', lineHeight: 16 },
