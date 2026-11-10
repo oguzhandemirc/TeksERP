@@ -12,6 +12,9 @@ export interface LabelTextsState {
   scopeKey: string | null;
   itemName: string;
   colorName: string;
+  /** Etiket alıcısı (2026-11-10, yalnız emanet); null = malın sahibi (labelConsigneeId gitmez). */
+  consigneeId: string | null;
+  consigneeName: string | null;
   /** Bu kapsam için `last` tohumu uygulandı mı (bir kez; operatör girişini ezmez). */
   seeded: boolean;
 }
@@ -20,10 +23,21 @@ export interface LabelTextsLast {
   itemName: string | null;
   colorName: string | null;
   batchNo: string | null;
+  consigneeId?: string | null;
+  consigneeName?: string | null;
+}
+
+/** Kesim/bitir gövdesine yayılan etiket alanları (`...labelTexts`) — eski backend bilmediğini strip eder. */
+export interface LabelTextsBody {
+  labelItemName?: string;
+  labelColorName?: string;
+  labelConsigneeId?: string;
+  weightSource?: 'SCALE' | 'MANUAL' | 'SIMULATED';
+  widthCm?: number;
 }
 
 export function initialLabelTexts(scopeKey: string | null): LabelTextsState {
-  return { scopeKey, itemName: '', colorName: '', seeded: false };
+  return { scopeKey, itemName: '', colorName: '', consigneeId: null, consigneeName: null, seeded: false };
 }
 
 export function normalizeLabelText(text: string | null | undefined): string | null {
@@ -40,7 +54,19 @@ export function withTextsScope(s: LabelTextsState, scopeKey: string | null): Lab
 export function withSeed(s: LabelTextsState, last: LabelTextsLast | null | undefined): LabelTextsState {
   if (s.seeded) return s;
   if (!last) return { ...s, seeded: true };
-  return { ...s, itemName: last.itemName ?? '', colorName: last.colorName ?? '', seeded: true };
+  return {
+    ...s,
+    itemName: last.itemName ?? '',
+    colorName: last.colorName ?? '',
+    consigneeId: last.consigneeId ?? null,
+    consigneeName: last.consigneeId ? (last.consigneeName ?? null) : null,
+    seeded: true,
+  };
+}
+
+/** Alıcı seç (null = sahibine dön). Ad/renk alıcıya özgü olabileceği için dokunulmaz; öneriler alıcıyla tazelenir. */
+export function withConsignee(s: LabelTextsState, c: { id: string; name: string } | null): LabelTextsState {
+  return { ...s, consigneeId: c?.id ?? null, consigneeName: c?.name ?? null, seeded: true };
 }
 
 export function withTexts(s: LabelTextsState, v: { itemName: string; colorName: string }): LabelTextsState {

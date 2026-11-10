@@ -1175,11 +1175,25 @@ export interface TamburMeasureBody {
   rawCounter?: number | null;
 }
 
+/** Etiket alıcısı · kg kaynağı · ölçülen en (2026-11-10) — tambur kesim/bitir uçlarının ortak ek alanları.
+ *  Eski backend zod `strip` eder (alanlar sessizce düşer, kesim yine geçer). */
+export type TamburWeightSource = 'SCALE' | 'MANUAL' | 'SIMULATED';
+export interface TamburLabelExtras {
+  /** Emanet topun alıcısı (müşterimizin müşterisi); null/yok = malın sahibi. */
+  labelConsigneeId?: string | null;
+  /** Kg'nin kaynağı — kg yoksa gönderilmez (backend 400 WEIGHT_SOURCE_WITHOUT_KG). */
+  weightSource?: TamburWeightSource;
+  /** Operatörün ölçtüğü en (cm); yok = atadan miras / gelen belge. */
+  widthCm?: number | null;
+}
+
 export interface TamburCut {
   length: number;
   qualityGrade: string;
   relatedErrorIds?: string[];
   measure?: TamburMeasureBody;
+  weightKg?: number | null;
+  weightSource?: TamburWeightSource;
 }
 
 export interface TamburFinalizeRequest {
@@ -1363,7 +1377,7 @@ export interface TamburContext {
 }
 
 /** `POST /api/tambur/:id/cut` — açık kumaşta tek kesim */
-export interface TamburCutRequest {
+export interface TamburCutRequest extends TamburLabelExtras {
   lengthMeters: number;
   /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; eski backend yok sayar. */
   weightKg?: number | null;
@@ -1405,7 +1419,7 @@ export type TamburFinalizeRemainingAction =
   | "scrap"
   | "discard";
 
-export interface TamburFinalizeOpenFabricRequest {
+export interface TamburFinalizeOpenFabricRequest extends TamburLabelExtras {
   /**
    * Kalan metre (parent.currentQty) için operatör kararı:
    *   - keep_1kalite → 1.KALITE barkodlu top oluştur

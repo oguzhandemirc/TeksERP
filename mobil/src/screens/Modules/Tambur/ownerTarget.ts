@@ -49,3 +49,12 @@ export function useOwnerDefaultTarget(
     decidedFor.current = null;
   };
 }
+
+/**
+ * Sahip kilidi (2026-11-10): emanet topta "Kime?" çizilmez — hedef sabit sahiptir, sunucu başka müşteriyi 409'lar.
+ * `ownerLocked` eski backend'de yok → sahip varlığına düşülür; ikisi de yoksa kendi topumuz (Kime? bugünkü gibi).
+ */
+export function ownerLockOf(s: { ownerLocked?: boolean; ownerCustomer?: OwnerRef | null } | null | undefined): OwnerRef | null {
+  const owner = s?.ownerCustomer ?? null;
+  return owner && s?.ownerLocked !== false ? owner : null;
+}

@@ -74,3 +74,24 @@ export function overridePatch(
   }
   return out;
 }
+
+/** Son "Tart" okuması — kutudaki metin bu değerden sapınca kaynak ELLE sayılır. */
+export interface KgStamp {
+  kg: number;
+  source: 'SCALE' | 'SIMULATED';
+}
+
+/** Gövdeye giden kg kaynağı: kg yoksa hiç (backend kg'sız kaynağı 400'ler); Tart değeri aynen duruyorsa onun kaynağı; aksi ELLE. */
+export function kgSource(stamp: KgStamp | null | undefined, kgText: string): 'SCALE' | 'MANUAL' | 'SIMULATED' | undefined {
+  const kg = parseKg(kgText);
+  if (kg == null || Number.isNaN(kg)) return undefined;
+  return stamp && Math.abs(stamp.kg - kg) < 0.0005 ? stamp.source : 'MANUAL';
+}
+
+/** Ölçülen en (cm): boş → null (miras), bozuk/sınır dışı → NaN. Sunucu sınırı ayrıca denetler. */
+export function parseWidthCm(text: string): number | null {
+  const t = text.trim();
+  if (t === '') return null;
+  const n = Number(t.replace(',', '.'));
+  return Number.isFinite(n) && n > 0 && n <= 1000 ? Math.round(n * 10) / 10 : NaN;
+}

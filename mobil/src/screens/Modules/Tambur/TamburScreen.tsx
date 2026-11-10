@@ -44,9 +44,10 @@ import { showStopOpenEntryWarning } from '../../../components/machine-stop/entry
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
+import { useTamburLabelCard } from './useTamburLabelCard';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
-import { labelSummaryText } from './labelTexts';
+import { labelSummaryText, type LabelTextsBody } from './labelTexts';
 import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
 import { useOwnerDefaultTarget } from './ownerTarget';
 import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
@@ -76,6 +77,7 @@ import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
+import TruncatedText from '../../../components/TruncatedText';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -108,7 +110,6 @@ import {
   type TamburMeasure,
 } from './measureSource';
 import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
-import TamburTargetValueChips from './TamburTargetValueChips';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
@@ -192,6 +193,7 @@ import { CustomerCodeBindSheet } from '../../../components/customerCode/Customer
 import { CustomerCodeBindButton } from '../../../components/customerCode/CustomerCodeBindButton';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { useCustomerCodeBindable } from '../../../components/customerCode/useCustomerCodeBindable';
+const WorkOrderDetailSheet = React.lazy(() => import('../HizliIsEmri/WorkOrderDetailSheet'));
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -1019,6 +1021,7 @@ export default function TamburScreen() {
     setRecutTargetCustomerName(o.name);
   });
   const [labelInfoOpen, setLabelInfoOpen] = useState(false);
+  const [woDetailId, setWoDetailId] = useState<string | null>(null);
   // Etiket özeti/penceresi: boş kutuda basılacak kaynak değerler (kumaşın kendi adı/rengi, İE parti no).
   const openLabelDefaults = {
     itemName: selectedRoll?.itemName ?? null,
@@ -1034,6 +1037,28 @@ export default function TamburScreen() {
   const recutLabelSummary = labelSummaryText({
     itemName: recutFinal.texts.itemName, colorName: recutFinal.texts.colorName, batchNo: recutFinal.batch.value,
     batchEnabled: recutFinal.batch.enabled, defaults: recutLabelDefaults,
+  });
+  // "Etikette" kartı (2026-11-10): şablon alanları + kimin için (emanet) + kg Tart/elle + en.
+  const qualityNameOf = (code: string | null | undefined) => qualityGrades.find((q) => q.code === code)?.name ?? code ?? null;
+  const openCard = useTamburLabelCard({
+    final: openFinal,
+    summaryText: openLabelSummary,
+    onOpenInfo: () => setLabelInfoOpen(true),
+    defaults: openLabelDefaults,
+    qualityName: qualityNameOf(work.voluntaryEntry.qualityGrade),
+    meters: work.voluntaryEntry.length?.trim() || (selectedRoll ? String(selectedRoll.currentQty).replace('.', ',') : null),
+    inheritedWidthCm: selectedRoll?.width ?? null,
+    targetCustomerName: work.voluntaryEntry.targetCustomerName ?? null,
+  });
+  const recutCard = useTamburLabelCard({
+    final: recutFinal,
+    summaryText: recutLabelSummary,
+    onOpenInfo: () => setLabelInfoOpen(true),
+    defaults: recutLabelDefaults,
+    qualityName: qualityNameOf(recutQualityGrade),
+    meters: recutCutLength.trim() || null,
+    inheritedWidthCm: recutRollMeta?.width ?? null,
+    targetCustomerName: recutTargetCustomerName ?? null,
   });
   const printTiming = useTamburPrintTiming();
 
@@ -1397,7 +1422,7 @@ export default function TamburScreen() {
       /** Müşteri parti no (etiket); ayar kapalıysa undefined. */
       labelBatchNo?: string | null;
       /** Etiket kumaş adı / renk (boşsa alan yok). */
-      labelTexts?: { labelItemName?: string; labelColorName?: string };
+      labelTexts?: LabelTextsBody;
     }) =>
       tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
@@ -1714,7 +1739,7 @@ export default function TamburScreen() {
       /** S5 tartım (kg). */
       weightKg?: number;
       labelBatchNo?: string | null;
-      labelTexts?: { labelItemName?: string; labelColorName?: string };
+      labelTexts?: LabelTextsBody;
     }) =>
       tamburService.cutWarehouseRoll(rollId, withMeasure({
         cutLength,
@@ -1828,7 +1853,7 @@ export default function TamburScreen() {
       varianceReasonText?: string | null;
       weightKg?: number;
       labelBatchNo?: string | null;
-      labelTexts?: { labelItemName?: string; labelColorName?: string };
+      labelTexts?: LabelTextsBody;
     }) =>
       tamburService.finalizeWarehouseCut(rollId, {
         remainingAction,
@@ -3038,11 +3063,16 @@ export default function TamburScreen() {
    * `manualQualityGrades` gerekçesi).
    */
   const renderKimeKalite = (opts: {
+    /** Emanet top (sahip kilidi, 2026-11-10): Kime? çizilmez, sahip sabit satırda. */
+    owner?: { id: string; name: string } | null;
     orderShortcuts?: React.ReactNode;
     grades: QualityGrade[];
     gradeNote?: string | null;
   }) => (
     <View style={styles.kimeKaliteRow}>
+      {opts.owner ? (
+        <OwnerLockColumn owner={opts.owner} />
+      ) : (
       <View style={styles.kimeCol}>
         <Text style={styles.cutSubLabel}>Kime?</Text>
         {/* Açık "Stok" seçeneği — hiç seçim yokken aktif görünür. */}
@@ -3058,6 +3088,7 @@ export default function TamburScreen() {
           customerId={work.voluntaryEntry.targetCustomerId ?? null}
         />
       </View>
+      )}
 
       <View style={styles.kaliteCol}>
         <Text style={styles.cutSubLabel}>Kalite</Text>
@@ -3261,15 +3292,15 @@ export default function TamburScreen() {
         </View>
       ) : null}
 
-      <DocSiblingsStrip
-        siblings={docSiblings.siblings}
-        activeCardBarcode={activeJob?.cardBarcode ?? null}
-        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
-        onDismiss={docSiblings.clear}
-      />
-
       {openJobs.length > 0 && (
         <View style={styles.tabBar}>
+          {/* K6 (2026-11-10): çok partili belgede parti seçici İE sekmeleriyle AYNI satırda; tek partide çizilmez. */}
+          <DocSiblingsStrip
+            siblings={docSiblings.siblings}
+            activeCardBarcode={activeJob?.cardBarcode ?? null}
+            onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+            style={styles.partySelector}
+          />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -3280,7 +3311,7 @@ export default function TamburScreen() {
                 key={job.cardId}
                 job={job}
                 active={job.cardId === activeCardId}
-                onPress={() => setActiveCardId(job.cardId)}
+                onPress={() => (job.cardId === activeCardId ? setWoDetailId(job.stepSummary.workOrderId ?? null) : setActiveCardId(job.cardId))}
                 onClose={() => closeJob(job.cardId)}
               />
             ))}
@@ -3297,8 +3328,12 @@ export default function TamburScreen() {
         </View>
       )}
 
-      {/* SY-F3: iş emrinin hedef değerleri ("Kuşak: ZEBRA") — salt-okunur; boşsa çizilmez. */}
-      {activeJob && <TamburTargetValueChips targetValues={activeJob.stepSummary.targetValues} />}
+      {/* K1 (2026-11-10): İE hedef değerleri ana ekranda çizilmez; aktif İE sekmesine dokununca açılan detayda. */}
+      {woDetailId ? (
+        <React.Suspense fallback={null}>
+          <WorkOrderDetailSheet workOrderId={woDetailId} onClose={() => setWoDetailId(null)} onChanged={() => undefined} />
+        </React.Suspense>
+      ) : null}
       {!activeJob ? (
         <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
@@ -4018,7 +4053,8 @@ export default function TamburScreen() {
 
                   {/* Kime + Kalite yan yana iki sütun; her sütun kendi dikey listesi */}
                   <View style={styles.kimeKaliteRow}>
-                    <View style={styles.kimeCol}>
+                    {recutFinal.owner ? <OwnerLockColumn owner={recutFinal.owner} /> : null}
+                    <View style={[styles.kimeCol, recutFinal.owner ? styles.hidden : null]}>
                       <Text style={styles.cutSubLabel}>Kime?</Text>
                       {stokChip}
                       {kimeListChip}
@@ -4112,10 +4148,11 @@ export default function TamburScreen() {
                 onKgChange={recutFinal.setKgText}
                 onSuggest={handleRecutLengthChange}
                 labelSummary={{ text: recutLabelSummary, onPress: () => setLabelInfoOpen(true) }}
+                card={recutCard.card}
               />
+              {recutCard.overlay}
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
-                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
                 compact={compact}
                 kartelaOn={markAsKartela}
                 copies={copiesBar}
@@ -4398,6 +4435,7 @@ export default function TamburScreen() {
                       kaldırır = stok). Manuel modda iş emri yok → kısayol yok. */}
                   {renderKimeKalite({
                     grades: qualityGrades,
+                    owner: openFinal.owner,
                     orderShortcuts: (
                       <ScrollView
                         style={styles.kimeScroll}
@@ -4468,10 +4506,11 @@ export default function TamburScreen() {
                 onKgChange={openFinal.setKgText}
                 labelSummary={{ text: openLabelSummary, onPress: () => setLabelInfoOpen(true) }}
                 onSuggest={(t) => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: t } }))}
+                card={openCard.card}
               />
+              {openCard.overlay}
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
-                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
                 compact={compact}
                 kartelaOn={markAsKartela}
                 copies={copiesBar}
@@ -9570,6 +9609,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   tabScroll: { paddingHorizontal: 6, gap: 6, alignItems: 'center' },
+  partySelector: { marginHorizontal: 6, marginTop: 0, alignSelf: 'center' },
+  hidden: { display: 'none' },
   tabRefreshWrap: {
     paddingHorizontal: 6,
     justifyContent: 'center',
@@ -9773,4 +9814,25 @@ const cameraStyles = StyleSheet.create({
     color: '#0f172a',
     fontVariant: ['tabular-nums'],
   },
+});
+
+/** Emanet topun sabit sahibi (2026-11-10): Kime? yerine; sunucu başka hedefi 409 ile reddeder. */
+function OwnerLockColumn({ owner }: { owner: { id: string; name: string } }) {
+  return (
+    <View style={[styles.kimeCol, ownerStyles.box]} testID="tambur-sahip" accessibilityLabel={`Malın sahibi ${owner.name}, etiket sahibine basılır`}>
+      <Text style={styles.cutSubLabel}>Sahibi</Text>
+      <View style={ownerStyles.row}>
+        <Icon source="lock" size={20} color={colors.warningDark} />
+        <TruncatedText style={ownerStyles.name}>{owner.name}</TruncatedText>
+      </View>
+      <Text style={ownerStyles.hint}>Müşteri malı (emanet) — hedef değiştirilemez</Text>
+    </View>
+  );
+}
+
+const ownerStyles = StyleSheet.create({
+  box: { gap: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 56, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.warningContainer },
+  name: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.warningDark },
+  hint: { fontSize: 12, color: colors.textSecondary },
 });

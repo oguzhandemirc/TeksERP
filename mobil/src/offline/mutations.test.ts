@@ -260,6 +260,9 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
       labelBatchNo: "J1",
       labelItemName: "SULTAN",
       labelColorName: "EKRU",
+      labelConsigneeId: "k-1",
+      weightSource: "SCALE",
+      widthCm: 148,
     });
     expect(tamburService.finalizeOpenFabric).toHaveBeenCalledWith(
       "r-pg",
@@ -273,6 +276,9 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
         labelBatchNo: "J1",
         labelItemName: "SULTAN",
         labelColorName: "EKRU",
+        labelConsigneeId: "k-1",
+        weightSource: "SCALE",
+        widthCm: 148,
       }),
     );
   });

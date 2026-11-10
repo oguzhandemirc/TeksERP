@@ -5,7 +5,7 @@
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
-import TamburFinalLabelStrip from './TamburFinalLabelStrip';
+import TamburFinalLabelStrip, { type TamburLabelCardProps } from './TamburFinalLabelStrip';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import { DEFAULT_LABEL_SETTINGS } from './finalLabel';
@@ -104,6 +104,67 @@ function fakeFinal(over: { batchEnabled?: boolean; itemName?: string; colorName?
     batch, texts, suggestionParams: { workOrderId: 'wo1' },
   } as unknown as TamburFinalLabelState & { texts: typeof texts; batch: typeof batch };
 }
+
+describe('TamburFinalLabelStrip — Etikette kartı (2026-11-10)', () => {
+  const card = (o: Partial<TamburLabelCardProps> = {}): TamburLabelCardProps => ({
+    consignee: null,
+    templateName: 'Final Top Etiketi',
+    rows: [
+      { key: 'consigneeName', label: 'Alıcı', value: 'ABC', muted: false },
+      { key: 'widthCm', label: 'En', value: '—', muted: true },
+    ],
+    summaryText: 'Etiket: SULTAN',
+    onPress: noop,
+    kg: { visible: false, required: false, text: '', onChange: noop },
+    width: { visible: false, text: '', onChange: noop, placeholder: 'En (cm)' },
+    ...o,
+  });
+  const strip = (c: TamburLabelCardProps, weighRequired = false) => renderWithPaper(
+    <TamburFinalLabelStrip settings={{ ...DEFAULT_LABEL_SETTINGS, weighRequired }} remaining={120} kgText="" onKgChange={noop} onSuggest={noop}
+      labelSummary={{ text: 'ESKİ ÖZET', onPress: noop }} card={c} />,
+  );
+
+  it('kart özetin yerini alır: şablon adı + yalnız verilen satırlar; kendi topta "kimin için" yok', () => {
+    const r = strip(card());
+    expect(r.getByTestId('tambur-etikette-kart')).toBeTruthy();
+    expect(r.getByText('Şablon: Final Top Etiketi')).toBeTruthy();
+    expect(r.getByTestId('tambur-etikette-consigneeName').props.children).toBe('Alıcı: ABC');
+    expect(r.getByTestId('tambur-etikette-widthCm').props.children).toBe('En: —');
+    expect(r.queryByText('ESKİ ÖZET')).toBeNull();
+    expect(r.queryByTestId('tambur-alici-sec')).toBeNull();
+  });
+
+  it('emanette "kimin için" satırı görünür ve dokununca seçici açılır', () => {
+    const onPress = jest.fn();
+    const r = strip(card({ consignee: { text: 'HHL MC (malın sahibi)', onPress } }));
+    expect(r.getByText('HHL MC (malın sahibi)')).toBeTruthy();
+    fireEvent.press(r.getByTestId('tambur-alici-sec'));
+    expect(onPress).toHaveBeenCalled();
+  });
+
+  it('eski backend (rows null) → özet metni kartın içinde', () => {
+    const r = strip(card({ rows: null }));
+    expect(r.getByText('Etiket: SULTAN')).toBeTruthy();
+  });
+
+  it('K2: kg görünürse kartta kutu + Tart; şeritteki kg kutusu çift çizilmez', () => {
+    const onTart = jest.fn();
+    const onChange = jest.fn();
+    const r = strip(card({ kg: { visible: true, required: true, text: '', onChange, onTart } }), true);
+    expect(r.getAllByTestId('tambur-tartim-kg')).toHaveLength(1);
+    fireEvent.press(r.getByTestId('tambur-tart'));
+    expect(onTart).toHaveBeenCalled();
+    fireEvent.changeText(r.getByTestId('tambur-tartim-kg'), '9');
+    expect(onChange).toHaveBeenCalledWith('9');
+  });
+
+  it('kg/en görünmezse kutular yok; tartısız cihazda Tart yok', () => {
+    expect(strip(card()).queryByTestId('tambur-tartim-kg')).toBeNull();
+    const r = strip(card({ kg: { visible: true, required: false, text: '', onChange: noop }, width: { visible: true, text: '', onChange: noop, placeholder: 'En 150' } }));
+    expect(r.queryByTestId('tambur-tart')).toBeNull();
+    expect(r.getByTestId('tambur-en-cm')).toBeTruthy();
+  });
+});
 
 describe('TamburLabelInfoModal', () => {
   beforeEach(() => {

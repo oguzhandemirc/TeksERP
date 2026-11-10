@@ -6,8 +6,7 @@ import { packingService } from '../services/packing.service';
 import { isWorkSessionLost } from '../services/api';
 import { isLicenseNotified } from '../lib/license';
 import { useMachinePeripherals, primaryScaleFor } from './useMachinePeripherals';
-import { buildIoFromPeripheral } from './usePeripheralIO';
-import { isBonded, pairByMac } from '../services/hal/btClassic.transport';
+import { readScaleOnce } from '../services/hal/readScale';
 
 // =============================================================================
 // Çuval tartısı — TEK DOKUNUŞ. "Tart" (⚖) tuşuna basılınca kantardan okunur ve
@@ -52,81 +51,15 @@ export function useSackWeigh(onSaved: () => void) {
    * "gerçek ölçüm" gibi göndermez.
    */
   const readFromScale = async (): Promise<{ kg: number; source: WeighSource } | null> => {
-    const p = primaryScaleFor(scalePeripherals);
-    if (!p) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kantar tanımlı değil',
-        text2: 'Admin → Cihaz Kaydı’ndan bu yere SCALE ekleyin (veya ⋮ → “Elle kg gir”).',
-        visibilityTime: 6000,
-      });
+    const read = await readScaleOnce(primaryScaleFor(scalePeripherals), {
+      onPairing: (m) => Toast.show({ type: 'info', text1: m.title, text2: m.detail, visibilityTime: 8000 }),
+    });
+    if (!read.ok) {
+      Toast.show({ type: 'error', text1: read.error.title, text2: read.error.detail, visibilityTime: 6000 });
       return null;
     }
-    if (p.simulate) {
-      // Simülasyon cihazı: değer UYDURULUR → backend'e SIMULATED olarak BEYAN edilir
-      // ve `shipping.simulatedWeightEnabled` kapalıyken (default) 400 ile reddedilir.
-      // Yani bu değer artık canlı veriye SESSİZCE girmez; yalnız demo/eğitim
-      // kurulumunda (bayrak açık) kaydedilir. Toast operatöre durumu söyler.
-      const v = Math.round((10 + Math.random() * 90) * 10) / 10;
-      Toast.show({
-        type: 'info',
-        text1: 'SİMÜLASYON tartısı',
-        text2: `${v} kg gerçek ölçüm DEĞİL — cihaz kaydında “simulate” açık.`,
-        visibilityTime: 6000,
-      });
-      return { kg: v, source: 'SIMULATED' };
-    }
-    const io = buildIoFromPeripheral(p);
-    if (!io.supported || !io.transport || !io.codec) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kantar okunamıyor',
-        text2: 'Bu derlemede/bağlantı türünde desteklenmiyor (native build / connectionType).',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
-    if (p.connectionType === 'BLUETOOTH_SPP' && p.address) {
-      try {
-        if (!(await isBonded(p.address))) {
-          Toast.show({
-            type: 'info',
-            text1: 'Kantar ilk kez eşleştiriliyor',
-            text2: 'PIN sorulursa girin (ör. 1234) — sonraki tartılarda otomatik bağlanır.',
-            visibilityTime: 8000,
-          });
-          await pairByMac(p.address);
-        }
-      } catch (e) {
-        Toast.show({
-          type: 'error',
-          text1: 'Kantar eşleştirilemedi',
-          text2: e instanceof Error ? e.message : 'Kantar açık ve menzilde mi? PIN girildi mi?',
-          visibilityTime: 6000,
-        });
-        return null;
-      }
-    }
-    try {
-      const raw = await io.transport.read({
-        readMode: p.readMode,
-        pollCommand: p.pollCommand ?? undefined,
-        terminator: p.terminator ?? undefined,
-        timeoutMs: p.timeoutMs ?? undefined,
-        framePattern: p.identifyPattern ?? undefined,
-      });
-      const v = io.codec.decode(raw);
-      if (v != null && v > 0) return { kg: v, source: 'SCALE' };
-      throw new Error('Geçerli tartı gelmedi');
-    } catch (e) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kantar okunamadı',
-        text2: e instanceof Error ? e.message : 'Kantar kapalı/menzil dışı veya komut yanlış olabilir',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
+    if (read.notice) Toast.show({ type: 'info', text1: read.notice.title, text2: read.notice.detail, visibilityTime: 6000 });
+    return { kg: read.kg, source: read.source };
   };
 
   const saveMut = useMutation({

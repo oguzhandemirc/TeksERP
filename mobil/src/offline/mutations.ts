@@ -100,6 +100,10 @@ export interface TamburFinalizeOpenFabricVars {
   /** Kalan topun etiket kumaş adı / rengi. Eski kuyrukta `undefined` = alan gitmez (null). */
   labelItemName?: string | null;
   labelColorName?: string | null;
+  /** Kalan topun etiket alıcısı · kg kaynağı · ölçülen en (2026-11-10). Eski kuyrukta `undefined` = alan gitmez. */
+  labelConsigneeId?: string;
+  weightSource?: 'SCALE' | 'MANUAL' | 'SIMULATED';
+  widthCm?: number;
 }
 
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
@@ -255,6 +259,10 @@ export function registerStationMutationDefaults(): void {
         // Etiket kumaş adı / renk — aynı sessiz-allowlist tuzağı.
         labelItemName: vars.labelItemName,
         labelColorName: vars.labelColorName,
+        // Alıcı · kg kaynağı · en — aynı sessiz-allowlist tuzağı (2026-11-10).
+        labelConsigneeId: vars.labelConsigneeId,
+        weightSource: vars.weightSource,
+        widthCm: vars.widthCm,
       })),
     ...OFFLINE_AWARE,
   });

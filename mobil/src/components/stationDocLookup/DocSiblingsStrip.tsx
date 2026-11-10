@@ -14,8 +14,6 @@ interface Props {
   /** Ekrandaki aktif kartın barkodu (belgeden açılan kartla eşleşmezse seçici çizilmez). */
   activeCardBarcode: string | null;
   onSwitch: (workOrder: StationLookupWorkOrder) => void;
-  /** Eski şeridin kapat düğmesi kalktı; çağıran ekranlar derlensin diye kabul edilir, kullanılmaz. */
-  onDismiss?: () => void;
   /** Konak satırına gömülünce dış boşluğu ezmek için. */
   style?: StyleProp<ViewStyle>;
 }
