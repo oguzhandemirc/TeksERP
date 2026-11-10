@@ -1404,6 +1404,14 @@ export default function TamburScreen() {
     if (compact) setRightDrawerOpen(false);
   };
 
+  // Geniş tablette ara "top seçin" ekranı yok (kullanıcı 2026-11-11): iş açılınca/top bitince kuyruğun ilk topu seçilir.
+  useEffect(() => {
+    if (compact || manualMode || recutResolvedRollId || !activeJob || selectedRoll) return;
+    const first = activeJob.stepSummary.rolls[0];
+    if (!first) return;
+    setOpenJobs((prev) => prev.map((j) => (j.cardId === activeJob.cardId ? { ...j, selectedRollId: first.rollId } : j)));
+  }, [compact, manualMode, recutResolvedRollId, activeJob, selectedRoll]);
+
   // Compact'ta aktif kart değiştiğinde (yeni kart çözüldü / tab değişti) drawer kapanır.
   useEffect(() => {
     if (compact && activeCardId) setRightDrawerOpen(false);

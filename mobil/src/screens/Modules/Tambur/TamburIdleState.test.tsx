@@ -49,3 +49,11 @@ describe('TamburScreen iş açık, top seçilmemiş (2026-11-11)', () => {
     expect(r.queryAllByRole('button')).toHaveLength(0);
   });
 });
+
+describe('TamburScreen geniş tablette ilk top otomatik seçilir (2026-11-11)', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'TamburScreen.tsx'), 'utf8');
+  it('iş açık, top seçili değilse kuyruğun ilk topu seçilir', () => {
+    expect(src).toContain('if (compact || manualMode || recutResolvedRollId || !activeJob || selectedRoll) return;');
+    expect(src).toContain('const first = activeJob.stepSummary.rolls[0];');
+  });
+});
