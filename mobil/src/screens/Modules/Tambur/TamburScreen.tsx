@@ -46,6 +46,8 @@ import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
 import { TARGET_LINE_PREFIX, TARGET_STOCK_VALUE, TargetButton, QualitySegment, targetButtonText } from './TamburCompactPickers';
 import { rememberedGrade, shortGradeLabel } from './qualityMemory';
+import { RECENT_OUTPUT_SCREEN_KEY, resolveOutputColumns, toggleOutputColumn, type OutputColumnKey } from './recentOutputColumns';
+import { OutputColumnsButton, OutputColumnsPicker } from './OutputColumnsPicker';
 import { useTamburLabelCard } from './useTamburLabelCard';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -6234,7 +6236,7 @@ const noteModalStyles = StyleSheet.create({
 // "Çıkanlar" listesinde tek top satırı — TÜM satır tıklanır (dokun → önizleme:
 // Bas / Yeni Etiket). (Eski "Etiket Değiştir" RelabelPickerModal'i kaldırıldı;
 // yönlendirme artık Çıkanlar önizlemesindeki "Yeni Etiket" butonundan yapılıyor.)
-function RelabelRollRow({
+export function RelabelRollRow({
   grades,
   roll,
   onPress,
@@ -6242,7 +6244,10 @@ function RelabelRollRow({
   stacked,
   selectMode,
   selected,
+  cols,
 }: {
+  /** Görünür sütunlar (tablo düzeni); verilmezse bugünkü tüm sütunlar. */
+  cols?: ReadonlySet<OutputColumnKey>;
   roll: Roll;
   onPress: () => void;
   /** "Geri Al" ikonu — Tambur işlemini iptal akışını açar (önizleme onaylı). */
@@ -6264,6 +6269,7 @@ function RelabelRollRow({
   // İşaret olmasaydı operatör "bu top hangi işten çıktı" sorusuna listeye bakarak
   // yanlış cevap verirdi — satırdaki iş emri alanı manuel topta boştur.
   const isManual = roll.entrySource === 'TAMBUR_MANUAL';
+  const show = (k: OutputColumnKey) => !cols || cols.has(k);
   const itemText = `${roll.item?.name ?? '—'}${color?.name ? ` · ${color.name}` : ''}`;
   const qtyText =
     (roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—') +
@@ -6343,9 +6349,11 @@ function RelabelRollRow({
             color={selected ? '#1e40af' : '#94a3b8'}
           />
         )}
-        <View style={[relabelStyles.gradePill, { backgroundColor: gradeBg }]}>
-          <Text style={relabelStyles.gradePillText}>{grade}</Text>
-        </View>
+        {show('quality') && (
+          <View style={[relabelStyles.gradePill, { backgroundColor: gradeBg }]}>
+            <Text style={relabelStyles.gradePillText}>{grade}</Text>
+          </View>
+        )}
         <Text style={relabelStyles.rowBarcode} numberOfLines={1}>
           {roll.barcode ?? '—'}
         </Text>
@@ -6354,11 +6362,17 @@ function RelabelRollRow({
             <Text style={relabelStyles.manualPillText}>MANUEL</Text>
           </View>
         )}
-        <View style={relabelStyles.colItem}>
-          <Text style={relabelStyles.colItemText} numberOfLines={1}>
-            {roll.item?.name ?? '—'}
-          </Text>
-        </View>
+        {/* Ürün kapalıyken boşluğu dolduran esnek ayraç — sağdaki sütunlar sağa yaslı kalsın. */}
+        {show('item') ? (
+          <View style={relabelStyles.colItem}>
+            <Text style={relabelStyles.colItemText} numberOfLines={1}>
+              {roll.item?.name ?? '—'}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+        {show('color') && (
         <View style={relabelStyles.colColor}>
           {color && (
             <View
@@ -6372,27 +6386,49 @@ function RelabelRollRow({
             {color?.name ?? '—'}
           </Text>
         </View>
-        <View style={relabelStyles.colWidth}>
-          <Text style={relabelStyles.colMutedText}>
-            {roll.width != null ? `${Number(roll.width).toFixed(0)} cm` : '—'}
-          </Text>
-        </View>
+        )}
+        {show('width') && (
+          <View style={relabelStyles.colWidth}>
+            <Text style={relabelStyles.colMutedText}>
+              {roll.width != null ? `${Number(roll.width).toFixed(0)} cm` : '—'}
+            </Text>
+          </View>
+        )}
+        {show('labelBatch') && (
+          <View style={relabelStyles.colExtra} testID="son-cikan-hucre-labelBatch">
+            <Text style={relabelStyles.colMutedText} numberOfLines={1}>{roll.labelBatchNo || '—'}</Text>
+          </View>
+        )}
+        {show('workOrder') && (
+          <View style={relabelStyles.colExtra}>
+            <Text style={relabelStyles.colMutedText} numberOfLines={1}>{roll.batch?.workOrder?.workOrderNumber ?? '—'}</Text>
+          </View>
+        )}
         {/* ÜRETİM ANI — gün + saat (2026-08-09 saha isteği).
             ⚠️ `createdAt` kullanılır, `updatedAt` DEĞİL: bu liste "bu top ne
             zaman ÇIKTI" sorusuna bakar. `updatedAt` etiket yeniden basımında da
             değişir ve sıralamayı yalanlar (envanter kuralı: listede TEK tarih
             kolonu görünür ve SIRALANAN kolonun aynısıdır — liste
             `createdAt desc` sıralı). Vardiya içi ayırt etmek için saat şart. */}
-        <View style={relabelStyles.colDate}>
-          <Text style={relabelStyles.colMutedText} numberOfLines={1}>
-            {formatOutputDate(roll.createdAt)}
-          </Text>
-        </View>
-        <View style={relabelStyles.colQty}>
-          <Text style={relabelStyles.colQtyText}>
-            {roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—'}
-          </Text>
-        </View>
+        {show('date') && (
+          <View style={relabelStyles.colDate}>
+            <Text style={relabelStyles.colMutedText} numberOfLines={1}>
+              {formatOutputDate(roll.createdAt)}
+            </Text>
+          </View>
+        )}
+        {show('kg') && (
+          <View style={relabelStyles.colWidth}>
+            <Text style={relabelStyles.colMutedText}>{roll.weightKg != null ? `${Number(roll.weightKg)} kg` : '—'}</Text>
+          </View>
+        )}
+        {show('qty') && (
+          <View style={relabelStyles.colQty}>
+            <Text style={relabelStyles.colQtyText}>
+              {roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—'}
+            </Text>
+          </View>
+        )}
         {onUndo && (
           <IconButton
             icon="undo-variant"
@@ -6495,8 +6531,9 @@ const relabelStyles = StyleSheet.create({
   },
   // Üretim anı — "GG.AA SS:dd" için yeterli, kumaş adını daha fazla kırpmayan
   // en dar genişlik.
+  // "GG.AA SS:dd" yazı ölçeği büyük tablette de kesilmesin (2026-11-10: 92'de "10.11 11:…" kırpılıyordu).
   colDate: {
-    width: 92,
+    width: 118,
     paddingLeft: 10,
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
@@ -6504,6 +6541,7 @@ const relabelStyles = StyleSheet.create({
   },
   colItemText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
   colMutedText: { fontSize: 13, color: '#475569', flexShrink: 1, fontVariant: ['tabular-nums'] },
+  colExtra: { width: 120, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: colors.border },
   colQtyText: {
     fontSize: 14,
     fontWeight: '800',
@@ -6634,6 +6672,10 @@ function RecentOutputModal({
   const { width: winW, height: winH } = useWindowDimensions();
   const isCompactPortrait = winH > winW;
   const [search, setSearch] = useState('');
+  // Sütun seçimi cihazda, ekran kimliğiyle (başka listelerin varsayılanı değişmez).
+  const storedCols = useDeviceSettingsStore((st) => st.listColumns[RECENT_OUTPUT_SCREEN_KEY]);
+  const setListColumns = useDeviceSettingsStore((st) => st.setListColumns);
+  const [colsOpen, setColsOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   // Modal kapanınca aramayı sıfırla — sonraki açılış temiz başlasın.
@@ -6727,6 +6769,7 @@ function RecentOutputModal({
     [q.data],
   );
   const total = q.data?.pages[0]?.pagination.totalEstimate ?? null;
+  const visibleCols = useMemo(() => resolveOutputColumns(storedCols, rolls), [storedCols, rolls]);
 
   // Satıra dokununca topun "son basılan etiket"ini önizle (LabelPreviewSheet,
   // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
@@ -6888,7 +6931,7 @@ function RecentOutputModal({
         headerTint="#dbeafe"
         // Tabloya geçince 6 sütun oldu (kalite·barkod·kumaş·renk·en·metraj) —
         // %50 dar kalıyordu, kumaş adı sürekli kırpılıyordu.
-        widthRatio={isCompactPortrait ? 0.96 : 0.78}
+        widthRatio={isCompactPortrait ? 0.96 : 0.95}
         heightRatio={isCompactPortrait ? 0.9 : 0.85}
         loading={q.isLoading}
         fetching={q.isFetching && !q.isFetchingNextPage}
@@ -6898,6 +6941,17 @@ function RecentOutputModal({
         successMessage="Son çıkan toplar güncellendi"
         items={rolls}
         keyExtractor={(r) => r.id}
+        headerExtras={isCompactPortrait ? undefined : <OutputColumnsButton onPress={() => setColsOpen(true)} />}
+        swipeToDismiss={!colsOpen}
+        overlay={
+          <OutputColumnsPicker
+            visible={colsOpen}
+            value={visibleCols}
+            onToggle={(k) => void setListColumns(RECENT_OUTPUT_SCREEN_KEY, toggleOutputColumn(visibleCols, k))}
+            onReset={() => void setListColumns(RECENT_OUTPUT_SCREEN_KEY, null)}
+            onClose={() => setColsOpen(false)}
+          />
+        }
         onEndReached={() => {
           if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
         }}
@@ -7031,6 +7085,7 @@ function RecentOutputModal({
             grades={grades}
             roll={roll}
             stacked={isCompactPortrait}
+            cols={visibleCols}
             selectMode={selectMode}
             selected={selected.has(roll.id)}
             onPress={() => (selectMode ? toggleSelect(roll.id) : setPreviewRoll(roll))}

@@ -499,6 +499,8 @@ export interface Roll {
   producedInStep?: {
     workOrder?: { id: string; workOrderNumber: string } | null;
   } | null;
+  /** Partinin iş emri — yalnız bazı listelerde gelir (Tambur son çıkanlar `include.batch.workOrder`). */
+  batch?: { workOrder?: { id: string; workOrderNumber: string } | null } | null;
   createdBy?: { id: string; username: string; fullName: string } | null;
   /** Topun sisteme GİRDİĞİ istasyon (kalıcı köken; 2026-08-05 öncesi toplar null). */
   entryStation?: { id: string; code: string; name: string } | null;

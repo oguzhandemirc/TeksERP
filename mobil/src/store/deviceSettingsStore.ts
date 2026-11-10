@@ -19,6 +19,7 @@ const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
 const TAMBUR_RESET_QUALITY_KEY = 'tambur_reset_quality_after_cut';
 const TAMBUR_RESET_KARTELA_KEY = 'tambur_reset_kartela_after_cut';
 const TAMBUR_LAST_QUALITY_KEY = 'tambur_last_quality_code';
+const LIST_COLUMNS_KEY = 'device_list_columns';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
@@ -141,6 +142,8 @@ interface DeviceSettingsState {
    * geçince ve uygulama yeniden açılınca seçili kalır. null = hatırlanan yok; katalogda yoksa ekran seçimsiz kalır.
    */
   tamburLastQualityCode: string | null;
+  /** Liste sütun seçimi, EKRAN KİMLİĞİNE göre (ör. 'tambur.recentOutput'); kayıt yok = ekranın varsayılanı. */
+  listColumns: Record<string, string[]>;
   /**
    * Tambur "MANUEL EKLE" modu: true → ekran refakat kartı BEKLEMEZ, operatör
    * ürün/metraj/müşteri seçip topu doğrudan BİTMİŞ DEPO'ya yazar
@@ -250,6 +253,8 @@ interface DeviceSettingsState {
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
   setTamburResetQualityAfterCut: (v: boolean) => Promise<void>;
   setTamburLastQualityCode: (v: string | null) => Promise<void>;
+  /** null → o ekranın kaydı silinir (varsayılana dön); diğer ekranlara dokunulmaz. */
+  setListColumns: (screenKey: string, cols: string[] | null) => Promise<void>;
   setTamburResetKartelaAfterCut: (v: boolean) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
   setScanSoundEnabled: (v: boolean) => Promise<void>;
@@ -294,6 +299,22 @@ export function parseDocPageSizes(raw: string | null): Record<string, DocPageSiz
   }
 }
 
+/** Bozuk kayıt → {} (her ekran varsayılanına döner); yalnız string dizisi değerler kalır. */
+export function parseListColumns(raw: string | null | undefined): Record<string, string[]> {
+  if (!raw) return {};
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    const out: Record<string, string[]> = {};
+    for (const [k, cols] of Object.entries(v as Record<string, unknown>)) {
+      if (Array.isArray(cols) && cols.every((c) => typeof c === 'string')) out[k] = cols as string[];
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   manualBarcodeEntry: false,
   lastRouteTemplateId: null,
@@ -302,6 +323,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   tamburResetQualityAfterCut: false,
   tamburResetKartelaAfterCut: true,
   tamburLastQualityCode: null,
+  listColumns: {},
   tamburManualMode: false,
   tamburOutputCollapsed: false,
   scanSoundEnabled: true,
@@ -323,7 +345,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold, docDesk, docDeskCapture, docDeskFrame, docScanEngine, woKinds, woRouteOnBtn, woBtns, scanMethod, hardwareLink, woLastBatch, docTorchAuto, lastQuality, listColumns] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -350,6 +372,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(WO_LAST_BATCH_HINT_KEY),
         storage.getItem(DOC_TORCH_AUTO_KEY),
         storage.getItem(TAMBUR_LAST_QUALITY_KEY),
+        storage.getItem(LIST_COLUMNS_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -365,6 +388,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // (scanSoundEnabled ile aynı ters yön; güvenli taraf "sıfırla").
       tamburResetKartelaAfterCut: tamburResetKartela !== 'false',
       tamburLastQualityCode: lastQuality?.trim() ? lastQuality.trim() : null,
+      listColumns: parseListColumns(listColumns),
       // Güvenli varsayılan KAPALI: yalnız birebir 'true' modu açar (bozuk değer
       // kart-atlayan modu sessizce açmasın).
       tamburManualMode: tamburManual === 'true',
@@ -452,6 +476,14 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
     set({ tamburLastQualityCode: code });
     if (code) await storage.setItem(TAMBUR_LAST_QUALITY_KEY, code);
     else await storage.deleteItem(TAMBUR_LAST_QUALITY_KEY);
+  },
+
+  setListColumns: async (screenKey, cols) => {
+    const next = { ...useDeviceSettingsStore.getState().listColumns };
+    if (cols) next[screenKey] = [...cols];
+    else delete next[screenKey];
+    set({ listColumns: next });
+    await storage.setItem(LIST_COLUMNS_KEY, JSON.stringify(next));
   },
 
   setTamburResetKartelaAfterCut: async (v) => {
