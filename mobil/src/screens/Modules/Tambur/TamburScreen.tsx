@@ -120,7 +120,7 @@ import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip
 import TamburMeterTrail, { useRollMeterTrail } from './TamburMeterTrail';
 import TamburWideCut from './TamburWideCut';
 import TamburMeasureCard from './TamburMeasureCard';
-import TamburIdleState from './TamburIdleState';
+import TamburIdleState, { TAMBUR_PICK_ROLL_TEXT } from './TamburIdleState';
 import TamburCardCodeSheet from './TamburCardCodeSheet';
 import { useTamburLivePreview } from './useTamburLivePreview';
 import { buildPreviewDraft, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
@@ -4720,6 +4720,8 @@ export default function TamburScreen() {
                 {emptyCardHint({ compact, docLookupEnabled: docLookup.enabled, where: 'Sağdan' })}
               </Text>
             </View>
+          ) : !selectedRoll && !compact ? (
+            <TamburIdleState text={TAMBUR_PICK_ROLL_TEXT} icon="gesture-tap" />
           ) : !selectedRoll ? (
             <View style={styles.emptyState}>
               <Icon source="package-variant" size={64} color="#cbd5e1" />
@@ -5062,7 +5064,8 @@ export default function TamburScreen() {
             {renderRightContent()}
             {/* Otomatik modda yazılacak bir şey yok → numpad gizlenir. Recut
                 akışı aktifse onun modu (recutMode), değilse açık-kumaş (cutMode). */}
-            {!wideMain && (recutRollMeta ? recutMode : cutMode) === 'manual' && (
+            {/* Top seçilmeden yazılacak bir şey yok → tuş takımı yalnız seçili top / Top Kesme / manuel modda (2026-11-11). */}
+            {!wideMain && (!!selectedRoll || !!recutRollMeta || manualMode) && (recutRollMeta ? recutMode : cutMode) === 'manual' && (
               <NumpadHost style={styles.numpadHost} />
             )}
             {/* Geniş ana kesim: sağ sütun kartlarla dolu → numpad alt sayfada açılır. */}

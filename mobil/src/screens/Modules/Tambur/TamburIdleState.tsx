@@ -6,12 +6,14 @@ import { Icon, Text } from 'react-native-paper';
 import { colors, palette, spacing, typography } from '../../../theme/tokens';
 
 export const TAMBUR_IDLE_TEXT = 'Kart veya belge okutun';
+// İş açık ama top seçilmemişken (kuyruk sağda): aynı sade görünüm, tek cümle.
+export const TAMBUR_PICK_ROLL_TEXT = 'Sağdaki listeden bir top seçin';
 
-export default function TamburIdleState() {
+export default function TamburIdleState({ text = TAMBUR_IDLE_TEXT, icon = 'barcode-scan' }: { text?: string; icon?: string }) {
   return (
     <View style={s.wrap} testID="tambur-bos-durum">
-      <Icon source="barcode-scan" size={72} color={palette.slate[300]} />
-      <Text style={s.text}>{TAMBUR_IDLE_TEXT}</Text>
+      <Icon source={icon} size={72} color={palette.slate[300]} />
+      <Text style={s.text}>{text}</Text>
     </View>
   );
 }

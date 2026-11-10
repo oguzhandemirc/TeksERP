@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import React from 'react';
 import { renderWithPaper } from '../../../test/render';
-import TamburIdleState, { TAMBUR_IDLE_TEXT } from './TamburIdleState';
+import TamburIdleState, { TAMBUR_IDLE_TEXT, TAMBUR_PICK_ROLL_TEXT } from './TamburIdleState';
 
 describe('TamburIdleState', () => {
   it('tek cümle, başka metin ve tuş yok', () => {
@@ -33,5 +33,19 @@ describe('TamburScreen boş durum yerleşimi', () => {
     const listener = src.indexOf('listenWhileHidden');
     const rightCol = src.indexOf('{!compact && !idleFull && (');
     expect(listener).toBeGreaterThan(rightCol);
+  });
+});
+
+describe('TamburScreen iş açık, top seçilmemiş (2026-11-11)', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'TamburScreen.tsx'), 'utf8');
+  it('tablette sade "listeden top seçin" durumu; tuş takımı top seçilmeden çizilmez', () => {
+    expect(TAMBUR_PICK_ROLL_TEXT).toBe('Sağdaki listeden bir top seçin');
+    expect(src).toContain('!selectedRoll && !compact ? (\n            <TamburIdleState text={TAMBUR_PICK_ROLL_TEXT}');
+    expect(src).toContain("{!wideMain && (!!selectedRoll || !!recutRollMeta || manualMode) && (recutRollMeta ? recutMode : cutMode) === 'manual' && (");
+  });
+  it('özel metinle tek cümle çizer', () => {
+    const r = renderWithPaper(<TamburIdleState text={TAMBUR_PICK_ROLL_TEXT} icon="gesture-tap" />);
+    expect(r.getByText(TAMBUR_PICK_ROLL_TEXT)).toBeTruthy();
+    expect(r.queryAllByRole('button')).toHaveLength(0);
   });
 });
