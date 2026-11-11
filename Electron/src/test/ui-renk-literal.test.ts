@@ -16,9 +16,7 @@ const SRC = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, "");
 const ROOTS = ["components/ui", "components/layout", "components/data-table", "components/hub"];
 
 /** Bilinçli istisnalar — yol `src`ye göre; gerekçesiyle. Liste yalnız DARALIR. */
-const EXEMPT: Record<string, string> = {
-  "components/layout/AppearanceControls.tsx": "eski gökkuşağı örneği — kişiselleştirme ekranı yeniden yazılınca düşer",
-};
+const EXEMPT: Record<string, string> = {};
 
 const PALETTE =
   "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";

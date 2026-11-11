@@ -356,13 +356,26 @@
     --primary-soft-foreground: var(--custom-h) 90% 82%;
   }
 
-  /* ── ZEMİN TONU ── */
+  /* ── ZEMİN TONU ── varsayılan değer de AÇIKÇA yazılır: önizleme kutusu kökün seçimini miras almasın. */
+  [data-surface="lavender"] { --background: 245 38% 97%; --card-border: 245 30% 93%; }
+  .dark[data-surface="lavender"], .dark [data-surface="lavender"] { --background: 235 25% 8%; --card-border: 235 18% 18%; }
   [data-surface="neutral"] { --background: 240 6% 96%; --card-border: 240 6% 91%; }
   [data-surface="white"] { --background: 0 0% 100%; --card-border: 245 20% 89%; }
   .dark[data-surface="neutral"], .dark [data-surface="neutral"] { --background: 225 8% 8%; --card-border: 225 8% 18%; }
   .dark[data-surface="white"], .dark [data-surface="white"] { --background: 235 22% 11%; --card-border: 235 18% 22%; }
 
-  /* ── MENÜ STİLİ ── (açık = varsayılan :root/.dark değerleri) */
+  /* ── MENÜ STİLİ ── (açık = :root/.dark değerleri; önizleme için açıkça da yazılır) */
+  [data-sidebar="light"], [data-sidebar="dark"] {
+    --nav-active-from: var(--primary); --nav-active-to: var(--primary-2); --nav-active-fg: var(--primary-foreground);
+  }
+  [data-sidebar="light"] {
+    --sidebar: 0 0% 100%; --sidebar-foreground: 240 20% 22%; --sidebar-muted: 240 8% 46%;
+    --sidebar-accent: 245 45% 96%; --sidebar-border: 245 25% 93%;
+  }
+  .dark[data-sidebar="light"], .dark [data-sidebar="light"] {
+    --sidebar: 235 24% 10%; --sidebar-foreground: 240 15% 86%; --sidebar-muted: 240 10% 62%;
+    --sidebar-accent: 240 18% 17%; --sidebar-border: 235 18% 16%;
+  }
   [data-sidebar="dark"] {
     --sidebar: 240 28% 14%; --sidebar-foreground: 240 15% 90%; --sidebar-muted: 240 10% 66%;
     --sidebar-accent: 240 22% 22%; --sidebar-border: 240 20% 20%;
@@ -375,8 +388,10 @@
   }
 
   /* ── KÖŞE / YOĞUNLUK / YAZI BOYUTU ── */
+  [data-radius="large"] { --radius-control: 0.625rem; --radius-card: 1rem; }
   [data-radius="small"] { --radius-control: 0.375rem; --radius-card: 0.5rem; }
   [data-radius="medium"] { --radius-control: 0.5rem; --radius-card: 0.75rem; }
+  [data-density="compact"] { --cell-py: 0.6875rem; --head-h: 2.5rem; }
   [data-density="comfortable"] { --cell-py: 1rem; --head-h: 2.75rem; }
   html[data-font="small"] { font-size: 14px; }
   html[data-font="large"] { font-size: 17px; }
@@ -434,13 +449,20 @@
 .tile-orange { --tile-fg: var(--tile-orange); --tile-bg: var(--tile-orange-bg); }
 .tile-rose { --tile-fg: var(--tile-rose); --tile-bg: var(--tile-rose-bg); }
 .tile-primary { --tile-fg: var(--primary-soft-foreground); --tile-bg: var(--primary-soft); }
-/* Tek renk kip: bütün kareler birincil tonun pastelini alır. */
-[data-tiles="mono"] .icon-tile { --tile-fg: var(--primary-soft-foreground); --tile-bg: var(--primary-soft); }
+/* Tek renk kip: bütün kareler birincil tonun pastelini alır. @scope sınırı: içteki farklı seçim
+   (Ayarlar › Görünüm önizlemesi) kökün kipini miras almaz — en yakın data-* kazanır. */
+@scope ([data-tiles="mono"]) to ([data-tiles="color"]) {
+  :scope .icon-tile { --tile-fg: var(--primary-soft-foreground); --tile-bg: var(--primary-soft); }
+}
 /* Koyu / birincil menü stilinde kareler zemine göre yarı saydam olur. */
-[data-sidebar="dark"] [data-sidebar-root] .icon-tile { background-color: hsl(var(--tile-fg) / 0.18); }
-[data-sidebar="brand"] [data-sidebar-root] .icon-tile {
-  background-color: hsl(var(--primary-foreground) / 0.16);
-  color: hsl(var(--primary-foreground));
+@scope ([data-sidebar="dark"]) to ([data-sidebar="light"], [data-sidebar="brand"]) {
+  :scope [data-sidebar-root] .icon-tile { background-color: hsl(var(--tile-fg) / 0.18); }
+}
+@scope ([data-sidebar="brand"]) to ([data-sidebar="light"], [data-sidebar="dark"]) {
+  :scope [data-sidebar-root] .icon-tile {
+    background-color: hsl(var(--primary-foreground) / 0.16);
+    color: hsl(var(--primary-foreground));
+  }
 }
 /* Seçili menü öğesinde kare degradeye karışır. */
 [data-nav-active="true"] .icon-tile {
