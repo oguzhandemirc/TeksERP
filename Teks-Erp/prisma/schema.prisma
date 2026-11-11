@@ -8693,6 +8693,9 @@ enum PrintedDocType {
   // PUBLISHED'da donar; teklif iptal/revizyonunda belge VOIDED, liste arşivi belgeyi bozmaz.
   SALES_QUOTE // Satış teklifi (SalesQuote — no/R<revizyon>)
   PRICE_LIST // Fiyat listesi (PriceList — no/R<revizyon>)
+  // 2026-11-12 Seyitoğlu L1 (yine SONA). Müşteriye gider; kaynak Order, no = sipariş no. İlk açılışta
+  // donar (taslağı yok), değişiklikten sonra yeniden basım; sipariş iptalinde VOIDED. İç kolon yok.
+  ORDER_CONFIRMATION // Sipariş teyidi (Order)
 }
 
 enum PrintedDocStatus {

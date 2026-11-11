@@ -75,6 +75,7 @@ import { manualComplete as manualCompleteImpl, reopen as reopenImpl } from "./or
 import type { OrderStats } from "./order/list";
 import type { OrderShipmentsResult } from "./order/detail";
 import type { OrderActor, PreparedOrderCreate } from "./order/create";
+import { voidOrderConfirmationTx } from "./order-documents.service";
 import { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE, computeAllowedActions, computeTotalAmount, pickDefaultAction, withExtraWarnings, type CancelAction, type OrderServiceThis, type OrderWithLines } from "./order/shared";
 
 export type { OrderStats } from "./order/list";
@@ -1351,6 +1352,8 @@ export class OrderService extends BaseService {
           }, tekrar iptal edilemez. Sayfayı yenileyin.`
         );
       }
+      // Donmuş sipariş teyidi iptalle birlikte VOIDED (birlikte ya da hiç).
+      await voidOrderConfirmationTx(tx, orderId, cancelReasonText ?? "Sipariş iptal edildi");
       // F145: preview↔apply arası WO status yarışını kapat. Etkilenen WO'ları
       // SIRALI kilitle (WO start/dispatch/finalize/cancel yolları da bu satırı
       // kilitler → serileşir), sonra TAZE status + TAZE sole-order oku ve her

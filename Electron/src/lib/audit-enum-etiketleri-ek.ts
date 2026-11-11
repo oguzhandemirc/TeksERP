@@ -20,6 +20,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   QUALITY_CERTIFICATE: "Kalite belgesi",
   INSPECTION_REPORT: "Muayene raporu",
   SALES_QUOTE: "Satış teklifi", // PrintedDocType (MAL-6)
+  ORDER_CONFIRMATION: "Sipariş teyidi", // PrintedDocType (Seyitoğlu L1)
   PIECE: "Adet", // ServiceQtyUnit (EKS-E2 brode fiyat birimi)
   STITCH: "Vuruş",
   WEIGH: "Tartım",
@@ -402,6 +403,8 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   DELIVERY_NOTE: "İrsaliye top no",
   // ServiceMeterBasis (H7, 2026-10-29) — OUT/IN ortak; CUT/RECEIVED SERVICE_BILLING_LINK.meterBasis override'ı ile ayrılır
   DECLARED: "Beyan edilen metre",
+  // ServiceBillingMeterBasis ayar değeri (GK metre, 2026-11-10)
+  MAX_DECLARED: "Beyan ile ölçülenin büyüğü (parti)",
   // MeterApprovalMode — NONE ortak
   OPERATOR_REASON: "Operatör sebep yazar",
   SUPERVISOR_PIN: "Süpervizör PIN onayı",

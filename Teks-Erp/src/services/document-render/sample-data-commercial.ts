@@ -37,9 +37,23 @@ export const SAMPLE_PRICE_LIST: Record<string, unknown> = {
   notes: "Liste fiyatları metre başınadır.",
 };
 
+export const SAMPLE_ORDER_CONFIRMATION: Record<string, unknown> = {
+  header: {
+    get documentNo() { return ornekNo("order", 128); }, get orderNumber() { return ornekNo("order", 128); }, orderDate: "2026-06-07T09:15:00.000Z", deadline: "2026-07-15T00:00:00.000Z",
+    currency: "EUR", customerName: "Örnek Tekstil A.Ş.", customerCode: "M001", branchName: "İstanbul Merkez",
+  },
+  lines: [
+    { lineNo: 1, itemCode: "KM-0101", itemName: "Pamuklu Astar", customerItemName: "Astar 150", colorName: "Bej", customerColorName: null, widthCm: 150, quantity: 1200, unit: "MT", unitPrice: 2.85, lineTotal: 3420, tolerancePct: 5 },
+    { lineNo: 2, itemCode: "KM-0207", itemName: "Süet Kumaş", customerItemName: null, colorName: "Antrasit", customerColorName: "Füme", widthCm: 140, quantity: 800, unit: "MT", unitPrice: 4.1, lineTotal: 3280, tolerancePct: null },
+    { lineNo: 3, itemCode: "KM-0310", itemName: "Tül Perde", customerItemName: null, colorName: null, customerColorName: null, widthCm: 300, quantity: 400, unit: "MT", unitPrice: null, lineTotal: null, tolerancePct: 3 },
+  ],
+  totals: { quantity: 2400, amount: 6700 },
+};
+
 /** `SAMPLE_PRINTED_DOCS`a yayılan ek müşteri belgeleri (muayene: geçen/kalan/muayenesiz top). */
 export const SAMPLE_CUSTOMER_EXTRA_DOCS = {
   INSPECTION_REPORT: SAMPLE_INSPECTION_REPORT,
   SALES_QUOTE: SAMPLE_SALES_QUOTE,
   PRICE_LIST: SAMPLE_PRICE_LIST,
+  ORDER_CONFIRMATION: SAMPLE_ORDER_CONFIRMATION,
 } as const satisfies Record<string, Record<string, unknown>>;
