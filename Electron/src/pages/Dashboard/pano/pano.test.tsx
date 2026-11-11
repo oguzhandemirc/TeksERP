@@ -53,9 +53,9 @@ vi.mock("@/providers/PreferencesProvider", () => ({
   },
 }));
 
-vi.mock("./PanoGrafik", () => ({
-  PanoGrafik: ({ etiket }: { etiket: string }) => <div data-testid="grafik">{etiket}</div>,
-  saydam: (r: string) => r,
+vi.mock("@/components/insight/EChart", () => ({
+  EChart: ({ label }: { label: string }) => <div data-testid="grafik">{label}</div>,
+  withAlpha: (r: string) => r,
 }));
 
 const fetchPano = vi.fn();

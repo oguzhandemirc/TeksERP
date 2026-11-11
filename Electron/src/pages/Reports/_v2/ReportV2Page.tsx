@@ -12,6 +12,7 @@ import { ReportBody } from "./ReportBody";
 import { ReportFailureState, ReportLoadingState } from "./ReportStates";
 import { SaveMenu } from "./SaveMenu";
 import { failureOf, useReportV2 } from "./useReportV2";
+import { useTrackReportOpen } from "./opened";
 
 interface Props {
   entry: ReportCatalogEntry;
@@ -23,6 +24,7 @@ interface Props {
  */
 export function ReportV2Page({ entry }: Props) {
   const query = useReportV2(entry);
+  useTrackReportOpen(entry.key);
   const { isFavorite, toggle } = useReportFavorites();
   const fav = isFavorite(entry.key);
   const data = query.data;
