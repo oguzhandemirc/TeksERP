@@ -14,6 +14,7 @@ export { goodsReceiptSystem } from "./goods-receipt"; // GOODS_RECEIPT
 export { inspectionReportSystem } from "./inspection-report"; // INSPECTION_REPORT
 export { invoiceInternalSystem } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchSystem } from "./kartela-dispatch"; // KARTELA_DISPATCH
+export { orderConfirmationSystem } from "./order-confirmation"; // ORDER_CONFIRMATION
 export { paymentReceiptSystem } from "./payment-receipt"; // PAYMENT_RECEIPT
 export { priceListSystem } from "./price-list"; // PRICE_LIST
 export { qualityCertificateSystem } from "./quality-certificate"; // QUALITY_CERTIFICATE
