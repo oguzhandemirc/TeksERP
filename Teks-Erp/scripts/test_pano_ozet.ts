@@ -173,7 +173,10 @@ async function main(): Promise<void> {
   const ordRow = hr.hareketler.find((x) => x.hedef.id === order.id);
   check("§6 fikstür sipariş akışta, 200 m", ordRow?.tur === "SIPARIS" && ordRow.miktar === 200, JSON.stringify(ordRow));
   check("§6 en fazla 8 satır, zaman azalan", hr.hareketler.length <= 8 && hr.hareketler.every((x, i, a) => i === 0 || a[i - 1]!.zaman >= x.zaman));
-  check("§6 planlı sevkiyat akışa girmez", !hr.hareketler.some((x) => x.hedef.id === planned.id));
+  const fasonRows = hr.hareketler.filter((x) => x.tur === "FASON_GIDEN" || x.tur === "FASON_DONEN");
+  check("§6 fason satırı iş emri bağını taşır (`hedef.isEmriId` uuid ya da null)",
+    fasonRows.every((x) => x.hedef.isEmriId === null || typeof x.hedef.isEmriId === "string"), `${fasonRows.length} fason satırı`);
+  check("§6 planlı sevkiyat akışa girmez",!hr.hareketler.some((x) => x.hedef.id === planned.id));
   const none = await getPanoHareketler({ userId: "test-pano", permissions: ["report:sales"] }, NOW);
   check("§6 izinsiz kullanıcı: tür listesi ve akış boş", none.turler.length === 0 && none.hareketler.length === 0);
 

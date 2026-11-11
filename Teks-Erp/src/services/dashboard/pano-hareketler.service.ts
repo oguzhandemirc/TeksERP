@@ -32,7 +32,8 @@ export interface PanoHareket {
   miktar: number | null;
   birim: "m" | "top" | null;
   zaman: string;
-  hedef: { tur: MovementTargetType; id: string };
+  /** Fason sevk/kabulün kendi ekranı yok: panel `isEmriId` varsa iş emri detayına gider (dokuma işinde null). */
+  hedef: { tur: MovementTargetType; id: string; isEmriId?: string | null };
 }
 
 export interface PanoHareketler {
@@ -114,32 +115,32 @@ async function subcontractDispatches(): Promise<PanoHareket[]> {
     where: { cancelledAt: null },
     orderBy: [{ dispatchedAt: "desc" }, { id: "desc" }],
     take: N,
-    select: { id: true, dispatchNo: true, dispatchedAt: true, totalQty: true, subcontractor: { select: { name: true } } },
+    select: { id: true, dispatchNo: true, dispatchedAt: true, totalQty: true, workOrderId: true, subcontractor: { select: { name: true } } },
   });
   return rows.map((d) => ({
     tur: "FASON_GIDEN", belgeNo: d.dispatchNo, cari: d.subcontractor.name, miktar: round1(Number(d.totalQty)), birim: "m",
-    zaman: d.dispatchedAt.toISOString(), hedef: { tur: "subcontractorDispatch", id: d.id },
+    zaman: d.dispatchedAt.toISOString(), hedef: { tur: "subcontractorDispatch", id: d.id, isEmriId: d.workOrderId },
   }));
 }
 
 async function subcontractReceipts(): Promise<PanoHareket[]> {
   // Dönen metre = kabul defteri: `receivedQty`, eski (NULL) satırda yeni topun metresi (Fason Karnesi ifadesi).
-  const rows = await prisma.$queryRaw<Array<{ id: string; receiptNo: string; receivedAt: Date; name: string; qty: number | null }>>(Prisma.sql`
+  const rows = await prisma.$queryRaw<Array<{ id: string; receiptNo: string; receivedAt: Date; workOrderId: string | null; name: string; qty: number | null }>>(Prisma.sql`
     WITH last AS (
-      SELECT sr.id, sr."receiptNo", sr."receivedAt", sr."subcontractorId"
+      SELECT sr.id, sr."receiptNo", sr."receivedAt", sr."workOrderId", sr."subcontractorId"
       FROM subcontractor_receipts sr
       WHERE sr."cancelledAt" IS NULL
       ORDER BY sr."receivedAt" DESC, sr.id DESC
       LIMIT ${N}
     )
-    SELECT l.id, l."receiptNo" AS "receiptNo", l."receivedAt" AS "receivedAt", s.name,
+    SELECT l.id, l."receiptNo" AS "receiptNo", l."receivedAt" AS "receivedAt", l."workOrderId" AS "workOrderId", s.name,
            (SELECT SUM(COALESCE(sri."receivedQty", nr."currentQty"))::float
               FROM subcontractor_receipt_items sri JOIN rolls nr ON nr.id = sri."newRollId"
              WHERE sri."receiptId" = l.id) AS qty
     FROM last l JOIN subcontractors s ON s.id = l."subcontractorId"`);
   return rows.map((r) => ({
     tur: "FASON_DONEN", belgeNo: r.receiptNo, cari: r.name, miktar: r.qty === null ? null : round1(Number(r.qty)), birim: r.qty === null ? null : "m",
-    zaman: r.receivedAt.toISOString(), hedef: { tur: "subcontractorReceipt", id: r.id },
+    zaman: r.receivedAt.toISOString(), hedef: { tur: "subcontractorReceipt", id: r.id, isEmriId: r.workOrderId },
   }));
 }
 

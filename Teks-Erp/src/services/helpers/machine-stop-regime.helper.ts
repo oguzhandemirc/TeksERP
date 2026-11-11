@@ -12,6 +12,7 @@
 import { Prisma, StationKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { SETTING_KEYS, readDokumaEnabled, readMachineStopTrackingEnabled, readProductionEnabled } from "../system-setting.service";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { assertStopShiftWritableTx } from "./machine-stop-context.helper";
@@ -104,7 +105,7 @@ export function assertMachineStopKindAllowed(r: MachineStopRegime, kind: Station
  */
 export function assertStationStopEnabled(station: { machineStopEnabled: boolean }, machineId: string): void {
   if (station.machineStopEnabled) return;
-  throw AppError.badRequest("Bu istasyonda duruş bildirimi kapalı (İstasyonlar → Duruş bildirimi).", {
+  throw AppError.badRequest(`Bu istasyonda duruş bildirimi kapalı (${ekranYolu("uretimIstasyonlari")} → Duruş bildirimi).`, {
     code: "STOP_STATION_DISABLED", machineId,
   });
 }

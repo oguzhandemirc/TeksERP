@@ -6,9 +6,10 @@
 // yazılmıştı; 7'si panelde olmayan yolu gösteriyordu ("Sistem → Kalite Sınıfları", "Kalite → Hata
 // Tipleri", "Sistem → Raporlar", "Tanımlar → Cihaz Kaydı", "Makine Donanımı", "Envanter", "Etiketler →
 // Atamalar") (arşiv 2026-10-13).
-//   §1 panel menü kaynakları okunur (AST): `nav-config` sol menü + beş hub karosu (Tanımlar ·
-//      Operasyon · Muhasebe · Yetkilendirme · Sistem); `TERIM.x.y` başlıkları backend TERIM'iyle
-//      çözülür (iki dosya bayt-eşit, `test_terim_eski_ad`)
+//   §1 panel menü kaynakları okunur (AST): `nav-config` sol menü + hub karoları (Tanımlar · Maliyet ·
+//      Muhasebe · Yetkilendirme · Sistem · …); T5 (2026-11-11) Operasyon karoları `group` alanıyla dört
+//      menü köküne (Satış · Üretim · Depo · Sevkiyat) bölünür, Satış'a Maliyet'ten Teklifler eklenir
+//      (`sections.ts` aynası); `TERIM.x.y` başlıkları backend TERIM'iyle çözülür (`test_terim_eski_ad`)
 //   §2 `PANEL_EKRAN` her girişi: menü sol menüde, karo o menünün hub'ında, alt etiket beyanlı
 //      panel dosyasında; `ALT_KAYNAK` ile tablo birebir
 //   §3 backend `src/` dizgelerinde (yorum değil) elle yazılmış menü yolu YOK — beyanlı istisna hariç
@@ -43,13 +44,17 @@ const NAV = "components/layout/nav-config.ts";
 /** Sol menü satırının `to`su → o hub'ın klasörü (karo dosyaları `scripts/lib/panel-karo-dosyalari.ts`ten; UX-2 bölünmesi). */
 const HUB: Record<string, string> = {
   "/definitions": "Definitions",
-  "/operations": "Operations",
+  "/cost": "Cost",
   "/finance": "Finance",
   "/access": "Access",
   "/system": "System",
   "/quality": "Quality",
   "/documents": "Documents",
 };
+/** T5 menü kökü → Operasyon karo `group` değeri (`nav-config` `section`, `sections.ts` `sectionTiles`). */
+const BOLUM: Record<string, string> = { "/sales": "planning", "/production": "production", "/warehouse": "warehouse", "/shipping": "shipping" };
+/** Maliyet karolarından Satış bölümüne giden anahtarlar (`sections.ts` `SALES_COST_TILE_KEYS`); Maliyet hub'ı bunları çizmez. */
+const SATIS_MALIYET_KAROLARI = ["quotes"];
 /** Karo içi alt etiketin (sekme/bölüm/düğme) paneldeki yeri. */
 const ALT_KAYNAK: Partial<Record<PanelEkran, string>> = {
   etiketDuzenleri: "pages/Labels/tabs-config.ts",
@@ -114,21 +119,39 @@ function prop(o: ts.ObjectLiteralExpression, ad: string): ts.Expression | null {
   }
   return null;
 }
-/** `export const <ad>Tiles = [ {…}, … ]` öğelerinin `alan` değerleri (çözülemeyen → "?"); birleşim dizileri (`...x`) öğe değildir. */
-function diziAlanlari(sf: ts.SourceFile, alan: string): string[] {
-  const out: string[] = [];
+interface Karo { title: string; key: string | null; group: string | null }
+/** `export const <ad>Tiles = [ {…}, … ]` öğeleri (başlık çözülemezse "?"); birleşim dizileri (`...x`) öğe değildir. */
+function karolar(sf: ts.SourceFile): Karo[] {
+  const out: Karo[] = [];
+  const duz = (o: ts.ObjectLiteralExpression, ad: string): string | null => {
+    const v = prop(o, ad);
+    return v && ts.isStringLiteral(v) ? v.text : null;
+  };
   const visit = (n: ts.Node): void => {
     if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text.endsWith("Tiles") && n.initializer && ts.isArrayLiteralExpression(n.initializer)) {
       for (const el of n.initializer.elements) {
         if (!ts.isObjectLiteralExpression(el)) continue;
-        const v = prop(el, alan);
-        out.push(v ? metinCoz(v) ?? "?" : "?");
+        const v = prop(el, "title");
+        out.push({ title: v ? metinCoz(v) ?? "?" : "?", key: duz(el, "key"), group: duz(el, "group") });
       }
     }
     ts.forEachChild(n, visit);
   };
   visit(sf);
   return out;
+}
+const hubKarolari = (hub: string): Karo[] => hubKaroDosyalari(PANEL_SRC, hub).flatMap((f) => karolar(kaynak(f)));
+/** Menü kökünün karoları: klasik hub ya da T5 bölümü (Operasyon karoları `group`a göre + Satış'a Teklifler). */
+function menuKarolari(to: string): Karo[] | null {
+  const bolum = BOLUM[to];
+  if (bolum) {
+    const own = hubKarolari("Operations").filter((k) => k.group === bolum);
+    return bolum === "planning" ? [...own, ...hubKarolari("Cost").filter((k) => k.key !== null && SATIS_MALIYET_KAROLARI.includes(k.key))] : own;
+  }
+  const hub = HUB[to];
+  if (!hub) return null;
+  const tum = hubKarolari(hub);
+  return hub === "Cost" ? tum.filter((k) => k.key === null || !SATIS_MALIYET_KAROLARI.includes(k.key)) : tum;
 }
 
 interface Menu { label: string; to: string }
@@ -163,9 +186,9 @@ function paneliOku(): PanelMenusu {
   const menu = new Map<string, string[]>();
   const okunamayan: string[] = [];
   for (const m of solMenu()) {
-    const hub = HUB[m.to];
-    if (!hub) continue;
-    const basliklar = hubKaroDosyalari(PANEL_SRC, hub).flatMap((f) => diziAlanlari(kaynak(f), "title"));
+    const k = menuKarolari(m.to);
+    if (!k) continue;
+    const basliklar = k.map((x) => x.title);
     basliklar.forEach((b, i) => { if (b === "?") okunamayan.push(`${m.label}#${i}`); });
     menu.set(m.label, basliklar);
   }
@@ -186,7 +209,8 @@ function girisFarklari(p: PanelMenusu, tablo: Record<string, Giris>, alt: Record
 }
 
 // UX-2 (2026-10-26): + Kalite Güvence · Belgeler; "Muhasebe" → "Ön Muhasebe"; "Bildirimler" satırı kalktı.
-const KOK_MENU = ["Anasayfa", "Operasyon", "Kalite Güvence", "Maliyet & Teklif", "Ön Muhasebe", "Raporlar", "Tanımlar", "Belgeler", "Yetkilendirme", "Sistem"];
+// T5 (2026-11-11): "Operasyon" → Satış · Üretim · Depo · Sevkiyat; "Maliyet & Teklif" → "Maliyet".
+const KOK_MENU = ["Anasayfa", "Satış", "Üretim", "Depo", "Sevkiyat", "Kalite Güvence", "Maliyet", "Ön Muhasebe", "Raporlar", "Tanımlar", "Belgeler", "Yetkilendirme", "Sistem"];
 function desenler(kokler: readonly string[]): RegExp[] {
   return [
     new RegExp(`(^|[^\\p{L}])(${kokler.join("|")})\\s*[→›>]\\s*\\S`, "u"),
@@ -222,7 +246,7 @@ function main(): void {
   console.log("\n=== Ekran yolu — backend mesajındaki menü yolu panelin menüsünde ===\n");
   const p = paneliOku();
   const karoSayisi = [...p.menu.values()].reduce((n, k) => n + k.length, 0);
-  check("§1a panel menüsü okundu (körlük zemini: 7 hub, ≥ 60 karo)", p.menu.size === 7 && karoSayisi >= 60,
+  check("§1a panel menüsü okundu (körlük zemini: 11 kök, ≥ 90 karo)", p.menu.size === 11 && karoSayisi >= 90,
     `${[...p.menu.entries()].map(([m, k]) => `${m}:${k.length}`).join(" · ")}`);
   check("§1b her karo başlığı çözüldü (düz dizge / TERIM)", p.okunamayan.length === 0, p.okunamayan.join(" · "));
   check("§1c sol menü kökleri bekçinin bildiği kümede", solMenu().every((m) => KOK_MENU.includes(m.label)),
