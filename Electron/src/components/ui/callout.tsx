@@ -56,7 +56,7 @@ export function Callout({ tone = "info", icon, title, children, className }: Pro
   return (
     <div
       className={cn(
-        "flex items-start gap-2.5 rounded-md border p-3 text-xs text-foreground",
+        "flex items-start gap-2.5 rounded-lg border p-3 text-xs text-foreground",
         t.wrap,
         className,
       )}

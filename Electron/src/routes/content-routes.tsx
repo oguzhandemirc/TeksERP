@@ -1394,6 +1394,11 @@ export const contentRoutes: RouteObject[] = [
 
   // Operasyon — hub + alt sayfalar
   { path: "operations", element: <OperationsHubPage /> },
+  // T5 menü bölümleri: izinsiz kart sayfaları (operations ile aynı desen) — her karo kendi izniyle süzülür.
+  { path: "sales", element: <OperationsHubPage section="planning" /> },
+  { path: "production", element: <OperationsHubPage section="production" /> },
+  { path: "warehouse", element: <OperationsHubPage section="warehouse" /> },
+  { path: "shipping", element: <OperationsHubPage section="shipping" /> },
   {
     path: "operations/orders",
     element: (

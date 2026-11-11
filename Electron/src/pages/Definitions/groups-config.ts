@@ -2,6 +2,7 @@ import {
   Layers,
   Handshake,
   Factory,
+  ScanText,
   type LucideIcon,
 } from "lucide-react";
 import { TERIM } from "@/lib/terim";
@@ -9,7 +10,8 @@ import { TERIM } from "@/lib/terim";
 export type DefinitionGroupKey =
   | "catalog"
   | "partners"
-  | "production";
+  | "production"
+  | "incoming";
 
 export interface DefinitionGroup {
   key: DefinitionGroupKey;
@@ -36,5 +38,11 @@ export const definitionGroups: DefinitionGroup[] = [
     title: "Üretim & Kalite",
     get description() { return `İstasyonlar, donanım, rotalar, ${TERIM.terbiyeIsEmri.tekilKucuk} şablonları, hata tipleri ve iade nedenleri`; },
     icon: Factory,
+  },
+  {
+    key: "incoming",
+    title: "Gelen Belge Kurulumu",
+    description: "Müşteri irsaliyesi okuma: belge tipleri, yeni tip tanıtma ve müşteriye göre varsayılan ürün",
+    icon: ScanText,
   },
 ];

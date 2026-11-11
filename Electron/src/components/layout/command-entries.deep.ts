@@ -1,4 +1,4 @@
-import { Send, Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange, ListChecks, Lock, GitMerge } from "lucide-react";
+import { Send, Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, CalendarRange, ListChecks, Lock, GitMerge, LayoutGrid } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -131,12 +131,23 @@ const hubGroupEntries: CommandEntry[] = [
     keywords: "tanım hub bölüm",
     deep: true,
   })),
+  // T5: bölümler menü kökü oldu (`nav:/sales` …); eski adlarıyla ("Operasyon · Satış") aranınca da bulunur.
+  // Eski birleşik `/operations` sayfası çalışmaya devam eder — paletteki tek girişi bu.
+  {
+    key: "ops-hub",
+    label: "Operasyon · Tüm bölümler",
+    description: "Satış, üretim, depo ve sevkiyat kartları tek sayfada",
+    icon: LayoutGrid,
+    to: "/operations",
+    keywords: "operasyon hub bölüm hepsi",
+    deep: true,
+  },
   ...operationGroups.map((g) => ({
     key: `ops-group:${g.key}`,
     get label() { return `Operasyon · ${g.title}`; },
     get description() { return g.description; },
     icon: g.icon,
-    to: "/operations",
+    to: g.route,
     keywords: "operasyon hub bölüm",
     deep: true,
   })),

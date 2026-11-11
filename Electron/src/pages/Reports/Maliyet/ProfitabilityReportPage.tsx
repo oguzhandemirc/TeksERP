@@ -38,7 +38,7 @@ export function ProfitabilityReportPage() {
     <PageShell className="overflow-hidden">
       {blocked ? (
         <>
-          <PageHeader title={ENTRY.baslik} parent={{ label: "Maliyet & Teklif", to: "/cost" }} />
+          <PageHeader title={ENTRY.baslik} parent={{ label: "Maliyet", to: "/cost" }} />
           <PageBody className="p-4"><p className="mx-auto max-w-3xl rounded-md border bg-muted/30 p-4 text-sm">{blocked}</p></PageBody>
         </>
       ) : (
@@ -57,7 +57,7 @@ function ProfitabilityReportBody() {
     <>
       <PageHeader
         title={ENTRY.baslik}
-        parent={{ label: "Maliyet & Teklif", to: "/cost" }}
+        parent={{ label: "Maliyet", to: "/cost" }}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={query.isFetching} onClick={() => void query.refetch()} aria-label="Yenile">

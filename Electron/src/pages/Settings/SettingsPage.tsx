@@ -6,7 +6,7 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { AppearanceControls } from "@/components/layout/AppearanceControls";
+import { AppearanceSettings } from "@/components/layout/appearance/AppearanceSettings";
 import { findCommandEntry } from "@/components/layout/command-entries";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
@@ -48,13 +48,13 @@ export function SettingsPage() {
       <PageHeader title="Kullanıcı Tercihleri" />
 
       <PageBody className="grid gap-6 p-6 lg:grid-cols-2">
-        <Card className="border-t-2 border-t-primary/50">
+        <Card id="gorunum" className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Görünüm</CardTitle>
-            <CardDescription>Tema, vurgu rengi ve yoğunluk. Anında uygulanır, hesabına kaydedilir.</CardDescription>
+            <CardDescription>Tema rengi, menü, zemin, köşe, yoğunluk ve yazı boyutu. Anında uygulanır.</CardDescription>
           </CardHeader>
           <CardContent>
-            <AppearanceControls />
+            <AppearanceSettings />
           </CardContent>
         </Card>
 

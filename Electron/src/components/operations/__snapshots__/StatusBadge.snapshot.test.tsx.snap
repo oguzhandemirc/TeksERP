@@ -2,7 +2,7 @@
 
 exports[`StatusBadge — yapısal snapshot > bilinmeyen durum → ham status + defaultTone (neutral) 1`] = `
 <div
-  class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-foreground/10 text-foreground border-transparent"
+  class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors bg-secondary text-secondary-foreground border-transparent"
 >
   UNKNOWN_STATE
 </div>
@@ -11,27 +11,27 @@ exports[`StatusBadge — yapısal snapshot > bilinmeyen durum → ham status + d
 exports[`StatusBadge — yapısal snapshot > sipariş durumları için ton/etiket sınıfları sabit kalır 1`] = `
 <div>
   <div
-    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-warning/15 text-warning border-transparent"
+    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors bg-warning-soft text-warning-soft-foreground border-transparent"
   >
     Bekliyor
   </div>
   <div
-    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-info/15 text-info border-transparent"
+    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors bg-info-soft text-info-soft-foreground border-transparent"
   >
     Onaylandı
   </div>
   <div
-    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-station-process/15 text-station-process border-transparent"
+    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors bg-primary text-primary-foreground icon-tile tile-violet border-transparent"
   >
     PARTIAL_SHIPPED
   </div>
   <div
-    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-success/15 text-success border-transparent"
+    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors bg-success-soft text-success-soft-foreground border-transparent"
   >
     Tamamlandı
   </div>
   <div
-    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-muted text-muted-foreground border-transparent"
+    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors bg-muted text-muted-foreground border-transparent"
   >
     İptal
   </div>

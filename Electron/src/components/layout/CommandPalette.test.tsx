@@ -87,7 +87,8 @@ describe("CommandPalette", () => {
   it("rapor sayfaları arama yapmadan da listede", () => {
     // Şikâyetin merkezi: Raporlar hiç eklenmemişti — hub da alt rapor da yoktu.
     open();
-    expect(screen.getByText("Üretim")).toBeInTheDocument();
+    // T5: "Üretim" menü kökü + bölüm başlığı + rapor kategorisi (3) — rapor kategorisi düşerse 2 kalır.
+    expect(screen.getAllByText("Üretim").length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText("Nerede Takıldı (WIP)")).toBeInTheDocument();
   });
 
@@ -207,7 +208,8 @@ describe("CommandPalette — K19 menü düzeni", () => {
     menu = toMenuLayoutState({ hiddenScreens: ["reports/production/wip"], advancedGroup: false, advancedScreens: [] });
     open();
     expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
-    expect(screen.getByText("Üretim")).toBeInTheDocument();
+    // T5: "Üretim" menü kökü + bölüm başlığı + rapor kategorisi (3) — rapor kategorisi düşerse 2 kalır.
+    expect(screen.getAllByText("Üretim").length).toBeGreaterThanOrEqual(3);
     type("nerede");
     expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-// Operasyon › Satış & Planlama karoları (sıra = hub sırası).
+// Satış karoları (menü kökü Satış, `/sales`; sıra = hub sırası). Teklifler Maliyet karolarında durur, bölüme `sections.ts` ekler.
 import { Scale, ShoppingCart, Wrench } from "lucide-react";
 import { isProductBalanceVisible } from "../production-regime";
 import { flagOffHint } from "@/lib/flag-setting-path";

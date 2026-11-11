@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
-import { flexRender, type ColumnDef, type Header, type Row, type Table as TanstackTable } from "@tanstack/react-table";
+import { flexRender, type ColumnDef, type ColumnMeta, type Header, type Row, type Table as TanstackTable } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -170,7 +170,7 @@ export function DataTable<T>({
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div data-list-surface="table" className="flex min-h-0 flex-1 flex-col">
       <div ref={rootRef} className="flex-1 overflow-auto">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           {/* containerClassName="overflow-visible": Table'ın kendi overflow-auto
@@ -178,12 +178,12 @@ export function DataTable<T>({
               iç sarmalayıcıya yapışıp dikeyde kayıyordu). overflow-visible ile
               tek scroll kabı = rootRef → başlık gerçekten sabit kalır. */}
           <Table containerClassName="overflow-visible">
-            {/* Mor ayraç çizgisi: <tr> border-b'si `border-collapse: collapse`'te
+            {/* İnce ayraç çizgisi (hedef görsel): <tr> border-b'si `border-collapse: collapse`'te
                 sticky başlıkla YAPIŞMAZ (çökmüş kenarlık gövdeyle boyanıp kayar).
                 Çözüm: çizgiyi th hücrelerinin ARKA PLANINA linear-gradient olarak
-                koy (alt 2px mor, üstü şeffaf) — arka plan çökmüş hücrelerde daima
+                koy (alt 1px kenar rengi, üstü şeffaf) — arka plan çökmüş hücrelerde daima
                 render olur ve th sticky başlıkla birlikte kaydıkça sabit kalır. */}
-            <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-[linear-gradient(to_top,hsl(var(--primary)_/_0.3)_2px,transparent_2px)]">
+            <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-[linear-gradient(to_top,hsl(var(--border))_1px,transparent_1px)]">
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
                   {selectable && (
@@ -218,7 +218,7 @@ export function DataTable<T>({
                   `PeriodClose/CashPeriodSection`ten alındı. */}
               {isError && rows.length > 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={colCount} className="bg-amber-100 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  <TableCell colSpan={colCount} className="bg-warning-soft py-2 text-xs text-warning-soft-foreground">
                     <span className="flex items-center gap-2">
                       <Info className="h-3.5 w-3.5 shrink-0" />
                       Liste tazelenemedi — aşağıdaki satırlar son başarılı okumaya aittir ve eski
@@ -480,7 +480,7 @@ function DataTableRowInner<T>({
         </TableCell>
       )}
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id}>
+        <TableCell key={cell.id} className={alignClass(cell.column.columnDef.meta)}>
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
       ))}
@@ -508,6 +508,12 @@ function DataTableRowInner<T>({
   );
 }
 
+/** Sayısal kolon (meta.align "right" ya da toplanabilir) sağa hizalı + sabit genişlikli rakam. */
+function alignClass(meta: Pick<ColumnMeta<never, unknown>, "align" | "summable"> | undefined): string | undefined {
+  const align = meta?.align ?? (meta?.summable ? "right" : undefined);
+  return align === "right" ? "text-right tabular-nums" : align === "center" ? "text-center" : undefined;
+}
+
 // memo + generic korunumu: memo default shallow karşılaştırması props için yeterli
 // (row/refs kararlı, isSelected/index/selectable primitive).
 const DataTableRow = memo(DataTableRowInner) as typeof DataTableRowInner;
@@ -527,7 +533,7 @@ function SortableHead<T>({ header }: { header: Header<T, unknown> }) {
         opacity: isDragging ? 0.65 : 1,
         zIndex: isDragging ? 20 : undefined,
       }}
-      className="group/th relative cursor-grab touch-none select-none active:cursor-grabbing"
+      className={cn("group/th relative cursor-grab touch-none select-none active:cursor-grabbing", alignClass(header.column.columnDef.meta))}
       {...attributes}
       {...listeners}
     >

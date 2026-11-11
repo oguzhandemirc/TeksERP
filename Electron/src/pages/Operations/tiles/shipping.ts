@@ -1,4 +1,4 @@
-// Operasyon › Sevkiyat & İade karoları (sıra = hub sırası).
+// Sevkiyat karoları (menü kökü Sevkiyat, `/shipping`; sıra = hub sırası).
 import { ClipboardList, PackageCheck, ScanBarcode, Truck, Undo2, FileCheck2 } from "lucide-react";
 import type { OperationsTile } from "../tile-config";
 import { TERIM, TERIM_AD } from "@/lib/terim";

@@ -50,7 +50,7 @@ export function TabStrip() {
   };
 
   return (
-    <div className="flex h-9 shrink-0 select-none items-stretch gap-1 border-b border-border/60 bg-card/40 px-1.5">
+    <div className="flex h-10 shrink-0 select-none items-stretch gap-1 border-b border-border/70 px-2 sm:px-4">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={horizontalListSortingStrategy}>
           <div
@@ -129,8 +129,8 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
         className={cn(
           "group flex h-7 min-w-[100px] max-w-[200px] flex-1 items-center gap-1.5 rounded-md pl-2.5 pr-1.5 text-sm transition-colors touch-none",
           active
-            ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
-            : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+            ? "bg-card font-semibold text-foreground shadow-soft ring-1 ring-card-border"
+            : "text-muted-foreground hover:bg-card/70 hover:text-foreground",
         )}
       >
         <button
@@ -168,7 +168,7 @@ function CloseButton({ title, dirty, onClose }: { title: string; dirty: boolean;
       )}
     >
       {dirty && (
-        <span aria-hidden className="h-2 w-2 rounded-full bg-amber-500 group-hover/close:hidden" />
+        <span aria-hidden className="h-2 w-2 rounded-full bg-warning group-hover/close:hidden" />
       )}
       <X className={cn("h-3 w-3", dirty && "hidden group-hover/close:block")} />
     </button>

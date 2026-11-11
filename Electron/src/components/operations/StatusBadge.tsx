@@ -4,15 +4,15 @@ import { cn } from "@/lib/utils";
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "muted" | "progress";
 
 const toneClasses: Record<Tone, string> = {
-  neutral: "bg-foreground/10 text-foreground border-transparent",
-  info: "bg-info/15 text-info border-transparent",
-  success: "bg-success/15 text-success border-transparent",
-  warning: "bg-warning/15 text-warning border-transparent",
-  danger: "bg-destructive/15 text-destructive border-transparent",
+  neutral: "bg-secondary text-secondary-foreground border-transparent",
+  info: "bg-info-soft text-info-soft-foreground border-transparent",
+  success: "bg-success-soft text-success-soft-foreground border-transparent",
+  warning: "bg-warning-soft text-warning-soft-foreground border-transparent",
+  danger: "bg-destructive-soft text-destructive-soft-foreground border-transparent",
   muted: "bg-muted text-muted-foreground border-transparent",
-  // Mor — "yolda / kısmen tamamlandı" ara durumu (ör. Kısmi Sevk); mavi(info) ve
-  // amber(warning) dolu olduğundan ayrık kalması için station-process token'ı.
-  progress: "bg-station-process/15 text-station-process border-transparent",
+  // "Yolda / kısmen tamamlandı" ara durumu (ör. Kısmi Sevk); mavi(info) ve amber(warning) dolu
+  // olduğundan ayrık kalması için mor simge karesi tonu (pastel zemin + doygun yazı).
+  progress: "icon-tile tile-violet border-transparent",
 };
 
 interface Props {

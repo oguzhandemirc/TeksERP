@@ -23,7 +23,7 @@ export function DataTablePagination({ pagination, actions }: Props) {
     <ListFooter loaded={loaded} total={total} hasMore={hasMore} isFetchingMore={isFetchingMore}>
       {actions}
       <select
-        className="h-7 rounded-md border bg-background px-2 text-xs"
+        className="h-7 rounded-md border border-input bg-card px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         value={pageSize}
         onChange={(e) => setPageSize(Number(e.target.value))}
       >

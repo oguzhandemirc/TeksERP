@@ -1,91 +1,69 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
-import { useOperationsVisibilityContext } from "./useOperationsVisibility";
-import { operationsTiles, type OperationsTile } from "./tile-config";
-import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { RelocatedToolsSection } from "@/pages/Reports/_v2/RelocatedTools";
-import { useMenuLayout } from "@/hooks/useMenuLayout";
-import { isHubTileHidden } from "@/lib/menu-layout";
+import { operationGroups, operationGroup, type OperationGroupKey } from "./groups-config";
+import { useSectionTiles, type VisibleSectionTile } from "./useSectionTiles";
 
-// İstasyon/akış anlamına göre ton — verilmeyen kartlar grup içinde palet tonunu alır.
-const TILE_TONES: Record<string, string> = {
-  orders: "text-info",
-  "work-orders": "text-primary",
-  "product-balance": "text-station-fason",
-  rolls: "text-station-depo",
-  "kursun-dagitim": "text-station-process",
-  shipments: "text-success",
-};
+interface Props {
+  /** Verilirse yalnız o bölüm (menü kökü sayfası: `/sales` …); verilmezse eski birleşik `/operations`. */
+  section?: OperationGroupKey;
+}
 
-export function OperationsHubPage() {
-  // Y6 fix: isAdmin bypass'ı kaldırıldı — kısmi admin, yetkisiz operasyon kartını görmez.
-  const { hasPermission, hasAnyPermission } = useRoleAccess();
-  // Karo görünürlüğünün bağlı olduğu çalışma anı durumu — kural karoların yanında
-  // (`tile-config.ts` → `visibleWhen`), bağlamın kurulumu tek yerde
-  // (`useOperationsVisibilityContext`; komut paleti de aynısını kullanır).
-  //
-  // YÜKLEME ANI BİLİNÇLİ: sayaçlar gelene kadar 0 kabul edilir, yani davranış saf
-  // bayrak kuralına düşer. Alternatif (veri gelene kadar hiç çizmemek) hub'ın her
-  // açılışında karoların geç gelmesi/titremesi demekti; eksik kalan karo saniyeler
-  // içinde kendiliğinden belirir ve bu, menüde kabul edilebilir tek yönlü hatadır.
-  const visibilityCtx = useOperationsVisibilityContext();
-  const canSeeOff = useCanSeeOffModules();
-
-  // Kapalı modül karosu yalnız modülü açabilene soluk çizilir, diğerine hiç (`offEntryMode`, 2026-11-01); izin yine şart.
-  const permitted = (t: OperationsTile) =>
-    t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
-  const isOff = (t: OperationsTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
-  const menu = useMenuLayout();
-  const visible = operationsTiles.filter((t) => !isHubTileHidden(menu, t.to) && permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
-
-  const byGroup = new Map<OperationGroupKey, OperationsTile[]>();
-  for (const t of visible) {
-    const list = byGroup.get(t.group) ?? [];
-    list.push(t);
-    byGroup.set(t.group, list);
-  }
+/**
+ * Bölüm kart sayfası. Görünürlük `useSectionTiles`ten (menü alt listesiyle AYNI süzgeç).
+ * YÜKLEME ANI: bayraklar gelene dek iskelet — modüllü karo gizlenip sonra BELİRMEZ (titreme sıfır).
+ */
+export function OperationsHubPage({ section }: Props) {
+  const { ready, tiles } = useSectionTiles();
+  const groups = section ? [operationGroup(section)] : operationGroups;
+  const single = section ? operationGroup(section) : null;
 
   return (
     <PageShell>
-      <PageHeader
-        title="Operasyon"
-      />
-      <PageBody className="flex flex-col gap-8 p-6">
-        {/* Bayraklar gelene dek modüllü karo gizlenip sonra BELİRMEZ — iskelet (titreme sıfır). */}
-        {!visibilityCtx.flagsReady ? <HubSkeleton count={9} /> : null}
-        {visibilityCtx.flagsReady && operationGroups.map((group) => {
-          const groupTiles = byGroup.get(group.key);
-          if (!groupTiles || groupTiles.length === 0) return null;
-          return (
-            <section key={group.key}>
-              <div className="mb-3 flex items-baseline gap-2">
-                <group.icon className="h-4 w-4 self-center text-muted-foreground" />
-                <h2 className="text-sm font-semibold">{group.title}</h2>
-              </div>
-              <HubGrid>
-                {groupTiles.map((tile, i) => (
-                  <HubCard
-                    key={tile.key}
-                    to={tile.to}
-                    title={tile.titleWhen?.(visibilityCtx) ?? tile.title}
-                    description={tile.description}
-                    icon={tile.icon}
-                    tone={TILE_TONES[tile.key]}
-                    index={i}
-                    offHint={isOff(tile) ? tile.offHint : undefined}
-                  />
-                ))}
-              </HubGrid>
-            </section>
-          );
-        })}
+      <PageHeader title={single?.title ?? "Operasyon"} />
+      <PageBody className="flex flex-col gap-8 px-4 pb-6 pt-2 md:px-6">
+        {!ready ? <HubSkeleton count={9} /> : null}
+        {ready &&
+          groups.map((group) => {
+            const groupTiles = tiles[group.key];
+            if (groupTiles.length === 0) return null;
+            return (
+              <section key={group.key}>
+                {single ? null : (
+                  <div className="mb-3 flex items-baseline gap-2">
+                    <group.icon className="h-4 w-4 self-center text-muted-foreground" />
+                    <h2 className="text-sm font-semibold">{group.title}</h2>
+                  </div>
+                )}
+                <SectionGrid tiles={groupTiles} />
+              </section>
+            );
+          })}
         {/* Raporlar v2: rapor menüsünden çıkan iz sürme araçları (bayrak kapalıyken çizilmez). */}
-        {visibilityCtx.flagsReady ? <RelocatedToolsSection host="/operations" title="İz sürme" /> : null}
+        {ready && (!section || section === "production") ? (
+          <RelocatedToolsSection host="/operations" title="İz sürme" />
+        ) : null}
       </PageBody>
     </PageShell>
+  );
+}
+
+function SectionGrid({ tiles }: { tiles: VisibleSectionTile[] }) {
+  return (
+    <HubGrid>
+      {tiles.map((tile, i) => (
+        <HubCard
+          key={tile.key}
+          to={tile.to}
+          title={tile.label}
+          description={tile.description}
+          icon={tile.icon}
+          index={i}
+          offHint={tile.off ? tile.offHint : undefined}
+        />
+      ))}
+    </HubGrid>
   );
 }

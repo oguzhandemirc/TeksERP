@@ -15,6 +15,7 @@ import { useLicenseSuspension } from "@/lib/license/suspension";
 import { fetchPreferences, savePreferences } from "@/services/preferencesService";
 import { DEFAULT_PREFERENCES, type AppPreferences } from "@/types/preferences";
 import { readTabOpenMode, setTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
+import { applyAppearance, resolveAppearance } from "@/lib/theme/appearance";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -29,22 +30,6 @@ interface PreferencesContextValue {
 export type PreferencePatch = Partial<AppPreferences> | ((current: AppPreferences) => Partial<AppPreferences>);
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
-
-/** Accent rengini :root CSS değişkenlerine yazar (null = token varsayılanı). */
-function applyAccent(accent: string | null | undefined): void {
-  const root = document.documentElement;
-  const vars = ["--primary", "--brand", "--ring"];
-  if (accent) {
-    for (const v of vars) root.style.setProperty(v, accent);
-  } else {
-    for (const v of vars) root.style.removeProperty(v);
-  }
-}
-
-/** Yoğunluğu <html data-density> ile işaretler — index.css ölçeği uygular. */
-function applyDensity(density: AppPreferences["density"]): void {
-  document.documentElement.dataset.density = density ?? "comfortable";
-}
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -72,11 +57,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const prefs = (enabled ? data : undefined) ?? DEFAULT_PREFERENCES;
   const ready = !enabled || isFetched;
 
-  // Accent + yoğunluğu DOM'a uygula.
+  // Görünüm (tema rengi, menü, zemin, köşe, yoğunluk, yazı, simge) → <html data-*>.
+  const appearance = resolveAppearance(prefs);
+  const appearanceKey = JSON.stringify(appearance);
   useEffect(() => {
-    applyAccent(prefs.accent);
-    applyDensity(prefs.density);
-  }, [prefs.accent, prefs.density]);
+    applyAppearance(JSON.parse(appearanceKey));
+  }, [appearanceKey]);
 
   // Sekme davranışı aynası — tıklama anında okunur, değişiklik bir sonraki tıkta etkili.
   const tabOpenMode = readTabOpenMode(prefs);

@@ -27,7 +27,7 @@ export function ChannelBadge() {
     <span
       data-channel-badge=""
       title={title}
-      className="flex items-center rounded-md border border-rose-500/60 bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400"
+      className="flex items-center rounded-md border border-destructive/40 bg-destructive-soft px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-destructive-soft-foreground"
     >
       {label}
     </span>

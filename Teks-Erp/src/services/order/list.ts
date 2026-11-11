@@ -51,7 +51,8 @@ function hasWoLink(statuses: WorkOrderStatus[]): Record<string, unknown> {
   } satisfies Prisma.OrderWhereInput;
 }
 
-const WO_STATE_WHERE: Record<string, Record<string, unknown>> = {
+/** Dışa açık: açılış panosunun "üretime gönderilmemiş sipariş" sayımı `NONE` rozetini birebir okur. */
+export const WO_STATE_WHERE: Record<string, Record<string, unknown>> = {
   NONE: { NOT: hasWoLink(WO_ROLLUP_ACTIVE) },
   PLANNED: {
     AND: [

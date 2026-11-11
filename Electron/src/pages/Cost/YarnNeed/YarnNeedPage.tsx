@@ -31,7 +31,7 @@ export function YarnNeedPage() {
     <PageShell className="overflow-hidden">
       <PageHeader
         title={ENTRY.baslik}
-        parent={{ label: "Maliyet & Teklif", to: "/cost" }}
+        parent={{ label: "Maliyet", to: "/cost" }}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={query.isFetching} onClick={() => void query.refetch()} aria-label="Yenile">

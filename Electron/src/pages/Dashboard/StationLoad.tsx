@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { Activity } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { SectionCard } from "@/components/ui/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -59,20 +59,16 @@ export function StationLoad() {
   if (!allowed) return null;
 
   return (
-    <Card className="border-t-2 border-t-primary/50">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <Activity className="h-4 w-4 text-muted-foreground" />
-          İstasyon Doluluk
-          {data && data.length > 0 && (
-            <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-              <span className="live-dot" />
-              Canlı
-            </span>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      title="İstasyon doluluğu"
+      titleExtra={<Activity className="h-4 w-4 text-muted-foreground" aria-hidden />}
+      action={data && data.length > 0 ? (
+        <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+          <span className="live-dot" />
+          Canlı
+        </span>
+      ) : undefined}
+    >
         {isLoading ? (
           <LoadingGrid />
         ) : isError ? (
@@ -97,8 +93,7 @@ export function StationLoad() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }
 

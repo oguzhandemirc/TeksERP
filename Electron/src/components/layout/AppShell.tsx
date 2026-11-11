@@ -89,17 +89,18 @@ function MenuShell() {
   usePdfLicenseWatermark();
 
   return (
-    <div className="app-bg flex h-screen w-screen flex-col overflow-hidden text-foreground">
-      <Topbar
-        onToggleSidebar={toggleSidebar}
-        narrow={narrow}
-        drawerOpen={drawerOpen}
-        onOpenCommand={() => setPaletteOpen(true)}
-      />
-      <ShellBanners />
-      <div className="relative flex min-h-0 flex-1">
-        <ShellSidebar narrow={narrow} collapsed={collapsed} drawerOpen={drawerOpen} onCloseDrawer={closeDrawer} />
-        <main className="relative min-w-0 flex-1 overflow-hidden">
+    // Düzen: tam boy sol menü | sağ sütun (üst çubuk → bantlar → sekmeler + içerik). Dar kabukta menü çekmecedir.
+    <div className="app-bg relative flex h-screen w-screen overflow-hidden text-foreground">
+      <ShellSidebar narrow={narrow} collapsed={collapsed} drawerOpen={drawerOpen} onCloseDrawer={closeDrawer} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar
+          onToggleSidebar={toggleSidebar}
+          narrow={narrow}
+          drawerOpen={drawerOpen}
+          onOpenCommand={() => setPaletteOpen(true)}
+        />
+        <ShellBanners />
+        <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
           <TabHost />
         </main>
       </div>

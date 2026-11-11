@@ -31,12 +31,12 @@ const SheetOverlay = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
-  <SheetPrimitive.Overlay data-ui-overlay="" className={cn("fixed inset-0 z-50 bg-black/70", className)} {...props} ref={ref} />
+  <SheetPrimitive.Overlay data-ui-overlay="" className={cn("fixed inset-0 z-50 bg-black/50", className)} {...props} ref={ref} />
 ));
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
 const sheetVariants = cva(
-  "fixed z-50 gap-4 bg-background p-6 shadow-lg",
+  "fixed z-50 gap-4 bg-card p-6 shadow-card",
   {
     variants: {
       side: {
@@ -86,7 +86,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
             ref={ownOverlayRef}
             data-ui-overlay=""
             aria-hidden
-            className="absolute inset-0 z-50 bg-black/70"
+            className="absolute inset-0 z-50 bg-black/50"
           />
         ) : (
           <SheetOverlay />
@@ -121,7 +121,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
             <EscapeRegistrar close={requestClose} isActive={() => isTabActiveRef.current} />
           )}
           {children}
-          <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none">
+          <SheetPrimitive.Close className="absolute right-4 top-4 rounded-md opacity-70 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <X className="h-4 w-4" />
             <span className="sr-only">Kapat</span>
           </SheetPrimitive.Close>
