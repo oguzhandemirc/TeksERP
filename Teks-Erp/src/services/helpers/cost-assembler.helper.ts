@@ -17,6 +17,7 @@ import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeav
 import { readWarpLayersForItems, readWeftOverridesForRecipes, weftOverrideFor, type CostWarpLayerRow } from "./effective-construction.helper";
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 import { layerOwnCardWastePct } from "./warp-layer-beam.helper";
+import { resolveLengthShrinkPct } from "./raw-need.helper";
 
 
 type Dec = Prisma.Decimal;
@@ -79,7 +80,17 @@ export interface CostSources {
 
 type Db = Prisma.TransactionClient;
 
-export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCodes: string[] = [], recipeIds: string[] = []): Promise<CostSources> {
+export function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCodes: string[] = [], recipeIds: string[] = []): Promise<CostSources> {
+  return loadSourcesTx(tx, { itemIds, extraRateCodes, recipeIds, withPrices: true });
+}
+
+/** Yalnız yapı/kg isteyen tüketici (hesaplanan gramaj): iplik fiyatı sorgusu koşmaz, kalan kaynaklar aynı. */
+export function loadCostStructureSourcesTx(tx: Db, itemIds: string[]): Promise<CostSources> {
+  return loadSourcesTx(tx, { itemIds, extraRateCodes: [], recipeIds: [], withPrices: false });
+}
+
+async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: string[]; recipeIds: string[]; withPrices: boolean }): Promise<CostSources> {
+  const { itemIds, extraRateCodes, recipeIds } = a;
   const rows = itemIds.length ? await tx.item.findMany({ where: { id: { in: itemIds } }, select: itemSelect }) : [];
   const params = await tx.costParameterSet.findFirst({ where: { status: "ACTIVE" } });
   const recipes = recipeIds.length ? await tx.productRecipe.findMany({ where: { id: { in: recipeIds } }, select: { id: true, itemId: true, finishingRateCode: true } }) : [];
@@ -96,7 +107,7 @@ export async function loadCostSourcesTx(tx: Db, itemIds: string[], extraRateCode
     if (r.costStructure?.finishingRateCode) codes.add(r.costStructure.finishingRateCode);
     for (const p of r.costStructure?.processes ?? []) codes.add(p.rateCode);
   }
-  const prices = yarnIds.size ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
+  const prices = yarnIds.size && a.withPrices ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
   const weavingMethod = await readCostWeavingStandardMethod(tx);
   // Metre tabanlı tarifelerde ayar okunmaz (sorgu sayısı bugünkü).
@@ -207,6 +218,8 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     role: l.role,
     beamMode: l.beamMode,
   }));
+  // Boy çekmesi YAPI → tarife önceliği tek çözücüden (öneri ve iplik ihtiyacı da aynısını çağırır).
+  const shrink = resolveLengthShrinkPct(cs?.lengthShrinkPct, finishing ? src.rates.get(finishing.code)?.typicalShrinkPct : null);
   const processes = (cs?.processes ?? []).filter((p) => p.rateCode !== code).map((p) => finishingOf(src, p.rateCode)).filter((r): r is CostRate => r !== null);
   return {
     schemaVersion: 1,
@@ -244,7 +257,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     },
     finishing,
     ...(processes.length ? { processes } : {}),
-    lengthShrinkPct: firstOf([o.lengthShrinkPct, "ELLE"], [cs?.lengthShrinkPct, "YAPI"], [finishing && src.rates.get(finishing.code)?.typicalShrinkPct, "KART"]),
+    lengthShrinkPct: firstOf([o.lengthShrinkPct, "ELLE"], [shrink.value, shrink.source]),
     fabricWastePct: firstOf([o.fabricWastePct, "ELLE"], [cs?.fabricWastePct, "YAPI"], [p?.defaultFabricWastePct, "PARAMETRE"]),
     overheadPct: firstOf([p?.overheadPct, "PARAMETRE"]),
     extra: extraTry ? { amountTry: extraTry, label: cs?.extraCostLabel ?? null } : null,

@@ -39,7 +39,7 @@ import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
-import { readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
 import { readPartyCodeAuto } from "./production";
 import { readItemPhaseOutNewOrder, readShippingOrderRequirement, readShippingReadyNotifyUnits, resetReadyBaselineOnIncomingDocOpen } from "./shipping";
@@ -219,12 +219,14 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
       /** null = fabrika varsayılanına dön (0 dk). */
       tezgahEscalationGraceMinutes?: number | null;
+      /** null = fabrika varsayılanına dön (%0). */
+      dokumaWeavingWastePct?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
       /** null = varsayılana dön (12 sa). */
@@ -1644,6 +1646,14 @@ export async function setFeatureFlags(
         }
       }
       await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_START, v === null ? DEFAULT_SHIPPING_SACK_SEQ_START : v, "Sevkiyat içi çuval sırası başlangıç numarası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaWeavingWastePct")) {
+      const v = input.dokumaWeavingWastePct;
+      // `null` = alan temizlendi → varsayılan 0 (fire çarpanı yok = bugünkü davranış).
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > DOKUMA_WEAVING_WASTE_PCT_MAX)) {
+        throw AppError.badRequest(`Dokuma firesi 0 ile ${DOKUMA_WEAVING_WASTE_PCT_MAX} arasında olmalı (yüzde)`);
+      }
+      await this.set(SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT, v === null ? DEFAULT_DOKUMA_WEAVING_WASTE_PCT : v, "Dokuma firesi (%) — üretim önerisi ve iplik ihtiyacında ham metre = … ÷ (1 − fire)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahEscalationGraceMinutes")) {
       const v = input.tezgahEscalationGraceMinutes;

@@ -436,6 +436,8 @@ export interface FeatureFlags {
   dokumaOrderLineLinkRequired: boolean;
   /** S1 (2026-10-21): top doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Panel: Dokuma kategorisi (S4b). */
   dokumaRollBirth: DokumaRollBirth;
+  /** Dokuma firesi % (backend `DEFAULT_DOKUMA_WEAVING_WASTE_PCT` = 0). */
+  dokumaWeavingWastePct: number;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */

@@ -9,6 +9,8 @@
 //      ürün `yapisiEksik`te, rapor düşmez · §8 netleme = ProductionBalanceService · §9 ALTIN (§2.3 ürünü
 //      5.000 m = motor × metre) · §10 modül kapalı 403 MODULE_DISABLED, izin yok 403, tanınmayan 400
 //   §11 iplik/ticaret/devere kapalıyken ilgili tablolara SIFIR sorgu · §12 sunum: null → "bilinmiyor"
+//   §13 (Seyitoğlu temel) talep HAM metreye çevrilir: sipariş ÷ (1 − çekme) ÷ (1 − dokuma firesi); çekme maliyet
+//      girdisinin tek-çözücü değeri; fire yalnız dokuma açıkken. §1–§12 altını "çekme 0" yapısıyla (mamul = ham) korunur.
 // Koşum: npx tsx scripts/test_iplik_ihtiyaci.ts (kendi _test DB'n)
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -27,6 +29,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { altinYapiYaz, fiksturKur, fiksturSil, type MaliyetFikstur } from "./lib/maliyet-fikstur";
 import { assertGelistirmeVeritabani } from "./db-guard";
+import { rawMetersFromFinished } from "../src/services/helpers/raw-need.helper";
 
 let pass = 0,
   fail = 0;
@@ -38,7 +41,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg3 = (v: Prisma.Decimal) => v.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP).toFixed(3);
 
-async function withSettings<T>(values: Record<string, boolean>, fn: () => Promise<T>): Promise<T> {
+async function withSettings<T>(values: Record<string, boolean | number>, fn: () => Promise<T>): Promise<T> {
   const keys = Object.keys(values);
   const before = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
   try {
@@ -83,6 +86,8 @@ interface Fx {
 
 async function kur(f: MaliyetFikstur): Promise<Fx> {
   await altinYapiYaz(f);
+  // §1–§12 altını mamul = ham (çekme 0, YAPI) üzerinde; ham çevrimi §13 ölçer.
+  await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { lengthShrinkPct: D(0) } });
   // Alış miktarı yalnız KG birimli kalemde okunur — fikstür iplikleri KG.
   await prisma.item.updateMany({ where: { id: { in: [f.warpYarnId, f.weftAId, f.weftBId] } }, data: { unit: "KG" } });
   const cust = await prisma.customer.create({ data: { code: `${f.tag}-M`, name: `${f.tag} müşteri` }, select: { id: true } });
@@ -241,6 +246,30 @@ async function bolumlerKapali(x: Fx): Promise<void> {
   check("§6c Emanet kapalı → emanet kolonu null, stok toplamı serbest (300)", we?.emanetKg === null && we.serbestStokKg === "300.000" && emanetOff.meta.kaynaklar.emanet === false, `${we?.serbestStokKg}`);
 }
 
+/** §13 ham metre: yapı çekmesi %4 + dokuma firesi %5 → 5000 ÷ 0,96 ÷ 0,95; kg = motor kg/m × ham metre. */
+async function bolum13(x: Fx): Promise<void> {
+  const { f } = x;
+  await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { lengthShrinkPct: D(4) } });
+  try {
+    const dokumaOn = { ...ALL_ON, [SETTING_KEYS.PRODUCTION_ENABLED]: true, [SETTING_KEYS.DOKUMA_ENABLED]: true, [SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT]: 5 };
+    const r = await withSettings(dokumaOn, () => yarnNeedReport({ musteriId: x.customerId, netle: false, leventDus: false }));
+    const ham = rawMetersFromFinished(5000, 4, 5)!;
+    const input = await assembleCostInputTx(prisma as unknown as Prisma.TransactionClient, { itemId: f.fabricId });
+    const u = yarnUsagePerM(input);
+    check("§13a ⭐ Kumaş metresi HAM: 5000 ÷ 0,96 ÷ 0,95 = 5482,5; sipariş metresi 5000 ayrı", r.ozet.kumasMetre === ham.toFixed(1) && r.ozet.siparisMetre === "5000.0" && r.ozet.kumasMetre === "5482.5", `${r.ozet.kumasMetre} / ${r.ozet.siparisMetre}`);
+    check("§13b ⭐ Çözgü kg = yarnUsagePerM × ham metre (sipariş metresi DEĞİL)", row(r, f.warpYarnId)?.cozguKg === kg3(u.warp!.kgPerM.mul(ham)), row(r, f.warpYarnId)?.cozguKg);
+    check("§13c Atkı kg da ham metreyle", row(r, f.weftAId)?.atkiKg === kg3(u.weft.find((w) => w.yarnItemId === f.weftAId)!.kgPerM.mul(ham)));
+    check("§13d Beyan: metreEsasi HAM, uygulanan dokuma firesi 5", r.meta.metreEsasi === "HAM" && r.meta.dokumaFiresiPct === 5);
+    check("§13e Çekme maliyet girdisinin tek-çözücü değeri (YAPI 4)", input.lengthShrinkPct.value?.eq(4) === true && input.lengthShrinkPct.source === "YAPI");
+    const off = await withSettings({ ...dokumaOn, [SETTING_KEYS.DOKUMA_ENABLED]: false }, () => yarnNeedReport({ musteriId: x.customerId, netle: false, leventDus: false }));
+    check("§13f ⭐ Dokuma kapalı → fire uygulanmaz (yalnız çekme: 5000 ÷ 0,96 = 5208,3), beyan 0", off.ozet.kumasMetre === "5208.3" && off.meta.dokumaFiresiPct === 0, off.ozet.kumasMetre);
+    const sun = buildYarnNeedSunumu(r, {});
+    check("§13g Sunum ana sayı adı \"ham metre\" der", sun.yanSayilar.some((y) => y.ad.includes("ham metre")));
+  } finally {
+    await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { lengthShrinkPct: D(0) } });
+  }
+}
+
 async function bolum10(): Promise<void> {
   const mw = await withSettings({ [SETTING_KEYS.MALIYET_ENABLED]: false }, () =>
     new Promise<{ statusCode?: number; details?: { code?: string } } | null>((resolve) => void requireMaliyetEnabled({} as never, {} as never, (err?: unknown) => resolve((err as never) ?? null))));
@@ -262,6 +291,7 @@ async function main(): Promise<void> {
     const x = await kur(f);
     await withSettings(ALL_ON, () => bolumlerAcik(x));
     await bolumlerKapali(x);
+    await bolum13(x);
     await bolum10();
   } finally {
     await temizle(f);

@@ -11,7 +11,7 @@ import { readGoodsReceiptRequirePriceEnabled, readGoodsReceiptYarnQualityHoldEna
 import { DEFAULT_DOKUMA_ROLL_BIRTH, DEFAULT_KURSUN_METER_CAPTURE, type DokumaRollBirth, type KursunMeterCapture, type PackingGroupMode } from "./defaults";
 import { readFinanceChequeNoteMovementEnabled, readFinanceEnabled, readFinanceInvoiceMatchTolerance } from "./finance";
 import { readBatchShortNumberEnabled, readKursunBypassEnabled, readKursunMeterCapture } from "./kursun-batch";
-import { readDevereBeamWeavingLinkRequired, readDevereEnabled, readDokumaEnabled, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readIplikEnabled, readProductionEnabled, readTicaretEnabled } from "./modules";
+import { readDevereBeamWeavingLinkRequired, readDevereEnabled, readDokumaEnabled, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, readIplikEnabled, readProductionEnabled, readTicaretEnabled } from "./modules";
 import { readPackingGroupMode, readPackingGroupsEnabled } from "./packing-loom";
 import { readTamburOverQuantityEnabled, readTamburUndoFullSameDayOnly } from "./tambur-fason";
 
@@ -131,6 +131,12 @@ export async function effectivePackingGroupMode(
 export async function resolveOrderLineLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return false;
   return readDokumaOrderLineLinkRequired(tx);
+}
+
+/** Dokuma firesi % — ETKİN değer: dokuma (üretim ∧ lisans tavanı) kapalıyken 0 (eski ayar sessizce çarpmasın). */
+export async function resolveDokumaWeavingWastePct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return DEFAULT_DOKUMA_WEAVING_WASTE_PCT;
+  return readDokumaWeavingWastePct(tx);
 }
 
 /** S1 — top doğuş yolu — ETKİN değer: dokuma (üretim ∧ lisans tavanı) kapalıyken daima `TABLET_DOFF` (KK1 bugünküyle birebir). */

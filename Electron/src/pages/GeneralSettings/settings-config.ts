@@ -1980,6 +1980,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         gate: RollBirthGate,
       },
     ],
+    numberFlags: [
+      {
+        // Seyitoğlu temel: backend `readDokumaWeavingWastePct` (kayıt yok = 0) ve üst sınır 50 ile birebir.
+        key: "dokumaWeavingWastePct",
+        title: "Dokuma firesi (%)",
+        desc: "Siparişten üretim önerisinde ve iplik ihtiyacında dokunacak ham metre bu yüzde kadar büyütülür: ham = açık metre ÷ (1 − boy çekmesi) ÷ (1 − dokuma firesi). 0 (varsayılan) = fire eklenmez, bugünkü hesap. Önizleme uygulanan yüzdeyi gösterir.",
+        min: 0,
+        max: 50,
+        fallback: 0,
+        unit: "%",
+        step: 0.5,
+        audience: ["Planlamacı", "Yönetim"],
+      },
+    ],
   },
   {
     // TEZGAH İZLEME — KİLİT `tezgahEnabled` (ETKİN: production && tezgah); yazma

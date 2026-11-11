@@ -404,6 +404,8 @@ export const updateSchema = z.strictObject({
   dokumaOrderLineLinkRequired: z.boolean().optional(),
   /** S1: top doğuş yolu (enum; `DOKUMA_ROLL_BIRTH_MODES` ile birebir). */
   dokumaRollBirth: z.enum(["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"]).optional(),
+  /** Dokuma firesi % (`DOKUMA_WEAVING_WASTE_PCT_MAX` ile birebir); null = varsayılana (0) dön. */
+  dokumaWeavingWastePct: z.number({ message: "Dokuma firesi sayı olmalı" }).min(0, "Dokuma firesi negatif olamaz").max(50, "Dokuma firesi en çok %50 olabilir").nullable().optional(),
   // reports.closedKeys — KAPALI raporların anahtar listesi (`REPORT_CATALOG` anahtarları).
   // ⚠️ Anahtar doğrulaması BURADA DEĞİL serviste: tanınmayan anahtar 400 `REPORT_KEY_UNKNOWN`
   // ile ADIYLA reddedilir; Zod'un `z.enum(29 anahtar)` hâli yalnız "geçersiz değer" derdi ve

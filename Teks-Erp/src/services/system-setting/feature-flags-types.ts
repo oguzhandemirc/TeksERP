@@ -218,6 +218,8 @@ export interface FeatureFlags {
   dokumaOrderLineLinkRequired: boolean;
   /** S1: topun doğuş yolu (varsayılan `TABLET_DOFF` = bugün). HAM; etkin `resolveDokumaRollBirth` (dokuma kapalı → TABLET_DOFF). */
   dokumaRollBirth: DokumaRollBirth;
+  /** Dokuma firesi % (0 = bugünkü davranış); üretim önerisi ve iplik ihtiyacı ham metresine girer. */
+  dokumaWeavingWastePct: number;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */

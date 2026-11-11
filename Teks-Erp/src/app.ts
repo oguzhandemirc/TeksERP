@@ -56,6 +56,7 @@ import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import productionProposalRoutes from "./routes/production-proposal.routes";
+import itemComputedGsmRoutes from "./routes/item-computed-gsm.routes";
 import loomSuggestionRoutes from "./routes/loom-suggestion.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
 import scanRoutes from "./routes/scan.routes";
@@ -543,6 +544,8 @@ app.use("/api", licenseGate);
 // API Routes
 // =============================================================================
 app.use("/api/auth", authRoutes);
+// Seyitoğlu temel: hesaplanan gramaj (kendi yoluna bağlı; salt okuma).
+app.use("/api/items/:id/computed-gsm", itemComputedGsmRoutes);
 app.use("/api/items", itemRoutes);
 // Hizmet kartları ayrı tabloda (`service_items`, D1b); izin ürün kartıyla aynı.
 app.use("/api/service-items", serviceItemRoutes);

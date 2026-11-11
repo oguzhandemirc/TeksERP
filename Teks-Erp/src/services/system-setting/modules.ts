@@ -8,7 +8,7 @@
 
 import prisma from "../../lib/prisma";
 import { applyModuleCeiling } from "../../lib/license/module-ceiling";
-import { asBoolean } from "./core";
+import { asBoolean, asNumber } from "./core";
 import { DEFAULT_DOKUMA_ROLL_BIRTH, DOKUMA_ROLL_BIRTH_MODES, type DokumaRollBirth } from "./defaults";
 import { SETTING_KEYS } from "./keys";
 
@@ -282,6 +282,17 @@ export async function readDokumaRollBirth(tx?: Pick<typeof prisma, "systemSettin
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_ROLL_BIRTH }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && DOKUMA_ROLL_BIRTH_MODES.includes(v as DokumaRollBirth) ? (v as DokumaRollBirth) : DEFAULT_DOKUMA_ROLL_BIRTH;
+}
+
+/** Dokuma firesi % — varsayılan 0 (bugünkü davranış: ham ihtiyaç yalnız çekmeyle büyür); üst sınır dahil. */
+export const DEFAULT_DOKUMA_WEAVING_WASTE_PCT = 0;
+export const DOKUMA_WEAVING_WASTE_PCT_MAX = 50;
+/** Dokuma firesi HAM değer — satır yok / çöp / aralık dışı → 0 (çarpan uygulanmaz, sessiz büyütme yok). */
+export async function readDokumaWeavingWastePct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT }, select: { value: true } });
+  if (!setting) return DEFAULT_DOKUMA_WEAVING_WASTE_PCT;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isFinite(n) || n < 0 || n > DOKUMA_WEAVING_WASTE_PCT_MAX ? DEFAULT_DOKUMA_WEAVING_WASTE_PCT : n;
 }
 
 /** Dokuma işi modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış:

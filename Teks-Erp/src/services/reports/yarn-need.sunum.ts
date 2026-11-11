@@ -83,13 +83,14 @@ export function buildYarnNeedSunumu(r: YarnNeedReport, o: YarnNeedOptions): Rapo
     anaSayi: anaSayiKur({ olcu: "iplik.eksikKg", ad: "Eksik iplik", deger: sayi(r.ozet.eksikKg), birim: "kg", iyiYon: "asagi" }),
     yanSayilar: [
       anaSayiKur({ olcu: "iplik.ihtiyacKg", ad: "İplik ihtiyacı", deger: sayi(r.ozet.ihtiyacKg), birim: "kg", iyiYon: "notr" }),
-      anaSayiKur({ olcu: "iplik.kumasMetre", ad: "Dokunacak kumaş", deger: sayi(r.ozet.kumasMetre), birim: "m", iyiYon: "notr" }),
+      anaSayiKur({ olcu: "iplik.kumasMetre", ad: "Dokunacak kumaş (ham metre)", deger: sayi(r.ozet.kumasMetre), birim: "m", iyiYon: "notr" }),
     ],
     anlati,
     grafik: null,
     tablo: yarnNeedTable(r),
     tanimlar: [
       { ad: "İplik ihtiyacı", aciklama: "Açık siparişlerin dokunacak metresi için ürün yapısından çıkan çözgü ve atkı ipliği; iptal edilen kalemler sayılmaz." },
+      { ad: "Ham metre", aciklama: "Sipariş (mamul) metresi boy çekmesi ve dokuma firesiyle büyütülür: ham = sipariş metresi ÷ (1 − çekme) ÷ (1 − fire). Çekme ürün yapısından, yoksa terbiye tarifesinden; fire Dokuma ayarından." },
       { ad: "Serbest stok", aciklama: "Depodaki iplik; müşterinin bize bıraktığı emanet iplik bu sayıya girmez." },
       { ad: "Eksik", aciklama: "İhtiyaçtan serbest stok ve yoldaki alış siparişi çıkınca kalan; sıfırın altına inmez." },
       { ad: BILINMIYOR, aciklama: "İlgili modül kapalı olduğu için değer okunamadı; sıfır demek değildir." },

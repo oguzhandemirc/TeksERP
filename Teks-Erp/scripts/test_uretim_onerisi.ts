@@ -11,6 +11,8 @@
 //   §2d aynı token'la EŞZAMANLI iki istek → bir yaratma + bir replay, sayım 1/1
 //   §5 bayat seçim 409 PROPOSAL_STALE · yazma izni yoksa 403 (anahtar-kapsamlı) · aynı anahtar iki kez → 400
 //   §6 dokuma modülü kapalı → önizlemede yalnız iş emri; dokuma seçimi 403 MODULE_DISABLED
+//   §7 (Seyitoğlu temel) çekme tek çözücü: ürün yapısı çekmesi tarifeninkini YENER (maliyetle aynı sıra);
+//      dokuma firesi ayarı ham = açık ÷ (1 − çekme) ÷ (1 − fire); uygulanan fire `weavingWastePct` (grup + üst)
 // Çalıştır: npx tsx scripts/test_uretim_onerisi.ts (yalnız test DB)
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -29,7 +31,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const TAG = `TEST-SYM1-${Date.now().toString(36).toUpperCase()}`;
 const FULL: ProposalAccess = { readWeaving: true, writeWeaving: true, writeWorkOrder: true };
-const KEYS = [SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.DOKUMA_ENABLED];
+const KEYS = [SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT];
 const saved = new Map<string, unknown>();
 const made = { customer: "", items: [] as string[], weft: "", station: "", route: "", recipe: "", recipe2: "", rate: "" };
 
@@ -72,8 +74,8 @@ async function main(): Promise<void> {
   const admin = await ensureTestAdmin();
   await setSetting(SETTING_KEYS.PRODUCTION_ENABLED, true);
   await setSetting(SETTING_KEYS.DOKUMA_ENABLED, true);
-  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL } });
-  const { order } = await fixtures(admin.id);
+  await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL, SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT] } } });
+  const { order, itemId } = await fixtures(admin.id);
   const o1 = await order(2);
 
   check("§0 ayar yokken (KAPALI) önizleme 403 PRODUCTION_PROPOSAL_DISABLED", (await codeOf(previewProductionProposal(o1, FULL))) === "PRODUCTION_PROPOSAL_DISABLED");
@@ -84,6 +86,7 @@ async function main(): Promise<void> {
   const og = p1.workOrders[0];
   check("§1a tek dokuma işi grubu, iki satır, varyant + atkı kartı dolu", p1.weavingOrders.length === 1 && wg?.orderLines.length === 2 && wg.recipeId === made.recipe && wg.weftSpecId === made.weft, JSON.stringify(wg));
   check("§1b ham ihtiyaç = 2 × 1000 ÷ 0,9 (çekme %10)", wg?.plannedM === 2222.222 && wg.shrinkPct === 10, String(wg?.plannedM));
+  check("§1b2 fire ayarı yok → uygulanan fire 0 (grup + üst), çekme kaynağı KART (tarife)", wg?.weavingWastePct === 0 && p1.weavingWastePct === 0 && wg.shrinkSource === "KART", JSON.stringify({ g: wg?.weavingWastePct, u: p1.weavingWastePct, s: wg?.shrinkSource }));
   check("§1c tek iş emri grubu, rota varyanttan, seçilebilir", p1.workOrders.length === 1 && og?.routeId === made.route && og.blockedCode === null && og.targetQuantity === 2000, JSON.stringify(og));
 
   const p1d = (await previewProductionProposal(await order(1, made.recipe2, 900), FULL)).data!.weavingOrders[0];
@@ -137,9 +140,23 @@ async function main(): Promise<void> {
   const dup = { ...full5, clientToken: randomUUID(), weavingOrders: [full5.weavingOrders[0]!, full5.weavingOrders[0]!] };
   check("§5c aynı öneri anahtarı iki kez → 400 PROPOSAL_KEY_DUPLICATE", (await codeOf(applyProductionProposal(o3, dup, FULL, admin.id))) === "PROPOSAL_KEY_DUPLICATE");
 
+  // §7 çekme tek çözücü + dokuma firesi
+  await prisma.costStructure.update({ where: { itemId }, data: { lengthShrinkPct: "6" } });
+  const p7a = (await previewProductionProposal(await order(1, made.recipe, 940), FULL)).data!.weavingOrders[0];
+  check("§7a ⭐ ürün yapısı çekmesi (%6) varyant tarifesinin çekmesini (%10) yener: 940 ÷ 0,94 = 1000, kaynak YAPI", p7a?.shrinkPct === 6 && p7a.shrinkSource === "YAPI" && p7a.plannedM === 1000, JSON.stringify(p7a));
+  await setSetting(SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT, 5);
+  const p7b = (await previewProductionProposal(await order(1, made.recipe2, 1000), FULL)).data!;
+  const g7b = p7b.weavingOrders[0];
+  check("§7b ⭐ dokuma firesi %5: 1000 ÷ 0,94 ÷ 0,95 = 1119,821; uygulanan fire grup + üstte 5", g7b?.plannedM === 1119.821 && g7b.weavingWastePct === 5 && p7b.weavingWastePct === 5 && g7b.orderLines[0]?.allocatedM === 1119.821, JSON.stringify(g7b));
+  await prisma.costStructure.update({ where: { itemId }, data: { lengthShrinkPct: null } });
+  const p7c = (await previewProductionProposal(await order(1, made.recipe2, 855), FULL)).data!.weavingOrders[0];
+  check("§7c yapıda çekme boş → tarife (%10) + fire %5: 855 ÷ 0,9 ÷ 0,95 = 1000", p7c?.plannedM === 1000 && p7c.shrinkSource === "KART", JSON.stringify(p7c));
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT } });
+
   await setSetting(SETTING_KEYS.DOKUMA_ENABLED, false);
   const p6 = (await previewProductionProposal(o3, FULL)).data!;
   check("§6a dokuma kapalı → önizlemede dokuma grubu yok, iş emri önerisi var", p6.weavingOrders.length === 0 && p6.workOrders.length === 1 && p6.canCreate.weaving === false, JSON.stringify(p6.weavingOrders));
+  check("§6c dokuma kapalı → üst düzey weavingWastePct yazılmaz", !("weavingWastePct" in p6));
   check("§6b dokuma kapalı → dokuma seçimi 403 MODULE_DISABLED", (await codeOf(applyProductionProposal(o3, { ...full5, clientToken: randomUUID() }, FULL, admin.id))) === "MODULE_DISABLED");
   await setSetting(SETTING_KEYS.DOKUMA_ENABLED, true);
 }

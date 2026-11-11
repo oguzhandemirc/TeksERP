@@ -175,14 +175,21 @@ function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Ar
   return { picksPerCm: p, perYarn };
 }
 
-/** Yalnız iplik tüketimi (kg/m) — ihtiyaç planı (MAL-7) fiyat/kur/parametre istemez. */
-export function yarnUsagePerM(input: CostInput): {
+/** Fire payları 0'a çekilmiş girdi — AYNI formülden net (firesiz) kg/m; kaynak etiketi korunur. */
+function withoutYarnWaste(input: CostInput): CostInput {
+  const zero = <T extends { wastePct: Sourced<Dec> }>(x: T): T => ({ ...x, wastePct: { value: ZERO, source: x.wastePct.source } });
+  return { ...input, warp: input.warp && zero(input.warp), ...(input.warpLayers ? { warpLayers: input.warpLayers.map(zero) } : {}), weft: input.weft && zero(input.weft) };
+}
+
+/** İplik tüketimi (kg/m; MAL-7 fiyat istemez). `includeWaste: false` = firesiz net kumaş (gramaj); varsayılan fireli. */
+export function yarnUsagePerM(input: CostInput, opts: { includeWaste?: boolean } = {}): {
   missing: CostMissing[];
   warp: { yarnItemId: string | null; kgPerM: Dec } | null;
   weft: Array<{ yarnItemId: string | null; kgPerM: Dec }>;
   /** SY-B1 ek çözgü katmanları (zemin `warp`a KATILMAZ — kip başına ayrı düşüm). */
   warpLayers: Array<{ yarnItemId: string | null; warpSpecId: string | null; beamMode: CostWarpLayer["beamMode"]; kgPerM: Dec }>;
 } {
+  if (opts.includeWaste === false) return yarnUsagePerM(withoutYarnWaste(input));
   const c = new Collector();
   const warp = warpKg(input.warp, c);
   const layers = (input.warpLayers ?? []).map((l) => ({ l, r: warpKg(l, c) }));

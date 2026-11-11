@@ -49,6 +49,8 @@ async function beam(tag: string, warpSpecId: string, lengthM: number): Promise<v
 
 async function kur(f: MaliyetFikstur): Promise<Fx> {
   await altinYapiYaz(f);
+  // Katman düşümü mamul = ham (çekme 0) üzerinde ölçülür; ham çevrimi test_iplik_ihtiyaci §13.
+  await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { lengthShrinkPct: new Prisma.Decimal(0) } });
   const leno = await prisma.item.create({ data: { code: `${f.tag}-ID`, name: `${f.tag} döner iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 50 }, select: { id: true } });
   const lenoSpec = await prisma.warpSpec.create({ data: { code: `${f.tag}-CD`, name: `${f.tag} döner`, yarnItemId: leno.id, endsCount: 2720, takeUpPct: 14 }, select: { id: true } });
   const cust = await prisma.customer.create({ data: { code: `${f.tag}-M`, name: `${f.tag} müşteri` }, select: { id: true } });

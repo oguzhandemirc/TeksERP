@@ -159,7 +159,7 @@ export {
   readDepoMultiEnabledRaw, readDepoMultiEnabled, readKumasTeknikEnabledRaw, readKumasTeknikEnabled, readTezgahEnabledRaw,
   readTezgahEnabled, readDevereEnabledRaw, readDevereEnabled, readEmanetEnabledRaw, readEmanetEnabled, readKaliteGuvenceEnabledRaw,
   readKaliteGuvenceEnabled, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDevereAutoConsume,
-  readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth,
+  readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaWeavingWastePct, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX,
   readReportsClosedKeys, readReportsV2Enabled, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,
   readGelenBelgeEnabledRaw,
 } from "./modules";
@@ -190,7 +190,7 @@ export {
 export {
   resolvePurchaseBlockOverReceiptEnabled, resolveInvoiceMatchToleranceEnabled, resolveChequeNoteMovementEnabled,
   resolveCancelReasonRequired, resolveYarnQualityHoldEnabled, resolveGoodsReceiptRequirePriceEnabled, resolveBeamWeavingLinkRequired,
-  resolveRunWeavingOrderRequired, effectivePackingGroupMode, resolveOrderLineLinkRequired, resolveDokumaRollBirth,
+  resolveRunWeavingOrderRequired, effectivePackingGroupMode, resolveOrderLineLinkRequired, resolveDokumaRollBirth, resolveDokumaWeavingWastePct,
   resolveKursunMeterCapture, resolveKursunBypassEnabled, resolveTamburOverQuantityEnabled, resolveTamburUndoFullSameDayOnly,
   resolveBatchShortNumberEnabled,
 } from "./resolvers";

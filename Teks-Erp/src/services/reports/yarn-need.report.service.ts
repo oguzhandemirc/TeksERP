@@ -3,7 +3,8 @@
 // =============================================================================
 // "Açık siparişleri dokumak için hangi iplikten kaç kg lazım, ne kadarı stokta/yolda, eksik ne?"
 // Talep `ProductionBalanceService` dengesinden (açık sipariş kalemi tek kaynakları orada), kg
-// maliyet motorunun `yarnUsagePerM`inden; stok/açık alış/hazır levent YALNIZ köprüden okunur
+// maliyet motorunun `yarnUsagePerM`inden; talep MAMUL (sipariş) metresidir → HAM metreye `rawMetersFromFinished`
+// (boy çekmesi: maliyet girdisinin aynı çözücüden gelen değeri + dokuma firesi ayarı) ile çevrilir; stok/açık alış/hazır levent YALNIZ köprüden okunur
 // (`maliyet-bridge.helper`) — kapalı modülün değeri `null`dır ("bilinmiyor"), 0 DEĞİL.
 // İç hesap `Prisma.Decimal`; yuvarlama yalnız çıktıda (kg 3 hane, dize). Para YOK.
 // =============================================================================
@@ -16,6 +17,8 @@ import { buildCostInput, loadCostSourcesTx } from "../helpers/cost-assembler.hel
 import { fabricMetersFromWarpM, yarnUsagePerM, type CostInput, type CostWarpLayer } from "../helpers/fabric-cost.helper";
 import { readOpenPurchase, readReadyBeams, readYarnStock } from "../helpers/maliyet-bridge.helper";
 import { isSharedBeamLayer, layerHasOwnBeam } from "../helpers/warp-layer-beam.helper";
+import { rawMetersFromFinished } from "../helpers/raw-need.helper";
+import { resolveDokumaWeavingWastePct } from "../system-setting.service";
 
 type Dec = Prisma.Decimal;
 const D0 = (): Dec => new Prisma.Decimal(0);
@@ -53,8 +56,10 @@ export interface YarnNeedSummary {
   atkiKg: string;
   ihtiyacKg: string;
   eksikKg: string;
-  /** Dokunacak kumaş metresi (yapısı tam ürünler; hazır levent düşümünden ÖNCE). */
+  /** Dokunacak HAM kumaş metresi (yapısı tam ürünler; çekme + dokuma firesiyle; hazır levent düşümünden ÖNCE). */
   kumasMetre: string;
+  /** Aynı ürünlerin sipariş (mamul) metresi — ham metreye çevrilmeden önce. */
+  siparisMetre: string;
 }
 
 export interface YarnNeedReport {
@@ -63,6 +68,10 @@ export interface YarnNeedReport {
   meta: {
     netle: boolean;
     leventDus: boolean;
+    /** kg'ın çarpıldığı metre: HAM (sipariş metresi ÷ (1 − çekme) ÷ (1 − dokuma firesi)). */
+    metreEsasi: "HAM";
+    /** Uygulanan dokuma firesi % (etkin ayar; dokuma kapalıyken 0). */
+    dokumaFiresiPct: number;
     yapisiEksik: Array<{ urunId: string; urunKodu: string; urun: string; kalemSayisi: number; metre: string; eksikler: string[] }>;
     olculemeyen: Array<{ urunId: string; urunKodu: string; urun: string; birim: string; kalemSayisi: number; miktar: string }>;
     leventler: Array<{ cozguKartiId: string; leventSayisi: number; kalanCozguM: string; dusulenKumasM: string }>;
@@ -77,6 +86,7 @@ export interface YarnNeedReport {
 const OPEN_ORDER = { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } };
 
 interface ItemDemand { itemId: string; lineCount: number; meters: Dec }
+type ReadyItem = { d: ItemDemand; code: string; input: CostInput; usage: ReturnType<typeof yarnUsagePerM>; rawM: Dec };
 
 /**
  * Ürün başına dokunacak metre. Netlemede (ürün, renk) grubunun kumaş açığı (`malzemeAcigi` = talep −
@@ -143,7 +153,8 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   const itemIds = [...demand.keys()].sort();
   const src = await loadCostSourcesTx(prisma as unknown as Prisma.TransactionClient, itemIds);
   const yapisiEksik: YarnNeedReport["meta"]["yapisiEksik"] = [];
-  const ready: Array<{ d: ItemDemand; code: string; input: CostInput; usage: ReturnType<typeof yarnUsagePerM> }> = [];
+  const ready: ReadyItem[] = [];
+  const wastePct = await resolveDokumaWeavingWastePct();
   for (const id of itemIds) {
     const d = demand.get(id)!;
     const item = src.items.get(id);
@@ -159,24 +170,26 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
       yapisiEksik.push({ urunId: id, urunKodu: code, urun: name, kalemSayisi: d.lineCount, metre: m1(d.meters), eksikler: usage.missing });
       continue;
     }
-    ready.push({ d, code, input, usage });
+    // Ham metre: çekme maliyet girdisindeki tek-çözücü değeri (YAPI → tarife), fire etkin ayar.
+    const rawM = rawMetersFromFinished(d.meters, input.lengthShrinkPct.value, wastePct) ?? d.meters;
+    ready.push({ d, code, input, usage, rawM });
   }
   ready.sort((a, b) => a.code.localeCompare(b.code, "tr"));
 
   // Hazır çözgü: aynı çözgü kartının kalan levent metresi, kartın ürünlerine kod sırasıyla dağıtılır.
   // SY-N2: SEPARATE_BEAM katmanının kendi leventi de AYNI düşümle (katman başına) — SHARED zemini izler, CREEL düşülmez.
-  const ownBeamLayers = (r: typeof ready[number]) => (r.input.warpLayers ?? []).filter((l) => layerHasOwnBeam(l.beamMode) && l.warpSpecId);
-  const specIdsOf = (r: typeof ready[number]) => [r.input.warp?.warpSpecId, ...ownBeamLayers(r).map((l) => l.warpSpecId)];
+  const ownBeamLayers = (r: ReadyItem) => (r.input.warpLayers ?? []).filter((l) => layerHasOwnBeam(l.beamMode) && l.warpSpecId);
+  const specIdsOf = (r: ReadyItem) => [r.input.warp?.warpSpecId, ...ownBeamLayers(r).map((l) => l.warpSpecId)];
   const warpSpecIds = [...new Set(ready.flatMap(specIdsOf).filter((x): x is string => !!x))].sort();
   const beams = leventDus ? await readReadyBeams(warpSpecIds) : null;
-  const warpMeters = new Map<typeof ready[number], Dec>();
+  const warpMeters = new Map<ReadyItem, Dec>();
   const layerMeters = new Map<string, Dec>();
   const leventler: YarnNeedReport["meta"]["leventler"] = [];
   const pool = new Map<string, Dec>();
   if (beams) for (const [id, b] of beams) pool.set(id, b.remainingM);
   const covered = new Map<string, Dec>();
-  const deductReadyBeam = (r: typeof ready[number], specId: string | null, layer?: CostWarpLayer): Dec => {
-    let need = r.d.meters;
+  const deductReadyBeam = (r: ReadyItem, specId: string | null, layer?: CostWarpLayer): Dec => {
+    let need = r.rawM;
     const remW = specId ? pool.get(specId) : undefined;
     if (specId && remW && remW.gt(0) && need.gt(0)) {
       const fabricAvail = fabricMetersFromWarpM(r.input, remW, layer);
@@ -209,15 +222,17 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
     perYarn.set(id, a);
   };
   let kumasMetre = D0();
+  let siparisMetre = D0();
   for (const r of ready) {
-    kumasMetre = kumasMetre.plus(r.d.meters);
+    kumasMetre = kumasMetre.plus(r.rawM);
+    siparisMetre = siparisMetre.plus(r.d.meters);
     add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!));
     // SY-B1/N2: SHARED_BEAM zemin leventinde (aynı düşüm); SEPARATE kendi leventinin düşümüyle; CREEL tam talep (stoktan).
     for (const l of r.usage.warpLayers) {
       const own = layerMeters.get(`${r.d.itemId}|${l.warpSpecId}`);
-      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.d.meters)));
+      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)));
     }
-    for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.d.meters));
+    for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.rawM));
   }
 
   const yarnIds = [...perYarn.keys()].sort();
@@ -270,10 +285,13 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
       ihtiyacKg: kg(tWarp.plus(tWeft)),
       eksikKg: kg(tShort),
       kumasMetre: m1(kumasMetre),
+      siparisMetre: m1(siparisMetre),
     },
     meta: {
       netle,
       leventDus,
+      metreEsasi: "HAM",
+      dokumaFiresiPct: wastePct,
       yapisiEksik: yapisiEksik.sort((a, b) => a.urunKodu.localeCompare(b.urunKodu, "tr")),
       olculemeyen,
       leventler,

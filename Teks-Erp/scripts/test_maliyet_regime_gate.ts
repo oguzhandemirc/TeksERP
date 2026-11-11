@@ -83,6 +83,26 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     neden: "Levent ihtiyacı (SY-M2) levent boyunu ürün yapısında yoksa etkin parametre setinin defaultBeamLengthM'inden OKUR; set yoksa boy boş, öneri sayısız — fiyat okumaz.",
   },
   {
+    dosya: "routes/item-computed-gsm.routes.ts",
+    model: "costStructure",
+    neden: "Hesaplanan gramaj (Seyitoğlu temel) maliyet girdisi kurucusundan yalnız yapı alanını (atkı boyu, fire kaynağı) OKUR; çıktıda para yok, fireler sıfırlanır — maliyet kapalıyken yapı yoksa kart değerleriyle hesaplar.",
+  },
+  {
+    dosya: "routes/item-computed-gsm.routes.ts",
+    model: "costParameterSet",
+    neden: "Hesaplanan gramaj take-up ve atkı kenar payı varsayılanını etkin parametre setinden OKUR (buildCostInput zinciri); set yoksa ilgili alan null — fiyat okumaz.",
+  },
+  {
+    dosya: "routes/item-computed-gsm.routes.ts",
+    model: "finishingRate",
+    neden: "Hesaplanan gramaj ortak yükleyicinin (loadCostSourcesTx) tarife kodu çözümünü geçer; tarife tutarı gramaja girmez, çıktıda para alanı yok.",
+  },
+  {
+    dosya: "routes/item-computed-gsm.routes.ts",
+    model: "yarnCostPrice",
+    neden: "Hesaplanan gramaj loadCostStructureSourcesTx'i çağırır — iplik fiyatı sorgusu KOŞMAZ; tarayıcı dosya düzeyinde gördüğü için muaf (machineCostRate komşu-fonksiyon emsali).",
+  },
+  {
     dosya: "routes/loom-suggestion.routes.ts",
     model: "costParameterSet",
     neden: "Tezgâh önerisi (SY-M2) levent boyunu yalnız ihtiyaç satırı için parametre setinden OKUR (beam-need.helper); fiyat okumaz, maliyet kapalıyken öneri yine çalışır.",

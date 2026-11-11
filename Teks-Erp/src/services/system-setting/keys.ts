@@ -373,6 +373,8 @@ export const SETTING_KEYS = {
   DOKUMA_ORDER_LINE_LINK_REQUIRED: "dokuma.orderLineLinkRequired",
   /** S1 (2026-10-21, D1): topun doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Enum; kalıp `DOKUMA_ROLL_BIRTH_MODES`. */
   DOKUMA_ROLL_BIRTH: "dokuma.rollBirth",
+  /** Seyitoğlu temel (2026-11-11): üretim önerisi + iplik ihtiyacında dokuma firesi % (ham = … ÷ (1 − fire)); varsayılan 0 = bugünkü davranış. */
+  DOKUMA_WEAVING_WASTE_PCT: "dokuma.weavingWastePct",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *
