@@ -4959,6 +4959,9 @@ model OrderLine {
   pieceLengthM Decimal? @db.Decimal(12, 3)
   /// Kesim/sevk için serbest not (pieceLengthM'e sığmayan istisna talimatlar).
   cutNote      String?
+  /// Satır sevk toleransı (%, 0..50; CHECK `order_lines_tolerance_pct_range`). NULL = yok (bugünkü davranış).
+  /// Dolu ise siparişin tamamlanma toleransına katılır: `recomputeOrderStatusTx` (fabrika metre + Σ miktar × %/100).
+  tolerancePct Decimal? @db.Decimal(5, 2)
 
   /// "Müşterideki adı" — sipariş satırı bazlı override (1-shot).
   /// NULL ise effective name CustomerItemAlias.alias'tan (master, live) okunur;

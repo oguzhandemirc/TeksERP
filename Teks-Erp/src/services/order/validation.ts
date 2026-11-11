@@ -27,6 +27,20 @@ import {
 } from "../helpers/order-line-target-value.helper";
 import type { OrderServiceThis } from "./shared";
 
+/**
+ * Satır sevk toleransı (K4): sayı ya da NOKTALI metin; null/"" temizler (null). 0..50, en çok 2 ondalık (Decimal(5,2),
+ * DB CHECK `order_lines_tolerance_pct_range` seddi). Virgüllü metin reddedilir (sessiz yanlış okuma yerine net hata).
+ */
+export function normalizeLineTolerancePct(raw: unknown, idx: number): string | null {
+  if (raw == null || raw === "") return null;
+  const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim() : null;
+  if (text === null || !/^\d+(\.\d{1,2})?$/.test(text)) {
+    throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: tolerans % sayı olmalı (en çok 2 ondalık, ayırıcı nokta).`);
+  }
+  if (Number(text) > 50) throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: tolerans % 0 ile 50 arasında olmalı.`);
+  return text;
+}
+
 export function validateLines(lines: unknown): void {
     if (!Array.isArray(lines)) return;
     lines.forEach((rawLine, idx) => {
@@ -53,6 +67,7 @@ export function validateLines(lines: unknown): void {
           throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: en çok büyük.`);
         }
       }
+      if ("tolerancePct" in line) line.tolerancePct = normalizeLineTolerancePct(line.tolerancePct, idx);
       if (line.unitPrice != null) {
         const price =
           typeof line.unitPrice === "string"

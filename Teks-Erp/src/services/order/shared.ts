@@ -36,6 +36,8 @@ export const ORDER_LINE_WRITABLE: ReadonlySet<string> = new Set([
   "width",
   "pieceLengthM",
   "cutNote",
+  // Satır sevk toleransı % (K4): `validateLines` normalize eder (null temizler), tamamlanma toleransına katılır.
+  "tolerancePct",
   "customerItemName",
   "customerColorName",
   // Varyant (SY-K1k): `prepareOrderLineRecipes` normalize eder ve ürüne aitliğini sınar.

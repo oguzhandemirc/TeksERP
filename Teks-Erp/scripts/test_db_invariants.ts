@@ -742,6 +742,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "stations", name: "stations_default_label_copies_range" },
   { table: "order_lines", name: "order_lines_quantity_pos" },
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
+  // 2026-11-11 (K4): satır sevk toleransı NULL ya da 0..50 (`order-status.helper.ts`).
+  { table: "order_lines", name: "order_lines_tolerance_pct_range" },
   { table: "manifests", name: "manifests_source_shape" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
   // Çuvalsız sevk: SACK-dışı birim tartı/parti taşımaz, araba no yalnız CART'ta, SACK çözülmez.

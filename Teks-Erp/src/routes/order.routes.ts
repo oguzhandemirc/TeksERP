@@ -740,6 +740,7 @@ router.get("/:id", verifyToken, requirePermission("order:read"), orderDetailHand
  *                     width: { type: number, nullable: true }
  *                     customerItemName: { type: string, nullable: true }
  *                     customerColorName: { type: string, nullable: true }
+ *                     tolerancePct: { type: string, nullable: true, description: "Satır sevk toleransı % (0..50; sayı ya da noktalı metin; null temizler). Siparişin tamamlanma toleransına eklenir." }
  *     responses:
  *       201:
  *         description: |
