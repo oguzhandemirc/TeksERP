@@ -64,7 +64,7 @@ describe("Görünüm tercihi", () => {
 
 describe("Liste görünümü — satır = istasyon, kart ve dosya ile aynı küme", () => {
   const items = (stations: Station[], machines = new Map<string, Machine[]>()) =>
-    buildStationListItems(stations, machines, new Map(), new Map(), new Map());
+    buildStationListItems(stations, { machinesByStation: machines, peripheralsByMachine: new Map(), capByStation: new Map(), kursunByStation: new Map() });
 
   it("⭐ çok makineli istasyon TEK satır; makine sayısı sütunda; süzülmüş küme form enum'uyla aynı (#2 bekçisi)", () => {
     const s1 = station({ id: "s1", name: "KK1", kind: StationKind.RAW_QC });
@@ -97,7 +97,7 @@ describe("Liste görünümü — satır = istasyon, kart ve dosya ile aynı küm
 
   it("kurşun rozeti varsayılan gramajla görünür", () => {
     const s1 = station({ id: "s1", name: "KURŞUN", kind: StationKind.PROCESS_QC });
-    const list = buildStationListItems([s1], new Map(), new Map(), new Map(), new Map([["s1", { enabled: true, defaultGramaj: "25 gr" }]]));
+    const list = buildStationListItems([s1], { machinesByStation: new Map(), peripheralsByMachine: new Map(), capByStation: new Map(), kursunByStation: new Map([["s1", { enabled: true, defaultGramaj: "25 gr" }]]) });
     renderWithProviders(<StationListView items={list} selectedId={null} onSelect={() => {}} />);
     expect(screen.getByTestId("kursun-badge")).toHaveTextContent("Kurşun25 gr");
   });

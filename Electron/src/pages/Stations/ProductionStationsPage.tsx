@@ -215,7 +215,7 @@ export function ProductionStationsPage() {
 
   // İstasyon öğeleri — EKRANDA GÖRÜNEN küme (filtre sonrası); liste görünümü VE dışa aktarım bundan.
   const listItems = useMemo<StationListItem[]>(
-    () => buildStationListItems(stations, machinesByStation, peripheralsByMachine, capByStation, kursunByStation),
+    () => buildStationListItems(stations, { machinesByStation, peripheralsByMachine, capByStation, kursunByStation }),
     [stations, machinesByStation, peripheralsByMachine, capByStation, kursunByStation],
   );
   const selectedStation = selectedStationId ? (allStations.find((s) => s.id === selectedStationId) ?? null) : null;

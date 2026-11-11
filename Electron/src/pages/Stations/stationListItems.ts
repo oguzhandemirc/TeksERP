@@ -37,12 +37,16 @@ export function kursunInfoFromDto(d: KursunStationDto): StationKursunInfo {
   return { enabled: d.enabled, defaultGramaj: def ? def.name : null };
 }
 
+export interface StationListMaps {
+  machinesByStation: ReadonlyMap<string, Machine[]>;
+  peripheralsByMachine: ReadonlyMap<string, PeripheralDevice[]>;
+  capByStation: ReadonlyMap<string, StationCapabilitySummary>;
+  kursunByStation: ReadonlyMap<string, StationKursunInfo>;
+}
+
 export function buildStationListItems(
   stations: readonly Station[],
-  machinesByStation: ReadonlyMap<string, Machine[]>,
-  peripheralsByMachine: ReadonlyMap<string, PeripheralDevice[]>,
-  capByStation: ReadonlyMap<string, StationCapabilitySummary>,
-  kursunByStation: ReadonlyMap<string, StationKursunInfo>,
+  { machinesByStation, peripheralsByMachine, capByStation, kursunByStation }: StationListMaps,
 ): StationListItem[] {
   return stations.map((s) => {
     const machines = machinesByStation.get(s.id) ?? [];

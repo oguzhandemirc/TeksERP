@@ -39,7 +39,7 @@ export function printedValueRows(snap: RollLabelSnapshot | null | undefined): Ar
     ["Kg", p.weightKg, " kg"],
     ["En", p.widthCm, " cm"],
     ["Kat", p.foldType],
-    ["Alıcı", p.consigneeName],
+    ["Etiket alıcısı", p.consigneeName],
   ];
   return rows
     .filter(([, v]) => v !== null && v !== undefined && v !== "")

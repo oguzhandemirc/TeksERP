@@ -159,7 +159,7 @@ describe("top bilgileri: bağlantı, sahiplik, basım izi", () => {
     expect(screen.queryByTestId("roll-info-printed-values")).toBeNull();
     fireEvent.click(screen.getByTestId("roll-info-printed-toggle"));
     const txt = screen.getByTestId("roll-info-printed-values").textContent;
-    for (const s of ["Metre: 80 m", "Kalite: A", "Parti no: J1", "Kg: 12,5 kg", "En: 160 cm", "Alıcı: ACME USA", "Kumaş: SULTAN"]) expect(txt).toContain(s);
+    for (const s of ["Metre: 80 m", "Kalite: A", "Parti no: J1", "Kg: 12,5 kg", "En: 160 cm", "Etiket alıcısı: ACME USA", "Kumaş: SULTAN"]) expect(txt).toContain(s);
     unmount();
     const old = { ...snap, printed: undefined };
     expect(printedValueRows(old)).toEqual([["Müşteri", "HHL MC"], ["Kumaş", "SULTAN"]]);

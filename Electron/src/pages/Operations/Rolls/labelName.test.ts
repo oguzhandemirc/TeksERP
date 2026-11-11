@@ -13,7 +13,7 @@ describe("etiketteki ad", () => {
     const cols = makeRollColumns([]);
     const ids = cols.map((c) => ("id" in c ? c.id : undefined) ?? ("accessorKey" in c ? String(c.accessorKey) : ""));
     expect(ids[ids.indexOf("color") + 1]).toBe("labelName");
-    const meta = cols[ids.indexOf("labelName")].meta as { exportValue: (r: unknown) => string };
+    const meta = cols[ids.indexOf("labelName")]?.meta as { exportValue: (r: unknown) => string };
     expect(meta.exportValue({ labelItemName: "PANOS", labelColorName: "MAVİ" })).toBe("PANOS · MAVİ");
   });
 });
