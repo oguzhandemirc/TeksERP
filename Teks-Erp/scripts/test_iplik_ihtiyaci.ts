@@ -9,6 +9,7 @@
 //      ürün `yapisiEksik`te, rapor düşmez · §8 netleme = ProductionBalanceService · §9 ALTIN (§2.3 ürünü
 //      5.000 m = motor × metre) · §10 modül kapalı 403 MODULE_DISABLED, izin yok 403, tanınmayan 400
 //   §11 iplik/ticaret/devere kapalıyken ilgili tablolara SIFIR sorgu · §12 sunum: null → "bilinmiyor"
+//   §13h (K5 2026-11-11) tablo kg kolon başlıkları "ham metre" der; sonda: İhtiyaç başlığı eski metin → §13h ❌
 //   §13 (Seyitoğlu temel) talep HAM metreye çevrilir: sipariş ÷ (1 − çekme) ÷ (1 − dokuma firesi); çekme maliyet
 //      girdisinin tek-çözücü değeri; fire yalnız dokuma açıkken. §1–§12 altını "çekme 0" yapısıyla (mamul = ham) korunur.
 // Koşum: npx tsx scripts/test_iplik_ihtiyaci.ts (kendi _test DB'n)
@@ -265,6 +266,8 @@ async function bolum13(x: Fx): Promise<void> {
     check("§13f ⭐ Dokuma kapalı → fire uygulanmaz (yalnız çekme: 5000 ÷ 0,96 = 5208,3), beyan 0", off.ozet.kumasMetre === "5208.3" && off.meta.dokumaFiresiPct === 0, off.ozet.kumasMetre);
     const sun = buildYarnNeedSunumu(r, {});
     check("§13g Sunum ana sayı adı \"ham metre\" der", sun.yanSayilar.some((y) => y.ad.includes("ham metre")));
+    const kgBasliklari = (sun.tablo?.kolonlar ?? []).filter((k) => ["cozguKg", "atkiKg", "ihtiyacKg"].includes(k.anahtar)).map((k) => k.baslik);
+    check("§13h ⭐ K5: tablo kg kolon başlıkları (Çözgü/Atkı/İhtiyaç) \"ham metre\" der — PDF/Excel aynı kolonlardan", kgBasliklari.length === 3 && kgBasliklari.every((b) => b.includes("ham metre")), kgBasliklari.join(" | "));
   } finally {
     await prisma.costStructure.update({ where: { itemId: f.fabricId }, data: { lengthShrinkPct: D(0) } });
   }

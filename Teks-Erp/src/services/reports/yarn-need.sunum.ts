@@ -18,12 +18,13 @@ const EVET_HAYIR = [{ deger: "1", etiket: "Evet" }, { deger: "0", etiket: "Hayı
 const sayi = (v: string): number => Number(v);
 const ya = (v: string | null): number | string => (v === null ? BILINMIYOR : sayi(v));
 
+// K5: kg kolonları HAM metreden (çekme + fire büyütülmüş) hesaplanır; başlık bunu söyler (sipariş metresi sanılmasın).
 export function yarnNeedColumns(r: YarnNeedReport): TabloKolonu[] {
   return [
     { anahtar: "iplik", baslik: "İplik" },
-    { anahtar: "cozguKg", baslik: "Çözgü", birim: "kg", hiza: "sag" },
-    { anahtar: "atkiKg", baslik: "Atkı", birim: "kg", hiza: "sag" },
-    { anahtar: "ihtiyacKg", baslik: "İhtiyaç", birim: "kg", hiza: "sag" },
+    { anahtar: "cozguKg", baslik: "Çözgü (ham metreye göre)", birim: "kg", hiza: "sag" },
+    { anahtar: "atkiKg", baslik: "Atkı (ham metreye göre)", birim: "kg", hiza: "sag" },
+    { anahtar: "ihtiyacKg", baslik: "İhtiyaç (ham metreye göre)", birim: "kg", hiza: "sag" },
     { anahtar: "serbestStokKg", baslik: "Serbest stok", birim: "kg", hiza: "sag" },
     ...(r.meta.kaynaklar.emanet ? [{ anahtar: "emanetKg", baslik: "Emanet (müşterinin)", birim: "kg" as const, hiza: "sag" as const }] : []),
     { anahtar: "acikAlisKg", baslik: "Açık alış", birim: "kg", hiza: "sag" },
