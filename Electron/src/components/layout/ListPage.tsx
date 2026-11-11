@@ -1,6 +1,7 @@
 // Liste sayfası standardı (Gelen Belgeler / Kumaş Stoğu düzeni) — DataTable kullanmayan, kendi <table>'ını çizen
 // liste sayfaları için aynı iskelet: sabit üst bant → kenardan kenara TEK kaydırıcı (yapışkan başlık) → durum altlığı.
-// Tablo kart (rounded + border + dış boşluk) içine KONMAZ; bekçi: src/test/liste-standardi.test.ts.
+// Sayfa tabloyu kendi kartına SARMAZ (bekçi: src/test/liste-standardi.test.ts); kart görünümü iskelettedir:
+// bu parçalar `data-list-surface` taşır, index.css "liste yüzeyi koşusu" ardışık parçaları tek kart gibi boyar.
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -10,22 +11,22 @@ import { cn } from "@/lib/utils";
  * Sıra Gelen Belgeler ile aynı: özet → çipler → girdiler (+ `ml-auto` araçlar).
  */
 export function ListToolbar({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex shrink-0 flex-col gap-2 border-b px-4 py-2", className)} {...props} />;
+  return <div data-list-surface="toolbar" className={cn("flex shrink-0 flex-col gap-2 border-b px-4 py-2", className)} {...props} />;
 }
 
 /**
- * Yapışkan başlık + DataTable'daki mor ayraç. Ayraç th ARKA PLANINDA: `border-collapse`ta tr kenarlığı sticky
+ * Yapışkan başlık + DataTable'daki ince ayraç. Ayraç th ARKA PLANINDA: `border-collapse`ta tr kenarlığı sticky
  * başlıkla birlikte durmaz (DataTable.tsx'teki notla aynı neden).
  */
 const STICKY_HEAD =
-  "[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-card [&_thead_th]:bg-[linear-gradient(to_top,hsl(var(--primary)_/_0.3)_2px,transparent_2px)]";
+  "[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-card [&_thead_th]:bg-[linear-gradient(to_top,hsl(var(--border))_1px,transparent_1px)]";
 
 /**
  * Listenin TEK kaydırıcısı — PageBody'nin dolgusuz, tam genişlik hâli. Sonsuz kaydırmada
  * `useInfiniteScroll().rootRef` buraya, `sentinelRef` en sondaki `<ListSentinel>`e bağlanır.
  */
 export const ListBody = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
-  <div ref={ref} data-list-body="" className={cn("min-h-0 flex-1 overflow-auto", STICKY_HEAD, className)} {...props} />
+  <div ref={ref} data-list-body="" data-list-surface="body" className={cn("min-h-0 flex-1 overflow-auto", STICKY_HEAD, className)} {...props} />
 ));
 ListBody.displayName = "ListBody";
 
@@ -60,6 +61,7 @@ export function ListFooter({ loaded, total, hasMore, isFetchingMore = false, lab
   return (
     <div
       data-list-footer=""
+      data-list-surface="footer"
       className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-3 py-2 text-xs text-muted-foreground"
     >
       <div>{label ?? (total != null ? `Yüklü ${n(loaded)} / ${n(total)} kayıt` : `Yüklü ${n(loaded)} kayıt`)}</div>

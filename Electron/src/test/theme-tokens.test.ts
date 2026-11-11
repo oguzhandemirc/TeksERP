@@ -16,7 +16,10 @@ const css = postcss.parse(readFileSync(resolve(process.cwd(), "src/index.css"), 
 function block(selector: string): Record<string, string> {
   const out: Record<string, string> = {};
   css.walkRules((r) => {
-    if (r.selectors.includes(selector)) r.walkDecls((d) => (out[d.prop] = d.value));
+    if (r.selectors.includes(selector))
+      r.walkDecls((d) => {
+        out[d.prop] = d.value;
+      });
   });
   return out;
 }

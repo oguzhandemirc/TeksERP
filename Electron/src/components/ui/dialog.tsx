@@ -38,7 +38,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     data-ui-overlay=""
-    className={cn("fixed inset-0 z-50 bg-black/70", className)}
+    className={cn("fixed inset-0 z-50 bg-black/50", className)}
     {...props}
   />
 ));
@@ -81,7 +81,7 @@ const DialogContent = React.forwardRef<
           ref={ownOverlayRef}
           data-ui-overlay=""
           aria-hidden
-          className="absolute inset-0 z-50 bg-black/70"
+          className="absolute inset-0 z-50 bg-black/50"
         />
       ) : (
         <DialogOverlay />
@@ -116,7 +116,7 @@ const DialogContent = React.forwardRef<
           // max-h + overflow varsayılanı: içerik uzasa bile modal ekranı aşmaz,
           // gövde kayar. Kendi yüksekliğini yöneten dialog'lar (flex + h-[..vh] +
           // overflow-hidden) bunu tailwind-merge ile override eder.
-          "left-1/2 top-1/2 z-50 grid max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto border bg-background p-6 shadow-lg sm:rounded-lg",
+          "left-1/2 top-1/2 z-50 grid max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto border border-card-border bg-card p-6 shadow-card sm:rounded-2xl",
           // Dar ekran (<640 px): tam ekran sayfa — seçici/form modalı telefonda kenara taşmaz,
           // kendi gövdesi kayar (UX-3). Çağıranın max-w/h sınıfları yalnız geniş ekranda geçer.
           DIALOG_NARROW_FULLSCREEN,
@@ -131,7 +131,7 @@ const DialogContent = React.forwardRef<
           <EscapeRegistrar close={requestClose} isActive={() => isTabActiveRef.current} />
         )}
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <X className="h-4 w-4" />
           <span className="sr-only">Kapat</span>
         </DialogPrimitive.Close>

@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { IconTile, ICON_TILE_TONES } from "@/components/ui/icon-tile";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
 import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
@@ -62,7 +63,7 @@ interface HubCardProps {
   note?: string;
 }
 
-/** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket.
+/** Hub kartı (hedef görsel) — renkli simge karesi + başlık; ton verilmezse sıraya göre simge karesi paleti.
  *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
 export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint, note }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
@@ -82,39 +83,25 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
         className="group block h-full w-full text-left"
       >
         {/* Soluk görünüm KART üstünde: dış motion.div'in opacity'sini giriş animasyonu ezer. */}
-        <Card className={cn("card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4", offHint && "border-dashed opacity-50 grayscale")}>
-          {/* Dev ikon filigranı — sağ alt, tona boyalı, hover'da hafif büyür */}
-          <Icon
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute -bottom-4 -right-3 h-24 w-24 opacity-[0.06] transition-transform duration-300 group-hover:scale-110",
-              toneClass,
-            )}
-          />
+        <Card className={cn("card-glow relative h-full overflow-hidden p-4", offHint && "border-dashed opacity-50 grayscale")}>
           <div className="relative flex items-start justify-between">
-            <div
-              className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-xl bg-current/10",
-                toneClass,
-              )}
-            >
-              <Icon className="h-5 w-5" />
-            </div>
+            {tone ? (
+              <div className={cn("flex h-11 w-11 items-center justify-center rounded-xl bg-current/10", toneClass)}>
+                <Icon className="h-5 w-5" />
+              </div>
+            ) : (
+              <IconTile icon={Icon} tone={ICON_TILE_TONES[index % ICON_TILE_TONES.length]} size="lg" />
+            )}
             {!dragHandle && !offHint && (
-              <ArrowRight
-                className={cn(
-                  "h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100",
-                  toneClass,
-                )}
-              />
+              <ArrowRight className="h-4 w-4 -translate-x-1 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100 motion-reduce:transition-none" />
             )}
           </div>
           <div className="relative mt-4 flex items-center gap-2">
-            <div className="font-medium">{title}</div>
+            <div className="font-semibold">{title}</div>
             {offHint ? <span className="text-[11px] text-muted-foreground">kapalı</span> : null}
             {badge ? (
               <span
-                className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums"
+                className="rounded-full bg-warning px-1.5 py-0.5 text-[11px] font-semibold leading-none text-warning-foreground tabular-nums"
                 aria-label={badgeLabel ?? `${badge} bekleyen`}
                 title={badgeLabel}
               >

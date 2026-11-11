@@ -42,7 +42,7 @@ export function DataTableToolbar<T>({
   leading,
 }: Props<T>) {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
+    <div data-list-surface="toolbar" className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
       {!hideSearch && (
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

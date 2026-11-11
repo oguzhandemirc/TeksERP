@@ -20,14 +20,14 @@ export function ServerOutageStrip() {
       data-testid="sunucu-kesinti-seridi"
       className={
         outage
-          ? "flex items-center gap-3 border-b border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm"
-          : "flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm"
+          ? "flex items-center gap-3 border-b border-info/30 bg-info-soft px-4 py-2 text-sm text-info-soft-foreground"
+          : "flex items-center gap-3 border-b border-warning/30 bg-warning-soft px-4 py-2 text-sm text-warning-soft-foreground"
       }
     >
       {outage ? (
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-600 dark:text-sky-400" />
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-info-soft-foreground" />
       ) : (
-        <ServerCog className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <ServerCog className="h-4 w-4 shrink-0 text-warning-soft-foreground" />
       )}
       <span className="min-w-0 flex-1">{strip.text}</span>
     </div>

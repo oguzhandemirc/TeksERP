@@ -16,7 +16,7 @@ const TooltipContent = React.forwardRef<
       data-ui-pop=""
       sideOffset={sideOffset}
       className={cn(
-        "z-50 overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground shadow",
+        "z-50 overflow-hidden rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-card",
         className,
       )}
       {...props}

@@ -168,7 +168,7 @@ function CloseButton({ title, dirty, onClose }: { title: string; dirty: boolean;
       )}
     >
       {dirty && (
-        <span aria-hidden className="h-2 w-2 rounded-full bg-amber-500 group-hover/close:hidden" />
+        <span aria-hidden className="h-2 w-2 rounded-full bg-warning group-hover/close:hidden" />
       )}
       <X className={cn("h-3 w-3", dirty && "hidden group-hover/close:block")} />
     </button>

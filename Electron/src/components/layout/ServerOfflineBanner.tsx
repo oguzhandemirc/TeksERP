@@ -84,8 +84,8 @@ export function ServerOfflineBanner() {
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="flex items-center gap-3 border-b border-warning/30 bg-warning-soft px-4 py-2 text-sm text-warning-soft-foreground">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning-soft-foreground" />
         <span className="min-w-0 flex-1">
           {IS_ELECTRON
             ? "Sunucuya ulaşılamıyor. Kayıtlar gönderilemiyor."

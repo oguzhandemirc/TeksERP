@@ -105,7 +105,7 @@ export function FilterRow({ search = "", onSearchChange, leading, placeholder = 
   };
 
   return (
-    <div data-testid="filter-row" className={FILTER_ROW_CLASS}>
+    <div data-testid="filter-row" data-list-surface="toolbar" className={FILTER_ROW_CLASS}>
       {leading ?? (onSearchChange && <RowSearch value={search} onChange={onSearchChange} placeholder={placeholder} />)}
       <div ref={scrollRef} data-testid="filter-row-scroll" className={cn(FILTER_ROW_SCROLL_CLASS, fadeClass(edges))}>
         {shown.map(chip)}
