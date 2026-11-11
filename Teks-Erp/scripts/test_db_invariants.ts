@@ -842,6 +842,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "machines", name: "machines_plan_rpm_pos" },
   { table: "machines", name: "machines_plan_efficiency_range" },
   { table: "machines", name: "machines_max_working_width_pos" },
+  // 2026-11-12 (Seyitoğlu 3. bölüm I2) — migration 20261112100000: iplik başına fire (0..50, yalnız YARN).
+  { table: "items", name: "items_yarn_waste_pct_ck" },
   // 2026-09-13 (dokuma yazma yüzeyi) — migration 20260913241000. P1 bilerek
   // erteledi ("kapısız CHECK, yazanı olmayan kısıt"); servisin 400'ü ilk hat,
   // bu CHECK son hat (çift yüklem). SUBCONTRACTED ⇔ subcontractorId DOLU.

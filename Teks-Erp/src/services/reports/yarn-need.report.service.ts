@@ -19,6 +19,7 @@ import { readOpenPurchase, readReadyBeams, readYarnStock } from "../helpers/mali
 import { isSharedBeamLayer, layerHasOwnBeam } from "../helpers/warp-layer-beam.helper";
 import { rawMetersFromFinished } from "../helpers/raw-need.helper";
 import { resolveDokumaWeavingWastePct } from "../system-setting.service";
+import type { YarnWasteSource } from "../helpers/yarn-waste.helper";
 
 type Dec = Prisma.Decimal;
 const D0 = (): Dec => new Prisma.Decimal(0);
@@ -48,6 +49,8 @@ export interface YarnNeedRow {
   acikAlisKg: string | null;
   eksikKg: string;
   eksikBelirsiz: boolean;
+  /** SY-3 I2: kg'a uygulanan firenin kaynağı — `IPLIK` iplik kartı firesi, `KART` çözgü/atkı fire zinciri. */
+  fireKaynagi: YarnWasteSource;
 }
 
 export interface YarnNeedSummary {
@@ -132,7 +135,7 @@ async function unmeasuredLines(o: YarnNeedOptions): Promise<YarnNeedReport["meta
     .map((a) => ({ ...a, miktar: a.miktar.toFixed(3) }));
 }
 
-interface YarnAcc { warp: Dec; weft: Dec }
+interface YarnAcc { warp: Dec; weft: Dec; wasteSource: YarnWasteSource }
 
 /** Hazır levent düşümüne giren çözgü kartları (zemin + kendi leventi olan katmanlar), sıralı. */
 export function readyWarpSpecIds(ready: readonly ReadyItem[]): string[] {
@@ -145,7 +148,7 @@ const ownBeamLayers = (r: ReadyItem) => (r.input.warpLayers ?? []).filter((l) =>
  * ÇEKİRDEK: ürünlerin ham metresi → iplik başına çözgü/atkı kg (hazır levent düşümüyle). Rapor ve üretim önerisinin
  * iplik özeti AYNI fonksiyonu çağırır. `beams` null → düşüm yok. Havuz çağrı başına tazedir (sıra: verilen sıra).
  */
-export function yarnKgByYarn(ready: readonly ReadyItem[], beams: Map<string, { remainingM: Dec }> | null): { perYarn: Map<string, YarnAcc>; covered: Map<string, Dec> } {
+export function yarnKgByYarn(ready: readonly ReadyItem[], beams: Map<string, { remainingM: Dec }> | null): { perYarn: Map<string, YarnAcc>; covered: Map<string, Dec>; poolAfter: Map<string, Dec> } {
   // Hazır çözgü: aynı çözgü kartının kalan levent metresi, kartın ürünlerine kod sırasıyla dağıtılır.
   // SY-N2: SEPARATE_BEAM katmanının kendi leventi de AYNI düşümle (katman başına) — SHARED zemini izler, CREEL düşülmez.
   const warpMeters = new Map<ReadyItem, Dec>();
@@ -173,22 +176,24 @@ export function yarnKgByYarn(ready: readonly ReadyItem[], beams: Map<string, { r
     for (const l of ownBeamLayers(r)) layerMeters.set(`${r.d.itemId}|${l.warpSpecId}`, deductReadyBeam(r, l.warpSpecId, l));
   }
   const perYarn = new Map<string, YarnAcc>();
-  const add = (id: string | null, k: keyof YarnAcc, v: Dec) => {
+  const add = (id: string | null, k: "warp" | "weft", v: Dec, src: YarnWasteSource) => {
     if (!id) return;
-    const a = perYarn.get(id) ?? { warp: D0(), weft: D0() };
+    const a = perYarn.get(id) ?? { warp: D0(), weft: D0(), wasteSource: src };
     a[k] = a[k].plus(v);
+    if (src === "IPLIK") a.wasteSource = "IPLIK";
     perYarn.set(id, a);
   };
   for (const r of ready) {
-    add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!));
+    add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!), r.usage.warp!.wasteSource);
     // SY-B1/N2: SHARED_BEAM zemin leventinde (aynı düşüm); SEPARATE kendi leventinin düşümüyle; CREEL tam talep (stoktan).
     for (const l of r.usage.warpLayers) {
       const own = layerMeters.get(`${r.d.itemId}|${l.warpSpecId}`);
-      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)));
+      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)), l.wasteSource);
     }
-    for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.rawM));
+    for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.rawM), w.wasteSource);
   }
-  return { perYarn, covered };
+  // `poolAfter` (SY-3 I1): düşümden sonra kalan levent metresi — iplik ayırması önce işlere, kalanı talebe verir.
+  return { perYarn, covered, poolAfter: pool };
 }
 
 /** Eksik = ihtiyaç − serbest stok − açık alış, sıfırın altına inmez; bilinmeyen kaynak (null) düşülmez. */
@@ -291,6 +296,7 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
         acikAlisKg: p ? kg(p) : null,
         eksikKg: kg(short),
         eksikBelirsiz: stock === null,
+        fireKaynagi: a.wasteSource,
       } satisfies YarnNeedRow,
     };
   });

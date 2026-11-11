@@ -16,6 +16,7 @@ import { yarnUsagePerM } from "./fabric-cost.helper";
 import { readOpenPurchase, readReadyBeams, readYarnStock } from "./maliyet-bridge.helper";
 import { readyWarpSpecIds, yarnKgByYarn, yarnShortKg, type ReadyItem } from "../reports/yarn-need.report.service";
 import { readMaliyetEnabled } from "../system-setting.service";
+import type { YarnWasteSource } from "./yarn-waste.helper";
 
 type Dec = Prisma.Decimal;
 const round3 = (d: Dec): number => d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP).toNumber();
@@ -50,6 +51,8 @@ export interface YarnSummaryRow {
   needKg: number;
   /** max(0, gereken − serbest stok − açık alış); iplik modülü kapalıysa null (bilinmiyor). */
   shortKg: number | null;
+  /** SY-3 I2: `IPLIK` iplik kartı firesi, `KART` çözgü/atkı fire zinciri. */
+  wasteSource: YarnWasteSource;
 }
 
 export interface YarnSummary {
@@ -140,7 +143,7 @@ async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, Yar
       const need = a.warp.plus(a.weft);
       const short = stock ? yarnShortKg(need, stock.byItem.get(id)?.serbestKg ?? new Prisma.Decimal(0), purchase?.get(id) ?? null) : null;
       if (short) total = total.plus(short);
-      return { yarnItemId: id, code: names.get(id)?.code ?? "", name: names.get(id)?.name ?? "", needKg: round3(need), shortKg: short ? round3(short) : null, short };
+      return { yarnItemId: id, code: names.get(id)?.code ?? "", name: names.get(id)?.name ?? "", needKg: round3(need), shortKg: short ? round3(short) : null, wasteSource: a.wasteSource, short };
     });
     yarns.sort((x, y) => (y.short ? y.short.comparedTo(x.short ?? 0) : 0) || x.code.localeCompare(y.code, "tr"));
     out.set(key, {

@@ -3641,6 +3641,10 @@ model Item {
   /// bu alana otomatik taşınmaz — ad satın alınan malın tanımlayıcısıdır, sayı
   /// değildir. Devere kapalıyken hiçbir yüzeyde çizilmez.
   linearDensityDen Decimal? @db.Decimal(10, 4)
+  /// SY-3 I2: İPLİK BAŞINA FİRE (%) — yalnız `ItemType.YARN`; doluysa bu ipliğin kg/m'sinde çözgü/atkı
+  /// fire zinciri (yapı/kart/parametre) YERİNE kullanılır (tek çözücü `yarn-waste.helper`). NULL = bugünkü
+  /// davranış. CHECK `items_yarn_waste_pct_ck` (0..50, yalnız YARN).
+  yarnWastePct     Decimal? @db.Decimal(5, 2)
 
   /// KUMAŞ → ÇÖZGÜ KARTI (N:1) — "bu deseni hangi çözgü besliyor".
   /// Yalnız `ItemType.FABRIC` için anlamlıdır (servis 400 verir).
