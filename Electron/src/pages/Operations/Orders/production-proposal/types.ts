@@ -22,9 +22,57 @@ export interface WeavingProposal {
   weftSpecId: string | null;
   weaveDesignId: string | null;
   shrinkPct: number | null;
+  /** Çekmenin kaynağı: YAPI (ürün yapısı) · KART (terbiye tarifesi); eski backend göndermez. */
+  shrinkSource?: "YAPI" | "KART" | null;
+  /** Uygulanan dokuma firesi % (0 = eklenmedi); eski backend göndermez. */
+  weavingWastePct?: number;
   plannedM: number | null;
   orderLines: Array<{ orderLineId: string; openM: number | null; allocatedM: number | null }>;
   beamNeeds?: BeamNeed[];
+  /** Karar özetleri (yalnız önizleme; `production-proposal-insight.helper` aynası). Hesaplanamayan null, eski backend'de yok. */
+  loomSummary?: LoomSummary | null;
+  yarnSummary?: YarnSummary | null;
+  durationEstimate?: WeavingDurationEstimate | null;
+}
+
+export type LoomTier = "READY" | "BEAM_SHORT" | "WARP_CHANGE";
+
+export interface LoomSummary {
+  requiredM: number;
+  best: {
+    machineId: string;
+    code: string;
+    name: string;
+    tier: LoomTier;
+    /** Yalnız BEAM_SHORT: takılı leventlerle dokunabilecek metre. */
+    weavableM: number | null;
+    /** Yalnız WARP_CHANGE: gerekeni karşılayan ilk hazır levent no'su. */
+    readyBeamNo: string | null;
+    sameDesignRunning: boolean;
+    hasOpenRun: boolean;
+    widthWarning: boolean;
+  };
+  counts: Record<LoomTier, number>;
+}
+
+export interface YarnSummary {
+  rawM: number;
+  yarns: Array<{ yarnItemId: string; code: string; name: string; needKg: number; shortKg: number | null }>;
+  /** Stok bilinmiyorsa (iplik modülü kapalı) null. */
+  totalShortKg: number | null;
+  sources: { stock: boolean; openPurchase: boolean; readyBeams: boolean };
+}
+
+export interface WeavingDurationEstimate {
+  machineId: string;
+  picksPerCm: number;
+  planRpm: number;
+  planEfficiencyPct: number;
+  weavingHours: number;
+  weavingDays: number;
+  hoursUntilDeadline: number | null;
+  /** Yalnız dokuma süresi termine sığıyor mu — "yetişir" hükmü DEĞİL; termin yoksa null. */
+  weavingOnlyFitsDeadline: boolean | null;
 }
 
 export interface WorkOrderProposal {
@@ -47,6 +95,10 @@ export interface ProductionProposal {
   workOrders: WorkOrderProposal[];
   excluded: Array<{ orderLineId: string; kind: "WEAVING" | "WORK_ORDER" | "LINE"; code: string }>;
   canCreate: { weaving: boolean; workOrder: boolean };
+  /** Uygulanan dokuma firesi % (yalnız dokuma bölümü hesaplandıysa). */
+  weavingWastePct?: number;
+  /** Yalnız önizleme: sipariş termini (ISO). */
+  deadline?: string | null;
 }
 
 export interface ProposalApplyBody {

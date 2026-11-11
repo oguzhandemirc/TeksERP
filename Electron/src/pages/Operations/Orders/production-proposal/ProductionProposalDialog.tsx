@@ -98,7 +98,7 @@ export function ProductionProposalDialog({ open, onOpenChange, orderId, orderNum
         ) : p ? (
           <div className="space-y-4">
             {empty && <p className="text-sm text-muted-foreground">Bu sipariş için oluşturulacak yeni kayıt yok.</p>}
-            <WeavingSection rows={p.weavingOrders} sel={f.sel} canCreate={p.canCreate.weaving} lineLabel={lineLabel}
+            <WeavingSection rows={p.weavingOrders} sel={f.sel} canCreate={p.canCreate.weaving} lineLabel={lineLabel} wastePct={p.weavingWastePct}
               onToggle={(k) => f.setSel((s) => ({ ...s, weaving: toggled(s.weaving, k) }))}
               onPlannedM={(k, t) => f.setSel((s) => ({ ...s, plannedM: new Map(s.plannedM).set(k, t) }))} />
             <WorkOrderSection rows={p.workOrders} sel={f.sel} canCreate={p.canCreate.workOrder} lineLabel={lineLabel}

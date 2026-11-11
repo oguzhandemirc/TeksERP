@@ -66,4 +66,47 @@ describe("Üretime gönder (SY-M3)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Önizlemeyi yenile" }));
     await waitFor(() => expect(api.preview).toHaveBeenCalledTimes(2));
   });
+
+  it("karar özetleri: dolu → üç satır + ayrıntı; fire notu", async () => {
+    api.preview.mockResolvedValue({
+      ...proposal,
+      weavingWastePct: 2,
+      deadline: "2026-12-01T00:00:00.000Z",
+      weavingOrders: [{
+        ...proposal.weavingOrders[0], shrinkSource: "YAPI", weavingWastePct: 2,
+        loomSummary: { requiredM: 1111, best: { machineId: "m7", code: "T-07", name: "T7", tier: "BEAM_SHORT", weavableM: 620, readyBeamNo: null, sameDesignRunning: false, hasOpenRun: true, widthWarning: true }, counts: { READY: 0, BEAM_SHORT: 2, WARP_CHANGE: 5 } },
+        yarnSummary: { rawM: 1111, yarns: [{ yarnItemId: "y1", code: "IP-150D", name: "Polyester", needKg: 80, shortKg: 34.2 }], totalShortKg: 34.2, sources: { stock: true, openPurchase: true, readyBeams: true } },
+        durationEstimate: { machineId: "m7", picksPerCm: 24, planRpm: 420, planEfficiencyPct: 85, weavingHours: 117.4, weavingDays: 4.89, hoursUntilDeadline: 90, weavingOnlyFitsDeadline: false },
+      }],
+    });
+    renderWithProviders(<ProductionProposalDialog open onOpenChange={() => {}} orderId="o1" />);
+    const box = await screen.findByTestId("proposal-insights");
+    expect(box).toHaveTextContent("T-07 tezgâhında levent yetmez, 620 m dokur");
+    expect(box).toHaveTextContent("levent kısa 2 · değişim 5");
+    expect(box).toHaveTextContent("Tarak dar");
+    expect(box).toHaveTextContent("IP-150D: 34,2 kg eksik");
+    expect(box).toHaveTextContent("yalnız dokuma süresi bile termini aşıyor");
+    expect(screen.getByText(/%2 dokuma firesi dahil/)).toBeTruthy();
+    expect(screen.getByText(/çekme %10 \(ürün yapısından\)/)).toBeTruthy();
+    expect(screen.queryByTestId("proposal-insights-detail")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "ayrıntı" }));
+    const detail = screen.getByTestId("proposal-insights-detail");
+    expect(detail).toHaveTextContent("Polyester");
+    expect(detail).toHaveTextContent("T-07 · devir 420/dk · verim %85 · atkı sıklığı 24 atkı/cm");
+    fireEvent.click(screen.getByRole("button", { name: "ayrıntıyı gizle" }));
+    expect(screen.queryByTestId("proposal-insights-detail")).toBeNull();
+  });
+
+  it("özetler null ya da hiç yok (eski backend) → satır yok, çökmez; fire 0 yazılmaz", async () => {
+    api.preview.mockResolvedValue({ ...proposal, weavingWastePct: 0, weavingOrders: [{ ...proposal.weavingOrders[0], loomSummary: null, yarnSummary: null, durationEstimate: null }] });
+    const { unmount } = renderWithProviders(<ProductionProposalDialog open onOpenChange={() => {}} orderId="o1" />);
+    await screen.findByText(/Dokuma İş Emirleri/);
+    expect(screen.queryByTestId("proposal-insights")).toBeNull();
+    expect(screen.queryByText(/dokuma firesi/)).toBeNull();
+    unmount();
+    api.preview.mockResolvedValue(proposal);
+    renderWithProviders(<ProductionProposalDialog open onOpenChange={() => {}} orderId="o1" />);
+    await screen.findByText(/Dokuma İş Emirleri/);
+    expect(screen.queryByTestId("proposal-insights")).toBeNull();
+  });
 });
