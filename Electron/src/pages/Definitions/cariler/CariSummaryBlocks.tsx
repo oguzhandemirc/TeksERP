@@ -1,4 +1,5 @@
 // Cari özet blokları (yan panel): hesap — bakiye/vadesi geçmiş/risk PARA BİRİMİ BAŞINA; siparişler — açık adet/metre.
+// Termin/gecikme sayacı YOK (kullanıcı kararı 2026-11-12: tekstilde termin bilgisinin önemi sıfır).
 import type { UseQueryResult } from "@tanstack/react-query";
 import { AlertTriangle, ClipboardList, Wallet } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -70,21 +71,20 @@ export function CariOrderBlock({ stats }: { stats: OrderStats; compact?: boolean
       <RecordSectionTitle>Siparişler</RecordSectionTitle>
       <div className={cn(BOX, "flex items-center gap-3")}>
         <IconTile icon={ClipboardList} tone="blue" size="md" />
-        <div className="grid flex-1 grid-cols-3 gap-2 text-sm">
+        <div className="grid flex-1 grid-cols-2 gap-2 text-sm">
           <Mini label="Açık" value={formatNumber(open, 0)} />
           <Mini label="Kalan metre" value={metre(stats.totalOpenQty) ?? "—"} />
-          <Mini label="Gecikmiş" value={formatNumber(stats.overdueCount, 0)} danger={stats.overdueCount > 0} />
         </div>
       </div>
     </section>
   );
 }
 
-function Mini({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <p className="truncate text-xs text-muted-foreground">{label}</p>
-      <p className={cn("truncate font-bold tabular-nums", danger && "text-destructive")}>{value}</p>
+      <p className="truncate font-bold tabular-nums">{value}</p>
     </div>
   );
 }

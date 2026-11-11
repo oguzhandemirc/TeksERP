@@ -61,6 +61,7 @@ import { TeachTemplatePage } from "@/pages/Operations/GelenBelgeler/tanit/TanitP
 import { TeachStartPage } from "@/pages/Operations/GelenBelgeler/tanit/TanitStartPage";
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
+import { CariRecordPage } from "@/pages/Definitions/cariler/CariRecordPage";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
 import { CariPage } from "@/pages/Finance/CariPage";
 import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
@@ -532,6 +533,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={["customer:read", "subcontractor:read"]}>
         <CarilerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/cariler/:id",
+    element: (
+      <ProtectedRoute requireAnyPermission={["customer:read", "subcontractor:read"]}>
+        <CariRecordPage />
       </ProtectedRoute>
     ),
   },

@@ -56,7 +56,8 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     label: "Müşteriler",
     icon: Building2,
     permissions: ["customer:read"],
-    to: (r) => ({ to: `/definitions/customers?search=${q(r.code ?? r.title)}` }),
+    // (a) gerçek detay sayfası: cari kayıt sayfası (rejimden bağımsız açılır; kapısı customer:read).
+    to: (r) => ({ to: `/definitions/cariler/${encodeURIComponent(r.id)}` }),
     listTo: (t) => `/definitions/customers?search=${q(t)}`,
   },
   item: {
