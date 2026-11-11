@@ -414,7 +414,7 @@ function PermissionRow({
           )}
         </div>
       </TableCell>
-      <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
+      <TableCell className="break-words [--cell-wrap:normal] py-1.5 text-xs text-muted-foreground">
         {p.description}
         {p.roleNames && p.roleNames.length > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-1">

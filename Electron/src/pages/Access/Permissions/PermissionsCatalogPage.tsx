@@ -225,7 +225,7 @@ export function PermissionsCatalogPage() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
+                              <TableCell className="break-words [--cell-wrap:normal] py-1.5 text-xs text-muted-foreground">
                                 {p.description}
                               </TableCell>
                               <TableCell className="py-1.5 text-right">
