@@ -65,11 +65,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
           <Input id="wf-prog" value={program} maxLength={16} disabled={!canWrite} onChange={(e) => setProgram(e.target.value)} placeholder="6037" />
         </div>
       </div>
-      {shares && (
-        <div className="hidden gap-2 text-xs text-muted-foreground sm:grid sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]">
-          <span /><span>İplik</span><span>Rapordaki adet</span><span className="text-right">Pay %</span><span />
-        </div>
-      )}
+      {shares && <WeftShareHeader />}
       <ul className="space-y-2">
         {rows.map((r, i) => (
           <li key={i} className={shares ? "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]" : "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_2.5rem]"}>
@@ -89,11 +85,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
             />
             <Input aria-label={`Atkı ${weftLetter(i)} rapordaki adet`} value={r.picks} inputMode="numeric" disabled={!canWrite || derived} title={derived ? "Sıra kodundan sunucu türetir" : undefined}
               placeholder={derived ? "sıradan türetilir" : "adet"} onChange={(e) => setRow(i, { picks: e.target.value })} />
-            {shares && (
-              <span className="text-right text-sm tabular-nums text-muted-foreground" aria-label={`Atkı ${weftLetter(i)} pay`} title={sharesMatch ? "Atkıdaki payı" : "Kaydedince yeniden hesaplanır"}>
-                {weftShareCell(spec, i, sharesMatch)}
-              </span>
-            )}
+            {shares && <WeftShareCell spec={spec} index={i} matches={sharesMatch} />}
             {canWrite && (
               <Button variant="ghost" size="icon" aria-label={`Atkı ${weftLetter(i)} satırını sil`} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>
                 <Trash2 className="h-4 w-4" />
@@ -112,5 +104,22 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
         </div>
       )}
     </div>
+  );
+}
+
+// Pay % başlığı ve hücresi — yalnız sunucu payı gönderdiyse çizilir (weftShareVisible).
+function WeftShareHeader() {
+  return (
+    <div className="hidden gap-2 text-xs text-muted-foreground sm:grid sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]">
+      <span /><span>İplik</span><span>Rapordaki adet</span><span className="text-right">Pay %</span><span />
+    </div>
+  );
+}
+
+function WeftShareCell({ spec, index, matches }: { spec: WeftSpecDetail; index: number; matches: boolean }) {
+  return (
+    <span className="text-right text-sm tabular-nums text-muted-foreground" aria-label={`Atkı ${weftLetter(index)} pay`} title={matches ? "Atkıdaki payı" : "Kaydedince yeniden hesaplanır"}>
+      {weftShareCell(spec, index, matches)}
+    </span>
   );
 }

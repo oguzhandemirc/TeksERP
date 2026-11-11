@@ -93,7 +93,8 @@ export function reservationText(meta: Pick<YarnNeedMeta, "ayirma">): string | nu
   const a = meta.ayirma;
   if (!a) return null;
   if (a.isSayisi === 0) return "İplik ayırma açık: açık dokuma işi yok, ayrılan iplik yok.";
-  const cut = Number(a.netlenenKumasM);
-  const net = a.talepNetlendi && cut > 0 ? `; bu işlerin ${fmtDec(a.netlenenKumasM, 0)} m kalanı ihtiyaçtan düşüldü` : "";
+  // Sunucunun ondalık metni; yalnız "sıfırdan büyük mü" bakılır (hesap yok).
+  const cut = /^\d*\.?\d*$/.test(a.netlenenKumasM) && /[1-9]/.test(a.netlenenKumasM);
+  const net = a.talepNetlendi && cut ? `; bu işlerin ${fmtDec(a.netlenenKumasM, 0)} m kalanı ihtiyaçtan düşüldü` : "";
   return `İplik ayırma açık: ${a.isSayisi} açık dokuma işinin kalan metresi için iplik ayrıldı${net}.`;
 }

@@ -196,6 +196,7 @@ describe("karo bağlantıları", () => {
     // 2026-10-29: `icerideki-isler` (P1a, ister 3.2) — emanet kapalıyken GİZLİ.
     // 2026-11-08: `emanet-cikis` (Emanet Çıkış, fason F5/P3) — emanet kapalıyken GİZLİ (İçerideki İşler ile aynı kapı).
     // 2026-11-02: `work-order-create` (K6 İş emri oluştur) — üretim modülü kapısı (İş Emirleri ile aynı yüklem).
+    // 2026-11-11: `loom-load` (Tezgâh Yükü, SY-3) — Dokuma İşleri ile AYNI kapı (isWeavingOrdersVisible).
     expect(conditional.sort()).toEqual([
       "emanet-cikis",
       "gelen-belge-sablonlari",
@@ -207,6 +208,7 @@ describe("karo bağlantıları", () => {
       "kursun-dagitim",
       "kursun-sapmalar",
       "loom-alarms",
+      "loom-load",
       "machine-stops",
       "product-balance",
       "purchase-orders",
