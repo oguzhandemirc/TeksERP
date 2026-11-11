@@ -16,6 +16,8 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
   const yarns = w.yarnSummary?.yarns ?? [];
   const d = w.durationEstimate ?? null;
   const hasDetail = yarns.length > 0 || d != null;
+  // SY-3 I1: ayırma ayarı açıkken sunucu `reservedKg`/`freeKg` ekler; kapalıyken (ya da eski backend) sütun yok.
+  const reserved = yarns.some((y) => y.reservedKg !== undefined);
   const shortTone = (w.yarnSummary?.totalShortKg ?? 0) > 0;
   const machineCode = d && w.loomSummary?.best.machineId === d.machineId ? w.loomSummary.best.code : null;
   return (
@@ -53,6 +55,8 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
                 <tr>
                   <th className="text-left font-normal">İplik</th>
                   <th className="text-right font-normal">Gereken</th>
+                  {reserved && <th className="text-right font-normal" title="Açık dokuma işlerinin kalan metresi için ayrılan (tesis geneli)">Ayrılan</th>}
+                  {reserved && <th className="text-right font-normal" title="Serbest stok − ayrılan">Serbest</th>}
                   <th className="text-right font-normal">Eksik</th>
                 </tr>
               </thead>
@@ -64,6 +68,8 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
                       {y.wasteSource === "IPLIK" && <span className="ml-1 text-muted-foreground" title="Bu iplik kartına girilen fire yüzdesiyle hesaplandı">(iplik firesi)</span>}
                     </td>
                     <td className="text-right tabular-nums">{formatKg(y.needKg)}</td>
+                    {reserved && <td className="text-right tabular-nums">{y.reservedKg ? formatKg(y.reservedKg) : "—"}</td>}
+                    {reserved && <td className={y.freeKg != null && y.freeKg < 0 ? "text-right tabular-nums text-warning" : "text-right tabular-nums"}>{y.freeKg == null ? "bilinmiyor" : formatKg(y.freeKg)}</td>}
                     <td className="text-right tabular-nums">{y.shortKg == null ? "bilinmiyor" : y.shortKg > 0 ? formatKg(y.shortKg) : "—"}</td>
                   </tr>
                 ))}

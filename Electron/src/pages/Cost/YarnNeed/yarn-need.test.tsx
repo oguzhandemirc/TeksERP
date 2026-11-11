@@ -4,7 +4,7 @@ import { buildExportSpec } from "@/pages/Reports/_v2/export-spec";
 import { ReportTable } from "@/pages/Reports/_v2/ReportTable";
 import type { RaporSunumu, TabloBlok } from "@/pages/Reports/_v2/sunum";
 import { costTiles } from "../tile-config";
-import { excludedText, missingText, rawBasisText, sourceBadges, wasteSourceText } from "./yarn-need-model";
+import { excludedText, missingText, rawBasisText, reservationText, sourceBadges, wasteSourceText } from "./yarn-need-model";
 
 // Sunucu zarfının küçük kopyası: iplik modülü kapalı → stok hücresi sunucudan "bilinmiyor" gelir.
 const tablo: TabloBlok = {
@@ -76,5 +76,19 @@ describe("İplik İhtiyaç Planı — iplik firesi kaynağı (SY-3 I2)", () => {
   it("beşten fazlası 've N iplik daha' ile kısalır; kodsuz iplik adıyla", () => {
     const rows = Array.from({ length: 7 }, (_, i) => ({ iplikKodu: i === 0 ? "" : `K${i}`, iplik: `Ad${i}`, fireKaynagi: "IPLIK" as const }));
     expect(wasteSourceText(rows)).toBe("İplik kartındaki fire kullanıldı: Ad0, K1, K2, K3, K4 ve 2 iplik daha. Ötekilerde çözgü/atkı kartının firesi geçerli.");
+  });
+});
+
+describe("İplik İhtiyaç Planı — iplik ayırma (SY-3 I1)", () => {
+  const ay = (over = {}) => ({ isSayisi: 3, yapisiEksikIsler: [], talepNetlendi: true, netlenenKumasM: "1250.5", ...over });
+  it("ayar kapalı (ayirma yok) → satır yok", () => {
+    expect(reservationText({})).toBeNull();
+  });
+  it("açık: iş sayısı ve talepten düşülen ham metre", () => {
+    expect(reservationText({ ayirma: ay() })).toBe("İplik ayırma açık: 3 açık dokuma işinin kalan metresi için iplik ayrıldı; bu işlerin 1.251 m kalanı ihtiyaçtan düşüldü.");
+  });
+  it("müşteri süzgecinde (talep netlenmedi) düşüm cümlesi yok; iş yoksa ayrı cümle", () => {
+    expect(reservationText({ ayirma: ay({ talepNetlendi: false }) })).toBe("İplik ayırma açık: 3 açık dokuma işinin kalan metresi için iplik ayrıldı.");
+    expect(reservationText({ ayirma: ay({ isSayisi: 0, netlenenKumasM: "0" }) })).toBe("İplik ayırma açık: açık dokuma işi yok, ayrılan iplik yok.");
   });
 });

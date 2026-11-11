@@ -17,6 +17,8 @@ export interface YarnNeedMeta {
   olculemeyen: Array<{ urunId: string; urunKodu: string; urun: string; birim: string; kalemSayisi: number; miktar: string }>;
   kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean };
   hesapZamani: string;
+  /** SY-3 I1: yalnız iplik ayırma ayarı açıkken var (Ayrılan/Serbest sütunları sunucu tablosunda gelir). */
+  ayirma?: { isSayisi: number; yapisiEksikIsler: Array<{ isId: string; isNo: string; eksikler: string[] }>; talepNetlendi: boolean; netlenenKumasM: string };
 }
 
 /** Özet metreleri (sunucu ondalık metni): dokunacak HAM metre ve aynı ürünlerin sipariş (mamul) metresi. */
@@ -81,4 +83,17 @@ export function excludedText(m: Pick<YarnNeedMeta, "yapisiEksik" | "olculemeyen"
 /** Sunucunun eksik kodu → Türkçe (maliyet ekranlarıyla TEK sözlük); tanınmayan kod ham kalır. */
 export function missingText(code: string): string {
   return MISSING_LABEL[code] ?? code;
+}
+
+/**
+ * İplik ayırma açıkken kısa açıklama: kaç açık dokuma işine iplik ayrıldı, talepten ne kadar ham metre düşüldü.
+ * Uyarılar (stoğu aşan, yapısı eksik iş) sunucunun `uyarilar` şeridinde — burada tekrar edilmez. Ayar kapalı → null.
+ */
+export function reservationText(meta: Pick<YarnNeedMeta, "ayirma">): string | null {
+  const a = meta.ayirma;
+  if (!a) return null;
+  if (a.isSayisi === 0) return "İplik ayırma açık: açık dokuma işi yok, ayrılan iplik yok.";
+  const cut = Number(a.netlenenKumasM);
+  const net = a.talepNetlendi && cut > 0 ? `; bu işlerin ${fmtDec(a.netlenenKumasM, 0)} m kalanı ihtiyaçtan düşüldü` : "";
+  return `İplik ayırma açık: ${a.isSayisi} açık dokuma işinin kalan metresi için iplik ayrıldı${net}.`;
 }

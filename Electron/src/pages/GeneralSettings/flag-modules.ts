@@ -113,6 +113,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı (panel satırı S4b).
   dokumaRollBirth: "dokumaEnabled",
   dokumaWeavingWastePct: "dokumaEnabled",
+  dokumaYarnReservationEnabled: "dokumaEnabled",
   // Tezgah Salonu (2026-10-10): iletim payı tezgah izleme modülünün sayısal ayarı.
   tezgahEscalationGraceMinutes: "tezgahEnabled",
   // Dokuma alarmı: alarm motoru ve ayarları tezgah izleme modülünün davranış bayrakları ("Tezgah izleme" kategorisi).

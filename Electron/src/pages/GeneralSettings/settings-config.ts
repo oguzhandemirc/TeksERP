@@ -1961,6 +1961,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Planlamacı", "Yönetim"],
         desc: "Açıkken dokuma iş emri en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma iş emri açılır ve hub'da ayrı sekmede durur.",
       },
+      {
+        // SY-3 I1: backend `readDokumaYarnReservationEnabled` (kayıt yok = false) ile birebir; engellemez, yalnız gösterir.
+        key: "dokumaYarnReservationEnabled",
+        title: "Açık dokuma işlerine iplik ayır (göster)",
+        summary: "İplik ihtiyacı ve üretime gönder ekranı, açık dokuma işlerinin kalan metresi için gereken ipliği ayrılmış sayar.",
+        defaultOn: false,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Açıkken planlı ya da süren kendi tezgâh dokuma işlerinin kalan metresi için gereken iplik “ayrılan” sayılır: İplik İhtiyaç Planı'nda Ayrılan ve Serbest sütunları çıkar, eksik serbest miktara göre hesaplanır; hazır leventler önce bu işlere düşülür. Stok kilitlenmez, hiçbir kayıt engellenmez; ayrılan stoğu aşarsa yalnız uyarı verilir. Kapalıyken (varsayılan) ekranlar bugünkü gibidir.",
+      },
     ],
     enumFlags: [
       {

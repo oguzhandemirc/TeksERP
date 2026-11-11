@@ -438,6 +438,8 @@ export interface FeatureFlags {
   dokumaRollBirth: DokumaRollBirth;
   /** Dokuma firesi % (backend `DEFAULT_DOKUMA_WEAVING_WASTE_PCT` = 0). */
   dokumaWeavingWastePct: number;
+  /** SY-3 I1: iplik ayırma görünürlüğü (HAM; etkin = üretim && dokuma && bayrak). Varsayılan KAPALI. */
+  dokumaYarnReservationEnabled: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */
