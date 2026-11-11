@@ -1,12 +1,12 @@
 // D3a (2026-10-28): TABLO stratejisi — basılı çeki listesi satırları (0245: 2 blok, 21/21; 0246: 1 satır + TOPLAM).
 // Başlık satırı → blok; satırlar eğime duyarlı gruplanır (rows-tilted.ts); hücreler başlık kolonuna yatay çakışmayla
 // atanır; "T.Adet"/"TOPLAM" satırı beyan edilen toplamdır ve deftere DEĞİL computeNoteTotals'a gider.
-import type { DeclaredTotals, FieldSpec, OcrElement, OcrLine, OcrRect, OcrResult, Row, TableBlock, TableCell, TableColumnSpec, TableResult, TableRow, TableSpec } from "./types";
-import { collectLines, unionRect, averageConfidence } from "./geometry";
+import type { DeclaredTotals, OcrElement, OcrLine, OcrRect, OcrResult, Row, TableBlock, TableCell, TableColumnSpec, TableResult, TableRow, TableSpec } from "./types";
+import { collectLines, unionRect } from "./geometry";
 import { buildRowsTilted, pageMedianAngle } from "./rows-tilted";
-import { assignToColumn, isNumericText, labelSimilarity, matchesLabel, totalsLabelOf, LABEL_MIN_SIMILARITY } from "./labels";
-import { evaluateCandidate } from "./extract";
+import { assignToColumn, labelSimilarity, matchesLabel, totalsLabelOf, LABEL_MIN_SIMILARITY } from "./labels";
 import { lineElements } from "./anchor";
+import { isMeasureCell, isNumericCell, makeCell, measureText } from "./table-cells";
 import { canonicalEquals, sumCanonical } from "./totals";
 
 interface ColumnRect {
@@ -20,8 +20,6 @@ interface BlockDraft {
   /** Sağdaki bitişik sütuna taşmış devam satırları + o sütunun başlık kolonlarına x kayması. */
   spill?: { rows: Row[]; dx: number };
 }
-
-const DEFAULT_MIN_CONFIDENCE = 0.85;
 
 /** Satır, spec kolon başlıklarından kaçını taşıyor; eşleşen kolonların kutuları. */
 function matchHeader(row: Row, spec: TableSpec): ColumnRect[] {
@@ -74,32 +72,6 @@ function partition(rows: Row[], spec: TableSpec): { blocks: BlockDraft[] } {
     if (current) current.rows.push(row);
   }
   return { blocks: blocks.filter((b) => b.rows.length > 0) };
-}
-
-function columnField(col: TableColumnSpec): FieldSpec {
-  return { key: col.key, label: col.label, type: col.type, pattern: col.pattern, strategies: [] };
-}
-
-// Hücre kenarındaki "|" "¦" "[" "]" tablo çizgisidir, rakam değil ("212,30|" → 212.301; "3.935,00|" toplamı düşürüyordu, 214279).
-// YALNIZ baş/son: sayının içindeki karakter ("3.9|35,00") yutulmaz. Tablo hücresi okuması ve sayı sınaması bu tek temizleyiciden.
-const RULE_EDGES = /^[|¦[\]]+\s*|\s*[|¦[\]]+$/g;
-const cellText = (text: string): string => text.trim().replace(RULE_EDGES, "");
-const isNumericCell = (text: string): boolean => isNumericText(cellText(text));
-// Top satırı ve toplam satırı ölçüsü (kg/metre) eksi olmaz (kullanıcı kararı): sayıdan BOŞLUKLA ayrık baş tire çizgi gürültüsüdür
-// ("- 212,30" → 212,3; GB1011260003). Yalnız bu hücrelerde; genel sayı ayrıştırıcı ve başka alanlar eksiyi korur.
-const MEASURE_KEYS = new Set(["kg", "m", "metre"]);
-const RULE_DASH = /^[-–—_]+\s+(?=\d)/;
-const measureText = (text: string): string => cellText(text).replace(RULE_DASH, "");
-const isMeasureCell = (text: string): boolean => isNumericText(measureText(text));
-
-function makeCell(col: TableColumnSpec, lines: OcrLine[], measure = MEASURE_KEYS.has(col.key)): TableCell {
-  const raw = measure ? measureText(lines.map((l) => cellText(l.text)).join(" ")) : lines.map((l) => cellText(l.text)).join(" ");
-  const fr = evaluateCandidate(
-    columnField(col),
-    { raw, ocrConfidence: averageConfidence(lines.flatMap(lineElements)), labelSimilarity: 1, strategyIndex: 0, kind: "roi" },
-    DEFAULT_MIN_CONFIDENCE,
-  );
-  return { key: col.key, raw, value: fr.value, rect: unionRect(lines.map((l) => l.rect)), confidence: fr.confidence, needsReview: fr.needsReview };
 }
 
 /** Satırın kutularını kolonlara dağıtır; kolon başına birden çok kutu düşerse birleştirilir. */
