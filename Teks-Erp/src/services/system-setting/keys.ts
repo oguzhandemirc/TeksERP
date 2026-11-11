@@ -375,6 +375,8 @@ export const SETTING_KEYS = {
   DOKUMA_ROLL_BIRTH: "dokuma.rollBirth",
   /** Seyitoğlu temel (2026-11-11): üretim önerisi + iplik ihtiyacında dokuma firesi % (ham = … ÷ (1 − fire)); varsayılan 0 = bugünkü davranış. */
   DOKUMA_WEAVING_WASTE_PCT: "dokuma.weavingWastePct",
+  /** SY-3 I1 (2026-11-12): iplik ayırma görünürlüğü — açık dokuma işlerinin kalan iplik kg'ı "ayrılmış" sayılır; ENGELLEMEZ. Varsayılan FALSE. */
+  DOKUMA_YARN_RESERVATION_ENABLED: "dokuma.yarnReservationEnabled",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *

@@ -140,6 +140,8 @@ const PANEL_EXEMPT: Record<string, string> = {
   // ne ekran, ne kanca — panelde toggle, açılınca hiçbir şeyi değiştirmeyen düğme olurdu.
   // Yüzeyi doğunca panele girer ve satır SİLİNİR (muaf listesi iki yönlü denetlenir).
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
+  // Backend dilimi (SY-3 I1, 2026-11-12) panelden ayrı indi; panel satırı Dokuma kategorisine gelince SİLİNİR.
+  dokumaYarnReservationEnabled: "panel dilimi bekliyor — Dokuma kategorisi satırı ayrı dilimde (backend önce)",
 };
 
 const ELECTRON_CONFIG = path.resolve(

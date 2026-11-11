@@ -26,6 +26,11 @@ export function yarnNeedColumns(r: YarnNeedReport): TabloKolonu[] {
     { anahtar: "atkiKg", baslik: "Atkı (ham metreye göre)", birim: "kg", hiza: "sag" },
     { anahtar: "ihtiyacKg", baslik: "İhtiyaç (ham metreye göre)", birim: "kg", hiza: "sag" },
     { anahtar: "serbestStokKg", baslik: "Serbest stok", birim: "kg", hiza: "sag" },
+    // SY-3 I1: yalnız iplik ayırma açıkken (kapalıyken kolon listesi bugünküyle aynı).
+    ...(r.meta.ayirma ? [
+      { anahtar: "ayrilanKg", baslik: "Ayrılan (açık dokuma işleri)", birim: "kg" as const, hiza: "sag" as const },
+      { anahtar: "serbestKg", baslik: "Serbest (ayrılan düşülmüş)", birim: "kg" as const, hiza: "sag" as const },
+    ] : []),
     ...(r.meta.kaynaklar.emanet ? [{ anahtar: "emanetKg", baslik: "Emanet (müşterinin)", birim: "kg" as const, hiza: "sag" as const }] : []),
     { anahtar: "acikAlisKg", baslik: "Açık alış", birim: "kg", hiza: "sag" },
     { anahtar: "eksikKg", baslik: "Eksik", birim: "kg", hiza: "sag" },
@@ -41,11 +46,16 @@ export function yarnNeedTable(r: YarnNeedReport): TabloBlok {
       atkiKg: sayi(s.atkiKg),
       ihtiyacKg: sayi(s.ihtiyacKg),
       serbestStokKg: ya(s.serbestStokKg),
+      ...(r.meta.ayirma ? { ayrilanKg: sayi(s.ayrilanKg ?? "0"), serbestKg: ya(s.serbestKg ?? null) } : {}),
       ...(r.meta.kaynaklar.emanet ? { emanetKg: ya(s.emanetKg) } : {}),
       acikAlisKg: ya(s.acikAlisKg),
       eksikKg: sayi(s.eksikKg),
     })),
-    toplam: { iplik: "Toplam", cozguKg: sayi(r.ozet.cozguKg), atkiKg: sayi(r.ozet.atkiKg), ihtiyacKg: sayi(r.ozet.ihtiyacKg), eksikKg: sayi(r.ozet.eksikKg) },
+    toplam: {
+      iplik: "Toplam", cozguKg: sayi(r.ozet.cozguKg), atkiKg: sayi(r.ozet.atkiKg), ihtiyacKg: sayi(r.ozet.ihtiyacKg),
+      ...(r.ozet.ayrilanKg !== undefined ? { ayrilanKg: sayi(r.ozet.ayrilanKg) } : {}),
+      eksikKg: sayi(r.ozet.eksikKg),
+    },
   };
 }
 
@@ -58,6 +68,18 @@ function parametreler(r: YarnNeedReport, o: YarnNeedOptions): ParametreBeyani[] 
   ];
 }
 
+/** SY-3 I1 ayırma uyarıları — sunum şeridi VE yanıtın `warnings`i aynı metni taşır; ayar kapalıyken boş. */
+export function yarnReservationWarnings(r: YarnNeedReport): string[] {
+  const ay = r.meta.ayirma;
+  if (!ay) return [];
+  const w: string[] = [];
+  const asan = r.satirlar.filter((s) => s.serbestKg != null && sayi(s.serbestKg) < 0).length;
+  if (asan) w.push(`${asan} iplikte açık dokuma işlerine ayrılan miktar serbest stoğu aşıyor.`);
+  if (ay.yapisiEksikIsler.length) w.push(`${ay.yapisiEksikIsler.length} açık dokuma işinin yapısı eksik; ayrılan miktara katılmadı.`);
+  if (!ay.talepNetlendi) w.push("Müşteri süzgecinde talep açık işlerle netlenmez; ihtiyaç işlere ayrılan miktarla çakışabilir.");
+  return w;
+}
+
 /** Kaynak beyanı ve eksik listeleri — ekranın alt şeridi ile PDF/Excel uyarıları AYNI metin. */
 export function yarnNeedWarnings(r: YarnNeedReport): string[] {
   const w: string[] = [];
@@ -65,6 +87,7 @@ export function yarnNeedWarnings(r: YarnNeedReport): string[] {
   if (!r.meta.kaynaklar.acikAlis) w.push("Ticaret modülü kapalı: açık alış siparişleri bilinmiyor ve düşülmedi.");
   if (r.meta.leventDus && !r.meta.kaynaklar.leventDusumu) w.push("Devere modülü kapalı: hazır leventler düşülmedi.");
   if (r.meta.yapisiEksik.length) w.push(`${r.meta.yapisiEksik.length} ürünün yapısı eksik; ihtiyaca katılmadı.`);
+  w.push(...yarnReservationWarnings(r));
   if (r.meta.olculemeyen.length) w.push(`${r.meta.olculemeyen.reduce((a, x) => a + x.kalemSayisi, 0)} sipariş kalemi kg ya da adet birimli; metreye çevrilmedi.`);
   return w;
 }
@@ -94,6 +117,11 @@ export function buildYarnNeedSunumu(r: YarnNeedReport, o: YarnNeedOptions): Rapo
       { ad: "Ham metre", aciklama: "Sipariş (mamul) metresi boy çekmesi ve dokuma firesiyle büyütülür: ham = sipariş metresi ÷ (1 − çekme) ÷ (1 − fire). Çekme ürün yapısından, yoksa terbiye tarifesinden; fire Dokuma ayarından." },
       { ad: "Serbest stok", aciklama: "Depodaki iplik; müşterinin bize bıraktığı emanet iplik bu sayıya girmez." },
       { ad: "Eksik", aciklama: "İhtiyaçtan serbest stok ve yoldaki alış siparişi çıkınca kalan; sıfırın altına inmez." },
+      ...(r.meta.ayirma ? [
+        { ad: "Ayrılan", aciklama: "Açık (planlı ya da süren) kendi tezgâh dokuma işlerinin kalan ham metresi için gereken iplik; hazır leventler önce bu işlere düşülür. Stok ayırmaz, yalnız gösterir." },
+        { ad: "Serbest (ayrılan düşülmüş)", aciklama: "Serbest stoktan ayrılan çıkınca kalan; eksiye inmişse işler stoktan fazlasını bekliyor demektir. Eksik bu sayıya göre hesaplanır." },
+        { ad: "İhtiyaç (ayırma açıkken)", aciklama: "Açık işlerin kalan metresi ürünün talebinden düşülür; ihtiyaç yalnız henüz işe bağlanmamış talebi gösterir." },
+      ] : []),
       { ad: BILINMIYOR, aciklama: "İlgili modül kapalı olduğu için değer okunamadı; sıfır demek değildir." },
     ],
     parametreler: parametreler(r, o),

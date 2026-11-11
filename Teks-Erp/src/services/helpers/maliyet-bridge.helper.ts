@@ -10,7 +10,7 @@
 // =============================================================================
 import { Prisma, type Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { readDevereEnabled, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled } from "../system-setting.service";
+import { readDevereEnabled, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled, resolveDokumaYarnReservationEnabled } from "../system-setting.service";
 import { factoryYmd } from "../../constants/time";
 import { addDaysYmd } from "./dokuma-levent-rapor.helper";
 
@@ -129,4 +129,14 @@ export async function readReadyBeams(warpSpecIds: string[]): Promise<Map<string,
   if (!(await readDevereEnabled())) return null;
   const { readReadyBeamRemainingM } = await import("../warp-beam.service");
   return readReadyBeamRemainingM(warpSpecIds);
+}
+
+/**
+ * SY-3 I1 iplik ayırma (ayar `dokuma.yarnReservationEnabled`, üretim+dokuma ebeveynli). Kapalı → SORGU ATMADAN null
+ * (yanıt bugünküyle bayt-eşit). `leventDus` false ise hazır levent okunmaz (rapor seçeneğiyle aynı).
+ */
+export async function readYarnReservation(opts: { leventDus: boolean }): Promise<import("./yarn-reservation.helper").YarnReservation | null> {
+  if (!(await resolveDokumaYarnReservationEnabled())) return null;
+  const { computeYarnReservation } = await import("./yarn-reservation.helper");
+  return computeYarnReservation((ids) => (opts.leventDus ? readReadyBeams(ids) : Promise.resolve(null)));
 }

@@ -284,6 +284,13 @@ export async function readDokumaRollBirth(tx?: Pick<typeof prisma, "systemSettin
   return typeof v === "string" && DOKUMA_ROLL_BIRTH_MODES.includes(v as DokumaRollBirth) ? (v as DokumaRollBirth) : DEFAULT_DOKUMA_ROLL_BIRTH;
 }
 
+/** SY-3 I1: iplik ayırma görünürlüğü. Default FALSE (satır yok = bugünkü yanıtlar bayt-aynı). HAM değer. */
+export async function readDokumaYarnReservationEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 /** Dokuma firesi % — varsayılan 0 (bugünkü davranış: ham ihtiyaç yalnız çekmeyle büyür); üst sınır dahil. */
 export const DEFAULT_DOKUMA_WEAVING_WASTE_PCT = 0;
 export const DOKUMA_WEAVING_WASTE_PCT_MAX = 50;

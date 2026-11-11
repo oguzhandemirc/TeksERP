@@ -402,6 +402,7 @@ export const updateSchema = z.strictObject({
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
   dokumaOrderLineLinkRequired: z.boolean().optional(),
+  dokumaYarnReservationEnabled: z.boolean().optional(),
   /** S1: top doğuş yolu (enum; `DOKUMA_ROLL_BIRTH_MODES` ile birebir). */
   dokumaRollBirth: z.enum(["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"]).optional(),
   /** Dokuma firesi % (`DOKUMA_WEAVING_WASTE_PCT_MAX` ile birebir); null = varsayılana (0) dön. */
