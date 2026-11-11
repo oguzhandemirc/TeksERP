@@ -4,6 +4,7 @@
 // ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireDokumaEnabled` (modül rejimi; TOPLU) →
 // `requirePermission`. İzinler çözgü kartıyla AYNI kodlar (`warpspec:read/write`; yeni
 // kod yok — DOKUMA-MANUEL-PLAN §S2). Ekran S4c'de (iş emri formu v2 + kart sayfaları).
+// L3 (Seyitoğlu): kart dönen her yanıtta salt-okunur `shareBasis` + `yarns[].sharePct` (`withWeftShares`).
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -18,6 +19,7 @@ import {
   updateWeftSpec,
 } from "../services/weft-spec.service";
 import { forkWeftSpecForItem } from "../services/weft-spec-fork.service";
+import { withWeftShares } from "../services/helpers/weft-share.helper";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -46,7 +48,7 @@ const listQuery = z.object({
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
 router.get("/", requirePermission("warpspec:read"), wrap(async (req, res) => {
-  res.status(200).json({ success: true, data: await listWeftSpecs(listQuery.parse(req.query)) });
+  res.status(200).json({ success: true, data: (await listWeftSpecs(listQuery.parse(req.query))).map(withWeftShares) });
 }));
 
 /**
@@ -55,6 +57,9 @@ router.get("/", requirePermission("warpspec:read"), wrap(async (req, res) => {
  *   get:
  *     tags: [WeftSpecs]
  *     summary: Atkı kartı detayı (iplik satırlarıyla)
+ *     description: |
+ *       Salt-okunur pay: `shareBasis` = "MASS" (kütlece — maliyet motorunun atkı formülü; tüm ipliklerde denye varsa)
+ *       | "PICKS" (denye eksik → atım sayısı payı) | null (iplik satırı yok); `yarns[].sharePct` 2 haneli yüzde (yoksa null).
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
@@ -63,7 +68,7 @@ router.get("/", requirePermission("warpspec:read"), wrap(async (req, res) => {
  */
 router.get("/:id", requirePermission("warpspec:read"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
-  res.status(200).json({ success: true, data: await getWeftSpec(id) });
+  res.status(200).json({ success: true, data: withWeftShares(await getWeftSpec(id)) });
 }));
 
 /**
@@ -79,7 +84,7 @@ router.get("/:id", requirePermission("warpspec:read"), wrap(async (req, res) => 
  *       409: { description: Kod ya da ad mükerrer }
  */
 router.post("/", requirePermission("warpspec:write"), wrap(async (req, res) => {
-  const data = await createWeftSpec(body.parse(req.body ?? {}), req.user?.userId);
+  const data = withWeftShares(await createWeftSpec(body.parse(req.body ?? {}), req.user?.userId));
   res.status(201).json({ success: true, data, message: "Atkı kartı oluşturuldu." });
 }));
 
@@ -107,7 +112,8 @@ const forkBody = z.object({
  */
 router.post("/:id/fork", requirePermission("warpspec:write"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
-  const data = await forkWeftSpecForItem(id, forkBody.parse(req.body ?? {}), req.user?.userId);
+  const forked = await forkWeftSpecForItem(id, forkBody.parse(req.body ?? {}), req.user?.userId);
+  const data = { ...forked, weftSpec: withWeftShares(forked.weftSpec) };
   res.status(data.replayed ? 200 : 201).json({ success: true, data, message: data.replayed ? "Özel kopya zaten oluşturulmuştu." : "Bu desene özel atkı kartı oluşturuldu." });
 }));
 
@@ -124,7 +130,7 @@ router.post("/:id/fork", requirePermission("warpspec:write"), wrap(async (req, r
  */
 router.patch("/:id", requirePermission("warpspec:write"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
-  const data = await updateWeftSpec(id, body.parse(req.body ?? {}), req.user?.userId);
+  const data = withWeftShares(await updateWeftSpec(id, body.parse(req.body ?? {}), req.user?.userId));
   res.status(200).json({ success: true, data, message: "Atkı kartı güncellendi." });
 }));
 
