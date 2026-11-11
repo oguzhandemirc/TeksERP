@@ -13,7 +13,7 @@ import { isModuleOpen, loadAccessContext, type AccessContext } from "../reports/
 import { shippedPartsSql } from "../reports/_shipped";
 import { round1 } from "../reports/_breakdown";
 import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
-import type { PanoKullanici } from "./pano.service";
+import type { PanoKullanici } from "./pano-kaynak";
 
 export const PANO_HAREKET_LIMIT = 8;
 
@@ -180,9 +180,9 @@ async function deliveryNotes(): Promise<PanoHareket[]> {
   }));
 }
 
-export async function getPanoHareketler(user: PanoKullanici, now: Date = new Date()): Promise<PanoHareketler> {
-  const ctx = await loadAccessContext(user);
-  const can: Record<HareketTuru, boolean> = {
+/** Tür başına kapı — kutu kataloğu da bunu okur (tek kaynak). */
+export function movementGates(ctx: AccessContext): Record<HareketTuru, boolean> {
+  return {
     SIPARIS: gate(ctx, "order:read"),
     SEVK: gate(ctx, "shipping:read"),
     DOGRUDAN_SEVK: gate(ctx, "shipping:read"),
@@ -191,6 +191,10 @@ export async function getPanoHareketler(user: PanoKullanici, now: Date = new Dat
     MAL_KABUL: gate(ctx, "goods-receipt:read", "ticaretEnabled"),
     GELEN_BELGE: gate(ctx, "gelen-belge:read", "gelenBelgeEnabled"),
   };
+}
+
+export async function getPanoHareketler(user: PanoKullanici, now: Date = new Date()): Promise<PanoHareketler> {
+  const can = movementGates(await loadAccessContext(user));
   const parts = await Promise.all([
     can.SIPARIS ? orders() : none(),
     can.SEVK ? shipments(now) : none(),

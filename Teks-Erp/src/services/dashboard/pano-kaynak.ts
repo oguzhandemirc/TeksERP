@@ -24,6 +24,7 @@ import { buildDeliveryNoteBaseWhere, deliveryNoteStatusSummary } from "../gelen-
 import { buildShipmentListSummary } from "../shipping/list";
 import { WO_STATE_WHERE } from "../order/list";
 import { DEADLINE_OPEN_ORDER_STATUSES } from "../helpers/order-deadline.helper";
+import { movementGates } from "./pano-hareketler.service";
 import { bucketKeySql, type PanoKova, type PanoPencere } from "./pano-donem";
 
 /** "En çok" listeleri ve halka dilimi sayısı. */
@@ -69,6 +70,7 @@ export function panoGates(ctx: AccessContext) {
     isEmri: gate(ctx, "workorder:read"),
     alis: gate(ctx, "purchase-order:read", "ticaretEnabled"),
     dokumaIsi: gate(ctx, "weavingorder:read", "dokumaEnabled"),
+    hareket: Object.values(movementGates(ctx)).some(Boolean),
   };
 }
 export type PanoGates = ReturnType<typeof panoGates>;
