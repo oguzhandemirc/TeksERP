@@ -48,7 +48,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Emanet topun etiket hedefi malın sahibidir: başka müşteri / başka müşterinin sipariş satırı 409 `LABEL_TARGET_NOT_OWNER`, boş hedef ve üç kalan-yazan yol sahip niyetini yazar; tablette Kime? yerine sabit "Sahibi" satırı (`ownerLockOf`). <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
 - **[ÇEKİRDEK]** Etiket alıcısı (`Roll.labelConsigneeId`) yalnız emanet topta, sahibin aktif alıcısı olur; çocuğa MİRAS geçmez; null = malın sahibi; şablon sırası elle > alıcı > müşteri > cihaz > aşama, tekil ve toplu yol aynı. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
 - **[ÇEKİRDEK]** Kesim kg kaynağını (`weightSource`) YALNIZ `resolveWeightSource` çözer (çuval tartısıyla ortak): kaynaksız kg MANUAL, kgsız kaynak 400, simüle kantar + bayrak kapalı 400. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
-- **[ÇEKİRDEK]** Çocuk top eni atadan miras, yoksa gelen belge TOP satırının `widthCm`i; ölçülen en ezer ve `widthBefore` izini audit'e bırakır. <sub>(arşiv:2026-11-10 Tambur fason etiketi)</sub>
+- **[ÇEKİRDEK]** Çocuk top eni atadan miras, yoksa gelen belge satırının (TOP ya da ARABA) beyan `widthCm`i; tambur önizleme ipucu aynı miras enden; belgede en yoksa en boş kalır, kapı yok; ölçülen en ezer ve `widthBefore` izini audit'e bırakır. <sub>(arşiv:2026-11-10 Tambur fason etiketi; 2026-11-11 ARABA beyan eni)</sub>
 - **[PROFİL]** Top doğuran her yolda tartım kapısı 400 `TAMBUR_WEIGHT_REQUIRED` (discard/kalan 0 hariç); `tambur.labelPrintTiming` (EACH | END) istemci kararıdır.
 
 ### Yasaklar

@@ -3,7 +3,7 @@
 // =============================================================================
 // Kalan kuyruğunu yazan üç yol (finalize · açık kumaş bitir · depo kesim bitir) emanet topta stok değil
 // SAHİBİN niyetini yazar (sahip kilidi, `resolveLabelIntent` ile aynı karar). En: çocuk atanın enini
-// miras alır; atada en yoksa gelen belge TOP satırının eni (ARABA özeti değil). Ölçülen en (Etikette
+// miras alır; atada en yoksa gelen belge satırının BEYAN eni (TOP ya da ARABA). Ölçülen en (Etikette
 // kartındaki En) mirası ezer; sınır `measuredWidthLimit` (en ölçen istasyonla aynı hesap), iz audit'te.
 // =============================================================================
 import { Prisma } from "@prisma/client";
@@ -23,7 +23,7 @@ export function ownerTailIntent(ownerCustomerId: string | null | undefined): {
     : { lastLabelSnapshot: { stock: true }, labelCustomerId: null };
 }
 
-/** Miras en: atanın eni; yoksa gelen belge TOP satırının eni (ata zinciriyle tek çözücü); o da yoksa null. */
+/** Miras en: atanın eni; yoksa gelen belge satırının beyan eni (ata zinciriyle tek çözücü); o da yoksa null. */
 export async function inheritedChildWidth(rollId: string, parentWidth: Prisma.Decimal | null): Promise<Prisma.Decimal | null> {
   if (parentWidth != null) return parentWidth;
   const w = (await resolveDeliveryNoteLinesForRolls([rollId])).get(rollId)?.widthCm ?? null;

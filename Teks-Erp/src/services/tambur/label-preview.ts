@@ -18,6 +18,7 @@ import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.h
 import { readCanvasLayout } from "../../config/label-elements";
 import { templateTextLinesKeyed } from "../helpers/native-label.shared";
 import { payloadWithTemplateUnits } from "../../config/label-units";
+import { inheritedChildWidth } from "../helpers/tambur-child-label.helper";
 import { applyTamburDraft, composeCanvasElements, sourceWidthOf, type TamburLabelDraft, type TamburLabelPreview } from "./label-preview-compose";
 
 export type { TamburLabelDraft, TamburLabelPreview, TamburPreviewElement } from "./label-preview-compose";
@@ -58,6 +59,11 @@ export async function getTamburLabelPreview(args: {
       },
     },
   });
+  // Topta en yoksa kesimde çocuğa geçecek miras en (gelen belge beyanı, `inheritedChildWidth`) — ipucu ve önizleme kesimle aynı.
+  if (sourceWidthOf(base.data) == null) {
+    const inherited = await inheritedChildWidth(args.rollId, null);
+    if (inherited != null) base.data.widthCm = Number(inherited);
+  }
   const sourceWidthCm = sourceWidthOf(base.data);
   const payload = applyTamburDraft(base.data, args.draft);
   if (args.consigneeId && roll.ownerCustomerId) {

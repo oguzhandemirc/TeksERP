@@ -13,7 +13,8 @@
 //      kaynaksız kg MANUAL · kg'sız kaynak 400 · manuel üretim yolu da aynı boğazdan
 //   k) label-texts PATCH alıcıyı değiştirir (labelDirty + audit) · null sahibe döner · sevkli top 409
 //   l) label-suggestions consigneeId süzer; `last` alıcıyı taşır
-//   m) K7 en: atada en yoksa gelen belge TOP satırı eni · ARABA satırı eni topa yazılmaz · ölçülen en mirası
+//   m) K7 en: atada en yoksa gelen belge TOP satırı eni · ARABA (beyan) eni de çocuğa geçer, kök topa yazılmaz;
+//      önizleme ipucu (sourceWidthCm) aynı miras eni gösterir · ölçülen en mirası
 //      ezer (audit izinde widthBefore) · sınır dışı en 400
 //   z) Zod: beş kesim şeması yeni alanları TAŞIR (strip tuzağı) · AST: simüle bayrağını okuyan yazım yolu tek boğaz
 // Negatif sonda (2026-11-10): `resolveLabelIntent` sahip denetimi yorumlanınca a/b/c kırmızı; `owner ?? target`
@@ -26,6 +27,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { getTamburLabelSuggestions } from "../src/services/tambur/label-suggestions";
+import { getTamburLabelPreview } from "../src/services/tambur/label-preview";
 import { ensureConsignee, deactivateConsignee } from "../src/services/customer-consignee.service";
 import { mergeConsignee } from "../src/services/customer-consignee-merge.service";
 import { cutOpenFabricSchema, cutWarehouseRollSchema, finalizeOpenFabricSchema, finalizeSchema, finalizeWarehouseCutSchema } from "../src/controllers/tambur.controller";
@@ -248,7 +250,7 @@ async function main(): Promise<void> {
   check("l last alıcı alanlarını taşır (anahtar var)", sugWo.last === null || ("consigneeId" in sugWo.last && "consigneeName" in sugWo.last));
 
   console.log("\n[m] K7 en");
-  const mkNote = async (rollId: string, lineKind: "TOP" | "ARABA", widthCm: number) => {
+  const mkNote = async (rollId: string, lineKind: "TOP" | "ARABA", widthCm: number | null) => {
     const n = await prisma.customerDeliveryNote.create({
       data: { noteNo: `TST-TEE-GB-${seq++}-${ts}`, sourceKind: "MANUAL", ownerCustomerId: owner, lines: { create: [{ lineNo: 1, lineKind, meters: 100, widthCm, rollId }] } },
       select: { id: true },
@@ -264,7 +266,26 @@ async function main(): Promise<void> {
   const wm2 = await warehouseRoll(owner, null);
   await mkNote(wm2, "ARABA", 175);
   const rm2 = await tambur.cutWarehouseRoll(wm2, { cutLength: 5 }, actor);
-  check("m ARABA özet eni topa yazılmaz (null)", (await rollOf(rm2.data!.childRoll.id))?.width === null);
+  // 2026-11-11 (GK demo): ARABA beyan eni de miras; kök top ölçülmedikçe en'siz kalır (beyan ≠ ölçülen).
+  check("m ARABA beyan eni kök topa yazılmaz (null)", (await rollOf(wm2))?.width === null);
+  check("m ARABA beyan eni çocuğa geçer (175)", Number((await rollOf(rm2.data!.childRoll.id))?.width) === 175);
+  const wm2b = await warehouseRoll(owner, null);
+  await mkNote(wm2b, "ARABA", 325);
+  const pv = await getTamburLabelPreview({ rollId: wm2b, draft: {} });
+  check("m önizleme ipucu ARABA beyan eni (325)", pv.sourceWidthCm === 325, String(pv.sourceWidthCm));
+  // Belgede en YOK (şablonda en alanı yok / belgesiz): hiçbir kapı yok, en boş kalır, operatör isterse girer.
+  const wm2n = await warehouseRoll(owner, null);
+  await mkNote(wm2n, "ARABA", null);
+  const pvN = await getTamburLabelPreview({ rollId: wm2n, draft: {} });
+  check("m en'siz belge → önizleme ipucu boş (null)", pvN.sourceWidthCm === null, String(pvN.sourceWidthCm));
+  const rm2n = await tambur.cutWarehouseRoll(wm2n, { cutLength: 5 }, actor);
+  check("m en'siz belge → kesim sorunsuz, çocuk eni null", (await rollOf(rm2n.data!.childRoll.id))?.width === null);
+  const rm2m = await tambur.cutWarehouseRoll(wm2n, { cutLength: 5, widthCm: 410 }, actor);
+  check("m en'siz belge → elle girilen en sınırsız kabul (410)", Number((await rollOf(rm2m.data!.childRoll.id))?.width) === 410);
+  const wm2s = await warehouseRoll(owner, null);
+  const pvS = await getTamburLabelPreview({ rollId: wm2s, draft: {} });
+  const rm2s = await tambur.cutWarehouseRoll(wm2s, { cutLength: 5 }, actor);
+  check("m belgesiz top → ipucu null + kesim sorunsuz, en null", pvS.sourceWidthCm === null && (await rollOf(rm2s.data!.childRoll.id))?.width === null);
   const wm3 = await warehouseRoll(owner, 150);
   const rm3 = await tambur.cutWarehouseRoll(wm3, { cutLength: 5, widthCm: 148.5 }, actor);
   check("m ölçülen en mirası ezer (148,5)", Number((await rollOf(rm3.data!.childRoll.id))?.width) === 148.5);
@@ -276,6 +297,14 @@ async function main(): Promise<void> {
   const fm = await tambur.finalize({ rollId: om, decisions: [], cuts: [{ length: 10, qualityGrade: grade.code, relatedErrorIds: [] }], widthCm: 149, confirmMismatch: true }, actor);
   const fws = await Promise.all((fm.data?.splitRolls ?? []).map(async (r) => Number((await rollOf(r.id))?.width)));
   check("m segmentli finalize ölçülen en tüm parçalara", JSON.stringify(fws) === "[149,149]", JSON.stringify(fws));
+  const omN = await openFabric(owner);
+  await prisma.roll.update({ where: { id: omN }, data: { width: null } });
+  const omStep = await prisma.roll.findUniqueOrThrow({ where: { id: omN }, select: { currentStep: { select: { workOrderId: true } } } });
+  await prisma.workOrder.update({ where: { id: omStep.currentStep!.workOrderId }, data: { width: null } });
+  await mkNote(omN, "ARABA", null);
+  const fmN = await tambur.finalize({ rollId: omN, decisions: [], cuts: [{ length: 10, qualityGrade: grade.code, relatedErrorIds: [] }], confirmMismatch: true }, actor);
+  const fwsN = await Promise.all((fmN.data?.splitRolls ?? []).map(async (r) => (await rollOf(r.id))?.width ?? null));
+  check("m en'siz top + en'siz belge → finalize sorunsuz, parçalar en'siz", fwsN.length > 0 && fwsN.every((w) => w === null), JSON.stringify(fwsN));
 
   console.log("\n[z] Zod + AST");
   const U = "00000000-0000-4000-8000-000000000001";
