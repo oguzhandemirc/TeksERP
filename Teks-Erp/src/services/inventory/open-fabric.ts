@@ -15,6 +15,7 @@ import { AppError } from "../../utils/app-error";
 import { assertRollReplayAlive, tokenReplay } from "../helpers/token-replay.helper";
 import { ApiResponse } from "../../types/api.types";
 import {
+  Prisma,
   Roll,
   RollStatus,
   RollEntrySource,
@@ -125,33 +126,7 @@ export async function createOpenFabricFresh(this: InventoryServiceThis,
       const replay = data.clientToken ? await this.openFabricReplay(data).behindLock(tx, data.clientToken) : null;
       if (replay) return { fresh: false as const, replay };
 
-      const fr = await tx.subcontractorReceipt.findUnique({
-        where: { id: data.receiptId },
-        select: {
-          cancelledAt: true,
-          workOrderId: true,
-          workOrder: { select: { status: true, targetItemId: true } },
-        },
-      });
-      if (!fr) throw AppError.notFound("Mal kabul belgesi bulunamadı");
-      assertWorkOrderBound(fr, "Mal kabul belgesi");
-      if (fr.cancelledAt) {
-        throw AppError.conflict("Mal kabul bu sırada iptal edildi — açık kumaş açılamaz");
-      }
-      if (fr.workOrder.status === WorkOrderStatus.COMPLETED) {
-        throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada tamamlandı — açık kumaş açılamaz`);
-      }
-      if (!fr.workOrder.targetItemId) {
-        throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} hedef ürün (targetItem) tanımlı değil`);
-      }
-      const fs = await tx.workOrderStep.findUnique({
-        where: { id: data.stepId },
-        select: { status: true },
-      });
-      if (!fs) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı bulunamadı`);
-      if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
-        throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
-      }
+      const fr = await assertReceiptAndStepFreshTx(tx, data.receiptId, data.stepId);
       // Kurşun bypass: adım fiziksel kurşun MAKİNESİNE dağıtılmışsa iş kâğıtta
       // yürüyor ve kapsamı DAĞITIM ANINDA dondu. Buraya yeni bir açık kumaş topu
       // eklemek iki şeyi bozar: (a) `assign` "ölçümsüz açık kumaş yok" kontrolünü
@@ -253,3 +228,35 @@ export async function createOpenFabricFresh(this: InventoryServiceThis,
       message: `Açık kumaş Roll oluşturuldu (id: ${roll.id}). Kurşun/KK2 sonrası kursun-finish endpoint'i ile metraj + hata girilir.`,
     };
   }
+
+/** Kilit ALTINDA taze okuma: makbuz iptal/iş emri tamam/hedef ürün yok/adım kapalı → açık kumaş açılamaz. */
+async function assertReceiptAndStepFreshTx(tx: Prisma.TransactionClient, receiptId: string, stepId: string) {
+  const fr = await tx.subcontractorReceipt.findUnique({
+    where: { id: receiptId },
+    select: {
+      cancelledAt: true,
+      workOrderId: true,
+      workOrder: { select: { status: true, targetItemId: true } },
+    },
+  });
+  if (!fr) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+  assertWorkOrderBound(fr, "Mal kabul belgesi");
+  if (fr.cancelledAt) {
+    throw AppError.conflict("Mal kabul bu sırada iptal edildi — açık kumaş açılamaz");
+  }
+  if (fr.workOrder.status === WorkOrderStatus.COMPLETED) {
+    throw AppError.conflict(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bu sırada tamamlandı — açık kumaş açılamaz`);
+  }
+  if (!fr.workOrder.targetItemId) {
+    throw AppError.badRequest(`${TERIM.terbiyeIsEmri.cumleBasi.bulunma} hedef ürün (targetItem) tanımlı değil`);
+  }
+  const fs = await tx.workOrderStep.findUnique({
+    where: { id: stepId },
+    select: { status: true },
+  });
+  if (!fs) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} adımı bulunamadı`);
+  if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
+    throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
+  }
+  return { ...fr, workOrder: { ...fr.workOrder, targetItemId: fr.workOrder.targetItemId } };
+}
