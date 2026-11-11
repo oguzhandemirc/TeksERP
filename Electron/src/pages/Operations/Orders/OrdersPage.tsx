@@ -32,6 +32,8 @@ import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { buildCreatePayload, buildUpdatePayload, type CreatePayload, type UpdatePayload } from "./orderPayload";
 import { useAttemptToken } from "@/lib/attemptToken";
+import { useDeepLinkParam } from "@/hooks/useDeepLinkParam";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
@@ -56,6 +58,9 @@ export function OrdersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [stockLineOpen, setStockLineOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
+  const { hasPermission } = useRoleAccess();
+  // Pano hızlı işlemi `?action=new` → yeni sipariş formu (buton gibi `order:write` ister; düğme de PermissionGate'li).
+  useDeepLinkParam("action", (v) => { if (v === "new" && hasPermission("order:write")) setFormOpen(true); });
   // İdempotency anahtarı — create mantıksal deneme kimliği (kk1.md). Form create modunda
   // her açılışta, başarılı create'te ve kesin 4xx'te yenilenir; belirsiz hatada SABİT kalır
   // → timeout sonrası elle tekrar gönderim aynı token'ı taşır (mükerrer önlenir).

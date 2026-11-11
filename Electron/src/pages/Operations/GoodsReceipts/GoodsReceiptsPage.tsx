@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useDeepLinkParam } from "@/hooks/useDeepLinkParam";
 import { useQuery } from "@tanstack/react-query";
 import { formatFactory } from "@/lib/factory-time";
 import { Plus, FileText } from "lucide-react";
@@ -25,6 +27,7 @@ import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
  * (karoya `multiWarehouse` şartı KONMAZ — tek depolu ticaret firması da kullanır).
  */
 export function GoodsReceiptsPage() {
+  const { hasPermission } = useRoleAccess();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -33,6 +36,9 @@ export function GoodsReceiptsPage() {
   // o fişe aitmiş gibi görünmesin (yanlış fişe yazılan uyarı, hiç uyarmamaktan
   // kötüdür — depocu doğru fişi doğru sanır).
   const [createdSync, setCreatedSync] = useState<{ id: string; sync: ReceiptPurchaseOrderSync } | null>(null);
+  // Pano derin bağlantıları: hızlı işlem `?action=new` formu, son hareket `?focus=<id>` fiş detayını açar.
+  useDeepLinkParam("action", (v) => { if (v === "new" && hasPermission("goods-receipt:write")) setFormOpen(true); });
+  useDeepLinkParam("focus", setDetailId);
 
   const q = useQuery({
     queryKey: ["goods-receipts", search],

@@ -449,6 +449,11 @@
 .tile-orange { --tile-fg: var(--tile-orange); --tile-bg: var(--tile-orange-bg); }
 .tile-rose { --tile-fg: var(--tile-rose); --tile-bg: var(--tile-rose-bg); }
 .tile-primary { --tile-fg: var(--primary-soft-foreground); --tile-bg: var(--primary-soft); }
+/* Pastel rozet (pano hareket türü vb.) — ton sınıfıyla birlikte; tek renk kipten etkilenmez (anlam taşır). */
+.tone-chip {
+  background-color: hsl(var(--tile-bg));
+  color: hsl(var(--tile-fg));
+}
 /* Tek renk kip: bütün kareler birincil tonun pastelini alır. @scope sınırı: içteki farklı seçim
    (Ayarlar › Görünüm önizlemesi) kökün kipini miras almaz — en yakın data-* kazanır. */
 @scope ([data-tiles="mono"]) to ([data-tiles="color"]) {

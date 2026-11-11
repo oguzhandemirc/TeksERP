@@ -106,12 +106,9 @@ export interface AppPreferences {
   bildirim?: { masaustuTurler?: string[] };
   /** Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin"); tablo YOK, blob alanı. */
   raporlar?: { favoriler?: string[] };
-  /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
-  dashboard?: {
-    hidden?: string[];
-    groupOrder?: string[];
-    itemOrders?: Record<string, string[]>;
-  };
+  /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → bugün). Eski pano düzeni alanları
+   *  (`hidden`/`groupOrder`/`itemOrders`) kayıtlı blob'da kalabilir; okunmaz. */
+  dashboard?: { donem?: string };
   // NOT: `scanner`, `labelPrinter`, `scaleDevice` — makineye bağlı donanım
   // ayarları — bilerek burada DEĞİL. `@/lib/machine-config` (secure-store,
   // per-machine) içindeler; `useMachineConfig` ile okunur/yazılır.
