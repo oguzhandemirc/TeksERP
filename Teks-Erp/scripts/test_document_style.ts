@@ -29,6 +29,7 @@ import "../src/services/reconciliation-letter.service";
 import "../src/services/cheque-delivery-note.service";
 import "../src/services/stock-count.service";
 import "../src/services/quote-documents.service";
+import "../src/services/order-documents.service";
 import {
   systemSettingService,
   readDocumentsLogo,

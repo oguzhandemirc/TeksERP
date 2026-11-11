@@ -20,6 +20,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   QUALITY_CERTIFICATE: "Kalite belgesi",
   INSPECTION_REPORT: "Muayene raporu",
   SALES_QUOTE: "Satış teklifi", // PrintedDocType (MAL-6)
+  ORDER_CONFIRMATION: "Sipariş teyidi", // PrintedDocType (Seyitoğlu L1)
   PIECE: "Adet", // ServiceQtyUnit (EKS-E2 brode fiyat birimi)
   STITCH: "Vuruş",
   WEIGH: "Tartım",

@@ -849,10 +849,17 @@ router.post(
  *               totalAmount: { type: number, nullable: true }
  *               deadline:    { type: string, format: date-time, nullable: true }
  *     responses:
- *       200: { description: Güncellendi }
+ *       200: { description: "Güncellendi. Müşteri başka cariye taşındıysa ve iş kabulü risk kapısı kapalıyken yeni cari limiti aşıyorsa `warnings[]` Türkçe uyarı (tutar yalnız `finance:read`); kapı açıkken 409 RISK_LIMIT_EXCEEDED." }
  *       409: { description: Tamamlanmış veya aktif WO bağı nedeniyle kilit }
  */
-router.patch("/:id", verifyToken, requirePermission("order:write"), controller.update);
+// K3 (Seyitoğlu L4): müşteri değişiminde risk uyarısının tutarı yalnız `finance:read` ile (POST / ile aynı kural).
+router.patch("/:id", verifyToken, requirePermission("order:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json(await orderService.update(assertValidUuid(req.params.id as string, "id"), req.body, req.user?.userId, { canSeeRiskAmounts: matchesPermission(req.user?.permissions ?? [], "finance:read") }));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @openapi

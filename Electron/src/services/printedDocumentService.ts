@@ -22,6 +22,8 @@ export type PrintedDocType =
   // MAL-6 ticari müşteri belgeleri.
   | "SALES_QUOTE"
   | "PRICE_LIST"
+  // Seyitoğlu L1 sipariş teyidi (kaynak Order).
+  | "ORDER_CONFIRMATION"
   | "RETURN_DISPATCH"
   // Refakat kartı (2026-08-17): defterde SÜRÜM GEÇMİŞİ tutar ama belge içeriği
   // buradan basılmaz — kartın kendi HTML ucu (`/api/traveler-cards/:id/html`)

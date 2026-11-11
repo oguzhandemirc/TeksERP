@@ -25,6 +25,7 @@ import {
   updateWeavingOrder,
 } from "../services/weaving-order.service";
 import { getWeavingOrderOverview } from "../services/weaving-order-overview.service";
+import { getLoomLoad } from "../services/loom-load.service";
 import "../types/express-augment";
 
 const router = Router();
@@ -131,6 +132,35 @@ router.get(
         withTotal: q.withTotal === "true",
       });
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/weaving-orders/loom-load:
+ *   get:
+ *     tags: [WeavingOrders]
+ *     summary: Tezgâh yük çizelgesi — hangi tezgâh ne zamana kadar dolu (salt okuma, Seyitoğlu L2)
+ *     description: |
+ *       Her aktif dokuma tezgâhı için üzerindeki açık (PLANNED/IN_PROGRESS) IN_HOUSE dokuma işleri — açık koşum (OPEN_RUN)
+ *       ya da koşumsuz takılı levent (MOUNTED_BEAM) — kalan metre ve tahmini saat (öneri önizlemesiyle aynı süre
+ *       fonksiyonu; devir/randıman/atkı sıklığı/kalan bilinmiyorsa null). `estimatedFreeAtIfContinuous` = şimdi + Σ saat
+ *       (kesintisiz 24 saat varsayımı; bir terim null ise null). Tezgâhı olmayan açık işler `unassigned`te.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ success, data: { generatedAt, assumption, looms[], unassigned[] } }" }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+// `/:id`ten ÖNCE: aksi halde "loom-load" kimlik sanılıp 400 döner.
+router.get(
+  "/loom-load",
+  requirePermission("weavingorder:read"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json({ success: true, data: await getLoomLoad() });
     } catch (error) {
       next(error);
     }

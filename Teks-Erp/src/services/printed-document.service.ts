@@ -89,6 +89,8 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   // MAL-6 ticari müşteri belgeleri — maliyet/kâr/iç not sözleşmede YOK.
   SALES_QUOTE: "satisTeklifi",
   PRICE_LIST: "fiyatListesi",
+  // Seyitoğlu L1 — sipariş teyidi (müşteriye gider; iç kolon yok).
+  ORDER_CONFIRMATION: "siparisTeyidi",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

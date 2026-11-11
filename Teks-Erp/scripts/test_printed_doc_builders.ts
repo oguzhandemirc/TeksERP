@@ -50,6 +50,7 @@ import "../src/services/cheque-delivery-note.service";
 import "../src/services/stock-count.service";
 import "../src/services/quality-inspection-shipment.service";
 import "../src/services/quote-documents.service";
+import "../src/services/order-documents.service";
 
 let pass = 0;
 let fail = 0;
@@ -112,6 +113,8 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   // kaynakla basım `test_teklif_belgesi` kendi fikstürüyle koşar. A+B şekil garantisi burada da koşar.
   [PrintedDocType.SALES_QUOTE]: async () => null,
   [PrintedDocType.PRICE_LIST]: async () => null,
+  // Seyitoğlu L1: sipariş teyidi — gerçek kaynakla basım `test_siparis_teyidi` kendi fikstürüyle.
+  [PrintedDocType.ORDER_CONFIRMATION]: async () => null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

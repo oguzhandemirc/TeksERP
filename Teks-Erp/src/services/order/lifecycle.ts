@@ -21,6 +21,7 @@ import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "../helpers/traveler-card-dirty.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "../helpers/order-link.helper";
 import { TERIM } from "../../constants/terim";
+import { voidOrderConfirmationTx } from "../order-documents.service";
 import type { OrderServiceThis } from "./shared";
 
 export async function getActiveShipmentLinks(
@@ -112,6 +113,8 @@ export async function softDelete(this: OrderServiceThis,
           }, tekrar iptal edilemez. Sayfayı yenileyin.`,
         );
       }
+      // Donmuş sipariş teyidi iptalle birlikte VOIDED (birlikte ya da hiç).
+      await voidOrderConfirmationTx(tx, id, "Sipariş iptal edildi");
 
 
       // BU siparişin satır bağlarını TAZE oku (orderLineId scope — shared WO'nun

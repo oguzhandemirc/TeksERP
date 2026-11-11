@@ -7,6 +7,7 @@
 //      ÖNCE), helper'ı import eden küme SABİT
 //   §1 ayarlar KAPALI (varsayılan) — kapı tek ayar okuması, başka sorgu YOK; aşımlı caride sipariş/gelen belge/sevk geçer
 //   §1e–§1j (K3 2026-11-11) kapı KAPALI + aşım → sipariş doğar, `warnings` Türkçe uyarı; tutar yalnız `finance:read`
+//   §1k–§1p (L4 2026-11-12) aynı uyarı müşteri değişiminde (PATCH) ve teklif → sipariş dönüşümünde; aynı müşteri → uyarı yok
 //      (canSeeRiskAmounts); limit altı/limitsiz/ön muhasebe kapalı → uyarı yok; kur eksikliği engellemez
 //   §2 iş kabulü AÇIK — sipariş + müşteri taşıma + gelen belge onayı 409 RISK_LIMIT_EXCEEDED (Türkçe), yazım yok;
 //      limit altı / limitsiz cari geçer; para birimleri AYRI ölçülür
@@ -20,6 +21,7 @@
 //    yapan ikinci hesap eklendi → §0b ❌ (adıyla: shipping.service.ts:probeSecondExposure); ② performDispatchTx'ten
 //    risk kapısı silindi → §0i + §3c ❌ (PLANNED sevkiyat DISPATCHED oldu). Geri alındı → 30/0.
 //    ③ (D4-I1c, 2026-10-31) risk helper emanet kararını yok saydı (`if (release) return;`) → §3a §3c §3f §3g ❌; geri alındı → 33/0.
+//    ⑤ (L4, 2026-11-12) PATCH yolunda uyarı push'u silindi → §1k §1l ❌; dönüşüm `warnings`i [] döndü → §1o §1p ❌; geri alındı (42/4 → 46/0).
 //    ④ (K3, 2026-11-11) uyarı metni izni yok saydı (`withAmounts` hep true) → §1f ❌; uyarı yanıta eklenmedi → §1e §1f ❌; geri alındı → 39/0.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
@@ -35,6 +37,7 @@ import { firstGrade } from "./fixture-quality-grade";
 import { SETTING_KEYS, systemSettingService } from "../src/services/system-setting.service";
 import { customerService } from "../src/routes/customer.routes";
 import { orderService } from "../src/routes/order.routes";
+import { convertQuoteToOrder } from "../src/services/sales-quote-convert.service";
 import { shippingService } from "../src/services/shipping.service";
 import { invoiceService } from "../src/services/invoice.service";
 import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
@@ -177,7 +180,7 @@ async function main(): Promise<void> {
   const foto = await prisma.systemSetting.findMany({ where: { key: { in: AYARLAR } }, select: { key: true, value: true } });
   const ayar = (key: string, v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
   const admin = await ensureTestAdmin();
-  const ids = { customers: [] as string[], items: [] as string[], rolls: [] as string[], sacks: [] as string[], shipments: [] as string[], notes: [] as string[], invoices: [] as string[], orders: [] as string[] };
+  const ids = { customers: [] as string[], items: [] as string[], rolls: [] as string[], sacks: [] as string[], shipments: [] as string[], notes: [] as string[], invoices: [] as string[], orders: [] as string[], quotes: [] as string[] };
   try {
     await ayar(SETTING_KEYS.FINANCE_ENABLED, true);
     await ayar(SETTING_KEYS.EMANET_ENABLED, true);
@@ -276,6 +279,43 @@ async function main(): Promise<void> {
     const rota = readFileSync(path.join(SRC, "routes/order.routes.ts"), "utf8");
     check("§1j POST / ayrıntı kapısı `finance:read` (izin anahtarlı), varsayılan ayrıntısız", /router\.post\("\/", verifyToken, requireAnyPermission\("order:write", "mobile:siparis"\)[\s\S]{0,200}canSeeRiskAmounts: matchesPermission\(req\.user\?\.permissions \?\? \[\], "finance:read"\)/.test(rota));
 
+    // ── §1k–§1p L4 (Seyitoğlu 2026-11-12): müşteri değişimi + teklif dönüşümü aynı uyarıyı taşır ──
+    const pk = (await orderService.update(oD.data.id, { customerId: A.customerId }, admin.id, { canSeeRiskAmounts: true })) as { data: { customerId: string }; warnings?: string[] };
+    const wk = riskUyarisi(pk);
+    check("§1k ⭐ PATCH müşteri → aşımlı cari: taşınır, warnings'te tutarlı uyarı (\"güncellendi\")",
+      pk.data.customerId === A.customerId && wk.length === 1 && /risk limitini aştı \(TRY bakiyesi 500,00 · limit 100,00 · aşım 400,00\) — sipariş yine de güncellendi/.test(wk[0]!), wk.join(" | "));
+    const pl = (await orderService.update(oE.data.id, { customerId: A.customerId }, admin.id)) as { warnings?: string[] };
+    const wl = riskUyarisi(pl);
+    check("§1l ⭐ PATCH izinsiz → yalnız \"limit aşıldı\", sayı YOK", wl.length === 1 && /risk limitini aştı — sipariş yine de güncellendi/.test(wl[0]!) && !/\d/.test(wl[0]!.replace(TAG, "")), wl.join(" | "));
+    const pm = (await orderService.update(oD.data.id, { customerId: A.customerId }, admin.id, { canSeeRiskAmounts: true })) as { warnings?: string[] };
+    check("§1m aynı müşteriyi yeniden yazmak uyarı üretmez (taşıma yok)", riskUyarisi(pm).length === 0, riskUyarisi(pm).join(" | "));
+    const pn = (await orderService.update(oD.data.id, { customerId: D.customerId }, admin.id, { canSeeRiskAmounts: true })) as { warnings?: string[] };
+    check("§1n limit altı cariye taşıma uyarı üretmez", riskUyarisi(pn).length === 0, riskUyarisi(pn).join(" | "));
+    const teklif = async () => {
+      const q = await prisma.salesQuote.create({
+        data: {
+          quoteNo: `${TAG}-Q${ids.quotes.length}`, clientToken: randomUUID(), customerId: A.customerId, quoteDate: new Date(), validUntilDate: new Date(Date.now() + 7 * 86_400_000),
+          currency: "TRY", fxRate: 1, status: "ACCEPTED", totalAmount: 100,
+          lines: { create: [{ lineNo: 1, description: `${TAG} kalem`, itemId: item.id, quantity: 10, unit: "MT", unitPrice: 10, lineTotal: 100, costPerMTry: 0, costSnapshot: {}, markupPct: 0, suggestedUnitPrice: 0, priceSource: "COST_PLUS" }] },
+        },
+        select: { id: true },
+      });
+      ids.quotes.push(q.id);
+      return q.id;
+    };
+    const tum = ["order:write", "quote:convert"];
+    const co = await convertQuoteToOrder(await teklif(), { clientToken: randomUUID() }, { userId: admin.id, permissions: [...tum, "finance:read"] });
+    ids.orders.push(co.orderId);
+    const wo = co.warnings.filter((w) => w.includes("risk limit"));
+    check("§1o ⭐ teklif → sipariş: sipariş doğar, warnings'te tutarlı uyarı (finance:read)", !!co.orderId && wo.length === 1 && /aşım 400,00\) — sipariş yine de oluşturuldu/.test(wo[0]!), wo.join(" | "));
+    const cp = await convertQuoteToOrder(await teklif(), { clientToken: randomUUID() }, { userId: admin.id, permissions: tum });
+    ids.orders.push(cp.orderId);
+    const wp = cp.warnings.filter((w) => w.includes("risk limit"));
+    check("§1p teklif → sipariş izinsiz: yalnız \"limit aşıldı\", sayı YOK", wp.length === 1 && !/\d/.test(wp[0]!.replace(TAG, "")), wp.join(" | "));
+    const qr = readFileSync(path.join(SRC, "routes/quote.routes.ts"), "utf8");
+    check("§1q dönüşüm rotası warnings'i yanıta taşır; PATCH ayrıntı kapısı finance:read",
+      /out\.warnings\.length \? \{ warnings: out\.warnings \}/.test(qr) && /router\.patch\("\/:id", verifyToken, requirePermission\("order:write"\)[\s\S]{0,300}canSeeRiskAmounts: matchesPermission\(req\.user\?\.permissions \?\? \[\], "finance:read"\)/.test(rota));
+
     // ── §2 İş kabulü AÇIK ──
     console.log("\n── §2 finance.riskLimitBlock.intake açık ──");
     await ayar(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE, true);
@@ -360,6 +400,8 @@ async function main(): Promise<void> {
     const v2 = await hataNesnesi(() => systemSettingService.setFeatureFlags({ financeRiskLimitBlockShipment: 1 } as never, admin.id));
     check("§5a bilinmeyen ayar değeri 400 (iki ayar)", /boolean olmalı/.test(v1.mesaj) && /boolean olmalı/.test(v2.mesaj), `${v1.mesaj} | ${v2.mesaj}`);
   } finally {
+    await prisma.salesQuoteLine.deleteMany({ where: { quoteId: { in: ids.quotes } } }).catch(() => undefined);
+    await prisma.salesQuote.deleteMany({ where: { id: { in: ids.quotes } } }).catch(() => undefined);
     await temizle(ids).catch((e) => {
       fail++;
       console.log(`❌ temizlik — ${String(e).slice(0, 300)}`);
@@ -376,7 +418,7 @@ async function main(): Promise<void> {
   process.exitCode = fail > 0 ? 1 : 0;
 }
 
-async function temizle(ids: { customers: string[]; items: string[]; rolls: string[]; sacks: string[]; shipments: string[]; notes: string[]; invoices: string[]; orders: string[] }): Promise<void> {
+async function temizle(ids: { customers: string[]; items: string[]; rolls: string[]; sacks: string[]; shipments: string[]; notes: string[]; invoices: string[]; orders: string[]; quotes: string[] }): Promise<void> {
   const noteRolls = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: { in: ids.notes }, rollId: { not: null } }, select: { rollId: true } })).map((r) => r.rollId!);
   const rollIds = [...ids.rolls, ...noteRolls];
   const accIds = (await prisma.cariAccount.findMany({ where: { customerId: { in: ids.customers } }, select: { id: true } })).map((a) => a.id);
