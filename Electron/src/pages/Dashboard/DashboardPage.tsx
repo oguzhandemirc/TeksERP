@@ -1,80 +1,83 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { StationLoad } from "./StationLoad";
-import { fetchPano, fetchPanoHareketler } from "./dashboardService";
+import { fetchPanoCatalog } from "./dashboardService";
+import { PanoAddSheet } from "./pano/PanoAddSheet";
+import { PanoBoard } from "./pano/PanoBoard";
+import { BoxFailed } from "./pano/PanoBoxFrame";
 import { PanoHeader } from "./pano/PanoHeader";
-import { PanoKpiSeridi } from "./pano/PanoKpiSeridi";
-import { PanoDagilim, PanoEgilim } from "./pano/PanoGrafikKutulari";
-import { BoxError, PanoMovementList, PanoHizliEylemler } from "./pano/PanoMovementList";
-import { PanoAlacak, PanoBekleyen, PanoEnCok, PanoFason, PanoStok, PanoTezgah } from "./pano/PanoOzetKutulari";
-import { Hucre, PanoRow } from "./pano/PanoYerlesim";
 import { HIZLI_EYLEMLER } from "./pano/pano-hedefler";
+import { usePanoBoxData, type AgendaParams } from "./pano/usePanoBoxData";
 import { usePanoDonem } from "./pano/usePanoDonem";
 import { usePanoErisim } from "./pano/usePanoErisim";
-import { PANO_HAREKET_UC_IZINLERI, PANO_UC_IZINLERI, type PanoSummary } from "./pano/types";
+import { usePanoLayout } from "./pano/usePanoLayout";
+import { PANO_UC_IZINLERI } from "./pano/types";
 
-const egilimVar = (s: PanoSummary) => s.egilim.noktalar.some((n) => n.uretimMetre !== null || n.sevkMetre !== null);
-const bekleyenVar = (b: PanoSummary["bekleyen"]) => Boolean(b.onayBekleyenBelge || b.sevkeHazir || b.uretimeGonderilmemisSiparis !== null);
+const NO_CATALOG: never[] = [];
 
-/** Açılış panosu: dönem seçici bütün dönemli kutuları sürer; hareketler dönemden bağımsız ayrı sorgu. */
+/**
+ * Açılış panosu — kutu (widget) düzeni. Katalog bir kez; yalnız ekli kutuların verisi istenir (aynı tikteki
+ * kutular tek istekte). Düzen kullanıcı tercihinde; düzenleme kipinde veri isteği atılmaz.
+ */
 export function DashboardPage() {
   const { hasAnyPermission, hasPermission } = useRoleAccess();
   const erisim = usePanoErisim();
   const [donem, setDonem] = usePanoDonem();
+  const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [agenda, setAgenda] = useState<AgendaParams>({});
   const panoIzni = hasAnyPermission(PANO_UC_IZINLERI);
-  const hareketIzni = hasAnyPermission(PANO_HAREKET_UC_IZINLERI);
-  const pano = useQuery({ queryKey: ["dashboard", "pano", donem], queryFn: () => fetchPano(donem), enabled: panoIzni, staleTime: 60_000 });
-  const hareket = useQuery({ queryKey: ["dashboard", "hareketler"], queryFn: fetchPanoHareketler, enabled: hareketIzni, staleTime: 60_000 });
-  const s = pano.data;
+  const catalog = useQuery({ queryKey: ["pano-catalog"], queryFn: fetchPanoCatalog, enabled: panoIzni, staleTime: Infinity });
+
+  const quickOk = HIZLI_EYLEMLER.some((e) => erisim.canGo(e));
+  const stationOk = hasPermission("station:read");
+  const localAvailable = useMemo(() => new Set([...(quickOk ? ["hizliIslemler"] : []), ...(stationOk ? ["istasyonDoluluk"] : [])]), [quickOk, stationOk]);
+  const layout = usePanoLayout(panoIzni ? catalog.data : NO_CATALOG, localAvailable);
+  const states = usePanoBoxData(layout.boxes, donem, agenda, panoIzni && !editing);
+  const added = useMemo(() => new Set(layout.boxes.map((b) => b.anahtar)), [layout.boxes]);
+  const periodic = layout.boxes.some((b) => b.donemli);
 
   return (
     <PageShell>
       <PageBody className="space-y-5 p-6">
-        <PanoHeader donem={donem} onDonem={setDonem} donemGoster={panoIzni}
-          eylem={<RefreshButton queryKey="dashboard" successMessage="Anasayfa yenilendi" />} />
-        {panoIzni && pano.isError && !s ? (
-          <div className="rounded-xl border border-card-border bg-card shadow-card"><BoxError onYenile={() => void pano.refetch()} /></div>
+        <PanoHeader donem={donem} onDonem={setDonem} donemGoster={panoIzni && periodic}
+          eylem={<RefreshButton queryKey="dashboard" successMessage="Anasayfa yenilendi" />}
+          edit={layout.available.length > 0 ? {
+            editing, isDefault: layout.isDefault,
+            onStart: () => setEditing(true), onDone: () => { setEditing(false); setAdding(false); },
+            onAdd: () => setAdding(true), onReset: layout.reset,
+          } : undefined} />
+        {panoIzni && catalog.isError && !catalog.data ? (
+          <BoxFailed title="Pano" onRetry={() => void catalog.refetch()} />
+        ) : panoIzni && catalog.isLoading ? (
+          <BoardSkeleton />
         ) : (
-          <PanoKpiSeridi kpi={s?.kpi ?? null} donem={donem} erisim={erisim} yukleniyor={panoIzni && pano.isLoading} />
+          <PanoBoard boxes={layout.boxes} states={states} editing={editing}
+            ctx={{ donem, erisim, onAgenda: setAgenda, agendaLoading: states.ajanda?.fetching ?? false }}
+            onRemove={layout.remove} onReorder={layout.reorder} />
         )}
-        {panoIzni && pano.isLoading && <SkeletonRow />}
-        <PanoRow>
-          {s && egilimVar(s) && <Hucre agirlik={2} genis><PanoEgilim egilim={s.egilim} /></Hucre>}
-          {s?.dagilim && <Hucre><PanoDagilim dagilim={s.dagilim} /></Hucre>}
-          {s && bekleyenVar(s.bekleyen) && <Hucre><PanoBekleyen b={s.bekleyen} erisim={erisim} /></Hucre>}
-        </PanoRow>
-        <PanoRow>
-          {hareketIzni && (
-            <Hucre agirlik={2} genis>
-              <PanoMovementList hareketler={hareket.data?.hareketler} yukleniyor={hareket.isLoading} hata={hareket.isError} onYenile={() => void hareket.refetch()} erisim={erisim} />
-            </Hucre>
-          )}
-          {s && (s.enCok.uretilen || s.enCok.sevkEdilen) && <Hucre><PanoEnCok enCok={s.enCok} erisim={erisim} /></Hucre>}
-          {HIZLI_EYLEMLER.some((e) => erisim.canGo(e)) && <Hucre><PanoHizliEylemler erisim={erisim} /></Hucre>}
-        </PanoRow>
-        {s && (
-          <PanoRow>
-            {s.tezgah && <Hucre><PanoTezgah t={s.tezgah} erisim={erisim} /></Hucre>}
-            {s.stokOzeti && <Hucre><PanoStok s={s.stokOzeti} erisim={erisim} /></Hucre>}
-            {(s.fasonOzeti || s.emanet) && <Hucre><PanoFason f={s.fasonOzeti} emanet={s.emanet} erisim={erisim} /></Hucre>}
-            {s.finans && <Hucre><PanoAlacak f={s.finans} erisim={erisim} /></Hucre>}
-          </PanoRow>
+        {editing && layout.boxes.length === 0 && (
+          <p className="rounded-xl border-2 border-dashed border-card-border py-10 text-center text-sm text-muted-foreground">Panoda kutu yok — “Kutu ekle” ile başla.</p>
         )}
-        {/* Eski panodan: istasyon doluluğu (canlı kuyruk/aktif) — izin yoksa bileşen kendini gizler. */}
-        {hasPermission("station:read") && <StationLoad />}
+        <PanoAddSheet open={adding} onOpenChange={setAdding} available={layout.available} added={added}
+          onToggle={(key, add) => (add ? layout.add(key) : layout.remove(key))} />
       </PageBody>
     </PageShell>
   );
 }
 
-function SkeletonRow() {
+function BoardSkeleton() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 min-[1101px]:grid-cols-4" data-testid="pano-iskelet">
-      <div className="skeleton-shimmer h-72 rounded-xl bg-muted md:col-span-2" />
-      <div className="skeleton-shimmer h-72 rounded-xl bg-muted" />
-      <div className="skeleton-shimmer h-72 rounded-xl bg-muted" />
+    <div className="space-y-4" data-testid="pano-iskelet">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-4">
+        {Array.from({ length: 5 }, (_, i) => <div key={i} className="skeleton-shimmer h-28 rounded-xl bg-muted" />)}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 min-[1101px]:grid-cols-12">
+        <div className="skeleton-shimmer h-72 rounded-xl bg-muted md:col-span-2 min-[1101px]:col-span-8" />
+        <div className="skeleton-shimmer h-72 rounded-xl bg-muted min-[1101px]:col-span-4" />
+      </div>
     </div>
   );
 }
