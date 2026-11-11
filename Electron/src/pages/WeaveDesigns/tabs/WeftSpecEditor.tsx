@@ -13,6 +13,7 @@ import type { Item } from "@/pages/Items/types";
 import { weftSpecApi } from "../service";
 import type { WeftSpecDetail } from "../types";
 import { decimalToFormText } from "@/lib/decimal-form-text";
+import { weftRowsMatchSaved, weftShareCell, weftShareNote, weftShareVisible } from "./weft-share";
 
 interface Row { yarnItemId: string; picks: string }
 const MAX_WEFT_LINES = 26;
@@ -44,6 +45,8 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
     },
   });
   const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const shares = weftShareVisible(spec);
+  const sharesMatch = shares && weftRowsMatchSaved(spec, rows, seq);
   const ready = rows.length > 0 && rows.every((r) => r.yarnItemId && (derived || Number(r.picks) > 0));
   return (
     <div className="space-y-4">
@@ -62,9 +65,14 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
           <Input id="wf-prog" value={program} maxLength={16} disabled={!canWrite} onChange={(e) => setProgram(e.target.value)} placeholder="6037" />
         </div>
       </div>
+      {shares && (
+        <div className="hidden gap-2 text-xs text-muted-foreground sm:grid sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]">
+          <span /><span>İplik</span><span>Rapordaki adet</span><span className="text-right">Pay %</span><span />
+        </div>
+      )}
       <ul className="space-y-2">
         {rows.map((r, i) => (
-          <li key={i} className="grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_2.5rem]">
+          <li key={i} className={shares ? "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]" : "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_2.5rem]"}>
             <span className="font-mono text-sm font-semibold">{weftLetter(i)}</span>
             <EntityPickerModal<Item>
               value={r.yarnItemId || null}
@@ -81,6 +89,11 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
             />
             <Input aria-label={`Atkı ${weftLetter(i)} rapordaki adet`} value={r.picks} inputMode="numeric" disabled={!canWrite || derived} title={derived ? "Sıra kodundan sunucu türetir" : undefined}
               placeholder={derived ? "sıradan türetilir" : "adet"} onChange={(e) => setRow(i, { picks: e.target.value })} />
+            {shares && (
+              <span className="text-right text-sm tabular-nums text-muted-foreground" aria-label={`Atkı ${weftLetter(i)} pay`} title={sharesMatch ? "Atkıdaki payı" : "Kaydedince yeniden hesaplanır"}>
+                {weftShareCell(spec, i, sharesMatch)}
+              </span>
+            )}
             {canWrite && (
               <Button variant="ghost" size="icon" aria-label={`Atkı ${weftLetter(i)} satırını sil`} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>
                 <Trash2 className="h-4 w-4" />
@@ -89,6 +102,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
           </li>
         ))}
       </ul>
+      {shares && <p className="text-xs text-muted-foreground" data-testid="weft-share-note">{weftShareNote(spec)}</p>}
       {canWrite && (
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled={rows.length >= MAX_WEFT_LINES} onClick={() => setRows((rs) => [...rs, { yarnItemId: "", picks: "" }])}>

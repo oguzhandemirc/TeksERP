@@ -85,10 +85,16 @@ export interface DesignVariant {
   color?: { id: string; code: string; name: string } | null;
 }
 
-export interface WeftSpecYarnRow { yarnItemId: string; picksInRepeat: number; sortOrder: number; yarnItem?: YarnRef }
+export interface WeftSpecYarnRow {
+  yarnItemId: string; picksInRepeat: number; sortOrder: number; yarnItem?: YarnRef;
+  /** SY-3 L3 salt-okunur pay % (2 hane); hesaplanamıyorsa null, eski backend göndermez. */
+  sharePct?: number | null;
+}
 export interface WeftSpecDetail {
   id: string; code: string; name: string; picksPerCm: string | number | null; sequenceCode: string | null; weftProgramNo: string | null;
   yarns: WeftSpecYarnRow[];
+  /** SY-3 L3: `MASS` kütlece (maliyet formülü) · `PICKS` denye eksik → atım sayısına göre · null pay yok. */
+  shareBasis?: "MASS" | "PICKS" | null;
 }
 
 /** `POST /api/weft-specs/:id/fork` yanıtı — `replayed` = aynı kodlu kopya bu kumaşa zaten bağlıydı. */

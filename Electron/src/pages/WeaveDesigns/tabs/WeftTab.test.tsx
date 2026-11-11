@@ -80,3 +80,37 @@ describe("WeftTab — bu desene özel kopya", () => {
     expect(n.endsWith(" (D2057)")).toBe(true);
   });
 });
+
+describe("WeftSpecEditor — iplik payı % (SY-3 L3)", () => {
+  const yarns = [
+    { yarnItemId: "y-a", picksInRepeat: 4, sortOrder: 0, sharePct: 66.67 },
+    { yarnItemId: "y-b", picksInRepeat: 2, sortOrder: 1, sharePct: 33.33 },
+  ];
+  it("PICKS: pay sütunu + 'atım sayısına göre' notu", async () => {
+    countUsers.mockResolvedValue(1);
+    api.get.mockResolvedValue({ ...SPEC, shareBasis: "PICKS", yarns });
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite={false} />);
+    expect(await screen.findByLabelText("Atkı A pay")).toHaveTextContent("%66,67");
+    expect(screen.getByLabelText("Atkı B pay")).toHaveTextContent("%33,33");
+    expect(screen.getByText("Pay %")).toBeInTheDocument();
+    expect(screen.getByTestId("weft-share-note")).toHaveTextContent("atım sayısına göre");
+  });
+  it("esas null (ya da eski backend): sütun ve not yok", async () => {
+    countUsers.mockResolvedValue(1);
+    api.get.mockResolvedValue({ ...SPEC, shareBasis: null, yarns: yarns.map((y) => ({ ...y, sharePct: null })) });
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite={false} />);
+    await screen.findByText(/Atkı kartı:/);
+    expect(screen.queryByLabelText("Atkı A pay")).toBeNull();
+    expect(screen.queryByTestId("weft-share-note")).toBeNull();
+  });
+  it("satır düzenlenince pay '—' olur (kaydedince sunucu yeniden verir)", async () => {
+    countUsers.mockResolvedValue(1);
+    api.get.mockResolvedValue({ ...SPEC, shareBasis: "MASS", yarns });
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    const cell = await screen.findByLabelText("Atkı A pay");
+    expect(cell).toHaveTextContent("%66,67");
+    fireEvent.change(screen.getByLabelText("Atkı A rapordaki adet"), { target: { value: "5" } });
+    await waitFor(() => expect(screen.getByLabelText("Atkı A pay")).toHaveTextContent("—"));
+    expect(screen.getByTestId("weft-share-note")).toHaveTextContent("kütlece");
+  });
+});
