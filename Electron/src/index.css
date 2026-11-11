@@ -86,7 +86,7 @@
   --shadow-soft: var(--shadow-soft);
   --shadow-card: var(--shadow-card);
 
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--app-font), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 
@@ -176,6 +176,7 @@
     --cell-py: 0.6875rem;
     --head-h: 2.5rem;
     --page-gutter: 1rem;
+    --app-font: "Inter Variable", "Inter";
     /* Tablo sütun ayracı — kenarlık renginin düşük opaklığı; zor fark edilir. */
     --table-col-line: hsl(var(--border) / 0.55);
 
@@ -397,6 +398,17 @@
   [data-density="comfortable"] { --cell-py: 1rem; --head-h: 2.75rem; }
   html[data-font="small"] { font-size: 14px; }
   html[data-font="large"] { font-size: 17px; }
+  /* ── YAZI TİPİ (data-typeface) — yerel paketten (@fontsource), ağ yok. Değişken burada yeniden
+     çözülür ki önizleme kutusu da kendi yazı tipini alsın. ── */
+  [data-typeface="inter"] { --app-font: "Inter Variable", "Inter"; }
+  [data-typeface="dm-sans"] { --app-font: "DM Sans"; }
+  [data-typeface="nunito-sans"] { --app-font: "Nunito Sans"; }
+  [data-typeface="jakarta"] { --app-font: "Plus Jakarta Sans"; }
+  [data-typeface="source-serif"] { --app-font: "Source Serif 4"; }
+  [data-typeface] {
+    --font-sans: var(--app-font), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--font-sans);
+  }
   @media (min-width: 768px) {
     :root { --page-gutter: 1.5rem; }
   }

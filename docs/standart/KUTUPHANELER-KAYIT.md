@@ -2,6 +2,14 @@
 
 > `KUTUPHANELER.md` §9'dan bölündü (2026-11-02; o dosya boyut tavanına 202 bayt kalmıştı — kural kalır, ENVANTER ayrılır, §2 → `KUTUPHANELER-TABLO.md` emsali). Kayıt biçimi `KUTUPHANELER.md` §3; en yeni kayıt üstte.
 
+### @fontsource-variable/inter@^5.3.0 + @fontsource/dm-sans@^5.3.0 + @fontsource/nunito-sans@^5.3.0 + @fontsource/source-serif-4@^5.3.1 · Electron · 2026-11-12
+1. Problem      : kullanıcı kararı 2026-11-12 — panel yazısı "yumuşak ve okunaklı" olsun, yazı tipleri arasında geçiş yapılsın, Inter varsayılan; Görünüm › Yazı tipi (`appearance.typeface`, `data-typeface`); §2 "Font" satırı genişler, yeni ihtiyaç satırı açılmaz
+2. Alternatifler: Google Fonts CDN (fabrika çevrimdışı olabilir, dışarı istek — reddedildi) · sistem yazısı yığını (makineye göre değişir, Türkçe glif/rakam hizası denetimsiz — reddedildi) · woff2'yi elle depoya koymak (sürüm/lisans takibi elle — reddedildi)
+3. Boyut/biçim  : yalnız CSS + woff2; `latin` + `latin-ext` alt kümeleri (ğ ş ı İ), 400/500/600/700 (Inter değişken eksen); `unicode-range` sayesinde yalnız seçili yazı indirilir
+4. Bakım        : fontsource 5.x, kod yok; sürüm atlaması görsel risk yalnız
+5. Lisans       : OFL-1.1 (dördü de)
+6. Dağıtım      : native yok, rebuild gerekmez; electron-vite derlemesinde woff2 `out/renderer/assets` altına girer (ölçüldü)
+
 ### Cihazda metin tanıma: yerel Expo modülü `recognizeTextAsync` + Gradle com.google.mlkit:text-recognition 16.0.1 (GÖMÜLÜ model) · mobil · 2026-11-04
 1. Problem      : Belge okuması sunucudaki okuma servisine bağlı (servis yoksa/yavaşsa tarama PENDING bekler); tablet çekim anında okuyup sonucu yükleme isteğiyle göndermeli (S16c). Kullanıcı onayı 2026-11-04 ("Evet, ekle")
 2. Alternatifler: npm `@react-native-ml-kit/text-recognition` — eski köprü modülü, zaman aşımı/EXIF yönü/küçültme denetimi yok · `play-services-mlkit-text-recognition` (Play Hizmetleri modeli) — model ilk kullanımda iner; çevrimdışı/Play'siz tablette sessiz düşer, süre belirsiz · elle yazmak (SEÇİLDİ, [KU-07]; mevcut `teks-erp-belge-tarayici` modülüne ayrı `TextReader.kt`, ayrı tek iş parçacıklı işçi, süre kuyruğa girişten sayılır, EXIF yönü + uzun kenar 2600 sidecar ile aynı)

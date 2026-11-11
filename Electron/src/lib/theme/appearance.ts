@@ -17,6 +17,8 @@ export type RadiusScale = "small" | "medium" | "large";
 export type Density = "compact" | "comfortable";
 export type FontScale = "small" | "normal" | "large";
 export type TileStyle = "color" | "mono";
+/** Yazı tipi ailesi (yazı BOYUTU `font`tan ayrı eksen); aileler `lib/theme/fonts.ts` + index.css. */
+export type Typeface = "inter" | "dm-sans" | "nunito-sans" | "jakarta" | "source-serif";
 
 export interface Appearance {
   preset: ThemePreset;
@@ -28,6 +30,7 @@ export interface Appearance {
   density: Density;
   font: FontScale;
   tiles: TileStyle;
+  typeface: Typeface;
 }
 
 /** Kullanıcı kararı 2026-11-11: mor, açık menü, lavanta, geniş köşe, sıkı liste. */
@@ -40,6 +43,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   density: "compact",
   font: "normal",
   tiles: "color",
+  typeface: "inter",
 };
 
 const ALLOWED: { [K in Exclude<keyof Appearance, "customColor">]: readonly Appearance[K][] } = {
@@ -50,6 +54,7 @@ const ALLOWED: { [K in Exclude<keyof Appearance, "customColor">]: readonly Appea
   density: ["compact", "comfortable"],
   font: ["small", "normal", "large"],
   tiles: ["color", "mono"],
+  typeface: ["inter", "dm-sans", "nunito-sans", "jakarta", "source-serif"],
 };
 
 /** Eski `accent` (HSL kanalı) → en yakın hazır tema; eşleşmezse özel renk. */
@@ -98,6 +103,7 @@ export function resolveAppearance(prefs: AppPreferences | null | undefined): App
     density: pick("density", raw.density),
     font: pick("font", raw.font),
     tiles: pick("tiles", raw.tiles),
+    typeface: pick("typeface", raw.typeface),
   };
 }
 
@@ -127,6 +133,7 @@ export function appearanceAttributes(a: Appearance): Record<string, string> {
     "data-density": a.density,
     "data-font": a.font,
     "data-tiles": a.tiles,
+    "data-typeface": a.typeface,
   };
 }
 
