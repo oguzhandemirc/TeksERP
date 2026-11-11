@@ -248,6 +248,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
   // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.
   { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: TERIM.dokumaIsEmri.cogul, requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
+  // Tezgâh Yükü (SY-3 L2): salt okuma çizelgesi, aynı okuma izni; yazma yeteneği yok.
+  { key: "operations/loom-load", app: "desktop", modul: "dokumaEnabled", title: "Tezgâh Yükü", requires: ["weavingorder:read"], capabilities: [] },
   // Leventler (devere Faz 1b, 2026-09-14): plan → sar → hazır levent; sarım iptali ayrı yetenek.
   { key: "operations/warp-beams", app: "desktop", modul: "devereEnabled", title: "Leventler", requires: ["warpbeam:read"], capabilities: ["warpbeam:write", "warpbeam:cancel"] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,

@@ -1,5 +1,5 @@
 // Operasyon › Üretim & Fason karoları (sıra = hub sırası).
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -65,6 +65,19 @@ export const productionTiles: OperationsTile[] = [
     description: "Ne dokunacak, ne kadar, kimde — dokuma iş emri planlama; koşum ve top indirme tabletten",
     icon: Spool,
     to: "/operations/weaving-orders",
+    group: "production",
+    permission: "weavingorder:read",
+    visibleWhen: isWeavingOrdersVisible,
+    offHint: flagOffHint("dokumaEnabled"),
+  },
+  {
+    // TEZGÂH YÜKÜ (SY-3 L2): salt okuma; backend `/api/weaving-orders/loom-load` `requireDokumaEnabled` +
+    // `weavingorder:read` — karo dokuma işleriyle aynı yüklem ve izin (route `ProtectedRoute` ile birebir).
+    key: "loom-load",
+    title: "Tezgâh Yükü",
+    description: "Hangi tezgâh ne zamana kadar dolu: iş sırası, kalan metre, tahmini süre, boşalma zamanı",
+    icon: CalendarClock,
+    to: "/operations/loom-load",
     group: "production",
     permission: "weavingorder:read",
     visibleWhen: isWeavingOrdersVisible,

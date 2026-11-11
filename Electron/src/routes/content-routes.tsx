@@ -96,6 +96,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
+import { LoomLoadPage } from "@/pages/Operations/LoomLoad/LoomLoadPage";
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
 import { LoomAlarmDutyPage } from "@/pages/LoomAlarmDuty/LoomAlarmDutyPage";
 import { MachineCollectorsPage } from "@/pages/MachineCollectors/MachineCollectorsPage";
@@ -653,6 +654,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="weavingorder:read">
         <WeavingOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Tezgâh Yükü (SY-3 L2, salt okuma) — karo izniyle BİREBİR (`weavingorder:read`); modül kapısı backend
+    // `requireDokumaEnabled` + `ROUTE_MODULE` (`dokumaEnabled`).
+    path: "operations/loom-load",
+    element: (
+      <ProtectedRoute requirePermission="weavingorder:read">
+        <LoomLoadPage />
       </ProtectedRoute>
     ),
   },
