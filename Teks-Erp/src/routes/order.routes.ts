@@ -742,14 +742,24 @@ router.get("/:id", verifyToken, requirePermission("order:read"), orderDetailHand
  *                     customerColorName: { type: string, nullable: true }
  *     responses:
  *       201:
- *         description: Sipariş oluşturuldu
+ *         description: |
+ *           Sipariş oluşturuldu. İş kabulü risk kapısı (finance.riskLimitBlock.intake) KAPALIYKEN cari risk limitini aşıyorsa
+ *           `warnings[]` Türkçe uyarı taşır; tutar/bakiye yalnız `finance:read` izninde (aksi halde yalnız "limit aşıldı").
+ *           Kapı açıkken aşım 409 RISK_LIMIT_EXCEEDED (değişmedi).
  *       400:
  *         description: Geçersiz para birimi veya validasyon hatası
  */
 // Mobil "Yeni Sipariş" ekranı da bu ucu kullanır. `mobile:siparis` YALNIZ buraya
 // (yaratma) eklenir — iptal / manuel-kapatma / PATCH / DELETE hâlâ `order:write`
 // ister, yoksa saha kullanıcısına sipariş silme yetkisi de vermiş olurduk.
-router.post("/", verifyToken, requireAnyPermission("order:write", "mobile:siparis"), controller.create);
+// K3: risk limiti uyarısındaki tutar/bakiye yalnız bakiye görme izniyle (`finance:read`); diğerine yalnız "limit aşıldı".
+router.post("/", verifyToken, requireAnyPermission("order:write", "mobile:siparis"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(201).json(await orderService.create(req.body, req.user?.userId, { canSeeRiskAmounts: matchesPermission(req.user?.permissions ?? [], "finance:read") }));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @openapi

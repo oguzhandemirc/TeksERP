@@ -555,8 +555,8 @@ export class OrderService extends BaseService {
     return getOrderShipmentsImpl(orderId);
   }
 
-  async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    return createImpl.call(this as unknown as OrderServiceThis, data, userId);
+  async create(data: Record<string, unknown>, userId?: string, opts?: { canSeeRiskAmounts?: boolean }): Promise<ApiResponse<unknown>> {
+    return createImpl.call(this as unknown as OrderServiceThis, data, userId, opts);
   }
 
   /**

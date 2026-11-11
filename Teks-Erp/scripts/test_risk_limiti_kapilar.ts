@@ -6,6 +6,8 @@
 //      (gelen belge precheck · sipariş yaratma + müşteri değişimi · createShipmentCoreTx · performDispatchTx claim'den
 //      ÖNCE), helper'ı import eden küme SABİT
 //   §1 ayarlar KAPALI (varsayılan) — kapı tek ayar okuması, başka sorgu YOK; aşımlı caride sipariş/gelen belge/sevk geçer
+//   §1e–§1j (K3 2026-11-11) kapı KAPALI + aşım → sipariş doğar, `warnings` Türkçe uyarı; tutar yalnız `finance:read`
+//      (canSeeRiskAmounts); limit altı/limitsiz/ön muhasebe kapalı → uyarı yok; kur eksikliği engellemez
 //   §2 iş kabulü AÇIK — sipariş + müşteri taşıma + gelen belge onayı 409 RISK_LIMIT_EXCEEDED (Türkçe), yazım yok;
 //      limit altı / limitsiz cari geçer; para birimleri AYRI ölçülür
 //   §3 sevk AÇIK — karışık sevk 409; tamamı emanet sevk GEÇER (K22); PLANNED dispatch 409, PLANNED kalır; emanet kararı
@@ -18,6 +20,7 @@
 //    yapan ikinci hesap eklendi → §0b ❌ (adıyla: shipping.service.ts:probeSecondExposure); ② performDispatchTx'ten
 //    risk kapısı silindi → §0i + §3c ❌ (PLANNED sevkiyat DISPATCHED oldu). Geri alındı → 30/0.
 //    ③ (D4-I1c, 2026-10-31) risk helper emanet kararını yok saydı (`if (release) return;`) → §3a §3c §3f §3g ❌; geri alındı → 33/0.
+//    ④ (K3, 2026-11-11) uyarı metni izni yok saydı (`withAmounts` hep true) → §1f ❌; uyarı yanıta eklenmedi → §1e §1f ❌; geri alındı → 39/0.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -36,7 +39,7 @@ import { shippingService } from "../src/services/shipping.service";
 import { invoiceService } from "../src/services/invoice.service";
 import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
-import { assertCustomerRiskLimitTx } from "../src/services/helpers/risk-exposure.helper";
+import { assertCustomerRiskLimitTx, riskLimitIntakeWarningText } from "../src/services/helpers/risk-exposure.helper";
 import { sevkiyatServisUyeMetni, sevkiyatServisEtiketi } from "./lib/sevkiyat-servis-kaynak";
 import { siparisServisEtiketi, siparisServisMetni } from "./lib/siparis-servis-kaynak";
 
@@ -244,11 +247,41 @@ async function main(): Promise<void> {
     const k1 = await geriSarilan((tx) => core(tx, A.customerId, karisik, true));
     check("§1d aşımlı caride karışık sevk (kurulum + anında dispatch) geçer", k1 === "GEÇTİ", k1);
 
+    // ── §1e–§1j K3 (Seyitoğlu 2026-11-11): kapı kapalıyken aşım = sipariş doğar + Türkçe uyarı ──
+    const riskUyarisi = (r: { warnings?: string[] }) => (r.warnings ?? []).filter((w) => w.includes("risk limit"));
+    const o1e = (await orderService.create({ ...govdeS(A.customerId), clientToken: randomUUID() }, admin.id, { canSeeRiskAmounts: true })) as { data: { id: string }; warnings?: string[] };
+    ids.orders.push(o1e.data.id);
+    const w1e = riskUyarisi(o1e);
+    check("§1e ⭐ kapı kapalı + aşım → sipariş DOĞAR, warnings'te tutarlı Türkçe uyarı (bakiye 500 · limit 100 · aşım 400)",
+      !!o1e.data.id && w1e.length === 1 && /risk limitini aştı \(TRY bakiyesi 500,00 · limit 100,00 · aşım 400,00\) — sipariş yine de oluşturuldu/.test(w1e[0]!), w1e.join(" | "));
+    const o1f = (await orderService.create({ ...govdeS(A.customerId), clientToken: randomUUID() }, admin.id)) as { data: { id: string }; warnings?: string[] };
+    ids.orders.push(o1f.data.id);
+    const w1f = riskUyarisi(o1f);
+    check("§1f ⭐ bakiye görme izni yoksa yalnız \"limit aşıldı\" — tutar/bakiye/limit sayısı YOK", w1f.length === 1 && /risk limitini aştı — sipariş yine de/.test(w1f[0]!) && !/\d/.test(w1f[0]!.replace(TAG, "")), w1f.join(" | "));
+    const D = await kart("D", 1000); // limit altı
+    await bakiye(D.cariId, "TRY", 500);
+    const E = await kart("E", null); // limitsiz
+    await bakiye(E.cariId, "TRY", 99999);
+    const oD = (await orderService.create({ ...govdeS(D.customerId), clientToken: randomUUID() }, admin.id, { canSeeRiskAmounts: true })) as { data: { id: string }; warnings?: string[] };
+    const oE = (await orderService.create({ ...govdeS(E.customerId), clientToken: randomUUID() }, admin.id, { canSeeRiskAmounts: true })) as { data: { id: string }; warnings?: string[] };
+    ids.orders.push(oD.data.id, oE.data.id);
+    check("§1g limit altı ve limitsiz caride risk uyarısı YOK", riskUyarisi(oD).length === 0 && riskUyarisi(oE).length === 0, `${riskUyarisi(oD).join("|")} ${riskUyarisi(oE).join("|")}`);
+    await ayar(SETTING_KEYS.FINANCE_ENABLED, false);
+    const oOff = (await orderService.create({ ...govdeS(A.customerId), clientToken: randomUUID() }, admin.id, { canSeeRiskAmounts: true })) as { data: { id: string }; warnings?: string[] };
+    ids.orders.push(oOff.data.id);
+    await ayar(SETTING_KEYS.FINANCE_ENABLED, true);
+    check("§1h ön muhasebe kapalı → aşımlı caride de uyarı YOK", riskUyarisi(oOff).length === 0, riskUyarisi(oOff).join(" | "));
+    const fx = riskLimitIntakeWarningText({ kind: "FX_MISSING", currency: "USD" }, false);
+    check("§1i kur eksikliği engellemez, ölçülemedi uyarısı; izinsizde para birimi bile yok", /^Risk limiti ölçülemedi — sipariş yine de/.test(fx) && /USD için kur yok/.test(riskLimitIntakeWarningText({ kind: "FX_MISSING", currency: "USD" }, true)), fx);
+    const rota = readFileSync(path.join(SRC, "routes/order.routes.ts"), "utf8");
+    check("§1j POST / ayrıntı kapısı `finance:read` (izin anahtarlı), varsayılan ayrıntısız", /router\.post\("\/", verifyToken, requireAnyPermission\("order:write", "mobile:siparis"\)[\s\S]{0,200}canSeeRiskAmounts: matchesPermission\(req\.user\?\.permissions \?\? \[\], "finance:read"\)/.test(rota));
+
     // ── §2 İş kabulü AÇIK ──
     console.log("\n── §2 finance.riskLimitBlock.intake açık ──");
     await ayar(SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_INTAKE, true);
+    const oncekiA = await prisma.order.count({ where: { customerId: A.customerId } }); // §1e/§1f'nin siparişleri
     const s2 = await hataNesnesi(() => orderService.create({ ...govdeS(A.customerId), clientToken: randomUUID() }, admin.id));
-    check("§2a ⭐ aşım → sipariş 409 RISK_LIMIT_EXCEEDED (Türkçe), sipariş doğmaz", s2.kod === "RISK_LIMIT_EXCEEDED" && /risk limitini aştı .*yeni iş kabulü durduruldu/.test(s2.mesaj) && (await prisma.order.count({ where: { customerId: A.customerId } })) === 0, s2.mesaj);
+    check("§2a ⭐ aşım → sipariş 409 RISK_LIMIT_EXCEEDED (Türkçe), sipariş doğmaz", s2.kod === "RISK_LIMIT_EXCEEDED" && /risk limitini aştı .*yeni iş kabulü durduruldu/.test(s2.mesaj) && (await prisma.order.count({ where: { customerId: A.customerId } })) === oncekiA, s2.mesaj);
     check("§2a' mesaj tutar taşımaz", !/500|100/.test(s2.mesaj.replace(TAG, "")), s2.mesaj);
     const B = await kart("B", 1000); // limit altı
     await bakiye(B.cariId, "TRY", 500);

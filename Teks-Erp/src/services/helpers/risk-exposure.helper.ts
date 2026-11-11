@@ -18,7 +18,7 @@ import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
-import { readFinanceRiskLimitCurrencyMode, resolveRiskLimitBlockIntake, resolveRiskLimitBlockShipment } from "../system-setting.service";
+import { readFinanceEnabled, readFinanceRiskLimitCurrencyMode, resolveRiskLimitBlockIntake, resolveRiskLimitBlockShipment } from "../system-setting.service";
 import { factoryDayKeyUtcMidnight } from "../../constants/time";
 import { resolveExchangeRateTx } from "./finance.helper";
 import { cariAccountWhereForCard } from "./cari-card-where.helper";
@@ -101,6 +101,15 @@ export async function riskExposureTx(
   });
 }
 
+/** Müşteri kartının limiti tanımlı cari hesapları (K3a where'i), belirlenimli sırada — kapı ve uyarı aynı küme. */
+function limitedAccountsOfCustomer(tx: Pick<Tx, "cariAccount">, customerId: string): Promise<Array<{ id: string }>> {
+  return tx.cariAccount.findMany({
+    where: { AND: [cariAccountWhereForCard({ customerId, subcontractorId: null }), RISK_LIMITED_ACCOUNT_WHERE] },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+}
+
 export type RiskGateScope = "INTAKE" | "SHIPMENT";
 const SCOPE_LABEL: Record<RiskGateScope, string> = { INTAKE: "yeni iş kabulü", SHIPMENT: "sevk" };
 
@@ -118,11 +127,7 @@ export async function assertCustomerRiskLimitTx(
 ): Promise<void> {
   const enabled = scope === "INTAKE" ? await resolveRiskLimitBlockIntake(tx) : await resolveRiskLimitBlockShipment(tx);
   if (!enabled) return;
-  const accounts = await tx.cariAccount.findMany({
-    where: { AND: [cariAccountWhereForCard({ customerId, subcontractorId: null }), RISK_LIMITED_ACCOUNT_WHERE] },
-    select: { id: true },
-    orderBy: { id: "asc" },
-  });
+  const accounts = await limitedAccountsOfCustomer(tx, customerId);
   const release = async () => (scope === "SHIPMENT" && emanetRelease ? await emanetRelease() : null);
   for (const acc of accounts) {
     let hit: RiskExposure | undefined;
@@ -143,4 +148,43 @@ export async function assertCustomerRiskLimitTx(
       { code: "RISK_LIMIT_EXCEEDED", scope, cariId: hit.cariId, currency: hit.currency, ...(held?.heldRolls.length ? { emanetShipment: held.mode, heldRolls: held.heldRolls } : {}) },
     );
   }
+}
+
+/** Uyarı kipi sonucu: aşan hesap(lar) ya da TL kipinde kur eksikliği (ölçülemedi — engellemez). */
+export type RiskLimitIntakeWarning =
+  | { kind: "EXCEEDED"; hits: RiskExposure[] }
+  | { kind: "FX_MISSING"; currency: string | null };
+
+/**
+ * UYARI (Seyitoğlu K3): ön muhasebe AÇIK ve iş kabulü kapısı KAPALIYKEN aşım engellemez, bilgi döner (sipariş doğar,
+ * yanıt `warnings`e çağıran yazar). Kapı açıksa null — karar `assertCustomerRiskLimitTx`in (409). Ön muhasebe kapalı ya da
+ * limit tanımsızsa null (bugünkü sessizlik). Hesap yine `riskExposureTx`; ikinci formül yok.
+ */
+export async function customerRiskLimitIntakeWarningTx(
+  tx: Pick<Tx, "cariAccount" | "$queryRaw" | "systemSetting" | "exchangeRate">,
+  customerId: string,
+): Promise<RiskLimitIntakeWarning | null> {
+  if (!(await readFinanceEnabled(tx)) || (await resolveRiskLimitBlockIntake(tx))) return null;
+  const hits: RiskExposure[] = [];
+  for (const acc of await limitedAccountsOfCustomer(tx, customerId)) {
+    try {
+      hits.push(...(await riskExposureTx(tx, acc.id, null, new Prisma.Decimal(0))).filter((e) => e.exceeded));
+    } catch (err) {
+      if (err instanceof AppError && err.details?.code === "RISK_LIMIT_FX_MISSING") return { kind: "FX_MISSING", currency: (err.details.currency as string | undefined) ?? null };
+      throw err;
+    }
+  }
+  return hits.length > 0 ? { kind: "EXCEEDED", hits } : null;
+}
+
+const fmt2 = (d: Prisma.Decimal): string => d.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+/** Uyarı metni (Türkçe). Tutar/bakiye YALNIZ `withAmounts` (bakiye görme izni, `finance:read`) iken; aksi halde yalnız "limit aşıldı". */
+export function riskLimitIntakeWarningText(w: RiskLimitIntakeWarning, withAmounts: boolean): string {
+  const tail = `sipariş yine de oluşturuldu (iş kabulü kapısı kapalı: ${settingRowPath("financeRiskLimitBlockIntake")}).`;
+  if (w.kind === "FX_MISSING") return `Risk limiti ölçülemedi${withAmounts && w.currency ? ` (${w.currency} için kur yok)` : ""} — ${tail}`;
+  const name = w.hits[0]!.name;
+  if (!withAmounts) return `"${name}" risk limitini aştı — ${tail}`;
+  const parts = w.hits.map((h) => `${h.converted ? "TL'ye çevrilmiş bakiye" : `${h.currency} bakiyesi`} ${fmt2(h.balance)} · limit ${fmt2(h.limit)} · aşım ${fmt2(h.exposure.minus(h.limit))}`);
+  return `"${name}" risk limitini aştı (${parts.join("; ")}) — ${tail}`;
 }
