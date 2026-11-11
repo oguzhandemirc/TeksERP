@@ -54,7 +54,7 @@ export interface ShippedCell {
 
 /**
  * Brüt sevk PARÇALARI — tek tanımın SQL gövdesi (satır başına: müşteri · yön · kumaş · renk ·
- * top sayısı · metre · sevk anı `at`). `collectShipped` ve semantik `sevk` küpü (R1-SEMCEK) bunu
+ * top sayısı · metre · sevk anı `at` · belge kimliği `sid` = sevkiyat ya da doğrudan sevk id'si). `collectShipped` ve semantik `sevk` küpü (R1-SEMCEK) bunu
  * sarar; ikinci bir brüt tanım yazılmasın diye gövde dışa açıktır.
  * Üç kaynak UNION ALL ile birleşir: canlı sevk satırları · iade geri-eklemesi · doğrudan sevkler.
  */
@@ -77,7 +77,7 @@ export function shippedPartsSql(range: DateRange, f: ShippedFilter = {}): Prisma
       WHERE ${dispWhere}
     )
       -- 1) Sevkiyatta DURAN toplar (iade sonrası eksilmiş canlı küme)
-      SELECT d."customerId", d.destination, r."itemId", r."colorId", 1::int AS cnt, r."currentQty" AS qty, d."dispatchedAt" AS at
+      SELECT d."customerId", d.destination, r."itemId", r."colorId", 1::int AS cnt, r."currentQty" AS qty, d."dispatchedAt" AS at, d.id AS sid
       -- Yarı-birleşim sonucu DEĞİŞTİRMEZ (disp ile aynı küme); planlayıcıya gerçek
       -- istatistikli süzgeç + kısmi indeks yüklemini verir — yoksa sevk edilmiş TÜM
       -- topları hash'liyordu (Perf-2 B6, ölçüm arşiv 2026-10-13).
@@ -86,12 +86,12 @@ export function shippedPartsSql(range: DateRange, f: ShippedFilter = {}): Prisma
         AND r."shipmentId" IN (SELECT id FROM shipments WHERE ${dispWhere})
       UNION ALL
       -- 2) İADE GERİ-EKLEMESİ — spec snapshot'ı iadenin KENDİ satırından okunur
-      SELECT d."customerId", d.destination, rr."itemId", rr."colorId", 1::int, rr.qty, d."dispatchedAt"
+      SELECT d."customerId", d.destination, rr."itemId", rr."colorId", 1::int, rr.qty, d."dispatchedAt", d.id
       FROM roll_returns rr JOIN disp d ON d.id = rr."fromShipmentId"
       WHERE rr."cancelledAt" IS NULL
       ${withDirect ? Prisma.sql`UNION ALL
       -- 3a) Doğrudan sevklerin KUMAŞ KIRILIMI — bağlı toplardan.
-      SELECT ds."customerId", NULL::"ShipmentDestination", r."itemId", r."colorId", 1::int, r."currentQty", ds."shippedAt"
+      SELECT ds."customerId", NULL::"ShipmentDestination", r."itemId", r."colorId", 1::int, r."currentQty", ds."shippedAt", ds.id
       FROM direct_shipments ds JOIN rolls r ON r."directShipmentId" = ds.id
       WHERE ds."shippedAt" >= ${range.from} AND ds."shippedAt" <= ${range.to}
       UNION ALL
@@ -105,7 +105,7 @@ export function shippedPartsSql(range: DateRange, f: ShippedFilter = {}): Prisma
              ds."totalQty" - COALESCE((
                SELECT SUM(r2."currentQty") FROM rolls r2 WHERE r2."directShipmentId" = ds.id
              ), 0),
-             ds."shippedAt"
+             ds."shippedAt", ds.id
       FROM direct_shipments ds
       WHERE ds."shippedAt" >= ${range.from} AND ds."shippedAt" <= ${range.to}
         AND ds."totalQty" <> COALESCE((
