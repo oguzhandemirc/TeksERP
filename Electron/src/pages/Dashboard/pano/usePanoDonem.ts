@@ -2,9 +2,9 @@ import { useCallback } from "react";
 import { useOptionalPreferences } from "@/providers/PreferencesProvider";
 import { PANO_DONEMLERI, type PanoDonem } from "./types";
 
-/** Tanınmayan / eski kayıt → "bugun" (bugünkü varsayılan). */
+/** Tercih yok / tanınmayan kayıt → "hafta": "bugün" vardiya başında boş panoyla açılıyordu. */
 export function validPeriod(v: unknown): PanoDonem {
-  return (PANO_DONEMLERI as readonly unknown[]).includes(v) ? (v as PanoDonem) : "bugun";
+  return (PANO_DONEMLERI as readonly unknown[]).includes(v) ? (v as PanoDonem) : "hafta";
 }
 
 /** Pano dönemi — kullanıcı tercihinde (`prefs.dashboard.donem`) hatırlanır, cihazdan bağımsız. */

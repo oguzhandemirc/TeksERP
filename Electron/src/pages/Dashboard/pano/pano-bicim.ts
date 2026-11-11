@@ -20,6 +20,9 @@ export const para = (n: number, birim: string): string => `${formatNumber(n, 2)}
 
 export interface DegisimRozeti {
   metin: string;
+  /** Rozetin renkli parçası ("%12,5") ve gri kıyas metni ("önceki 7 güne göre"). */
+  yuzde: string;
+  kiyas: string;
   trend: "up" | "down" | "neutral";
 }
 
@@ -28,7 +31,9 @@ export function degisimRozeti(k: PanoKpi | null | undefined, donem: PanoDonem): 
   if (!k || k.degisimYuzde === null) return null;
   const y = k.degisimYuzde;
   const trend = y > 0 ? "up" : y < 0 ? "down" : "neutral";
-  return { metin: `%${formatNumber(Math.abs(y), 1)} ${KIYAS_ETIKETI[donem]}`, trend };
+  const yuzde = `%${formatNumber(Math.abs(y), 1)}`;
+  // Kartta kısa kıyas (dar kartta "önceki 30 güne göre" kırpılıyordu); kesin pencere `metin`de (ipucu).
+  return { metin: `${yuzde} ${KIYAS_ETIKETI[donem]}`, yuzde, kiyas: donem === "bugun" ? "düne göre" : "önceki döneme göre", trend };
 }
 
 const AYLAR = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];

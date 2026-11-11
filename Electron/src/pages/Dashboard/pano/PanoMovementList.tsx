@@ -49,14 +49,17 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
             const canOpen = erisim.canGo(target);
             const ic = (
               <>
-                <span className={cn("tone-chip w-28 shrink-0 truncate rounded-full px-2 py-0.5 text-center text-[11px] font-semibold", `tile-${r.ton}`)}>{r.etiket}</span>
-                <span className="w-32 shrink-0 truncate font-medium tabular-nums">{h.belgeNo}</span>
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">{h.cari ?? "—"}</span>
-                <span className="w-24 shrink-0 text-right font-semibold tabular-nums">{miktarMetni(h)}</span>
-                <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{hareketZamani(h.zaman)}</span>
+                <span className={cn("tone-chip w-[5.75rem] shrink-0 truncate rounded-full px-2 py-0.5 text-center text-[10.5px] font-semibold", `tile-${r.ton}`)} title={r.etiket}>{r.etiket}</span>
+                {/* Belge no üstte, cari altında: tek satırda cari ~50 px'e düşüp "Boyer…" kırpılıyordu. */}
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="truncate font-semibold tabular-nums">{h.belgeNo}</span>
+                  <span className="truncate text-xs text-muted-foreground" title={h.cari ?? undefined}>{h.cari ?? "—"}</span>
+                </span>
+                <span className="w-20 shrink-0 text-right font-semibold tabular-nums">{miktarMetni(h)}</span>
+                <span className="w-[4.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground">{hareketZamani(h.zaman)}</span>
               </>
             );
-            const sinif = "flex w-full items-center gap-3 px-5 py-2.5 text-left text-sm";
+            const sinif = "flex w-full items-center gap-3 px-5 py-2 text-left text-sm";
             return (
               <li key={`${h.tur}:${h.hedef.id}`}>
                 {canOpen ? (
@@ -87,14 +90,16 @@ export function PanoHizliEylemler({ erisim }: { erisim: PanoErisim }) {
   if (gorunen.length === 0) return null;
   return (
     <SectionCard title="Hızlı işlemler">
-      <div className="grid grid-cols-4 gap-x-2 gap-y-4">
+      <div className="@container">
+      <div className="grid grid-cols-3 gap-x-2 gap-y-4 @[17rem]:grid-cols-4">
         {gorunen.map((e) => (
-          <button key={e.key} type="button" onClick={() => navigateActive(e.to)}
-            className="flex flex-col items-center gap-1.5 rounded-lg p-1 text-center text-[11px] font-medium leading-tight text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <IconTile icon={e.icon} tone={e.tone} size="md" />
-            <span className="line-clamp-2">{e.label}</span>
+          <button key={e.key} type="button" onClick={() => navigateActive(e.to)} title={e.label}
+            className="group flex flex-col items-center gap-1.5 rounded-xl p-1.5 text-center text-[11px] font-medium leading-tight text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <IconTile icon={e.icon} tone={e.tone} size="lg" className="transition-transform group-hover:-translate-y-0.5" />
+            <span className="line-clamp-2 break-words">{e.kisa ?? e.label}</span>
           </button>
         ))}
+      </div>
       </div>
     </SectionCard>
   );

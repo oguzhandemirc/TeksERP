@@ -20,11 +20,13 @@ export interface StatCardProps {
   hint?: ReactNode;
   onClick?: () => void;
   loading?: boolean;
+  /** `stacked`: simge + etiket üst satırda, değer ve değişim tam genişlikte (dar, çok kartlı şeritler). */
+  layout?: "row" | "stacked";
   className?: string;
 }
 
 /** KPI kartı (hedef görsel): solda renkli simge karesi, etiket, kalın değer, altında değişim satırı. */
-export function StatCard({ label, value, icon, tone = "primary", delta, trend = "neutral", invertTrend, hint, onClick, loading, className }: StatCardProps) {
+export function StatCard({ label, value, icon, tone = "primary", delta, trend = "neutral", invertTrend, hint, onClick, loading, layout = "row", className }: StatCardProps) {
   const good = trend === "neutral" ? null : (trend === "up") !== Boolean(invertTrend);
   const Arrow = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : null;
   const Comp = onClick ? "button" : "div";
@@ -34,22 +36,30 @@ export function StatCard({ label, value, icon, tone = "primary", delta, trend = 
       onClick={onClick}
       data-slot="card"
       className={cn(
-        "flex w-full min-w-0 items-center gap-3 rounded-xl border border-card-border bg-card p-4 text-left text-card-foreground shadow-card",
+        "flex w-full min-w-0 gap-3 rounded-xl border border-card-border bg-card p-4 text-left text-card-foreground shadow-card",
+        layout === "row" && "items-center",
         onClick && "transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
     >
-      {icon && <IconTile icon={icon} tone={tone} size="md" />}
+      {icon && layout === "row" && <IconTile icon={icon} tone={tone} size="md" />}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
-        <p className="mt-0.5 truncate text-xl font-bold leading-tight tabular-nums">
+        {layout === "stacked" ? (
+          <div className="mb-2 flex items-center gap-2.5">
+            {icon && <IconTile icon={icon} tone={tone} size="sm" />}
+            <p className="truncate text-sm font-semibold text-muted-foreground">{label}</p>
+          </div>
+        ) : (
+          <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+        )}
+        <p className={cn("mt-0.5 truncate font-bold leading-tight tabular-nums", layout === "stacked" ? "text-2xl" : "text-xl")}>
           {loading ? <span className="skeleton-shimmer inline-block h-6 w-20 rounded-md bg-muted align-middle" /> : value}
         </p>
         {delta != null && (
           <p
             data-trend={trend}
             className={cn(
-              "mt-0.5 flex items-center gap-0.5 truncate text-xs font-medium",
+              "mt-1 flex items-center gap-0.5 truncate text-xs font-medium",
               good === null ? "text-muted-foreground" : good ? "text-success" : "text-destructive",
             )}
           >

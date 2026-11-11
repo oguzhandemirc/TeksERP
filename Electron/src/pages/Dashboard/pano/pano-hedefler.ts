@@ -67,6 +67,8 @@ export function movementTarget(h: Pick<PanoHareket, "hedef">): PanoTarget {
 export interface HizliEylem extends PanoTarget {
   key: string;
   label: string;
+  /** Simge altındaki dar etiket (iki satır); yoksa `label`. Tam ad ipucu/erişilebilir adda kalır. */
+  kisa?: string;
   icon: LucideIcon;
   tone: IconTileTone;
 }
@@ -74,7 +76,7 @@ export interface HizliEylem extends PanoTarget {
 /** Sık işler — yazma izni (route'un ya da ekrandaki düğmenin izni); kapalı modülde yol kapısı gizler. */
 export const HIZLI_EYLEMLER: readonly HizliEylem[] = [
   { key: "order-new", label: "Yeni sipariş", icon: ClipboardPlus, tone: "blue", to: "/operations/orders?action=new", izin: ["order:write"] },
-  { key: "wo-new", get label() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; }, icon: Factory, tone: "orange", to: "/operations/work-orders/new", izin: ["workorder:write"] },
+  { key: "wo-new", get label() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; }, get kisa() { return TERIM.terbiyeIsEmri.tekil; }, icon: Factory, tone: "orange", to: "/operations/work-orders/new", izin: ["workorder:write"] },
   { key: "gr-new", label: "Mal kabul", icon: PackageCheck, tone: "teal", to: "/operations/goods-receipts?action=new", izin: ["goods-receipt:write"] },
   { key: "ready", label: "Sevke hazır", icon: Truck, tone: "green", to: "/operations/sevke-hazir-isler", izin: ["shipping:write"] },
   { key: "notes", label: "Gelen belgeler", icon: FileStack, tone: "sky", to: "/operations/gelen-belgeler", izin: ["gelen-belge:read"] },

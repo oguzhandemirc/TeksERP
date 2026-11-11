@@ -101,6 +101,9 @@ const hareket = (tur: PanoHareket["tur"], hedef: PanoHareket["hedef"], belgeNo: 
   tur, belgeNo, cari: "Müşteri A", miktar: 100, birim: "m", zaman: new Date().toISOString(), hedef,
 });
 
+/** "Üretim" eğilim toplamında da geçer; KPI şeridi DOM'da önce gelir. */
+const kpiUretim = async () => (await screen.findAllByText("Üretim"))[0]!;
+
 function renderPano() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}><DashboardPage /></QueryClientProvider>);
@@ -120,7 +123,7 @@ beforeEach(() => {
 describe("Pano — null kutu çizilmez", () => {
   it("null KPI kartı ve null özet kutuları DOM'a girmez", async () => {
     renderPano();
-    const seritEl = (await screen.findByText("Üretim")).closest(".grid") as HTMLElement;
+    const seritEl = (await kpiUretim()).closest(".grid") as HTMLElement;
     const serit = within(seritEl);
     expect(serit.getByText("Sevk")).toBeTruthy();
     expect(serit.queryByText("Yeni sipariş")).toBeNull();
@@ -158,17 +161,20 @@ describe("Pano — null kutu çizilmez", () => {
 describe("Pano — değişim rozeti", () => {
   it("degisimYuzde null → rozet yok; pozitif → yüzde ve kıyas metni", async () => {
     renderPano();
-    await screen.findByText("Üretim");
-    expect(screen.getByText(/%12,5 düne göre/)).toBeTruthy();
+    await kpiUretim();
+    // Rozet: renkli yüzde + gri kıyas; kesin pencere ipucunda.
+    const rozetler = document.querySelectorAll("[data-trend]");
     // Sevk kartında yüzde rozeti yok (önceki dönem 0).
-    expect(screen.getAllByText(/düne göre/)).toHaveLength(1);
+    expect(rozetler).toHaveLength(1);
+    expect(rozetler[0]!.textContent).toBe("%12,5 düne göre");
+    expect(rozetler[0]!.querySelector("[title]")?.getAttribute("title")).toBe("%12,5 düne göre");
   });
 });
 
 describe("Pano — dönem değişimi", () => {
   it("yalnız /pano yeni dönemle istenir, hareketler tekrar istenmez; tercih yazılır", async () => {
     renderPano();
-    await screen.findByText("Üretim");
+    await kpiUretim();
     expect(fetchPano).toHaveBeenCalledTimes(1);
     expect(fetchPanoHareketler).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("radio", { name: "Hafta" }));
@@ -176,21 +182,22 @@ describe("Pano — dönem değişimi", () => {
     expect(fetchPano).toHaveBeenCalledTimes(2);
     expect(fetchPanoHareketler).toHaveBeenCalledTimes(1);
     expect(setPreference).toHaveBeenCalledWith({ dashboard: { donem: "hafta" } });
-    await screen.findByText(/önceki 7 güne göre/);
+    await waitFor(() => expect(document.querySelector("[data-trend]")?.textContent).toBe("%12,5 önceki döneme göre"));
+    expect(document.querySelector("[data-trend] [title]")?.getAttribute("title")).toBe("%12,5 önceki 7 güne göre");
   });
 });
 
 describe("Pano — tıklama hedefleri ve kapılar", () => {
   it("KPI tıklaması hedef ekrana gider", async () => {
     renderPano();
-    fireEvent.click((await screen.findByText("Üretim")).closest("button")!);
+    fireEvent.click((await kpiUretim()).closest("button")!);
     expect(navigateActive).toHaveBeenCalledWith("/reports/quality/scorecard");
   });
 
   it("izin yoksa KPI tıklanmaz ve hızlı işlem kutusu çizilmez", async () => {
     permissions = ["shipping:read", "report:sales"];
     renderPano();
-    const etiket = await screen.findByText("Üretim");
+    const etiket = await kpiUretim();
     expect(etiket.closest("button")).toBeNull();
     expect(screen.queryByText("Hızlı işlemler")).toBeNull();
   });
@@ -218,7 +225,7 @@ describe("Pano — tıklama hedefleri ve kapılar", () => {
   it("modül bayrakları yüklenmeden hiçbir hedef tıklanmaz", async () => {
     regime = { flagsReady: false };
     renderPano();
-    expect((await screen.findByText("Üretim")).closest("button")).toBeNull();
+    expect((await kpiUretim()).closest("button")).toBeNull();
     expect(screen.queryByText("Hızlı işlemler")).toBeNull();
   });
 
@@ -263,5 +270,46 @@ describe("movementTarget — yedi tür", () => {
   ];
   it.each(cases)("%o → %s", (hedef, to) => {
     expect(movementTarget({ hedef }).to).toBe(to);
+  });
+});
+
+describe("Pano — görsel cila sözleşmeleri", () => {
+  it("tercih yoksa / tanınmayan kayıt → varsayılan dönem hafta", async () => {
+    const { validPeriod } = await import("./usePanoDonem");
+    expect(validPeriod(undefined)).toBe("hafta");
+    expect(validPeriod("eski")).toBe("hafta");
+    expect(validPeriod("ay")).toBe("ay");
+  });
+
+  it("tezgâh yüzdesi izlenen tezgâh sayısıyla yazılır (toplamın %100'ü sanılmasın)", async () => {
+    fetchPano.mockResolvedValue(ozet({ tezgah: { toplam: 22, calisan: 1, duran: 0, izlenmeyen: 21, issiz: 21, suAnYuzde: 100 } }));
+    renderPano();
+    expect(await screen.findByText("İzlenen 1 tezgâhta çalışma %100")).toBeTruthy();
+    expect(screen.queryByText(/Şu an çalışan/)).toBeNull();
+  });
+
+  it("boş dönemde eğilim grafiği iskelet olarak çizilir + kısa not", async () => {
+    fetchPano.mockResolvedValue(ozet({ egilim: { kova: "saat", noktalar: [{ anahtar: "9", uretimMetre: 0, sevkMetre: 0 }] }, dagilim: { boyut: "kumas", dilimler: [] } }));
+    renderPano();
+    expect(await screen.findByText("Bu dönemde üretim ve sevk yok")).toBeTruthy();
+    expect(screen.getByText("Üretim ve sevk eğilimi")).toBeTruthy();
+    expect(screen.getByText("Üretilen kumaş dağılımı")).toBeTruthy();
+    expect(screen.getByText(/Bu dönemde biten kumaş yok/)).toBeTruthy();
+  });
+
+  it("hareket satırında cari ayrı satırda tam metin olarak durur", async () => {
+    fetchPanoHareketler.mockResolvedValue({ hareketler: [hareket("SIPARIS", { tur: "order", id: "o1" }, "SIP-1")], turler: ["SIPARIS"] });
+    renderPano();
+    const satir = (await screen.findByText("SIP-1")).closest("button")!;
+    expect(within(satir).getByText("Müşteri A")).toBeTruthy();
+  });
+
+  it("uzun hızlı işlem adı simge altında kısalır, tam adı ipucunda kalır", async () => {
+    permissions = ["workorder:write"];
+    renderPano();
+    const kutu = within((await screen.findByText("Hızlı işlemler")).closest("section")!);
+    const dugme = kutu.getByRole("button");
+    expect(dugme.getAttribute("title")).toMatch(/oluştur$/);
+    expect(dugme.textContent).not.toMatch(/oluştur/);
   });
 });

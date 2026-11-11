@@ -26,7 +26,8 @@ export function kpiKartlari(k: PanoSummary["kpi"]): Kart[] {
   if (k.siparis) out.push({ key: "siparis", label: "Yeni sipariş", icon: ClipboardList, tone: "blue", value: formatCount(k.siparis.adet.deger), kpi: k.siparis.adet, hint: metre(k.siparis.metre.deger) });
   if (k.fason) out.push({ key: "fason", label: "Fasona giden", icon: Send, tone: "orange", value: metre(k.fason.gidenMetre.deger), kpi: k.fason.gidenMetre, hint: `Dönen ${metre(k.fason.donenMetre)}` });
   if (k.stok) {
-    const ek = [`Ham ${metre(k.stok.hamMetre)}`, ...(k.stok.iplikKg !== null ? [`İplik ${kg(k.stok.iplikKg)}`] : [])].join(" · ");
+    // İki kısa satır: tek satırda "Ham … · İplik …" dar kartta kırpılıyordu.
+    const ek = <>Ham {metre(k.stok.hamMetre)}{k.stok.iplikKg !== null && <><br />İplik {kg(k.stok.iplikKg)}</>}</>;
     out.push({ key: "stok", label: "Mamul stok", icon: Boxes, tone: "teal", value: metre(k.stok.mamulMetre), kpi: null, hint: ek });
   }
   return out;
@@ -36,15 +37,15 @@ export function PanoKpiSeridi({ kpi, donem, erisim, yukleniyor }: { kpi: PanoSum
   const navigateActive = useTabsStore((s) => s.navigateActive);
   if (yukleniyor) {
     return (
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4" data-testid="pano-kpi-iskelet">
-        {Array.from({ length: 5 }, (_, i) => <StatCard key={i} label="…" value="" loading />)}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(148px,1fr))] gap-4" data-testid="pano-kpi-iskelet">
+        {Array.from({ length: 5 }, (_, i) => <StatCard key={i} label="…" value="" loading layout="stacked" />)}
       </div>
     );
   }
   const kartlar = kpi ? kpiKartlari(kpi) : [];
   if (kartlar.length === 0) return null;
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(148px,1fr))] gap-4">
       {kartlar.map((c) => {
         const rozet = degisimRozeti(c.kpi, donem);
         const target = KPI_TARGETS[c.key];
@@ -55,9 +56,11 @@ export function PanoKpiSeridi({ kpi, donem, erisim, yukleniyor }: { kpi: PanoSum
             value={c.value}
             icon={c.icon}
             tone={c.tone}
-            delta={rozet?.metin}
+            delta={rozet ? <span title={rozet.metin}><span className="font-semibold">{rozet.yuzde}</span> <span className="hidden font-normal text-muted-foreground @[11rem]:inline">{rozet.kiyas}</span></span> : undefined}
             trend={rozet?.trend ?? "neutral"}
             hint={c.hint}
+            layout="stacked"
+            className="@container"
             onClick={erisim.canGo(target) ? () => navigateActive(target.to) : undefined}
           />
         );
