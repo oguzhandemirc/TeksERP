@@ -29,6 +29,7 @@ import {
   type OrderFormValues,
 } from "./schema";
 import { TERIM } from "@/lib/terim";
+import { toleranceToFormText } from "./lineTolerance";
 
 interface Props {
   open: boolean;
@@ -59,6 +60,7 @@ function orderToFormValues(order: Order): OrderFormValues {
       customerColorName: l.customerColorName ?? "",
       requiredPropertyIds: (l.requiredProperties ?? []).map((p) => p.propertyId),
       cutNote: l.cutNote ?? "",
+      tolerancePct: toleranceToFormText(l.tolerancePct),
       recipeId: l.recipeId ?? null,
       pieceLengthM: l.pieceLengthM == null ? null : Number(l.pieceLengthM),
       targetValues: (l.targetValues ?? []).map((t) => ({ propertyId: t.propertyId, valueId: t.valueId })),
