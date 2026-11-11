@@ -75,8 +75,9 @@ describe("dikiş mandalı — karo eklendiği gün bağlayıcı olur", () => {
       expect(tile).toBeUndefined();
       return;
     }
+    // T5: Operasyon paleti bölüm başlıklarına ayrıldı — karo Depo bölümünde.
     const entry = commandSections
-      .find((s) => s.heading === "Operasyon")
+      .find((s) => s.heading === "Depo")
       ?.entries.find((e) => e.to === STOCK_COUNTS_PATH);
     expect(entry, "palet girişi yok — hub karosu var ama paletten açılamıyor").toBeDefined();
     expect(entry?.visibleWhen).toBe(isStockCountVisible);

@@ -1,5 +1,6 @@
-// Operasyon › Depo & Paketleme karoları (sıra = hub sırası).
-import { ArrowLeftRight, Boxes, ClipboardCheck, FileCog, Inbox, PackageCheck, Package, PackageOpen, PackagePlus, ScanLine, ScanText, ShoppingBasket, Tags, Undo2 } from "lucide-react";
+// Depo karoları (sıra = hub sırası). Fason karoları (İçerideki İşler, Emanet Çıkış) bu dosyada ama
+// `group: "production"` — menü kararı (T5) onları Üretim bölümüne koydu.
+import { ArrowLeftRight, Boxes, ClipboardCheck, Inbox, Package, PackageOpen, PackagePlus, ScanText, ShoppingBasket, Tags, Undo2 } from "lucide-react";
 import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
@@ -7,7 +8,6 @@ import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
 import { isIncomingDocumentVisible } from "../GelenBelgeler/gelenBelge-regime";
 import { isConsignedWorkVisible } from "../ConsignedWork/consignedWork-regime";
 import { CONSIGNMENT_DISPATCHES_PATH, isConsignmentDispatchVisible } from "../ConsignmentDispatches/consignmentDispatch-regime";
-import { CUSTOMER_DEFAULTS_PATH, TEACH_START_PATH } from "../GelenBelgeler/paths";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -75,7 +75,7 @@ export const warehouseTiles: OperationsTile[] = [
     description: "Müşterilerin bıraktığı emanet mal — müşteri başına top/metre, durum kırılımı",
     icon: Inbox,
     to: "/operations/icerideki-isler",
-    group: "warehouse",
+    group: "production",
     permission: "roll:read",
     visibleWhen: isConsignedWorkVisible,
   },
@@ -87,7 +87,7 @@ export const warehouseTiles: OperationsTile[] = [
     description: "Müşterinin emanet leventini ya da ipliğini sahibine geri ver — belge, iptal önizlemesi",
     icon: Undo2,
     to: CONSIGNMENT_DISPATCHES_PATH,
-    group: "warehouse",
+    group: "production",
     permission: "consignment:read",
     visibleWhen: isConsignmentDispatchVisible,
   },
@@ -101,39 +101,6 @@ export const warehouseTiles: OperationsTile[] = [
     to: "/operations/gelen-belgeler",
     group: "warehouse",
     permission: "gelen-belge:read",
-    visibleWhen: isIncomingDocumentVisible,
-  },
-  {
-    // E2 + belge tanıt 3 aşama: tanıtılan belge tipleri (düzenle/sıfırla) + gönderen cari bağı. Modül kapalıyken GİZLİ (üst karo gibi).
-    key: "gelen-belge-sablonlari",
-    title: "Belge Tipleri",
-    description: "Tanıtılan belge tiplerini düzenle ya da sıfırla; gönderen cariye ve varsayılan sahibe bağla, parti no alanını seç",
-    icon: FileCog,
-    to: "/operations/gelen-belgeler/sablonlar",
-    group: "warehouse",
-    permission: "gelen-belge:template",
-    visibleWhen: isIncomingDocumentVisible,
-  },
-  {
-    // K30-T: yeni belge tipini öğretme girişi (yükle → okununca adım adım tanıt). Şablon izni + aynı modül kapısı.
-    key: "gelen-belge-tanit",
-    title: "Belge Tanıt",
-    description: "Yeni belge tipini öğret — fotoğrafı yükle, başlığa ve değerlere sırayla dokun",
-    icon: ScanLine,
-    to: TEACH_START_PATH,
-    group: "warehouse",
-    permission: "gelen-belge:template",
-    visibleWhen: isIncomingDocumentVisible,
-  },
-  {
-    // E4b: sahibe özel varsayılan ürün (ürünsüz satır onayda bununla girer; fabrika ayarını ezer). Aynı kapı.
-    key: "gelen-belge-varsayilan-urunler",
-    title: "Müşteri Varsayılan Ürünleri",
-    description: "Gelen belgede ürünü seçilmemiş satırın müşteriye göre gireceği kumaş",
-    icon: PackageCheck,
-    to: CUSTOMER_DEFAULTS_PATH,
-    group: "warehouse",
-    permission: "gelen-belge:template",
     visibleWhen: isIncomingDocumentVisible,
   },
   // ── Paket D (2026-08-14) — ticaret paketi (İplik Stoğu yukarıda, aynı kural) ─────

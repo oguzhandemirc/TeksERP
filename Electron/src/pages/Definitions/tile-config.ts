@@ -4,6 +4,7 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 import { catalogTiles } from "./tiles/catalog";
 import { partnerTiles } from "./tiles/partners";
 import { productionTiles } from "./tiles/production";
+import { incomingDocumentTiles } from "./tiles/incoming-documents";
 
 export interface DefinitionTile {
   key: string;
@@ -36,4 +37,5 @@ export const definitionTiles: DefinitionTile[] = [
   ...catalogTiles,
   ...partnerTiles,
   ...productionTiles,
+  ...incomingDocumentTiles,
 ];

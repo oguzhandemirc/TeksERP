@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
-import { operationsTiles } from "@/pages/Operations/tile-config";
+// T5: karo Tanımlar › Gelen Belge Kurulumu altında (adres aynı).
+import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
 import { routeModuleOf } from "@/lib/route-modules";
 import { SenderTemplatesPage, SENDER_TEMPLATES_PATH, DOCUMENT_TYPES_TITLE } from "../GonderenSablonlariPage";
@@ -212,7 +213,7 @@ describe("şablon önerisi etiketi", () => {
 
 describe("bulunabilirlik", () => {
   it("karo + palet girişi aynı adres ve izinle; modül kapısı gelenBelge", () => {
-    const tile = operationsTiles.find((t) => t.key === "gelen-belge-sablonlari");
+    const tile = definitionTiles.find((t) => t.key === "gelen-belge-sablonlari");
     expect(tile?.to).toBe(SENDER_TEMPLATES_PATH);
     expect(tile?.title).toBe(DOCUMENT_TYPES_TITLE);
     expect(tile?.permission).toBe("gelen-belge:template");

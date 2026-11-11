@@ -1,20 +1,27 @@
 import { navGroups, type NavItem } from "./nav-config";
 import { resolveTabMeta, tabPathname } from "./tabs/tab-meta";
+import { sectionTiles } from "@/pages/Operations/sections";
 
 export interface ShellHeading {
   title: string;
   description?: string;
 }
 
-/** Yolun bağlı olduğu menü kökü: tam eşleşme, yoksa en uzun ön ek ("/" yalnız tam eşleşir). */
+const matches = (path: string, to: string) => path === to || (to !== "/" && path.startsWith(`${to}/`));
+
+/**
+ * Yolun bağlı olduğu menü kökü. Bölüm kökleri (T5) kendi karolarının adreslerini de sahiplenir
+ * (`/operations/orders` → Satış); en uzun eşleşme kazanır, "/" yalnız tam eşleşir.
+ */
 export function navRootFor(path: string, items: NavItem[] = navGroups.flatMap((g) => g.items)): NavItem | null {
-  const exact = items.find((i) => i.to === path);
-  if (exact) return exact;
-  return (
-    items
-      .filter((i) => i.to !== "/" && path.startsWith(`${i.to}/`))
-      .sort((a, b) => b.to.length - a.to.length)[0] ?? null
-  );
+  let best: { item: NavItem; len: number } | null = null;
+  for (const item of items) {
+    const targets = [item.to, ...(item.section ? sectionTiles(item.section).map((t) => t.to) : [])];
+    for (const to of targets) {
+      if (matches(path, to) && (!best || to.length > best.len)) best = { item, len: to.length };
+    }
+  }
+  return best?.item ?? null;
 }
 
 /** Üst çubuk başlığı: sayfanın menü bölümü + açıklaması; menü dışı sayfada sekme başlığı. */

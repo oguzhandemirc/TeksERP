@@ -70,7 +70,7 @@ describe("Yan menü — kapalı Kalite Güvence satırı", () => {
     asRole(role);
     renderWithProviders(<Sidebar collapsed={false} />);
     expect(screen.queryByText(TERIM_AD.kaliteGuvence)).toBeNull();
-    expect(screen.getByText("Operasyon")).toBeInTheDocument();
+    expect(screen.getByText("Satış")).toBeInTheDocument();
   });
   it("bayrak yüklenmemişken süperadmine de çizilmez (titreme önleme korunur)", () => {
     ready = false;

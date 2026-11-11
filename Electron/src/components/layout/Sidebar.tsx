@@ -7,6 +7,7 @@ import { useMenuOrder } from "@/hooks/useMenuOrder";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
 import { ADVANCED_GROUP_LABEL, navGroups, type NavItem, type NavGroup } from "./nav-config";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
+import { useSectionNav } from "./use-section-nav";
 import { findCommandEntry, type CommandEntry } from "./command-entries";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarBrand, SidebarFooter } from "./sidebar-brand";
@@ -58,6 +59,8 @@ export function Sidebar({ collapsed }: Props) {
   const withOffHint = (item: NavItem): NavItem =>
     item.featureFlag && !visibilityCtx[item.featureFlag] ? { ...item, offHint: flagOffHint(item.featureFlag) } : item;
 
+  const { sectionVisible, withChildren } = useSectionNav();
+
   // Favoriler — katalogdan çözülen sabitlenmiş sayfalar, en üstte ayrı grup
   // (kendi sırasını korur, menü sürüklemeye dahil değil).
   const favItems: NavItem[] = favorites
@@ -83,7 +86,7 @@ export function Sidebar({ collapsed }: Props) {
 
   // Nav grupları — kullanıcı sürükle-bırak sırası uygulanır (localStorage).
   const navOrdered: NavGroup[] = navGroups
-    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter((i) => !isMenuHidden(menu, i.to)).filter(visible).map(withOffHint)) }))
+    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter((i) => !isMenuHidden(menu, i.to)).filter(visible).filter(sectionVisible).map(withOffHint).map(withChildren)) }))
     .filter((g) => g.items.length > 0);
 
   // "Gelişmiş" grubu — teknik ekranlar hub'lardan çıkıp burada toplanır (yalnız ayar açıkken; hub/palet ile AYNI kapılar).

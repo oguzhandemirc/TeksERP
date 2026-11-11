@@ -24,7 +24,7 @@ import { SystemHubPage } from "./SystemHubPage";
 
 const HUBS = [
   "Access/AccessHubPage.tsx", "Cost/CostHubPage.tsx", "Definitions/DefinitionsHubPage.tsx", "Documents/DocumentsHubPage.tsx",
-  "Finance/FinanceHubPage.tsx", "Operations/OperationsHubPage.tsx", "Quality/QualityHubPage.tsx",
+  "Finance/FinanceHubPage.tsx", "Operations/useSectionTiles.ts" /* T5: Operasyon bölüm sayfalarının süzgeci */, "Quality/QualityHubPage.tsx",
   "Reports/ReportsHubPage.tsx", "System/SystemHubPage.tsx",
 ];
 

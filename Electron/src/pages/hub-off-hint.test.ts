@@ -44,7 +44,8 @@ describe("Kapalı karo ipucu", () => {
 /** Kapalı girişi çizen her yüzey kararı TEK yüklemden alır (`offEntryMode`); eski "ipucu varsa göster" süzgeci dönmez. */
 const OFF_ENTRY_SURFACES = [
   "../components/layout/Sidebar.tsx",
-  "./Operations/OperationsHubPage.tsx",
+  // T5: Operasyon bölüm sayfaları + menü alt listesi kararı tek süzgeçten alır.
+  "./Operations/useSectionTiles.ts",
   "./Definitions/DefinitionsHubPage.tsx",
   "./Quality/QualityHubPage.tsx",
   "./Documents/DocumentsHubPage.tsx",

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NavGroup } from "./nav-config";
 import { CollapsedItem, SortableExpandedItem } from "./sidebar-items";
+import { CollapsedSectionItem, SectionNavItem } from "./sidebar-section";
 
 // Menü gövdesi — grup başlıkları + satırlar. Kendiliğinden animasyon yok (giriş kademesi kaldırıldı).
 
@@ -35,9 +36,9 @@ export function CollapsedNav({ groups }: { groups: NavGroup[] }) {
           )}
           {(!group.collapsible || advancedOpen) && (
             <ul className="flex w-full flex-col items-center gap-1">
-              {group.items.map((item) => (
-                <CollapsedItem key={item.to} item={item} />
-              ))}
+              {group.items.map((item) =>
+                item.children ? <CollapsedSectionItem key={item.to} item={item} /> : <CollapsedItem key={item.to} item={item} />,
+              )}
             </ul>
           )}
         </div>
@@ -103,7 +104,9 @@ function ExpandedGroup({
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
             <ul className="space-y-0.5">
               {group.items.map((item) => (
-                <SortableExpandedItem key={item.to} item={item} />
+                <SortableExpandedItem key={item.to} item={item}>
+                  {item.children ? <SectionNavItem item={item} /> : undefined}
+                </SortableExpandedItem>
               ))}
             </ul>
           </SortableContext>
