@@ -43,7 +43,7 @@ function declsFor(attr: string, value: string): Record<string, string> {
 const AXES: { key: keyof Appearance; values: readonly string[]; vars: string[] }[] = [
   { key: "preset", values: PRESETS.map((o) => o.value), vars: ["--primary", "--ring"] },
   { key: "sidebar", values: SIDEBARS.map((o) => o.value), vars: ["--sidebar"] },
-  { key: "surface", values: SURFACES.map((o) => o.value), vars: ["--background"] },
+  { key: "surface", values: SURFACES.map((o) => o.value), vars: ["--background", "--chrome", "--chrome-border", "--tabstrip", "--band"] },
   { key: "radius", values: RADII.map((o) => o.value), vars: ["--radius-card", "--radius-control"] },
   { key: "density", values: DENSITIES.map((o) => o.value), vars: ["--cell-py", "--head-h", "--cell-wrap"] },
 ];
@@ -106,5 +106,41 @@ describe("görünüm zinciri", () => {
     expect(table).toContain("py-[var(--cell-py)]");
     expect(table).toContain("var(--cell-wrap");
     expect(table).toContain("h-[var(--head-h)]");
+  });
+});
+
+// Kullanıcı 2026-11-12: üst çubuk, sekme bandı, başlık ve özet şeridi aynı zeminde ayrışmıyordu.
+describe("katman belirteçleri", () => {
+  it("katmanlar: koyu kipte her zemin kendi krom/sekme/bant tonunu yazar", () => {
+    for (const o of SURFACES) {
+      const d: Record<string, string> = {};
+      css.walkRules((r) => {
+        if (r.selectors.some((s) => s.trim() === `.dark[data-surface="${o.value}"]`)) r.walkDecls((x) => {
+            d[x.prop] = x.value;
+          });
+      });
+      for (const v of ["--chrome", "--chrome-border", "--tabstrip", "--band"]) expect(d[v], `.dark[data-surface="${o.value}"] ${v}`).toBeTruthy();
+      // Sekme bandı içerik zemininden ayrışmalı — etkin sekme içerik rengiyle "bağlanır".
+      expect(d["--tabstrip"]).not.toBe(d["--background"]);
+    }
+  });
+
+  it("katmanlar: kabuk ve bantlar belirteçten boyanır, sınırı çizgidir", () => {
+    const read = (f: string) => readFileSync(resolve(process.cwd(), f), "utf-8");
+    const topbar = read("src/components/layout/Topbar.tsx");
+    expect(topbar).toContain("bg-chrome");
+    expect(topbar).toContain("border-chrome-border");
+    expect(read("src/components/layout/tabs/TabStrip.tsx")).toContain("bg-tabstrip");
+    expect(read("src/components/layout/tabs/TabStrip.tsx")).toContain("bg-background");
+    expect(raw).toMatch(/--color-chrome:\s*hsl\(var\(--chrome\)\)/);
+    expect(raw).toMatch(/--color-tabstrip:\s*hsl\(var\(--tabstrip\)\)/);
+    const bandRule: Record<string, string> = {};
+    css.walkRules((r) => {
+      if (r.selectors.some((s) => s.trim() === ".tab-pane [data-list-band]")) r.walkDecls((x) => {
+          bandRule[x.prop] = x.value;
+        });
+    });
+    expect(bandRule["background-color"]).toBe("hsl(var(--band))");
+    expect(bandRule["border-bottom"]).toMatch(/1px solid/);
   });
 });

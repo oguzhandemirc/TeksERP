@@ -35,6 +35,11 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
   --color-card-border: hsl(var(--card-border));
+  /* Katman sırası: kabuk kromu (üst çubuk) → sekme bandı → içerik zemini → bant (özet/alt sekme) → kart. */
+  --color-chrome: hsl(var(--chrome));
+  --color-chrome-border: hsl(var(--chrome-border));
+  --color-tabstrip: hsl(var(--tabstrip));
+  --color-band: hsl(var(--band));
 
   /* Marka accent — runtime'da kişiselleştirme ile override edilebilir */
   --color-brand: hsl(var(--brand));
@@ -103,6 +108,10 @@
     --card: 0 0% 100%;
     --card-foreground: 240 24% 13%;
     --card-border: 245 30% 93%;
+    --chrome: 0 0% 100%;
+    --chrome-border: 246 30% 87%;
+    --tabstrip: 246 40% 92.5%;
+    --band: 250 70% 98.5%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 24% 13%;
     --primary: 250 72% 58%;
@@ -181,6 +190,8 @@
     --head-h: 2.375rem;
     --cell-wrap: nowrap;
     --page-gutter: 1rem;
+    /* Tam genişlik listenin iç kenarı — başlık, bant, araç çubuğu ve altlık aynı hizadan başlar. */
+    --list-inset: 1rem;
     --badge-radius: 9999px;
     --app-font: "Inter Variable", "Inter";
     /* Tablo sütun ayracı — kenarlık renginin düşük opaklığı; zor fark edilir. */
@@ -209,6 +220,10 @@
     --card: 235 22% 12%;
     --card-foreground: 240 20% 95%;
     --card-border: 235 18% 18%;
+    --chrome: 236 24% 12.5%;
+    --chrome-border: 236 18% 19%;
+    --tabstrip: 238 30% 6.5%;
+    --band: 237 24% 11%;
     --popover: 235 22% 13%;
     --popover-foreground: 240 20% 95%;
     --primary: 252 70% 60%;
@@ -366,12 +381,31 @@
   }
 
   /* ── ZEMİN TONU ── varsayılan değer de AÇIKÇA yazılır: önizleme kutusu kökün seçimini miras almasın. */
-  [data-surface="lavender"] { --background: 247 52% 96%; --card-border: 246 34% 92%; }
-  .dark[data-surface="lavender"], .dark [data-surface="lavender"] { --background: 238 30% 9%; --card-border: 235 18% 18%; }
-  [data-surface="neutral"] { --background: 220 12% 94.5%; --card-border: 220 10% 89%; }
-  [data-surface="white"] { --background: 0 0% 100%; --card-border: 245 20% 89%; }
-  .dark[data-surface="neutral"], .dark [data-surface="neutral"] { --background: 220 6% 9%; --card-border: 225 8% 18%; }
-  .dark[data-surface="white"], .dark [data-surface="white"] { --background: 235 18% 13%; --card-border: 235 18% 22%; }
+  [data-surface="lavender"] {
+    --background: 247 52% 96%; --card-border: 246 34% 92%;
+    --chrome: 0 0% 100%; --chrome-border: 246 30% 87%; --tabstrip: 246 40% 92.5%; --band: 250 70% 98.5%;
+  }
+  .dark[data-surface="lavender"], .dark [data-surface="lavender"] {
+    --background: 238 30% 9%; --card-border: 235 18% 18%;
+    --chrome: 236 24% 12.5%; --chrome-border: 236 18% 19%; --tabstrip: 238 30% 6.5%; --band: 237 24% 11%;
+  }
+  [data-surface="neutral"] {
+    --background: 220 12% 94.5%; --card-border: 220 10% 89%;
+    --chrome: 0 0% 100%; --chrome-border: 220 10% 85%; --tabstrip: 220 12% 90.5%; --band: 220 14% 97.5%;
+  }
+  /* Beyaz zeminde krom ile içerik aynı renktir — katmanlar çizgi ve sekme bandının tonuyla ayrışır. */
+  [data-surface="white"] {
+    --background: 0 0% 100%; --card-border: 245 20% 89%;
+    --chrome: 0 0% 100%; --chrome-border: 245 20% 86%; --tabstrip: 245 24% 95.5%; --band: 245 40% 98%;
+  }
+  .dark[data-surface="neutral"], .dark [data-surface="neutral"] {
+    --background: 220 6% 9%; --card-border: 225 8% 18%;
+    --chrome: 220 6% 12.5%; --chrome-border: 225 8% 19%; --tabstrip: 220 6% 6.5%; --band: 220 6% 11%;
+  }
+  .dark[data-surface="white"], .dark [data-surface="white"] {
+    --background: 235 18% 13%; --card-border: 235 18% 22%;
+    --chrome: 235 18% 16.5%; --chrome-border: 235 18% 23%; --tabstrip: 235 18% 10%; --band: 235 18% 15%;
+  }
 
   /* ── MENÜ STİLİ ── (açık = :root/.dark değerleri; önizleme için açıkça da yazılır) */
   [data-sidebar="light"], [data-sidebar="dark"] {
@@ -535,38 +569,50 @@
 .data-grid [data-cell-clip] :is(.flex, .inline-flex) > .truncate { min-width: 0; }
 .data-grid [data-cell-clip] :is(.flex-col, .grid) { display: flex; flex-direction: row; align-items: center; gap: 0.375rem; }
 
-/* ── LİSTE YÜZEYİ KOŞUSU — sayfa dosyasına dokunmadan "kart içinde liste".
-   Araç çubuğu / filtre satırı / tablo / altlık `data-list-surface` taşır; sekme içinde ARDIŞIK
-   yüzeyler tek kart gibi boyanır (ilk: üst köşe, son: alt köşe). Diyalog/çekmece/Card içindeki ya da
-   başka bir yüzeyin içindeki yüzey sıfırlanır (gömülü tablo kart olmaz). Sayfanın kendi kart sarmalı
-   hâlâ yasak (liste-standardi.test.ts) — kart görünümü tek yerde, iskelette. */
+/* ── LİSTE YÜZEYİ KOŞUSU — sayfa dosyasına dokunmadan TAM GENİŞLİK liste.
+   Araç çubuğu / filtre satırı / tablo / altlık `data-list-surface` taşır; sekme içinde ARDIŞIK yüzeyler
+   kenardan kenara tek beyaz yüzey olur (oluk, köşe, gölge yok — tabloda genişlik önemli; kullanıcı
+   2026-11-12). Bantlar yalnız ALT çizgi çizer, çift çizgi olmaz. Diyalog/çekmece/Card içindeki ya da
+   başka bir yüzeyin içindeki yüzey sıfırlanır (gömülü tablo). Sayfanın kendi kart sarmalı hâlâ yasak
+   (liste-standardi.test.ts) — görünüm tek yerde, iskelette. */
 .tab-pane [data-list-surface] {
   background-color: hsl(var(--card));
-  margin-inline: var(--page-gutter);
-  border-inline: 1px solid hsl(var(--card-border));
 }
-.tab-pane [data-list-surface]:first-child,
-.tab-pane :not([data-list-surface]) + [data-list-surface] {
+.tab-pane [data-list-surface]:is([data-list-surface="toolbar"], [data-list-surface="footer"]) {
+  padding-inline: var(--list-inset);
+}
+/* Başlık ya da bant ile başlamayan koşu (ör. alt sekme satırından sonra) üst çizgisini kendi çizer. */
+.tab-pane :not([data-list-surface], [data-list-band], [data-page-header]) + [data-list-surface] {
   border-top: 1px solid hsl(var(--card-border));
-  border-top-left-radius: var(--radius-card);
-  border-top-right-radius: var(--radius-card);
-  margin-top: 0.25rem;
-}
-.tab-pane [data-list-surface]:last-child,
-.tab-pane [data-list-surface]:not(:has(+ [data-list-surface])) {
-  border-bottom: 1px solid hsl(var(--card-border));
-  border-bottom-left-radius: var(--radius-card);
-  border-bottom-right-radius: var(--radius-card);
-  margin-bottom: var(--page-gutter);
-  box-shadow: var(--shadow-card);
 }
 .tab-pane [data-list-surface="table"] { overflow: hidden; }
+/* Liste sayfasında başlık ve bantlar listenin iç kenarıyla aynı hizada başlar. */
+.tab-pane [data-page-header]:has(~ [data-list-surface], ~ * [data-list-surface]),
+.tab-pane [data-list-band] {
+  padding-inline: var(--list-inset);
+}
 .tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"], [data-list-surface]) [data-list-surface] {
   background-color: transparent;
-  margin: 0;
   border: 0;
-  border-radius: 0;
-  box-shadow: none;
+}
+
+/* ── SAYFA BANTLARI — başlık bandı ve liste bantları (özet şeridi) ince alt çizgiyle ayrışır.
+   Renk tek başına yetmez (beyaz zemin): her katmanın sınırı çizgidir. */
+.tab-pane [data-page-header] {
+  border-bottom: 1px solid hsl(var(--chrome-border));
+  margin-bottom: 0.75rem;
+}
+/* Liste sayfasında bant/yüzey çizgiye bitişik başlar (boşluk yok). */
+.tab-pane [data-page-header]:has(~ [data-list-surface], ~ * [data-list-surface]) {
+  margin-bottom: 0;
+}
+.tab-pane [data-list-band] {
+  background-color: hsl(var(--band));
+  border-bottom: 1px solid hsl(var(--card-border));
+}
+.tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"]) :is([data-page-header], [data-list-band]) {
+  border-bottom: 0;
+  background-color: transparent;
 }
 
 /* Login ekranı — yavaş hareketli gradient mesh blob'ları */

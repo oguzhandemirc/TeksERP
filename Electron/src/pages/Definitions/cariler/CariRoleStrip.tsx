@@ -40,7 +40,7 @@ export function CariRoleStrip({ filters, counts, loading }: { filters: CariFilte
       { replace: true },
     );
   return (
-    <div className="grid grid-cols-2 gap-3 px-4 pb-3 md:px-6 lg:grid-cols-4">
+    <div className="grid shrink-0 grid-cols-2 gap-3 px-[var(--list-inset)] py-3 lg:grid-cols-4">
       {ROLE_CHIPS.map((c) => (
         <StatCard
           key={c.key}

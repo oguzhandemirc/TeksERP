@@ -97,7 +97,7 @@ describe("cari hedefleri", () => {
   });
 
   it("geçmiş satırı sunucu cümlesini birleştirir; yoksa işlem · tablo", () => {
-    expect(historyText({ action: "UPDATE", tableName: "CUSTOMER", anlati: { metin: "x", parcalar: [{ t: "kisi", text: "Ali " }, { t: "metin", text: "kartı güncelledi" }] } })).toBe("Ali kartı güncelledi");
+    expect(historyText({ action: "UPDATE", tableName: "CUSTOMER", anlati: { metin: "Ali kartı güncelledi", parcalar: [{ t: "kisi", text: "Ali " }, { t: "metin", text: "kartı güncelledi" }] } })).toBe("Ali kartı güncelledi");
     expect(historyText({ action: "UPDATE", tableName: "CUSTOMER" })).toBe("UPDATE · CUSTOMER");
   });
 });

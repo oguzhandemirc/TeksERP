@@ -109,7 +109,7 @@ export function OrdersStats({
   return (
     <div
       data-testid="orders-stats"
-      className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-primary/25 bg-primary/5 px-3 py-1.5 shadow-sm"
+      className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1"
     >
       <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
         {scopeLabel}

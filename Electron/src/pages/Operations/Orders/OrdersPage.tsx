@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Ban, PanelRight, Pencil, Plus, Wrench } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { ListBand } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
@@ -274,7 +275,7 @@ export function OrdersPage() {
           satırının altında kalınca listeye ait bir başlık gibi okunuyordu.
           Şerit tam genişlik (`w-full`, sola dayalı) — kendi içinde pencere
           genişliğine göre kademeleniyor (bkz. OrdersStats başlığı). */}
-      <div className="shrink-0 px-3 pt-2">
+      <ListBand>
         <OrdersStats
           data={statsQuery.data?.data}
           isLoading={statsQuery.isLoading}
@@ -285,7 +286,7 @@ export function OrdersPage() {
           pricingEnabled={pricingEnabled}
           onApplyFilter={applyStatsFilter}
         />
-      </div>
+      </ListBand>
 
       {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı). Filtreler TEK SATIR
           (2026-11-06): arama + Görünüm ("Nerede?" sekmeleri) + Termin penceresi + kutular + "+ Filtre".

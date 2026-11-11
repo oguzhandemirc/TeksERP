@@ -112,9 +112,10 @@ export function CariPurchasesTab({ supplierId, showOrders, showReceipts }: { sup
   );
 }
 
-/** Sunucunun Türkçe cümlesi; eski backend göndermezse işlem + tablo. */
+/** Sunucunun Türkçe cümlesi (`anlati.metin`, parçaların düz hâli); eski backend göndermezse işlem + tablo.
+ *  Parçaları çizmek yalnız AuditNarrativeRow'un işi (tek çizici bekçisi). */
 export const historyText = (l: Pick<SystemLogListItem, "anlati" | "action" | "tableName">): string =>
-  l.anlati?.parcalar?.length ? l.anlati.parcalar.map((p) => p.text).join("") : (l.anlati?.metin ?? `${l.action} · ${l.tableName}`);
+  l.anlati?.metin ?? `${l.action} · ${l.tableName}`;
 
 export function CariHistoryTab({ customerId }: { customerId: string }) {
   const q = useQuery(cariHistoryQuery(customerId));

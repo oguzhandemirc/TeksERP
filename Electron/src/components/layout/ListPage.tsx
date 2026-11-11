@@ -15,6 +15,14 @@ export function ListToolbar({ className, ...props }: HTMLAttributes<HTMLDivEleme
 }
 
 /**
+ * Liste bandı — özet şeridi gibi listenin üstündeki tam genişlik bilgi satırı. Çerçevesiz; zemin `--band`, ince alt
+ * çizgi (index.css "SAYFA BANTLARI"). İçine konan şerit kendi kutusunu ÇİZMEZ.
+ */
+export function ListBand({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div data-list-band="" className={cn("shrink-0 py-1.5", className)} {...props} />;
+}
+
+/**
  * Yapışkan başlık + DataTable'daki ince ayraç. Ayraç th ARKA PLANINDA: `border-collapse`ta tr kenarlığı sticky
  * başlıkla birlikte durmaz (DataTable.tsx'teki notla aynı neden).
  */

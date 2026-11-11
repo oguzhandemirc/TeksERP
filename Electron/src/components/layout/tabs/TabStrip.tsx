@@ -50,13 +50,14 @@ export function TabStrip() {
   };
 
   return (
-    <div className="flex h-10 shrink-0 select-none items-stretch gap-1 border-b border-border/70 px-2 sm:px-4">
+    // Sekme bandı kromdan bir ton farklı; alt çizgi iç gölgedir ki etkin sekme (içerik zemini) üstünü örtüp içeriğe "bağlansın".
+    <div className="flex h-10 shrink-0 select-none items-stretch gap-1 bg-tabstrip px-2 shadow-[inset_0_-1px_0_var(--color-chrome-border)] sm:px-4">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={horizontalListSortingStrategy}>
           <div
             ref={scrollRef}
             onWheel={onWheel}
-            className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
+            className="no-scrollbar flex min-w-0 flex-1 items-end gap-1 overflow-x-auto overflow-y-hidden pt-1"
           >
             {tabs.map((tab) => (
               <TabChip
@@ -129,10 +130,10 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
           }
         }}
         className={cn(
-          "group relative flex h-8 min-w-[7.5rem] max-w-[13.5rem] shrink items-center gap-2 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors touch-none",
+          "group relative flex min-w-[7.5rem] max-w-[13.5rem] shrink items-center gap-2 pl-2.5 pr-1.5 text-[13px] transition-colors touch-none",
           active
-            ? "bg-card font-semibold text-foreground shadow-soft ring-1 ring-card-border after:absolute after:inset-x-3 after:-bottom-[3px] after:h-0.5 after:rounded-full after:bg-primary"
-            : "text-muted-foreground hover:bg-card/70 hover:text-foreground",
+            ? "h-9 rounded-t-lg border border-b-0 border-chrome-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:rounded-b-full before:bg-primary"
+            : "mb-1 h-8 rounded-lg text-muted-foreground hover:bg-background/60 hover:text-foreground",
         )}
       >
         <button

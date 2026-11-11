@@ -22,7 +22,7 @@ interface Props {
 
 export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerOpen = false }: Props) {
   return (
-    <header className="app-drag flex h-16 shrink-0 select-none items-center gap-2 bg-background pr-1 sm:gap-3 sm:pr-3">
+    <header className="app-drag flex h-16 shrink-0 select-none items-center gap-2 border-b border-chrome-border bg-chrome pr-1 sm:gap-3 sm:pr-3">
       {/* Dar kabukta (menü çekmece) mac trafik ışıkları bu çubuğun solundadır → `topbar-leading` boşluğu. */}
       <div
         className={`${narrow ? "topbar-leading " : ""}flex shrink-0 items-center pl-2 app-no-drag sm:pl-3`}

@@ -62,7 +62,8 @@ export function RecordSidePanel({ label, onClose, header, onPrev, onNext, onOpen
       data-record-side-panel=""
       aria-label={label}
       className={cn(
-        "record-side-panel flex h-full w-[min(32rem,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-card-border bg-card text-card-foreground shadow-card",
+        // Genişte listenin yanına yapışık tam boy bölme (tam genişlik liste ile aynı yüzey); darda üste binen çekmece gölgelidir.
+        "record-side-panel flex h-full w-[min(32rem,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden border-l border-card-border bg-card text-card-foreground max-[1180px]:shadow-card",
         className,
       )}
     >
@@ -91,12 +92,12 @@ export function RecordSidePanel({ label, onClose, header, onPrev, onNext, onOpen
   );
 }
 
-/** Liste + panel yerleşimi: genişte yan yana (liste daralır), darda panel listenin ÜSTÜNE biner. */
+/** Liste + panel yerleşimi: genişte yan yana tam alanı kaplar (liste daralır), darda panel listenin ÜSTÜNE biner. */
 export function RecordSplit({ list, panel }: { list: ReactNode; panel: ReactNode }) {
   return (
-    <div className="relative flex min-h-0 flex-1">
+    <div className="relative flex min-h-0 flex-1 border-t border-card-border">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">{list}</div>
-      {panel && <div className="flex min-h-0 pb-[var(--page-gutter)] pr-[var(--page-gutter)] pt-1 max-[1180px]:absolute max-[1180px]:inset-y-0 max-[1180px]:right-0 max-[1180px]:z-30">{panel}</div>}
+      {panel && <div className="flex min-h-0 max-[1180px]:absolute max-[1180px]:inset-y-0 max-[1180px]:right-0 max-[1180px]:z-30">{panel}</div>}
     </div>
   );
 }
