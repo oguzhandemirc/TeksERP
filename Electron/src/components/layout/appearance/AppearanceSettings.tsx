@@ -13,9 +13,8 @@ export function AppearanceSettings() {
       <div className="space-y-3">
         <p className="text-xs font-medium text-muted-foreground">Önizleme</p>
         <AppearancePreview appearance={appearance} />
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground">Hesabına kaydedilir; başka bilgisayarda da aynı görünümü bulursun.</p>
-          <Button variant="outline" size="sm" onClick={resetAppearance} disabled={isDefault}>
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={resetAppearance} disabled={isDefault} title="Hesabına kaydedilir; başka bilgisayarda da aynı görünümü bulursun.">
             <RotateCcw className="h-3.5 w-3.5" />
             Varsayılana dön
           </Button>

@@ -23,17 +23,19 @@ import {
 const raw = readFileSync(resolve(process.cwd(), "src/index.css"), "utf-8");
 const css = postcss.parse(raw);
 
-const selectors = new Set<string>();
-css.walkRules((r) => r.selectors.forEach((s) => selectors.add(s.replace(/\s+/g, " ").trim())));
 const scopes: string[] = [];
-css.walkAtRules("scope", (a) => scopes.push(a.params));
+css.walkAtRules("scope", (a) => {
+  scopes.push(a.params);
+});
 
 /** Değerin kendi bloğu: `[data-x="v"]` (ya da `html[data-x="v"]`) bildirimleri. */
 function declsFor(attr: string, value: string): Record<string, string> {
   const out: Record<string, string> = {};
   const want = [`[${attr}="${value}"]`, `html[${attr}="${value}"]`];
   css.walkRules((r) => {
-    if (r.selectors.some((s) => want.includes(s.trim()))) r.walkDecls((d) => (out[d.prop] = d.value));
+    if (r.selectors.some((s) => want.includes(s.trim()))) r.walkDecls((d) => {
+        out[d.prop] = d.value;
+      });
   });
   return out;
 }
@@ -89,7 +91,9 @@ describe("görünüm zinciri", () => {
     const dark = SURFACES.map((o) => {
       let bg = "";
       css.walkRules((r) => {
-        if (r.selectors.some((s) => s.trim() === `.dark[data-surface="${o.value}"]`)) r.walkDecls("--background", (d) => (bg = d.value));
+        if (r.selectors.some((s) => s.trim() === `.dark[data-surface="${o.value}"]`)) r.walkDecls("--background", (d) => {
+            bg = d.value;
+          });
       });
       return bg;
     });
