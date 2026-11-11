@@ -39,6 +39,7 @@ import { PartyCard } from "@/components/operations/PartyCard";
 import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
 import { OrderWhereCard } from "./OrderWhereCard";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
+import { OrderConfirmationButton } from "./OrderConfirmationButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
 import { ProductionProposalButton } from "./production-proposal/ProductionProposalButton";
@@ -195,7 +196,8 @@ export function OrderDetailSheet({
                   createdAt={order.createdAt}
                   updatedAt={order.updatedAt}
                 />
-                <FollowButton type="siparis" id={order.id} className="ml-auto mr-8 h-7 gap-1 text-xs" />
+                <OrderConfirmationButton order={order} className="ml-auto" />
+                <FollowButton type="siparis" id={order.id} className="mr-8 h-7 gap-1 text-xs" />
               </>
             )}
           </SheetTitle>

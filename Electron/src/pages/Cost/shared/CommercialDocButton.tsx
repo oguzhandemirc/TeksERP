@@ -1,4 +1,4 @@
-// Teklif / fiyat listesi basılı belgesi (MAL-6) — Yazdır / PDF / Excel. DRAFT'ta sunucu TASLAK önizlemesi döner
+// Teklif / fiyat listesi (MAL-6) ve sipariş teyidi (SY-3 L1) basılı belgesi — Yazdır / PDF / Excel. DRAFT'ta sunucu TASLAK önizlemesi döner
 // (donmaz); Excel PDF'i çizen AYNI kolon çözücüsünden (`/tables`) gelir, panelde kolon listesi yazılmaz.
 import { useState } from "react";
 import { FileSpreadsheet, Printer } from "lucide-react";
@@ -10,11 +10,13 @@ import { printedDocumentService } from "@/services/printedDocumentService";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { docTablesToSheets } from "@/lib/doc-tables-export";
 
-export type CommercialDocType = "SALES_QUOTE" | "PRICE_LIST";
+export type CommercialDocType = "SALES_QUOTE" | "PRICE_LIST" | "ORDER_CONFIRMATION";
 
 const META: Record<CommercialDocType, { title: string; suffix: string; write: string }> = {
   SALES_QUOTE: { title: "Satış Teklifi", suffix: "teklif", write: "quote:write" },
   PRICE_LIST: { title: "Fiyat Listesi", suffix: "fiyat-listesi", write: "price-list:write" },
+  // SY-3 L1: yeniden basım sipariş yazma izniyle (backend DOC_PERMISSIONS); fiyatsız teyit belge ayarından.
+  ORDER_CONFIRMATION: { title: "Sipariş Teyidi", suffix: "siparis-teyidi", write: "order:write" },
 };
 
 interface Props {
@@ -22,9 +24,11 @@ interface Props {
   sourceId: string;
   label: string;
   draft: boolean;
+  /** Düğme metni; verilmezse "Yazdır / PDF / Excel". */
+  buttonLabel?: string;
 }
 
-export function CommercialDocButton({ docType, sourceId, label, draft }: Props) {
+export function CommercialDocButton({ docType, sourceId, label, draft, buttonLabel }: Props) {
   const [open, setOpen] = useState(false);
   const m = META[docType];
   const exportExcel = async (view: PrintedDocView) => {
@@ -45,7 +49,7 @@ export function CommercialDocButton({ docType, sourceId, label, draft }: Props) 
     <>
       <Button size="sm" variant="outline" className="gap-2" onClick={() => setOpen(true)} data-testid="commercial-doc-open">
         <Printer className="h-4 w-4" />
-        Yazdır / PDF / Excel
+        {buttonLabel ?? "Yazdır / PDF / Excel"}
       </Button>
       {open && (
         <PrintedDocDialog
