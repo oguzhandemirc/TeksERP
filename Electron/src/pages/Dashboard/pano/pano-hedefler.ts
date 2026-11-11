@@ -29,6 +29,8 @@ export const KPI_TARGETS = {
   siparis: { to: "/operations/orders", izin: ["order:read"] },
   fason: FASON_KOKPITI,
   stok: { to: "/reports/inventory/scorecard", izin: ["report:inventory"] },
+  ciro: { to: "/reports/sales/destination-mix", izin: ["report:sales"] },
+  tahsilat: { to: "/finance/payments", izin: ["finance:read"] },
 } as const satisfies Record<string, PanoTarget>;
 
 export const BOX_TARGETS = {
@@ -40,6 +42,17 @@ export const BOX_TARGETS = {
   uretimeGonderilmemis: { to: "/operations/orders?filter[woState]=NONE", izin: ["order:read"] },
   alacak: { to: "/reports/finance/aging", izin: ["report:finance"] },
   urun: { to: "/definitions/items", izin: ["item:read"] },
+  musteriSiparis: { to: "/reports/sales/order-intake", izin: ["report:sales"] },
+  musteriSevk: { to: "/reports/sales/shipment-scorecard", izin: ["report:sales"] },
+  istasyonUretim: { to: "/reports/production/wip", izin: ["report:production"] },
+  isEmri: { to: "/operations/work-orders", izin: ["workorder:read"] },
+  kalite: { to: "/reports/quality/scorecard", izin: ["report:quality"] },
+  fire: { to: "/reports/quality/scrap-scorecard", izin: ["report:quality"] },
+  stokHareket: { to: "/reports/inventory/scorecard", izin: ["report:inventory"] },
+  nakit: { to: "/reports/finance/cash-book", izin: ["report:finance"] },
+  alis: { to: "/operations/purchase-orders", izin: ["purchase-order:read", "purchase-order:write"] },
+  dokuma: { to: "/operations/weaving-orders", izin: ["weavingorder:read"] },
+  sevkiyat: { to: "/operations/shipments", izin: ["shipping:read"] },
 } as const satisfies Record<string, PanoTarget>;
 
 /** Hareket satırı → kaydın ekranı. Fason sevk/kabulün kendi ekranı yok: iş emri detayı, dokuma işinde kokpit. */

@@ -1,4 +1,4 @@
-import { SectionCard } from "@/components/ui/section-card";
+import { PanoCard } from "./PanoBoxFrame";
 import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
 import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
@@ -34,7 +34,7 @@ interface Props {
 export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisim }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   return (
-    <SectionCard title="Son hareketler" description="Sipariş, sevk, fason, mal kabul ve gelen belge" flush>
+    <PanoCard title="Son hareketler" description="Sipariş, sevk, fason, mal kabul ve gelen belge" flush>
       {yukleniyor ? (
         <div className="space-y-2 px-5 pb-3">{Array.from({ length: 5 }, (_, i) => <div key={i} className="skeleton-shimmer h-9 rounded-lg bg-muted" />)}</div>
       ) : hata ? (
@@ -70,7 +70,7 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
           })}
         </ul>
       )}
-    </SectionCard>
+    </PanoCard>
   );
 }
 
@@ -89,7 +89,7 @@ export function PanoHizliEylemler({ erisim }: { erisim: PanoErisim }) {
   const gorunen = HIZLI_EYLEMLER.filter((e) => erisim.canGo(e));
   if (gorunen.length === 0) return null;
   return (
-    <SectionCard title="Hızlı işlemler">
+    <PanoCard title="Hızlı işlemler">
       <div className="@container">
       <div className="grid grid-cols-3 gap-x-2 gap-y-4 @[17rem]:grid-cols-4">
         {gorunen.map((e) => (
@@ -101,6 +101,6 @@ export function PanoHizliEylemler({ erisim }: { erisim: PanoErisim }) {
         ))}
       </div>
       </div>
-    </SectionCard>
+    </PanoCard>
   );
 }

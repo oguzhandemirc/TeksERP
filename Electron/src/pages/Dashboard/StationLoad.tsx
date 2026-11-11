@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { Activity } from "lucide-react";
-import { SectionCard } from "@/components/ui/section-card";
+import { PanoCard } from "./pano/PanoBoxFrame";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -59,7 +59,7 @@ export function StationLoad() {
   if (!allowed) return null;
 
   return (
-    <SectionCard
+    <PanoCard
       title="İstasyon doluluğu"
       titleExtra={<Activity className="h-4 w-4 text-muted-foreground" aria-hidden />}
       action={data && data.length > 0 ? (
@@ -93,7 +93,7 @@ export function StationLoad() {
             ))}
           </div>
         )}
-    </SectionCard>
+    </PanoCard>
   );
 }
 

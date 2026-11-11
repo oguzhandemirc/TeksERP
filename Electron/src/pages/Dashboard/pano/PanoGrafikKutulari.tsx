@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { SectionCard } from "@/components/ui/section-card";
+import { PanoCard } from "./PanoBoxFrame";
 import { cn } from "@/lib/utils";
 import type { GrafikTema } from "@/pages/Reports/_v2/grafik/tema";
 import { PanoGrafik, saydam } from "./PanoGrafik";
@@ -69,7 +69,7 @@ export function PanoEgilim({ egilim }: { egilim: PanoSummary["egilim"] }) {
   if (!uretimVar && !sevkVar) return null;
   const sumOf = (f: (n: (typeof egilim.noktalar)[number]) => number | null) => egilim.noktalar.reduce((a, n) => a + (f(n) ?? 0), 0);
   return (
-    <SectionCard title="Üretim ve sevk" description="Metre, dönem içinde">
+    <PanoCard title="Üretim ve sevk" description="Metre, dönem içinde">
       <div className="mb-2 flex flex-wrap gap-x-6 gap-y-1">
         {uretimVar && <SeriesTotal renk="bg-chart-1" etiket="Üretim" deger={metre(sumOf((n) => n.uretimMetre))} />}
         {sevkVar && <SeriesTotal renk="bg-chart-2" etiket="Sevk" deger={metre(sumOf((n) => n.sevkMetre))} />}
@@ -78,7 +78,7 @@ export function PanoEgilim({ egilim }: { egilim: PanoSummary["egilim"] }) {
         <PanoGrafik secenek={secenek} yukseklik={220} etiket="Üretim ve sevk eğilimi" />
         {bos && <EmptyNote metin="Bu dönemde üretim ve sevk yok" />}
       </div>
-    </SectionCard>
+    </PanoCard>
   );
 }
 
@@ -126,7 +126,7 @@ export function PanoDagilim({ dagilim }: { dagilim: NonNullable<PanoSummary["dag
     [dagilim, total, bos],
   );
   return (
-    <SectionCard title="Üretilen kumaşlar" description="Dönemde biten metre">
+    <PanoCard title="Üretilen kumaşlar" description="Dönemde biten metre">
       {/* Kartın kendi genişliği belirler (ekran değil): dar kartta halka üstte, lejant altında. */}
       <div className="@container">
       <div className="flex flex-col items-center gap-4 @[26rem]:flex-row">
@@ -147,6 +147,6 @@ export function PanoDagilim({ dagilim }: { dagilim: NonNullable<PanoSummary["dag
         )}
       </div>
       </div>
-    </SectionCard>
+    </PanoCard>
   );
 }
