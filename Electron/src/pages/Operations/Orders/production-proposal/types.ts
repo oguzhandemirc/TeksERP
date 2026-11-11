@@ -55,9 +55,23 @@ export interface LoomSummary {
   counts: Record<LoomTier, number>;
 }
 
+export interface YarnSummaryRow {
+  yarnItemId: string;
+  code: string;
+  name: string;
+  needKg: number;
+  shortKg: number | null;
+  /** SY-3 I2: `IPLIK` iplik kartı firesi, `KART` çözgü/atkı fire zinciri; eski backend göndermez. */
+  wasteSource?: "IPLIK" | "KART";
+  /** SY-3 I1: yalnız iplik ayırma açıkken var — açık dokuma işlerine ayrılan kg (tesis geneli). */
+  reservedKg?: number;
+  /** SY-3 I1: serbest stok − ayrılan (eksiye inebilir); stok bilinmiyorsa null. */
+  freeKg?: number | null;
+}
+
 export interface YarnSummary {
   rawM: number;
-  yarns: Array<{ yarnItemId: string; code: string; name: string; needKg: number; shortKg: number | null }>;
+  yarns: YarnSummaryRow[];
   /** Stok bilinmiyorsa (iplik modülü kapalı) null. */
   totalShortKg: number | null;
   sources: { stock: boolean; openPurchase: boolean; readyBeams: boolean };

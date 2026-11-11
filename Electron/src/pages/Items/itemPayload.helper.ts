@@ -77,3 +77,18 @@ export function fabricDetailPayload(
   }
   return out;
 }
+
+/**
+ * SY-3 I2 iplik firesi gövdesi — yalnız İPLİK ve alan görünürken (maliyet açık). Dolu → noktalı metin; boş + kayıtta
+ * değer VAR → `null` (kart zincirine dön); boş + kayıtta yok → anahtar hiç gitmez (gövde bugünküyle aynı).
+ */
+export function yarnWastePayload(
+  v: Pick<ItemFormValues, "itemType" | "yarnWastePct">,
+  initial: { yarnWastePct?: string | number | null } | null | undefined,
+  visible: boolean,
+): { yarnWastePct?: string | null } {
+  if (!visible || v.itemType !== ItemType.YARN) return {};
+  const text = v.yarnWastePct.trim();
+  if (text !== "") return { yarnWastePct: text.replace(",", ".") };
+  return initial?.yarnWastePct != null && initial.yarnWastePct !== "" ? { yarnWastePct: null } : {};
+}

@@ -4,7 +4,7 @@ import { buildExportSpec } from "@/pages/Reports/_v2/export-spec";
 import { ReportTable } from "@/pages/Reports/_v2/ReportTable";
 import type { RaporSunumu, TabloBlok } from "@/pages/Reports/_v2/sunum";
 import { costTiles } from "../tile-config";
-import { excludedText, missingText, rawBasisText, sourceBadges } from "./yarn-need-model";
+import { excludedText, missingText, rawBasisText, sourceBadges, wasteSourceText } from "./yarn-need-model";
 
 // Sunucu zarfının küçük kopyası: iplik modülü kapalı → stok hücresi sunucudan "bilinmiyor" gelir.
 const tablo: TabloBlok = {
@@ -63,5 +63,18 @@ describe("İplik İhtiyaç Planı — ham metre esası (K5)", () => {
   });
   it("eski backend (metreEsasi yok) → satır yok", () => {
     expect(rawBasisText({}, { kumasMetre: "10", siparisMetre: "9" })).toBeNull();
+  });
+});
+
+describe("İplik İhtiyaç Planı — iplik firesi kaynağı (SY-3 I2)", () => {
+  it("IPLIK satırları kodla sayılır; KART ya da alan yoksa (eski backend) satır yok", () => {
+    expect(wasteSourceText([{ iplikKodu: "IP1", iplik: "A", fireKaynagi: "IPLIK" }, { iplikKodu: "IP2", iplik: "B", fireKaynagi: "KART" }]))
+      .toBe("İplik kartındaki fire kullanıldı: IP1. Ötekilerde çözgü/atkı kartının firesi geçerli.");
+    expect(wasteSourceText([{ iplikKodu: "IP2", iplik: "B", fireKaynagi: "KART" }, { iplikKodu: "IP3", iplik: "C" }])).toBeNull();
+    expect(wasteSourceText(undefined)).toBeNull();
+  });
+  it("beşten fazlası 've N iplik daha' ile kısalır; kodsuz iplik adıyla", () => {
+    const rows = Array.from({ length: 7 }, (_, i) => ({ iplikKodu: i === 0 ? "" : `K${i}`, iplik: `Ad${i}`, fireKaynagi: "IPLIK" as const }));
+    expect(wasteSourceText(rows)).toBe("İplik kartındaki fire kullanıldı: Ad0, K1, K2, K3, K4 ve 2 iplik daha. Ötekilerde çözgü/atkı kartının firesi geçerli.");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildItemPayload } from "./itemPayload.helper";
+import { buildItemPayload, yarnWastePayload } from "./itemPayload.helper";
 import { makeItemFormSchema, itemFormDefaults, type ItemFormValues } from "./schema";
 import { ItemType } from "@/types/enums";
 
@@ -140,5 +140,26 @@ describe("makeItemFormSchema — kod validasyonu", () => {
     expect(create.safeParse(values({ linearDensityDen: "150" })).success).toBe(true);
     expect(create.safeParse(values({ linearDensityDen: "150.1234" })).success).toBe(true);
     expect(create.safeParse(values({ linearDensityDen: "150.12345" })).success).toBe(false);
+  });
+});
+
+describe("yarnWastePayload (SY-3 I2)", () => {
+  const yarn = (t: string) => values({ itemType: ItemType.YARN, yarnWastePct: t });
+  it("iplik + görünür: virgüllü değer noktalı gider", () => {
+    expect(yarnWastePayload(yarn(" 3,5 "), null, true)).toEqual({ yarnWastePct: "3.5" });
+  });
+  it("boş + kayıtta değer var → null (kart zincirine dön); kayıtta yok → anahtar yok", () => {
+    expect(yarnWastePayload(yarn(""), { yarnWastePct: 2 }, true)).toEqual({ yarnWastePct: null });
+    expect(yarnWastePayload(yarn(""), { yarnWastePct: null }, true)).toEqual({});
+    expect(yarnWastePayload(yarn(""), null, true)).toEqual({});
+  });
+  it("alan gizliyken (maliyet kapalı) ya da kumaşta anahtar HİÇ gitmez", () => {
+    expect(yarnWastePayload(yarn("3"), { yarnWastePct: 2 }, false)).toEqual({});
+    expect(yarnWastePayload(values({ itemType: ItemType.FABRIC, yarnWastePct: "3" }), null, true)).toEqual({});
+  });
+  it("şema: 0..50, en çok 2 ondalık, boş serbest", () => {
+    const create = makeItemFormSchema(false);
+    for (const ok of ["", "0", "50", "3,25", "12.5"]) expect(create.safeParse(values({ yarnWastePct: ok })).success).toBe(true);
+    for (const bad of ["50.01", "-1", "3,125", "abc"]) expect(create.safeParse(values({ yarnWastePct: bad })).success).toBe(false);
   });
 });

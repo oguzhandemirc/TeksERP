@@ -61,6 +61,7 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
                   <tr key={y.yarnItemId}>
                     <td>
                       <span className="font-mono">{y.code}</span> {y.name}
+                      {y.wasteSource === "IPLIK" && <span className="ml-1 text-muted-foreground" title="Bu iplik kartına girilen fire yüzdesiyle hesaplandı">(iplik firesi)</span>}
                     </td>
                     <td className="text-right tabular-nums">{formatKg(y.needKg)}</td>
                     <td className="text-right tabular-nums">{y.shortKg == null ? "bilinmiyor" : y.shortKg > 0 ? formatKg(y.shortKg) : "—"}</td>

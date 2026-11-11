@@ -77,6 +77,14 @@ export const makeItemFormSchema = (isEdit: boolean) =>
       .trim()
       .refine((v) => v === "" || /^\d+([.,]\d{1,2})?$/.test(v), "En sayı olmalı (en fazla 2 ondalık)")
       .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, "En sıfırdan büyük olmalı"),
+    /** SY-3 I2: iplik firesi % (yalnız İPLİK) — backend 0..50, en çok 2 ondalık (`Decimal(5,2)`); "" = kart zinciri. */
+    yarnWastePct: acceptNumberAsText(
+      z
+        .string()
+        .trim()
+        .refine((v) => v === "" || /^\d+([.,]\d{1,2})?$/.test(v), "İplik firesi sayı olmalı (en fazla 2 ondalık)")
+        .refine((v) => v === "" || Number(v.replace(",", ".")) <= 50, "İplik firesi en fazla %50 olabilir"),
+    ),
     /** Dokuma ayrıntıları (yalnız KUMAŞ): ham en Decimal(6,2), gramajlar Decimal(7,2). */
     rawWidthCm: positiveDecimalText("Ham en", 10_000),
     rawGsm: positiveDecimalText("Ham gramaj", 100_000),
@@ -98,6 +106,7 @@ export const itemFormDefaults: ItemFormValues = {
   itemType: ItemType.FABRIC,
   unit: "MT",
   linearDensityDen: "",
+  yarnWastePct: "",
   widthCm: "",
   rawWidthCm: "",
   rawGsm: "",

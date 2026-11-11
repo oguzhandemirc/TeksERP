@@ -28,13 +28,14 @@ import {
   makeItemFormSchema,
   type ItemFormValues,
 } from "./schema";
-import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists } from "./itemPayload.helper";
+import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnWastePayload } from "./itemPayload.helper";
+import { ItemYarnWasteField } from "./ItemYarnWasteField";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import { useDevereEnabled, useKaliteGuvenceEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 import { ItemCardTabs } from "./ItemCardTabs";
 import { ItemConstructionPickers, constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
@@ -72,6 +73,7 @@ export function ItemFormDialog({
         itemType: initial.itemType as ProductItemType,
         unit: initial.unit,
         linearDensityDen: decimalToFormText(initial.linearDensityDen),
+        yarnWastePct: fabricDetailToFormText(initial.yarnWastePct),
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
         rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
         rawGsm: fabricDetailToFormText(initial.rawGsm),
@@ -102,6 +104,8 @@ export function ItemFormDialog({
   const itemType = form.watch("itemType");
   const devereEnabled = useDevereEnabled();
   const kaliteGuvenceEnabled = useKaliteGuvenceEnabled();
+  const maliyetEnabled = useMaliyetEnabled();
+  const yarnWasteVisible = maliyetEnabled && itemType === ItemType.YARN;
   const constructionVisible = useConstructionPickersVisible(itemType);
   const derivedUnit = unitForItemType[itemType] ?? "MT";
 
@@ -163,7 +167,7 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial) });
+    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial), ...yarnWastePayload(v, initial, yarnWasteVisible) });
   });
 
   return (
@@ -266,6 +270,8 @@ export function ItemFormDialog({
               />
             </FormField>
           )}
+
+          {yarnWasteVisible && <ItemYarnWasteField form={form} />}
 
           {/* K4P: ürün kartı eni — muayene puan/100 m² kaynağı #1; modül kapalıyken alan hiç yok (bugünkü form). */}
           {itemType === ItemType.FABRIC && kaliteGuvenceEnabled && (

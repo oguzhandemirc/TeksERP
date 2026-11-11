@@ -29,6 +29,8 @@ export interface Item {
   lifecycleStatus?: ItemLifecycleStatus;
   /** İplik inceliği (denye). Yalnız YARN'da dolu; çözgü kartı bunu ister. */
   linearDensityDen: string | number | null;
+  /** SY-3 I2: iplik başına fire % (yalnız YARN; boş = çözgü/atkı kartının fire zinciri). Eski sunucuda yok. */
+  yarnWastePct?: string | number | null;
   /** KUMAŞ → varsayılan çözgü kartı (E4, 2026-09-18): dokuma işi formu ve sunucu ön-dolum kaynağı; yalnız FABRIC. */
   warpSpecId?: string | null;
   /** SY-A4: atkı kartı + desen kartı (yalnız KUMAŞ; eski sunucuda yok). */
@@ -59,6 +61,8 @@ export interface ItemCreatePayload {
   isActive?: boolean;
   /** Denye — boş bırakılırsa `null` gider (kolon nullable, FABRIC'te anlamsız). */
   linearDensityDen?: string | null;
+  /** SY-3 I2: iplik firesi % — yalnız YARN + maliyet açıkken; anahtar dolu ya da kayıtlı değer temizleniyorsa gider. */
+  yarnWastePct?: string | null;
   /** Varsayılan çözgü kartı — yalnız KUMAŞ; boş = `null` (temizler). */
   warpSpecId?: string | null;
   /** SY-A4: atkı/desen kartı — anahtar yalnız seçici görünür ve alan dolu/temizlenmişse gider. */

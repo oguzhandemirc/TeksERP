@@ -25,7 +25,28 @@ export interface YarnNeedSummaryMeters {
   siparisMetre?: string;
 }
 
-export type YarnNeedPresentation = RaporSunumu & { detay?: { meta: YarnNeedMeta; ozet?: YarnNeedSummaryMeters } };
+/** Ham satırın ekranda okunan alt kümesi; `fireKaynagi` eski backend'de yok. */
+export interface YarnNeedRowLite {
+  iplikKodu: string;
+  iplik: string;
+  /** SY-3 I2: `IPLIK` = iplik kartındaki fire, `KART` = çözgü/atkı kartının fire zinciri. */
+  fireKaynagi?: "IPLIK" | "KART";
+}
+
+export type YarnNeedPresentation = RaporSunumu & { detay?: { meta: YarnNeedMeta; ozet?: YarnNeedSummaryMeters; satirlar?: YarnNeedRowLite[] } };
+
+const WASTE_LIST_MAX = 5;
+
+/**
+ * İplik kartındaki fireyle hesaplanan iplikler — küçük açıklama satırı. Hiç yoksa (ya da eski backend) null, çizilmez.
+ */
+export function wasteSourceText(rows: readonly YarnNeedRowLite[] | undefined): string | null {
+  const own = (rows ?? []).filter((r) => r.fireKaynagi === "IPLIK").map((r) => r.iplikKodu || r.iplik);
+  if (own.length === 0) return null;
+  const shown = own.slice(0, WASTE_LIST_MAX).join(", ");
+  const more = own.length > WASTE_LIST_MAX ? ` ve ${own.length - WASTE_LIST_MAX} iplik daha` : "";
+  return `İplik kartındaki fire kullanıldı: ${shown}${more}. Ötekilerde çözgü/atkı kartının firesi geçerli.`;
+}
 
 /**
  * Metre esası açıklaması: kg'lar ham metreden; sipariş metresi geldiyse ikisi yan yana (karıştırılmasın).
