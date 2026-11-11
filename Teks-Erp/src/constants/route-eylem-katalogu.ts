@@ -21,6 +21,20 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   // ── Top etiketi elle düzenleme (2026-11-10)
   "PUT /api/labels/rolls/:id/overrides": e("topun etiketini elle düzenledi", "topun etiketini elle düzenlemeye çalıştı"),
   "POST /api/labels/rolls/:id/preview": e("etiket taslağını önizledi", "etiket taslağını önizlemeye çalıştı"),
+  // ── Etiket şablonu seçimi + etiket setleri (2026-11-11)
+  "PUT /api/labels/rolls/:id/template": e("topun etiket şablonunu değiştirdi", "topun etiket şablonunu değiştirmeye çalıştı"),
+  "POST /api/tambur/label-preview": e("tambur etiketini önizledi", "tambur etiketini önizlemeye çalıştı"),
+  "PUT /api/label-templates/global-options": e("genel etiket setini değiştirdi", "genel etiket setini değiştirmeye çalıştı"),
+  "PUT /api/customers/:customerId/label-template-options": e("müşterinin etiket setini değiştirdi", "müşterinin etiket setini değiştirmeye çalıştı"),
+  // ── El terminaliyle sevk (A6)
+  "POST /api/shipping/shipments/handheld": e("el terminaliyle sevkiyat açtı", "el terminaliyle sevkiyat açmaya çalıştı"),
+  "POST /api/shipping/shipments/:id/scan": e("el terminaliyle sevkiyata top okuttu", "el terminaliyle sevkiyata top okutmaya çalıştı"),
+  "POST /api/shipping/shipments/:id/sacks": e("el terminaliyle sevkiyatta çuval açtı", "el terminaliyle sevkiyatta çuval açmaya çalıştı"),
+  "PUT /api/shipping/shipments/:id/sacks/:sackId/weight": e("el terminaliyle çuvalı tarttı", "el terminaliyle çuvalı tartmaya çalıştı"),
+  "POST /api/shipping/shipments/:id/handheld-dispatch": e("el terminaliyle sevkiyatı onayladı", "el terminaliyle sevkiyatı onaylamaya çalıştı"),
+  // ── Kurşun: kontrolü bitmiş topu yeniden açma · gelen irsaliye künye düzeltmesi
+  "POST /api/kursun-qc/reopen-roll": e("kurşun kontrolü bitmiş bir topu yeniden açtı", "kurşun kontrolü bitmiş bir topu yeniden açmaya çalıştı"),
+  "PATCH /api/gelen-belge/irsaliyeler/:id/kunye": e("gelen irsaliyenin künyesini düzeltti", "gelen irsaliyenin künyesini düzeltmeye çalıştı"),
   // ── Etiket alıcısı kataloğu (tambur emanet, 2026-11-10)
   "POST /api/customers/:id/consignees/ensure": e("bir etiket alıcısı ekledi", "bir etiket alıcısı eklemeye çalıştı"),
   "PATCH /api/customer-consignees/:id": e("bir etiket alıcısını yeniden adlandırdı", "bir etiket alıcısını yeniden adlandırmaya çalıştı"),
