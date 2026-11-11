@@ -50,7 +50,7 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
             // Dar kutuda (orta boy, ~370 px) rozet renk noktasına, saat miktarın altına iner — belge no kırpılmasın.
             const ic = (
               <>
-                <span className={cn("tone-chip hidden w-[5.75rem] shrink-0 truncate rounded-full px-2 py-0.5 text-center text-[10.5px] font-semibold @[34rem]:inline-block", `tile-${r.ton}`)} title={r.etiket}>{r.etiket}</span>
+                <span className={cn("tone-chip hidden w-[5.75rem] shrink-0 truncate rounded-badge px-2 py-0.5 text-center text-[10.5px] font-semibold @[34rem]:inline-block", `tile-${r.ton}`)} title={r.etiket}>{r.etiket}</span>
                 <span className={cn("tone-chip h-2.5 w-2.5 shrink-0 rounded-full @[34rem]:hidden", `tile-${r.ton}`)} title={r.etiket} aria-label={r.etiket} />
                 {/* Belge no üstte, cari altında: tek satırda cari ~50 px'e düşüp "Boyer…" kırpılıyordu. */}
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">

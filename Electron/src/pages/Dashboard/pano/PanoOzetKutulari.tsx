@@ -185,7 +185,7 @@ export function PanoAlacak({ f, erisim }: { f: NonNullable<PanoSummary["finans"]
                   {a.vadesiGecmis > 0 ? `Vadesi geçmiş ${para(a.vadesiGecmis, a.paraBirimi)}` : "Vadesi geçmiş yok"}
                 </span>
               </span>}
-              deger={<span className="tone-chip tile-violet rounded-full px-2 py-0.5 text-[11px]">{a.paraBirimi}</span>} />
+              deger={<span className="tone-chip tile-violet rounded-badge px-2 py-0.5 text-[11px]">{a.paraBirimi}</span>} />
           ))}
         </RowList>
       )}

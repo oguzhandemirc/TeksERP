@@ -475,6 +475,9 @@
   background-color: hsl(var(--tile-bg));
   color: hsl(var(--tile-fg));
 }
+/* Kayıt yan paneli (components/record) — sağdan kısa kayma; hareket azaltma tercihinde yok. */
+.record-side-panel { animation: ui-sheet-in-right 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) { .record-side-panel { animation: none; } }
 /* Tek renk kip: bütün kareler birincil tonun pastelini alır. @scope sınırı: içteki farklı seçim
    (Ayarlar › Görünüm önizlemesi) kökün kipini miras almaz — en yakın data-* kazanır. */
 @scope ([data-tiles="mono"]) to ([data-tiles="color"]) {

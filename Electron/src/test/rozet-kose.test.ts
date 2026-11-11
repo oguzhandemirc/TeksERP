@@ -29,8 +29,8 @@ function fixedBadgeRadius(cls: string): string | null {
   if (!radius) return null;
   const py = toks.some((t) => /^py-(0|0\.5|px|\[[12]px\])$/.test(t));
   const px = toks.some((t) => /^px-(1|1\.5|2|2\.5|3)$/.test(t));
-  const small = toks.some((t) => /^text-(xs|\[(9|10|11)px\])$/.test(t));
-  const surface = toks.some((t) => t.startsWith("bg-") || t === "border");
+  const small = toks.some((t) => /^text-(xs|\[(9|10|10\.5|11)px\])$/.test(t));
+  const surface = toks.some((t) => t.startsWith("bg-") || t === "border" || t === "tone-chip");
   return py && px && small && surface ? radius : null;
 }
 

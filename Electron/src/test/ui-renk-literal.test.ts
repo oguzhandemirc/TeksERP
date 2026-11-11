@@ -4,7 +4,7 @@
 // Kişiselleştirme (hazır tema, özel renk, menü stili, zemin tonu) yalnız CSS değişkenleri üzerinden
 // çalışır. Ortak bileşende ham `#hex`, `rgb()/hsl(<sayı>)` ya da Tailwind'in sabit paleti
 // (`bg-amber-500`, `text-sky-600`…) seçilen temayı DELER: o parça hep aynı renkte kalır.
-// Ölçülen kökler: components/ui · layout · data-table · hub · insight · pages/Dashboard · pages/Reports/_hub. `hsl(var(--…))` serbest; perde (scrim)
+// Ölçülen kökler: components/ui · layout · data-table · hub · insight · record · pages/Dashboard · pages/Reports/_hub · pages/Definitions/cariler. `hsl(var(--…))` serbest; perde (scrim)
 // için `bg-black/NN` serbest (karartma temadan bağımsız siyahtır).
 // =============================================================================
 import { describe, it, expect } from "vitest";
@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const SRC = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, "");
-const ROOTS = ["components/ui", "components/layout", "components/data-table", "components/hub", "components/insight", "pages/Dashboard", "pages/Reports/_hub"];
+const ROOTS = ["components/ui", "components/layout", "components/data-table", "components/hub", "components/insight", "components/record", "pages/Dashboard", "pages/Reports/_hub", "pages/Definitions/cariler"];
 
 /** Bilinçli istisnalar — yol `src`ye göre; gerekçesiyle. Liste yalnız DARALIR. */
 const EXEMPT: Record<string, string> = {};

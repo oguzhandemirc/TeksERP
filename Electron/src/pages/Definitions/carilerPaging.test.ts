@@ -42,8 +42,13 @@ describe("cariQueryPlan — Yön × Fason (rol modeli 2026-09-17)", () => {
   });
 
   it("⭐ TEK giriş 'Yeni Cari': Cariler'de 'Yeni Fason' düğmesi ve bağsız fason yaratan yol YOK (fason formu yalnız düzenleme)", () => {
-    const src = readFileSync(resolve(__dirname, "CarilerPage.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-    expect(src).toMatch(/Yeni Cari/);
+    // Liste sayfası + düzenleme diyalogları (2026-11-12: diyaloglar `cariler/CariEditDialogs`e taşındı).
+    const src = ["CarilerPage.tsx", "cariler/CariEditDialogs.tsx"]
+      .map((f) => readFileSync(resolve(__dirname, f), "utf8"))
+      .join("\n")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(src).toMatch(/Yeni cari/i);
     expect(src).not.toMatch(/Yeni Fason|subcontractorService\.create|createKind|createSubM/);
     expect(src).toMatch(/open=\{Boolean\(editSub\)\}/);
   });
