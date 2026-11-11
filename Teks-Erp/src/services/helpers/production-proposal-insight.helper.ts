@@ -153,7 +153,21 @@ async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, Yar
   return out;
 }
 
-/** Süre: saat = ham metre ÷ (teorik m/saat × randıman%). Plan devri/randımanı/atkı sıklığı eksikse null (varsayılan uydurulmaz). */
+/**
+ * Dokuma süresi (saat, yuvarlamasız) = ham metre ÷ (teorik m/saat × randıman%) — FORMÜLÜN TEK EVİ (öneri önizlemesi +
+ * tezgâh yük çizelgesi). Devir/randıman/atkı sıklığı/metre eksik ya da randıman ≤ 0 → null (varsayılan uydurulmaz).
+ */
+export function weavingHoursDecimal(
+  rawM: Prisma.Decimal.Value | null, planRpm: number | null, planEfficiencyPct: Prisma.Decimal.Value | null, picksPerCm: Prisma.Decimal.Value | null,
+): Dec | null {
+  if (rawM == null || planRpm == null || planEfficiencyPct == null || picksPerCm == null) return null;
+  const eff = new Prisma.Decimal(planEfficiencyPct);
+  const perHour = theoreticalMPerHourDecimal(planRpm, picksPerCm);
+  if (perHour === null || !eff.gt(0)) return null;
+  return new Prisma.Decimal(rawM).div(perHour.mul(eff).div(100));
+}
+
+/** Süre: `weavingHoursDecimal`; plan devri/randımanı/atkı sıklığı eksikse null (varsayılan uydurulmaz). */
 async function durationEstimates(
   groups: WeavingProposal[], constructions: GroupConstructions, looms: Map<string, LoomSummary | null>, at: { deadline: Date | null; now: Date },
 ): Promise<Map<string, WeavingDurationEstimate | null>> {
@@ -167,14 +181,13 @@ async function durationEstimates(
     const loom = looms.get(g.key);
     const plan = loom ? plans.get(loom.best.machineId) : undefined;
     const picks = constructions.get(g.key)?.weft?.picksPerCm ?? null;
-    if (!loom || !plan || plan.planRpm == null || plan.planEfficiencyPct == null || picks == null || g.plannedM == null) continue;
-    const eff = new Prisma.Decimal(plan.planEfficiencyPct);
-    const perHour = theoreticalMPerHourDecimal(plan.planRpm, picks);
-    if (perHour === null || !eff.gt(0)) continue;
-    const hours = new Prisma.Decimal(g.plannedM).div(perHour.mul(eff).div(100));
+    if (!loom || !plan) continue;
+    const hours = weavingHoursDecimal(g.plannedM, plan.planRpm, plan.planEfficiencyPct, picks);
+    if (hours === null) continue;
+    const eff = new Prisma.Decimal(plan.planEfficiencyPct!);
     const weavingHours = round2(hours);
     out.set(g.key, {
-      machineId: plan.id, picksPerCm: Number(picks), planRpm: plan.planRpm, planEfficiencyPct: Number(eff),
+      machineId: plan.id, picksPerCm: Number(picks), planRpm: plan.planRpm!, planEfficiencyPct: Number(eff),
       weavingHours, weavingDays: round2(hours.div(24)),
       hoursUntilDeadline: hoursLeft, weavingOnlyFitsDeadline: hoursLeft === null ? null : weavingHours <= hoursLeft,
     });
