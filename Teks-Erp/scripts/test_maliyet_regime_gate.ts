@@ -16,6 +16,7 @@
 //   cost.routes.ts'ten `requireMaliyetEnabled` kapısı sökülünce → §2 + §4 ❌
 // 2026-10-30 (D4-G1a): item-lifecycle.helper'a cost-rate-validity importu eklenince muafa rağmen
 //   §2 ❌ (item.routes zincirinde machineCostRate) — model-kapsamlı muaf başka modeli örtmez.
+// 2026-11-12 (I3): production-balance çekme okuması muafsızken §2 ❌ (production-balance · reports/sales · weaving-order).
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -166,6 +167,36 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     dosya: "routes/finance.routes.ts",
     model: "costStructure",
     neden: "F6 fason alış taslağı (from-subcontractor-receipt; uç zaten requireFinanceEnabled arkasında): fason tarifesini ve kumaşın tarife kodunu yalnız OKUR (subcontractor-purchase-draft → resolveRateCodes/pickFinishingRateAtDispatch, sevk kg kontrolüyle aynı çözüm). Maliyet kapalıyken tarife yoksa satır fiyat 0 + uyarıyla döner; maliyet tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/production-balance.routes.ts",
+    model: "costStructure",
+    neden: "Üretim dengesi (I3): kumaş açığında ham stoğu mamul karşılığına çevirmek için ürün yapısından yalnız boy çekmesini ve tarife KODUNU OKUR (production-balance readItemShrinkPct → resolveLengthShrinkPct); fiyat okumaz, yapı yoksa çekme boş = bugünkü açık (üretim önerisi emsali).",
+  },
+  {
+    dosya: "routes/production-balance.routes.ts",
+    model: "finishingRate",
+    neden: "Üretim dengesi (I3): terbiye tarifesinden yalnız tipik çekme %'sini OKUR (yapıda çekme yoksa); tarife yoksa çekme boş, açık bugünkü ifade — maliyet kapalıyken denge yine çalışır (üretim önerisi emsali).",
+  },
+  {
+    dosya: "routes/reports/sales.routes.ts",
+    model: "costStructure",
+    neden: "Açık sipariş kapsaması raporu (open-order-coverage → üretim dengesi) (I3): kumaş açığında ham stoğu mamul karşılığına çevirmek için ürün yapısından yalnız boy çekmesini ve tarife KODUNU OKUR (production-balance readItemShrinkPct → resolveLengthShrinkPct); fiyat okumaz, yapı yoksa çekme boş = bugünkü açık (üretim önerisi emsali).",
+  },
+  {
+    dosya: "routes/reports/sales.routes.ts",
+    model: "finishingRate",
+    neden: "Açık sipariş kapsaması raporu (open-order-coverage → üretim dengesi) (I3): terbiye tarifesinden yalnız tipik çekme %'sini OKUR (yapıda çekme yoksa); tarife yoksa çekme boş, açık bugünkü ifade — maliyet kapalıyken denge yine çalışır (üretim önerisi emsali).",
+  },
+  {
+    dosya: "routes/weaving-order.routes.ts",
+    model: "costStructure",
+    neden: "Dokuma işi öneri özeti/iplik ayırma zinciri (→ iplik ihtiyacı → üretim dengesi) (I3): kumaş açığında ham stoğu mamul karşılığına çevirmek için ürün yapısından yalnız boy çekmesini ve tarife KODUNU OKUR (production-balance readItemShrinkPct → resolveLengthShrinkPct); fiyat okumaz, yapı yoksa çekme boş = bugünkü açık (üretim önerisi emsali).",
+  },
+  {
+    dosya: "routes/weaving-order.routes.ts",
+    model: "finishingRate",
+    neden: "Dokuma işi öneri özeti/iplik ayırma zinciri (→ iplik ihtiyacı → üretim dengesi) (I3): terbiye tarifesinden yalnız tipik çekme %'sini OKUR (yapıda çekme yoksa); tarife yoksa çekme boş, açık bugünkü ifade — maliyet kapalıyken denge yine çalışır (üretim önerisi emsali).",
   },
 ];
 

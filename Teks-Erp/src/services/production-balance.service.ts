@@ -4,11 +4,11 @@
 // Spec (ürün+renk+en) bazında arz/talep dengesi. Fabrika DOKUMA YAPMAZ — kumaş
 // hazır gelir, sadece işlenir. Bu yüzden iki açık ayrılır:
 //   üretilecek    = Talep − Depo − Üretimde   (WO açılacak miktar)
-//   malzeme açığı = üretilecek − Ham           (kumaş tedariki gereken kısım)
+//   malzeme açığı = üretilecek − Yarı mamul − Ham × (1 − çekme)  (kumaş tedariki, MAMUL metre)
 //
 // Talep    = Σ (quantity − shippedQty) açık siparişlerden (CANCELLED/COMPLETED hariç)
 // Depo     = WAREHOUSE, sevke okutulmamış (shipmentId=null) toplar
-// Ham      = STOCK, sevksiz toplar (işlenecek hazır kumaş)
+// Ham      = STOCK, sevksiz toplar (işlenecek hazır kumaş; HAM metre — terbiyede çeker)
 // Üretimde = canlı WO'ların (PLANNED/IN_PROGRESS) hedef-spec başına
 //            in-flight malzemesi = committed − finished (computeWoMaterial).
 //            Renk-veren fason (beyaz→kırmızı) doğru spec'e yazılsın diye top
@@ -23,6 +23,9 @@ import { ACTIVE_LINE, MEASURED_LINE } from "./helpers/order-line-scope.helper";
 import { readIdCondition } from "../utils/query-parser";
 import { readEmanetEnabled } from "./system-setting.service";
 import { isConsignedRoll } from "./helpers/stock-ownership.helper";
+import { materialGapFinishedM, resolveLengthShrinkPct } from "./helpers/raw-need.helper";
+import { resolveFinishingRateCode } from "./helpers/finishing-rate-code.helper";
+import { ACTIVE_FINISHING_RATE } from "./helpers/cost-price-validity.helper";
 
 const LIVE_WO: WorkOrderStatus[] = [
   WorkOrderStatus.PLANNED,
@@ -30,6 +33,29 @@ const LIVE_WO: WorkOrderStatus[] = [
 ];
 
 const D0 = () => new Prisma.Decimal(0);
+
+/**
+ * Ürün başına boy çekmesi — iplik ihtiyacının `buildCostInput({ itemId })` çözümüyle aynı girdiler
+ * (yapı çekmesi → yapının tarifesi; varyant yok). Kumaş açığında ham stoğu mamul karşılığına çevirmek için.
+ */
+async function readItemShrinkPct(itemIds: string[]): Promise<Map<string, Prisma.Decimal | null>> {
+  const out = new Map<string, Prisma.Decimal | null>();
+  if (itemIds.length === 0) return out;
+  const structures = await prisma.costStructure.findMany({
+    where: { itemId: { in: itemIds } },
+    select: { itemId: true, lengthShrinkPct: true, finishingRateCode: true },
+  });
+  const codes = [...new Set(structures.map((s) => resolveFinishingRateCode(null, s.finishingRateCode)).filter((c): c is string => !!c))];
+  const rates = codes.length
+    ? await prisma.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: codes } }, select: { code: true, typicalShrinkPct: true } })
+    : [];
+  const rateShrink = new Map(rates.map((r) => [r.code, r.typicalShrinkPct]));
+  for (const s of structures) {
+    const code = resolveFinishingRateCode(null, s.finishingRateCode);
+    out.set(s.itemId, resolveLengthShrinkPct(s.lengthShrinkPct, code ? rateShrink.get(code) : null).value);
+  }
+  return out;
+}
 
 function specKey(
   itemId: string,
@@ -126,7 +152,7 @@ export interface BalanceGroup {
   ham: Prisma.Decimal;
   /** Sevksiz YARI MAMUL havuzu (dışarıdan boyalı/işlenmiş geldi). Arzdır. */
   yariMamul: Prisma.Decimal;
-  /** max(0, Σüretilecek − (ham + yariMamul)) → kumaş tedariki gereken kısım. */
+  /** MAMUL metre: max(0, Σüretilecek − yariMamul − ham × (1 − çekme)) (`materialGapFinishedM`) → kumaş tedariki. */
   malzemeAcigi: Prisma.Decimal;
   /**
    * Emanet kırılımı (F1) — `depo` / `ham` / `yariMamul`un müşteri malı kısmı; yalnız `emanet.enabled` açıkken.
@@ -440,6 +466,7 @@ export class ProductionBalanceService {
       grp.specs.push(row);
     }
 
+    const shrinkByItem = await readItemShrinkPct([...new Set([...groupMap.values()].map((g) => g.itemId))]);
     for (const grp of groupMap.values()) {
       // Ham havuzu: sevksiz STOCK, ürün+renk uyumlu, EN-AGNOSTİK (tek sayım).
       // Yalnız bu ürünün STOCK satırlarını gez (renk-joker mantığı korunur).
@@ -457,10 +484,13 @@ export class ProductionBalanceService {
       // et" diyen sahte bir açık üretirdi. Sektör karşılığı: SAP'de HALB ayrı
       // stok TÜRÜdür (ayrı raporlanır) ama MRP/ATP'de arza girer.
       // Ayrım burada değil, EKRANDA yaşar (iki ayrı kolon).
-      grp.malzemeAcigi = Prisma.Decimal.max(
-        0,
-        grp.uretilecek.minus(grp.ham.plus(grp.yariMamul)),
-      );
+      // I3: ham HAM metredir, üretilecek MAMUL → ham çekmeyle mamul karşılığına çevrilir (tek helper).
+      grp.malzemeAcigi = materialGapFinishedM({
+        toProduceM: grp.uretilecek,
+        rawStockM: grp.ham,
+        semiFinishedM: grp.yariMamul,
+        shrinkPct: shrinkByItem.get(grp.itemId) ?? null,
+      });
       // En alt-satırlarını en çok üretilecek olan üste.
       grp.specs.sort((a, b) => b.uretilecek.comparedTo(a.uretilecek));
     }

@@ -5,11 +5,12 @@
 // `resolveLengthShrinkPct` kurar; "mamul kaç ham metre" formülünü YALNIZ `rawMetersFromFinished`.
 //   §1 `typicalShrinkPct` okuyan her src dosyası ya beyanlı CRUD/doğrulama yüzeyidir ya da çözücüyü çağırır
 //   §2 çözücü dışında `lengthShrinkPct ?? … typicalShrinkPct` (ya da tersi) yedek zinciri kurulmaz
-//   §3 bilinen tüketiciler (maliyet girdisi, üretim önerisi, iplik ihtiyacı) tek kaynağı çağırır
+//   §3 bilinen tüketiciler (maliyet girdisi, üretim önerisi, iplik ihtiyacı, üretim dengesi I3) tek kaynağı çağırır
 //
 // NEGATİF SONDA — 2026-11-11 koşuldu (cp + geri alma):
 //   cost-assembler'da çözücü yerine `cs?.lengthShrinkPct ?? src.rates.get(…)?.typicalShrinkPct` → §1 + §2 ❌
 //   yarn-need'de `rawMetersFromFinished` yerine `d.meters` → §3 ❌
+//   (I3, 2026-11-12) production-balance'ta `materialGapFinishedM(` çağrısı kaldırılınca → §3 ❌
 // Koşum: npx tsx scripts/test_cekme_tek_kaynak.ts
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -64,9 +65,11 @@ const must: Array<[string, string]> = [
   ["src/services/helpers/production-proposal.helper.ts", "resolveLengthShrinkPct("],
   ["src/services/helpers/production-proposal.helper.ts", "rawMetersFromFinished("],
   ["src/services/reports/yarn-need.report.service.ts", "rawMetersFromFinished("],
+  ["src/services/production-balance.service.ts", "resolveLengthShrinkPct("],
+  ["src/services/production-balance.service.ts", "materialGapFinishedM("],
 ];
 const missing = must.filter(([rel, sym]) => !files.find((f) => f.rel === rel)?.text.includes(sym));
-check("§3 maliyet girdisi · üretim önerisi · iplik ihtiyacı tek kaynağı çağırır", missing.length === 0, missing.map(([r, s]) => `${r} → ${s}`).join(", "));
+check("§3 maliyet girdisi · üretim önerisi · iplik ihtiyacı · üretim dengesi (kumaş açığı) tek kaynağı çağırır", missing.length === 0, missing.map(([r, s]) => `${r} → ${s}`).join(", "));
 const resolver = files.find((f) => f.rel === RESOLVER)?.text ?? "";
 check("§3b çözücü dosyası iki tek kaynağı da dışa verir", /export function resolveLengthShrinkPct\(/.test(resolver) && /export function rawMetersFromFinished\(/.test(resolver));
 
