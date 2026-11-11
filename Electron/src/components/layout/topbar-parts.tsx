@@ -34,10 +34,10 @@ export function TopbarSearch({ onOpenCommand }: { onOpenCommand: () => void }) {
       type="button"
       onClick={onOpenCommand}
       aria-label="Hızlı arama"
-      className="app-no-drag flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-card-border bg-card text-sm text-muted-foreground shadow-soft transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-64 md:justify-start md:px-3 lg:w-72"
+      className="app-no-drag flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-card-border bg-card text-sm text-muted-foreground shadow-soft transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-64 md:justify-start md:px-3 lg:w-80 xl:w-96"
     >
       <Search className="h-4 w-4 shrink-0" />
-      <span className="hidden flex-1 text-left md:inline">Ara…</span>
+      <span className="hidden flex-1 truncate text-left md:inline">Ekran, kayıt ya da komut ara…</span>
       <kbd className="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold md:inline">
         Ctrl K
       </kbd>
@@ -54,7 +54,12 @@ export function TopbarActivityButton() {
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Etkinlik" onClick={() => navigateActive("/system/activity")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Etkinlik"
+            onClick={() => navigateActive("/system/activity")}
+          >
             <Activity className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
@@ -79,7 +84,7 @@ export function TopbarUserMenu() {
           data-plain
           className="ml-1 flex h-10 items-center gap-2.5 rounded-lg px-1.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary-soft-foreground">
+          <span className="nav-active-fill flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-2 ring-card">
             {initials(user?.username)}
           </span>
           <span className="hidden min-w-0 flex-col leading-tight lg:flex">

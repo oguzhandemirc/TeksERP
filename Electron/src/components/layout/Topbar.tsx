@@ -6,13 +6,11 @@ import { ChannelBadge } from "./ChannelBadge";
 import { SupportSessionBadge } from "./SupportSessionBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { ThemeToggle } from "./ThemeToggle";
-import { shellHeadingFor } from "./shell-heading";
 import { TopbarActivityButton, TopbarSearch, TopbarUserMenu } from "./topbar-parts";
 import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import { BildirimZili } from "./BildirimZili";
 import { MasaustuBildirimKoprusu } from "@/components/bildirim/MasaustuBildirimKoprusu";
-import { useTabsStore } from "@/store/tabs";
 
 interface Props {
   onToggleSidebar: () => void;
@@ -23,13 +21,12 @@ interface Props {
 }
 
 export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerOpen = false }: Props) {
-  const activePath = useTabsStore((s) => s.tabs?.find((t) => t.id === s.activeId)?.path);
-  const heading = shellHeadingFor(activePath);
-
   return (
     <header className="app-drag flex h-16 shrink-0 select-none items-center gap-2 bg-background pr-1 sm:gap-3 sm:pr-3">
       {/* Dar kabukta (menü çekmece) mac trafik ışıkları bu çubuğun solundadır → `topbar-leading` boşluğu. */}
-      <div className={`${narrow ? "topbar-leading " : ""}flex shrink-0 items-center pl-2 app-no-drag sm:pl-3`}>
+      <div
+        className={`${narrow ? "topbar-leading " : ""}flex shrink-0 items-center pl-2 app-no-drag sm:pl-3`}
+      >
         <Button
           variant="ghost"
           size="icon"
@@ -42,12 +39,8 @@ export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerO
         </Button>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-lg font-bold leading-tight tracking-tight">{heading.title}</div>
-        {heading.description ? (
-          <p className="hidden truncate text-xs text-muted-foreground md:block">{heading.description}</p>
-        ) : null}
-      </div>
+      {/* Sayfa başlığı içerikte (PageHeader) — burada tekrar yazılmaz; boşluk sürükleme şerididir. */}
+      <div className="min-w-0 flex-1" />
 
       <TopbarSearch onOpenCommand={onOpenCommand} />
 

@@ -1,4 +1,4 @@
-import { useRef, type WheelEvent } from "react";
+import { useEffect, useRef, type WheelEvent } from "react";
 import { X, Plus, CopyX } from "lucide-react";
 import { requestCloseTabs } from "./dirty-close-guard";
 import { useIsTabDirty } from "./dirty-tabs";
@@ -10,11 +10,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  horizontalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { useTabsStore, type TabItem } from "@/store/tabs";
@@ -31,9 +27,7 @@ export function TabStrip() {
   const reorder = useTabsStore((s) => s.reorder);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const ids = tabs.map((t) => t.id);
 
   const onDragEnd = (e: DragEndEvent) => {
@@ -43,6 +37,12 @@ export function TabStrip() {
 
   // Dikey fare tekerleğini yatay kaydırmaya çevir (taşma varsa) — gizli
   // scrollbar'a rağmen sekmeler arasında gezinmeyi sağlar.
+  // Taşan şeritte aktif sekme görünür alana kayar (kısayolla/menüden geçişte gözden kaybolmasın).
+  useEffect(() => {
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-tab-id="${activeId ?? ""}"]`);
+    el?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
     if (!el || el.scrollWidth <= el.clientWidth || e.deltaY === 0) return;
@@ -113,6 +113,8 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
     <TabContextMenu tabId={tab.id}>
       <div
         ref={setNodeRef}
+        data-tab-id={tab.id}
+        data-active={active ? "true" : undefined}
         style={{
           // Yalnız yatay sürükleme: dikey ekseni sıfırla (imleç yukarı/aşağı gitse de çip kaymaz).
           transform: CSS.Translate.toString(transform ? { ...transform, y: 0 } : transform),
@@ -127,9 +129,9 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
           }
         }}
         className={cn(
-          "group flex h-7 min-w-[100px] max-w-[200px] flex-1 items-center gap-1.5 rounded-md pl-2.5 pr-1.5 text-sm transition-colors touch-none",
+          "group relative flex h-8 min-w-[7.5rem] max-w-[13.5rem] shrink items-center gap-2 rounded-lg pl-2.5 pr-1.5 text-[13px] transition-colors touch-none",
           active
-            ? "bg-card font-semibold text-foreground shadow-soft ring-1 ring-card-border"
+            ? "bg-card font-semibold text-foreground shadow-soft ring-1 ring-card-border after:absolute after:inset-x-3 after:-bottom-[3px] after:h-0.5 after:rounded-full after:bg-primary"
             : "text-muted-foreground hover:bg-card/70 hover:text-foreground",
         )}
       >
@@ -140,11 +142,11 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
           {...listeners}
           className="flex min-w-0 flex-1 items-center gap-1.5"
         >
-          <Icon className="h-3.5 w-3.5 shrink-0" />
+          <Icon className={cn("h-4 w-4 shrink-0", active && "text-primary")} />
           <span className="truncate">{tab.title}</span>
           {dirty && <span className="sr-only"> (kaydedilmemiş değişiklik)</span>}
         </button>
-        <CloseButton title={tab.title} dirty={dirty} onClose={onClose} />
+        <CloseButton title={tab.title} dirty={dirty} active={active} onClose={onClose} />
       </div>
     </TabContextMenu>
   );
@@ -154,23 +156,24 @@ function TabChip({ tab, active, onSelect, onClose }: ChipProps) {
  * Kapat düğmesi; kirli sekmede (VS Code kalıbı) yerinde dolu nokta durur, üstüne gelince X'e döner.
  * Nokta her zaman görünür — çip aktif olmasa da kaydedilmemiş iş gözden kaçmasın.
  */
-function CloseButton({ title, dirty, onClose }: { title: string; dirty: boolean; onClose: () => void }) {
+function CloseButton(props: { title: string; dirty: boolean; active: boolean; onClose: () => void }) {
+  const { title, dirty, active, onClose } = props;
   return (
     <button
       type="button"
       onClick={onClose}
-      aria-label={dirty ? `${title} sekmesini kapat (kaydedilmemiş değişiklik var)` : `${title} sekmesini kapat`}
+      aria-label={
+        dirty ? `${title} sekmesini kapat (kaydedilmemiş değişiklik var)` : `${title} sekmesini kapat`
+      }
       title={dirty ? "Kaydedilmemiş değişiklik var" : undefined}
       data-dirty={dirty ? "" : undefined}
       className={cn(
-        "group/close relative flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-opacity hover:bg-accent hover:text-foreground",
-        dirty ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        "group/close relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100",
+        dirty || active ? "opacity-100" : "opacity-0 group-hover:opacity-100",
       )}
     >
-      {dirty && (
-        <span aria-hidden className="h-2 w-2 rounded-full bg-warning group-hover/close:hidden" />
-      )}
-      <X className={cn("h-3 w-3", dirty && "hidden group-hover/close:block")} />
+      {dirty && <span aria-hidden className="h-2 w-2 rounded-full bg-warning group-hover/close:hidden" />}
+      <X className={cn("h-3.5 w-3.5", dirty && "hidden group-hover/close:block")} />
     </button>
   );
 }

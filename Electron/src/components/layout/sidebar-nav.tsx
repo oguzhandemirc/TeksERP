@@ -1,15 +1,22 @@
 import { useState } from "react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NavGroup } from "./nav-config";
 import { CollapsedItem, SortableExpandedItem } from "./sidebar-items";
-import { CollapsedSectionItem, SectionNavItem } from "./sidebar-section";
+import { CollapsedSectionItem, OpenSectionCtx, SectionNavItem } from "./sidebar-section";
 
 // Menü gövdesi — grup başlıkları + satırlar. Kendiliğinden animasyon yok (giriş kademesi kaldırıldı).
 
-const GROUP_HEAD = "px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-muted";
+const GROUP_HEAD = "px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted";
 
 export function CollapsedNav({ groups }: { groups: NavGroup[] }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -37,7 +44,11 @@ export function CollapsedNav({ groups }: { groups: NavGroup[] }) {
           {(!group.collapsible || advancedOpen) && (
             <ul className="flex w-full flex-col items-center gap-1">
               {group.items.map((item) =>
-                item.children ? <CollapsedSectionItem key={item.to} item={item} /> : <CollapsedItem key={item.to} item={item} />,
+                item.children ? (
+                  <CollapsedSectionItem key={item.to} item={item} />
+                ) : (
+                  <CollapsedItem key={item.to} item={item} />
+                ),
               )}
             </ul>
           )}
@@ -54,12 +65,15 @@ export function ExpandedNav({
   groups: NavGroup[];
   onReorder: (groupLabel: string, order: string[]) => void;
 }) {
+  const [openSection, setOpenSection] = useState<string | null>(null);
   return (
-    <nav className="flex-1 overflow-y-auto px-3 py-3">
-      {groups.map((group) => (
-        <ExpandedGroup key={group.label} group={group} onReorder={onReorder} />
-      ))}
-    </nav>
+    <OpenSectionCtx.Provider value={{ open: openSection, setOpen: setOpenSection }}>
+      <nav className="flex-1 overflow-y-auto px-3 py-2">
+        {groups.map((group) => (
+          <ExpandedGroup key={group.label} group={group} onReorder={onReorder} />
+        ))}
+      </nav>
+    </OpenSectionCtx.Provider>
   );
 }
 
@@ -85,7 +99,7 @@ function ExpandedGroup({
   // K19 Gelişmiş grubu: başlık düğmedir, grup varsayılan KAPALI açılır.
   const [open, setOpen] = useState(!group.collapsible);
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       {group.collapsible ? (
         <button
           type="button"
@@ -97,7 +111,7 @@ function ExpandedGroup({
           {group.label}
         </button>
       ) : (
-        <p className={`mb-1.5 ${GROUP_HEAD}`}>{group.label}</p>
+        <p className={`mb-2 ${GROUP_HEAD}`}>{group.label}</p>
       )}
       {open && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

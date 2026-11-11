@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { createContext, useContext, useEffect, useState, type MouseEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabsStore, selectActivePath } from "@/store/tabs";
@@ -38,17 +38,22 @@ function ChildLink({ child, active, inPopover }: { child: NavChild; active: bool
           data-nav-child=""
           aria-current={active ? "page" : undefined}
           className={cn(
-            "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
+            "relative flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             child.offHint && "opacity-50",
             active
-              ? "bg-primary-soft font-semibold text-primary-soft-foreground"
+              ? cn(
+                  "bg-primary-soft font-semibold text-primary-soft-foreground",
+                  // Kılavuz çizgisi üstünde seçili işaret — kök + alt öğe birlikte okunur.
+                  !inPopover &&
+                    "before:absolute before:inset-y-1.5 before:-left-[13px] before:w-[3px] before:rounded-full before:bg-primary",
+                )
               : inPopover
                 ? "text-muted-foreground hover:bg-accent hover:text-foreground"
                 : "text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground",
           )}
         >
-          <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <Icon className="h-4 w-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{child.label}</span>
           {child.offHint ? <span className="text-[10px] font-normal">kapalı</span> : null}
         </button>
@@ -73,23 +78,49 @@ function ChildList(props: {
   );
 }
 
+/** Akordeon: genişletilmiş menüde aynı anda TEK bölüm açık (uzun alt listeler menüyü kaydırmasın). */
+export const OpenSectionCtx = createContext<{
+  open: string | null;
+  setOpen: (to: string | null) => void;
+} | null>(null);
+
+function useSectionOpen(item: NavItem, active: boolean) {
+  const shared = useContext(OpenSectionCtx);
+  const [local, setLocal] = useState(active);
+  const open = shared ? shared.open === item.to : local;
+  const setOpen = (v: boolean) => (shared ? shared.setOpen(v ? item.to : null) : setLocal(v));
+  // Bölüme (alt sayfa ya da kök kart sayfası) başka yoldan gelinince kendiliğinden açılır; kullanıcı kapatabilir.
+  useEffect(() => {
+    if (active) setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız etkinleşme anında
+  }, [active]);
+  return [open, setOpen] as const;
+}
+
 /** Genişletilmiş menüde bölüm kökü + açılır alt liste. */
 export function SectionNavItem({ item }: { item: NavItem }) {
   const target = useNavTarget(item);
   const { active, activeChild } = useSectionState(item);
-  const [open, setOpen] = useState(activeChild !== null);
-  // Alt sayfaya başka yoldan (palet, kart) gidilince bölüm kendiliğinden açılır; kullanıcı kapatabilir.
-  useEffect(() => {
-    if (activeChild) setOpen(true);
-  }, [activeChild]);
+  const [open, setOpen] = useSectionOpen(item, active);
+  // Kökün KENDİ sayfası seçiliyse dolu degrade; alt öğesi seçiliyse kök yalnız vurgulanır (tek dolu satır).
+  const selfActive = active && activeChild === null;
+  const parentActive = active && !selfActive;
   return (
     <div>
-      <div data-nav-active={active ? "true" : undefined} className={cn(navRowClass(active), "h-10 pr-1")}>
+      <div
+        data-nav-active={selfActive ? "true" : undefined}
+        data-nav-parent={parentActive ? "true" : undefined}
+        className={cn(
+          navRowClass(selfActive),
+          "h-10 pr-1",
+          parentActive && "bg-sidebar-accent font-semibold",
+        )}
+      >
         <NavContextMenu to={item.to} label={item.label} disabled={Boolean(item.offHint)}>
           <button
             type="button"
             {...target}
-            aria-current={active ? "page" : undefined}
+            aria-current={selfActive ? "page" : undefined}
             className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-lg pl-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
@@ -101,12 +132,12 @@ export function SectionNavItem({ item }: { item: NavItem }) {
           data-nav-toggle=""
           aria-expanded={open}
           aria-label={`${item.label} alt menüsü`}
-          onClick={() => setOpen((v) => !v)}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setOpen(!open)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-sidebar-accent hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronDown
             className={cn(
-              "h-4 w-4 transition-transform duration-150 motion-reduce:transition-none",
+              "h-4 w-4 transition-transform duration-200 motion-reduce:transition-none",
               !open && "-rotate-90",
             )}
             aria-hidden
@@ -117,7 +148,7 @@ export function SectionNavItem({ item }: { item: NavItem }) {
         <ChildList
           item={item}
           activeChild={activeChild}
-          className="ml-[1.3rem] mt-0.5 border-l border-sidebar-border pl-2.5"
+          className="mb-1 ml-[1.35rem] mt-1 border-l-2 border-sidebar-border pl-2.5"
         />
       ) : null}
     </div>

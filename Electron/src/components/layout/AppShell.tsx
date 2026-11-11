@@ -6,6 +6,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { ShellBanners } from "./ShellBanners";
 import { TabHost } from "./tabs";
+import { useHashDeepLink } from "./tabs/use-hash-deep-link";
 import { SurumNotlariDialog } from "./SurumNotlariDialog";
 import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
@@ -75,6 +76,8 @@ function MenuShell() {
     isScannerCapturing: isCapturing,
   });
   useTabShortcuts();
+  // Adres çubuğu / derin bağlantı hash'i → sekme (yoksa doğrudan gelen hep Anasayfa'da kalırdı).
+  useHashDeepLink();
   useServerHeartbeat();
   // Sunucu güncellemesinin planlı kesintisi (şerit + istek bekletme) — oturumdaki her kullanıcı.
   useOutagePolling(true);
@@ -91,7 +94,12 @@ function MenuShell() {
   return (
     // Düzen: tam boy sol menü | sağ sütun (üst çubuk → bantlar → sekmeler + içerik). Dar kabukta menü çekmecedir.
     <div className="app-bg relative flex h-screen w-screen overflow-hidden text-foreground">
-      <ShellSidebar narrow={narrow} collapsed={collapsed} drawerOpen={drawerOpen} onCloseDrawer={closeDrawer} />
+      <ShellSidebar
+        narrow={narrow}
+        collapsed={collapsed}
+        drawerOpen={drawerOpen}
+        onCloseDrawer={closeDrawer}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           onToggleSidebar={toggleSidebar}
@@ -104,11 +112,7 @@ function MenuShell() {
           <TabHost />
         </main>
       </div>
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        onShowHelp={() => setHelpOpen(true)}
-      />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onShowHelp={() => setHelpOpen(true)} />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <ScanResultOverlay />
       <SurumNotlariDialog kuruluSurum={kuruluSurum} />
