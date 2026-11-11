@@ -13,7 +13,7 @@ import { ReportBody } from "@/pages/Reports/_v2/ReportBody";
 import { ReportFailureState, ReportLoadingState } from "@/pages/Reports/_v2/ReportStates";
 import { failureOf, useReportV2 } from "@/pages/Reports/_v2/useReportV2";
 import { fmtDec } from "../shared/format";
-import { excludedText, missingText, sourceBadges, YARN_NEED_KEY, type YarnNeedMeta, type YarnNeedPresentation } from "./yarn-need-model";
+import { excludedText, missingText, rawBasisText, sourceBadges, YARN_NEED_KEY, type YarnNeedMeta, type YarnNeedPresentation } from "./yarn-need-model";
 
 const ENTRY = REPORT_BY_KEY.get(YARN_NEED_KEY)!;
 
@@ -51,7 +51,7 @@ export function YarnNeedPage() {
             <ReportFailureState failure={failure} error={query.error} onRetry={() => void query.refetch()} />
           ) : data ? (
             <>
-              {meta ? <MetaStrip meta={meta} /> : null}
+              {meta ? <MetaStrip meta={meta} basis={rawBasisText(meta, data?.detay?.ozet)} /> : null}
               <ReportBody presentation={data} fetchedAt={query.dataUpdatedAt} />
             </>
           ) : (
@@ -63,7 +63,7 @@ export function YarnNeedPage() {
   );
 }
 
-function MetaStrip({ meta }: { meta: YarnNeedMeta }) {
+function MetaStrip({ meta, basis }: { meta: YarnNeedMeta; basis: string | null }) {
   const [open, setOpen] = useState(false);
   const excluded = excludedText(meta);
   return (
@@ -81,6 +81,7 @@ function MetaStrip({ meta }: { meta: YarnNeedMeta }) {
           </li>
         ))}
       </ul>
+      {basis ? <p className="text-xs text-muted-foreground" data-testid="yarn-need-basis">{basis}</p> : null}
       {excluded ? (
         <div>
           <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>

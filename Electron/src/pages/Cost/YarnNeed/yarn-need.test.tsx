@@ -4,7 +4,7 @@ import { buildExportSpec } from "@/pages/Reports/_v2/export-spec";
 import { ReportTable } from "@/pages/Reports/_v2/ReportTable";
 import type { RaporSunumu, TabloBlok } from "@/pages/Reports/_v2/sunum";
 import { costTiles } from "../tile-config";
-import { excludedText, missingText, sourceBadges } from "./yarn-need-model";
+import { excludedText, missingText, rawBasisText, sourceBadges } from "./yarn-need-model";
 
 // Sunucu zarfının küçük kopyası: iplik modülü kapalı → stok hücresi sunucudan "bilinmiyor" gelir.
 const tablo: TabloBlok = {
@@ -50,5 +50,18 @@ describe("İplik İhtiyaç Planı (MAL-7)", () => {
     const t = costTiles.find((x) => x.key === "yarn-need")!;
     expect(t.to).toBe("/cost/yarn-need");
     expect(t.permissionAny).toEqual(["report:yarn-need"]);
+  });
+});
+
+describe("İplik İhtiyaç Planı — ham metre esası (K5)", () => {
+  it("HAM + sipariş metresi → ikisi ayrı yazılır, fire dahil", () => {
+    expect(rawBasisText({ metreEsasi: "HAM", dokumaFiresiPct: 2 }, { kumasMetre: "1133.8", siparisMetre: "1000.0" }))
+      .toBe("Kg'lar ham metreye göre: sipariş 1.000 m → dokunacak ham 1.134 m (çekme ve %2 dokuma firesi dahil).");
+  });
+  it("HAM, fire 0, sipariş metresi yok → yalnız esas cümlesi", () => {
+    expect(rawBasisText({ metreEsasi: "HAM", dokumaFiresiPct: 0 })).toBe("Kg'lar ham metreye göre hesaplanır (çekme dahil).");
+  });
+  it("eski backend (metreEsasi yok) → satır yok", () => {
+    expect(rawBasisText({}, { kumasMetre: "10", siparisMetre: "9" })).toBeNull();
   });
 });

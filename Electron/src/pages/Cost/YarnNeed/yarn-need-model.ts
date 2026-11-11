@@ -2,19 +2,44 @@
 // İstemci HESAP YAPMAZ: sayı, tablo ve "bilinmiyor" hücresi sunucudan (`yarn-need.sunum.ts`); burada yalnız etiket.
 import type { RaporSunumu } from "@/pages/Reports/_v2/sunum";
 import { MISSING_LABEL } from "../shared/labels";
+import { fmtDec, fmtDecFull } from "../shared/format";
 
 export const YARN_NEED_KEY = "maliyet/iplik-ihtiyaci";
 
 export interface YarnNeedMeta {
   netle: boolean;
   leventDus: boolean;
+  /** kg'ın çarpıldığı metre (K5): HAM = sipariş metresi çekme + dokuma firesiyle büyütülmüş; eski backend göndermez. */
+  metreEsasi?: "HAM";
+  /** Uygulanan dokuma firesi %; eski backend göndermez. */
+  dokumaFiresiPct?: number;
   yapisiEksik: Array<{ urunId: string; urunKodu: string; urun: string; kalemSayisi: number; metre: string; eksikler: string[] }>;
   olculemeyen: Array<{ urunId: string; urunKodu: string; urun: string; birim: string; kalemSayisi: number; miktar: string }>;
   kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean };
   hesapZamani: string;
 }
 
-export type YarnNeedPresentation = RaporSunumu & { detay?: { meta: YarnNeedMeta } };
+/** Özet metreleri (sunucu ondalık metni): dokunacak HAM metre ve aynı ürünlerin sipariş (mamul) metresi. */
+export interface YarnNeedSummaryMeters {
+  kumasMetre?: string;
+  siparisMetre?: string;
+}
+
+export type YarnNeedPresentation = RaporSunumu & { detay?: { meta: YarnNeedMeta; ozet?: YarnNeedSummaryMeters } };
+
+/**
+ * Metre esası açıklaması: kg'lar ham metreden; sipariş metresi geldiyse ikisi yan yana (karıştırılmasın).
+ * Eski backend (`metreEsasi` yok) → null, satır çizilmez.
+ */
+export function rawBasisText(meta: Pick<YarnNeedMeta, "metreEsasi" | "dokumaFiresiPct">, ozet?: YarnNeedSummaryMeters): string | null {
+  if (meta.metreEsasi !== "HAM") return null;
+  const firePct = meta.dokumaFiresiPct != null && meta.dokumaFiresiPct > 0 ? `%${fmtDecFull(meta.dokumaFiresiPct, 2)}` : null;
+  const dahil = firePct ? `çekme ve ${firePct} dokuma firesi dahil` : "çekme dahil";
+  if (ozet?.siparisMetre && ozet.kumasMetre) {
+    return `Kg'lar ham metreye göre: sipariş ${fmtDec(ozet.siparisMetre, 0)} m → dokunacak ham ${fmtDec(ozet.kumasMetre, 0)} m (${dahil}).`;
+  }
+  return `Kg'lar ham metreye göre hesaplanır (${dahil}).`;
+}
 
 /** Hesaba giren / girmeyen kaynak rozetleri — modül kapalıysa "bilinmiyor" diye AÇIKÇA söylenir. */
 export function sourceBadges(k: YarnNeedMeta["kaynaklar"]): Array<{ key: string; label: string; on: boolean }> {
