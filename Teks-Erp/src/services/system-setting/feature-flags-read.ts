@@ -6,17 +6,16 @@
 // dışa açık ad yalnız cepheden (`../system-setting.service`) okunur.
 // =============================================================================
 
-import { terimDokumaAyarla } from "../../constants/terim";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { ApiResponse } from "../../types/api.types";
 import prisma from "../../lib/prisma";
 import { readConsumableStockEnabled, readCostFinishingKgBasis, readCostPresentationCurrency, readCostProfitCategoryClasses, readCostProfitConsumablePriceSource, readCostProfitMachineTime, readCostProfitOverheadKey, readCostProfitSubcontractSource, readCostWeavingStandardMethod, readFinanceAllowZeroPriceLineEnabled, readFinanceAutoAllocateOnPaymentEnabled, readFinanceCariHoldEmanetShipment, readFinanceCariHoldReleaseBySamePerson, readFinanceFutureDatedDocumentBlockEnabled, readFinanceRiskLimitCurrencyMode, readFinanceYarnOutOnInvoiceEnabled, readGoodsReceiptRequirePriceEnabled, readGoodsReceiptYarnQualityHoldEnabled, readOrderProductionProposal, readProductionCancelReasonRequired, readPurchaseBlockOverReceiptEnabled, readYarnBlockNegativeBalanceEnabled } from "./cost-purchase";
 import { readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readTrustedDeviceDays, readWebTotpPolicy } from "./device-auth";
 import { readCompanyLegalIdentity, readCompanyLetterhead, readDocumentsConfig, readEIrsaliyeConfig } from "./documents";
+import { applyTermRegime, settingMapClient } from "./feature-flags-read-helpers";
 import { withLicenseBlock, type CachedFeatureFlags, type FeatureFlags } from "./feature-flags-types";
 import { readFinanceAutoDraftFromShipmentEnabled, readFinanceBlockNegativeCashEnabled, readFinanceCariHoldDefaultScope, readFinanceChequeNoteMovementEnabled, readFinanceDefaultVatRate, readFinanceEnabledRaw, readFinanceExpenseAllocationClosedWorkOrder, readFinanceExpenseAllocationField, readFinanceExpenseCategorySuggestions, readFinanceInvoiceMatchTolerance, readFinanceInvoicePriceTolerancePct, readFinanceInvoiceQtyTolerancePct, readFinanceKursunGramPriceBasis, readFinanceRiskLimitBlockEnabled, readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceServiceBillingBrodeUnit, readFinanceServiceBillingStepWorks, readFinanceServiceBillingWeavingWorks, readFinanceServiceBillingEnabled, readFinanceServiceBillingMeterBasis, readFinanceServiceBillingMissingMeter, readFinanceServiceBillingPriceDate, readFinanceServiceBillingTrigger, readFinanceWithholdingDenominator, readFinanceWithholdingEnabled, readFinanceWithholdingNumerator, readFinancePurchaseWithholdingDenominator, readFinancePurchaseWithholdingEnabled, readFinancePurchaseWithholdingNumerator, readPricingEnabled } from "./finance";
 import { publicTimezoneWarning, readCompanyName, readFactoryTimezonePeriods } from "./general";
-import { SETTING_KEYS } from "./keys";
 import { readBatchAutoCreateEnabled, readBatchLastNumberHintEnabled, readBatchShortNumberEnabled, readKursunBypassEnabled, readKursunMachineAssignMode, readKursunMeterCapture, readKursunMeterStockMode, readKursunMeterVarianceApproval, readKursunMeterVarianceBasis, readKursunMeterVarianceThresholdM, readKursunMeterVarianceThresholdPct, readKursunSimulatedMeterEnabled, readProductionRouteMode, readProductionScanRouteStations, readQualityGradeRequiredEnabled, readScanCustomerCodeLookupEnabled } from "./kursun-batch";
 import { readDefaultLabelMedia, readDocumentDesignerEnabled, readDocumentPublishSodEnabled, readLabelCopies, readLabelCopiesSource, readLabelCustomerCodeAt, readLabelCustomerCodeMissing, readLabelNativeSendEnabled, readMobileRasterEnabled, readNotificationInboxEnabled, readPatronBulutOlayGudumluEnabled, readScrapGradeLabelEnabled } from "./labels";
 import { readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readReportsV2Enabled, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
@@ -54,13 +53,6 @@ export function invalidateFeatureFlagsCache(): void {
   cacheGeneration++;
 }
 
-/** K20: iş emri adı rejimi (`TERIM.terbiyeIsEmri`) etkin dokumadan — üretim ∧ dokuma ∧ lisans tavanı açık. */
-function applyTermRegime(flags: FeatureFlags): FeatureFlags {
-  const licenseClosed = flags.license?.kapaliModuller?.some((m) => m.anahtar === SETTING_KEYS.DOKUMA_ENABLED) ?? false;
-  terimDokumaAyarla(flags.productionEnabled && flags.dokumaEnabled && !licenseClosed);
-  return flags;
-}
-
 // Her tablet isteğinde okunur: kısa TTL'li önbellek; bayrak yazımı (invalidateFeatureFlagsCache)
 // kuşağı artırınca anında tazelenir. Okunamazsa bayat değer; hiç dolmadıysa fail-closed (true).
 let deviceProofCache: { value: boolean; at: number; gen: number } | null = null;
@@ -94,12 +86,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     // DB yerine map olur (system_settings tablosu küçük → tüm satırları çekmek ucuz).
     const rows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const valueByKey = new Map(rows.map((r) => [r.key, r.value] as const));
-    const cacheClient = {
-      systemSetting: {
-        findUnique: (args: { where: { key: string } }) =>
-          Promise.resolve(valueByKey.has(args.where.key) ? { value: valueByKey.get(args.where.key) } : null),
-      },
-    } as unknown as Pick<typeof prisma, "systemSetting">;
+    const cacheClient = settingMapClient(valueByKey);
 
     // Oturum ömrü tek kaynaktan (dakika); saat alanı geriye-uyum için aynı değerden türetilir.
     const sessionMinutes = await readSessionDurationMinutes(cacheClient);
