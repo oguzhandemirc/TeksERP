@@ -26,7 +26,8 @@ const COLUMNS: ColumnDef<Row>[] = [
   { accessorKey: "name", header: "Ad" },
   { accessorKey: "qty", header: "Metre", meta: { align: "right" } },
 ];
-const ROWS: Row[] = [{ id: "1", name: "ÖRNEK PERDE TOPTAN LTD. ŞTİ. (İSTANBUL)", qty: 1500 }];
+const NAME = "ÖRNEK PERDE TOPTAN LTD. ŞTİ. (İSTANBUL)";
+const ROWS: Row[] = [{ id: "1", name: NAME, qty: 1500 }];
 
 let lastSizing: ColumnSizingState = {};
 function Harness({ initial = {} }: { initial?: ColumnSizingState }) {
@@ -48,7 +49,7 @@ const clipOf = (text: string) => screen.getByText(text).closest<HTMLElement>("[d
 describe("DataTable — tek satır hücre", () => {
   it("her gövde hücresi kesen kutuda (truncate); sayısal sütun sağa + tabular-nums", () => {
     renderWithProviders(<Harness />);
-    const clip = clipOf(ROWS[0].name);
+    const clip = clipOf(NAME);
     expect(clip).toHaveClass("truncate");
     expect(clip.dataset.cellClip).toBe("name");
     expect(clip.style.maxWidth).toContain(`var(${widthVar("name")}`);
@@ -57,12 +58,12 @@ describe("DataTable — tek satır hücre", () => {
 
   it("taşan kutuya üzerine gelince tam metin title olur; taşma bitince kalkar", () => {
     renderWithProviders(<Harness />);
-    const clip = clipOf(ROWS[0].name);
+    const clip = clipOf(NAME);
     Object.defineProperty(clip, "scrollWidth", { configurable: true, value: 400 });
     Object.defineProperty(clip, "clientWidth", { configurable: true, value: 120 });
-    Object.defineProperty(clip, "innerText", { configurable: true, value: ROWS[0].name });
+    Object.defineProperty(clip, "innerText", { configurable: true, value: NAME });
     fireEvent.mouseOver(clip);
-    expect(clip.title).toBe(ROWS[0].name);
+    expect(clip.title).toBe(NAME);
     Object.defineProperty(clip, "scrollWidth", { configurable: true, value: 100 });
     fireEvent.mouseOver(clip);
     expect(clip.hasAttribute("title")).toBe(false);

@@ -20,10 +20,12 @@ export function moveColumn<T>(table: Table<T>, columnId: string, step: -1 | 1): 
   const visible = new Set(table.getVisibleLeafColumns().map((c) => c.id));
   const from = order.indexOf(columnId);
   let to = from + step;
-  while (to >= 0 && to < order.length && !visible.has(order[to])) to += step;
-  if (from < 0 || to < 0 || to >= order.length) return;
+  while (to >= 0 && to < order.length && !visible.has(order[to] ?? "")) to += step;
+  const target = order[to];
+  if (from < 0 || target === undefined) return;
   const next = [...order];
-  [next[from], next[to]] = [next[to], next[from]];
+  next[to] = columnId;
+  next[from] = target;
   table.setColumnOrder(next);
 }
 

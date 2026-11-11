@@ -511,8 +511,10 @@
 }
 
 /* ── VERİ TABLOSU (ortak DataTable `.data-grid`) — sütunlar arası çok ince dikey ayraç (kutu gölgesi:
-   çökmüş kenarlık sticky başlıkta kayardı). Son sütun ve tek hücreli (colSpan) satırlar çizgisiz. */
-.data-grid :is(th, td):not(:last-child) {
+   çökmüş kenarlık sticky başlıkta kayardı). Son sütun ve tek hücreli (colSpan) satırlar çizgisiz.
+   ListBody'de elle çizilen listeler de aynı ayracı alır (genişlik/sıra özellikleri yalnız DataTable'da). */
+.data-grid :is(th, td):not(:last-child),
+[data-list-body] table:not(.data-grid) :is(th, td):not(:last-child) {
   box-shadow: inset -1px 0 0 var(--table-col-line);
 }
 .data-grid[data-resizing] { cursor: col-resize; user-select: none; }
