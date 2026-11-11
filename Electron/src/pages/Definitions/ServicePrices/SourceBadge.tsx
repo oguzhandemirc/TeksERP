@@ -8,7 +8,7 @@ export function SourceBadge({ source, formula }: { source: ServicePriceSource; f
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-badge border px-1.5 py-0.5 text-[11px] font-medium",
         b.className,
       )}
       title={formula ? `${b.hint} — ${formula}` : b.hint}

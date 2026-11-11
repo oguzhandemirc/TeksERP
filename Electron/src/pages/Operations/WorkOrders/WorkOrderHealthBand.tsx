@@ -30,7 +30,7 @@ function Chip({
       ? "border-destructive/40 bg-destructive/10 text-destructive"
       : "border-warning/40 bg-warning/10 text-warning";
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", cls)}>
+    <span className={cn("inline-flex items-center gap-1 rounded-badge border px-2 py-0.5 text-[11px] font-medium", cls)}>
       <Icon className="h-3 w-3" />
       {children}
     </span>

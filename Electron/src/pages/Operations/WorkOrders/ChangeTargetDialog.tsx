@@ -451,7 +451,7 @@ export function ChangeTargetDialog({
                   {allEditableIds.length > 0 && (
                     <button
                       type="button"
-                      className="rounded border px-2 py-0.5 text-[11px] hover:bg-accent"
+                      className="rounded-badge border px-2 py-0.5 text-[11px] hover:bg-accent"
                       onClick={toggleAll}
                     >
                       {allSelected ? "Temizle" : "Tümünü seç"}

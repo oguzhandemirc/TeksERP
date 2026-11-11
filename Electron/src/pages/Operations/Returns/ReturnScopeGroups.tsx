@@ -66,7 +66,7 @@ function GroupCard({
         <span className="text-xs text-muted-foreground">
           {g.customer?.name ?? "—"}{g.branch ? ` · ${g.branch.name}` : ""}
         </span>
-        <span className="ml-auto rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
+        <span className="ml-auto rounded-badge bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
           {chosen.length}/{total} top · {DEC.format(meters)} m
         </span>
       </div>

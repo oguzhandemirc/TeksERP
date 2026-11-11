@@ -12,7 +12,7 @@ import type { NotificationItem } from "@/lib/bildirim/types";
 function StatusCell({ b }: { b: NotificationItem }) {
   if (b.cozulduAn)
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-badge bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
         <CircleCheck className="h-3 w-3" aria-hidden /> Çözüldü
       </span>
     );

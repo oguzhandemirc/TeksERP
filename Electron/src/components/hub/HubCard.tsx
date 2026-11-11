@@ -99,7 +99,7 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
                 {offHint ? <span className="text-[11px] text-muted-foreground">kapalı</span> : null}
                 {badge ? (
                   <span
-                    className="rounded-full bg-warning px-1.5 py-0.5 text-[11px] font-semibold leading-none text-warning-foreground tabular-nums"
+                    className="rounded-badge bg-warning px-1.5 py-0.5 text-[11px] font-semibold leading-none text-warning-foreground tabular-nums"
                     aria-label={badgeLabel ?? `${badge} bekleyen`}
                     title={badgeLabel}
                   >

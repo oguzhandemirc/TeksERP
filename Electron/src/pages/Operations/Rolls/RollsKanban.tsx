@@ -255,7 +255,7 @@ function QueueCard({ card }: { card: ProductionFlowQueueCard }) {
           {card.openRollCount} top · {card.totalCurrentQty.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 })} m
         </span>
         {card.isUrgent && (
-          <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+          <span className="shrink-0 rounded-badge bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
             Acil
           </span>
         )}

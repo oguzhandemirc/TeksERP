@@ -24,7 +24,7 @@ export function NoteWorkOrdersCell({ workOrders }: { workOrders: NoteWorkOrderRe
           type="button"
           data-testid="note-wo-chip"
           title="Sol tık: bu sekmede · Shift/Ctrl+tık: yeni sekmede"
-          className="whitespace-nowrap rounded border border-primary/30 px-1.5 py-0.5 font-mono text-xs text-primary hover:bg-primary/10"
+          className="whitespace-nowrap rounded-badge border border-primary/30 px-1.5 py-0.5 font-mono text-xs text-primary hover:bg-primary/10"
           onClick={(e) => open(w.id, e)}
           onAuxClick={(e) => {
             if (e.button !== 1) return;

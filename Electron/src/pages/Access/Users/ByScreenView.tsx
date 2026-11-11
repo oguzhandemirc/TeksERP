@@ -302,7 +302,7 @@ function Row({
                 {/* Ortak yetki uyarısı — yetkiyi çoğaltmamanın bedeli görünür olsun. */}
                 {others > 0 && (
                   <span
-                    className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-muted px-1 py-px text-[10px] text-muted-foreground"
+                    className="ml-1.5 inline-flex items-center gap-0.5 rounded-badge bg-muted px-1 py-px text-[10px] text-muted-foreground"
                     title={screensUsing(screens, code)
                       .map((s) => s.title)
                       .join(" · ")}

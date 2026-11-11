@@ -250,7 +250,7 @@ function LineCard({
         {/* Sipariş no + müşteri + kaldır */}
         <div className="flex items-start justify-between gap-1.5">
           <div className="min-w-0">
-            <span className="inline-block rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary">
+            <span className="inline-block rounded-badge bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary">
               {line.orderNumber}
             </span>
             <div className="mt-1 truncate text-xs font-semibold text-foreground">
@@ -310,7 +310,7 @@ function LineCard({
         {(line.orderDeadline || line.requiredProperties.length > 0) && (
           <div className="flex flex-wrap items-center gap-1">
             {line.orderDeadline && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+              <span className="inline-flex items-center gap-1 rounded-badge bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">
                 <CalendarClock className="h-2.5 w-2.5" />
                 {calendarLocaleDateString(line.orderDeadline, "tr-TR")}
               </span>

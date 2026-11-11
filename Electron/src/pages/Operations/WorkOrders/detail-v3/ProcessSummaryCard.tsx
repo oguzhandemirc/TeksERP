@@ -91,7 +91,7 @@ export function ProcessSummaryCard({ scope, editableTarget = false }: Props) {
                 )}
               >
                 <span className="min-w-[6rem] font-semibold">{r.valueName}</span>
-                <span className="rounded border border-current/30 px-1.5 py-0.5 text-xs opacity-80">{SOURCE_LABEL[r.source]}</span>
+                <span className="rounded-badge border border-current/30 px-1.5 py-0.5 text-xs opacity-80">{SOURCE_LABEL[r.source]}</span>
                 {r.deviatesFromTarget && <span className="text-xs font-medium">Hedeften farklı</span>}
                 <span className="ml-auto tabular-nums">
                   {r.rollCount} top · {formatNumber(r.meters, 0)} m

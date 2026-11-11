@@ -192,7 +192,7 @@ function DocRow({ doc, onClick }: { doc: WorkOrderDocument; onClick: () => void 
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{doc.title}</span>
           {doc.cancelled && (
-            <span className="rounded border border-destructive/40 px-1 py-px text-[10px] font-semibold uppercase text-destructive">
+            <span className="rounded-badge border border-destructive/40 px-1 py-px text-[10px] font-semibold uppercase text-destructive">
               İptal
             </span>
           )}

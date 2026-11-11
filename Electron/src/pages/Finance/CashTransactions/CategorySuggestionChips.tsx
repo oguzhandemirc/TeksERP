@@ -15,7 +15,7 @@ export function CategorySuggestionChips({ active, value, onPick }: { active: boo
   return (
     <div className="mt-1.5 flex flex-wrap gap-1" aria-label="Kategori önerileri">
       {chips.map((c) => (
-        <button key={c} type="button" className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => onPick(c)}>
+        <button key={c} type="button" className="rounded-badge border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => onPick(c)}>
           {c}
         </button>
       ))}

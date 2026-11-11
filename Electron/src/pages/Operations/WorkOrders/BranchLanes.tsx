@@ -472,13 +472,13 @@ function BatchLaneCard({
                 expanded && "rotate-180",
               )}
             />
-            <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+            <span className="inline-flex shrink-0 items-center rounded-badge bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary">
               {ordinal}. Parti
             </span>
             <span className="shrink-0 font-mono text-sm font-medium">{batch.batchNumber}</span>
             {batch.mergedInto && (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                className="inline-flex shrink-0 items-center gap-1 rounded-badge border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
                 title="Bu parti birleştirmeyle kapandı — topları ve sevkleri hedef partide (K17 tarihçe satırı)"
               >
                 <GitMerge className="h-3 w-3" /> → {batch.mergedInto.batchNumber} altına birleşti
@@ -486,7 +486,7 @@ function BatchLaneCard({
             )}
             {atFason && (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
+                className="inline-flex shrink-0 items-center gap-1 rounded-badge border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
                 title="Mal şu an bir fason firmasında (henüz dönmedi)"
               >
                 <Truck className="h-3 w-3" /> Fasonda
@@ -494,7 +494,7 @@ function BatchLaneCard({
             )}
             {batch.awaitingFasonDispatch && (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/50 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+                className="inline-flex shrink-0 items-center gap-1 rounded-badge border border-amber-400/50 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
                 title="Toplar fason adımında üretimde ama sevk edilmemiş"
               >
                 <Truck className="h-3 w-3" /> Fasona sevk bekliyor
@@ -868,7 +868,7 @@ function DispatchRow({
     <tr className={cn(cancelled && "opacity-60")}>
       <td className="whitespace-nowrap px-2 py-1 font-mono">{dispatch.dispatchNo}</td>
       <td className="px-2 py-1">
-        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", meta.cls)}>
+        <span className={cn("rounded-badge border px-2 py-0.5 text-[10px] font-medium", meta.cls)}>
           {meta.label}
         </span>
       </td>
@@ -950,7 +950,7 @@ function KapanisCell({ dispatch }: { dispatch: BatchLaneDispatch }) {
     return (
       <span
         title={title}
-        className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
+        className="inline-flex items-center gap-1 whitespace-nowrap rounded-badge border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
       >
         ✓ Kapandı
       </span>
@@ -1013,7 +1013,7 @@ function WorkOrderSplitChildRow({ child }: { child: WorkOrderSplitChild }) {
         <span className="font-mono font-medium text-foreground">{child.workOrderNumber}</span>
       </span>
       {child.targetColor && (
-        <span className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+        <span className="flex items-center gap-1 rounded-badge border px-2 py-0.5 text-[11px]">
           {child.targetColor.hex && (
             <span
               className="h-2 w-2 rounded-full border"

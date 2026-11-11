@@ -82,6 +82,8 @@
   --radius-lg: calc(var(--radius-control) + 2px);
   --radius-xl: var(--radius-card);
   --radius-2xl: calc(var(--radius-card) + 4px);
+  /* Rozet/etiket/durum hapı köşesi — TEK belirteç, köşe tercihine bağlı (`rounded-badge`). */
+  --radius-badge: var(--badge-radius);
 
   --shadow-soft: var(--shadow-soft);
   --shadow-card: var(--shadow-card);
@@ -176,6 +178,7 @@
     --cell-py: 0.6875rem;
     --head-h: 2.5rem;
     --page-gutter: 1rem;
+    --badge-radius: 9999px;
     --app-font: "Inter Variable", "Inter";
     /* Tablo sütun ayracı — kenarlık renginin düşük opaklığı; zor fark edilir. */
     --table-col-line: hsl(var(--border) / 0.55);
@@ -391,9 +394,9 @@
   }
 
   /* ── KÖŞE / YOĞUNLUK / YAZI BOYUTU ── */
-  [data-radius="large"] { --radius-control: 0.625rem; --radius-card: 1rem; }
-  [data-radius="small"] { --radius-control: 0.375rem; --radius-card: 0.5rem; }
-  [data-radius="medium"] { --radius-control: 0.5rem; --radius-card: 0.75rem; }
+  [data-radius="large"] { --radius-control: 0.625rem; --radius-card: 1rem; --badge-radius: 9999px; }
+  [data-radius="small"] { --radius-control: 0.375rem; --radius-card: 0.5rem; --badge-radius: 0.25rem; }
+  [data-radius="medium"] { --radius-control: 0.5rem; --radius-card: 0.75rem; --badge-radius: 0.375rem; }
   [data-density="compact"] { --cell-py: 0.6875rem; --head-h: 2.5rem; }
   [data-density="comfortable"] { --cell-py: 1rem; --head-h: 2.75rem; }
   html[data-font="small"] { font-size: 14px; }

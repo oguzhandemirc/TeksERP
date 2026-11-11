@@ -115,7 +115,7 @@ export function SackRow({
         </span>
         {hint && <span className="min-w-0 truncate text-xs text-muted-foreground">{hint}</span>}
         {isFiltering && (
-          <span className="ml-auto shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
+          <span className="ml-auto shrink-0 rounded-badge bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
             {rolls.length} eşleşen
           </span>
         )}

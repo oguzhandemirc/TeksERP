@@ -145,7 +145,7 @@ export function GoodsReceiptsPage() {
                           <span className="flex items-center gap-1.5">
                             {sup.name}
                             {sup.kind === "SUBCONTRACTOR" && (
-                              <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                              <span className="rounded-badge bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
                                 {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
                               </span>
                             )}

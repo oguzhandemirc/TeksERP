@@ -142,7 +142,7 @@ export function PermissionsCatalogPage() {
                   {atanmamis.map((p) => (
                     <code
                       key={p.id}
-                      className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px] text-amber-800 dark:text-amber-300"
+                      className="rounded-badge bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px] text-amber-800 dark:text-amber-300"
                       title={p.description ?? undefined}
                     >
                       {p.code}

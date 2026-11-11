@@ -314,7 +314,7 @@ export function WorkOrderCancelDialog({
                           key={p}
                           type="button"
                           onClick={() => setReason(p)}
-                          className="rounded border px-1.5 py-0.5 text-[11px] hover:bg-muted"
+                          className="rounded-badge border px-1.5 py-0.5 text-[11px] hover:bg-muted"
                         >
                           {p}
                         </button>

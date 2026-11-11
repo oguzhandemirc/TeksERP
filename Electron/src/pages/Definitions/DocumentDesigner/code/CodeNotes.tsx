@@ -37,7 +37,7 @@ export function CodeNotes({ notes }: { notes: readonly CodeNote[] }) {
           )}
         </div>
         {!open && notes.length > 1 && (
-          <span className="shrink-0 self-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground" data-testid="kod-notlari-fazla">
+          <span className="shrink-0 self-center rounded-badge bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground" data-testid="kod-notlari-fazla">
             +{notes.length - 1}
           </span>
         )}
