@@ -20,6 +20,8 @@ import { isSharedBeamLayer, layerHasOwnBeam } from "../helpers/warp-layer-beam.h
 import { rawMetersFromFinished } from "../helpers/raw-need.helper";
 import { resolveDokumaWeavingWastePct } from "../system-setting.service";
 import type { YarnWasteSource } from "../helpers/yarn-waste.helper";
+import type { YarnNeedOptions, YarnNeedReport, YarnNeedRow } from "./yarn-need.types";
+export type { YarnNeedOptions, YarnNeedReport, YarnNeedRow, YarnNeedSummary } from "./yarn-need.types";
 
 type Dec = Prisma.Decimal;
 const D0 = (): Dec => new Prisma.Decimal(0);
@@ -27,80 +29,6 @@ const kg = (v: Dec): string => v.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP
 const m1 = (v: Dec): string => v.toDecimalPlaces(1, Prisma.Decimal.ROUND_HALF_UP).toFixed(1);
 const maxD = (a: Dec, b: Dec): Dec => (a.gt(b) ? a : b);
 const minD = (a: Dec, b: Dec): Dec => (a.lt(b) ? a : b);
-
-export interface YarnNeedOptions {
-  /** true (varsayılan): talep − depo − üretimde (üretim dengesi); false: brüt kalan (istenen − sevk). */
-  netle?: boolean;
-  /** true (varsayılan): devere açıksa hazır leventlerin kalanı çözgü ihtiyacından düşülür. */
-  leventDus?: boolean;
-  musteriId?: string;
-  urunId?: string;
-}
-
-export interface YarnNeedRow {
-  iplikId: string;
-  iplikKodu: string;
-  iplik: string;
-  cozguKg: string;
-  atkiKg: string;
-  ihtiyacKg: string;
-  serbestStokKg: string | null;
-  emanetKg: string | null;
-  acikAlisKg: string | null;
-  eksikKg: string;
-  eksikBelirsiz: boolean;
-  /** SY-3 I2: kg'a uygulanan firenin kaynağı — `IPLIK` iplik kartı firesi, `KART` çözgü/atkı fire zinciri. */
-  fireKaynagi: YarnWasteSource;
-  /** SY-3 I1 (YALNIZ ayar açıkken anahtar var): açık kendi dokuma işlerinin kalan ham metresine ayrılan kg. */
-  ayrilanKg?: string;
-  /** SY-3 I1: serbest stok − ayrılan (eksiye inebilir = ayrılan stoğu aşıyor); stok bilinmiyorsa null. Eksik buna göre. */
-  serbestKg?: string | null;
-}
-
-export interface YarnNeedSummary {
-  iplikSayisi: number;
-  cozguKg: string;
-  atkiKg: string;
-  ihtiyacKg: string;
-  eksikKg: string;
-  /** Dokunacak HAM kumaş metresi (yapısı tam ürünler; çekme + dokuma firesiyle; hazır levent düşümünden ÖNCE). */
-  kumasMetre: string;
-  /** Aynı ürünlerin sipariş (mamul) metresi — ham metreye çevrilmeden önce. */
-  siparisMetre: string;
-  /** SY-3 I1 (yalnız ayar açıkken): Σ ayrılan kg. */
-  ayrilanKg?: string;
-}
-
-export interface YarnNeedReport {
-  satirlar: YarnNeedRow[];
-  ozet: YarnNeedSummary;
-  meta: {
-    netle: boolean;
-    leventDus: boolean;
-    /** kg'ın çarpıldığı metre: HAM (sipariş metresi ÷ (1 − çekme) ÷ (1 − dokuma firesi)). */
-    metreEsasi: "HAM";
-    /** Uygulanan dokuma firesi % (etkin ayar; dokuma kapalıyken 0). */
-    dokumaFiresiPct: number;
-    yapisiEksik: Array<{ urunId: string; urunKodu: string; urun: string; kalemSayisi: number; metre: string; eksikler: string[] }>;
-    olculemeyen: Array<{ urunId: string; urunKodu: string; urun: string; birim: string; kalemSayisi: number; miktar: string }>;
-    leventler: Array<{ cozguKartiId: string; leventSayisi: number; kalanCozguM: string; dusulenKumasM: string }>;
-    kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean };
-    hesapZamani: string;
-    /** Süzgeç seçenekleri: talebi olan müşteriler ve ürünler (süzme sunucuda). */
-    secenekler: { musteriler: Array<{ id: string; ad: string }>; urunler: Array<{ id: string; ad: string }> };
-    /**
-     * SY-3 I1 (yalnız ayar açıkken anahtar var). Açıkken `cozguKg/atkiKg/ihtiyacKg` PLANLANMAMIŞ talebin kg'ıdır:
-     * ürünün talep ham metresinden açık işlerin kalan ham metresi düşülür (`talepNetlendi`; müşteri süzgecinde düşülmez).
-     */
-    ayirma?: {
-      isSayisi: number;
-      yapisiEksikIsler: Array<{ isId: string; isNo: string; eksikler: string[] }>;
-      talepNetlendi: boolean;
-      /** Talepten düşülen ham metre (Σ ürün başına min(talep ham, işlerin kalanı)). */
-      netlenenKumasM: string;
-    };
-  };
-}
 
 /** Açık sipariş durumu — üretim dengesiyle aynı küme (KG/ADET listesi için). */
 const OPEN_ORDER = { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } };
