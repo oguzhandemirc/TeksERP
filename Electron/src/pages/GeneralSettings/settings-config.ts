@@ -1659,7 +1659,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
-        // H4: OFFICE seçeneği — çıkış yüzeyi Operasyon › Metre Sapmaları ekranı.
+        // H4: OFFICE seçeneği — çıkış yüzeyi Üretim › Metre Sapmaları ekranı.
         enumKey: "kursunMeterVarianceApproval",
         title: "Metre farkı eşiği aşınca kim onaylasın",
         summary: "Çıkış metresi girişten eşikten fazla saparsa ne olsun.",
@@ -1671,7 +1671,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "NONE", label: "Onaysız, işaretle (bugünkü)", hint: "Fark yalnız işaretlenir; akış durmaz." },
           { value: "OPERATOR_REASON", label: "Operatör sebep seçsin", hint: "Sebep seçilmeden çıkış kaydedilmez. Tablette sebep seçici gerekir — tablet güncellemesi gelmeden açmayın." },
           { value: "SUPERVISOR_PIN", label: "Süpervizör PIN'i", hint: "Onaylanmadan adım kapanmaz; makine durmaz. Tablette PIN penceresi gerekir — tablet güncellemesi gelmeden açmayın." },
-          { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Operasyon › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
+          { value: "OFFICE", label: "Ofis onayı", hint: "Okuma yazılır, makine durmaz; ofis Üretim › Metre Sapmaları ekranında onaylar. Onaylanmadan adım kapanmaz." },
         ],
       },
       {

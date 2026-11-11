@@ -62,7 +62,7 @@ export function ShipmentDetailHeader({
                 <Badge
                   variant="outline"
                   className="gap-0.5 border-amber-400/60 text-[10px] text-amber-700 dark:text-amber-400"
-                  title="Bu metraj sipariş defterine işlenmedi — sipariş 'Açık' kalır. Operasyon → Siparişe Yazılamayanlar ekranından onarılabilir."
+                  title="Bu metraj sipariş defterine işlenmedi — sipariş 'Açık' kalır. Satış → Siparişe Yazılamayanlar ekranından onarılabilir."
                 >
                   <AlertTriangle className="h-3 w-3" /> Deftere yazılmayan{" "}
                   {Math.round(d.defterBoslugu)} m
