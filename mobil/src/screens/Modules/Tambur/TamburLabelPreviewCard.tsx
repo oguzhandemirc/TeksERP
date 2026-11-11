@@ -24,8 +24,6 @@ export interface TamburLabelPreviewCardProps {
   stale: boolean;
   fallbackRows: PaperRow[];
   ctx: PreviewEditContext;
-  /** Etiket kimin için (müşteri / Stok / sahip). */
-  forWhom: string;
   /** Seçilebilir şablonlar; null = eski backend → "Şablon Değiştir" eski işini (etiket bilgisi penceresi) yapar. */
   templateOffer: TemplateOffer | null;
   /** Seçicide işaretli şablon (seçim ya da varsayılan). */
@@ -99,7 +97,7 @@ export default function TamburLabelPreviewCard(p: TamburLabelPreviewCardProps) {
       <View style={s.head}>
         <Text style={s.title}>Etiket önizlemesi</Text>
         <TruncatedText style={s.meta}>
-          {[p.preview?.templateName, `kimin için: ${p.forWhom}`].filter(Boolean).join(' · ')}
+          {p.preview?.templateName ?? ''}
         </TruncatedText>
         <View style={{ flex: 1 }} />
         <TemplateChange offer={p.templateOffer} selectedId={p.selectedTemplateId} onPick={p.onPickTemplate} onOpenInfo={p.onOpenInfo} />

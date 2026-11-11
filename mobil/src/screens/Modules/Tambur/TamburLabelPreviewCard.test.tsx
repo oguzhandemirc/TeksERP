@@ -46,7 +46,6 @@ function props(over: Partial<TamburLabelPreviewCardProps> = {}): TamburLabelPrev
     stale: false,
     fallbackRows: [],
     ctx: { owner: false, batchEnabled: false, manualLength: true },
-    forWhom: 'GAHAHA',
     templateOffer: null,
     selectedTemplateId: null,
     onPickTemplate: jest.fn(),

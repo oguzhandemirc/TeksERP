@@ -3449,7 +3449,6 @@ export default function TamburScreen() {
           stale: livePreview.stale,
           fallbackRows: (openCard.card.rows ?? []).map((r) => ({ key: r.key, text: `${r.label}: ${r.value}`, muted: r.muted })),
           ctx: { owner: !!owner, batchEnabled: openFinal.batch.enabled, manualLength: cutMode === 'manual' },
-          forWhom: owner ? (openCard.card.consignee?.text ?? owner.name) : customerName,
           templateOffer,
           selectedTemplateId: shownTemplateId(templateChoice.state, templateOffer),
           onPickTemplate: (id) => {
