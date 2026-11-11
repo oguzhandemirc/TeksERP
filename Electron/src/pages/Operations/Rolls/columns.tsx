@@ -156,6 +156,10 @@ export const customerBatchOf = (r: Pick<Roll, "labelBatchNo" | "customerBatchNo"
   r.labelBatchNo?.trim() || r.customerBatchNo?.trim() || null;
 
 /** SEÇİM tipli özellikte DEĞER de yazılır (RollDetailSheet ile aynı kural) — hücre + dışa aktarım. */
+/** "PANOS · MAVİ"; biri boşsa yalnız diğeri; ikisi de boşsa null. */
+export const labelNameOf = (r: Pick<Roll, "labelItemName" | "labelColorName">): string | null =>
+  [r.labelItemName, r.labelColorName].map((v) => v?.trim()).filter(Boolean).join(" · ") || null;
+
 const rollPropertyText = (p: NonNullable<Roll["properties"]>[number]): string =>
   p.value ? `${p.property.name}: ${p.value.name}` : p.property.name;
 
@@ -198,6 +202,16 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       ) : (
         <span className="text-muted-foreground text-xs">—</span>
       ),
+  },
+  {
+    // Etikete basılan ad/renk (tambur operatörünün yazdığı) — kumaş kartı adından farklı olabilir.
+    id: "labelName",
+    header: "Etiketteki ad",
+    meta: { label: "Etiketteki ad", exportValue: (r) => labelNameOf(r) ?? "" },
+    cell: ({ row }) => {
+      const v = labelNameOf(row.original);
+      return v ? <span className="text-xs">{v}</span> : <span className="text-muted-foreground text-xs">—</span>;
+    },
   },
   {
     id: "properties",
