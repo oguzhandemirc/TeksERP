@@ -3,13 +3,12 @@ import { flexRender, type ColumnDef, type Row, type Table as TanstackTable } fro
 import { toast } from "sonner";
 import {
   DndContext,
-  closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   AlertOctagon,
   Copy,
@@ -39,7 +38,7 @@ import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { DataTablePagination } from "./DataTablePagination";
 import { SortableHead, alignClass } from "./DataTableHead";
 import { clipStyle, handleClipHover, tableWidthVars } from "./column-layout";
-import { currentOrder } from "./column-arrange";
+import { columnCollision, currentOrder, reorderColumns } from "./column-arrange";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 
 // Satır açılışı bu kadar geciktirilir; bu süre içinde 2. tık gelirse (çift-tık)
@@ -133,12 +132,9 @@ export function DataTable<T>({
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const current = currentOrder(table);
-    const oldIndex = current.indexOf(active.id as string);
-    const newIndex = current.indexOf(over.id as string);
-    if (oldIndex < 0 || newIndex < 0) return;
-    table.setColumnOrder(arrayMove(current, oldIndex, newIndex));
+    if (!over) return;
+    const next = reorderColumns(currentOrder(table), String(active.id), String(over.id));
+    if (next) table.setColumnOrder(next);
   };
 
   const colCount = table.getAllColumns().length + (selectable ? 1 : 0);
@@ -168,7 +164,7 @@ export function DataTable<T>({
   return (
     <div data-list-surface="table" className="flex min-h-0 flex-1 flex-col">
       <div ref={rootRef} className="flex-1 overflow-auto" onMouseOver={handleClipHover}>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={columnCollision} onDragEnd={handleDragEnd}>
           {/* containerClassName="overflow-visible": Table'ın kendi overflow-auto
               sarmalayıcısı sticky başlığı yutuyordu (thead dış scroll kabına değil
               iç sarmalayıcıya yapışıp dikeyde kayıyordu). overflow-visible ile
