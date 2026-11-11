@@ -12,14 +12,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { IconTileTone } from "@/components/ui/icon-tile";
+import type { RouteTarget } from "@/hooks/useRouteAccess";
 import { TERIM } from "@/lib/terim";
 import type { PanoHareket } from "./types";
 
-export interface PanoTarget {
-  to: string;
-  /** Bunlardan HERHANGİ biri (route'un `requirePermission`/`requireAnyPermission` listesi). */
-  izin: readonly string[];
-}
+/** Pano hedefi = ortak yol hedefi (`useRouteAccess`). */
+export type PanoTarget = RouteTarget;
 
 const FASON_KOKPITI: PanoTarget = { to: "/operations/fason-kokpiti", izin: ["subcontractor:read", "workorder:read"] };
 
@@ -84,9 +82,3 @@ export const HIZLI_EYLEMLER: readonly HizliEylem[] = [
   { key: "rolls", label: "Kumaş stoğu", icon: PackageOpen, tone: "violet", to: "/operations/rolls", izin: ["roll:read"] },
   { key: "fason", label: "Fason kokpiti", icon: Send, tone: "amber", ...FASON_KOKPITI },
 ];
-
-/** Adresin yol kısmı (modül/rapor kapısı sorgu dizesine bakmaz). */
-export function yolunu(to: string): string {
-  const i = to.indexOf("?");
-  return i < 0 ? to : to.slice(0, i);
-}
