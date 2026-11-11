@@ -6,6 +6,7 @@ import { IconTile } from "@/components/ui/icon-tile";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { NavChild, NavItem } from "./nav-config";
 import { navRowClass, navTone, useNavTarget } from "./sidebar-items";
+import { NavContextMenu } from "./sidebar-context-menu";
 
 // T5 bölüm kökü (Satış · Üretim · Depo · Sevkiyat): kökün kendisi bölüm kart sayfasını açar, yanındaki
 // ok alt listeyi menüde açar/kapatır; daraltılmış menüde alt liste yana açılan panelde (flyout) gelir.
@@ -30,31 +31,38 @@ function ChildLink({ child, active, inPopover }: { child: NavChild; active: bool
   const Icon = child.icon;
   return (
     <li>
-      <button
-        type="button"
-        {...target}
-        data-nav-child=""
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          child.offHint && "opacity-50",
-          active
-            ? "bg-primary-soft font-semibold text-primary-soft-foreground"
-            : inPopover
-              ? "text-muted-foreground hover:bg-accent hover:text-foreground"
-              : "text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground",
-        )}
-      >
-        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0 flex-1 truncate">{child.label}</span>
-        {child.offHint ? <span className="text-[10px] font-normal">kapalı</span> : null}
-      </button>
+      <NavContextMenu to={child.to} label={child.label} disabled={Boolean(child.offHint)}>
+        <button
+          type="button"
+          {...target}
+          data-nav-child=""
+          aria-current={active ? "page" : undefined}
+          className={cn(
+            "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            child.offHint && "opacity-50",
+            active
+              ? "bg-primary-soft font-semibold text-primary-soft-foreground"
+              : inPopover
+                ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                : "text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground",
+          )}
+        >
+          <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{child.label}</span>
+          {child.offHint ? <span className="text-[10px] font-normal">kapalı</span> : null}
+        </button>
+      </NavContextMenu>
     </li>
   );
 }
 
-function ChildList(props: { item: NavItem; activeChild: string | null; className?: string; inPopover?: boolean }) {
+function ChildList(props: {
+  item: NavItem;
+  activeChild: string | null;
+  className?: string;
+  inPopover?: boolean;
+}) {
   const { item, activeChild, className, inPopover } = props;
   return (
     <ul className={cn("space-y-0.5", className)}>
@@ -77,15 +85,17 @@ export function SectionNavItem({ item }: { item: NavItem }) {
   return (
     <div>
       <div data-nav-active={active ? "true" : undefined} className={cn(navRowClass(active), "h-10 pr-1")}>
-        <button
-          type="button"
-          {...target}
-          aria-current={active ? "page" : undefined}
-          className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-lg pl-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
-          <span className="flex-1 truncate">{item.label}</span>
-        </button>
+        <NavContextMenu to={item.to} label={item.label} disabled={Boolean(item.offHint)}>
+          <button
+            type="button"
+            {...target}
+            aria-current={active ? "page" : undefined}
+            className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-lg pl-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
+            <span className="flex-1 truncate">{item.label}</span>
+          </button>
+        </NavContextMenu>
         <button
           type="button"
           data-nav-toggle=""
@@ -95,12 +105,21 @@ export function SectionNavItem({ item }: { item: NavItem }) {
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronDown
-            className={cn("h-4 w-4 transition-transform duration-150 motion-reduce:transition-none", !open && "-rotate-90")}
+            className={cn(
+              "h-4 w-4 transition-transform duration-150 motion-reduce:transition-none",
+              !open && "-rotate-90",
+            )}
             aria-hidden
           />
         </button>
       </div>
-      {open ? <ChildList item={item} activeChild={activeChild} className="ml-[1.3rem] mt-0.5 border-l border-sidebar-border pl-2.5" /> : null}
+      {open ? (
+        <ChildList
+          item={item}
+          activeChild={activeChild}
+          className="ml-[1.3rem] mt-0.5 border-l border-sidebar-border pl-2.5"
+        />
+      ) : null}
     </div>
   );
 }

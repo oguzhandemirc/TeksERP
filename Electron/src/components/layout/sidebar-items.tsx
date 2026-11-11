@@ -8,11 +8,13 @@ import type { NavItem } from "./nav-config";
 import { IconTile, toneForKey } from "@/components/ui/icon-tile";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { NavContextMenu } from "./sidebar-context-menu";
 
 /** UX-2 K3: kapalı modül satırı gezinmez; tıkta "kapalı — <ayar yolu>" der (HubCard ile aynı davranış). */
 export function useNavTarget(item: Pick<NavItem, "to" | "offHint">) {
-  const target = useTabTarget(item.to);
+  const { onContextMenu: _bgTab, ...target } = useTabTarget(item.to);
   const hint = item.offHint;
+  // Sağ tık menüde arka plan sekmesi açmaz → bağlam menüsü (`NavContextMenu`); orta/Ctrl+tık yeni sekme kalır.
   return hint ? { onClick: () => toast.info(hint), title: hint, "aria-disabled": true as const } : target;
 }
 
@@ -27,10 +29,7 @@ export function useSidebarActive(to: string): boolean {
   const hasMoreSpecificMatch =
     isPrefixActive &&
     allPaths.some(
-      (p) =>
-        p !== to &&
-        p.startsWith(to + "/") &&
-        (activePath === p || activePath?.startsWith(p + "/")),
+      (p) => p !== to && p.startsWith(to + "/") && (activePath === p || activePath?.startsWith(p + "/")),
     );
   return activePath === to || (isPrefixActive && !hasMoreSpecificMatch);
 }
@@ -62,20 +61,22 @@ export function NavItemLink({ item, active: activeProp }: { item: NavItem; activ
   const selfActive = useSidebarActive(item.to);
   const isActive = activeProp ?? selfActive;
   return (
-    <button
-      type="button"
-      {...target}
-      data-nav-active={isActive ? "true" : undefined}
-      aria-current={isActive ? "page" : undefined}
-      className={cn(navRowClass(isActive, Boolean(item.offHint)), "h-10 gap-3 px-1.5")}
-    >
-      <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
-      <span className="flex-1 truncate text-left">{item.label}</span>
-      <span className="ml-auto flex items-center gap-1.5 pr-1">
-        {item.offHint ? <span className="text-[10px] font-normal">kapalı</span> : null}
-        {item.badge ? <SidebarBadge value={item.badge} /> : null}
-      </span>
-    </button>
+    <NavContextMenu to={item.to} label={item.label} disabled={Boolean(item.offHint)}>
+      <button
+        type="button"
+        {...target}
+        data-nav-active={isActive ? "true" : undefined}
+        aria-current={isActive ? "page" : undefined}
+        className={cn(navRowClass(isActive, Boolean(item.offHint)), "h-10 gap-3 px-1.5")}
+      >
+        <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
+        <span className="flex-1 truncate text-left">{item.label}</span>
+        <span className="ml-auto flex items-center gap-1.5 pr-1">
+          {item.offHint ? <span className="text-[10px] font-normal">kapalı</span> : null}
+          {item.badge ? <SidebarBadge value={item.badge} /> : null}
+        </span>
+      </button>
+    </NavContextMenu>
   );
 }
 
@@ -86,21 +87,23 @@ export function CollapsedItem({ item }: { item: NavItem }) {
   return (
     <li className="flex w-full justify-center">
       <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            {...target}
-            aria-label={item.label}
-            data-nav-active={isActive ? "true" : undefined}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(navRowClass(isActive, Boolean(item.offHint)), "h-11 w-11 justify-center")}
-          >
-            <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
-            {item.badge ? (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary ring-2 ring-sidebar" />
-            ) : null}
-          </button>
-        </TooltipTrigger>
+        <NavContextMenu to={item.to} label={item.label} disabled={Boolean(item.offHint)}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              {...target}
+              aria-label={item.label}
+              data-nav-active={isActive ? "true" : undefined}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(navRowClass(isActive, Boolean(item.offHint)), "h-11 w-11 justify-center")}
+            >
+              <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
+              {item.badge ? (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary ring-2 ring-sidebar" />
+              ) : null}
+            </button>
+          </TooltipTrigger>
+        </NavContextMenu>
         <TooltipContent side="right" sideOffset={8}>
           {item.offHint ? `${item.label} · ${item.offHint}` : item.label}
         </TooltipContent>
