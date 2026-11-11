@@ -48,31 +48,29 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
       {open && (
         <div className="space-y-1.5 rounded-lg border border-card-border bg-muted/30 p-2.5" data-testid="proposal-insights-detail">
           {yarns.length > 0 && (
-            <table className="w-full text-xs">
-              <thead className="text-muted-foreground">
-                <tr>
-                  <th className="text-left font-normal">İplik</th>
-                  <th className="text-right font-normal">Gereken</th>
-                  {reserved && <th className="text-right font-normal" title={`Açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan metresi için ayrılan (tesis geneli)`}>Ayrılan</th>}
-                  {reserved && <th className="text-right font-normal" title="Serbest stok − ayrılan">Serbest</th>}
-                  <th className="text-right font-normal">Eksik</th>
-                </tr>
-              </thead>
-              <tbody>
-                {yarns.map((y) => (
-                  <tr key={y.yarnItemId}>
-                    <td>
-                      <span className="font-mono">{y.code}</span> {y.name}
-                      {y.wasteSource === "IPLIK" && <span className="ml-1 text-muted-foreground" title="Bu iplik kartına girilen fire yüzdesiyle hesaplandı">(iplik firesi)</span>}
-                    </td>
-                    <td className="text-right tabular-nums">{formatKg(y.needKg)}</td>
-                    {reserved && <td className="text-right tabular-nums">{y.reservedKg ? formatKg(y.reservedKg) : "—"}</td>}
-                    {reserved && <td className={y.freeKg != null && y.freeKg < 0 ? "text-right tabular-nums text-warning" : "text-right tabular-nums"}>{y.freeKg == null ? "bilinmiyor" : formatKg(y.freeKg)}</td>}
-                    <td className="text-right tabular-nums">{y.shortKg == null ? "bilinmiyor" : y.shortKg > 0 ? formatKg(y.shortKg) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul className="space-y-0.5" aria-label="İplik ihtiyacı">
+              {yarns.map((y) => (
+                <li key={y.yarnItemId} className="flex flex-wrap gap-x-2">
+                  <span>
+                    <span className="font-mono">{y.code}</span> {y.name}
+                    {y.wasteSource === "IPLIK" && <span className="ml-1 text-muted-foreground" title="Bu iplik kartına girilen fire yüzdesiyle hesaplandı">(iplik firesi)</span>}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    gereken {formatKg(y.needKg)}
+                    {reserved && (
+                      <span title={`Açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan metresi için ayrılan (tesis geneli)`}> · ayrılan {y.reservedKg ? formatKg(y.reservedKg) : "yok"}</span>
+                    )}
+                    {reserved && (
+                      <span title="Serbest stok − ayrılan">
+                        {" "}
+                        · serbest <span className={y.freeKg != null && y.freeKg < 0 ? "text-warning" : ""}>{y.freeKg == null ? "bilinmiyor" : formatKg(y.freeKg)}</span>
+                      </span>
+                    )}{" "}
+                    · eksik {y.shortKg == null ? "bilinmiyor" : y.shortKg > 0 ? formatKg(y.shortKg) : "yok"}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
           {w.yarnSummary && !w.yarnSummary.sources.stock && <p className="text-muted-foreground">Stok bilinmiyor (iplik modülü kapalı); eksik hesaplanmadı.</p>}
           {d && <p className="text-muted-foreground">Süre hesabı: {durationInputsText(d, machineCode)}</p>}

@@ -1,4 +1,4 @@
-// SY-3: öneri ayrıntısındaki iplik tablosu — iplik firesi notu (I2) ve ayrılan/serbest sütunları (I1) yalnız alan yanıttaysa.
+// SY-3: öneri ayrıntısındaki iplik listesi — iplik firesi notu (I2) ve ayrılan/serbest sütunları (I1) yalnız alan yanıttaysa.
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ProposalInsights } from "./ProposalInsights";
@@ -23,18 +23,22 @@ describe("ProposalInsights — SY-3", () => {
     expect(detail.textContent?.match(/\(iplik firesi\)/g)).toHaveLength(1);
   });
 
-  it("I1: Ayrılan/Serbest sütunları yalnız yanıtta reservedKg varken; serbest null → 'bilinmiyor', eksi → uyarı rengi", () => {
+  it("I1: ayrılan/serbest yalnız yanıtta reservedKg varken; serbest null → 'bilinmiyor', eksi → uyarı rengi", () => {
     const detail = openDetail(group([row({ reservedKg: 120, freeKg: -20.5 }), row({ yarnItemId: "y2", code: "IP-75D", reservedKg: 0, freeKg: null })]));
-    const heads = Array.from(detail.querySelectorAll("th")).map((t) => t.textContent);
-    expect(heads).toEqual(["İplik", "Gereken", "Ayrılan", "Serbest", "Eksik"]);
+    expect(detail.querySelector("table")).toBeNull();
+    const items = Array.from(detail.querySelectorAll("li")).map((li) => li.textContent);
+    expect(items[0]).toMatch(/gereken .* · ayrılan 120 kg · serbest -20,5 kg · eksik yok/);
+    expect(items[1]).toMatch(/ayrılan yok · serbest bilinmiyor/);
     expect(detail).toHaveTextContent("120 kg");
     expect(detail).toHaveTextContent("bilinmiyor");
     expect(screen.getByText(/-20,5 kg/).className).toContain("text-warning");
   });
 
-  it("I1 kapalı (anahtar yok): sütunlar çizilmez — bugünkü tablo", () => {
+  it("I1 kapalı (anahtar yok): ayrılan/serbest yazılmaz — yalnız gereken + eksik", () => {
     const detail = openDetail(group([row()]));
-    expect(Array.from(detail.querySelectorAll("th")).map((t) => t.textContent)).toEqual(["İplik", "Gereken", "Eksik"]);
+    const text = detail.querySelector("li")?.textContent ?? "";
+    expect(text).toMatch(/gereken .* · eksik yok/);
+    expect(text).not.toMatch(/ayrılan|serbest/);
   });
 });
 
