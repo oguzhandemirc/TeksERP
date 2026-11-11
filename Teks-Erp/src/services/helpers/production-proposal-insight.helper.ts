@@ -13,9 +13,10 @@ import { LOOM_TIERS, suggestLoomsForDrafts, type LoomTier } from "./loom-suggest
 import { theoreticalMPerHourDecimal } from "./dokuma-levent-rapor.helper";
 import { buildCostInput, loadCostSourcesTx } from "./cost-assembler.helper";
 import { yarnUsagePerM } from "./fabric-cost.helper";
-import { readOpenPurchase, readReadyBeams, readYarnStock } from "./maliyet-bridge.helper";
+import { readOpenPurchase, readReadyBeams, readYarnReservation, readYarnStock } from "./maliyet-bridge.helper";
 import { readyWarpSpecIds, yarnKgByYarn, yarnShortKg, type ReadyItem } from "../reports/yarn-need.report.service";
 import { readMaliyetEnabled } from "../system-setting.service";
+import type { YarnWasteSource } from "./yarn-waste.helper";
 
 type Dec = Prisma.Decimal;
 const round3 = (d: Dec): number => d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP).toNumber();
@@ -48,8 +49,14 @@ export interface YarnSummaryRow {
   name: string;
   /** Bu grubun ham metresi için gereken kg (çözgü + atkı, hazır levent düşülmüş). */
   needKg: number;
-  /** max(0, gereken − serbest stok − açık alış); iplik modülü kapalıysa null (bilinmiyor). */
+  /** max(0, gereken − serbest stok − açık alış); iplik modülü kapalıysa null (bilinmiyor). Ayırma açıkken serbest = `freeKg`. */
   shortKg: number | null;
+  /** SY-3 I1 (YALNIZ ayar açıkken anahtar var): açık dokuma işlerine ayrılan kg (tesis geneli). */
+  reservedKg?: number;
+  /** SY-3 I1: serbest stok − ayrılan (eksiye inebilir); stok bilinmiyorsa null. */
+  freeKg?: number | null;
+  /** SY-3 I2: `IPLIK` iplik kartı firesi, `KART` çözgü/atkı fire zinciri. */
+  wasteSource: YarnWasteSource;
 }
 
 export interface YarnSummary {
@@ -111,7 +118,7 @@ async function loomSummaries(groups: WeavingProposal[], constructions: GroupCons
  * İplik özetleri. "Eksik" iplik ihtiyaç raporunun satır formülüdür (`yarnShortKg`), ama ihtiyaç YALNIZ bu grubun ham
  * metresidir ve stok/alış/hazır levent bu gruba ayrılmış sayılır (diğer açık talep düşülmez) — toplam tablo raporda.
  */
-async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, YarnSummary | null>> {
+export async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, YarnSummary | null>> {
   const out = new Map<string, YarnSummary | null>();
   const measured = groups.filter((g) => g.plannedM != null);
   if (measured.length === 0 || !(await readMaliyetEnabled())) return out;
@@ -128,7 +135,12 @@ async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, Yar
     ready.set(g.key, { d: { itemId: g.itemId, lineCount: g.orderLines.length, meters: rawM }, code: item.code, input, usage, rawM });
   }
   if (ready.size === 0) return out;
-  const beams = await readReadyBeams(readyWarpSpecIds([...ready.values()]));
+  // SY-3 I1: kapalıyken null, sorgu yok; açıkken hazır levent önce açık işlere gider, öneri kalanı görür.
+  const reservation = await readYarnReservation({ leventDus: true });
+  const physicalBeams = await readReadyBeams(readyWarpSpecIds([...ready.values()]));
+  const beams = physicalBeams && reservation?.beamsAfter
+    ? new Map([...physicalBeams].map(([id, b]) => [id, reservation.beamsAfter!.get(id) ?? b]))
+    : physicalBeams;
   const perGroup = new Map([...ready].map(([key, r]) => [key, yarnKgByYarn([r], beams).perYarn]));
   const yarnIds = [...new Set([...perGroup.values()].flatMap((m) => [...m.keys()]))].sort();
   const stock = await readYarnStock(yarnIds);
@@ -138,9 +150,13 @@ async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, Yar
     let total = new Prisma.Decimal(0);
     const yarns = [...perYarn].map(([id, a]) => {
       const need = a.warp.plus(a.weft);
-      const short = stock ? yarnShortKg(need, stock.byItem.get(id)?.serbestKg ?? new Prisma.Decimal(0), purchase?.get(id) ?? null) : null;
+      const stockKg = stock ? (stock.byItem.get(id)?.serbestKg ?? new Prisma.Decimal(0)) : null;
+      const reservedKg = reservation?.reservedKg.get(id)?.kg ?? new Prisma.Decimal(0);
+      const freeKg = stockKg ? stockKg.minus(reservedKg) : null;
+      const short = stockKg ? yarnShortKg(need, reservation ? freeKg : stockKg, purchase?.get(id) ?? null) : null;
       if (short) total = total.plus(short);
-      return { yarnItemId: id, code: names.get(id)?.code ?? "", name: names.get(id)?.name ?? "", needKg: round3(need), shortKg: short ? round3(short) : null, short };
+      const res = reservation ? { reservedKg: round3(reservedKg), freeKg: freeKg ? round3(freeKg) : null } : {};
+      return { yarnItemId: id, code: names.get(id)?.code ?? "", name: names.get(id)?.name ?? "", needKg: round3(need), shortKg: short ? round3(short) : null, wasteSource: a.wasteSource, ...res, short };
     });
     yarns.sort((x, y) => (y.short ? y.short.comparedTo(x.short ?? 0) : 0) || x.code.localeCompare(y.code, "tr"));
     out.set(key, {
@@ -149,6 +165,19 @@ async function yarnSummaries(groups: WeavingProposal[]): Promise<Map<string, Yar
       totalShortKg: stock ? round3(total) : null,
       sources: { stock: stock !== null, openPurchase: purchase !== null, readyBeams: beams !== null },
     });
+  }
+  return out;
+}
+
+/** SY-3 I1: ayrılan miktar yüzünden eksik doğan iplikler için `ApiResponse.warnings` metinleri (ayar kapalıyken boş). */
+export function yarnReservationWarnings(groups: Array<{ itemName?: string; yarnSummary?: YarnSummary | null }>): string[] {
+  const out: string[] = [];
+  for (const g of groups) {
+    for (const y of g.yarnSummary?.yarns ?? []) {
+      if (y.reservedKg !== undefined && y.reservedKg > 0 && (y.shortKg ?? 0) > 0) {
+        out.push(`${g.itemName ? g.itemName + ": " : ""}${y.code || y.name} ipliğinin ${y.reservedKg} kg'ı açık dokuma işlerine ayrılmış; serbest miktar yetmiyor (eksik ${y.shortKg} kg).`);
+      }
+    }
   }
   return out;
 }

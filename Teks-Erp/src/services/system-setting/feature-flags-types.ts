@@ -220,6 +220,8 @@ export interface FeatureFlags {
   dokumaRollBirth: DokumaRollBirth;
   /** Dokuma firesi % (0 = bugünkü davranış); üretim önerisi ve iplik ihtiyacı ham metresine girer. */
   dokumaWeavingWastePct: number;
+  /** SY-3 I1: iplik ayırma görünürlüğü (HAM; etkin değer `resolveDokumaYarnReservationEnabled`). */
+  dokumaYarnReservationEnabled: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */

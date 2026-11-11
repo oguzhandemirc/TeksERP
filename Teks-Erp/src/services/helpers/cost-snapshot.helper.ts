@@ -18,7 +18,8 @@ const sourceEnum = z.enum(["KART", "YAPI", "PARAMETRE", "OLCULMUS", "ELLE"]);
 const currencyEnum = z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]);
 const sourced = z.object({ value: dec.nullable(), source: sourceEnum, flag: z.enum(COST_WARNING_CODES).optional() }).strict();
 const price = z.object({ amount: dec, currency: currencyEnum, source: sourceEnum, flag: z.enum(COST_WARNING_CODES).optional() }).strict();
-const yarn = z.object({ yarnItemId: z.string().nullable(), name: z.string(), denier: sourced, price: price.nullable() }).strict();
+// SY-3 I2: `wastePct` (iplik kartı firesi) yalnız doluyken yazılır; eski fotoğraflar anahtarsız aynen okunur.
+const yarn = z.object({ yarnItemId: z.string().nullable(), name: z.string(), denier: sourced, price: price.nullable(), wastePct: dec.optional() }).strict();
 
 // SY-E1: `kgBase` yalnız KG tabanında yazılır; eski fotoğraflar (anahtarsız) aynen okunur.
 const rate = z
@@ -91,7 +92,8 @@ export function serializeCostInput(input: CostInput): CostInputSnapshot {
   return costInputSnapshotSchema.parse(toJsonValue(input));
 }
 
-const DEC_KEYS = new Set(["value", "amount", "amountTry"]);
+// `wastePct` yalnız iplikte METİNdir (çözgü/atkı `wastePct`i nesne — dize kontrolü ayırır).
+const DEC_KEYS = new Set(["value", "amount", "amountTry", "wastePct"]);
 function toInputValue(v: unknown, key = ""): unknown {
   if (typeof v === "string" && DEC_KEYS.has(key)) return new Prisma.Decimal(v);
   if (Array.isArray(v)) return v.map((x) => toInputValue(x));

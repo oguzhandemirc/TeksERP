@@ -837,6 +837,12 @@ export async function setFeatureFlags(
       }
       await this.set(SETTING_KEYS.DOKUMA_RUN_WEAVING_ORDER_REQUIRED, input.dokumaRunWeavingOrderRequired, "Dokuma: tezgah koşumu dokuma iş emrine bağlı açılır", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaYarnReservationEnabled")) {
+      if (typeof input.dokumaYarnReservationEnabled !== "boolean") {
+        throw AppError.badRequest("dokumaYarnReservationEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED, input.dokumaYarnReservationEnabled, "Dokuma: açık dokuma işlerinin kalan ipliği ayrılmış sayılır (görünürlük, engellemez)", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
       if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {
         throw AppError.badRequest("dokumaOrderLineLinkRequired boolean olmalı");

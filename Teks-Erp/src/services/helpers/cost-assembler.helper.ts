@@ -76,6 +76,8 @@ export interface CostSources {
   warpLayers?: Map<string, CostWarpLayerRow[]>;
   /** F2: varyant → (atkı sırası → iplik); yalnız değişimi olan varyantlar (yoksa desen geneli, bayt-aynı). */
   weftOverrides?: Map<string, Map<number, CostYarnRow>>;
+  /** SY-3 I2: iplik kartı firesi DOLU olan iplikler (boş harita/yok = bugünkü girdi, bayt-aynı). */
+  yarnWaste?: Map<string, Dec>;
 }
 
 type Db = Prisma.TransactionClient;
@@ -107,6 +109,8 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
     if (r.costStructure?.finishingRateCode) codes.add(r.costStructure.finishingRateCode);
     for (const p of r.costStructure?.processes ?? []) codes.add(p.rateCode);
   }
+  // SY-3 I2: iplik firesi ayrı, dar sorgu — etkin yapı seçimine (tablet yanıtları) kolon eklenmez.
+  const wasteRows = yarnIds.size ? await tx.item.findMany({ where: { id: { in: [...yarnIds] }, yarnWastePct: { not: null } }, select: { id: true, yarnWastePct: true } }) : [];
   const prices = yarnIds.size && a.withPrices ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
   const weavingMethod = await readCostWeavingStandardMethod(tx);
@@ -123,6 +127,7 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
     ...(kgBasis ? { kgBasis } : {}),
     warpLayers,
     ...(weftOverrides.size ? { weftOverrides } : {}),
+    ...(wasteRows.length ? { yarnWaste: new Map(wasteRows.map((r) => [r.id, r.yarnWastePct!])) } : {}),
   };
 }
 
@@ -139,9 +144,14 @@ function yarnPrice(src: CostSources, yarnItemId: string): CostPrice | null {
   const stale = src.asOf.getTime() - p.createdAt.getTime() > PRICE_STALE_DAYS * 86_400_000;
   return { amount: p.pricePerKg, currency: p.currency, source: "KART", ...(stale ? { flag: "PRICE_STALE" as const } : {}) };
 }
-const cardYarn = (src: CostSources, y: CostYarnRow): CostYarn => ({
-  yarnItemId: y.id, name: y.name, denier: { value: resolveDenier(y), source: "KART" }, price: yarnPrice(src, y.id),
-});
+const cardYarn = (src: CostSources, y: CostYarnRow): CostYarn => {
+  const waste = src.yarnWaste?.get(y.id);
+  return {
+    yarnItemId: y.id, name: y.name, denier: { value: resolveDenier(y), source: "KART" }, price: yarnPrice(src, y.id),
+    // Anahtar yalnız doluyken: boş iplikte girdi + `inputHash` bayt-aynı.
+    ...(waste != null ? { wastePct: waste } : {}),
+  };
+};
 const adHocYarn = (y: AdHocYarn): CostYarn => ({
   yarnItemId: null, name: y.name, denier: { value: y.denier, source: "ELLE" },
   price: y.pricePerKg ? { amount: y.pricePerKg, currency: y.currency, source: "ELLE" } : null,

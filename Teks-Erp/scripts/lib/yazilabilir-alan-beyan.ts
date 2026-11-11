@@ -9,7 +9,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   defectType: ["code", "createdById", "defectGroup", "description", "fixedPoints", "isActive", "isDefault", "name", "severity", "sortOrder", "updatedById"],
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],
   fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "serviceItemId", "sortOrder", "updatedById", "valueType", "variantOfPropertyId"],
-  item: ["code", "composition", "createdById", "finishedGsm", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "rawGsm", "rawWidthCm", "unit", "updatedById", "warpSpecId", "weaveDesignId", "weftSpecId", "widthCm"],
+  item: ["code", "composition", "createdById", "finishedGsm", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "rawGsm", "rawWidthCm", "unit", "updatedById", "warpSpecId", "weaveDesignId", "weftSpecId", "widthCm", "yarnWastePct"],
   machine: ["code", "createdById", "isActive", "name", "productionLineCount", "stationId", "updatedById", "warpBeamSlots"],
   machineStopCodeMap: ["collectorType", "isActive", "machineId", "rawStopCode", "stopReasonId"],
   order: ["branchId", "cancelReason", "cancelReasonCode", "cancelledAt", "clientToken", "completedAt", "createdById", "currency", "customerId", "deadline", "destination", "manualCloseReason", "manualClosedById", "orderDate", "orderNumber", "shippedQty", "status", "totalAmount", "updatedById"],

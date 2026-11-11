@@ -23,7 +23,7 @@ import {
   auditWeavingOrderCreate, insertWeavingOrderTx, prepareWeavingOrderCreate, type WeavingOrderCreateInput,
 } from "./weaving-order.service";
 import { weavingOrderReplay } from "./helpers/weaving-order-replay.helper";
-import { buildWeavingInsights } from "./helpers/production-proposal-insight.helper";
+import { buildWeavingInsights, yarnReservationWarnings } from "./helpers/production-proposal-insight.helper";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 import { readDevereEnabled, readDokumaEnabled, readOrderProductionProposal, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
@@ -80,7 +80,9 @@ export async function previewProductionProposal(
     for (const g of proposal.weavingOrders) Object.assign(g, insights.get(g.key));
     proposal.deadline = deadline ? deadline.toISOString() : null;
   }
-  return { success: true, data: { ...proposal, canCreate: { weaving: scope.weaving && access.writeWeaving, workOrder: access.writeWorkOrder } } };
+  // SY-3 I1: engellemez, yalnız uyarır; ayar kapalıyken boş → anahtar yok (yanıt bugünküyle aynı).
+  const warnings = scope.weaving ? yarnReservationWarnings(proposal.weavingOrders) : [];
+  return { success: true, data: { ...proposal, canCreate: { weaving: scope.weaving && access.writeWeaving, workOrder: access.writeWorkOrder } }, ...(warnings.length ? { warnings } : {}) };
 }
 
 function parseKey(key: string, prefix: "W" | "I", parts: number): string[] {
