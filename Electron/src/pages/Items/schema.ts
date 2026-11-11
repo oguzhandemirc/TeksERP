@@ -2,6 +2,17 @@ import { z } from "zod";
 import { ItemType } from "@/types/enums";
 import { acceptNumberAsText } from "@/lib/decimal-form-text";
 
+/** Dokuma ayrıntısı sayısı — Decimal(·,2) metin taşınır, virgül kabul, "" = boş; `max` kolon tavanı. */
+const positiveDecimalText = (label: string, max: number) =>
+  acceptNumberAsText(
+    z
+      .string()
+      .trim()
+      .refine((v) => v === "" || /^\d+([.,]\d{1,2})?$/.test(v), `${label} sayı olmalı (en fazla 2 ondalık)`)
+      .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, `${label} sıfırdan büyük olmalı`)
+      .refine((v) => v === "" || Number(v.replace(",", ".")) < max, `${label} çok büyük`),
+  );
+
 const itemTypeEnum = z.enum(
   // Hizmet kartı ayrı tabloda (`/api/service-items`) — ürün kartı formu SERVICE sunmaz.
   [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE],
@@ -66,6 +77,10 @@ export const makeItemFormSchema = (isEdit: boolean) =>
       .trim()
       .refine((v) => v === "" || /^\d+([.,]\d{1,2})?$/.test(v), "En sayı olmalı (en fazla 2 ondalık)")
       .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, "En sıfırdan büyük olmalı"),
+    /** Dokuma ayrıntıları (yalnız KUMAŞ): ham en Decimal(6,2), gramajlar Decimal(7,2). */
+    rawWidthCm: positiveDecimalText("Ham en", 10_000),
+    rawGsm: positiveDecimalText("Ham gramaj", 100_000),
+    finishedGsm: positiveDecimalText("Mamul gramaj", 100_000),
     /** Kumaşın varsayılan çözgü kartı (E4) — yalnız FABRIC'te çizilir, boş = kartsız. */
     warpSpecId: z.string(),
     /** SY-A4: atkı + desen kartı — yalnız KUMAŞ + dokuma açıkken çizilir, boş = kartsız. */
@@ -84,6 +99,9 @@ export const itemFormDefaults: ItemFormValues = {
   unit: "MT",
   linearDensityDen: "",
   widthCm: "",
+  rawWidthCm: "",
+  rawGsm: "",
+  finishedGsm: "",
   warpSpecId: "",
   weftSpecId: "",
   weaveDesignId: "",

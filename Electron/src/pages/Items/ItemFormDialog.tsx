@@ -28,7 +28,8 @@ import {
   makeItemFormSchema,
   type ItemFormValues,
 } from "./schema";
-import { buildItemPayload, itemCarriesAllowedLists } from "./itemPayload.helper";
+import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists } from "./itemPayload.helper";
+import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
@@ -72,6 +73,9 @@ export function ItemFormDialog({
         unit: initial.unit,
         linearDensityDen: decimalToFormText(initial.linearDensityDen),
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
+        rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
+        rawGsm: fabricDetailToFormText(initial.rawGsm),
+        finishedGsm: fabricDetailToFormText(initial.finishedGsm),
         warpSpecId: initial.warpSpecId ?? "",
         weftSpecId: initial.weftSpecId ?? "",
         weaveDesignId: initial.weaveDesignId ?? "",
@@ -159,7 +163,7 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible) });
+    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial) });
   });
 
   return (
@@ -336,6 +340,15 @@ export function ItemFormDialog({
             <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
               {itemTypeLabels[itemType]} kartında renk/özellik listesi tutulmaz, kaydedince kaldırılır.
             </p>
+          )}
+
+          {/* Az kullanılan dokuma alanları katlanır bölümde, kapalı gelir (dolu değer varsa açık). */}
+          {itemType === ItemType.FABRIC && (
+            <ItemWeavingDetails
+              form={form}
+              itemId={initial?.id ?? null}
+              hasSavedValues={Boolean(defaults.rawWidthCm || defaults.rawGsm || defaults.finishedGsm)}
+            />
           )}
 
           <StockCodeRow

@@ -2,7 +2,7 @@ import apiClient from "@/services/apiClient";
 import { createCrudService } from "@/services/crudService";
 import type { ApiResponse } from "@/types/api";
 import type { ItemLifecyclePreview, ItemLifecycleStatus } from "@/lib/item-lifecycle";
-import type { Item, ItemColorLink, ItemPropertyLink } from "./types";
+import type { Item, ItemColorLink, ItemComputedGsm, ItemPropertyLink } from "./types";
 
 const baseService = createCrudService<Item>("/api/items");
 
@@ -28,6 +28,11 @@ export const itemService = {
     apiClient
       .post<ApiResponse<Item>>(`/api/items/${itemId}/lifecycle`, { to, reason })
       .then((r) => r.data),
+  /** Çözgü + atkı kartından hesaplanan gramaj. Toast YOK: eski sunucuda uç yok (404), satır sessizce gizlenir. */
+  computedGsm: (itemId: string) =>
+    apiClient
+      .get<ApiResponse<ItemComputedGsm>>(`/api/items/${itemId}/computed-gsm`, { suppressErrorToast: true })
+      .then((r) => r.data.data),
   /** Liste rozeti: kart başına kalan canlı kayıt. */
   lifecycleSummary: (ids: string[]) =>
     apiClient

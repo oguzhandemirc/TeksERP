@@ -36,6 +36,10 @@ export interface Item {
   weaveDesignId?: string | null;
   /** K4P ürün kartı eni (cm); Decimal metin gelir. Eski sunucuda yok. */
   widthCm?: string | number | null;
+  /** Dokuma ayrıntıları (yalnız KUMAŞ; Decimal sayı/metin gelir; eski sunucuda yok). */
+  rawWidthCm?: string | number | null;
+  rawGsm?: string | number | null;
+  finishedGsm?: string | number | null;
   /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
   /** Item'a uygulanabilir özellikler (kataloğu). Boşsa = serbest. */
@@ -62,8 +66,23 @@ export interface ItemCreatePayload {
   weaveDesignId?: string | null;
   /** K4P en (cm) — yalnız Kalite Güvence açıkken ve KUMAŞta gider; boş = `null` (temizler). */
   widthCm?: string | null;
+  /** Dokuma ayrıntıları — yalnız KUMAŞ; anahtar dolu ya da kayıtlı değer temizleniyorsa gider. */
+  rawWidthCm?: string | null;
+  rawGsm?: string | null;
+  finishedGsm?: string | null;
   /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */
   pendingReview?: boolean;
   allowedPropertyIds?: string[];
   allowedColorIds?: string[];
+}
+
+/** `GET /api/items/:id/computed-gsm` — null = bilinmiyor (hesap kapanır). */
+export interface ItemComputedGsm {
+  rawWidthCm: number | null;
+  warpGPerM: number | null;
+  weftGPerM: number | null;
+  totalGPerM: number | null;
+  gsm: number | null;
+  enteredRawGsm: number | null;
+  diffPct: number | null;
 }
