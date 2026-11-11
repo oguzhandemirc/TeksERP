@@ -104,8 +104,11 @@ export interface AppPreferences {
    * seçili kalanlarla budanır (`lib/bildirim/masaustu-tercih.ts`). Sonraki sürümde okuyucusu kalkar.
    */
   bildirim?: { masaustuTurler?: string[] };
-  /** Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin"); tablo YOK, blob alanı. */
-  raporlar?: { favoriler?: string[] };
+  /**
+   * Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin") ve kişinin rapor açılış kaydı
+   * (`opened`: anahtar · açılış sayısı · son açılış; en çok 20, `_v2/opened.ts`). Tablo YOK, blob alanı.
+   */
+  raporlar?: { favoriler?: string[]; opened?: ReportOpenRecord[] };
   /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → bugün). Eski pano düzeni alanları
    *  (`hidden`/`groupOrder`/`itemOrders`) kayıtlı blob'da kalabilir; okunmaz. */
   dashboard?: { donem?: string };
@@ -129,4 +132,12 @@ export function mergePreferences(raw: Partial<AppPreferences> | null | undefined
   delete legacy.scaleDevice;
   delete legacy.scanner;
   return merged;
+}
+
+/** Kişinin bir raporu kaç kez / en son ne zaman açtığı — yalnız kendi tercih blob'unda (kullanım istatistiği DEĞİL). */
+export interface ReportOpenRecord {
+  key: string;
+  count: number;
+  /** ISO zaman damgası. */
+  lastAt: string;
 }
