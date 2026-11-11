@@ -74,9 +74,11 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
 
   return (
     <div
+      data-page-header=""
       className={cn(
         // flex-wrap: dar ekranda eylemler alt satıra iner; başlık sütunu kelime kelime kırılmaz (UX-3 R3).
-        "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b bg-gradient-to-r from-primary/[0.07] via-transparent to-transparent px-4 py-3 md:px-6 md:py-4",
+        // Yeni görünüm: başlık lavanta zeminde, kenarlıksız; içerik kartları altında başlar.
+        "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pb-3 pt-4 md:px-6 md:pt-5",
         className,
       )}
     >
@@ -88,12 +90,11 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
             onClick={goBack}
             aria-label="Geri"
             title="Geri"
-            className="h-8 w-8 shrink-0 self-center rounded-full text-muted-foreground hover:text-foreground"
+            className="h-9 w-9 shrink-0 self-center rounded-lg border border-card-border bg-card text-muted-foreground shadow-soft hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
-        <span className="my-0.5 w-1 shrink-0 rounded-full bg-primary/70" aria-hidden />
         <div className="flex min-w-0 flex-col justify-center">
           {parent && (
             <button
@@ -106,7 +107,7 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
             </button>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="break-words text-lg font-semibold tracking-tight">{title}</h1>
+            <h1 className="break-words text-xl font-bold tracking-tight">{title}</h1>
             {description && <HeaderInfo text={description} />}
             {titleExtra}
           </div>

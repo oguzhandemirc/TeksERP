@@ -51,7 +51,7 @@ export const PageFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivEleme
     <div
       ref={ref}
       className={cn(
-        "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-background px-6 py-3",
+        "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-card-border bg-card px-6 py-3",
         className,
       )}
       {...props}

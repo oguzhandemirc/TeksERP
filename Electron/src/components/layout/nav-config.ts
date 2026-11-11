@@ -13,11 +13,16 @@ import {
 } from "lucide-react";
 import { TERIM_AD } from "@/lib/terim";
 import { DOCUMENTS_HUB_ACCESS, QUALITY_HUB_ACCESS, SYSTEM_HUB_ACCESS } from "@/lib/permissions";
+import type { IconTileTone } from "@/components/ui/icon-tile";
 
 export interface NavItem {
   label: string;
   to: string;
   icon: LucideIcon;
+  /** Menü simge karesinin tonu (verilmezse yoldan belirlenimli ton). */
+  tone?: IconTileTone;
+  /** Üst çubukta bölüm başlığının altındaki tek satır açıklama. */
+  description?: string;
   permission?: string;
   /** İzinlerden BİRİ yeter — route'un `requireAnyPermission`ıyla AYNI küme. */
   permissionAny?: string[];
@@ -76,13 +81,15 @@ export const navGroups: NavGroup[] = [
   {
     label: "Genel",
     items: [
-      { label: "Anasayfa", to: "/", icon: LayoutDashboard },
-      { label: "Operasyon", to: "/operations", icon: ClipboardList },
+      { label: "Anasayfa", to: "/", icon: LayoutDashboard, tone: "violet", description: "Fabrikanın bugünkü durumu" },
+      { label: "Operasyon", to: "/operations", icon: ClipboardList, tone: "blue", description: "Sipariş, üretim, depo ve sevkiyat ekranları" },
       {
         // UX-2: kalite karoları Operasyon'dan ayrı kök; bayrak kapalıyken satır yalnız modülü açabilene soluk (`off-module-visibility`).
         label: TERIM_AD.kaliteGuvence,
         to: "/quality",
         icon: BadgeCheck,
+        tone: "green",
+        description: "Muayene, laboratuvar ve sertifikalar",
         permissionAny: QUALITY_HUB_ACCESS,
         featureFlag: "kaliteGuvenceEnabled",
         keywords: "kalite muayene laboratuvar test sertifika 4 puan kusur",
@@ -92,6 +99,8 @@ export const navGroups: NavGroup[] = [
         label: "Maliyet & Teklif",
         to: "/cost",
         icon: Coins,
+        tone: "amber",
+        description: "Metre maliyeti, fiyat listeleri ve teklifler",
         // MAL-5: teklif/fiyat listesi okuyan da girer (satış rolü maliyet görmez); karolar kendi izniyle süzülür.
         permissionAny: ["cost:read", "quote:read", "price-list:read", "report:yarn-need"],
         featureFlag: "maliyetEnabled",
@@ -101,17 +110,21 @@ export const navGroups: NavGroup[] = [
         label: TERIM_AD.onMuhasebe,
         to: "/finance",
         icon: Calculator,
+        tone: "teal",
+        description: "Cari, fatura, kasa ve banka",
         permission: "finance:read",
         featureFlag: "financeEnabled",
         keywords: "muhasebe",
       },
-      { label: "Raporlar", to: "/reports", icon: ScrollText },
-      { label: "Tanımlar", to: "/definitions", icon: Library },
+      { label: "Raporlar", to: "/reports", icon: ScrollText, tone: "sky", description: "Üretim, satış ve stok raporları" },
+      { label: "Tanımlar", to: "/definitions", icon: Library, tone: "orange", description: "Ürünler, iş ortakları ve üretim tanımları" },
       {
         // UX-2: belge/etiket/refakat çıktıları Tanımlar'dan ayrı kök.
         label: TERIM_AD.belgeler,
         to: "/documents",
         icon: FileText,
+        tone: "rose",
+        description: "Belge, etiket ve refakat kartı şablonları",
         permissionAny: DOCUMENTS_HUB_ACCESS,
         keywords: "belge şablon etiket refakat kartı yazdır çıktı",
       },
@@ -126,12 +139,16 @@ export const navGroups: NavGroup[] = [
         label: "Sistem",
         to: "/system",
         icon: ServerCog,
+        tone: "blue",
+        description: "Sunucu, cihazlar, ayarlar ve bakım",
         permissionAny: SYSTEM_HUB_ACCESS,
       },
       {
         label: "Yetkilendirme",
         to: "/access",
         icon: ShieldCheck,
+        tone: "rose",
+        description: "Kullanıcılar, roller ve izinler",
         adminOnly: true,
       },
     ],

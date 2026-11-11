@@ -453,6 +453,19 @@
   box-shadow: 0 6px 16px -8px hsl(var(--primary) / 0.6);
 }
 
+/* Üst çubuk simge düğmeleri beyaz kutu olur (zil, güncelleme, tema…) — çocuk bileşenler değişmeden. */
+.topbar-tools > button:not([data-plain]) {
+  height: 2.25rem;
+  width: 2.25rem;
+  border-radius: var(--radius-control);
+  border: 1px solid hsl(var(--card-border));
+  background-color: hsl(var(--card));
+  box-shadow: var(--shadow-soft);
+}
+.topbar-tools > button:not([data-plain]):hover {
+  background-color: hsl(var(--accent));
+}
+
 /* ── LİSTE YÜZEYİ KOŞUSU — sayfa dosyasına dokunmadan "kart içinde liste".
    Araç çubuğu / filtre satırı / tablo / altlık `data-list-surface` taşır; sekme içinde ARDIŞIK
    yüzeyler tek kart gibi boyanır (ilk: üst köşe, son: alt köşe). Diyalog/çekmece/Card içindeki ya da
