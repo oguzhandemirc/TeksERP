@@ -836,6 +836,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // `test_production_line` §1 onun DAVRANIŞINI ölçer (varlığını değil).
   { table: "machines", name: "machines_productionLineCount_pos" },
   { table: "machines", name: "machines_warp_beam_slots_nonneg" },
+  // 2026-11-11 (Seyitoğlu temel) — migration 20261111170000: tezgâh plan alanları (NULL serbest).
+  { table: "machines", name: "machines_plan_rpm_pos" },
+  { table: "machines", name: "machines_plan_efficiency_range" },
+  { table: "machines", name: "machines_max_working_width_pos" },
   // 2026-09-13 (dokuma yazma yüzeyi) — migration 20260913241000. P1 bilerek
   // erteledi ("kapısız CHECK, yazanı olmayan kısıt"); servisin 400'ü ilk hat,
   // bu CHECK son hat (çift yüklem). SUBCONTRACTED ⇔ subcontractorId DOLU.

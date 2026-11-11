@@ -321,6 +321,9 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   machines_productionLineCount_pos:
     "Makinenin üretim hattı sayısı en az 1 olmalı.",
   machines_warp_beam_slots_nonneg: "Makinenin levent yuva sayısı negatif olamaz.",
+  machines_plan_rpm_pos: "Tezgâhın plan devri sıfırdan büyük olmalı.",
+  machines_plan_efficiency_range: "Tezgâhın plan randımanı %0'dan büyük, en çok %100 olmalı.",
+  machines_max_working_width_pos: "Tezgâhın azami çalışma eni sıfırdan büyük olmalı.",
   machine_runs_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",
   doff_events_pieceCount_pos: "İndirilen parça sayısı en az 1 olmalı.",
   doff_events_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",

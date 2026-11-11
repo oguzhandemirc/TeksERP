@@ -1291,6 +1291,13 @@ model Machine {
   /// beslenen çözgü makinesinde yuva gerçekten 0. `@default(1)` = bugünkü davranış (tek levent).
   warpBeamSlots Int @default(1) @db.SmallInt
 
+  /// PLANLAMA ALANLARI (Seyitoğlu temel, 2026-11-11) — yalnız ÖNERİ/plan girdisi; ölçüm değil.
+  /// `MachineSpec` satırı "izleniyor" demektir (dokuma.md) — plan hızı için künye açılmasın diye
+  /// ayrı kolon. NULL = bilinmiyor. CHECK'ler `machines_plan_*` (migration 20261111170000).
+  planRpm           Int?     @db.Integer
+  planEfficiencyPct Decimal? @db.Decimal(5, 2)
+  maxWorkingWidthCm Decimal? @db.Decimal(6, 2)
+
   // Relations
   station            Station                  @relation(fields: [stationId], references: [id])
   devices            Device[]
