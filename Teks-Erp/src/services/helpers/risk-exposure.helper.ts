@@ -180,8 +180,8 @@ export async function customerRiskLimitIntakeWarningTx(
 const fmt2 = (d: Prisma.Decimal): string => d.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
 /** Uyarı metni (Türkçe). Tutar/bakiye YALNIZ `withAmounts` (bakiye görme izni, `finance:read`) iken; aksi halde yalnız "limit aşıldı". */
-export function riskLimitIntakeWarningText(w: RiskLimitIntakeWarning, withAmounts: boolean): string {
-  const tail = `sipariş yine de oluşturuldu (iş kabulü kapısı kapalı: ${settingRowPath("financeRiskLimitBlockIntake")}).`;
+export function riskLimitIntakeWarningText(w: RiskLimitIntakeWarning, withAmounts: boolean, verb: "oluşturuldu" | "güncellendi" = "oluşturuldu"): string {
+  const tail = `sipariş yine de ${verb} (iş kabulü kapısı kapalı: ${settingRowPath("financeRiskLimitBlockIntake")}).`;
   if (w.kind === "FX_MISSING") return `Risk limiti ölçülemedi${withAmounts && w.currency ? ` (${w.currency} için kur yok)` : ""} — ${tail}`;
   const name = w.hits[0]!.name;
   if (!withAmounts) return `"${name}" risk limitini aştı — ${tail}`;
