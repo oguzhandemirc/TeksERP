@@ -1,50 +1,6 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, ChevronRight, History, Star } from "lucide-react";
-import type { ReportCatalogEntry } from "@/lib/report-catalog";
+import { ArrowRight, ChevronRight, History } from "lucide-react";
 import type { LegacyCard, LegacyGroup } from "./legacy-model";
-
-export function FavoritesStrip({ entries }: { entries: readonly ReportCatalogEntry[] }) {
-  return (
-    <section aria-label="Favorilerim">
-      <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-        <Star className="h-4 w-4 fill-amber-400 text-amber-500" /> Favorilerim
-      </h2>
-      <div className="flex flex-wrap gap-2">
-        {entries.map((e) => (
-          <Link key={e.key} to={`/${e.panelYolu}`} className="rounded-full border bg-card px-3 py-1 text-sm hover:bg-muted">
-            {e.baslik}
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-interface GroupProps {
-  title: string;
-  entries: readonly ReportCatalogEntry[];
-}
-
-export function ReportGroupSection({ title, entries }: GroupProps) {
-  return (
-    <section aria-label={title}>
-      <h2 className="mb-2 text-sm font-semibold">
-        {title} <span className="font-normal text-muted-foreground">({entries.length})</span>
-      </h2>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {entries.map((e) => (
-          <Link key={e.key} to={`/${e.panelYolu}`} className="group flex items-start justify-between gap-2 rounded-lg border bg-card p-3 hover:border-primary/50 hover:bg-muted/40">
-            <span>
-              <span className="block text-sm font-medium">{e.baslik}</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">{e.soru}</span>
-            </span>
-            <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 /** "Eski raporlar (geçiş dönemi)" — v1 raporlar eski kategorileriyle; her kartta yeni hâline yol. */
 export function LegacyReportsSection({ groups }: { groups: readonly LegacyGroup[] }) {

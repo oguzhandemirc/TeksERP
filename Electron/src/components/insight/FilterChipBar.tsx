@@ -25,12 +25,14 @@ const CHIP = "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-x
 export function FilterChip({ label, value, options, allLabel, onChange }: FilterChipProps) {
   const selected = options.find((o) => o.value === value);
   const text = selected?.label ?? allLabel ?? label;
+  // Yalnız "hepsi"si olan çip seçimde vurgulanır; zorunlu tek seçimli (dönem) çip hep düz kalır.
+  const highlighted = selected !== undefined && allLabel !== undefined;
   const items: Array<{ value: string | null; label: string }> = [...(allLabel ? [{ value: null, label: allLabel }] : []), ...options];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`${label}: ${text}`}
-        className={cn(CHIP, selected ? "border-primary/50 bg-primary-soft text-primary-soft-foreground" : "border-input bg-card")}
+        className={cn(CHIP, highlighted ? "border-primary/50 bg-primary-soft text-primary-soft-foreground" : "border-input bg-card")}
       >
         {text}
         <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
