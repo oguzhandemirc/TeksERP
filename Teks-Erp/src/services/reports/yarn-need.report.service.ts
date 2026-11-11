@@ -85,8 +85,8 @@ export interface YarnNeedReport {
 /** Açık sipariş durumu — üretim dengesiyle aynı küme (KG/ADET listesi için). */
 const OPEN_ORDER = { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } };
 
-interface ItemDemand { itemId: string; lineCount: number; meters: Dec }
-type ReadyItem = { d: ItemDemand; code: string; input: CostInput; usage: ReturnType<typeof yarnUsagePerM>; rawM: Dec };
+export interface ItemDemand { itemId: string; lineCount: number; meters: Dec }
+export type ReadyItem = { d: ItemDemand; code: string; input: CostInput; usage: ReturnType<typeof yarnUsagePerM>; rawM: Dec };
 
 /**
  * Ürün başına dokunacak metre. Netlemede (ürün, renk) grubunun kumaş açığı (`malzemeAcigi` = talep −
@@ -134,6 +134,68 @@ async function unmeasuredLines(o: YarnNeedOptions): Promise<YarnNeedReport["meta
 
 interface YarnAcc { warp: Dec; weft: Dec }
 
+/** Hazır levent düşümüne giren çözgü kartları (zemin + kendi leventi olan katmanlar), sıralı. */
+export function readyWarpSpecIds(ready: readonly ReadyItem[]): string[] {
+  return [...new Set(ready.flatMap((r) => [r.input.warp?.warpSpecId, ...ownBeamLayers(r).map((l) => l.warpSpecId)]).filter((x): x is string => !!x))].sort();
+}
+
+const ownBeamLayers = (r: ReadyItem) => (r.input.warpLayers ?? []).filter((l) => layerHasOwnBeam(l.beamMode) && l.warpSpecId);
+
+/**
+ * ÇEKİRDEK: ürünlerin ham metresi → iplik başına çözgü/atkı kg (hazır levent düşümüyle). Rapor ve üretim önerisinin
+ * iplik özeti AYNI fonksiyonu çağırır. `beams` null → düşüm yok. Havuz çağrı başına tazedir (sıra: verilen sıra).
+ */
+export function yarnKgByYarn(ready: readonly ReadyItem[], beams: Map<string, { remainingM: Dec }> | null): { perYarn: Map<string, YarnAcc>; covered: Map<string, Dec> } {
+  // Hazır çözgü: aynı çözgü kartının kalan levent metresi, kartın ürünlerine kod sırasıyla dağıtılır.
+  // SY-N2: SEPARATE_BEAM katmanının kendi leventi de AYNI düşümle (katman başına) — SHARED zemini izler, CREEL düşülmez.
+  const warpMeters = new Map<ReadyItem, Dec>();
+  const layerMeters = new Map<string, Dec>();
+  const pool = new Map<string, Dec>();
+  if (beams) for (const [id, b] of beams) pool.set(id, b.remainingM);
+  const covered = new Map<string, Dec>();
+  const deductReadyBeam = (r: ReadyItem, specId: string | null, layer?: CostWarpLayer): Dec => {
+    let need = r.rawM;
+    const remW = specId ? pool.get(specId) : undefined;
+    if (specId && remW && remW.gt(0) && need.gt(0)) {
+      const fabricAvail = fabricMetersFromWarpM(r.input, remW, layer);
+      if (fabricAvail && fabricAvail.gt(0)) {
+        const take = minD(need, fabricAvail);
+        // Kullanılan çözgü metresi oranla (take-up formülü kopyalanmaz): remW × take / fabricAvail.
+        pool.set(specId, remW.minus(remW.mul(take).div(fabricAvail)));
+        covered.set(specId, (covered.get(specId) ?? D0()).plus(take));
+        need = need.minus(take);
+      }
+    }
+    return need;
+  };
+  for (const r of ready) {
+    warpMeters.set(r, deductReadyBeam(r, r.input.warp?.warpSpecId ?? null));
+    for (const l of ownBeamLayers(r)) layerMeters.set(`${r.d.itemId}|${l.warpSpecId}`, deductReadyBeam(r, l.warpSpecId, l));
+  }
+  const perYarn = new Map<string, YarnAcc>();
+  const add = (id: string | null, k: keyof YarnAcc, v: Dec) => {
+    if (!id) return;
+    const a = perYarn.get(id) ?? { warp: D0(), weft: D0() };
+    a[k] = a[k].plus(v);
+    perYarn.set(id, a);
+  };
+  for (const r of ready) {
+    add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!));
+    // SY-B1/N2: SHARED_BEAM zemin leventinde (aynı düşüm); SEPARATE kendi leventinin düşümüyle; CREEL tam talep (stoktan).
+    for (const l of r.usage.warpLayers) {
+      const own = layerMeters.get(`${r.d.itemId}|${l.warpSpecId}`);
+      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)));
+    }
+    for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.rawM));
+  }
+  return { perYarn, covered };
+}
+
+/** Eksik = ihtiyaç − serbest stok − açık alış, sıfırın altına inmez; bilinmeyen kaynak (null) düşülmez. */
+export function yarnShortKg(need: Dec, freeStockKg: Dec | null, openPurchaseKg: Dec | null): Dec {
+  return maxD(D0(), need.minus(freeStockKg ?? D0()).minus(openPurchaseKg ?? D0()));
+}
+
 export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNeedReport> {
   const netle = opts.netle ?? true;
   const leventDus = opts.leventDus ?? true;
@@ -176,63 +238,21 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   }
   ready.sort((a, b) => a.code.localeCompare(b.code, "tr"));
 
-  // Hazır çözgü: aynı çözgü kartının kalan levent metresi, kartın ürünlerine kod sırasıyla dağıtılır.
-  // SY-N2: SEPARATE_BEAM katmanının kendi leventi de AYNI düşümle (katman başına) — SHARED zemini izler, CREEL düşülmez.
-  const ownBeamLayers = (r: ReadyItem) => (r.input.warpLayers ?? []).filter((l) => layerHasOwnBeam(l.beamMode) && l.warpSpecId);
-  const specIdsOf = (r: ReadyItem) => [r.input.warp?.warpSpecId, ...ownBeamLayers(r).map((l) => l.warpSpecId)];
-  const warpSpecIds = [...new Set(ready.flatMap(specIdsOf).filter((x): x is string => !!x))].sort();
+  const warpSpecIds = readyWarpSpecIds(ready);
   const beams = leventDus ? await readReadyBeams(warpSpecIds) : null;
-  const warpMeters = new Map<ReadyItem, Dec>();
-  const layerMeters = new Map<string, Dec>();
+  const { perYarn, covered } = yarnKgByYarn(ready, beams);
   const leventler: YarnNeedReport["meta"]["leventler"] = [];
-  const pool = new Map<string, Dec>();
-  if (beams) for (const [id, b] of beams) pool.set(id, b.remainingM);
-  const covered = new Map<string, Dec>();
-  const deductReadyBeam = (r: ReadyItem, specId: string | null, layer?: CostWarpLayer): Dec => {
-    let need = r.rawM;
-    const remW = specId ? pool.get(specId) : undefined;
-    if (specId && remW && remW.gt(0) && need.gt(0)) {
-      const fabricAvail = fabricMetersFromWarpM(r.input, remW, layer);
-      if (fabricAvail && fabricAvail.gt(0)) {
-        const take = minD(need, fabricAvail);
-        // Kullanılan çözgü metresi oranla (take-up formülü kopyalanmaz): remW × take / fabricAvail.
-        pool.set(specId, remW.minus(remW.mul(take).div(fabricAvail)));
-        covered.set(specId, (covered.get(specId) ?? D0()).plus(take));
-        need = need.minus(take);
-      }
-    }
-    return need;
-  };
-  for (const r of ready) {
-    warpMeters.set(r, deductReadyBeam(r, r.input.warp?.warpSpecId ?? null));
-    for (const l of ownBeamLayers(r)) layerMeters.set(`${r.d.itemId}|${l.warpSpecId}`, deductReadyBeam(r, l.warpSpecId, l));
-  }
   if (beams) {
     for (const id of warpSpecIds) {
       const b = beams.get(id);
       if (b) leventler.push({ cozguKartiId: id, leventSayisi: b.beamCount, kalanCozguM: m1(b.remainingM), dusulenKumasM: m1(covered.get(id) ?? D0()) });
     }
   }
-
-  const perYarn = new Map<string, YarnAcc>();
-  const add = (id: string | null, k: keyof YarnAcc, v: Dec) => {
-    if (!id) return;
-    const a = perYarn.get(id) ?? { warp: D0(), weft: D0() };
-    a[k] = a[k].plus(v);
-    perYarn.set(id, a);
-  };
   let kumasMetre = D0();
   let siparisMetre = D0();
   for (const r of ready) {
     kumasMetre = kumasMetre.plus(r.rawM);
     siparisMetre = siparisMetre.plus(r.d.meters);
-    add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!));
-    // SY-B1/N2: SHARED_BEAM zemin leventinde (aynı düşüm); SEPARATE kendi leventinin düşümüyle; CREEL tam talep (stoktan).
-    for (const l of r.usage.warpLayers) {
-      const own = layerMeters.get(`${r.d.itemId}|${l.warpSpecId}`);
-      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)));
-    }
-    for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.rawM));
   }
 
   const yarnIds = [...perYarn.keys()].sort();
@@ -252,7 +272,7 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
     const need = a.warp.plus(a.weft);
     const s = stock ? (stock.byItem.get(id) ?? { serbestKg: D0(), emanetKg: consignmentOn ? D0() : null }) : null;
     const p = purchase ? (purchase.get(id) ?? D0()) : null;
-    const short = maxD(D0(), need.minus(s?.serbestKg ?? D0()).minus(p ?? D0()));
+    const short = yarnShortKg(need, s?.serbestKg ?? null, p);
     tWarp = tWarp.plus(a.warp);
     tWeft = tWeft.plus(a.weft);
     tShort = tShort.plus(short);

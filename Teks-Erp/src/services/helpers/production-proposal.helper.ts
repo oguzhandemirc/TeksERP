@@ -19,6 +19,7 @@ import { availableBySpec, beamNeeds, readBeamLengthsM, warpRequirements, type Be
 import { readBeamStockBySpec } from "./warp-beam-stock.helper";
 import { rawMetersFromFinished, rawNeedFactorsActive, resolveLengthShrinkPct, type LengthShrinkSource } from "./raw-need.helper";
 import { resolveDokumaWeavingWastePct } from "../system-setting.service";
+import type { LoomSummary, WeavingDurationEstimate, YarnSummary } from "./production-proposal-insight.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -59,6 +60,10 @@ export interface WeavingProposal {
   orderLines: Array<{ orderLineId: string; openM: number | null; allocatedM: number | null }>;
   /** SY-M2: çözgü katmanı başına gerekli metre + eksik için PLANNED levent önerisi (yalnız `scope.beamNeeds`). */
   beamNeeds?: BeamNeed[];
+  /** Yalnız önizleme (K1): karar özetleri — `production-proposal-insight.helper`; hesaplanamayan null. Uygula yolu yazmaz. */
+  loomSummary?: LoomSummary | null;
+  yarnSummary?: YarnSummary | null;
+  durationEstimate?: WeavingDurationEstimate | null;
 }
 
 export interface WorkOrderProposal {
@@ -83,6 +88,8 @@ export interface ProductionProposal {
   excluded: Array<{ orderLineId: string; kind: "WEAVING" | "WORK_ORDER" | "LINE"; code: string }>;
   /** Uygulanan dokuma firesi % — yalnız dokuma bölümü hesaplandıysa yazılır. */
   weavingWastePct?: number;
+  /** Yalnız önizleme: sipariş termini (ISO); süre tahmininin karşılaştırdığı değer. */
+  deadline?: string | null;
 }
 
 /** "Satır zaten planlanmış mı" — canlı dokuma işi bağı (iptal dışı her durum). */
@@ -134,10 +141,12 @@ export function rawNeedMeters(openM: number | null, shrinkPct: number | null, we
   return round3(Number(rawMetersFromFinished(openM, shrinkPct, weavingWastePct)));
 }
 
-async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionProposal, withBeamNeeds: boolean): Promise<void> {
+export type GroupConstructions = Map<string, Awaited<ReturnType<typeof resolveEffectiveConstruction>>>;
+
+async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionProposal, o: { withBeamNeeds: boolean; constructions: GroupConstructions }): Promise<void> {
+  const { withBeamNeeds, constructions } = o;
   const weavingWastePct = out.weavingWastePct ?? 0;
   const groups = new Map<string, WeavingProposal>();
-  const constructions = new Map<string, Awaited<ReturnType<typeof resolveEffectiveConstruction>>>();
   const shrinkMemo = new Map<string, Prisma.Decimal | null>();
   for (const l of lines) {
     if (l.weavingOrderLinks.length > 0) {
@@ -222,7 +231,14 @@ function buildWorkOrderGroups(lines: LineRow[], out: ProductionProposal): void {
  * Satırlar id sırasıyla okunur (uygula yolu aynı sırayla kilitler).
  */
 export async function buildProductionProposal(db: Db, orderId: string, scope: ProposalScope): Promise<ProductionProposal> {
-  const order = await db.order.findUnique({ where: { id: orderId }, select: { id: true, orderNumber: true, status: true } });
+  return (await buildProductionProposalWithContext(db, orderId, scope)).proposal;
+}
+
+/** Önizlemenin ek özetleri için: öneri + grup başına çözülmüş yapı + sipariş termini (ikinci okuma yazılmasın). */
+export async function buildProductionProposalWithContext(
+  db: Db, orderId: string, scope: ProposalScope,
+): Promise<{ proposal: ProductionProposal; constructions: GroupConstructions; deadline: Date | null }> {
+  const order = await db.order.findUnique({ where: { id: orderId }, select: { id: true, orderNumber: true, status: true, deadline: true } });
   if (!order) throw AppError.notFound("Sipariş bulunamadı");
   if (!(PROPOSAL_ORDER_STATUSES as readonly string[]).includes(order.status)) {
     throw AppError.conflict("Üretim önerisi yalnız onaylı ya da kısmi sevk edilmiş siparişte açılır.", { code: "ORDER_NOT_PRODUCIBLE", status: order.status });
@@ -235,10 +251,11 @@ export async function buildProductionProposal(db: Db, orderId: string, scope: Pr
     if (m === 0) out.excluded.push({ orderLineId: r.id, kind: "LINE", code: PROPOSAL_CODES.lineClosed });
     else open.push(r);
   }
+  const constructions: GroupConstructions = new Map();
   if (scope.weaving) {
     out.weavingWastePct = await resolveDokumaWeavingWastePct(db);
-    await buildWeavingGroups(db, open, out, scope.beamNeeds === true);
+    await buildWeavingGroups(db, open, out, { withBeamNeeds: scope.beamNeeds === true, constructions });
   }
   if (scope.workOrder) buildWorkOrderGroups(open, out);
-  return out;
+  return { proposal: out, constructions, deadline: order.deadline ?? null };
 }

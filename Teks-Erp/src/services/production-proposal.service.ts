@@ -17,12 +17,13 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002OnField } from "../utils/p2002";
 import { lockClientTokenTx } from "./helpers/token-replay.helper";
 import {
-  buildProductionProposal, PROPOSAL_CODES, type ProductionProposal, type ProposalScope, type WeavingProposal, type WorkOrderProposal,
+  buildProductionProposal, buildProductionProposalWithContext, PROPOSAL_CODES, type ProductionProposal, type ProposalScope, type WeavingProposal, type WorkOrderProposal,
 } from "./helpers/production-proposal.helper";
 import {
   auditWeavingOrderCreate, insertWeavingOrderTx, prepareWeavingOrderCreate, type WeavingOrderCreateInput,
 } from "./weaving-order.service";
 import { weavingOrderReplay } from "./helpers/weaving-order-replay.helper";
+import { buildWeavingInsights } from "./helpers/production-proposal-insight.helper";
 import { WorkOrderService, type WorkOrderCreateInput } from "./workorder.service";
 import { readDevereEnabled, readDokumaEnabled, readOrderProductionProposal, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
@@ -34,6 +35,8 @@ export interface ProposalAccess {
   readWeaving: boolean;
   writeWeaving: boolean;
   writeWorkOrder: boolean;
+  /** İplik özeti (stok kg'ı) — iplik ihtiyaç raporuyla aynı izin; yoksa `yarnSummary` null. */
+  readYarnNeed?: boolean;
 }
 
 export interface ProposalApplyInput {
@@ -70,7 +73,13 @@ export async function previewProductionProposal(
   const scope = await resolveScope(access);
   // Levent ihtiyacı yalnız önizlemede ve devere açıkken (leventler devere modülünün malı); uygula yolu okumaz.
   const beamNeeds = scope.weaving && (await readDevereEnabled());
-  const proposal = await buildProductionProposal(prisma, orderId, { ...scope, beamNeeds });
+  const { proposal, constructions, deadline } = await buildProductionProposalWithContext(prisma, orderId, { ...scope, beamNeeds });
+  if (scope.weaving) {
+    // K1: karar özetleri (tezgâh · iplik · süre) — yalnız önizlemede; uygula yolu okumaz.
+    const insights = await buildWeavingInsights(proposal.weavingOrders, constructions, { deadline, yarn: access.readYarnNeed === true });
+    for (const g of proposal.weavingOrders) Object.assign(g, insights.get(g.key));
+    proposal.deadline = deadline ? deadline.toISOString() : null;
+  }
   return { success: true, data: { ...proposal, canCreate: { weaving: scope.weaving && access.writeWeaving, workOrder: access.writeWorkOrder } } };
 }
 
