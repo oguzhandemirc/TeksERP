@@ -11,6 +11,9 @@
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-2: hsl(var(--primary-2));
+  --color-primary-soft: hsl(var(--primary-soft));
+  --color-primary-soft-foreground: hsl(var(--primary-soft-foreground));
 
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
@@ -29,18 +32,34 @@
 
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
 
   /* Marka accent — runtime'da kişiselleştirme ile override edilebilir */
   --color-brand: hsl(var(--brand));
   --color-brand-foreground: hsl(var(--brand-foreground));
 
-  /* Semantik durum renkleri */
+  /* Semantik durum renkleri — dolu (solid) ve pastel (soft) çiftleri */
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
+  --color-success-soft: hsl(var(--success-soft));
+  --color-success-soft-foreground: hsl(var(--success-soft-foreground));
   --color-warning: hsl(var(--warning));
   --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-warning-soft: hsl(var(--warning-soft));
+  --color-warning-soft-foreground: hsl(var(--warning-soft-foreground));
   --color-info: hsl(var(--info));
   --color-info-foreground: hsl(var(--info-foreground));
+  --color-info-soft: hsl(var(--info-soft));
+  --color-info-soft-foreground: hsl(var(--info-soft-foreground));
+  --color-destructive-soft: hsl(var(--destructive-soft));
+  --color-destructive-soft-foreground: hsl(var(--destructive-soft-foreground));
+
+  /* Kenar menü */
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-muted: hsl(var(--sidebar-muted));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-border: hsl(var(--sidebar-border));
 
   /* İstasyon renk kodları (üretim akışı) */
   --color-station-kk1: hsl(var(--station-kk1));
@@ -57,112 +76,312 @@
   --color-chart-5: hsl(var(--chart-5));
   --color-chart-6: hsl(var(--chart-6));
 
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* Köşe ölçeği — kontrol (girdi/düğme) ve kart iki ayrı kişiselleştirilebilir taban. */
+  --radius-sm: calc(var(--radius-control) - 4px);
+  --radius-md: var(--radius-control);
+  --radius-lg: calc(var(--radius-control) + 2px);
+  --radius-xl: var(--radius-card);
+  --radius-2xl: calc(var(--radius-card) + 4px);
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-card: var(--shadow-card);
 
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 
 @layer base {
+  /* ── AÇIK TEMA (varsayılan: lavanta zemin + mor vurgu) ──
+     Değerler HSL kanalıdır ("H S% L%"); metin çiftleri WCAG AA (bekçi: theme-tokens.test.ts). */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 245 38% 97%;
+    --foreground: 240 24% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 240 24% 13%;
+    --card-border: 245 30% 93%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 243 75% 59%;
+    --popover-foreground: 240 24% 13%;
+    --primary: 250 72% 58%;
+    --primary-2: 262 76% 62%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 243 75% 59%;
-    --radius: 0.5rem;
+    --primary-soft: 250 90% 96%;
+    --primary-soft-foreground: 250 60% 40%;
+    --secondary: 245 30% 95%;
+    --secondary-foreground: 240 24% 16%;
+    --muted: 245 30% 96%;
+    --muted-foreground: 240 10% 42%;
+    --accent: 248 60% 96%;
+    --accent-foreground: 248 50% 30%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 245 25% 91%;
+    --input: 245 20% 86%;
+    --ring: 250 72% 58%;
+    /* Eski tek yarıçap adı — kontrol tabanının eşi (geriye uyum). */
+    --radius: var(--radius-control);
+    --radius-control: 0.625rem;
+    --radius-card: 1rem;
 
     /* Marka accent (kişiselleştirilebilir varsayılan) */
-    --brand: 243 75% 59%;
+    --brand: 250 72% 58%;
     --brand-foreground: 0 0% 100%;
 
-    /* Durum renkleri */
-    --success: 142 71% 40%;
+    /* Durum renkleri — dolu + pastel hap çiftleri */
+    --success: 150 72% 29%;
     --success-foreground: 0 0% 100%;
+    --success-soft: 145 60% 93%;
+    --success-soft-foreground: 150 75% 23%;
     --warning: 38 95% 44%;
     --warning-foreground: 38 100% 12%;
-    --info: 217 91% 53%;
+    --warning-soft: 44 100% 91%;
+    --warning-soft-foreground: 28 90% 27%;
+    --info: 217 85% 47%;
     --info-foreground: 0 0% 100%;
+    --info-soft: 214 100% 95%;
+    --info-soft-foreground: 220 75% 37%;
+    --destructive-soft: 0 90% 95%;
+    --destructive-soft-foreground: 0 70% 39%;
+
+    /* Simge kareleri — pastel zemin + doygun simge (8 ton) */
+    --tile-violet: 258 72% 56%;
+    --tile-violet-bg: 258 90% 95%;
+    --tile-blue: 217 85% 50%;
+    --tile-blue-bg: 214 100% 94%;
+    --tile-sky: 195 85% 38%;
+    --tile-sky-bg: 192 80% 92%;
+    --tile-teal: 170 72% 30%;
+    --tile-teal-bg: 166 60% 91%;
+    --tile-green: 145 60% 34%;
+    --tile-green-bg: 140 55% 92%;
+    --tile-amber: 35 92% 40%;
+    --tile-amber-bg: 45 100% 90%;
+    --tile-orange: 20 88% 48%;
+    --tile-orange-bg: 25 100% 93%;
+    --tile-rose: 345 78% 50%;
+    --tile-rose-bg: 345 100% 95%;
+
+    /* Kenar menü (açık stil) + seçili öğe degradesi */
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 240 20% 22%;
+    --sidebar-muted: 240 8% 46%;
+    --sidebar-accent: 245 45% 96%;
+    --sidebar-border: 245 25% 93%;
+    --nav-active-from: var(--primary);
+    --nav-active-to: var(--primary-2);
+    --nav-active-fg: var(--primary-foreground);
+
+    /* Gölge ve yoğunluk */
+    --shadow-soft: 0 1px 2px hsl(245 30% 30% / 0.05);
+    --shadow-card: 0 1px 2px hsl(245 30% 30% / 0.04), 0 6px 20px -8px hsl(245 40% 40% / 0.12);
+    --cell-py: 0.6875rem;
+    --head-h: 2.5rem;
+    --page-gutter: 1rem;
 
     /* İstasyon renkleri */
-    --station-kk1: 199 89% 48%;
-    --station-fason: 25 95% 53%;
-    --station-process: 262 83% 58%;
-    --station-tambur: 160 84% 39%;
-    --station-depo: 43 96% 50%;
+    --station-kk1: 195 85% 40%;
+    --station-fason: 22 90% 48%;
+    --station-process: 258 70% 56%;
+    --station-tambur: 165 75% 32%;
+    --station-depo: 40 92% 44%;
 
     /* Grafik paleti */
-    --chart-1: 243 75% 59%;
-    --chart-2: 160 84% 39%;
+    --chart-1: 250 72% 58%;
+    --chart-2: 195 85% 42%;
     --chart-3: 38 92% 50%;
-    --chart-4: 199 89% 48%;
-    --chart-5: 350 89% 60%;
-    --chart-6: 262 83% 58%;
+    --chart-4: 150 60% 40%;
+    --chart-5: 345 80% 58%;
+    --chart-6: 217 85% 55%;
   }
 
+  /* ── KOYU TEMA — kartlar koyu lacivert-gri, mor vurgu korunur ── */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 243 80% 67%;
+    --background: 235 25% 8%;
+    --foreground: 240 20% 95%;
+    --card: 235 22% 12%;
+    --card-foreground: 240 20% 95%;
+    --card-border: 235 18% 18%;
+    --popover: 235 22% 13%;
+    --popover-foreground: 240 20% 95%;
+    --primary: 252 70% 60%;
+    --primary-2: 262 66% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 243 80% 67%;
+    --primary-soft: 250 40% 22%;
+    --primary-soft-foreground: 250 95% 84%;
+    --secondary: 235 18% 18%;
+    --secondary-foreground: 240 20% 95%;
+    --muted: 235 18% 16%;
+    --muted-foreground: 240 12% 68%;
+    --accent: 245 25% 20%;
+    --accent-foreground: 240 20% 95%;
+    --destructive: 0 66% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 235 18% 20%;
+    --input: 235 16% 27%;
+    --ring: 252 80% 70%;
 
-    /* Marka accent (kişiselleştirilebilir varsayılan) */
-    --brand: 243 80% 67%;
+    --brand: 252 70% 60%;
     --brand-foreground: 0 0% 100%;
 
-    /* Durum renkleri */
-    --success: 142 64% 52%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 55%;
+    --success: 150 60% 45%;
+    --success-foreground: 150 80% 6%;
+    --success-soft: 150 40% 16%;
+    --success-soft-foreground: 145 60% 72%;
+    --warning: 40 92% 55%;
     --warning-foreground: 38 100% 10%;
-    --info: 217 91% 65%;
-    --info-foreground: 0 0% 100%;
+    --warning-soft: 38 50% 16%;
+    --warning-soft-foreground: 42 95% 70%;
+    --info: 214 90% 66%;
+    --info-foreground: 220 80% 8%;
+    --info-soft: 217 45% 19%;
+    --info-soft-foreground: 214 95% 80%;
+    --destructive-soft: 0 45% 19%;
+    --destructive-soft-foreground: 0 90% 80%;
 
-    /* İstasyon renkleri */
-    --station-kk1: 199 89% 55%;
-    --station-fason: 25 95% 60%;
-    --station-process: 262 83% 66%;
-    --station-tambur: 160 75% 48%;
-    --station-depo: 43 96% 56%;
+    --tile-violet: 258 85% 76%;
+    --tile-violet-bg: 258 35% 22%;
+    --tile-blue: 214 90% 72%;
+    --tile-blue-bg: 217 40% 21%;
+    --tile-sky: 192 80% 64%;
+    --tile-sky-bg: 195 45% 18%;
+    --tile-teal: 166 60% 58%;
+    --tile-teal-bg: 170 40% 17%;
+    --tile-green: 142 55% 62%;
+    --tile-green-bg: 145 35% 18%;
+    --tile-amber: 42 92% 64%;
+    --tile-amber-bg: 38 45% 18%;
+    --tile-orange: 25 92% 66%;
+    --tile-orange-bg: 20 45% 19%;
+    --tile-rose: 345 88% 74%;
+    --tile-rose-bg: 345 40% 21%;
 
-    /* Grafik paleti */
-    --chart-1: 243 80% 67%;
-    --chart-2: 160 75% 48%;
-    --chart-3: 38 92% 55%;
-    --chart-4: 199 89% 55%;
-    --chart-5: 350 89% 66%;
-    --chart-6: 262 83% 66%;
+    --sidebar: 235 24% 10%;
+    --sidebar-foreground: 240 15% 86%;
+    --sidebar-muted: 240 10% 62%;
+    --sidebar-accent: 240 18% 17%;
+    --sidebar-border: 235 18% 16%;
+
+    --shadow-soft: 0 1px 2px hsl(235 40% 2% / 0.4);
+    --shadow-card: 0 1px 2px hsl(235 40% 2% / 0.5), 0 8px 24px -10px hsl(235 40% 2% / 0.6);
+
+    --station-kk1: 195 85% 56%;
+    --station-fason: 25 92% 60%;
+    --station-process: 258 80% 72%;
+    --station-tambur: 165 65% 48%;
+    --station-depo: 43 92% 56%;
+
+    --chart-1: 252 85% 72%;
+    --chart-2: 192 80% 58%;
+    --chart-3: 40 92% 58%;
+    --chart-4: 145 55% 55%;
+    --chart-5: 345 85% 68%;
+    --chart-6: 214 90% 66%;
+  }
+
+  /* ── HAZIR TEMALAR (kişiselleştirme) — `[data-preset]` html'de ya da önizleme kutusunda.
+     Türetilmiş adlar (ring/brand/chart-1) burada AÇIKÇA yazılır: custom property var()'ı
+     bildirildiği elemanda çözülür; kapsamlı önizleme aksi halde kökün rengini taşırdı. */
+  [data-preset="violet"] {
+    --primary: 250 72% 58%; --primary-2: 262 76% 62%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 250 90% 96%; --primary-soft-foreground: 250 60% 40%;
+    --ring: 250 72% 58%; --brand: 250 72% 58%; --brand-foreground: 0 0% 100%; --chart-1: 250 72% 58%;
+  }
+  [data-preset="blue"] {
+    --primary: 221 83% 50%; --primary-2: 211 90% 44%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 214 100% 95%; --primary-soft-foreground: 221 70% 38%;
+    --ring: 221 83% 50%; --brand: 221 83% 50%; --brand-foreground: 0 0% 100%; --chart-1: 221 83% 53%;
+  }
+  [data-preset="teal"] {
+    --primary: 184 88% 27%; --primary-2: 172 78% 29%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 180 60% 93%; --primary-soft-foreground: 184 80% 23%;
+    --ring: 184 88% 30%; --brand: 184 88% 27%; --brand-foreground: 0 0% 100%; --chart-1: 182 80% 36%;
+  }
+  [data-preset="green"] {
+    --primary: 152 72% 28%; --primary-2: 140 64% 30%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 145 60% 93%; --primary-soft-foreground: 152 72% 23%;
+    --ring: 152 72% 32%; --brand: 152 72% 28%; --brand-foreground: 0 0% 100%; --chart-1: 150 62% 38%;
+  }
+  [data-preset="orange"] {
+    --primary: 22 92% 41%; --primary-2: 10 80% 45%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 28 100% 93%; --primary-soft-foreground: 20 85% 30%;
+    --ring: 22 92% 45%; --brand: 22 92% 41%; --brand-foreground: 0 0% 100%; --chart-1: 24 92% 50%;
+  }
+  [data-preset="rose"] {
+    --primary: 343 76% 46%; --primary-2: 328 70% 45%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 345 100% 95%; --primary-soft-foreground: 343 70% 36%;
+    --ring: 343 76% 50%; --brand: 343 76% 46%; --brand-foreground: 0 0% 100%; --chart-1: 343 76% 54%;
+  }
+  [data-preset="graphite"] {
+    --primary: 222 22% 30%; --primary-2: 222 16% 40%; --primary-foreground: 0 0% 100%;
+    --primary-soft: 222 20% 94%; --primary-soft-foreground: 222 25% 26%;
+    --ring: 222 22% 40%; --brand: 222 22% 30%; --brand-foreground: 0 0% 100%; --chart-1: 222 20% 45%;
+  }
+  /* Özel renk: JS yalnız --custom-h/s/l + --custom-fg yazar (lib/theme/appearance.ts). */
+  [data-preset="custom"] {
+    --primary: var(--custom-h) var(--custom-s) var(--custom-l);
+    --primary-2: calc(var(--custom-h) + 12) var(--custom-s) var(--custom-l);
+    --primary-foreground: var(--custom-fg);
+    --primary-soft: var(--custom-h) 85% 95%;
+    --primary-soft-foreground: var(--custom-h) 65% 32%;
+    --ring: var(--custom-h) var(--custom-s) var(--custom-l);
+    --brand: var(--custom-h) var(--custom-s) var(--custom-l);
+    --brand-foreground: var(--custom-fg);
+    --chart-1: var(--custom-h) var(--custom-s) var(--custom-l);
+  }
+  .dark[data-preset="violet"], .dark [data-preset="violet"] {
+    --primary: 252 70% 60%; --primary-2: 262 66% 60%; --ring: 252 80% 70%;
+    --primary-soft: 250 40% 22%; --primary-soft-foreground: 250 95% 84%;
+    --brand: 252 70% 60%; --chart-1: 252 85% 72%;
+  }
+  .dark[data-preset="blue"], .dark [data-preset="blue"] {
+    --primary-soft: 217 45% 20%; --primary-soft-foreground: 214 95% 82%; --ring: 214 90% 64%; --chart-1: 214 90% 66%;
+  }
+  .dark[data-preset="teal"], .dark [data-preset="teal"] {
+    --primary-soft: 180 40% 16%; --primary-soft-foreground: 175 65% 70%; --ring: 176 70% 45%; --chart-1: 176 65% 50%;
+  }
+  .dark[data-preset="green"], .dark [data-preset="green"] {
+    --primary-soft: 150 40% 16%; --primary-soft-foreground: 145 60% 72%; --ring: 148 60% 45%; --chart-1: 148 55% 52%;
+  }
+  .dark[data-preset="orange"], .dark [data-preset="orange"] {
+    --primary-soft: 22 45% 18%; --primary-soft-foreground: 28 95% 74%; --ring: 24 92% 55%; --chart-1: 26 92% 60%;
+  }
+  .dark[data-preset="rose"], .dark [data-preset="rose"] {
+    --primary-soft: 343 40% 20%; --primary-soft-foreground: 345 90% 82%; --ring: 343 80% 62%; --chart-1: 343 85% 66%;
+  }
+  .dark[data-preset="graphite"], .dark [data-preset="graphite"] {
+    --primary: 222 14% 42%; --primary-2: 222 12% 48%;
+    --primary-soft: 222 15% 20%; --primary-soft-foreground: 222 20% 85%; --ring: 222 15% 60%; --chart-1: 222 15% 65%;
+  }
+  .dark[data-preset="custom"], .dark [data-preset="custom"] {
+    --primary-soft: var(--custom-h) 35% 20%;
+    --primary-soft-foreground: var(--custom-h) 90% 82%;
+  }
+
+  /* ── ZEMİN TONU ── */
+  [data-surface="neutral"] { --background: 240 6% 96%; --card-border: 240 6% 91%; }
+  [data-surface="white"] { --background: 0 0% 100%; --card-border: 245 20% 89%; }
+  .dark[data-surface="neutral"], .dark [data-surface="neutral"] { --background: 225 8% 8%; --card-border: 225 8% 18%; }
+  .dark[data-surface="white"], .dark [data-surface="white"] { --background: 235 22% 11%; --card-border: 235 18% 22%; }
+
+  /* ── MENÜ STİLİ ── (açık = varsayılan :root/.dark değerleri) */
+  [data-sidebar="dark"] {
+    --sidebar: 240 28% 14%; --sidebar-foreground: 240 15% 90%; --sidebar-muted: 240 10% 66%;
+    --sidebar-accent: 240 22% 22%; --sidebar-border: 240 20% 20%;
+  }
+  .dark[data-sidebar="dark"], .dark [data-sidebar="dark"] { --sidebar: 235 30% 6%; --sidebar-accent: 235 22% 14%; }
+  [data-sidebar="brand"] {
+    --sidebar: var(--primary); --sidebar-foreground: var(--primary-foreground); --sidebar-muted: var(--primary-foreground);
+    --sidebar-accent: var(--primary-2); --sidebar-border: var(--primary-2);
+    --nav-active-from: var(--primary-foreground); --nav-active-to: var(--primary-foreground); --nav-active-fg: var(--primary);
+  }
+
+  /* ── KÖŞE / YOĞUNLUK / YAZI BOYUTU ── */
+  [data-radius="small"] { --radius-control: 0.375rem; --radius-card: 0.5rem; }
+  [data-radius="medium"] { --radius-control: 0.5rem; --radius-card: 0.75rem; }
+  [data-density="comfortable"] { --cell-py: 1rem; --head-h: 2.75rem; }
+  html[data-font="small"] { font-size: 14px; }
+  html[data-font="large"] { font-size: 17px; }
+  @media (min-width: 768px) {
+    :root { --page-gutter: 1.5rem; }
   }
 
   * {
@@ -199,6 +418,73 @@
   [contenteditable] {
     user-select: text;
   }
+}
+
+/* ── SİMGE KARESİ (IconTile) — ton sınıfı iki değişkeni seçer; kip kuralları onları ezer. ── */
+.icon-tile {
+  background-color: hsl(var(--tile-bg) / var(--tile-bg-alpha, 1));
+  color: hsl(var(--tile-fg));
+}
+.tile-violet { --tile-fg: var(--tile-violet); --tile-bg: var(--tile-violet-bg); }
+.tile-blue { --tile-fg: var(--tile-blue); --tile-bg: var(--tile-blue-bg); }
+.tile-sky { --tile-fg: var(--tile-sky); --tile-bg: var(--tile-sky-bg); }
+.tile-teal { --tile-fg: var(--tile-teal); --tile-bg: var(--tile-teal-bg); }
+.tile-green { --tile-fg: var(--tile-green); --tile-bg: var(--tile-green-bg); }
+.tile-amber { --tile-fg: var(--tile-amber); --tile-bg: var(--tile-amber-bg); }
+.tile-orange { --tile-fg: var(--tile-orange); --tile-bg: var(--tile-orange-bg); }
+.tile-rose { --tile-fg: var(--tile-rose); --tile-bg: var(--tile-rose-bg); }
+.tile-primary { --tile-fg: var(--primary-soft-foreground); --tile-bg: var(--primary-soft); }
+/* Tek renk kip: bütün kareler birincil tonun pastelini alır. */
+[data-tiles="mono"] .icon-tile { --tile-fg: var(--primary-soft-foreground); --tile-bg: var(--primary-soft); }
+/* Koyu / birincil menü stilinde kareler zemine göre yarı saydam olur. */
+[data-sidebar="dark"] [data-sidebar-root] .icon-tile { background-color: hsl(var(--tile-fg) / 0.18); }
+[data-sidebar="brand"] [data-sidebar-root] .icon-tile {
+  background-color: hsl(var(--primary-foreground) / 0.16);
+  color: hsl(var(--primary-foreground));
+}
+/* Seçili menü öğesinde kare degradeye karışır. */
+[data-nav-active="true"] .icon-tile {
+  background-color: hsl(var(--nav-active-fg) / 0.18);
+  color: hsl(var(--nav-active-fg));
+}
+.nav-active-fill {
+  background-image: linear-gradient(90deg, hsl(var(--nav-active-from)), hsl(var(--nav-active-to)));
+  color: hsl(var(--nav-active-fg));
+  box-shadow: 0 6px 16px -8px hsl(var(--primary) / 0.6);
+}
+
+/* ── LİSTE YÜZEYİ KOŞUSU — sayfa dosyasına dokunmadan "kart içinde liste".
+   Araç çubuğu / filtre satırı / tablo / altlık `data-list-surface` taşır; sekme içinde ARDIŞIK
+   yüzeyler tek kart gibi boyanır (ilk: üst köşe, son: alt köşe). Diyalog/çekmece/Card içindeki ya da
+   başka bir yüzeyin içindeki yüzey sıfırlanır (gömülü tablo kart olmaz). Sayfanın kendi kart sarmalı
+   hâlâ yasak (liste-standardi.test.ts) — kart görünümü tek yerde, iskelette. */
+.tab-pane [data-list-surface] {
+  background-color: hsl(var(--card));
+  margin-inline: var(--page-gutter);
+  border-inline: 1px solid hsl(var(--card-border));
+}
+.tab-pane [data-list-surface]:first-child,
+.tab-pane :not([data-list-surface]) + [data-list-surface] {
+  border-top: 1px solid hsl(var(--card-border));
+  border-top-left-radius: var(--radius-card);
+  border-top-right-radius: var(--radius-card);
+  margin-top: 0.25rem;
+}
+.tab-pane [data-list-surface]:last-child,
+.tab-pane [data-list-surface]:not(:has(+ [data-list-surface])) {
+  border-bottom: 1px solid hsl(var(--card-border));
+  border-bottom-left-radius: var(--radius-card);
+  border-bottom-right-radius: var(--radius-card);
+  margin-bottom: var(--page-gutter);
+  box-shadow: var(--shadow-card);
+}
+.tab-pane [data-list-surface="table"] { overflow: hidden; }
+.tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"], [data-list-surface]) [data-list-surface] {
+  background-color: transparent;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Login ekranı — yavaş hareketli gradient mesh blob'ları */
@@ -416,24 +702,21 @@
   app-region: no-drag;
 }
 
-/* Yoğunluk modu (kişiselleştirme) — kök font ölçeği rem-tabanlı tüm
-   boşluk/tipografiyi orantılı küçültür. comfortable = varsayılan (kural yok). */
-html[data-density="compact"] {
-  font-size: 14px;
-}
+/* Yoğunluk (satır yüksekliği) ve yazı boyutu artık ayrı eksen: `data-density` → --cell-py/--head-h,
+   `data-font` → kök font ölçeği (bkz. @layer base). */
 
-/* App geneli zemin — düz renk yerine accent-tonlu çok hafif radial derinlik. */
+/* App geneli zemin — düz lavanta-gri (hedef görsel); ton `data-surface` ile değişir. */
 .app-bg {
   background-color: hsl(var(--background));
-  background-image:
-    radial-gradient(58rem 40rem at 100% -5%, hsl(var(--primary) / 0.10), transparent 60%),
-    radial-gradient(48rem 34rem at -5% 105%, hsl(var(--primary) / 0.07), transparent 55%);
-  background-attachment: fixed;
 }
 
-/* macOS'ta hiddenInset: traffic lights ~78px alır */
+/* macOS'ta hiddenInset: traffic lights ~78px alır. Geniş kabukta ışıklar menü markasının
+   üstündedir (marka üst boşluk alır); dar kabukta menü çekmece olduğundan üst çubuk kayar. */
 .platform-mac .topbar-leading {
   padding-left: 78px;
+}
+.platform-mac .sidebar-brand-mac {
+  padding-top: 1.75rem;
 }
 
 /* ── KAYDIRMA ÇUBUĞU (yatay + dikey) — ince, tema renginde, hover'da belirginleşen ──
