@@ -62,7 +62,7 @@ export function RecordSidePanel({ label, onClose, header, onPrev, onNext, onOpen
       data-record-side-panel=""
       aria-label={label}
       className={cn(
-        "record-side-panel flex h-full w-[min(32rem,100%)] shrink-0 flex-col border-l border-card-border bg-card text-card-foreground shadow-card",
+        "record-side-panel flex h-full w-[min(32rem,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-card-border bg-card text-card-foreground shadow-card",
         className,
       )}
     >
@@ -96,7 +96,7 @@ export function RecordSplit({ list, panel }: { list: ReactNode; panel: ReactNode
   return (
     <div className="relative flex min-h-0 flex-1">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">{list}</div>
-      {panel && <div className="flex min-h-0 max-[1180px]:absolute max-[1180px]:inset-y-0 max-[1180px]:right-0 max-[1180px]:z-30">{panel}</div>}
+      {panel && <div className="flex min-h-0 pb-[var(--page-gutter)] pr-[var(--page-gutter)] pt-1 max-[1180px]:absolute max-[1180px]:inset-y-0 max-[1180px]:right-0 max-[1180px]:z-30">{panel}</div>}
     </div>
   );
 }

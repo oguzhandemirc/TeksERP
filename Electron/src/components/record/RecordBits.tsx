@@ -21,15 +21,17 @@ export function initialsOf(name: string): string {
   return upperTr(letters.join("")) || "?";
 }
 
+const AVATAR_SIZES = { sm: "h-8 w-8 rounded-lg text-[11px]", md: "h-10 w-10 rounded-xl text-sm", lg: "h-14 w-14 rounded-2xl text-lg" } as const;
+
 /** Baş harfli renkli kare — kayıt kimliğinin görsel çapası. */
-export function RecordAvatar({ name, tone, size = "md" }: { name: string; tone: IconTileTone; size?: "md" | "lg" }) {
+export function RecordAvatar({ name, tone, size = "md" }: { name: string; tone: IconTileTone; size?: "sm" | "md" | "lg" }) {
   return (
     <span
       aria-hidden
       className={cn(
         "icon-tile inline-flex shrink-0 items-center justify-center font-bold tracking-tight",
         `tile-${tone}`,
-        size === "lg" ? "h-14 w-14 rounded-2xl text-lg" : "h-10 w-10 rounded-xl text-sm",
+        AVATAR_SIZES[size],
       )}
     >
       {initialsOf(name)}
@@ -44,10 +46,10 @@ export interface RecordFact {
   icon?: LucideIcon;
 }
 
-/** Özet satırları — değeri boş (null/"") olan satır HİÇ çizilmez; hepsi boşsa bileşen de yok. */
-export function RecordFacts({ facts, className }: { facts: RecordFact[]; className?: string }) {
+/** Özet satırları — değeri boş (null/"") olan satır HİÇ çizilmez; hepsi boşsa `empty` (verilmezse hiçbir şey). */
+export function RecordFacts({ facts, className, empty = null }: { facts: RecordFact[]; className?: string; empty?: ReactNode }) {
   const shown = facts.filter((f) => f.value !== null && f.value !== undefined && f.value !== "");
-  if (shown.length === 0) return null;
+  if (shown.length === 0) return <>{empty}</>;
   return (
     <dl className={cn("grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm", className)}>
       {shown.map((f) => (
