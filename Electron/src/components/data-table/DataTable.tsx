@@ -39,6 +39,7 @@ import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { DataTablePagination } from "./DataTablePagination";
 import { SortableHead, alignClass } from "./DataTableHead";
 import { clipStyle, handleClipHover, tableWidthVars } from "./column-layout";
+import { currentOrder } from "./column-arrange";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 
 // Satır açılışı bu kadar geciktirilir; bu süre içinde 2. tık gelirse (çift-tık)
@@ -133,9 +134,7 @@ export function DataTable<T>({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const current = table.getState().columnOrder?.length
-      ? table.getState().columnOrder
-      : table.getAllLeafColumns().map((c) => c.id);
+    const current = currentOrder(table);
     const oldIndex = current.indexOf(active.id as string);
     const newIndex = current.indexOf(over.id as string);
     if (oldIndex < 0 || newIndex < 0) return;
