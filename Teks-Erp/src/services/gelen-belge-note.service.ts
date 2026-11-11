@@ -10,7 +10,7 @@
 // =============================================================================
 import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { cariHoldNotice } from "./helpers/cari-hold.helper";
-import { DeliveryNoteSourceKind, DeliveryNoteStatus, Prisma } from "@prisma/client";
+import { DeliveryNoteStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
@@ -37,6 +37,7 @@ import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 import { noteTanima } from "./gelen-belge-tanima-ozeti.service";
 import { withDocLineCount } from "./gelen-belge-satir-sayim.service";
 import { withNoteWorkOrders } from "./gelen-belge-liste-is-emri.service";
+import type { DeliveryNoteCreateInput, DeliveryNoteHeaderInput, DeliveryNoteListQuery } from "./gelen-belge-note-types";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -46,40 +47,7 @@ export { addDeliveryNoteLines, deleteDeliveryNoteLine, updateDeliveryNoteLine, t
 // Durum kümesi Prisma enum'undan TÜRETİLİR (elle kopya bayatlar; D4 yeni değer eklerse tek yer).
 export const DELIVERY_NOTE_STATUSES = Object.values(DeliveryNoteStatus) as readonly DeliveryNoteStatus[];
 
-// ── Girdi tipleri (route Zod'u bunlara daraltır) ────────────────────────────
-export interface DeliveryNoteHeaderInput {
-  ownerCustomerId?: string | null;
-  senderCustomerId?: string | null;
-  senderText?: string | null;
-  senderDocNo?: string | null;
-  /** YYYY-AA-GG — takvim günü. */
-  senderDocDate?: string | null;
-  customerBatchNo?: string | null;
-  customerOrderNo?: string | null;
-  processText?: string | null;
-  pageCount?: number | null;
-  declaredTopCount?: number | null;
-  totalsDeclared?: Record<string, unknown> | null;
-}
-export interface DeliveryNoteCreateInput extends DeliveryNoteHeaderInput {
-  clientToken?: string | null;
-  sourceKind: Exclude<DeliveryNoteSourceKind, "OCR">;
-  /** Önceden yüklenmiş, sahipsiz taramalar (sha256 ile doğmuş) taslağa bağlanır. */
-  scanIds?: string[];
-  lines?: DeliveryNoteLineInput[];
-}
-export interface DeliveryNoteListQuery {
-  status?: DeliveryNoteStatus;
-  sourceKind?: DeliveryNoteSourceKind;
-  ownerCustomerId?: string | string[];
-  senderCustomerId?: string | string[];
-  q?: string;
-  /** createdAt aralığı (dahil); gün-yalnız değer fabrika gününün başı/sonu. */
-  from?: string;
-  to?: string;
-  cursor?: string;
-  limit?: number;
-}
+export type { DeliveryNoteCreateInput, DeliveryNoteHeaderInput, DeliveryNoteListQuery } from "./gelen-belge-note-types";
 
 // ── Seçimler ────────────────────────────────────────────────────────────────
 const HEADER_SELECT = {
