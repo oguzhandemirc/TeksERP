@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { CONSIGNED_WHERE } from "../helpers/stock-ownership.helper";
 
 export const LABEL_SUGGESTION_DAYS = 180;
 export const LABEL_SUGGESTION_LIMIT = 20;
@@ -43,7 +44,7 @@ async function resolveScope(args: { workOrderId?: string | null; rollId?: string
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
     if (wo.customerId) customers.add(wo.customerId);
     const owners = await prisma.roll.findMany({
-      where: { batch: { workOrderId }, ownerCustomerId: { not: null } },
+      where: { batch: { workOrderId }, ...CONSIGNED_WHERE },
       select: { ownerCustomerId: true },
       distinct: ["ownerCustomerId"],
       take: 10,

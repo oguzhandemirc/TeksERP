@@ -12,7 +12,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { normalizeDisplayName } from "./helpers/name-normalize.helper";
-import { LABEL_TEXT_LOCKED_STATUSES } from "./inventory/label-texts";
+import { LABEL_TEXT_LOCKED_STATUSES } from "./helpers/label-text-lock.helper";
 import { assertTemplateAssignable } from "./label-template.service";
 
 const TABLE = "CUSTOMER_CONSIGNEE";

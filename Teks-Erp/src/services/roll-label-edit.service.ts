@@ -25,7 +25,7 @@ import { resolveLabelRouting } from "./helpers/label-routing.resolver";
 import { rollLabelKindOf } from "./helpers/roll-stage.helper";
 import { rollTemplateApplies } from "./helpers/roll-label-template.helper";
 import { isOfferedTemplate, resolveLabelTemplateOptions, type LabelTemplateOption } from "./helpers/label-template-options.helper";
-import { LABEL_TEXT_LOCKED_STATUSES, labelTextFixBlock } from "./inventory/label-texts";
+import { LABEL_TEXT_LOCKED_STATUSES, labelTextFixBlock } from "./helpers/label-text-lock.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { resolveTamburConsignee } from "./helpers/tambur-customer-settings.helper";
 
