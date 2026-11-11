@@ -52,7 +52,7 @@ export function cariStatCards({ account, stats }: { account: CariRow | null | un
     const open = openOrderCount(stats);
     if (open > 0) cards.push(<StatCard key="open" label="Açık sipariş" icon={ClipboardList} tone="blue" value={`${formatNumber(open, 0)} sipariş`} hint={`Kalan ${metre(stats.totalOpenQty) ?? "0 m"}`} />);
     if (stats.totalCount > 0 && stats.totalOrderedQty > 0) {
-      cards.push(<StatCard key="ordered" label="Sipariş metresi" icon={Ruler} tone="teal" value={metre(stats.totalOrderedQty) ?? "—"} hint={`Sevk edilen ${metre(stats.totalShippedQty) ?? "0 m"} · ${formatNumber(stats.totalCount, 0)} sipariş`} />);
+      cards.push(<StatCard key="ordered" label="Sipariş metresi" icon={Ruler} tone="teal" value={metre(stats.totalOrderedQty) ?? "—"} hint={`Siparişten sevk: ${metre(stats.totalShippedQty) ?? "0 m"} · ${formatNumber(stats.totalCount, 0)} sipariş`} />);
     }
   }
   return cards;

@@ -18,6 +18,10 @@ export function ledgerCurrencies(acc: Pick<CariRow, "balances" | "defaultCurrenc
   return [...new Set([acc.defaultCurrency, ...(acc.balances ?? []).map((b) => b.currency)])];
 }
 
+/** Açıklama belge no'sunu tekrar ediyorsa boş kalır (kolon tekrarı gürültüdür). */
+const ledgerDesc = (r: { description?: string | null; docNo?: string | null; sourceType: string }): string =>
+  r.description && r.description !== r.docNo ? r.description : r.description ? "" : r.sourceType;
+
 export function CariLedgerTab({ account }: { account: CariRow }) {
   const currencies = ledgerCurrencies(account);
   const [currency, setCurrency] = useState<Currency>(currencies[0]!);
@@ -63,7 +67,7 @@ export function CariLedgerTab({ account }: { account: CariRow }) {
         columns={[
           { key: "date", label: "Tarih", render: (r) => gunCari(r.txnDate) },
           { key: "doc", label: "Belge", render: (r) => <span className="font-semibold tabular-nums">{r.docNo ?? "—"}</span> },
-          { key: "desc", label: "Açıklama", className: "max-w-[22rem] truncate", title: (r) => r.description ?? r.sourceType, render: (r) => r.description ?? r.sourceType },
+          { key: "desc", label: "Açıklama", className: "max-w-[22rem] truncate", title: ledgerDesc, render: ledgerDesc },
           { key: "debit", label: "Borç", align: "right", render: (r) => (r.debit ? money(r.debit, currency) : "") },
           { key: "credit", label: "Alacak", align: "right", render: (r) => (r.credit ? money(r.credit, currency) : "") },
           { key: "run", label: "Bakiye", align: "right", render: (r) => <span className="font-semibold">{money(r.running, currency)}</span> },
