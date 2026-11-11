@@ -164,7 +164,7 @@ export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel, o
                 <dd className="font-medium">
                   {supplierDisplayName(po)}
                   {supplierRefOf(po)?.kind === "SUBCONTRACTOR" && (
-                    <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                    <span className="ml-1.5 rounded-badge bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
                       {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
                     </span>
                   )}

@@ -43,7 +43,7 @@ export function DesignerToolbar({ editor, templateId, docTypeLabel, onDocType, d
         <FileType2 className="mr-1.5 h-3.5 w-3.5" /> Belge türü: {docTypeLabel}
       </Button>
       {dirty && (
-        <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300" data-testid="taslak-rozeti">
+        <span className="rounded-badge bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300" data-testid="taslak-rozeti">
           Taslak · kaydedilince yeni sürüm
         </span>
       )}

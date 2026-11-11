@@ -122,7 +122,7 @@ export function RawHtmlEditor({
                   disabled={disabled}
                   title={`${f.label} — örn. ${f.sample}`}
                   onClick={() => insert(`{{${f.key}}}`)}
-                  className="rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] hover:bg-accent disabled:opacity-50"
+                  className="rounded-badge border bg-background px-1.5 py-0.5 font-mono text-[10px] hover:bg-accent disabled:opacity-50"
                 >
                   {f.key}
                 </button>

@@ -8,11 +8,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { WeavingFloorView } from "@/pages/Operations/WeavingFloor/WeavingFloorView";
 import { useLoomFloorMock } from "@/pages/Operations/WeavingFloor/mock/useLoomFloorMock";
-import "@fontsource/plus-jakarta-sans/400.css";
-import "@fontsource/plus-jakarta-sans/500.css";
-import "@fontsource/plus-jakarta-sans/600.css";
-import "@fontsource/plus-jakarta-sans/700.css";
-import "@fontsource/plus-jakarta-sans/800.css";
+import "@/lib/theme/fonts";
 import "../index.css";
 
 if (!import.meta.env.DEV) throw new Error("Önizleme yalnız geliştirme kipinde açılır.");

@@ -424,7 +424,7 @@ function PermissionRow({
             {p.roleNames.map((r) => (
               <span
                 key={r}
-                className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                className="rounded-badge bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
                 title="Bu yetki bu rolün paketinde var — öneridir, zorunluluk değil."
               >
                 {r.replace(/^Mobil — |^Web — /, "")}

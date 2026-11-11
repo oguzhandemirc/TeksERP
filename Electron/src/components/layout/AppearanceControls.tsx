@@ -12,6 +12,7 @@ import {
   TILES,
 } from "./appearance/appearance-options";
 import { Field, PresetSwatches, Segmented } from "./appearance/appearance-parts";
+import { TypefacePicker } from "./appearance/TypefacePicker";
 
 const MODE_ICONS = Object.fromEntries(THEME_MODES.map((m) => [m.value, <m.icon key={m.value} className="h-3.5 w-3.5" />]));
 
@@ -87,6 +88,9 @@ export function AppearanceControls({ variant = "full" }: { variant?: "quick" | "
           </Field>
           <Field label="Köşe yuvarlaklığı">
             <Segmented label="Köşe yuvarlaklığı" options={RADII} value={a.radius} onChange={(radius) => setAppearance({ radius })} icons={RADIUS_TILES} />
+          </Field>
+          <Field label="Yazı tipi">
+            <TypefacePicker value={a.typeface} onChange={(typeface) => setAppearance({ typeface })} />
           </Field>
           <Field label="Yazı boyutu">
             <Segmented label="Yazı boyutu" options={FONTS} value={a.font} onChange={(font) => setAppearance({ font })} icons={FONT_ICONS} />

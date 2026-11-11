@@ -164,7 +164,7 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
             <ArrowRightLeft className="h-4 w-4 text-primary" />
             Konumu Düzelt — {source?.batchNumber}
             {isBackflush && (
-              <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              <span className="rounded-badge border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                 Milestone Atla
               </span>
             )}

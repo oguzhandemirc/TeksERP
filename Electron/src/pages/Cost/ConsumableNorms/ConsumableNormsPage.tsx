@@ -68,7 +68,7 @@ export function ConsumableNormsPage() {
                   <td className="px-3 py-2"><span className="font-medium">{r.serviceItem.code}</span> <span className="text-muted-foreground">{r.serviceItem.name}</span></td>
                   <td className="px-3 py-2"><span className="font-medium">{r.consumableItem.code}</span> <span className="text-muted-foreground">{r.consumableItem.name}</span></td>
                   <td className="px-3 py-2 text-right tabular-nums">{/^0(\.0+)?$/.test(String(r.qtyPerM)) ? "0 — sarf kullanmaz" : `${fmtDecFull(r.qtyPerM, 6)} ${r.unit}/${r.basis === "PER_ROLL" ? "top" : "m"}`}
-                    {r.propertyValue && <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs">{r.propertyValue.name}</span>}</td>
+                    {r.propertyValue && <span className="ml-1 rounded-badge bg-muted px-1.5 py-0.5 text-xs">{r.propertyValue.name}</span>}</td>
                   <td className="px-3 py-2">{fmtFactoryDate(r.createdAt)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <PermissionGate permission="cost:write">

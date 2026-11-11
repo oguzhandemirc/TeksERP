@@ -78,7 +78,7 @@ export function LocationCell({ konum, status }: { konum: WorkOrderLocation | und
   const chip = (
     <span
       className={cn(
-        "inline-flex max-w-[10rem] items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs",
+        "inline-flex max-w-[10rem] items-center gap-1.5 rounded-badge border px-2 py-0.5 text-xs",
         v.fason && "border-station-fason/45 bg-station-fason/10",
       )}
     >

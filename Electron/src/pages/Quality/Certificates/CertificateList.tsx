@@ -115,7 +115,7 @@ function SummaryStrip({ s, active, onPick }: { s: CertificateSummary; active: Ce
 
 export function ExpiryPill({ row, soonDays }: { row: Parameters<typeof expiryBadge>[0]; soonDays: number }) {
   const b = expiryBadge(row, soonDays);
-  return <span data-tone={b.tone} className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", TONE_CLASS[b.tone])}>{b.text}</span>;
+  return <span data-tone={b.tone} className={cn("inline-flex whitespace-nowrap rounded-badge border px-2 py-0.5 text-xs font-medium", TONE_CLASS[b.tone])}>{b.text}</span>;
 }
 
 function CertificateTable({ rows, soonDays, onOpen }: { rows: CertificateRow[]; soonDays: number; onOpen: (id: string) => void }) {

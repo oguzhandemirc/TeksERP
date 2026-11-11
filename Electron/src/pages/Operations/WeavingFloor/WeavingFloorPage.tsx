@@ -24,7 +24,7 @@ import { buildTezgahTvUrl, closeTezgahTvWindow, exitTezgahTvHere, isSeparateTvWi
 /** Tazeleme koptuğunda eldeki veri gösterilir ama yaşı açıkça yazılır. */
 function StaleNotice({ updatedAt }: { updatedAt: number }) {
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-bold text-destructive">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-badge bg-destructive/10 px-2.5 py-0.5 text-xs font-bold text-destructive">
       <WifiOff className="h-3.5 w-3.5" />
       Bağlantı yok — son veri {formatFactory(updatedAt, "HH:mm:ss")}
     </span>

@@ -4,6 +4,7 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnSizingState,
   type OnChangeFn,
   type Row,
   type RowSelectionState,
@@ -57,6 +58,21 @@ interface Options<T> {
   /** Opt-in: son kullanılan süzgeç + sıralama kullanıcı tercihinde (tablo anahtarı = `queryKey`)
    *  saklanır, sayfaya dönünce geri gelir; arama kaydedilmez. `usePersistedTableFilters`. */
   persistFilters?: TableFilterPersistConfig;
+}
+
+/** Tablo-başı tercih haritasına yaz; `null` = anahtarı düşür ("Sütunları sıfırla", 64KB tavanı). */
+export function withTableEntry<V>(map: Record<string, V> | undefined, key: string, value: V | null): Record<string, V> {
+  const next = { ...(map ?? {}) };
+  if (value === null) delete next[key];
+  else next[key] = value;
+  return next;
+}
+
+/** Genişlikler tam px; geçersiz/sıfır değer saklanmaz; hiç kalmazsa `null` (anahtar düşer). */
+export function roundSizing(sizing: ColumnSizingState): ColumnSizingState | null {
+  const out: ColumnSizingState = {};
+  for (const [id, w] of Object.entries(sizing)) if (Number.isFinite(w) && w > 0) out[id] = Math.round(w);
+  return Object.keys(out).length ? out : null;
 }
 
 /**
@@ -120,13 +136,22 @@ export function useDataTable<T>({
     }),
     [prefs.tableVisibility, queryKey, initialVisibilityStr],
   );
+  // Elle verilen sütun genişlikleri (px) — sürükle-bırak ya da çift tık "sığdır" (DataTable).
+  const columnSizing = useMemo<ColumnSizingState>(
+    () => prefs.tableSizing?.[queryKey] ?? {},
+    [prefs.tableSizing, queryKey],
+  );
   const onColumnOrderChange: OnChangeFn<string[]> = (updater) => {
     const next = typeof updater === "function" ? updater(columnOrder) : updater;
-    setPreference({ tableOrder: { ...(prefs.tableOrder ?? {}), [queryKey]: next } });
+    setPreference({ tableOrder: withTableEntry(prefs.tableOrder, queryKey, next.length ? next : null) });
   };
   const onColumnVisibilityChange: OnChangeFn<VisibilityState> = (updater) => {
     const next = typeof updater === "function" ? updater(columnVisibility) : updater;
-    setPreference({ tableVisibility: { ...(prefs.tableVisibility ?? {}), [queryKey]: next } });
+    setPreference({ tableVisibility: withTableEntry(prefs.tableVisibility, queryKey, Object.keys(next).length ? next : null) });
+  };
+  const onColumnSizingChange: OnChangeFn<ColumnSizingState> = (updater) => {
+    const next = typeof updater === "function" ? updater(columnSizing) : updater;
+    setPreference({ tableSizing: withTableEntry(prefs.tableSizing, queryKey, roundSizing(next)) });
   };
 
   // ⚠️ TAZE URL — LOAD-BEARING (2026-09-06). Effect'in bağımlılığı yalnız [search]
@@ -289,9 +314,10 @@ export function useDataTable<T>({
   const table = useReactTable({
     data: flatRows,
     columns,
-    state: { columnOrder, columnVisibility, rowSelection },
+    state: { columnOrder, columnVisibility, columnSizing, rowSelection },
     onColumnOrderChange,
     onColumnVisibilityChange,
+    onColumnSizingChange,
     onRowSelectionChange: setRowSelection,
     enableRowSelection: enableSelection,
     // Seçim entity id'sine bağlı — sayfa yüklendikçe index kaymasından etkilenmez.

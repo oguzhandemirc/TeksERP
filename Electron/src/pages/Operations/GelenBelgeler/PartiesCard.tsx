@@ -97,7 +97,7 @@ function PartyItem({ p, check }: { p: NoteParty; check?: BlockCheck }) {
         {partyFactItems(p).map((f) => (
           <li
             key={f.text}
-            className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-xs tabular-nums ${f.warn ? `border-amber-300 bg-amber-50 dark:bg-amber-950 ${WARN_TEXT}` : "bg-background"}`}
+            className={`whitespace-nowrap rounded-badge border px-1.5 py-0.5 text-xs tabular-nums ${f.warn ? `border-amber-300 bg-amber-50 dark:bg-amber-950 ${WARN_TEXT}` : "bg-background"}`}
           >
             {f.text}
           </li>

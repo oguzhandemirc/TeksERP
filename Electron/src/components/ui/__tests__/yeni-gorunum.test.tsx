@@ -63,6 +63,6 @@ describe("Badge pastel haplar", () => {
     render(<Badge variant="success">Ödendi</Badge>);
     const el = screen.getByText("Ödendi");
     expect(el.className).toContain("bg-success-soft");
-    expect(el.className).toContain("rounded-full");
+    expect(el.className).toContain("rounded-badge"); // köşe tercihine bağlı tek belirteç (rozet-kose.test.ts)
   });
 });

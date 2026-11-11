@@ -305,7 +305,7 @@ function LotFields({ lot }: { lot: ReturnType<typeof useNewSackLot> }) {
               İpucu yalnız hata ya da zorunlu modda; "boş bırakırsan" cümlesi yer tutucuda zaten var. */}
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
             {siradaki != null && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground shadow-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-badge bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground shadow-sm">
                 Sıradaki numara: <span className="tabular-nums font-semibold">{siradaki}</span>
               </span>
             )}

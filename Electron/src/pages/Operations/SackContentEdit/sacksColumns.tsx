@@ -116,7 +116,7 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
       const s = row.original;
       if (s.matchRollCount === null) return <span className="text-muted-foreground">—</span>;
       return (
-        <span className="inline-flex whitespace-nowrap rounded bg-primary/15 px-1.5 py-0.5 text-xs font-medium tabular-nums text-primary">
+        <span className="inline-flex whitespace-nowrap rounded-badge bg-primary/15 px-1.5 py-0.5 text-xs font-medium tabular-nums text-primary">
           {s.matchRollCount} top · {fmtQty(s.matchQty ?? 0)}
         </span>
       );
@@ -179,7 +179,7 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
       const g = row.original.packingGroup;
       if (!g) return <span className="text-muted-foreground">—</span>;
       return (
-        <span className="inline-flex whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+        <span className="inline-flex whitespace-nowrap rounded-badge bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
           {g.name}
         </span>
       );

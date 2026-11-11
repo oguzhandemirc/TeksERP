@@ -5,7 +5,7 @@ import { LOOM_TIER_META, candidateDetail, type LoomCandidate, type LoomTier } fr
 export function LoomTierBadge({ tier, className }: { tier: LoomTier; className?: string }) {
   const m = LOOM_TIER_META[tier];
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap", m.tone, className)} title={m.label}>
+    <span className={cn("inline-flex items-center gap-1 rounded-badge border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap", m.tone, className)} title={m.label}>
       {m.short} · {m.label}
     </span>
   );
@@ -13,7 +13,7 @@ export function LoomTierBadge({ tier, className }: { tier: LoomTier; className?:
 
 export function WidthWarningBadge() {
   return (
-    <span className="rounded border border-warning/40 px-1.5 py-0.5 text-[11px] text-warning" title="Tarak eni ürün eninden dar">
+    <span className="rounded-badge border border-warning/40 px-1.5 py-0.5 text-[11px] text-warning" title="Tarak eni ürün eninden dar">
       Tarak dar
     </span>
   );

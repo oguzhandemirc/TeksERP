@@ -24,7 +24,7 @@ export function ReturnedRollBadge({
 }) {
   return (
     <span
-      className="mr-1 inline-flex shrink-0 items-center gap-0.5 rounded border border-amber-500/40 bg-amber-500/10 px-1 py-px align-middle text-[9px] font-semibold uppercase leading-none text-amber-700 dark:text-amber-400"
+      className="mr-1 inline-flex shrink-0 items-center gap-0.5 rounded-badge border border-amber-500/40 bg-amber-500/10 px-1 py-px align-middle text-[9px] font-semibold uppercase leading-none text-amber-700 dark:text-amber-400"
       title={
         reasonName
           ? `${safeFormat(returnedAt, "dd.MM.yyyy HH:mm")} tarihinde iade alındı — ${reasonName}`

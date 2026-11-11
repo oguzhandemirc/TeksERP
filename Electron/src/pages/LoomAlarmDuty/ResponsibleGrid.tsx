@@ -20,7 +20,7 @@ type Slot = { stationId: string; shiftDefinitionId: string; tier: DutyTier };
 
 function PersonChip({ r, onRevoke, busy }: { r: DutyResponsible; onRevoke: () => void; busy: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-xs">
+    <span className="inline-flex items-center gap-1 rounded-badge border bg-muted/40 px-2 py-0.5 text-xs">
       {!r.user.canViewAlarms && <AlertTriangle className="h-3 w-3 text-amber-600" aria-label="Alarmları göremez" />}
       {r.user.name}
       <button type="button" disabled={busy} onClick={onRevoke} aria-label={`${r.user.name} sorumluluğunu kaldır`} className="text-muted-foreground hover:text-destructive">

@@ -73,7 +73,7 @@ function MetaStrip({ meta, basis, notes }: { meta: YarnNeedMeta; basis: string |
           <li
             key={b.key}
             className={cn(
-              "rounded-full border px-2.5 py-0.5 text-xs",
+              "rounded-badge border px-2.5 py-0.5 text-xs",
               b.on ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-muted-foreground/30 bg-muted text-muted-foreground",
             )}
           >

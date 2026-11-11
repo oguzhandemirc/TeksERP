@@ -346,7 +346,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                                   );
                                   setRollQtys((p) => ({ ...p, [r.id]: v }));
                                 }}
-                                className="w-14 rounded border bg-background px-1.5 py-0.5 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-ring"
+                                className="w-14 rounded-badge border bg-background px-1.5 py-0.5 text-right text-xs tabular-nums outline-none focus:ring-2 focus:ring-ring"
                                 title="Sevk metresi — topun tam metresinden azsa top bölünür"
                               />
                               <span className="text-[10px] text-muted-foreground">

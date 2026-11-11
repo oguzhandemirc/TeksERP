@@ -47,7 +47,7 @@ const REMOVE_LABELS = [
 function Pending({ slot }: { slot: PriceSlot | null }) {
   if (!slot?.pending) return null;
   return (
-    <span className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-300">
+    <span className="inline-flex items-center gap-1 rounded-badge border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-300">
       <CalendarClock className="h-3 w-3" />
       {formatPrice(slot.pending.price)} · {fmtFactoryDate(slot.pending.validFrom)}
     </span>

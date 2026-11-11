@@ -161,7 +161,7 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
                 type="button"
                 title={`{{${c.key}}} ekle`}
                 onClick={() => insertVar(c.key)}
-                className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] hover:bg-muted"
+                className="rounded-badge border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] hover:bg-muted"
               >
                 {`{{${c.key}}}`}
               </button>
