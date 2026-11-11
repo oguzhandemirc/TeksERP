@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
-import { flexRender, type ColumnDef, type ColumnMeta, type Header, type Row, type Table as TanstackTable } from "@tanstack/react-table";
+import { flexRender, type ColumnDef, type Row, type Table as TanstackTable } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -9,19 +9,12 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   AlertOctagon,
   Copy,
   FileText,
   FileSpreadsheet,
-  GripVertical,
   Inbox,
   Info,
   RefreshCw,
@@ -44,6 +37,8 @@ import { exportTableToPdf, exportTableToXlsx, exportListName } from "@/lib/table
 import { cn } from "@/lib/utils";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { DataTablePagination } from "./DataTablePagination";
+import { SortableHead, alignClass } from "./DataTableHead";
+import { clipStyle, handleClipHover, tableWidthVars } from "./column-layout";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 
 // Satır açılışı bu kadar geciktirilir; bu süre içinde 2. tık gelirse (çift-tık)
@@ -157,6 +152,8 @@ export function DataTable<T>({
   // görünürlük+sırayı, columnDefs ise hücre-closure (ör. restoreMutation.isPending)
   // değişimini yakalar. İkisi de satır SEÇİMİ toggle'ında sabit → memo hâlâ tutar.
   const visibleColumnIds = table.getVisibleLeafColumns().map((c) => c.id).join(",");
+  // Genişlik değişkenleri <table>'da; satırlar yalnız değişkeni okur → genişlik değişimi satır çizdirmez.
+  const widthVars = tableWidthVars(table);
   const columnDefs = table.options.columns;
 
   // Sonsuz kaydırma: liste dibine gelince pagination.loadMore otomatik tetiklenir
@@ -171,13 +168,13 @@ export function DataTable<T>({
 
   return (
     <div data-list-surface="table" className="flex min-h-0 flex-1 flex-col">
-      <div ref={rootRef} className="flex-1 overflow-auto">
+      <div ref={rootRef} className="flex-1 overflow-auto" onMouseOver={handleClipHover}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           {/* containerClassName="overflow-visible": Table'ın kendi overflow-auto
               sarmalayıcısı sticky başlığı yutuyordu (thead dış scroll kabına değil
               iç sarmalayıcıya yapışıp dikeyde kayıyordu). overflow-visible ile
               tek scroll kabı = rootRef → başlık gerçekten sabit kalır. */}
-          <Table containerClassName="overflow-visible">
+          <Table containerClassName="overflow-visible" className="data-grid" style={widthVars}>
             {/* İnce ayraç çizgisi (hedef görsel): <tr> border-b'si `border-collapse: collapse`'te
                 sticky başlıkla YAPIŞMAZ (çökmüş kenarlık gövdeyle boyanıp kayar).
                 Çözüm: çizgiyi th hücrelerinin ARKA PLANINA linear-gradient olarak
@@ -206,7 +203,7 @@ export function DataTable<T>({
                     strategy={horizontalListSortingStrategy}
                   >
                     {hg.headers.map((h) => (
-                      <SortableHead key={h.id} header={h} />
+                      <SortableHead key={h.id} header={h} table={table} />
                     ))}
                   </SortableContext>
                 </TableRow>
@@ -246,9 +243,9 @@ export function DataTable<T>({
                           <Skeleton className="h-4 w-4" />
                         </TableCell>
                       )}
-                      {table.getAllColumns().map((c) => (
+                      {table.getVisibleLeafColumns().map((c) => (
                         <TableCell key={c.id}>
-                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-16" />
                         </TableCell>
                       ))}
                     </TableRow>
@@ -481,7 +478,9 @@ function DataTableRowInner<T>({
       )}
       {row.getVisibleCells().map((cell) => (
         <TableCell key={cell.id} className={alignClass(cell.column.columnDef.meta)}>
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          <div data-cell-clip={cell.column.id} className="truncate" style={clipStyle(cell.column.id, true)}>
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </div>
         </TableCell>
       ))}
     </TableRow>
@@ -508,45 +507,9 @@ function DataTableRowInner<T>({
   );
 }
 
-/** Sayısal kolon (meta.align "right" ya da toplanabilir) sağa hizalı + sabit genişlikli rakam. */
-function alignClass(meta: Pick<ColumnMeta<never, unknown>, "align" | "summable"> | undefined): string | undefined {
-  const align = meta?.align ?? (meta?.summable ? "right" : undefined);
-  return align === "right" ? "text-right tabular-nums" : align === "center" ? "text-center" : undefined;
-}
-
 // memo + generic korunumu: memo default shallow karşılaştırması props için yeterli
 // (row/refs kararlı, isSelected/index/selectable primitive).
 const DataTableRow = memo(DataTableRowInner) as typeof DataTableRowInner;
-
-function SortableHead<T>({ header }: { header: Header<T, unknown> }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: header.column.id,
-  });
-  const sized = header.getSize();
-  return (
-    <TableHead
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Translate.toString(transform),
-        transition,
-        width: sized === 150 ? undefined : sized,
-        opacity: isDragging ? 0.65 : 1,
-        zIndex: isDragging ? 20 : undefined,
-      }}
-      className={cn("group/th relative cursor-grab touch-none select-none active:cursor-grabbing", alignClass(header.column.columnDef.meta))}
-      {...attributes}
-      {...listeners}
-    >
-      {!header.isPlaceholder && (
-        <GripVertical
-          aria-hidden
-          className="pointer-events-none absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/40 opacity-0 transition-opacity group-hover/th:opacity-100"
-        />
-      )}
-      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-    </TableHead>
-  );
-}
 
 /** Satır sağ-tık menüsünün başına "Seçimi Kopyala" — yalnız bir metin seçiliyse.
  *  `getText` menü açılırken yakalanan seçimi okur (selRef). */

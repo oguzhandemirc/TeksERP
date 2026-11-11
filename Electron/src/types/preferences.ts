@@ -43,6 +43,8 @@ export interface AppPreferences {
   /** Filtre satırı kutu görünürlüğü — sayfa (pathname ya da `viewKey`) → { filtreId: görünür } yalnız
    *  sayfa varsayılanından sapanlar; şekli `filter-row/filter-visibility.ts` sahiplenir ve okurken süzer. */
   filterRowVisibility?: Record<string, Record<string, boolean>>;
+  /** Tablo sütun genişliği (px, elle) — queryKey → { columnId: px }; yalnız sürüklenen sütunlar. */
+  tableSizing?: Record<string, Record<string, number>>;
   /** Tablo sütun görünürlüğü — queryKey → { columnId: visible }. */
   tableVisibility?: Record<string, Record<string, boolean>>;
   /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */

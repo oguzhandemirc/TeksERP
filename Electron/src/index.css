@@ -176,6 +176,8 @@
     --cell-py: 0.6875rem;
     --head-h: 2.5rem;
     --page-gutter: 1rem;
+    /* Tablo sütun ayracı — kenarlık renginin düşük opaklığı; zor fark edilir. */
+    --table-col-line: hsl(var(--border) / 0.55);
 
     /* İstasyon renkleri */
     --station-kk1: 195 85% 40%;
@@ -492,6 +494,19 @@
 .topbar-tools > button:not([data-plain]):hover {
   background-color: hsl(var(--accent));
 }
+
+/* ── VERİ TABLOSU (ortak DataTable `.data-grid`) — sütunlar arası çok ince dikey ayraç (kutu gölgesi:
+   çökmüş kenarlık sticky başlıkta kayardı). Son sütun ve tek hücreli (colSpan) satırlar çizgisiz. */
+.data-grid :is(th, td):not(:last-child) {
+  box-shadow: inset -1px 0 0 var(--table-col-line);
+}
+.data-grid[data-resizing] { cursor: col-resize; user-select: none; }
+/* Hücre TEK SATIR: sayfa sütunu `whitespace-normal`/`flex-wrap` verse de tablo içinde kaydırmaz;
+   taşan kısım kutuda "…" olur, tam metin üzerine gelince (column-layout `handleClipHover`). */
+.data-grid [data-cell-clip],
+.data-grid [data-cell-clip] * { white-space: nowrap; }
+.data-grid [data-cell-clip] .flex-wrap { flex-wrap: nowrap; }
+.data-grid [data-cell-clip] :is(.flex-col, .grid) { display: flex; flex-direction: row; align-items: center; gap: 0.375rem; }
 
 /* ── LİSTE YÜZEYİ KOŞUSU — sayfa dosyasına dokunmadan "kart içinde liste".
    Araç çubuğu / filtre satırı / tablo / altlık `data-list-surface` taşır; sekme içinde ARDIŞIK
