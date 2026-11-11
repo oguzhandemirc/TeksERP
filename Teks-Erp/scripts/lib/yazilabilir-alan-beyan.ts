@@ -10,7 +10,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],
   fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "serviceItemId", "sortOrder", "updatedById", "valueType", "variantOfPropertyId"],
   item: ["code", "composition", "createdById", "finishedGsm", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "rawGsm", "rawWidthCm", "unit", "updatedById", "warpSpecId", "weaveDesignId", "weftSpecId", "widthCm", "yarnWastePct"],
-  machine: ["code", "createdById", "isActive", "name", "productionLineCount", "stationId", "updatedById", "warpBeamSlots"],
+  machine: ["code", "createdById", "isActive", "maxWorkingWidthCm", "name", "planEfficiencyPct", "planRpm", "productionLineCount", "stationId", "updatedById", "warpBeamSlots"],
   machineStopCodeMap: ["collectorType", "isActive", "machineId", "rawStopCode", "stopReasonId"],
   order: ["branchId", "cancelReason", "cancelReasonCode", "cancelledAt", "clientToken", "completedAt", "createdById", "currency", "customerId", "deadline", "destination", "manualCloseReason", "manualClosedById", "orderDate", "orderNumber", "shippedQty", "status", "totalAmount", "updatedById"],
   peripheralDevice: ["address", "code", "connectionType", "counterMode", "createdById", "decimals", "deviceId", "identifyPattern", "isActive", "kind", "labelDpi", "labelGapMm", "labelHeightMm", "labelWidthMm", "languageOverride", "machineId", "mediaType", "name", "notes", "pollCommand", "port", "rasterMode", "readMode", "resetCommand", "role", "scale", "simulate", "stationId", "terminator", "timeoutMs", "updatedById"],
@@ -19,7 +19,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   returnReason: ["code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById"],
   route: ["code", "createdById", "customerId", "description", "isActive", "isFavorite", "isWorkOrderShortcut", "name", "shortcutOrder", "updatedById"],
   serviceItem: ["name", "unit"],
-  station: ["allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "capturesWidth", "code", "consumesWarpBeam", "createdById", "defaultCategoryId", "defaultLabelCopies", "department", "inspectionEnabled", "isActive", "kind", "name", "producesWarpBeam", "scanAddAllowed", "scanNotSkippable", "type", "updatedById"],
+  station: ["allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "capturesWidth", "code", "consumesWarpBeam", "createdById", "defaultCategoryId", "defaultLabelCopies", "department", "inspectionEnabled", "isActive", "kind", "machineStopEnabled", "name", "producesWarpBeam", "scanAddAllowed", "scanNotSkippable", "type", "updatedById"],
   warehouse: ["address", "code", "isActive", "name", "notes"],
   warpSpec: ["code", "createdById", "endsCount", "endsPerDent", "isActive", "name", "notes", "reedNo", "reedWidthCm", "selvedgeEnds", "takeUpPct", "updatedById", "wastePct", "yarnItemId"],
 };
