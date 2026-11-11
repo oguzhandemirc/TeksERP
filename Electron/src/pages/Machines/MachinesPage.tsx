@@ -3,16 +3,7 @@ import { machineColumns } from "./columns";
 import { machineService } from "./service";
 import { MachineFormDialog } from "./MachineFormDialog";
 import type { Machine } from "./types";
-import type { MachineFormValues } from "./schema";
-
-const buildPayload = (v: MachineFormValues, initial: Machine | null): Partial<Machine> => ({
-  stationId: v.stationId,
-  // Kod backend'de üretilir (MAK+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
-  ...(initial?.code ? { code: initial.code } : {}),
-  name: v.name,
-  // Devere Faz 3: yuva sayısı — allowlist satırı (istek gövdesini elle kuran katman).
-  warpBeamSlots: v.warpBeamSlots,
-});
+import { buildMachinePayload } from "./machinePayload";
 
 export function MachinesPage() {
   return (
@@ -32,7 +23,7 @@ export function MachinesPage() {
           onOpenChange={onOpenChange}
           initial={initial}
           isSubmitting={isSubmitting}
-          onSubmit={(values) => onSubmit(buildPayload(values, initial))}
+          onSubmit={(values) => onSubmit(buildMachinePayload(values, initial))}
         />
       )}
     />

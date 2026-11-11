@@ -3,11 +3,13 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Input } from "@/components/ui/input";
-import { useDevereEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
 import { machineFormDefaults, machineFormSchema, type MachineFormValues } from "./schema";
 import type { Machine } from "./types";
+import { planningToFormText } from "./machinePayload";
+import { MachinePlanningSection } from "./MachinePlanningSection";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
@@ -23,11 +25,16 @@ interface Props {
 export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, defaultStationId }: Props) {
   // Yuva alanı yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski, değer 1 gider).
   const devereEnabled = useDevereEnabled();
+  // Planlama (devir/verim/en) yalnız dokuma tezgâhında anlamlı — modül kapalıyken bölüm yok (bugünkü form).
+  const dokumaEnabled = useDokumaEnabled();
   const defaults: MachineFormValues = initial
     ? {
         stationId: initial.stationId,
         name: initial.name,
         warpBeamSlots: initial.warpBeamSlots ?? 1,
+        planRpm: planningToFormText(initial.planRpm),
+        planEfficiencyPct: planningToFormText(initial.planEfficiencyPct),
+        maxWorkingWidthCm: planningToFormText(initial.maxWorkingWidthCm),
       }
     : { ...machineFormDefaults, stationId: defaultStationId ?? machineFormDefaults.stationId };
 
@@ -79,6 +86,7 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               <Input id="warpBeamSlots" type="number" min={0} max={32} step={1} {...form.register("warpBeamSlots")} />
             </FormField>
           )}
+          {dokumaEnabled && <MachinePlanningSection form={form} hasSavedValues={Boolean(defaults.planRpm || defaults.planEfficiencyPct || defaults.maxWorkingWidthCm)} />}
         </>
       )}
     </EntityFormDialog>
