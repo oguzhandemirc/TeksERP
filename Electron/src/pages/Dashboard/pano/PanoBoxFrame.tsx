@@ -67,7 +67,7 @@ export function PreviewSkeleton({ kind, large }: { kind: PreviewKind; large?: bo
     return <div className="grid grid-cols-7 gap-1">{Array.from({ length: large ? 35 : 14 }, (_, i) => <span key={i} className={cn("rounded-sm", large ? "h-5" : "h-2", i % 5 === 2 ? "bg-primary/30" : shade)} />)}</div>;
   }
   if (kind === "tiles") {
-    return <div className="grid grid-cols-4 gap-1.5">{Array.from({ length: large ? 8 : 4 }, (_, i) => <span key={i} className={cn("aspect-square rounded-md", shade)} />)}</div>;
+    return <div className="grid grid-cols-4 gap-1.5">{Array.from({ length: large ? 8 : 4 }, (_, i) => <span key={i} className={cn("rounded-md", large ? "h-16" : "h-3", shade)} />)}</div>;
   }
   return <div className="space-y-1.5">{Array.from({ length: large ? 5 : 3 }, (_, i) => <div key={i} className={cn("rounded", shade, large ? "h-6" : "h-2")} style={{ width: `${95 - i * 12}%` }} />)}</div>;
 }

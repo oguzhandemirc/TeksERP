@@ -32,7 +32,7 @@ function MonthGrid({ d, onPick }: { d: AgendaBox; onPick: (p: AgendaParams) => v
   const today = factoryDayKey();
   const [y, m] = d.ay.split("-").map(Number) as [number, number];
   return (
-    <div className="w-full @[40rem]:w-72 @[40rem]:shrink-0">
+    <div className="w-full @[34rem]:w-60 @[34rem]:shrink-0">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-semibold">{MONTHS[m - 1]} {y}</p>
         <div className="flex gap-1">
@@ -117,7 +117,7 @@ export function PanoAgenda({ d, erisim, onPick, loading }: { d: AgendaBox; erisi
     <PanoCard title="Ajanda" description={`${fmtDayKey(d.gun)} planı`}
       action={<button type="button" onClick={() => onPick({})} className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-muted">Bugün</button>}>
       <div className="@container">
-        <div className="flex flex-col gap-5 @[40rem]:flex-row">
+        <div className="flex flex-col gap-5 @[34rem]:flex-row">
           <MonthGrid d={d} onPick={onPick} />
           <div className={cn("min-w-0 flex-1 space-y-3 transition-opacity", loading && "opacity-60")} aria-busy={loading || undefined}>
             {sections.length === 0 ? (

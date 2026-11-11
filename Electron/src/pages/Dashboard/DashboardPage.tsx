@@ -74,8 +74,8 @@ function BoardSkeleton() {
       <div className="grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-4">
         {Array.from({ length: 5 }, (_, i) => <div key={i} className="skeleton-shimmer h-28 rounded-xl bg-muted" />)}
       </div>
-      <div className="grid gap-4 md:grid-cols-2 min-[1101px]:grid-cols-12">
-        <div className="skeleton-shimmer h-72 rounded-xl bg-muted md:col-span-2 min-[1101px]:col-span-8" />
+      <div className="grid gap-4 min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12">
+        <div className="skeleton-shimmer h-72 rounded-xl bg-muted min-[768px]:max-[1100px]:col-span-2 min-[1101px]:col-span-8" />
         <div className="skeleton-shimmer h-72 rounded-xl bg-muted min-[1101px]:col-span-4" />
       </div>
     </div>

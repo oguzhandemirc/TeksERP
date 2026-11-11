@@ -64,12 +64,12 @@ export function PanoStockFlow({ d, erisim }: { d: StockFlowBox; erisim: PanoEris
   return (
     <PanoCard title="Stok giriş–çıkış" description="Depoya giren ve çıkan metre">
       <div className="@container">
-        <div className="flex flex-col gap-4 @[40rem]:flex-row">
+        <div className="flex flex-col gap-4 @[34rem]:flex-row">
           <div className="min-w-0 flex-1">
             <Totals items={[{ label: "Giriş", value: metre(d.toplam.girisMetre), dot: "bg-chart-1" }, { label: "Çıkış", value: metre(d.toplam.cikisMetre), dot: "bg-chart-3" }]} />
             <PanoGrafik secenek={option} yukseklik={190} etiket="Stok giriş ve çıkış grafiği" />
           </div>
-          <div className="-mx-2 min-w-0 divide-y divide-border/60 @[40rem]:w-56">
+          <div className="-mx-2 min-w-0 divide-y divide-border/60 @[34rem]:w-48">
             {d.turler.length === 0 && <p className="px-2 py-4 text-center text-xs text-muted-foreground">Bu dönemde depo hareketi yok</p>}
             {d.turler.slice(0, 6).map((r) => (
               <RowLink key={r.tur} onClick={go} className="py-1.5">

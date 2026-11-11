@@ -59,7 +59,7 @@ function BoxOption({ def, on, onToggle }: { def: PanoBoxDef; on: boolean; onTogg
             <span className="truncate text-sm font-semibold">{def.baslik}</span>
             <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{SIZE_LABEL[def.boyut]}</span>
           </span>
-          <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground" title={def.aciklama}>{def.aciklama}</span>
+          <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground" title={def.aciklama}>{def.aciklama}</span>
         </span>
         <span className="hidden w-16 shrink-0 rounded-md border border-card-border bg-card p-1.5 sm:block" aria-hidden><PreviewSkeleton kind={meta.preview} /></span>
         <span className={cn("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full", on ? "bg-primary text-primary-foreground" : "border border-card-border text-muted-foreground")}>

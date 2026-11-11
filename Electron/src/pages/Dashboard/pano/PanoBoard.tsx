@@ -12,12 +12,15 @@ import { BoxChrome, BoxFailed, BoxLoading, BoxMenu, PreviewSkeleton } from "./Pa
 import { LOCAL_BOX_KEYS, moveBox, packRows } from "./pano-layout";
 import type { BoxState } from "./usePanoBoxData";
 
-/** 12 sütunlu ızgarada genişlik — Tailwind sınıfları statik kalsın diye tablo. */
+/** 12 sütunlu ızgarada genişlik — Tailwind sınıfları statik kalsın diye tablo. Aralıklar çakışmaz: `md` (rem) ile
+ *  `min-[1101px]` (px) Tailwind 4'te sıralanamıyor, `md` kazanıyordu. */
 const SPAN: Record<number, string> = {
   1: "min-[1101px]:col-span-1", 2: "min-[1101px]:col-span-2", 3: "min-[1101px]:col-span-3", 4: "min-[1101px]:col-span-4",
   5: "min-[1101px]:col-span-5", 6: "min-[1101px]:col-span-6", 7: "min-[1101px]:col-span-7", 8: "min-[1101px]:col-span-8",
   9: "min-[1101px]:col-span-9", 10: "min-[1101px]:col-span-10", 11: "min-[1101px]:col-span-11", 12: "min-[1101px]:col-span-12",
 };
+
+const MONEY_KPIS: ReadonlySet<string> = new Set(["ciro", "tahsilat"]);
 
 interface Props {
   boxes: PanoBoxDef[];
@@ -70,17 +73,21 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
       <div className="space-y-4" data-testid="pano-board" data-editing={editing || undefined}>
         {kpis.length > 0 && (
           <SortableContext items={kpis.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-4" data-testid="pano-kpi-seridi">
-              {kpis.map((b) => <Cell key={b.anahtar} id={b.anahtar} editing={editing}>{cell(b)}</Cell>)}
+            {/* Esnek şerit: son satırdaki kart da genişler; para kartı (çok satırlı tutar) daha geniş tabanla. */}
+            <div className="flex flex-wrap gap-4" data-testid="pano-kpi-seridi">
+              {kpis.map((b) => (
+                <Cell key={b.anahtar} id={b.anahtar} editing={editing}
+                  className={MONEY_KPIS.has(b.anahtar) ? "flex-[1_1_15rem]" : "flex-[1_1_10.5rem]"}>{cell(b)}</Cell>
+              ))}
             </div>
           </SortableContext>
         )}
         {body.length > 0 && (
           <SortableContext items={body.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            <div className="grid gap-4 md:grid-flow-row-dense md:grid-cols-2 min-[1101px]:grid-flow-row min-[1101px]:grid-cols-12">
+            <div className="grid gap-4 min-[768px]:max-[1100px]:grid-flow-row-dense min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12">
               {body.map((b) => (
                 <Cell key={b.anahtar} id={b.anahtar} editing={editing}
-                  className={cn(b.boyut === "genis" && "md:col-span-2", SPAN[spans.get(b.anahtar) ?? 4])}>{cell(b)}</Cell>
+                  className={cn(b.boyut === "genis" && "min-[768px]:max-[1100px]:col-span-2", SPAN[spans.get(b.anahtar) ?? 4])}>{cell(b)}</Cell>
               ))}
             </div>
           </SortableContext>

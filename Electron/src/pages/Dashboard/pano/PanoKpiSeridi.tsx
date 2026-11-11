@@ -101,7 +101,7 @@ export function PanoMoneyKpi({ boxKey, data, donem, erisim }: { boxKey: MoneyKpi
             const Arrow = r?.trend === "up" ? ArrowUpRight : r?.trend === "down" ? ArrowDownRight : null;
             return (
               <li key={t.paraBirimi} className="flex min-w-0 items-baseline justify-between gap-2">
-                <span className={cn("truncate font-bold tabular-nums", i === 0 ? "text-xl" : "text-sm")}>{para(t.deger, t.paraBirimi)}</span>
+                <span className={cn("min-w-0 truncate font-bold tabular-nums", i === 0 ? "text-xl" : "text-sm")} title={para(t.deger, t.paraBirimi)}>{para(t.deger, t.paraBirimi)}</span>
                 {r && (
                   <span data-trend={r.trend} title={r.metin}
                     className={cn("inline-flex shrink-0 items-center text-xs font-semibold", r.trend === "up" ? "text-success" : r.trend === "down" ? "text-destructive" : "text-muted-foreground")}>

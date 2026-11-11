@@ -84,12 +84,13 @@ export function PanoOpenWorkOrders({ d, erisim }: { d: OpenWorkOrdersBox; erisim
   const go = useGo(erisim)(BOX_TARGETS.isEmri);
   return (
     <PanoCard title="Açık iş emirleri">
-      <div className="flex items-center gap-4">
+      <div className="@container">
+      <div className="flex flex-col items-center gap-3 @[17rem]:flex-row @[17rem]:gap-4">
         <Ring size={96} thickness={11} label={`${formatCount(d.toplam)} açık iş emri`} parts={d.durumlar.map((s, i) => ({ value: s.adet, stroke: CHART_STROKE[i]! }))}>
           <span className="text-xl font-bold tabular-nums">{formatCount(d.toplam)}</span>
           <span className="text-[10px] text-muted-foreground">açık</span>
         </Ring>
-        <div className="-mx-2 min-w-0 flex-1">
+        <div className="-mx-2 w-full min-w-0 flex-1">
           {d.durumlar.map((s, i) => (
             <RowLink key={s.durum} onClick={go}>
               <LegendDot color={CHART_BG[i]!} className="flex-1 text-muted-foreground">{WO_LABEL[s.durum] ?? s.durum}</LegendDot>
@@ -98,6 +99,7 @@ export function PanoOpenWorkOrders({ d, erisim }: { d: OpenWorkOrdersBox; erisim
             </RowLink>
           ))}
         </div>
+      </div>
       </div>
     </PanoCard>
   );
