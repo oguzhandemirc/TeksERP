@@ -20,6 +20,20 @@ export interface WeavingOrderListProgress {
   producedM: number | null;
 }
 
+/**
+ * ÜRETİLEN metre seçimi (TEK kaynak; liste + genel bakış): fasonda kabul (yoksa 0), kendi tezgahımızda doğan top
+ * metresi (top yoksa null). Koşum ve TEZGAHTA (türetilen) metresi hiçbir zaman girmez (dokuma.md).
+ */
+export function weavingProducedM(kind: WeavingExecutionKind, fasonReceivedM: number | null, rollMeters: number | null): number | null {
+  return kind === "SUBCONTRACTED" ? (fasonReceivedM ?? 0) : rollMeters;
+}
+
+/** Kalan = plannedM − ÜRETİLEN (top yoksa üretilen 0 sayılır: teslim edilen yok); sıfırın altına inmez; açık uçlu → null. */
+export function weavingRemainingM(plannedM: number | null, producedM: number | null): number | null {
+  if (plannedM === null) return null;
+  return Math.max(0, Math.round((plannedM - (producedM ?? 0)) * 1000) / 1000);
+}
+
 /** Sayfadaki işler için ilerleme — iki/üç toplu sorgu; boş sayfada sorgu yok. */
 export async function weavingOrderListProgress(
   orders: Array<{ id: string; executionKind: WeavingExecutionKind }>,
@@ -48,7 +62,7 @@ export async function weavingOrderListProgress(
     const m = meters.get(o.id);
     out.set(o.id, {
       openRunMachines: machines.get(o.id) ?? [],
-      producedM: o.executionKind === "SUBCONTRACTED" ? (received.get(o.id) ?? 0) : m ? Number(m) : null,
+      producedM: weavingProducedM(o.executionKind, received.get(o.id) ?? null, m ? Number(m) : null),
     });
   }
   return out;
