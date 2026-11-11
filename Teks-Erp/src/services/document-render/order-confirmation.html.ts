@@ -72,12 +72,18 @@ export type OrderConfirmationFootTotals = OrderConfirmationDoc["totals"];
 
 const withCustomer = (own: string, customer: string | null): string => (customer && customer !== own ? `${own} (${customer})` : own);
 
+/** Ürün hücresi "KOD — Ad (müşteri adı)" — renderer ve tasarımcı sözleşmesi aynı metni basar. */
+export const orderLineItemText = (r: OrderConfirmationDocLine): string => withCustomer(`${r.itemCode} — ${r.itemName}`, r.customerItemName);
+/** Renk hücresi; ikisi de yoksa null (renderer "—" basar). */
+export const orderLineColorText = (r: OrderConfirmationDocLine): string | null =>
+  r.colorName ? withCustomer(r.colorName, r.customerColorName) : r.customerColorName;
+
 /** Kalem kolonları — PDF ve Excel bu TEK listeden; fiyatsız teyit `columns.kalemler.hidden` ile. */
 export function orderConfirmationColumns(t: OrderConfirmationFootTotals): DocColSpec<OrderConfirmationDocLine>[] {
   return [
     { key: "seq", label: "#", align: "c", width: "30px", kind: TEXT, value: (r) => String(r.lineNo) },
-    { key: "description", label: "ÜRÜN", align: "l", kind: TEXT, value: (r) => withCustomer(`${r.itemCode} — ${r.itemName}`, r.customerItemName) },
-    { key: "color", label: "RENK", align: "l", kind: TEXT, value: (r) => (r.colorName ? withCustomer(r.colorName, r.customerColorName) : r.customerColorName ?? "—") },
+    { key: "description", label: "ÜRÜN", align: "l", kind: TEXT, value: orderLineItemText },
+    { key: "color", label: "RENK", align: "l", kind: TEXT, value: (r) => orderLineColorText(r) ?? "—" },
     { key: "width", label: "EN", align: "c", width: "56px", kind: { t: "int", suffix: " cm" }, value: (r) => (r.widthCm != null ? Math.round(r.widthCm) : "—") },
     { key: "qty", label: "MİKTAR", align: "r", width: "76px", kind: NUM2, value: (r) => r.quantity, foot: { value: t.quantity } },
     { key: "unit", label: "BİRİM", align: "c", width: "48px", kind: TEXT, value: (r) => unitText(r.unit) },

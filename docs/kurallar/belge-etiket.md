@@ -107,6 +107,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] `DocumentDesigner/binding/*` değişince fikstürü iki uçtan tazele (`TASARIMCI_FIKSTUR_YAZ=1 npx vitest run …/binding/roundtrip.test.ts`; sözleşme değişince `test_belge_tasarimci_gidis_donus.ts --yaz`), derleyici + önizlemeyi ölç; panel `language`ı `tr`ye kilitler.
 - [ÇEKİRDEK] Şablonlu belge Excel'i sözleşme bağlamı (`insa`) + `tableBindings`ten (`document-template/excel-tables.ts`); iç kolon yalnız `internalFields`; bağsızda Sistem tabloları + `warnings`; sıra kaynak HTML'den. `itemTable.ts`/üretici/`/tables` değişince iki Excel eşitlik bekçisini koş.
 - [ÇEKİRDEK] Kod sekmesi/önizlemede Liquid istemcide ÇALIŞMAZ: önizleme `POST /preview` (400 ms debounce, son cevap) → `sandbox=""` iframe; PDF önizleme `pdf:preview` ile `pdf:save` kapısından, köprüsüz ayrık pencerede.
+- [ÇEKİRDEK] Sipariş teyidi `ORDER_CONFIRMATION` sözleşmesinde iç alan açma; ürün/renk hücre metni, koşul ve genel toplam metni renderer yardımcılarından (`orderLineItemText` · `orderLineColorText` · `orderTermLines` · `orderGrandTotalText`) gelir, fiyatsız satır/toplam boş kalır ve şablonda "—" basılır; fiyatsız teyidi kolon gizlemeyle yap.
 - [ÇEKİRDEK] Muayene raporu `INSPECTION_REPORT` sözleşmesi + `buildShipmentInspectionSummary` tek kaynağından; iç kolonlar (operatör · istasyon · cihaz) opt-in; Excel aynı çözücüden.
 
 ## Backend

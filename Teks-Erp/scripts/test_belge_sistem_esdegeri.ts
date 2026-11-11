@@ -16,6 +16,7 @@
  */
 
 import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
+import { renderOrderConfirmationHtml } from "../src/services/document-render/order-confirmation.html";
 import { renderPriceListHtml } from "../src/services/document-render/price-list.html";
 import { renderSalesQuoteHtml } from "../src/services/document-render/sales-quote.html";
 import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
@@ -68,6 +69,7 @@ const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   INSPECTION_REPORT: (s, m) => renderInspectionReportHtml(s, m as Parameters<typeof renderInspectionReportHtml>[1]),
   INVOICE_INTERNAL: (s, m) => renderInvoiceInternalHtml(s, m as Parameters<typeof renderInvoiceInternalHtml>[1]),
   KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),
+  ORDER_CONFIRMATION: (s, m) => renderOrderConfirmationHtml(s, m as Parameters<typeof renderOrderConfirmationHtml>[1]),
   PAYMENT_RECEIPT: (s, m) => renderPaymentReceiptHtml(s, m as Parameters<typeof renderPaymentReceiptHtml>[1]),
   PRICE_LIST: (s, m) => renderPriceListHtml(s, m as Parameters<typeof renderPriceListHtml>[1]),
   QUALITY_CERTIFICATE: (s, m) => renderQualityCertificateHtml(s, m as Parameters<typeof renderQualityCertificateHtml>[1]),

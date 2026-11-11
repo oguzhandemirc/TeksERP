@@ -8,6 +8,9 @@
 //   §3 yaşam döngüsü: ilk açılışta donar, sipariş değişse de aynı sürüm; yeniden basım v2 güncel veriyle;
 //      iki iptal yolunda (cancelWithActions · softDelete) belge VOIDED; belgesiz iptal VOIDED doğar
 //   §4 statik: izin satırı sipariş uçlarıyla hizalı (order:read|write), iki iptal yolu void çağırır
+//   §5 tasarımcı: sözleşme kayıtlı (müşteri belgesi, `ic` alan yok), "Sistemden kopyala" 409 vermez,
+//      gerçek donmuş belgede Liquid eşleniği fiyatlı/fiyatsız satırı Sistem'le aynı basar, fiyatsız
+//      teyit (`columns.kalemler.hidden`) tasarımcı çıktısında da fiyat/tutar kolonunu düşürür
 // Negatif sonda (2026-11-12): (A) `cancelWithActions`taki `voidOrderConfirmationTx` kaldırıldı → §3c §3d §4b ❌ (15/3);
 // (B) select'e `cutNote` eklenip satıra yayıldı → §1e ❌ (17/1); geri alındı.
 // Çalıştır: npx tsx scripts/test_siparis_teyidi.ts (yalnız test DB)
@@ -23,6 +26,10 @@ import { renderOrderConfirmationHtml, renderOrderConfirmationTables, type OrderC
 import type { DocTablesPayload } from "../src/services/document-render/doc-model";
 import { factoryDateTr } from "../src/constants/time";
 import { orderService } from "../src/routes/order.routes";
+import { contractPaths, getContract } from "../src/services/document-template/sozlesme/kayit";
+import { getSystemEquivalent, materializeEquivalent } from "../src/services/document-template/sistem/kayit";
+import { renderTemplate } from "../src/services/document-template/motor/render";
+import { createTemplate } from "../src/services/document-template/template.service";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -33,7 +40,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const OC = PrintedDocType.ORDER_CONFIRMATION;
 const TAG = `TEST-SYL1-${Date.now().toString(36).toUpperCase()}`;
 const LEAK = `${TAG}-SIZINTI-KESIM`;
-const made = { customer: "", item: "", color: "", orders: [] as string[] };
+const made = { customer: "", item: "", color: "", orders: [] as string[], templates: [] as string[] };
 const docs = (id: string) => prisma.printedDocument.findMany({ where: { docType: OC, sourceId: id }, orderBy: { version: "asc" }, select: { version: true, status: true, snapshot: true } });
 const docOf = (s: unknown) => (s as PrintedDocSnapshot).doc as unknown as OrderConfirmationDoc;
 
@@ -73,7 +80,8 @@ async function main(): Promise<void> {
   const d1 = v1[0] ? docOf(v1[0].snapshot) : null;
   check("§1a ⭐ ilk açılışta v1 ACTIVE donar; belge no = sipariş no", v1.length === 1 && v1[0]!.status === "ACTIVE" && d1?.header.documentNo === o1.orderNumber, JSON.stringify(v1.map((v) => [v.version, v.status])));
   check("§1b iptal edilmiş satır yok (2 satır, 999 m yok)", d1?.lines.length === 2 && !d1.lines.some((l) => l.quantity === 999));
-  const L1 = d1?.lines[0], L2 = d1?.lines[1];
+  // Aynı ifadede doğan iki satırın createdAt'i eşit; sıra id'ye düşer → satır miktarla seçilir.
+  const L1 = d1?.lines.find((l) => l.quantity === 120), L2 = d1?.lines.find((l) => l.quantity === 80);
   check("§1c fiyatlı satır: renk, en, birim fiyat, tutar = miktar × fiyat, tolerans, müşteri adı",
     L1?.colorName === `${TAG} Ekru` && L1.widthCm === 300 && L1.unitPrice === 2.85 && L1.lineTotal === 342 && L1.tolerancePct === 5 && L1.customerItemName === "Müşteri Tül 300" && L1.itemCode === `${TAG}-I`, JSON.stringify(L1));
   check("§1d ⭐ fiyatsız satır: birim fiyat ve tutar null (0 uydurulmaz); tolerans boş → null", L2?.unitPrice === null && L2.lineTotal === null && L2.tolerancePct === null, JSON.stringify(L2));
@@ -90,21 +98,56 @@ async function main(): Promise<void> {
   const cols = t?.tables[0]?.columns.map((c) => c.label) ?? [];
   const htmlHasAll = cols.every((c) => html.includes(`>${c}<`));
   check("§2b ⭐ Excel tablosu HTML ile aynı kolonlar (PDF = Excel; TOL. % · BİRİM FİYAT · TUTAR dahil)", cols.length === 9 && htmlHasAll && cols.includes("TOL. %"), JSON.stringify(cols));
-  check("§2c Excel satırı: fiyatsız satır tutarı '—'", t?.tables[0]?.rows[1]?.[8] === "—", JSON.stringify(t?.tables[0]?.rows[1]));
+  const npRow = t?.tables[0]?.rows.find((r) => r[4] === 80);
+  check("§2c Excel satırı: fiyatsız satır tutarı '—'", npRow?.[8] === "—", JSON.stringify(npRow));
   const snap = v1[0]!.snapshot as unknown as PrintedDocSnapshot;
   const noPrice: PrintedDocSnapshot = { ...snap, docConfigOverride: { ...(snap.docConfigOverride ?? {}), columns: { kalemler: { hidden: ["unitPrice", "amount"] } } } as PrintedDocSnapshot["docConfigOverride"] };
   const npHtml = renderOrderConfirmationHtml(noPrice);
   const npCols = renderOrderConfirmationTables(noPrice).tables[0]?.columns.map((c) => c.key) ?? [];
   check("§2d fiyatsız teyit: `columns.kalemler.hidden` → HTML ve Excel'de fiyat/tutar kolonu yok", !npHtml.includes(">BİRİM FİYAT<") && !npHtml.includes(">TUTAR<") && !npCols.includes("unitPrice") && !npCols.includes("amount"), JSON.stringify(npCols));
 
+  console.log("\n── §5 Tasarımcı (sözleşme + Sistem eşleniği) ──");
+  const contract = getContract("ORDER_CONFIRMATION");
+  const paths = contractPaths(contract);
+  check("§5a sözleşme kayıtlı, müşteri belgesi, `ic` sınıflı alan yok", contract.hedef === "musteri" && !Object.values(paths).some((e) => e.sinif === "ic"));
+  const eq = getSystemEquivalent("ORDER_CONFIRMATION");
+  check("§5b ⭐ Sistem eşleniği kayıtlı (\"Sistemden kopyala\" 409 NO_SYSTEM_EQUIVALENT vermez)", eq !== null);
+  const liquid = (s: PrintedDocSnapshot): string => {
+    const ayar = contract.ayarNormalize(s.docConfigOverride ?? {}) as Record<string, unknown>;
+    const m = materializeEquivalent(eq!, ayar);
+    const ctx = contract.insa(s, ayar, [], { baski: {} });
+    return renderTemplate({ editMode: m.editMode, sourceHtml: m.html, css: m.css, pageSettings: m.pageSettings }, { context: ctx as unknown as Record<string, unknown>, snapshot: s, overlay: null }).html;
+  };
+  const cells = (h: string): string[] => [...h.matchAll(/<t[dh][^>]*>([^<]*)<\/t[dh]>/g)].map((x) => x[1]!.trim());
+  if (eq) {
+    const lq = liquid(snap);
+    check("§5c ⭐ gerçek donmuş belgede Liquid tablo hücreleri = Sistem (fiyatsız satır '—', müşteri ürün adı)",
+      JSON.stringify(cells(lq)) === JSON.stringify(cells(html)) && lq.includes("Müşteri Tül 300") && cells(lq).includes("—"), JSON.stringify(cells(lq)).slice(0, 160));
+    const npLq = liquid(noPrice);
+    check("§5d ⭐ fiyatsız teyit tasarımcı çıktısında: fiyat/tutar kolonu yok, hücreler Sistem'le aynı",
+      !npLq.includes(">BİRİM FİYAT<") && !npLq.includes(">TUTAR<") && JSON.stringify(cells(npLq)) === JSON.stringify(cells(npHtml)));
+    check("§5e sözleşme bağlamında iç alan metni yok (kesim notu)", !JSON.stringify(contract.insa(snap, {}, [])).includes(LEAK));
+  }
+  const user = await prisma.user.findFirst({ where: { deletedAt: null }, select: { id: true }, orderBy: { createdAt: "asc" } });
+  if (!user) throw new Error("Test DB'sinde kullanıcı yok (seed koşulmadı).");
+  let copyCode = "";
+  try {
+    const r = await createTemplate({ docType: "ORDER_CONFIRMATION", name: `${TAG}-kopya`, copyFrom: { kind: "system" } }, user.id);
+    made.templates.push(r.template.id);
+    copyCode = r.template.copiedFrom ?? "";
+  } catch (e) {
+    copyCode = (e as { details?: { code?: string } }).details?.code ?? String(e);
+  }
+  check("§5f ⭐ \"Sistemden kopyala\" gerçek yoldan şablon doğurur (copiedFrom=system)", copyCode === "system", copyCode);
+
   console.log("\n── §3 Yaşam döngüsü ──");
   await prisma.orderLine.updateMany({ where: { orderId: o1.id, quantity: new Prisma.Decimal(80) }, data: { quantity: new Prisma.Decimal(90) } });
   await printedDocumentService.getCurrent(OC, o1.id);
   const again = await docs(o1.id);
-  check("§3a donmuş belge sipariş değişince DEĞİŞMEZ (aynı v1, 80 m)", again.length === 1 && docOf(again[0]!.snapshot).lines[1]!.quantity === 80);
+  check("§3a donmuş belge sipariş değişince DEĞİŞMEZ (aynı v1, 80 m)", again.length === 1 && docOf(again[0]!.snapshot).lines.some((l) => l.quantity === 80));
   await printedDocumentService.reissue(OC, o1.id, "Miktar güncellendi");
   const re = await docs(o1.id);
-  check("§3b yeniden basım: v1 SUPERSEDED, v2 ACTIVE güncel miktarla (90 m)", re.length === 2 && re[0]!.status === "SUPERSEDED" && re[1]!.status === "ACTIVE" && docOf(re[1]!.snapshot).lines[1]!.quantity === 90, JSON.stringify(re.map((v) => [v.version, v.status])));
+  check("§3b yeniden basım: v1 SUPERSEDED, v2 ACTIVE güncel miktarla (90 m)", re.length === 2 && re[0]!.status === "SUPERSEDED" && re[1]!.status === "ACTIVE" && docOf(re[1]!.snapshot).lines.some((l) => l.quantity === 90), JSON.stringify(re.map((v) => [v.version, v.status])));
   await orderService.cancelWithActions(o1.id, [], undefined, { reasonText: "Müşteri vazgeçti" });
   const cx = await docs(o1.id);
   check("§3c ⭐ cancelWithActions: aktif belge VOIDED (sebep iptal metni)", cx[1]?.status === "VOIDED", JSON.stringify(cx.map((v) => v.status)));
@@ -134,6 +177,11 @@ main()
   .catch((e) => { fail++; console.error(e); })
   .finally(async () => {
     const t = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { console.error("temizlik:", (e as Error).message); } };
+    // Yayınlanmamış taslak şablon: sürüm DELETE'i trigger'ca serbest (yalnız yayınlı reddedilir).
+    const verIds = (await prisma.documentTemplateVersion.findMany({ where: { templateId: { in: made.templates } }, select: { id: true } }).catch(() => [])).map((v) => v.id);
+    await t(() => prisma.systemLog.deleteMany({ where: { recordId: { in: [...made.templates, ...verIds] } } }));
+    await t(() => prisma.documentTemplateVersion.deleteMany({ where: { templateId: { in: made.templates } } }));
+    await t(() => prisma.documentTemplate.deleteMany({ where: { id: { in: made.templates } } }));
     await t(() => prisma.printedDocument.deleteMany({ where: { docType: OC, sourceId: { in: made.orders } } }));
     await t(() => prisma.systemLog.deleteMany({ where: { recordId: { in: made.orders } } }));
     await t(() => prisma.orderLine.deleteMany({ where: { orderId: { in: made.orders } } }));
