@@ -111,9 +111,10 @@ export interface AppPreferences {
    * (`opened`: anahtar · açılış sayısı · son açılış; en çok 20, `_v2/opened.ts`). Tablo YOK, blob alanı.
    */
   raporlar?: { favoriler?: string[]; opened?: ReportOpenRecord[] };
-  /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → bugün). Eski pano düzeni alanları
-   *  (`hidden`/`groupOrder`/`itemOrders`) kayıtlı blob'da kalabilir; okunmaz. */
-  dashboard?: { donem?: string };
+  /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → hafta) ve kutu düzeni (`boxes`: sıralı
+   *  kutu anahtarları; yoksa katalog varsayılanı). Eski pano düzeni alanları (`hidden`/`groupOrder`/`itemOrders`)
+   *  kayıtlı blob'da kalabilir; okunmaz. */
+  dashboard?: { donem?: string; boxes?: string[] };
   // NOT: `scanner`, `labelPrinter`, `scaleDevice` — makineye bağlı donanım
   // ayarları — bilerek burada DEĞİL. `@/lib/machine-config` (secure-store,
   // per-machine) içindeler; `useMachineConfig` ile okunur/yazılır.

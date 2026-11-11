@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight, ClipboardList, FileClock, Trophy, Truck, Wallet, type LucideIcon } from "lucide-react";
 import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
-import { SectionCard } from "@/components/ui/section-card";
+import { PanoCard } from "./PanoBoxFrame";
 import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
 import { formatCount, kg, metre, para } from "./pano-bicim";
@@ -51,7 +51,7 @@ const RowList = ({ children }: { children: ReactNode }) => <div className="-mx-2
 export function PanoBekleyen({ b, erisim }: { b: PanoSummary["bekleyen"]; erisim: PanoErisim }) {
   if (!b.onayBekleyenBelge && !b.sevkeHazir && b.uretimeGonderilmemisSiparis === null) return null;
   return (
-    <SectionCard title="Bekleyen işler">
+    <PanoCard title="Bekleyen işler">
       <RowList>
         {b.onayBekleyenBelge && (
           <SummaryRow etiket="Onay bekleyen gelen belge" deger={formatCount(b.onayBekleyenBelge.toplam)} ek={b.onayBekleyenBelge.kismi > 0 ? `${formatCount(b.onayBekleyenBelge.kismi)} kısmi` : undefined}
@@ -65,7 +65,7 @@ export function PanoBekleyen({ b, erisim }: { b: PanoSummary["bekleyen"]; erisim
             vurgu={b.uretimeGonderilmemisSiparis > 0 ? "warning" : undefined} />
         )}
       </RowList>
-    </SectionCard>
+    </PanoCard>
   );
 }
 
@@ -79,7 +79,7 @@ export function PanoEnCok({ enCok, erisim }: { enCok: PanoSummary["enCok"]; eris
   if (sekmeler.length === 0) return null;
   const aktif = sekmeler[Math.min(secili, sekmeler.length - 1)]!;
   return (
-    <SectionCard
+    <PanoCard
       title="En çok"
       action={sekmeler.length > 1 ? (
         <div role="tablist" className="flex rounded-lg bg-muted p-0.5 text-xs">
@@ -100,7 +100,7 @@ export function PanoEnCok({ enCok, erisim }: { enCok: PanoSummary["enCok"]; eris
           ))}
         </RowList>
       )}
-    </SectionCard>
+    </PanoCard>
   );
 }
 
@@ -117,7 +117,7 @@ export function PanoTezgah({ t, erisim }: { t: NonNullable<PanoSummary["tezgah"]
   const izlenen = t.calisan + t.duran;
   const pay = (n: number) => (t.toplam > 0 ? `${(n * 100) / t.toplam}%` : "0%");
   return (
-    <SectionCard title="Tezgâh salonu"
+    <PanoCard title="Tezgâh salonu"
       description={t.suAnYuzde !== null ? `İzlenen ${formatCount(izlenen)} tezgâhta çalışma %${formatCount(t.suAnYuzde)}` : "Durumu izlenen tezgâh yok"}>
       {t.toplam > 0 && (
         <div className="mb-3 flex h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${formatCount(t.calisan)} çalışan, ${formatCount(t.duran)} duran, ${formatCount(t.izlenmeyen)} izlenmeyen`}>
@@ -131,41 +131,50 @@ export function PanoTezgah({ t, erisim }: { t: NonNullable<PanoSummary["tezgah"]
         {t.issiz !== null && <SummaryRow etiket={<Dot renk="bg-warning">İşsiz</Dot>} deger={formatCount(t.issiz)} erisim={erisim} />}
         <SummaryRow etiket={<Dot renk="bg-muted-foreground/40">İzlenmeyen</Dot>} deger={formatCount(t.izlenmeyen)} erisim={erisim} />
       </RowList>
-    </SectionCard>
+    </PanoCard>
   );
 }
 
 export function PanoStok({ s, erisim }: { s: NonNullable<PanoSummary["stokOzeti"]>; erisim: PanoErisim }) {
   return (
-    <SectionCard title="Stok">
+    <PanoCard title="Stok">
       <RowList>
         <SummaryRow etiket="Mamul" deger={metre(s.mamul.metre)} ek={`${formatCount(s.mamul.top)} top`} hedef={BOX_TARGETS.stokOzeti} erisim={erisim} />
         <SummaryRow etiket="Ham" deger={metre(s.ham.metre)} ek={`${formatCount(s.ham.top)} top`} erisim={erisim} />
         <SummaryRow etiket="Yarı mamul" deger={metre(s.yariMamul.metre)} ek={`${formatCount(s.yariMamul.top)} top`} erisim={erisim} />
         {s.iplikKg !== null && <SummaryRow etiket="İplik" deger={kg(s.iplikKg)} erisim={erisim} />}
       </RowList>
-    </SectionCard>
+    </PanoCard>
   );
 }
 
-/** Fason özeti; emanet (müşteri malı) aynı kutuda ayrı satır — bizim stoka karışmaz. */
-export function PanoFason({ f, emanet, erisim }: { f: PanoSummary["fasonOzeti"]; emanet: PanoSummary["emanet"]; erisim: PanoErisim }) {
-  if (!f && !emanet) return null;
+/** Fasondaki mal — dışarıda bekleyen metre/top ve fasoncu sayısı. */
+export function PanoOutside({ f, erisim }: { f: NonNullable<PanoSummary["fasonOzeti"]>; erisim: PanoErisim }) {
   return (
-    <SectionCard title="Fason ve emanet" description="Dışarıdaki mal · müşteri malı">
+    <PanoCard title="Fasondaki mal" description="Şu an fasoncuda">
       <RowList>
-        {f && <SummaryRow etiket="Fasonda" deger={metre(f.disaridakiMetre)} ek={`${formatCount(f.disaridakiTop)} top`} hedef={BOX_TARGETS.fasonOzeti} erisim={erisim} />}
-        {f && <SummaryRow etiket="Fasoncu" deger={formatCount(f.fasoncuSayisi)} erisim={erisim} />}
-        {emanet && <SummaryRow etiket="Emanet" deger={metre(emanet.metre)} ek={`${formatCount(emanet.top)} top`} erisim={erisim} />}
+        <SummaryRow etiket="Fasonda" deger={metre(f.disaridakiMetre)} ek={`${formatCount(f.disaridakiTop)} top`} hedef={BOX_TARGETS.fasonOzeti} erisim={erisim} />
+        <SummaryRow etiket="Fasoncu" deger={formatCount(f.fasoncuSayisi)} erisim={erisim} />
       </RowList>
-    </SectionCard>
+    </PanoCard>
+  );
+}
+
+/** Emanet (müşteri malı) — bizim stoka karışmaz, ayrı kutu. */
+export function PanoConsigned({ e, erisim }: { e: NonNullable<PanoSummary["emanet"]>; erisim: PanoErisim }) {
+  return (
+    <PanoCard title="Emanet mal" description="Depodaki müşteri malı">
+      <RowList>
+        <SummaryRow etiket="Emanet" deger={metre(e.metre)} ek={`${formatCount(e.top)} top`} hedef={BOX_TARGETS.stokOzeti} erisim={erisim} />
+      </RowList>
+    </PanoCard>
   );
 }
 
 /** Alacak — para birimi başına satır; birimler TOPLANMAZ. */
 export function PanoAlacak({ f, erisim }: { f: NonNullable<PanoSummary["finans"]>; erisim: PanoErisim }) {
   return (
-    <SectionCard title="Alacaklar" description="Açık · vadesi geçmiş">
+    <PanoCard title="Alacaklar" description="Açık · vadesi geçmiş">
       {f.alacaklar.length === 0 ? <PanoEmptyState icon={Wallet} metin="Açık alacak yok" /> : (
         <RowList>
           {f.alacaklar.map((a) => (
@@ -180,6 +189,6 @@ export function PanoAlacak({ f, erisim }: { f: NonNullable<PanoSummary["finans"]
           ))}
         </RowList>
       )}
-    </SectionCard>
+    </PanoCard>
   );
 }

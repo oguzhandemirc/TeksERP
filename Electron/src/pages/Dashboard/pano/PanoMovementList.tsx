@@ -1,4 +1,4 @@
-import { SectionCard } from "@/components/ui/section-card";
+import { PanoCard } from "./PanoBoxFrame";
 import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
 import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
@@ -34,7 +34,7 @@ interface Props {
 export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisim }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   return (
-    <SectionCard title="Son hareketler" description="Sipariş, sevk, fason, mal kabul ve gelen belge" flush>
+    <PanoCard title="Son hareketler" description="Sipariş, sevk, fason, mal kabul ve gelen belge" flush>
       {yukleniyor ? (
         <div className="space-y-2 px-5 pb-3">{Array.from({ length: 5 }, (_, i) => <div key={i} className="skeleton-shimmer h-9 rounded-lg bg-muted" />)}</div>
       ) : hata ? (
@@ -42,21 +42,25 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
       ) : !hareketler || hareketler.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted-foreground">Henüz hareket yok.</p>
       ) : (
-        <ul className="divide-y divide-border/60">
+        <ul className="@container divide-y divide-border/60">
           {hareketler.map((h) => {
             const r = HAREKET_ROZETI[h.tur];
             const target = movementTarget(h);
             const canOpen = erisim.canGo(target);
+            // Dar kutuda (orta boy, ~370 px) rozet renk noktasına, saat miktarın altına iner — belge no kırpılmasın.
             const ic = (
               <>
-                <span className={cn("tone-chip w-[5.75rem] shrink-0 truncate rounded-full px-2 py-0.5 text-center text-[10.5px] font-semibold", `tile-${r.ton}`)} title={r.etiket}>{r.etiket}</span>
+                <span className={cn("tone-chip hidden w-[5.75rem] shrink-0 truncate rounded-full px-2 py-0.5 text-center text-[10.5px] font-semibold @[34rem]:inline-block", `tile-${r.ton}`)} title={r.etiket}>{r.etiket}</span>
+                <span className={cn("tone-chip h-2.5 w-2.5 shrink-0 rounded-full @[34rem]:hidden", `tile-${r.ton}`)} title={r.etiket} aria-label={r.etiket} />
                 {/* Belge no üstte, cari altında: tek satırda cari ~50 px'e düşüp "Boyer…" kırpılıyordu. */}
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <span className="truncate font-semibold tabular-nums">{h.belgeNo}</span>
+                  <span className="truncate font-semibold tabular-nums" title={h.belgeNo}>{h.belgeNo}</span>
                   <span className="truncate text-xs text-muted-foreground" title={h.cari ?? undefined}>{h.cari ?? "—"}</span>
                 </span>
-                <span className="w-20 shrink-0 text-right font-semibold tabular-nums">{miktarMetni(h)}</span>
-                <span className="w-[4.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground">{hareketZamani(h.zaman)}</span>
+                <span className="flex shrink-0 flex-col items-end leading-tight @[34rem]:flex-row @[34rem]:items-center @[34rem]:gap-3">
+                  <span className="font-semibold tabular-nums @[34rem]:w-20 @[34rem]:text-right">{miktarMetni(h)}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground @[34rem]:w-[4.5rem] @[34rem]:text-right">{hareketZamani(h.zaman)}</span>
+                </span>
               </>
             );
             const sinif = "flex w-full items-center gap-3 px-5 py-2 text-left text-sm";
@@ -70,7 +74,7 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
           })}
         </ul>
       )}
-    </SectionCard>
+    </PanoCard>
   );
 }
 
@@ -89,7 +93,7 @@ export function PanoHizliEylemler({ erisim }: { erisim: PanoErisim }) {
   const gorunen = HIZLI_EYLEMLER.filter((e) => erisim.canGo(e));
   if (gorunen.length === 0) return null;
   return (
-    <SectionCard title="Hızlı işlemler">
+    <PanoCard title="Hızlı işlemler">
       <div className="@container">
       <div className="grid grid-cols-3 gap-x-2 gap-y-4 @[17rem]:grid-cols-4">
         {gorunen.map((e) => (
@@ -101,6 +105,6 @@ export function PanoHizliEylemler({ erisim }: { erisim: PanoErisim }) {
         ))}
       </div>
       </div>
-    </SectionCard>
+    </PanoCard>
   );
 }

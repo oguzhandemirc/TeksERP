@@ -61,9 +61,9 @@ export interface PanoHareketler {
   turler: HareketTuru[];
 }
 
-/** Uç kapıları (`PANO_ROUTE_PERMISSIONS`, `PANO_HAREKET_ROUTE_PERMISSIONS`) — izinsiz kullanıcıya istek atılmaz (403 toast'ı yok). */
+/** Uç kapısı (`PANO_ROUTE_PERMISSIONS`) — izinsiz kullanıcıya katalog/kutu isteği atılmaz (403 toast'ı yok). */
 export const PANO_UC_IZINLERI = [
-  "report:quality", "report:sales", "report:subcontract", "report:inventory",
+  "report:quality", "report:sales", "report:subcontract", "report:inventory", "report:production", "report:finance",
   "warehouse:read", "roll:read", "loom:live-view", "gelen-belge:read", "shipping:read", "order:read", "finance:read",
+  "workorder:read", "purchase-order:read", "weavingorder:read", "goods-receipt:read",
 ];
-export const PANO_HAREKET_UC_IZINLERI = ["order:read", "shipping:read", "workorder:read", "goods-receipt:read", "gelen-belge:read"];

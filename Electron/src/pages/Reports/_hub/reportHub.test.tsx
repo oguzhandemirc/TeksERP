@@ -39,7 +39,8 @@ vi.mock("@/providers/PreferencesProvider", () => ({
   usePreferences: () => ({ prefs, setPreference, resetPreferences: vi.fn(), ready: true }),
   useOptionalPreferences: () => ({ prefs, setPreference, resetPreferences: vi.fn(), ready: true }),
 }));
-vi.mock("@/pages/Dashboard/dashboardService", () => ({ fetchPano: (d: string) => fetchPano(d) }));
+// Pano kutu uçları sekme defteri üzerinden modül grafiğine girer; bu testte çağrılmaz.
+vi.mock("@/pages/Dashboard/dashboardService", () => ({ fetchPano: (d: string) => fetchPano(d), fetchPanoBoxes: vi.fn(), fetchPanoCatalog: vi.fn() }));
 vi.mock("../_v2/custom/custom-api", async (orig) => ({
   ...(await orig<typeof import("../_v2/custom/custom-api")>()),
   useCustomReportList: () => ({ data: { items: [] }, isLoading: false, isError: false }),
@@ -131,7 +132,8 @@ describe("süzgeç", () => {
 describe("analiz kutuları ve kişisel kutular", () => {
   it("pano izni yoksa analiz kutusu ve istek yok; boş kişisel kutular yönlendirir", () => {
     admin = false;
-    perms = ["report:production"];
+    // report:customer pano ucunun izin kümesinde (PANO_UC_IZINLERI) yok; report:production artık var.
+    perms = ["report:customer"];
     render();
     expect(fetchPano).not.toHaveBeenCalled();
     expect(screen.queryByText("Üretim ve sevk eğilimi")).toBeNull();

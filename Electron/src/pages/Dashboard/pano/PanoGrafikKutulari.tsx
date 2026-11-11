@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { SectionCard } from "@/components/ui/section-card";
+import { PanoCard } from "./PanoBoxFrame";
 import { TrendAreaChart, type TrendSeries } from "@/components/insight/TrendAreaChart";
 import { DonutBreakdown } from "@/components/insight/DonutBreakdown";
 import { kovaEtiketi, metre } from "./pano-bicim";
@@ -19,9 +19,9 @@ export function PanoEgilim({ egilim }: { egilim: PanoSummary["egilim"] }) {
   const labels = useMemo(() => egilim.noktalar.map((n) => kovaEtiketi(n.anahtar, egilim.kova)), [egilim]);
   if (series.length === 0) return null;
   return (
-    <SectionCard title="Üretim ve sevk" description="Metre, dönem içinde">
+    <PanoCard title="Üretim ve sevk" description="Metre, dönem içinde">
       <TrendAreaChart labels={labels} series={series} formatValue={metre} label="Üretim ve sevk eğilimi" emptyText="Bu dönemde üretim ve sevk yok" />
-    </SectionCard>
+    </PanoCard>
   );
 }
 
@@ -29,7 +29,7 @@ export function PanoEgilim({ egilim }: { egilim: PanoSummary["egilim"] }) {
 export function PanoDagilim({ dagilim }: { dagilim: NonNullable<PanoSummary["dagilim"]> }) {
   const slices = useMemo(() => dagilim.dilimler.map((d) => ({ key: d.itemId ?? d.ad, name: d.ad, value: d.metre, percent: d.yuzde })), [dagilim]);
   return (
-    <SectionCard title="Üretilen kumaşlar" description="Dönemde biten metre">
+    <PanoCard title="Üretilen kumaşlar" description="Dönemde biten metre">
       <DonutBreakdown
         slices={slices}
         formatValue={metre}
@@ -37,6 +37,6 @@ export function PanoDagilim({ dagilim }: { dagilim: NonNullable<PanoSummary["dag
         label="Üretilen kumaş dağılımı"
         emptyText="Bu dönemde biten kumaş yok. Üretim kaydı geldikçe kumaş payları burada görünür."
       />
-    </SectionCard>
+    </PanoCard>
   );
 }
