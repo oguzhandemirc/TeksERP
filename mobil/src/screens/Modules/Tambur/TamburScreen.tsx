@@ -1132,6 +1132,15 @@ export default function TamburScreen() {
       batch: openFinal.batch,
     }),
   });
+  // Belgenin/topun bilinen eni En kutusuna DOLU gelir (kullanıcı 2026-11-11); top başına bir kez — operatör silerse yeniden dolmaz.
+  const widthPrefilledRef = useRef<string | null>(null);
+  const prefillWidth = widthHintText(selectedRoll?.width, livePreview.preview?.sourceWidthCm);
+  useEffect(() => {
+    const id = selectedRoll?.rollId ?? null;
+    if (!id || !prefillWidth || widthPrefilledRef.current === id) return;
+    widthPrefilledRef.current = id;
+    if (openFinal.widthText === '') openFinal.setWidthText(prefillWidth);
+  }, [selectedRoll?.rollId, prefillWidth, openFinal]);
   const templateOffer = useMemo(() => (wideMain ? offerFromPreview(livePreview.preview) : null), [wideMain, livePreview.preview]);
   useTemplateChoiceSync(templateChoice, templateOffer, livePreview);
 
