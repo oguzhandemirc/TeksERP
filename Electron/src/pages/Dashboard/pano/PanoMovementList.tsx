@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
 import { formatCount, hareketZamani, metre } from "./pano-bicim";
 import { HIZLI_EYLEMLER, movementTarget } from "./pano-hedefler";
+import { DEFAULT_BOX_OPTIONS, MOVEMENT_GROUP_OF, type MovementOptions } from "./box-options";
 import type { PanoErisim } from "./usePanoErisim";
 import type { HareketTuru, PanoHareket } from "./types";
 
@@ -29,11 +30,18 @@ interface Props {
   hata: boolean;
   onYenile: () => void;
   erisim: PanoErisim;
+  options?: MovementOptions;
+}
+
+/** Ayar süzgeci: gizli tür grubu düşer, satır sayısı kesilir (sunucunun verdiği listeden; yeni istek yok). */
+export function visibleMovements(list: PanoHareket[], o: MovementOptions): PanoHareket[] {
+  return list.filter((h) => !o.hidden.includes(MOVEMENT_GROUP_OF[h.tur])).slice(0, o.rows);
 }
 
 /** Son hareketler — satır tıklanınca kaydın ekranı (izin/modül kapalıysa düz satır). */
-export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisim }: Props) {
+export function PanoMovementList({ hareketler: ham, yukleniyor, hata, onYenile, erisim, options = DEFAULT_BOX_OPTIONS.sonHareketler }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
+  const hareketler = ham && visibleMovements(ham, options);
   return (
     <PanoCard title="Son hareketler" description="Sipariş, sevk, fason, mal kabul ve gelen belge" flush>
       {yukleniyor ? (
@@ -41,7 +49,7 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
       ) : hata ? (
         <BoxError onYenile={onYenile} />
       ) : !hareketler || hareketler.length === 0 ? (
-        <p className="flex flex-1 items-center justify-center px-5 py-8 text-center text-sm text-muted-foreground">Henüz hareket yok.</p>
+        <p className="flex flex-1 items-center justify-center px-5 py-8 text-center text-sm text-muted-foreground">{ham && ham.length > 0 ? "Seçili türlerde hareket yok." : "Henüz hareket yok."}</p>
       ) : (
         <ul className="@container divide-y divide-border/60">
           {hareketler.map((h) => {

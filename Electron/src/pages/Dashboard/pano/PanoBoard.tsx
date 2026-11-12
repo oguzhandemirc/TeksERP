@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { PanoBoxDef } from "./box-types";
 import { metaOf } from "./box-meta";
 import { hasContent, hasRenderer, renderBox, type RenderCtx } from "./box-render";
+import { boxSettings } from "./PanoBoxSettings";
 import { BoxChrome, BoxFailed, BoxLoading, BoxMenu, PreviewSkeleton } from "./PanoBoxFrame";
 import { BASE_SPAN, LOCAL_BOX_KEYS, moveBox, packRows, type SizeChoice } from "./pano-layout";
 import { useMasonry } from "./pano-masonry";
@@ -64,7 +65,8 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder, on
   const cell = (b: PanoBoxDef) => {
     const s = states[b.anahtar];
     if (editing) return <EditCard def={b} onRemove={() => onRemove(b.anahtar)} onResize={(s) => onResize(b.anahtar, s)} />;
-    const menu = <BoxMenu title={b.baslik} onRemove={() => onRemove(b.anahtar)} className={b.boyut === "kpi" ? "absolute right-3 top-3 z-10 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" : undefined} />;
+    const settings = s && !s.loading && !s.error ? boxSettings(b.anahtar, s.data, ctx.options, ctx.setOption) : null;
+    const menu = <BoxMenu title={b.baslik} settings={settings} onRemove={() => onRemove(b.anahtar)} className={b.boyut === "kpi" ? "absolute right-3 top-3 z-10 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" : undefined} />;
     let content: ReactNode;
     if (LOCAL_BOX_KEYS.has(b.anahtar)) content = renderBox(b.anahtar, null, ctx);
     else if (s?.loading) content = b.boyut === "kpi" ? <KpiLoading /> : <BoxLoading title={b.baslik} kind={metaOf(b.anahtar).preview} />;

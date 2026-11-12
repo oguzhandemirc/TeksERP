@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { TERIM } from "@/lib/terim";
 import { factoryDayKey, fmtDayKey } from "@/lib/factory-time";
 import type { AgendaBox } from "./box-types";
+import { agendaKinds, DEFAULT_BOX_OPTIONS, type AgendaKind, type AgendaOptions } from "./box-options";
 import { formatCount, metre } from "./pano-bicim";
 import { BOX_TARGETS, type PanoTarget } from "./pano-hedefler";
 import { PanoCard } from "./PanoBoxFrame";
@@ -24,13 +25,14 @@ export function shiftMonth(month: string, n: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Ayın ilk gününden önceki boş hücre sayısı (Pazartesi başlangıçlı). */
-function leadingBlanks(month: string): number {
+/** Ayın ilk gününden önceki boş hücre sayısı (hafta Pazartesi ya da Pazar başlar). */
+export function leadingBlanks(month: string, weekStart: AgendaOptions["weekStart"] = "mon"): number {
   const [y, m] = month.split("-").map(Number) as [number, number];
-  return (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+  const dow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  return weekStart === "sun" ? dow : (dow + 6) % 7;
 }
 
-function MonthGrid({ d, onPick }: { d: AgendaBox; onPick: (p: AgendaParams) => void }) {
+function MonthGrid({ d, onPick, weekStart }: { d: AgendaBox; onPick: (p: AgendaParams) => void; weekStart: AgendaOptions["weekStart"] }) {
   const today = factoryDayKey();
   const [y, m] = d.ay.split("-").map(Number) as [number, number];
   return (
@@ -43,8 +45,8 @@ function MonthGrid({ d, onPick }: { d: AgendaBox; onPick: (p: AgendaParams) => v
         </div>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center text-[11px]">
-        {WEEKDAYS.map((w) => <span key={w} className="py-1 font-medium text-muted-foreground">{w}</span>)}
-        {Array.from({ length: leadingBlanks(d.ay) }, (_, i) => <span key={`b${i}`} />)}
+        {(weekStart === "sun" ? ["Paz", ...WEEKDAYS.slice(0, 6)] : WEEKDAYS).map((w) => <span key={w} className="py-1 font-medium text-muted-foreground">{w}</span>)}
+        {Array.from({ length: leadingBlanks(d.ay, weekStart) }, (_, i) => <span key={`b${i}`} />)}
         {d.ayGunleri.map((g) => {
           const selected = g.gun === d.gun;
           return (
@@ -75,7 +77,7 @@ function NavButton({ label, icon: Icon, onClick }: { label: string; icon: Lucide
 const shipmentTarget = (id: string): PanoTarget => ({ to: `/operations/shipments/${encodeURIComponent(id)}`, izin: ["shipping:read"] });
 
 interface Item { id: string; title: string; sub: string | null; amount: string | null; target: PanoTarget }
-interface Section { key: string; label: string; icon: LucideIcon; tone: IconTileTone; total: number; items: Item[] }
+interface Section { key: AgendaKind; label: string; icon: LucideIcon; tone: IconTileTone; total: number; items: Item[] }
 
 function daySections(d: AgendaBox): Section[] {
   const out: Section[] = [];
@@ -115,16 +117,20 @@ function SectionList({ s, erisim }: { s: Section; erisim: PanoErisim }) {
   );
 }
 
-export function PanoAgenda({ d, erisim, onPick, loading }: { d: AgendaBox; erisim: PanoErisim; onPick: (p: AgendaParams) => void; loading?: boolean }) {
+interface AgendaProps { d: AgendaBox; erisim: PanoErisim; onPick: (p: AgendaParams) => void; loading?: boolean; options?: AgendaOptions }
+
+export function PanoAgenda({ d, erisim, onPick, loading, options = DEFAULT_BOX_OPTIONS.ajanda }: AgendaProps) {
   const go = useGo(erisim);
-  const sections = daySections(d).filter((s) => s.total > 0);
-  const ship = d.planliSevkiyat;
+  // Sunucunun verdiği türlerin hepsi gizliyse ayar yok sayılır (kutu boş kalmasın).
+  const hidden = agendaKinds(d).every((k) => options.hidden.includes(k)) ? [] : options.hidden;
+  const sections = daySections(d).filter((s) => s.total > 0 && !hidden.includes(s.key));
+  const ship = hidden.includes("tarihsiz") ? null : d.planliSevkiyat;
   return (
     <PanoCard title="Ajanda" description={`${fmtDayKey(d.gun)} planı`}
       action={<button type="button" onClick={() => onPick({})} className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-muted">Bugün</button>}>
       <div className="@container">
         <div className="flex flex-col gap-5 @[34rem]:flex-row">
-          <MonthGrid d={d} onPick={onPick} />
+          {options.calendar && <MonthGrid d={d} onPick={onPick} weekStart={options.weekStart} />}
           <div className={cn("min-w-0 flex-1 space-y-3 transition-opacity", loading && "opacity-60")} aria-busy={loading || undefined}>
             {sections.length === 0 ? (
               <p className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-3 text-sm text-muted-foreground"><CalendarDays className="h-4 w-4" aria-hidden />Bu gün için planlı iş yok</p>

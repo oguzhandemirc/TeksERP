@@ -1,7 +1,8 @@
-import { createContext, useContext, type ReactNode } from "react";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { MoreHorizontal, SlidersHorizontal, Trash2 } from "lucide-react";
 import { SectionCard, type SectionCardProps } from "@/components/ui/section-card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { PreviewKind } from "./box-meta";
 
@@ -19,22 +20,35 @@ export function PanoCard({ action, className, contentClassName, ...rest }: Secti
   return <SectionCard {...rest} className={cn("h-full", className)} contentClassName={cn("flex flex-col", contentClassName)} action={action || menu ? <>{action}{menu}</> : undefined} />;
 }
 
-/** Kip dışında kutu başlığındaki ⋯ — "Kaldır". */
-export function BoxMenu({ title, onRemove, className }: { title: string; onRemove: () => void; className?: string }) {
+/** Kip dışında kutu başlığındaki ⋯ — "Ayarlar" (yalnız ayarı olan kutuda; küçük açılır panel) + "Kaldır". */
+export function BoxMenu({ title, onRemove, settings, className }: { title: string; onRemove: () => void; settings?: ReactNode; className?: string }) {
+  const [open, setOpen] = useState(false);
+  // Menü kapanırken odağı ⋯'ye geri verirse açılan panel "dışarı odak" sayıp kapanıyordu.
+  const opening = useRef(false);
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <button type="button" aria-label={`${title} kutusu seçenekleri`}
-          className={cn("-mr-1.5 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}>
-          <MoreHorizontal className="h-4 w-4" aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onRemove} className="gap-2 text-destructive focus:text-destructive">
-          <Trash2 className="h-4 w-4" aria-hidden />Panodan kaldır
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Popover open={open && settings != null} onOpenChange={setOpen}>
+      <DropdownMenu modal={false}>
+        <PopoverAnchor asChild>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label={`${title} kutusu seçenekleri`}
+              className={cn("-mr-1.5 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}>
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+        </PopoverAnchor>
+        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => { if (opening.current) { e.preventDefault(); opening.current = false; } }}>
+          {settings != null && (
+            <DropdownMenuItem onSelect={() => { opening.current = true; setOpen(true); }} className="gap-2">
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />Ayarlar
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={onRemove} className="gap-2 text-destructive focus:text-destructive">
+            <Trash2 className="h-4 w-4" aria-hidden />Panodan kaldır
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <PopoverContent align="end" className="w-64" aria-label={`${title} ayarları`} role="dialog">{settings}</PopoverContent>
+    </Popover>
   );
 }
 
