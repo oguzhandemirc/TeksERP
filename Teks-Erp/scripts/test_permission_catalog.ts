@@ -116,6 +116,9 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // matchesPermission(perms, p) — p ∈ DOC_PERMISSIONS[docType].read (belge tasarımcısı önizlemesinin
   // gerçek kayıt kapısı). Sabit yukarıdaki printed-document.routes satırında çözülür; burada devir.
   "src/controllers/document-template.controller.ts": [`${DELEGE}scripts/test_permission_catalog.ts`],
+  // matchesPermission(permissions, p) — p ∈ DOC_PERMISSIONS[tür].read ∪ {"gelen-belge:read"} (carinin belgeleri
+  // tür kapısı). Sabit printed-document.routes satırında çözülür; burada devir.
+  "src/services/customer-documents.service.ts": [`${DELEGE}scripts/test_permission_catalog.ts`],
   // matchesPermission(codes, ALARM_*) — alarm yetki soruları + PERMISSION kademe kuralının kodu
   // (`rule.permissionCode`: yazılırken `loom-alarm-duty.service` PERMISSION_CATALOG'a karşı doğrular, 400 DUTY_RULE_INVALID).
   "src/services/helpers/loom-alarm-recipient.helper.ts": ["ALARM_VIEW_PERMISSIONS", "ALARM_ESCALATION_PERMISSION"],

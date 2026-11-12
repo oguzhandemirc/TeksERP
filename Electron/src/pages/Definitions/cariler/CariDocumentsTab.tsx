@@ -17,19 +17,20 @@ import type { PrintedDocType } from "@/services/printedDocumentService";
 import { cariDocLabel, cariDocStatus, cariDocumentsQuery, incomingNotePath, type CariDocumentRow } from "./cari-documents";
 
 const COLUMNS: ColumnDef<CariDocumentRow>[] = [
-  { id: "type", header: "Tür", enableSorting: false, cell: ({ row }) => <Badge variant="outline">{cariDocLabel(row.original.docType)}</Badge> },
-  { id: "no", header: "Belge no", enableSorting: false, cell: ({ row }) => <span className="font-semibold tabular-nums">{row.original.documentNo}</span> },
-  { id: "date", header: "Tarih", enableSorting: false, cell: ({ row }) => formatFactory(row.original.date, "dd.MM.yyyy HH:mm") },
+  { id: "type", header: "Tür", enableSorting: false, meta: { exportValue: (r: CariDocumentRow) => cariDocLabel(r.docType) }, cell: ({ row }) => <Badge variant="outline">{cariDocLabel(row.original.docType)}</Badge> },
+  { id: "no", header: "Belge no", enableSorting: false, meta: { exportValue: (r: CariDocumentRow) => r.documentNo }, cell: ({ row }) => <span className="font-semibold tabular-nums">{row.original.documentNo}</span> },
+  { id: "date", header: "Tarih", enableSorting: false, meta: { exportValue: (r: CariDocumentRow) => formatFactory(r.date, "dd.MM.yyyy HH:mm") }, cell: ({ row }) => formatFactory(row.original.date, "dd.MM.yyyy HH:mm") },
   {
     id: "status",
     header: "Durum",
     enableSorting: false,
+    meta: { exportValue: (r: CariDocumentRow) => cariDocStatus(r).label },
     cell: ({ row }) => {
       const s = cariDocStatus(row.original);
       return <Badge variant={s.variant}>{s.label}</Badge>;
     },
   },
-  { id: "version", header: "Sürüm", enableSorting: false, cell: ({ row }) => (row.original.version != null ? `v${row.original.version}` : "—") },
+  { id: "version", header: "Sürüm", enableSorting: false, meta: { exportValue: (r: CariDocumentRow) => (r.version != null ? `v${r.version}` : "") }, cell: ({ row }) => (row.original.version != null ? `v${row.original.version}` : "—") },
 ];
 
 export function CariDocumentsTab({ customerId }: { customerId: string }) {
