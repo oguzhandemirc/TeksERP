@@ -14,8 +14,8 @@ import { formatClassed } from "./format";
  * Raporlarda kullanılabilen sayı biçimleri — kapalı küme. Eşitlik bekçisi bu kümenin
  * HER elemanını ölçer; rapor spec'lerini tarayan bekçi kümede olmayan biçimi reddeder.
  */
-// Para: "#,##0.00" (tutar) · "#,##0.0000" (kur). Ölçü/sayım/yüzde: "0" · "0.0" · "0.00".
-export const REPORT_NUM_FMTS = ["0", "0.0", "0.00", "#,##0.00", "#,##0.0000"] as const;
+// Para: "#,##0.00" (tutar) · "#,##0.0000" (kur). Ölçü/sayım/yüzde: "0" · "0.0".
+export const REPORT_NUM_FMTS = ["0", "0.0", "#,##0.00", "#,##0.0000"] as const;
 
 /** Excel sayı biçimi — sabit ya da hücre değerine göre seçilen. */
 export type ExcelNumFmt = string | ((value: unknown) => string | undefined);
