@@ -85,10 +85,10 @@ describe("İplik İhtiyaç Planı — iplik ayırma (SY-3 I1)", () => {
     expect(reservationText({})).toBeNull();
   });
   it("açık: iş sayısı ve talepten düşülen ham metre", () => {
-    expect(reservationText({ ayirma: ay() })).toBe("İplik ayırma açık: 3 açık dokuma işinin kalan metresi için iplik ayrıldı; bu işlerin 1.251 m kalanı ihtiyaçtan düşüldü.");
+    expect(reservationText({ ayirma: ay() })).toBe("İplik ayırma açık: 3 açık dokuma iş emrinin kalan metresi için iplik ayrıldı; bu işlerin 1.251 m kalanı ihtiyaçtan düşüldü.");
   });
   it("müşteri süzgecinde (talep netlenmedi) düşüm cümlesi yok; iş yoksa ayrı cümle", () => {
-    expect(reservationText({ ayirma: ay({ talepNetlendi: false }) })).toBe("İplik ayırma açık: 3 açık dokuma işinin kalan metresi için iplik ayrıldı.");
-    expect(reservationText({ ayirma: ay({ isSayisi: 0, netlenenKumasM: "0" }) })).toBe("İplik ayırma açık: açık dokuma işi yok, ayrılan iplik yok.");
+    expect(reservationText({ ayirma: ay({ talepNetlendi: false }) })).toBe("İplik ayırma açık: 3 açık dokuma iş emrinin kalan metresi için iplik ayrıldı.");
+    expect(reservationText({ ayirma: ay({ isSayisi: 0, netlenenKumasM: "0" }) })).toBe("İplik ayırma açık: açık dokuma iş emri yok, ayrılan iplik yok.");
   });
 });

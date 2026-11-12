@@ -8,6 +8,7 @@ import type { MultiPartyMode } from '../../../../services/inboundDoc.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { chooseMode, MODE_LABELS, type MultiPartyDraft } from './partyDraft';
 import { stripHasContent, type StripModel } from './stripModel';
+import { TERIM } from '../../../../lib/terim';
 
 interface Props {
   model: StripModel | null;
@@ -23,12 +24,12 @@ export default function RecognitionStrip({ model, noteNo, multi, onMode }: Props
   return (
     <View style={styles.strip} testID={`ie-tanima-${noteNo}`}>
       {rule && (
-        <View style={styles.seg} testID="ie-tanima-3" accessibilityLabel={`İş emri kuralı: ${rule.text}`}>
+        <View style={styles.seg} testID="ie-tanima-3" accessibilityLabel={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} kuralı: ${rule.text}`}>
           <Icon source="file-cog-outline" size={20} color={colors.textSecondary} />
           <Text style={[styles.text, styles.grow]} testID="ie-tanima-kural">{rule.text}</Text>
           {multi && (
             <Button mode="contained-tonal" icon="swap-horizontal" onPress={() => setSheet(true)} disabled={!rule.canChange} style={styles.change}
-              contentStyle={styles.btn} accessibilityLabel="İş emri kipini değiştir" testID="ie-tanima-kip-degistir">
+              contentStyle={styles.btn} accessibilityLabel={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} kipini değiştir`} testID="ie-tanima-kip-degistir">
               Değiştir
             </Button>
           )}

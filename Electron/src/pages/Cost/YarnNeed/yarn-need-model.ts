@@ -3,6 +3,7 @@
 import type { RaporSunumu } from "@/pages/Reports/_v2/sunum";
 import { MISSING_LABEL } from "../shared/labels";
 import { fmtDec, fmtDecFull } from "../shared/format";
+import { TERIM } from "@/lib/terim";
 
 export const YARN_NEED_KEY = "maliyet/iplik-ihtiyaci";
 
@@ -92,9 +93,9 @@ export function missingText(code: string): string {
 export function reservationText(meta: Pick<YarnNeedMeta, "ayirma">): string | null {
   const a = meta.ayirma;
   if (!a) return null;
-  if (a.isSayisi === 0) return "İplik ayırma açık: açık dokuma işi yok, ayrılan iplik yok.";
+  if (a.isSayisi === 0) return `İplik ayırma açık: açık ${TERIM.dokumaIsEmri.tekilKucuk} yok, ayrılan iplik yok.`;
   // Sunucunun ondalık metni; yalnız "sıfırdan büyük mü" bakılır (hesap yok).
   const cut = /^\d*\.?\d*$/.test(a.netlenenKumasM) && /[1-9]/.test(a.netlenenKumasM);
   const net = a.talepNetlendi && cut ? `; bu işlerin ${fmtDec(a.netlenenKumasM, 0)} m kalanı ihtiyaçtan düşüldü` : "";
-  return `İplik ayırma açık: ${a.isSayisi} açık dokuma işinin kalan metresi için iplik ayrıldı${net}.`;
+  return `İplik ayırma açık: ${a.isSayisi} açık ${TERIM.dokumaIsEmri.cekimKucuk.ilgi} kalan metresi için iplik ayrıldı${net}.`;
 }

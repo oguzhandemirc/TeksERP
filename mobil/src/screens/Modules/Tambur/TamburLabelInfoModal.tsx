@@ -21,6 +21,7 @@ import { LABEL_TEXT_MAX, NAME_OVERRIDE_KEYS, emptyHint, visibleOverrideKeys } fr
 import { useTamburLabelSuggestions, type TamburFinalLabelState } from './useTamburFinalLabel';
 import { labelTextFixBody, labelTextFixReasonError } from './labelTextFix';
 import { LabelFieldRow, OverrideRow, type FieldDraft } from './TamburLabelInfoRows';
+import { TERIM } from '../../../lib/terim';
 
 type OverrideDraft = Record<string, FieldDraft>;
 type FieldKey = 'item' | 'color' | 'batch';
@@ -298,7 +299,7 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
 
         {workOrderId ? (
           <View style={twoCol ? s.col : s.stacked} testID="etiket-diger-alanlar">
-            <Text style={s.colTitle}>İş emrinin tüm topları</Text>
+            <Text style={s.colTitle}>{TERIM.terbiyeIsEmri.cumleBasi.ilgi} tüm topları</Text>
             {ov.isLoading ? <Text style={s.sub}>Yükleniyor…</Text> : null}
             {ov.isError ? <Text style={s.err}>Etiket alanları okunamadı.</Text> : null}
             {otherKeys.map((k) => (

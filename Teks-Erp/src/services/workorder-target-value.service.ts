@@ -68,7 +68,7 @@ async function assertTabletFixScope(db: Prisma.TransactionClient | typeof prisma
   });
   for (const i of others) {
     if (i.valueId === null || !active.some((a) => a.propertyId === i.propertyId)) {
-      throw AppError.forbidden("Tablet düzeltmesi yalnız iş emrinde olan hedef değeri değiştirebilir (ekleme/kaldırma panelden).", { code: "PERMISSION_DENIED" });
+      throw AppError.forbidden(`Tablet düzeltmesi yalnız ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} olan hedef değeri değiştirebilir (ekleme/kaldırma panelden).`, { code: "PERMISSION_DENIED" });
     }
   }
   const locks = await loadTargetValueEditLocks(db, workOrderId, others.map((i) => i.propertyId));

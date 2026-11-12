@@ -52,7 +52,7 @@ export default function IsEmirleriScreen() {
   const open = (manual: boolean) => setStage({ route: initialFormRoute({ buttonRoute: buttonRouteFor(routeOnButton, scan.type), cardRoute: null, scanMode: scan.scanMode === true }), manual, n: Date.now() });
   const cols = useColumnPrefs();
   const list = useWorkOrderList(filters, cols.visible.includes('metre'));
-  const refresh = useManualRefresh(() => list.refetch(), 'İş emirleri güncellendi');
+  const refresh = useManualRefresh(() => list.refetch(), `${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin} güncellendi`);
   const { stations, loading: stationsLoading } = useLocationStations();
   // Terbiye | Dokuma: dokuma rejimi kapalıysa (ya da okuma izni yoksa) anahtar yok, başlık bugünkü düz metin.
   const tur = useIsEmriTuru();

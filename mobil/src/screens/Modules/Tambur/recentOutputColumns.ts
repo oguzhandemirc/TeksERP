@@ -1,6 +1,7 @@
 // "Son Çıkan Toplar" sütun seçimi (saha 2026-11-10): operatör hangi sütunların görüneceğini seçer, seçim cihazda
 // ekran kimliğiyle saklanır. Barkod zorunludur. Kayıt yokken bugünkü görünüm; verisi hiç olmayan renk/en sütunu kapalı başlar.
 import type { Roll } from '../../../types/models';
+import { TERIM } from '../../../lib/terim';
 
 export const RECENT_OUTPUT_SCREEN_KEY = 'tambur.recentOutput';
 
@@ -16,7 +17,7 @@ export const OUTPUT_COLUMNS: readonly { key: OutputColumnKey; label: string; req
   { key: 'qty', label: 'Metre' },
   { key: 'kg', label: 'Kg' },
   { key: 'labelBatch', label: 'Müşteri parti no' },
-  { key: 'workOrder', label: 'İş emri no' },
+  { key: 'workOrder', get label() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} no`; } },
 ];
 
 /** Bugünkü görünüm (sütun seçici öncesi). */

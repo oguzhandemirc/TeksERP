@@ -16,6 +16,7 @@ import { readFirstRegion, type TrustMode } from "./gelen-belge-parti-metre.servi
 import { noteIntroState, type IntroState } from "./gelen-belge-tanitim-guveni.service";
 import { noteTemplateSnapshot, resolveMultiPartyMode, type NoteTemplateSnapshot } from "./gelen-belge-parti-kipi.service";
 import type { MultiPartyWorkOrderMode } from "./system-setting.service";
+import { TERIM } from "../constants/terim";
 
 export type TanimaRuleSource = "TEMPLATE" | "FACTORY" | "MANUAL";
 
@@ -49,8 +50,8 @@ const rule = (key: TanimaRule["key"], value: string, source: TanimaRuleSource, t
 
 /** Saf: kip + parti sayısı → metin ("3 parti → 3 iş emri"; tek partide kuralın kendisi). */
 export function multiPartyText(mode: MultiPartyWorkOrderMode, partyCount: number): string {
-  if (partyCount > 1) return `${partyCount} parti → ${mode === "PER_PARTY" ? partyCount : 1} iş emri`;
-  return `Birden çok parti gelirse: ${mode === "PER_PARTY" ? "her parti ayrı iş emri" : "tek iş emri"}`;
+  if (partyCount > 1) return `${partyCount} parti → ${mode === "PER_PARTY" ? partyCount : 1} ${TERIM.terbiyeIsEmri.tekilKucuk}`;
+  return `Birden çok parti gelirse: ${mode === "PER_PARTY" ? "her parti ayrı" : "tek"} ${TERIM.terbiyeIsEmri.tekilKucuk}`;
 }
 
 /** Saf: gelen metre kaynağı metni (okuma anında yazılan `kursunMetersSource` + şablonun metre kaynakları). */

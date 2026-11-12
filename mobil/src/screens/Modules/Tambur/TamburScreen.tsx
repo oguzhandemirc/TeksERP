@@ -4054,7 +4054,7 @@ export default function TamburScreen() {
       case 'labelInfo':
         return { icon: 'tag-text-outline', label: 'Etiket bilgisi', onPress: () => setLabelInfoOpen(true) };
       case 'woDetail':
-        return { icon: 'clipboard-text-outline', label: 'İş emri detayı', onPress: () => setWoDetailId(activeJob?.stepSummary.workOrderId ?? null) };
+        return { icon: 'clipboard-text-outline', label: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} detayı`, onPress: () => setWoDetailId(activeJob?.stepSummary.workOrderId ?? null) };
       case 'refreshJob':
         return { icon: 'refresh', label: 'İşi yenile', onPress: () => activeRefresh.onRefresh() };
       case 'closeJob':

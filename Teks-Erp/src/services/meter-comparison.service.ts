@@ -11,6 +11,7 @@ import { METER_COMPARE_TOLERANCE_PCT, resolvePartyMeters, rollDeclaredMeters, ty
 import { KURSUN_PROPERTY_CODE } from "./helpers/quality-station.helper";
 import { readFilterList } from "../utils/query-parser";
 import { rollWorkOrderEdgesSql, whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
+import { TERIM } from "../constants/terim";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 type D = Prisma.Decimal;
@@ -25,7 +26,7 @@ function uuidOr400(id: unknown, message: string): string {
 }
 
 export async function getWorkOrderMeterComparison(id: unknown): Promise<MeterComparison> {
-  return workOrderMeterComparison(uuidOr400(id, "Geçersiz iş emri ID"));
+  return workOrderMeterComparison(uuidOr400(id, `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} ID`));
 }
 
 export async function getRollMeterTrail(id: unknown): Promise<RollMeterTrail> {
@@ -62,7 +63,7 @@ const stripParty = ({ rootIds: _r, rollIds: _i, firstAt: _f, ...p }: PartyMeters
 /** İE detayının parti satırları: İE'nin (iptal dışı) toplarının partileri. */
 export async function workOrderMeterComparison(workOrderId: string, db: Db = prisma): Promise<MeterComparison> {
   const wo = await db.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
-  if (!wo) throw AppError.notFound("İş emri bulunamadı", { code: "WORK_ORDER_NOT_FOUND" });
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı`, { code: "WORK_ORDER_NOT_FOUND" });
   const rolls = await db.roll.findMany({ where: { AND: [whereRollsOfWorkOrder(workOrderId), { status: { not: RollStatus.CANCELLED } }] }, select: { id: true } });
   const { parties } = await resolvePartyMeters(rolls.map((r) => r.id), db);
   const out = parties.map(stripParty);

@@ -17,6 +17,7 @@ import { partyLineId } from "../gelen-belge-kontrol.service";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./roll-error-scope.helper";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
+import { TERIM } from "../../constants/terim";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 type D = Prisma.Decimal;
@@ -143,7 +144,7 @@ function frontierSum(values: Map<string, D>, nodes: Map<string, RollNode>): D | 
 
 /** Kural 4 uyarı metni — tablet sarı şerit; bekçi aynı cümleyi arar. */
 export function beyondDeclaredDefectWarning(startMeter: number, declaredM: number): string {
-  return `Hata konumu (${startMeter} m) topun beyan metresini (${declaredM} m) aşıyor — kayıt alındı, metre farkı iş emrinde görünür.`;
+  return `Hata konumu (${startMeter} m) topun beyan metresini (${declaredM} m) aşıyor — kayıt alındı, metre farkı ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} görünür.`;
 }
 
 type DeclaredBlock = { blockNo?: number; m?: number | string | null };

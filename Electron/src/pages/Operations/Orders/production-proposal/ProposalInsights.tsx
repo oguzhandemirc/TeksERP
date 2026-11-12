@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { WidthWarningBadge } from "@/pages/Operations/WeavingOrders/loom-suggestion/LoomSuggestionParts";
 import { durationInputsText, durationLine, formatKg, loomCountsText, loomLine, yarnLine } from "./insight-text";
 import type { WeavingProposal } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export function ProposalInsights({ w }: { w: WeavingProposal }) {
   const [open, setOpen] = useState(false);
@@ -55,7 +56,7 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
                 <tr>
                   <th className="text-left font-normal">İplik</th>
                   <th className="text-right font-normal">Gereken</th>
-                  {reserved && <th className="text-right font-normal" title="Açık dokuma işlerinin kalan metresi için ayrılan (tesis geneli)">Ayrılan</th>}
+                  {reserved && <th className="text-right font-normal" title={`Açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan metresi için ayrılan (tesis geneli)`}>Ayrılan</th>}
                   {reserved && <th className="text-right font-normal" title="Serbest stok − ayrılan">Serbest</th>}
                   <th className="text-right font-normal">Eksik</th>
                 </tr>

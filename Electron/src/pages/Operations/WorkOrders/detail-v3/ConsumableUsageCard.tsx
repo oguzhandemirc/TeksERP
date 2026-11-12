@@ -7,6 +7,7 @@ import { flagSettingTrail } from "@/lib/flag-setting-path";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { V3Section } from "./V3Section";
 import { CONSUMABLE_USAGE_KEY, getWorkOrderConsumableUsage, type ConsumableUsage } from "./consumableUsage";
+import { TERIM } from "@/lib/terim";
 
 const UNIT_TR: Record<string, string> = { MT: "m", KG: "kg", ADET: "adet" };
 const tl = (v: string | null | undefined) => (v == null ? null : `${formatFixed(v, 2)} ₺`);
@@ -25,7 +26,7 @@ export function ConsumableUsageView({ data }: { data: ConsumableUsage }) {
           Sarf stoğu kapalı — {flagSettingTrail("consumableStockEnabled")}
         </p>
       )}
-      {data.rows.length === 0 && data.enabled && <p className="text-muted-foreground">Bu iş emrinde henüz sarf düşümü yok.</p>}
+      {data.rows.length === 0 && data.enabled && <p className="text-muted-foreground">Bu {TERIM.terbiyeIsEmri.cekimKucuk.bulunma} henüz sarf düşümü yok.</p>}
       {data.rows.length > 0 && (
         <table className="w-full">
           <thead className="text-left text-xs uppercase text-muted-foreground">
