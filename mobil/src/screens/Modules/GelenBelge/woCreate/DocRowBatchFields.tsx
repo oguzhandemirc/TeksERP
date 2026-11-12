@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { batchService } from '../../../../services/batch.service';
+import { usePermissions } from '../../../../hooks/usePermission';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import { DeclaredEditSheet, DeclaredField, declaredLayout } from './DeclaredField';
 import { editCustomerBatchNo } from './woFromDoc';
@@ -51,10 +52,13 @@ const NO_PREVIEW: readonly string[] = [];
 
 /** Sıradaki `count` parti numarası tahmini (numara TÜKETMEZ); kapalıyken / hata / çevrimdışı boş → "Otomatik". */
 export function useOurBatchPreview(count: number, enabled: boolean): readonly string[] {
+  // Uç kapısının aynası (`GET /batches/number-state`); yetkisizde sorgu atılmaz, kutu "Otomatik" der.
+  const { has } = usePermissions();
+  const canPeek = has('workorder:read') || has('workorder:write') || has('admin:settings') || has('mobile:hizli-is-emri');
   const q = useQuery({
     queryKey: ['batch-number-state', 'preview', count],
     queryFn: () => batchService.getNumberPreview(count),
-    enabled: enabled && count > 0,
+    enabled: canPeek && enabled && count > 0,
     staleTime: 5_000,
     retry: false,
   });

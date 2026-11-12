@@ -545,6 +545,32 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "PUT /work-orders/:p/target-values",
     why: "Gramajı / Hedef değeri değiştir — `mobile:is-emri-duzelt` yeteneği (tablet yolunda yalnız mevcut hedefin sebepli düzeltmesi, adımı başlamış değer 409); düğme yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
   },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "PATCH /work-orders/:p/fold-type",
+    why: "Katı Değiştir — `mobile:is-emri-duzelt` yeteneği; kalem yalnız `canFix` iken çizilir (WorkOrderDetailSheet `fixAllowed.fold`).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /gelen-belge/is-emirleri/:p/belgeler",
+    why: "İE Belgeler → kaynak gelen belge taramaları — sorgu yalnız `gelen-belge:read` varken atılır (useIncomingScans `enabled: canRead`); yetkisizde satır çıkmaz.",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /gelen-belge/taramalar/:p/icerik",
+    why: "Tarama baytı — yalnız yukarıdaki (`gelen-belge:read` kapılı) listeden dokunulan satır için çağrılır (useIncomingScans `open`).",
+  },
+  // Tek İE formu GelenBelge dizininde yaşar; İş Emirleri ekranı da (mobile:hizli-is-emri) aynı formu açar.
+  {
+    screen: "gelen-belge:write",
+    path: "POST /work-orders/quick-start",
+    why: "Kendi üretim kaydı — yalnız İş Emirleri ekranının `ownerKinds` verdiği kipte; kayıt `workorder:write ∨ mobile:hizli-is-emri` yoksa engel cümlesiyle kapalı (useOwnGoodsCreate `allowed`/`denied`).",
+  },
+  {
+    screen: "gelen-belge:write",
+    path: "GET /batches/number-state",
+    why: "Bizim parti no tahmini (numara tüketmez) — sorgu yalnız ucun izinlerinden biri varken atılır (useOurBatchPreview `canPeek`); yetkisizde kutu \"Otomatik\" der.",
+  },
 ];
 
 function main(): void {

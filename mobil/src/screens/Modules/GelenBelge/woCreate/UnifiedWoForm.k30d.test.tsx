@@ -7,6 +7,7 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import type { DocRow, ExtraFormBody } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
 import { TERIM } from '../../../../lib/terim';
+import { useAuthStore } from '../../../../store/authStore';
 // Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
 jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
 
@@ -125,7 +126,9 @@ async function openFree() {
   return s;
 }
 
+// Parti no tahmini ve kendi üretim kaydı ucun iznine kapılı (useOurBatchPreview · useOwnGoodsCreate).
 beforeEach(() => {
+  useAuthStore.setState({ user: { permissions: ['mobile:hizli-is-emri', 'workorder:read'] } as never });
   mockBlob = { tabletIeForm: { hedefDoldur: true } };
   mockDefaults = mockDefaultsLoaded();
   mockRows = [row];

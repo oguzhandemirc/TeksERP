@@ -183,6 +183,7 @@ export function useUnifiedWoForm({ initialRoute, routeLocked, fieldsOpen, onFiel
   const ownerIssue: FormIssue[] = owner.visible && owner.value === null ? [{ key: 'malSahibi', text: 'Kendi Üretimimiz / Fason Üretim seçin.' }] : [];
   const issues: FormIssue[] = [
     ...ownerIssue,
+    ...(ownMode ? own.denied : []),
     ...(row?.form && wo.mode !== 'SEPARATE' && !ownMode ? rowIssueList(row.form) : []),
     ...extrasIssues(extras, { routeChosen: !!route, hasTambur: foldRequired, perParty, inOther: fields.isOther }),
   ];
