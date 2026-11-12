@@ -128,6 +128,23 @@ describe("§1 çipler sunucu beyanından", () => {
     expect(screen.queryByRole("button", { name: /Dönem kıyası:/ })).toBeNull();
   });
 
+  it("§1f ⭐ tablo görünümü çipinde 'Tümü' yok; uygulanan görünüm gösterilir", () => {
+    const VIEW_DECL: ParametreBeyani = {
+      ad: "gorunum",
+      etiket: "Tablo",
+      tur: "secim",
+      deger: "ozet",
+      secenekler: [
+        { deger: "ozet", etiket: "Özet" },
+        { deger: "iptaller", etiket: "İptal edilen siparişler" },
+      ],
+    };
+    wrap(<ParamChips entry={entry} params={[VIEW_DECL]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Tablo:\s*Özet/ }));
+    const dlg = within(screen.getByRole("dialog"));
+    expect(dlg.getAllByRole("option").map((o) => o.textContent)).toEqual(["Özet", "İptal edilen siparişler"]);
+  });
+
   it("§1e kişi adı taşıyan sunum → kırılım çipinde işaret (K-KISI)", () => {
     wrap(<ParamChips entry={entry} params={[VARIANT_DECL]} personNamed />);
     expect(screen.getByTestId("person-named-chip")).toBeInTheDocument();

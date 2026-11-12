@@ -11,17 +11,20 @@ import { efficiencyReport, type EfficiencyRow } from "../dokuma.report.service";
 import { SHIFT_STAT_PAGE_MAX } from "../../machine-shift-stat.service";
 import { capacityUsageReport, type CapacityRow } from "../kapasite-kullanimi.report.service";
 import type { GrafikBlok, RaporTanimi, TabloBlok } from "../sunum/sunum.types";
+import { factoryDateTr, factoryDayStartOfKey } from "../../../constants/time";
 import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
+import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
+import { secondsToMinutes } from "./duruslar.temel";
 
 /** Tablo görünümleri — eski Randıman / Vardiya Karnesi satırları (tezgah × vardiya × gün, aynı `efficiencyReport`). */
-export const LOOM_EFFICIENCY_VIEWS = ["ozet", "vardiyalar"] as const;
+export const LOOM_EFFICIENCY_VIEWS = ["ozet", "kapasite", "vardiyalar"] as const;
 export type LoomEfficiencyView = (typeof LOOM_EFFICIENCY_VIEWS)[number];
-const LOOM_EFFICIENCY_VIEW_LABEL: Readonly<Record<LoomEfficiencyView, string>> = { ozet: "Tezgah × hafta", vardiyalar: "Vardiya satırları" };
+const LOOM_EFFICIENCY_VIEW_LABEL: Readonly<Record<LoomEfficiencyView, string>> = { ozet: "Tezgah × hafta", kapasite: "Kapasite ayrıntısı", vardiyalar: "Vardiya satırları" };
 const SOURCE_LABEL: Readonly<Record<EfficiencyRow["source"], string>> = {
   MACHINE: "Makine", INFERRED: "Hesaplanan", OPERATOR: "Operatör", SUPERVISOR: "Şef", SIMULATED: "Benzetim",
 };
-/** Fabrika günü anahtarı (UTC gece yarısı) → "gg.aa.yyyy"; dilim yorumu yok, anahtar zaten fabrika günüdür. */
-const dayKeyTr = (d: Date): string => { const y = d.toISOString().slice(0, 10); return `${y.slice(8, 10)}.${y.slice(5, 7)}.${y.slice(0, 4)}`; };
+/** Fabrika günü anahtarı (UTC gece yarısı) → "gg.aa.yyyy" (tek kaynak `constants/time`). */
+const dayKeyTr = (d: Date): string => factoryDateTr(factoryDayStartOfKey(d.toISOString().slice(0, 10)));
 
 /** Vardiya satırları: her hücre `EfficiencyRow`un aynı alanı (K · P · E ayrı kolon). */
 export function shiftRowsTable(rows: readonly EfficiencyRow[]): TabloBlok {
@@ -30,6 +33,9 @@ export function shiftRowsTable(rows: readonly EfficiencyRow[]): TabloBlok {
       { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
       { anahtar: "gun", baslik: "Gün", hiza: "sol" },
       { anahtar: "vardiya", baslik: "Vardiya", hiza: "sol" },
+      { anahtar: "planli", baslik: "Planlı", birim: "dakika", hiza: "sag" },
+      { anahtar: "calisti", baslik: "Çalıştı", birim: "dakika", hiza: "sag" },
+      { anahtar: "durus", baslik: "Duruş", birim: "dakika", hiza: "sag" },
       { anahtar: "kullanilabilirlik", baslik: "Çalışma payı", birim: "yuzde", hiza: "sag" },
       { anahtar: "performans", baslik: "Hız payı", birim: "yuzde", hiza: "sag" },
       { anahtar: "randiman", baslik: "Randıman", birim: "yuzde", hiza: "sag" },
@@ -40,13 +46,13 @@ export function shiftRowsTable(rows: readonly EfficiencyRow[]): TabloBlok {
     ],
     satirlar: rows.map((r) => ({
       tezgah: r.machine.code, gun: dayKeyTr(r.factoryDayKey), vardiya: r.shift.name,
+      planli: secondsToMinutes(r.potSec), calisti: secondsToMinutes(r.aptSec), durus: secondsToMinutes(r.durusSec),
       kullanilabilirlik: r.availabilityPct, performans: r.performancePct, randiman: r.effectivenessPct,
-      atki: r.unitsActual, metre: r.producedM, kaynak: SOURCE_LABEL[r.source],
+      atki: r.unitsActual, metre: r.producedM, kaynak: r.emptyLoom ? "Boş tezgah" : SOURCE_LABEL[r.source],
       durum: r.live ? "Sürüyor" : r.sealState === "SEALED" ? "Mühürlü" : "Açık",
     })),
   };
 }
-import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
 
 export interface LoomEfficiencyInput {
   window: ResolvedDayRange;
@@ -92,6 +98,28 @@ function capacityTable(rows: CapacityRow[]): TabloBlok {
   };
 }
 
+/** Kapasite ayrıntısı: eski Kapasite Kullanımı satırı kolon kolon (`CapacityRow`un aynı alanları). */
+export function capacityDetailTable(rows: readonly CapacityRow[]): TabloBlok {
+  return {
+    kolonlar: [
+      { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
+      { anahtar: "hafta", baslik: "Hafta", hiza: "sol" },
+      { anahtar: "nominal", baslik: "Nominal atkı/dk", hiza: "sag" },
+      { anahtar: "atkiCm", baslik: "Atkı/cm", hiza: "sag" },
+      { anahtar: "teorik", baslik: "Teorik m/sa", hiza: "sag" },
+      { anahtar: "takvim", baslik: "Takvim saati", birim: "saat", hiza: "sag" },
+      { anahtar: "potansiyel", baslik: "Potansiyel", birim: "m", hiza: "sag" },
+      { anahtar: "gercek", baslik: "Gerçek", birim: "m", hiza: "sag" },
+      { anahtar: "kullanim", baslik: "Kullanım", birim: "yuzde", hiza: "sag" },
+      { anahtar: "hesaplanamadi", baslik: "Hesaplanamadı", hiza: "sol" },
+    ],
+    satirlar: rows.map((r) => ({
+      tezgah: r.code, hafta: r.hafta, nominal: r.nominalUnitsPerMin, atkiCm: r.unitsPerCm, teorik: r.teorikMSaat, takvim: r.takvimSaat,
+      potansiyel: r.potansiyelM, gercek: r.gercekM, kullanim: r.kullanimPct, hesaplanamadi: r.hesaplanamadi,
+    })),
+  };
+}
+
 export async function buildLoomEfficiencyReport(input: LoomEfficiencyInput): Promise<CoreReportResult> {
   const { days, range, compareDays, compareRange, mode } = input.window;
   const [eff, cap, prevEff, prevCap] = await Promise.all([
@@ -133,7 +161,7 @@ export async function buildLoomEfficiencyReport(input: LoomEfficiencyInput): Pro
   // Vardiya satırları yalnız istendiğinde çekilir (ana görünüm 1 satırlık toplam okur).
   const table = view === "vardiyalar"
     ? shiftRowsTable((await efficiencyReport({ from: days.from, to: days.to, limit: SHIFT_STAT_PAGE_MAX })).satirlar)
-    : capacityTable(rows);
+    : view === "kapasite" ? capacityDetailTable(rows) : capacityTable(rows);
   const capped = capTable(table, LOOM_EFFICIENCY_VIEW_LABEL[view]);
 
   const anlati = anlatiUret({

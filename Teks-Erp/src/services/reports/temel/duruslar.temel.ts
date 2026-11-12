@@ -14,13 +14,16 @@ import { alarmResponseReport, type AlarmResponseReport, type AlarmResponseRow } 
 import { durusParetoReport, type ParetoReport } from "../dokuma.report.service";
 import type { AnaSayi, GrafikBlok, ParametreBeyani, TabloBlok } from "../sunum/sunum.types";
 import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
+import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
 
 /** Tablo görünümleri — eski Müdahale raporunun kırılımları (aynı `alarmResponseReport`, aynı vardiya süzgeci). */
-export const LOOM_STOP_VIEWS = ["ozet", "mudahaleSebep", "mudahaleTezgah", "mudahaleVardiya"] as const;
+// Kişi kırılımı (`kisiler`) bilerek yok: temel rapor kişi adı taşımaz (`withPeople:false`).
+export const LOOM_STOP_VIEWS = ["ozet", "mudahaleSebep", "mudahaleHol", "mudahaleTezgah", "mudahaleVardiya"] as const;
 export type LoomStopView = (typeof LOOM_STOP_VIEWS)[number];
 const LOOM_STOP_VIEW_LABEL: Readonly<Record<LoomStopView, string>> = {
   ozet: "Duruş sebepleri",
   mudahaleSebep: "Müdahale: alarm türü",
+  mudahaleHol: "Müdahale: hol",
   mudahaleTezgah: "Müdahale: tezgah",
   mudahaleVardiya: "Müdahale: vardiya",
 };
@@ -39,13 +42,12 @@ export function responseTable(first: string, rows: readonly AlarmResponseRow[]):
   };
 }
 
-function responseRowsOf(view: Exclude<LoomStopView, "ozet">, alarm: AlarmResponseReport): { first: string; rows: AlarmResponseRow[] } {
+export function responseRowsOf(view: Exclude<LoomStopView, "ozet">, alarm: AlarmResponseReport): { first: string; rows: AlarmResponseRow[] } {
   if (view === "mudahaleSebep") return { first: "Alarm türü", rows: alarm.sebepler };
+  if (view === "mudahaleHol") return { first: "Hol", rows: alarm.holler };
   if (view === "mudahaleTezgah") return { first: "Tezgah", rows: alarm.tezgahlar };
   return { first: "Vardiya", rows: alarm.vardiyalar };
 }
-import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
-
 export interface LoomStopsInput {
   window: ResolvedDayRange;
   /** Vardiya tanımı kimlikleri (`readFilterList`ten; boş = tümü). */

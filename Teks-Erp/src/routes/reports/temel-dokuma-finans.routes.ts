@@ -70,7 +70,7 @@ export const coreReceivablesQuerySchema = z.object({ asOf: z.string().datetime({
  *       - { in: query, name: to, schema: { type: string, format: date } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
- *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, vardiyalar] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, kapasite, vardiyalar] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -106,7 +106,7 @@ router.get("/dokuma/tezgah-randimani", requireDokumaEnabled, ...reportGate("doku
  *       - { in: query, name: shiftDefinitionId, schema: { type: string }, description: "Vardiya tanımı (uuid; CSV ya da tekrarlı anahtar)" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [vardiya] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
- *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, mudahaleSebep, mudahaleTezgah, mudahaleVardiya] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, mudahaleSebep, mudahaleHol, mudahaleTezgah, mudahaleVardiya] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -141,7 +141,7 @@ router.get("/dokuma/duruslar", requireDokumaEnabled, ...reportGate("dokuma/durus
  *       - { in: query, name: to, schema: { type: string, format: date } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
- *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, acik] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, kapananlar, acik] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Dokuma ya da devere modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }

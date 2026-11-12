@@ -11,11 +11,39 @@ import { roundM, shareOfPct } from "../../helpers/dokuma-levent-rapor.helper";
 import { beamResultReport, type BeamResultRow } from "../levent-sonucu.report.service";
 import type { GrafikBlok, TabloBlok } from "../sunum/sunum.types";
 import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
+import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
+import { factoryDateTr } from "../../../constants/time";
 
 /** Tablo görünümleri — eski Levent Sonucu'nun "açık leventler (kesit)" listesi (aynı `beamResultReport`). */
-export const BEAM_BALANCE_VIEWS = ["ozet", "acik"] as const;
+export const BEAM_BALANCE_VIEWS = ["ozet", "kapananlar", "acik"] as const;
 export type BeamBalanceView = (typeof BEAM_BALANCE_VIEWS)[number];
-const BEAM_BALANCE_VIEW_LABEL: Readonly<Record<BeamBalanceView, string>> = { ozet: "Biten leventler", acik: "Tezgahtaki leventler" };
+const BEAM_BALANCE_VIEW_LABEL: Readonly<Record<BeamBalanceView, string>> = { ozet: "Biten leventler", kapananlar: "Biten leventler (ayrıntı)", acik: "Tezgahtaki leventler" };
+
+/** Biten levent ayrıntısı: eski Levent Sonucu satırı kolon kolon (`BeamResultRow`un aynı alanları). */
+export function closedBeamDetailTable(closed: readonly BeamResultRow[]): TabloBlok {
+  return {
+    kolonlar: [
+      { anahtar: "levent", baslik: "Levent", hiza: "sol" },
+      { anahtar: "cozgu", baslik: "Çözgü kartı", hiza: "sol" },
+      { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
+      { anahtar: "sarilan", baslik: "Sarılan", birim: "m", hiza: "sag" },
+      { anahtar: "dokunan", baslik: "Gerçek kumaş", birim: "m", hiza: "sag" },
+      { anahtar: "otomatik", baslik: "Otomatik", birim: "m", hiza: "sag" },
+      { anahtar: "elle", baslik: "Elle", birim: "m", hiza: "sag" },
+      { anahtar: "beklenen", baslik: "Beklenen", birim: "m", hiza: "sag" },
+      { anahtar: "fire", baslik: "Fire", birim: "m", hiza: "sag" },
+      { anahtar: "firePct", baslik: "Fire %", birim: "yuzde", hiza: "sag" },
+      { anahtar: "kapanis", baslik: "Kapanış", hiza: "sol" },
+    ],
+    satirlar: closed.map((r) => ({
+      levent: beamLabel(r), cozgu: `${r.warpSpec.code} · ${r.warpSpec.name}`, tezgah: r.tezgahlar.join(", ") || null,
+      sarilan: r.sarilanM, dokunan: r.gercekKumasM, otomatik: r.gercekKaynak.otomatik, elle: r.gercekKaynak.elle,
+      beklenen: r.beklenenKumasM, fire: r.fireM, firePct: r.firePct, kapanis: r.kapanisAt ? factoryDateTr(r.kapanisAt) : null,
+    })),
+  };
+}
+
+const beamLabel = (r: BeamResultRow): string => (r.physicalBeamNo ? `${r.beamNo} (${r.physicalBeamNo})` : r.beamNo);
 
 /** Açık levent kesiti: her hücre `BeamResultRow`un aynı alanı. */
 export function openBeamTable(open: readonly BeamResultRow[]): TabloBlok {
@@ -30,14 +58,12 @@ export function openBeamTable(open: readonly BeamResultRow[]): TabloBlok {
       { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
     ],
     satirlar: open.map((r) => ({
-      levent: r.physicalBeamNo ? `${r.beamNo} (${r.physicalBeamNo})` : r.beamNo,
+      levent: beamLabel(r),
       cozgu: `${r.warpSpec.code} · ${r.warpSpec.name}`,
       sarilan: r.sarilanM, kalan: r.kalanM, dokunan: r.gercekKumasM, kullanim: r.kullanimPct ?? null, tezgah: r.tezgahlar.join(", ") || null,
     })),
   };
 }
-import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
-
 export interface BeamBalance {
   /** Beklenen kumaşı bilinen biten leventlerin beklenen toplamı (= Levent Sonucu `ozet.beklenenM`). */
   expectedM: number;
@@ -112,7 +138,7 @@ export async function buildBeamBalanceReport(input: BeamBalanceInput): Promise<C
   ];
 
   const view = input.view ?? "ozet";
-  const table = view === "acik" ? openBeamTable(now.data.acikLeventler) : beamTable(closed, bal, o.fireM);
+  const table = view === "acik" ? openBeamTable(now.data.acikLeventler) : view === "kapananlar" ? closedBeamDetailTable(closed) : beamTable(closed, bal, o.fireM);
   const capped = capTable(table, BEAM_BALANCE_VIEW_LABEL[view]);
 
   const measurable = closed.filter((r) => r.beklenenKumasM !== null).slice(0, 20);

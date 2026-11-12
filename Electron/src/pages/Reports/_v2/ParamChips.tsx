@@ -9,7 +9,7 @@ import { ReportDateFilter } from "../_components/ReportDateFilter";
 import { parseCsv, toCsv } from "../_hooks/reportAxisFilters";
 import type { ParametreBeyani, ParametreSecenegi } from "./sunum";
 import { ALL_LABEL, ParamPickerDialog } from "./ParamPickerDialog";
-import { COMPARE_PARAM } from "./request-params";
+import { COMPARE_PARAM, VIEW_PARAM } from "./request-params";
 import { emptyLabelOf, VARIANT_PARAM } from "./variant-model";
 
 interface ChipSpec {
@@ -41,7 +41,8 @@ function appliedOf(p: ParametreBeyani, search: URLSearchParams): string[] {
 
 /**
  * Sunucunun beyan ettiği seçim parametreleri → çip. Kıyas da bir beyandır (K-KIYAS): varsayılanı
- * istemci YAZMAZ, beyan yoksa çip yoktur; "Tümü" seçeneği taşımaz ve en başta durur.
+ * istemci YAZMAZ, beyan yoksa çip yoktur; "Tümü" seçeneği taşımaz ve en başta durur. Tablo görünümü de
+ * "Tümü" taşımaz (sunucu hep bir tablo uygular).
  * Tarih çipi `ReportDateFilter`ındır; serbest metin/sayı R1'de.
  */
 export function chipSpecsOf(params: readonly ParametreBeyani[], search: URLSearchParams): ChipSpec[] {
@@ -52,7 +53,7 @@ export function chipSpecsOf(params: readonly ParametreBeyani[], search: URLSearc
       label: p.etiket,
       options: p.secenekler ?? [],
       multiple: p.tur === "cokluSecim",
-      allowAll: p.ad !== COMPARE_PARAM,
+      allowAll: p.ad !== COMPARE_PARAM && p.ad !== VIEW_PARAM,
       selected: appliedOf(p, search),
       emptyLabel: emptyLabelOf(p.ad),
     }));
