@@ -753,18 +753,18 @@ export async function cancelPayment(id: string, reason?: string) {
   return res.data as { message?: string };
 }
 
-export async function listCashBoxes(): Promise<Paged<AccountRow>> {
+export async function listCashBoxes(search?: string): Promise<Paged<AccountRow>> {
   const res = await apiClient.get("/api/finance/cash-boxes", {
     // ⚠️ Sınır SABİTTEN: "tümünü çek" davranışının tavanı tek yerde yaşar
     // (`PICKER_MAX_PAGE_SIZE`, backend `MAX_PAGE_SIZE` ile eşli).
-    params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "name", sortOrder: "asc" },
+    params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "name", sortOrder: "asc", ...(search ? { search } : {}) },
   });
   return res.data;
 }
 
-export async function listBankAccounts(): Promise<Paged<AccountRow>> {
+export async function listBankAccounts(search?: string): Promise<Paged<AccountRow>> {
   const res = await apiClient.get("/api/finance/bank-accounts", {
-    params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "name", sortOrder: "asc" },
+    params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "name", sortOrder: "asc", ...(search ? { search } : {}) },
   });
   return res.data;
 }
@@ -795,9 +795,9 @@ export async function createBankAccount(body: {
  */
 const RATE_LIST_PAGE_SIZE = 100;
 
-export async function listRates(): Promise<Paged<RateRow>> {
+export async function listRates(search?: string): Promise<Paged<RateRow>> {
   const res = await apiClient.get("/api/finance/exchange-rates", {
-    params: { page: 1, pageSize: RATE_LIST_PAGE_SIZE, sortBy: "rateDate", sortOrder: "desc" },
+    params: { page: 1, pageSize: RATE_LIST_PAGE_SIZE, sortBy: "rateDate", sortOrder: "desc", ...(search ? { search } : {}) },
   });
   return res.data;
 }

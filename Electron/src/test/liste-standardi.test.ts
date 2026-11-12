@@ -220,7 +220,6 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/GelenBelgeler/GonderenSablonlariPage.tsx": KATALOG,
   "Operations/MachineStops/StopsTable.tsx": "gün + makine süzgeçli duruş listesi; uçta metin araması yok (backend gerekiyor)",
   "ShiftDefinitions/ShiftDefinitionsPage.tsx": KATALOG,
-  "Finance/RatesPage.tsx": KATALOG,
   "Operations/LoomAlarms/LoomAlarmsPage.tsx": "alarm ucu kapsam/kademe/hol/sebep/tarih süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/KursunMeterDeviations/MeterDeviationsPage.tsx": "sapma ucu durum/makine/müşteri/tarih süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/ReadyWorks/ReadyWorksPage.tsx": "hazır iş ucu gruplama + durum süzgeçli; metin araması yok (backend gerekiyor)",
@@ -229,7 +228,6 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/AllocationRepair/RepairTable.tsx": "onarım ucu parametresiz tek liste (yalnız eksikli sevkiyatlar); metin araması yok (backend gerekiyor)",
   "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/PurchaseOrders/OpenLinesPanel.tsx": "açık kalem ucu (tedarikçi/ürün/gecikme süzgeçli) metin araması almıyor — şerit bu sekmede aramayı bilinçli gizler (backend gerekiyor)",
-  "Finance/AccountsPage.tsx": "kasa + banka hesabı tanımları (birkaç satır, iki bölüm); liste uçları arama almıyor (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
   "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
   "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",
@@ -237,7 +235,6 @@ const NO_SEARCH: Record<string, string> = {
   "System/PrintHistory/PrintHistoryTable.tsx": "baskı ucu gün/kişi/yazıcı/cihaz/tür/durum/kaynak süzgeçli; metin araması yok (backend gerekiyor)",
   "Notifications/NotificationsPage.tsx": "kişisel gelen kutusu sekme + alan süzgeçli (sunucuda); `/api/bildirim` metin araması almıyor (backend gerekiyor)",
   "GeneralSettings/Numbering/NumberingTable.tsx": "numara serisi kataloğu (kod kataloğundaki seriler, bölümlü, tek istek); `/api/number-series` arama almıyor (backend gerekiyor)",
-  "Finance/PeriodClose/PeriodClosePage.tsx": "kapanış ucu cari/para birimi/yeniden açılan süzgeçli (cari seçici aramalı); metin araması yok (backend gerekiyor)",
   "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
