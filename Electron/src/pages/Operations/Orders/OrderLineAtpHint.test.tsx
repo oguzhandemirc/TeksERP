@@ -32,7 +32,7 @@ describe("OrderLineAtpHint", () => {
     resolve({ freeWarehouse: 1250, inProduction: 300, freeStock: 500 });
     renderWithProviders(<OrderLineAtpHint itemId="it1" colorId="c1" width={180} />);
     expect(await screen.findByText(/Depoda:/)).toBeInTheDocument();
-    expect(screen.getByText("1.250 m")).toBeInTheDocument();
+    expect(screen.getByText("1250 m")).toBeInTheDocument();
     expect(screen.getByText("300 m")).toBeInTheDocument();
     expect(screen.getByText("500 m")).toBeInTheDocument();
   });

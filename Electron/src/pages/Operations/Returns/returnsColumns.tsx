@@ -1,9 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { safeFormat } from "@/lib/format";
+import { qtyFormatter, safeFormat } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import type { ReturnAppliedStatus, ReturnRow } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 const SHELF_LABEL: Record<ReturnAppliedStatus, string> = {
   WAREHOUSE: "Hazır Depo",
   A1_STOCK: "2. Kalite Stok",

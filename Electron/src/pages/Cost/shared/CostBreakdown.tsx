@@ -2,7 +2,7 @@
 // toplam satırlardan TOPLANMAZ (bekçi: cost-no-client-math + CostBreakdown.test).
 import { cn } from "@/lib/utils";
 import type { CostLineOut, CostResultOut } from "./cost-types";
-import { fmtDec, fmtDecFull } from "./format";
+import { fmtDec, fmtDecFull, fmtQtyDec, fmtQtyDecFull } from "./format";
 import { missingText, warningText } from "./labels";
 import { PresentationNote, presentationAmount } from "./PresentationNote";
 
@@ -71,7 +71,7 @@ function ResultTable({ s }: { s: CostResultOut }) {
         </tbody>
       </table>
       <p className="border-t px-3 py-1.5 text-xs text-muted-foreground">
-        Çözgü {fmtDecFull(s.cozguKgM, 6)} kg/m · Atkı {fmtDecFull(s.atkiKgM, 6)} kg/m · Tezgah {fmtDec(s.tezgahMSaat)} m/sa
+        Çözgü {fmtQtyDecFull(s.cozguKgM, 6)} kg/m · Atkı {fmtQtyDecFull(s.atkiKgM, 6)} kg/m · Tezgah {fmtQtyDec(s.tezgahMSaat)} m/sa
       </p>
     </div>
   );
@@ -81,7 +81,7 @@ function LineRow({ l, withCurrency }: { l: CostLineOut; withCurrency: boolean })
   return (
     <tr className="border-t">
       <td className="px-3 py-1.5">{l.etiket}</td>
-      <td className="px-3 py-1.5 text-right tabular-nums">{l.miktar === null ? "—" : `${fmtDecFull(l.miktar, 6)} ${l.birim ?? ""}`}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{l.miktar === null ? "—" : `${fmtQtyDecFull(l.miktar, 6)} ${l.birim ?? ""}`}</td>
       <td className="px-3 py-1.5 text-right tabular-nums">{fmtDecFull(l.birimFiyatTl)}</td>
       <td className="px-3 py-1.5 text-right tabular-nums" title={`${fmtDecFull(l.tutarTlM)} TL/m`}>{fmtDec(l.tutarTlM)}</td>
       {withCurrency && <td className="px-3 py-1.5 text-right tabular-nums">{fmtDec(l.tutarDoviz, 4)}</td>}

@@ -1,5 +1,6 @@
 import { AlertTriangle, Info } from "lucide-react";
 import type { ImportColumn, ImportTemplateSpec } from "@/services/importService";
+import { formatQty } from "@/lib/format";
 
 const TYPE_LABEL: Record<ImportColumn["type"], string> = {
   text: "Metin",
@@ -142,7 +143,7 @@ export function ImportDataPreview({
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Toplam <strong>{total.toLocaleString("tr-TR")}</strong> kayıt
+        Toplam <strong>{formatQty(total)}</strong> kayıt
         {truncated ? ` · aşağıda ilk ${rows.length} tanesi gösteriliyor` : ""}. İndirilen dosya bu
         sütunları taşır ve <strong>düzenlenip geri yüklenebilir</strong>.
       </p>

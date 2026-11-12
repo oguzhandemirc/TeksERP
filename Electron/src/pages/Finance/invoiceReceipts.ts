@@ -7,6 +7,7 @@
 // =============================================================================
 import axios from "axios";
 import { money, type Currency, type InvoiceReceiptDifference, type InvoiceReceiptMatch } from "./service";
+import { formatQty } from "@/lib/format";
 
 export interface ReceiptLike {
   receiptNo: string;
@@ -36,8 +37,8 @@ export const DIFF_KIND_LABEL: Record<InvoiceReceiptDifference["kind"], string> =
   AMOUNT: "Tutar",
 };
 
-const pct = (n: number) => `%${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
-const qty = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
+const pct = (n: number) => `%${formatQty(n, 1)}`;
+const qty = (n: number) => formatQty(n, 3);
 
 /** Tek fark satırı: "Miktar: fatura 1.250 ↔ fişler 1.200 (fark %4,2 · tolerans %2)". */
 export function differenceText(d: InvoiceReceiptDifference, currency: Currency): string {

@@ -1,3 +1,4 @@
+import { formatQty } from "@/lib/format";
 // Tezgâh önerisi (SY-M2 `GET /api/loom-suggestions`) tel tipleri — backend `helpers/loom-suggestion.helper.ts` aynası.
 export type LoomTier = "READY" | "BEAM_SHORT" | "WARP_CHANGE";
 
@@ -37,7 +38,7 @@ export const LOOM_TIER_META: Record<LoomTier, { short: string; label: string; to
   WARP_CHANGE: { short: "T3", label: "Çözgü değişimi", tone: "bg-muted text-muted-foreground border-border" },
 };
 
-const fmtM = (n: number) => `${n.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} m`;
+const fmtM = (n: number) => `${formatQty(n, 0)} m`;
 
 /** Adayın tek satırlık açıklaması (kademe ayrıntısı). */
 export function candidateDetail(c: LoomCandidate): string {

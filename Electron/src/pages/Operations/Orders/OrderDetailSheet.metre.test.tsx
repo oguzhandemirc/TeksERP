@@ -44,7 +44,7 @@ describe("OrderDetailSheet — Sevk İlerlemesi metresi", () => {
     renderWithProviders(<OrderDetailSheet order={o} open onOpenChange={() => {}} />);
     const label = await screen.findByText("Sevk İlerlemesi");
     expect(label.nextElementSibling?.textContent).toBe(orderMetreText(o));
-    expect(label.nextElementSibling?.textContent).toBe("1.200 / 2.400 m (%50)");
+    expect(label.nextElementSibling?.textContent).toBe("1200 / 2400 m (%50)");
   });
 
   it("iptal kalemin yalnız sevk edilen kısmı paydaya girer", async () => {
@@ -54,7 +54,7 @@ describe("OrderDetailSheet — Sevk İlerlemesi metresi", () => {
     ]);
     renderWithProviders(<OrderDetailSheet order={o} open onOpenChange={() => {}} />);
     const label = await screen.findByText("Sevk İlerlemesi");
-    expect(label.nextElementSibling?.textContent).toBe("1.240 / 1.240 m (%100)");
+    expect(label.nextElementSibling?.textContent).toBe("1240 / 1240 m (%100)");
   });
 
   it("ölçülü kalemi olmayan siparişte ilerleme kartı çizilmez", async () => {

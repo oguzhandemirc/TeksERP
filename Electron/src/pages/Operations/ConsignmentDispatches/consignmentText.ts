@@ -1,5 +1,6 @@
 // Emanet çıkış metinleri (saf): sunucu hata kodu → Türkçe neden, tel sayısı → görüntü. Kod kullanıcıya basılmaz.
 import type { ConsignmentDispatchErrorCode, ConsignmentItemKind } from "./types";
+import { qtyFormatter } from "@/lib/format";
 
 const REASON: Record<ConsignmentDispatchErrorCode, string> = {
   CONSIGNMENT_ITEMS_EMPTY: "Belgede kalem yok",
@@ -22,7 +23,7 @@ export function blockedReasonText(code: string | null | undefined): string | nul
 
 export const KIND_LABEL: Record<ConsignmentItemKind, string> = { WARP_BEAM: "Levent", YARN: "İplik" };
 
-const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
+const NUM = qtyFormatter(2);
 
 /** Telde string gelen sayı → "1.234,5". Sayı değilse olduğu gibi (sessiz 0 yok). */
 export function fmtNum(v: string | number | null | undefined): string {

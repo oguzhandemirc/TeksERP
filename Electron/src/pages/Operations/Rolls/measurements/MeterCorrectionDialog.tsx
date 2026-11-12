@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { correctCutReading, correctionErrorText } from "./correctionService";
 import { measureSourceLabel, type RollMeterReadingView } from "./measure-source";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   reading: RollMeterReadingView;
@@ -54,7 +55,7 @@ export function MeterCorrectionDialog({ reading, onClose, onChanged }: Props) {
         <DialogHeader>
           <DialogTitle>Kesim metresini düzelt</DialogTitle>
           <DialogDescription>
-            Kayıtlı: {reading.meters.toLocaleString("tr-TR")} m ({measureSourceLabel(reading.source)}). Eski okuma silinmez, düzeltildi olarak
+            Kayıtlı: {formatQty(reading.meters)} m ({measureSourceLabel(reading.source)}). Eski okuma silinmez, düzeltildi olarak
             işaretlenir; faturaya yeni (Süpervizör) metre girer. Topun stok metresi değişmez.
           </DialogDescription>
         </DialogHeader>

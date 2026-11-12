@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { orderService } from "./service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { TERIM } from "@/lib/terim";
+import { qtyFormatter } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -25,7 +26,7 @@ interface Props {
   onCancelled?: () => void;
 }
 
-const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const NUM = qtyFormatter(1);
 
 /**
  * KALEM İPTALİ ONAY EKRANI.

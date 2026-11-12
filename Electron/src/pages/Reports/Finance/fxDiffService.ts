@@ -34,6 +34,7 @@ import {
 } from "@/pages/Finance/service";
 import type { ReportResponse } from "../_services/types";
 import type { CariKind } from "./service";
+import { formatAmount } from "@/lib/format";
 
 // -----------------------------------------------------------------------------
 // SÖZLEŞME
@@ -186,7 +187,7 @@ export function fxRate(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  return formatAmount(n, 4, 4);
 }
 
 /**

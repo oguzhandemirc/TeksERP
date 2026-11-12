@@ -22,8 +22,9 @@ import { ReturnInvoiceDraft } from "./ReturnInvoiceDraft";
 import { canDraftReturnInvoice } from "./returnInvoice";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { ReturnsFilterRow, RETURN_PERSIST } from "./ReturnsFilterRow";
+import { qtyFormatter } from "@/lib/format";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 
 export function ReturnsPage() {
   const qc = useQueryClient();

@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { allocationRepairService, type RepairPreview, type RepairableShipment } from "./service";
+import { formatQty } from "@/lib/format";
 
-const m = (n: number) => `${Math.round(n).toLocaleString("tr-TR")} m`;
+const m = (n: number) => `${formatQty(Math.round(n))} m`;
 
 /**
  * ONARIM ÖNİZLEMESİ — HANGİ SATIRA KAÇ METRE.

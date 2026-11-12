@@ -26,6 +26,7 @@
 // =============================================================================
 import { toNum, type DecimalLike } from "./service";
 import { lowerTr } from "../../../lib/tr-case";
+import { formatQty } from "@/lib/format";
 
 export type FulfillmentState = "NONE" | "PARTIAL" | "COMPLETE" | "OVER";
 
@@ -91,7 +92,7 @@ export function remainingText(
   opts?: { shortClosed?: boolean },
 ): string {
   const u = unit ? ` ${lowerTr(unit)}` : "";
-  const n = (v: number) => v.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+  const n = (v: number) => formatQty(v, 2);
   if (f.excess > 0) return `${n(f.excess)}${u} fazla geldi`;
   if (f.state === "COMPLETE") return "Tamamlandı";
   if (opts?.shortClosed) return `${n(f.remaining)}${u} gelmeyecek (kapatıldı)`;

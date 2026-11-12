@@ -1,3 +1,4 @@
+import { formatQty } from "@/lib/format";
 // Etiket şablonu birim sistemi (Gülkesim S5) — backend `config/label-units.ts` aynası.
 // Biçim SUNUCUDA uygulanır; burada yalnız seçici modeli + açıklama örneği var.
 
@@ -47,11 +48,7 @@ export function fromUnitSettings(s: LabelUnitSettings | null | undefined): {
 }
 
 function fmt(n: number, decimals: number | null | undefined, sep: LabelDecimalSep): string {
-  const txt = n.toLocaleString("tr-TR", {
-    useGrouping: false,
-    minimumFractionDigits: decimals ?? 0,
-    maximumFractionDigits: decimals ?? 2,
-  });
+  const txt = formatQty(n, decimals ?? 2, decimals ?? 0);
   return sep === "." ? txt.replace(",", ".") : txt;
 }
 

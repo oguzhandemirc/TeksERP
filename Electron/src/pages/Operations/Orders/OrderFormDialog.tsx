@@ -30,6 +30,7 @@ import {
 } from "./schema";
 import { TERIM } from "@/lib/terim";
 import { toleranceToFormText } from "./lineTolerance";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -114,7 +115,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
     const totalQty = active.reduce((acc, l) => acc + Number(l.quantity), 0);
     const cancelled = order.lines.length - active.length;
     return (
-      `${active.length} kalem · toplam ${totalQty.toLocaleString("tr-TR", { useGrouping: false })} m` +
+      `${active.length} kalem · toplam ${formatQty(totalQty)} m` +
       (cancelled > 0 ? ` (${cancelled} iptal)` : "")
     );
   }, [order]);

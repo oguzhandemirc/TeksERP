@@ -2,7 +2,7 @@
 // İstemci HESAP YAPMAZ: sayı, tablo ve "bilinmiyor" hücresi sunucudan (`yarn-need.sunum.ts`); burada yalnız etiket.
 import type { RaporSunumu } from "@/pages/Reports/_v2/sunum";
 import { MISSING_LABEL } from "../shared/labels";
-import { fmtDec, fmtDecFull } from "../shared/format";
+import { fmtQtyDec, fmtQtyDecFull } from "../shared/format";
 import { TERIM } from "@/lib/terim";
 
 export const YARN_NEED_KEY = "maliyet/iplik-ihtiyaci";
@@ -57,10 +57,10 @@ export function wasteSourceText(rows: readonly YarnNeedRowLite[] | undefined): s
  */
 export function rawBasisText(meta: Pick<YarnNeedMeta, "metreEsasi" | "dokumaFiresiPct">, ozet?: YarnNeedSummaryMeters): string | null {
   if (meta.metreEsasi !== "HAM") return null;
-  const firePct = meta.dokumaFiresiPct != null && meta.dokumaFiresiPct > 0 ? `%${fmtDecFull(meta.dokumaFiresiPct, 2)}` : null;
+  const firePct = meta.dokumaFiresiPct != null && meta.dokumaFiresiPct > 0 ? `%${fmtQtyDecFull(meta.dokumaFiresiPct, 2)}` : null;
   const dahil = firePct ? `çekme ve ${firePct} dokuma firesi dahil` : "çekme dahil";
   if (ozet?.siparisMetre && ozet.kumasMetre) {
-    return `Kg'lar ham metreye göre: sipariş ${fmtDec(ozet.siparisMetre, 0)} m → dokunacak ham ${fmtDec(ozet.kumasMetre, 0)} m (${dahil}).`;
+    return `Kg'lar ham metreye göre: sipariş ${fmtQtyDec(ozet.siparisMetre, 0)} m → dokunacak ham ${fmtQtyDec(ozet.kumasMetre, 0)} m (${dahil}).`;
   }
   return `Kg'lar ham metreye göre hesaplanır (${dahil}).`;
 }
@@ -96,6 +96,6 @@ export function reservationText(meta: Pick<YarnNeedMeta, "ayirma">): string | nu
   if (a.isSayisi === 0) return `İplik ayırma açık: açık ${TERIM.dokumaIsEmri.tekilKucuk} yok, ayrılan iplik yok.`;
   // Sunucunun ondalık metni; yalnız "sıfırdan büyük mü" bakılır (hesap yok).
   const cut = /^\d*\.?\d*$/.test(a.netlenenKumasM) && /[1-9]/.test(a.netlenenKumasM);
-  const net = a.talepNetlendi && cut ? `; bu işlerin ${fmtDec(a.netlenenKumasM, 0)} m kalanı ihtiyaçtan düşüldü` : "";
+  const net = a.talepNetlendi && cut ? `; bu işlerin ${fmtQtyDec(a.netlenenKumasM, 0)} m kalanı ihtiyaçtan düşüldü` : "";
   return `İplik ayırma açık: ${a.isSayisi} açık ${TERIM.dokumaIsEmri.cekimKucuk.ilgi} kalan metresi için iplik ayrıldı${net}.`;
 }

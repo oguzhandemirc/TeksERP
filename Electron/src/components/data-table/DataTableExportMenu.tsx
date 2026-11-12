@@ -14,6 +14,7 @@ import { exportTableToPdf, exportTableToXlsx, exportTableToCsv, exportListName }
 import { useExportRange } from "@/hooks/useExportRange";
 import { isExportCancelled, truncatedExportNote } from "@/lib/export-drain";
 import { useExportConfirm } from "@/hooks/useExportConfirm";
+import { formatQty } from "@/lib/format";
 
 type ExportKind = "pdf" | "xlsx" | "csv";
 
@@ -95,7 +96,7 @@ export function DataTableExportMenu<T>({
   const triggerLabel = !busy
     ? "Dışa aktar"
     : progress
-      ? `${progress.loaded.toLocaleString("tr-TR")}${progress.total ? ` / ~${progress.total.toLocaleString("tr-TR")}` : ""} indiriliyor…`
+      ? `${formatQty(progress.loaded)}${progress.total ? ` / ~${formatQty(progress.total)}` : ""} indiriliyor…`
       : "Hazırlanıyor…";
   const scope = fetchAll ? "süzgece uyan tüm kayıtlar" : "ekrandaki kayıtlar";
   const extras = extraExports ?? [];

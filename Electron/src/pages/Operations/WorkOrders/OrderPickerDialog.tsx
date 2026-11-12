@@ -21,6 +21,7 @@ import type { Order, OrderLine } from "@/pages/Operations/Orders/types";
 import { trCompare } from "@/lib/collate";
 import { calendarLocaleDateString } from "@/lib/factory-time";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 export interface PickedOrderLineProperty {
   id: string;
@@ -519,7 +520,7 @@ export function OrderPickerDialog({
                   <span className="font-medium text-foreground">
                     {selectedArray.length} kalem
                   </span>{" "}
-                  · {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m · {customerCount} müşteri
+                  · {formatQty(totalQty)} m · {customerCount} müşteri
                 </div>
               </div>
               {selectedArray.length > 0 && (
@@ -580,7 +581,7 @@ export function OrderPickerDialog({
                           </Badge>
                         )}
                         <span className="ml-auto tabular-nums text-muted-foreground">
-                          {l.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
+                          {formatQty(l.quantity)} m
                         </span>
                       </div>
                     </li>
@@ -599,7 +600,7 @@ export function OrderPickerDialog({
                 <span className="font-medium text-foreground">
                   {selectedArray.length} kalem
                 </span>{" "}
-                seçildi · {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m · {customerCount} müşteri
+                seçildi · {formatQty(totalQty)} m · {customerCount} müşteri
               </>
             ) : (
               "Henüz seçim yok"
@@ -752,7 +753,7 @@ function FetchedOrderRow({
                   </Badge>
                 )}
                 <span className="tabular-nums text-muted-foreground">
-                  {line.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
+                  {formatQty(line.quantity)} m
                   {line.width ? ` × ${line.width} cm` : ""}
                 </span>
                 {incompatible && (
@@ -890,7 +891,7 @@ function SelectedOrderRow({
               </Badge>
             )}
             <span className="tabular-nums text-muted-foreground">
-              {l.quantity.toLocaleString("tr-TR", { useGrouping: false })} m
+              {formatQty(l.quantity)} m
               {l.width ? ` × ${l.width} cm` : ""}
             </span>
             {l.requiredProperties.length > 0 && (

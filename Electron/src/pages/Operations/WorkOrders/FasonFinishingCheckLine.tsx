@@ -4,7 +4,7 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useMaliyetEnabled } from "@/hooks/usePricingEnabled";
-import { fmtDec, fmtDecFull } from "@/pages/Cost/shared/format";
+import { fmtDec, fmtDecFull, fmtQtyDec } from "@/pages/Cost/shared/format";
 
 /** SY-E2 — `GET /api/cost/subcontractor-dispatches/:id/finishing-check` yanıtı (yalnız okuma). */
 export interface FinishingCheckLine {
@@ -93,7 +93,7 @@ export function FasonFinishingCheckLine({ dispatchId, open }: { dispatchId: stri
         </strong>
       </span>
       <span className="text-muted-foreground">
-        {fmtDec(line.totalKg, 3)} kg × {fmtDecFull(line.pricePerKg, 4)} {line.currency}/kg ({line.rateName}
+        {fmtQtyDec(line.totalKg, 3)} kg × {fmtDecFull(line.pricePerKg, 4)} {line.currency}/kg ({line.rateName}
         {line.rateAsOf ? `, ${dayTr(line.rateAsOf)} sevk tarihindeki tarife` : ""}
         {line.rateFallback ? " — o gün tarife yoktu, ilk tarife kullanıldı" : ""})
         {line.unweighedCount > 0 ? ` · ${line.unweighedCount} top tartısız, hesaba girmedi` : ""}

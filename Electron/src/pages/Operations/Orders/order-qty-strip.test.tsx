@@ -72,17 +72,17 @@ describe("özet şeridi kova etiketi", () => {
 });
 
 describe("sipariş miktarı tek biçim", () => {
-  it("fmtNum: binlik grup, en çok 2 ondalık", () => {
+  it("fmtNum: ayırıcısız (ölçü), en çok 2 ondalık", () => {
     expect(fmtNum(668.3)).toBe("668,3");
     expect(fmtNum(668.333)).toBe("668,33");
-    expect(fmtNum(1200)).toBe("1.200");
+    expect(fmtNum(1200)).toBe("1200");
   });
 
   it("kapsama paneli sevki başlıkla aynı yazar (668,3 — 668 değil)", async () => {
     withQuery(<CoveragePanel lineIds={["l1"]} />);
     expect(await screen.findByText("668,3")).toBeTruthy();
     expect(screen.getByText("100,25")).toBeTruthy();
-    expect(screen.getByText("1.200")).toBeTruthy();
+    expect(screen.getByText("1200")).toBeTruthy();
     expect(screen.queryByText("668")).toBeNull();
   });
 

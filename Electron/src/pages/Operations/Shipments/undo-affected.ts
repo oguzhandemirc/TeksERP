@@ -8,6 +8,7 @@
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { EIrsaliyeAffected, UndoAffectedRoll, UndoDispatchPreview } from "./service";
 import { loadUnitTitle } from "@/lib/load-unit";
+import { formatQty } from "@/lib/format";
 
 export interface UndoAffectedRow {
   key: string;
@@ -18,7 +19,7 @@ export interface UndoAffectedRow {
   detail: string;
 }
 
-const meters = (m: number): string => `${m.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} m`;
+const meters = (m: number): string => `${formatQty(m, 2)} m`;
 const shelf = (s: string): string => rollStatusLabels[s as RollStatus] ?? s;
 
 export function undoRollDetail(r: UndoAffectedRoll): string {

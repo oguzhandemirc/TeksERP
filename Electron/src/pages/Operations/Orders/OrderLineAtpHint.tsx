@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { orderService } from "./service";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   itemId: string;
@@ -8,9 +9,9 @@ interface Props {
   width: number | null;
 }
 
-/** Tamsayı metre, tr-TR gruplama (1.250). */
+/** Tamsayı metre, ayırıcısız (1250). */
 function fmtM(v: number): string {
-  return Math.round(v).toLocaleString("tr-TR", { useGrouping: true });
+  return formatQty(Math.round(v));
 }
 
 /**

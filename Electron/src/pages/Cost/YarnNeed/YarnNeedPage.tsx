@@ -7,7 +7,7 @@ import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { cn } from "@/lib/utils";
 import { useReportV2 } from "@/pages/Reports/_v2/useReportV2";
 import { ReportV2Frame } from "@/pages/Reports/_v2/view/ReportV2Frame";
-import { fmtDec } from "../shared/format";
+import { fmtQtyDec } from "../shared/format";
 import { excludedText, missingText, rawBasisText, reservationText, sourceBadges, wasteSourceText, YARN_NEED_KEY, type YarnNeedMeta, type YarnNeedPresentation } from "./yarn-need-model";
 
 const ENTRY = REPORT_BY_KEY.get(YARN_NEED_KEY)!;
@@ -74,7 +74,7 @@ function MetaStrip({ meta, basis, notes }: { meta: YarnNeedMeta; basis: string |
                 {meta.yapisiEksik.map((u) => (
                   <li key={u.urunId} className="rounded border px-3 py-1.5">
                     <span className="font-medium">{u.urunKodu} · {u.urun}</span>
-                    <span className="text-muted-foreground"> — {u.kalemSayisi} sipariş kalemi · {fmtDec(u.metre, 1)} m</span>
+                    <span className="text-muted-foreground"> — {u.kalemSayisi} sipariş kalemi · {fmtQtyDec(u.metre, 1)} m</span>
                     <ul className="mt-0.5 list-disc pl-5 text-xs text-muted-foreground">
                       {u.eksikler.map((c) => <li key={c}>{missingText(c)}</li>)}
                     </ul>
@@ -90,7 +90,7 @@ function MetaStrip({ meta, basis, notes }: { meta: YarnNeedMeta; basis: string |
                 {meta.olculemeyen.map((u) => (
                   <li key={`${u.urunId}-${u.birim}`} className="rounded border px-3 py-1.5">
                     <span className="font-medium">{u.urunKodu} · {u.urun}</span>
-                    <span className="text-muted-foreground"> — {u.kalemSayisi} kalem · {fmtDec(u.miktar, 1)} {u.birim}</span>
+                    <span className="text-muted-foreground"> — {u.kalemSayisi} kalem · {fmtQtyDec(u.miktar, 1)} {u.birim}</span>
                   </li>
                 ))}
               </ul>

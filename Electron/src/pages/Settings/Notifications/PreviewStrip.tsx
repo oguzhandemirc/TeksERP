@@ -7,10 +7,11 @@ import { NOTIFICATION_QUERY_KEY } from "@/lib/bildirim/hooks";
 import { draftToBody, type PreferenceDraft } from "@/lib/bildirim/tercih-taslak";
 import type { NotificationCatalogKind } from "@/lib/bildirim/types";
 import { bildirimService } from "@/services/bildirimService";
+import { qtyFormatter } from "@/lib/format";
 
 export const PREVIEW_DEBOUNCE_MS = 400;
 
-const fmt = (n: number) => new Intl.NumberFormat("tr-TR", { maximumFractionDigits: n < 10 ? 1 : 0 }).format(n);
+const fmt = (n: number) => qtyFormatter(n < 10 ? 1 : 0).format(n);
 
 export function PreviewStrip({ draft, kinds }: { draft: PreferenceDraft; kinds: readonly NotificationCatalogKind[] }) {
   const body = JSON.stringify(draftToBody(draft));

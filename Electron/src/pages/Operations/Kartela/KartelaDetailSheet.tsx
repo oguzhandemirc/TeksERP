@@ -24,13 +24,14 @@ import { useKartelaMeasurementEnabled } from "@/hooks/usePricingEnabled";
 import { kartelaService } from "./service";
 import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
 import { DispatchCancelAction, ReceiptCancelAction } from "./KartelaDetailActions";
+import { qtyFormatter } from "@/lib/format";
 
 export type KartelaSelection =
   | { kind: "dispatch"; id: string }
   | { kind: "receipt"; id: string }
   | null;
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 const fmtDate = (s: string) => formatFactory(s, "dd.MM.yyyy HH:mm");
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

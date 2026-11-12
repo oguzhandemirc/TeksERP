@@ -14,8 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { shipmentService } from "./service";
 import { EIrsaliyeAffectedNote } from "./UndoAffectedList";
 import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
+import { formatQty } from "@/lib/format";
 
-const fmtM = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => formatQty(Number(n), 1);
 
 interface Props {
   /** İptal edilecek sevkiyat id'si — null ise dialog kapalı. */

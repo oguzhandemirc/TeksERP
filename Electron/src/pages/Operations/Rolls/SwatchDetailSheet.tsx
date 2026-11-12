@@ -1,5 +1,5 @@
 import { QRCodeSVG } from "qrcode.react";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import {
   Sheet,
   SheetContent,
@@ -55,7 +55,7 @@ export function SwatchDetailSheet({ swatch, open, onOpenChange }: Props) {
                     <div className="mt-0.5">
                       <span className="text-2xl font-semibold tabular-nums">
                         {swatch.length != null
-                          ? swatch.length.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 })
+                          ? formatQty(swatch.length, 2)
                           : "—"}
                       </span>
                       <span className="ml-1 text-xs text-muted-foreground">cm</span>

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { formatQty } from "@/lib/format";
 
 /**
  * "Tümünü indir"de büyük liste onayı (Perf-2 B4): `drainCursor` toplam tahmini
@@ -34,7 +35,7 @@ export function useExportConfirm(): {
         if (!open) settle(false);
       }}
       title="Büyük liste indirilecek"
-      description={`Yaklaşık ${(total ?? 0).toLocaleString("tr-TR")} kayıt indirilecek; bu birkaç dakika sürebilir. Süzgeçle daraltmak daha hızlıdır.\nYine de indirilsin mi?`}
+      description={`Yaklaşık ${formatQty((total ?? 0))} kayıt indirilecek; bu birkaç dakika sürebilir. Süzgeçle daraltmak daha hızlıdır.\nYine de indirilsin mi?`}
       confirmLabel="İndir"
       cancelLabel="Vazgeç"
       onConfirm={() => settle(true)}

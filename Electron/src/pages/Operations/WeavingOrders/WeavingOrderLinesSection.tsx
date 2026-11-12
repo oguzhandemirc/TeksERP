@@ -17,6 +17,7 @@ import type { WeavingOrderFormValues } from "./schema";
 import type { WeavingOrderLineLink } from "./types";
 import { OrderLinePickerDialog } from "./OrderLinePickerDialog";
 import { orderLinePrefill } from "./prefill";
+import { formatQty } from "@/lib/format";
 
 /** Satırın gösterim verisi — DTO (kayıtlı bağ) ya da seçici satırı (yeni bağ) aynı biçime iner. */
 export interface LineMeta {
@@ -29,7 +30,7 @@ export interface LineMeta {
   qtyText: string;
 }
 
-const fmtN = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmtN = (n: number) => formatQty(n, 0);
 
 /** Seçici satırı → gösterim (saf): açık = netOpenQty (yoksa openQty), ölçülmeyen birimde "ölçülmüyor". */
 export function metaFromAvailable(l: AvailableOrderLine): LineMeta {

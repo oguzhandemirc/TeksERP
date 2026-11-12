@@ -1,6 +1,7 @@
 // Hizmet Fiyat Tablosu — saf kurallar (React'siz; bileşen ve test aynı kodu koşar).
 import { addDaysToKey, factoryDayKey, factoryDayStartIso } from "@/lib/factory-time";
 import type { ServicePriceSource, ServicePriceTierRow } from "./service";
+import { formatAmount } from "@/lib/format";
 
 /** Kaynak rozeti: kısa ad + açıklama + ton. Sıra = fatura çözüm sırası (K1). */
 export const SOURCE_BADGE: Record<ServicePriceSource, { label: string; hint: string; className: string }> = {
@@ -45,7 +46,7 @@ export function formatPrice(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—";
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return formatAmount(n, 2, 4);
 }
 
 /** İleri tarih seçicisinin en erken günü: yarın (bugünün başı geçmiştir; backend geçmiş `validFrom`u 400 ile reddeder). */

@@ -11,10 +11,11 @@ import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import type { BalanceGroup, BalanceSpecRow } from "./types";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 /** Metre — binlik ayırıcısız (lib/format kuralı). */
 export const fmt = (n: number) =>
-  n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+  formatQty(n, 0);
 
 export const widthLabel = (w: number | null) => (w == null ? "en —" : `${w}cm`);
 

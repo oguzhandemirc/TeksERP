@@ -4,11 +4,11 @@ import { History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDate } from "@/lib/factory-time";
-import { fmtDecFull } from "../shared/format";
+import { fmtQtyDecFull } from "../shared/format";
 import type { ConsumableNorm } from "./service";
 
 const qtyText = (r: ConsumableNorm) =>
-  /^0(\.0+)?$/.test(String(r.qtyPerM)) ? "0 — sarf kullanmaz" : `${fmtDecFull(r.qtyPerM, 6)} ${r.unit}/${r.basis === "PER_ROLL" ? "top" : "m"}`;
+  /^0(\.0+)?$/.test(String(r.qtyPerM)) ? "0 — sarf kullanmaz" : `${fmtQtyDecFull(r.qtyPerM, 6)} ${r.unit}/${r.basis === "PER_ROLL" ? "top" : "m"}`;
 const codeName = (it: { code: string; name: string }) => (
   <span><span className="font-medium">{it.code}</span> <span className="text-muted-foreground">{it.name}</span></span>
 );

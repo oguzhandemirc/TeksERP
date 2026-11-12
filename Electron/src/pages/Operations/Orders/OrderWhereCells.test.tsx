@@ -38,7 +38,7 @@ describe("Nerede? / Sevk hücreleri", () => {
       "status" | "shippedQty" | "manualClosedById" | "lines"
     >;
     const { container } = render(<ShipCell order={o} />);
-    expect(container.textContent).toBe("Bir kısmı gönderildi (1.200 / 2.400 m)");
+    expect(container.textContent).toBe("Bir kısmı gönderildi (1200 / 2400 m)");
     expect(container.textContent).toBe(orderShipText(o));
   });
 

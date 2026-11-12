@@ -8,8 +8,9 @@ import { ProposalInsights } from "./ProposalInsights";
 import { shrinkSourceText, wasteNote } from "./insight-text";
 import { excludedKindLabel, excludedReason, parsePlannedM, type ProposalSelection } from "./selection";
 import type { BeamNeed, ProductionProposal, WeavingProposal, WorkOrderProposal } from "./types";
+import { formatQty } from "@/lib/format";
 
-const fmt = (n: number | null | undefined, unit = "m") => (n == null ? "—" : `${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} ${unit}`);
+const fmt = (n: number | null | undefined, unit = "m") => (n == null ? "—" : `${formatQty(n, 1)} ${unit}`);
 
 export type LineLabel = (orderLineId: string) => string;
 

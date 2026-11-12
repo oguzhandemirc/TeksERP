@@ -4,6 +4,7 @@
 import { isMeasuredUnit } from "@/lib/item-unit";
 import { fmtNum } from "./order-where-text";
 import type { Order, OrderLine } from "./types";
+import { formatAmount } from "@/lib/format";
 
 export interface LineLabel {
   key: string;
@@ -46,7 +47,7 @@ export function lineLabelsText(lines: OrderLine[] | undefined, kind: "item" | "c
 /** "Tutar" hücresi: "1234,50 TRY"; tutarsız sipariş null. */
 export function totalAmountText(o: Order): string | null {
   if (!o.totalAmount) return null;
-  const n = Number(o.totalAmount).toLocaleString("tr-TR", { useGrouping: false, minimumFractionDigits: 2 });
+  const n = formatAmount(Number(o.totalAmount), 2);
   return `${n} ${o.currency}`;
 }
 

@@ -1,7 +1,8 @@
 // Top bilgileri tablosunun saf yardımcıları — özellik ayrımı ve basılan değerler listesi (veri güdümlü, ad yazılmaz).
 import type { Roll, RollLabelSnapshot } from "../types";
+import { formatQty } from "@/lib/format";
 
-export const num = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false });
+export const num = (n: number) => formatQty(n);
 
 /** Kg kaynağı — iç izdir; belgeye basılmaz. Eski satırda kaynak yok → yalnız kg. */
 export const WEIGHT_SOURCE_LABELS: Record<"SCALE" | "MANUAL" | "SIMULATED", string> = { SCALE: "Kantar", MANUAL: "Elle", SIMULATED: "Simüle" };

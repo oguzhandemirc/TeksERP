@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { differingIndexes, parseCount, type ReceiveEntry } from "./kartelaActions";
 import type { KartelaOutstandingItem } from "./service";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   item: KartelaOutstandingItem;
@@ -16,7 +17,7 @@ interface Props {
   disabled: boolean;
 }
 
-const fmtM = (n: number) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1, useGrouping: false });
+const fmtM = (n: number) => formatQty(Number(n), 1);
 const decimalOnly = (v: string) => v.replace(/[^0-9.,]/g, "");
 
 export function ReceiveRollRow({ item, entry, onChange, showMeasure, expanded, onToggleExpand, disabled }: Props) {

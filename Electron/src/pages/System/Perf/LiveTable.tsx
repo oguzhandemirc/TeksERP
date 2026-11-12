@@ -1,6 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { PerfRoute } from "./perfService";
+import { formatQty } from "@/lib/format";
 
 /** p95 için basit renk skalası — göz tek bakışta yavaş ucu bulsun. */
 function p95Class(ms: number): string {
@@ -33,7 +34,7 @@ export function LiveTable({ routes }: { routes: PerfRoute[] }) {
         {routes.map((r) => (
           <TableRow key={r.route}>
             <TableCell className="font-mono text-xs">{r.route}</TableCell>
-            <TableCell className="text-right tabular-nums">{r.count.toLocaleString("tr-TR", { useGrouping: false })}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatQty(r.count)}</TableCell>
             <TableCell
               className={cn("text-right tabular-nums", r.errCount > 0 && "text-destructive font-medium")}
             >

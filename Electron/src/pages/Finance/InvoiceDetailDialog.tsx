@@ -53,6 +53,7 @@ import { allocationSourceOf, paidDriftK, sumAllocationsK } from "./invoiceDetail
 // birinin "saat de yazalım" demesiyle ekranlar arası ayrışmaya döner.
 import { fmtDate, fmtDueDate } from "./Cheques/dates";
 import { lineCardLabel } from "./invoiceLineSubject";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   invoiceId: string;
@@ -126,7 +127,7 @@ function TotalRow({ label, value, strong }: { label: string; value: string; stro
 
 /** Oran hücresi — %0 da bir orandır, "—" ile karıştırılmaz. */
 function pct(v: number): string {
-  return `%${Number(v ?? 0).toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
+  return `%${formatQty(Number(v ?? 0), 2)}`;
 }
 
 export function InvoiceDetailDialog({
@@ -350,7 +351,7 @@ export function InvoiceDetailDialog({
                             {lineCardLabel(l) && <div className="text-xs text-muted-foreground">{lineCardLabel(l)}</div>}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-                            {Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {l.unit}
+                            {formatQty(Number(l.qty), 3)} {l.unit}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">{money(l.unitPrice, cur)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{pct(l.discountRate)}</td>

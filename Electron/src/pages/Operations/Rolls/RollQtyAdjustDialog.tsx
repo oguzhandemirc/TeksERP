@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { qtyAdjustService } from "./qtyAdjustService";
 import type { Roll } from "./types";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   /** Düzeltilecek top — null = kapalı. */
@@ -25,7 +26,7 @@ interface Props {
   onAdjusted?: () => void;
 }
 
-const fmt = (n: number): string => n.toLocaleString("tr-TR", { useGrouping: false });
+const fmt = (n: number): string => formatQty(n);
 
 /**
  * "Metraj Düzelt" (G4, ticaret paketi) — SAYIM düzeltmesi: kayıtlı 500 m'lik

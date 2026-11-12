@@ -1,3 +1,4 @@
+import { formatQty } from "@/lib/format";
 // "Tüm listeyi indir" imleç döngüsü — tavana çarpınca SÖYLER (Perf-2 B4, 2026-10-13).
 // Eskiden 1000 sayfada `for` sessizce bitiyordu: kullanıcı eksik dosyayı tam sanıyordu.
 
@@ -55,5 +56,5 @@ export async function drainCursor<T>(
 
 /** Tavan uyarısının metni (indirme bildirimi). */
 export function truncatedExportNote(loaded: number): string {
-  return `Liste ${loaded.toLocaleString("tr-TR")} kayıtta kesildi — dosya listenin TAMAMI DEĞİL; süzgeçle daraltıp yeniden indirin.`;
+  return `Liste ${formatQty(loaded)} kayıtta kesildi — dosya listenin TAMAMI DEĞİL; süzgeçle daraltıp yeniden indirin.`;
 }

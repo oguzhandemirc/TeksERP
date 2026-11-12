@@ -27,6 +27,7 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import { CURRENCY_SYMBOL, money, type Currency } from "@/pages/Finance/service";
+import { formatAmount } from "@/lib/format";
 
 export type { Currency };
 
@@ -126,10 +127,7 @@ export function priceText(value: DecimalLike | null | undefined, currency: Curre
   if (!Number.isFinite(n)) return "—";
   const twoDigits = Math.round(n * 100) / 100;
   if (twoDigits === n) return money(n, currency);
-  return `${n.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  })} ${CURRENCY_SYMBOL[currency]}`;
+  return `${formatAmount(n, 2, 4)} ${CURRENCY_SYMBOL[currency]}`;
 }
 
 // -----------------------------------------------------------------------------

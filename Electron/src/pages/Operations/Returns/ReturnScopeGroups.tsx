@@ -5,8 +5,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { candidateOrders, selectedInGroup, type ReturnScope } from "./returnScope";
 import type { ReturnLookupRoll, ReturnScopeGroup, ReturnScopeSack } from "./service";
+import { qtyFormatter } from "@/lib/format";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
+const DEC = qtyFormatter(2);
 
 /**
  * KAPSAM LİSTESİ — sevkiyat başına bir kart; kartta çuvallar (katlanır), çuvalda

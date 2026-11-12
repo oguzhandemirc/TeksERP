@@ -14,10 +14,11 @@ import type { PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerD
 import { useTabsStore } from "@/store/tabs";
 import type { WoTarget, BalanceLine } from "./types";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 type Mode = "bind" | "stock";
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+const fmt = (n: number) => formatQty(n, 0);
 
 function toPicked(l: BalanceLine): PickedOrderLine {
   return {

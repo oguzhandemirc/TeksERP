@@ -9,7 +9,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { cn } from "@/lib/utils";
 import { finishingRateService } from "../FinishingRates/service";
 import type { MeasuredWarpWaste } from "../shared/cost-types";
-import { decToInput, fmtDecFull, toDecimalText } from "../shared/format";
+import { decToInput, fmtDecFull, fmtQtyDecFull, toDecimalText } from "../shared/format";
 import { CardSummary } from "./CardSummary";
 import { ProcessesEditor } from "./ProcessesEditor";
 import { StructurePickField } from "./StructurePickField";
@@ -64,7 +64,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
               className={cn("mt-1 text-right tabular-nums", flagged.has(fd.key) && "ring-2 ring-destructive")} value={f[fd.key]} onChange={(e) => set(fd.key, e.target.value)} />
             {fd.key === "warpWastePct" && measured && (
               <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                Ölçülmüş %{fmtDecFull(measured.firePct, 2)} · {measured.leventSayisi} levent
+                Ölçülmüş %{fmtQtyDecFull(measured.firePct, 2)} · {measured.leventSayisi} levent
                 {canWrite && <Button type="button" size="sm" variant="ghost" className="h-6" onClick={() => set("warpWastePct", decToInput(measured.firePct))}>Uygula</Button>}
               </span>
             )}

@@ -8,6 +8,7 @@ import { TERIM } from "@/lib/terim";
 import { formatSeconds } from "./alarm-format";
 import { loomAlarmService } from "./service";
 import type { LoomAlarmDetail, LoomAlarmStopStat } from "./types";
+import { formatQty } from "@/lib/format";
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -72,7 +73,7 @@ export function AlarmContext({ detail }: { detail: LoomAlarmDetail }) {
             <Field
               key={b.id}
               label={`Levent ${b.beamNo}${b.position !== null ? ` (yuva ${b.position})` : ""}`}
-              value={`${b.remainingM.toLocaleString("tr-TR")} / ${b.plannedLengthM.toLocaleString("tr-TR")} m kaldı`}
+              value={`${formatQty(b.remainingM)} / ${formatQty(b.plannedLengthM)} m kaldı`}
             />
           ))}
         </div>

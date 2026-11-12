@@ -3,6 +3,7 @@
 // (`producedOutputWhere`) doğduğu için buradaki her fark gerçek bir olaydır.
 import type { RollStatus } from "@/types/enums";
 import { rollStatusLabels } from "@/types/enums";
+import { formatQty } from "@/lib/format";
 
 export interface CloseSnapshotLine {
   rollId: string;
@@ -33,7 +34,7 @@ export interface RollChange {
 }
 
 const statusLabel = (s: string) => rollStatusLabels[s as RollStatus] ?? s;
-const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString("tr-TR");
+const fmt = (n: number) => formatQty((Math.round(n * 10) / 10));
 
 /** Top başına fark — değişmeyen top listede YOK (simple is more). */
 export function diffCloseSnapshot(lines: CloseSnapshotLine[], live: LiveProducedItem[]): RollChange[] {

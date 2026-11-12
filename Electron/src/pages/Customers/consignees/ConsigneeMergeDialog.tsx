@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { consigneeService, type ConsigneeRow } from "./consigneeService";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   source: ConsigneeRow;
@@ -63,7 +64,7 @@ export function ConsigneeMergeDialog({ source, candidates, initialTargetId, onCl
                 {p.rolls.map((r) => (
                   <li key={r.id} className="flex justify-between gap-2 px-2 py-1" data-testid="consignee-merge-roll">
                     <span className="font-mono">{r.barcode ?? "barkodsuz"}</span>
-                    <span className="text-muted-foreground">{r.meters.toLocaleString("tr-TR")} m{r.printed ? " · etiket yeniden basılmalı" : ""}</span>
+                    <span className="text-muted-foreground">{formatQty(r.meters)} m{r.printed ? " · etiket yeniden basılmalı" : ""}</span>
                   </li>
                 ))}
               </ul>

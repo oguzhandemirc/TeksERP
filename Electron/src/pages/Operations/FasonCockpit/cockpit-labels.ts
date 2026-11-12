@@ -1,5 +1,6 @@
 // Kokpit metinleri ve gecikme sınıfı — tablo, özet ve dışa aktarım aynı yerden okur.
 import type { CockpitState, SubcontractorCockpitRow } from "./types";
+import { formatQty } from "@/lib/format";
 
 export const STATE_LABEL: Record<CockpitState, string> = {
   ALL: "Tümü",
@@ -27,7 +28,7 @@ export function dueText(r: Pick<SubcontractorCockpitRow, "overdueDays">): string
 }
 
 export const fmtQty = (v: string | number, digits = 0): string =>
-  Number(v).toLocaleString("tr-TR", { maximumFractionDigits: digits });
+  formatQty(Number(v), digits);
 
 /** Firma/satır bakiyesi tek metin: kumaş metresi; yalnız iplik/levent bakiyesi varsa "0 m" yerine onlar yazılır. */
 export function balanceText(b: { outstandingQty: string; yarnOutstandingKg: string; beamOutstandingCount: number }): string {

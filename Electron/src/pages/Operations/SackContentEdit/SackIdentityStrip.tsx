@@ -2,6 +2,7 @@ import { Boxes, Hash, Layers, MessageSquareText, Package, Pencil, Ruler, Scale, 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { EditorTarget } from "./types";
+import { formatQty } from "@/lib/format";
 
 /**
  * Çuval editörü KİMLİK ŞERİDİ — operatörün çuvala girince ilk gördüğü üç şey:
@@ -119,7 +120,7 @@ export function SackNoBox({ sackNo }: { sackNo: string }) {
 /** Kutulu kimlik hücresi — parti listesi/çuval listesi başlıkları da aynı dili kullanır. */
 export { Hucre as KimlikKutusu };
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => formatQty(n, 1);
 
 function Hucre({
   icon: Icon,

@@ -16,8 +16,9 @@ import { formatFactory } from "@/lib/factory-time";
 import { kartelaService } from "./service";
 import { filterJobs, groupOutstanding, type KartelaJob } from "./kartelaActions";
 import { KartelaReceiveDialog } from "./KartelaReceiveDialog";
+import { formatQty } from "@/lib/format";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1, useGrouping: false });
+const fmtM = (n: number) => formatQty(n, 1);
 const SEARCH_HINT = "Firma, sevk no, kumaş, renk ya da top barkodu";
 const goodsText = (j: KartelaJob) =>
   ([j.itemNames[0], j.colorNames[0]].filter(Boolean).join(" · ") || "—") + (j.itemNames.length > 1 ? ` (+${j.itemNames.length - 1} kumaş)` : "");

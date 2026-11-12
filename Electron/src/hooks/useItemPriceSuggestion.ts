@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { addDaysToKey } from "@/lib/factory-time";
+import { formatAmount } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAF KATMAN — React yok, HTTP yok.
@@ -161,10 +162,7 @@ export function describeSuggestion(args: {
   if (args.price === null) return args.message;
   if (sameSuggestionValue(args.current, args.price)) return args.message;
   const kaynak = args.source === "CUSTOMER" ? "müşteriye özel" : "kart varsayılanı";
-  const tutar = args.price.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const tutar = formatAmount(args.price, 2, 2);
   return `Tanımlı fiyat ${tutar} (${kaynak}) — elle girilen değer korundu.`;
 }
 
