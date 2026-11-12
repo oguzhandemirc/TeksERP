@@ -45,6 +45,12 @@ import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 // açılış iptal edilir. Çift-tıkla kelime seçerken satır detayı açılmasın diye.
 // Daha düşük = daha çevik tek-tık ama çok hızlı çift-tıkları kaçırma riski artar.
 const ROW_OPEN_DELAY_MS = 160;
+// Hücre içi düğme/bağlantı/alan kendi işini yapar; satır açılışını tetiklemez (stopPropagation unutulsa bile).
+const INTERACTIVE = "button, a[href], input, select, textarea, label, [role='button'], [role='checkbox'], [role='menuitem'], [role='switch']";
+const fromInteractive = (e: { target: EventTarget; currentTarget: Element }) => {
+  const hit = e.target instanceof Element ? e.target.closest(INTERACTIVE) : null;
+  return !!hit && hit !== e.currentTarget && e.currentTarget.contains(hit);
+};
 
 /** Satır tıklamasının değiştirici tuşları — `useOpenTarget()(yol, click)` Ctrl/⌘/orta tıkla yeni sekme kararını verir. */
 export interface RowClick {
@@ -519,6 +525,7 @@ function DataTableRowInner<T>({
           clearTimeout(openTimer.current);
           openTimer.current = null;
         }
+        if (fromInteractive(e)) return;
         // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
         if (window.getSelection()?.toString()) return;
         // 2./3. tık (çift-tık) → boş hücrede bile açma.

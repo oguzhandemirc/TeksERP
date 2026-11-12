@@ -1,6 +1,6 @@
 // Ortak DataTable — klavyeyle satır açma (Tab ile odaklanan satırda Enter/Space → onRowClick) ve satır ipucu (`rowTitle`).
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { renderWithProviders } from "@/test/render";
 import { DataTable } from "./DataTable";
@@ -46,6 +46,22 @@ describe("DataTable — klavyeyle satır açma", () => {
     fireEvent.keyDown(screen.getAllByText("Eylem")[0]!, { key: "Enter" });
     fireEvent.keyDown(rowOf("Birinci"), { key: "a" });
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("hücre içi düğmeye tık satırı açmaz (stopPropagation olmasa da); satır hücresine tık açar", () => {
+    vi.useFakeTimers();
+    try {
+      const onOpen = vi.fn();
+      renderWithProviders(<Harness onOpen={onOpen} />);
+      fireEvent.click(screen.getAllByText("Eylem")[0]!);
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(onOpen).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByText("Birinci"));
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(onOpen).toHaveBeenCalledWith(ROWS[0], expect.objectContaining({ button: 0 }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("onRowClick yoksa satır sekme sırasına girmez", () => {

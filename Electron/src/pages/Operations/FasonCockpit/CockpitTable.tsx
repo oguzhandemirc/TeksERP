@@ -26,16 +26,19 @@ function OrderCell({ r }: { r: SubcontractorCockpitRow }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-function ExtraBalance({ r }: { r: SubcontractorCockpitRow }) {
+/** Fasoncudaki iplik/levent bakiyesi metni — hücre ve dışa aktarım aynı metni kullanır ("" = bakiye yok). */
+function extraBalanceText(r: SubcontractorCockpitRow): string {
   const kg = Number(r.yarnOutstandingKg);
-  if (kg <= 0 && r.beamOutstandingCount <= 0) return <span className="text-muted-foreground">—</span>;
-  return (
-    <span className="whitespace-nowrap tabular-nums">
-      {kg > 0 && `${fmtQty(kg, 1)} kg iplik`}
-      {kg > 0 && r.beamOutstandingCount > 0 && " · "}
-      {r.beamOutstandingCount > 0 && `${r.beamOutstandingCount} levent`}
-    </span>
-  );
+  const parts: string[] = [];
+  if (kg > 0) parts.push(`${fmtQty(kg, 1)} kg iplik`);
+  if (r.beamOutstandingCount > 0) parts.push(`${r.beamOutstandingCount} levent`);
+  return parts.join(" · ");
+}
+
+function ExtraBalance({ r }: { r: SubcontractorCockpitRow }) {
+  const text = extraBalanceText(r);
+  if (!text) return <span className="text-muted-foreground">—</span>;
+  return <span className="whitespace-nowrap tabular-nums">{text}</span>;
 }
 
 const qtyOrDash = (r: SubcontractorCockpitRow, v: number | string) => (Number(r.dispatchedQty) > 0 ? `${fmtQty(v)} m` : "—");
@@ -86,7 +89,7 @@ export const COCKPIT_COLUMNS: ColumnDef<SubcontractorCockpitRow>[] = [
         "—"
       ),
   },
-  { id: "extra", header: "İplik / levent", meta: { label: "İplik / levent" }, cell: ({ row }) => <span className="text-xs"><ExtraBalance r={row.original} /></span> },
+  { id: "extra", header: "İplik / levent", meta: { label: "İplik / levent", exportValue: (r: SubcontractorCockpitRow) => extraBalanceText(r) || "—" }, cell: ({ row }) => <span className="text-xs"><ExtraBalance r={row.original} /></span> },
 ];
 
 export const cockpitRowClass = (r: SubcontractorCockpitRow) =>
