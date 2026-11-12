@@ -25,6 +25,9 @@
 //   ① kayıpta fason `fireQty + openQty` → ❌ 2 (§R3b kaynak eşitliği + §R3c ana toplam)
 //   ② kalite payı top adediyle ağırlıklandı → ❌ 3 (§R2a kaynak eşitliği + §R2b metre beklentisi + §R2e süzgeçli)
 //   ③ kayıp tablosunun `toplam` satırına oran (fire / payda toplamı) eklendi → ❌ 1 (§R3e toplam oran yok)
+//   • TABLO eşitliği (2026-11-12, RAPB açılışı — eski ekranlar kalkmadan önce): istasyon (§R1f) · operatör (§R1g) ·
+//     kalite 3 görünüm (§R2f) · depo kumaş (§R4d) · fasoncu (§R5f) = eski karnenin satırları hücre hücre.
+//     Sonda: geçen metre ← bekleyen metre → ❌ §R1f · fasonda bekleyen ← gönderilen → ❌ §R5f · depo metre ← top → ❌ §R4d.
 //
 // § Dokuma/finans (RAPC) — `dokuma/tezgah-randimani`, `dokuma/duruslar`, `dokuma/levent-dengesi`, `finance/alacaklar`:
 //   • modül kapısı kaynak raporunkiyle aynı (dokuma · levent ayrıca devere · finans) — Express yığınındaki
@@ -152,6 +155,15 @@ async function rapbFixture(): Promise<{ subId: string; otherSubId: string }> {
   ids.wos.push(wo.id);
   const step = await prisma.workOrderStep.create({ data: { workOrderId: wo.id, stationId: station.id, stepSequence: 1 }, select: { id: true } });
   ids.steps.push(step.id);
+  // WIP (D1 §R1f): istasyonda bekleyen 1 top (çıkışsız) + pencerede geçen 1 top — istasyon tablosu boş kalmasın.
+  for (const [i, exitedAt] of [[0, null], [1, IN_WINDOW]] as const) {
+    const wr = await prisma.roll.create({
+      data: { itemId: item.id, initialQty: 40 + i, currentQty: 40 + i, status: "IN_PRODUCTION", entrySource: "SUPPLIER_RECEIPT", barcode: `${TAG}-W${i}` },
+      select: { id: true },
+    });
+    ids.rolls.push(wr.id);
+    await prisma.rollMovement.create({ data: { rollId: wr.id, workOrderStepId: step.id, qtyIn: 40 + i, enteredAt: exitedAt ? new Date(IN_WINDOW.getTime() - 3_600_000) : new Date(), exitedAt } });
+  }
   const batch = await prisma.batch.create({ data: { batchNumber: `${TAG}-B`, workOrderId: wo.id }, select: { id: true } });
   ids.batches.push(batch.id);
   const subA = await prisma.subcontractor.create({ data: { code: `${TAG}-A`, name: `Boyahane A ${TAG}` }, select: { id: true } });
@@ -227,6 +239,22 @@ async function rapbSection(): Promise<void> {
     `${opView.tablo?.satirlar.length} / ${ops.length}`);
   check("§R1e ⭐ K-KISI: operatör görünümü `kisiAdi:true` SUNUMDA, istasyon görünümü taşımaz",
     opView.kisiAdi === true && flow.kisiAdi === undefined);
+  // D1 (eski rapor kaldırma): eski WIP ekranının istasyon tablosu yeni raporda HÜCRE HÜCRE aynı olmalı.
+  const flowRows = flow.tablo?.satirlar ?? [];
+  const wipRowDrift = wip.byStation.filter((s, i) => {
+    const r = flowRows[i];
+    return !r || r.istasyon !== s.label || !same(r.bekleyenTop as number, s.waitingCount) || !same(r.bekleyenMetre as number, s.waitingQty)
+      || !same(r.enEski as number | null, s.oldestDays) || !same(r.ortBekleme as number | null, s.avgWaitDays)
+      || !same(r.gecenTop as number, s.passedCount) || !same(r.gecenMetre as number, s.passedQty) || !same(r.kalis as number | null, s.avgDurationHours);
+  });
+  check("§R1f ⭐ istasyon tablosu = eski WIP karnesi `byStation` (satır sayısı + 8 kolon hücre hücre)",
+    flowRows.length === wip.byStation.length && wip.byStation.length > 0 && wipRowDrift.length === 0,
+    `${flowRows.length}/${wip.byStation.length} satır · sapan ${wipRowDrift.map((s) => s.label).join(", ") || "yok"}`);
+  const opRowDrift = ops.filter((o, i) => {
+    const r = opView.tablo?.satirlar[i];
+    return !r || !same(r.kursun as number, o.kursunCount) || !same(r.kalite as number, o.qc2Count) || !same(r.tambur as number, o.tamburCount) || !same(r.fason as number, o.subcontractorOps);
+  });
+  check("§R1g operatör tablosu kolonları = eski Operatör İş Hacmi (kurşun · kalite · tambur · fason)", opRowDrift.length === 0, `sapan ${opRowDrift.length}`);
 
   // §R2 Kalite = kalite + hurda + plan dışı karneleri
   const quality = (await buildQualityReport({ range: RANGE, compareRange, compareMode: mode, filters: {} })).sunum;
@@ -241,6 +269,19 @@ async function rapbSection(): Promise<void> {
     same(fig(quality, "kalite.binMetredeHata")?.deger, sc.summary.defectsPerThousandM) && same(fig(quality, "kalite.binMetredeHata")?.kiyas?.deger, sc.summary.prevDefectsPerThousandM),
     show(fig(quality, "kalite.binMetredeHata")?.deger, sc.summary.defectsPerThousandM));
   check("§R2d plan dışı onaylı metre = `PlanDeviationScorecard.summary.deviatedQtyM`", same(fig(quality, "kalite.planDisiMetre")?.deger, dev.summary.deviatedQtyM));
+  // D1: eski Kalite Karnesi kumaş/renk/fason tabloları — yeni raporun üç görünümü hücre hücre aynı.
+  const viewDrift: string[] = [];
+  for (const [view, srcRows] of [["urun", qc.byItem], ["renk", qc.byColor], ["fasoncu", qc.bySubcontractor]] as const) {
+    const vs = (await buildQualityReport({ range: RANGE, compareRange, compareMode: mode, filters: {}, view })).sunum;
+    const vr = vs.tablo?.satirlar ?? [];
+    if (vr.length !== srcRows.length) viewDrift.push(`${view} ${vr.length}/${srcRows.length}`);
+    srcRows.forEach((s, i) => {
+      const r = vr[i];
+      if (!r || r.ad !== s.label || !same(r.top as number, s.rollCount) || !same(r.metre as number, s.totalQty) || !same(r.birinciMetre as number, s.topGradeQty)) viewDrift.push(`${view}:${s.label}`);
+    });
+  }
+  check("§R2f ⭐ kalite görünümleri (kumaş · renk · fason) = eski Kalite Karnesi `byItem/byColor/bySubcontractor`",
+    viewDrift.length === 0 && qc.byItem.length > 0, viewDrift.join(", ") || `kumaş ${qc.byItem.length} satır birebir`);
   const beamId = "00000000-0000-4000-8000-000000000097";
   const qBeam = (await buildQualityReport({ range: RANGE, compareRange, compareMode: mode, filters: { warpBeamId: beamId } })).sunum;
   const qcBeam = await getQualityScorecard(RANGE, compareRange, { warpBeamId: beamId });
@@ -292,6 +333,15 @@ async function rapbSection(): Promise<void> {
       && same(fig(depot, "stok.yasiBilinmeyenMetre")?.deger, stock.summary.unagedQty));
   check("§R4c kesit kıyası ölçülemedi + ay sonu uyarısı (0'a çökmez)",
     depot.anaSayi.kiyas?.deger === null && depot.uyarilar.includes(NO_MONTH_END_SNAPSHOT));
+  // D1: eski Stok & Ölü Stok kumaş tablosu = yeni depo tablosu (tavan altındaki satırlar hücre hücre).
+  const depotRows = depot.tablo?.satirlar ?? [];
+  const stockDrift = depotRows.filter((r, i) => {
+    const s = stock.byItem[i];
+    return !s || r.kumas !== s.label || !same(r.top as number, s.count) || !same(r.metre as number, s.qty) || !same(r.enEski as number | null, s.oldestDays) || !same(r.siparissiz as number, s.uncoveredQty);
+  });
+  check("§R4d ⭐ depo kumaş tablosu = eski Stok karnesi `byItem` (satır satır)",
+    depotRows.length > 0 && depotRows.length === Math.min(stock.byItem.length, depotRows.length) && stockDrift.length === 0,
+    `${depotRows.length}/${stock.byItem.length} satır · sapan ${stockDrift.length}`);
 
   // §R5 Fasoncular = fason karnesi (K-FASON)
   const subR = (await buildSubcontractorsReport({ range: RANGE, compareRange, compareMode: mode, filters: {} })).sunum;
@@ -301,6 +351,16 @@ async function rapbSection(): Promise<void> {
   check("§R5b fikstür: dönüş 4 gün, önceki 10 gün", same(subR.anaSayi.deger, 4) && same(subR.anaSayi.kiyas?.deger, 10));
   check("§R5c yanlar = `openQty` (bekleyen) · `fireQty` (eksik dönen)",
     same(fig(subR, "fason.bekleyenMetre")?.deger, sub.summary.openQty) && same(fig(subR, "fire.fasonMetre")?.deger, sub.summary.fireQty) && subR.yanSayilar.length === 2);
+  // D1: eski Fason Karnesi firma tablosu = yeni fasoncular tablosu (7 kolon hücre hücre).
+  const subRows = subR.tablo?.satirlar ?? [];
+  const subDrift = sub.bySubcontractor.filter((s, i) => {
+    const r = subRows[i];
+    return !r || r.fasoncu !== s.label || !same(r.gonderilen as number, s.dispatchedQty) || !same(r.donen as number, s.returnedQty) || !same(r.musteriye as number, s.deliveredQty)
+      || !same(r.fark as number, s.fireQty) || !same(r.bekleyen as number, s.openQty) || !same(r.donusGun as number | null, s.avgTurnaroundDays);
+  });
+  check("§R5f ⭐ fasoncu tablosu = eski Fason Karnesi `bySubcontractor` (satır + 7 kolon)",
+    subRows.length === sub.bySubcontractor.length && sub.bySubcontractor.length >= 2 && subDrift.length === 0,
+    `${subRows.length}/${sub.bySubcontractor.length} · sapan ${subDrift.map((s) => s.label).join(", ") || "yok"}`);
   const subOne = (await buildSubcontractorsReport({ range: RANGE, compareRange, compareMode: mode, filters: { subcontractorId: [subId] } })).sunum;
   const subOneSrc = await getSubcontractScorecard(RANGE, compareRange, { subcontractorId: [subId] });
   check("§R5d süzgeçli vaka (fasoncu): ana + yanlar kaynağın AYNI süzgeçli değeri",

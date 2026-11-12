@@ -68,6 +68,8 @@ import { ANLATI_EKRAN_SAYISI, ANLATI_PDF_SAYISI, type AnaSayi, type RaporSunumu 
 const V2_ROWS = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV2 => e.nesil === "v2");
 /** Ucu inmiş gibi: aynı satır `hazir:true` (katalogun kendisine dokunulmaz). */
 const ready = (key: string): ReportCatalogEntryV2 => ({ ...(REPORT_BY_KEY.get(key) as ReportCatalogEntryV2), hazir: true });
+/** Katalogda `hazir:false` satır kalmadı (RAPB 2026-11-12 açıldı) — kapıyı yapay satırla ölç. */
+const notReady = (key: string): ReportCatalogEntryV2 => ({ ...(REPORT_BY_KEY.get(key) as ReportCatalogEntryV2), hazir: false });
 const access = (over: Partial<CenterAccess> = {}): CenterAccess => ({ isAdmin: false, hasPermission: () => true, ctx: ctx(), ...over });
 
 beforeEach(() => {
@@ -117,7 +119,7 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
 });
 
 describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
-  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), REPORT_BY_KEY.get("quality/kayip")!];
+  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), notReady("quality/kayip")];
   const keys = (a: CenterAccess) => centerGroups(a, catalog).flatMap((g) => g.entries.map((e) => e.key));
 
   it("körlük zemini: tam erişimde hazır üç satır çizilir", () => {
@@ -125,7 +127,7 @@ describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
   });
   it("⭐ `hazir:false` satır çizilmez", () => {
     expect(keys(access())).not.toContain("quality/kayip");
-    expect(isCenterEntryOpen(REPORT_BY_KEY.get("quality/kayip")!, ctx())).toBe(false);
+    expect(isCenterEntryOpen(notReady("quality/kayip"), ctx())).toBe(false);
   });
   it("⭐ izinsiz rapor çizilmez (admin değil, izin yok)", () => {
     expect(keys(access({ hasPermission: (c) => c !== "report:sales" }))).not.toContain("sales/termin");
@@ -281,13 +283,19 @@ function renderLeaf(path: string, key: string) {
 describe("§7 yaprak kapısı", () => {
   it("⭐ bayrak kapalı → /forbidden; açık ama hazir:false → /forbidden", () => {
     v2 = false;
-    // `quality/kayip` hâlâ `hazir:false` (satış satırları R1-KAYIT'ta hazır oldu).
     const a = renderLeaf("/reports/sales/termin", "quality/kayip");
     expect(screen.getByText("YASAK")).toBeInTheDocument();
     a.unmount();
     v2 = true;
-    renderLeaf("/reports/sales/termin", "quality/kayip");
-    expect(screen.getByText("YASAK")).toBeInTheDocument();
+    // Katalogda `hazir:false` satır kalmadı: satırı test süresince yapay olarak geri çevir.
+    const row = REPORT_BY_KEY.get("quality/kayip") as { hazir: boolean };
+    row.hazir = false;
+    try {
+      renderLeaf("/reports/sales/termin", "quality/kayip");
+      expect(screen.getByText("YASAK")).toBeInTheDocument();
+    } finally {
+      row.hazir = true;
+    }
   });
 });
 
