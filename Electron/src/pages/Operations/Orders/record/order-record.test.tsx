@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { visibleOrderTabs } from "./order-record-tabs";
+import { visibleOrderTabs, type OrderTabCounts } from "./order-record-tabs";
 import { mergeOrderMovements, type OrderMovement } from "./order-movements";
 import { orderMetreFigures, orderStatusChip } from "./order-record";
 import type { OrderAccess } from "./useOrderRecordData";
@@ -11,7 +11,7 @@ vi.mock("@/components/ui/stat-card", () => ({ StatCard: ({ label, value }: { lab
 const { orderStatCards } = await import("./OrderGeneralTab");
 
 const open: OrderAccess = { write: true, workOrders: true, weaving: true, shipments: true, documents: true, history: true, production: true };
-const counts = { lines: 2, workOrders: 1, weaving: 2, shipments: 3, documents: 1 };
+const counts: OrderTabCounts = { lines: 2, workOrders: 1, weaving: 2, shipments: 3, documents: 1 };
 const keys = (a: OrderAccess, c = counts) => visibleOrderTabs(a, c).map((t) => t.key);
 
 describe("visibleOrderTabs — kapı + veri", () => {
