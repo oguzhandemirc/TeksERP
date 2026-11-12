@@ -13,7 +13,6 @@ import {
 import type { HubTile } from "./_components/ReportHubGrid";
 import { productionReportTiles } from "./Production/tile-config";
 import { salesReportTiles } from "./Sales/tile-config";
-import { customerReportTiles } from "./Customer/tile-config";
 import { auditReportTiles } from "./Audit/tile-config";
 import { financeReportTiles } from "./Finance/tile-config";
 import { dokumaReportTiles } from "./Dokuma/tile-config";
@@ -56,7 +55,7 @@ export const reportCategoryTiles: Record<string, HubTile[]> = {
   quality: [],
   inventory: [],
   subcontract: [],
-  customer: customerReportTiles,
+  customer: [],
   audit: auditReportTiles,
   finance: financeReportTiles,
   dokuma: dokumaReportTiles,

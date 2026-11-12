@@ -174,7 +174,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "customer/order-profile", baslik: "Müşteri Sipariş Profili", soru: "Bu müşteri genelde hangi ürün ve renkleri sipariş ediyor?",
     sinif: "basit", izin: "report:customer", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/customer/order-profile", uc: "/api/reports/customer/order-profile", kapiTasiyici: [{ dosya: "src/routes/reports/customer.routes.ts", yol: "/order-profile" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" }, emekli: true },
 
   // ── DENETİM ───────────────────────────────────────────────────────────────
   { key: "audit/system-log-summary", baslik: "Denetim Kaydı Özeti", soru: "Bu dönemde sistemde hangi işlemler kaç kez yapıldı?",

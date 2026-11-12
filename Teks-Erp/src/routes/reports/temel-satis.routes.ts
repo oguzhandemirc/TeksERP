@@ -49,7 +49,7 @@ export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQ
  *       Sipariş Karnesi'nin sayılarıyla (aynı parametre) kurulan sunum zarfı: ana sayı alınan
  *       sipariş metresi (iptaller hariç), yan sayılar sipariş adedi, müşteri sayısı, tutar
  *       (tek para birimiyse; fiyatsız satır sayılmaz). Grafik günlük sipariş metresi (fabrika günü).
- *       `gorunum` tabloyu eski Talep Analizi listelerine çevirir (aynı süzgeç; aylık = son 24 ay).
+ *       `gorunum` tabloyu eski Talep Analizi / Müşteri Sipariş Profili listelerine çevirir (aynı süzgeç; aylık = son 24 ay).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
@@ -58,7 +58,7 @@ export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQ
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Siparişin yönü (Sipariş Karnesi ile aynı)" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
- *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, cesit, kumas, renk, aylik] }, description: "Tablo görünümü (varsayılan ozet = müşteri)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, cesit, kumas, renk, aylik, musteriProfili] }, description: "Tablo görünümü (varsayılan ozet = müşteri). musteriProfili tüm zamanların müşteri profilidir; yön/kumaş süzgeciyle 400 VIEW_FILTER_UNSUPPORTED" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [musteri, urun, yon] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:

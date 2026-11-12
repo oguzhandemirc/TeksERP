@@ -122,7 +122,7 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
       const el = m[2]!.match(/<(\w+)\s*\/>/);
       if (el) routeComponent.set(m[1]!, el[1]!);
     }
-    expect(routeComponent.size, "route→bileşen zinciri çözülmedi").toBeGreaterThan(20);
+    expect(routeComponent.size, "route→bileşen zinciri çözülmedi").toBeGreaterThan(15); // son eski raporlar kalktı (2026-11-12): 20
     // Taşıyıcı şeritler: `_components` altında `<ReportDateFilter` GÖMEN dosyalar.
     // Tanımın kendisi (ReportDateFilter.tsx) taşıyıcı değildir.
     const carriers = new Set<string>();

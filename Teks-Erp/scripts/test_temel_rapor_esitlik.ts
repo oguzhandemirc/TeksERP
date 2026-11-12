@@ -87,6 +87,7 @@ import { getOrderCancellationScorecard } from "../src/services/reports/order-can
 import { buildOrderDemandReport } from "../src/services/reports/temel/siparis-talep.temel";
 import { ORDER_DEMAND_VIEWS, type OrderDemandView } from "../src/services/reports/temel/siparis-talep.views";
 import { getDemandAnalysis } from "../src/services/reports/demand-analysis.report.service";
+import { getCustomerOrderProfiles } from "../src/services/reports/customer.report.service";
 import { buildShippedReport } from "../src/services/reports/temel/sevkiyat.temel";
 import { buildDeadlineReport } from "../src/services/reports/temel/termin.temel";
 import { buildOpenOrderReport } from "../src/services/reports/temel/acik-siparisler.temel";
@@ -903,6 +904,27 @@ async function salesSection(cD: string): Promise<void> {
     check("S1v5b aylık görünüm dönemden bağımsız olduğunu uyarıda söyler", aylik.uyarilar.some((u) => u.includes("son 24 ay")));
     const daF = await getDemandAnalysis(SALES_RANGE, SALES_PREV, { destination: "EXPORT" });
     cellsMatch("S1v6 süzgeçli (yön EXPORT) = aynı süzgeçli Talep Analizi", await run("cesit", { destination: "EXPORT" }), daF.specs.map((r) => ({ kumas: r.itemName, renk: r.colorName ?? "Renk belirtilmemiş", metre: r.qty })), true);
+  }
+
+  console.log("── S1p sipariş-talep müşteri profili görünümü = Müşteri Sipariş Profili ──");
+  {
+    const want = (rows: Awaited<ReturnType<typeof getCustomerOrderProfiles>>["rows"]) => rows.map((r) => ({
+      musteri: r.customerName, kod: r.customerCode, siparis: r.orderCount, kalem: r.lineCount, kumas: r.topItemName, renk: r.topColorName, en: r.topWidth,
+      sonSiparis: r.lastOrderDate ? factoryDateTr(new Date(r.lastOrderDate)) : null,
+    }));
+    const run = async (filters: OrderDemandFilters = {}) =>
+      (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters, view: "musteriProfili" })).sunum;
+    const all = await run();
+    cellsMatch("S1p1 ⭐ profil = `getCustomerOrderProfiles()` satırları (en sık kumaş/renk/en · kalem · son sipariş)", all, want((await getCustomerOrderProfiles({})).rows), true);
+    const one = await run({ customerId: [cD] });
+    const src = (await getCustomerOrderProfiles({ customerId: [cD] })).rows;
+    cellsMatch("S1p2 süzgeçli (müşteri) = aynı süzgeçli profil", one, want(src), true);
+    check("S1p3 fikstür müşterisi: sipariş 5 · son sipariş Mart · görünüm tüm zamanlar uyarısı",
+      src.length === 1 && src[0]!.orderCount === 5 && one.tablo?.satirlar[0]?.sonSiparis === factoryDateTr(salesDay("2097-03-04")) && one.uyarilar.some((u) => u.includes("dönemden bağımsız")),
+      JSON.stringify(one.tablo?.satirlar[0]));
+    let code: unknown = null;
+    try { await run({ destination: "EXPORT" }); } catch (e) { code = (e as { statusCode?: number; details?: { code?: string } }).details?.code; }
+    check("S1p4 yön/kumaş süzgeciyle profil görünümü 400 VIEW_FILTER_UNSUPPORTED (müşteri kartı yönü ≠ sipariş yönü)", code === "VIEW_FILTER_UNSUPPORTED", String(code));
   }
 
   console.log("── S6 K-KIYAS: parametresiz çağrı = önceki dönem ──");

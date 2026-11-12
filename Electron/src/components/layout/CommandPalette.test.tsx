@@ -151,16 +151,17 @@ describe("CommandPalette", () => {
    * yazılan sayfayı açmıyorsa palet değildir.
    */
   it("tam ad eşleşmesi ilk sırada — açıklamadan eşleşen kaydın ÖNÜNDE", async () => {
-    // "Eski: Müşteri Sipariş Profili" adı ifadeyi taşır (eski yaprak palette "Eski:" ikiziyle); "Müşteri" kategori girişi aynı ifadeyi AÇIKLAMASINDA taşır.
-    permissions = ["report:customer"];
+    // "Kasa & Banka Defteri" adı ifadeyi taşır (eski yaprak palette "Eski:" ikiziyle); "Ön Muhasebe" kategori girişi aynı ifadeyi AÇIKLAMASINDA taşır.
+    permissions = ["report:finance"];
+    regime = { ...regime, financeEnabled: true };
     open();
-    type("müşteri sipariş profili");
+    type("kasa & banka defteri");
 
     const items = await screen.findAllByRole("option");
     const labels = items.map((el) => el.textContent ?? "");
     // İkisi de eşleşmeli (küme değişmedi) ...
-    const exact = labels.findIndex((l) => l.startsWith("Eski: Müşteri Sipariş Profili"));
-    const viaDescription = labels.findIndex((l) => l.startsWith("Müşteri") && !l.includes("Sipariş Profili"));
+    const exact = labels.findIndex((l) => l.startsWith("Eski: Kasa & Banka Defteri"));
+    const viaDescription = labels.findIndex((l) => l.startsWith("Ön Muhasebe"));
     expect(exact).toBeGreaterThanOrEqual(0);
     expect(viaDescription).toBeGreaterThanOrEqual(0);
     // ... ama SIRA: tam ad önce.
