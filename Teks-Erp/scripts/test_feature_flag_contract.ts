@@ -142,6 +142,13 @@ const PANEL_EXEMPT: Record<string, string> = {
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
 };
 
+// EMEKLİ SABİT bayraklar: yanıtta eski istemci uyumu için SABİT değerle kalır, yazma yolu ve panel satırı
+// YOKTUR (eski panelin yazması 400). §1/§5 kümesinden düşer; aşağıdaki §R kolu dört yönü ölçer.
+// Sonda (2026-11-12, md5 ile geri): okuyucu `reportsV2Enabled: false` → §R ❌.
+const RETIRED_CONSTANT_FLAGS: Record<string, { value: boolean; why: string }> = {
+  reportsV2Enabled: { value: true, why: "2026-11-12 yeni rapor merkezi tek yol; eski panel yokluğu false sayıp eski karo sayfasını açardı" },
+};
+
 const ELECTRON_CONFIG = path.resolve(
   __dirname,
   "../../Electron/src/pages/GeneralSettings/settings-config.ts",
@@ -196,7 +203,7 @@ async function main() {
     unknown
   >;
   const A = Object.keys(flags);
-  const aBool = A.filter((k) => typeof flags[k] === "boolean");
+  const aBool = A.filter((k) => typeof flags[k] === "boolean" && !RETIRED_CONSTANT_FLAGS[k]);
   // SAYISAL AYAK (2026-08-19): sözleşmenin bu tarafı bugüne kadar HİÇ ölçülmüyordu
   // — `aBool` daraltması sayısal anahtarları (eşik/dakika) eliyordu ve onların
   // A/B/C üçlüsü kopsa kimse görmezdi. `null` değerli anahtar da sayısaldır
@@ -245,6 +252,15 @@ async function main() {
   check("zemin: B ≥ 30 anahtar", B.length >= 30, `B=${B.length}`);
   check("zemin: C ≥ 30 yazma dalı", C.length >= 30, `C=${C.length}`);
   check("zemin: D ≥ 10 panel satırı", D.length >= 10, `D=${D.length}`);
+
+  // §R — emekli sabit bayrak: yanıtta sabit değer · şemada/yazma dalında/panelde YOK (muaf satırı bayatlayamaz).
+  const retiredBad = Object.entries(RETIRED_CONSTANT_FLAGS).flatMap(([k, r]) => [
+    flags[k] === r.value ? null : `${k}: yanıt ${String(flags[k])} ≠ ${String(r.value)}`,
+    B.includes(k) ? `${k}: PATCH şemasında` : null,
+    C.includes(k) ? `${k}: yazma dalı var` : null,
+    D.includes(k) ? `${k}: panel satırı var` : null,
+  ]).filter((x): x is string => x !== null);
+  check("§R emekli sabit bayrak: yanıtta sabit, yazılamaz, panelde yok", retiredBad.length === 0, retiredBad.join(" · "));
 
   // ---------------------------------------------------------------------------
   // 1) ⭐ ASIL KONTROL — API'nin döndüğü her boolean bayrak PATCH'lenebilmeli

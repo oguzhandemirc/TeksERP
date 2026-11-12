@@ -25,7 +25,7 @@ const ctx = (): OperationsVisibilityContext => ({
   tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: true, gelenBelgeEnabled: false, emanetEnabled: false,
   financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true,
   reportsClosedKeys: closed, isReportOpen: (key: string) => isReportOpenWith(closed, key),
-  reportsV2Enabled: true, flagsReady: true, flagsFailed: false,
+  flagsReady: true, flagsFailed: false,
 });
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({ useOperationsVisibilityContext: () => ctx() }));
 vi.mock("@/hooks/useRoleAccess", () => ({

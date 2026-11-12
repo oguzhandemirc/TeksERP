@@ -963,18 +963,6 @@ export async function setFeatureFlags(
       );
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "reportsV2Enabled")) {
-      if (typeof input.reportsV2Enabled !== "boolean") {
-        throw AppError.badRequest("reportsV2Enabled boolean olmalı");
-      }
-      await this.set(
-        SETTING_KEYS.REPORTS_V2_ENABLED,
-        input.reportsV2Enabled,
-        "Yeni rapor merkezi (Raporlar v2)",
-        userId
-      );
-    }
-
     if (Object.prototype.hasOwnProperty.call(input, "kk1WeightEntryEnabled")) {
       if (typeof input.kk1WeightEntryEnabled !== "boolean") {
         throw AppError.badRequest("kk1WeightEntryEnabled boolean olmalı");

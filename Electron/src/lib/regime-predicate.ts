@@ -26,7 +26,7 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
  * bu tip onu kendiliğinden dışarıda bırakır (bağlamda sayaç zaten yasak:
  * `tile-visibility.test`).
  */
-// `-?`: isteğe bağlı alan (`reportsV2Enabled?`) dizine `undefined` sokmasın; `boolean | undefined` alan rejim yüklemi olamaz.
+// `-?`: isteğe bağlı alan dizine `undefined` sokmasın; `boolean | undefined` alan rejim yüklemi olamaz.
 export type RegimeFlagField = {
   [K in keyof OperationsVisibilityContext]-?: OperationsVisibilityContext[K] extends boolean
     ? K

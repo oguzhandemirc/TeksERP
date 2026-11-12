@@ -16,7 +16,7 @@ const ctx = (): OperationsVisibilityContext =>
     dokumaEnabled: false, machineStopEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false,
     maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
     financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true,
-    reportsClosedKeys: [], isReportOpen: () => true, reportsV2Enabled: false,
+    reportsClosedKeys: [], isReportOpen: () => true,
     flagsReady: ready, flagsFailed: false,
   }) as OperationsVisibilityContext;
 let isAdmin = true;

@@ -40,7 +40,7 @@ function spotlightCategory(spot: SpotlightController, groups: readonly CenterGro
   spot.spotlight(key, `${title} bölümü vurgulandı, ${n} rapor.`, `${title} raporları seçili süzgeçle gizli; “Sıfırla” ile görünür.`);
 }
 
-/** Rapor Merkezi (plan §4.2) — `reports.v2Enabled` açıkken `/reports`un yerini alır. */
+/** Rapor Merkezi (plan §4.2) — `/reports`un tek yüzü. */
 export function ReportCenterPage({ legacyTiles }: Props) {
   const { isAdmin, hasPermission } = useRoleAccess();
   const ctx = useOperationsVisibilityContext();

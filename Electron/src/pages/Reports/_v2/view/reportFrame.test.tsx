@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ reportsV2Enabled: true, flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
+  useOperationsVisibilityContext: () => ({ flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
 }));
 // Başlık kabuğu (sekme/geçmiş bağlamı) bu testin konusu değil: soru ⓘ'ye `description` ile gider.
 vi.mock("@/components/layout/PageHeader", () => ({

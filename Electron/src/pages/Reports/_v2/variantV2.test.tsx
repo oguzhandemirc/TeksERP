@@ -17,7 +17,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ reportsV2Enabled: true, flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
+  useOperationsVisibilityContext: () => ({ flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
 }));
 
 import { ParamChips } from "./ParamChips";

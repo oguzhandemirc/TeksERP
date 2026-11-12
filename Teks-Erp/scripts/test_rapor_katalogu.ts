@@ -429,13 +429,29 @@ function main(): void {
   check("§9d `sevk.brutMetre` kaynağı `reports/_shipped.ts` (brüt sevk tek kaynak)", sevk?.kaynak?.dosya === "src/services/reports/_shipped.ts",
     sevk?.kaynak?.dosya ?? "kaynak yok");
 
-  // ── §10 `reports.v2Enabled` VARSAYILANI KAPALI (bugünkü davranış) ──────────
-  // Panel rozeti ↔ backend okuyucusu birebirliğini `test_feature_flag_contract` ölçer (sonda: okuyucu
-  // `true` döndü → ❌ 1); bu kol İKİSİNİN BİRLİKTE `true`ya kaymasını yakalar (o bekçi eşitliğe bakar).
+  // ── §10 `reports.v2Enabled` EMEKLİ (2026-11-12): yeni rapor merkezi tek yol ─────────────────
+  // Yanıtta sabit `true` (alanı okuyan eski panel yokluğu `false` sayıp eski karo sayfasını açardı); yazma
+  // yolu, panel satırı ve panel bayrak dalı yok. Sondalar (2026-11-12, md5 ile geri): panel kaynağına
+  // `ctx.reportsV2Enabled` anması → §10d ❌; okuyucu `false` → §10c ❌.
   const ayar = readFileSync(join(ELECTRON, "src/pages/GeneralSettings/settings-config.ts"), "utf8");
-  const satir = ayar.slice(ayar.indexOf('key: "reportsV2Enabled"'), ayar.indexOf('key: "reportsV2Enabled"') + 600);
-  check("§10 `reportsV2Enabled` panel satırı var ve varsayılanı KAPALI", ayar.includes('key: "reportsV2Enabled"') && /defaultOn: false/.test(satir),
-    ayar.includes('key: "reportsV2Enabled"') ? (/defaultOn: false/.test(satir) ? "defaultOn: false" : "defaultOn KAPALI DEĞİL") : "satır yok");
+  check("§10a panel ayar satırı yok (`reportsV2Enabled`)", ayar.length > 10000 && !ayar.includes("reportsV2Enabled"), `${ayar.length} karakter`);
+  const rota = readFileSync(join(KOK, "src/routes/feature-flag.routes.ts"), "utf8");
+  const yazma = readFileSync(join(KOK, "src/services/system-setting/feature-flags-write.ts"), "utf8");
+  check("§10b yazma yolu yok: PATCH şeması ve yazma dalı anahtarı tanımaz (eski panelin yazması 400)",
+    rota.includes("updateSchema") && !rota.includes("reportsV2Enabled") && !yazma.includes("reportsV2Enabled"));
+  const okuma = readFileSync(join(KOK, "src/services/system-setting/feature-flags-read.ts"), "utf8");
+  check("§10c yanıtta sabit `reportsV2Enabled: true` (eski panel uyumluluğu)", /reportsV2Enabled:\s*true,/.test(okuma));
+  const panelDali: string[] = [];
+  const tara = (dizin: string): void => {
+    for (const ad of readdirSync(dizin, { withFileTypes: true })) {
+      const yol = join(dizin, ad.name);
+      if (ad.isDirectory()) { tara(yol); continue; }
+      if (!/\.(ts|tsx)$/.test(ad.name) || /\.test\.(ts|tsx)$/.test(ad.name)) continue;
+      if (readFileSync(yol, "utf8").includes("reportsV2Enabled")) panelDali.push(yol.slice(ELECTRON.length + 1));
+    }
+  };
+  tara(join(ELECTRON, "src"));
+  check("§10d panel kaynağında bayrak dalı yok (yeni nesil tek yol)", panelDali.length === 0, panelDali.join(", ") || "temiz");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exitCode = fail > 0 ? 1 : 0;

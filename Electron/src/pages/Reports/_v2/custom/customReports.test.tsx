@@ -14,7 +14,6 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
-let v2: boolean | undefined;
 let perms: string[] = [];
 let lists: Record<string, unknown[]> = { benim: [], paylasilan: [] };
 const getMock = vi.fn((url: string, cfg?: { params?: { kapsam?: string } }) =>
@@ -25,7 +24,6 @@ const ctx = (): OperationsVisibilityContext => ({
   shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, machineStopEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
   financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true,
   reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
-  ...(v2 === undefined ? {} : { reportsV2Enabled: v2 }),
 });
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({ useOperationsVisibilityContext: () => ctx() }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: false, hasPermission: (c: string) => perms.includes(c) }) }));
@@ -45,28 +43,20 @@ const summary = (id: string, ad: string) => ({
 });
 
 beforeEach(() => {
-  v2 = undefined;
   perms = ["report:sales"];
   lists = { benim: [], paylasilan: [] };
   getMock.mockClear();
 });
 
-describe("§1 bayrak kapısı", () => {
-  it("⭐ bayrak kapalı: özel rapor bölümü yok, tanım ucu çağrılmaz; palet girişi görünmez", () => {
-    perms = ["report:sales", "report:builder"];
-    v2 = false;
-    renderWithProviders(<ReportsHubPage />);
-    expect(screen.queryByText("Özel raporlarım")).toBeNull();
-    expect(getMock.mock.calls.some(([u]) => String(u).startsWith("/api/rapor-tanimlari"))).toBe(false);
+describe("§1 giriş", () => {
+  it("⭐ palet girişi izinle sınırlı, bayraksız görünür", () => {
     const entry = allCommandEntries.find((e) => e.key === "report-custom:new")!;
     expect(entry.permission).toBe("report:builder");
-    expect(entry.visibleWhen!({ ...ctx(), reportsV2Enabled: undefined })).toBe(false);
-    expect(entry.visibleWhen!({ ...ctx(), reportsV2Enabled: true })).toBe(true);
+    expect(entry.visibleWhen?.(ctx()) ?? true).toBe(true);
   });
 
-  it("bayrak açık: Rapor Merkezi'nde 'Özel raporlarım' bölümü çizilir", async () => {
+  it("Rapor Merkezi'nde 'Özel raporlarım' bölümü çizilir", async () => {
     perms = ["report:sales", "report:builder"];
-    v2 = true;
     renderWithProviders(<ReportsHubPage />);
     expect(await screen.findByRole("region", { name: "Özel raporlarım" })).toBeInTheDocument();
   });

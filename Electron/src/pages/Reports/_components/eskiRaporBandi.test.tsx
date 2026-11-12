@@ -1,14 +1,12 @@
 // =============================================================================
 // RAPORLAR v2 GEÇİŞ YÜZEYİ (R0-GECIS) — "yeni hâli" bandı, "Eski raporlar", taşınan araçlar, palet
 // =============================================================================
-// §1 band modeli: birlesti / tasindi / uzman / bayrak kapalı / hedef çizilmiyor · §2 band YALNIZ
-// `ReportPageLayout`ta (36/36: 35 yaprak + diyalog), yönlendirme yok · §3 bayrak kapalıyken DOM
-// bayt-eşit · §4 "Eski raporlar" bölümü + arama · §5 taşınan yedi araç katalogla eşit, karo/şerit ·
-// §6 palet: kapalıyken ikiz/taşınan giriş görünmez, açıkken "Eski:" ikizi özgünün yerini alır.
+// §1 band modeli: birlesti / tasindi / uzman / hedef çizilmiyor · §2 band YALNIZ `ReportPageLayout`ta,
+// yönlendirme yok · §3 band çizimi · §4 "Eski raporlar" bölümü + arama · §5 taşınan yedi araç katalogla
+// eşit, karo/şerit · §6 palet: "Eski:" ikizi özgünün yerini alır. Bayrak dalı 2026-11-12 kalktı (tek yol).
 //
-// Negatif sondalar (2026-10-24, md5 ile geri alındı, 17/0): `legacyBannerModel`den bayrak denetimi
-// kaldırıldı → ❌ 2 (§1 bayrak kapalı · §3 DOM eşitliği); hedef için `isCenterEntryVisible`
-// (`isReportSurfaced` dahil) kaldırıldı → ❌ 1 (§1 "hedef çizilmiyorsa band yok").
+// Negatif sonda (2026-10-24, md5 ile geri alındı): hedef için `isCenterEntryVisible` (`isReportSurfaced`
+// dahil) kaldırıldı → ❌ 1 (§1 "hedef çizilmiyorsa band yok").
 // =============================================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -19,7 +17,6 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 import { REPORT_BY_KEY, REPORT_CATALOG, type ReportCatalogEntryV1, type ReportCatalogEntryV2 } from "@/lib/report-catalog";
 import { isReportOpenWith } from "@/lib/report-gate";
 
-let v2: boolean | undefined = true;
 let perms: string[] | "all" = "all";
 let closed: string[] | null = [];
 const ctx = (): OperationsVisibilityContext => ({
@@ -36,7 +33,6 @@ const ctx = (): OperationsVisibilityContext => ({
   kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
   reportsClosedKeys: closed,
   isReportOpen: (key: string) => isReportOpenWith(closed, key),
-  ...(v2 === undefined ? {} : { reportsV2Enabled: v2 }),
   flagsReady: true,
   flagsFailed: false,
 });
@@ -68,7 +64,6 @@ function setReady(key: string, value: boolean) {
 }
 
 beforeEach(() => {
-  v2 = true;
   perms = "all";
   closed = [];
 });
@@ -86,13 +81,6 @@ describe("§1 band modeli", () => {
     expect(legacyBannerModel("production/wip", access())).toBeNull();
     closed = [];
     perms = ["report:sales"];
-    expect(legacyBannerModel("production/wip", access())).toBeNull();
-  });
-  it("⭐ bayrak kapalı (false ya da yok) → band yok", () => {
-    setReady(MERGE_TARGET, true);
-    v2 = false;
-    expect(legacyBannerModel("production/wip", access())).toBeNull();
-    v2 = undefined;
     expect(legacyBannerModel("production/wip", access())).toBeNull();
   });
   it("uzman → band yok (muhasebe aracı olarak kalır)", () => {
@@ -137,42 +125,28 @@ describe("§2 band yalnız ReportPageLayout'ta — panelde kalan v1", () => {
   });
 });
 
-describe("§3 bayrak kapalıyken DOM bayt-eşit", () => {
+describe("§3 band çizimi", () => {
   const page = () => (
     <ReportPageLayout title="Duruş Pareto" reportKey="dokuma/durus-pareto" filters={<div />}>
       <p>içerik</p>
     </ReportPageLayout>
   );
-  it("⭐ undefined ve false aynı DOM; band yok", () => {
+  it("⭐ hedef yüzeydeyken eski sayfada 'yeni hâli' bandı çizilir", () => {
     setReady("dokuma/duruslar", true);
     try {
-      v2 = undefined;
-      const a = renderWithProviders(page()).container.innerHTML;
-      v2 = false;
-      const b = renderWithProviders(page()).container.innerHTML;
-      expect(b).toBe(a);
-      expect(a).not.toContain("yeni hâli");
-      v2 = true;
       expect(renderWithProviders(page()).container.innerHTML).toContain("Bu raporun yeni hâli:");
     } finally {
       setReady("dokuma/duruslar", false);
     }
   });
-  it("taşınan araç karosu/şeridi bayrak kapalıyken çizilmez", () => {
-    v2 = false;
-    const { container } = renderWithProviders(<><RelocatedToolsSection host="/operations" title="İz sürme" /><RelocatedToolStrip host="/system/logs" /></>);
-    expect(container.innerHTML).toBe("");
-  });
 });
 
 describe("§4 Eski raporlar bölümü", () => {
-  it("⭐ açıkken yalnız panelden henüz kalkmamış eski RAPORLAR (araç/uzman yok); kapalıyken boş", () => {
+  it("⭐ yalnız panelden henüz kalkmamış eski RAPORLAR (araç/uzman yok)", () => {
     const groups = legacyGroups(reportTiles, access());
     const want = v1Entries.filter((e) => e.yeniHali.tur === "birlesti").map((e) => e.key).sort();
     expect(groups.flatMap((g) => g.cards.map((c) => c.entry.key)).sort()).toEqual(want);
     expect(want).toEqual(["customer/order-profile", "sales/demand-analysis", "sales/destination-mix"]);
-    v2 = false;
-    expect(legacyGroups(reportTiles, access())).toEqual([]);
   });
   it("izinsiz / kapalı rapor çizilmez; arama başlık + soruyu kapsar", () => {
     perms = ["report:sales"];
@@ -214,14 +188,7 @@ describe("§5 taşınan yedi araç", () => {
 
 describe("§6 palet", () => {
   const visible = () => allCommandEntries.filter((e) => !e.visibleWhen || e.visibleWhen(ctx()));
-  it("⭐ kapalıyken ikiz ve taşınan girişlerin hiçbiri görünmez; undefined = false", () => {
-    v2 = undefined;
-    const a = visible().map((e) => `${e.key}|${e.label}|${e.to}`);
-    v2 = false;
-    expect(visible().map((e) => `${e.key}|${e.label}|${e.to}`)).toEqual(a);
-    expect(a.some((s) => s.includes(":legacy|") || s.startsWith("relocated:") || s.includes("|Eski: "))).toBe(false);
-  });
-  it("açıkken eski yaprak 'Eski:' ikiziyle görünür, özgünü gizlenir; taşınan araç yeni yerinin adıyla", () => {
+  it("eski yaprak 'Eski:' ikiziyle görünür, özgünü gizlenir; taşınan araç yeni yerinin adıyla", () => {
     const keys = new Set(visible().map((e) => e.key));
     expect(keys.has("report:sales:demand-analysis")).toBe(false);
     expect(keys.has("report:sales:demand-analysis:legacy")).toBe(true);

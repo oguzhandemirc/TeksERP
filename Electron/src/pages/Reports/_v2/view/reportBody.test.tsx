@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ reportsV2Enabled: true, flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
+  useOperationsVisibilityContext: () => ({ flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
 }));
 
 import { HIGHLIGHTS_TITLE, ReportBody } from "../ReportBody";
