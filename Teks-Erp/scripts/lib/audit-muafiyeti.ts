@@ -105,4 +105,6 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "kişinin sessiz saati, gün özeti saati ve ses tercihi; iş kararı değil" },
   { model: "RecordFollow", sinif: "KULLANICI_TERCIHI",
     gerekce: "kişinin kayıt takibi (oluşturan otomatik + elle takip/bırak); yalnız kime bildirim gideceğini daraltır/genişletir, iş kaydı değildir" },
+  { model: "RowMark", sinif: "KULLANICI_TERCIHI",
+    gerekce: "kişinin liste satırına koyduğu hatırlatma rengi/notu (paylaşılan olsa da sahibinin adıyla görünür); hiçbir iş kararına ve rapora girmez, not metni audit yüküne girmesin diye sessiz" },
 ];
