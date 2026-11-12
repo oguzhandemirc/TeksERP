@@ -33,8 +33,9 @@ function usePanelInputs(p: Pick<RecordSidePanelProps, "onClose" | "onPrev" | "on
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
+      // defaultPrevented: odaktaki liste (DataTable `activeRowId`) tuşu kendisi işledi.
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      if (e.altKey || e.ctrlKey || e.metaKey || isTypingTarget(e.target)) return;
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || isTypingTarget(e.target)) return;
       if (document.querySelector("[role='dialog'][data-state='open']")) return;
       const go = e.key === "ArrowDown" ? ref.current.onNext : ref.current.onPrev;
       if (!go) return;

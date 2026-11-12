@@ -1,9 +1,13 @@
 import { useRef, useState, type ReactNode } from "react";
+import type { Table } from "@tanstack/react-table";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { searchLabels } from "@/lib/search-placeholder";
+import { DataTableTools, type ExtraExportOption } from "../DataTableTools";
+import type { TableFetchAll } from "../DataTableExportMenu";
 import { useScrollEdges } from "./useScrollEdges";
 import { FilterChip } from "./FilterChip";
 import { MoreFiltersMenu } from "./MoreFiltersMenu";
@@ -15,7 +19,15 @@ export interface FilterRowProps {
   onSearchChange?: (v: string) => void;
   /** Arama kutusunun yerine (ör. barkod okutma alanı — o da `search` yazar). */
   leading?: ReactNode;
+  /** Kısa yer tutucu (≤20 karakter; uzunu "Ara…"ya düşer ve ipucuna taşınır). */
   placeholder?: string;
+  /** Neyin arandığının tam cümlesi — kutunun `title` + `aria-label`ı. */
+  searchHint?: string;
+  /**
+   * Listenin tablosu — verilince sağ uçta STANDART "Sütunlar" (aç/kapa · taşı · sıfırla) + "Dışa aktar" çizilir.
+   * Tablo çizen her liste bunu verir (bekçi `liste-standardi.test.ts`).
+   */
+  tools?: ListTools;
   /** İlk açılışta görünen kutular (Görünüm, Termin, Müşteri, Durum…) — çakılı değil, kullanıcı "+ Filtre"den kaldırabilir. */
   primary: readonly RowFilter[];
   /** İlk açılışta gizli olanlar; etkin olan ya da kullanıcının eklediği satıra kutu olarak çıkar. */
@@ -37,7 +49,18 @@ export interface FilterRowProps {
 export const FILTER_ROW_CLASS = "flex shrink-0 flex-nowrap items-center gap-2 border-b px-3 py-2";
 export const FILTER_ROW_SCROLL_CLASS = "flex min-w-0 shrink flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:thin]";
 
-export function FilterRow({ search = "", onSearchChange, leading, placeholder = "Ara...", primary, more = [], trailing, viewKey }: FilterRowProps) {
+/** Ortak araç çubuğunun tablo araçları — `DataTableTools` sözleşmesi (tablo tipi sayfadan bağımsız). */
+export interface ListTools {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- satır tipi sayfaya özgü; araçlar yalnız sütun düzenini okur
+  table: Table<any>;
+  exportName?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- yukarıdakiyle aynı
+  fetchAll?: TableFetchAll<any>;
+  hideExport?: boolean;
+  extraExports?: ExtraExportOption[];
+}
+
+export function FilterRow({ search = "", onSearchChange, leading, placeholder, searchHint, tools, primary, more = [], trailing, viewKey }: FilterRowProps) {
   const [sp, setSp] = useSearchParams();
   const { pathname } = useLocation();
   const { overrides, write } = useFilterRowVisibility(viewKey ?? pathname);
@@ -106,7 +129,7 @@ export function FilterRow({ search = "", onSearchChange, leading, placeholder = 
 
   return (
     <div data-testid="filter-row" data-list-surface="toolbar" className={FILTER_ROW_CLASS}>
-      {leading ?? (onSearchChange && <RowSearch value={search} onChange={onSearchChange} placeholder={placeholder} />)}
+      {leading ?? (onSearchChange && <RowSearch value={search} onChange={onSearchChange} {...searchLabels(placeholder, searchHint)} />)}
       <div ref={scrollRef} data-testid="filter-row-scroll" className={cn(FILTER_ROW_SCROLL_CLASS, fadeClass(edges))}>
         {shown.map(chip)}
       </div>
@@ -120,6 +143,7 @@ export function FilterRow({ search = "", onSearchChange, leading, placeholder = 
           </Button>
         )}
         {trailing}
+        {tools && <DataTableTools compact {...tools} />}
       </div>
     </div>
   );
@@ -133,12 +157,12 @@ function fadeClass({ left, right }: { left: boolean; right: boolean }): string |
   return undefined;
 }
 
-function RowSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+function RowSearch({ value, onChange, placeholder, hint }: { value: string; onChange: (v: string) => void; placeholder: string; hint: string }) {
   return (
     // Dar ekranda ilk küçülen arama: taban 7rem, 2xl altında 10rem, üstünde 16rem (etkin kutulara yer).
     <div className="relative w-28 min-w-[7rem] shrink sm:w-40 2xl:w-64">
       <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} title={placeholder} aria-label="Ara" className="h-8 pl-8 text-sm" />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} title={hint} aria-label={hint} className="h-8 pl-8 text-sm" />
     </div>
   );
 }
