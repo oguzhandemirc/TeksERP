@@ -206,16 +206,13 @@ const NO_COLUMN_MENU: Record<string, string> = {
 };
 
 const KATALOG = "küçük katalog, liste ucu arama parametresi almıyor (backend gerekiyor); istemci süzmesi yazılmaz";
-const COST_ACTIVE = "maliyet tarife kataloğu: `/active` ucu yürürlükteki sürümleri parametresiz tek istekte verir; arama yok (backend gerekiyor)";
+const COST_ACTIVE = "makine saat ücretleri: satırlar makine listesi ∪ aktif ücretlerden istemcide birleşir (ücretsiz makine de satır); tek uca arama iki kaynağı tutarsız süzerdi";
 /** Arama kutusu OLMAYAN DataTable sayfası — gerekçeli. */
 const NO_SEARCH: Record<string, string> = {
   "Quality/Certificates/CustomerSpecsPanel.tsx": "müşteri spesifikasyon kataloğu (müşteri süzgeçli, tek istek); uçta metin araması yok (backend gerekiyor)",
   "Quality/LabTests/LabTypesPanel.tsx": KATALOG,
   "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx": "seçili belge türünün profil ataması (belge profili sayısı kadar satır, atama ucundan tek istekte); arama yok (backend gerekiyor)",
-  "Cost/ConsumableNorms/ConsumableNormsPage.tsx": COST_ACTIVE,
-  "Cost/FinishingRates/FinishingRatesPage.tsx": COST_ACTIVE,
   "Cost/MachineRates/MachineRatesPage.tsx": COST_ACTIVE,
-  "Cost/YarnPrices/YarnPricesPage.tsx": COST_ACTIVE,
   "Operations/GelenBelgeler/GonderenSablonlariPage.tsx": KATALOG,
   "Operations/KursunMeterDeviations/MeterDeviationsPage.tsx": "sapma ucu durum/makine/müşteri/tarih süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/ReadyWorks/ReadyWorksPage.tsx": "hazır iş ucu gruplama + durum süzgeçli; metin araması yok (backend gerekiyor)",

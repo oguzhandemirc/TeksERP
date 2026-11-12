@@ -25,7 +25,7 @@ export function buildNormBody(v: NormValues): NormValues {
 const BASE = "/api/cost/consumable-norms";
 
 export const consumableNormService = {
-  listActive: async () => (await apiClient.get<ApiResponse<ConsumableNorm[]>>(BASE)).data.data,
+  listActive: async (search?: string) => (await apiClient.get<ApiResponse<ConsumableNorm[]>>(BASE, { params: search ? { search } : {} })).data.data,
   history: async (serviceItemId: string, consumableItemId: string) =>
     (await apiClient.get<ApiResponse<ConsumableNorm[]>>(BASE, {
       params: { "filter[serviceItemId]": serviceItemId, "filter[consumableItemId]": consumableItemId, includeRevoked: "1" },

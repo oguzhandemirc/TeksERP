@@ -21,6 +21,9 @@ import { listShiftDefinitions } from "../src/services/shift-definition.service";
 import { MachineCollectorService } from "../src/services/machine-collector.service";
 import { listMachineStops } from "../src/services/loom-list.service";
 import { listLoomAlarms } from "../src/services/loom-alarm-read.service";
+import { listFinishingRates } from "../src/services/finishing-rate.service";
+import { listYarnCostPrices } from "../src/services/yarn-cost-price.service";
+import { listConsumableNorms } from "../src/services/consumable-norm.service";
 
 let pass = 0;
 let fail = 0;
@@ -234,6 +237,43 @@ async function dokuma(): Promise<void> {
   check("§D4e alarm: izin kapısı aynen (LIST)", guardOf("loom-alarm.routes.ts", "/").includes("LIST,"));
 }
 
+async function maliyet(): Promise<void> {
+  console.log("\n— §M maliyet —");
+  const ek = TAG.slice(-6);
+  const ids = { items: [] as string[], service: [] as string[], yarn: [] as string[], fin: [] as string[], norm: [] as string[] };
+  cleanup.push(async () => {
+    await prisma.serviceConsumableNorm.deleteMany({ where: { id: { in: ids.norm } } });
+    await prisma.yarnCostPrice.deleteMany({ where: { id: { in: ids.yarn } } });
+    await prisma.finishingRate.deleteMany({ where: { id: { in: ids.fin } } });
+    await prisma.serviceItem.deleteMany({ where: { id: { in: ids.service } } });
+    await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
+  });
+  const y1 = await prisma.item.create({ data: { code: `${TAG}-Y1`, name: `${TAG} Pamuk Çözgü`, itemType: "YARN", unit: "KG" }, select: { id: true } });
+  const y2 = await prisma.item.create({ data: { code: `${TAG}-Y2`, name: `${TAG} Polyester Atkı`, itemType: "YARN", unit: "KG" }, select: { id: true } });
+  const c1 = await prisma.item.create({ data: { code: `${TAG}-C1`, name: `${TAG} Boya Ğ`, itemType: "CONSUMABLE", unit: "KG" }, select: { id: true } });
+  ids.items.push(y1.id, y2.id, c1.id);
+  const sv = await prisma.serviceItem.create({ data: { code: `${TAG}-SV`, name: `${TAG} Şardon` }, select: { id: true } });
+  ids.service.push(sv.id);
+  for (const yarnItemId of [y1.id, y2.id]) ids.yarn.push((await prisma.yarnCostPrice.create({ data: { yarnItemId, currency: "TRY", pricePerKg: 1 }, select: { id: true } })).id);
+  for (const [code, name] of [[`LA${ek}A`, `${TAG} Apre Yıkama`], [`LA${ek}B`, `${TAG} Boyama`]]) {
+    ids.fin.push((await prisma.finishingRate.create({ data: { code, name, basis: "RAW_M", currency: "TRY", pricePerM: 1 }, select: { id: true } })).id);
+  }
+  ids.norm.push((await prisma.serviceConsumableNorm.create({ data: { serviceItemId: sv.id, consumableItemId: c1.id, qtyPerM: 1, unit: "KG", clientToken: randomUUID() }, select: { id: true } })).id);
+
+  const mineY = (r: Array<{ id: string }>) => r.filter((x) => ids.yarn.includes(x.id)).length;
+  check("§M1a iplik fiyatı: boş = ikisi; 'pamuk cozgu' yalnız biri; kod küçük harfle", mineY(await listYarnCostPrices({})) === 2 && mineY(await listYarnCostPrices({ search: "pamuk cozgu" })) === 1 && mineY(await listYarnCostPrices({ search: `${TAG}-y2`.toLowerCase() })) === 1);
+  check("§M1b iplik fiyatı: eşleşmeyen 0", mineY(await listYarnCostPrices({ search: `${TAG} zzqq` })) === 0);
+  const mineF = (r: Array<{ id: string }>) => r.filter((x) => ids.fin.includes(x.id)).length;
+  check("§M2a tarife: boş = ikisi; kod küçük harfle yalnız biri", mineF(await listFinishingRates({})) === 2 && mineF(await listFinishingRates({ search: `la${ek}a` })) === 1);
+  check("§M2b tarife: ad (gölgesiz yol) 'APRE' yalnız biri; eşleşmeyen 0", mineF(await listFinishingRates({ search: "APRE" })) === 1 && mineF(await listFinishingRates({ search: `${TAG} zzqq` })) === 0);
+  const mineN = (r: Array<{ id: string }>) => r.filter((x) => ids.norm.includes(x.id)).length;
+  const nq = (search?: string) => listConsumableNorms({ serviceItemId: null, consumableItemId: null, includeRevoked: false, search });
+  check("§M3a sarf normu: hizmet adı ('sardon') ve sarf kodu bulur", mineN(await nq("sardon")) === 1 && mineN(await nq(`${TAG}-c1`.toLowerCase())) === 1);
+  check("§M3b sarf normu: boş = var; eşleşmeyen 0", mineN(await nq()) === 1 && mineN(await nq(`${TAG} zzqq`)) === 0);
+  const costSrc = readFileSync(join(ROUTES, "cost.routes.ts"), "utf8");
+  check("§M4 maliyet: kapı toplu (verifyToken + requireMaliyetEnabled) ve üç uç cost:read aynen", costSrc.includes("router.use(verifyToken, requireMaliyetEnabled)") && ["/yarn-prices", "/finishing-rates", "/consumable-norms"].every((p) => guardOf("cost.routes.ts", p).includes('requirePermission("cost:read")')));
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -247,6 +287,7 @@ async function main(): Promise<void> {
     await finans();
     await satinAlma();
     await dokuma();
+    await maliyet();
   } finally {
     for (const fn of cleanup.reverse()) await fn().catch((e: unknown) => check("temizlik", false, String(e)));
   }

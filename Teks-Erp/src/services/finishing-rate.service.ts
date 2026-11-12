@@ -13,6 +13,7 @@ import { AuditService } from "./audit.service";
 import { ACTIVE_FINISHING_RATE, COST_PRICE_REVOKE_REASON } from "./helpers/cost-price-validity.helper";
 import { assertServiceItemUsableTx } from "./helpers/item-usage.helper";
 import { PCT_RULE, isUniqueViolation, logStampedVersionAudit, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { listSearchWhere } from "../utils/list-search";
 
 export const FINISHING_RATE_SELECT = {
   id: true,
@@ -59,7 +60,8 @@ export interface FinishingRateChangeInput {
   serviceItemId?: string | null;
 }
 
-export async function listFinishingRates(opts: { code?: string; includeRevoked?: boolean }): Promise<FinishingRateRow[]> {
+export async function listFinishingRates(opts: { code?: string; includeRevoked?: boolean; search?: string }): Promise<FinishingRateRow[]> {
+  const search = listSearchWhere<Prisma.FinishingRateWhereInput>(opts.search, { code: ["code"], plain: ["name"], text: ["subcontractor.name"] });
   const where: Prisma.FinishingRateWhereInput = {
     AND: [opts.code ? { code: opts.code } : {}, opts.includeRevoked ? {} : ACTIVE_FINISHING_RATE],
   };

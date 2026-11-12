@@ -17,6 +17,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { assertItemUsable, assertItemUsableTx, assertServiceItemUsable, assertServiceItemUsableTx } from "./helpers/item-usage.helper";
 import { ACTIVE_COST_RATE, COST_RATE_REVOKE_REASON } from "./helpers/cost-rate-validity.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { listSearchWhere } from "../utils/list-search";
 
 const TABLE = "SERVICE_CONSUMABLE_NORM";
 const ACTIVE_PAIR_RE = /service_consumable_norms_active_pair_uq|serviceItemId/i;
@@ -158,13 +159,19 @@ export async function listConsumableNorms(opts: {
   serviceItemId: IdCondition;
   consumableItemId: IdCondition;
   includeRevoked: boolean;
+  search?: string;
 }): Promise<ConsumableNormRow[]> {
+  const search = listSearchWhere<Prisma.ServiceConsumableNormWhereInput>(opts.search, {
+    text: ["serviceItem.name", "consumableItem.name"],
+    code: ["serviceItem.code", "consumableItem.code"],
+  });
   return prisma.serviceConsumableNorm.findMany({
     where: {
       AND: [
         opts.serviceItemId ? { serviceItemId: opts.serviceItemId } : {},
         opts.consumableItemId ? { consumableItemId: opts.consumableItemId } : {},
         opts.includeRevoked ? {} : ACTIVE_COST_RATE,
+
       ],
     },
     select: CONSUMABLE_NORM_SELECT,

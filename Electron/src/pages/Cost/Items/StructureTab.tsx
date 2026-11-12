@@ -35,7 +35,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
     rate: decToInput(detail.yapi?.loomPickRate ?? null),
     currency: isCostCurrency(detail.yapi?.loomPickCurrency) ? detail.yapi.loomPickCurrency : "",
   }));
-  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
+  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: () => finishingRateService.listActive() });
   const set = (k: keyof Form, v: string) => setF((x) => ({ ...x, [k]: v }));
   const save = useMutation({
     mutationFn: () =>

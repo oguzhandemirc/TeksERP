@@ -39,6 +39,7 @@ import {
 } from "../services/standard-cost.service";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { AppError } from "../utils/app-error";
+import { listSearchParam, readListSearch } from "../utils/list-search";
 
 const router = Router();
 router.use(verifyToken, requireMaliyetEnabled);
@@ -207,11 +208,16 @@ router.delete("/parameter-sets/:id", requirePermission("cost:settings"), wrap(as
  *     tags: [Cost]
  *     summary: İplik maliyet fiyatları (varsayılan yalnız aktif; includeRevoked=1 geçmiş)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — iplik adı/kodu; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
  */
 router.get("/yarn-prices", requirePermission("cost:read"), wrap(async (req, res) => {
-  const q = z.object({ yarnItemId: z.string().uuid("Geçersiz iplik ID").optional(), includeRevoked: includeRevokedQ }).parse(req.query);
+  const q = z.object({ yarnItemId: z.string().uuid("Geçersiz iplik ID").optional(), includeRevoked: includeRevokedQ, search: listSearchParam }).parse(req.query);
   res.status(200).json({ success: true, data: await listYarnCostPrices(q) });
 }));
 
@@ -259,11 +265,16 @@ router.post("/yarn-prices/:id/revoke", requirePermission("cost:write"), wrap(asy
  *     tags: [Cost]
  *     summary: Terbiye/fason tarifeleri (varsayılan yalnız aktif; includeRevoked=1 geçmiş)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — tarife kodu/adı ya da fason firma; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
  */
 router.get("/finishing-rates", requirePermission("cost:read"), wrap(async (req, res) => {
-  const q = z.object({ code: z.string().max(32).optional(), includeRevoked: includeRevokedQ }).parse(req.query);
+  const q = z.object({ code: z.string().max(32).optional(), includeRevoked: includeRevokedQ, search: listSearchParam }).parse(req.query);
   res.status(200).json({ success: true, data: await listFinishingRates(q) });
 }));
 
@@ -429,6 +440,11 @@ router.post("/machine-rates/:id/revoke", requirePermission("cost:write"), wrap(a
  *     tags: [Cost]
  *     summary: Hizmet sarf normları (varsayılan yalnız aktif; includeRevoked=1 geçmiş; filter[serviceItemId] / filter[consumableItemId] CSV)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — hizmet ya da sarf adı/kodu; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
  *   post:
@@ -446,6 +462,7 @@ router.get("/consumable-norms", requirePermission("cost:read"), wrap(async (req,
     serviceItemId: readUuidFilter(req, "serviceItemId"),
     consumableItemId: readUuidFilter(req, "consumableItemId"),
     includeRevoked: historyQ(req),
+    search: readListSearch(req.query.search),
   });
   res.status(200).json({ success: true, data });
 }));

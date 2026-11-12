@@ -31,7 +31,7 @@ export function buildFinishingRateBody(i: FinishingRateInput): FinishingRateInpu
 const BASE = "/api/cost/finishing-rates";
 
 export const finishingRateService = {
-  listActive: async () => (await apiClient.get<ApiResponse<FinishingRate[]>>(BASE)).data.data,
+  listActive: async (search?: string) => (await apiClient.get<ApiResponse<FinishingRate[]>>(BASE, { params: search ? { search } : {} })).data.data,
   history: async (code: string) => (await apiClient.get<ApiResponse<FinishingRate[]>>(BASE, { params: { code, includeRevoked: "1" } })).data.data,
   change: async (i: FinishingRateInput) => (await apiClient.post<ApiResponse<FinishingRate & { wrote: boolean }>>(BASE, buildFinishingRateBody(i))).data,
   revoke: async (id: string) => (await apiClient.post<ApiResponse<{ id: string }>>(`${BASE}/${id}/revoke`, {})).data,

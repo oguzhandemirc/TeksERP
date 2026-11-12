@@ -26,7 +26,7 @@ export function buildYarnPriceBody(i: YarnPriceInput): YarnPriceInput {
 const BASE = "/api/cost/yarn-prices";
 
 export const yarnPriceService = {
-  listActive: async () => (await apiClient.get<ApiResponse<YarnCostPrice[]>>(BASE)).data.data,
+  listActive: async (search?: string) => (await apiClient.get<ApiResponse<YarnCostPrice[]>>(BASE, { params: search ? { search } : {} })).data.data,
   history: async (yarnItemId: string) =>
     (await apiClient.get<ApiResponse<YarnCostPrice[]>>(BASE, { params: { yarnItemId, includeRevoked: "1" } })).data.data,
   change: async (i: YarnPriceInput) =>
