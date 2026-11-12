@@ -194,6 +194,7 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Operations/ConsignmentDispatches/ConsignmentDispatchesPage.tsx": ["Operations/ConsignmentDispatches/ConsignmentDispatchFilters.tsx"],
   "Operations/Yarn/YarnStockTable.tsx": ["Operations/Yarn/YarnStockPage.tsx", "Operations/Yarn/YarnFilterBar.tsx"],
   "Devices/DevicesPage.tsx": ["Devices/DeviceFilterBar.tsx"],
+  "System/PrintHistory/PrintHistoryTable.tsx": ["System/PrintHistory/PrintHistoryPage.tsx", "System/PrintHistory/PrintHistoryFilters.tsx"],
   "Stations/StationListView.tsx": ["Stations/ProductionStationsPage.tsx", "Stations/StationFilterBar.tsx"],
   "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
 };
@@ -233,10 +234,10 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
   "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",
   "System/Clients/ClientsPage.tsx": "sunucu belleğindeki istemci envanteri (tek istek, parametresiz, birkaç kurulum); arama yok (backend gerekiyor)",
+  "System/PrintHistory/PrintHistoryTable.tsx": "baskı ucu gün/kişi/yazıcı/cihaz/tür/durum/kaynak süzgeçli; metin araması yok (backend gerekiyor)",
   "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
-const EXPAND = "genişleyen satır (satır altında detay gövdesi) — DataTable'a genel 'genişleyen satır' yeteneği gelince geçer";
 /** Seçimi sayfa durumu sahiplenir (toplu eylem, süzgeçte sıfırlanır) — DataTable seçimi dışarıdan denetlenemiyor. */
 const CONTROLLED_SELECT = "dış durumlu satır seçimi (toplu 'okundu say', süzgeç değişince sıfırlanır) + başlık/gövde/sebep üç satır — DataTable'a denetimli seçim yeteneği gelince geçer";
 const INLINE = "satır içi düzenleme + seçim — DataTable'a genel satır içi düzenleme yeteneği gelince geçer";
@@ -249,10 +250,8 @@ const HAND_TABLES: Record<string, string> = {
   "Finance/PeriodClose/PeriodClosePage.tsx": INLINE,
   "GeneralSettings/Numbering/NumberingTable.tsx": INLINE,
   "Notifications/NotificationTable.tsx": CONTROLLED_SELECT,
-  "Operations/ProductBalance/ProductBalancePage.tsx": EXPAND,
   "System/Duplicates/DuplicatesPage.tsx": MATRIX,
   "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
-  "System/PrintHistory/PrintHistoryTable.tsx": `${EXPAND} (HATA satırının altında neden + ipucu satırı)`,
 };
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;

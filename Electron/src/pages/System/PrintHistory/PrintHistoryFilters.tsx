@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
@@ -25,6 +26,8 @@ interface Props {
   printerOptions: FilterOption[];
   deviceOptions: FilterOption[];
   subjectLabel?: string | null;
+  /** Tablonun Sütunlar menüsü (çubuğun sağında). */
+  tools?: ReactNode;
 }
 
 const ANY = "__any__";
@@ -36,7 +39,7 @@ const CHIPS: { key: Exclude<PrintDayChip, "aralik">; label: string }[] = [
   { key: "tumu", label: "Tümü" },
 ];
 
-export function PrintHistoryFilters({ value, onChange, userOptions, printerOptions, deviceOptions, subjectLabel }: Props) {
+export function PrintHistoryFilters({ value, onChange, userOptions, printerOptions, deviceOptions, subjectLabel, tools }: Props) {
   const set = <K extends keyof PrintHistoryFilterState>(k: K, v: PrintHistoryFilterState[K] | undefined) =>
     onChange({ ...value, [k]: v });
   const hasActive =
@@ -105,6 +108,7 @@ export function PrintHistoryFilters({ value, onChange, userOptions, printerOptio
           Temizle
         </Button>
       )}
+      {tools && <div className="ml-auto flex items-center gap-1.5">{tools}</div>}
     </div>
   );
 }
