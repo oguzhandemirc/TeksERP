@@ -179,6 +179,7 @@ import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
+import { OrderRecordPage } from "@/pages/Operations/Orders/record/OrderRecordPage";
 import { AllocationRepairPage } from "@/pages/Operations/AllocationRepair/AllocationRepairPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { WorkOrderEventsPage } from "@/pages/Operations/WorkOrderEvents/WorkOrderEventsPage";
@@ -1382,6 +1383,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="order:read">
         <OrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Sipariş kayıt sayfası — liste ile AYNI izin (yan panelin "Tam sayfa"sı, ⌘/Ctrl+tık).
+    path: "operations/orders/:id",
+    element: (
+      <ProtectedRoute requirePermission="order:read">
+        <OrderRecordPage />
       </ProtectedRoute>
     ),
   },

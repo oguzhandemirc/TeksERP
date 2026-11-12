@@ -30,7 +30,7 @@ export function useOrderAccess(): OrderAccess {
   return {
     write: hasPermission("order:write"),
     workOrders: production && canGo({ to: "/operations/work-orders", izin: ["workorder:read"] }),
-    weaving: canGo({ to: "/operations/weaving-orders", izin: ["weavingorder:read"] }),
+    weaving: production && canGo({ to: "/operations/weaving-orders", izin: ["weavingorder:read"] }),
     shipments: canGo({ to: "/operations/shipments", izin: ["shipping:read"] }),
     documents: hasAnyPermission(ORDER_CONFIRMATION_READ),
     history: canGo({ to: "/system/activity", izin: SYSTEM_ACTIVITY_ACCESS }),
