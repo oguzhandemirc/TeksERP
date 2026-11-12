@@ -61,7 +61,7 @@ describe("rapor spec'lerinin sayı biçimi kapalı kümede", () => {
 
   it("körlük zemini: motoru kullanan dosyalar ve biçim kullanımları gerçekten okundu", () => {
     expect(dosyalar.length).toBeGreaterThanOrEqual(25); // eski rapor sayfaları kalktı (2026-11-12): 29
-    expect(kullanimlar.length).toBeGreaterThanOrEqual(80); // eski rapor sayfaları kalktı (2026-11-12; son üçüyle 86)
+    expect(kullanimlar.length).toBeGreaterThanOrEqual(70); // eski rapor sayfaları kalktı (2026-11-12; Yurtiçi/Yurtdışı sonrası 75)
   });
 
   it("⭐ her biçim REPORT_NUM_FMTS kümesinde (bilinmeyen biçim PDF↔Excel eşitliği ölçülmeden çıkar)", () => {

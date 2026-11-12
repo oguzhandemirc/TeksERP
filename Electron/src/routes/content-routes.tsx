@@ -175,8 +175,6 @@ import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { TravelerTracePage } from "@/pages/Reports/Production/TravelerTracePage";
 import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
-import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
-import { DestinationMixPage } from "@/pages/Reports/Sales/DestinationMixPage";
 import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
@@ -1649,19 +1647,12 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // Satış kategori hub'ı (2026-11-12, son eski raporu panelden kalktı): ekran anahtarı yaşadığı için Rapor Merkezi'ne yönlenir.
   {
     path: "reports/sales",
     element: (
       <ProtectedRoute requirePermission="report:sales">
-        <SalesReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/destination-mix",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <DestinationMixPage />
+        <Navigate to="/reports" replace />
       </ProtectedRoute>
     ),
   },

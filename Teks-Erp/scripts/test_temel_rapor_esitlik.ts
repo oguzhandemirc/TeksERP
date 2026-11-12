@@ -47,6 +47,8 @@
 // ⚠️ KÖR: RAPC penceresinde tezgah/alarm/levent/alacak verisi yok → gerçek DB kıyası boş kümede; eşleme sentetik satırla.
 // S1v (2026-11-12, Talep Analizi emekli): sipariş-talep görünümleri = `getDemandAnalysis` listeleri; sonda kumaş ← byColor
 //   + çeşit müşteri ← kalem → ❌ 2 (S1v1 · S1v3), md5 ile geri alındı.
+// S2y (2026-11-12, Yurtiçi/Yurtdışı emekli): sevkiyat görünümleri = `getDestinationMix` kırılımları; yön süzgeçli ana sayı
+//   = kova metresi/topu. Sonda iade ← metre + yön süzgeci yok sayıldı → ❌ 4 (S2y1 · S2y2×2 · S2y7), md5 ile geri alındı → 157/0.
 //
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-07 (kıyas 2097-06), etiket TEST-TRE-<pid>.
 // Koşum: npx tsx scripts/test_temel_rapor_esitlik.ts
@@ -89,6 +91,7 @@ import { ORDER_DEMAND_VIEWS, type OrderDemandView } from "../src/services/report
 import { getDemandAnalysis } from "../src/services/reports/demand-analysis.report.service";
 import { getCustomerOrderProfiles } from "../src/services/reports/customer.report.service";
 import { buildShippedReport } from "../src/services/reports/temel/sevkiyat.temel";
+import { SHIPPED_VIEWS, type ShippedView } from "../src/services/reports/temel/sevkiyat.views";
 import { buildDeadlineReport } from "../src/services/reports/temel/termin.temel";
 import { buildOpenOrderReport } from "../src/services/reports/temel/acik-siparisler.temel";
 import { buildLostWorkReport, LOST_WORK_VIEWS, type LostWorkView } from "../src/services/reports/temel/vazgecilen-is.temel";
@@ -925,6 +928,41 @@ async function salesSection(cD: string): Promise<void> {
     let code: unknown = null;
     try { await run({ destination: "EXPORT" }); } catch (e) { code = (e as { statusCode?: number; details?: { code?: string } }).details?.code; }
     check("S1p4 yön/kumaş süzgeciyle profil görünümü 400 VIEW_FILTER_UNSUPPORTED (müşteri kartı yönü ≠ sipariş yönü)", code === "VIEW_FILTER_UNSUPPORTED", String(code));
+  }
+
+  console.log("── S2y sevkiyat tablo görünümleri = Yurtiçi/Yurtdışı Satış kırılımları ──");
+  {
+    const mix = await getDestinationMix(SALES_RANGE, SALES_PREV);
+    const run = async (view: ShippedView | undefined, destination?: ShipmentDestination) =>
+      (await buildShippedReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: { destination }, view })).sunum;
+    const tl = (m: { pricedLineCount: number; tlTotal: number }) => (m.pricedLineCount === 0 ? null : m.tlTotal);
+    const short: Record<string, string> = { DOMESTIC: "Yurtiçi", EXPORT: "Yurtdışı", NONE: "Yön kaydı yok" };
+    const yon = await run("yon");
+    const base = await run(undefined);
+    const decl = viewDecl(yon);
+    check("S2y0 `gorunum` beyanı = SHIPPED_VIEWS · ana sayı görünümle değişmez",
+      decl?.deger === "yon" && JSON.stringify(decl.secenekler?.map((o) => o.deger)) === JSON.stringify(SHIPPED_VIEWS) && yon.anaSayi.deger === base.anaSayi.deger && viewDecl(base)?.deger === "ozet");
+    cellsMatch("S2y1 ⭐ yön = `buckets[]` (sevk · top · metre · önceki · kg · iade · TL)", yon, mix.buckets.map((b) => ({
+      yon: b.label, sevk: b.shipmentCount, top: b.rollCount, metre: b.meters, oncekiMetre: mix.prevBuckets?.find((p) => p.bucket === b.bucket)?.meters ?? 0,
+      kg: b.weighedSacks > 0 ? b.kg : null, iade: b.returnQty, tl: tl(b.money),
+    })), true);
+    for (const d of ["EXPORT", "DOMESTIC"] as const) {
+      const b = mix.buckets.find((x) => x.bucket === d)!;
+      const f = await run("yon", d);
+      check(`S2y2 ⭐ yön süzgeci ${d}: ana sayı = kova metresi · top = rollCount · tablo tek kova`,
+        b.meters > 0 && f.anaSayi.deger === b.meters && side(f, "sevk.top")?.deger === b.rollCount && f.tablo?.satirlar.length === 1 && f.tablo.satirlar[0]?.yon === b.label,
+        `${f.anaSayi.deger}/${b.meters} · ${side(f, "sevk.top")?.deger}/${b.rollCount}`);
+    }
+    const money = mix.buckets.flatMap((b): Record<string, unknown>[] => b.money.amounts.length === 0
+      ? [{ yon: b.label, para: "fiyat girilmemiş", tutar: null, ortFiyat: null, fiyatli: b.money.pricedLineCount, satir: b.money.lineCount }]
+      : b.money.amounts.map((a) => ({ yon: b.label, para: a.currency, tutar: a.amount, ortFiyat: a.avgUnitPrice, fiyatli: b.money.pricedLineCount, satir: b.money.lineCount })));
+    cellsMatch("S2y3 yön × para birimi = kova `money.amounts[]` (tutar · ort. fiyat · fiyatlı/toplam satır)", await run("tutar"), money, true);
+    const bd = (rows: typeof mix.byCustomer) => rows.map((r) => ({ ad: r.label, yon: short[r.bucket], metre: r.meters, tl: tl(r.money), fiyatli: r.money.pricedLineCount, satir: r.money.lineCount }));
+    cellsMatch("S2y4 müşteri = `byCustomer[]` (ülke dahil)", await run("musteri"), bd(mix.byCustomer).map((r, i) => ({ ...r, ulke: mix.byCustomer[i]!.country ?? null })), true);
+    cellsMatch("S2y5 ülke = `byCountry[]` (müşteri sayısı dahil)", await run("ulke"), bd(mix.byCountry).map((r, i) => ({ ...r, musteri: mix.byCountry[i]!.customerCount ?? 0 })), true);
+    cellsMatch("S2y6 kumaş = `byItem[]`", await run("kumas"), bd(mix.byItem), true);
+    const exp = mix.byCountry.filter((r) => r.bucket === "EXPORT");
+    cellsMatch("S2y7 süzgeçli (yön EXPORT) ülke = yalnız EXPORT kovası (Almanya)", await run("ulke", "EXPORT"), bd(exp), exp.some((r) => r.label === "Almanya"));
   }
 
   console.log("── S6 K-KIYAS: parametresiz çağrı = önceki dönem ──");

@@ -14,6 +14,7 @@ import { round1 } from "../_breakdown";
 import { aggregateMoney, collectMoneyRows, type MoneyAgg } from "../_destination-mix-money";
 import { filterEcho } from "../_filters";
 import type { CompareMode, DateRange } from "../_shared";
+import { shippedBucketOf } from "../_destination";
 import { collectShipped, type ShippedCell } from "../_shipped";
 import type { AnaSayi, GrafikBlok, TabloBlok } from "../sunum/sunum.types";
 import {
@@ -26,8 +27,10 @@ import {
   plainFigure,
   rangeParameters,
   singleCurrencyUnit,
+  viewParameter,
   type CoreReportResult,
 } from "./_common";
+import { loadShippedView, SHIPPED_VIEW_LABEL, type ShippedView } from "./sevkiyat.views";
 
 export const SHIPPED_FILTER_KEYS = ["destination"] as const;
 const CHART_CUSTOMER_LIMIT = 10;
@@ -43,6 +46,8 @@ export interface ShippedReportInput {
   /** Uygulanan kıyas kipi (K-KIYAS: `resolveCoreCompare`). */
   compareMode: CompareMode;
   filters: { destination?: ShipmentDestination };
+  /** Tablo görünümü (yalnız ana koşu; varyant hücresi görünüm koşmaz). */
+  view?: ShippedView;
 }
 
 const sumQty = (cells: ShippedCell[]): number => cells.reduce((a, c) => a + c.qty, 0);
@@ -70,7 +75,7 @@ function groupByCustomer(cells: ShippedCell[], prevCells: ShippedCell[] | null):
     const a = slot(c);
     a.qty += c.qty;
     a.rolls += c.rollCount;
-    const d = c.destination ?? "NONE";
+    const d = shippedBucketOf(c.destination);
     a.byDestination.set(d, (a.byDestination.get(d) ?? 0) + c.qty);
   }
   for (const c of prevCells ?? []) slot(c).prevQty += c.qty;
@@ -108,7 +113,7 @@ function destinationChart(customers: CustomerAgg[], cells: ShippedCell[]): Grafi
   const head = customers.filter((c) => c.qty > 0).slice(0, CHART_CUSTOMER_LIMIT);
   const rest = customers.filter((c) => c.qty > 0).slice(CHART_CUSTOMER_LIMIT);
   const restByDestination = (d: string) => rest.reduce((a, c) => a + (c.byDestination.get(d) ?? 0), 0);
-  const usedSeries = DESTINATION_SERIES.filter((s) => cells.some((c) => (c.destination ?? "NONE") === s.key && c.qty > 0));
+  const usedSeries = DESTINATION_SERIES.filter((s) => cells.some((c) => (shippedBucketOf(c.destination)) === s.key && c.qty > 0));
   return head.length
     ? {
         tur: "yiginCubuk",
@@ -178,8 +183,10 @@ export async function buildShippedReport(input: ShippedReportInput): Promise<Cor
   const customers = groupByCustomer(cells, prevCells);
   const chart = destinationChart(customers, cells);
 
-  const table = customerTable(customers, cells, prevCells !== null);
-  const capped = capTable(table, "Müşteri kırılımı");
+  const view = input.view ?? "ozet";
+  const viewed = view === "ozet" ? null : await loadShippedView(view, range, compareRange, filters.destination);
+  const table = viewed?.table ?? customerTable(customers, cells, prevCells !== null);
+  const capped = capTable(table, view === "ozet" ? "Müşteri kırılımı" : SHIPPED_VIEW_LABEL[view]);
 
   const anlati = anlatiUret({
     donem: range,
@@ -208,8 +215,8 @@ export async function buildShippedReport(input: ShippedReportInput): Promise<Cor
       grafik: chart,
       tablo: capped.tablo,
       tanimlar: definitionsOf(["sevk.brutMetre", "sevk.tutar"]),
-      parametreler: [...rangeParameters(range, input.compareMode), destinationParameter(filters.destination, "Yön (sevkiyat)")],
-      uyarilar: capped.uyarilar,
+      parametreler: [...rangeParameters(range, input.compareMode), destinationParameter(filters.destination, "Yön (sevkiyat)"), viewParameter(SHIPPED_VIEW_LABEL, view)],
+      uyarilar: [...(viewed?.notes ?? []), ...capped.uyarilar],
     },
   };
 }

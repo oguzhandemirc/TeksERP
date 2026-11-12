@@ -8,6 +8,7 @@ import type { ShipmentDestination } from "@prisma/client";
 import { factoryYmd } from "../../../constants/time";
 import type { CompareMode, DateRange } from "../_shared";
 import { buildOrderDemandReport } from "./siparis-talep.temel";
+import type { ShippedView } from "./sevkiyat.views";
 import type { OrderDemandView } from "./siparis-talep.views";
 import { buildShippedReport } from "./sevkiyat.temel";
 import { buildDeadlineReport } from "./termin.temel";
@@ -59,9 +60,12 @@ export function orderDemandRunner(filters: OrderDemandFilters, compareMode: Comp
     });
 }
 
-export function shippedRunner(destination: ShipmentDestination | undefined, compareMode: CompareMode): CoreRunner {
+export function shippedRunner(destination: ShipmentDestination | undefined, compareMode: CompareMode, view?: ShippedView): CoreRunner {
   return (range, compareRange, cell) =>
-    buildShippedReport({ range, compareRange, compareMode, filters: { destination: cell?.boyut === "yon" ? (cell.deger as ShipmentDestination) : destination } });
+    buildShippedReport({
+      range, compareRange, compareMode, view: cell ? undefined : view,
+      filters: { destination: cell?.boyut === "yon" ? (cell.deger as ShipmentDestination) : destination },
+    });
 }
 
 export function deadlineRunner(destination: ShipmentDestination | undefined, compareMode: CompareMode): CoreRunner {

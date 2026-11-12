@@ -69,7 +69,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/destination-mix", baslik: "Yurtiçi / Yurtdışı Satış", soru: "Satışların ne kadarı yurtiçi, ne kadarı yurtdışı; ihracatta kime, nereye, ne kadar ve hangi fiyatla gidiyor?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/destination-mix", uc: "/api/reports/sales/destination-mix", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/destination-mix" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/sevkiyat" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/sevkiyat" }, emekli: true },
   { key: "sales/return-scorecard", baslik: "İade Karnesi", soru: "Bu dönemde ne kadar mal iade edildi ve önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/return-scorecard", uc: "/api/reports/sales/return-scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/return-scorecard" }], yuzey: "yaprak",

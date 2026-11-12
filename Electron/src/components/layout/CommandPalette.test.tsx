@@ -216,16 +216,17 @@ describe("CommandPalette — K19 menü düzeni", () => {
     expect(screen.queryByText("Parti İzleme")).not.toBeInTheDocument();
   });
 
-  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Yurtiçi / Yurtdışı Satış)", () => {
-    permissions = [...permissions, "report:sales"];
+  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Kasa & Banka Defteri)", () => {
+    permissions = [...permissions, "report:finance"];
+    regime = { ...regime, financeEnabled: true };
     const a = open();
-    type("yurtdışı satış");
-    expect(screen.getByText("Eski: Yurtiçi / Yurtdışı Satış")).toBeInTheDocument();
+    type("kasa & banka defteri");
+    expect(screen.getByText("Eski: Kasa & Banka Defteri")).toBeInTheDocument();
     a.unmount();
-    menu = toMenuLayoutState({ hiddenScreens: ["reports/sales"], advancedGroup: false, advancedScreens: [] });
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/finance"], advancedGroup: false, advancedScreens: [] });
     open();
-    type("yurtdışı satış");
-    expect(screen.queryByText("Eski: Yurtiçi / Yurtdışı Satış")).not.toBeInTheDocument();
+    type("kasa & banka defteri");
+    expect(screen.queryByText("Eski: Kasa & Banka Defteri")).not.toBeInTheDocument();
   });
 });
 

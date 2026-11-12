@@ -12,8 +12,9 @@ import prisma from "../../lib/prisma";
 import { Prisma, type Currency } from "@prisma/client";
 import { factoryDaySql } from "../../constants/time";
 import type { DateRange } from "./_shared";
+import type { ShippedBucket } from "./_destination";
 
-export type MixBucket = "DOMESTIC" | "EXPORT" | "NONE";
+export type MixBucket = ShippedBucket;
 
 export interface MoneyRow {
   bucket: MixBucket;
