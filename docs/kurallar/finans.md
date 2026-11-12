@@ -59,6 +59,8 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 ### Kararlar
 
+- **[ÇEKİRDEK]** Cari listesi bakiyesini yalnız `helpers/customer-list-balance.helper` ile ekle (kart→hesap toplu ikizi `cariAccountWhereForCustomers` + `CARD_ACCOUNT_ORDER`, sayfa başına tek sorgu); alan yalnız `finance:read` ∧ finans açıkken; para birimlerini toplama.
+- **[ÇEKİRDEK]** Müşteri dönem özetini yeni tanımla yazma: pano kaynakları (`_shipped`, `collectMoneyRows`+`aggregateMoney`, `getOrderIntake`) müşteri süzgeciyle, pencere `resolvePanoPencere`, kapı `panoGates` (izinsiz ölçü `null`); alt router'ı dar yola bağla.
 - **[ÇEKİRDEK]** Toplu açılış aktarımı yalnız tekil servislerden yazar (`setOpeningBalance` · `chequeService.create` · `itemPriceService.upsert`); ikinci defter yazarı açma; geri sarma `REVERSE_ENTRY` · `REVOKE_VERSION`.
 - **[ÇEKİRDEK]** `ItemPrice` silinmez/ezilmez: değişim `revokedAt` damgası (partial unique `revokedAt IS NULL`); okuma `ACTIVE_ITEM_PRICE`/`itemPriceValidAt`, tarihli `resolveItemPrice*({ asOf })`; `isActive` ekleme.
 - **[ÇEKİRDEK]** Hizmet fiyatını yalnız `pickServicePrice` sırasıyla seç (müşteri kademe → müşteri gram → genel kademe → istasyon gram → kalem fiyatı; tabloda olmayan kademe fiyatsız + uyarı); ileri tarihli fiyatı zamanlanmış damgayla yaz (yürürlükteki `revokedAt` = yeni `validFrom`), "şu an"ı `itemPriceNow` ile oku.

@@ -14,9 +14,8 @@ import { aggregateMoney, collectMoneyRows } from "./reports/_destination-mix-mon
 import { getOrderIntake } from "./reports/order-intake.report.service";
 import { loadAccessContext } from "./reports/semantik/izin";
 import { panoGates, type PanoKullanici } from "./dashboard/pano-kaynak";
-import { resolvePanoPencere, type PanoDonem } from "./dashboard/pano-donem";
+import { moneyKpis, resolvePanoPencere, type PanoDonem, type PanoParaKpi } from "./dashboard/pano-donem";
 import { kpi, type PanoKpi } from "./dashboard/pano-kutu-mevcut";
-import { moneyKpis, type PanoParaKpi } from "./dashboard/pano-kutu-satis";
 import { factoryYmd } from "../constants/time";
 
 export interface CustomerPeriodSummary {

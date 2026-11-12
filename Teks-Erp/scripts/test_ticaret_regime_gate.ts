@@ -193,6 +193,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "Kapı KUTU düzeyinde sunucudadır: `alis` = purchase-order:read izni + ticaretEnabled (pano-kaynak.ts:87); kapalı modülde kutu katalogda yoktur, veri ucu `null` döner " +
       "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
   },
+  {
+    dosya: "routes/customer-period-summary.routes.ts",
+    neden:
+      "MÜŞTERİ DÖNEM ÖZETİ (cari-be madde 3, 2026-11-12). Router SALT-OKUMADIR (CUD yok); ticaret dokunuşu yalnız GEÇİŞLİ importtur: kapı tek kaynağı " +
+      "`panoGates` (pano-kaynak.ts) pano kutularının kaynak grafını taşır. Uç alış siparişi/mal kabul OKUMAZ: brüt sevk (`_shipped`), ciro (`collectMoneyRows`) " +
+      "ve sipariş karnesi satış çekirdeğidir. Router kapısı KONULAMAZ: kartlar ticaret modülü kapalı kurulumda da görünür.",
+  },
 ];
 
 function main(): void {

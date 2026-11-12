@@ -9,23 +9,12 @@
 import { Prisma } from "@prisma/client";
 import { aggregateMoney, collectMoneyRows } from "../reports/_destination-mix-money";
 import { collectCashFlow, type CashFlowRow } from "../reports/cash-book.report";
-import { changePct, bucketKeySql } from "./pano-donem";
+import { bucketKeySql, moneyKpis } from "./pano-donem";
 import { PANO_TOP_N, type PanoSources } from "./pano-kaynak";
 import { round1 } from "../reports/_breakdown";
 import type { BoxInput } from "./pano-kutu-mevcut";
 
-export interface PanoParaKpi { paraBirimi: string; deger: number; onceki: number; degisimYuzde: number | null }
-
-const cents = (v: number): number => Math.round(v * 100) / 100;
-
-/** Para birimi başına kıyas: iki dönemin birleşik para birimi kümesi, alfabetik. */
-export function moneyKpis(cur: Map<string, number>, prev: Map<string, number>): PanoParaKpi[] {
-  return [...new Set([...cur.keys(), ...prev.keys()])].sort().map((c) => {
-    const d = cur.get(c) ?? 0;
-    const p = prev.get(c) ?? 0;
-    return { paraBirimi: c, deger: cents(d), onceki: cents(p), degisimYuzde: changePct(d, p) };
-  });
-}
+export type { PanoParaKpi } from "./pano-donem";
 
 export async function revenueBox({ src }: BoxInput) {
   const [cur, prev] = await Promise.all([

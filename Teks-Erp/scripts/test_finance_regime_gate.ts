@@ -315,6 +315,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "Kapı KUTU düzeyinde sunucudadır: `nakit` = report:finance izni + financeEnabled (pano-kaynak.ts:85); kapalı modülde kutu katalogda yoktur, veri ucu `null` döner " +
       "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
   },
+  {
+    dosya: "routes/customer-period-summary.routes.ts",
+    neden:
+      "MÜŞTERİ DÖNEM ÖZETİ (cari-be madde 3, 2026-11-12). Router SALT-OKUMADIR (CUD yok); finans dokunuşu yalnız GEÇİŞLİ importtur: kapı tek kaynağı " +
+      "`panoGates` (pano-kaynak.ts) pano kutularının kaynak grafını taşır. Uç kasa/banka ya da cari tablosu OKUMAZ: brüt sevk (`_shipped`), ciro (sevk günü fiyatı, " +
+      "`collectMoneyRows`) ve sipariş karnesi üretim çekirdeğidir. Router kapısı KONULAMAZ: sevk/sipariş kartları ön muhasebe kapalı kurulumda da görünür.",
+  },
 ];
 
 // ⚠️ AST yardımcıları (`oku` · `yerelImportlar` · `mountEdilenler` ·

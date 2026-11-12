@@ -93,3 +93,17 @@ export function changePct(current: number, previous: number | null | undefined):
   if (previous == null || previous === 0) return null;
   return Math.round(((current - previous) * 1000) / previous) / 10;
 }
+
+export interface PanoParaKpi { paraBirimi: string; deger: number; onceki: number; degisimYuzde: number | null }
+
+const cents = (v: number): number => Math.round(v * 100) / 100;
+
+/** Para birimi başına kıyas: iki dönemin birleşik para birimi kümesi, alfabetik. Saf — finans grafına bağlanmaz
+ *  (müşteri dönem özeti de kullanır; `test_finance_regime_gate` transitif dokunuşu ölçer). */
+export function moneyKpis(cur: Map<string, number>, prev: Map<string, number>): PanoParaKpi[] {
+  return [...new Set([...cur.keys(), ...prev.keys()])].sort().map((c) => {
+    const d = cur.get(c) ?? 0;
+    const p = prev.get(c) ?? 0;
+    return { paraBirimi: c, deger: cents(d), onceki: cents(p), degisimYuzde: changePct(d, p) };
+  });
+}
