@@ -26,6 +26,7 @@ import type { AddressInfo } from "node:net";
 import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { atlamaDefteri } from "./lib/atlama";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { AuthService } from "../src/services/auth.service";
 import { customerService } from "../src/routes/customer.routes";
@@ -35,13 +36,13 @@ import { ROW_MARK_ENTITY_PERMISSIONS, ROW_MARK_ENTITIES } from "../src/constants
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) pass++;
   else fail++;
   console.log(`${ok ? "✅" : "❌"} ${label}${detail ? " — " + detail : ""}`);
 }
 
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 const ROOT = path.resolve(__dirname, "..");
 const TAG = `TEST-RMK-${process.pid}`;
 type Mark = { recordId: string; color: string | null; note: string | null; shared: boolean; mine: boolean; ownerName: string | null };
@@ -207,8 +208,7 @@ async function main(): Promise<void> {
       check(`§6 ${l.ad}: var olmayan kimlik → 200 + 0 satır`, yok.status === 200 && yokIds?.length === 0, `status=${yok.status} satır=${yokIds?.length ?? "?"}`);
       const ornek = satirIds(await call("GET", `${l.yol}?limit=2`, adminToken)) ?? [];
       if (ornek.length === 0) {
-        atlanan++;
-        console.log(`⏭  §6 ${l.ad}: liste boş — CSV kolu ölçülmedi (körlük beyanı)`);
+        ATLAMA.atla(`§6 ${l.ad}`, "liste boş — CSV kolu ölçülmedi (körlük beyanı)");
         continue;
       }
       const var1 = satirIds(await call("GET", `${l.yol}?limit=5&filter[id]=${ornek[0]},${randomUUID()}`, adminToken)) ?? [];
@@ -228,7 +228,7 @@ async function main(): Promise<void> {
     await new Promise<void>((r) => server.close(() => r()));
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===${atlanan ? ` (${atlanan} kol atlandı: boş liste)` : ""}`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   await prisma.$disconnect();
   await pool.end();
   process.exitCode = fail > 0 ? 1 : 0;
