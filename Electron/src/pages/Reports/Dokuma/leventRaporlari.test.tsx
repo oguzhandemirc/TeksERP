@@ -9,11 +9,9 @@ import { REPORT_CATALOG } from "@/lib/report-catalog";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { dokumaReportTiles, visibleDokumaTiles } from "./tile-config";
 import { enYakinBitis, secenekOptions, warpSpecCellText, type BeamResultReport, type FinishForecastRow } from "./leventReportTypes";
-import { buildLeventSonucuExport } from "./leventExport";
 
-const leventSonucu = vi.fn();
 const leventBitisTahmini = vi.fn();
-vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), dokumaReportsApi: { leventSonucu: (...a: unknown[]) => leventSonucu(...a), leventBitisTahmini: (...a: unknown[]) => leventBitisTahmini(...a) } }));
+vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), dokumaReportsApi: { leventBitisTahmini: (...a: unknown[]) => leventBitisTahmini(...a) } }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({ shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, machineStopEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false, financeEnabled: false, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false, reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
 }));
@@ -27,13 +25,7 @@ const row = (over: Partial<BeamResultReport["kapananlar"][number]> = {}) => ({
   sarilanM: 1000, sarilanKg: null, kgKaynak: null, beklenenKumasM: null, gercekKumasM: 190, gercekKaynak: { otomatik: 150, elle: 40 },
   kalanM: 0, fireM: null, firePct: null, status: "EXHAUSTED", kapanisAt: "2026-10-20T10:00:00Z", tezgahlar: ["T-07"], ...over,
 });
-const rapor: BeamResultReport = {
-  kapananlar: [row()], acikLeventler: [],
-  ozet: { leventSayisi: 1, sarilanM: 1000, beklenenM: 0, gercekM: 190, gercekKaynak: { otomatik: 150, elle: 40 }, fireM: 0, firePct: null, olculemedi: 1, acikLeventSayisi: 0 },
-  meta: { ufuk: "2026-09-14", ufukOncesiSatir: 0, duzeltilmisTop: 2, kumasiOlculmeyenTuketim: 0, secenekler: { warpSpecId: [{ id: "w1", ad: "Siyah", kod: "CZ-1" }], machineId: [] } },
-};
-
-beforeEach(() => { leventSonucu.mockReset(); leventBitisTahmini.mockReset(); });
+beforeEach(() => { leventBitisTahmini.mockReset(); });
 
 describe("karo ↔ katalog", () => {
   it("⭐ kalan levent karosu katalogda kendi panelYolu ile, üç segmentli", () => {
@@ -59,20 +51,11 @@ describe("saf yardımcılar", () => {
     expect(warpSpecCellText(row())).toBe("CZ-1 · Siyah");
     const leno = row({ katman: { rol: "LENO", beamMode: "SEPARATE_BEAM", etiket: "Döner çözgü" } });
     expect(warpSpecCellText(leno)).toBe("CZ-1 · Siyah — Döner çözgü");
-    const spec = buildLeventSonucuExport({ rapor: { ...rapor, kapananlar: [leno] }, periodLabel: "x" });
-    expect(spec.tables[0]!.rows[0]).toMatchObject({ cozgu: "CZ-1 · Siyah — Döner çözgü" });
   });
   it("en yakın bitiş: null'lar atlanır, hiç yoksa null", () => {
     const r = (g: string | null) => ({ tahminiBitisGun: g }) as FinishForecastRow;
     expect(enYakinBitis([r(null), r("2026-11-02"), r("2026-10-28")])).toBe("2026-10-28");
     expect(enYakinBitis([r(null)])).toBeNull();
-  });
-  it("⭐ çıktı: beklenen/fire null → 'ölçülemedi' (0 değil); kaynak kırılımı + ufuk notu basılır", () => {
-    const spec = buildLeventSonucuExport({ rapor, periodLabel: "x" });
-    expect(spec.tables[0]!.rows[0]).toMatchObject({ beklenen: "ölçülemedi", fire: "ölçülemedi", firePct: "ölçülemedi", otomatik: 150, elle: 40 });
-    expect(spec.meta!.join("\n")).toMatch(/Ölçülen \(top doğuşundan otomatik\)/);
-    expect(spec.meta!.join("\n")).toMatch(/Ölçüm ufku: 2026-09-14/);
-    expect(spec.meta!.join("\n")).toMatch(/Düzeltilmiş top: 2/);
   });
 });
 

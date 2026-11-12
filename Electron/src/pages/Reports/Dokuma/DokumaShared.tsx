@@ -1,10 +1,6 @@
 // =============================================================================
-// DOKUMA RAPORLARI — ortak parçalar: kaynak kırılımı şeridi · ufuk notu · uyarılar ·
-// tarih aralığı → fabrika günü · süre biçimi
-// =============================================================================
-// Rapor değişmezi ①: her toplam satırı KAYNAK KIRILIMINI taşır, tek yüzdeye
-// çökertilmez — şerit bu yüzden her sayfada aynı bileşendir. Değişmez ②: ufuk
-// yazılır — "şu günden sonrası ölçülü", ufuk öncesi satır sayısıyla.
+// DOKUMA RAPORLARI — ortak parçalar: uyarılar · tarih aralığı → fabrika günü ·
+// süre biçimi · mühür rozeti · sayfa yükleme
 // =============================================================================
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -12,42 +8,6 @@ import { Button } from "@/components/ui/button";
 import type { ReportKey } from "@/lib/report-catalog";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { rangeDayParams } from "../_lib/report-date";
-import { SOURCE_LABELS, type DataSource } from "./dokuma-regime";
-import type { LoomReportMeta, SourceBreakdownTable } from "./service";
-
-const SOURCE_ORDER: DataSource[] = ["MACHINE", "OPERATOR", "SUPERVISOR", "SIMULATED", "INFERRED"];
-
-export function SourceBreakdownStrip({ kirilim, unit = "satır" }: { kirilim: SourceBreakdownTable | undefined; unit?: string }) {
-  if (!kirilim) return null;
-  const total = SOURCE_ORDER.reduce((a, k) => a + (kirilim[k]?.satir ?? 0), 0);
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
-      <span className="font-semibold text-muted-foreground">Kaynak kırılımı ({total} {unit}):</span>
-      {SOURCE_ORDER.map((k) => {
-        const n = kirilim[k]?.satir ?? 0;
-        if (n === 0) return null;
-        return (
-          <Badge key={k} variant={k === "SIMULATED" ? "destructive" : k === "INFERRED" ? "outline" : "secondary"}>
-            {SOURCE_LABELS[k]}: {n}
-          </Badge>
-        );
-      })}
-      <span className="text-muted-foreground">— tek yüzdeye çökertilmez; simüle değer elle girişten ayrı sayılır.</span>
-    </div>
-  );
-}
-
-export function HorizonNote({ meta }: { meta: LoomReportMeta | undefined }) {
-  if (!meta) return null;
-  return (
-    <p className="text-xs text-muted-foreground">
-      Ölçüm ufku: <span className="font-mono">{meta.ufuk}</span> sonrası ölçülüdür
-      {meta.ufukOncesiSatir > 0 ? ` · ufuk öncesi ${meta.ufukOncesiSatir} satır (eksik olabilir)` : ""}
-      {meta.truncated ? ` · toplamlar ${meta.total} satırın tamamından; liste sayfalı` : ""}
-      {` · anlık ${meta.live} · mühürlü ${meta.sealed}`}
-    </p>
-  );
-}
 
 export function WarningsBlock({ warnings }: { warnings: string[] }) {
   if (warnings.length === 0) return null;

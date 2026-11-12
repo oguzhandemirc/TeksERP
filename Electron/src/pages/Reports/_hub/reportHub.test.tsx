@@ -191,7 +191,7 @@ describe("analiz kutuları ve kişisel kutular", () => {
 
   it("⭐ tercihte kalan EMEKLİ ya da artık olmayan rapor anahtarı son açılan/favoride sessizce düşer", () => {
     const [a] = inCategory("dokuma");
-    const retired = REPORT_CATALOG.find((e) => e.emekli === true)!;
+    const retired = REPORT_CATALOG.find((e) => e.nesil === "v1" && e.emekli === true)!;
     const gone = "dokuma/olmayan-eski-rapor";
     prefs = {
       raporlar: {
