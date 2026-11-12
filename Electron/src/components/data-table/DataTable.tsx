@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
 import { flexRender, type ColumnDef, type Row, type Table as TanstackTable } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
@@ -9,16 +9,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
-import {
-  AlertOctagon,
-  Copy,
-  FileText,
-  FileSpreadsheet,
-  Inbox,
-  Info,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { AlertOctagon, Copy, Inbox, Info, RefreshCw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ContextMenu,
@@ -32,7 +23,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { exportTableToPdf, exportTableToXlsx, exportListName } from "@/lib/table-export";
 import { cn } from "@/lib/utils";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { DataTablePagination } from "./DataTablePagination";
@@ -40,6 +30,8 @@ import { SortableHead, alignClass } from "./DataTableHead";
 import { clipStyle, handleClipHover, tableWidthVars } from "./column-layout";
 import { columnCollision, currentOrder, reorderColumns } from "./column-arrange";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
+import { SelectionBar } from "./SelectionBar";
+import { ExpandHeadCell, ExpandToggleCell, ExpandedRow, expandKey, useRowExpansion, type RowExpandProps } from "./row-expand";
 
 // Satır açılışı bu kadar geciktirilir; bu süre içinde 2. tık gelirse (çift-tık)
 // açılış iptal edilir. Çift-tıkla kelime seçerken satır detayı açılmasın diye.
@@ -60,7 +52,7 @@ export interface RowClick {
   metaKey: boolean;
 }
 
-interface Props<T> {
+interface Props<T> extends RowExpandProps<T> {
   table: TanstackTable<T>;
   isLoading?: boolean;
   /**
@@ -142,6 +134,11 @@ export function DataTable<T>({
   rowTitle,
   activeRowId,
   loadMore,
+  renderExpanded,
+  canExpand,
+  expandedIds,
+  onExpandedChange,
+  renderSubRow,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -164,7 +161,9 @@ export function DataTable<T>({
     if (next) table.setColumnOrder(next);
   };
 
-  const colCount = table.getAllColumns().length + (selectable ? 1 : 0);
+  const expandable = Boolean(renderExpanded);
+  const { expanded, toggle: toggleExpanded } = useRowExpansion(expandedIds, onExpandedChange);
+  const colCount = table.getVisibleLeafColumns().length + (selectable ? 1 : 0) + (expandable ? 1 : 0);
 
   // DataTableRow memo geçersizleştirme sinyalleri — bunlar OLMADAN memo satır
   // gövdesini fazla iyi tutar: sütun görünürlük/sıra veya sütun TANIMI değişince
@@ -238,6 +237,7 @@ export function DataTable<T>({
             <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-[linear-gradient(to_top,hsl(var(--border))_1px,transparent_1px)]">
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
+                  {expandable && <ExpandHeadCell />}
                   {selectable && (
                     <TableHead className="w-9">
                       <Checkbox
@@ -293,6 +293,7 @@ export function DataTable<T>({
               {isLoading && rows.length === 0
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <TableRow key={`sk-${i}`}>
+                      {expandable && <TableCell className="w-8" />}
                       {selectable && (
                         <TableCell className="w-9">
                           <Skeleton className="h-4 w-4" />
@@ -366,6 +367,12 @@ export function DataTable<T>({
                         selRef={selRef}
                         visibleColumnIds={visibleColumnIds}
                         columnDefs={columnDefs}
+                        colCount={colCount}
+                        isExpanded={expandable && expanded.has(row.id)}
+                        onToggleExpand={toggleExpanded}
+                        renderExpanded={renderExpanded}
+                        canExpand={canExpand}
+                        renderSubRow={renderSubRow}
                       />
                     ))}
             </TableBody>
@@ -375,75 +382,8 @@ export function DataTable<T>({
         {more ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
-      {/* Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. İKİ DURUMDA
-          AYNI İSKELET (saha 2026-09-22: "aktif/pasif arasında çok yer değiştiriyor"):
-          sol slot "N seçili + Seçimi temizle" (0'da pasif, genişlik sabit), hemen
-          ardından toplu eylemler (0'da pasif), sağ slot ipucu (0) ↔ dışa aktarma (seçim). */}
       {selectable && (rows.length > 0 || selected.length > 0) && (
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-3 py-2 text-sm",
-            selected.length > 0 ? "bg-primary/5" : "bg-muted/40",
-          )}
-        >
-          <span className={cn("min-w-[4.5rem] font-medium tabular-nums", selected.length === 0 && "text-muted-foreground")}>
-            {selected.length} seçili
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5"
-            disabled={selected.length === 0}
-            onClick={() => table.resetRowSelection()}
-          >
-            <X className="h-3.5 w-3.5" />
-            Seçimi temizle
-          </Button>
-          {bulkActions?.(selected.map((r) => r.original))}
-          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-            {selected.length > 0 ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5"
-                  title={selectedExportHint}
-                  onClick={() =>
-                    void exportTableToPdf(
-                      table,
-                      selected.map((r) => r.original),
-                      exportListName(exportName, { selected: true }),
-                    )
-                  }
-                >
-                  <FileText className="h-3.5 w-3.5 text-destructive" />
-                  Seçili PDF
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5"
-                  title={selectedExportHint}
-                  onClick={() =>
-                    void exportTableToXlsx(
-                      table,
-                      selected.map((r) => r.original),
-                      exportListName(exportName, { selected: true }),
-                    )
-                  }
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
-                  Seçili Excel
-                </Button>
-              </>
-            ) : selectionHint ? (
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Info className="h-3.5 w-3.5 shrink-0" />
-                {selectionHint}
-              </span>
-            ) : null}
-          </div>
-        </div>
+        <SelectionBar table={table} selected={selected.map((r) => r.original)} bulkActions={bulkActions} selectionHint={selectionHint} exportName={exportName} selectedExportHint={selectedExportHint} />
       )}
 
       {pagination ? <DataTablePagination pagination={pagination} actions={paginationActions} /> : null}
@@ -471,6 +411,12 @@ interface DataTableRowProps<T> {
   // toggle'ında ikisi de sabit → memo tutar. (Bkz. DataTable gövdesindeki not.)
   visibleColumnIds: string;
   columnDefs: ColumnDef<T>[];
+  colCount: number;
+  isExpanded: boolean;
+  onToggleExpand: (id: string, open?: boolean) => void;
+  renderExpanded?: (row: T) => ReactNode;
+  canExpand?: (row: T) => boolean;
+  renderSubRow?: (row: T) => ReactNode;
 }
 
 /**
@@ -494,51 +440,70 @@ function DataTableRowInner<T>({
   rowTitle,
   openTimer,
   selRef,
+  colCount,
+  isExpanded,
+  onToggleExpand,
+  renderExpanded,
+  canExpand,
+  renderSubRow,
 }: DataTableRowProps<T>) {
   const blocked = selectable && !row.getCanSelect() ? (selectionBlockedReason?.(row.original) ?? null) : null;
+  const expandable = Boolean(renderExpanded);
+  const can = expandable && (canExpand?.(row.original) ?? true);
+  const subRow = renderSubRow?.(row.original);
+  // Satır açılışı yoksa tık/Enter ayrıntıyı açıp kapar (genişleyen satırın tek eylemi odur).
+  const activate = onRowClick ?? (can ? () => onToggleExpand(row.id) : undefined);
+  const detailId = `row-detail-${row.id}`;
+  const handleClick = (e: MouseEvent<HTMLElement>) => {
+    if (!activate) return;
+    // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı (aşağıdaki guard'lardan erken çıksa bile) 1. tıkın
+    // zamanlayıcısını öldürsün.
+    if (openTimer.current) {
+      clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+    if (fromInteractive(e)) return;
+    // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
+    if (window.getSelection()?.toString()) return;
+    // 2./3. tık (çift-tık) → boş hücrede bile açma.
+    if (e.detail > 1) return;
+    const data = row.original;
+    // Olay zamanlayıcıdan önce okunur: değiştiriciler (Ctrl/⌘ → yeni sekme) açılışa taşınır.
+    const click: RowClick = { button: e.button, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
+    openTimer.current = setTimeout(() => {
+      openTimer.current = null;
+      activate(data, click);
+    }, ROW_OPEN_DELAY_MS);
+  };
   const rowEl = (
     <TableRow
       data-state={isSelected ? "selected" : undefined}
       {...(isActive === undefined ? {} : { "data-record-row": "", "data-row-key": row.id, "aria-selected": isActive })}
       className={cn(
         "row-enter",
-        onRowClick && "cursor-pointer",
+        activate && "cursor-pointer",
         isActive && "bg-primary-soft hover:bg-primary-soft",
-        onRowClick && "focus-visible:bg-accent/60 focus-visible:outline-none",
+        (activate || can) && "focus-visible:bg-accent/60 focus-visible:outline-none",
+        subRow ? "border-b-0" : undefined,
         rowClassName?.(row.original),
       )}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
       title={rowTitle?.(row.original)}
-      // Klavye erişimi: tıklanabilir satır Tab ile odaklanır, Enter/Space açar (hücre içi düğmeler hariç).
-      tabIndex={onRowClick ? 0 : undefined}
-      onKeyDown={onRowClick ? (e) => {
-        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
-        e.preventDefault();
-        onRowClick(row.original, { button: 0, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
-      } : undefined}
-      onClick={(e) => {
-        if (!onRowClick) return;
-        // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı
-        // (aşağıdaki guard'lardan erken çıksa bile) 1. tıkın
-        // zamanlayıcısını öldürsün.
-        if (openTimer.current) {
-          clearTimeout(openTimer.current);
-          openTimer.current = null;
+      // Klavye erişimi: tıklanabilir satır Tab ile odaklanır, Enter/Space açar (hücre içi düğmeler hariç); →/← ayrıntı.
+      tabIndex={activate || can ? 0 : undefined}
+      onKeyDown={activate || can ? (e) => {
+        if (e.target !== e.currentTarget) return;
+        if (expandKey(e.key, can, isExpanded, (open) => onToggleExpand(row.id, open))) {
+          e.preventDefault();
+          return;
         }
-        if (fromInteractive(e)) return;
-        // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
-        if (window.getSelection()?.toString()) return;
-        // 2./3. tık (çift-tık) → boş hücrede bile açma.
-        if (e.detail > 1) return;
-        const data = row.original;
-        // Olay zamanlayıcıdan önce okunur: değiştiriciler (Ctrl/⌘ → yeni sekme) açılışa taşınır.
-        const click: RowClick = { button: e.button, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
-        openTimer.current = setTimeout(() => {
-          openTimer.current = null;
-          onRowClick(data, click);
-        }, ROW_OPEN_DELAY_MS);
-      }}
+        if (!activate || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        activate(row.original, { button: 0, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
+      } : undefined}
+      onClick={handleClick}
     >
+      {expandable && <ExpandToggleCell can={can} open={isExpanded} onToggle={() => onToggleExpand(row.id)} controls={detailId} />}
       {selectable && (
         <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
           {/* Seçilemez satırlarda (enableRowSelection predicate false —
@@ -567,8 +532,19 @@ function DataTableRowInner<T>({
   );
 
   const menu = rowContextMenu?.(row.original);
-  if (!menu) return rowEl;
+  const extra = (
+    <>
+      {subRow ? (
+        <ExpandedRow colSpan={colCount} className={rowClassName?.(row.original)} onClick={onRowClick ? () => onRowClick(row.original) : undefined}>
+          {subRow}
+        </ExpandedRow>
+      ) : null}
+      {isExpanded && can ? <ExpandedRow id={detailId} colSpan={colCount} className="bg-muted/20">{renderExpanded?.(row.original)}</ExpandedRow> : null}
+    </>
+  );
+  if (!menu) return <>{rowEl}{extra}</>;
   return (
+    <>
     <ContextMenu>
       <ContextMenuTrigger
         asChild
@@ -584,6 +560,8 @@ function DataTableRowInner<T>({
         {menu}
       </ContextMenuContent>
     </ContextMenu>
+    {extra}
+    </>
   );
 }
 
