@@ -7,8 +7,8 @@ import type { SpotlightController } from "./useSpotlight";
  * soluk alan `pointer-events` korur (modal değil); hareket azaltılmışsa geçiş yok.
  */
 export const SPOTLIGHT_CLASS = cn(
-  "rounded-xl transition-[opacity,box-shadow,background-color] duration-300 motion-reduce:transition-none",
-  "data-[spotlight=lit]:bg-primary-soft/30 data-[spotlight=lit]:ring-2 data-[spotlight=lit]:ring-primary/50 data-[spotlight=lit]:ring-offset-4 data-[spotlight=lit]:ring-offset-background",
+  "scroll-mt-6 rounded-xl transition-[opacity,box-shadow,background-color] duration-300 motion-reduce:transition-none",
+  "data-[spotlight=lit]:bg-primary-soft/30 data-[spotlight=lit]:ring-2 data-[spotlight=lit]:ring-primary/50",
   "data-[spotlight=dim]:opacity-40",
 );
 

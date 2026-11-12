@@ -74,6 +74,9 @@ export function treemapOption(blok: GrafikBlok, p: ScreenPalette, o: ScreenOpts)
 }
 
 /** Isı haritası: satır = seri (kıyas hariç), sütun = kategori; renk birincil tonun açık→koyu skalası. */
+/** Bu kadar hücreye kadar ısı haritası değeri hücreye yazar (etiket düğmesinden bağımsız). */
+export const HEAT_ALWAYS_LABEL = 24;
+
 export function heatmapOption(blok: GrafikBlok, p: ScreenPalette, o: ScreenOpts): Option {
   const rows = blok.seriler.filter((s) => !s.soluk);
   const cells: [number, number, number][] = [];
@@ -89,7 +92,7 @@ export function heatmapOption(blok: GrafikBlok, p: ScreenPalette, o: ScreenOpts)
         `${rows[x.value[1]]?.ad ?? ""} · ${kategoriEtiketi(blok.kategoriler[x.value[0]] ?? "", blok.eksen.x.tur)}: ${valueText(x.value[2], blok.eksen.y.birim)}`,
     },
     grid: { left: 8, right: 12, top: 8, bottom: 44, containLabel: true },
-    xAxis: { type: "category", data: blok.kategoriler.map((k) => kategoriEtiketi(k, blok.eksen.x.tur)), axisLabel: { color: p.ikincil, hideOverlap: true }, axisTick: { show: false }, axisLine: { show: false }, splitArea: { show: false } },
+    xAxis: { type: "category", data: blok.kategoriler.map((k) => kategoriEtiketi(k, blok.eksen.x.tur)), axisLabel: { color: p.ikincil, hideOverlap: true, width: 120, overflow: "truncate" }, axisTick: { show: false }, axisLine: { show: false }, splitArea: { show: false } },
     yAxis: { type: "category", inverse: true, data: rows.map((s) => s.ad), axisLabel: { color: p.ikincil, width: 120, overflow: "truncate" }, axisTick: { show: false }, axisLine: { show: false }, splitArea: { show: false } },
     visualMap: {
       min,
@@ -110,7 +113,8 @@ export function heatmapOption(blok: GrafikBlok, p: ScreenPalette, o: ScreenOpts)
         name: blok.eksen.y.ad,
         data: cells,
         itemStyle: { borderColor: p.card, borderWidth: 2, borderRadius: 4 },
-        label: { show: o.labels && cells.length <= 160, color: p.metin, textBorderColor: p.card, textBorderWidth: 2, fontSize: 10, formatter: (x: { value: [number, number, number] }) => upTo3Text(x.value[2]) },
+        // Az hücrede değer hep yazılır: renk tek başına seyrek ızgarada okunmaz.
+        label: { show: cells.length <= HEAT_ALWAYS_LABEL || (o.labels && cells.length <= 160), color: p.metin, textBorderColor: p.card, textBorderWidth: 2, fontSize: 10, formatter: (x: { value: [number, number, number] }) => upTo3Text(x.value[2]) },
       },
     ],
   };

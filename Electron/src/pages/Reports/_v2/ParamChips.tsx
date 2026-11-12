@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown, SlidersHorizontal, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,24 @@ export function chipSpecsOf(params: readonly ParametreBeyani[], search: URLSearc
 /** Bantta satır içinde kalan çip sayısı; fazlası "Süzgeçler (n)" paneline katlanır. */
 export const INLINE_CHIP_LIMIT = 2;
 
+/** Bant genişliğine göre satır içi çip sayısı: dar bantta (1280 ekranda ~1040 px) bant iki satıra kırılmasın. */
+export function inlineLimitFor(width: number): number {
+  if (width >= 1180) return INLINE_CHIP_LIMIT;
+  return width >= 760 ? 1 : 0;
+}
+
+// React 19 ref temizliği: gözlemci bant sökülünce kapanır.
+function useBandWidth(): [(el: HTMLDivElement | null) => (() => void) | undefined, number] {
+  const [width, setWidth] = useState(Number.POSITIVE_INFINITY);
+  const ref = useCallback((el: HTMLDivElement | null) => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setWidth(e?.contentRect.width ?? Number.POSITIVE_INFINITY));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width];
+}
+
 /** Satır içi / katlanan çipler: kıyas ve SEÇİMİ OLAN çipler önce satırda kalır (sıra korunur). */
 export function splitChips<T extends { key: string; selected: string[] }>(chips: readonly T[], limit = INLINE_CHIP_LIMIT): { inline: T[]; folded: T[] } {
   if (chips.length <= limit) return { inline: [...chips], folded: [] };
@@ -86,8 +104,9 @@ export function ParamChips({ entry, params, personNamed = false }: Props) {
   const [search, setSearch] = useSearchParams();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [foldOpen, setFoldOpen] = useState(false);
+  const [bandRef, bandWidth] = useBandWidth();
   const chips = chipSpecsOf(params, search);
-  const { inline, folded } = splitChips(chips);
+  const { inline, folded } = splitChips(chips, inlineLimitFor(bandWidth));
   const foldedActive = folded.filter((c) => c.selected.length > 0).length;
   const apply = (key: string, values: string[]) => {
     const next = new URLSearchParams(search);
@@ -119,6 +138,7 @@ export function ParamChips({ entry, params, personNamed = false }: Props) {
   const open = chips.find((c) => c.key === openKey) ?? null;
   return (
     <div
+      ref={bandRef}
       className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-y border-chrome-border bg-band/95 px-4 py-1.5 text-xs backdrop-blur supports-[backdrop-filter]:bg-band/85"
       data-testid="report-filter-band"
     >

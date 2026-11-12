@@ -17,7 +17,7 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 
-import { splitChips } from "../ParamChips";
+import { INLINE_CHIP_LIMIT, inlineLimitFor, splitChips } from "../ParamChips";
 import type { ParametreBeyani, RaporSunumu } from "../sunum";
 import { ReportV2Frame, type ReportFrameQuery } from "./ReportV2Frame";
 
@@ -114,5 +114,12 @@ describe("splitChips — satır içi / katlanan", () => {
     const { inline, folded } = splitChips([c("kiyas"), c("a"), c("b", ["x"]), c("d")], 2);
     expect(inline.map((x) => x.key)).toEqual(["kiyas", "b"]);
     expect(folded.map((x) => x.key)).toEqual(["a", "d"]);
+  });
+  it("dar bant (1280 ekran) tek çip tutar, daha darı hepsini katlar; ölçüsüz bant bugünkü sınırı korur", () => {
+    expect(inlineLimitFor(1200)).toBe(INLINE_CHIP_LIMIT);
+    expect(inlineLimitFor(1040)).toBe(1);
+    expect(inlineLimitFor(600)).toBe(0);
+    expect(inlineLimitFor(Number.POSITIVE_INFINITY)).toBe(INLINE_CHIP_LIMIT);
+    expect(splitChips([c("kiyas"), c("a")], 0).inline).toEqual([]);
   });
 });

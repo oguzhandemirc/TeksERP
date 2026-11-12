@@ -66,7 +66,7 @@ function FigureCard({ figure, comparisonLabel, tone, primary }: { figure: AnaSay
   return (
     <div
       className={cn(
-        "@container flex min-w-0 gap-3 rounded-xl border border-card-border bg-card p-4 shadow-card",
+        "@container flex min-w-0 items-center gap-3 rounded-xl border border-card-border bg-card p-4 shadow-card",
         primary && "ring-1 ring-primary/20 bg-gradient-to-br from-primary/[0.06] to-card",
       )}
       data-testid={primary ? "headline-card" : "side-figure"}

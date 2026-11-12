@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GrafikBlok, GrafikSerisi } from "../../sunum";
 import { BASKI_TEMASI } from "../tema";
 import { defaultKind, kindOptions, resolveKind, type ChartKind } from "./gorunum";
-import { screenOption } from "./ekranSecenek";
+import { chartHeight, screenOption } from "./ekranSecenek";
 import type { ScreenPalette } from "./palet";
 
 const seri = (ad: string, n: number, soluk = false, base = 10): GrafikSerisi => ({ ad, veri: Array.from({ length: n }, (_, i) => base + i), ...(soluk ? { soluk } : {}) });
@@ -95,5 +95,12 @@ describe("ekran seçeneği", () => {
   it("boş veri 'Grafik için veri yok' seçeneğine düşer", () => {
     const o = screenOption(blok("cizgi", "zaman", [seri("A", 0)], 0), "line", p, { labels: false });
     expect((o.title as { text: string }).text).toBe("Grafik için veri yok");
+  });
+  it("seyrek ısı haritası: az hücrede değer hep yazılır, yükseklik tabana gerilmez", () => {
+    const b = blok("yiginCubuk", "kategori", [seri("A", 2), seri("B", 2)], 2);
+    expect((series(screenOption(b, "heatmap", p, { labels: false }))[0]!.label as { show: boolean }).show).toBe(true);
+    expect(chartHeight(b, "heatmap", 320)).toBeLessThan(320);
+    const big = blok("yiginCubuk", "kategori", Array.from({ length: 6 }, (_, i) => seri(`S${i}`, 10)), 10);
+    expect((series(screenOption(big, "heatmap", p, { labels: false }))[0]!.label as { show: boolean }).show).toBe(false);
   });
 });

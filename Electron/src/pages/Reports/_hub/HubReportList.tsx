@@ -1,5 +1,6 @@
 import { ReportCard } from "@/components/insight/ReportCard";
 import { SPOTLIGHT_CLASS } from "@/components/insight/SpotlightGroup";
+import { cn } from "@/lib/utils";
 import type { SpotlightRegionProps } from "@/components/insight/useSpotlight";
 import type { CenterGroup } from "../_v2/center-model";
 import { CATEGORY_LOOK } from "./hub-meta";
@@ -19,7 +20,7 @@ export function HubReportList({ groups, isFavorite, onToggleFavorite, regionProp
       {groups.map((g) => {
         const look = CATEGORY_LOOK[g.key];
         return (
-          <section key={g.key} aria-label={g.title} {...regionProps?.(g.key)} className={SPOTLIGHT_CLASS}>
+          <section key={g.key} aria-label={g.title} {...regionProps?.(g.key)} className={cn("-m-2 p-2", SPOTLIGHT_CLASS)}>
             <h3 data-spotlight-heading className="mb-2 text-sm font-semibold outline-none">
               {g.title} <span className="font-normal text-muted-foreground">({g.entries.length})</span>
             </h3>

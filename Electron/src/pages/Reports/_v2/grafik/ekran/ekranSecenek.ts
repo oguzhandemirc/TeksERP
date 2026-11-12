@@ -28,6 +28,7 @@ export function screenOption(blok: GrafikBlok, kind: ChartKind, p: ScreenPalette
 /** Kapsayıcı yüksekliği: yatay çubuk kategori başına büyür (30+ kategoride okunur kalır). */
 export function chartHeight(blok: GrafikBlok, kind: ChartKind, base: number): number {
   if (kind === "hbar") return Math.min(1200, Math.max(base, blok.kategoriler.length * 28 + 70));
-  if (kind === "heatmap") return Math.max(base, blok.seriler.filter((s) => !s.soluk).length * 36 + 90);
+  // Isı haritası satır başına büyür; az satırda tabana gerilmez (2×2 dev blok olmasın).
+  if (kind === "heatmap") return Math.max(180, blok.seriler.filter((s) => !s.soluk).length * 44 + 100);
   return base;
 }
