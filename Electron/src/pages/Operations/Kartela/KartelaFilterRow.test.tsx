@@ -28,7 +28,7 @@ describe("Kartela — Sevkler tek satır", () => {
       </QueryClientProvider>,
     );
     const row = screen.getByTestId("filter-row");
-    expect(within(row).getByPlaceholderText("Ara ya da barkod okut...")).toBeTruthy();
+    expect(within(row).getByPlaceholderText("Ara / okut…")).toBeTruthy();
     expect(within(row).queryByRole("textbox", { name: "Ara" })).toBeNull();
     const chips = within(screen.getByTestId("filter-row-scroll")).getAllByTestId(/^filter-chip-/).map((c) => c.dataset.testid);
     expect(chips).toEqual(["filter-chip-date", "filter-chip-status", "filter-chip-subcontractorId"]);

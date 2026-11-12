@@ -60,7 +60,7 @@ export function EIrsaliyeRecordsPage() {
         primaryKeys={PRIMARY}
         search={search}
         onSearchChange={setSearch}
-        placeholder="e-İrsaliye no, sevkiyat no, müşteri ya da tam ETTN ara…"
+        placeholder="Ara…" searchHint="E-İrsaliye no, sevkiyat no, müşteri ya da tam ETTN ara"
         trailing={
           <>
             <SavedViewsMenu compact />

@@ -35,7 +35,7 @@ export function ConsumableStockPage() {
           </p>
         )}
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Input className="w-full sm:w-72" placeholder="Kalem adı ya da kodu ara" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="w-full sm:w-72" placeholder="Ara…" title="Kalem adı ya da kodu ara" aria-label="Kalem adı ya da kodu ara" value={search} onChange={(e) => setSearch(e.target.value)} />
           {data && (
             <span className="text-sm text-muted-foreground">
               {data.summary.itemCount} kalem{data.summary.negativeCount > 0 ? ` · ${data.summary.negativeCount} eksi bakiye` : ""}

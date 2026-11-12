@@ -47,7 +47,7 @@ describe("ShipmentOrderSelect — sipariş arama", () => {
     // İlk çağrı süzgeçsiz.
     expect(listOpenOrders).toHaveBeenCalledWith({ customerId: "c1", branchId: undefined, search: undefined });
 
-    await userEvent.type(screen.getByPlaceholderText(/Sipariş no/i), "SIP-002");
+    await userEvent.type(screen.getByLabelText(/Sipariş no/i), "SIP-002");
 
     // ⚠️ SUNUCU çağrısı terimi TAŞIMALI. İstemci süzmesine dönülürse bu bekleyiş
     // zaman aşımına düşer — negatif sondanın tuttuğu yer burası.
@@ -64,7 +64,7 @@ describe("ShipmentOrderSelect — sipariş arama", () => {
       <ShipmentOrderSelect customerId="c1" branchId={null} selectedIds={new Set()} onToggle={vi.fn()} />,
     );
     await screen.findByText("SIP-001");
-    await userEvent.type(screen.getByPlaceholderText(/Sipariş no/i), "yok");
+    await userEvent.type(screen.getByLabelText(/Sipariş no/i), "yok");
 
     const msg = await screen.findByText(/eşleşen açık sipariş yok/i);
     expect(msg.textContent).toContain("yok");
@@ -89,12 +89,12 @@ describe("ShipmentOrderSelect — sipariş arama", () => {
       <ShipmentOrderSelect customerId="c1" branchId={null} selectedIds={new Set()} onToggle={vi.fn()} />,
     );
     await screen.findByText("SIP-001");
-    const box = screen.getByPlaceholderText(/Sipariş no/i) as HTMLInputElement;
+    const box = screen.getByLabelText(/Sipariş no/i) as HTMLInputElement;
     await userEvent.type(box, "abc");
     expect(box.value).toBe("abc");
 
     rerender(<ShipmentOrderSelect customerId="c2" branchId={null} selectedIds={new Set()} onToggle={vi.fn()} />);
-    await waitFor(() => expect((screen.getByPlaceholderText(/Sipariş no/i) as HTMLInputElement).value).toBe(""));
+    await waitFor(() => expect((screen.getByLabelText(/Sipariş no/i) as HTMLInputElement).value).toBe(""));
     // Yeni cari süzgeçsiz sorulur — eski terim taşınmaz.
     await waitFor(() =>
       expect(listOpenOrders).toHaveBeenCalledWith({ customerId: "c2", branchId: undefined, search: undefined }),

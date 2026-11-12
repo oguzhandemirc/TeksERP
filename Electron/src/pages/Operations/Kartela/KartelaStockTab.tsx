@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { DataTable } from "@/components/data-table/DataTable";
 import { useDataTable } from "@/hooks/useDataTable";
+import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
 import { makeRollColumns } from "@/pages/Operations/Rolls/columns";
 import { rollService } from "@/pages/Operations/Rolls/service";
 import type { Roll } from "@/pages/Operations/Rolls/types";
@@ -23,7 +24,7 @@ export function KartelaStockTab({ onAddToDispatch }: { onAddToDispatch: (rolls: 
     const all = makeRollColumns([]);
     return KARTELA_STOCK_COLUMN_IDS.flatMap((id) => all.filter((c) => columnId(c) === id));
   }, []);
-  const { table, query, pagination } = useDataTable<Roll>({
+  const { table, query, pagination, search, setSearch, fetchAll } = useDataTable<Roll>({
     queryKey: "rolls:KARTELA_STOCK",
     queryKeyParts: ["rolls", "KARTELA_STOCK"],
     fetchFn: rollService.listCursor,
@@ -35,6 +36,8 @@ export function KartelaStockTab({ onAddToDispatch }: { onAddToDispatch: (rolls: 
     persistFilters: SORT_ONLY,
   });
   return (
+    <>
+    <FilterRow search={search} onSearchChange={setSearch} searchHint="Top no, kumaş ya da renkle ara" primary={[]} tools={{ table, fetchAll, exportName: "Kartelalık toplar" }} />
     <DataTable<Roll>
       table={table}
       isLoading={query.isLoading}
@@ -58,5 +61,6 @@ export function KartelaStockTab({ onAddToDispatch }: { onAddToDispatch: (rolls: 
         </PermissionGate>
       )}
     />
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { FilterDef } from "@/components/data-table/FilterBar";
-import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
+import { FilterRow, type ListTools } from "@/components/data-table/filter-row/FilterRow";
 import { ViewSelect, type ViewOption } from "@/components/data-table/filter-row/ViewSelect";
 import { persistConfigOf, splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
 import type { RowFilter } from "@/components/data-table/filter-row/row-filter";
@@ -47,7 +47,7 @@ function ReturnsStatusSelect({ autoOpen }: { autoOpen?: boolean }) {
 const STATUS_ROW_FILTER: RowFilter = { id: "cancelled", label: "Durum", keys: [CANCELLED_PARAM], render: ({ autoOpen }) => <ReturnsStatusSelect autoOpen={autoOpen} /> };
 
 /** İade Takibi — TEK SATIR: `[Ara·Okut][Durum][Tarih][Müşteri][Neden] … [Temizle][Görünümler]`. */
-export function ReturnsFilterRow({ leading, trailing }: { leading: ReactNode; trailing?: ReactNode }) {
+export function ReturnsFilterRow({ leading, trailing, tools }: { leading: ReactNode; trailing?: ReactNode; tools?: ListTools }) {
   const split = splitDefFilters(RETURN_FILTERS, ["customerId", "reasonId"]);
-  return <FilterRow leading={leading} primary={[STATUS_ROW_FILTER, ...split.primary]} more={split.more} trailing={trailing} />;
+  return <FilterRow leading={leading} primary={[STATUS_ROW_FILTER, ...split.primary]} more={split.more} trailing={trailing} tools={tools} />;
 }

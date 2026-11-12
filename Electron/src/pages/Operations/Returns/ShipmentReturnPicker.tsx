@@ -82,7 +82,7 @@ export function ShipmentReturnPicker({ open, onOpenChange, onPick, onPickShipmen
               <Input
                 className="pl-8"
                 autoFocus
-                placeholder="Sevkiyat no veya müşteri ara..."
+                placeholder="Ara…" title="Sevkiyat no veya müşteri ara" aria-label="Sevkiyat no veya müşteri ara"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />

@@ -155,7 +155,7 @@ export function MoveRollsDialog({
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Çuval kodu / müşteri ara…"
+                placeholder="Ara…" title="Çuval kodu / müşteri ara" aria-label="Çuval kodu / müşteri ara"
                 className="pl-8"
               />
             </div>

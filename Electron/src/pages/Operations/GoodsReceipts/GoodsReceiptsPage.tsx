@@ -70,7 +70,7 @@ export function GoodsReceiptsPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Fiş no veya tedarikçi irsaliye no ara..."
+          placeholder="Ara…" title="Fiş no veya tedarikçi irsaliye no ara" aria-label="Fiş no veya tedarikçi irsaliye no ara"
           className="max-w-sm"
         />
       </div>

@@ -47,7 +47,7 @@ export function StationFilterBar({
         <Input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="İstasyon / makine ara..."
+          placeholder="Ara…" title="İstasyon / makine ara" aria-label="İstasyon / makine ara"
           className="h-8 pl-8 text-sm"
         />
       </div>

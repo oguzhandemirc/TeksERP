@@ -217,7 +217,8 @@ export function ShipmentsPage() {
         filters={filters}
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sevkiyat no, firma, parti kodu / adı, çuval no ara…"
+        placeholder="Ara…"
+          searchHint="Sevkiyat no, firma, parti kodu / adı ya da çuval noyla ara"
         setShowCancelled={setShowCancelled}
         trailing={
           <>

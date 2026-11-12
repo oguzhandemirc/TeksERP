@@ -55,7 +55,7 @@ export function WarpBeamsPage() {
   const { dialog, setDialog, actions } = usePageDialog();
   const { save, deleteDraft, wind, cancel, act } = useWarpBeamMutations(() => setDialog(null));
   const mountTracking = useDevereMountTracking();
-  const { table, query, search, setSearch, pagination } = useDataTable<WarpBeam>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>({
     queryKey: WARP_BEAMS_QUERY_KEY,
     fetchFn: warpBeamService.listCursor,
     columns: warpBeamColumns,
@@ -83,7 +83,7 @@ export function WarpBeamsPage() {
         }
       />
       <RelocatedToolStrip host="/operations/warp-beams" />
-      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} placeholder="Levent no, gövde no veya çözgü kartı ara..." trailing={<SavedViewsMenu compact />} />
+      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Levent no, gövde no ya da çözgü kartıyla ara" trailing={<SavedViewsMenu compact />} tools={{ table, fetchAll, exportName: "Leventler" }} />
       <DataTable<WarpBeam>
         table={table}
         isLoading={query.isLoading}

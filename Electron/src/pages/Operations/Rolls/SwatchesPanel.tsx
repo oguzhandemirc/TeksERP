@@ -83,7 +83,7 @@ export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
           value={search}
           onChange={setSearch}
           onScan={handleScan}
-          placeholder="Ara ya da barkod okut..."
+          placeholder="Ara / okut…" hint="Ara ya da barkod okut"
           expectPrefix="SWATCH"
           busy={swatchLookupPending}
           widthClassName="w-64"

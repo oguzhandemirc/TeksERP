@@ -228,7 +228,7 @@ export function ProductBalancePage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Kumaş, renk, sipariş no, müşteri, parti ara..."
+            placeholder="Ara…" title="Kumaş, renk, sipariş no, müşteri, parti ara" aria-label="Kumaş, renk, sipariş no, müşteri, parti ara"
             className="h-8 pl-8 text-sm"
           />
         </div>

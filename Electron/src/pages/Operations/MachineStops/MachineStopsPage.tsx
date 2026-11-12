@@ -20,7 +20,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
 import { FilterBar } from "@/components/data-table/FilterBar";
 import { machineStopService } from "./service";
-import { StopsTable } from "./StopsTable";
+import { StopsTable, useStopsTable } from "./StopsTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { StopEntryDialog } from "./StopEntryDialog";
 import { StopReasonDialog } from "./StopReasonDialog";
 import { StopCloseDialog, StopRevokeDialog } from "./StopSimpleDialogs";
@@ -45,6 +46,7 @@ export function MachineStopsPage() {
   const noun = machineNoun({ dokumaEnabled });
   const actions = useStopActions(setDialog);
   const { active, labelOf } = useStopReasonPresets();
+  const table = useStopsTable({ rows, labelOf, nowMs, actions, noun });
   const { open, close, classify, reclassify, revoke, stampError, clearStampError } = useMachineStopMutations(() => setDialog(null));
   const closeDialog = () => {
     clearStampError();
@@ -78,8 +80,9 @@ export function MachineStopsPage() {
             <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={dayFree} className="h-7 w-40 text-xs" />
           </div>
         }
+        trailing={<DataTableTools table={table} compact exportName={`${noun} duruşları`} />}
       />
-      <StopsTable rows={rows} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} labelOf={labelOf} nowMs={nowMs} actions={actions} noun={noun} />
+      <StopsTable table={table} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} noun={noun} />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
       {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={closeDialog} onConfirm={(b) => open.mutateAsync(b)} stampError={stampError} noun={noun} />}
       {(dialog?.kind === "classify" || dialog?.kind === "reclassify") && (

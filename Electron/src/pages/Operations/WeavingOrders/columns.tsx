@@ -70,10 +70,9 @@ export const weavingOrderColumns: ColumnDef<WeavingOrder>[] = [
   },
   {
     accessorKey: "plannedM",
-    header: () => <span className="block text-right">Hedef</span>,
-    cell: ({ row }) => (
-      <span className="block text-right tabular-nums">{formatPlannedM(row.original.plannedM)}</span>
-    ),
+    header: "Hedef",
+    meta: { label: "Hedef", align: "right" },
+    cell: ({ row }) => formatPlannedM(row.original.plannedM),
   },
   {
     id: "dates",

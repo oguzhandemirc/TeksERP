@@ -140,7 +140,7 @@ export function SacksListView({ onEditSack }: Props) {
             value={search}
             onChange={setSearch}
             onScan={handleScan}
-            placeholder="Ara ya da barkod okut…"
+            placeholder="Ara / okut…" hint="Ara ya da barkod okut"
             expectPrefix={["ROLL", "SACK"]}
             busy={locateBusy}
             className="w-56 min-w-[10rem] shrink 2xl:w-72"

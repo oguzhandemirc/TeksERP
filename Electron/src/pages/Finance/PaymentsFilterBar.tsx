@@ -44,7 +44,7 @@ export function PaymentsFilterBar({ value, onChange }: Props) {
         <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-8"
-          placeholder="Belge no / referans ara…"
+          placeholder="Ara…" title="Belge no / referans ara" aria-label="Belge no / referans ara"
           value={value.search}
           onChange={(e) => set("search", e.target.value)}
         />
