@@ -41,7 +41,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 type P = [number, number];
 interface FxWord { t: string; rect: OcrRect; l: number; p: number | null }
-const fx = JSON.parse(readFileSync(join(__dirname, "../src/lib/gelen-belge/motor/__tests__/fikstur/gercek/0247-cikis-ceki-dik.json"), "utf8")) as {
+const fx = JSON.parse(readFileSync(join(__dirname, "../src/lib/gelen-belge/motor/__tests__/fikstur/kelime/0247-cikis-ceki-dik.json"), "utf8")) as {
   imageWidth: number; imageHeight: number; words: FxWord[]; template: DocumentTemplate;
 };
 const tpl = fx.template;

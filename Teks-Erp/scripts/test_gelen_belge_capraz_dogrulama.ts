@@ -85,7 +85,7 @@ const batchField: FieldSpec = { key: "partiNo", label: "Parti No", type: "alnum"
 
 // ── §4 motor: 0247 fikstürü (kurulum şablonu, çıkış çeki listesi) ────────────
 interface FxWord { t: string; rect: OcrRect; l: number; p: number | null }
-const fx = JSON.parse(readFileSync(join(__dirname, "../src/lib/gelen-belge/motor/__tests__/fikstur/gercek/0247-cikis-ceki-dik.json"), "utf8")) as { imageWidth: number; imageHeight: number; words: FxWord[]; template: DocumentTemplate };
+const fx = JSON.parse(readFileSync(join(__dirname, "../src/lib/gelen-belge/motor/__tests__/fikstur/kelime/0247-cikis-ceki-dik.json"), "utf8")) as { imageWidth: number; imageHeight: number; words: FxWord[]; template: DocumentTemplate };
 const quad = (r: OcrRect): Array<[number, number]> => [[r.x, r.y], [r.x + r.width, r.y], [r.x + r.width, r.y + r.height], [r.x, r.y + r.height]];
 function frame(edit: (t: string) => string): ClientOcr {
   const n = Math.max(...fx.words.map((w) => w.l)) + 1;
