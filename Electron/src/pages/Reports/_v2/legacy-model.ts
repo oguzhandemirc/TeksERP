@@ -1,6 +1,5 @@
 // Geçiş yüzeyi (R0-GECIS) — SAF. Eski (v1) rapor nereye gitti, bu kişiye gösterilebilir mi:
 // band, Merkez'in "Eski raporlar" bölümü, taşınan araç karoları ve palet AYNI yüklemleri okur.
-// Bayrak kapalıyken hiçbiri bir şey döndürmez (panel bayt-eşit kalır).
 import type { LucideIcon } from "lucide-react";
 import { CalendarClock, ClipboardList, FileSearch, Footprints, ScrollText, UserRoundSearch, Waypoints } from "lucide-react";
 import { REPORT_BY_KEY, REPORT_CATALOG, type ReportCatalogEntryV1 } from "@/lib/report-catalog";
@@ -75,9 +74,8 @@ export function isHostReachable(tool: RelocatedTool, a: LegacyAccess): boolean {
   return host !== null && hasHostAccess(tool, a) && isRouteModuleOpen(host, a.ctx);
 }
 
-/** Taşınan araç yeni yerinde çizilir mi: bayrak + rapor görünür (izin · modül · kapı) + aracın adresi açılır. */
+/** Taşınan araç yeni yerinde çizilir mi: rapor görünür (izin · modül · kapı) + aracın adresi açılır. */
 export function isRelocatedToolOpen(tool: RelocatedTool, a: LegacyAccess): boolean {
-  if (a.ctx.reportsV2Enabled !== true) return false;
   const entry = REPORT_BY_KEY.get(tool.reportKey);
   if (!entry || !isCenterEntryVisible(entry, a)) return false;
   return tool.to === "/finance/cari" ? isHostReachable(tool, a) : true;
@@ -91,9 +89,9 @@ export type LegacyBannerModel =
   | { kind: "merged"; targetTitle: string; to: string }
   | { kind: "moved"; place: string; hostLabel: string; to: string };
 
-/** Eski rapor sayfasının üst bandı — `null` ⇒ band çizilmez (bayrak kapalı · uzman · hedef açılmıyor). */
+/** Eski rapor sayfasının üst bandı — `null` ⇒ band çizilmez (uzman · hedef açılmıyor). */
 export function legacyBannerModel(reportKey: string | undefined, a: LegacyAccess): LegacyBannerModel | null {
-  if (a.ctx.reportsV2Enabled !== true || !reportKey) return null;
+  if (!reportKey) return null;
   const entry = REPORT_BY_KEY.get(reportKey);
   if (!entry || entry.nesil !== "v1") return null;
   const next = entry.yeniHali;
@@ -146,7 +144,6 @@ export function legacyGroups(
   a: LegacyAccess,
   search: { term: string; includes: (hay: string, needle: string) => boolean } = { term: "", includes: (h, n) => h.includes(n) },
 ): LegacyGroup[] {
-  if (a.ctx.reportsV2Enabled !== true) return [];
   const q = search.term.trim();
   const { includes } = search;
   return categories
@@ -154,7 +151,8 @@ export function legacyGroups(
       key: c.key,
       title: c.title,
       cards: REPORT_CATALOG
-        .filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.key.startsWith(`${c.key}/`))
+        // Yalnız henüz panelden kalkmamış eski RAPORLAR (araçlar yeni yerlerinde, uzmanlar Rapor Merkezi'nde).
+        .filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.emekli !== true && e.yeniHali.tur === "birlesti" && e.key.startsWith(`${c.key}/`))
         .filter((e) => !q || includes(`${e.baslik} ${e.soru}`, q))
         .map((e) => legacyCardOf(e, a))
         .filter((x): x is LegacyCard => x !== null),

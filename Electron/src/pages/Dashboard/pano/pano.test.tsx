@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import type { PanoBoxDef } from "./box-types";
 import type { PanoHareket, PanoKpi } from "./types";
+import { BOX_TARGETS, KPI_TARGETS, PANO_REPORT_LINKS } from "./pano-hedefler";
+import { REPORT_BY_KEY, REPORT_CATALOG, isReportSurfaced } from "@/lib/report-catalog";
 
 // =============================================================================
 // AÇILIŞ PANOSU (kutu düzeni) — davranış bekçisi: yalnız ekli kutular istenir, eklenen kutu tek başına
@@ -259,7 +261,7 @@ describe("Pano — rozet, hedefler, kapılar", () => {
   it("KPI tıklaması hedef ekrana gider; izin yoksa tıklanmaz", async () => {
     renderPano();
     fireEvent.click((await kpiUretim()).closest("button")!);
-    expect(navigateActive).toHaveBeenCalledWith("/reports/quality/scorecard");
+    expect(navigateActive).toHaveBeenCalledWith("/reports/quality/kalite");
   });
 
   it("izin yoksa KPI düz metin, hızlı işlem kutusu yok", async () => {
@@ -319,5 +321,25 @@ describe("movementTarget — yedi tür", () => {
     const { validPeriod } = await import("./usePanoDonem");
     expect(validPeriod(undefined)).toBe("hafta");
     expect(validPeriod("ay")).toBe("ay");
+  });
+});
+
+describe("Pano — rapor bağlantıları (eski rapor kaldırma D3)", () => {
+  it("⭐ kutu → rapor eşlemesindeki her anahtar yüzeyde bir yeni nesil (v2) rapordur", () => {
+    for (const [box, key] of Object.entries(PANO_REPORT_LINKS)) {
+      const entry = REPORT_BY_KEY.get(key);
+      expect(entry, box).toBeDefined();
+      expect(entry!.nesil, box).toBe("v2");
+      expect(isReportSurfaced(entry!), box).toBe(true);
+    }
+  });
+  it("⭐ hiçbir pano hedefi eski (v1) RAPOR adresine gitmez — yalnız uzman/taşınan araçlar kalır", () => {
+    const v1Reports = new Map(REPORT_CATALOG.filter((e) => e.nesil === "v1" && e.yeniHali.tur === "birlesti").map((e) => [`/${e.panelYolu}`, e.key]));
+    const hits = [...Object.entries(KPI_TARGETS), ...Object.entries(BOX_TARGETS)].filter(([, t]) => v1Reports.has(t.to.split("?")[0]!)).map(([k]) => k);
+    expect(hits).toEqual([]);
+  });
+  it("hedef adresi ve izni katalog satırından türer", () => {
+    expect(KPI_TARGETS.stok).toEqual({ to: "/reports/inventory/depo", izin: ["report:inventory"] });
+    expect(BOX_TARGETS.fire).toEqual({ to: "/reports/quality/kayip", izin: ["report:quality"] });
   });
 });

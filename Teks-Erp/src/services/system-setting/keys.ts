@@ -386,9 +386,6 @@ export const SETTING_KEYS = {
    * her kurulumda 29 rapor birden kaybolurdu ve yeni doğan rapor da kapalı doğardı.
    */
   REPORTS_CLOSED_KEYS: "reports.closedKeys",
-  /** Yeni rapor merkezi (Raporlar v2). Default FALSE = bugünkü rapor menüsü. Davranış
-   *  bayrağı (profile girmez); açıkken eski 36 rapor "Eski raporlar"da ve kendi adresinde kalır. */
-  REPORTS_V2_ENABLED: "reports.v2Enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** İş emri formunda "hedef en" kutusu gösterilsin mi. Default TRUE (bugünkü davranış). */

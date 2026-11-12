@@ -24,30 +24,16 @@
 // çağırır.
 // =============================================================================
 
-import { ArrowLeftRight, BookOpen, CalendarClock, Hourglass, Percent, Receipt } from "lucide-react";
+import { ArrowLeftRight, BookOpen, Percent, Receipt } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 export const financeReportTiles: HubTile[] = [
-  {
-    key: "aging",
-    title: "Cari Yaşlandırma",
-    description: "Açık bakiyenin yaşı — kimden ne kadar alacak var, ne kadar gecikmiş (kesit raporu)",
-    icon: Hourglass,
-    to: "/reports/finance/aging",
-  },
   {
     key: "cash-book",
     title: "Kasa & Banka Defteri",
     description: "Devir, dönem hareketleri ve yürüyen bakiye — tahsilat, kasa hareketi ve çek tahsili",
     icon: BookOpen,
     to: "/reports/finance/cash-book",
-  },
-  {
-    key: "cheque-due",
-    title: "Çek Vade Takvimi",
-    description: "Hangi hafta/ay ne kadar tahsilat girecek, ne kadar ödeme çıkacak — vadesi geçmişler ayrı blokta",
-    icon: CalendarClock,
-    to: "/reports/finance/cheque-due",
   },
   {
     key: "vat-summary",

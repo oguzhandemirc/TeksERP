@@ -140,7 +140,7 @@ export function fxTone(signedDiffTry: string | number | null | undefined): FxTon
 /**
  * Tonun ekrandaki rengi.
  *
- * ⚠️ Renk TEK BAŞINA erişilebilir değildir (`DUE_BUCKET_TONE` ile aynı kural):
+ * ⚠️ Renk TEK BAŞINA erişilebilir değildir (`Cheques/dates.dueHint` ile aynı kural):
  * yön her yerde ADIYLA da yazılır (`FX_TONE_LABEL`), ton yalnız göz taraması
  * içindir. Semantik token kullanılır — `--success`/`--destructive` koyu temada
  * kendi değerlerini taşır, yani ayrı bir `dark:` varyantı gerekmez.

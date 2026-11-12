@@ -27,6 +27,8 @@
 //   F1 `computeHorizon` açık tx'i yok sayar (base = dbNow)            → §4 ❌
 //   F2 kaynak taraması eşitlik bozucusuz (`>` yerine yalnız zaman)    → §6 ❌
 //   F3 ret edilen projeksiyonun zinciri de yazılır                    → §5 ❌
+//   F4 (2026-11-12) `CLOUD_HELD_REPORT_KEYS` yalnız `quality/kalite`e indirildi → §9f + §9g ❌ (bulut planı
+//      D1 öncesinden saptı; bekletilen rapor bulut yüklemine açıldı); md5 ile geri alındı.
 // ⭐ KALICI SONDA ✓K1 (her koşumda): sahte bulut imzasız/kurcalı isteği reddeder — §2'nin
 // "imza geçerli" ölçümü kör değil.
 // =============================================================================
@@ -46,8 +48,8 @@ import { evaluateCloudEligibility } from "../src/cloud-sync/eligibility";
 import { __setScanLimitForTests } from "../src/cloud-sync/change-scan";
 import { RECORD_PROJECTIONS } from "../src/cloud-sync/projections";
 import { FULL_RESEND_MARKER, wmKey } from "../src/cloud-sync/watermarks";
-import { claimAndRunReportRequests, standardReportPlan, REMOTE_REPORTS } from "../src/cloud-sync/report-requests";
-import { REPORT_BY_KEY, isReportSurfaced } from "../src/constants/report-catalog";
+import { claimAndRunReportRequests, standardReportPlan, REMOTE_REPORTS, CLOUD_HELD_REPORT_KEYS, computeReportResult, isReportCloudSurfaced } from "../src/cloud-sync/report-requests";
+import { REPORT_BY_KEY } from "../src/constants/report-catalog";
 import { onDoorbellTopic, dispatchDoorbellTopic, __resetDoorbellTopicsForTests } from "../src/jobs/doorbell-topics";
 import { runCloudSyncTick, getCloudSyncStatus, __configureCloudSyncForTests } from "../src/jobs/cloud-sync.job";
 import { DAY_MS, msToIso } from "../src/lib/license/protocol";
@@ -352,10 +354,38 @@ async function raporBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<void
   check("§9d ⭐ tanınmayan parametre → PARAMETRE_GECERSIZ (fabrika kendi şemasıyla doğrular)", by.get(c)?.durum === "HATA" && by.get(c)?.hataKodu === "PARAMETRE_GECERSIZ");
   const plan = standardReportPlan(new Date());
   // Yüzeye çıkmamış v2 satırı (`hazir:false`) standart görüntü üretmez (R1-BULUT).
-  const yuzeyde = REMOTE_REPORTS.filter((x) => { const e = REPORT_BY_KEY.get(x.key); return e !== undefined && isReportSurfaced(e); });
+  const yuzeyde = REMOTE_REPORTS.filter((x) => { const e = REPORT_BY_KEY.get(x.key); return e !== undefined && isReportCloudSurfaced(e); });
   const donemli = yuzeyde.filter((x) => x.standard === "DONEMLI").length;
   const kesit = yuzeyde.filter((x) => x.standard === "KESIT").length;
   check("§9e standart görüntü planı: yüzeydeki dönemli × 3 dönem + kesit × 1", plan.length === donemli * 3 + kesit, `${plan.length} = ${donemli}×3 + ${kesit}`);
+  // §9f: panelde açılan dört rapor (2026-11-12 "surface the five core … reports") bulutu DEĞİŞTİRMEZ — plan o
+  // değişiklik öncesi listeyle eşit: o günkü katalog (`hazir:false` beşli) ∩ değişmemiş REMOTE_REPORTS, elle; bulut
+  // listesini değiştiren iş bu sabiti BİLİNÇLİ günceller.
+  const D1_ONCESI_PLAN: Readonly<Record<string, number>> = {
+    "sales/order-intake": 3, "sales/shipment-scorecard": 3, "customer/scorecard": 3, "quality/scorecard": 3,
+    "subcontract/scorecard": 3, "inventory/scorecard": 1, "finance/aging": 1, "finance/cheque-due": 1,
+    "sales/siparis-talep": 3, "sales/sevkiyat": 3, "sales/termin": 3, "sales/acik-siparisler": 1, "sales/vazgecilen-is": 3,
+    "dokuma/tezgah-randimani": 3, "dokuma/duruslar": 3, "dokuma/levent-dengesi": 3, "production/makine-duruslari": 3,
+    "maliyet/karlilik": 3, "finance/alacaklar": 1,
+  };
+  const planSayim: Record<string, number> = {};
+  for (const x of plan) planSayim[x.key] = (planSayim[x.key] ?? 0) + 1;
+  const planFark = [...new Set([...Object.keys(D1_ONCESI_PLAN), ...Object.keys(planSayim)])]
+    .filter((k) => D1_ONCESI_PLAN[k] !== planSayim[k]).map((k) => `${k}: beklenen ${D1_ONCESI_PLAN[k] ?? 0} · plan ${planSayim[k] ?? 0}`);
+  check("§9f ⭐ saatlik bulut planı D1 öncesiyle EŞİT (anahtar × görüntü sayısı)", planFark.length === 0 && plan.length === 47,
+    planFark.join(" · ") || `${plan.length} görüntü, ${Object.keys(planSayim).length} rapor`);
+  const bekletilen: string[] = [];
+  for (const k of CLOUD_HELD_REPORT_KEYS) {
+    const e = REPORT_BY_KEY.get(k);
+    const sonuc = await computeReportResult({ istekId: null, key: k, params: {}, donem: null, nowMs: Date.now() });
+    // Panelde açık (uç yüklemi) ama buluttan istenirse RAPOR_KAPALI; modülsüz raporda MODUL_KAPALI kaçamağı yok.
+    const modullu = REMOTE_REPORTS.find((x) => x.key === k)?.module !== undefined;
+    const kapali = sonuc.hataKodu === "RAPOR_KAPALI" || (modullu && sonuc.hataKodu === "MODUL_KAPALI");
+    if (e?.nesil !== "v2" || !e.hazir || !kapali) bekletilen.push(`${k}: ${sonuc.durum}/${sonuc.hataKodu}`);
+    if (e && isReportCloudSurfaced(e)) bekletilen.push(`${k}: bulut yüklemi açık`);
+  }
+  check("§9g ⭐ bekletilen dört rapor panelde hazır, bulut isteği reddedilir", CLOUD_HELD_REPORT_KEYS.size === 4 && bekletilen.length === 0,
+    bekletilen.join(" · ") || [...CLOUD_HELD_REPORT_KEYS].join(","));
 }
 
 async function isBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<void> {

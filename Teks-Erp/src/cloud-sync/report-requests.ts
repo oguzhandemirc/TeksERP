@@ -8,7 +8,7 @@
 import { gzipSync } from "node:zlib";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
-import { REPORT_BY_KEY, isReportSurfaced, type ReportKey } from "../constants/report-catalog";
+import { REPORT_BY_KEY, isReportSurfaced, type ReportCatalogEntry, type ReportKey } from "../constants/report-catalog";
 import { factoryYmd, resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import {
   readDevereEnabled,
@@ -281,13 +281,24 @@ async function moduleOpen(m: ModuleKey | undefined): Promise<boolean> {
   return true;
 }
 
+/** Panelde açılmış ama patron bulutuna HENÜZ sunulmayan raporlar (2026-11-12, D1 yan etkisi kapatıldı) — bulut
+ *  listesinin değişimi ayrı iştir; küme o iş inene kadar bulutu D1 öncesiyle eşit tutar (`test_bulut_filigran` §9f). */
+export const CLOUD_HELD_REPORT_KEYS: ReadonlySet<string> = new Set<ReportKey>([
+  "quality/kalite", "quality/kayip", "inventory/depo", "subcontract/fasoncular",
+]);
+
+/** Satır patron bulutuna sunulur mu — TEK bulut yüklemi: uç yüklemi (`isReportSurfaced`) ∧ bulutta bekletilmiyor. */
+export function isReportCloudSurfaced(entry: ReportCatalogEntry): boolean {
+  return isReportSurfaced(entry) && !CLOUD_HELD_REPORT_KEYS.has(entry.key);
+}
+
 /** Rapor şu an sunulabilir mi — kapalı rapor ve kapalı modül buluta da kapalıdır (fail-closed). */
 async function availability(r: RemoteReport): Promise<"ACIK" | "RAPOR_KAPALI" | "MODUL_KAPALI"> {
   if (!(await moduleOpen(r.module))) return "MODUL_KAPALI";
   if (r.gate && !(await r.gate())) return "MODUL_KAPALI";
-  // Yüzeye çıkmamış v2 satırı (`hazir:false`) panelde de yoktur — buluta da kapalı (fail-closed).
+  // Yüzeye çıkmamış v2 satırı (`hazir:false`) ve bulutta bekletilen rapor buluta kapalı (fail-closed).
   const entry = REPORT_BY_KEY.get(r.key);
-  if (!entry || !isReportSurfaced(entry)) return "RAPOR_KAPALI";
+  if (!entry || !isReportCloudSurfaced(entry)) return "RAPOR_KAPALI";
   const vis = await readReportsClosedKeys();
   if (vis.durum === "olculemedi" || vis.kapali.includes(r.key)) return "RAPOR_KAPALI";
   return "ACIK";
@@ -426,7 +437,7 @@ export function standardReportPlan(now: Date): StandardReportPlan[] {
   const out: StandardReportPlan[] = [];
   for (const r of REMOTE_REPORTS) {
     const entry = REPORT_BY_KEY.get(r.key);
-    if (!entry || !isReportSurfaced(entry)) continue;
+    if (!entry || !isReportCloudSurfaced(entry)) continue;
     if (r.standard === "DONEMLI") {
       for (const d of REPORT_PERIODS) {
         const range = periodRange(d, now);

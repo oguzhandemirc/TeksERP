@@ -160,7 +160,7 @@ export {
   readTezgahEnabled, readDevereEnabledRaw, readDevereEnabled, readEmanetEnabledRaw, readEmanetEnabled, readKaliteGuvenceEnabledRaw,
   readKaliteGuvenceEnabled, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDevereAutoConsume,
   readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX,
-  readReportsClosedKeys, readReportsV2Enabled, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,
+  readReportsClosedKeys, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,
   readGelenBelgeEnabledRaw,
 } from "./modules";
 export type {

@@ -13,9 +13,6 @@ import {
 import type { HubTile } from "./_components/ReportHubGrid";
 import { productionReportTiles } from "./Production/tile-config";
 import { salesReportTiles } from "./Sales/tile-config";
-import { qualityReportTiles } from "./Quality/tile-config";
-import { inventoryReportTiles } from "./Inventory/tile-config";
-import { subcontractReportTiles } from "./Subcontract/tile-config";
 import { customerReportTiles } from "./Customer/tile-config";
 import { auditReportTiles } from "./Audit/tile-config";
 import { financeReportTiles } from "./Finance/tile-config";
@@ -55,9 +52,10 @@ export interface ReportTile {
 export const reportCategoryTiles: Record<string, HubTile[]> = {
   production: productionReportTiles,
   sales: salesReportTiles,
-  quality: qualityReportTiles,
-  inventory: inventoryReportTiles,
-  subcontract: subcontractReportTiles,
+  // Eski yaprakları panelden kalktı (2026-11-12); kategori ekranı menü düzeninde v2 raporlarını da kapsar.
+  quality: [],
+  inventory: [],
+  subcontract: [],
   customer: customerReportTiles,
   audit: auditReportTiles,
   finance: financeReportTiles,

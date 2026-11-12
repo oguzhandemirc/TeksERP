@@ -17,7 +17,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ reportsV2Enabled: true, flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
+  useOperationsVisibilityContext: () => ({ flagsReady: true, flagsFailed: false, isReportOpen: () => true }),
 }));
 
 import { ParamChips } from "./ParamChips";
@@ -126,6 +126,23 @@ describe("§1 çipler sunucu beyanından", () => {
     wrap(<ParamChips entry={entry} params={[]} />);
     expect(screen.queryByRole("button", { name: /Kırılım:/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Dönem kıyası:/ })).toBeNull();
+  });
+
+  it("§1f ⭐ tablo görünümü çipinde 'Tümü' yok; uygulanan görünüm gösterilir", () => {
+    const VIEW_DECL: ParametreBeyani = {
+      ad: "gorunum",
+      etiket: "Tablo",
+      tur: "secim",
+      deger: "ozet",
+      secenekler: [
+        { deger: "ozet", etiket: "Özet" },
+        { deger: "iptaller", etiket: "İptal edilen siparişler" },
+      ],
+    };
+    wrap(<ParamChips entry={entry} params={[VIEW_DECL]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Tablo:\s*Özet/ }));
+    const dlg = within(screen.getByRole("dialog"));
+    expect(dlg.getAllByRole("option").map((o) => o.textContent)).toEqual(["Özet", "İptal edilen siparişler"]);
   });
 
   it("§1e kişi adı taşıyan sunum → kırılım çipinde işaret (K-KISI)", () => {

@@ -1,35 +1,33 @@
-// KQ-D6: `reports.v2Enabled` kapalıyken "Gramaj raporu" düğmesi sessizce kaybolmaz, nedenini söyler.
+// KQ-D6: "Gramaj raporu" kısa yolu Rapor Merkezi'nin yüklemiyle çizilir (bayrak 2026-11-12 emekli).
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-let v2: boolean | undefined = false;
 let allowed = true;
-const info = vi.fn();
-vi.mock("sonner", () => ({ toast: { info: (...a: unknown[]) => info(...a) } }));
+let open = true;
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: false, hasPermission: () => allowed }) }));
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ flagsReady: true, reportsV2Enabled: v2, productionEnabled: true, modules: {}, flags: {} }),
+  useOperationsVisibilityContext: () => ({ flagsReady: true, flagsFailed: false, productionEnabled: true, isReportOpen: () => open }),
 }));
 
-import { KursunGramajReportLink, REPORTS_V2_OFF_MESSAGE } from "./KursunGramajReportLink";
+import { KursunGramajReportLink } from "./KursunGramajReportLink";
 
 const draw = () => render(<MemoryRouter><KursunGramajReportLink /></MemoryRouter>);
 
 describe("KursunGramajReportLink", () => {
-  beforeEach(() => { info.mockReset(); allowed = true; });
-  it("bayrak kapalı: düğme görünür, tıklanınca 'kapalı' mesajı, bağlantı yok", () => {
-    v2 = false;
+  beforeEach(() => { allowed = true; open = true; });
+  it("izinli ve rapor açık: rapor adresine bağlantı", () => {
     draw();
-    const btn = screen.getByRole("button", { name: /Gramaj raporu/ });
-    expect(screen.queryByRole("link")).toBeNull();
-    fireEvent.click(btn);
-    expect(info).toHaveBeenCalledWith(REPORTS_V2_OFF_MESSAGE);
-    expect(REPORTS_V2_OFF_MESSAGE).toBe("Raporlar v2 kapalı — Genel Ayarlar'dan açılır");
+    expect(screen.getByRole("link", { name: /Gramaj raporu/ }).getAttribute("href")).toBe("/reports/production/kursun-gramaj");
   });
-  it("bayrak kapalı + izin yok: hiç çizilmez", () => {
-    v2 = false; allowed = false;
+  it("izin yok: hiç çizilmez", () => {
+    allowed = false;
     draw();
-    expect(screen.queryByRole("button", { name: /Gramaj raporu/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Gramaj raporu/ })).toBeNull();
+  });
+  it("rapor kapalı: hiç çizilmez", () => {
+    open = false;
+    draw();
+    expect(screen.queryByRole("link", { name: /Gramaj raporu/ })).toBeNull();
   });
 });

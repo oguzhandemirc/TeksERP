@@ -89,7 +89,7 @@ describe("CommandPalette", () => {
     open();
     // T5: "Üretim" menü kökü + bölüm başlığı + rapor kategorisi (3) — rapor kategorisi düşerse 2 kalır.
     expect(screen.getAllByText("Üretim").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByText("Nerede Takıldı (WIP)")).toBeInTheDocument();
+    expect(screen.getByText("Eski: Parti İzleme")).toBeInTheDocument();
   });
 
   // D4-A3: dokumasız + ayar açık (rejim alanı) → giriş "Makine Duruşları" adıyla VAR; rejim kapalıyken YOK.
@@ -118,7 +118,7 @@ describe("CommandPalette", () => {
   it("izin yoksa rapor girişi hiç çizilmez", () => {
     permissions = ["roll:read"];
     open();
-    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Parti İzleme")).not.toBeInTheDocument();
   });
 
   it("alt başlık (sekme) boş palette YOK, aranınca VAR", async () => {
@@ -151,18 +151,19 @@ describe("CommandPalette", () => {
    * yazılan sayfayı açmıyorsa palet değildir.
    */
   it("tam ad eşleşmesi ilk sırada — açıklamadan eşleşen kaydın ÖNÜNDE", async () => {
-    permissions = ["report:sales", "report:customer"];
+    // "Eski: Müşteri Sipariş Profili" adı ifadeyi taşır (eski yaprak palette "Eski:" ikiziyle); "Müşteri" kategori girişi aynı ifadeyi AÇIKLAMASINDA taşır.
+    permissions = ["report:customer"];
     open();
-    type("müşteri karnesi");
+    type("müşteri sipariş profili");
 
     const items = await screen.findAllByRole("option");
     const labels = items.map((el) => el.textContent ?? "");
     // İkisi de eşleşmeli (küme değişmedi) ...
-    expect(labels.some((l) => l.includes("Müşteri Karnesi"))).toBe(true);
-    expect(labels.some((l) => l.includes("Sipariş İptal Karnesi"))).toBe(true);
+    const exact = labels.findIndex((l) => l.startsWith("Eski: Müşteri Sipariş Profili"));
+    const viaDescription = labels.findIndex((l) => l.startsWith("Müşteri") && !l.includes("Sipariş Profili"));
+    expect(exact).toBeGreaterThanOrEqual(0);
+    expect(viaDescription).toBeGreaterThanOrEqual(0);
     // ... ama SIRA: tam ad önce.
-    const exact = labels.findIndex((l) => l.includes("Müşteri Karnesi"));
-    const viaDescription = labels.findIndex((l) => l.includes("Sipariş İptal Karnesi"));
     expect(exact).toBeLessThan(viaDescription);
   });
 
@@ -188,8 +189,8 @@ describe("CommandPalette", () => {
 
   it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {
     open();
-    fireEvent.click(screen.getByText("Nerede Takıldı (WIP)"));
-    expect(openTab).toHaveBeenCalledWith("/reports/production/wip");
+    fireEvent.click(screen.getByText("Eski: Parti İzleme"));
+    expect(openTab).toHaveBeenCalledWith("/reports/production/batch-trace");
   });
 });
 
@@ -205,25 +206,25 @@ describe("CommandPalette — K19 menü düzeni", () => {
   });
 
   it("⭐ K19: menüden gizlenen ekran paletten de düşer (aramada da); diğerleri durur", async () => {
-    menu = toMenuLayoutState({ hiddenScreens: ["reports/production/wip"], advancedGroup: false, advancedScreens: [] });
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/production/batch-trace"], advancedGroup: false, advancedScreens: [] });
     open();
-    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Parti İzleme")).not.toBeInTheDocument();
     // T5: "Üretim" menü kökü + bölüm başlığı + rapor kategorisi (3) — rapor kategorisi düşerse 2 kalır.
     expect(screen.getAllByText("Üretim").length).toBeGreaterThanOrEqual(3);
     type("nerede");
-    expect(screen.queryByText("Nerede Takıldı (WIP)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Parti İzleme")).not.toBeInTheDocument();
   });
 
-  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Fason Karnesi)", () => {
-    permissions = [...permissions, "report:subcontract"];
+  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Talep Analizi)", () => {
+    permissions = [...permissions, "report:sales"];
     const a = open();
-    type("fason karnesi");
-    expect(screen.getByText("Fason Karnesi")).toBeInTheDocument();
+    type("talep analizi");
+    expect(screen.getByText("Eski: Talep Analizi")).toBeInTheDocument();
     a.unmount();
-    menu = toMenuLayoutState({ hiddenScreens: ["reports/subcontract"], advancedGroup: false, advancedScreens: [] });
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/sales"], advancedGroup: false, advancedScreens: [] });
     open();
-    type("fason karnesi");
-    expect(screen.queryByText("Fason Karnesi")).not.toBeInTheDocument();
+    type("talep analizi");
+    expect(screen.queryByText("Eski: Talep Analizi")).not.toBeInTheDocument();
   });
 });
 
@@ -231,7 +232,7 @@ describe("CommandPalette satır düzeni", () => {
   it("statik giriş etiketi kesilmez (shrink-0), açıklama kalan yeri alır (min-w-0)", () => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
     open();
-    const label = screen.getByText("Nerede Takıldı (WIP)");
+    const label = screen.getByText("Eski: Parti İzleme");
     expect(label.className).toContain("shrink-0");
     const desc = label.nextElementSibling as HTMLElement | null;
     if (desc) expect(desc.className).toContain("min-w-0");

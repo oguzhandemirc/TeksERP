@@ -25,7 +25,7 @@ const ctx = (): OperationsVisibilityContext => ({
   tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: true, gelenBelgeEnabled: false, emanetEnabled: false,
   financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true,
   reportsClosedKeys: closed, isReportOpen: (key: string) => isReportOpenWith(closed, key),
-  reportsV2Enabled: true, flagsReady: true, flagsFailed: false,
+  flagsReady: true, flagsFailed: false,
 });
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({ useOperationsVisibilityContext: () => ctx() }));
 vi.mock("@/hooks/useRoleAccess", () => ({
@@ -187,6 +187,28 @@ describe("analiz kutuları ve kişisel kutular", () => {
     expect(within(recent).getByRole("link", { name: new RegExp(a!.baslik.replace(/[?()]/g, ".")) })).toHaveAttribute("href", `/${a!.panelYolu}`);
     expect(within(recent).getAllByRole("listitem")).toHaveLength(1);
     expect(within(screen.getByRole("list", { name: "Sık açtıklarım" })).getByText(/3 kez açtınız/)).toBeInTheDocument();
+  });
+
+  it("⭐ tercihte kalan EMEKLİ ya da artık olmayan rapor anahtarı son açılan/favoride sessizce düşer", () => {
+    const [a] = inCategory("dokuma");
+    const retired = REPORT_CATALOG.find((e) => e.nesil === "v1" && e.emekli === true)!;
+    const gone = "dokuma/olmayan-eski-rapor";
+    prefs = {
+      raporlar: {
+        favoriler: [retired.key, gone, a!.key],
+        opened: [
+          { key: retired.key, count: 7, lastAt: "2026-11-11T10:00:00.000Z" },
+          { key: gone, count: 5, lastAt: "2026-11-11T09:30:00.000Z" },
+          { key: a!.key, count: 2, lastAt: "2026-11-11T08:00:00.000Z" },
+        ],
+      },
+    };
+    render();
+    expect(within(screen.getByRole("list", { name: "Son açtıklarım" })).getAllByRole("listitem")).toHaveLength(1);
+    const favs = within(screen.getByRole("region", { name: "Favorilerim" }));
+    expect(favs.getAllByRole("listitem")).toHaveLength(1);
+    expect(favs.queryByText(retired.baslik)).not.toBeInTheDocument();
+    expect(setPreference).not.toHaveBeenCalled();
   });
 
   it("yıldız favoriyi değiştirir (tercihe yazar)", () => {

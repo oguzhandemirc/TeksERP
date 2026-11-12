@@ -108,6 +108,8 @@ export interface EfficiencyRow {
   shiftInstanceId: string; factoryDayKey: Date; shift: { code: string; name: string };
   live: boolean; sealState: "OPEN" | "SEALED"; source: MachineDataSource; emptyLoom: boolean;
   potSec: number; aptSec: number; unitsActual: number; producedM: number | null;
+  /** Vardiya Karnesi'nin `durusSec`iyle aynı toplam (`downSec`). */
+  durusSec: number;
   targetUnitCapacityApt: number; targetUnitCapacityPot: number; targetUnitsPerMin: number | null;
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null;
   olculemedi: { A?: string; P?: string; E?: string };
@@ -134,7 +136,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
   const efficiencyRows: EfficiencyRow[] = page.map((r) => ({
     machineId: r.machineId, machine: r.machine, shiftInstanceId: r.shiftInstanceId, factoryDayKey: r.shiftInstance.factoryDayKey,
     shift: r.shiftInstance.shiftDefinition, live: r.live, sealState: r.sealState, source: r.terms.source, emptyLoom: r.emptyLoom,
-    potSec: r.terms.potSec, aptSec: r.terms.aptSec, unitsActual: r.terms.unitsActual, producedM: r.terms.producedM,
+    potSec: r.terms.potSec, aptSec: r.terms.aptSec, unitsActual: r.terms.unitsActual, producedM: r.terms.producedM, durusSec: downSec(r.terms),
     targetUnitCapacityApt: r.terms.targetUnitCapacityApt, targetUnitCapacityPot: r.terms.targetUnitCapacityPot, targetUnitsPerMin: r.terms.targetUnitsPerMin,
     availabilityPct: r.kpis.availabilityPct, performancePct: r.kpis.performancePct, effectivenessPct: r.kpis.effectivenessPct,
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],

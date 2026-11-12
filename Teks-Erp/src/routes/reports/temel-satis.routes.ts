@@ -13,9 +13,9 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import type { ReportKey } from "../../constants/report-catalog";
 import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
-import { coreRangeQuerySchema, resolveCoreCompare } from "../../services/reports/temel/_common";
+import { coreRangeQuerySchema, resolveCoreCompare, viewQueryKey } from "../../services/reports/temel/_common";
 import { kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
-import { buildLostWorkReport } from "../../services/reports/temel/vazgecilen-is.temel";
+import { buildLostWorkReport, LOST_WORK_VIEWS } from "../../services/reports/temel/vazgecilen-is.temel";
 import { runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
 import {
   DEADLINE_DIMS, OPEN_ORDER_DIMS, ORDER_DEMAND_DIMS, SHIPPED_DIMS,
@@ -34,7 +34,7 @@ export const coreOrderDemandQuerySchema = coreRangeQuerySchema.extend({ ...muste
 export const coreShippedQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination, ...variantQueryKeys(SHIPPED_DIMS) }).strict();
 export const coreDeadlineQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination, ...variantQueryKeys(DEADLINE_DIMS) }).strict();
 export const coreOpenOrderQuerySchema = z.object({ itemId: kalemEkseni.itemId, ...variantQueryKeys(OPEN_ORDER_DIMS) }).strict();
-export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQueryKeys([]) }).strict();
+export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQueryKeys([]), ...viewQueryKey(LOST_WORK_VIEWS) }).strict();
 
 /**
  * @openapi
@@ -184,12 +184,13 @@ router.get("/sales/acik-siparisler", ...reportGate("sales/acik-siparisler"), asy
  *     description: |
  *       İade (İade Karnesi) ve sipariş iptali (Sipariş İptal Karnesi; çıpa iptal anı) İKİ ayrı
  *       satır; ana sayı ikisinin metre toplamı. İptal oranı tek tanımdan (`cancelRatePct`).
- *       Süzgeç yok: iki kaynağın yön anlamı farklı.
+ *       Süzgeç yok: iki kaynağın yön anlamı farklı. `gorunum` tabloyu eski İptal/İade Karnesi listesine çevirir.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, iptaller, iptalSebep, iptalMusteri, iadeMusteri, iadeKumas, iadeRenk, iadeSebep] }, description: "Tablo görünümü (varsayılan ozet)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
@@ -201,7 +202,7 @@ router.get("/sales/vazgecilen-is", ...reportGate("sales/vazgecilen-is"), async (
     const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
     const { sunum } = await runCoreWithExtras({
       range, compareRange, dims: [], donemler: input.donemler,
-      run: (r, c) => buildLostWorkReport({ range: r, compareRange: c, compareMode }),
+      run: (r, c) => buildLostWorkReport({ range: r, compareRange: c, compareMode, view: input.gorunum }),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {

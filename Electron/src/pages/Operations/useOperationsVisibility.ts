@@ -72,8 +72,6 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
   const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
   const isReportOpen = useCallback((key: string) => isReportOpenWith(reportsClosedKeys, key), [reportsClosedKeys]);
-  // Raporlar v2 bayrağı: belirsizken FALSE — fabrikada hub bir an Merkez'e dönüp geri gelmesin.
-  const reportsV2Enabled = flagsQuery.data?.data?.reportsV2Enabled ?? false;
   // Tek kurulum noktası: karo · palet · route aynı "sonuçlandı mı"yı okur.
   const flagsReady = flagsQuery.isSuccess || flagsQuery.isError;
   const flagsFailed = flagsQuery.isError;
@@ -101,7 +99,6 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     emanetEnabled: flagsQuery.data?.data?.emanetEnabled ?? false,
     reportsClosedKeys,
     isReportOpen,
-    reportsV2Enabled,
     flagsReady,
     flagsFailed,
   };

@@ -6,8 +6,9 @@
 // Her sözleşme için üç şey ölçülür: (a) hangi girdi çizildi (kaç tarih kutusu), (b) hook
 // hangi parametre ADLARINI üretti (K7 tablosu), (c) URL durumu — anahtarlar sözleşmeye göre.
 //
-// Negatif sondalar (bir kezlik, geri alındı — sha commit mesajında): `REPORT_DATE_PARAM_KEYS.kesit`
-// → ["asOfDate"] → §d ❌ (11/1); `useForwardWindow` boş URL'de `{dateFrom, dateTo}` uydurdu → §e ❌ (11/1).
+// Negatif sonda (bir kezlik, geri alındı — sha commit mesajında): `useForwardWindow` boş URL'de
+// `{dateFrom, dateTo}` uydurdu → §e ❌ (11/1). Tek-gün parametre kancaları (`useFactoryDay`/`useAsOfDay`)
+// kullanan yaprak kalmadığı için 2026-11-12'de silindi; §c/§d yalnız girdiyi ölçer.
 // =============================================================================
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -15,7 +16,7 @@ import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { REPORT_CATALOG, type ReportKey, type ReportTarih } from "@/lib/report-catalog";
 import { useForwardWindow } from "../_hooks/useForwardWindow";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
-import { useAsOfDay, useFactoryDay } from "../_hooks/useReportDay";
+import { useReportDayState } from "../_hooks/useReportDay";
 import { REPORT_DATE_PARAM_KEYS, REPORT_DATE_URL_KEYS, rangeDayParams } from "../_lib/report-date";
 import { ReportDateFilter } from "./ReportDateFilter";
 import { formatFactory } from "@/lib/factory-time";
@@ -53,11 +54,8 @@ function DayRangeProbe({ reportKey }: { reportKey: ReportKey }) {
   const { params } = useReportDateRange(reportKey);
   return <Probe params={rangeDayParams(params.dateFrom, params.dateTo)} />;
 }
-function FactoryDayProbe({ reportKey }: { reportKey: ReportKey }) {
-  return <Probe params={useFactoryDay(reportKey).params} />;
-}
-function AsOfProbe({ reportKey }: { reportKey: ReportKey }) {
-  return <Probe params={useAsOfDay(reportKey).params} />;
+function FactoryDayStateProbe({ reportKey }: { reportKey: ReportKey }) {
+  return <Probe params={{ ymd: useReportDayState(reportKey, "tek-gun").ymd }} />;
 }
 function ForwardProbe({ reportKey }: { reportKey: ReportKey }) {
   return <Probe params={useForwardWindow(reportKey).params} />;
@@ -123,46 +121,33 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
     expect([...readUrl().keys()].sort()).toEqual([...REPORT_DATE_URL_KEYS["aralik-gun"]].sort());
   });
 
-  it("§c tek-gun: TEK kutu + Bugün; URL'de yoksa bugün ve bugün URL'e YAZILMAZ; parametre factoryDay", () => {
+  it("§c tek-gun: TEK kutu + Bugün; URL'de yoksa bugün ve bugün URL'e YAZILMAZ", () => {
     const key = sampleKey("tek-gun");
     const { container } = mount(
       <>
         <ReportDateFilter reportKey={key} />
-        <FactoryDayProbe reportKey={key} />
+        <FactoryDayStateProbe reportKey={key} />
       </>,
     );
     expect(container.querySelectorAll(DATE_INPUT)).toHaveLength(1);
     expect(screen.getByText("Fabrika günü")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bugün" })).toBeDisabled();
-    expect(Object.keys(readParams())).toEqual([...REPORT_DATE_PARAM_KEYS["tek-gun"]]);
     expect(readUrl().toString()).toBe("");
   });
 
-  it("§c2 tek-gun: URL'deki gün okunur ve aynen gider (yenilemede kaybolmaz)", () => {
+  it("§c2 tek-gun: URL'deki gün okunur (yenilemede kaybolmaz)", () => {
     const key = sampleKey("tek-gun");
-    mount(<FactoryDayProbe reportKey={key} />, "/reports/x/y?factoryDay=2026-01-15");
-    expect(readParams()).toEqual({ factoryDay: "2026-01-15" });
+    mount(<FactoryDayStateProbe reportKey={key} />, "/reports/x/y?factoryDay=2026-01-15");
+    expect(readParams()).toEqual({ ymd: "2026-01-15" });
   });
 
-  it("§d kesit: TEK kutu (max=bugün) + Kesit etiketi; asOf = seçilen günün SONU (ISO)", () => {
+  it("§d kesit: TEK kutu (max=bugün) + Kesit etiketi", () => {
     const key = sampleKey("kesit");
-    const { container } = mount(
-      <>
-        <ReportDateFilter reportKey={key} />
-        <AsOfProbe reportKey={key} />
-      </>,
-      "/reports/x/y?asOf=2026-03-10",
-    );
+    const { container } = mount(<ReportDateFilter reportKey={key} />, "/reports/x/y?asOf=2026-03-10");
     const inputs = container.querySelectorAll<HTMLInputElement>(DATE_INPUT);
     expect(inputs).toHaveLength(1);
     expect(inputs[0]!.dataset.max).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(screen.getByText("Kesit")).toBeInTheDocument();
-    const p = readParams();
-    expect(Object.keys(p)).toEqual([...REPORT_DATE_PARAM_KEYS.kesit]);
-    const asOf = new Date(String(p.asOf));
-    expect(Number(formatFactory(asOf, "H"))).toBe(23);
-    expect(Number(formatFactory(asOf, "mm"))).toBe(59);
-    expect(Number(formatFactory(asOf, "d"))).toBe(10);
   });
 
   it("§e ileri-pencere: iki kutu + İLERİ ön ayarlar (çıpa yokken pasif); boş URL → BOŞ parametre (backend varsayılanı)", () => {
@@ -216,7 +201,7 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
     console.error = () => {};
     try {
       expect(() => mount(<RangeProbe reportKey={sampleKey("kesit")} />)).toThrow(/aralık hook'u kullanılamaz/);
-      expect(() => mount(<FactoryDayProbe reportKey={sampleKey("kesit")} />)).toThrow(/bekleniyordu/);
+      expect(() => mount(<FactoryDayStateProbe reportKey={sampleKey("kesit")} />)).toThrow(/bekleniyordu/);
       expect(() => mount(<ForwardProbe reportKey={sampleKey("aralik-iso")} />)).toThrow(/ileri-pencere hook'u kullanılamaz/);
       expect(() => mount(<RangeProbe reportKey="finance/statement" />)).toThrow(/varsayılan gün yok/);
     } finally {

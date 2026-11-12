@@ -7,14 +7,57 @@
 // Tablo kapasite satırlarının kendisidir (tezgah × hafta) — temel katman toplama yapmaz.
 
 import { anlatiUret } from "../anlati/anlati";
-import { efficiencyReport } from "../dokuma.report.service";
+import { efficiencyReport, type EfficiencyRow } from "../dokuma.report.service";
+import { SHIFT_STAT_PAGE_MAX } from "../../machine-shift-stat.service";
 import { capacityUsageReport, type CapacityRow } from "../kapasite-kullanimi.report.service";
 import type { GrafikBlok, RaporTanimi, TabloBlok } from "../sunum/sunum.types";
-import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, type CoreReportResult } from "./_common";
+import { factoryDateTr, factoryDayStartOfKey } from "../../../constants/time";
+import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
+import { secondsToMinutes } from "./duruslar.temel";
+
+/** Tablo görünümleri — eski Randıman / Vardiya Karnesi satırları (tezgah × vardiya × gün, aynı `efficiencyReport`). */
+export const LOOM_EFFICIENCY_VIEWS = ["ozet", "kapasite", "vardiyalar"] as const;
+export type LoomEfficiencyView = (typeof LOOM_EFFICIENCY_VIEWS)[number];
+const LOOM_EFFICIENCY_VIEW_LABEL: Readonly<Record<LoomEfficiencyView, string>> = { ozet: "Tezgah × hafta", kapasite: "Kapasite ayrıntısı", vardiyalar: "Vardiya satırları" };
+const SOURCE_LABEL: Readonly<Record<EfficiencyRow["source"], string>> = {
+  MACHINE: "Makine", INFERRED: "Hesaplanan", OPERATOR: "Operatör", SUPERVISOR: "Şef", SIMULATED: "Benzetim",
+};
+/** Fabrika günü anahtarı (UTC gece yarısı) → "gg.aa.yyyy" (tek kaynak `constants/time`). */
+const dayKeyTr = (d: Date): string => factoryDateTr(factoryDayStartOfKey(d.toISOString().slice(0, 10)));
+
+/** Vardiya satırları: her hücre `EfficiencyRow`un aynı alanı (K · P · E ayrı kolon). */
+export function shiftRowsTable(rows: readonly EfficiencyRow[]): TabloBlok {
+  return {
+    kolonlar: [
+      { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
+      { anahtar: "gun", baslik: "Gün", hiza: "sol" },
+      { anahtar: "vardiya", baslik: "Vardiya", hiza: "sol" },
+      { anahtar: "planli", baslik: "Planlı", birim: "dakika", hiza: "sag" },
+      { anahtar: "calisti", baslik: "Çalıştı", birim: "dakika", hiza: "sag" },
+      { anahtar: "durus", baslik: "Duruş", birim: "dakika", hiza: "sag" },
+      { anahtar: "kullanilabilirlik", baslik: "Çalışma payı", birim: "yuzde", hiza: "sag" },
+      { anahtar: "performans", baslik: "Hız payı", birim: "yuzde", hiza: "sag" },
+      { anahtar: "randiman", baslik: "Randıman", birim: "yuzde", hiza: "sag" },
+      { anahtar: "atki", baslik: "Atkı", birim: "adet", hiza: "sag" },
+      { anahtar: "metre", baslik: "Kumaş", birim: "m", hiza: "sag" },
+      { anahtar: "kaynak", baslik: "Kaynak", hiza: "sol" },
+      { anahtar: "durum", baslik: "Durum", hiza: "sol" },
+    ],
+    satirlar: rows.map((r) => ({
+      tezgah: r.machine.code, gun: dayKeyTr(r.factoryDayKey), vardiya: r.shift.name,
+      planli: secondsToMinutes(r.potSec), calisti: secondsToMinutes(r.aptSec), durus: secondsToMinutes(r.durusSec),
+      kullanilabilirlik: r.availabilityPct, performans: r.performancePct, randiman: r.effectivenessPct,
+      atki: r.unitsActual, metre: r.producedM, kaynak: r.emptyLoom ? "Boş tezgah" : SOURCE_LABEL[r.source],
+      durum: r.live ? "Sürüyor" : r.sealState === "SEALED" ? "Mühürlü" : "Açık",
+    })),
+  };
+}
 
 export interface LoomEfficiencyInput {
   window: ResolvedDayRange;
+  /** Tablo görünümü; yoksa `ozet`. */
+  view?: LoomEfficiencyView;
 }
 
 /** Randıman kaynağı: yalnız toplam gerekir (sayfa 1 satır — toplam TAM kümeden hesaplanır). */
@@ -51,6 +94,28 @@ function capacityTable(rows: CapacityRow[]): TabloBlok {
       dokuyabilecegi: r.potansiyelM,
       kullanim: r.kullanimPct,
       not: r.hesaplanamadi ? `Hesaplanamadı: ${r.hesaplanamadi}` : null,
+    })),
+  };
+}
+
+/** Kapasite ayrıntısı: eski Kapasite Kullanımı satırı kolon kolon (`CapacityRow`un aynı alanları). */
+export function capacityDetailTable(rows: readonly CapacityRow[]): TabloBlok {
+  return {
+    kolonlar: [
+      { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
+      { anahtar: "hafta", baslik: "Hafta", hiza: "sol" },
+      { anahtar: "nominal", baslik: "Nominal atkı/dk", hiza: "sag" },
+      { anahtar: "atkiCm", baslik: "Atkı/cm", hiza: "sag" },
+      { anahtar: "teorik", baslik: "Teorik m/sa", hiza: "sag" },
+      { anahtar: "takvim", baslik: "Takvim saati", birim: "saat", hiza: "sag" },
+      { anahtar: "potansiyel", baslik: "Potansiyel", birim: "m", hiza: "sag" },
+      { anahtar: "gercek", baslik: "Gerçek", birim: "m", hiza: "sag" },
+      { anahtar: "kullanim", baslik: "Kullanım", birim: "yuzde", hiza: "sag" },
+      { anahtar: "hesaplanamadi", baslik: "Hesaplanamadı", hiza: "sol" },
+    ],
+    satirlar: rows.map((r) => ({
+      tezgah: r.code, hafta: r.hafta, nominal: r.nominalUnitsPerMin, atkiCm: r.unitsPerCm, teorik: r.teorikMSaat, takvim: r.takvimSaat,
+      potansiyel: r.potansiyelM, gercek: r.gercekM, kullanim: r.kullanimPct, hesaplanamadi: r.hesaplanamadi,
     })),
   };
 }
@@ -92,8 +157,12 @@ export async function buildLoomEfficiencyReport(input: LoomEfficiencyInput): Pro
       }
     : null;
 
-  const table = capacityTable(rows);
-  const capped = capTable(table, "Tezgah × hafta");
+  const view = input.view ?? "ozet";
+  // Vardiya satırları yalnız istendiğinde çekilir (ana görünüm 1 satırlık toplam okur).
+  const table = view === "vardiyalar"
+    ? shiftRowsTable((await efficiencyReport({ from: days.from, to: days.to, limit: SHIFT_STAT_PAGE_MAX })).satirlar)
+    : view === "kapasite" ? capacityDetailTable(rows) : capacityTable(rows);
+  const capped = capTable(table, LOOM_EFFICIENCY_VIEW_LABEL[view]);
 
   const anlati = anlatiUret({
     donem: range,
@@ -123,7 +192,7 @@ export async function buildLoomEfficiencyReport(input: LoomEfficiencyInput): Pro
       grafik: chart,
       tablo: capped.tablo,
       tanimlar,
-      parametreler: dayRangeParameters(days, mode),
+      parametreler: [...dayRangeParameters(days, mode), viewParameter(LOOM_EFFICIENCY_VIEW_LABEL, view)],
       uyarilar: capped.uyarilar,
     },
   };

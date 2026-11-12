@@ -237,8 +237,8 @@ export interface FeatureFlags {
    * değil" ile aynı şey DEĞİL; panel bunu fail-closed okur (R2/K5) ve rapor çizmez.
    */
   reportsClosedKeys: string[] | null;
-  /** Yeni rapor merkezi (Raporlar v2) açık mı (default false). Client (panel) okur. */
-  reportsV2Enabled: boolean;
+  /** EMEKLİ bayrak — hep `true` (eski panel uyumluluğu); yazılamaz, yeni panel okumaz. */
+  reportsV2Enabled: true;
   targetQuantityEnabled: boolean;
   /** İş emri formunda hedef en kutusu (default true = bugünkü davranış). */
   targetWidthEnabled: boolean;

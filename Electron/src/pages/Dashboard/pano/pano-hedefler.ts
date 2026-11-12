@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { IconTileTone } from "@/components/ui/icon-tile";
 import type { RouteTarget } from "@/hooks/useRouteAccess";
+import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { TERIM } from "@/lib/terim";
 import type { PanoHareket } from "./types";
 
@@ -21,13 +22,36 @@ export type PanoTarget = RouteTarget;
 
 const FASON_KOKPITI: PanoTarget = { to: "/operations/fason-kokpiti", izin: ["subcontractor:read", "workorder:read"] };
 
+/**
+ * Kutu → rapor eşlemesi TEK tablo: adres ve izin katalog satırından türer (elle yazılan yol eski rapora kayıyordu).
+ * Yalnız Rapor Merkezi'nin yeni nesil raporları; eski (v1) rapor adresi buraya yazılmaz (`pano.test` ölçer).
+ */
+export const PANO_REPORT_LINKS = {
+  uretim: "quality/kalite",
+  stok: "inventory/depo",
+  ciro: "sales/sevkiyat",
+  alacak: "finance/alacaklar",
+  musteriSiparis: "sales/siparis-talep",
+  musteriSevk: "sales/sevkiyat",
+  istasyonUretim: "production/uretim-akisi",
+  kalite: "quality/kalite",
+  fire: "quality/kayip",
+  stokHareket: "inventory/depo",
+} as const;
+
+function reportTarget(box: keyof typeof PANO_REPORT_LINKS): PanoTarget {
+  const entry = REPORT_BY_KEY.get(PANO_REPORT_LINKS[box]);
+  // Katalog dışı anahtar derlemede yakalanmaz; boş izin listesi kutuyu tıklanmaz bırakır (fail-closed).
+  return entry ? { to: `/${entry.panelYolu}`, izin: [entry.izin] } : { to: "/forbidden", izin: ["__katalog-disi__"] };
+}
+
 export const KPI_TARGETS = {
-  uretim: { to: "/reports/quality/scorecard", izin: ["report:quality"] },
+  uretim: reportTarget("uretim"),
   sevk: { to: "/operations/shipments", izin: ["shipping:read"] },
   siparis: { to: "/operations/orders", izin: ["order:read"] },
   fason: FASON_KOKPITI,
-  stok: { to: "/reports/inventory/scorecard", izin: ["report:inventory"] },
-  ciro: { to: "/reports/sales/destination-mix", izin: ["report:sales"] },
+  stok: reportTarget("stok"),
+  ciro: reportTarget("ciro"),
   tahsilat: { to: "/finance/payments", izin: ["finance:read"] },
 } as const satisfies Record<string, PanoTarget>;
 
@@ -38,15 +62,15 @@ export const BOX_TARGETS = {
   onayBekleyenBelge: { to: "/operations/gelen-belgeler", izin: ["gelen-belge:read"] },
   sevkeHazir: { to: "/operations/sevke-hazir-isler", izin: ["shipping:read"] },
   uretimeGonderilmemis: { to: "/operations/orders?filter[woState]=NONE", izin: ["order:read"] },
-  alacak: { to: "/reports/finance/aging", izin: ["report:finance"] },
+  alacak: reportTarget("alacak"),
   urun: { to: "/definitions/items", izin: ["item:read"] },
-  musteriSiparis: { to: "/reports/sales/order-intake", izin: ["report:sales"] },
-  musteriSevk: { to: "/reports/sales/shipment-scorecard", izin: ["report:sales"] },
-  istasyonUretim: { to: "/reports/production/wip", izin: ["report:production"] },
+  musteriSiparis: reportTarget("musteriSiparis"),
+  musteriSevk: reportTarget("musteriSevk"),
+  istasyonUretim: reportTarget("istasyonUretim"),
   isEmri: { to: "/operations/work-orders", izin: ["workorder:read"] },
-  kalite: { to: "/reports/quality/scorecard", izin: ["report:quality"] },
-  fire: { to: "/reports/quality/scrap-scorecard", izin: ["report:quality"] },
-  stokHareket: { to: "/reports/inventory/scorecard", izin: ["report:inventory"] },
+  kalite: reportTarget("kalite"),
+  fire: reportTarget("fire"),
+  stokHareket: reportTarget("stokHareket"),
   nakit: { to: "/reports/finance/cash-book", izin: ["report:finance"] },
   alis: { to: "/operations/purchase-orders", izin: ["purchase-order:read", "purchase-order:write"] },
   dokuma: { to: "/operations/weaving-orders", izin: ["weavingorder:read"] },

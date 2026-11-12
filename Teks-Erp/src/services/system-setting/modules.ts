@@ -341,18 +341,6 @@ export async function readReportsClosedKeys(
   return { durum: "okundu", kapali: ham };
 }
 
-/** Yeni rapor merkezi (Raporlar v2) açık mı? Default false (bugün: eski rapor menüsü). */
-export async function readReportsV2Enabled(
-  tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<boolean> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.REPORTS_V2_ENABLED },
-    select: { value: true },
-  });
-  return asBoolean(setting?.value);
-}
-
 export async function readDokumaEnabledRaw(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
