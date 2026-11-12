@@ -240,7 +240,7 @@ describe("§5 ana sayı — ölçülemedi 0 basmaz", () => {
     expect(screen.getByTestId("headline-value")).toHaveTextContent("%78");
     const c = screen.getByTestId("headline-compare");
     expect(c).toHaveTextContent("▼ 6 puan (Eylül 2026: %84)");
-    expect(c.className).toContain("text-red-600");
+    expect(c.className).toContain("text-destructive");
   });
 });
 

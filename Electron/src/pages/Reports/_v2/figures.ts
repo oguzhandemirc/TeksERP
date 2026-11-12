@@ -41,7 +41,7 @@ export function comparisonText(figure: AnaSayi, periodLabel?: string): string | 
 
 /** Kıyas okunun rengi `durum`dan (sunucu `IyiYon` × yön ile hesapladı); istemci yeniden yorumlamaz. */
 export function toneClass(tone: ComparisonTone | undefined): string {
-  if (tone === "iyi") return "text-emerald-600 dark:text-emerald-400";
-  if (tone === "kotu") return "text-red-600 dark:text-red-400";
+  if (tone === "iyi") return "text-success";
+  if (tone === "kotu") return "text-destructive";
   return "text-muted-foreground";
 }

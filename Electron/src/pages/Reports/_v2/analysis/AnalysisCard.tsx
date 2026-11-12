@@ -45,7 +45,7 @@ function ConfounderDialog({ open, title, body, onClose }: { open: boolean; title
         {preview.isLoading ? <p className="text-sm text-muted-foreground">Hazırlanıyor…</p> : null}
         {preview.isError ? <p className="text-sm text-destructive">Hazırlanamadı; biraz sonra yeniden deneyin.</p> : null}
         {v ? <SmallMultiples block={v} /> : null}
-        {t ? <ReportTable table={t} /> : null}
+        {t ? <ReportTable table={t} embedded /> : null}
       </DialogContent>
     </Dialog>
   );
@@ -75,7 +75,7 @@ export function AnalysisCard({ analysis, title, block, body, cubes }: Props) {
           <div className="min-w-0">
             {chart?.tur === "sacilim" ? <Scatter chart={chart} stats={istatistik} /> : chart ? <RaporGrafik blok={chart} yukseklik={240} baslik={sunum.soru} /> : null}
           </div>
-          <div className="min-w-0 overflow-x-auto">{sunum.tablo ? <ReportTable table={sunum.tablo} /> : null}</div>
+          <div className="min-w-0 overflow-x-auto">{sunum.tablo ? <ReportTable table={sunum.tablo} embedded /> : null}</div>
         </div>
       ) : null}
       {verdict.kind === "warning" ? (
