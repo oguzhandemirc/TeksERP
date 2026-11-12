@@ -19,7 +19,7 @@ export interface PanoParaKpi { paraBirimi: string; deger: number; onceki: number
 const cents = (v: number): number => Math.round(v * 100) / 100;
 
 /** Para birimi başına kıyas: iki dönemin birleşik para birimi kümesi, alfabetik. */
-function moneyKpis(cur: Map<string, number>, prev: Map<string, number>): PanoParaKpi[] {
+export function moneyKpis(cur: Map<string, number>, prev: Map<string, number>): PanoParaKpi[] {
   return [...new Set([...cur.keys(), ...prev.keys()])].sort().map((c) => {
     const d = cur.get(c) ?? 0;
     const p = prev.get(c) ?? 0;
