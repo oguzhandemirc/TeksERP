@@ -20,14 +20,30 @@ const ROWS: CariRowItem[] = [
   },
 ];
 
-function Harness({ compact = false, selectedKey = null, onSelect = () => {}, onEdit = () => {} }: {
-  compact?: boolean; selectedKey?: string | null; onSelect?: (r: CariRowItem) => void; onEdit?: (r: CariRowItem) => void;
+function Harness({ rows = ROWS, compact = false, selectedKey = null, onSelect = () => {}, onEdit = () => {} }: {
+  rows?: CariRowItem[]; compact?: boolean; selectedKey?: string | null; onSelect?: (r: CariRowItem) => void; onEdit?: (r: CariRowItem) => void;
 }) {
-  const table = useCariTable(ROWS, compact, { onEdit, onOpenFull: () => {} });
+  const table = useCariTable(rows, compact, { onEdit, onOpenFull: () => {} });
   return <CariListTable table={table} selectedKey={selectedKey} onSelect={onSelect} />;
 }
 
 describe("Cariler — ortak DataTable", () => {
+  it("bakiye sütunu yalnız yanıtta `balances` varsa; para birimi başına satır, toplanmaz", () => {
+    const { unmount } = renderWithProviders(<Harness />);
+    expect(screen.queryByText("Bakiye")).toBeNull();
+    unmount();
+    const [first, second] = ROWS as [CariRowItem, CariRowItem];
+    const rows: CariRowItem[] = [
+      { ...first, balances: [{ currency: "TRY", balance: "325684.90" }, { currency: "USD", balance: "-12.50" }] },
+      { ...second, balances: [] },
+    ];
+    renderWithProviders(<Harness rows={rows} />);
+    expect(screen.getByText("Bakiye")).toBeInTheDocument();
+    expect(screen.getByText("325.684,90 TRY")).toBeInTheDocument();
+    expect(screen.getByText("-12,50 USD")).toBeInTheDocument();
+  });
+
+
   it("sütunlar çizilir; pasif satır soluk", () => {
     renderWithProviders(<Harness />);
     for (const h of ["Cari", "Rol", "Şehir", "Telefon", "Vergi no", "Durum"]) expect(screen.getByText(h)).toBeInTheDocument();
