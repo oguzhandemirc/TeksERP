@@ -27,6 +27,9 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true, hasAnyPermission: () => true }),
 }));
+// Merkez'in özel rapor listesi ağ çağrısı yapar; test ağsız kalsın (yanıt hiç gelmez).
+vi.mock("@/services/apiClient", () => ({ default: { get: () => new Promise(() => {}), post: vi.fn(), put: vi.fn(), patch: vi.fn() } }));
+vi.mock("@/providers/PreferencesProvider", () => ({ usePreferences: () => ({ prefs: {}, setPreference: vi.fn(), resetPreferences: vi.fn(), ready: true }) }));
 vi.mock("@/hooks/useFavorites", () => ({
   useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }),
 }));
@@ -61,6 +64,17 @@ describe("Hub bayrak bekleme — iskelet", () => {
   });
   both("§1 Operasyon hub'ı", () => <OperationsHubPage />);
   both("§2 Tanımlar hub'ı", () => <DefinitionsHubPage />);
-  both("§3 Raporlar hub'ı", () => <ReportsHubPage />);
+  // Raporlar hub'ı = Rapor Merkezi (karo yok, 2026-11-12): pending'de iskelet, dolunca Merkez.
+  it("§3 Raporlar hub'ı: pending → iskelet, Merkez YOK; ready → Merkez, iskelet YOK", () => {
+    ready = false;
+    const p = renderWithProviders(<ReportsHubPage />);
+    expect(skeleton(), "pending'de iskelet").not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Rapor Merkezi" })).toBeNull();
+    p.unmount();
+    ready = true;
+    renderWithProviders(<ReportsHubPage />);
+    expect(skeleton(), "ready'de iskelet").toBeNull();
+    expect(screen.getByRole("heading", { name: "Rapor Merkezi" })).toBeInTheDocument();
+  });
   both("§4 rapor kategorisi (ReportHubGrid)", () => <ReportHubGrid title="Satış" tiles={salesReportTiles} />);
 });

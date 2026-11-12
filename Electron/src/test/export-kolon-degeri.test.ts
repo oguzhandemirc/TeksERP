@@ -36,7 +36,7 @@ const BASELINE: Record<string, string[]> = {
   "PeripheralDevices/columns.tsx": ["connection", "kind", "lang", "name", "owner", "routes", "test"],
   "ProductRecipes/columns.tsx": ["color", "item", "props", "route"],
   "QualityGrades/columns.tsx": ["color"],
-  "Reports/Dokuma/leventColumns.tsx": ["kaynak", "kaynak"],
+  "Reports/Dokuma/leventColumns.tsx": ["kaynak"],
   "Reports/Sales/destinationMixColumns.tsx": ["kapsam", "ort", "tutar", "tutar"],
   "Reports/_components/BreakdownTable.tsx": ["delta", "prevQty", "share"],
   "ReturnReasons/columns.tsx": ["swatch"],
