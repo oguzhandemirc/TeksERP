@@ -48,7 +48,7 @@ export interface YarnCostPriceChangeInput {
 export async function listYarnCostPrices(opts: { yarnItemId?: string; includeRevoked?: boolean; search?: string }): Promise<YarnCostPriceRow[]> {
   const search = listSearchWhere<Prisma.YarnCostPriceWhereInput>(opts.search, { text: ["yarnItem.name"], code: ["yarnItem.code"] });
   const where: Prisma.YarnCostPriceWhereInput = {
-    AND: [opts.yarnItemId ? { yarnItemId: opts.yarnItemId } : {}, opts.includeRevoked ? {} : ACTIVE_YARN_COST_PRICE],
+    AND: [opts.yarnItemId ? { yarnItemId: opts.yarnItemId } : {}, opts.includeRevoked ? {} : ACTIVE_YARN_COST_PRICE, search ?? {}],
   };
   return prisma.yarnCostPrice.findMany({ where, select: YARN_COST_PRICE_SELECT, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
 }

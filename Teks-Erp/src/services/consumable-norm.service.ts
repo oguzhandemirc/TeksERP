@@ -171,7 +171,7 @@ export async function listConsumableNorms(opts: {
         opts.serviceItemId ? { serviceItemId: opts.serviceItemId } : {},
         opts.consumableItemId ? { consumableItemId: opts.consumableItemId } : {},
         opts.includeRevoked ? {} : ACTIVE_COST_RATE,
-
+        search ?? {},
       ],
     },
     select: CONSUMABLE_NORM_SELECT,

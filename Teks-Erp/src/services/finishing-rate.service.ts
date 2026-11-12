@@ -63,7 +63,7 @@ export interface FinishingRateChangeInput {
 export async function listFinishingRates(opts: { code?: string; includeRevoked?: boolean; search?: string }): Promise<FinishingRateRow[]> {
   const search = listSearchWhere<Prisma.FinishingRateWhereInput>(opts.search, { code: ["code"], plain: ["name"], text: ["subcontractor.name"] });
   const where: Prisma.FinishingRateWhereInput = {
-    AND: [opts.code ? { code: opts.code } : {}, opts.includeRevoked ? {} : ACTIVE_FINISHING_RATE],
+    AND: [opts.code ? { code: opts.code } : {}, opts.includeRevoked ? {} : ACTIVE_FINISHING_RATE, search ?? {}],
   };
   return prisma.finishingRate.findMany({ where, select: FINISHING_RATE_SELECT, orderBy: [{ code: "asc" }, { createdAt: "desc" }, { id: "desc" }] });
 }
