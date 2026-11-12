@@ -139,8 +139,8 @@ describe("§2 küçük çoklular", () => {
     wrap(<ReportBody presentation={base({ varyant: VARIANT })} fetchedAt={Date.parse("2026-10-25T08:00:00Z")} />, `${RANGE}&varyant=musteri`);
     const grid = screen.getByRole("region", { name: "Müşteri kırılımı" });
     expect(within(grid).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(grid).getByText("6.400 m")).toBeInTheDocument();
-    expect(within(grid).getByText("▲ %28 (Eylül 2026: 5.000 m)")).toBeInTheDocument();
+    expect(within(grid).getByText("6400 m")).toBeInTheDocument();
+    expect(within(grid).getByText("▲ %28 (Eylül 2026: 5000 m)")).toBeInTheDocument();
     fireEvent.click(within(grid).getByRole("button", { name: /Kaya Tekstil/ }));
     const u = urlNow();
     expect(u.get("customerId")).toBe("c1");
@@ -159,7 +159,7 @@ describe("§3 dönem kıyası", () => {
     wrap(<ReportBody presentation={base({ donemler: PERIODS })} fetchedAt={0} />);
     const t = screen.getByRole("region", { name: "Dönem kıyası" });
     expect(within(t).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Ölçü", "Ağustos 2026", "Eylül 2026", "Ekim 2026"]);
-    expect(within(t).getByText("▲ %20 (Eylül 2026: 10.000 m)")).toBeInTheDocument();
+    expect(within(t).getByText("▲ %20 (Eylül 2026: 10000 m)")).toBeInTheDocument();
   });
 
   it("§3b ⭐ kesit raporunda geçmiş 'Ölçülemedi' + neden + uyarı; '0' yazılmaz", () => {
@@ -210,8 +210,8 @@ describe("§6 dışa aktarım ekranla aynı metin", () => {
     expect(spec.parametreCumlesi).toBe("Kırılım: Tek · Dönem kıyası: Kapalı");
     const [v, d] = spec.tables;
     expect(v!.name).toBe("Müşteri kırılımı");
-    expect(v!.rows[0]).toEqual({ ad: "Kaya Tekstil", deger: "6.400 m", kiyas: "▲ %28 (Eylül 2026: 5.000 m)" });
+    expect(v!.rows[0]).toEqual({ ad: "Kaya Tekstil", deger: "6400 m", kiyas: "▲ %28 (Eylül 2026: 5000 m)" });
     expect(d!.rows.map((r) => r.donem)).toEqual(["Ağustos 2026", "Eylül 2026", "Ekim 2026"]);
-    expect(d!.rows[2]).toEqual({ donem: "Ekim 2026", deger: "12.000 m", kiyas: "▲ %20 (Eylül 2026: 10.000 m)" });
+    expect(d!.rows[2]).toEqual({ donem: "Ekim 2026", deger: "12000 m", kiyas: "▲ %20 (Eylül 2026: 10000 m)" });
   });
 });

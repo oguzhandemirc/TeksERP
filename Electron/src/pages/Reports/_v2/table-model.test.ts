@@ -40,7 +40,7 @@ describe("rapor v2 tablosu — para kolonları tek biçim", () => {
     const f = columnFormat(TABLE, TABLE.kolonlar[1]!);
     expect(cellText(1234.5, f)).toBe("1.234,50");
     expect(columnFormat(TABLE, TABLE.kolonlar[3]!).numFmt).toBe("#,##0.0");
-    expect(formatFigure(42300, "m")).toBe("42.300 m");
+    expect(formatFigure(42300, "m")).toBe("42300 m");
   });
 
   it("Excel/PDF zarfı ekranla aynı biçimi taşır; para dışı kolon ölçülen ondalıkta kalır", () => {

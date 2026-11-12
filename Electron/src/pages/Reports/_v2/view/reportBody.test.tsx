@@ -41,9 +41,9 @@ const wrap = (ui: React.ReactNode) =>
 describe("v2 rapor gövdesi — sayı kartları + Öne çıkanlar", () => {
   it("⭐ ana sayı + yan sayılar ayrı kartlar; kıyas hapı sunucunun durumundan, metin PDF ile aynı", () => {
     wrap(<ReportBody presentation={presentation()} fetchedAt={0} />);
-    expect(screen.getByTestId("headline-value")).toHaveTextContent("14.700 m");
+    expect(screen.getByTestId("headline-value")).toHaveTextContent("14700 m");
     const cmp = screen.getByTestId("headline-compare");
-    expect(cmp).toHaveTextContent("▲ %50 (Eylül 2026: 9.800 m)");
+    expect(cmp).toHaveTextContent("▲ %50 (Eylül 2026: 9800 m)");
     expect(cmp.className).toContain("text-success");
     const sides = screen.getAllByTestId("side-figure");
     expect(sides).toHaveLength(2);

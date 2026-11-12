@@ -3,6 +3,7 @@ import { Columns3, TableProperties } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ReportColumn } from "@/pages/Reports/_components/reportExport";
+import { formatDisplay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TabloBlok, TabloHucresi, TabloKolonu } from "./sunum";
 import { cellText, columnAlign, columnHeader, columnFormat, truncationNote } from "./table-model";
@@ -131,7 +132,7 @@ export function ReportTable({ table, rowLink, hiddenColumns, onHiddenColumns, ba
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <TableProperties className="h-4 w-4 text-primary" aria-hidden />
             Ayrıntı
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">{table.satirlar.length.toLocaleString("tr-TR")}</span>
+            <span className="rounded-badge bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">{formatDisplay(table.satirlar.length, 0)}</span>
           </h2>
           {table.kolonlar.length > 1 ? <ColumnMenu table={table} hidden={hidden} onChange={onHiddenColumns ?? setLocalHidden} shown={cols.length} /> : null}
         </header>
