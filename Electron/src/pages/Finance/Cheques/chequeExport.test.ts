@@ -3,7 +3,7 @@
 // =============================================================================
 // Ölçtüğü şeyler:
 //  §1 Excel ↔ PDF kolon eşitliği (tek spec sözleşmesi).
-//  §2 EKRAN ↔ SPEC eşlemesi — `ChequeTable`ın `<thead>`'i KAYNAKTAN okunur ve
+//  §2 EKRAN ↔ SPEC eşlemesi — `ChequeTable`ın sütun başlıkları (`header: "…"`) KAYNAKTAN okunur ve
 //     her ekran başlığının hangi dosya kolon(lar)ına açıldığı BURADA yazılıdır.
 //     Tabloya kolon eklenirse ya da dosyadan kolon düşerse test kırmızı verir;
 //     bu, "ekranda var, dosyada yok" sınıfını yakalayan tek mekanik kontroldür.
@@ -55,9 +55,9 @@ const HEADER_MAP: Array<[string, string[]]> = [
 ];
 
 function tableHeaders(relPath: string): string[] {
+  // Ortak DataTable sütun tanımları: metin başlıklı her sütun bir veri kolonudur (seçim/eylem başlığı bileşendir).
   const src = readFileSync(resolve(__dirname, relPath), "utf8");
-  const thead = /<thead[\s\S]*?<\/thead>/.exec(src)?.[0] ?? "";
-  return [...thead.matchAll(/<th[^>]*>([^<]+)<\/th>/g)]
+  return [...src.matchAll(/\bheader: "([^"]+)"/g)]
     .map((m) => (m[1] ?? "").trim())
     .filter(Boolean);
 }

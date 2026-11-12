@@ -84,22 +84,22 @@ export function AllocationRepairPage() {
           />
         </ListToolbar>
       )}
-      <ListBody>
-        {liste.isLoading ? (
+      {liste.isLoading ? (
+        <ListBody>
           <ListMessage className="space-y-2">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-40 w-full" />
           </ListMessage>
-        ) : (
-          <RepairShipmentTable
-            rows={satirlar}
-            onSelect={setOnizleme}
-            onOrder={setOrderId}
-            onShipment={setShipmentId}
-            busyId={mut.isPending ? (mut.variables as string | undefined) : undefined}
-          />
-        )}
-      </ListBody>
+        </ListBody>
+      ) : (
+        <RepairShipmentTable
+          rows={satirlar}
+          onSelect={setOnizleme}
+          onOrder={setOrderId}
+          onShipment={setShipmentId}
+          busyId={mut.isPending ? (mut.variables as string | undefined) : undefined}
+        />
+      )}
       {!liste.isLoading && satirlar.length > 0 && <ListFooter loaded={satirlar.length} />}
 
       <RepairPreviewDialog

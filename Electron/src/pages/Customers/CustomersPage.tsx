@@ -76,7 +76,7 @@ export function CustomersPage() {
       writePermission="customer:write"
       glowWhenEmpty
       keepFormOpenAfterSave
-      searchPlaceholder="Kod, ad veya vergi no ara..."
+      searchHint="Kod, ad veya vergi no"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <CustomerFormDialog
           open={open}

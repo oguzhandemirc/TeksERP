@@ -187,6 +187,15 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Operations/GelenBelgeler/NoteListTable.tsx": ["Operations/GelenBelgeler/GelenBelgelerPage.tsx", "Operations/GelenBelgeler/NoteListFilters.tsx"],
   "Operations/Rolls/RollsTableBody.tsx": ["Operations/Rolls/RollsPage.tsx", "Operations/Rolls/RollScanBar.tsx"],
   "Operations/MachineStops/StopsTable.tsx": ["Operations/MachineStops/MachineStopsPage.tsx"],
+  "Finance/CashTransactions/CashTxnTable.tsx": ["Finance/CashTransactions/CashTransactionsPage.tsx", "Finance/CashTransactions/CashTxnFilterBar.tsx"],
+  "Finance/Cheques/ChequeTable.tsx": ["Finance/Cheques/ChequesPage.tsx", "Finance/Cheques/ChequeFilterBar.tsx"],
+  "Finance/PaymentsPage.tsx": ["Finance/PaymentsFilterBar.tsx"],
+  "Quality/Inspections/InspectionList.tsx": ["Quality/Inspections/InspectionFilters.tsx"],
+  "Cost/PriceLists/PriceListsPage.tsx": ["Cost/PriceLists/PriceListFilters.tsx"],
+  "Cost/Quotes/QuotesPage.tsx": ["Cost/Quotes/QuoteFilters.tsx"],
+  "Operations/ConsignmentDispatches/ConsignmentDispatchesPage.tsx": ["Operations/ConsignmentDispatches/ConsignmentDispatchFilters.tsx"],
+  "Operations/Yarn/YarnStockTable.tsx": ["Operations/Yarn/YarnStockPage.tsx", "Operations/Yarn/YarnFilterBar.tsx"],
+  "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
 };
 
 /** Sütun menüsü OLMAYAN DataTable — gerekçeli. */
@@ -196,79 +205,60 @@ const NO_COLUMN_MENU: Record<string, string> = {
 };
 
 const KATALOG = "küçük katalog, liste ucu arama parametresi almıyor (backend gerekiyor); istemci süzmesi yazılmaz";
+const COST_ACTIVE = "maliyet tarife kataloğu: `/active` ucu yürürlükteki sürümleri parametresiz tek istekte verir; arama yok (backend gerekiyor)";
 /** Arama kutusu OLMAYAN DataTable sayfası — gerekçeli. */
 const NO_SEARCH: Record<string, string> = {
+  "Quality/Certificates/CustomerSpecsPanel.tsx": "müşteri spesifikasyon kataloğu (müşteri süzgeçli, tek istek); uçta metin araması yok (backend gerekiyor)",
+  "Quality/LabTests/LabTypesPanel.tsx": KATALOG,
+  "MachineCollectors/MachineCollectorsPage.tsx": "tezgah kartı kayıtları (birkaç cihaz, tek istek); liste ucu arama almıyor (backend gerekiyor)",
+  "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx": "seçili belge türünün profil ataması (belge profili sayısı kadar satır, atama ucundan tek istekte); arama yok (backend gerekiyor)",
+  "Cost/ConsumableNorms/ConsumableNormsPage.tsx": COST_ACTIVE,
+  "Cost/FinishingRates/FinishingRatesPage.tsx": COST_ACTIVE,
+  "Cost/MachineRates/MachineRatesPage.tsx": COST_ACTIVE,
+  "Cost/YarnPrices/YarnPricesPage.tsx": COST_ACTIVE,
   "Operations/GelenBelgeler/GonderenSablonlariPage.tsx": KATALOG,
   "Operations/MachineStops/StopsTable.tsx": "gün + makine süzgeçli duruş listesi; uçta metin araması yok (backend gerekiyor)",
   "ShiftDefinitions/ShiftDefinitionsPage.tsx": KATALOG,
+  "Finance/RatesPage.tsx": KATALOG,
+  "Operations/LoomAlarms/LoomAlarmsPage.tsx": "alarm ucu kapsam/kademe/hol/sebep/tarih süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/KursunMeterDeviations/MeterDeviationsPage.tsx": "sapma ucu durum/makine/müşteri/tarih süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/ReadyWorks/ReadyWorksPage.tsx": "hazır iş ucu gruplama + durum süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/ConsignedWork/ConsignedWorkPage.tsx": "müşteri başına emanet özeti (tek istek, sahip başına bir satır); uçta metin araması yok (backend gerekiyor)",
+  "Operations/Orders/OrderPlanView.tsx": "plan-lines ucu renk/durum/müşteri/ürün süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/AllocationRepair/RepairTable.tsx": "onarım ucu parametresiz tek liste (yalnız eksikli sevkiyatlar); metin araması yok (backend gerekiyor)",
+  "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/PurchaseOrders/OpenLinesPanel.tsx": "açık kalem ucu (tedarikçi/ürün/gecikme süzgeçli) metin araması almıyor — şerit bu sekmede aramayı bilinçli gizler (backend gerekiyor)",
+  "Finance/AccountsPage.tsx": "kasa + banka hesabı tanımları (birkaç satır, iki bölüm); liste uçları arama almıyor (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
-  "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",
+  "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
+  "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",
+  "System/Clients/ClientsPage.tsx": "sunucu belleğindeki istemci envanteri (tek istek, parametresiz, birkaç kurulum); arama yok (backend gerekiyor)",
+  "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
-const LISTE = "liste tablosu elle çiziliyor — ortak DataTable'a geçirilecek";
-/** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır). */
-const HAND_TABLES: Record<string, string> = Object.fromEntries(
-  [
-    "Access/PatronCloud/PatronCloudPage.tsx",
-    "Access/Permissions/PermissionsCatalogPage.tsx",
-    "Access/Templates/TemplatesPage.tsx",
-    "Access/Users/AccessUsersPage.tsx",
-    "Cost/ConsumableNorms/ConsumableNormsPage.tsx",
-    "Cost/FinishingRates/FinishingRatesPage.tsx",
-    "Cost/Items/CostItemsTable.tsx",
-    "Cost/MachineRates/MachineRatesPage.tsx",
-    "Cost/PriceLists/PriceListsPage.tsx",
-    "Cost/Quotes/QuotesTable.tsx",
-    "Cost/YarnPrices/YarnPricesPage.tsx",
-    "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx",
-    "Devices/DevicesPage.tsx",
-    "Finance/AccountsPage.tsx",
-    "Finance/CashTransactions/CashTxnTable.tsx",
-    "Finance/Cheques/ChequeTable.tsx",
-    "Finance/InvoicesPage.tsx",
-    "Finance/PaymentsPage.tsx",
-    "Finance/PeriodClose/PeriodClosePage.tsx",
-    "Finance/RatesPage.tsx",
-    "GeneralSettings/Numbering/NumberingTable.tsx",
-    "MachineCollectors/CollectorTable.tsx",
-    "Notifications/NotificationTable.tsx",
-    "Operations/AllocationRepair/RepairTable.tsx",
-    "Operations/ConsignedWork/ConsignedWorkTable.tsx",
-    "Operations/ConsignmentDispatches/ConsignmentDispatchTable.tsx",
-    "Operations/ConsumableStock/ConsumableStockPage.tsx",
-    "Operations/FasonCockpit/CockpitTable.tsx",
-    "Operations/GoodsReceipts/GoodsReceiptsPage.tsx",
-    "Operations/Kartela/OutstandingTab.tsx",
-    "Operations/KursunMeterDeviations/DeviationTable.tsx",
-    "Operations/LoomAlarms/LoomAlarmsTable.tsx",
-    "Operations/Orders/OrderPlanView.tsx",
-    "Operations/ProductBalance/ProductBalancePage.tsx",
-    "Operations/PurchaseOrders/OpenLinesPanel.tsx",
-    "Operations/PurchaseOrders/PurchaseOrderTable.tsx",
-    "Operations/ReadyWorks/ReadyWorksTable.tsx",
-    "Operations/SackContentEdit/PackingLotListView.tsx",
-    "Operations/StockCounts/StockCountsPage.tsx",
-    "Operations/WarehouseTransfers/WarehouseTransfersPage.tsx",
-    "Operations/Yarn/YarnLotsPanel.tsx",
-    "Operations/Yarn/YarnStockTable.tsx",
-    "Quality/Certificates/CertificateList.tsx",
-    "Quality/Certificates/CustomerSpecsPanel.tsx",
-    "Quality/Inspections/InspectionList.tsx",
-    "Quality/LabTests/LabTestList.tsx",
-    "Quality/LabTests/LabTypesPanel.tsx",
-    "Stations/StationListView.tsx",
-    "System/Clients/ClientsPage.tsx",
-    "System/Duplicates/DuplicatesPage.tsx",
-    "System/Events/SystemEventsList.tsx",
-    "System/NotificationProfiles/ProfileMatrixTab.tsx",
-    "System/PrintHistory/PrintHistoryTable.tsx",
-    "System/WorkSessions/HistoryTable.tsx",
-    "WeaveDesigns/WeaveDesignsPage.tsx",
-  ].map((f) => [f, LISTE]),
-);
+const EXPAND = "genişleyen satır (satır altında detay gövdesi) — DataTable'a genel 'genişleyen satır' yeteneği gelince geçer";
+/** Seçimi sayfa durumu sahiplenir (toplu eylem, süzgeçte sıfırlanır) — DataTable seçimi dışarıdan denetlenemiyor. */
+const CONTROLLED_SELECT = "dış durumlu satır seçimi (toplu 'okundu say', süzgeç değişince sıfırlanır) + başlık/gövde/sebep üç satır — DataTable'a denetimli seçim yeteneği gelince geçer";
+const INLINE = "satır içi düzenleme + seçim — DataTable'a genel satır içi düzenleme yeteneği gelince geçer";
+/** KALICI muaf: sütunu veri olan matris/gruplu katalog — sütun menüsü anlamsız; tek satır hücre + ince ayraç uygulanır. */
+const MATRIX = "kalıcı muaf: matris/gruplu katalog (sütunlar sabit durum ya da grup başlıkları) — tek satır hücre + ince ayraç";
+/** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır) — her biri gerekçeli. */
+const HAND_TABLES: Record<string, string> = {
+  "Access/Permissions/PermissionsCatalogPage.tsx": MATRIX,
+  "Devices/DevicesPage.tsx": EXPAND,
+  "Finance/InvoicesPage.tsx": INLINE,
+  "Finance/PeriodClose/PeriodClosePage.tsx": INLINE,
+  "GeneralSettings/Numbering/NumberingTable.tsx": INLINE,
+  "Notifications/NotificationTable.tsx": CONTROLLED_SELECT,
+  "Operations/ProductBalance/ProductBalancePage.tsx": EXPAND,
+  "Stations/StationListView.tsx": EXPAND,
+  "System/Duplicates/DuplicatesPage.tsx": MATRIX,
+  "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
+  "System/PrintHistory/PrintHistoryTable.tsx": `${EXPAND} (HATA satırının altında neden + ipucu satırı)`,
+};
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
-const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\bset\w*Search\w*\(e\.target\.value\)/;
+const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("(?:search|q)", e\.target\.value\)|\bsearch: e\.target\.value\b|\bq: e\.target\.value\b/;
 const HAND_TABLE_TAG = /<(table|Table)\b/;
 
 /** Ortak DataTable'ı çizen sayfa dosyaları için eksikler: `dosya: sütun-menüsü|arama`. */
@@ -287,7 +277,9 @@ export function missingListTools(files: Record<string, string>, opts = { host: T
 /** Arama kutusu yer tutucuları (ara/okut ile biten literal) 20 karakteri aşanlar. */
 export function longSearchPlaceholders(src: string): string[] {
   const out: string[] = [];
-  for (const m of src.matchAll(/placeholder="([^"]+)"/g)) {
+  // `searchPlaceholder` (CrudPage) her zaman arama kutusudur → biçimden bağımsız ölçülür; açıklama `searchHint`e.
+  for (const m of src.matchAll(/\bsearchPlaceholder="([^"]+)"/g)) if ((m[1] ?? "").length > 20) out.push(m[1] ?? "");
+  for (const m of src.matchAll(/(?<![\w])placeholder="([^"]+)"/g)) {
     const text = m[1] ?? "";
     if (!/(^|[\s/·,])(ara|okut)(\.\.\.|…)?$/i.test(text)) continue;
     // Etiketin açılışı: önünde tanımlayıcı karakteri olmayan "<" (jenerik `<Select<Row>`in iç "<"i değil).
@@ -321,7 +313,8 @@ describe("liste araçları standardı — sütun menüsü + arama + kısa yer tu
 
   it("⭐ elle çizilen liste tablosu cırcırı: yeni yok, geçirilen listeden düşer", () => {
     const hand = Object.keys(files).filter(
-      (f) => !OVERLAY_FILE.test(f) && HAND_TABLE_TAG.test(files[f] ?? "") && /<ListBody\b/.test(files[f] ?? ""),
+      // Ana listesi DataTable olan dosyadaki <table> yan panel/detay gövdesidir (geçirilmiş sayılır — bayat kuralıyla aynı).
+      (f) => !OVERLAY_FILE.test(f) && HAND_TABLE_TAG.test(files[f] ?? "") && /<ListBody\b/.test(files[f] ?? "") && !/<DataTable\b/.test(files[f] ?? ""),
     );
     expect(hand.filter((f) => !(f in HAND_TABLES))).toEqual([]);
     const stale = Object.keys(HAND_TABLES).filter((f) => !HAND_TABLE_TAG.test(files[f] ?? "") || /<DataTable\b/.test(files[f] ?? ""));
@@ -345,9 +338,13 @@ describe("liste araçları standardı — sütun menüsü + arama + kısa yer tu
         { host: { "X/T.tsx": ["X/P.tsx"] }, noMenu: {}, noSearch: {} },
       ),
     ).toEqual([]);
+    expect(missingListTools({ "X/A.tsx": `<Input onChange={(e) => set("search", e.target.value)} /><DataTableTools table={t} /><DataTable table={t} />` })).toEqual([]);
+    expect(missingListTools({ "X/A.tsx": `<Input onChange={(e) => set("status", e.target.value)} /><DataTableTools table={t} /><DataTable table={t} />` })).toEqual(["X/A.tsx: arama"]);
     expect(longSearchPlaceholders(`<Input placeholder="Dokuma no, kumaş veya fasoncu ara..." />`)).toHaveLength(1);
     expect(longSearchPlaceholders(`<Input placeholder="Ara…" title="Dokuma no, kumaş ya da fasoncu" />`)).toEqual([]);
     expect(longSearchPlaceholders(`<ReferenceSelect<CariRow> placeholder="Müşteri / fason ara..." />`)).toEqual([]);
     expect(longSearchPlaceholders(`<Input placeholder="Kâğıdın üzerindeki numara" />`)).toEqual([]);
+    expect(longSearchPlaceholders(`<CrudPage searchPlaceholder="Kod, ad veya vergi numarası" />`)).toHaveLength(1);
+    expect(longSearchPlaceholders(`<CrudPage searchPlaceholder="Kod ara…" searchHint="Kod, ad veya vergi no" />`)).toEqual([]);
   });
 });

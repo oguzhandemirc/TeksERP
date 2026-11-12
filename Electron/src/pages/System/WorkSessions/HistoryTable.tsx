@@ -1,17 +1,10 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { safeFormat } from "@/lib/format";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
@@ -24,13 +17,8 @@ import { adminUserService } from "@/services/adminUserService";
 import { workSessionService } from "./service";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
-import {
-  endReasonLabels,
-  formatDurationMinutes,
-  placeLabel,
-  sessionDurationMinutes,
-  type WorkSessionItem,
-} from "./types";
+import { endReasonLabels, formatDurationMinutes, sessionDurationMinutes, type WorkSessionItem } from "./types";
+import { useSessionHistoryTable } from "./historyColumns";
 
 const PAGE_SIZE = 25;
 const SELECT_CLS = "h-9 rounded-md border border-input bg-background px-2 text-sm";
@@ -101,6 +89,7 @@ export function HistoryTable() {
   });
   const rows = q.data?.data ?? [];
   const pagination = q.data?.pagination;
+  const table = useSessionHistoryTable(rows, openTarget);
 
   const resetPage = () => setPage(1);
 
@@ -182,7 +171,9 @@ export function HistoryTable() {
           fromLabel="Oturum tarihi başlangıcı"
           toLabel="Oturum tarihi bitişi"
         />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Dosya kendi sütunlarıyla iner (İstasyon/Makine ayrı, toplanabilir dakika) — tablo menüsünde ikinci indirme yok. */}
+          <DataTableTools table={table} compact hideExport />
           <ListExportMenu
             name="Çalışma Oturumları"
             rows={rows}
@@ -200,81 +191,19 @@ export function HistoryTable() {
         </div>
       </ListToolbar>
 
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage>
-            <Skeleton className="h-64 w-full" />
-          </ListMessage>
-        ) : (
-          <Table containerClassName="overflow-visible">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kullanıcı</TableHead>
-                <TableHead>Yer</TableHead>
-                <TableHead>Cihaz</TableHead>
-                <TableHead>Başlangıç</TableHead>
-                <TableHead>Bitiş</TableHead>
-                <TableHead>Süre</TableHead>
-                <TableHead>Kapanış</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                    Filtrelere uyan oturum yok.
-                  </TableCell>
-                </TableRow>
-              )}
-              {rows.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.user.fullName}</TableCell>
-                  <TableCell>
-                    {placeLabel(s)}
-                    {s.machine && (
-                      <span className="ml-1 font-mono text-xs text-muted-foreground">
-                        {s.machine.code}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    <button
-                      type="button"
-                      className="hover:underline"
-                      title="Cihaz işlem dökümü"
-                      onClick={(e) => openTarget(`/access/devices/${s.device.id}`, e)}
-                      onAuxClick={(e) => {
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          openTarget(`/access/devices/${s.device.id}`, e);
-                        }
-                      }}
-                    >
-                      {s.device.name}
-                    </button>
-                  </TableCell>
-                  <TableCell className="text-xs">{safeFormat(s.startedAt, "dd.MM.yyyy HH:mm")}</TableCell>
-                  <TableCell className="text-xs">
-                    {s.endedAt ? safeFormat(s.endedAt, "dd.MM.yyyy HH:mm") : <Badge>Açık</Badge>}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {formatDurationMinutes(sessionDurationMinutes(s.startedAt, s.endedAt))}
-                  </TableCell>
-                  <TableCell>
-                    {s.endReason ? (
-                      <Badge variant={s.endReason === "ADMIN" || s.endReason === "TAKEOVER" ? "muted" : "outline"}>
-                        {endReasonLabels[s.endReason]}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </ListBody>
+      {!q.isLoading && rows.length > 0 ? (
+        <DataTable table={table} exportName="Çalışma Oturumları" />
+      ) : (
+        <ListBody>
+          {q.isLoading ? (
+            <ListMessage>
+              <Skeleton className="h-64 w-full" />
+            </ListMessage>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">Filtrelere uyan oturum yok.</p>
+          )}
+        </ListBody>
+      )}
 
       <ListFooter
         loaded={rows.length}

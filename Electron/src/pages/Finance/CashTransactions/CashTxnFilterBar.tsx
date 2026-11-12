@@ -16,6 +16,7 @@
 // Kasa+banka tek listede, pasif hesap gizlenmez işaretlenir.
 // =============================================================================
 
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,11 @@ interface Props {
   account: CashAccountOption | null;
   onAccountChange: (account: CashAccountOption | null) => void;
   onChange: (next: CashTxnFilterState) => void;
+  /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
+  tools?: ReactNode;
 }
 
-export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: Props) {
+export function CashTxnFilterBar({ value, account, onAccountChange, onChange, tools }: Props) {
   const set = <K extends keyof CashTxnFilterState>(key: K, v: CashTxnFilterState[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -112,6 +115,7 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: 
           Filtreleri temizle
         </Button>
       )}
+      {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
     </div>
   );
 }

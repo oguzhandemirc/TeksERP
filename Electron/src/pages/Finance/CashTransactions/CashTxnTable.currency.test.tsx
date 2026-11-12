@@ -8,7 +8,11 @@ import { currencyMismatchOf } from "./currencyMismatch";
 
 vi.mock("@/components/layout/tabs/use-tab-target", () => ({ useDrillTarget: () => ({ onClick: () => {}, onAuxClick: () => {}, onContextMenu: () => {} }) }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
-import { CashTxnTable } from "./CashTxnTable";
+import { CashTxnTable, useCashTxnTable } from "./CashTxnTable";
+
+function Harness({ rows, onCancel }: { rows: CashTxnRow[]; onCancel: (r: CashTxnRow) => void }) {
+  return <CashTxnTable table={useCashTxnTable(rows, { onCancel })} />;
+}
 
 const base = { status: "ACTIVE", currency: "TRY", amount: 100, txnDate: "2026-09-18T08:00:00Z", category: null, description: null, reference: null, transferGroupId: null, bankAccount: null, kind: "EXPENSE", direction: "OUT", paymentId: null, payment: null } as const;
 const usdBox = { id: "k2", name: "Döviz Kasası", currency: "USD" } as const;
@@ -21,7 +25,7 @@ describe("kasa defteri — para birimi rozeti", () => {
       { ...base, id: "b", docNo: "KH-2", cashBox: tryBox },
       { ...base, id: "c", docNo: "KH-3", cashBox: { id: "k3", name: "Eski" } },
     ];
-    renderWithProviders(<CashTxnTable rows={rows} onCancel={() => {}} />);
+    renderWithProviders(<Harness rows={rows} onCancel={() => {}} />);
     const badges = screen.getAllByTestId("currency-mismatch");
     expect(badges).toHaveLength(1);
     expect(screen.getByText("KH-1").closest("tr")).toContainElement(badges[0]!);

@@ -3,20 +3,22 @@
 // Makine listesi `station:read` varsa makine ucundan, yoksa `cost:read` kapsamlı hafif seçenek ucundan
 // (`/api/cost/machine-options`, yalnız id/kod/ad) gelir — Muhasebe de ücretsiz makineye satırından ücret girer.
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import { fmtFactoryDate } from "@/lib/factory-time";
 import { machineService } from "@/pages/Machines/service";
 import { CostQueryError } from "../shared/CostQueryState";
-import { fmtDecFull } from "../shared/format";
+import { machineRateColumns } from "./columns";
 import { MachineRateDialog } from "./MachineRateDialog";
 import { MachineRateHistorySheet } from "./MachineRateHistorySheet";
 import { machineRateService, type MachineCostRate } from "./service";
@@ -47,6 +49,7 @@ export function MachineRatesPage() {
   const [edit, setEdit] = useState<Edit | null>(null);
   const [history, setHistory] = useState<MachineCostRate | null>(null);
   const rows = mergeMachineRows(q.data ?? [], machinesQ.data ?? null);
+  const table = useLocalTable({ tableKey: "cost:machine-rates", data: rows, columns: useMemo(() => machineRateColumns(setEdit, setHistory), []), getRowId: (r) => r.machine.id });
   return (
     <PageShell>
       <PageHeader
@@ -63,6 +66,12 @@ export function MachineRatesPage() {
           </div>
         }
       />
+      <ListToolbar className="flex-row items-center justify-end">
+        <DataTableTools table={table} compact exportName="Makine saat ücretleri" />
+      </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} exportName="Makine saat ücretleri" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -70,54 +79,18 @@ export function MachineRatesPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="Makine saat ücretleri" onRetry={() => void q.refetch()} />
           </ListMessage>
-        ) : rows.length === 0 ? (
+        ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
               Henüz makine saat ücreti yok — ücreti olmayan makinenin çalışması kârlılıkta "ücret eksik" sayılır.
             </div>
           </ListMessage>
-        ) : (
-          <table className="w-full min-w-[36rem] text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Makine</th>
-                <th className="px-3 py-2 text-right">Saat ücreti</th>
-                <th className="px-3 py-2 text-right">Beklenen m/saat</th>
-                <th className="px-3 py-2">Geçerli olduğu an</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <RateRow key={r.machine.id} r={r}
-                  onEdit={() => setEdit({ current: r.rate, machine: r.machine })}
-                  onHistory={r.rate ? () => setHistory(r.rate) : undefined} />
-              ))}
-            </tbody>
-          </table>
         )}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} />
       {edit && <MachineRateDialog onClose={() => setEdit(null)} current={edit.current} machine={edit.machine} />}
       {history && <MachineRateHistorySheet row={history} onClose={() => setHistory(null)} />}
     </PageShell>
-  );
-}
-
-function RateRow({ r, onEdit, onHistory }: { r: MachineRateRow; onEdit: () => void; onHistory?: () => void }) {
-  const { rate } = r;
-  return (
-    <tr className="border-t">
-      <td className="px-3 py-2"><span className="font-medium">{r.machine.code}</span> <span className="text-muted-foreground">{r.machine.name}</span></td>
-      <td className="px-3 py-2 text-right tabular-nums">{rate ? `${fmtDecFull(rate.hourRateTry)} TL` : <span className="text-amber-600 dark:text-amber-400">ücret yok</span>}</td>
-      <td className="px-3 py-2 text-right tabular-nums">{rate ? fmtDecFull(rate.normMPerHour, 2) : "—"}</td>
-      <td className="px-3 py-2">{rate ? fmtFactoryDate(rate.createdAt) : "—"}</td>
-      <td className="px-3 py-2 text-right whitespace-nowrap">
-        <PermissionGate permission="cost:write">
-          <Button size="sm" variant="outline" onClick={onEdit}>{rate ? "Ücreti değiştir" : "Ücret gir"}</Button>
-        </PermissionGate>
-        {onHistory && <Button size="sm" variant="ghost" onClick={onHistory} aria-label="Geçmiş"><History className="h-4 w-4" /></Button>}
-      </td>
-    </tr>
   );
 }

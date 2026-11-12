@@ -8,12 +8,15 @@ import { useNavigate } from "react-router-dom";
 import { Calculator, Search } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { CostQueryError } from "../shared/CostQueryState";
-import { CostItemsTable } from "./CostItemsTable";
+import { COST_ITEM_COLUMNS } from "./columns";
 import { CostItemsSummary } from "./CostItemsSummary";
 import { costItemService, type CostItemFilter } from "./service";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -32,6 +35,7 @@ export function CostItemsPage() {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const rows = (q.data?.pages ?? []).flatMap((p) => p.data);
+  const table = useLocalTable({ tableKey: "cost:items", data: rows, columns: COST_ITEM_COLUMNS, getRowId: (r) => r.itemId });
   const summary = q.data?.pages[0]?.ozet;
   const filtered = f.durum !== "" || f.girdiDegisti || f.q.trim() !== "";
   return (
@@ -46,13 +50,19 @@ export function CostItemsPage() {
           </div>
         }
       />
-      <ListToolbar>
+      <ListToolbar className="flex-row flex-wrap items-center">
         {summary && <CostItemsSummary summary={summary} filter={f} onChange={setF} />}
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Ürün kodu ya da adı…" value={f.q} onChange={(e) => setF((x) => ({ ...x, q: e.target.value }))} />
+          <Input className="pl-8" placeholder="Ara…" title="Ürün kodu ya da adı" aria-label="Ürün maliyeti ara: ürün kodu ya da adı" value={f.q} onChange={(e) => setF((x) => ({ ...x, q: e.target.value }))} />
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Ürün maliyetleri" />
         </div>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={(r) => nav(`/cost/items/${r.itemId}`)} exportName="Ürün maliyetleri" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -60,16 +70,15 @@ export function CostItemsPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="Maliyet kartları" onRetry={() => void q.refetch()} />
           </ListMessage>
-        ) : rows.length === 0 ? (
+        ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
               {filtered ? "Süzgece uyan kumaş yok." : "Aktif kumaş kartı yok — maliyet kartı kumaş (FABRIC) ürünleri için açılır."}
             </div>
           </ListMessage>
-        ) : (
-          <CostItemsTable rows={rows} onOpen={(id) => nav(`/cost/items/${id}`)} />
         )}
       </ListBody>
+      )}
       {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
       <ListFooter loaded={rows.length}>
         {q.hasNextPage && (

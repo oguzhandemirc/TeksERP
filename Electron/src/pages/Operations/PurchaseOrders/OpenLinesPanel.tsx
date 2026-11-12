@@ -21,13 +21,17 @@
 // dizi kalır ve onu "hepsi geldi" diye basmak DÜPEDÜZ YALANDIR — satın almacı
 // bekleyen malı olmadığı sonucuna varır.
 // =============================================================================
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
-import { cn } from "@/lib/utils";
 import {
   supplierDisplayName, supplierPartyQuery, type SupplierParty,
 } from "@/components/forms/supplierParty";
@@ -35,6 +39,64 @@ import { fmtQty, listOpenLines, type OpenLineRow } from "./service";
 import { FIFO_HINT, fulfillmentOf, remainingText } from "./fulfillment";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+
+const Sub = ({ children }: { children: React.ReactNode }) => <span className="ml-1.5 text-[11px] text-muted-foreground">{children}</span>;
+
+const OPEN_LINE_COLUMNS: ColumnDef<OpenLineRow>[] = [
+  {
+    id: "expectedDate",
+    header: "Beklenen",
+    meta: { label: "Beklenen", exportValue: (r) => fmtDate(r.purchaseOrder.expectedDate) },
+    cell: ({ row: { original: r } }) => {
+      const tone = expectedTone(r.purchaseOrder.expectedDate, r.purchaseOrder.status);
+      const hint = expectedHint(tone);
+      return (
+        <span className={EXPECTED_TONE_CLASS[tone]}>
+          {fmtDate(r.purchaseOrder.expectedDate)}
+          {hint && <span className="ml-1.5 text-[11px]">{hint}</span>}
+        </span>
+      );
+    },
+  },
+  {
+    id: "item",
+    header: "Ürün",
+    size: 240,
+    meta: { label: "Ürün", exportValue: (r) => `${r.item.code} — ${r.item.name}` },
+    cell: ({ row: { original: r } }) => (
+      <span>
+        <span className="font-medium">{r.item.name}</span>
+        <Sub>{r.item.code}</Sub>
+      </span>
+    ),
+  },
+  { id: "supplier", header: "Tedarikçi", meta: { label: "Tedarikçi", exportValue: (r) => supplierDisplayName(r.purchaseOrder) }, cell: ({ row }) => supplierDisplayName(row.original.purchaseOrder) },
+  {
+    id: "order",
+    header: "Sipariş",
+    meta: { label: "Sipariş", exportValue: (r) => r.purchaseOrder.orderNo },
+    cell: ({ row: { original: r } }) => (
+      <span className="font-mono text-xs">
+        {r.purchaseOrder.orderNo}
+        <Sub>{r.lineNo}. kalem</Sub>
+      </span>
+    ),
+  },
+  { id: "qty", header: "Ismarlanan", meta: { label: "Ismarlanan", align: "right", exportValue: (r) => fmtQty(r.qty, r.item.unit) }, cell: ({ row }) => <span className="tabular-nums">{fmtQty(row.original.qty, row.original.item.unit)}</span> },
+  {
+    id: "receivedQty",
+    header: "Gelen",
+    meta: { label: "Gelen", align: "right", exportValue: (r) => fmtQty(r.receivedQty, r.item.unit) },
+    cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{fmtQty(row.original.receivedQty, row.original.item.unit)}</span>,
+  },
+  {
+    id: "remaining",
+    header: "Kalan",
+    // Bu uçta kalan daima > 0 (süzgeç öyle kuruyor); yine de ortak hesap kullanılır ki kural TEK YERDE kalsın.
+    meta: { label: "Kalan", align: "right", exportValue: (r) => remainingText(fulfillmentOf(r), r.item.unit) },
+    cell: ({ row: { original: r } }) => <span className="font-medium tabular-nums">{remainingText(fulfillmentOf(r), r.item.unit)}</span>,
+  },
+];
 
 /** Sunucudan çekilen en fazla kalem — backend tavanı 500. */
 const LIMIT = 200;
@@ -71,8 +133,9 @@ export function OpenLinesPanel({
       }),
   });
 
-  const rows: OpenLineRow[] = q.data?.rows ?? [];
+  const rows: OpenLineRow[] = useMemo(() => q.data?.rows ?? [], [q.data]);
   const total = q.data?.total ?? 0;
+  const table = useLocalTable({ tableKey: "purchase:open-lines", data: rows, columns: OPEN_LINE_COLUMNS });
 
   return (
     <>
@@ -102,8 +165,32 @@ export function OpenLinesPanel({
             {total} açık kalem{rows.length < total ? ` · ilk ${rows.length} tanesi gösteriliyor` : ""}
           </span>
         )}
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Bekleyen kalemler" />
+        </div>
       </ListToolbar>
 
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <>
+          <DataTable
+            table={table}
+            onRowClick={(r) => onOpenOrder(r.purchaseOrder.id)}
+            rowTitle={() => "Siparişin tamamını aç"}
+            exportName="Bekleyen kalemler"
+          />
+          <p className="flex shrink-0 items-start gap-1.5 border-t px-4 py-2 text-[11px] text-muted-foreground">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            {FIFO_HINT}
+          </p>
+          {rows.length < total && (
+            <p className="flex shrink-0 items-start gap-1.5 px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {total} açık kalemin ilk {rows.length} tanesi gösteriliyor (en yakın termin önce).
+              Aradığınızı bulmak için tedarikçi ya da ürün filtresini kullanın.
+            </p>
+          )}
+        </>
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -130,78 +217,9 @@ export function OpenLinesPanel({
                   : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."}
             </div>
           </ListMessage>
-        ) : (
-          <>
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Beklenen</th>
-                  <th className="px-3 py-2 text-left">Ürün</th>
-                  <th className="px-3 py-2 text-left">Tedarikçi</th>
-                  <th className="px-3 py-2 text-left">Sipariş</th>
-                  <th className="px-3 py-2 text-right">Ismarlanan</th>
-                  <th className="px-3 py-2 text-right">Gelen</th>
-                  <th className="px-3 py-2 text-right">Kalan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const po = r.purchaseOrder;
-                  const tone = expectedTone(po.expectedDate, po.status);
-                  const hint = expectedHint(tone);
-                  const f = fulfillmentOf(r);
-                  return (
-                    <tr
-                      key={r.id}
-                      className="cursor-pointer border-t hover:bg-muted/40"
-                      onClick={() => onOpenOrder(po.id)}
-                      title="Siparişin tamamını aç"
-                    >
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={EXPECTED_TONE_CLASS[tone]}>{fmtDate(po.expectedDate)}</span>
-                        {hint && (
-                          <div className={cn("text-[11px]", EXPECTED_TONE_CLASS[tone])}>{hint}</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{r.item.name}</div>
-                        <div className="text-[11px] text-muted-foreground">{r.item.code}</div>
-                      </td>
-                      <td className="px-3 py-2">{supplierDisplayName(po)}</td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {po.orderNo}
-                        <div className="text-[11px] text-muted-foreground">{r.lineNo}. kalem</div>
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtQty(r.qty, r.item.unit)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                        {fmtQty(r.receivedQty, r.item.unit)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium tabular-nums">
-                        {/* Bu uçta kalan daima > 0 (süzgeç öyle kuruyor); yine de
-                            ortak hesap kullanılır ki kural TEK YERDE kalsın. */}
-                        {remainingText(f, r.item.unit)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            <p className="flex items-start gap-1.5 border-t px-4 py-2 text-[11px] text-muted-foreground">
-              <Info className="mt-0.5 h-3 w-3 shrink-0" />
-              {FIFO_HINT}
-            </p>
-
-            {rows.length < total && (
-              <p className="flex items-start gap-1.5 px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                {total} açık kalemin ilk {rows.length} tanesi gösteriliyor (en yakın termin önce).
-                Aradığınızı bulmak için tedarikçi ya da ürün filtresini kullanın.
-              </p>
-            )}
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
     </>
   );

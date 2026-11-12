@@ -274,7 +274,9 @@ export function DuplicatesPage() {
                 <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-8"
-                  placeholder={`${MERGE_ENTITY_LABEL[entity]} ara — ad veya kod`}
+                  placeholder="Ara…"
+                  title={`${MERGE_ENTITY_LABEL[entity]}: ad veya kod`}
+                  aria-label={`${MERGE_ENTITY_LABEL[entity]} ara — ad veya kod`}
                   value={rawSearch}
                   onChange={(e) => setRawSearch(e.target.value)}
                 />
@@ -395,11 +397,11 @@ export function DuplicatesPage() {
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {r.code ?? "—"}
                         </TableCell>
-                        <TableCell className="font-medium">{r.name}</TableCell>
+                        <TableCell className="max-w-0 truncate font-medium" title={r.name}>{r.name}</TableCell>
                         <TableCell className="text-right">
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             <Users className="h-3 w-3" />
-                            {r.refCount === null ? "?" : r.refCount.toLocaleString("tr-TR")}
+                            {r.refCount === null ? "?" : r.refCount}
                           </span>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -409,7 +411,7 @@ export function DuplicatesPage() {
                           {r.suspect ? (
                             <button
                               type="button"
-                              className="flex flex-wrap items-center gap-1 text-left"
+                              className="flex flex-nowrap items-center gap-1 overflow-hidden text-left"
                               onClick={() => selectGroup(r)}
                               title={`${r.suspect.details.join("\n")}\n\nTıkla: bu grubun tümünü seç`}
                             >

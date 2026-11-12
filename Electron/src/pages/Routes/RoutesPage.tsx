@@ -91,7 +91,7 @@ export function RoutesPage() {
       service={routeService}
       columns={routeColumns}
       writePermission="station:write"
-      searchPlaceholder="Rota adı ara..."
+      searchHint="Rota adı"
       openCreateOnMount={shortcutSeed}
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <RouteFormDialog

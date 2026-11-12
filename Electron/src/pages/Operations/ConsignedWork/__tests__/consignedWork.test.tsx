@@ -83,7 +83,8 @@ describe("İçerideki İşler", () => {
     const links = screen.getAllByRole("link").map((a) => a.getAttribute("href") ?? "");
     expect(links.some((h) => h.includes("tab=SEMI_FINISHED") && h.includes("filter%5BownerCustomerId%5D=cA"))).toBe(true);
     expect(links.some((h) => h.includes("tab=RAW_STOCK"))).toBe(false);
-    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toContain("Bekliyor");
+    // DataTable başlığı sürüklenebilir (role=button) — başlık ipucuyla bulunur; ham sütunu yokken ek "(yarı mamul)" düşer.
+    expect(screen.getByTitle("Rotaya girmemiş yarı mamul emanet — Yarı Mamul")).toHaveTextContent(/^Bekliyor$/);
     expect(primaryBucket({ ...semi, inProcess: b(1, 10) })).toBe("waitingSemi");
   });
 

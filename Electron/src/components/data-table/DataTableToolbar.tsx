@@ -1,3 +1,4 @@
+import { searchLabels } from "@/lib/search-placeholder";
 import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import type { Table } from "@tanstack/react-table";
@@ -9,6 +10,8 @@ interface Props<T> {
   search: string;
   onSearchChange: (value: string) => void;
   placeholder?: string;
+  /** Neyin arandığı (ör. "Kod, ad veya vergi no") — kutuda kısa "Ara…", açıklama `title`/`aria-label`da. */
+  searchHint?: string;
   actions?: ReactNode;
   /** Verilirse "Sütunlar" + "Dışa aktar ▾" düğmeleri gösterilir. */
   table?: Table<T>;
@@ -32,7 +35,8 @@ interface Props<T> {
 export function DataTableToolbar<T>({
   search,
   onSearchChange,
-  placeholder = "Ara...",
+  placeholder,
+  searchHint,
   actions,
   table,
   exportName,
@@ -41,6 +45,7 @@ export function DataTableToolbar<T>({
   hideSearch = false,
   leading,
 }: Props<T>) {
+  const labels = searchLabels(placeholder, searchHint);
   return (
     <div data-list-surface="toolbar" className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
       {!hideSearch && (
@@ -49,7 +54,9 @@ export function DataTableToolbar<T>({
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={placeholder}
+            placeholder={labels.placeholder}
+            title={labels.hint}
+            aria-label={labels.hint}
             className="h-8 pl-8 text-sm"
           />
         </div>

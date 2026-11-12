@@ -35,6 +35,8 @@ interface Props<T extends { id: string }> {
   service: CrudService<T>;
   columns: ColumnDef<T>[];
   searchPlaceholder?: string;
+  /** Neyin arandığı — kutuda "Ara…", açıklama ipucunda (yer tutucu ≤ 20 karakter kuralı). */
+  searchHint?: string;
   writePermission: string;
   /** Backend filter'larına eklenir (queryKey'e otomatik dahil edilir). */
   extraFilters?: Record<string, string>;
@@ -110,6 +112,7 @@ export function CrudPage<T extends { id: string }>({
   service,
   columns,
   searchPlaceholder,
+  searchHint,
   writePermission,
   extraFilters,
   filterBar,
@@ -343,6 +346,7 @@ export function CrudPage<T extends { id: string }>({
         search={search}
         onSearchChange={setSearch}
         placeholder={searchPlaceholder}
+        searchHint={searchHint}
         table={table}
         exportName={title}
         fetchAll={fetchAll}

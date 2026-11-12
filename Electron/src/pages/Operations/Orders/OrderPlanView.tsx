@@ -5,14 +5,18 @@
 // kuşak · top boyu · not. Satır rengi SUNUCUDAN (`orderLineProductionState`); istemci renk hesaplamaz.
 // Renk süzgeci URL'de (`planState`) → kayıtlı görünüm altyapısı (`SavedViewsMenu`, URL anlığı) saklar.
 // =============================================================================
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
-import { fmtCalendarDay, fmtFactoryDate } from "@/lib/factory-time";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { cn } from "@/lib/utils";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
-import { getOrderPlan, parsePlanStates, PLAN_STATE_LABEL, ORDER_PLAN_STATES, type OrderPlanRow, type OrderPlanState, type OrderPlanSummary } from "./orderPlanService";
+import { getOrderPlan, parsePlanStates, PLAN_STATE_LABEL, ORDER_PLAN_STATES, type OrderPlanState, type OrderPlanSummary } from "./orderPlanService";
+import { DOT_CLASS, n, orderPlanColumns } from "./orderPlanColumns";
 
 export const ORDER_PLAN_QUERY_KEY = "order-plan";
 const PAGE = 100;
@@ -24,14 +28,6 @@ export const PLAN_STATE_CLASS: Record<OrderPlanState, string> = {
   GREEN: "bg-emerald-50 dark:bg-emerald-950/30",
   RED: "bg-red-50 dark:bg-red-950/30",
 };
-const DOT_CLASS: Record<OrderPlanState, string> = {
-  WHITE: "border border-muted-foreground/50 bg-background",
-  YELLOW: "bg-amber-400",
-  GREEN: "bg-emerald-500",
-  RED: "bg-red-500",
-};
-
-const n = (v: number | null, digits = 1) => (v === null ? "—" : v.toLocaleString("tr-TR", { maximumFractionDigits: digits }));
 
 export function OrderPlanView({ pricingEnabled }: { pricingEnabled: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -54,15 +50,21 @@ export function OrderPlanView({ pricingEnabled }: { pricingEnabled: boolean }) {
   });
   const rows = (q.data?.pages ?? []).flatMap((p) => p.items);
   const summary = q.data?.pages[0]?.summary;
+  const columns = useMemo(() => orderPlanColumns(pricingEnabled), [pricingEnabled]);
+  const table = useLocalTable({ tableKey: "orders:plan", data: rows, columns, getRowId: (r) => r.lineId });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="order-plan-view">
       <ListToolbar className="flex-row flex-wrap items-center">
         <PlanStateChips summary={summary} active={states} onToggle={toggleState} />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
           <SavedViewsMenu />
+          <DataTableTools table={table} compact exportName="Sipariş planı" />
         </div>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} rowClassName={(r) => PLAN_STATE_CLASS[r.state]} exportName="Sipariş planı" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -71,12 +73,11 @@ export function OrderPlanView({ pricingEnabled }: { pricingEnabled: boolean }) {
             <p className="font-medium text-destructive">Plan yüklenemedi.</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
           </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage className="text-center text-sm text-muted-foreground">Bu süzgeçte açık sipariş satırı yok.</ListMessage>
         ) : (
-          <PlanTable rows={rows} pricingEnabled={pricingEnabled} />
+          <ListMessage className="text-center text-sm text-muted-foreground">Bu süzgeçte açık sipariş satırı yok.</ListMessage>
         )}
       </ListBody>
+      )}
       {/* [EL-09] sapması devralındı: elle "Daha fazla" (davranış korunarak alt şeride taşındı). */}
       <ListFooter loaded={rows.length}>
         {q.hasNextPage && (
@@ -105,37 +106,5 @@ function PlanStateChips({ summary, active, onToggle }: { summary?: OrderPlanSumm
       ))}
       {summary && <span className="text-xs text-muted-foreground">Σ {n(summary.quantity)} m</span>}
     </div>
-  );
-}
-
-function PlanTable({ rows, pricingEnabled }: { rows: OrderPlanRow[]; pricingEnabled: boolean }) {
-  const heads = ["", "Tarih", "Termin", "Desen", "Varyant", "Metre", "En", "Müşteri", ...(pricingEnabled ? ["Fiyat"] : []), "Kuşak", "Top boyu", "Not", "Sipariş"];
-  return (
-    <table className="w-full text-sm">
-      <thead className="text-xs text-muted-foreground">
-        <tr>{heads.map((h, i) => <th key={i} className="whitespace-nowrap px-2 py-1.5 text-left font-medium">{h}</th>)}</tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.lineId} className={cn("border-t", PLAN_STATE_CLASS[r.state])} data-state={r.state} data-testid="order-plan-row">
-            <td className="px-2 py-1.5" title={PLAN_STATE_LABEL[r.state]}>
-              <span className={cn("inline-block h-2.5 w-2.5 rounded-full", DOT_CLASS[r.state])} aria-label={PLAN_STATE_LABEL[r.state]} />
-            </td>
-            <td className="whitespace-nowrap px-2 py-1.5">{fmtFactoryDate(r.orderDate)}</td>
-            <td className="whitespace-nowrap px-2 py-1.5">{fmtCalendarDay(r.deadline)}</td>
-            <td className="px-2 py-1.5">{r.item.code} <span className="text-muted-foreground">{r.item.name}</span></td>
-            <td className="px-2 py-1.5">{r.recipe ? (r.recipe.variantCode ?? r.recipe.code) : "—"}</td>
-            <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">{n(r.quantity)} {r.unit === "MT" ? "" : r.unit}</td>
-            <td className="px-2 py-1.5 text-right tabular-nums">{n(r.width)}</td>
-            <td className="px-2 py-1.5">{r.customer.code ?? r.customer.name}</td>
-            {pricingEnabled && <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">{r.unitPrice === null ? "—" : `${n(r.unitPrice, 2)} ${r.currency}`}</td>}
-            <td className="px-2 py-1.5">{r.targetValues.length > 0 ? r.targetValues.map((t) => t.valueName).join(", ") : "—"}</td>
-            <td className="px-2 py-1.5 text-right tabular-nums">{n(r.pieceLengthM)}</td>
-            <td className="max-w-[16rem] truncate px-2 py-1.5" title={r.cutNote ?? undefined}>{r.cutNote ?? "—"}</td>
-            <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs">{r.orderNumber}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }

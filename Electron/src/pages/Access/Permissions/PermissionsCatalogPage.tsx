@@ -99,7 +99,9 @@ export function PermissionsCatalogPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Kod, açıklama veya modül..."
+            placeholder="Ara…"
+            title="Kod, açıklama veya modül"
+            aria-label="Yetki ara: kod, açıklama veya modül"
             className="h-8 pl-8 text-sm"
           />
         </div>
@@ -225,7 +227,7 @@ export function PermissionsCatalogPage() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="break-words [--cell-wrap:normal] py-1.5 text-xs text-muted-foreground">
+                              <TableCell className="truncate py-1.5 text-xs text-muted-foreground" title={p.description ?? undefined}>
                                 {p.description}
                               </TableCell>
                               <TableCell className="py-1.5 text-right">

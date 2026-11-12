@@ -10,7 +10,11 @@ import type { CashTxnRow } from "./service";
 const opened: string[] = [];
 vi.mock("@/components/layout/tabs/use-tab-target", () => ({ useDrillTarget: (to: string) => ({ onClick: () => opened.push(to), onAuxClick: () => {}, onContextMenu: () => {} }) }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
-import { CashTxnTable } from "./CashTxnTable";
+import { CashTxnTable, useCashTxnTable } from "./CashTxnTable";
+
+function Harness({ rows, onCancel }: { rows: CashTxnRow[]; onCancel: (r: CashTxnRow) => void }) {
+  return <CashTxnTable table={useCashTxnTable(rows, { onCancel })} />;
+}
 
 const base = { status: "ACTIVE", currency: "TRY", amount: 100, txnDate: "2026-09-18T08:00:00Z", category: null, description: null, reference: null, transferGroupId: null, cashBox: { id: "k1", name: "Ana Kasa" }, bankAccount: null } as const;
 const rows: CashTxnRow[] = [
@@ -22,7 +26,7 @@ describe("CashTxnTable — ödeme satırı", () => {
   it("⭐ Kaynak hücresi ödemeyi gösterir ve Tahsilat/Ödeme listesine arama ile gider; iptal düğmesi yalnız masraf satırında", async () => {
     const onCancel = vi.fn();
     const user = userEvent.setup();
-    renderWithProviders(<CashTxnTable rows={rows} onCancel={onCancel} />);
+    renderWithProviders(<Harness rows={rows} onCancel={onCancel} />);
     expect(screen.getByText("Tahsilat")).toBeInTheDocument();
     const link = screen.getByTitle("Tahsilat/Ödeme kaydını aç");
     expect(link).toHaveTextContent("TH-77");

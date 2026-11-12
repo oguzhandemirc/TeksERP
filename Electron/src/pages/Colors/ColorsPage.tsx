@@ -46,7 +46,7 @@ export function ColorsPage() {
       service={colorService}
       columns={colorColumns}
       writePermission="property:write" // Y7 fix: backend color.routes property:* ister (item:* DEĞİL)
-      searchPlaceholder="Kod veya ad ara..."
+      searchHint="Kod veya ad"
       filterBar={<BulkColorAddDialog />}
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <ColorFormDialog

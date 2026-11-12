@@ -135,12 +135,14 @@ describe("çek/senet teslim bordrosu", () => {
   });
 
   it("§9b seçim sütununun BAŞLIĞI metinsizdir (chequeExport §2 eşlemesine girmemeli)", () => {
-    // `chequeExport.test.ts` §2 `<thead>`'i kaynaktan okuyup dosya kolonlarıyla
-    // eşliyor; seçim kutusu bir veri kolonu DEĞİLDİR. Metinli bir başlık o
+    // `chequeExport.test.ts` §2 metin sütun başlıklarını (`header: "…"`) kaynaktan okuyup dosya
+    // kolonlarıyla eşliyor; seçim kutusu bir veri kolonu DEĞİLDİR. Metinli bir başlık o
     // sözleşmeyi (bizim değil, KOMŞU bekçinin) sessizce kırardı.
-    const thead = /<thead[\s\S]*?<\/thead>/.exec(src("./ChequeTable.tsx"))?.[0] ?? "";
-    expect(thead).toContain("Checkbox");
-    const headers = [...thead.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => (m[1] ?? "").trim());
+    const table$ = src("./ChequeTable.tsx");
+    const select = /id: "select",[\s\S]*?cell:/.exec(table$)?.[0] ?? "";
+    expect(select).toContain("header: () =>");
+    expect(select).toContain("Checkbox");
+    const headers = [...table$.matchAll(/\bheader: "([^"]+)"/g)].map((m) => (m[1] ?? "").trim());
     expect(headers).not.toContain("Seç");
     expect(headers).toEqual([
       "Belge No",

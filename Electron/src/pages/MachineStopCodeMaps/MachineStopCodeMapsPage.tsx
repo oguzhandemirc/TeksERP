@@ -22,7 +22,7 @@ export function MachineStopCodeMapsPage() {
       service={machineStopCodeMapService}
       columns={codeMapColumns}
       writePermission="loom:spec-manage"
-      searchPlaceholder="Kart tipi veya ham kod ara..."
+      searchHint="Kart tipi veya ham kod"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <CodeMapFormDialog
           open={open}

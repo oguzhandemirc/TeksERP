@@ -123,7 +123,8 @@ export function CariListTable({ table, selectedKey, onSelect }: Props) {
     <DataTable<CariRowItem>
       table={table}
       activeRowId={selectedKey}
-      onRowClick={onSelect}
+      // Seçim yalnız satırı alır; tıklama değiştiricileri (yeni sekme) bu listede anlamsız.
+      onRowClick={(r) => onSelect(r)}
       exportName="Cariler"
       rowClassName={(r) => (r.isActive ? "group" : "group text-muted-foreground")}
     />

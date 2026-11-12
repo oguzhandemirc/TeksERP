@@ -125,10 +125,11 @@ describe("sevk partisi — kaynak metni kapıları", () => {
     expect(page).toMatch(/lotList \? \(\s*<PackingLotListView/);
     expect(page).toMatch(/inWorkspace && groupFilter \? \(\) => setGroupFilter\(null\)/);
     expect(page).toMatch(/onBack=\{onBack\}/);
-    const list = src("PackingLotListView.tsx");
-    // Havuz satırı SABİT ve boşken kaybolmaz; parti satırı "N açık · M sevk".
-    expect(list).toMatch(/<UngroupedRow /);
-    expect(list).toMatch(/lotSackLabel\(lot\)/);
+    const list = src("PackingLotListView.tsx") + src("PackingLotTable.tsx");
+    // Havuz satırı SABİT (aramasız her durumda ilk satır) ve boşken kaybolmaz; parti satırı "N açık · M sevk".
+    expect(list).toMatch(/\.\.\.\(query \? \[\] : \[\{ id: POOL_ROW_ID/);
+    expect(list).toMatch(/Partisiz çuvallar \(havuz\)/);
+    expect(list).toMatch(/lotSackLabel\(r\)/);
     expect(list).not.toMatch(/empty && null/);
     expect(list).toMatch(/operations\/shipments\?filter\[customerId\]=/);
   });

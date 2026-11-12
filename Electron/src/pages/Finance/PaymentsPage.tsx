@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
-import { cashTxnSearchPath } from "./CashTransactions/cashTxnRules";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, ArrowDownLeft, ArrowUpRight, Printer } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
-import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { cancelledPaymentRow, usePaymentTable } from "./PaymentTable";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { listPayments, cancelPayment, money, partyName, type PaymentRow } from "./service";
@@ -18,13 +18,11 @@ import { PaymentFormDialog } from "./PaymentFormDialog";
 import { PaymentsFilterBar } from "./PaymentsFilterBar";
 import {
   EMPTY_PAYMENT_FILTERS,
-  PAYMENT_METHOD_LABEL,
   buildPaymentListQuery,
   isPaymentFilterDirty,
   paymentFilterKey,
   type PaymentFilterState,
 } from "./paymentFilters";
-import { factoryLocaleDateString } from "@/lib/factory-time";
 import { RefreshButton } from "@/components/RefreshButton";
 
 const PAGE_SIZE = 100;
@@ -56,7 +54,8 @@ export function PaymentsPage() {
     },
   });
 
-  const rows = q.data?.data ?? [];
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const table = usePaymentTable(rows, { onPrint: setPrintTarget, onCancel: setCancelTarget });
   const total = q.data?.pagination?.total ?? 0;
 
   const openForm = (d: "IN" | "OUT") => {
@@ -86,8 +85,11 @@ export function PaymentsPage() {
         }
       />
 
-      <PaymentsFilterBar value={filters} onChange={setFilters} />
+      <PaymentsFilterBar value={filters} onChange={setFilters} tools={<DataTableTools table={table} compact exportName="Tahsilat ve ödemeler" />} />
 
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} rowClassName={cancelledPaymentRow} exportName="Tahsilat ve ödemeler" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -114,83 +116,18 @@ export function PaymentsPage() {
                 : "Kayıt yok. Tahsilat veya ödeme girmek için üstteki düğmeleri kullanın."}
             </div>
           </ListMessage>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left">Belge No</th>
-                <th className="px-3 py-2 text-left">Yön</th>
-                <th className="px-3 py-2 text-left">Cari</th>
-                <th className="px-3 py-2 text-left">Yöntem</th>
-                <th className="px-3 py-2 text-left">Kasa / Banka</th>
-                <th className="px-3 py-2 text-left">Kasa defteri</th>
-                <th className="px-3 py-2 text-left">Tarih</th>
-                <th className="px-3 py-2 text-right">Tutar</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id} className={`border-t ${p.status === "CANCELLED" ? "opacity-60" : ""}`}>
-                  <td className="px-3 py-2 font-mono text-xs">{p.docNo}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant="outline" className={p.direction === "IN" ? "text-emerald-600" : "text-amber-700"}>
-                      {p.direction === "IN" ? "Tahsilat" : "Ödeme"}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2 font-medium">{partyName(p.cari)}</td>
-                  <td className="px-3 py-2">{PAYMENT_METHOD_LABEL[p.method] ?? p.method}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {p.cashBox?.name ?? p.bankAccount?.name ?? "—"}
-                  </td>
-                  <td className="px-3 py-2">{p.cashTransaction ? <CashLedgerLink docNo={p.cashTransaction.docNo} /> : <span className="text-xs text-muted-foreground" title="Defter satırı yok — geçmiş kayıt (backfill bekliyor) ya da eski sunucu">—</span>}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {factoryLocaleDateString(p.paymentDate, "tr-TR")}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">
-                    {p.status === "CANCELLED" ? (
-                      <span className="line-through">{money(p.amount, p.currency)}</span>
-                    ) : (
-                      money(p.amount, p.currency)
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {/* Makbuz KAYIT anında donduğu için her satırda basılabilir
-                        (iptal edilmiş olan İPTAL filigranıyla) — faturadan farkı
-                        budur: makbuzun taslak hâli YOKTUR. */}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="mr-1"
-                      title="Makbuzu yazdır / önizle"
-                      onClick={() => setPrintTarget(p)}
-                    >
-                      <Printer className="h-4 w-4" />
-                    </Button>
-                    {p.status === "ACTIVE" && (
-                      <PermissionGate permission="finance:payment">
-                        <Button variant="outline" size="sm" onClick={() => setCancelTarget(p)}>
-                          <Ban className="mr-1 h-3.5 w-3.5" />
-                          İptal
-                        </Button>
-                      </PermissionGate>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        ) : null}
+      </ListBody>
+      )}
         {/* ⚠️ KIRPMA SESSİZ DEĞİL: sunucudaki toplam gösterilen satırı aşarsa
             yazılır. Aksi halde 100. satırdan sonrası "yok" sanılır ve aranan
             tahsilat ikinci kez girilir. */}
         {rows.length > 0 && total > rows.length && (
-          <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+          <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
             {total} kaydın ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için tarih, cari
             ya da yöntem filtresini kullanın.
           </p>
         )}
-      </ListBody>
       <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       <PaymentFormDialog
@@ -226,15 +163,5 @@ export function PaymentsPage() {
         writePermission="finance:payment"
       />
     </PageShell>
-  );
-}
-
-/** Ödemenin kasa/banka defteri satırı — tıklayınca Kasa Hareketleri o belge no ile açılır. */
-function CashLedgerLink({ docNo }: { docNo: string }) {
-  const drill = useDrillTarget(cashTxnSearchPath(docNo));
-  return (
-    <button type="button" className="font-mono text-xs text-primary hover:underline" title="Kasa defteri satırını aç" onClick={drill.onClick} onAuxClick={drill.onAuxClick} onContextMenu={drill.onContextMenu}>
-      {docNo}
-    </button>
   );
 }

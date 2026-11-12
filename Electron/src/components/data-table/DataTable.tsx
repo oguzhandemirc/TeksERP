@@ -45,6 +45,20 @@ import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 // açılış iptal edilir. Çift-tıkla kelime seçerken satır detayı açılmasın diye.
 // Daha düşük = daha çevik tek-tık ama çok hızlı çift-tıkları kaçırma riski artar.
 const ROW_OPEN_DELAY_MS = 160;
+// Hücre içi düğme/bağlantı/alan kendi işini yapar; satır açılışını tetiklemez (stopPropagation unutulsa bile).
+const INTERACTIVE = "button, a[href], input, select, textarea, label, [role='button'], [role='checkbox'], [role='menuitem'], [role='switch']";
+const fromInteractive = (e: { target: EventTarget; currentTarget: Element }) => {
+  const hit = e.target instanceof Element ? e.target.closest(INTERACTIVE) : null;
+  return !!hit && hit !== e.currentTarget && e.currentTarget.contains(hit);
+};
+
+/** Satır tıklamasının değiştirici tuşları — `useOpenTarget()(yol, click)` Ctrl/⌘/orta tıkla yeni sekme kararını verir. */
+export interface RowClick {
+  button: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}
 
 interface Props<T> {
   table: TanstackTable<T>;
@@ -65,7 +79,8 @@ interface Props<T> {
   errorText?: string;
   pagination?: Pagination;
   emptyText?: string;
-  onRowClick?: (row: T) => void;
+  /** Satır açılışı; ikinci argüman tıklamanın değiştiricileri (klavye ↑/↓ ile açılışta yok). */
+  onRowClick?: (row: T, click?: RowClick) => void;
   /** Seçim çubuğuna sayfa-özel toplu aksiyon enjekte eder (seçili satırları alır). */
   bulkActions?: (rows: T[]) => ReactNode;
   /**
@@ -96,6 +111,8 @@ interface Props<T> {
   paginationActions?: ReactNode;
   /** Satıra ek sınıf (ağaç görünümünde bağlam satırı soluk, daraltılan çeşit gizli — Kumaş Özellikleri). */
   rowClassName?: (row: T) => string | undefined;
+  /** Satır düzeyi ipucu (`title`) — ör. "Siparişin tamamını aç": tıklamanın neyi açtığını söyler. */
+  rowTitle?: (row: T) => string | undefined;
   /**
    * Etkin (yan panelde açık) satırın kimliği. Verilirse (null dahil) satırlar kayıt satırıdır: vurgulanır
    * (`aria-selected`), görünür tutulur ve tablo odaktayken ↑/↓ komşu satırı `onRowClick` ile hemen açar.
@@ -122,6 +139,7 @@ export function DataTable<T>({
   selectionBlockedReason,
   paginationActions,
   rowClassName,
+  rowTitle,
   activeRowId,
   loadMore,
 }: Props<T>) {
@@ -343,6 +361,7 @@ export function DataTable<T>({
                         rowContextMenu={rowContextMenu}
                         selectionBlockedReason={selectionBlockedReason}
                         rowClassName={rowClassName}
+                        rowTitle={rowTitle}
                         openTimer={openTimer}
                         selRef={selRef}
                         visibleColumnIds={visibleColumnIds}
@@ -439,10 +458,11 @@ interface DataTableRowProps<T> {
   /** undefined → kayıt satırı değil; true/false → etkin satır vurgusu (`activeRowId`). */
   isActive?: boolean;
   selectable: boolean;
-  onRowClick?: (row: T) => void;
+  onRowClick?: (row: T, click?: RowClick) => void;
   rowContextMenu?: (row: T) => ReactNode;
   selectionBlockedReason?: (row: T) => string | null;
   rowClassName?: (row: T) => string | undefined;
+  rowTitle?: (row: T) => string | undefined;
   openTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   selRef: MutableRefObject<string>;
   // Memo geçersizleştirme sinyalleri — gövdede doğrudan kullanılmaz, React.memo
@@ -471,6 +491,7 @@ function DataTableRowInner<T>({
   rowContextMenu,
   selectionBlockedReason,
   rowClassName,
+  rowTitle,
   openTimer,
   selRef,
 }: DataTableRowProps<T>) {
@@ -483,9 +504,18 @@ function DataTableRowInner<T>({
         "row-enter",
         onRowClick && "cursor-pointer",
         isActive && "bg-primary-soft hover:bg-primary-soft",
+        onRowClick && "focus-visible:bg-accent/60 focus-visible:outline-none",
         rowClassName?.(row.original),
       )}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
+      title={rowTitle?.(row.original)}
+      // Klavye erişimi: tıklanabilir satır Tab ile odaklanır, Enter/Space açar (hücre içi düğmeler hariç).
+      tabIndex={onRowClick ? 0 : undefined}
+      onKeyDown={onRowClick ? (e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        onRowClick(row.original, { button: 0, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
+      } : undefined}
       onClick={(e) => {
         if (!onRowClick) return;
         // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı
@@ -495,14 +525,17 @@ function DataTableRowInner<T>({
           clearTimeout(openTimer.current);
           openTimer.current = null;
         }
+        if (fromInteractive(e)) return;
         // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
         if (window.getSelection()?.toString()) return;
         // 2./3. tık (çift-tık) → boş hücrede bile açma.
         if (e.detail > 1) return;
         const data = row.original;
+        // Olay zamanlayıcıdan önce okunur: değiştiriciler (Ctrl/⌘ → yeni sekme) açılışa taşınır.
+        const click: RowClick = { button: e.button, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
         openTimer.current = setTimeout(() => {
           openTimer.current = null;
-          onRowClick(data);
+          onRowClick(data, click);
         }, ROW_OPEN_DELAY_MS);
       }}
     >

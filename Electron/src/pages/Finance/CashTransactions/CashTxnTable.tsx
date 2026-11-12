@@ -9,92 +9,181 @@
 // basılır (`PaymentsPage` emsali). Defterde duruyor olması bilgidir.
 // =============================================================================
 
+import { useMemo } from "react";
+import type { ColumnDef, Table } from "@tanstack/react-table";
 import { AlertTriangle, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { DataTable } from "@/components/data-table/DataTable";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { money } from "../service";
 import { fmtDate } from "../Cheques/dates";
 import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
-import { DIRECTION_TONE, KIND_LABEL, STATUS_LABEL, accountNameOf, isPaymentLedgerRow, paymentSearchPath, withSign } from "./cashTxnRules";
+import {
+  DIRECTION_TONE,
+  KIND_LABEL,
+  STATUS_LABEL,
+  accountNameOf,
+  isPaymentLedgerRow,
+  paymentSearchPath,
+  withSign,
+} from "./cashTxnRules";
 import type { CashTxnRow } from "./service";
 import { currencyMismatchOf } from "./currencyMismatch";
 
-interface Props {
-  rows: CashTxnRow[];
+interface Handlers {
   onCancel: (row: CashTxnRow) => void;
   /** D4-H3: masraf bağları — yalnız `finance.masraf.bagAlani` OPTIONAL iken verilir (OFF'ta tablo bayt-aynı). */
   onAllocations?: (row: CashTxnRow) => void;
 }
 
-export function CashTxnTable({ rows, onCancel, onAllocations }: Props) {
+const amountTextOf = (r: CashTxnRow) => withSign(r.direction, money(r.amount, r.currency));
+
+const CASH_TXN_COLUMNS: ColumnDef<CashTxnRow>[] = [
+  {
+    accessorKey: "docNo",
+    header: "Belge No",
+    cell: ({ row }) => <span className="font-mono text-xs">{row.original.docNo}</span>,
+  },
+  {
+    id: "kind",
+    header: "Tür",
+    meta: { label: "Tür", exportValue: (r) => KIND_LABEL[r.kind] },
+    cell: ({ row: { original: r } }) => (
+      <Badge variant="outline" className={DIRECTION_TONE[r.direction]}>
+        {KIND_LABEL[r.kind]}
+      </Badge>
+    ),
+  },
+  {
+    id: "account",
+    header: "Hesap",
+    meta: { label: "Hesap", exportValue: accountNameOf },
+    cell: ({ row }) => <span className="font-medium">{accountNameOf(row.original)}</span>,
+  },
+  {
+    id: "txnDate",
+    header: "Tarih",
+    meta: { label: "Tarih", exportValue: (r) => fmtDate(r.txnDate) },
+    cell: ({ row }) => fmtDate(row.original.txnDate),
+  },
+  {
+    id: "amount",
+    header: "Tutar",
+    meta: { label: "Tutar", align: "right", exportValue: amountTextOf },
+    cell: ({ row: { original: r } }) => {
+      const cancelled = r.status === "CANCELLED";
+      const amountText = amountTextOf(r);
+      return (
+        <span className={`font-medium ${cancelled ? "" : DIRECTION_TONE[r.direction]}`}>
+          {cancelled ? <span className="line-through">{amountText}</span> : amountText}
+          <CurrencyMismatchBadge row={r} />
+        </span>
+      );
+    },
+  },
+  {
+    id: "category",
+    header: "Kategori",
+    meta: { label: "Kategori", exportValue: (r) => r.category ?? "" },
+    cell: ({ row }) => <span className="text-muted-foreground">{row.original.category ?? "—"}</span>,
+  },
+  {
+    id: "description",
+    header: "Açıklama",
+    size: 280,
+    meta: {
+      label: "Açıklama",
+      exportValue: (r) => [r.description, r.reference].filter(Boolean).join(" · "),
+    },
+    cell: ({ row: { original: r } }) => (
+      <span className="text-muted-foreground">
+        {r.description ?? "—"}
+        {r.reference && <span className="ml-1 text-xs">· {r.reference}</span>}
+      </span>
+    ),
+  },
+  {
+    id: "source",
+    header: "Kaynak",
+    meta: { label: "Kaynak", exportValue: (r) => r.payment?.docNo ?? "" },
+    cell: ({ row: { original: r } }) =>
+      r.payment ? <PaymentLink payment={r.payment} /> : <span className="text-muted-foreground">—</span>,
+  },
+  {
+    id: "status",
+    header: "Durum",
+    meta: {
+      label: "Durum",
+      exportValue: (r) => STATUS_LABEL[r.status === "CANCELLED" ? "CANCELLED" : "ACTIVE"],
+    },
+    cell: ({ row: { original: r } }) =>
+      r.status === "CANCELLED" ? (
+        <Badge className="bg-muted text-muted-foreground">{STATUS_LABEL.CANCELLED}</Badge>
+      ) : (
+        <span className="text-xs text-muted-foreground">{STATUS_LABEL.ACTIVE}</span>
+      ),
+  },
+];
+
+function cashTxnColumnsActions({ onCancel, onAllocations }: Handlers): ColumnDef<CashTxnRow> {
+  return {
+    id: "actions",
+    header: () => <span className="sr-only">Eylemler</span>,
+    enableHiding: false,
+    size: 170,
+    meta: { label: "Eylemler", align: "right" },
+    cell: ({ row: { original: r } }) => (
+      <div className="flex items-center justify-end">
+        {onAllocations && r.kind === "EXPENSE" && (
+          <Button variant="ghost" size="sm" className="mr-1" onClick={() => onAllocations(r)}>
+            Bağlar
+          </Button>
+        )}
+        {r.status !== "CANCELLED" && !isPaymentLedgerRow(r) && (
+          <PermissionGate permission="finance:payment">
+            <Button variant="outline" size="sm" onClick={() => onCancel(r)}>
+              <Ban className="mr-1 h-3.5 w-3.5" />
+              İptal
+            </Button>
+          </PermissionGate>
+        )}
+      </div>
+    ),
+  };
+}
+
+const cashTxnColumns = (h: Handlers): ColumnDef<CashTxnRow>[] => [
+  ...CASH_TXN_COLUMNS,
+  cashTxnColumnsActions(h),
+];
+
+/** Tablo sayfada kurulur — standart "Sütunlar" menüsü süzgeç çubuğunda. Düzen `finance:cash-txn` altında kayıtlı. */
+export function useCashTxnTable(rows: CashTxnRow[], { onCancel, onAllocations }: Handlers) {
+  const columns = useMemo(() => cashTxnColumns({ onCancel, onAllocations }), [onCancel, onAllocations]);
+  return useLocalTable({ tableKey: "finance:cash-txn", data: rows, columns });
+}
+
+const cancelledRow = (r: CashTxnRow) => (r.status === "CANCELLED" ? "opacity-60" : undefined);
+
+export function CashTxnTable({
+  table,
+  isError,
+  onRetry,
+}: {
+  table: Table<CashTxnRow>;
+  isError?: boolean;
+  onRetry?: () => void;
+}) {
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-        <tr>
-          <th className="px-3 py-2 text-left">Belge No</th>
-          <th className="px-3 py-2 text-left">Tür</th>
-          <th className="px-3 py-2 text-left">Hesap</th>
-          <th className="px-3 py-2 text-left">Tarih</th>
-          <th className="px-3 py-2 text-right">Tutar</th>
-          <th className="px-3 py-2 text-left">Kategori</th>
-          <th className="px-3 py-2 text-left">Açıklama</th>
-          <th className="px-3 py-2 text-left">Kaynak</th>
-          <th className="px-3 py-2 text-left">Durum</th>
-          <th className="px-3 py-2" />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const cancelled = r.status === "CANCELLED";
-          const amountText = withSign(r.direction, money(r.amount, r.currency));
-          return (
-            <tr key={r.id} className={`border-t ${cancelled ? "opacity-60" : ""}`}>
-              <td className="px-3 py-2 font-mono text-xs">{r.docNo}</td>
-              <td className="px-3 py-2">
-                <Badge variant="outline" className={DIRECTION_TONE[r.direction]}>
-                  {KIND_LABEL[r.kind]}
-                </Badge>
-              </td>
-              <td className="px-3 py-2 font-medium">{accountNameOf(r)}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{fmtDate(r.txnDate)}</td>
-              <td className={`px-3 py-2 text-right font-medium ${cancelled ? "" : DIRECTION_TONE[r.direction]}`}>
-                {cancelled ? <span className="line-through">{amountText}</span> : amountText}
-                <CurrencyMismatchBadge row={r} />
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">{r.category ?? "—"}</td>
-              <td className="max-w-[22rem] truncate px-3 py-2 text-muted-foreground" title={r.description ?? ""}>
-                {r.description ?? "—"}
-                {r.reference && <span className="ml-1 text-xs">· {r.reference}</span>}
-              </td>
-              <td className="px-3 py-2">{r.payment ? <PaymentLink payment={r.payment} /> : <span className="text-muted-foreground">—</span>}</td>
-              <td className="px-3 py-2">
-                {cancelled ? (
-                  <Badge className="bg-muted text-muted-foreground">{STATUS_LABEL.CANCELLED}</Badge>
-                ) : (
-                  <span className="text-xs text-muted-foreground">{STATUS_LABEL.ACTIVE}</span>
-                )}
-              </td>
-              <td className="px-3 py-2 text-right">
-                {onAllocations && r.kind === "EXPENSE" && (
-                  <Button variant="ghost" size="sm" className="mr-1" onClick={() => onAllocations(r)}>
-                    Bağlar
-                  </Button>
-                )}
-                {!cancelled && !isPaymentLedgerRow(r) && (
-                  <PermissionGate permission="finance:payment">
-                    <Button variant="outline" size="sm" onClick={() => onCancel(r)}>
-                      <Ban className="mr-1 h-3.5 w-3.5" />
-                      İptal
-                    </Button>
-                  </PermissionGate>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <DataTable<CashTxnRow>
+      table={table}
+      isError={isError}
+      onRetry={onRetry}
+      rowClassName={cancelledRow}
+      exportName="Kasa hareketleri"
+    />
   );
 }
 
@@ -102,9 +191,18 @@ export function CashTxnTable({ rows, onCancel, onAllocations }: Props) {
 function PaymentLink({ payment }: { payment: NonNullable<CashTxnRow["payment"]> }) {
   const drill = useDrillTarget(paymentSearchPath(payment.docNo));
   return (
-    <button type="button" className="text-left text-primary hover:underline" title="Tahsilat/Ödeme kaydını aç" onClick={drill.onClick} onAuxClick={drill.onAuxClick} onContextMenu={drill.onContextMenu}>
+    <button
+      type="button"
+      className="text-left text-primary hover:underline"
+      title="Tahsilat/Ödeme kaydını aç"
+      onClick={drill.onClick}
+      onAuxClick={drill.onAuxClick}
+      onContextMenu={drill.onContextMenu}
+    >
       <span className="font-mono text-xs">{payment.docNo}</span>
-      <span className="ml-1 text-xs text-muted-foreground">{payment.direction === "IN" ? "Tahsilat" : "Ödeme"} · {payment.cari.name}</span>
+      <span className="ml-1 text-xs text-muted-foreground">
+        {payment.direction === "IN" ? "Tahsilat" : "Ödeme"} · {payment.cari.name}
+      </span>
     </button>
   );
 }
@@ -114,7 +212,12 @@ function CurrencyMismatchBadge({ row }: { row: CashTxnRow }) {
   const m = currencyMismatchOf(row);
   if (!m) return null;
   return (
-    <Badge variant="outline" data-testid="currency-mismatch" title={m.hint} className="ml-1.5 border-warning/50 text-warning">
+    <Badge
+      variant="outline"
+      data-testid="currency-mismatch"
+      title={m.hint}
+      className="ml-1.5 border-warning/50 text-warning"
+    >
       <AlertTriangle className="mr-0.5 h-3 w-3" /> Hesap {m.account}
     </Badge>
   );

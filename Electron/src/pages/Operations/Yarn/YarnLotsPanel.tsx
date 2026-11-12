@@ -5,7 +5,7 @@
 // Süzme sunucuda (kalem · arama · aktiflik · kalite CSV), cursor'lu; izin: liste `warehouse:read`, yazma `yarn:write`,
 // kalite geçişi `quality:write` (rozet + satır menüsü: `YarnLotQualityMenu`).
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -13,7 +13,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
@@ -22,11 +23,9 @@ import type { Customer } from "@/pages/Customers/types";
 import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { YARN_ITEM_FILTER } from "./YarnFilterBar";
-import { YarnLotQualityMenu } from "./YarnLotQualityMenu";
-import { lotQualityOf, qualityFilterParam, YARN_LOT_QUALITY, YARN_LOT_QUALITY_FILTER_ALL, YARN_LOT_QUALITY_FILTER_OPTIONS } from "./yarnLotQuality";
+import { useYarnLotTable } from "./YarnLotTable";
+import { qualityFilterParam, YARN_LOT_QUALITY_FILTER_ALL, YARN_LOT_QUALITY_FILTER_OPTIONS } from "./yarnLotQuality";
 import { createYarnLot, listYarnLots, updateYarnLot, type YarnLotRow } from "./service";
-import { kg } from "./qty";
-import { factoryLocaleDateString } from "@/lib/factory-time";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 
 const LOTS_KEY = ["yarn", "lots"] as const;
@@ -44,7 +43,7 @@ export function YarnLotsPanel() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.pagination.nextCursor ?? undefined,
   });
-  const rows = q.data?.pages.flatMap((p) => p.data) ?? [];
+  const rows = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
   const invalidate = () => void qc.invalidateQueries({ queryKey: LOTS_KEY });
   const toggle = useMutation({
     mutationFn: (r: YarnLotRow) => updateYarnLot(r.id, { isActive: !r.isActive }),
@@ -53,6 +52,7 @@ export function YarnLotsPanel() {
       invalidate();
     },
   });
+  const table = useYarnLotTable(rows, { onToggle: (r) => toggle.mutate(r), busy: toggle.isPending, onDone: invalidate });
 
   return (
     <>
@@ -60,7 +60,7 @@ export function YarnLotsPanel() {
         <div className="w-72">
           <ReferenceSelect<Item> value={itemId} onChange={setItemId} service={itemService} queryKey="items-yarn-lots" getLabel={(it) => `${it.code} — ${it.name}`} placeholder="İplik (hepsi)" extraFilters={YARN_ITEM_FILTER} />
         </div>
-        <Input className="w-56" placeholder="Lot no / kalem ara" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Lot ara" />
+        <Input className="w-56" placeholder="Ara…" title="Lot no ya da kalem ara" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Lot ara" />
         <LabeledSelect label="Kalite" value={quality} options={YARN_LOT_QUALITY_FILTER_OPTIONS} onChange={setQuality} />
         <label className="flex items-center gap-1 text-sm">
           <input type="checkbox" checked={showPassive} onChange={(e) => setShowPassive(e.target.checked)} /> Pasifleri de göster
@@ -70,7 +70,13 @@ export function YarnLotsPanel() {
             <Plus className="mr-1 h-4 w-4" /> Lot Aç
           </Button>
         </PermissionGate>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="İplik lotları" />
+        </div>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} rowClassName={(r) => (r.isActive ? undefined : "opacity-60")} exportName="İplik lotları" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -80,10 +86,9 @@ export function YarnLotsPanel() {
           <ListMessage>
             <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Lot yok — lotlar mal kabulde iplik satırına lot numarası yazılınca kendiliğinden doğar; elle de açılabilir.</div>
           </ListMessage>
-        ) : (
-          <LotTable rows={rows} onToggle={(r) => toggle.mutate(r)} busy={toggle.isPending} onDone={invalidate} />
-        )}
+        ) : null}
       </ListBody>
+      )}
       {rows.length > 0 && (
         <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage}>
           {q.hasNextPage && (
@@ -95,57 +100,6 @@ export function YarnLotsPanel() {
       )}
       {creating && <CreateLotDialog defaultItemId={itemId} onClose={() => setCreating(false)} onDone={invalidate} />}
     </>
-  );
-}
-
-function LotTable({ rows, onToggle, busy, onDone }: { rows: YarnLotRow[]; onToggle: (r: YarnLotRow) => void; busy: boolean; onDone: () => void }) {
-  return (
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-          <tr>
-            <th className="p-2 text-left">Lot</th>
-            <th className="p-2 text-left">İplik</th>
-            <th className="p-2 text-left">Tedarikçi</th>
-            <th className="p-2 text-right">Bakiye (kg)</th>
-            <th className="p-2 text-left">Durum</th>
-            <th className="p-2 text-left">Kalite</th>
-            <th className="p-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className={`border-t ${r.isActive ? "" : "opacity-60"}`}>
-              <td className="p-2 font-mono">{r.lotNo}</td>
-              <td className="p-2">
-                {r.item.name} <span className="font-mono text-xs text-muted-foreground">{r.item.code}</span>
-              </td>
-              <td className="p-2">
-                {r.supplier?.name ?? <span className="text-muted-foreground">—</span>}
-                {r.ownerCustomer && <div className="text-xs text-amber-700">Emanet: {r.ownerCustomer.name}</div>}
-              </td>
-              {/* Türetilen bakiye — sunucu Σ hareket; eksi görünüyorsa mutabakat §41 kırmızıdır. */}
-              <td className="p-2 text-right tabular-nums">{kg(r.balanceKg)}</td>
-              <td className="p-2">{r.isActive ? <Badge variant="outline">Aktif</Badge> : <Badge variant="secondary">Pasif</Badge>}</td>
-              <td className="p-2">
-                <Badge variant="outline" className={YARN_LOT_QUALITY[lotQualityOf(r)].cls} title={r.qualityNote ?? undefined}>{YARN_LOT_QUALITY[lotQualityOf(r)].label}</Badge>
-                {(r.qualityNote || r.qualityDecidedAt) && (
-                  <div className="max-w-[16rem] truncate text-xs text-muted-foreground" title={r.qualityNote ?? undefined}>
-                    {r.qualityDecidedAt ? factoryLocaleDateString(r.qualityDecidedAt, "tr-TR") : null}{r.qualityDecidedAt && r.qualityNote ? " · " : ""}{r.qualityNote}
-                  </div>
-                )}
-              </td>
-              <td className="p-2 text-right">
-                <YarnLotQualityMenu row={r} onDone={onDone} />
-                <PermissionGate permission="yarn:write">
-                  <Button size="sm" variant="ghost" onClick={() => onToggle(r)} disabled={busy}>
-                    {r.isActive ? "Pasife al" : "Aktifleştir"}
-                  </Button>
-                </PermissionGate>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
   );
 }
 

@@ -15,7 +15,7 @@ vi.mock("@/components/print/PrintedDocDialog", () => ({ PrintedDocDialog: () => 
 vi.mock("@/components/layout/tabs/use-tab-target", () => ({ useDrillTarget: (to: string) => ({ onClick: () => opened.push(to), onAuxClick: () => {}, onContextMenu: () => {} }) }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/providers/PreferencesProvider", () => ({ usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }) }));
+vi.mock("@/providers/PreferencesProvider", () => ({ usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }), useOptionalPreferences: () => null }));
 import { PaymentsPage } from "./PaymentsPage";
 
 const row = (id: string, docNo: string, cashTransaction: { id: string; docNo: string; txnDate: string; status: "ACTIVE" | "CANCELLED" } | null) => ({ id, docNo, direction: "IN", method: "CASH", status: "ACTIVE", currency: "TRY", amount: 100, amountTry: 100, paymentDate: "2026-09-18T08:00:00Z", reference: null, cashBox: { id: "k1", name: "Ana Kasa" }, bankAccount: null, cari: { id: "c1", customer: { code: "M1", name: "Müşteri A" }, subcontractor: null }, cashTransaction });

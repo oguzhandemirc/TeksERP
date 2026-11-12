@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Wallet, Landmark } from "lucide-react";
@@ -52,54 +56,47 @@ export function AccountsPage() {
         actions={<RefreshButton queryKey={["finance", "cash-boxes"]} extraKeys={[["finance", "bank-accounts"]]} />}
         description="Her kasa/hesap TEK para birimlidir — dövizli işlem için ayrı kart açılır. Bakiye elle yazılmaz; tahsilat ve ödemelerden türetilir."
       />
-      <ListBody>
-        <section>
-          <div className="flex items-center justify-between border-b px-4 py-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-              Kasalar
-            </h2>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AccountSection
+          tableKey="finance:cash-boxes"
+          title="Kasalar"
+          icon={<Wallet className="h-4 w-4 text-muted-foreground" />}
+          addButton={
             <PermissionGate permission="finance:write">
               <Button size="sm" variant="outline" onClick={() => setOpen("CASH")}>
                 <Plus className="mr-1 h-4 w-4" />
                 Kasa ekle
               </Button>
             </PermissionGate>
-          </div>
-          <AccountTable
-            rows={cashQ.data?.data ?? []}
-            loading={cashQ.isLoading}
-            isError={cashQ.isError}
-            onRetry={() => void cashQ.refetch()}
-            empty="Kasa tanımı yok."
-            errorTitle="Kasa listesi yüklenemedi."
-          />
-        </section>
-
-        <section className="border-t">
-          <div className="flex items-center justify-between border-b px-4 py-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Landmark className="h-4 w-4 text-muted-foreground" />
-              Banka Hesapları
-            </h2>
+          }
+          rows={cashQ.data?.data}
+          loading={cashQ.isLoading}
+          isError={cashQ.isError}
+          onRetry={() => void cashQ.refetch()}
+          empty="Kasa tanımı yok."
+          errorTitle="Kasa listesi yüklenemedi."
+        />
+        <AccountSection
+          tableKey="finance:bank-accounts"
+          title="Banka Hesapları"
+          icon={<Landmark className="h-4 w-4 text-muted-foreground" />}
+          addButton={
             <PermissionGate permission="finance:write">
               <Button size="sm" variant="outline" onClick={() => setOpen("BANK")}>
                 <Plus className="mr-1 h-4 w-4" />
                 Hesap ekle
               </Button>
             </PermissionGate>
-          </div>
-          <AccountTable
-            rows={bankQ.data?.data ?? []}
-            loading={bankQ.isLoading}
-            isError={bankQ.isError}
-            onRetry={() => void bankQ.refetch()}
-            empty="Banka hesabı tanımı yok."
-            errorTitle="Banka hesabı listesi yüklenemedi."
-            showBank
-          />
-        </section>
-      </ListBody>
+          }
+          rows={bankQ.data?.data}
+          loading={bankQ.isLoading}
+          isError={bankQ.isError}
+          onRetry={() => void bankQ.refetch()}
+          empty="Banka hesabı tanımı yok."
+          errorTitle="Banka hesabı listesi yüklenemedi."
+          showBank
+        />
+      </div>
       <ListFooter
         loaded={(cashQ.data?.data.length ?? 0) + (bankQ.data?.data.length ?? 0)}
         label={`${cashQ.data?.data.length ?? 0} kasa · ${bankQ.data?.data.length ?? 0} banka hesabı`}
@@ -160,22 +157,91 @@ export function AccountsPage() {
   );
 }
 
-function AccountTable({
+type AccountRow = { id: string; code: string; name: string; bankName?: string | null; iban?: string | null; currency: Currency; balance: number; isActive: boolean };
+
+const accountColumns = (showBank: boolean): ColumnDef<AccountRow>[] => [
+  { accessorKey: "code", header: "Kod", size: 110, cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span> },
+  { accessorKey: "name", header: "Ad", cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
+  ...(showBank
+    ? ([
+        { id: "bankName", header: "Banka", meta: { label: "Banka", exportValue: (a) => a.bankName ?? "" }, cell: ({ row }) => <span className="text-muted-foreground">{row.original.bankName ?? "—"}</span> },
+        { id: "iban", header: "IBAN", size: 260, meta: { label: "IBAN", exportValue: (a) => a.iban ?? "" }, cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.iban ?? "—"}</span> },
+      ] satisfies ColumnDef<AccountRow>[])
+    : []),
+  { accessorKey: "currency", header: "Para Birimi", size: 100 },
+  {
+    id: "balance",
+    header: "Bakiye",
+    meta: { label: "Bakiye", align: "right", exportValue: (a) => money(a.balance, a.currency) },
+    cell: ({ row }) => <span className="font-medium">{money(row.original.balance, row.original.currency)}</span>,
+  },
+];
+
+const inactiveRow = (a: AccountRow) => (a.isActive ? undefined : "opacity-60");
+
+/** Kasalar / Banka hesapları bölümü — başlık + standart Sütunlar menüsü + ortak DataTable (ekranı ikiye böler). */
+function AccountSection({
+  tableKey,
+  title,
+  icon,
+  addButton,
   rows,
-  loading,
-  isError,
-  onRetry,
-  empty,
-  errorTitle,
   showBank = false,
+  ...state
 }: {
-  rows: Array<{ id: string; code: string; name: string; bankName?: string | null; iban?: string | null; currency: Currency; balance: number; isActive: boolean }>;
+  tableKey: string;
+  title: string;
+  icon: ReactNode;
+  addButton: ReactNode;
+  rows: AccountRow[] | undefined;
   loading: boolean;
   isError?: boolean;
   onRetry?: () => void;
   empty: string;
   errorTitle: string;
   showBank?: boolean;
+}) {
+  const data = useMemo(() => rows ?? [], [rows]);
+  const columns = useMemo(() => accountColumns(showBank), [showBank]);
+  const table = useLocalTable({ tableKey, data, columns });
+  return (
+    <section className="flex min-h-0 flex-1 flex-col border-b">
+      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          {icon}
+          {title}
+        </h2>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName={title} />
+          {addButton}
+        </div>
+      </div>
+      {!state.loading && data.length > 0 ? (
+        <DataTable table={table} isError={state.isError} onRetry={state.onRetry} rowClassName={inactiveRow} exportName={title} />
+      ) : (
+        <ListBody>
+          <AccountMessage rows={data} {...state} />
+        </ListBody>
+      )}
+    </section>
+  );
+}
+
+/** Yükleniyor / hata / boş — satır varken tabloyu DataTable çizer. */
+function AccountMessage({
+  rows,
+  loading,
+  isError,
+  onRetry,
+  empty,
+  errorTitle,
+}: {
+  rows: AccountRow[];
+  loading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
+  empty: string;
+  errorTitle: string;
 }) {
   if (loading) return <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>;
   // ⚠️ "TANIM YOK" ZİNCİRİNİN KÖKÜ. Tahsilat formu kasa listesini okuyamayınca
@@ -208,40 +274,5 @@ function AccountTable({
       </ListMessage>
     );
   }
-  return (
-    <>
-      {isError && (
-        <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          Liste tazelenemedi — aşağıdaki hesaplar ve bakiyeler son başarılı okumaya aittir.
-        </p>
-      )}
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-          <tr>
-            <th className="px-3 py-2 text-left">Kod</th>
-            <th className="px-3 py-2 text-left">Ad</th>
-            {showBank && <th className="px-3 py-2 text-left">Banka / IBAN</th>}
-            <th className="px-3 py-2 text-left">Para Birimi</th>
-            <th className="px-3 py-2 text-right">Bakiye</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((a) => (
-            <tr key={a.id} className={`border-t ${a.isActive ? "" : "opacity-60"}`}>
-              <td className="px-3 py-2 font-mono text-xs">{a.code}</td>
-              <td className="px-3 py-2 font-medium">{a.name}</td>
-              {showBank && (
-                <td className="px-3 py-2 text-muted-foreground">
-                  {a.bankName ?? "—"}
-                  {a.iban ? <div className="font-mono text-xs">{a.iban}</div> : null}
-                </td>
-              )}
-              <td className="px-3 py-2">{a.currency}</td>
-              <td className="px-3 py-2 text-right font-medium">{money(a.balance, a.currency)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
+  return null;
 }

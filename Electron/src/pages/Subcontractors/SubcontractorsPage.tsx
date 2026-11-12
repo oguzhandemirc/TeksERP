@@ -49,7 +49,7 @@ export function SubcontractorsPage() {
       service={subcontractorService}
       columns={subcontractorColumns}
       writePermission="subcontractor:write"
-      searchPlaceholder="Ad veya kod ara..."
+      searchHint="Ad veya kod"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <SubcontractorFormDialog
           open={open}

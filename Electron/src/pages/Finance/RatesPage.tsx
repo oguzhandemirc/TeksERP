@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, RefreshCw } from "lucide-react";
@@ -9,14 +10,39 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
-import { listRates, createRate, fetchTcmbRates, type Currency } from "./service";
+import { listRates, createRate, fetchTcmbRates, type Currency, type RateRow } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { factoryDayKey, fmtDayKey, calendarLocaleDateString } from "@/lib/factory-time";
 import { RefreshButton } from "@/components/RefreshButton";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
 const CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "RUB"];
+
+const rateColumns: ColumnDef<RateRow>[] = [
+  {
+    id: "rateDate",
+    header: "Tarih",
+    meta: { label: "Tarih", exportValue: (r) => calendarLocaleDateString(r.rateDate, "tr-TR") },
+    cell: ({ row }) => calendarLocaleDateString(row.original.rateDate, "tr-TR"),
+  },
+  { accessorKey: "currency", header: "Para Birimi", cell: ({ row }) => <span className="font-medium">{row.original.currency}</span> },
+  {
+    id: "rate",
+    header: "Kur (TL)",
+    meta: { label: "Kur (TL)", align: "right", exportValue: (r) => Number(r.rate).toFixed(4) },
+    cell: ({ row }) => <span className="font-mono">{Number(row.original.rate).toFixed(4)}</span>,
+  },
+  {
+    id: "source",
+    header: "Kaynak",
+    meta: { label: "Kaynak", exportValue: (r) => (r.source === "MANUAL" ? "Elle girildi" : "TCMB") },
+    cell: ({ row }) => <span className="text-muted-foreground">{row.original.source === "MANUAL" ? "Elle girildi" : "TCMB"}</span>,
+  },
+];
 
 function ymd(d: Date): string {
   return factoryDayKey(d);
@@ -55,7 +81,8 @@ export function RatesPage() {
     },
   });
 
-  const rows = q.data?.data ?? [];
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const table = useLocalTable({ tableKey: "finance:rates", data: rows, columns: rateColumns });
 
   return (
     <PageShell>
@@ -65,8 +92,9 @@ export function RatesPage() {
         description="1 birim döviz kaç TL. Fatura ve tahsilatlar belge tarihine en yakın (≤) kuru kullanır ve o kuru belgeye DAMGALAR — sonradan kuru düzeltmek geçmiş belgeleri değiştirmez."
       />
 
-      <PermissionGate permission="finance:write">
-        <ListToolbar>
+      <ListToolbar>
+        <div className="flex flex-wrap items-end gap-3">
+        <PermissionGate permission="finance:write">
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <Label className="text-xs">Tarih</Label>
@@ -107,9 +135,16 @@ export function RatesPage() {
               {tcmbM.isPending ? "Çekiliyor…" : "TCMB'den Çek"}
             </Button>
           </div>
-        </ListToolbar>
-      </PermissionGate>
+        </PermissionGate>
+          <div className="ml-auto flex items-center gap-1.5">
+            <DataTableTools table={table} compact exportName="Kurlar" />
+          </div>
+        </div>
+      </ListToolbar>
 
+      {!q.isLoading && rows.length > 0 ? (
+        <DataTable table={table} isError={q.isError} onRetry={() => void q.refetch()} exportName="Kurlar" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -137,41 +172,9 @@ export function RatesPage() {
               Kur girilmemiş. Döviz cinsinden fatura kesmek için önce o güne ait kuru girin.
             </div>
           </ListMessage>
-        ) : (
-          <>
-            {q.isError && (
-              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                Liste tazelenemedi — aşağıdaki kurlar son başarılı okumaya aittir; bugün girilmiş
-                bir kur burada görünmeyebilir.
-              </p>
-            )}
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Tarih</th>
-                  <th className="px-3 py-2 text-left">Para Birimi</th>
-                  <th className="px-3 py-2 text-right">Kur (TL)</th>
-                  <th className="px-3 py-2 text-left">Kaynak</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {calendarLocaleDateString(r.rateDate, "tr-TR")}
-                    </td>
-                    <td className="px-3 py-2 font-medium">{r.currency}</td>
-                    <td className="px-3 py-2 text-right font-mono">{Number(r.rate).toFixed(4)}</td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {r.source === "MANUAL" ? "Elle girildi" : "TCMB"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} />
     </PageShell>
   );

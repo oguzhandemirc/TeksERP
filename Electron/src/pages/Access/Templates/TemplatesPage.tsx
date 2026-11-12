@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
 import { foldedIncludes } from "@/lib/search-fold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, RotateCcw, Lock } from "lucide-react";
+import { Plus } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
@@ -20,6 +21,7 @@ import {
   type PermissionTemplate,
 } from "@/services/permissionTemplateService";
 import { TemplateFormDialog } from "./TemplateFormDialog";
+import { useTemplatesTable } from "./templateColumns";
 
 const QUERY_KEY = "permission-templates";
 
@@ -98,6 +100,16 @@ export function TemplatesPage() {
     },
   });
 
+  const table = useTemplatesTable(filtered, {
+    onEdit: (t) => {
+      setEditing(t);
+      setFormOpen(true);
+    },
+    onRemove: setRemoving,
+    onReactivate: (t) => reactivateMut.mutate(t.id),
+    reactivating: reactivateMut.isPending,
+  });
+
   const onSubmit = async (values: {
     name: string;
     description?: string | null;
@@ -132,14 +144,18 @@ export function TemplatesPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
+      <ListToolbar className="flex-row flex-wrap items-center">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Şablon ara..."
+          placeholder="Ara…"
+          title="Şablon adı ya da açıklamasıyla ara"
+          aria-label="Şablon adı ya da açıklamasıyla ara"
           className="h-8 w-64 text-sm"
         />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Dosya kendi sütunlarıyla iner (kod, sistem rolü, durum) — tablo menüsünde ikinci indirme yok. */}
+          <DataTableTools table={table} compact hideExport />
           <ListExportMenu
             name="Yetki Şablonları"
             rows={filtered}
@@ -151,115 +167,23 @@ export function TemplatesPage() {
             ]}
           />
         </div>
-      </div>
+      </ListToolbar>
 
-      <PageBody>
-        <Table containerClassName="overflow-visible">
-          <TableHeader className="sticky top-0 z-10 bg-card">
-            <TableRow>
-              <TableHead>Ad</TableHead>
-              <TableHead>Yetki Sayısı</TableHead>
-              <TableHead>Açıklama</TableHead>
-              <TableHead>Oluşturma</TableHead>
-              <TableHead className="text-right">İşlem</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {query.isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                  Şablon bulunamadı.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((t) => (
-                <TableRow key={t.id} className={t.isActive ? undefined : "opacity-60"}>
-                  <TableCell className="font-medium">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate">{t.name}</span>
-                      {t.code && (
-                        <Badge
-                          variant="muted"
-                          className="shrink-0 gap-1 font-normal"
-                          title="Sistem rolü — sürümle birlikte gelir ve yeni yetkiler eklendikçe otomatik güncellenir. Silinmez, pasifleştirilir."
-                        >
-                          <Lock className="h-3 w-3" /> sistem
-                        </Badge>
-                      )}
-                      {!t.isActive && (
-                        <Badge variant="destructive" className="shrink-0 font-normal">
-                          pasif
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="muted">{t.permissions.length}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {t.description ? (
-                      <span className="line-clamp-1 text-sm text-muted-foreground">
-                        {t.description}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{safeFormat(t.createdAt, "dd.MM.yyyy")}</TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Düzenle"
-                        onClick={() => {
-                          setEditing(t);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      {t.isActive ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          title={t.code ? "Pasifleştir" : "Sil"}
-                          onClick={() => setRemoving(t)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          title="Geri aç"
-                          disabled={reactivateMut.isPending}
-                          onClick={() => reactivateMut.mutate(t.id)}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </PageBody>
+      {!query.isLoading && filtered.length > 0 ? (
+        <DataTable table={table} exportName="Yetki Şablonları" rowClassName={(t) => (t.isActive ? undefined : "opacity-60")} />
+      ) : (
+        <ListBody>
+          {query.isLoading ? (
+            <ListMessage className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </ListMessage>
+          ) : (
+            <p className="py-10 text-center text-muted-foreground">Şablon bulunamadı.</p>
+          )}
+        </ListBody>
+      )}
 
       <TemplateFormDialog
         open={formOpen}
