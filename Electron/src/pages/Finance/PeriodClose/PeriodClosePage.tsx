@@ -41,7 +41,8 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import type { CariRow, Currency } from "../service";
 import { CariPicker } from "./CariPicker";
@@ -120,12 +121,10 @@ export function PeriodClosePage() {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex min-h-0 flex-1 flex-col">
-        <div className="shrink-0 border-b px-6 py-2">
-          <TabsList>
-            <TabsTrigger value="cari">Cari Hesaplar</TabsTrigger>
-            <TabsTrigger value="cash">Kasa / Banka</TabsTrigger>
-          </TabsList>
-        </div>
+        <PageTabsList>
+            <PageTabsTrigger value="cari">Cari Hesaplar</PageTabsTrigger>
+            <PageTabsTrigger value="cash">Kasa / Banka</PageTabsTrigger>
+        </PageTabsList>
 
         <TabsContent value="cari" className="mt-0 flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">

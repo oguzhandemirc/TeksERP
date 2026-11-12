@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -14,7 +14,7 @@ import { primaryBucket, rollsLinkFor } from "./consigned-links";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getAllReadyWorks, READY_WORKS_QUERY_KEY } from "@/pages/Operations/ReadyWorks/service";
 import { OwnersTable, TotalsStrip, type ReadinessStatus } from "./ConsignedWorkTable";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageTabs } from "@/components/layout/PageTabs";
 import { CONSIGNED_STATEMENT_QUERY_KEY } from "./statement/service";
 import { ConsignedStatementView, STATEMENT_PARAMS } from "./statement/ConsignedStatementView";
 
@@ -40,14 +40,7 @@ export function ConsignedWorkPage() {
 }
 
 function ViewTabs({ value, onChange }: { value: "anlik" | "ekstre"; onChange: (v: string) => void }) {
-  return (
-    <Tabs value={value} onValueChange={onChange} className="shrink-0 px-4 pt-1">
-      <TabsList>
-        <TabsTrigger value="anlik">Anlık durum</TabsTrigger>
-        <TabsTrigger value="ekstre">Emanet ekstresi</TabsTrigger>
-      </TabsList>
-    </Tabs>
-  );
+  return <PageTabs label="Emanet görünümü" tabs={[{ key: "anlik", label: "Anlık durum" }, { key: "ekstre", label: "Emanet ekstresi" }]} active={value} onSelect={onChange} />;
 }
 
 function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | null) => void }) {
@@ -89,9 +82,9 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
       />
       <ViewTabs value="anlik" onChange={(v) => v === "ekstre" && onStatement(null)} />
       {!q.isLoading && !q.isError && q.data && (
-        <ListToolbar>
+        <ListBand>
           <TotalsStrip totals={q.data.totals} />
-        </ListToolbar>
+        </ListBand>
       )}
       <ListBody>
         {q.isLoading ? (

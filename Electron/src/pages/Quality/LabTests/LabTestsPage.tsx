@@ -7,10 +7,10 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import { LabTestList } from "./LabTestList";
 import { LabTypesPanel } from "./LabTypesPanel";
@@ -38,12 +38,10 @@ export function LabTestsPage() {
         }
       />
       <Tabs defaultValue="tests" className="flex min-h-0 flex-1 flex-col">
-        <ListToolbar>
-          <TabsList className="self-start">
-            <TabsTrigger value="tests">Testler</TabsTrigger>
-            <TabsTrigger value="types">Test türleri</TabsTrigger>
-          </TabsList>
-        </ListToolbar>
+        <PageTabsList>
+            <PageTabsTrigger value="tests">Testler</PageTabsTrigger>
+            <PageTabsTrigger value="types">Test türleri</PageTabsTrigger>
+        </PageTabsList>
         <TabsContent value="tests" className={TAB_PANE}><LabTestList onOpen={setOpenId} /></TabsContent>
         <TabsContent value="types" className={TAB_PANE}><LabTypesPanel /></TabsContent>
       </Tabs>

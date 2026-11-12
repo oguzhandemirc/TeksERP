@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { AssignmentsView } from "./assignments/AssignmentsView";
 import { TemplateListView } from "./templates/TemplateListView";
 import { useNarrowEditor } from "@/hooks/useMediaQuery";
@@ -35,10 +36,10 @@ function ListFace() {
   const access = useTemplateAccess();
   return (
     <Tabs defaultValue="templates" className="flex min-h-0 flex-1 flex-col">
-      <TabsList className="self-start">
-        <TabsTrigger value="templates">Şablonlar</TabsTrigger>
-        <TabsTrigger value="assignments">Atamalar</TabsTrigger>
-      </TabsList>
+      <PageTabsList>
+        <PageTabsTrigger value="templates">Şablonlar</PageTabsTrigger>
+        <PageTabsTrigger value="assignments">Atamalar</PageTabsTrigger>
+      </PageTabsList>
       <TabsContent value="templates" className="min-h-0 flex-1">
         <TemplateListView />
       </TabsContent>

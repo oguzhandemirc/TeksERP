@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelAssignmentsPage } from "@/pages/Labels/LabelAssignmentsPage";
 import { StandalonePrintPage } from "@/pages/Labels/StandalonePrintPage";
@@ -38,11 +39,11 @@ export function EtiketlerPage() {
         actions={<div ref={setActionsEl} className="flex items-center gap-2" />}
       />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-4 mt-4 w-fit">
-          <TabsTrigger value="templates">Düzenler</TabsTrigger>
-          <TabsTrigger value="assignments">Atamalar</TabsTrigger>
-          <TabsTrigger value="freeprint">Serbest Baskı</TabsTrigger>
-        </TabsList>
+        <PageTabsList>
+          <PageTabsTrigger value="templates">Düzenler</PageTabsTrigger>
+          <PageTabsTrigger value="assignments">Atamalar</PageTabsTrigger>
+          <PageTabsTrigger value="freeprint">Serbest Baskı</PageTabsTrigger>
+        </PageTabsList>
         <TabsContent value="templates" className="mt-0 min-h-0 flex-1 overflow-hidden">
           <LabelTemplatesPage hideHeader actionsPortal={actionsEl} />
         </TabsContent>

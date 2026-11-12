@@ -38,7 +38,7 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
@@ -54,7 +54,8 @@ import { YarnStockTable } from "./YarnStockTable";
 import { YarnMovementsSheet } from "./YarnMovementsSheet";
 import { YarnMovementDialog } from "./YarnMovementDialog";
 import { YarnLotsPanel } from "./YarnLotsPanel";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 
 const PAGE_SIZE = 100;
 
@@ -128,12 +129,10 @@ export function YarnStockPage() {
 
       {/* Devere Faz 2: "Lotlar" sekmesi — lot kaydı bayraksız her kurulumda mümkün (sekme hep çizilir). */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as "stok" | "lotlar")} className="flex min-h-0 flex-1 flex-col">
-        <ListToolbar>
-          <TabsList className="self-start">
-            <TabsTrigger value="stok">Stok</TabsTrigger>
-            <TabsTrigger value="lotlar">Lotlar</TabsTrigger>
-          </TabsList>
-        </ListToolbar>
+        <PageTabsList>
+            <PageTabsTrigger value="stok">Stok</PageTabsTrigger>
+            <PageTabsTrigger value="lotlar">Lotlar</PageTabsTrigger>
+        </PageTabsList>
         <TabsContent value="lotlar" className={TAB_PANE}>
           <YarnLotsPanel />
         </TabsContent>

@@ -31,9 +31,10 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import { supplierPartyQuery } from "@/components/forms/supplierParty";
 import { listPurchaseOrders, type PurchaseOrderListRow } from "./service";
@@ -129,13 +130,11 @@ export function PurchaseOrdersPage() {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="flex min-h-0 flex-1 flex-col">
-        <ListToolbar>
-          <TabsList className="self-start">
-            <TabsTrigger value="orders">Siparişler</TabsTrigger>
+        <PageTabsList>
+            <PageTabsTrigger value="orders">Siparişler</PageTabsTrigger>
             {/* Ekranın asıl sorusu bu sekmede — adı da soruyla aynı. */}
-            <TabsTrigger value="open-lines">Ne bekliyorum?</TabsTrigger>
-          </TabsList>
-        </ListToolbar>
+            <PageTabsTrigger value="open-lines">Ne bekliyorum?</PageTabsTrigger>
+        </PageTabsList>
 
         <TabsContent value="orders" className={TAB_PANE}>
           <ListBody>

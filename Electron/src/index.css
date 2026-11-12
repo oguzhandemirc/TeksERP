@@ -582,13 +582,14 @@
   padding-inline: var(--list-inset);
 }
 /* Başlık ya da bant ile başlamayan koşu (ör. alt sekme satırından sonra) üst çizgisini kendi çizer. */
-.tab-pane :not([data-list-surface], [data-list-band], [data-page-header]) + [data-list-surface] {
+.tab-pane :not([data-list-surface], [data-list-band], [data-page-header], [data-page-tabs]) + [data-list-surface] {
   border-top: 1px solid hsl(var(--card-border));
 }
 .tab-pane [data-list-surface="table"] { overflow: hidden; }
 /* Liste sayfasında başlık ve bantlar listenin iç kenarıyla aynı hizada başlar. */
 .tab-pane [data-page-header]:has(~ [data-list-surface], ~ * [data-list-surface]),
-.tab-pane [data-list-band] {
+.tab-pane [data-list-band],
+.tab-pane [data-page-tabs] {
   padding-inline: var(--list-inset);
 }
 .tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"], [data-list-surface]) [data-list-surface] {
@@ -602,15 +603,17 @@
   border-bottom: 1px solid hsl(var(--chrome-border));
   margin-bottom: 0.75rem;
 }
-/* Liste sayfasında bant/yüzey çizgiye bitişik başlar (boşluk yok). */
-.tab-pane [data-page-header]:has(~ [data-list-surface], ~ * [data-list-surface]) {
+/* Liste sayfasında bant/yüzey/alt sekme çizgiye bitişik başlar (boşluk yok). */
+.tab-pane [data-page-header]:has(~ [data-list-surface], ~ * [data-list-surface], ~ [data-list-band], ~ [data-page-tabs], ~ * [data-page-tabs]) {
   margin-bottom: 0;
 }
-.tab-pane [data-list-band] {
+/* Sayfa içi alt sekmeler (PageTabs) de bant: başlığın altında tam genişlik, alt çizgisi sekme göstergesinin zemini. */
+.tab-pane [data-list-band],
+.tab-pane [data-page-tabs] {
   background-color: hsl(var(--band));
   border-bottom: 1px solid hsl(var(--card-border));
 }
-.tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"]) :is([data-page-header], [data-list-band]) {
+.tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"]) :is([data-page-header], [data-list-band], [data-page-tabs]) {
   border-bottom: 0;
   background-color: transparent;
 }
