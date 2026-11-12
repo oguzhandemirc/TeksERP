@@ -70,11 +70,11 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <div className="space-y-4" data-testid="pano-board" data-editing={editing || undefined}>
+      <div className="space-y-[var(--space-gap)]" data-testid="pano-board" data-editing={editing || undefined}>
         {kpis.length > 0 && (
           <SortableContext items={kpis.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
             {/* Esnek şerit: beş kompakt kart 1280 genişlikte tek sıra; para kartı biraz daha geniş tabanla. */}
-            <div className="flex flex-wrap gap-4" data-testid="pano-kpi-seridi">
+            <div className="flex flex-wrap gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
               {kpis.map((b) => (
                 <Cell key={b.anahtar} id={b.anahtar} editing={editing}
                   className={MONEY_KPIS.has(b.anahtar) ? "flex-[1_1_12rem]" : "flex-[1_1_10.5rem]"}>{cell(b)}</Cell>
@@ -84,7 +84,7 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
         )}
         {body.length > 0 && (
           <SortableContext items={body.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            <div className="grid gap-4 min-[768px]:max-[1100px]:grid-flow-row-dense min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12">
+            <div className="grid gap-[var(--space-gap)] min-[768px]:max-[1100px]:grid-flow-row-dense min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12">
               {body.map((b) => (
                 <Cell key={b.anahtar} id={b.anahtar} editing={editing}
                   className={cn(b.boyut === "genis" && "min-[768px]:max-[1100px]:col-span-2", SPAN[spans.get(b.anahtar) ?? 4])}>{cell(b)}</Cell>
@@ -123,7 +123,7 @@ function EditCard({ def, onRemove }: { def: PanoBoxDef; onRemove: () => void }) 
   const meta = metaOf(def.anahtar);
   const kpi = def.boyut === "kpi";
   return (
-    <section className={cn("flex h-full cursor-grab flex-col rounded-xl border-2 border-dashed border-primary/30 bg-card p-4 shadow-card active:cursor-grabbing", !kpi && "min-h-48")}
+    <section className={cn("flex h-full cursor-grab flex-col rounded-xl border-2 border-dashed border-primary/30 bg-card p-[var(--space-card)] shadow-card active:cursor-grabbing", !kpi && "min-h-48")}
       aria-label={def.baslik}>
       <header className="flex items-start gap-2">
         <GripVertical className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

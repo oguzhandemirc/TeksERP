@@ -50,9 +50,9 @@ export function RecordPageShell({ parent, title, avatar, badges, subtitle, actio
         statusLine={subtitle}
         actions={actions}
       />
-      <PageBody className="px-4 pb-6 md:px-6">
+      <PageBody className="px-4 pb-[var(--space-page)] md:px-[var(--space-page)]">
         {shownStats.length > 0 && (
-          <div data-record-stats="" className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-3">
+          <div data-record-stats="" className="mb-[var(--space-section)] grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-[var(--space-gap)]">
             {shownStats}
           </div>
         )}

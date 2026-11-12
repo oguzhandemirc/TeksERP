@@ -68,7 +68,7 @@ export function RecordSidePanel({ label, onClose, header, onPrev, onNext, onOpen
         className,
       )}
     >
-      <div className="flex items-start gap-3 border-b border-border/70 px-5 pb-4 pt-4">
+      <div className="flex items-start gap-3 border-b border-border/70 px-[var(--space-card)] pb-4 pt-[var(--space-card)]">
         <div className="min-w-0 flex-1">{header}</div>
         <div className="flex shrink-0 items-center gap-0.5">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrev ?? undefined} disabled={!onPrev} aria-label="Önceki kayıt" title="Önceki kayıt (↑)">
@@ -87,8 +87,8 @@ export function RecordSidePanel({ label, onClose, header, onPrev, onNext, onOpen
           </Button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">{children}</div>
-      {footer && <div className="border-t border-border/70 px-5 py-3">{footer}</div>}
+      <div className="min-h-0 flex-1 space-y-[var(--space-gap)] overflow-y-auto px-[var(--space-card)] py-4">{children}</div>
+      {footer && <div className="border-t border-border/70 px-[var(--space-card)] py-3">{footer}</div>}
     </aside>
   );
 }
