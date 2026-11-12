@@ -1,4 +1,4 @@
-// Pano metin biçimleri — sayı `lib/format` gösterim biçimi (binlik nokta, ondalık virgül), saat `lib/factory-time`.
+// Pano metin biçimleri — sayı `lib/format` gösterim biçimi (binlik ayracı yok, ondalık virgül), saat `lib/factory-time`.
 import { formatDisplay, formatMeasure, formatMoney, formatPercent } from "@/lib/format";
 import { factoryDayKey, formatFactory } from "@/lib/factory-time";
 import type { PanoDonem, PanoKova, PanoKpi } from "./types";

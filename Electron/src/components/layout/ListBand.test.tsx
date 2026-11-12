@@ -5,7 +5,7 @@ import { render } from "@testing-library/react";
 import { BandStats, ListBand, ListFooter } from "./ListPage";
 
 describe("BandStats — liste özetinin tek görünümü", () => {
-  it("ham sayıyı binlik noktayla basar, ton ve birim taşır", () => {
+  it("ham sayıyı binlik ayracısız basar, ton ve birim taşır", () => {
     const { container } = render(
       <ListBand>
         <BandStats
@@ -13,7 +13,7 @@ describe("BandStats — liste özetinin tek görünümü", () => {
           scope="Depo"
           items={[
             { key: "a", label: "Top", value: 4295 },
-            { key: "b", label: "Metre", value: "10.500,5", unit: "m" },
+            { key: "b", label: "Metre", value: "10500,5", unit: "m" },
             { key: "c", label: "Geciken", value: 3, tone: "danger", title: "ipucu" },
           ]}
         />
@@ -22,15 +22,15 @@ describe("BandStats — liste özetinin tek görünümü", () => {
     const band = container.querySelector("[data-list-band]")!;
     expect(band.querySelector("[data-band-stats]")!.getAttribute("aria-label")).toBe("Özet");
     expect(band.textContent).toContain("Depo");
-    expect(band.textContent).toContain("Top4.295");
-    expect(band.textContent).toContain("Metre10.500,5m");
+    expect(band.textContent).toContain("Top4295");
+    expect(band.textContent).toContain("Metre10500,5m");
     const late = [...band.querySelectorAll("[title='ipucu'] span")].find((s) => s.textContent === "3")!;
     expect(late.className).toContain("text-destructive");
   });
 
   it("altlık sayıları da aynı biçimde", () => {
     const { container } = render(<ListFooter loaded={1250} total={3400} />);
-    expect(container.textContent).toContain("Yüklü 1.250 / 3.400 kayıt");
+    expect(container.textContent).toContain("Yüklü 1250 / 3400 kayıt");
   });
 });
 

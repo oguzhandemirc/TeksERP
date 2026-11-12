@@ -2,7 +2,7 @@ import { formatDisplay } from "@/lib/format";
 import { factoryLocaleDateString, factoryLocaleString, formatCalendarDay } from "@/lib/factory-time";
 // Rapor sayfalarında tekrar tekrar kullanılan formatlayıcılar.
 
-// Rapor Merkezi gösterim biçimi = `lib/format` ortak biçimi (binlik nokta, ondalık virgül).
+// Rapor Merkezi gösterim biçimi = `lib/format` ortak biçimi (binlik ayracı yok, ondalık virgül).
 const trNum = { format: (n: number) => formatDisplay(n, 1) };
 const trInt = { format: (n: number) => formatDisplay(n, 0) };
 

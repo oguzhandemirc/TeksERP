@@ -3,7 +3,7 @@ import { BandStats } from "@/components/layout/ListPage";
 import { formatDisplay } from "@/lib/format";
 import type { RollStats } from "./service";
 
-// Özet bandı ortak gösterim biçimi (binlik nokta, metre en çok 1 hane).
+// Özet bandı ortak gösterim biçimi (binlik ayracı yok, metre en çok 1 hane).
 const NUM_FMT = { format: (n: number) => formatDisplay(n, 0) };
 const DEC_FMT = { format: (n: number) => formatDisplay(n, 1) };
 

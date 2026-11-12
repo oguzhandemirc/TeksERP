@@ -29,7 +29,7 @@ export const ORDER_STATS_VIEWS: Array<{ key: OrderStatsView; label: string; hint
   { key: "genis", label: "Geniş", get hint() { return `+ ${TERIM.terbiyeIsEmri.tekilKucuk}, termin, tutar`; } },
 ];
 
-// Envanter şeridiyle AYNI biçim: özet bantlarının ortak gösterim biçimi (`lib/format`, binlik nokta).
+// Envanter şeridiyle AYNI biçim: özet bantlarının ortak gösterim biçimi (`lib/format`, binlik ayracı yok).
 const NUM_FMT = { format: (n: number) => formatDisplay(n, 0) };
 const DEC_FMT = { format: (n: number) => formatDisplay(n, 1) };
 const MONEY_FMT = { format: (n: number) => formatMoney(n) };

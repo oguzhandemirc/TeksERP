@@ -33,7 +33,7 @@ describe("Son hareketler — tür rozeti", () => {
       expect(r.textContent).toBe(def.kisa + def.etiket);
       expect(def.kisa.length).toBeLessThanOrEqual(9);
     }
-    expect(container.textContent).toContain("4.295 m");
+    expect(container.textContent).toContain("4295 m");
   });
 });
 

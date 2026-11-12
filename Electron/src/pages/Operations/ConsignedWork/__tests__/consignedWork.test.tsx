@@ -48,10 +48,10 @@ describe("İçerideki İşler", () => {
     renderWithProviders(<ConsignedWorkPage />);
     expect(await screen.findByText("Gül Perde")).toBeInTheDocument();
     expect(screen.getAllByText("8 top").length).toBeGreaterThanOrEqual(1);
-    // Toplam şeridi ListBand'de: adet + birim ayrı, metre ortak gösterim biçiminde (binlik nokta).
+    // Toplam şeridi ListBand'de: adet + birim ayrı, metre ortak gösterim biçiminde (gruplamasız).
     const band = screen.getByRole("group", { name: "İçerideki işler özeti" });
     expect(band.textContent).toContain("İçeride (toplam)8top");
-    expect(band.textContent).toContain("1.170 m");
+    expect(band.textContent).toContain("1170 m");
     expect(get).toHaveBeenCalledTimes(1);
   });
 
