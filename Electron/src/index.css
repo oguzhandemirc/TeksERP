@@ -190,7 +190,7 @@
     --head-h: 2.375rem;
     --cell-wrap: nowrap;
     /* Genel boşluk/yükseklik yoğunluğu (sıkı = varsayılan); `data-density` ezer. */
-    --space-card: 1rem; --space-gap: 0.875rem; --space-section: 1rem; --space-page: 1.25rem; --control-h: 2.25rem; --control-h-sm: 2rem; --kpi-px: 0.875rem; --kpi-py: 0.625rem;
+    --space-card: 1rem; --space-gap: 0.875rem; --space-section: 1rem; --space-page: 1.25rem; --space-band: 0.375rem; --control-h: 2.25rem; --control-h-sm: 2rem; --kpi-px: 0.875rem; --kpi-py: 0.625rem;
     --page-gutter: 1rem;
     /* Tam genişlik listenin iç kenarı — başlık, bant, araç çubuğu ve altlık aynı hizadan başlar. */
     --list-inset: 1rem;
@@ -438,8 +438,8 @@
   [data-radius="medium"] { --radius-control: 0.5rem; --radius-card: 0.75rem; --badge-radius: 0.375rem; }
   /* Sıkı: tek satır hücre (taşan tablo yatay kayar) — fark gözle seçilsin; rahat: kaydırmalı + geniş dolgu.
      Kart iç boşluğu, kartlar arası, bölüm/sayfa boşluğu ve denetim yüksekliği de aynı eksende. */
-  [data-density="compact"] { --cell-py: 0.5rem; --head-h: 2.375rem; --cell-wrap: nowrap; --space-card: 1rem; --space-gap: 0.875rem; --space-section: 1rem; --space-page: 1.25rem; --control-h: 2.25rem; --control-h-sm: 2rem; --kpi-px: 0.875rem; --kpi-py: 0.625rem; }
-  [data-density="comfortable"] { --cell-py: 1.125rem; --head-h: 3rem; --cell-wrap: normal; --space-card: 1.5rem; --space-gap: 1.5rem; --space-section: 2rem; --space-page: 2rem; --control-h: 2.625rem; --control-h-sm: 2.375rem; --kpi-px: 1.0625rem; --kpi-py: 1.125rem; }
+  [data-density="compact"] { --cell-py: 0.5rem; --head-h: 2.375rem; --cell-wrap: nowrap; --space-card: 1rem; --space-gap: 0.875rem; --space-section: 1rem; --space-page: 1.25rem; --space-band: 0.375rem; --control-h: 2.25rem; --control-h-sm: 2rem; --kpi-px: 0.875rem; --kpi-py: 0.625rem; }
+  [data-density="comfortable"] { --cell-py: 1.125rem; --head-h: 3rem; --cell-wrap: normal; --space-card: 1.5rem; --space-gap: 1.5rem; --space-section: 2rem; --space-page: 2rem; --space-band: 0.75rem; --control-h: 2.625rem; --control-h-sm: 2.375rem; --kpi-px: 1.0625rem; --kpi-py: 1.125rem; }
   html[data-font="small"] { font-size: 14px; }
   html[data-font="large"] { font-size: 17px; }
   /* ── YAZI TİPİ (data-typeface) — yerel paketten (@fontsource), ağ yok. Değişken burada yeniden
