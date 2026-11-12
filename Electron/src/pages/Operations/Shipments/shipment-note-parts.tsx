@@ -1,4 +1,4 @@
-import { safeFormat } from "@/lib/format";
+import { qtyFormatter, safeFormat } from "@/lib/format";
 import { isLooseUnit, loadUnitTitle, type LoadUnitKind } from "@/lib/load-unit";
 
 // =============================================================================
@@ -6,8 +6,8 @@ import { isLooseUnit, loadUnitTitle, type LoadUnitKind } from "@/lib/load-unit";
 // Hem donmuş (FrozenSheet) hem taslak (DraftSheet) render'ı paylaşır.
 // =============================================================================
 
-export const NUM = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
-export const NUMKG = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+export const NUM = qtyFormatter(0);
+export const NUMKG = qtyFormatter(1);
 
 // Backend buildShipmentDispatchDoc ile birebir aynı şekil.
 export interface ShipmentDocLine {

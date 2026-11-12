@@ -60,8 +60,8 @@ describe("orderMetreText — tek kaynak hesap", () => {
 
   it("kısmi sevk: gönderilen / istenen + yüzde; binlik ayraç sevk cümlesiyle aynı", () => {
     const o = order({ shippedQty: 1200, lines: [line({ quantity: 1000 }), line({ id: "l2", quantity: 1400 })] });
-    expect(orderMetreText(o)).toBe("1.200 / 2.400 m (%50)");
-    expect(orderMetreParts(o)).toEqual({ qty: "1.200 / 2.400 m", pct: "%50" });
+    expect(orderMetreText(o)).toBe("1200 / 2400 m (%50)");
+    expect(orderMetreParts(o)).toEqual({ qty: "1200 / 2400 m", pct: "%50" });
   });
 
   it("yalnız ölçülü (metre) kalemler toplanır; kg/adet istenene girmez", () => {
@@ -125,7 +125,7 @@ describe("liste 'Metre' sütunu", () => {
     const head = csv[0]!;
     const col = head.indexOf("Metre");
     expect(col).toBeGreaterThan(-1);
-    expect(csv.slice(1).map((r) => r[col])).toEqual(["0 / 500 m (%0)", "1.200 / 2.400 m (%50)", "—"]);
+    expect(csv.slice(1).map((r) => r[col])).toEqual(["0 / 500 m (%0)", "1200 / 2400 m (%50)", "—"]);
     rows.forEach((o, i) => expect(csv[i + 1]![col]).toBe(orderMetreText(o)));
   });
 

@@ -25,7 +25,7 @@ describe("invoiceReceipts", () => {
   });
 
   it("fark satırı: miktar sayı, tutar para; yüzdeler tr", () => {
-    expect(differenceText(diff({}), "TRY")).toBe("Miktar: fatura 1.250 ↔ fişler 1.200 (fark %4,2 · tolerans %2)");
+    expect(differenceText(diff({}), "TRY")).toBe("Miktar: fatura 1250 ↔ fişler 1200 (fark %4,2 · tolerans %2)");
     expect(differenceText(diff({ kind: "AMOUNT", invoice: 1000, receipts: 900, diffPct: 11.11, tolerancePct: 0 }), "TRY")).toMatch(/^Tutar: fatura .*1\.000.* ↔ fişler .*900.* \(fark %11,1 · tolerans %0\)$/);
   });
 

@@ -35,7 +35,7 @@ const yapraklar = [...ROUTES.matchAll(LEAF_RE)].map(([, yol, bilesen]) => ({ yol
 describe("rapor çıktı kapsamı — her yaprak sayfa ReportExportBar çizer", () => {
   it("zemin: yaprak rapor route'ları okundu", () => {
     // Sıfır yaprak "hepsi temiz" DEĞİL, tarayıcı bozuk demektir.
-    expect(yapraklar.length).toBeGreaterThan(20);
+    expect(yapraklar.length).toBeGreaterThan(10); // eski raporlar panelden kalktı (2026-11-12): 16 yaprak
   });
 
   it("zemin: her yaprağın kaynak dosyası bulundu", () => {
@@ -48,7 +48,9 @@ describe("rapor çıktı kapsamı — her yaprak sayfa ReportExportBar çizer", 
       .filter((y) => {
         const dosya = dosyaBul(y.bilesen);
         if (!dosya) return false; // ayrı testte kırmızı
-        return !readFileSync(dosya, "utf8").includes("<ReportExportBar");
+        // v2 çerçevesi (`_v2/view/ReportV2Frame`) şeridi kendisi çizer.
+        const src = readFileSync(dosya, "utf8");
+        return !src.includes("<ReportExportBar") && !src.includes("<ReportV2Frame");
       })
       .map((y) => `${y.yol} (${y.bilesen})`);
     expect(eksik).toEqual([]);

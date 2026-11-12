@@ -164,6 +164,8 @@ interface Props {
   /** Satır-içi mod: kendi border/padding sarmalayıcısını çizmez — başka bir araç
    *  çubuğunun (ör. DataTableToolbar `leading`) içine gömülmek için. */
   inline?: boolean;
+  /** Sağ uç — standart tablo araçları (Sütunlar · Dışa aktar); `ml-auto` ile sağa yaslanır. */
+  trailing?: ReactNode;
   /** Kontrol yüksekliği: "sm" (varsayılan, h-7 kompakt) | "md" (h-9, arama input'uyla eşit). */
   size?: "sm" | "md";
 }
@@ -181,7 +183,7 @@ const NONE = "__all__";
  *  istek gitsin diye. Tıkla-seç filtreleri (select/lookup) etkilenmez. */
 const FILTER_DEBOUNCE_MS = 500;
 
-export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline = false, size = "sm" }: Props) {
+export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline = false, size = "sm", trailing }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dateDef = filters.find((f) => f.kind === "dateRange");
   // Kontrol yüksekliği — "md" arama input'uyla (h-9) hizalar; varsayılan kompakt (h-7).
@@ -229,6 +231,7 @@ export function FilterBar({ filters, defaultDateRangeDays = 0, leading, inline =
         if (f.kind === "numberRange") return <NumberRangeFilter key={f.key} def={f} sp={searchParams} update={update} h={ctrlH} />;
         return <DateRangeFilter key="date" def={f} sp={searchParams} update={update} h={ctrlH} />;
       })}
+      {trailing && <div className="ml-auto flex shrink-0 items-center gap-1.5">{trailing}</div>}
     </div>
   );
 }

@@ -15,14 +15,15 @@ import { factoryDateTimeFormat } from "@/lib/factory-time";
 // client TZ = sunucu TZ → sunucunun duvar saati). Modül seviyesinde 1 kez kurulur.
 const dateFmt = () => factoryDateTimeFormat("tr-TR", { day: "2-digit", month: "short" });
 const timeFmt = () => factoryDateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
-const fullFmt = () => factoryDateTimeFormat("tr-TR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+const fullFmt = () =>
+  factoryDateTimeFormat("tr-TR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 /**
  * Marka altındaki gerçek durum + sunucu saati satırı (statik "Sistem aktif"in
@@ -45,8 +46,8 @@ function SidebarServerStatus() {
   }
   if (status === "connecting") {
     return (
-      <span className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-muted-foreground">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" />
+      <span className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-sidebar-muted">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-sidebar-muted/40" />
         Bağlanıyor…
       </span>
     );
@@ -54,11 +55,41 @@ function SidebarServerStatus() {
   return (
     <span
       title={`Sunucu saati · ${fullFmt().format(serverDate)}`}
-      className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-muted-foreground"
+      className="flex items-center gap-1.5 text-[10px] font-medium leading-tight text-sidebar-muted"
     >
-      <span className="live-dot shrink-0" />
       {dateFmt().format(serverDate)} · {timeFmt().format(serverDate)}
     </span>
+  );
+}
+
+/** Alt kart: sunucu bağlantısı (marka satırı saati gösterir, burası durumu söyler). */
+function SidebarConnectionLine() {
+  const { status } = useServerClock();
+  const text =
+    status === "offline"
+      ? "Sunucuya ulaşılamıyor"
+      : status === "connecting"
+        ? "Bağlanıyor…"
+        : "Sunucuya bağlı";
+  return (
+    <p
+      className={cn(
+        "flex items-center gap-2 text-xs font-medium",
+        status === "offline" ? "text-destructive" : "text-sidebar-foreground",
+      )}
+    >
+      {status === "online" ? (
+        <span className="live-dot shrink-0" />
+      ) : (
+        <span
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            status === "offline" ? "bg-destructive" : "bg-sidebar-muted/40",
+          )}
+        />
+      )}
+      {text}
+    </p>
   );
 }
 
@@ -66,29 +97,25 @@ function SidebarServerStatus() {
 const PRODUCT_NAME = "TeksERP";
 
 /** Uygulama sürümünü main process'ten okur (window.api.appInfo.version). */
-/** Marka başlığı — gradient accent bandı + logo; genişken firma adı (dinamik) + canlı "Sistem aktif" nabzı. */
+/** Marka başlığı — logo; genişken firma adı (dinamik) + sunucu saati/bağlantı durumu. */
 export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   const companyName = useCompanyName();
   return (
+    // Geniş kabukta pencere başlığı bu alandır (mac trafik ışıkları üstünde durur → üst boşluk).
     <div
       className={cn(
-        "relative flex h-14 shrink-0 items-center overflow-hidden border-b border-border/50",
-        collapsed ? "justify-center px-2" : "gap-2.5 px-4",
+        "sidebar-brand-mac app-drag relative flex min-h-16 shrink-0 items-center",
+        collapsed ? "justify-center px-2" : "gap-3 px-5",
       )}
     >
-      {/* Marka rengiyle yumuşak köşe parıltısı — sidebar'a kimlik katar. */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
       <img
         src={logoUrl}
         alt=""
-        className="relative h-8 w-8 shrink-0 rounded-lg object-cover ring-1 ring-primary/30"
+        className="relative h-10 w-10 shrink-0 rounded-xl object-cover shadow-soft ring-1 ring-sidebar-border"
       />
       {!collapsed && (
         <div className="relative flex min-w-0 flex-col">
-          <span
-            title={companyName}
-            className="truncate text-sm font-bold leading-tight tracking-tight"
-          >
+          <span title={companyName} className="truncate text-[15px] font-bold leading-tight tracking-tight">
             {companyName}
           </span>
           <SidebarServerStatus />
@@ -131,11 +158,11 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
 
   if (collapsed) {
     return (
-      <div className="flex justify-center border-t border-border/50 py-3">
+      <div className="flex justify-center border-t border-sidebar-border py-3">
         <VendorLink
           aria-label="Etkili Yazılım"
           title={`${PRODUCT_NAME}${version ? ` v${version}` : ""} · etkiliyazilim.com`}
-          className="text-[10px] font-medium tracking-wider text-muted-foreground/50 transition-colors hover:text-foreground"
+          className="text-[10px] font-medium tracking-wider text-sidebar-muted transition-colors hover:text-sidebar-foreground"
         >
           EY
         </VendorLink>
@@ -143,24 +170,27 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
     );
   }
   return (
-    <div className="border-t border-border/50 px-4 py-3">
-      {/* Sürüm artık tooltip'te değil GÖRÜNÜR: "hangi sürümü kullanıyorum" ve
-          "güncel miyim" soruları sahada en sık sorulan iki sorudur. Tıklama
-          sürüm notlarını açar — sürümü görüp "bunda ne var?" diyen kişi için
-          doğal yol. */}
-      <button
-        type="button"
-        onClick={() => navigateActive(RELEASE_NOTES_PATH)}
-        title="Sürüm notları — bu sürümde neler değişti"
-        className="block w-full truncate text-left text-[10px] font-semibold leading-tight text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {PRODUCT_NAME}
-        {version ? ` v${version}` : ""}
-        {guncellik ? <span className={guncellik.sinif}> · {guncellik.metin}</span> : null}
-      </button>
-      <VendorLink title="etkiliyazilim.com" className="text-[10px] text-muted-foreground/50 transition-colors hover:text-foreground">
-        by Etkili Yazılım
-      </VendorLink>
+    <div className="px-3 pb-3 pt-2">
+      <div className="rounded-xl border border-sidebar-border bg-sidebar-accent/60 px-3 py-2.5">
+        <SidebarConnectionLine />
+        {/* Sürüm GÖRÜNÜR ("hangi sürüm / güncel miyim" sahada en sık iki soru); tık sürüm notlarını açar. */}
+        <button
+          type="button"
+          onClick={() => navigateActive(RELEASE_NOTES_PATH)}
+          title="Sürüm notları — bu sürümde neler değişti"
+          className="mt-1.5 block w-full truncate text-left text-xs font-semibold text-sidebar-foreground transition-colors hover:text-primary"
+        >
+          {PRODUCT_NAME}
+          {version ? ` v${version}` : ""}
+          {guncellik ? <span className={guncellik.sinif}> · {guncellik.metin}</span> : null}
+        </button>
+        <VendorLink
+          title="etkiliyazilim.com"
+          className="block text-[10px] text-sidebar-muted transition-colors hover:text-sidebar-foreground"
+        >
+          by Etkili Yazılım
+        </VendorLink>
+      </div>
     </div>
   );
 }

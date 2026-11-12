@@ -13,7 +13,7 @@ export function FasonTag({ type, long = false, className }: { type: string | nul
     <span
       data-testid="wo-fason-tag"
       className={cn(
-        "inline-flex items-center rounded-md border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] font-semibold text-warning",
+        "inline-flex items-center rounded-badge border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] font-semibold text-warning",
         className,
       )}
     >

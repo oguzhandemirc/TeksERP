@@ -9,82 +9,19 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
-import type { ExportColumn } from "@/lib/list-export";
-import { safeFormat } from "@/lib/format";
-import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { productBalanceService } from "./service";
-import { ProductBalanceRow } from "./ProductBalanceRow";
+import { ProductBalanceDetail } from "./ProductBalanceRow";
+import { BALANCE_EXPORT_COLUMNS, useProductBalanceTable, type BalanceExportRow } from "./productBalanceColumns";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ProductBalanceWoDialog } from "./ProductBalanceWoDialog";
 import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
 import { foldSearchText } from "@/lib/search-fold";
 import { TERIM } from "@/lib/terim";
 
 const QUERY_KEY = "product-balance";
-
-/**
- * Dışa aktarım satırı — ekran (kumaş+renk) grubu + açılır EN kırılımı; dosya bunun
- * DÜZLEŞTİRİLMİŞİ: bir satır = bir (kumaş, renk, en) alt-satırı, yani ekranın en
- * ince kırılımı. Grup sütunları (Ham / Ham Açığı) tekrarlanır.
- */
-interface BalanceExportRow {
-  group: BalanceGroup;
-  spec: BalanceSpecRow;
-}
-
-/**
- * ⚠️ `summable` YALNIZ en (spec) düzeyinde eklenebilir miktarlara verilir.
- * Ham ve Ham Açığı (kumaş+renk havuzu, en'lere BÖLÜNMEZ) her satırda tekrarlandığı
- * için toplanabilir DEĞİL — TOPLAM satırı onları grup içindeki en sayısı kadar
- * sayardı ve dosya, ekranın söylediğinden fazla ham stok gösterirdi.
- */
-const BALANCE_EXPORT_COLUMNS: ExportColumn<BalanceExportRow>[] = [
-  { label: "Kumaş", value: (r) => r.spec.itemName },
-  { label: "Renk", value: (r) => r.spec.colorName ?? "—" },
-  { label: "En (cm)", value: (r) => r.spec.width ?? "" },
-  { label: "Talep (m)", value: (r) => r.spec.talep, summable: true },
-  { label: "Depo (m)", value: (r) => r.spec.depo, summable: true },
-  { label: "Üretimde (m)", value: (r) => r.spec.uretimde, summable: true },
-  { label: "Üretilecek (m)", value: (r) => r.spec.uretilecek, summable: true },
-  { label: "Durum", value: (r) => (r.spec.uretilecek > 0 ? "Üretilecek" : "Karşılanıyor") },
-  { label: "Ham (m, kumaş+renk)", value: (r) => r.group.ham },
-  { label: "Yarı Mamul (m, kumaş+renk)", value: (r) => r.group.yariMamul },
-  { label: "Ham Açığı (m, kumaş+renk)", value: (r) => r.group.malzemeAcigi },
-  { label: "Sipariş Sayısı", value: (r) => r.spec.lines.length, summable: true },
-  // İstenen − Sevk = Talep (yukarıdaki sütun). Ayrı bir "Kalan" sütunu EKLENMEDİ:
-  // Talep'in birebir aynısı olurdu ve iki farklı isim aynı sayıyı gösterirdi.
-  { label: "İstenen (m)", value: (r) => sum(r.spec.lines, (l) => l.quantity), summable: true },
-  { label: "Sevk Edilen (m)", value: (r) => sum(r.spec.lines, (l) => l.shipped), summable: true },
-  { label: "Siparişler", value: (r) => uniq(r.spec.lines.map((l) => l.orderNumber)).join(", ") },
-  { label: "Müşteriler", value: (r) => uniq(r.spec.lines.map((l) => l.customerName)).join(", ") },
-  { label: "En Yakın Termin", value: (r) => earliestDeadline(r.spec) },
-  { get label() { return `Canlı ${TERIM.terbiyeIsEmri.tekil} Sayısı`; }, value: (r) => r.spec.wos.length, summable: true },
-  {
-    get label() { return TERIM.terbiyeIsEmri.cogul; },
-    value: (r) =>
-      r.spec.wos
-        .map(
-          (w) =>
-            `${w.batchNumber} (${workOrderStatusLabels[w.status as WorkOrderStatus] ?? w.status})`,
-        )
-        .join(", "),
-  },
-];
-
-const sum = <T,>(rows: T[], pick: (row: T) => number): number =>
-  rows.reduce((acc, row) => acc + pick(row), 0);
-
-const uniq = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
-
-/** En erken termin (ekrandaki drill-down sıralamasıyla aynı ölçüt). */
-function earliestDeadline(spec: BalanceSpecRow): string {
-  const stamps = spec.lines
-    .map((l) => l.deadline)
-    .filter((d): d is string => Boolean(d))
-    .sort();
-  return stamps.length > 0 ? safeFormat(stamps[0], "dd.MM.yyyy") : "";
-}
 
 // Kumaş → backend (sorguları daraltır). Renk/Durum → client-side (anlık).
 // Kumaş + renk ÇOKLU. Durum TEKİL kalır: Açık / Karşılanıyor birbirinin
@@ -117,7 +54,6 @@ export function ProductBalancePage() {
   }, [searchParams]);
   const status = searchParams.get("filter[status]") ?? undefined;
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [woTarget, setWoTarget] = useState<WoTarget | null>(null);
   const [search, setSearch] = useState("");
 
@@ -162,17 +98,6 @@ export function ProductBalancePage() {
     [filtered],
   );
 
-  // Perf: ProductBalanceRow React.memo'lu — aramaya yazarken filtre dışı kalmayan
-  // satırlar re-render olmasın diye handler'lar kararlı referans (useCallback).
-  const toggle = useCallback((key: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-
   const openWo = useCallback((g: BalanceGroup, s: BalanceSpecRow) =>
     setWoTarget({
       key: s.key,
@@ -189,6 +114,7 @@ export function ProductBalancePage() {
       yariMamul: g.yariMamul,
       lines: s.lines,
     }), []);
+  const table = useProductBalanceTable(filtered, openWo);
 
   return (
     <PageShell>
@@ -228,70 +154,36 @@ export function ProductBalancePage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Kumaş, renk, sipariş no, müşteri, parti ara..."
+            placeholder="Ara…" title="Kumaş, renk, sipariş no, müşteri, parti ara" aria-label="Kumaş, renk, sipariş no, müşteri, parti ara"
             className="h-8 pl-8 text-sm"
           />
         </div>
-        {!isLoading && (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {filtered.length} kumaş
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {!isLoading && <span className="text-xs text-muted-foreground">{filtered.length} kumaş</span>}
+          <DataTableTools table={table} hideExport />
+        </div>
       </div>
       <FilterBar filters={FILTERS} />
 
-      <ListBody>
-        {isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Hesaplanıyor…</ListMessage>
-        ) : groups.length === 0 ? (
+      {isLoading || groups.length === 0 || filtered.length === 0 ? (
+        <ListBody>
           <ListMessage className="text-sm text-muted-foreground">
-            Açık talep veya üretimde kumaş yok.
+            {isLoading ? "Hesaplanıyor…" : groups.length === 0 ? "Açık talep veya üretimde kumaş yok." : "Filtreyle eşleşen kumaş yok."}
           </ListMessage>
-        ) : filtered.length === 0 ? (
-          <ListMessage className="text-sm text-muted-foreground">
-            Filtreyle eşleşen kumaş yok.
-          </ListMessage>
-        ) : (
-          <table className="w-full text-sm tabular-nums">
-            <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                <th className="text-left">Kumaş</th>
-                <th className="text-left" title="En (cm)">En</th>
-                <th className="text-right" title="Açık siparişler (istenen − sevk)">
-                  Talep
-                </th>
-                <th className="text-right" title="Depoda hazır (sevksiz)">Depo</th>
-                <th className="text-right" title={`Canlı ${TERIM.terbiyeIsEmri.cogulCekimKucuk.bulunma}`}>Üretimde</th>
-                <th
-                  className="text-right"
-                  title="İşlenecek ham kumaş — kumaş+renk havuzu (eni önemsiz)"
-                >
-                  Ham
-                </th>
-                <th className="text-right" title="Talep − Depo − Üretimde">Üretilecek</th>
-                <th className="text-right" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((g) => (
-                <ProductBalanceRow
-                  key={g.key}
-                  group={g}
-                  isOpen={expanded.has(g.key)}
-                  onToggle={toggle}
-                  onOpenWo={openWo}
-                />
-              ))}
-            </tbody>
-          </table>
-        )}
-        <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+        </ListBody>
+      ) : (
+        <DataTable
+          table={table}
+          renderExpanded={(g) => <ProductBalanceDetail group={g} onOpenWo={openWo} />}
+          rowTitle={(g) => `${g.itemName}${g.colorName ? ` · ${g.colorName}` : ""} — en kırılımı ve siparişler için aç`}
+        />
+      )}
+      <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">
           Üretilecek = Talep − Depo − Üretimde. Fabrika kumaş üretmez, işler —
           ham stok yetmiyorsa "ham açığı" kadar kumaş tedariki gerekir. Ham
           kumaşın eni önemsizdir: ham havuzu kumaş+renk düzeyinde tutulur, en'lere
           bölünmez (renksiz ham boyanacağı için her renge sayılır).
         </p>
-      </ListBody>
       {!isLoading && <ListFooter loaded={filtered.length} total={groups.length} />}
 
       <ProductBalanceWoDialog

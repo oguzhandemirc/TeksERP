@@ -15,6 +15,7 @@
 // `number | string` alır ve İÇERİDE `Number()` ile çevirir.
 // =============================================================================
 import { factoryDayEndIso, factoryDayStartIso } from "@/lib/factory-time";
+import { formatQty } from "@/lib/format";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir. */
 type Numeric = number | string | null | undefined;
@@ -36,7 +37,7 @@ export function kg(value: Numeric): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return "—";
-  return `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} kg`;
+  return `${formatQty(n, 3, 2)} kg`;
 }
 
 /**

@@ -133,7 +133,7 @@ describe("Sevke Hazır İşler", () => {
   it("satır → toplar çekmecesi; 'sevke al' Hızlı Sevk'i yalnız seçili HAZIR toplar + birimin müşterisiyle açar", async () => {
     getRolls.mockResolvedValue([roll("r1", "READY"), roll("r2", "IN_PROCESS"), roll("r3", "READY")]);
     renderWithProviders(<ReadyWorksPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "İE-001 toplarını aç" }));
+    fireEvent.click(await screen.findByTitle("İE-001 toplarını aç"));
     await screen.findByText("B-r3");
     expect(getRolls).toHaveBeenCalledWith("workOrder", "wo1");
     fireEvent.click(screen.getByRole("checkbox", { name: "B-r3 seç" }));
@@ -150,7 +150,7 @@ describe("Sevke Hazır İşler — çekmece Hızlı Sevk ön-seçimi", () => {
   it("çuvaldaki / sevkiyattaki HAZIR top ön-seçili gelmez, seçilemez, rozetle ayrılır (Hızlı Sevk 400'ü önlenir)", async () => {
     getRolls.mockResolvedValue([roll("r1", "READY"), { ...roll("r2", "READY"), inSack: true }, { ...roll("r3", "READY"), inShipment: true }]);
     renderWithProviders(<ReadyWorksPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "İE-001 toplarını aç" }));
+    fireEvent.click(await screen.findByTitle("İE-001 toplarını aç"));
     await screen.findByText("B-r3");
     expect(screen.getByRole("checkbox", { name: "B-r2 seç" })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: "B-r3 seç" })).toBeDisabled();
@@ -165,7 +165,7 @@ describe("Sevke Hazır İşler — çekmece Hızlı Sevk ön-seçimi", () => {
     const at = (id: string, wh: string) => ({ ...roll(id, "READY"), warehouseId: wh, warehouseName: `Depo ${wh}` });
     getRolls.mockResolvedValue([at("r1", "A"), at("r2", "A"), at("r3", "B")]);
     renderWithProviders(<ReadyWorksPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "İE-001 toplarını aç" }));
+    fireEvent.click(await screen.findByTitle("İE-001 toplarını aç"));
     await screen.findByText("B-r3");
     expect(screen.getByRole("checkbox", { name: "B-r3 seç" })).not.toBeChecked();
     expect(screen.getByRole("button", { name: /Hazır topları sevke al \(2 top/ })).toBeEnabled();
@@ -181,7 +181,7 @@ describe("Sevke Hazır İşler — izin, yaratıcı, bulunabilirlik", () => {
     flags.finance = false;
     getRolls.mockResolvedValue([roll("r1", "READY")]);
     renderWithProviders(<ReadyWorksPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "İE-001 toplarını aç" }));
+    fireEvent.click(await screen.findByTitle("İE-001 toplarını aç"));
     await screen.findByText("B-r1");
     expect(screen.queryByRole("button", { name: /sevke al/ })).toBeNull();
     expect(screen.getByText(/Sevk Kapısı \/ çuval akışından/)).toBeInTheDocument();
@@ -217,7 +217,7 @@ describe("İçerideki İşler hazırlık kolonu", () => {
     expect(await screen.findByText("Kısmi")).toBeInTheDocument();
     expect(screen.getByText(/200(,0)? m hazır/)).toBeInTheDocument();
     expect(getAll).toHaveBeenCalledWith("customer");
-    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toContain("Hazırlık");
+    expect(screen.queryByTitle("Sevke hazırlık — Sevke Hazır İşler'in müşteri birimi (fabrika kuralıyla)")).toHaveTextContent("Hazırlık"); // DataTable başlığı role=button (sürükle)
   });
 
   it("hazırlık hücresi Müşteri sekmesine bağlanır; uç hata verirse 'yüklenemedi' ('satır yok' ile karışmaz)", async () => {
@@ -236,7 +236,7 @@ describe("İçerideki İşler hazırlık kolonu", () => {
     getConsigned.mockResolvedValue(summary);
     renderWithProviders(<ConsignedWorkPage />);
     await screen.findByText("Gül Perde");
-    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).not.toContain("Hazırlık");
+    expect(screen.queryByTitle("Sevke hazırlık — Sevke Hazır İşler'in müşteri birimi (fabrika kuralıyla)")).toBeNull();
     expect(getAll).not.toHaveBeenCalled();
   });
 });

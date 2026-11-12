@@ -121,7 +121,9 @@ export function FactoryTimezoneField() {
             id="factory-timezone-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Dilim ara (örn. Istanbul, Berlin, New_York)"
+            placeholder="Dilim ara…"
+            title="Örn. Istanbul, Berlin, New_York"
+            aria-label="Saat dilimi ara"
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
           />
           <ul className="max-h-40 overflow-y-auto rounded-md border text-sm" role="listbox" aria-label="Saat dilimleri">

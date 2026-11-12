@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
  */
 export function HubSkeleton({ count = 6, className }: { count?: number; className?: string }) {
   return (
-    <div data-testid="hub-iskelet" className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3", className)}>
+    <div data-testid="hub-iskelet" className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4", className)}>
       {Array.from({ length: count }, (_, i) => (
-        <Skeleton key={i} className="h-[92px] w-full" />
+        <Skeleton key={i} className="h-[80px] w-full" />
       ))}
     </div>
   );

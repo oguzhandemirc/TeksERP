@@ -2,7 +2,8 @@ import { Settings as SettingsIcon, Download, FilePlus2, ScrollText, BellRing, Be
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
-import { operationsTiles } from "@/pages/Operations/tile-config";
+import { operationGroups } from "@/pages/Operations/groups-config";
+import { SALES_COST_TILE_KEYS, sectionTiles } from "@/pages/Operations/sections";
 import { qualityTiles } from "@/pages/Quality/tile-config";
 import { documentTiles } from "@/pages/Documents/tile-config";
 import { financeTiles } from "@/pages/Finance/tile-config";
@@ -37,6 +38,17 @@ export type { CommandEntry, CommandSection } from "./command-entries.types";
  * girişe route'un istediğinden farklı bir izin yazmak, kullanıcıya görünen ama
  * tıklayınca `/forbidden`'a düşen bir satır üretir.
  */
+// Doğrudan eylem: yeni teklif taslağı (route izni `quote:write` ile birebir) — T5'ten beri Satış bölümünde.
+const QUOTE_NEW_ENTRY: CommandEntry = {
+  key: "cost:quote-new",
+  label: "Yeni teklif",
+  description: "Müşteriye yeni fiyat teklifi taslağı aç",
+  icon: FilePlus2,
+  to: "/cost/quotes/new",
+  permission: "quote:write",
+  visibleWhen: regimePredicate("maliyetEnabled"),
+};
+
 export const commandSections: CommandSection[] = [
   ...navGroups.map<CommandSection>((group) => ({
     heading: group.label,
@@ -59,11 +71,13 @@ export const commandSections: CommandSection[] = [
       visibleWhen: item.featureFlag ? regimePredicate(item.featureFlag) : undefined,
     })),
   })),
-  {
-    heading: "Operasyon",
+  // T5: Operasyon dört menü bölümüne ayrıldı — her bölüm kendi başlığıyla, karolar `sections.ts`ten (menü ile AYNI liste).
+  ...operationGroups.map<CommandSection>((group) => ({
+    heading: group.title,
     entries: [
-      ...operationsTiles.map<CommandEntry>((tile) => ({
-        key: `ops:${tile.key}`,
+      ...sectionTiles(group.key).map<CommandEntry>((tile) => ({
+        // Teklifler karosu Maliyet kataloğundan gelir; anahtarı orada doğdu, palet geçmişi bozulmasın.
+        key: `${SALES_COST_TILE_KEYS.includes(tile.key) ? "cost" : "ops"}:${tile.key}`,
         get label() { return tile.title; },
         get description() { return tile.description; },
         icon: tile.icon,
@@ -74,8 +88,9 @@ export const commandSections: CommandSection[] = [
         visibleWhen: tile.visibleWhen,
         labelWhen: tile.titleWhen,
       })),
+      ...(group.key === "planning" ? [QUOTE_NEW_ENTRY] : []),
     ],
-  },
+  })),
   {
     // UX-2: Kalite Güvence kökü — karo yüklemi aynen taşınır.
     heading: TERIM_AD.kaliteGuvence,
@@ -111,9 +126,10 @@ export const commandSections: CommandSection[] = [
   {
     // MAL-3: Muhasebe'den farklı olarak bayrak yüklemi TAŞINIR — `cost:read` Muhasebe rol şablonunda
     // modül kapalıyken de atanmış olabilir; satır menüyle aynı `maliyetEnabled` kapısından geçer.
-    heading: "Maliyet & Teklif",
-    entries: [
-      ...costTiles.map<CommandEntry>((tile) => ({
+    heading: "Maliyet",
+    entries: costTiles
+      .filter((tile) => !SALES_COST_TILE_KEYS.includes(tile.key))
+      .map<CommandEntry>((tile) => ({
         key: `cost:${tile.key}`,
         get label() { return tile.title; },
         get description() { return tile.description; },
@@ -123,17 +139,6 @@ export const commandSections: CommandSection[] = [
         // K19 bağlı modül: Kârlılık ayrıca finans ister (karo + route ile aynı yüklem).
         visibleWhen: (ctx) => regimePredicate("maliyetEnabled")(ctx) && isRouteModuleOpen(tile.to, ctx),
       })),
-      // Doğrudan eylem: yeni teklif taslağı (route izni `quote:write` ile birebir).
-      {
-        key: "cost:quote-new",
-        label: "Yeni teklif",
-        description: "Müşteriye yeni fiyat teklifi taslağı aç",
-        icon: FilePlus2,
-        to: "/cost/quotes/new",
-        permission: "quote:write",
-        visibleWhen: regimePredicate("maliyetEnabled"),
-      },
-    ],
   },
   ...reportCommandSections,
   ...definitionGroups.map<CommandSection>((group) => ({
@@ -296,7 +301,8 @@ export function findCommandEntry(to: string): CommandEntry | undefined {
 
 // Bölüm başlığı → üst (hub) sayfa. Breadcrumb için: alt sayfadan hub'a dönüş.
 const SECTION_PARENTS: Record<string, { label: string; to: string }> = {
-  Operasyon: { label: "Operasyon", to: "/operations" },
+  // T5 bölümleri: alt sayfanın geri/üst bağlantısı kendi bölüm sayfasıdır.
+  ...Object.fromEntries(operationGroups.map((g) => [g.title, { label: g.title, to: g.route }])),
   [TERIM_AD.kaliteGuvence]: { label: TERIM_AD.kaliteGuvence, to: "/quality" },
   [TERIM_AD.belgeler]: { label: TERIM_AD.belgeler, to: "/documents" },
   Yetkilendirme: { label: "Yetkilendirme", to: "/access" },

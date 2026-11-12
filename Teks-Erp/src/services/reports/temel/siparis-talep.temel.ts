@@ -24,8 +24,10 @@ import {
   plainFigure,
   rangeParameters,
   singleCurrencyUnit,
+  viewParameter,
   type CoreReportResult,
 } from "./_common";
+import { loadOrderDemandView, ORDER_DEMAND_VIEW_LABEL, type OrderDemandView } from "./siparis-talep.views";
 
 export const ORDER_DEMAND_FILTER_KEYS = ["customerId", "destination", "itemId"] as const;
 
@@ -35,6 +37,8 @@ export interface OrderDemandInput {
   /** Uygulanan kıyas kipi (K-KIYAS: `resolveCoreCompare`). */
   compareMode: CompareMode;
   filters: { customerId?: string[]; destination?: ShipmentDestination; itemId?: string[] };
+  /** Tablo görünümü; yoksa `ozet` (müşteri kırılımı). Varyant hücresi görünüm koşmaz. */
+  view?: OrderDemandView;
 }
 
 /** Tutar yan sayısı: tek para birimi → o birimle; çok birim ya da fiyatsız → ölçülemedi (0 DEĞİL). */
@@ -90,8 +94,10 @@ export async function buildOrderDemandReport(input: OrderDemandInput): Promise<C
       }
     : null;
 
-  const table = customerTable(report, compareRange !== null);
-  const capped = capTable(table, "Müşteri kırılımı");
+  const view = input.view ?? "ozet";
+  const viewed = view === "ozet" ? null : await loadOrderDemandView(view, range, compareRange, filters);
+  const table = viewed?.table ?? customerTable(report, compareRange !== null);
+  const capped = capTable(table, view === "ozet" ? "Müşteri kırılımı" : ORDER_DEMAND_VIEW_LABEL[view]);
 
   const scope: ScopeNoteInput[] = [
     { sayi: s.cancelledCount, nesne: "sipariş", neden: "Dönemde alınıp sonradan iptal edilen", sonuc: "metreye katılmadı", toplam: s.orderCount },
@@ -137,8 +143,9 @@ export async function buildOrderDemandReport(input: OrderDemandInput): Promise<C
         listParameter("customerId", filters.customerId, report.secenekler.customerId),
         destinationParameter(filters.destination, "Yön (müşteri kartı)"),
         listParameter("itemId", filters.itemId, report.secenekler.itemId),
+        viewParameter(ORDER_DEMAND_VIEW_LABEL, view),
       ],
-      uyarilar: capped.uyarilar,
+      uyarilar: [...(viewed?.notes ?? []), ...capped.uyarilar],
     },
     kirilimlar: { musteri: rankedPool(report.byCustomer, (r) => r.qty), urun: rankedPool(report.byItem, (r) => r.qty) },
   };

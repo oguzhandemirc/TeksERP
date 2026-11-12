@@ -41,7 +41,8 @@ export function ShellSidebar({ narrow, collapsed, drawerOpen, onCloseDrawer }: P
 
   // Menü satırına tıklama sekmeyi değiştirmese de (aynı sayfa) çekmece kapanır.
   const onNavClick = (e: MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest("nav button")) onCloseDrawer();
+    // Bölüm okunu açıp kapatmak gezinme değildir → çekmece açık kalır.
+    if ((e.target as HTMLElement).closest("nav button:not([data-nav-toggle])")) onCloseDrawer();
   };
 
   return (

@@ -20,14 +20,14 @@
 //   ① ek.ts sert ünsüz kümesinden `ç` çıkarıldı ("fstkşhp") → 10 ❌ (3/13/103/-3/%3/2,3'te,
 //      3/23'ten, Koç'ta, Kılıç'tan — "üç" ile biten her okunuş ve ç'li özel ad)
 //   ② kiyasHesapla'da `null` 0'a çevrildi (`simdi ?? 0`, `once ?? 0`) → 4 ❌ (§3 iki null kolu,
-//      anaSayiKur null kıyası, §5 "önceki dönem ölçülemedi" cümlesi "42.300 m fazla"ya döndü)
+//      anaSayiKur null kıyası, §5 "önceki dönem ölçülemedi" cümlesi "42300 m fazla"ya döndü)
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { anlatiUret, gozlemleriTopla, type NarrativeInput } from "../src/services/reports/anlati/anlati";
 import { ayrilma, belirtme, bulunma, ile, ilgi, iyelik3, lik, durative, yonelme, type SuffixInput } from "../src/services/reports/anlati/ek";
 import { KURAL_ADLARI, type KuralAdi } from "../src/services/reports/anlati/gozlem";
-import { formatValue, sayiMetni } from "../src/services/reports/anlati/sayi-bicim";
+import { formatValue, paraMetni, sayiMetni } from "../src/services/reports/anlati/sayi-bicim";
 import { sonOkunanSozcuk, tamSayiOkunus } from "../src/services/reports/anlati/sayi-okunus";
 import { YASAK_SOZCUKLER, yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
 import { narrativeOf } from "../src/services/reports/semantik/anlati-blok";
@@ -51,12 +51,13 @@ const cins = (metin: string, yumusamaz = false): SuffixInput => ({ tur: "ad", me
 
 // --- §1 sayı biçimi + okunuş ---------------------------------------------------
 console.log("\n§1 sayı biçimi + okunuş");
-esit("§1 42300 → 42.300", sayiMetni(42300), "42.300");
+esit("§1 ⭐ 42300 → 42300 (ölçü ayırıcısız, kural 2026-11-12)", sayiMetni(42300), "42300");
 esit("§1 12.5 → 12,5", sayiMetni(12.5), "12,5");
 esit("§1 12.46 → 12,5 (en çok 1 ondalık)", sayiMetni(12.46), "12,5");
 esit("§1 -0.04 → 0 (eksi sıfır yok)", sayiMetni(-0.04), "0");
-esit("§1 1234567.89 → 1.234.567,9", sayiMetni(1234567.89), "1.234.567,9");
-esit("§1 para 0 ondalık + birim", formatValue(1200000.4, "TRY"), "1.200.000 TL");
+esit("§1 1234567.89 → 1234567,9", sayiMetni(1234567.89), "1234567,9");
+esit("§1 ⭐ para binlik ayırıcılı, 2 hane + birim", formatValue(1200000.4, "TRY"), "1.200.000,40 TL");
+esit("§1 para negatif / sıfır", [paraMetni(-325684.9), paraMetni(0), paraMetni(-0.001)], ["-325.684,90", "0,00", "0,00"]);
 esit("§1 oran", formatValue(78, "yuzde"), "%78");
 esit("§1 okunuş 0", tamSayiOkunus(0), "sıfır");
 esit("§1 okunuş 1.000 ('bir bin' denmez)", tamSayiOkunus(1000), "bin");
@@ -96,10 +97,10 @@ const vakalar: [string, Ek, SuffixInput, string | null][] = [
   ["bulunma", bulunma, sayi(80), "80'de"],
   ["bulunma", bulunma, sayi(90), "90'da"],
   ["bulunma", bulunma, sayi(100), "100'de"],
-  ["bulunma", bulunma, sayi(1000), "1.000'de"],
-  ["bulunma", bulunma, sayi(9800), "9.800'de"],
-  ["bulunma", bulunma, sayi(42300), "42.300'de"],
-  ["bulunma", bulunma, sayi(1000000), "1.000.000'da"],
+  ["bulunma", bulunma, sayi(1000), "1000'de"],
+  ["bulunma", bulunma, sayi(9800), "9800'de"],
+  ["bulunma", bulunma, sayi(42300), "42300'de"],
+  ["bulunma", bulunma, sayi(1000000), "1000000'da"],
   ["bulunma", bulunma, sayi(-3), "-3'te"],
   ["bulunma", bulunma, sayi(12.5), "12,5'te"],
   ["bulunma", bulunma, sayi(0.5), "0,5'te"],
@@ -113,8 +114,8 @@ const vakalar: [string, Ek, SuffixInput, string | null][] = [
   ["ayrilma", ayrilma, sayi(6), "6'dan"],
   ["ayrilma", ayrilma, sayi(15), "15'ten"],
   ["ayrilma", ayrilma, sayi(40), "40'tan"],
-  ["ayrilma", ayrilma, sayi(1000), "1.000'den"],
-  ["ayrilma", ayrilma, sayi(2_500_000), "2.500.000'den"],
+  ["ayrilma", ayrilma, sayi(1000), "1000'den"],
+  ["ayrilma", ayrilma, sayi(2_500_000), "2500000'den"],
   ["ayrilma", ayrilma, sayi(23), "23'ten"],
   // yönelme (kaynaştırma -ya/-ye)
   ["yonelme", yonelme, sayi(2), "2'ye"],
@@ -123,13 +124,13 @@ const vakalar: [string, Ek, SuffixInput, string | null][] = [
   ["yonelme", yonelme, sayi(9), "9'a"],
   ["yonelme", yonelme, sayi(40), "40'a"],
   ["yonelme", yonelme, sayi(100), "100'e"],
-  ["yonelme", yonelme, sayi(1000000), "1.000.000'a"],
+  ["yonelme", yonelme, sayi(1000000), "1000000'a"],
   // belirtme, ilgi, iyelik, -lik, ile
   ["belirtme", belirtme, sayi(6), "6'yı"],
   ["belirtme", belirtme, sayi(2), "2'yi"],
   ["belirtme", belirtme, sayi(3), "3'ü"],
   ["belirtme", belirtme, sayi(10), "10'u"],
-  ["ilgi", ilgi, sayi(1000), "1.000'in"],
+  ["ilgi", ilgi, sayi(1000), "1000'in"],
   ["ilgi", ilgi, sayi(6), "6'nın"],
   ["ilgi", ilgi, sayi(2), "2'nin"],
   ["ilgi", ilgi, sayi(9), "9'un"],
@@ -256,12 +257,12 @@ function altin(label: string, girdi: NarrativeInput, kural: KuralAdi, beklenen: 
 }
 const siparis = anaSayiKur({ olcu: "siparis.metre", ad: "Alınan sipariş", deger: 42300, birim: "m", onceki: 37768, iyiYon: "yukari" });
 const ifade = { yuklem: "sipariş aldınız" };
-altin("anaSayiKiyas", { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: siparis, anaSayiIfadesi: ifade }, "anaSayiKiyas", "Ekim'de 42.300 m sipariş aldınız; eylüle göre %12 fazla.");
+altin("anaSayiKiyas", { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: siparis, anaSayiIfadesi: ifade }, "anaSayiKiyas", "Ekim'de 42300 m sipariş aldınız; eylüle göre %12 fazla.");
 altin(
   "anaSayiKiyas ±%2 altı",
   { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: anaSayiKur({ olcu: "siparis.metre", ad: "Alınan sipariş", deger: 42300, birim: "m", onceki: 41700, iyiYon: "yukari" }), anaSayiIfadesi: ifade },
   "anaSayiKiyas",
-  "Ekim'de 42.300 m sipariş aldınız; eylülle aynı düzeyde.",
+  "Ekim'de 42300 m sipariş aldınız; eylülle aynı düzeyde.",
 );
 altin(
   "anaSayiKiyas oran (§4.1)",
@@ -273,16 +274,16 @@ altin(
   "anaSayiKiyas adsız dönem yedeği",
   { donem: { from: IST("2026-10-05T00:00:00"), to: IST("2026-11-03T23:59:59") }, kiyasDonemi: { from: IST("2026-09-05T00:00:00"), to: IST("2026-10-04T23:59:59") }, anaSayi: siparis, anaSayiIfadesi: ifade },
   "anaSayiKiyas",
-  "Bu dönemde 42.300 m sipariş aldınız; önceki döneme göre %12 fazla.",
+  "Bu dönemde 42300 m sipariş aldınız; önceki döneme göre %12 fazla.",
 );
 altin(
   "anaSayiKiyas önceki ölçülemedi",
   { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: anaSayiKur({ olcu: "siparis.metre", ad: "Alınan sipariş", deger: 42300, birim: "m", onceki: null, iyiYon: "yukari" }), anaSayiIfadesi: ifade },
   "anaSayiKiyas",
-  "Ekim'de 42.300 m sipariş aldınız; önceki dönem ölçülemediği için kıyas yok.",
+  "Ekim'de 42300 m sipariş aldınız; önceki dönem ölçülemediği için kıyas yok.",
 );
 // Özel rapor (R2-ANLATI): ölçünün yüklemi yok → ölçü adıyla açılır; oran ölçüsünde de aynı kalıp.
-altin("anaSayiKiyas yüklemsiz (özel rapor)", { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: siparis, anaSayiIfadesi: {} }, "anaSayiKiyas", "Alınan sipariş: Ekim'de 42.300 m; eylüle göre %12 fazla.");
+altin("anaSayiKiyas yüklemsiz (özel rapor)", { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: siparis, anaSayiIfadesi: {} }, "anaSayiKiyas", "Alınan sipariş: Ekim'de 42300 m; eylüle göre %12 fazla.");
 altin(
   "anaSayiKiyas yüklemsiz adsız dönem",
   { donem: { from: IST("2026-10-05T00:00:00"), to: IST("2026-11-03T23:59:59") }, kiyasDonemi: { from: IST("2026-09-05T00:00:00"), to: IST("2026-10-04T23:59:59") }, anaSayi: anaSayiKur({ olcu: "termin.zamaninda", ad: "Zamanında teslim", deger: 78, birim: "yuzde", onceki: 84, iyiYon: "yukari" }), anaSayiIfadesi: {} },
@@ -290,8 +291,8 @@ altin(
   "Zamanında teslim: bu dönemde %78; önceki döneme göre 6 puan düşük.",
 );
 const musteri = (satirlar: [string, number][]) => ({ boyut: "müşteri", birim: "m" as const, satirlar: satirlar.map(([a, d]) => ({ ad: a, deger: d })) });
-altin("enBuyukPay", { kirilim: musteri([["Kaya Tekstil", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]) }, "enBuyukPay", "En büyük pay Kaya Tekstil'de: 9.800 m (toplamın %23'ü).");
-altin("enBuyukPay yabancı ad → eksiz yedek", { kirilim: musteri([["Renault", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]) }, "enBuyukPay", "En büyük pay — Renault: 9.800 m (toplamın %23'ü).");
+altin("enBuyukPay", { kirilim: musteri([["Kaya Tekstil", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]) }, "enBuyukPay", "En büyük pay Kaya Tekstil'de: 9800 m (toplamın %23'ü).");
+altin("enBuyukPay yabancı ad → eksiz yedek", { kirilim: musteri([["Renault", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]) }, "enBuyukPay", "En büyük pay — Renault: 9800 m (toplamın %23'ü).");
 altin("yogunlasma", { kirilim: musteri([["A", 30], ["B", 20], ["C", 14], ["D", 10], ["E", 10], ["F", 8], ["G", 8]]) }, "yogunlasma", "İşin %64'ü üç müşteriden geliyor.");
 const renkler = { boyut: "renk", adTuru: "cins" as const, birim: "m" as const, satirlar: [{ ad: "lacivert", deger: 150, onceki: 100 }, { ad: "siyah", deger: 130, onceki: 100 }, { ad: "beyaz", deger: 120, onceki: 100 }] };
 altin("degisimKaynagi", { kirilim: renkler }, "degisimKaynagi", "Artışın yarısı lacivert renkten geliyor.");
@@ -300,7 +301,7 @@ altin("egilim", { seri: ay([86, 88, 87, 89, 85, 83, 80]) }, "egilim", "Zamanınd
 altin("egilim ardışık < 2 → eğilim kalıbı", { seri: ay([90, 88, 86, 82, 80, 81]) }, "egilim", "Zamanında teslim son 6 ayda düşüş eğiliminde.");
 const fire = { olcuAdi: "Fire", olcuAdiCumleIci: "fire", birim: "m" as const, zamanBirimi: "gün" as const, noktalar: [110, 120, 130, 115, 125, 118, 640, 120, 122].map((d, i) => ({ etiket: `${8 + i} Ekim`, deger: d })) };
 altin("aykiri", { seri: fire }, "aykiri", "14 Ekim'de fire olağandışı yüksek: 640 m (normalde 120 m).");
-altin("esikAsimi", { esikler: [{ yer: "Depo", esik: 90, esikBirimi: "gün", sifat: "eski", deger: 6800, birim: "m", nesne: "mal" }] }, "esikAsimi", "Depoda 90 günden eski 6.800 m mal var.");
+altin("esikAsimi", { esikler: [{ yer: "Depo", esik: 90, esikBirimi: "gün", sifat: "eski", deger: 6800, birim: "m", nesne: "mal" }] }, "esikAsimi", "Depoda 90 günden eski 6800 m mal var.");
 const BUGUN = IST("2026-10-24T15:00:00");
 const demir = { ad: "Demir Örme", siparisTarihleri: ["2026-07-11", "2026-07-31", "2026-08-20", "2026-09-09"].map((d) => IST(`${d}T10:00:00`)) };
 const duzenli = { ad: "Kaya Tekstil", siparisTarihleri: ["2026-09-20", "2026-10-01", "2026-10-12", "2026-10-22"].map((d) => IST(`${d}T10:00:00`)) };
@@ -329,13 +330,13 @@ check("§5 sessizlesen ritminde müşteri → yok", anlatiUret({ musteriRitmi: {
 check("§5 analiz girdisi yokken korelasyon/örneklem gözlemi yok", !gozlemleriTopla({}).length);
 
 // R3-ISTAT: analiz cümleleri — kanıt dili + HER cümlenin sonunda "İlişki, nedeni göstermez."
-const oranKanit = { yontem: "kiKare" as const, tur: "oran" as const, n: 1240, nesne: "kayıt", olcuAdi: "bulunan hata", yer: "Gece vardiyasında", birimSozu: "1.000 m'de", oran: 4.1, digerOran: 2, kat: 2.05 };
+const oranKanit = { yontem: "kiKare" as const, tur: "oran" as const, n: 1240, nesne: "kayıt", olcuAdi: "bulunan hata", yer: "Gece vardiyasında", birimSozu: "1000 m'de", oran: 4.1, digerOran: 2, kat: 2.05 };
 altin("korelasyon oran güçlü", { analiz: { korelasyon: { ...oranKanit, p: 0.0004 }, orneklem: null } }, "korelasyon",
-  "Gece vardiyasında bulunan hata 1.000 m'de 4,1; diğerlerinde 2 — yaklaşık 2,1 katı. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 1.240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+  "Gece vardiyasında bulunan hata 1000 m'de 4,1; diğerlerinde 2 — yaklaşık 2,1 katı. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 1240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
 altin("korelasyon oran kanıt var", { analiz: { korelasyon: { ...oranKanit, p: 0.03 }, orneklem: null } }, "korelasyon",
-  "Gece vardiyasında bulunan hata 1.000 m'de 4,1; diğerlerinde 2 — yaklaşık 2,1 katı. Bu fark tesadüf olmayacak kadar büyük (kanıt var; 1.240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+  "Gece vardiyasında bulunan hata 1000 m'de 4,1; diğerlerinde 2 — yaklaşık 2,1 katı. Bu fark tesadüf olmayacak kadar büyük (kanıt var; 1240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
 altin("korelasyon oran belirgin değil", { analiz: { korelasyon: { ...oranKanit, oran: 2.3, digerOran: 2.2, kat: 1.05, p: 0.4 }, orneklem: null } }, "korelasyon",
-  "Gece vardiyasında bulunan hata 1.000 m'de 2,3; diğerlerinde 2,2. Belirgin bir fark görünmüyor (1.240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+  "Gece vardiyasında bulunan hata 1000 m'de 2,3; diğerlerinde 2,2. Belirgin bir fark görünmüyor (1240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
 altin("korelasyon tablo", { analiz: { korelasyon: { yontem: "kiKare", tur: "tablo", n: 412, p: 0.002, nesne: "kayıt", yer: "Gece vardiyasında", ikinciAd: "çözgü", pay: 41, genelPay: 28 }, orneklem: null } }, "korelasyon",
   "Gece vardiyasında çözgü payı %41; genelde %28. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 412 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
 altin("korelasyon iki ölçü", { analiz: { korelasyon: { yontem: "spearman", n: 45, p: 0.02, r: -0.42, nesne: "gün", xAdi: "Duruş süresi", yAdi: "biten kumaş" }, orneklem: null } }, "korelasyon",

@@ -2,20 +2,19 @@
 // RAPOR KAPISI — KARO · ŞERİT · PALET (Raporlar K5, üç yolun birinci ve üçüncüsü)
 // =============================================================================
 // Üç yüzey aynı yüklemi okur (`isReportOpen` / `categoryHasOpenReport`): kapalı rapor alt
-// karoda, sağ şeritte ve komut paletinde yoktur; bütün raporları kapalı kategori üst karoda
-// ve palet başlığında yoktur. Yüklem ctx'te; bu test ctx'i sahteler ve yüzeylerin ona
+// karoda, sağ şeritte ve komut paletinde yoktur; bütün raporları kapalı kategori palet başlığında
+// yoktur (eski karo sayfası 2026-11-12'de kalktı, §2 onunla gitti). Yüklem ctx'te; bu test ctx'i sahteler ve yüzeylerin ona
 // UYDUĞUNU ölçer (ctx'in kendisi `report-gate.test.ts` + `ProtectedRoute.report.test.tsx`).
 //
 // Negatif sondalar (bir kezlik, geri alındı — sha commit mesajında): `ReportHubGrid`ten süzme
-// kaldırıldı → §1 ❌; `ReportsHubPage`ten `categoryHasOpenReport` kaldırıldı → §2 ❌;
-// palet alt girişinin `visibleWhen`i eski hâline (yalnız modül) döndürüldü → §4 ❌.
+// kaldırıldı → §1 ❌; palet alt girişinin `visibleWhen`i eski hâline (yalnız modül) döndürüldü → §4 ❌.
 // =============================================================================
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
-import { isReportOpenWith, isReportSurfaced } from "@/lib/report-gate";
+import { isReportOpenWith, isReportOnPanel } from "@/lib/report-gate";
 
 let closed: string[] | null = [];
 const ctx = (): OperationsVisibilityContext => ({
@@ -39,50 +38,41 @@ vi.mock("@/hooks/useFavorites", () => ({
 }));
 
 import { ReportHubGrid } from "./_components/ReportHubGrid";
-import { ReportsHubPage } from "./ReportsHubPage";
-import { salesReportTiles } from "./Sales/tile-config";
+import { financeReportTiles } from "./Finance/tile-config";
 import { reportCommandSections } from "@/components/layout/command-entries.reports";
 
 // Karo taşıyan satırlar: ucu inmemiş v2 satırı (`hazir:false`) bugün hiçbir yüzeyde çizilmez.
-// Satış hub karoları yalnız v1 satırlarıdır; hazır v2 satırları Rapor Merkezi'nde (genel v2 yaprağı) çizilir.
-const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && r.nesil !== "v2" && isReportSurfaced(r)).map((r) => r.key);
+// Ön Muhasebe karoları uzman v1 satırlarıdır (satış karoları 2026-11-12'de eski raporlarla kalktı);
+// hazır v2 satırları Rapor Merkezi'nde (genel v2 yaprağı) çizilir.
+// Kendi sayfalı v2 satırı (masraf özeti, `V2_KEYS_WITH_OWN_PAGE`) da karo taşır.
+const CAT_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("finance/") && r.panelYolu.startsWith("reports/") && isReportOnPanel(r))
+  .filter((r) => r.nesil !== "v2" || r.key === "finance/masraf-ozeti").map((r) => r.key);
 /** Kategori kapısı ve palet v2 satırlarını da sayar: "hepsi kapalı" bu kümedir. */
-const SALES_ALL = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && isReportSurfaced(r)).map((r) => r.key);
-const INTAKE = "sales/order-intake";
-const intakeTile = salesReportTiles.find((t) => t.to.endsWith(INTAKE))!;
+const CAT_ALL = REPORT_CATALOG.filter((r) => r.key.startsWith("finance/") && isReportOnPanel(r)).map((r) => r.key);
+const INTAKE = "finance/cash-book";
+const intakeTile = financeReportTiles.find((t) => t.to.endsWith(INTAKE))!;
 
 describe("Rapor kapısı — karo · şerit · palet", () => {
   beforeEach(() => {
     closed = [];
   });
 
-  it("§0 körlük zemini: satış kategorisinde birden çok rapor var ve karo listesi katalogla örtüşüyor", () => {
-    expect(SALES_KEYS.length).toBeGreaterThan(1);
+  it("§0 körlük zemini: Ön Muhasebe kategorisinde birden çok rapor var ve karo listesi katalogla örtüşüyor", () => {
+    expect(CAT_KEYS.length).toBeGreaterThan(1);
     expect(intakeTile).toBeDefined();
-    expect(salesReportTiles.length).toBe(SALES_KEYS.length);
+    expect(financeReportTiles.length).toBe(CAT_KEYS.length);
   });
 
   it("§1 ⭐ alt karo: kapalı rapor çizilmez, açıklar kalır; liste null → hiçbiri", () => {
     closed = [INTAKE];
-    const { unmount } = renderWithProviders(<ReportHubGrid title="Satış" tiles={salesReportTiles} />);
+    const { unmount } = renderWithProviders(<ReportHubGrid title="Ön Muhasebe" tiles={financeReportTiles} />);
     expect(screen.queryByText(intakeTile.title)).toBeNull();
-    const other = salesReportTiles.find((t) => t !== intakeTile)!;
+    const other = financeReportTiles.find((t) => t !== intakeTile)!;
     expect(screen.getByText(other.title)).toBeInTheDocument();
     unmount();
     closed = null;
-    renderWithProviders(<ReportHubGrid title="Satış" tiles={salesReportTiles} />);
-    for (const t of salesReportTiles) expect(screen.queryByText(t.title)).toBeNull();
-  });
-
-  it("§2 ⭐ üst karo: kategorinin BÜTÜN raporları kapalıysa kategori karosu yok; biri açıksa var", () => {
-    closed = SALES_ALL;
-    const { unmount } = renderWithProviders(<ReportsHubPage />);
-    expect(screen.queryByText("Sipariş & Sevkiyat")).toBeNull();
-    expect(screen.getByText("Üretim")).toBeInTheDocument(); // kontrol grubu: dokunulmayan kategori duruyor
-    unmount();
-    closed = SALES_ALL.filter((k) => k !== SALES_KEYS[0]);
-    renderWithProviders(<ReportsHubPage />);
-    expect(screen.getByText("Sipariş & Sevkiyat")).toBeInTheDocument();
+    renderWithProviders(<ReportHubGrid title="Ön Muhasebe" tiles={financeReportTiles} />);
+    for (const t of financeReportTiles) expect(screen.queryByText(t.title)).toBeNull();
   });
 
   it("§3 sağ şerit kapalı raporu listelemez (aynı yüklem)", async () => {
@@ -91,24 +81,26 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     const { MemoryRouter } = await import("react-router-dom");
     const { render } = await import("@testing-library/react");
     render(
-      <MemoryRouter initialEntries={["/reports/sales/order-cancellation"]}>
+      <MemoryRouter initialEntries={["/reports/finance/vat-summary"]}>
         <ReportSideRail />
       </MemoryRouter>,
     );
     expect(screen.queryByText(intakeTile.title)).toBeNull();
-    expect(screen.getByText(salesReportTiles.find((t) => t.to.endsWith("order-cancellation"))!.title)).toBeInTheDocument();
+    expect(screen.getByText(financeReportTiles.find((t) => t.to.endsWith("vat-summary"))!.title)).toBeInTheDocument();
   });
 
   it("§4 ⭐ palet: kapalı raporun girişi görünmez; kategorinin hepsi kapalıysa başlık girişi de görünmez", () => {
-    const sales = reportCommandSections.find((s) => s.heading.endsWith("Sipariş & Sevkiyat"))!;
+    const sales = reportCommandSections.find((s) => s.heading.endsWith("Ön Muhasebe"))!;
     const hub = sales.entries[0]!;
-    const intake = sales.entries.find((e) => e.to.endsWith(INTAKE))!;
+    // Muhasebe uzman araçları palette kendi adıyla görünür (v2 yaprağının ikizi gizli, kendi girişi var).
+    const twins = sales.entries.filter((e) => e !== hub && e.visibleWhen?.(ctx()) !== false);
+    const intake = twins.find((e) => e.to.endsWith(INTAKE))!;
     closed = [INTAKE];
     expect(intake.visibleWhen?.(ctx())).toBe(false);
     expect(hub.visibleWhen?.(ctx())).toBe(true);
-    const other = sales.entries.find((e) => e !== hub && e !== intake)!;
+    const other = twins.find((e) => e !== intake)!;
     expect(other.visibleWhen?.(ctx())).toBe(true);
-    closed = SALES_ALL;
+    closed = CAT_ALL;
     expect(hub.visibleWhen?.(ctx())).toBe(false);
   });
 
@@ -116,9 +108,9 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     const dokuma = reportCommandSections.find((s) => s.heading.endsWith("Dokuma"))!;
     const off: OperationsVisibilityContext = { ...ctx(), dokumaEnabled: false };
     for (const e of dokuma.entries) expect(e.visibleWhen?.(off)).toBe(false);
-    // "Eski:" ikizleri (R0-GECIS) yalnız Raporlar v2 açıkken görünür; aynı modül kapısını taşır.
-    const v2On: OperationsVisibilityContext = { ...ctx(), reportsV2Enabled: true };
-    for (const e of dokuma.entries) expect(e.visibleWhen?.(e.key.endsWith(":legacy") ? v2On : ctx())).toBe(true);
-    for (const e of dokuma.entries.filter((x) => x.key.endsWith(":legacy"))) expect(e.visibleWhen?.({ ...off, reportsV2Enabled: true })).toBe(false);
+    // Dokuma yaprakları yeni yerlerine taşındı (`relocated:` girişi): kategori ikizi palette çizilmez, sekme başlığı kaynağıdır.
+    const isLeaf = (k: string) => k.split(":").length >= 3;
+    for (const e of dokuma.entries) expect(e.visibleWhen?.(ctx())).toBe(!isLeaf(e.key));
+    expect(dokuma.entries.some((e) => isLeaf(e.key))).toBe(true);
   });
 });

@@ -3,6 +3,7 @@ import { Label } from "@/components/ui/label";
 import { LockInfo } from "./LockInfo";
 import { counterFieldError, type CounterFieldError } from "./counterRules";
 import type { NumberSeriesRow, SeriesCounterInput, SeriesExhaustion } from "./types";
+import { formatQty } from "@/lib/format";
 
 /**
  * SAYAÇ AYARLARI — başlangıç · artış adımı · üst sınır.
@@ -25,8 +26,8 @@ function Tukenme({ exhaustion }: { exhaustion: SeriesExhaustion | null }) {
   const yuzde = Math.round(exhaustion.percent * 100);
   return (
     <p className={`text-xs ${exhaustion.warn ? "font-medium text-destructive" : "text-muted-foreground"}`}>
-      Yürürlükteki dönemde {exhaustion.used?.toLocaleString("tr-TR")} /{" "}
-      {exhaustion.limit?.toLocaleString("tr-TR")} kullanıldı (%{yuzde})
+      Yürürlükteki dönemde {formatQty(exhaustion.used)} /{" "}
+      {formatQty(exhaustion.limit)} kullanıldı (%{yuzde})
       {exhaustion.warn ? " — sınıra yaklaşıldı." : "."}
     </p>
   );
@@ -90,7 +91,7 @@ function PartialLockNotes({ caps }: { caps: NumberSeriesRow["counter"] }) {
  */
 function paddingNote(counter: SeriesCounterInput, digits: number): string | null {
   if (counter.maxValue === null) {
-    const padLimit = (10 ** digits - 1).toLocaleString("tr-TR");
+    const padLimit = formatQty((10 ** digits - 1));
     return `Hane sayısı yalnız görünümdür (dolgu). Üst sınır boşken numara ${padLimit}'u aşınca hane genişler, başa sarmaz.`;
   }
   if (!counter.wrap) return "Hane sayısı yalnız görünümdür (dolgu); sayacı üst sınır durdurur.";

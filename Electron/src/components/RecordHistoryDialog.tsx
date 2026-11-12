@@ -152,7 +152,7 @@ export function RecordHistoryDialog({ open, onOpenChange, table, id, title }: Pr
               "hangi tabletten" sorusunu yalnız bu cevaplar. */}
           {r.deviceId && (
             <span
-              className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              className="inline-flex items-center gap-1 rounded-badge bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
               title={`Cihaz: ${r.deviceId}`}
             >
               <Smartphone className="h-2.5 w-2.5" />

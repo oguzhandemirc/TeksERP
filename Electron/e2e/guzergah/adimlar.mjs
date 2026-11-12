@@ -1367,7 +1367,7 @@ export const ADIMLAR = [
     yol: "Yönetici: ⌘K 'Kalite Karnesi' → yok · Raporlar → Kalite → karo yok · API 403 REPORT_DISABLED", rota: "reports/quality",
     async yap({ git, api, page }) {
       // Palet: kapalı rapor aranınca çıkmamalı.
-      const kutu = page().getByPlaceholder("Sayfa, rapor, ayar ara...");
+      const kutu = page().getByLabel("Sayfa, rapor, ayar ya da kayıt ara");
       const acici = page().getByText("Ara veya komut", { exact: false }).first();
       if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page().keyboard.press("Meta+k");
       await kutu.waitFor({ timeout: 10_000 }); await kutu.fill("Kalite Karnesi"); await page().waitForTimeout(700);
@@ -1494,7 +1494,7 @@ export const ADIMLAR = [
     id: "M2b", rol: "P", gerektirir: ["M2"],
     yol: "Yönetici: ⌘K 'Dokuma İş Emirleri' → yok · GET /api/weaving-orders → 403 MODULE_DISABLED (tablet Bölüm Seçimi: d5)", rota: "operations/weaving-orders",
     async yap({ api, page }) {
-      const kutu = page().getByPlaceholder("Sayfa, rapor, ayar ara...");
+      const kutu = page().getByLabel("Sayfa, rapor, ayar ya da kayıt ara");
       const acici = page().getByText("Ara veya komut", { exact: false }).first();
       if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page().keyboard.press("Meta+k");
       await kutu.waitFor({ timeout: 10_000 }); await kutu.fill("Dokuma İş Emirleri"); await page().waitForTimeout(700);

@@ -2,13 +2,14 @@
 // Oran "%78", para kuruşlu sabit 2 ondalık (`MONEY_NUM_FMT`, tablo hücresiyle aynı), diğerleri en çok 1 ondalık
 // (sunucu anlatısı `anlati/sayi-bicim.ts` cümlede tam TL yazar). Ölçülemeyen değer "0" YAZILMAZ — "Ölçülemedi" yazılır.
 import { reportCellText } from "@/lib/number-format";
+import { formatDisplay } from "@/lib/format";
 import { BIRIM_METNI, PARA_BIRIMLERI, type AnaSayi, type Birim, type ComparisonTone } from "./sunum";
 import { MONEY_NUM_FMT } from "./table-model";
 
 export const NOT_MEASURED_TEXT = "Ölçülemedi";
 
 function numberText(n: number, maxDecimals: number): string {
-  return n.toLocaleString("tr-TR", { maximumFractionDigits: maxDecimals });
+  return formatDisplay(n, maxDecimals);
 }
 
 /** Değer + birim: "%78" · "42.300 m" · "1.200,00 TL"; `null` → "Ölçülemedi". */
@@ -40,7 +41,7 @@ export function comparisonText(figure: AnaSayi, periodLabel?: string): string | 
 
 /** Kıyas okunun rengi `durum`dan (sunucu `IyiYon` × yön ile hesapladı); istemci yeniden yorumlamaz. */
 export function toneClass(tone: ComparisonTone | undefined): string {
-  if (tone === "iyi") return "text-emerald-600 dark:text-emerald-400";
-  if (tone === "kotu") return "text-red-600 dark:text-red-400";
+  if (tone === "iyi") return "text-success";
+  if (tone === "kotu") return "text-destructive";
   return "text-muted-foreground";
 }

@@ -27,10 +27,11 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { shrinkExceedsTolerance, shrinkInfo } from "./fasonReceive.helper";
 import { useFasonShrinkWarn } from "@/hooks/usePricingEnabled";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 type Group = FasonQuickPreview["groups"][number];
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+const fmt = (n: number) => formatQty(n, 2);
 const parseQty = (raw: string): number | null => {
   const n = parseFloat(raw.replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : null;

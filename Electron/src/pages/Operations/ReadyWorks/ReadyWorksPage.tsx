@@ -1,13 +1,16 @@
 // SEVKE HAZIR İŞLER (D4-J3, ister 2.4 / 2.10) — iş emri / gelen belge / parti / müşteri başına sevke hazırlık.
 // Sekme = `groupBy`; durum süzgeci query'de (liste + imleç + özet şeridi sunucuda aynı where'den). Satır → toplar
 // çekmecesi; "sevke al" mevcut Hızlı Sevk boğazı. Gelen belge modülü kapalıyken iki sekme yok, istek de yok.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useFeatureFlags, useGelenBelgeEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
@@ -18,7 +21,8 @@ import type { QuickShipRoll } from "@/pages/Operations/Rolls/quickShipService";
 import { getReadyWorks, READY_WORKS_QUERY_KEY, type ReadyWorkRow, type ReadyWorkUnit } from "./service";
 import { readyWorksTabs, statesForFilter, toQuickShipRoll, type ReadyStateFilter } from "./ready-works-view";
 import { ReadyWorkRollsSheet } from "./ReadyWorkRollsSheet";
-import { ReadyWorksTable, ReadyWorksToolbar, SummaryStrip } from "./ReadyWorksTable";
+import { ReadyWorksToolbar, SummaryStrip } from "./ReadyWorksTable";
+import { readyWorksColumns } from "./readyWorksColumns";
 
 const PAGE = 50;
 
@@ -57,6 +61,29 @@ function ShipFlow({ openRow, onCloseRow, canShip }: { openRow: ReadyWorkRow | nu
   );
 }
 
+/** Tablo yokken gövde: yükleniyor / hata (boş sanılmaz) / boş süzgeç. */
+function ReadyWorksState({ isLoading, isError, onRetry }: { isLoading: boolean; isError: boolean; onRetry: () => void }) {
+  return isLoading ? (
+    <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+  ) : isError ? (
+    <ListMessage>
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+        <p className="font-medium text-destructive">Liste yüklenemedi.</p>
+        <p className="mt-1 text-muted-foreground">Bu bir “hazır iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+          Tekrar dene
+        </Button>
+      </div>
+    </ListMessage>
+  ) : (
+    <ListMessage>
+      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        Bu süzgeçte iş yok. Tamamı sevk edilmiş işler listede görünmez.
+      </div>
+    </ListMessage>
+  );
+}
+
 export function ReadyWorksPage() {
   const incomingDocEnabled = useGelenBelgeEnabled();
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
@@ -85,6 +112,15 @@ export function ReadyWorksPage() {
   const first = q.data?.pages[0];
 
   const [openRow, setOpenRow] = useState<ReadyWorkRow | null>(null);
+  const unitLabel = tabs.find((t) => t.unit === unit)?.label ?? "İş";
+  const columns = useMemo(() => readyWorksColumns(unitLabel, unit === "customer"), [unitLabel, unit]);
+  const table = useLocalTable({
+    tableKey: "ready-works",
+    data: rows,
+    columns,
+    getRowId: (r) => `${r.unit}:${r.id}`,
+    hiddenColumns: unit === "customer" ? ["customer"] : undefined,
+  });
 
   return (
     <PageShell>
@@ -93,37 +129,24 @@ export function ReadyWorksPage() {
         description={`${TERIM.terbiyeIsEmri.tekil}, gelen belge, parti ya da müşteri başına sevke hazırlık. Hazır = Bitmiş Depo / 2. kalite stoktaki toplar; kural fabrika ayarından (tümü bitti ya da metre eşiği). Satıra tıklayınca toplar açılır, hazır olanlar oradan sevke alınır.`}
         actions={<RefreshButton queryKey={READY_WORKS_QUERY_KEY} />}
       />
-      <ListToolbar>
-        {!q.isLoading && !q.isError && first && <SummaryStrip s={first.summary} />}
+      {!q.isLoading && !q.isError && first && (
+        <ListBand>
+          <SummaryStrip s={first.summary} />
+        </ListBand>
+      )}
+      <ListToolbar className="flex-row flex-wrap items-center">
         <ReadyWorksToolbar tabs={tabs} unit={unit} onUnit={setPicked} stateFilter={stateFilter} onStateFilter={setStateFilter} />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Sevke hazır işler" />
+        </div>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={setOpenRow} rowTitle={(r) => `${r.label} toplarını aç`} exportName="Sevke hazır işler" />
+      ) : (
       <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">Bu bir “hazır iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : (
-          <>
-            {rows.length === 0 ? (
-              <ListMessage>
-                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  Bu süzgeçte iş yok. Tamamı sevk edilmiş işler listede görünmez.
-                </div>
-              </ListMessage>
-            ) : (
-              <ReadyWorksTable rows={rows} unit={unit} unitLabel={tabs.find((t) => t.unit === unit)?.label ?? "İş"} onOpen={setOpenRow} />
-            )}
-          </>
-        )}
+        <ReadyWorksState isLoading={q.isLoading} isError={q.isError} onRetry={() => void q.refetch()} />
       </ListBody>
+      )}
       {!q.isLoading && !q.isError && rows.length > 0 && (
         <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage}>
           {q.hasNextPage && (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCoreRowModel, useReactTable, type RowSelectionState } from "@tanstack/react-table";
+import { useOptionalTablePrefs } from "@/hooks/useTablePrefs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRightLeft, PackageOpen, SplitSquareHorizontal } from "lucide-react";
@@ -30,14 +31,19 @@ export function SackContentsTable({ sackId, rolls, locked, sourceCustomerId, sou
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [moveRollIds, setMoveRollIds] = useState<string[] | null>(null);
 
+  // Seçimi sayfa yönetir (toplu eylem sonrası sıfırlanır); sütun düzeni salt-okunur görünümle ORTAK kayıtta.
+  const prefs = useOptionalTablePrefs("sack-contents");
   const table = useReactTable({
     data: rolls,
     columns: sackContentsColumns,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (r) => r.id,
     enableRowSelection: !locked,
-    state: { rowSelection },
+    state: { rowSelection, columnOrder: prefs.columnOrder, columnVisibility: prefs.columnVisibility, columnSizing: prefs.columnSizing },
     onRowSelectionChange: setRowSelection,
+    onColumnOrderChange: prefs.onColumnOrderChange,
+    onColumnVisibilityChange: prefs.onColumnVisibilityChange,
+    onColumnSizingChange: prefs.onColumnSizingChange,
   });
 
   const distributeMut = useMutation({

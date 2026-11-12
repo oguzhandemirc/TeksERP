@@ -1,10 +1,9 @@
 // =============================================================================
 // RAPORLAR v2 ŞABLONU + RAPOR MERKEZİ (R0-SABLON) — bayrak, çizim kümesi, "Tümü", ölçülemedi
 // =============================================================================
-// §1 bayrak kapalı → hub bugünkü hâli (başlık + karo listesi ölçülür; `undefined` ile `false`
-//    DOM'u bayt eşit) · §2 açık → Merkez · §3 izinsiz / modülü kapalı / `hazir:false` / kapalı
-//    rapor çizilmez · §4 "Tümü" seçiliyken istekte anahtar YOK · §5 `olculemedi` ana sayı "0"
-//    basmaz · §6 palet: bayrak kapalıyken görünen giriş kümesi aynı · §7 yaprak kapısı ·
+// §2 hub = Merkez (bayrak 2026-11-12 emekli, tek yol) · §3 izinsiz / modülü kapalı / `hazir:false` /
+//    kapalı rapor çizilmez · §4 "Tümü" seçiliyken istekte anahtar YOK · §5 `olculemedi` ana sayı "0"
+//    basmaz · §6 palet: v2 girişleri satırın izni + yalnız hazır · §7 yaprak kapısı ·
 //    §8 hata sınıfları ayrı mesaj · §9 dışa aktarım ekranla aynı metin.
 //
 // Negatif sonda (2026-10-24, geri alındı): `center-model.ts`ten `isReportSurfaced` çağrısı
@@ -22,7 +21,6 @@ import { isReportOpenWith } from "@/lib/report-gate";
 import { toMenuLayoutState } from "@/lib/menu-layout";
 
 let closed: string[] | null = [];
-let v2: boolean | undefined;
 let flags: Partial<OperationsVisibilityContext> = {};
 const ctx = (): OperationsVisibilityContext => ({
   shipmentConfirmationEnabled: false,
@@ -37,7 +35,6 @@ const ctx = (): OperationsVisibilityContext => ({
   iplikEnabled: true,
   reportsClosedKeys: closed,
   isReportOpen: (key: string) => isReportOpenWith(closed, key),
-  ...(v2 === undefined ? {} : { reportsV2Enabled: v2 }),
   flagsReady: true,
   flagsFailed: false,
   ...flags,
@@ -52,7 +49,6 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 }));
 
 import { ReportsHubPage } from "../ReportsHubPage";
-import { reportTiles } from "../tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
 import { centerGroups, isCenterEntryOpen, type CenterAccess } from "./center-model";
 import { HeadlineCard } from "./HeadlineCard";
@@ -68,44 +64,25 @@ import { ANLATI_EKRAN_SAYISI, ANLATI_PDF_SAYISI, type AnaSayi, type RaporSunumu 
 const V2_ROWS = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV2 => e.nesil === "v2");
 /** Ucu inmiş gibi: aynı satır `hazir:true` (katalogun kendisine dokunulmaz). */
 const ready = (key: string): ReportCatalogEntryV2 => ({ ...(REPORT_BY_KEY.get(key) as ReportCatalogEntryV2), hazir: true });
+/** Katalogda `hazir:false` satır kalmadı (RAPB 2026-11-12 açıldı) — kapıyı yapay satırla ölç. */
+const notReady = (key: string): ReportCatalogEntryV2 => ({ ...(REPORT_BY_KEY.get(key) as ReportCatalogEntryV2), hazir: false });
 const access = (over: Partial<CenterAccess> = {}): CenterAccess => ({ isAdmin: false, hasPermission: () => true, ctx: ctx(), ...over });
 
 beforeEach(() => {
   closed = [];
-  v2 = undefined;
   flags = {};
 });
 
-describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
-  it("§1 ⭐ bayrak kapalı: bugünkü hub (başlık + karo listesi); `undefined` ve `false` DOM'u bayt eşit", () => {
-    v2 = undefined;
-    const a = renderWithProviders(<ReportsHubPage />);
-    const htmlUndefined = a.container.innerHTML;
-    expect(screen.getByRole("heading", { name: "Raporlar" })).toBeInTheDocument();
-    expect(screen.queryByText("Rapor Merkezi")).toBeNull();
-    // Bütün bayraklar açık + admin: on kategori karosu (MAL-7 Maliyet), sırası tile-config'in sırası.
-    const titles = reportTiles.map((t) => t.title);
-    expect(titles).toHaveLength(10);
-    for (const t of titles) expect(screen.getByText(t)).toBeInTheDocument();
-    a.unmount();
-    v2 = false;
-    const b = renderWithProviders(<ReportsHubPage />);
-    expect(b.container.innerHTML).toBe(htmlUndefined);
-  });
-
-  it("§2 bayrak açık: Rapor Merkezi; muhasebe araçları + favori + eski raporlar yer tutucusu", () => {
-    v2 = true;
+describe("§2 ReportsHubPage = Rapor Merkezi (tek yol)", () => {
+  it("§2 Rapor Merkezi; muhasebe araçları + favori + eski raporlar yer tutucusu", () => {
     renderWithProviders(<ReportsHubPage />);
     expect(screen.getByRole("heading", { name: "Rapor Merkezi" })).toBeInTheDocument();
     const tools = screen.getByRole("region", { name: "Muhasebe araçları" });
     expect(within(tools).getAllByRole("link")).toHaveLength(3);
     const fav = screen.getByRole("region", { name: "Favorilerim" });
     expect(within(fav).getByText("Kasa & Banka Defteri")).toBeInTheDocument();
-    const legacy = screen.getByRole("region", { name: "Eski raporlar (geçiş dönemi)" });
-    // R0-GECIS: yer tutucu yerine 36 v1 rapor, eski hub'ın kategorileriyle (`legacy-model.ts`).
-    expect(within(legacy).getAllByRole("listitem")).toHaveLength(36);
-    // Maliyet kategorisinin v1 raporu yok (MAL-7 yalnız v2) → eski raporlar grubu da yok.
-    expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length - 1);
+    // 2026-11-12: birleşen eski raporların hepsi panelden kalktı — "Eski raporlar" bölümü çizilmez.
+    expect(screen.queryByRole("region", { name: "Eski raporlar (geçiş dönemi)" })).toBeNull();
     // `hazir:true` satır Merkez'de çizilir, `hazir:false` çizilmez (ilk hazır satır KQ-D6 kurşun gramajı).
     const readyRows = V2_ROWS.filter((e) => e.hazir);
     expect(readyRows.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);
@@ -117,7 +94,7 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
 });
 
 describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
-  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), REPORT_BY_KEY.get("quality/kayip")!];
+  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), notReady("quality/kayip")];
   const keys = (a: CenterAccess) => centerGroups(a, catalog).flatMap((g) => g.entries.map((e) => e.key));
 
   it("körlük zemini: tam erişimde hazır üç satır çizilir", () => {
@@ -125,7 +102,7 @@ describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
   });
   it("⭐ `hazir:false` satır çizilmez", () => {
     expect(keys(access())).not.toContain("quality/kayip");
-    expect(isCenterEntryOpen(REPORT_BY_KEY.get("quality/kayip")!, ctx())).toBe(false);
+    expect(isCenterEntryOpen(notReady("quality/kayip"), ctx())).toBe(false);
   });
   it("⭐ izinsiz rapor çizilmez (admin değil, izin yok)", () => {
     expect(keys(access({ hasPermission: (c) => c !== "report:sales" }))).not.toContain("sales/termin");
@@ -240,23 +217,17 @@ describe("§5 ana sayı — ölçülemedi 0 basmaz", () => {
     expect(screen.getByTestId("headline-value")).toHaveTextContent("%78");
     const c = screen.getByTestId("headline-compare");
     expect(c).toHaveTextContent("▼ 6 puan (Eylül 2026: %84)");
-    expect(c.className).toContain("text-red-600");
+    expect(c.className).toContain("text-destructive");
   });
 });
 
-describe("§6 palet — bayrak kapalıyken görünen küme aynı", () => {
+describe("§6 palet — v2 girişleri", () => {
   const visibleKeys = () => allCommandEntries.filter((e) => !e.visibleWhen || e.visibleWhen(ctx())).map((e) => e.key);
-  it("⭐ undefined ve false aynı; hiçbir v2 girişi görünmez; v2 girişleri satırın iznini taşır", () => {
-    v2 = undefined;
-    const a = visibleKeys();
-    v2 = false;
-    expect(visibleKeys()).toEqual(a);
-    expect(a.some((k) => k.startsWith("report-v2:"))).toBe(false);
+  it("⭐ v2 girişleri satırın iznini taşır; yalnız hazır satırlar görünür", () => {
     const v2Entries = allCommandEntries.filter((e) => e.key.startsWith("report-v2:"));
     expect(v2Entries).toHaveLength(V2_ROWS.length);
     for (const e of v2Entries) expect(e.permission).toBe(REPORT_BY_KEY.get(e.key.slice("report-v2:".length))!.izin);
-    // Açık bayrakta yalnız `hazir:true` satırlar görünür; `hazir:false` olan hiçbiri görünmez.
-    v2 = true;
+    // Yalnız `hazir:true` satırlar görünür; `hazir:false` olan hiçbiri görünmez.
     const shown = visibleKeys().filter((k) => k.startsWith("report-v2:")).sort();
     const readyKeys = V2_ROWS.filter((e) => e.hazir).map((e) => `report-v2:${e.key}`).sort();
     expect(readyKeys.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);
@@ -279,15 +250,16 @@ function renderLeaf(path: string, key: string) {
 }
 
 describe("§7 yaprak kapısı", () => {
-  it("⭐ bayrak kapalı → /forbidden; açık ama hazir:false → /forbidden", () => {
-    v2 = false;
-    // `quality/kayip` hâlâ `hazir:false` (satış satırları R1-KAYIT'ta hazır oldu).
-    const a = renderLeaf("/reports/sales/termin", "quality/kayip");
-    expect(screen.getByText("YASAK")).toBeInTheDocument();
-    a.unmount();
-    v2 = true;
-    renderLeaf("/reports/sales/termin", "quality/kayip");
-    expect(screen.getByText("YASAK")).toBeInTheDocument();
+  it("⭐ hazir:false → /forbidden", () => {
+    // Katalogda `hazir:false` satır kalmadı: satırı test süresince yapay olarak geri çevir.
+    const row = REPORT_BY_KEY.get("quality/kayip") as { hazir: boolean };
+    row.hazir = false;
+    try {
+      renderLeaf("/reports/sales/termin", "quality/kayip");
+      expect(screen.getByText("YASAK")).toBeInTheDocument();
+    } finally {
+      row.hazir = true;
+    }
   });
 });
 

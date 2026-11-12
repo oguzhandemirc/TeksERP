@@ -4,14 +4,19 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { matchPath } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { REPORT_CATALOG } from "@/lib/report-catalog";
 
 const oku = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 // Katalog tek nesnedir ama boyut yüzünden parça dosyalara yayılır (D4-I5 `notification-catalog-cari.ts`).
 const katalog = ["notification-catalog.ts", "notification-catalog-cari.ts", "notification-catalog-sevkiyat.ts"]
   .map((f) => oku(`../../../../Teks-Erp/src/constants/${f}`))
   .join("\n");
-const rotalar = [...oku("../../routes/content-routes.tsx").matchAll(/path:\s*"([^"]+)"/g)]
-  .map((m) => m[1]!)
+const icerik = oku("../../routes/content-routes.tsx");
+// Rapor v2 yaprakları katalogdan üretilir (`...reportV2Routes`); yayılım yerindeyse hazır v2 adresleri de rotadır.
+const v2Rotalari = /\.\.\.reportV2Routes\b/.test(icerik)
+  ? REPORT_CATALOG.filter((e) => e.nesil === "v2" && e.hazir).map((e) => e.panelYolu)
+  : [];
+const rotalar = [...[...icerik.matchAll(/path:\s*"([^"]+)"/g)].map((m) => m[1]!), ...v2Rotalari]
   .filter((p) => p !== "*" && !p.includes("*"));
 
 const turler = [...katalog.matchAll(/panelEkran:\s*"([^"]+)",\s*panelYol:\s*"([^"]+)"/g)].map((m) => ({

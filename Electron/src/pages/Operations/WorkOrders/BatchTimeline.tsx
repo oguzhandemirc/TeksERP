@@ -99,7 +99,7 @@ function TimelineStep({ step }: { step: BatchTimelineStep }) {
           {visibleOps.map((op) => (
             <span
               key={op.type}
-              className="inline-flex items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px]"
+              className="inline-flex items-center gap-1 rounded-badge border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px]"
               title={[op.operators.join(", "), safeFormat(op.lastAt, "dd.MM.yyyy · HH:mm")]
                 .filter(Boolean)
                 .join(" · ")}

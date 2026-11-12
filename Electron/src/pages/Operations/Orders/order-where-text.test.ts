@@ -34,7 +34,7 @@ describe("Nerede? — durum tablosu", () => {
     [where({ yerler: [fason("Akın Boya", 8, 0)] }), "Fasonda – Akın Boya · 8 top · bugün gönderildi", "warning"],
     [where({ yerler: [fason(null, 2, null)] }), "Fasonda · 2 top", "warning"],
     [where({ yerler: [hazir(5)] }), "Sevke hazır · 5 top", "success"],
-    [where({ yerler: [asama("Tambur", 1200)] }), "Tambur aşamasında · 1.200 top", "info"],
+    [where({ yerler: [asama("Tambur", 1200)] }), "Tambur aşamasında · 1200 top", "info"],
     [where({ yerler: [hazir(9), asama("Tambur", 4), fason("Akın Boya", 2, 1)] }), "Sevke hazır · 9 top · +2 yerde daha", "success"],
   ] as const)("%j → %s", (n, text, tone) => {
     expect(view(n)).toEqual({ text, tone, overdue: false });
@@ -76,15 +76,15 @@ describe("Sevk durumu — günlük dil, BRÜT sevk cümlesi", () => {
   it.each([
     ["APPROVED", 0, [line(), line()], null, "Henüz gönderilmedi"],
     ["PENDING", 0, [line()], null, "Henüz onaylanmadı"],
-    ["PARTIAL_SHIPPED", 1200, [line(), line()], null, "Bir kısmı gönderildi (1.200 / 2.400 m)"],
+    ["PARTIAL_SHIPPED", 1200, [line(), line()], null, "Bir kısmı gönderildi (1200 / 2400 m)"],
     ["APPROVED", 40.5, [line({ quantity: 300 })], null, "Bir kısmı gönderildi (40,5 / 300 m)"],
     ["COMPLETED", 2400, [line(), line()], null, "Hepsi gönderildi"],
     ["PARTIAL_SHIPPED", 2400, [line(), line()], null, "Hepsi gönderildi"],
-    ["COMPLETED", 1000, [line(), line()], "u1", "Sipariş elle kapatıldı (1.000 / 2.400 m gönderildi)"],
+    ["COMPLETED", 1000, [line(), line()], "u1", "Sipariş elle kapatıldı (1000 / 2400 m gönderildi)"],
     ["COMPLETED", 0, [line({ unit: "KG" })], "u1", "Sipariş elle kapatıldı"],
     ["PARTIAL_SHIPPED", 0, [line({ unit: "KG" }), line()], null, "Bir kısmı gönderildi"],
     ["CANCELLED", 0, [line()], null, "Sipariş iptal edildi"],
-    ["CANCELLED", 300, [line()], null, "Sipariş iptal edildi (300 / 1.200 m gönderildi)"],
+    ["CANCELLED", 300, [line()], null, "Sipariş iptal edildi (300 / 1200 m gönderildi)"],
     ["CANCELLED", 300, [line({ unit: "KG" })], null, "Sipariş iptal edildi"],
   ] as const)("%s sevk=%s → %s", (...c) => {
     const [status, shipped, lines, closed, text] = c;
@@ -129,7 +129,7 @@ describe("Sevk durumu — günlük dil, BRÜT sevk cümlesi", () => {
 
   it("iptal kalem yalnız sevk edilmiş kısmıyla istenene girer", () => {
     const lines = [line(), line({ cancelledAt: "2026-11-01T00:00:00Z", quantity: 5000, shippedQty: 200 })];
-    expect(ship("PARTIAL_SHIPPED", 500, lines)).toBe("Bir kısmı gönderildi (500 / 1.400 m)");
+    expect(ship("PARTIAL_SHIPPED", 500, lines)).toBe("Bir kısmı gönderildi (500 / 1400 m)");
   });
 });
 
@@ -169,8 +169,8 @@ describe("yan panel metinleri", () => {
     });
     expect(woDetailLines(w)).toEqual([
       "Tambur: 4 top · 400 m",
-      "Fasonda – Akın Boya: 8 top · 1.600 m · bugün gönderildi",
-      "Sevke hazır: 6 top · 1.800 m",
+      "Fasonda – Akın Boya: 8 top · 1600 m · bugün gönderildi",
+      "Sevke hazır: 6 top · 1800 m",
       "Gönderildi: 2 top · 600,5 m",
     ]);
   });

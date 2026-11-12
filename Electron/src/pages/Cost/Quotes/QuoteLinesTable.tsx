@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fmtDec, fmtDecFull, fmtPct } from "../shared/format";
+import { fmtDec, fmtDecFull, fmtPct, fmtQtyDecFull } from "../shared/format";
 import { PRICE_SOURCE_LABEL } from "./labels";
 import { hasCostColumns } from "./line-columns";
 import { PriceCell } from "./PriceCell";
@@ -57,8 +57,8 @@ export function QuoteLinesTable({ lines, currency, editable, busy, onPrice, onDe
               <TableCell className="tabular-nums">{l.lineNo}</TableCell>
               <TableCell><Product l={l} /></TableCell>
               <TableCell className="whitespace-nowrap">{l.color?.name ?? "—"}</TableCell>
-              <TableCell className="text-right tabular-nums">{fmtDecFull(l.width, 1)}</TableCell>
-              <TableCell className="whitespace-nowrap text-right tabular-nums">{fmtDecFull(l.quantity, 3)} m</TableCell>
+              <TableCell className="text-right tabular-nums">{fmtQtyDecFull(l.width, 1)}</TableCell>
+              <TableCell className="whitespace-nowrap text-right tabular-nums">{fmtQtyDecFull(l.quantity, 3)} m</TableCell>
               {cost && <TableCell className="text-right tabular-nums">{fmtDecFull(l.costPerMTry, 4)}</TableCell>}
               {cost && <TableCell className="text-right tabular-nums">{fmtPct(l.markupPct)}</TableCell>}
               {cost && <TableCell className="text-right tabular-nums">{fmtDecFull(l.suggestedUnitPrice, 4)}</TableCell>}

@@ -8,6 +8,7 @@ import { colorService } from "@/pages/Colors/service";
 import { workOrderService } from "./service";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 type Mode = "MERGE" | "ONE_TO_ONE";
 
@@ -17,7 +18,7 @@ interface Props {
   onReceived: () => void;
 }
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmt = (n: number) => formatQty(n, 1);
 
 /**
  * "Toplar fasonda" engelini KAPATMA EKRANINDAN çözer (2026-08-17 saha isteği).

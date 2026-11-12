@@ -24,13 +24,14 @@ import {
   type RollMeterReadingView,
   type RollVarianceView,
 } from "./measure-source";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   measurements: RollMeasurements;
   onChanged: () => void;
 }
 
-const fmt = (v: number) => `${v.toLocaleString("tr-TR", { maximumFractionDigits: 3 })} m`;
+const fmt = (v: number) => `${formatQty(v, 3)} m`;
 
 function SourceChip({ source }: { source: string | null }) {
   return (

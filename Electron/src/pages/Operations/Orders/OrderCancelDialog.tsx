@@ -23,6 +23,7 @@ import type {
   OrderCancelPreviewWO,
 } from "./service";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -323,7 +324,7 @@ function WOActionRow({
         />
         {wo.targetQuantity != null && wo.targetQuantity > 0 && (
           <Badge variant="muted" className="text-[10px]">
-            {wo.targetQuantity.toLocaleString("tr-TR", { useGrouping: false })} m hedef
+            {formatQty(wo.targetQuantity)} m hedef
           </Badge>
         )}
         {wo.producedRollCount > 0 && (

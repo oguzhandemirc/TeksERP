@@ -4,7 +4,6 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
-  type OnChangeFn,
   type Row,
   type RowSelectionState,
   type VisibilityState,
@@ -12,7 +11,7 @@ import {
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { roundSizing, useTablePrefs, withTableEntry } from "@/hooks/useTablePrefs";
 import { usePersistedTableFilters } from "@/hooks/usePersistedTableFilters";
 import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 import { drainCursor, EXPORT_PAGE_LIMIT, ExportCancelledError } from "@/lib/export-drain";
@@ -58,6 +57,8 @@ interface Options<T> {
    *  saklanır, sayfaya dönünce geri gelir; arama kaydedilmez. `usePersistedTableFilters`. */
   persistFilters?: TableFilterPersistConfig;
 }
+
+export { withTableEntry, roundSizing };
 
 /**
  * Cursor pagination'lı tablo hook'u.
@@ -105,29 +106,9 @@ export function useDataTable<T>({
   // etmek için — aksi halde geri-senkron, kullanıcı yazarken input'u ezerdi.
   const lastPushedSearchRef = useRef(urlParams.search ?? "");
 
-  // Sütun sırası + görünürlüğü — kullanıcı tercihlerinde (backend) saklanır,
-  // cihazdan bağımsız. Boş = varsayılan.
-  const { prefs, setPreference } = usePreferences();
-  const columnOrder = useMemo(
-    () => prefs.tableOrder?.[queryKey] ?? [],
-    [prefs.tableOrder, queryKey],
-  );
-  const initialVisibilityStr = JSON.stringify(initialVisibility);
-  const columnVisibility = useMemo<VisibilityState>(
-    () => ({
-      ...initialVisibility,
-      ...(prefs.tableVisibility?.[queryKey] ?? {}),
-    }),
-    [prefs.tableVisibility, queryKey, initialVisibilityStr],
-  );
-  const onColumnOrderChange: OnChangeFn<string[]> = (updater) => {
-    const next = typeof updater === "function" ? updater(columnOrder) : updater;
-    setPreference({ tableOrder: { ...(prefs.tableOrder ?? {}), [queryKey]: next } });
-  };
-  const onColumnVisibilityChange: OnChangeFn<VisibilityState> = (updater) => {
-    const next = typeof updater === "function" ? updater(columnVisibility) : updater;
-    setPreference({ tableVisibility: { ...(prefs.tableVisibility ?? {}), [queryKey]: next } });
-  };
+  // Sütun sırası + görünürlüğü + genişliği — kullanıcı tercihinde (tablo anahtarı = queryKey).
+  const { columnOrder, columnVisibility, columnSizing, onColumnOrderChange, onColumnVisibilityChange, onColumnSizingChange } =
+    useTablePrefs(queryKey, initialVisibility);
 
   // ⚠️ TAZE URL — LOAD-BEARING (2026-09-06). Effect'in bağımlılığı yalnız [search]
   // olduğu için kapanışındaki `searchParams` MOUNT anındaki değerde DONAR. Zamanlayıcı
@@ -289,9 +270,10 @@ export function useDataTable<T>({
   const table = useReactTable({
     data: flatRows,
     columns,
-    state: { columnOrder, columnVisibility, rowSelection },
+    state: { columnOrder, columnVisibility, columnSizing, rowSelection },
     onColumnOrderChange,
     onColumnVisibilityChange,
+    onColumnSizingChange,
     onRowSelectionChange: setRowSelection,
     enableRowSelection: enableSelection,
     // Seçim entity id'sine bağlı — sayfa yüklendikçe index kaymasından etkilenmez.

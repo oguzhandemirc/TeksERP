@@ -161,7 +161,7 @@ export function OrdersModal({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Sipariş no, kumaş, renk ara..."
+              placeholder="Ara…" title="Sipariş no, kumaş, renk ara" aria-label="Sipariş no, kumaş, renk ara"
               className="h-8 pl-8 text-sm"
             />
           </div>

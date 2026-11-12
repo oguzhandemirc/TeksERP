@@ -169,7 +169,7 @@ export function ReleaseDetail({ entry, installed }: { entry: ReleaseEntry; insta
             return (
               <span
                 key={t}
-                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs"
+                className="inline-flex items-center gap-1.5 rounded-badge border px-2.5 py-0.5 text-xs"
               >
                 <Icon className={cn("h-3.5 w-3.5", view.className)} />
                 {counts[t]} {view.lower}
@@ -196,7 +196,7 @@ export function ReleaseDetail({ entry, installed }: { entry: ReleaseEntry; insta
                 {items.map((m, i) => (
                   <li key={i} className="flex gap-3 rounded-md border bg-muted/20 px-3 py-2.5">
                     <p className="min-w-0 flex-1 text-sm leading-relaxed">{m.metin}</p>
-                    <span className="shrink-0 self-start rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="shrink-0 self-start rounded-badge bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       {SCOPE_LABEL[m.kapsam]}
                     </span>
                   </li>

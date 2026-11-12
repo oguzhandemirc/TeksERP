@@ -3,14 +3,15 @@ import { useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListSentinel } from "@/components/layout/ListPage";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { ListBand, ListBody, ListFooter } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isUuid, fromSearchParams, toQueryParams, toSearchParams, dayChipLabel, type PrintHistoryFilterState } from "@/lib/print-history-query";
 import { printDeviceText, printPrinterText, printUserText } from "@/lib/print-job-format";
 import { isEndpointMissing, printHistoryService, type PrintJobRow, type PrintJobSummary } from "@/services/printHistoryService";
 import { PrintHistoryFilters, type FilterOption } from "./PrintHistoryFilters";
 import { PrintHistoryTable } from "./PrintHistoryTable";
+import { usePrintHistoryTable } from "./printHistoryColumns";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { PrintJobDetailSheet } from "./PrintJobDetailSheet";
 
 export const PRINT_HISTORY_QUERY_KEY = "print-history";
@@ -48,15 +49,14 @@ export function PrintHistoryPage() {
     [filters, setFilters],
   );
 
-  const { rootRef, sentinelRef } = useInfiniteScroll({
-    hasMore: query.hasNextPage,
-    isLoading: query.isFetchingNextPage,
-    onLoadMore: () => void query.fetchNextPage(),
-  });
+  // Sonsuz kaydırma: DataTable dibi izler, altlığı sayfa çizer.
+  const loadMore = { hasMore: query.hasNextPage, isFetchingMore: query.isFetchingNextPage, onLoadMore: () => void query.fetchNextPage() };
+  const table = usePrintHistoryTable(items, handleQuickFilter);
 
   return (
     <PageShell>
       <PageHeader title="Yazdırma Geçmişi" actions={<RefreshButton queryKey={PRINT_HISTORY_QUERY_KEY} />} />
+      {summary && <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} />}
       <PrintHistoryFilters
         value={filters}
         onChange={setFilters}
@@ -64,26 +64,22 @@ export function PrintHistoryPage() {
         printerOptions={options.printers}
         deviceOptions={options.devices}
         subjectLabel={subjectLabel}
+        tools={<DataTableTools table={table} hideExport />}
       />
-      {summary && <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} />}
 
-      <ListBody ref={rootRef}>
-        {unsupported ? (
-          <EmptyState text="Bu sunucu sürümü yazdırma geçmişini desteklemiyor. Sunucu güncellendiğinde kayıtlar burada görünür." />
-        ) : query.isError ? (
-          <EmptyState text="Yazdırma geçmişi okunamadı. Bağlantıyı kontrol edip yenileyin." tone="danger" />
-        ) : (
-          <>
-            <PrintHistoryTable
-              items={items}
-              loading={query.isLoading}
-              onSelect={handleSelect}
-              onQuickFilter={handleQuickFilter}
-            />
-            {items.length > 0 && <ListSentinel ref={sentinelRef} />}
-          </>
-        )}
-      </ListBody>
+      {!unsupported && !query.isError && items.length > 0 ? (
+        <PrintHistoryTable table={table} items={items} loading={query.isLoading} onSelect={handleSelect} loadMore={loadMore} />
+      ) : (
+        <ListBody>
+          {unsupported ? (
+            <EmptyState text="Bu sunucu sürümü yazdırma geçmişini desteklemiyor. Sunucu güncellendiğinde kayıtlar burada görünür." />
+          ) : query.isError ? (
+            <EmptyState text="Yazdırma geçmişi okunamadı. Bağlantıyı kontrol edip yenileyin." tone="danger" />
+          ) : (
+            <PrintHistoryTable table={table} items={items} loading={query.isLoading} onSelect={handleSelect} loadMore={loadMore} />
+          )}
+        </ListBody>
+      )}
       <ListFooter
         loaded={items.length}
         total={summary?.toplam ?? null}
@@ -133,15 +129,9 @@ function SummaryStrip({ summary, prefix, items }: { summary: PrintJobSummary; pr
     : null;
   const hasError = summary.durum.HATA > 0;
   return (
-    <div
-      className={
-        "border-b px-4 py-2 text-sm sm:px-6 " +
-        (hasError ? "bg-red-500/5 text-foreground" : "bg-muted/30 text-muted-foreground")
-      }
-      data-testid="print-summary"
-    >
+    <ListBand className={hasError ? "text-sm text-foreground" : "text-sm text-muted-foreground"} data-testid="print-summary" data-has-error={hasError || undefined}>
       {summaryText(summary, prefix, worstLabel)}
-    </div>
+    </ListBand>
   );
 }
 

@@ -6,6 +6,7 @@ import { workOrderService, type CoverageLine } from "./service";
 import { TERIM } from "@/lib/terim";
 // Sipariş miktarı her yüzeyde aynı metin: yan panel başlığı "668,3" diyorsa kapsama da (668 değil).
 import { fmtNum } from "@/pages/Operations/Orders/order-where-text";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   lineIds: string[];
@@ -13,7 +14,7 @@ interface Props {
 }
 
 function fmt(n: number): string {
-  return Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+  return formatQty(Number(n), 0);
 }
 
 /** Kapsama hücresi: sayarak gelir, sipariş miktarının tek biçimiyle (`fmtNum`). */

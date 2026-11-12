@@ -7,7 +7,7 @@ import { renderWithProviders } from "@/test/render";
 import { flagSettingTrail } from "@/lib/flag-setting-path";
 import { ConsumableStockPage } from "../ConsumableStockPage";
 
-vi.mock("@/providers/PreferencesProvider", () => ({ usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }) }));
+vi.mock("@/providers/PreferencesProvider", () => ({ useOptionalPreferences: () => null, usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }) }));
 vi.mock("../service", async (orig) => ({
   ...(await orig<typeof import("../service")>()),
   listConsumableStock: vi.fn(async () => ({

@@ -6,6 +6,7 @@
 // dışa açık ad yalnız cepheden (`../system-setting.service`) okunur.
 // =============================================================================
 
+import { REPORT_BY_KEY, isRetiredReportKey } from "../../constants/report-catalog";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { ApiResponse } from "../../types/api.types";
 import prisma from "../../lib/prisma";
@@ -18,7 +19,7 @@ import { readFinanceAutoDraftFromShipmentEnabled, readFinanceBlockNegativeCashEn
 import { publicTimezoneWarning, readCompanyName, readFactoryTimezonePeriods } from "./general";
 import { readBatchAutoCreateEnabled, readBatchLastNumberHintEnabled, readBatchShortNumberEnabled, readKursunBypassEnabled, readKursunMachineAssignMode, readKursunMeterCapture, readKursunMeterStockMode, readKursunMeterVarianceApproval, readKursunMeterVarianceBasis, readKursunMeterVarianceThresholdM, readKursunMeterVarianceThresholdPct, readKursunSimulatedMeterEnabled, readProductionRouteMode, readProductionScanRouteStations, readQualityGradeRequiredEnabled, readScanCustomerCodeLookupEnabled } from "./kursun-batch";
 import { readDefaultLabelMedia, readDocumentDesignerEnabled, readDocumentPublishSodEnabled, readLabelCopies, readLabelCopiesSource, readLabelCustomerCodeAt, readLabelCustomerCodeMissing, readLabelNativeSendEnabled, readMobileRasterEnabled, readNotificationInboxEnabled, readPatronBulutOlayGudumluEnabled, readScrapGradeLabelEnabled } from "./labels";
-import { readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readReportsV2Enabled, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readPackageNoMode, readPackageNoStartsAtZero, readPackageNumbering, readPackingGroupMode, readPackingGroupNumbering, readPackingGroupsEnabled, readPackingLotPartialDispatch, readPackingLotRequired, readPackingPoolPackageNo, readSackDumpNameMode, readShippingDocPackingLot, readShippingReturnFootnote, readShippingSackSeqOnDoc, readShippingSackSeqPrefix, readShippingSackSeqPrefixLive, readShippingSackSeqShowTotal, readShippingSackSeqStart, readTezgahAlarmEnabled, readTezgahAlarmEscalateWhenAcked, readTezgahAlarmNoShiftMode, readTezgahAlarmRenotifyMinutes, readTezgahAlarmUnclassifiedEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahCollectorSilenceMinutes, readTezgahEscalationGraceMinutes, readTezgahMaxOpenStopHours } from "./packing-loom";
 import { readBackupHour, readLoginMethods, readPinLockoutAttempts, readPinLockoutEnabled, readPinLockoutEscalateAfter, readPinLockoutLongPenaltyMin, readPinLockoutPenaltySec } from "./pin-backup";
 import { readFasonNoteMobileEntry, readKartelaMeasurementEnabled, readKk1DuplicateGuardEnabled, readKk1HistoryAllEntriesEnabled, readKk1LabelScanVerifyEnabled, readKk1OnlineOnlyEnabled, readKk1WeightEntryEnabled, readPartyCodeAuto, readRawWidthEnabled, readReturnGradingEnabled, readSimulatedWeightEnabled, readSupportOwnTicketsOnlyEnabled, readTargetQuantityEnabled, readTargetWidthEnabled, readWorkOrderQuickOwnOnlyEnabled } from "./production";
@@ -183,9 +184,12 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
       reportsClosedKeys: ((): string[] | null => {
         const o = reportsClosedRead;
-        return o.durum === "okundu" ? o.kapali : null;
+        // Panel listeyi olduğu gibi geri yazar: katalog dışı ve emekli anahtar burada ayıklanır, yoksa yazma 400 verir.
+        return o.durum === "okundu" ? o.kapali.filter((k) => REPORT_BY_KEY.has(k) && !isRetiredReportKey(k)) : null;
       })(),
-      reportsV2Enabled: await readReportsV2Enabled(cacheClient),
+      // Bayrak emekli (2026-11-12): yeni rapor merkezi tek yol. Alanı okuyan eski panel yokluğu `false` sayıp eski
+      // karo sayfasını açardı — yanıtta sabit `true` kalır; yazma yolu yok.
+      reportsV2Enabled: true,
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       targetWidthEnabled: await readTargetWidthEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),

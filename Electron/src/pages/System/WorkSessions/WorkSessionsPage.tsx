@@ -1,4 +1,5 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -19,12 +20,10 @@ export function WorkSessionsPage() {
         actions={<RefreshButton queryKey={["work-sessions"]} successMessage="Oturumlar yenilendi" />}
       />
       <Tabs defaultValue="active" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b px-6 pt-3">
-          <TabsList>
-            <TabsTrigger value="active">Canlı</TabsTrigger>
-            <TabsTrigger value="history">Geçmiş</TabsTrigger>
-          </TabsList>
-        </div>
+        <PageTabsList>
+            <PageTabsTrigger value="active">Canlı</PageTabsTrigger>
+            <PageTabsTrigger value="history">Geçmiş</PageTabsTrigger>
+        </PageTabsList>
         <TabsContent value="active" className="mt-0 min-h-0 flex-1">
           <PageBody className="h-full p-6">
             <ActiveSessionsPanel />

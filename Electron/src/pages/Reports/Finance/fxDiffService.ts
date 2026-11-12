@@ -34,6 +34,7 @@ import {
 } from "@/pages/Finance/service";
 import type { ReportResponse } from "../_services/types";
 import type { CariKind } from "./service";
+import { formatAmount } from "@/lib/format";
 
 // -----------------------------------------------------------------------------
 // SÖZLEŞME
@@ -140,7 +141,7 @@ export function fxTone(signedDiffTry: string | number | null | undefined): FxTon
 /**
  * Tonun ekrandaki rengi.
  *
- * ⚠️ Renk TEK BAŞINA erişilebilir değildir (`DUE_BUCKET_TONE` ile aynı kural):
+ * ⚠️ Renk TEK BAŞINA erişilebilir değildir (`Cheques/dates.dueHint` ile aynı kural):
  * yön her yerde ADIYLA da yazılır (`FX_TONE_LABEL`), ton yalnız göz taraması
  * içindir. Semantik token kullanılır — `--success`/`--destructive` koyu temada
  * kendi değerlerini taşır, yani ayrı bir `dark:` varyantı gerekmez.
@@ -186,7 +187,7 @@ export function fxRate(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  return formatAmount(n, 4, 4);
 }
 
 /**

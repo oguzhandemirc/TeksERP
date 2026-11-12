@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
-import { fmtDecFull } from "../shared/format";
+import { fmtDecFull, fmtQtyDecFull } from "../shared/format";
 import { machineRateService, type MachineCostRate } from "./service";
 
 export function MachineRateHistorySheet({ row, onClose }: { row: MachineCostRate; onClose: () => void }) {
@@ -35,7 +35,7 @@ export function MachineRateHistorySheet({ row, onClose }: { row: MachineCostRate
             <li key={p.id} className="rounded-md border p-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium tabular-nums">
-                  {fmtDecFull(p.hourRateTry)} TL/saat{p.normMPerHour ? ` · ${fmtDecFull(p.normMPerHour, 2)} m/saat` : ""}
+                  {fmtDecFull(p.hourRateTry)} TL/saat{p.normMPerHour ? ` · ${fmtQtyDecFull(p.normMPerHour, 2)} m/saat` : ""}
                 </span>
                 {p.revokedAt ? <Badge variant="muted">Damgalı</Badge> : <Badge>Geçerli</Badge>}
               </div>

@@ -196,6 +196,12 @@ export function buildDeliveryNoteBaseWhere(q: DeliveryNoteListQuery): Prisma.Cus
   return where;
 }
 
+/** Liste özet şeridinin durum sayımı — açılış panosunun "onay bekleyen" kutusu da bunu okur (tek kaynak). */
+export async function deliveryNoteStatusSummary(base: Prisma.CustomerDeliveryNoteWhereInput): Promise<Record<DeliveryNoteStatus, number>> {
+  const grouped = await prisma.customerDeliveryNote.groupBy({ by: ["status"], where: base, _count: { _all: true } });
+  return Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<DeliveryNoteStatus, number>;
+}
+
 export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
   const base = buildDeliveryNoteBaseWhere(q);
   const where: Prisma.CustomerDeliveryNoteWhereInput = q.status ? { AND: [base, { status: q.status }] } : base;
@@ -203,8 +209,7 @@ export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
   const offset = decodeOffsetCursor(q.cursor);
   const rows = await prisma.customerDeliveryNote.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: offset, take: limit + 1, select: HEADER_SELECT });
   const page = rows.slice(0, limit);
-  const grouped = await prisma.customerDeliveryNote.groupBy({ by: ["status"], where: base, _count: { _all: true } });
-  const summary = Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<DeliveryNoteStatus, number>;
+  const summary = await deliveryNoteStatusSummary(base);
   // `docLineCount`: özet satırı hariç belge satırı ("Top"; eski istemci `_count.lines`) · `workOrders`: bağlı İE'ler (eski istemci yok sayar).
   return {
     items: await withNoteWorkOrders(await withDocLineCount(page)),

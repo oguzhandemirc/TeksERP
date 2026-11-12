@@ -2,9 +2,14 @@ import { useEffect } from "react";
 import { useTabsStore } from "@/store/tabs";
 import { isTyping } from "@/lib/scanner/is-typing";
 
-// "g" sonrası tuş → hedef route (g-then-key gezinme deseni).
-const GO: Record<string, string> = {
+// "g" sonrası tuş → hedef route (g-then-key gezinme deseni). `o` eski
+// alışkanlık için kalır (birleşik operasyon sayfası); bölümler s/u/e/v.
+export const GO: Record<string, string> = {
   d: "/",
+  s: "/sales",
+  u: "/production",
+  e: "/warehouse",
+  v: "/shipping",
   o: "/operations",
   t: "/definitions",
   r: "/reports",
@@ -19,7 +24,7 @@ interface Options {
 
 /**
  * Global klavye kısayolları (input'larda devre dışı):
- *  - `g` ardından `d/o/t/r` → Anasayfa/Operasyon/Tanımlar/Raporlar
+ *  - `g` ardından `d/s/u/e/v/o/t/r` → Anasayfa/Satış/Üretim/Depo/Sevkiyat/Operasyon/Tanımlar/Raporlar
  *  - `/` → arama (komut paleti)
  *  - `?` → kısayol rehberi
  *  - `Alt+←` ve FARE GERİ TUŞU → aktif sekmede bir adım geri

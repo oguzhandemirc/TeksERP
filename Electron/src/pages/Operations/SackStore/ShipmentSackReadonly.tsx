@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PermissionGate } from "@/components/PermissionGate";
 import type { ContentSack } from "./types";
+import { formatQty } from "@/lib/format";
 
-const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
+const fmtKg = (n: number) => formatQty(n, 1);
+const fmtM = (n: number) => formatQty(n, 2);
 
 interface Props {
   sack: ContentSack;

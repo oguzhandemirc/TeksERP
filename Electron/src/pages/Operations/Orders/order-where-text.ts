@@ -11,8 +11,9 @@ import { isMeasuredUnit } from "@/lib/item-unit";
 import { TERIM } from "@/lib/terim";
 import { orderStatusLabels, type OrderStatus } from "@/types/enums";
 import type { Order, OrderWherePlace, OrderWhereStep, OrderWhereWorkOrder } from "./types";
+import { qtyFormatter } from "@/lib/format";
 
-const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
+const NUM = qtyFormatter(2);
 /** Türkçe gruplama (1.200) — top sayısı ve metre aynı biçimde. */
 export const fmtNum = (n: number): string => NUM.format(n);
 

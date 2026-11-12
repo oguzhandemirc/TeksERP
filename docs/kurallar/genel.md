@@ -41,6 +41,8 @@
 
 - **[ÇEKİRDEK]** `TERIM`le DB'ye kalıcı metin yazan açılış tohumu (izin/rol şablonu/sebep) yazmadan ÖNCE rejimi DB'den çözer (`reconcileCatalogsOnce` → `refreshTermRegime`); rejim job'uyla sırasız koşturma. · bekçi: `test_terim_katalog_tohum.ts`
 
+- **[ÇEKİRDEK]** Sayı biçimi birim sınıfına göre, her yüzeyde (kart, liste, özet bandı, rapor tablosu, grafik, kayıt sayfası, PDF/Excel, sunucu rapor cümlesi): para binlik ayırıcılı 2 hane ("325.684,90 TRY"), metre/kg/top/adet/yüzde ayırıcısız ("14700 m"); panelde yalnız `lib/format` (`formatAmount`/`formatMoney` · `formatQty`/`formatDisplay`), rapor biçiminde virgül = para (`lib/number-format`), sunucuda `anlati/sayi-bicim`; basılı müşteri belgeleri ayrı karar (`test_yerel_ayar_bagimliligi` §5).
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** `CLIENT_IP_HEADER` yalnız beyanlı ters vekil arkasında verilir (demo) ve her isteğe uygulanır; LAN kurulumunda VERİLMEZ. `REMOTE_PORT` .env'de duruyorsa başlık yok sayılır ve uyarılır; `TRUST_PROXY` app-wide AYARLANMAZ. · bekçi: `scripts/test_web_hardening.ts §CI-11..13`
@@ -89,6 +91,7 @@
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
+- **KISMI** "Binlik ayracı YOK — tüm program" (`lib/format.ts`) → 2026-11-12 para için GEÇERSİZ: para binlik ayırıcılı; ölçü/sayım/yüzde ayırıcısız kalır.
 - **TAM** `users.quickPin` düz metin → 2026-10-01 G21-K: PIN/kart yalnız HMAC özeti; `/credentials` düz değeri yalnız basım penceresinde döner.
 - **TAM** Uzaktan erişim tüneli (cloudflared, `REMOTE_PORT`, Cloudflare Access JWT, uzakta 404, `assertNotRemote`, uzak-yalnız TOTP, `clientIpHeaderRemoteOnly`, `/api/boss/overview`, BossShell, `WEB_BOSS`) KALDIRILDI → 2026-09-30 B6; patron, patron bulutundan izler; tek dinleyici, tek process.
 - **KISMI** Audit hata sayacı `/health`te değil `/api/admin/health`te (`buildRichHealth`); "best-effort + tx dışında" geçerli.

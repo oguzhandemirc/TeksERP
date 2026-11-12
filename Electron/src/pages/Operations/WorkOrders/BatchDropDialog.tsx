@@ -189,7 +189,7 @@ export function BatchDropDialog({
                               return next;
                             })
                           }
-                          className="rounded border px-1.5 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
+                          className="rounded-badge border px-1.5 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
                         >
                           {o.label}
                         </button>
@@ -271,7 +271,7 @@ export function BatchDropDialog({
                           key={p}
                           type="button"
                           onClick={() => setReason(p)}
-                          className="rounded border px-1.5 py-0.5 text-[11px] hover:bg-muted"
+                          className="rounded-badge border px-1.5 py-0.5 text-[11px] hover:bg-muted"
                         >
                           {p}
                         </button>

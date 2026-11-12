@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { DemoBar } from "@/components/demo/DemoBar";
 import { SimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
 import { PageShell } from "@/components/layout/PageShell";
+import { ListBand } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -308,25 +309,24 @@ export function RollsPage() {
         open={Boolean(scanRoll)}
         onOpenChange={(o) => !o && setScanRoll(null)}
       />
+      {isTableTab && (
+        <ListBand>
+          <RollsStats
+            data={statsQuery.data?.data}
+            isLoading={statsQuery.isLoading}
+            scopeLabel={
+              tab === "SUBCONTRACTOR"
+                ? fasonScopeLabel ?? "Fasonda"
+                : TABS.find((t) => t.key === tab)?.label ?? ""
+            }
+          />
+        </ListBand>
+      )}
       <ReorderableTabBar
         tabs={orderedTabs}
         activeKey={tab}
         onSelect={(k) => selectTab(k as RollTabKey)}
         onReorder={reorder}
-        // "Top/Metre" özeti şeridin sağında (Arşiv'in eski yeri).
-        trailing={
-          isTableTab ? (
-            <RollsStats
-              data={statsQuery.data?.data}
-              isLoading={statsQuery.isLoading}
-              scopeLabel={
-                tab === "SUBCONTRACTOR"
-                  ? fasonScopeLabel ?? "Fasonda"
-                  : TABS.find((t) => t.key === tab)?.label ?? ""
-              }
-            />
-          ) : undefined
-        }
       />
       {/* Okutma alanı satırın başında (arama kutusunun yeri); Üretim Akışı'nda süzgeç yok. */}
       {tab === "KANBAN" ? (

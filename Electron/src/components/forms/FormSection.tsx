@@ -93,12 +93,12 @@ export function FormSection({
               {title}
             </h3>
             {required && (
-              <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-destructive">
+              <span className="rounded-badge bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-destructive">
                 Zorunlu
               </span>
             )}
             {optional && (
-              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-blue-600 dark:text-blue-400">
+              <span className="rounded-badge bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-blue-600 dark:text-blue-400">
                 Opsiyonel
               </span>
             )}

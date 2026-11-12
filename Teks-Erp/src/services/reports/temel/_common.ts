@@ -187,3 +187,25 @@ export const coreRangeQuerySchema = z
   })
   .strict();
 export type CoreRangeQuery = z.infer<typeof coreRangeQuerySchema>;
+
+// ── TABLO GÖRÜNÜMÜ (eski raporların döküm/kırılım tabloları, 2026-11-12) ─────────────────────────────
+// Eski karnelerin listeleri yeni raporda AYRI rapor değil, aynı raporun tablo seçimidir: ana/yan sayı, grafik ve
+// anlatı değişmez, yalnız `tablo` aynı kaynak servisin başka listesinden kurulur. Varsayılan `ozet` = raporun ana tablosu.
+export const VIEW_PARAM = "gorunum";
+export const VIEW_DEFAULT = "ozet";
+
+/** Rapor başına görünüm şeması — `ozet` her listede ilk; tanınmayan değer 400 (`.strict()` şemanın parçası). */
+export function viewQueryKey<const V extends readonly [typeof VIEW_DEFAULT, ...string[]]>(views: V) {
+  return { gorunum: z.enum(views).optional() };
+}
+
+/** Görünüm çipi: seçenekler sunucudan, uygulanan değer her zaman dolu (yokluğu `ozet`). */
+export function viewParameter<V extends string>(labels: Readonly<Record<V, string>>, value: V): ParametreBeyani {
+  return {
+    ad: VIEW_PARAM,
+    etiket: "Tablo",
+    tur: "secim",
+    deger: value,
+    secenekler: (Object.keys(labels) as V[]).map((deger) => ({ deger, etiket: labels[deger] })),
+  };
+}

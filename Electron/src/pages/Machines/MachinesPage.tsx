@@ -16,7 +16,7 @@ export function MachinesPage() {
       service={machineService}
       columns={machineColumns}
       writePermission="station:write"
-      searchPlaceholder="Kod veya ad ara..."
+      searchHint="Kod veya ad"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <MachineFormDialog
           open={open}

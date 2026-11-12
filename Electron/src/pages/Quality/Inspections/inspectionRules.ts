@@ -2,6 +2,7 @@
 // Puan/derece HESABI burada YOK — tek kaynak backend motoru (önizleme ucu).
 import axios from "axios";
 import type { DefectInput, DefectSizeClass, InspectionDetail, InspectionListParams, InspectionPhase, WidthSource } from "./service";
+import { formatQty } from "@/lib/format";
 
 export interface InspectionFilterState {
   q: string; from: string; to: string;
@@ -60,7 +61,7 @@ export const WIDTH_SOURCE_LABEL: Record<WidthSource, string> = {
 export function numText(v: string | number | null | undefined, digits = 2): string {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
-  return Number.isFinite(n) ? n.toLocaleString("tr-TR", { maximumFractionDigits: digits }) : "—";
+  return Number.isFinite(n) ? formatQty(n, digits) : "—";
 }
 
 export function inspectionState(r: { supersededAt: string | null; voidedAt: string | null }): "ACTIVE" | "REVISED" | "VOIDED" {

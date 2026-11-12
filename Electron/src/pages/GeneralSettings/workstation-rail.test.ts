@@ -58,7 +58,8 @@ import {
 } from "./settings-groups";
 
 const SHELL_SRC = readFileSync(resolve(__dirname, "SettingsSurfacePage.tsx"), "utf8");
-const HUB_SRC = readFileSync(resolve(__dirname, "../Settings/SettingsPage.tsx"), "utf8");
+// "Bu Bilgisayar" kartı tercihlerin Çalışma sekmesine taşındı (SettingsAccountCards.tsx → WorkstationCard).
+const HUB_SRC = readFileSync(resolve(__dirname, "../Settings/SettingsAccountCards.tsx"), "utf8");
 
 const REGIME = resolveSettingsRegime(undefined);
 const local = () => SETTINGS_CATEGORIES.filter((c) => c.section === WORKSTATION_SECTION);

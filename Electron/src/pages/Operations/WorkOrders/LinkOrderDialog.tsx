@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { safeFormatCalendar } from "@/lib/format";
+import { formatQty, safeFormatCalendar } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -39,7 +39,7 @@ interface Props {
   targetWidth: number | null;
 }
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmt = (n: number) => formatQty(n, 0);
 
 /**
  * "Sipariş Bağla" — üretim başlamış (hatta boyahanedeki) bir iş emrine sonradan

@@ -16,6 +16,7 @@ import { importService } from "@/services/importService";
 import { downloadTemplate } from "@/lib/import/template";
 import { downloadEntityData } from "@/lib/import/entity-data-export";
 import { ImportDataPreview, ImportSpecPreview } from "./ImportSpecPreview";
+import { formatQty } from "@/lib/format";
 
 /** Önizlemede gösterilen satır sayısı — dosyanın ŞEKLİNİ anlamaya yeter. */
 const PREVIEW_ROWS = 10;
@@ -133,7 +134,7 @@ export function EntityPreviewDialog({
           ) : (
             <Button onClick={() => void onDownloadData()} disabled={!data || data.total === 0 || busy}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {data ? `Tümünü indir (${data.total.toLocaleString("tr-TR")} kayıt)` : "İndir"}
+              {data ? `Tümünü indir (${formatQty(data.total)} kayıt)` : "İndir"}
             </Button>
           )}
         </DialogFooter>

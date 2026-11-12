@@ -17,8 +17,9 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import type { SackSearchRow } from "./types";
+import { formatQty } from "@/lib/format";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => formatQty(n, 1);
 
 interface Props {
   sackId: string;
@@ -155,7 +156,7 @@ export function MoveRollsDialog({
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Çuval kodu / müşteri ara…"
+                placeholder="Ara…" title="Çuval kodu / müşteri ara" aria-label="Çuval kodu / müşteri ara"
                 className="pl-8"
               />
             </div>

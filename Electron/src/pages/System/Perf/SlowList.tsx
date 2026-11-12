@@ -1,6 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { SlowRequest } from "./perfService";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { formatQty } from "@/lib/format";
 
 /** Yavaş istek defteri (≥0,5 sn, son 50 — en yenisi başta). 499 = istemci bekledi
  *  ama vazgeçti (timeout/pencere kapandı) — çoğu zaman EN önemli satırlar. */
@@ -36,7 +37,7 @@ export function SlowList({ items }: { items: SlowRequest[] }) {
               {s.status === 499 ? "499 (istemci vazgeçti)" : s.status}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
-              {(s.ms / 1000).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} sn
+              {formatQty((s.ms / 1000), 1)} sn
             </TableCell>
             <TableCell className="font-mono text-xs text-muted-foreground" title={s.query ? `?${s.query}` : undefined}>
               {s.reqId ?? "—"}

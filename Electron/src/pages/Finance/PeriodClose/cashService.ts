@@ -26,6 +26,7 @@
 import apiClient from "@/services/apiClient";
 import { money, type Currency } from "../service";
 import type { Decimalish, NeighbourClose, PeriodStatus, PeriodVerify } from "./service";
+import { formatAmount } from "@/lib/format";
 
 export type CashAccountKind = "CASH_BOX" | "BANK_ACCOUNT";
 
@@ -140,7 +141,7 @@ export function fmtCashMoney(
   if (currency) return money(value, currency);
   const n = typeof value === "number" ? value : Number(value);
   if (value === null || value === undefined || value === "" || !Number.isFinite(n)) return "—";
-  return n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatAmount(n, 2, 2);
 }
 
 /** Kapanış listesi. Hesap süzgeci opsiyonel; `includeReopened` denetim görünümü. */

@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Check, Ban, Trash2, Printer, Eye, Pencil, CalendarRange } from "lucide-react";
+import { Plus, CalendarRange } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,15 +23,10 @@ import {
   deleteInvoice,
   money,
   partyName,
-  settlementOf,
-  SETTLEMENT_BADGE,
-  SETTLEMENT_LABEL,
-  INVOICE_STATUS_BADGE,
   INVOICE_TYPE_LABEL,
   type InvoiceRow,
 } from "./service";
-// Kuruş → tutar yalnız GÖSTERİM anında (allocationMath sözleşmesi).
-import { fromKurus } from "./Allocations/allocationMath";
+import { useInvoiceTable } from "./invoiceColumns";
 import { InvoiceFormDialog } from "./InvoiceFormDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
 import { ServicePeriodDraftDialog } from "./ServicePeriodDraftDialog";
@@ -41,7 +38,6 @@ import { draftBadgeText, trimNotice } from "./invoicesList";
 import { GoodsReceiptDetailSheet } from "@/pages/Operations/GoodsReceipts/GoodsReceiptDetailSheet";
 import { ShipmentDetailSheet } from "@/pages/Operations/Shipments/ShipmentDetailSheet";
 import { DirectShipmentDetailSheet } from "@/pages/Operations/Shipments/DirectShipmentDetailSheet";
-import { factoryLocaleDateString } from "@/lib/factory-time";
 import { RefreshButton } from "@/components/RefreshButton";
 
 // ⚠️ Rozet sözlükleri 2026-08-14'te `service.ts`'e TAŞINDI (buradan kopyalanmadı,
@@ -137,6 +133,15 @@ export function InvoicesPage() {
   // var" ile "sistemde ne var" ayrımını korur.
   const draftBadge = draftBadgeText(draftCountQ.data?.pagination?.total, status);
   const trimBand = trimNotice(q.data?.pagination?.total, rows.length);
+  const hasRows = !q.isLoading && !q.isError && rows.length > 0;
+  const table = useInvoiceTable(rows, {
+    onDetail: (inv) => setDetailId(inv.id),
+    onPrint: (inv) => setPrintTarget(inv),
+    onEdit: (inv) => setEditId(inv.id),
+    onConfirm: setConfirmTarget,
+    onCancel: setCancelTarget,
+    onDelete: setDeleteTarget,
+  });
 
   return (
     <PageShell>
@@ -181,10 +186,12 @@ export function InvoicesPage() {
         }
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3 md:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-[var(--list-inset)] py-3">
         <Input
           className="w-64"
-          placeholder="Belge no / cari ara…"
+          placeholder="Ara…"
+          title="Belge no / cari ara"
+          aria-label="Belge no / cari ara"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -208,200 +215,59 @@ export function InvoicesPage() {
           <option value="CONFIRMED">Onaylı</option>
           <option value="CANCELLED">İptal</option>
         </select>
+        <div className="ml-auto">
+          <DataTableTools table={table} exportName="Faturalar" compact />
+        </div>
       </div>
 
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          /* ⚠️ "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "fatura yok"
-             diye basmak, kullanıcıyı AYNI FATURAYI İKİNCİ KEZ kesmeye iter —
-             ve fatura, iki kez kesilmesi en pahalı belgedir. Interceptor'ın
-             toast'ı birkaç saniyede kaybolur; ekranda kalan cümle doğruyu
-             söylemek zorunda (emsal: PurchaseOrdersPage). */
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Fatura listesi yüklenemedi.</p>
-              {/* Backend'in KENDİ cümlesi ("Ön muhasebe modülü kapalı" gibi) ortak
-                  çıkarıcıdan gelir ve yeniden yazılmaz; altındaki satır ise bu
-                  ekrana özel sonucu söyler. */}
-              <p className="mt-1 text-muted-foreground">
-                {apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “fatura yok” cevabı DEĞİLDİR. Kayıtlarınız yerinde duruyor; yeni fatura
-                kesmeden önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Fatura yok. "Yeni Fatura" ile taslak oluşturabilirsiniz.
-            </div>
-          </ListMessage>
-        ) : (
-          <>
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Belge No</th>
-                  <th className="px-3 py-2 text-left">Tür</th>
-                  <th className="px-3 py-2 text-left">Cari</th>
-                  <th className="px-3 py-2 text-left">Tarih</th>
-                  <th className="px-3 py-2 text-left">Durum</th>
-                  <th className="px-3 py-2 text-right">Tutar</th>
-                  <th className="px-3 py-2 text-right">Kapanan / Açık</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((inv) => {
-                  const badge = INVOICE_STATUS_BADGE[inv.status];
-                  // Kapama TÜRETİLİR (kolon değil) ve yalnız CONFIRMED'da
-                  // anlamlıdır — kural + gerekçe `settlementOf` başlığında.
-                  const st = settlementOf(inv);
-                  return (
-                    <tr key={inv.id} className={`border-t ${inv.status === "CANCELLED" ? "opacity-60" : ""}`}>
-                      <td className="px-3 py-2 font-mono text-xs">{inv.docNo}</td>
-                      <td className="px-3 py-2">{INVOICE_TYPE_LABEL[inv.type]}</td>
-                      <td className="px-3 py-2 font-medium">{partyName(inv.cari)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {factoryLocaleDateString(inv.issueDate, "tr-TR")}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge className={badge.cls}>{badge.label}</Badge>
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium">
-                        {money(inv.grandTotal, inv.currency)}
-                        {/* Döviz faturada TL karşılığı ikinci satırda — dönem
-                            toplamları tek birimde okunabilsin diye damgalanır. */}
-                        {inv.currency !== "TRY" && (
-                          <div className="text-xs text-muted-foreground">
-                            ≈ {money(inv.grandTotalTry, "TRY")}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {st ? (
-                          <div className="flex flex-col items-end gap-0.5">
-                            <div className="flex items-center gap-1">
-                              {/* Gecikme rozeti yalnız AÇIK tutar varken —
-                                  kapalı/taslak/iptal faturada basılmaz
-                                  (settlementOf bunu zaten garanti eder). */}
-                              {st.overdue && (
-                                <Badge className="bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200">
-                                  Vadesi geçti
-                                </Badge>
-                              )}
-                              <Badge className={SETTLEMENT_BADGE[st.state]}>
-                                {SETTLEMENT_LABEL[st.state]}
-                              </Badge>
-                            </div>
-                            <span className="whitespace-nowrap text-xs text-muted-foreground">
-                              {money(fromKurus(st.paidK), inv.currency)} / {money(fromKurus(st.openK), inv.currency)}
-                            </span>
-                          </div>
-                        ) : (
-                          // Taslak/iptalde kapama sorusu YOKTUR — boş bırakmak
-                          // değil, "soru yok" demek ("—").
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* DETAY her statüde açılır (taslak dahil): satırları
-                              ve toplamları görmek okuma iznidir, belge basmak
-                              değil. */}
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            title="Detay — satırlar, kapamalar, belge"
-                            onClick={() => setDetailId(inv.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {/* BELGE — taslakta ÇIKMAZ: belge onayda donar, taslağın
-                              resmi kaydı yoktur ve düğme "yok" bir şeyi vaat eder.
-                              İPTAL edilmiş fatura basılabilir KALIR (İPTAL
-                              filigranıyla) — dosyaya bakan kişinin ihtiyacı. */}
-                          {inv.status !== "DRAFT" && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              title="Faturayı yazdır / önizle"
-                              onClick={() => setPrintTarget(inv)}
-                            >
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {inv.status === "DRAFT" && (
-                            <>
-                              {/* ⭐ DÜZENLE — `PATCH /invoices/:id` (updateDraft)
-                                  ucu 2026-08-14'ten beri VARDI ve panel onu HİÇ
-                                  çağırmıyordu. Otomatik doğan 0 fiyatlı taslak
-                                  ne onaylanabiliyor (confirm sıfır fiyatı
-                                  reddediyor) ne düzeltilebiliyordu; tek çıkış
-                                  silmekti ve silmek kaynak bağını da götürüyordu
-                                  (oluşturma şeması `goodsReceiptId` kabul etmez).
-                                  Onaydan ÖNCE gelir: doğal sıra "düzelt → onayla". */}
-                              <PermissionGate permission="finance:write">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  title="Taslağı düzenle — satırlar, vade, dış belge no, not"
-                                  onClick={() => setEditId(inv.id)}
-                                >
-                                  <Pencil className="mr-1 h-3.5 w-3.5" />
-                                  Düzenle
-                                </Button>
-                              </PermissionGate>
-                              <PermissionGate permission="finance:invoice">
-                                <Button size="sm" onClick={() => setConfirmTarget(inv)}>
-                                  <Check className="mr-1 h-3.5 w-3.5" />
-                                  Onayla
-                                </Button>
-                              </PermissionGate>
-                              <PermissionGate permission="finance:write">
-                                <Button
-                                  size="icon"
-                                  title="Taslağı sil"
-                                  className="bg-destructive text-white hover:bg-destructive/90"
-                                  onClick={() => setDeleteTarget(inv)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </PermissionGate>
-                            </>
-                          )}
-                          {inv.status === "CONFIRMED" && (
-                            <PermissionGate permission="finance:invoice">
-                              <Button variant="outline" size="sm" onClick={() => setCancelTarget(inv)}>
-                                <Ban className="mr-1 h-3.5 w-3.5" />
-                                İptal (storno)
-                              </Button>
-                            </PermissionGate>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda kullanıcı
-                bulamadığı faturayı "yok" sayıp ikinci kez kesebilir. */}
-            {trimBand && (
-              <p className="border-t bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                {trimBand}
-              </p>
-            )}
-          </>
-        )}
-      </ListBody>
+      {hasRows ? (
+        <>
+          <DataTable table={table} rowClassName={(inv) => (inv.status === "CANCELLED" ? "opacity-60" : undefined)} />
+          {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda kullanıcı
+              bulamadığı faturayı "yok" sayıp ikinci kez kesebilir. */}
+          {trimBand && (
+            <p className="shrink-0 border-t bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              {trimBand}
+            </p>
+          )}
+        </>
+      ) : (
+        <ListBody>
+          {q.isLoading ? (
+            <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+          ) : q.isError ? (
+            /* ⚠️ "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "fatura yok"
+               diye basmak, kullanıcıyı AYNI FATURAYI İKİNCİ KEZ kesmeye iter —
+               ve fatura, iki kez kesilmesi en pahalı belgedir. Interceptor'ın
+               toast'ı birkaç saniyede kaybolur; ekranda kalan cümle doğruyu
+               söylemek zorunda (emsal: PurchaseOrdersPage). */
+            <ListMessage>
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+                <p className="font-medium text-destructive">Fatura listesi yüklenemedi.</p>
+                {/* Backend'in KENDİ cümlesi ("Ön muhasebe modülü kapalı" gibi) ortak
+                    çıkarıcıdan gelir ve yeniden yazılmaz; altındaki satır ise bu
+                    ekrana özel sonucu söyler. */}
+                <p className="mt-1 text-muted-foreground">
+                  {apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Bu bir “fatura yok” cevabı DEĞİLDİR. Kayıtlarınız yerinde duruyor; yeni fatura
+                  kesmeden önce tekrar deneyin.
+                </p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                  Tekrar dene
+                </Button>
+              </div>
+            </ListMessage>
+          ) : (
+            <ListMessage>
+              <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                Fatura yok. "Yeni Fatura" ile taslak oluşturabilirsiniz.
+              </div>
+            </ListMessage>
+          )}
+        </ListBody>
+      )}
       <ListFooter loaded={rows.length} total={q.data?.pagination?.total ?? null} />
 
       <ServicePeriodDraftDialog open={servicePeriodOpen} onOpenChange={setServicePeriodOpen} onCreated={(id) => { invalidate(); setDetailId(id); }} />

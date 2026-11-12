@@ -30,7 +30,7 @@ export function SubcontractorCategoriesPage() {
       service={subcontractorCategoryService}
       columns={subcontractorCategoryColumns}
       writePermission="subcontractor:write"
-      searchPlaceholder="Ad ara..."
+      searchHint="Ad"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <SubcontractorCategoryFormDialog
           open={open}

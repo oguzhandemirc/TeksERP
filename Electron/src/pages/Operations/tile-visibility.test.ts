@@ -4,6 +4,7 @@ import {
   type OperationsVisibilityContext,
 } from "./tile-config";
 import { commandSections } from "@/components/layout/command-entries";
+import { operationGroups } from "./groups-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { documentTiles } from "@/pages/Documents/tile-config";
 import { isGoodsReceiptVisible } from "./GoodsReceipts/goodsReceipt-regime";
@@ -197,11 +198,9 @@ describe("karo bağlantıları", () => {
     // 2026-11-08: `emanet-cikis` (Emanet Çıkış, fason F5/P3) — emanet kapalıyken GİZLİ (İçerideki İşler ile aynı kapı).
     // 2026-11-02: `work-order-create` (K6 İş emri oluştur) — üretim modülü kapısı (İş Emirleri ile aynı yüklem).
     // 2026-11-11: `loom-load` (Tezgâh Yükü, SY-3) — Dokuma İşleri ile AYNI kapı (isWeavingOrdersVisible).
+    // 2026-11-11 (T5 menü): üç gelen belge KURULUM karosu Tanımlar › Gelen Belge Kurulumu'na taşındı (kapı aynı).
     expect(conditional.sort()).toEqual([
       "emanet-cikis",
-      "gelen-belge-sablonlari",
-      "gelen-belge-tanit",
-      "gelen-belge-varsayilan-urunler",
       "gelen-belgeler",
       "goods-receipts",
       "icerideki-isler",
@@ -330,8 +329,10 @@ describe("Tanımlar — cari rejimi", () => {
 });
 
 describe("komut paleti — karo yüklemi taşınıyor", () => {
-  const opsEntries =
-    commandSections.find((s) => s.heading === "Operasyon")?.entries ?? [];
+  // T5: Operasyon paleti dört bölüm başlığına ayrıldı (Satış · Üretim · Depo · Sevkiyat).
+  const opsEntries = commandSections
+    .filter((s) => operationGroups.some((g) => g.title === s.heading))
+    .flatMap((s) => s.entries);
 
   it("her karo için bir giriş üretilir (karo sessizce düşmez)", () => {
     const entryKeys = new Set(opsEntries.map((e) => e.key));
@@ -348,7 +349,8 @@ describe("komut paleti — karo yüklemi taşınıyor", () => {
     const extra = opsEntries
       .filter((e) => !operationsTiles.some((t) => `ops:${t.key}` === e.key))
       .map((e) => e.key);
-    expect(extra).toEqual([]);
+    // T5: Satış bölümüne Maliyet kataloğundan gelen teklif girişleri (karo + "Yeni teklif" eylemi).
+    expect(extra).toEqual(["cost:quotes", "cost:quote-new"]);
   });
 
   it("her operasyon girişi karosunun yüklemini AYNEN taşır", () => {

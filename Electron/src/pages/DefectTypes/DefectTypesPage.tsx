@@ -49,7 +49,7 @@ export function DefectTypesPage() {
         </PermissionGate>
       ) : undefined}
       writePermission="quality:write"
-      searchPlaceholder="Kod veya ad ara..."
+      searchHint="Kod veya ad"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <DefectTypeFormDialog
           fourPoint={fourPoint}

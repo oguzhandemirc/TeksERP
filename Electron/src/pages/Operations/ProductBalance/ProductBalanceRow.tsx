@@ -1,6 +1,4 @@
 import {
-  ChevronRight,
-  ChevronDown,
   Factory,
   PackageCheck,
   AlertTriangle,
@@ -13,29 +11,67 @@ import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import type { BalanceGroup, BalanceSpecRow } from "./types";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
-const fmt = (n: number) =>
-  n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+/** Metre — binlik ayırıcısız (lib/format kuralı). */
+export const fmt = (n: number) =>
+  formatQty(n, 0);
 
-const widthLabel = (w: number | null) => (w == null ? "en —" : `${w}cm`);
+export const widthLabel = (w: number | null) => (w == null ? "en —" : `${w}cm`);
 
-interface Props {
+/** Kumaş+renk grubunun Ham hücresi — yarı mamul varsa AYNI satırda (ikisi de gerçek arz; ayrı stok türü). */
+export function BalanceHamCell({ group: g }: { group: BalanceGroup }) {
+  return (
+    <span title="Ham havuzu — kumaş+renk için ortak (eni önemsiz). En'lere bölünmez. Yarı mamul ayrı; ham açığı ikisini birden düşer." className="text-muted-foreground">
+      {fmt(g.ham)}
+      {g.yariMamul > 0 && <span className="ml-1 text-[10px] text-cyan-700 dark:text-cyan-400">+ {fmt(g.yariMamul)} yarı mamul</span>}
+    </span>
+  );
+}
+
+/** Üretilecek hücresi — karşılanıyorsa yeşil, değilse metre + (varsa) ham açığı aynı satırda. */
+export function BalanceNeedCell({ group: g }: { group: BalanceGroup }) {
+  if (g.uretilecek <= 0) {
+    return (
+      <span className="inline-flex items-center justify-end gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+        <PackageCheck className="h-3.5 w-3.5" /> Karşılanıyor
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center justify-end gap-1.5">
+      <span className="font-semibold text-amber-600 dark:text-amber-400">{fmt(g.uretilecek)} m</span>
+      {g.malzemeAcigi > 0 && (
+        <span className="inline-flex items-center gap-1 text-[10px] text-amber-600/80 dark:text-amber-400/80">
+          <AlertTriangle className="h-3 w-3" /> ham açığı {fmt(g.malzemeAcigi)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Tek en → başlıkta hızlı iş emri düğmesi; çok en → satırı açıp en seçilir. */
+export function BalanceWoButton({ group: g, onOpenWo }: { group: BalanceGroup; onOpenWo: (group: BalanceGroup, spec: BalanceSpecRow) => void }) {
+  const singleSpec = g.specs[0];
+  if (g.uretilecek <= 0 || g.specs.length > 1 || !singleSpec) return null;
+  return (
+    <PermissionGate permission="workorder:write">
+      <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={() => onOpenWo(g, singleSpec)}>
+        <Factory className="h-3.5 w-3.5" /> {TERIM.terbiyeIsEmri.tekil} Aç
+      </Button>
+    </PermissionGate>
+  );
+}
+
+interface DetailProps {
   group: BalanceGroup;
-  isOpen: boolean;
-  /** Grup key'i ile genişlet/daralt (stabil referans — üst listede memo tutsun). */
-  onToggle: (key: string) => void;
   /** Belirli bir en alt-satırı için iş emri aç (grup + spec). */
   onOpenWo: (group: BalanceGroup, spec: BalanceSpecRow) => void;
 }
 
-/** Kumaş Dengesi tablosunda tek (kumaş+renk) grubu + (açıksa) en kırılımı + drill-down.
- *  Perf: React.memo — arama kutusuna yazarken filtre dışı kalmayan grupların
- *  props'u değişmediğinden yeniden render EDİLMEZ (handler'lar üstte useCallback'li). */
-export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isOpen, onToggle, onOpenWo }: Props) {
-  const covered = g.uretilecek <= 0;
+/** Açılan ayrıntı: en kırılımı + talep eden siparişler + üretimdeki iş emirleri (DataTable `renderExpanded`). */
+export const ProductBalanceDetail = memo(function ProductBalanceDetail({ group: g, onOpenWo }: DetailProps) {
   const multiWidth = g.specs.length > 1;
-  const singleSpec = g.specs[0];
-
   // Drill-down: tüm en alt-satırlarının siparişleri/WO'ları, termin sıralı.
   const allLines = useMemo(
     () =>
@@ -51,95 +87,7 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
   const allWos = useMemo(() => g.specs.flatMap((s) => s.wos), [g.specs]);
 
   return (
-    <>
-      <tr className="border-t [&>td]:px-3 [&>td]:py-2">
-        <td className="text-left">
-          <button
-            type="button"
-            onClick={() => onToggle(g.key)}
-            className="flex items-center gap-1.5 text-left hover:text-primary"
-          >
-            {isOpen ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-            )}
-            {g.colorHex && (
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full border"
-                style={{ backgroundColor: g.colorHex }}
-              />
-            )}
-            <span className="font-medium">{g.itemName}</span>
-            {g.colorName && (
-              <span className="text-muted-foreground">· {g.colorName}</span>
-            )}
-
-          </button>
-        </td>
-        <td className="text-left text-muted-foreground">
-          {multiWidth ? (
-            <span className="text-xs">{g.specs.length} en</span>
-          ) : (
-            <span className="text-xs">{singleSpec ? widthLabel(singleSpec.width) : "—"}</span>
-          )}
-        </td>
-        <td className="text-right text-foreground">{fmt(g.talep)}</td>
-        <td className="text-right text-muted-foreground">{fmt(g.depo)}</td>
-        <td className="text-right text-muted-foreground">{fmt(g.uretimde)}</td>
-        {/* Ham havuzu — yarı mamul varsa ALTINDA ayrı satırda. İkisi de gerçek
-            arzdır (açık hesabı ikisini birden düşer); ayrı gösterilmelerinin
-            sebebi farklı stok TÜRÜ olmaları. */}
-        <td
-          className="text-right text-muted-foreground"
-          title="Ham havuzu — kumaş+renk için ortak (eni önemsiz). En'lere bölünmez. Yarı mamul ayrı satırda; ham açığı ikisini birden düşer."
-        >
-          {fmt(g.ham)}
-          {g.yariMamul > 0 && (
-            <span className="block text-[10px] text-cyan-700 dark:text-cyan-400">
-              + {fmt(g.yariMamul)} yarı mamul
-            </span>
-          )}
-        </td>
-        <td className="text-right">
-          {covered ? (
-            <span className="inline-flex items-center justify-end gap-1 font-medium text-emerald-600 dark:text-emerald-400">
-              <PackageCheck className="h-3.5 w-3.5" /> Karşılanıyor
-            </span>
-          ) : (
-            <div className="flex flex-col items-end leading-tight">
-              <span className="font-semibold text-amber-600 dark:text-amber-400">
-                {fmt(g.uretilecek)} m
-              </span>
-              {g.malzemeAcigi > 0 && (
-                <span className="flex items-center gap-1 text-[10px] text-amber-600/80 dark:text-amber-400/80">
-                  <AlertTriangle className="h-3 w-3" /> ham açığı{" "}
-                  {fmt(g.malzemeAcigi)}
-                </span>
-              )}
-            </div>
-          )}
-        </td>
-        <td className="text-right">
-          {/* Tek en → başlıkta hızlı buton; çok en → açıp en seç. */}
-          {!covered && !multiWidth && singleSpec && (
-            <PermissionGate permission="workorder:write">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1.5"
-                onClick={() => onOpenWo(g, singleSpec)}
-              >
-                <Factory className="h-3.5 w-3.5" /> {TERIM.terbiyeIsEmri.tekil} Aç
-              </Button>
-            </PermissionGate>
-          )}
-        </td>
-      </tr>
-
-      {isOpen && (
-        <tr className="border-t bg-muted/20">
-          <td colSpan={8} className="px-4 py-3">
+    <div className="px-4 py-3">
               <div className="mb-3">
                 <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   En kırılımı{multiWidth ? ` (${g.specs.length})` : ""}
@@ -265,9 +213,6 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
                 )}
               </div>
             </div>
-          </td>
-        </tr>
-      )}
-    </>
+    </div>
   );
 });

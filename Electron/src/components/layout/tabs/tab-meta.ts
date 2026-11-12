@@ -17,6 +17,9 @@ import {
   Users,
   History,
   AlertOctagon,
+  ShoppingCart,
+  Warehouse,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
 import { allCommandEntries } from "@/components/layout/command-entries";
@@ -37,6 +40,11 @@ const STATIC: Record<string, TabMeta> = {
   "/forbidden": { title: "Yetki yok", icon: ShieldAlert },
   "/definitions": { title: "Tanımlar", icon: Library },
   "/operations": { title: "Operasyon", icon: ClipboardList },
+  // T5 bölüm sayfaları.
+  "/sales": { title: "Satış", icon: ShoppingCart },
+  "/production": { title: "Üretim", icon: Factory },
+  "/warehouse": { title: "Depo", icon: Warehouse },
+  "/shipping": { title: "Sevkiyat", icon: Truck },
   "/operations/work-orders/new": { get title() { return `Yeni ${TERIM.terbiyeIsEmri.tekil}`; }, icon: Factory },
   "/reports": { title: "Raporlar", icon: ScrollText },
   "/access": { title: "Yetkilendirme", icon: ShieldCheck },

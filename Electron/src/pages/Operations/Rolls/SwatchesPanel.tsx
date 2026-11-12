@@ -13,8 +13,9 @@ import { colorService } from "@/pages/Colors/service";
 import { swatchService, type KartelaStockGroup } from "./swatchService";
 import { ReduceKartelaStockDialog } from "./ReduceKartelaStockDialog";
 import { KartelaReductionHistoryDialog } from "./KartelaReductionHistoryDialog";
+import { qtyFormatter } from "@/lib/format";
 
-const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
+const NUM_FMT = qtyFormatter(3);
 
 // ÇOKLU: kartela stoğu ürün+renk kırılımında sayılır; birkaç kumaşı yan yana
 // görmek tam da bu ekranın sorusu. Backend `kartela.getStock` CSV'yi `in`'e
@@ -83,7 +84,7 @@ export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
           value={search}
           onChange={setSearch}
           onScan={handleScan}
-          placeholder="Ara ya da barkod okut..."
+          placeholder="Ara / okut…" hint="Ara ya da barkod okut"
           expectPrefix="SWATCH"
           busy={swatchLookupPending}
           widthClassName="w-64"

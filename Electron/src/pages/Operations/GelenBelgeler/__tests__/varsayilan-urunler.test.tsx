@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
-import { operationsTiles } from "@/pages/Operations/tile-config";
+// T5: karo Tanımlar › Gelen Belge Kurulumu altında (adres aynı).
+import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
 import { routeModuleOf } from "@/lib/route-modules";
 import { CustomerDefaultsPage, CUSTOMER_DEFAULTS_PATH } from "../MusteriVarsayilanUrunleriPage";
@@ -136,7 +137,7 @@ describe("müşteri varsayılan ürünleri sayfası", () => {
 
 describe("bulunabilirlik ve izin", () => {
   it("karo + palet girişi aynı adres ve izinle; modül kapısı gelenBelge", () => {
-    const tile = operationsTiles.find((t) => t.key === "gelen-belge-varsayilan-urunler");
+    const tile = definitionTiles.find((t) => t.key === "gelen-belge-varsayilan-urunler");
     expect(tile?.to).toBe(CUSTOMER_DEFAULTS_PATH);
     expect(tile?.permission).toBe("gelen-belge:template");
     expect(allCommandEntries.find((e) => e.to === CUSTOMER_DEFAULTS_PATH)?.visibleWhen).toBe(tile?.visibleWhen);

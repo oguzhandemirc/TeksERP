@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { formatFactory } from "@/lib/factory-time";
-import { ArrowRight, Ban, Plus, Printer } from "lucide-react";
+import { ArrowRight, Ban, Plus, Printer, Search } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
+import { Input } from "@/components/ui/input";
+import { TRANSFER_COLUMNS } from "./TransferTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -32,7 +36,11 @@ export function WarehouseTransfersPage() {
   // Baskı yerine ÖNİZLEME (saha isteği): ne basılacağı görülmeden kâğıt gitmesin.
   const [docOpen, setDocOpen] = useState(false);
 
-  const listQ = useQuery({ queryKey: ["warehouse-transfers"], queryFn: () => listTransfers({ page: 1, pageSize: 100 }) });
+  const [search, setSearch] = useState("");
+  const listQ = useQuery({
+    queryKey: ["warehouse-transfers", search],
+    queryFn: () => listTransfers({ page: 1, pageSize: 100, search: search || undefined }),
+  });
   const detailQ = useQuery({
     queryKey: ["warehouse-transfer", detailId],
     queryFn: () => getTransfer(detailId!),
@@ -52,7 +60,8 @@ export function WarehouseTransfersPage() {
     },
   });
 
-  const rows = listQ.data?.data ?? [];
+  const rows = useMemo(() => listQ.data?.data ?? [], [listQ.data]);
+  const table = useLocalTable({ tableKey: "warehouse-transfer:list", data: rows, columns: TRANSFER_COLUMNS });
   const total = listQ.data?.pagination?.total ?? 0;
 
   return (
@@ -73,6 +82,27 @@ export function WarehouseTransfersPage() {
         }
       />
 
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <div className="relative w-64">
+          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-8" placeholder="Ara…" title="Belge no ya da not ara" aria-label="Belge no ya da not ara" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Depo transferleri" />
+        </div>
+      </ListToolbar>
+
+      {!listQ.isLoading && rows.length > 0 ? (
+        <>
+          <DataTable table={table} isError={listQ.isError} onRetry={() => void listQ.refetch()} onRowClick={(r) => setDetailId(r.id)} exportName="Depo transferleri" />
+          {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
+          {total > rows.length && (
+            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+              {total} transferin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
+            </p>
+          )}
+        </>
+      ) : (
       <ListBody>
         {listQ.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -96,56 +126,12 @@ export function WarehouseTransfersPage() {
         ) : rows.length === 0 ? (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Henüz transfer yok.
+              {search ? "Bu aramayla transfer yok." : "Henüz transfer yok."}
             </div>
           </ListMessage>
-        ) : (
-          <>
-            {listQ.isError && (
-              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                Liste tazelenemedi — aşağıdaki belgeler son başarılı okumaya aittir; az önce
-                yapılmış bir transfer burada görünmeyebilir.
-              </p>
-            )}
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="p-3 text-left">Belge No</th>
-                  <th className="p-3 text-left">Tarih</th>
-                  <th className="p-3 text-left">Güzergâh</th>
-                  <th className="p-3 text-right">Top</th>
-                  <th className="p-3 text-left">Durum</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setDetailId(r.id)}>
-                    <td className="p-3 font-mono text-xs">{r.transferNo}</td>
-                    <td className="p-3">{formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}</td>
-                    <td className="p-3">
-                      <span className="inline-flex items-center gap-1">
-                        {r.fromWarehouse.name}
-                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                        {r.toWarehouse.name}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right tabular-nums">{r._count.movements}</td>
-                    <td className="p-3">
-                      {r.status === "CANCELLED" ? <Badge variant="outline">Geri alındı</Badge> : <Badge>Tamam</Badge>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
-            {total > rows.length && (
-              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                {total} transferin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
-              </p>
-            )}
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
 
       <TransferFormDialog

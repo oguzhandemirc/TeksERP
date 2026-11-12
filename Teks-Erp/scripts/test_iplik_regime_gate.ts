@@ -200,6 +200,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "(ADJUST_IN/ADJUST_OUT) ile deftere yazar. Route kapısı KONULAMAZ (aynı sayım " +
       "fişinde kumaş satırları da var); kapı TEK YAZARIN içindedir (§4d).",
   },
+  {
+    dosya: "routes/dashboard.routes.ts",
+    neden:
+      "AÇILIŞ PANOSU (çekirdek, pano kutu mimarisi 2026-11). Router SALT-OKUMADIR (CUD yok). Stok giriş–çıkış kutusu iplik hareketini OKUR (pano-kutu-akis.ts:38), yalnız `can.iplik` doğruyken (pano-kutu-akis.ts:52; stok KPI pano-kutu-mevcut.ts:73). " +
+      "Kapı KUTU düzeyinde sunucudadır: `iplik` = warehouse:read izni + ticaretEnabled + iplikEnabled (pano-kaynak.ts:76); kapalı modülde kutu katalogda yoktur, veri ucu `null` döner " +
+      "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
+  },
 ];
 
 /**

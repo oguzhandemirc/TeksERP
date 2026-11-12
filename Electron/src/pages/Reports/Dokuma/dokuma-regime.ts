@@ -1,3 +1,4 @@
+import { formatQty } from "@/lib/format";
 // =============================================================================
 // DOKUMA RAPORLARI — SAF KATMAN: oran biçimi · kaynak etiketleri
 // =============================================================================
@@ -16,7 +17,7 @@
  */
 export function formatPct(value: number | null | undefined): string {
   if (value === null || value === undefined) return "ölçülemedi";
-  return `%${value.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+  return `%${formatQty(value, 1, 1)}`;
 }
 
 /** Kaynak etiketi — `SIMULATED` `OPERATOR`dan AYRI yazılır (farklı güven sınıfı). */

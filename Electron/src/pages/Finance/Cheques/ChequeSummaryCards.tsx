@@ -45,7 +45,7 @@ import {
   getChequeDueSummary,
   type ChequeDueBucket,
   type ChequeDueSummary,
-} from "@/pages/Reports/Finance/chequeDueService";
+} from "./chequeDueService";
 import { money } from "../service";
 import type { Currency } from "../service";
 import { LIVE_STATUS } from "./ChequeFilterBar";

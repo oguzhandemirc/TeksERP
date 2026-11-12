@@ -2,6 +2,7 @@ import { MapPin, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { shipmentStatusLabels, type LocatedRoll } from "./types";
+import { formatQty } from "@/lib/format";
 
 const ROLL_STATUS_LABEL: Record<string, string> = {
   STOCK: "Stokta",
@@ -42,7 +43,7 @@ export function RollLocateCard({ roll, onClear }: { roll: LocatedRoll; onClear: 
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           {rollName || roll.item.name} ·{" "}
-          {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m
+          {formatQty(roll.currentQty, 1)} m
         </div>
         <div className="mt-1.5 text-sm">
           <span className="font-semibold">Yeri: </span>

@@ -1,6 +1,7 @@
 // İE listesi "Metre" sütunu — beyan ↔ ölçülen özeti (`GET /api/work-orders?withMeterSummary=true`).
 // Sınıf ve fark SUNUCUDA (tek çözücü); burası yalnız detay kartının sınıflandırıcısıyla tonu seçer ve biçimler.
 import { classifyMeterDiff, type MeterDiffTone } from "./detail-v3/meterComparison";
+import { formatQty } from "@/lib/format";
 
 export interface WorkOrderMeterSummary {
   declaredM: number | null;
@@ -21,7 +22,7 @@ export interface MeterCellView {
   title: string;
 }
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+const fmt = (n: number) => formatQty(n, 0);
 const m = (n: number | null) => (n == null ? "—" : `${fmt(n)} m`);
 
 /** "Giren" = beyan, "Çıkan" = en yüksek ölçüm (yoksa "—"); fark: uzunda faturaya eklenen (billed − beyan, hep artı), kısada ölçülen − beyan. */

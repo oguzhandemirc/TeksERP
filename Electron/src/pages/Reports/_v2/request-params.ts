@@ -9,6 +9,8 @@ import { REPORT_DATE_URL_KEYS, asOfParams, rangeDayParams, rangeIsoParams, toYmd
 
 /** Kıyas çipinin sunucu beyanındaki adı; beyan yoksa çip çizilmez (eski uç). */
 export const COMPARE_PARAM = "kiyas";
+/** Tablo görünümü beyanı (backend `VIEW_PARAM`); sunucu her zaman bir tablo uygular, "Tümü" anlamsız. */
+export const VIEW_PARAM = "gorunum";
 
 function dateParams(entry: ReportCatalogEntry, search: URLSearchParams): Record<string, string | undefined> {
   switch (entry.tarih) {

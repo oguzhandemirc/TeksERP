@@ -22,7 +22,7 @@ export function PeripheralDevicesPage() {
       service={peripheralService}
       columns={peripheralColumns}
       writePermission="station:write"
-      searchPlaceholder="Ad / kod / adres ara..."
+      searchHint="Ad / kod / adres"
       permanentDelete={{
         description: (d) =>
           `"${d.name}" (${d.code}) KALICI olarak silinecek — bu işlem GERİ ALINAMAZ. ` +

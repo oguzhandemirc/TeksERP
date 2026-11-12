@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useDeepLinkParam } from "@/hooks/useDeepLinkParam";
 import { useQuery } from "@tanstack/react-query";
-import { formatFactory } from "@/lib/factory-time";
 import { Plus, FileText } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
-import { SUPPLIER_KIND_TAG, supplierRefOf } from "@/components/forms/supplierParty";
+import { GOODS_RECEIPT_COLUMNS } from "./GoodsReceiptTable";
 import { listGoodsReceipts } from "./service";
 import { GoodsReceiptFormDialog } from "./GoodsReceiptFormDialog";
 import { GoodsReceiptDetailSheet } from "./GoodsReceiptDetailSheet";
@@ -25,6 +28,7 @@ import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
  * (karoya `multiWarehouse` şartı KONMAZ — tek depolu ticaret firması da kullanır).
  */
 export function GoodsReceiptsPage() {
+  const { hasPermission } = useRoleAccess();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -33,13 +37,17 @@ export function GoodsReceiptsPage() {
   // o fişe aitmiş gibi görünmesin (yanlış fişe yazılan uyarı, hiç uyarmamaktan
   // kötüdür — depocu doğru fişi doğru sanır).
   const [createdSync, setCreatedSync] = useState<{ id: string; sync: ReceiptPurchaseOrderSync } | null>(null);
+  // Pano derin bağlantıları: hızlı işlem `?action=new` formu, son hareket `?focus=<id>` fiş detayını açar.
+  useDeepLinkParam("action", (v) => { if (v === "new" && hasPermission("goods-receipt:write")) setFormOpen(true); });
+  useDeepLinkParam("focus", setDetailId);
 
   const q = useQuery({
     queryKey: ["goods-receipts", search],
     queryFn: () => listGoodsReceipts({ page: 1, pageSize: 100, search: search || undefined }),
   });
 
-  const rows = q.data?.data ?? [];
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const table = useLocalTable({ tableKey: "goods-receipt:list", data: rows, columns: GOODS_RECEIPT_COLUMNS });
   const total = q.data?.pagination?.total ?? 0;
 
   return (
@@ -60,15 +68,30 @@ export function GoodsReceiptsPage() {
         }
       />
 
-      <div className="shrink-0 border-b px-6 py-3">
+      <div className="flex shrink-0 items-center gap-2 border-b px-6 py-3">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Fiş no veya tedarikçi irsaliye no ara..."
+          placeholder="Ara…" title="Fiş no veya tedarikçi irsaliye no ara" aria-label="Fiş no veya tedarikçi irsaliye no ara"
           className="max-w-sm"
         />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Mal kabul fişleri" />
+        </div>
       </div>
 
+      {!q.isLoading && rows.length > 0 ? (
+        <>
+          <DataTable table={table} isError={q.isError} onRetry={() => void q.refetch()} onRowClick={(r) => setDetailId(r.id)} exportName="Mal kabul fişleri" />
+          {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
+          {total > rows.length && (
+            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+              {total} fişin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
+              Aradığınızı bulmak için fiş no / irsaliye no aramasını kullanın.
+            </p>
+          )}
+        </>
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -95,101 +118,9 @@ export function GoodsReceiptsPage() {
               Henüz mal kabul fişi yok. “Yeni Mal Kabul” ile tedarikçiden gelen malı depoya alın.
             </div>
           </ListMessage>
-        ) : (
-          <>
-            {q.isError && (
-              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                Liste tazelenemedi — aşağıdaki fişler son başarılı okumaya aittir; az önce
-                kaydedilmiş bir fiş burada görünmeyebilir.
-              </p>
-            )}
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="p-3 text-left">Fiş No</th>
-                  <th className="p-3 text-left">Tarih</th>
-                  <th className="p-3 text-left">Depo</th>
-                  <th className="p-3 text-left">Tedarikçi</th>
-                  <th className="p-3 text-left">Tedarikçi İrs.</th>
-                  {/* "Top" değil "İçerik": fiş iplik de taşıyabilir (Sınıf 5) —
-                      yalnız-iplik fiş "0 top" görünürse depocu "kaydedilmemiş"
-                      sanıp ikinci kez girer (backend loadDetail uyarısının ikizi). */}
-                  <th className="p-3 text-right">İçerik</th>
-                  <th className="p-3 text-left">Durum</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  // C4 — DOLU bacak basılır (cari kart / fason firma); rozet
-                  // yalnız fason tarafta (bugünkü satırlar bayt bayt aynı).
-                  const sup = supplierRefOf(r);
-                  return (
-                    <tr
-                      key={r.id}
-                      className="cursor-pointer border-t hover:bg-muted/40"
-                      onClick={() => setDetailId(r.id)}
-                    >
-                      <td className="p-3 font-mono text-xs">{r.receiptNo}</td>
-                      <td className="p-3">
-                        {formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}
-                      </td>
-                      <td className="p-3">{r.warehouse?.name ?? "—"}</td>
-                      <td className="p-3">
-                        {sup ? (
-                          <span className="flex items-center gap-1.5">
-                            {sup.name}
-                            {sup.kind === "SUBCONTRACTOR" && (
-                              <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
-                                {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">{r.deliveryNoteNo ?? "—"}</td>
-                      {/* Sayaç backend `_count`undan (yarnMovements eski backend'de
-                        yok → ?? 0 kumaş sayacına düşer). ⚠️ İki sayaç da "ne
-                        oldu"yu sayar (iptalli fişte satırlar da sayılır) —
-                        "ne kaldı" detaydaki `totals`tadır; ayrışan tek durum
-                        İptal rozetli satırdır (backend listReceipts yorumu). */}
-                      <td className="p-3 text-right tabular-nums">
-                        {[
-                          ...(r._count.rolls > 0 || (r._count.yarnMovements ?? 0) + (r._count.consumableMovements ?? 0) === 0
-                            ? [`${r._count.rolls} top`]
-                            : []),
-                          ...((r._count.yarnMovements ?? 0) > 0 ? [`${r._count.yarnMovements} iplik`] : []),
-                          ...((r._count.consumableMovements ?? 0) > 0 ? [`${r._count.consumableMovements} sarf`] : []),
-                        ].join(" + ")}
-                      </td>
-                      <td className="p-3">
-                        <span className="flex items-center gap-1.5">
-                          {r.status === "CANCELLED" ? (
-                            <Badge variant="outline">İptal</Badge>
-                          ) : (
-                            <Badge variant="default">Aktif</Badge>
-                          )}
-                          {/* C2 — ham stok fişi ayırt edilir: toplar Bitmiş Depo
-                            değil Ham Stok sekmesinde durur. */}
-                          {r.rawStockEntry && <Badge variant="outline">Ham stok</Badge>}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
-            {total > rows.length && (
-              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                {total} fişin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
-                Aradığınızı bulmak için fiş no / irsaliye no aramasını kullanın.
-              </p>
-            )}
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       {rows.length > 0 && (
         <ListFooter loaded={rows.length} total={total}>
           <span className="flex items-center gap-1">

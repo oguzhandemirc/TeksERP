@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListSentinel } from "@/components/layout/ListPage";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { ListBody, ListFooter } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { systemLogService } from "@/services/systemLogService";
 import type { SystemLogListItem } from "@/types/systemLog";
@@ -12,7 +15,7 @@ import {
   SystemEventsFilters,
   type SystemEventsFilterState,
 } from "./SystemEventsFilters";
-import { SystemEventsList } from "./SystemEventsList";
+import { useSystemEventsTable } from "./SystemEventsList";
 import { SystemEventDetailSheet } from "./SystemEventDetailSheet";
 
 const QUERY_KEY = "system-events";
@@ -49,14 +52,7 @@ export function SystemEventsPage() {
     [query.data],
   );
 
-  // Perf: SystemEventsList'in React.memo'lu satırları için stabil referans.
-  const handleSelect = useCallback((item: SystemLogListItem) => setDetailId(item.id), []);
-
-  const { rootRef, sentinelRef } = useInfiniteScroll({
-    hasMore: query.hasNextPage,
-    isLoading: query.isFetchingNextPage,
-    onLoadMore: () => void query.fetchNextPage(),
-  });
+  const table = useSystemEventsTable(items);
 
   return (
     <PageShell>
@@ -65,12 +61,36 @@ export function SystemEventsPage() {
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
       <RelocatedToolStrip host="/system/logs" />
-      <SystemEventsFilters value={filters} onChange={setFilters} />
+      <SystemEventsFilters
+        value={filters}
+        onChange={setFilters}
+        tools={<DataTableTools table={table} compact exportName="Sistem kayıtları" />}
+      />
 
-      <ListBody ref={rootRef}>
-        <SystemEventsList items={items} loading={query.isLoading} onSelect={handleSelect} />
-        {items.length > 0 && <ListSentinel ref={sentinelRef} />}
-      </ListBody>
+      {items.length > 0 ? (
+        <TooltipProvider delayDuration={300}>
+          <DataTable
+            table={table}
+            onRowClick={(e) => setDetailId(e.id)}
+            loadMore={{ hasMore: query.hasNextPage, isFetchingMore: query.isFetchingNextPage, onLoadMore: () => void query.fetchNextPage() }}
+            exportName="Sistem kayıtları"
+          />
+        </TooltipProvider>
+      ) : (
+        <ListBody>
+          {query.isLoading ? (
+            <div className="space-y-2 p-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-12 text-sm text-muted-foreground">
+              Filtreye uyan sistem kaydı bulunamadı.
+            </div>
+          )}
+        </ListBody>
+      )}
       <ListFooter loaded={items.length} hasMore={query.hasNextPage} isFetchingMore={query.isFetchingNextPage} />
 
       <SystemEventDetailSheet logId={detailId} onClose={() => setDetailId(null)} />

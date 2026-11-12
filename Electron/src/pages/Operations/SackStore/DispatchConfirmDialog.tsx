@@ -18,8 +18,9 @@ import { printedDocumentService } from "@/services/printedDocumentService";
 import { sackStoreService } from "./service";
 import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
 import { toastServerSuccess } from "@/lib/serverNotes";
+import { qtyFormatter } from "@/lib/format";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 
 /** Sevk onayının ihtiyacı olan asgari sevkiyat kimliği — her yüzey kendi tipinden eşler. */
 export interface DispatchShipmentInfo {

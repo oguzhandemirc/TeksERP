@@ -21,7 +21,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactElement } from "react";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
-let v2 = true;
 let perms: string[] = ["report:builder", "report:sales"];
 let editable = true;
 let versionReply: "ok" | "conflict" = "ok";
@@ -97,7 +96,7 @@ vi.mock("@/services/apiClient", () => ({
 const ctx = (): OperationsVisibilityContext => ({
   shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: true, dokumaEnabled: true, machineStopEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
   financeEnabled: true, productionEnabled: true, ticaretEnabled: true, iplikEnabled: true,
-  reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false, reportsV2Enabled: v2,
+  reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
 });
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({ useOperationsVisibilityContext: () => ctx() }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: false, hasPermission: (c: string) => perms.includes(c) }) }));
@@ -108,7 +107,6 @@ import { addBlock, moveBlock, normalizedBody, orderedLayout, removeBlock, resize
 import { contentKeyOf } from "./useLayoutEditor";
 import { ReportLayoutPage } from "./ReportLayoutPage";
 import { CustomReportViewPage } from "../CustomReportViewPage";
-import { CustomReportRoute } from "../CustomReportRoute";
 import { DefinitionResultView } from "../DefinitionResultView";
 import { buildDefinitionExportSpec } from "./definition-export";
 import { buildReportHtml, toSheets } from "@/pages/Reports/_components/reportExport";
@@ -132,7 +130,6 @@ function renderAt(path: string, routePath: string, ui: ReactElement) {
 }
 
 beforeEach(() => {
-  v2 = true;
   perms = ["report:builder", "report:sales"];
   editable = true;
   versionReply = "ok";
@@ -236,14 +233,6 @@ describe("§3 bulunabilirlik ve kapılar", () => {
     renderAt("/reports/ozel/r1", "/reports/ozel/:id", <CustomReportViewPage />);
     expect(await screen.findByText("Kaya Tekstil")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Düzeni düzenle/ })).toBeNull();
-  });
-
-  it("bayrak kapalı: düzen sayfası çizilmez, tanım ucu çağrılmaz", async () => {
-    v2 = false;
-    renderAt("/reports/ozel/r1/duzen", "/reports/ozel/:id/duzen", <CustomReportRoute><ReportLayoutPage /></CustomReportRoute>);
-    expect(await screen.findByText("yasak")).toBeInTheDocument();
-    expect(screen.queryByText(/Düzen:/)).toBeNull();
-    expect(post).not.toHaveBeenCalled();
   });
 });
 

@@ -44,7 +44,7 @@ export function ReturnReasonsPage() {
       service={returnReasonService}
       columns={returnReasonColumns}
       writePermission="return:write"
-      searchPlaceholder="Kod veya ad ara..."
+      searchHint="Kod veya ad"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <ReturnReasonFormDialog
           open={open}

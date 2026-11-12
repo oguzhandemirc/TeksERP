@@ -577,7 +577,7 @@ function InvoiceFormBody({
           <DialogTitle>{isEdit ? `Taslağı Düzenle — ${edit?.docNo}` : "Yeni Fatura (Taslak)"}</DialogTitle>
           <DialogDescription>
             {prefill?.sourceLabel && (
-              <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+              <span className="mr-1 rounded-badge bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
                 Kaynak: {prefill.sourceLabel}
               </span>
             )}

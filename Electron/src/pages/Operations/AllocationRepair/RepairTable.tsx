@@ -1,4 +1,9 @@
+import { useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, CheckCircle2, Loader2, Wrench } from "lucide-react";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { Button } from "@/components/ui/button";
 import type { RepairableShipment } from "./service";
 import { factoryLocaleDateString } from "@/lib/factory-time";
@@ -21,7 +26,7 @@ export function RepairSummary({
     return (
       <div className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-950/40">
         <CheckCircle2 className="h-5 w-5" />
-        <span>Siparişe yazılamayan shipmentCount yok — defter temiz.</span>
+        <span>Siparişe yazılamayan sevkiyat yok — defter temiz.</span>
       </div>
     );
   }
@@ -31,14 +36,14 @@ export function RepairSummary({
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <AlertTriangle className="h-4 w-4" /> Deftere işlenmemiş
         </div>
-        <div className="mt-1 text-2xl font-semibold">{Math.round(gap).toLocaleString("tr-TR")} m</div>
+        <div className="mt-1 text-2xl font-semibold">{Math.round(gap)} m</div>
         <div className="text-xs text-muted-foreground">{shipmentCount} sevkiyatta</div>
       </div>
       <div className="rounded-md border bg-muted/40 px-4 py-3">
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <Wrench className="h-4 w-4" /> Bugün onarılabilir
         </div>
-        <div className="mt-1 text-2xl font-semibold">{Math.round(gain).toLocaleString("tr-TR")} m</div>
+        <div className="mt-1 text-2xl font-semibold">{Math.round(gain)} m</div>
         <div className="text-xs text-muted-foreground">{repairableCount} sevkiyatta</div>
       </div>
     </div>
@@ -76,117 +81,93 @@ function OrderNumberLinks({
   return <span className="text-xs text-muted-foreground">{row.orderNumbers.join(", ") || "—"}</span>;
 }
 
-/** Tek satır — tablo gövdesinden ayrı: numaralar tıklanabilir olunca uzadı. */
-function RepairShipmentRow({
-  s,
-  onSelect,
-  onOrder,
-  onShipment,
-  busyId,
-}: {
-  s: RepairableShipment;
+interface RowActions {
   onSelect: (s: RepairableShipment) => void;
   onOrder: (orderId: string) => void;
   onShipment: (shipmentId: string) => void;
   busyId?: string;
-}) {
-  const repairable = s.onarilabilirMetraj > 0.001;
-  return (
-    <tr className="border-t [&>td]:px-3 [&>td]:py-2">
-      <td className="font-medium">
-        <button
-          type="button"
-          className={LINK_CLS}
-          onClick={() => onShipment(s.shipmentId)}
-          title="Sevkiyat detayını aç"
-        >
-          {s.shipmentNo}
-        </button>
-        <div className="text-xs text-muted-foreground">
-          {s.dispatchedAt ? factoryLocaleDateString(s.dispatchedAt, "tr-TR") : "—"}
-        </div>
-      </td>
-      <td>{s.customer?.name ?? "—"}</td>
-      <td>
-        <OrderNumberLinks row={s} onOrder={onOrder} />
-      </td>
-      <td className="text-right">{Math.round(s.icerikMetraj)}</td>
-      <td className="text-right">{Math.round(s.yazilanMetraj)}</td>
-      <td className="text-right font-semibold text-amber-700 dark:text-amber-400">
-        {Math.round(s.bosluk)}
-      </td>
-      <td className="text-right font-semibold">
-        {repairable ? (
-          <span className="text-emerald-700 dark:text-emerald-400">
-            {Math.round(s.onarilabilirMetraj)}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">0</span>
-        )}
-      </td>
-      <td className="text-right">
-        <Button
-          size="sm"
-          variant={repairable ? "default" : "outline"}
-          disabled={!repairable || busyId === s.shipmentId}
-          onClick={() => onSelect(s)}
-          title={
-            repairable
-              ? "Ne yazılacağını göster"
-              : "Bugün de yazılamıyor — sipariş dolu ya da kumaş/renk/en tutmuyor"
-          }
-          className="gap-1.5"
-        >
-          {busyId === s.shipmentId && <Loader2 className="h-4 w-4 animate-spin" />}
-          İncele
-        </Button>
-      </td>
-    </tr>
-  );
 }
 
-/** Sevkiyat listesi — onarılabilir olanlar üstte. */
-export function RepairShipmentTable({
-  rows,
-  onSelect,
-  onOrder,
-  onShipment,
-  busyId,
-}: {
-  rows: RepairableShipment[];
-  onSelect: (s: RepairableShipment) => void;
-  onOrder: (orderId: string) => void;
-  onShipment: (shipmentId: string) => void;
-  busyId?: string;
-}) {
-  const sorted = [...rows].sort((a, b) => b.onarilabilirMetraj - a.onarilabilirMetraj);
+const right = (label: string) => ({ label, align: "right" as const });
+
+function repairColumns({ onSelect, onOrder, onShipment, busyId }: RowActions): ColumnDef<RepairableShipment>[] {
+  return [
+    {
+      id: "shipment",
+      header: "Sevkiyat",
+      enableHiding: false,
+      meta: { label: "Sevkiyat", exportValue: (s) => s.shipmentNo },
+      accessorFn: (s) => s.shipmentNo,
+      cell: ({ row: { original: s } }) => (
+        <span className="font-medium">
+          <button type="button" className={LINK_CLS} onClick={(e) => { e.stopPropagation(); onShipment(s.shipmentId); }} title="Sevkiyat detayını aç">
+            {s.shipmentNo}
+          </button>
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">{s.dispatchedAt ? factoryLocaleDateString(s.dispatchedAt, "tr-TR") : "—"}</span>
+        </span>
+      ),
+    },
+    { id: "customer", header: "Müşteri", meta: { label: "Müşteri" }, accessorFn: (s) => s.customer?.name ?? "—" },
+    { id: "orders", header: "Sipariş", meta: { label: "Sipariş", exportValue: (s) => s.orderNumbers.join(", ") }, cell: ({ row }) => <OrderNumberLinks row={row.original} onOrder={onOrder} /> },
+    { id: "out", header: "Çıkan", meta: right("Çıkan"), accessorFn: (s) => Math.round(s.icerikMetraj) },
+    { id: "written", header: "Yazılan", meta: right("Yazılan"), accessorFn: (s) => Math.round(s.yazilanMetraj) },
+    {
+      id: "gap",
+      header: "Eksik",
+      meta: right("Eksik"),
+      accessorFn: (s) => Math.round(s.bosluk),
+      cell: ({ row }) => <span className="font-semibold text-amber-700 dark:text-amber-400">{Math.round(row.original.bosluk)}</span>,
+    },
+    {
+      id: "repairable",
+      header: "Onarılabilir",
+      meta: right("Onarılabilir"),
+      accessorFn: (s) => Math.round(s.onarilabilirMetraj),
+      cell: ({ row: { original: s } }) =>
+        s.onarilabilirMetraj > 0.001 ? (
+          <span className="font-semibold text-emerald-700 dark:text-emerald-400">{Math.round(s.onarilabilirMetraj)}</span>
+        ) : (
+          <span className="font-semibold text-muted-foreground">0</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      enableHiding: false,
+      meta: { label: "İşlem", align: "right" },
+      cell: ({ row: { original: s } }) => {
+        const repairable = s.onarilabilirMetraj > 0.001;
+        return (
+          <Button
+            size="sm"
+            variant={repairable ? "default" : "outline"}
+            disabled={!repairable || busyId === s.shipmentId}
+            onClick={() => onSelect(s)}
+            title={repairable ? "Ne yazılacağını göster" : "Bugün de yazılamıyor — sipariş dolu ya da kumaş/renk/en tutmuyor"}
+            className="h-7 gap-1.5"
+          >
+            {busyId === s.shipmentId && <Loader2 className="h-4 w-4 animate-spin" />}
+            İncele
+          </Button>
+        );
+      },
+    },
+  ];
+}
+
+/** Sevkiyat listesi — onarılabilir olanlar üstte (ilk sıra; başlıktan yeniden sıralanabilir). */
+export function RepairShipmentTable({ rows, onSelect, onOrder, onShipment, busyId }: RowActions & { rows: RepairableShipment[] }) {
+  const sorted = useMemo(() => [...rows].sort((a, b) => b.onarilabilirMetraj - a.onarilabilirMetraj), [rows]);
+  const columns = useMemo(() => repairColumns({ onSelect, onOrder, onShipment, busyId }), [onSelect, onOrder, onShipment, busyId]);
+  const table = useLocalTable({ tableKey: "allocation-repair", data: sorted, columns, getRowId: (s) => s.shipmentId });
   if (sorted.length === 0) return null;
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-muted/50 text-left">
-        <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-          <th>Sevkiyat</th>
-          <th>Müşteri</th>
-          <th>Sipariş</th>
-          <th className="text-right">Çıkan</th>
-          <th className="text-right">Yazılan</th>
-          <th className="text-right">Eksik</th>
-          <th className="text-right">Onarılabilir</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((s) => (
-          <RepairShipmentRow
-            key={s.shipmentId}
-            s={s}
-            onSelect={onSelect}
-            onOrder={onOrder}
-            onShipment={onShipment}
-            busyId={busyId}
-          />
-        ))}
-      </tbody>
-    </table>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 justify-end px-4 py-1.5">
+        <DataTableTools table={table} compact exportName="Siparişe yazılamayan sevkiyatlar" />
+      </div>
+      <DataTable table={table} exportName="Siparişe yazılamayan sevkiyatlar" />
+    </div>
   );
 }

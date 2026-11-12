@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { formatDisplay, formatMoney } from "@/lib/format";
 import type { OrderStats } from "./service";
 import { TERIM } from "@/lib/terim";
 import { ORDER_SHIP_FILTER_OPTIONS } from "./order-where-text";
@@ -28,12 +29,10 @@ export const ORDER_STATS_VIEWS: Array<{ key: OrderStatsView; label: string; hint
   { key: "genis", label: "Geniş", get hint() { return `+ ${TERIM.terbiyeIsEmri.tekilKucuk}, termin, tutar`; } },
 ];
 
-// Envanter şeridiyle AYNI biçim: gruplama YOK. tr-TR'de binlik ayracı "."
-// olduğu için `62.990` metraj alanında ondalık gibi okunuyor (RollsStats'ta da
-// bu yüzden kapalı) — iki şerit yan yana farklı okunmamalı.
-const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
-const DEC_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const MONEY_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+// Envanter şeridiyle AYNI biçim: özet bantlarının ortak gösterim biçimi (`lib/format`, binlik ayracı yok).
+const NUM_FMT = { format: (n: number) => formatDisplay(n, 0) };
+const DEC_FMT = { format: (n: number) => formatDisplay(n, 1) };
+const MONEY_FMT = { format: (n: number) => formatMoney(n) };
 
 /** Durum kovası → etiket + ton. Sıra üretim akışını izler. */
 const STATUS_ORDER = ["PENDING", "APPROVED", "PARTIAL_SHIPPED", "COMPLETED", "CANCELLED"] as const;
@@ -109,7 +108,7 @@ export function OrdersStats({
   return (
     <div
       data-testid="orders-stats"
-      className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-primary/25 bg-primary/5 px-3 py-1.5 shadow-sm"
+      className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1"
     >
       <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
         {scopeLabel}

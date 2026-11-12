@@ -369,6 +369,10 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     { etiket: "İş emrine geri al", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; düğme adı değişti." },
     { etiket: "İş emri plan düzeltme sebepleri", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; sebep kataloğu adı artık \"Terbiye iş emri plan düzeltme sebepleri\" (backend + tablet)." },
     { etiket: "Genel Ayarlar → Tezgah", sinif: "EMEKLI", gerekce: "Backend 2.15.4'ün alarm kapalı cümlesindeki bayat yol; 2.15.5'te ayar yolu tek kaynaktan (`panel-ayar-yolu`) — panel 1.6.4 notu eski yolu anarak düzeltmeyi anlatıyor." },
+    // Eski raporlar emekli (2026-11, rapor v2): eski rapor sayfaları silindi, yayımlanmış notlar donuk.
+    { etiket: "Yurtiçi (sipariş yönü)", sinif: "EMEKLI", gerekce: "Eski Sipariş/İptal Karnesi yön seçicisi (DestinationSelect); 0e3bf2ede eski sayfayı emekli etti." },
+    { etiket: "İhracat (sipariş yönü)", sinif: "EMEKLI", gerekce: "Eski Sipariş/İptal Karnesi yön seçicisi (DestinationSelect); 0e3bf2ede eski sayfayı emekli etti." },
+    { etiket: "Müşteriye (m)", sinif: "EMEKLI", gerekce: "Eski Fasoncu Karnesi Excel kolonu (Subcontract/scorecard.ts); 83de0c735 eski raporları panelden kaldırdı." },
   ];
 
   let dosyaSayisi = 0;

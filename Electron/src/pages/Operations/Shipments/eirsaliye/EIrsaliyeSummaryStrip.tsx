@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
+import { BandStats, ListBand } from "@/components/layout/ListPage";
 import { EIrsaliyeStatus, eIrsaliyeStatusLabels } from "@/types/enums";
 import { EIRSALIYE_RECORDS_KEY } from "./useEIrsaliye";
 import { eIrsaliyeService } from "./service";
@@ -22,16 +23,14 @@ export function EIrsaliyeSummaryStrip({ ready = true }: { ready?: boolean }) {
   if (!q.data) return null;
   const items = Object.values(EIrsaliyeStatus).filter((s) => (q.data.byStatus[s] ?? 0) > 0);
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-card px-3 py-2 text-sm" data-testid="eirsaliye-summary">
-      <span>
-        <span className="text-muted-foreground">Toplam</span> <b className="tabular-nums">{q.data.total}</b>
-      </span>
-      {items.map((s) => (
-        <span key={s}>
-          <span className="text-muted-foreground">{eIrsaliyeStatusLabels[s]}</span>{" "}
-          <b className="tabular-nums">{q.data.byStatus[s]}</b>
-        </span>
-      ))}
-    </div>
+    <ListBand data-testid="eirsaliye-summary">
+      <BandStats
+        label="e-İrsaliye özeti"
+        items={[
+          { key: "total", label: "Toplam", value: q.data.total },
+          ...items.map((s) => ({ key: s, label: eIrsaliyeStatusLabels[s], value: q.data.byStatus[s] ?? 0 })),
+        ]}
+      />
+    </ListBand>
   );
 }

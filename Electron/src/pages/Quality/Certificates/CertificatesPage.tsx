@@ -8,10 +8,10 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { CertificateList } from "./CertificateList";
@@ -59,12 +59,10 @@ export function CertificatesPage() {
         onValueChange={(v) => { const p = new URLSearchParams(params); if (v === "specs") p.set("tab", "specs"); else p.delete("tab"); setParams(p, { replace: true }); }}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <ListToolbar>
-          <TabsList className="self-start">
-            <TabsTrigger value="certificates">Sertifikalar</TabsTrigger>
-            {hasPermission("labtest:read") && <TabsTrigger value="specs">Müşteri spesifikasyonları</TabsTrigger>}
-          </TabsList>
-        </ListToolbar>
+        <PageTabsList>
+            <PageTabsTrigger value="certificates">Sertifikalar</PageTabsTrigger>
+            {hasPermission("labtest:read") && <PageTabsTrigger value="specs">Müşteri spesifikasyonları</PageTabsTrigger>}
+        </PageTabsList>
         <TabsContent value="certificates" className={TAB_PANE}><CertificateList onOpen={setOpenId} /></TabsContent>
         {hasPermission("labtest:read") && <TabsContent value="specs" className={TAB_PANE}><CustomerSpecsPanel /></TabsContent>}
       </Tabs>

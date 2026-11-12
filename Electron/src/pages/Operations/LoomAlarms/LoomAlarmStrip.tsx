@@ -51,7 +51,7 @@ function StripBody({ lead, others, now, canAct, onOpen, onDismiss }: BodyProps) 
       <p className="min-w-0 flex-1 truncate">
         <b>{lead.machine.code}</b> · {lead.machine.hallName} · {reasonText(lead)} ·{" "}
         <span className="tabular-nums">{durationVsTarget(lead, now)}</span> · {tierShort(lead.tier)}
-        {others > 0 && <span className="ml-2 rounded-full bg-black/20 px-2 py-0.5 text-xs font-semibold">+{others}</span>}
+        {others > 0 && <span className="ml-2 rounded-badge bg-black/20 px-2 py-0.5 text-xs font-semibold">+{others}</span>}
       </p>
       {canAct && <AckButton key={lead.id} alarmId={lead.id} />}
       <Button size="sm" variant="secondary" className="h-7" onClick={() => onOpen(lead.id)}>

@@ -38,3 +38,11 @@ export function shipmentDestinationSql(d: ShipmentDestination | undefined, shipm
   if (!d) return Prisma.empty;
   return Prisma.sql`AND ${Prisma.raw(shipmentAlias)}.destination = ${d}::"ShipmentDestination"`;
 }
+
+/** Sevk kovası: donmuş yön; yön kaydı olmayan (fasondan doğrudan sevk) "NONE". */
+export type ShippedBucket = "DOMESTIC" | "EXPORT" | "NONE";
+
+/** Sevk hücresi → kova — TEK eşleme (Sevkiyat raporu ve Yurtiçi/Yurtdışı kırılımı aynı kovayı okur). */
+export function shippedBucketOf(destination: string | null | undefined): ShippedBucket {
+  return destination === "DOMESTIC" || destination === "EXPORT" ? destination : "NONE";
+}

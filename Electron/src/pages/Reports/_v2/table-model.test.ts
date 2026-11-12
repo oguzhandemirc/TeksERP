@@ -39,15 +39,15 @@ describe("rapor v2 tablosu — para kolonları tek biçim", () => {
   it("TL kuruşlu (2 ondalık) basılır; metre/adet biçimi değişmez (D4-KUC2 g)", () => {
     const f = columnFormat(TABLE, TABLE.kolonlar[1]!);
     expect(cellText(1234.5, f)).toBe("1.234,50");
-    expect(columnFormat(TABLE, TABLE.kolonlar[3]!).numFmt).toBe("#,##0.0");
-    expect(formatFigure(42300, "m")).toBe("42.300 m");
+    expect(columnFormat(TABLE, TABLE.kolonlar[3]!).numFmt).toBe("0.0");
+    expect(formatFigure(42300, "m")).toBe("42300 m");
   });
 
   it("Excel/PDF zarfı ekranla aynı biçimi taşır; para dışı kolon ölçülen ondalıkta kalır", () => {
     const cols = tableToExport(TABLE, "Tablo").columns;
     expect(cols[1]!.numFmt).toBe(cols[2]!.numFmt);
     expect(cols[1]!.numFmt).toBe("#,##0.00");
-    expect(cols[3]!.numFmt).toBe("#,##0.0");
+    expect(cols[3]!.numFmt).toBe("0.0");
     expect(cols[0]!.numFmt).toBeUndefined();
   });
 });

@@ -72,7 +72,7 @@ export function WarehousesPage() {
         service={warehouseService}
         columns={columns}
         writePermission="warehouse:write"
-        searchPlaceholder="Kod veya depo adı ara..."
+        searchHint="Kod veya depo adı"
         permanentDelete={{
           description: (row) =>
             `"${row.name}" deposu KALICI olarak silinecek. İçinde top, mal kabul fişi, transfer ya da depo hareketi varsa silme reddedilir.`,

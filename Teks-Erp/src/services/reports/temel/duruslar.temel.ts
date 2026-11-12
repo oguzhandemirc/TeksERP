@@ -10,16 +10,50 @@ import prisma from "../../../lib/prisma";
 import { AppError } from "../../../utils/app-error";
 import { readIdCondition } from "../../../utils/query-parser";
 import { anlatiUret } from "../anlati/anlati";
-import { alarmResponseReport } from "../alarm-response.report.service";
+import { alarmResponseReport, type AlarmResponseReport, type AlarmResponseRow } from "../alarm-response.report.service";
 import { durusParetoReport, type ParetoReport } from "../dokuma.report.service";
 import type { AnaSayi, GrafikBlok, ParametreBeyani, TabloBlok } from "../sunum/sunum.types";
-import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, type CoreReportResult } from "./_common";
+import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
 
+/** Tablo görünümleri — eski Müdahale raporunun kırılımları (aynı `alarmResponseReport`, aynı vardiya süzgeci). */
+// Kişi kırılımı (`kisiler`) bilerek yok: temel rapor kişi adı taşımaz (`withPeople:false`).
+export const LOOM_STOP_VIEWS = ["ozet", "mudahaleSebep", "mudahaleHol", "mudahaleTezgah", "mudahaleVardiya"] as const;
+export type LoomStopView = (typeof LOOM_STOP_VIEWS)[number];
+const LOOM_STOP_VIEW_LABEL: Readonly<Record<LoomStopView, string>> = {
+  ozet: "Duruş sebepleri",
+  mudahaleSebep: "Müdahale: alarm türü",
+  mudahaleHol: "Müdahale: hol",
+  mudahaleTezgah: "Müdahale: tezgah",
+  mudahaleVardiya: "Müdahale: vardiya",
+};
+
+/** Müdahale kırılımı; her hücre `AlarmResponseRow`un aynı alanı (süreler dakikaya çevrilir). */
+export function responseTable(first: string, rows: readonly AlarmResponseRow[]): TabloBlok {
+  return {
+    kolonlar: [
+      { anahtar: "ad", baslik: first, hiza: "sol" },
+      { anahtar: "alarm", baslik: "Alarm", birim: "adet", hiza: "sag" },
+      { anahtar: "ustlenme", baslik: "Ortalama üstlenme", birim: "dakika", hiza: "sag" },
+      { anahtar: "cozum", baslik: "Ortalama çözüm", birim: "dakika", hiza: "sag" },
+      { anahtar: "asim", baslik: "Hedefi aşan", birim: "yuzde", hiza: "sag" },
+    ],
+    satirlar: rows.map((r) => ({ ad: r.etiket, alarm: r.alarm, ustlenme: secondsToMinutes(r.ustlenmeOrtSn), cozum: secondsToMinutes(r.cozumOrtSn), asim: r.asimOraniPct })),
+  };
+}
+
+export function responseRowsOf(view: Exclude<LoomStopView, "ozet">, alarm: AlarmResponseReport): { first: string; rows: AlarmResponseRow[] } {
+  if (view === "mudahaleSebep") return { first: "Alarm türü", rows: alarm.sebepler };
+  if (view === "mudahaleHol") return { first: "Hol", rows: alarm.holler };
+  if (view === "mudahaleTezgah") return { first: "Tezgah", rows: alarm.tezgahlar };
+  return { first: "Vardiya", rows: alarm.vardiyalar };
+}
 export interface LoomStopsInput {
   window: ResolvedDayRange;
   /** Vardiya tanımı kimlikleri (`readFilterList`ten; boş = tümü). */
   shiftDefinitionId?: string[];
+  /** Tablo görünümü; yoksa `ozet`. */
+  view?: LoomStopView;
 }
 
 /** Saniye → dakika (1 ondalık); kaynağın saniyesi değişmeden gösterim birimine çevrilir. */
@@ -100,8 +134,11 @@ export async function buildLoomStopsReport(input: LoomStopsInput): Promise<CoreR
     }),
   ];
 
-  const { tableRows, table } = reasonTable(pareto);
-  const capped = capTable(table, "Duruş sebepleri");
+  const view = input.view ?? "ozet";
+  const { tableRows, table: reasonBlock } = reasonTable(pareto);
+  const responseView = view === "ozet" ? null : responseRowsOf(view, alarm.data);
+  const table = responseView ? responseTable(responseView.first, responseView.rows) : reasonBlock;
+  const capped = capTable(table, LOOM_STOP_VIEW_LABEL[view]);
 
   const chartRows = tableRows.slice(0, 10);
   const chart: GrafikBlok | null = chartRows.length
@@ -136,7 +173,7 @@ export async function buildLoomStopsReport(input: LoomStopsInput): Promise<CoreR
       grafik: chart,
       tablo: capped.tablo,
       tanimlar: definitionsOf(["dokuma.durusSure", "dokuma.mudahaleDakika"]),
-      parametreler: [...dayRangeParameters(days, mode), shift.param],
+      parametreler: [...dayRangeParameters(days, mode), shift.param, viewParameter(LOOM_STOP_VIEW_LABEL, view)],
       uyarilar: warnings,
     },
   };

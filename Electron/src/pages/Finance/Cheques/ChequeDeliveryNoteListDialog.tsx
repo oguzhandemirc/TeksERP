@@ -60,7 +60,7 @@ export function deliveryNoteListSpec(rows: DeliveryNoteRow[], total: number): Re
           { header: "Teslim", key: "deliveryDate", width: 12 },
           { header: "Yön", key: "kind", width: 12 },
           { header: "Teslim Edilen", key: "target", width: 36 },
-          { header: "Adet", key: "count", width: 8, numFmt: "#,##0", align: "right" },
+          { header: "Adet", key: "count", width: 8, numFmt: "0", align: "right" },
           { header: "Durum", key: "status", width: 12 },
         ],
         rows: rows.map((r) => ({

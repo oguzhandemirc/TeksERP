@@ -77,7 +77,7 @@ export function ItemsPage() {
       service={itemService}
       columns={itemColumns}
       writePermission="item:write"
-      searchPlaceholder="Kod veya ad ara..."
+      searchHint="Kod veya ad"
       inactiveToggle={false}
       extraFilters={extraFilters}
       onRemove={setLifecycleItem}

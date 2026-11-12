@@ -22,6 +22,7 @@ export interface ShipmentsFilterRowProps {
   search: string;
   onSearchChange: (v: string) => void;
   placeholder: string;
+  searchHint?: string;
   setShowCancelled: (v: boolean) => void;
   trailing?: ReactNode;
 }
@@ -33,5 +34,5 @@ export function ShipmentsFilterRow(p: ShipmentsFilterRowProps) {
     const split = splitDefFilters(filters, PRIMARY_KEYS);
     return { primary: split.primary, more: [...split.more, urlToggleRowFilter("iptal", "İptaller dahil", SHOW_CANCELLED_PARAM, setShowCancelled)] };
   }, [filters, setShowCancelled]);
-  return <FilterRow search={p.search} onSearchChange={p.onSearchChange} placeholder={p.placeholder} primary={primary} more={more} trailing={p.trailing} />;
+  return <FilterRow search={p.search} onSearchChange={p.onSearchChange} placeholder={p.placeholder} searchHint={p.searchHint} primary={primary} more={more} trailing={p.trailing} />;
 }

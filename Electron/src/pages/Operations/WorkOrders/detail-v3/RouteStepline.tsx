@@ -27,7 +27,7 @@ export function RouteStepline({ steps }: { steps: WorkOrderStepLite[] }) {
               <div className="nm">{step.station?.name ?? "—"}</div>
               {origin && (
                 <div className="st" data-testid="step-origin-badge">
-                  <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{origin}</span>
+                  <span className="inline-flex items-center rounded-badge border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{origin}</span>
                 </div>
               )}
               {hasWip ? (

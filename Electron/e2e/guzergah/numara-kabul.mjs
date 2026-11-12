@@ -123,7 +123,7 @@ await page.route("http://localhost:4000/**", (r) => r.abort("blockedbyclient"));
 async function numaralandirmayaGit() {
   const acici = page.getByText("Ara veya komut", { exact: false }).first();
   if (await acici.count()) await acici.click(); else await page.keyboard.press("Meta+k");
-  const kutu = page.getByPlaceholder("Sayfa, rapor, ayar ara...");
+  const kutu = page.getByLabel("Sayfa, rapor, ayar ya da kayıt ara");
   await kutu.fill("Numaralandırma");
   await page.waitForTimeout(500);
   const aday = page.getByRole("option", { name: "Numaralandırma" }).first();
@@ -419,7 +419,7 @@ const TABLET_ADIMLARI = [
 async function gitSayfa(ad) {
   const acici = page.getByText("Ara veya komut", { exact: false }).first();
   if (await acici.count()) await acici.click(); else await page.keyboard.press("Meta+k");
-  const kutu = page.getByPlaceholder("Sayfa, rapor, ayar ara...");
+  const kutu = page.getByLabel("Sayfa, rapor, ayar ya da kayıt ara");
   await kutu.fill(ad); await page.waitForTimeout(500);
   // Tam ad önce: "Siparişler" "Alış Siparişleri"nin alt dizgisidir.
   const tam = page.getByRole("option", { name: ad, exact: true }).first();

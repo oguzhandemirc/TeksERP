@@ -1,5 +1,6 @@
 // Özet şeridi: sayılar SUNUCUNUN `ozet`i (durum süzgecinden önceki küme) — çip tıklaması süzgeci sunucuya taşır.
 import { cn } from "@/lib/utils";
+import { formatDisplay } from "@/lib/format";
 import { QUOTE_STATUS_LABEL } from "./labels";
 import { QUOTE_STATUSES, type QuoteFilter, type QuoteStatus, type QuoteSummary } from "./quote-types";
 
@@ -13,7 +14,7 @@ function Chip({ active, label, count, onClick }: { active: boolean; label: strin
       onClick={onClick}
       className={cn("rounded-full border px-3 py-1 text-xs transition-colors", active ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted")}
     >
-      {label} <span className="font-semibold tabular-nums">{count}</span>
+      {label} <span className="font-semibold tabular-nums">{formatDisplay(count, 0)}</span>
     </button>
   );
 }

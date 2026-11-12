@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors",
+  "inline-flex items-center whitespace-nowrap rounded-badge border px-2.5 py-0.5 text-xs font-semibold transition-colors",
   {
     variants: {
       variant: {
@@ -12,6 +12,12 @@ const badgeVariants = cva(
         destructive: "border-transparent bg-destructive text-destructive-foreground",
         outline: "text-foreground",
         muted: "border-transparent bg-muted text-muted-foreground",
+        // Pastel haplar (hedef görsel) — zemin + yazı çifti AA (theme-tokens.test.ts).
+        soft: "border-transparent bg-primary-soft text-primary-soft-foreground",
+        success: "border-transparent bg-success-soft text-success-soft-foreground",
+        warning: "border-transparent bg-warning-soft text-warning-soft-foreground",
+        info: "border-transparent bg-info-soft text-info-soft-foreground",
+        danger: "border-transparent bg-destructive-soft text-destructive-soft-foreground",
       },
     },
     defaultVariants: { variant: "default" },

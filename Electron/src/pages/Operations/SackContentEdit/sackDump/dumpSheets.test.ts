@@ -69,8 +69,8 @@ describe("buildSackDumpSheets", () => {
     expect(cell(s, s.totalRow, "Barkod")).toBe("TOPLAM (2 top)");
     expect(cell(s, s.totalRow, "Metre")).toBe(1340.5);
     const fmt = s.columns.find((c) => c.header === "Metre")!.numFmt as (v: unknown) => string | undefined;
-    // "#,##0.###" 700'ü "700," gösterirdi — PDF "700" basar.
-    expect([fmt(700), fmt(640.5), fmt("—")]).toEqual(["#,##0", "#,##0.0##", undefined]);
+    // "0.###" 700'ü "700," gösterirdi — PDF "700" basar.
+    expect([fmt(700), fmt(640.5), fmt("—")]).toEqual(["0", "0.0##", undefined]);
   });
 
   it("boş çuvalda TOPLAM satırı basılmaz, PDF'teki 'Çuval boş' yazılır", () => {

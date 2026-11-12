@@ -186,7 +186,7 @@ function SelectedHeader({ p, onRename, onArchive }: { p: NotificationProfile; on
       <h2 className="text-base font-semibold">{p.ad}</h2>
       <span className="text-sm text-muted-foreground">{p.kod}</span>
       {p.arsivlendi ? (
-        <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">Arşivli</span>
+        <span className="rounded-badge border px-2 py-0.5 text-xs text-muted-foreground">Arşivli</span>
       ) : (
         <span className="ml-auto flex gap-1">
           <Button variant="ghost" size="sm" onClick={() => onRename()}>

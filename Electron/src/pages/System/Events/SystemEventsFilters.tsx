@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
@@ -26,11 +27,13 @@ export interface SystemEventsFilterState {
 interface Props {
   value: SystemEventsFilterState;
   onChange: (next: SystemEventsFilterState) => void;
+  /** Tablo araçları (sütun menüsü + dışa aktar) — süzgeç satırının sağında. */
+  tools?: ReactNode;
 }
 
 const ANY = "__any__";
 
-export function SystemEventsFilters({ value, onChange }: Props) {
+export function SystemEventsFilters({ value, onChange, tools }: Props) {
   // Action seçenekleri seçili kategoriye göre daralır; "ALL"da AUTH+SYSTEM birleştirilir.
   const actionOptions =
     value.category === "ALL"
@@ -111,6 +114,7 @@ export function SystemEventsFilters({ value, onChange }: Props) {
           Temizle
         </Button>
       )}
+      {tools && <div className="ml-auto flex items-center gap-1.5">{tools}</div>}
     </div>
   );
 }

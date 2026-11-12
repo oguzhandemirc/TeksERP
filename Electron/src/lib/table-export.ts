@@ -23,9 +23,13 @@ declare module "@tanstack/react-table" {
     /** true → Excel'de gerçek SAYI olarak yazılır + altına TOPLAM satırına eklenir
      *  (metre/kg/adet gibi). Diğer kolonlar metin. */
     summable?: boolean;
+    /** Hücre hizası — verilmezse toplanabilir kolon sağa, diğerleri sola (DataTable). */
+    align?: "left" | "right" | "center";
     /** Yalnız dosyada, bu kolonun hemen ardından yazılan ek sütunlar (ekranda gerekmeyen ayrıntı,
      *  ör. "İE sayısı"). Görünürlüğü ana kolonu izler. */
     exportExtras?: { label: string; value: (row: TData) => unknown; summable?: boolean }[];
+    /** true → hücre ÇOK SATIRA sarılır (başlık + gövde gibi); varsayılan tek satır + "…" (DataTable). */
+    wrap?: boolean;
   }
 }
 

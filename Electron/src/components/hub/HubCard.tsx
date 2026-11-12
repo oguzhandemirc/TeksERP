@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { IconTile, ICON_TILE_TONES } from "@/components/ui/icon-tile";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
 import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
@@ -33,7 +34,7 @@ export function HubGrid({ children, className }: { children: ReactNode; classNam
       variants={staggerContainer}
       initial="hidden"
       animate="show"
-      className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3", className)}
+      className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4", className)}
     >
       {children}
     </motion.div>
@@ -62,7 +63,7 @@ interface HubCardProps {
   note?: string;
 }
 
-/** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket.
+/** Hub kartı (hedef görsel) — renkli simge karesi + başlık; ton verilmezse sıraya göre simge karesi paleti.
  *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
 export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint, note }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
@@ -82,49 +83,38 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
         className="group block h-full w-full text-left"
       >
         {/* Soluk görünüm KART üstünde: dış motion.div'in opacity'sini giriş animasyonu ezer. */}
-        <Card className={cn("card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4", offHint && "border-dashed opacity-50 grayscale")}>
-          {/* Dev ikon filigranı — sağ alt, tona boyalı, hover'da hafif büyür */}
-          <Icon
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute -bottom-4 -right-3 h-24 w-24 opacity-[0.06] transition-transform duration-300 group-hover:scale-110",
-              toneClass,
+        <Card className={cn("card-glow relative h-full overflow-hidden p-4", offHint && "border-dashed opacity-50 grayscale")}>
+          {/* Yatay düzen: simge solda, başlık yanında — dikey kartta başlık altı boş yükseklikti. */}
+          <div className={cn("relative flex items-center gap-4", dragHandle && "pr-6")}>
+            {tone ? (
+              <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-current/10", toneClass)}>
+                <Icon className="h-6 w-6" />
+              </div>
+            ) : (
+              <IconTile icon={Icon} tone={ICON_TILE_TONES[index % ICON_TILE_TONES.length]} size="lg" />
             )}
-          />
-          <div className="relative flex items-start justify-between">
-            <div
-              className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-xl bg-current/10",
-                toneClass,
-              )}
-            >
-              <Icon className="h-5 w-5" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="font-semibold leading-snug">{title}</div>
+                {offHint ? <span className="text-[11px] text-muted-foreground">kapalı</span> : null}
+                {badge ? (
+                  <span
+                    className="rounded-badge bg-warning px-1.5 py-0.5 text-[11px] font-semibold leading-none text-warning-foreground tabular-nums"
+                    aria-label={badgeLabel ?? `${badge} bekleyen`}
+                    title={badgeLabel}
+                  >
+                    {badge}
+                  </span>
+                ) : null}
+              </div>
+              {note && <p className="relative mt-1 text-xs text-muted-foreground">{note}</p>}
+              {/* UX-2 K3: kapalı karo nereden açılacağını BASAR ("kapalı — Sistem → Modüller"); title/toast yalnız tekrarı. */}
+              {offHint && offHint !== "kapalı" ? <p className="relative mt-1 text-xs text-muted-foreground" data-testid="hub-off-hint">{offHint}</p> : null}
             </div>
             {!dragHandle && !offHint && (
-              <ArrowRight
-                className={cn(
-                  "h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100",
-                  toneClass,
-                )}
-              />
+              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transition-none" />
             )}
           </div>
-          <div className="relative mt-4 flex items-center gap-2">
-            <div className="font-medium">{title}</div>
-            {offHint ? <span className="text-[11px] text-muted-foreground">kapalı</span> : null}
-            {badge ? (
-              <span
-                className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums"
-                aria-label={badgeLabel ?? `${badge} bekleyen`}
-                title={badgeLabel}
-              >
-                {badge}
-              </span>
-            ) : null}
-          </div>
-          {note && <p className="relative mt-1 text-xs text-muted-foreground">{note}</p>}
-          {/* UX-2 K3: kapalı karo nereden açılacağını BASAR ("kapalı — Sistem → Modüller"); title/toast yalnız tekrarı. */}
-          {offHint && offHint !== "kapalı" ? <p className="relative mt-1 text-xs text-muted-foreground" data-testid="hub-off-hint">{offHint}</p> : null}
         </Card>
       </button>
       {/* Sürükleme tutamacı — kart butonunun KARDEŞİ (içinde değil): iç içe

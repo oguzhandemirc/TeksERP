@@ -62,14 +62,14 @@ export function BlockBody({ block, chartKind, context }: { block: BlockOutcome; 
   }
   if (block.tur === "donem") {
     const t = periodTableOf(r);
-    return t ? <ReportTable table={t} /> : <p className="text-sm text-muted-foreground">Dönem sütunu çıkmadı.</p>;
+    return t ? <ReportTable table={t} embedded /> : <p className="text-sm text-muted-foreground">Dönem sütunu çıkmadı.</p>;
   }
   if (block.tur === "grafik" && chartKind === "isiHaritasi" && r.boyutlar.length === 2) return <Heatmap result={r} title={block.baslik ?? undefined} />;
   if (block.tur === "grafik") {
     const chart = chartOf(r, chartKind);
     return chart ? <RaporGrafik blok={chart} baslik={block.baslik ?? undefined} /> : <p className="text-sm text-muted-foreground">Grafik için kırılım yok.</p>;
   }
-  return <ReportTable table={tableOf(r)} />;
+  return <ReportTable table={tableOf(r)} embedded />;
 }
 
 /** Ana sayı, kırılım kartları ve anlatı kutusu kendi çerçevesini (ve anlatı başlığını) taşır. */

@@ -4,7 +4,7 @@ import { PackageOpen, Palette, Send, Undo2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { TERIM } from "@/lib/terim";
 import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "../types";
 
@@ -186,7 +186,7 @@ function ReturnCard({ detail }: Props) {
           )}
           <div className="text-xs text-muted-foreground">İade Metrajı</div>
           <div className="tabular-nums">
-            {latestReturn.qty.toLocaleString("tr-TR", { useGrouping: false })} m
+            {formatQty(latestReturn.qty)} m
           </div>
           <div className="text-xs text-muted-foreground">Teslim Alan</div>
           <div className="text-xs">{latestReturn.receivedBy?.fullName ?? "—"}</div>
@@ -214,13 +214,13 @@ function PackagingCard({ r }: Props) {
           {r.grossWeightKg != null && (
             <>
               <div className="text-xs text-muted-foreground">Brüt Ağırlık</div>
-              <div>{r.grossWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
+              <div>{formatQty(r.grossWeightKg)} kg</div>
             </>
           )}
           {r.netWeightKg != null && (
             <>
               <div className="text-xs text-muted-foreground">Net Ağırlık</div>
-              <div>{r.netWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
+              <div>{formatQty(r.netWeightKg)} kg</div>
             </>
           )}
           {r.packagingDate && (

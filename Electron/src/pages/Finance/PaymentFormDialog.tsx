@@ -20,9 +20,11 @@ interface Props {
   direction: "IN" | "OUT";
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  /** Cari kaydından açılınca taraf hazır gelir (değiştirilebilir); verilmezse bugünkü boş seçim. */
+  presetCustomerId?: string | null;
 }
 
-export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: Props) {
+export function PaymentFormDialog({ open, direction, onOpenChange, onCreated, presetCustomerId }: Props) {
   // Rol modeli (dilim F): taraf yalnız KART (`customerId`) — fason firma da kartıyla seçilir, hesap karta yazılır;
   // panel fason bacağını göndermez (eski istemci yolu backend'de kalır).
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
       setAmount(0);
       setReference("");
       alloc.reset();
-    }
+    } else if (presetCustomerId) setCustomerId(presetCustomerId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

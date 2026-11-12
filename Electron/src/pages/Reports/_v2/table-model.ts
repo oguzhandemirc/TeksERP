@@ -1,5 +1,6 @@
 // Rapor v2 tablosu — ekran hücresi ile PDF/Excel hücresi AYNI biçimden (`REPORT_NUM_FMTS`) basılır.
 import type { ReportColumn, ReportTableSpec } from "@/pages/Reports/_components/reportExport";
+import { formatDisplay } from "@/lib/format";
 import { reportCellText } from "@/lib/number-format";
 import { BIRIM_METNI, PARA_BIRIMLERI, type TabloBlok, type TabloKolonu } from "./sunum";
 
@@ -14,7 +15,7 @@ export function columnFormat(table: TabloBlok, column: TabloKolonu): Pick<Report
   if (values.length === 0) return {};
   // Kolon başına ölçülen ondalık aynı tablodaki TL kolonlarını "45.000,0" / "45.000" diye ayırıyordu.
   if (column.birim && PARA_BIRIMLERI.includes(column.birim)) return { numFmt: MONEY_NUM_FMT };
-  return values.every((v) => Number.isInteger(v)) ? { numFmt: "#,##0" } : { numFmt: "#,##0.0" };
+  return values.every((v) => Number.isInteger(v)) ? { numFmt: "0" } : { numFmt: "0.0" };
 }
 
 /** Başlık + birim: "Sevk (m)", "Oran (%)". */
@@ -37,7 +38,7 @@ export function cellText(value: unknown, format: Pick<ReportColumn, "numFmt">): 
 export function truncationNote(table: TabloBlok): string | null {
   const k = table.kesildi;
   if (!k) return null;
-  return `İlk ${k.gosterilen.toLocaleString("tr-TR")} satır gösteriliyor (toplam ${k.toplam.toLocaleString("tr-TR")}).`;
+  return `İlk ${formatDisplay(k.gosterilen, 0)} satır gösteriliyor (toplam ${formatDisplay(k.toplam, 0)}).`;
 }
 
 /** Dışa aktarım tablosu — ekranla aynı başlık, aynı biçim. */

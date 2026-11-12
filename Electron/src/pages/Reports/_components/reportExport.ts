@@ -29,7 +29,7 @@ export interface ReportColumn {
   /** `rows[]` / `totalRow` içindeki alan adı. */
   key: string;
   width?: number;
-  /** Excel sayı biçimi — örn "#,##0.0" (metre), "#,##0" (adet), "0.0" (yüzde). */
+  /** Excel sayı biçimi — örn "0.0" (metre), "0" (adet), "0.0" (yüzde). */
   numFmt?: string;
   /** PDF/yazdırma hizası. Sayısal kolonlar sağa yaslanır. */
   align?: "left" | "right";

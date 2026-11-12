@@ -21,12 +21,10 @@ function excelText(v: unknown, numFmt: SheetColumn["numFmt"]): string {
   if (v == null) return "";
   if (typeof v !== "number") return String(v);
   const fmt = typeof numFmt === "function" ? numFmt(v) : numFmt;
-  const m = /^(#,##0(?:\.(0)(#*))?|0)(?:"(.*)")?$/.exec(fmt ?? "");
+  const m = /^(#,##0|0)(?:\.(0)(#*))?(?:"(.*)")?$/.exec(fmt ?? "");
   if (!m) return String(v);
-  const body =
-    m[1] === "0"
-      ? String(v)
-      : v.toLocaleString("tr-TR", { minimumFractionDigits: m[2] ? 1 : 0, maximumFractionDigits: m[2] ? 1 + (m[3]?.length ?? 0) : 0 });
+  // "#,##0…" binlik gruplar, "0…" gruplamaz (sayı biçimi kuralı 2026-11-12: ölçü grupsuz).
+  const body = v.toLocaleString("tr-TR", { useGrouping: m[1] === "#,##0", minimumFractionDigits: m[2] ? 1 : 0, maximumFractionDigits: m[2] ? 1 + (m[3]?.length ?? 0) : 0 });
   return body + (m[4] ?? "");
 }
 
@@ -133,7 +131,7 @@ const blobBytes = (b: Blob) =>
   });
 
 describe("gerçek .xlsx — tam sayıda ondalık ayırıcı yok, kartela aynı sayfada", () => {
-  it("40 → '#,##0', 112,35 → '#,##0.0##', en '0\" cm\"' biçimli; kartela tablosu top tablosunun altında", async () => {
+  it("40 → '0', 112,35 → '0.0##', en '0\" cm\"' biçimli; kartela tablosu top tablosunun altında", async () => {
     const k = dumpKombinasyonlari().find((x) => x.ad === "tekDolu/ikisi")!;
     const { default: ExcelJS } = await import("exceljs");
     const wb = new ExcelJS.Workbook();
@@ -142,10 +140,10 @@ describe("gerçek .xlsx — tam sayıda ondalık ayırıcı yok, kartela aynı s
     const rows: Array<{ vals: unknown[]; fmts: string[] }> = [];
     ws.eachRow((r) => rows.push({ vals: (r.values as unknown[]).slice(1), fmts: (r.values as unknown[]).slice(1).map((_, i) => r.getCell(i + 1).numFmt) }));
     const metreRow = rows.find((r) => r.vals.includes(40))!;
-    expect(metreRow.fmts[metreRow.vals.indexOf(40)]).toBe("#,##0");
+    expect(metreRow.fmts[metreRow.vals.indexOf(40)]).toBe("0");
     const kesirli = rows.find((r) => r.vals.includes(112.35))!;
-    expect(kesirli.fmts[kesirli.vals.indexOf(112.35)]).toBe("#,##0.0##");
-    expect(kesirli.fmts[kesirli.vals.indexOf(330)]).toBe('#,##0" cm"');
+    expect(kesirli.fmts[kesirli.vals.indexOf(112.35)]).toBe("0.0##");
+    expect(kesirli.fmts[kesirli.vals.indexOf(330)]).toBe('0" cm"');
     expect(rows.some((r) => r.vals[0] === "KARTELALAR · 2")).toBe(true);
   });
 });

@@ -24,8 +24,8 @@ import { SystemHubPage } from "./SystemHubPage";
 
 const HUBS = [
   "Access/AccessHubPage.tsx", "Cost/CostHubPage.tsx", "Definitions/DefinitionsHubPage.tsx", "Documents/DocumentsHubPage.tsx",
-  "Finance/FinanceHubPage.tsx", "Operations/OperationsHubPage.tsx", "Quality/QualityHubPage.tsx",
-  "Reports/ReportsHubPage.tsx", "System/SystemHubPage.tsx",
+  "Finance/FinanceHubPage.tsx", "Operations/useSectionTiles.ts" /* T5: Operasyon bölüm sayfalarının süzgeci */, "Quality/QualityHubPage.tsx",
+  "System/SystemHubPage.tsx",
 ];
 
 beforeEach(() => {
@@ -59,5 +59,9 @@ describe("SystemHubPage — K19 menü düzeni", () => {
       const src = readFileSync(resolve(__dirname, "..", f), "utf8");
       expect(src, f).toMatch(/isHubTileHidden\(menu, /);
     }
+    // Dokuzuncu: Rapor Merkezi karo çizmez ("Eski raporlar" bölümü 2026-11-12 kalktı); süzgeç `centerGroups`ta, aynı menü durumuyla.
+    const read = (f: string) => readFileSync(resolve(__dirname, "..", f), "utf8");
+    expect(read("Reports/_v2/ReportCenterPage.tsx")).toMatch(/centerGroups\(access, undefined, menu\)/);
+    expect(read("Reports/_v2/center-model.ts")).toMatch(/!isMenuHidden\(menu, /);
   });
 });

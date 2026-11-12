@@ -81,7 +81,7 @@ export function TransferPickerDialog({
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Kumaş / renk / kod ara..."
+            placeholder="Ara…" title="Kumaş / renk / kod ara" aria-label="Kumaş / renk / kod ara"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

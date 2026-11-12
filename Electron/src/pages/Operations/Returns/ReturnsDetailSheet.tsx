@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FilePlus2, Loader2, Pencil } from "lucide-react";
-import { safeFormat } from "@/lib/format";
+import { qtyFormatter, safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { returnsService, type ReturnAppliedStatus, type ReturnRow } from "./service";
 import { canDraftReturnInvoice } from "./returnInvoice";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 const TEXTAREA_CLS =
   "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 

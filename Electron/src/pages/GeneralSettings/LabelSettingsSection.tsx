@@ -136,7 +136,7 @@ export function LabelSettingsSection({
   if (!canEdit) {
     return (
       <p className="text-sm">
-        Etiket adedi: <span className="rounded-md border px-2 py-0.5 text-xs">{currentCopies}</span>{" "}
+        Etiket adedi: <span className="rounded-badge border px-2 py-0.5 text-xs">{currentCopies}</span>{" "}
         <span className="text-xs text-muted-foreground">
           ({currentSource === "STATION" ? "istasyon belirler; bu genel adettir" : "sistem geneli"})
         </span>

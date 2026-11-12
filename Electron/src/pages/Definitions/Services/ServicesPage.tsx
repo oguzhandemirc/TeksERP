@@ -23,7 +23,7 @@ export function ServicesPage() {
         service={serviceItemService}
         columns={serviceColumns}
         writePermission="item:write"
-        searchPlaceholder="Kod veya ad ara..."
+        searchHint="Kod veya ad"
         onRemove={setLifecycleItem}
         removeLabel="Kullanımdan kaldır"
         onRestore={setLifecycleItem}

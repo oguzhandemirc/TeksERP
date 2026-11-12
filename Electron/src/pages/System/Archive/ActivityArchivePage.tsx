@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { systemLogService } from "@/services/systemLogService";
 import { factoryLocaleDateString, factoryLocaleString } from "@/lib/factory-time";
+import { formatDisplay, formatQty } from "@/lib/format";
 
 const STATS_KEY = "system-log-stats";
 
@@ -47,7 +48,7 @@ export function ActivityArchivePage() {
       toast.success(
         res.archived === 0
           ? "Arşivlenecek eski kayıt yok"
-          : `${res.archived.toLocaleString("tr-TR", { useGrouping: false })} kayıt arşivlendi (${res.batches} batch)`,
+          : `${formatQty(res.archived)} kayıt arşivlendi (${res.batches} batch)`,
       );
       void qc.invalidateQueries({ queryKey: [STATS_KEY] });
       // L: arsivleme satirlari TASIR — aktif Aktivite listesi ve Arsiv aramasi da tazelensin.
@@ -141,7 +142,7 @@ export function ActivityArchivePage() {
             <p className="mt-3 text-xs text-muted-foreground">
               Batch {progress.batches} — Şu ana kadar{" "}
               <span className="font-medium text-foreground">
-                {progress.archived.toLocaleString("tr-TR", { useGrouping: false })}
+                {formatQty(progress.archived)}
               </span>{" "}
               kayıt taşındı.
             </p>
@@ -190,6 +191,5 @@ function StatCard({
 }
 
 function formatCount(n: number | undefined): string {
-  if (n === undefined) return "—";
-  return n.toLocaleString("tr-TR", { useGrouping: false });
+  return formatDisplay(n, 0);
 }

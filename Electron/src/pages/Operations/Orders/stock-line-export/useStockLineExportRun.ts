@@ -12,6 +12,7 @@ import { loadAllFinishedStock, loadFinishedStock, loadLiveMetersByWorkOrder, typ
 import { buildStockLineSheet, stockLineNotes } from "./sheet";
 import { describeOrderScope, type OrderListScope } from "./scope-summary";
 import type { StockLineOptions } from "./options";
+import { formatQty } from "@/lib/format";
 
 export type OrdersFetchAll = (
   onProgress?: (loaded: number, total?: number) => void,
@@ -44,7 +45,7 @@ export function useStockLineExportRun(props: { fetchAll: OrdersFetchAll; listSco
         : Promise.resolve({ value: null, notes: [] });
       const orders = await props.fetchAll(
         (loaded, total) =>
-          setProgress(`${loaded.toLocaleString("tr-TR")}${total ? ` / ~${total.toLocaleString("tr-TR")}` : ""} sipariş…`),
+          setProgress(`${formatQty(loaded)}${total ? ` / ~${formatQty(total)}` : ""} sipariş…`),
         (loaded) => toast.warning(truncatedExportNote(loaded), { duration: 12000 }),
         confirmTotal,
       );

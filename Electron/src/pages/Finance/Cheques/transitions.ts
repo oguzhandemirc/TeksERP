@@ -26,6 +26,7 @@
 // =============================================================================
 import type { ChequeEventType, ChequeKind, ChequeStatus, DecimalLike } from "./service";
 import { toNum } from "./service";
+import { formatAmount } from "@/lib/format";
 
 export type ChequeAction =
   | "deposit"
@@ -253,8 +254,5 @@ export function allocationBlockReason(
   if (!def.blockedByAllocation) return null;
   const allocated = toNum(row.allocatedTotal);
   if (allocated <= 0) return null;
-  return `Bu çek/senet ${allocated.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ${row.currency} tutarında faturaya kapatılmış — "${def.label}" öncesinde kapamayı kaldırın.`;
+  return `Bu çek/senet ${formatAmount(allocated, 2, 2)} ${row.currency} tutarında faturaya kapatılmış — "${def.label}" öncesinde kapamayı kaldırın.`;
 }

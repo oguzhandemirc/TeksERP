@@ -1,3 +1,4 @@
+import { qtyFormatter } from "@/lib/format";
 // =============================================================================
 // LEVENT — panel tipleri (backend `WarpBeamDto` aynası) · devere Faz 1b
 // =============================================================================
@@ -117,8 +118,8 @@ export const WARP_KG_SOURCE_LABEL: Record<WarpKgSource, string> = {
   THEORETICAL: "Nominal (hesap)",
 };
 
-const M = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
-const KG = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 3 });
+const M = qtyFormatter(1);
+const KG = qtyFormatter(3);
 export const formatM = (v: number | null | undefined): string => (v == null ? "—" : `${M.format(v)} m`);
 export const formatKg = (v: number | null | undefined): string => (v == null ? "—" : `${KG.format(v)} kg`);
 

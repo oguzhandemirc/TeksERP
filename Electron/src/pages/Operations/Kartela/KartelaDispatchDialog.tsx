@@ -20,6 +20,7 @@ import { buildDispatchPayload, KARTELA_PICKER_SCOPES, refreshKartelaLists, type 
 import { useDispatchDraft, type DispatchDraft } from "./useDispatchDraft";
 import { useKartelaFirmCategory } from "./useKartelaFirmCategory";
 import { useSingleFlight } from "./useSingleFlight";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -30,7 +31,7 @@ interface Props {
   initialRolls?: readonly KartelaPickedRoll[] | null;
 }
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1, useGrouping: false });
+const fmtM = (n: number) => formatQty(n, 1);
 
 export function KartelaDispatchDialog({ open, onOpenChange, onCreated, initialRolls }: Props) {
   const qc = useQueryClient();

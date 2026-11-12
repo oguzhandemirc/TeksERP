@@ -23,7 +23,7 @@ export function PriceListFilters({ value, onChange, summary }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Liste no ya da adı…" value={value.q} onChange={(e) => set({ q: e.target.value })} />
+          <Input className="pl-8" placeholder="Ara…" title="Liste no ya da adı" aria-label="Fiyat listesi ara: liste no ya da adı" value={value.q} onChange={(e) => set({ q: e.target.value })} />
         </div>
         <div className="flex gap-1" role="group" aria-label="Kapsam">
           <Chip active={value.scope === ""} label="Tüm listeler" onClick={() => set({ scope: "", customerId: null })} />

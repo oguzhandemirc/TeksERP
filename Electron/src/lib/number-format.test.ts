@@ -57,11 +57,16 @@ describe("öykünücü Excel'in bilinen davranışını üretir (yoksa ölçüm 
 });
 
 describe("rapor biçimi: PDF metni = Excel görünen metin", () => {
-  it("PDF metni SABİT: bugünkü çıktı değişmez", () => {
-    expect(reportCellText(12, "#,##0.#")).toBe("12,0");
-    expect(reportCellText(1234.5, "0.0")).toBe("1.234,5");
-    expect(reportCellText(1234567.891, "#,##0")).toBe("1.234.568");
+  it("⭐ PDF metni: para biçimi gruplu, ölçü biçimi grupsuz (kullanıcı kuralı 2026-11-12)", () => {
+    expect(reportCellText(12, "0.#")).toBe("12,0");
+    expect(reportCellText(1234.5, "0.0")).toBe("1234,5");
+    expect(reportCellText(1234567.891, "0")).toBe("1234568");
+    expect(reportCellText(325684.9, "#,##0.00")).toBe("325.684,90");
+    expect(reportCellText(-1234.56789, "#,##0.0000")).toBe("-1.234,5679");
     expect(reportCellText("—", "#,##0.00")).toBe("—");
+    expect(reportExcelNumFmt("0.0")).toBe("0.0");
+    expect(reportExcelNumFmt("#,##0.00")).toBe("#,##0.00");
+    expect(upTo3Text(14700.1234)).toBe("14700,123");
   });
 
   it.each(REPORT_NUM_FMTS.map((f) => [f]))("%s × tam/kesir/negatif/1000+ değerler", (f) => {

@@ -16,6 +16,7 @@
 // Kasa+banka tek listede, pasif hesap gizlenmez işaretlenir.
 // =============================================================================
 
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,11 @@ interface Props {
   account: CashAccountOption | null;
   onAccountChange: (account: CashAccountOption | null) => void;
   onChange: (next: CashTxnFilterState) => void;
+  /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
+  tools?: ReactNode;
 }
 
-export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: Props) {
+export function CashTxnFilterBar({ value, account, onAccountChange, onChange, tools }: Props) {
   const set = <K extends keyof CashTxnFilterState>(key: K, v: CashTxnFilterState[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -42,7 +45,7 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: 
         <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-8"
-          placeholder="Belge no / kategori / açıklama / referans ara…"
+          placeholder="Ara…" title="Belge no / kategori / açıklama / referans ara" aria-label="Belge no / kategori / açıklama / referans ara"
           value={value.search}
           onChange={(e) => set("search", e.target.value)}
         />
@@ -112,6 +115,7 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: 
           Filtreleri temizle
         </Button>
       )}
+      {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
     </div>
   );
 }

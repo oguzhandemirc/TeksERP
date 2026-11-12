@@ -47,8 +47,11 @@ describe("İçerideki İşler", () => {
   it("müşteri satırı ve toplam şeridi sunucu özetini basar", async () => {
     renderWithProviders(<ConsignedWorkPage />);
     expect(await screen.findByText("Gül Perde")).toBeInTheDocument();
-    expect(screen.getAllByText("8 top").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(/^1170(,0)? m$/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("8 top").length).toBeGreaterThanOrEqual(1);
+    // Toplam şeridi ListBand'de: adet + birim ayrı, metre ortak gösterim biçiminde (gruplamasız).
+    const band = screen.getByRole("group", { name: "İçerideki işler özeti" });
+    expect(band.textContent).toContain("İçeride (toplam)8top");
+    expect(band.textContent).toContain("1170 m");
     expect(get).toHaveBeenCalledTimes(1);
   });
 
@@ -80,7 +83,8 @@ describe("İçerideki İşler", () => {
     const links = screen.getAllByRole("link").map((a) => a.getAttribute("href") ?? "");
     expect(links.some((h) => h.includes("tab=SEMI_FINISHED") && h.includes("filter%5BownerCustomerId%5D=cA"))).toBe(true);
     expect(links.some((h) => h.includes("tab=RAW_STOCK"))).toBe(false);
-    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toContain("Bekliyor");
+    // DataTable başlığı sürüklenebilir (role=button) — başlık ipucuyla bulunur; ham sütunu yokken ek "(yarı mamul)" düşer.
+    expect(screen.getByTitle("Rotaya girmemiş yarı mamul emanet — Yarı Mamul")).toHaveTextContent(/^Bekliyor$/);
     expect(primaryBucket({ ...semi, inProcess: b(1, 10) })).toBe("waitingSemi");
   });
 

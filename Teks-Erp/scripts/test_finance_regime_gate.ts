@@ -308,6 +308,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "(`subcontractor/receipt-cancel` → SubcontractorService) kabulün iptal edilmemiş alış faturasını ENGEL olarak SORAR (409 " +
       "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
   },
+  {
+    dosya: "routes/dashboard.routes.ts",
+    neden:
+      "AÇILIŞ PANOSU (çekirdek, pano kutu mimarisi 2026-11). Router SALT-OKUMADIR (CUD yok). Tahsilat ve nakit akışı kutuları kasa/banka hareketini OKUR (pano-kutu-satis.ts:43), yalnız `nakit` kapısı açıkken (pano-kutu-katalog.ts:50,66). " +
+      "Kapı KUTU düzeyinde sunucudadır: `nakit` = report:finance izni + financeEnabled (pano-kaynak.ts:85); kapalı modülde kutu katalogda yoktur, veri ucu `null` döner " +
+      "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
+  },
 ];
 
 // ⚠️ AST yardımcıları (`oku` · `yerelImportlar` · `mountEdilenler` ·

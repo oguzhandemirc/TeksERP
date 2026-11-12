@@ -114,7 +114,7 @@ describe("PageHeader — dar ekranda sarma (UX-3 R3)", () => {
       { initialEntries: [CHILD] },
     );
     render(<RouterProvider router={router} />);
-    const root = screen.getByRole("heading", { name: "Envanter" }).closest("div.border-b") as HTMLElement;
+    const root = screen.getByRole("heading", { name: "Envanter" }).closest("[data-page-header]") as HTMLElement;
     expect(root.className).toContain("flex-wrap");
     const actions = screen.getByRole("button", { name: "Yeni" }).parentElement as HTMLElement;
     expect(actions.className).toContain("flex-wrap");

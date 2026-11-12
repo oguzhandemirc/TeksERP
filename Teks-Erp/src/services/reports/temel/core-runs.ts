@@ -8,11 +8,13 @@ import type { ShipmentDestination } from "@prisma/client";
 import { factoryYmd } from "../../../constants/time";
 import type { CompareMode, DateRange } from "../_shared";
 import { buildOrderDemandReport } from "./siparis-talep.temel";
+import type { ShippedView } from "./sevkiyat.views";
+import type { OrderDemandView } from "./siparis-talep.views";
 import { buildShippedReport } from "./sevkiyat.temel";
 import { buildDeadlineReport } from "./termin.temel";
 import { buildOpenOrderReport } from "./acik-siparisler.temel";
 import { buildSubcontractorsReport } from "./fasoncular.temel";
-import { buildLoomStopsReport } from "./duruslar.temel";
+import { buildLoomStopsReport, type LoomStopView } from "./duruslar.temel";
 import type { ResolvedDayRange } from "./_day-range";
 import { DESTINATION_DIMENSION, declaredOptionsDimension, rankedDimension, type CoreRunner, type VariantDimension } from "./_variant";
 
@@ -46,10 +48,10 @@ type Cell = Parameters<CoreRunner>[2];
 const only = (cell: Cell, boyut: string): string[] | undefined => (cell && cell.boyut === boyut ? [cell.deger] : undefined);
 
 export interface OrderDemandFilters { customerId?: string[]; destination?: ShipmentDestination; itemId?: string[] }
-export function orderDemandRunner(filters: OrderDemandFilters, compareMode: CompareMode): CoreRunner {
+export function orderDemandRunner(filters: OrderDemandFilters, compareMode: CompareMode, view?: OrderDemandView): CoreRunner {
   return (range, compareRange, cell) =>
     buildOrderDemandReport({
-      range, compareRange, compareMode,
+      range, compareRange, compareMode, view: cell ? undefined : view,
       filters: {
         customerId: only(cell, "musteri") ?? filters.customerId,
         itemId: only(cell, "urun") ?? filters.itemId,
@@ -58,9 +60,12 @@ export function orderDemandRunner(filters: OrderDemandFilters, compareMode: Comp
     });
 }
 
-export function shippedRunner(destination: ShipmentDestination | undefined, compareMode: CompareMode): CoreRunner {
+export function shippedRunner(destination: ShipmentDestination | undefined, compareMode: CompareMode, view?: ShippedView): CoreRunner {
   return (range, compareRange, cell) =>
-    buildShippedReport({ range, compareRange, compareMode, filters: { destination: cell?.boyut === "yon" ? (cell.deger as ShipmentDestination) : destination } });
+    buildShippedReport({
+      range, compareRange, compareMode, view: cell ? undefined : view,
+      filters: { destination: cell?.boyut === "yon" ? (cell.deger as ShipmentDestination) : destination },
+    });
 }
 
 export function deadlineRunner(destination: ShipmentDestination | undefined, compareMode: CompareMode): CoreRunner {
@@ -90,7 +95,7 @@ export function dayWindowOf(range: DateRange, compareRange: DateRange | null, mo
   };
 }
 
-export function loomStopsRunner(shiftDefinitionId: string[] | undefined, mode: CompareMode): CoreRunner {
+export function loomStopsRunner(shiftDefinitionId: string[] | undefined, mode: CompareMode, view?: LoomStopView): CoreRunner {
   return (range, compareRange, cell) =>
-    buildLoomStopsReport({ window: dayWindowOf(range, compareRange, mode), shiftDefinitionId: only(cell, "vardiya") ?? shiftDefinitionId });
+    buildLoomStopsReport({ window: dayWindowOf(range, compareRange, mode), shiftDefinitionId: only(cell, "vardiya") ?? shiftDefinitionId, view });
 }

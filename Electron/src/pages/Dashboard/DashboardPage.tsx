@@ -1,77 +1,83 @@
-import { Fragment, useState } from "react";
-import type { ReactNode } from "react";
-import { Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { DashboardHero } from "./DashboardHero";
-import { KpiCards } from "./KpiCards";
-import { StationLoad } from "./StationLoad";
-import { UpcomingOrders } from "./UpcomingOrders";
-import { OverdueWorkOrders } from "./OverdueWorkOrders";
-import { UpcomingWorkOrders } from "./UpcomingWorkOrders";
-import { DashboardSettingsDialog } from "./DashboardSettingsDialog";
-import { useDashboardLayout } from "./useDashboardLayout";
-import type { GroupKey } from "./widgetRegistry";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { fetchPanoCatalog } from "./dashboardService";
+import { PanoAddSheet } from "./pano/PanoAddSheet";
+import { PanoBoard } from "./pano/PanoBoard";
+import { BoxFailed } from "./pano/PanoBoxFrame";
+import { PanoHeader } from "./pano/PanoHeader";
+import { HIZLI_EYLEMLER } from "./pano/pano-hedefler";
+import { usePanoBoxData, type AgendaParams } from "./pano/usePanoBoxData";
+import { usePanoDonem } from "./pano/usePanoDonem";
+import { usePanoErisim } from "./pano/usePanoErisim";
+import { usePanoLayout } from "./pano/usePanoLayout";
+import { PANO_UC_IZINLERI } from "./pano/types";
 
-const PANEL_RENDERERS: Record<string, ReactNode> = {
-  "panel:upcomingOrders": <UpcomingOrders />,
-  "panel:overdueWorkOrders": <OverdueWorkOrders />,
-  "panel:upcomingWorkOrders": <UpcomingWorkOrders />,
-};
+const NO_CATALOG: never[] = [];
 
+/**
+ * Açılış panosu — kutu (widget) düzeni. Katalog bir kez; yalnız ekli kutuların verisi istenir (aynı tikteki
+ * kutular tek istekte). Düzen kullanıcı tercihinde; düzenleme kipinde veri isteği atılmaz.
+ */
 export function DashboardPage() {
-  const { isVisible, groupOrder, itemOrder } = useDashboardLayout();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { hasAnyPermission, hasPermission } = useRoleAccess();
+  const erisim = usePanoErisim();
+  const [donem, setDonem] = usePanoDonem();
+  const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [agenda, setAgenda] = useState<AgendaParams>({});
+  const panoIzni = hasAnyPermission(PANO_UC_IZINLERI);
+  const catalog = useQuery({ queryKey: ["pano-catalog"], queryFn: fetchPanoCatalog, enabled: panoIzni, staleTime: Infinity });
 
-  const renderGroup = (key: GroupKey): ReactNode => {
-    switch (key) {
-      case "kpi":
-        return <KpiCards />;
-      case "stationLoad":
-        return isVisible("panel:stationLoad") ? <StationLoad /> : null;
-      case "panels": {
-        const visible = itemOrder("panels")
-          .filter((k) => isVisible(k) && PANEL_RENDERERS[k]);
-        if (visible.length === 0) return null;
-        return (
-          <div className="grid gap-6 lg:grid-cols-2">
-            {visible.map((k) => (
-              <div key={k}>{PANEL_RENDERERS[k]}</div>
-            ))}
-          </div>
-        );
-      }
-    }
-  };
+  const quickOk = HIZLI_EYLEMLER.some((e) => erisim.canGo(e));
+  const stationOk = hasPermission("station:read");
+  const localAvailable = useMemo(() => new Set([...(quickOk ? ["hizliIslemler"] : []), ...(stationOk ? ["istasyonDoluluk"] : [])]), [quickOk, stationOk]);
+  const layout = usePanoLayout(panoIzni ? catalog.data : NO_CATALOG, localAvailable);
+  const states = usePanoBoxData(layout.boxes, donem, agenda, panoIzni && !editing);
+  const added = useMemo(() => new Set(layout.boxes.map((b) => b.anahtar)), [layout.boxes]);
+  const periodic = layout.boxes.some((b) => b.donemli);
 
   return (
     <PageShell>
-      <PageBody className="space-y-6 p-6">
-      <DashboardHero
-        actions={
-          <>
-            <RefreshButton queryKey="dashboard" successMessage="Anasayfa yenilendi" />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSettingsOpen(true)}
-              className="gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              Düzenle
-            </Button>
-          </>
-        }
-      />
-      {groupOrder.map((g) => {
-        const node = renderGroup(g);
-        if (!node) return null;
-        return <Fragment key={g}>{node}</Fragment>;
-      })}
-
-      <DashboardSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <PageBody className="space-y-5 p-6">
+        <PanoHeader donem={donem} onDonem={setDonem} donemGoster={panoIzni && periodic}
+          eylem={<RefreshButton queryKey="dashboard" successMessage="Anasayfa yenilendi" />}
+          edit={layout.available.length > 0 ? {
+            editing, isDefault: layout.isDefault,
+            onStart: () => setEditing(true), onDone: () => { setEditing(false); setAdding(false); },
+            onAdd: () => setAdding(true), onReset: layout.reset,
+          } : undefined} />
+        {panoIzni && catalog.isError && !catalog.data ? (
+          <BoxFailed title="Pano" onRetry={() => void catalog.refetch()} />
+        ) : panoIzni && catalog.isLoading ? (
+          <BoardSkeleton />
+        ) : (
+          <PanoBoard boxes={layout.boxes} states={states} editing={editing}
+            ctx={{ donem, erisim, onAgenda: setAgenda, agendaLoading: states.ajanda?.fetching ?? false }}
+            onRemove={layout.remove} onReorder={layout.reorder} />
+        )}
+        {editing && layout.boxes.length === 0 && (
+          <p className="rounded-xl border-2 border-dashed border-card-border py-10 text-center text-sm text-muted-foreground">Panoda kutu yok — “Kutu ekle” ile başla.</p>
+        )}
+        <PanoAddSheet open={adding} onOpenChange={setAdding} available={layout.available} added={added}
+          onToggle={(key, add) => (add ? layout.add(key) : layout.remove(key))} />
       </PageBody>
     </PageShell>
+  );
+}
+
+function BoardSkeleton() {
+  return (
+    <div className="space-y-4" data-testid="pano-iskelet">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-4">
+        {Array.from({ length: 5 }, (_, i) => <div key={i} className="skeleton-shimmer h-28 rounded-xl bg-muted" />)}
+      </div>
+      <div className="grid gap-4 min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12">
+        <div className="skeleton-shimmer h-72 rounded-xl bg-muted min-[768px]:max-[1100px]:col-span-2 min-[1101px]:col-span-8" />
+        <div className="skeleton-shimmer h-72 rounded-xl bg-muted min-[1101px]:col-span-4" />
+      </div>
+    </div>
   );
 }

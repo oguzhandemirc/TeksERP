@@ -1,28 +1,24 @@
 // Özet şeridi + firma şeridi: sunucu özeti listeyle AYNI where'den; firma çipi tıklanınca firma süzgeci olur.
 import { cn } from "@/lib/utils";
-import { balanceText, fmtQty } from "./cockpit-labels";
+import { BandStats } from "@/components/layout/ListPage";
+import { formatDisplay } from "@/lib/format";
+import { balanceText } from "./cockpit-labels";
 import type { SubcontractorCockpitResult } from "./types";
 
 type Summary = SubcontractorCockpitResult["summary"];
 
-function Cell({ label, value, tone }: { label: string; value: string; tone?: "danger" | "warn" }) {
-  return (
-    <div className="min-w-0 rounded-md border bg-card px-3 py-2">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-semibold tabular-nums", tone === "danger" && "text-destructive", tone === "warn" && "text-amber-600 dark:text-amber-400")}>{value}</div>
-    </div>
-  );
-}
-
 export function CockpitSummaryStrip({ summary }: { summary: Summary | null }) {
   const s = summary;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Fason özeti">
-      <Cell label="Açık sevk" value={s ? String(s.openDispatchCount) : "—"} />
-      <Cell label="Geciken" value={s ? String(s.overdueCount) : "—"} tone={s && s.overdueCount > 0 ? "danger" : undefined} />
-      <Cell label="2 gün içinde dönecek" value={s ? String(s.dueSoonCount) : "—"} tone={s && s.dueSoonCount > 0 ? "warn" : undefined} />
-      <Cell label="Fasonda kalan" value={s ? `${fmtQty(s.outstandingQty)} m` : "—"} />
-    </div>
+    <BandStats
+      label="Fason özeti"
+      items={[
+        { key: "open", label: "Açık sevk", value: s ? s.openDispatchCount : "—" },
+        { key: "overdue", label: "Geciken", value: s ? s.overdueCount : "—", tone: s && s.overdueCount > 0 ? "danger" : undefined },
+        { key: "soon", label: "2 gün içinde dönecek", value: s ? s.dueSoonCount : "—", tone: s && s.dueSoonCount > 0 ? "warn" : undefined },
+        { key: "qty", label: "Fasonda kalan", value: s ? formatDisplay(s.outstandingQty) : "—", unit: s ? "m" : undefined },
+      ]}
+    />
   );
 }
 

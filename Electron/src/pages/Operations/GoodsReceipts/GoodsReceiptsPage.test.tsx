@@ -13,7 +13,7 @@
 // =============================================================================
 import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
@@ -124,6 +124,7 @@ describe("GoodsReceiptsPage — senkron uyarısının taşınması", () => {
 
     // Listeden ikinci fişi aç — uyarı ona ait değil.
     await user.click(await screen.findByText("MK-2"));
-    expect(screen.getByTestId("sheet")).toHaveTextContent("r2|senkron-yok");
+    // Ortak tablo satırı tek-tık/çift-tık ayrımı için açılışı kısa süre geciktirir.
+    await waitFor(() => expect(screen.getByTestId("sheet")).toHaveTextContent("r2|senkron-yok"));
   });
 });

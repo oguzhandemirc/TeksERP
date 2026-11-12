@@ -27,10 +27,11 @@ import { PO_STATUS_LABEL } from "../PurchaseOrders/labels";
 // İki bileşen birbirini import etseydi modül döngüsü doğardı.
 import { PurchaseOrderDetailSheet } from "../PurchaseOrders/PurchaseOrderDetailSheet";
 import { toastServerSuccess } from "@/lib/serverNotes";
+import { formatQty } from "@/lib/format";
 
 /** Decimal JSON'da string gelir — görüntü için sayıya çevirip TR biçimler. */
 const fmt = (v: string | number | null | undefined): string =>
-  v == null ? "—" : Number(v).toLocaleString("tr-TR");
+  v == null ? "—" : formatQty(Number(v));
 
 interface Props {
   id: string | null;
@@ -160,7 +161,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                   <dd className="flex items-center gap-1.5">
                     {supplierDisplayName(r)}
                     {supplierRefOf(r)?.kind === "SUBCONTRACTOR" && (
-                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                      <span className="rounded-badge bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
                         {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
                       </span>
                     )}
@@ -207,7 +208,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                           fişin birimiyle geçer — yani anlaşılan fiyat sessizce
                           başka bir para biriminde faturalanır. */}
                       {r.purchaseOrder.currency !== r.currency && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                        <span className="rounded-badge bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                           Sipariş {r.purchaseOrder.currency}, fiş {r.currency} — fiyatlar fişin para
                           biriminde faturalanır
                         </span>

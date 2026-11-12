@@ -2,6 +2,7 @@
 // SÜRE · KADEME · ÖZET — saf hesaplar (bileşen değil; birim testli)
 // =============================================================================
 import type { BeamState, LiveLoom, OpenStop, StopTotal } from "./types";
+import { formatQty } from "@/lib/format";
 
 const MINUTE = 60_000;
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -182,7 +183,7 @@ export function stopTotalsOf(t: LiveLoom, now: number): StopTotal[] {
 }
 
 /** Metre ve atkı biçimi — saat değil, sayı (tr-TR binlik ayırıcı). */
-export const formatNumber = (n: number): string => Math.round(n).toLocaleString("tr-TR");
+export const formatNumber = (n: number): string => formatQty(Math.round(n));
 
 /** Kalan iplik bu oranın altına inince levent uyarı rengine döner. */
 export const LOW_BEAM_RATIO = 0.08;

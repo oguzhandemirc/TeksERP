@@ -14,9 +14,10 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type KeyboardEvent, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PAGE_TABS_BAR_CLASS, pageTabClass } from "./PageTabs";
 
 export interface ReorderableTab {
   key: string;
@@ -64,7 +65,8 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-3 pt-2">
+    // Görünüm PageTabs bandıyla aynı (sayfa içi alt sekme); klavye: ok/Home/End sekmeler arasında gezinir.
+    <div data-page-tabs="" role="tablist" aria-label="Sekmeler" onKeyDown={onTabKeyDown} className={PAGE_TABS_BAR_CLASS}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -88,21 +90,31 @@ export function ReorderableTabBar({ tabs, pinnedTab, activeKey, onSelect, onReor
           <button
             type="button"
             onClick={() => onSelect(pinnedTab.key)}
-            className={cn(
-              "flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-1.5 text-xs font-medium transition-colors",
-              activeKey === pinnedTab.key
-                ? "border-b-primary text-foreground"
-                : "border-b-transparent text-muted-foreground hover:text-foreground",
-            )}
+            role="tab"
+            aria-selected={activeKey === pinnedTab.key}
+            tabIndex={activeKey === pinnedTab.key ? 0 : -1}
+            className={pageTabClass(activeKey === pinnedTab.key)}
           >
             <pinnedTab.Icon className="h-3.5 w-3.5" />
             {pinnedTab.label}
           </button>
         </>
       )}
-      {trailing && <div className="ml-auto flex shrink-0 items-center pb-1.5">{trailing}</div>}
+      {trailing && <div className="ml-auto flex shrink-0 items-center self-center py-1">{trailing}</div>}
     </div>
   );
+}
+
+/** Ok tuşları sekme düğmeleri arasında odağı taşır ve seçer (Radix Tabs ile aynı otomatik seçim). */
+function onTabKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  const tabs = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const i = tabs.indexOf(document.activeElement as HTMLButtonElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[next]?.focus();
+  tabs[next]?.click();
 }
 
 /** 1px dikey ayraç — başlıksız; shrink-0 ile şeritle birlikte kayar, taşmaz. */
@@ -134,14 +146,13 @@ function SortableTab({
         opacity: isDragging ? 0.6 : 1,
         zIndex: isDragging ? 10 : undefined,
       }}
-      className={cn(
-        "flex shrink-0 cursor-pointer touch-none items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-1.5 text-xs font-medium transition-colors active:cursor-grabbing",
-        active
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
-      )}
+      className={cn(pageTabClass(active), "cursor-pointer touch-none active:cursor-grabbing")}
       {...attributes}
       {...listeners}
+      role="tab"
+      aria-selected={active}
+      aria-roledescription="sıralanabilir sekme"
+      tabIndex={active ? 0 : -1}
     >
       <Icon className="h-3.5 w-3.5" />
       {tab.label}

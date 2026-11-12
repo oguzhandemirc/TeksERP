@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { apiErrorText } from "@/lib/api-error";
 import { shipmentService } from "./service";
 import { DirectShipPrintDialog } from "./DirectShipPrintDialog";
@@ -14,7 +14,7 @@ import { DIRECT_ROLL_COLUMNS, directRollBarcode } from "./directRollListExport";
 import { TERIM } from "@/lib/terim";
 
 const fmt = (n: number) =>
-  Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+  formatQty(Number(n), 0);
 
 /** Fasondan sevk detayını çeker — Sheet + Modal + içerik aynı queryKey'i paylaşır (dedupe). */
 export function useDirectShipmentDetail(directShipmentId: string | null, enabled: boolean) {

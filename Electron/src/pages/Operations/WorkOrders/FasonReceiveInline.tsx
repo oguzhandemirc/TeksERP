@@ -90,7 +90,7 @@ export function FasonReceiveInline({
   };
 
   const modeBtn = (active: boolean) =>
-    `rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+    `rounded-badge border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
       active
         ? "border-primary bg-primary text-primary-foreground"
         : "bg-background text-muted-foreground hover:text-foreground"
@@ -128,7 +128,7 @@ export function FasonReceiveInline({
                   p.map((x, j) => (j === i ? Math.max(0, Number(e.target.value) || 0) : x)),
                 );
               }}
-              className="w-24 rounded border bg-background px-2 py-0.5 text-right text-[11px] tabular-nums outline-none focus:ring-2 focus:ring-ring"
+              className="w-24 rounded-badge border bg-background px-2 py-0.5 text-right text-[11px] tabular-nums outline-none focus:ring-2 focus:ring-ring"
             />
             <span className="text-[10px] text-muted-foreground">m</span>
             {pieces.length > 1 && (
@@ -171,7 +171,7 @@ export function FasonReceiveInline({
         </div>
       )}
       <div className="flex justify-end gap-1.5">
-        <button type="button" onClick={onDone} className="rounded border px-1.5 py-0.5 text-[11px]">
+        <button type="button" onClick={onDone} className="rounded-badge border px-1.5 py-0.5 text-[11px]">
           Vazgeç
         </button>
         <button

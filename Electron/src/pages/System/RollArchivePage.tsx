@@ -122,7 +122,7 @@ export default function RollArchivePage() {
         primaryKeys={ARCHIVE_PRIMARY}
         search={dataTable.search}
         onSearchChange={dataTable.setSearch}
-        placeholder="Barkod, kumaş veya renk ara..."
+        placeholder="Ara…" searchHint="Barkod, kumaş veya renk ara"
         trailing={<SavedViewsMenu compact />}
       />
       <RollsTableBody

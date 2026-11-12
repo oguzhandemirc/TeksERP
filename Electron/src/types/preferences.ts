@@ -7,7 +7,10 @@
 // onlar `@/lib/machine-config` (secure-store, per-machine) içindedir; aksi halde
 // aynı hesapla başka bilgisayara girince A'nın COM portu B'ye taşınırdı.
 
+import type { Appearance } from "@/lib/theme/appearance";
+
 export type ThemePref = "light" | "dark" | "system";
+/** ESKİ yoğunluk alanı — yalnız göçte okunur (`lib/theme/appearance.ts`); yeni yazım `appearance.density`. */
 export type DensityPref = "comfortable" | "compact";
 
 export interface SavedView {
@@ -19,9 +22,13 @@ export interface SavedView {
 
 export interface AppPreferences {
   theme?: ThemePref;
-  /** HSL kanalları "H S% L%" (CSS var formatı). null/boş = tema varsayılanı. */
+  /** ESKİ vurgu rengi (HSL kanalı) — yalnız göçte okunur; görünüm değişince null yazılır. */
   accent?: string | null;
+  /** ESKİ yoğunluk — yalnız göçte okunur. */
   density?: DensityPref;
+  /** Kişiselleştirme (tema, menü, zemin, köşe, yoğunluk, yazı, simge) — şekli ve doğrulaması
+   *  `lib/theme/appearance.ts` (`resolveAppearance`) sahiplenir; okurken süzülür. */
+  appearance?: Partial<Appearance>;
   /** Sidebar favorileri (route listesi). */
   sidebar?: { favorites?: string[] };
   /** Tablo kayıtlı görünümleri — anahtar = sayfa pathname, değer = görünüm listesi. */
@@ -36,6 +43,8 @@ export interface AppPreferences {
   /** Filtre satırı kutu görünürlüğü — sayfa (pathname ya da `viewKey`) → { filtreId: görünür } yalnız
    *  sayfa varsayılanından sapanlar; şekli `filter-row/filter-visibility.ts` sahiplenir ve okurken süzer. */
   filterRowVisibility?: Record<string, Record<string, boolean>>;
+  /** Tablo sütun genişliği (px, elle) — queryKey → { columnId: px }; yalnız sürüklenen sütunlar. */
+  tableSizing?: Record<string, Record<string, number>>;
   /** Tablo sütun görünürlüğü — queryKey → { columnId: visible }. */
   tableVisibility?: Record<string, Record<string, boolean>>;
   /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */
@@ -97,14 +106,17 @@ export interface AppPreferences {
    * seçili kalanlarla budanır (`lib/bildirim/masaustu-tercih.ts`). Sonraki sürümde okuyucusu kalkar.
    */
   bildirim?: { masaustuTurler?: string[] };
-  /** Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin"); tablo YOK, blob alanı. */
-  raporlar?: { favoriler?: string[] };
-  /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
-  dashboard?: {
-    hidden?: string[];
-    groupOrder?: string[];
-    itemOrders?: Record<string, string[]>;
-  };
+  /**
+   * Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin") ve kişinin rapor açılış kaydı
+   * (`opened`: anahtar · açılış sayısı · son açılış; en çok 20, `_v2/opened.ts`). Tablo YOK, blob alanı.
+   */
+  /** `charts`: rapor anahtarı → ekran görünüm tercihi (grafik türü, etiket, yerleşim, gizli kolon);
+   *  şekli `pages/Reports/_v2/view/view-pref.ts` sahiplenir ve okurken süzer. */
+  raporlar?: { favoriler?: string[]; opened?: ReportOpenRecord[]; charts?: Record<string, unknown> };
+  /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → hafta) ve kutu düzeni (`boxes`: sıralı
+   *  kutu anahtarları; yoksa katalog varsayılanı). Eski pano düzeni alanları (`hidden`/`groupOrder`/`itemOrders`)
+   *  kayıtlı blob'da kalabilir; okunmaz. */
+  dashboard?: { donem?: string; boxes?: string[] };
   // NOT: `scanner`, `labelPrinter`, `scaleDevice` — makineye bağlı donanım
   // ayarları — bilerek burada DEĞİL. `@/lib/machine-config` (secure-store,
   // per-machine) içindeler; `useMachineConfig` ile okunur/yazılır.
@@ -112,29 +124,7 @@ export interface AppPreferences {
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
   theme: "system",
-  accent: null,
-  density: "comfortable",
 };
-
-export interface AccentPreset {
-  key: string;
-  label: string;
-  /** HSL kanalları — index.css token formatıyla aynı. */
-  value: string;
-}
-
-/** Hazır vurgu renkleri. "Varsayılan" (accent: null) bunlara ek olarak sunulur. */
-export const ACCENT_PRESETS: AccentPreset[] = [
-  { key: "indigo", label: "İndigo", value: "243 75% 59%" },
-  { key: "violet", label: "Mor", value: "262 83% 58%" },
-  { key: "blue", label: "Mavi", value: "217 91% 60%" },
-  { key: "cyan", label: "Camgöbeği", value: "199 89% 48%" },
-  { key: "teal", label: "Teal", value: "172 66% 45%" },
-  { key: "emerald", label: "Yeşil", value: "160 84% 39%" },
-  { key: "amber", label: "Amber", value: "38 92% 50%" },
-  { key: "orange", label: "Turuncu", value: "25 95% 53%" },
-  { key: "rose", label: "Gül", value: "350 89% 60%" },
-];
 
 /** Backend'den gelen kısmi/boş objeyi varsayılanlarla birleştirir. */
 export function mergePreferences(raw: Partial<AppPreferences> | null | undefined): AppPreferences {
@@ -147,4 +137,12 @@ export function mergePreferences(raw: Partial<AppPreferences> | null | undefined
   delete legacy.scaleDevice;
   delete legacy.scanner;
   return merged;
+}
+
+/** Kişinin bir raporu kaç kez / en son ne zaman açtığı — yalnız kendi tercih blob'unda (kullanım istatistiği DEĞİL). */
+export interface ReportOpenRecord {
+  key: string;
+  count: number;
+  /** ISO zaman damgası. */
+  lastAt: string;
 }

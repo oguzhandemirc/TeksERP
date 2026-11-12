@@ -25,19 +25,21 @@
 // başına bir rejim kapısı ÇİZMEZ, çünkü kullanıcı buraya ancak görünür bir
 // yoldan gelir ve iki yerde iki kapı, biri değişince sessizce ayrışırdı.
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import { supplierPartyQuery } from "@/components/forms/supplierParty";
 import { listPurchaseOrders, type PurchaseOrderListRow } from "./service";
-import { PurchaseOrderTable } from "./PurchaseOrderTable";
+import { PurchaseOrderTable, usePurchaseOrderTable } from "./PurchaseOrderTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { PurchaseOrderFormDialog } from "./PurchaseOrderFormDialog";
 import { PurchaseOrderDetailSheet } from "./PurchaseOrderDetailSheet";
 import { CancelPurchaseOrderDialog } from "./CancelPurchaseOrderDialog";
@@ -87,7 +89,7 @@ export function PurchaseOrdersPage() {
       }),
   });
 
-  const rows: PurchaseOrderListRow[] = q.data?.data ?? [];
+  const rows: PurchaseOrderListRow[] = useMemo(() => q.data?.data ?? [], [q.data]);
   const total = q.data?.pagination?.total ?? 0;
   const dirty = isPoFilterDirty(filters);
 
@@ -95,6 +97,11 @@ export function PurchaseOrdersPage() {
     setEditId(id);
     setFormOpen(true);
   };
+  const table = usePurchaseOrderTable(rows, {
+    onDetail: (r) => setDetailId(r.id),
+    onEdit: (r) => openEdit(r.id),
+    onCancel: (r) => setCancelId(r.id),
+  });
 
   return (
     <PageShell>
@@ -126,18 +133,28 @@ export function PurchaseOrdersPage() {
         value={filters}
         onChange={setFilters}
         scope={tab === "orders" ? "orders" : "open-lines"}
+        tools={tab === "orders" ? <DataTableTools table={table} compact exportName="Alış siparişleri" /> : null}
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="flex min-h-0 flex-1 flex-col">
-        <ListToolbar>
-          <TabsList className="self-start">
-            <TabsTrigger value="orders">Siparişler</TabsTrigger>
+        <PageTabsList>
+            <PageTabsTrigger value="orders">Siparişler</PageTabsTrigger>
             {/* Ekranın asıl sorusu bu sekmede — adı da soruyla aynı. */}
-            <TabsTrigger value="open-lines">Ne bekliyorum?</TabsTrigger>
-          </TabsList>
-        </ListToolbar>
+            <PageTabsTrigger value="open-lines">Ne bekliyorum?</PageTabsTrigger>
+        </PageTabsList>
 
         <TabsContent value="orders" className={TAB_PANE}>
+          {!q.isLoading && !q.isError && rows.length > 0 ? (
+            <>
+              <PurchaseOrderTable table={table} onDetail={(r) => setDetailId(r.id)} />
+              {total > rows.length && (
+                <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+                  {total} siparişin ilk {rows.length} tanesi gösteriliyor (en yeni önce). Aradığınızı
+                  bulmak için arama, tedarikçi ya da tarih filtresini kullanın.
+                </p>
+              )}
+            </>
+          ) : (
           <ListBody>
             {q.isLoading ? (
               <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -166,23 +183,9 @@ export function PurchaseOrdersPage() {
                     : "Henüz alış siparişi yok. “Yeni Sipariş” ile tedarikçiye verdiğiniz siparişi kaydedin; mal geldikçe kalan miktar kendiliğinden düşer."}
                 </div>
               </ListMessage>
-            ) : (
-              <>
-                <PurchaseOrderTable
-                  rows={rows}
-                  onDetail={(r) => setDetailId(r.id)}
-                  onEdit={(r) => openEdit(r.id)}
-                  onCancel={(r) => setCancelId(r.id)}
-                />
-                {total > rows.length && (
-                  <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                    {total} siparişin ilk {rows.length} tanesi gösteriliyor (en yeni önce). Aradığınızı
-                    bulmak için arama, tedarikçi ya da tarih filtresini kullanın.
-                  </p>
-                )}
-              </>
-            )}
+            ) : null}
           </ListBody>
+          )}
           {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
         </TabsContent>
 

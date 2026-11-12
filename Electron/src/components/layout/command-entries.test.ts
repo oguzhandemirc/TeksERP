@@ -68,6 +68,9 @@ describe("komut paleti kataloğu", () => {
     // Regresyon çıpası: şikâyetin ta kendisi. Kategori hub'ı + en az bir alt rapor.
     for (const cat of ["production", "sales", "quality", "inventory", "subcontract", "customer", "audit"]) {
       expect(paths.has(`/reports/${cat}`), `/reports/${cat} yok`).toBe(true);
+      // Müşteri kategorisinin son eski raporu (Sipariş Profili) 2026-11-12'de "Ne kadar iş aldık?" görünümüne taşındı:
+      // kategori adresi Rapor Merkezi'ne yönlenir, alt raporu yoktur.
+      if (cat === "customer") continue;
       const subs = allCommandEntries.filter((e) => e.to.startsWith(`/reports/${cat}/`));
       expect(subs.length, `/reports/${cat} altında alt rapor yok`).toBeGreaterThan(0);
     }
@@ -102,7 +105,7 @@ describe("komut paleti kataloğu", () => {
     // 2026-08-09: "/reports/production/scrap" KALDIRILDI (Fire Karnesi Kalite
     // altında). Örnek, hâlâ var olan bir alt raporla değiştirildi — silinmiş bir
     // rotayla test etmek, breadcrumb kuralını değil yokluğu doğrulardı.
-    expect(findBreadcrumbParent("/reports/production/wip")).toEqual({
+    expect(findBreadcrumbParent("/reports/production/batch-trace")).toEqual({
       label: "Üretim",
       to: "/reports/production",
     });

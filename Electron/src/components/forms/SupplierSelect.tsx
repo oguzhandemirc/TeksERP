@@ -232,7 +232,7 @@ export function SupplierSelect({
             <span className="truncate">
               {triggerText}
               {value?.kind === "SUBCONTRACTOR" && resolvedLabel && (
-                <span className="ml-2 rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                <span className="ml-2 rounded-badge bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
                   {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
                 </span>
               )}
@@ -267,7 +267,7 @@ export function SupplierSelect({
               {/* Rozet YALNIZ fason bacağında — bugünkü kayıtların görünümü
                   bayt bayt korunur (saf katman başlığı). */}
               {value?.kind === "SUBCONTRACTOR" && resolvedLabel && (
-                <span className="ml-2 rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                <span className="ml-2 rounded-badge bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
                   {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
                 </span>
               )}

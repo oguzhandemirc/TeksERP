@@ -2,6 +2,7 @@
 import { isAmbiguousFailure } from "@/lib/attemptToken";
 import type { PickedRoll } from "@/components/operations/roll-picker/pickable-rolls";
 import type { RollPickerScope } from "@/components/operations/roll-picker/RollPickerDialog";
+import { formatQty } from "@/lib/format";
 
 /** Seçici kapsamları — tablet `RollPickerModal` sekmeleriyle aynı süzgeçler; kumaş iş emrinin kumaşına kilitli. */
 export function addBatchScopes(targetItemId: string | null): RollPickerScope[] {
@@ -13,7 +14,7 @@ export function addBatchScopes(targetItemId: string | null): RollPickerScope[] {
 }
 
 export function addBatchPreview(rolls: readonly PickedRoll[], firstStepName: string | null): string {
-  const m = Math.round(rolls.reduce((acc, r) => acc + r.qty, 0)).toLocaleString("tr-TR");
+  const m = formatQty(Math.round(rolls.reduce((acc, r) => acc + r.qty, 0)));
   return `Yeni parti açılacak · ${rolls.length} top · ${m} m${firstStepName ? ` · ilk adım: ${firstStepName}` : ""}`;
 }
 

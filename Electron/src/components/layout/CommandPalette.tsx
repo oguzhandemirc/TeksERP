@@ -45,6 +45,7 @@ import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { lowerTr } from "../../lib/tr-case";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isMenuHidden } from "@/lib/menu-layout";
+import { appearancePatch, resolveAppearance } from "@/lib/theme/appearance";
 
 interface Props {
   open: boolean;
@@ -150,7 +151,8 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     .filter(isAllowed);
 
   const nextTheme = theme === "dark" ? "light" : "dark";
-  const nextDensity = prefs.density === "compact" ? "comfortable" : "compact";
+  const density = resolveAppearance(prefs).density;
+  const nextDensity = density === "compact" ? "comfortable" : "compact";
   const actions: { key: string; label: string; icon: LucideIcon; run: () => void }[] = [
     {
       key: "theme",
@@ -163,9 +165,9 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     },
     {
       key: "density",
-      label: prefs.density === "compact" ? "Rahat moda geç" : "Sıkışık moda geç",
+      label: density === "compact" ? "Rahat listeye geç" : "Sıkı listeye geç",
       icon: Rows3,
-      run: () => setPreference({ density: nextDensity }),
+      run: () => setPreference((cur) => appearancePatch(cur, { density: nextDensity })),
     },
     { key: "reload", label: "Sayfayı yenile", icon: RotateCw, run: () => window.location.reload() },
     { key: "help", label: "Klavye kısayolları", icon: Keyboard, run: () => onShowHelp?.() },
@@ -324,7 +326,8 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       filter={scoreCommandValue}
     >
       <CommandInput
-        placeholder="Sayfa, rapor, ayar ara..."
+        placeholder="Ara…"
+        aria-label="Sayfa, rapor, ayar ya da kayıt ara"
         value={search}
         onValueChange={setSearch}
       />

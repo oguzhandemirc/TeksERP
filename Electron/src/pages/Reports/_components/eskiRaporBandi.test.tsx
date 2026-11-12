@@ -1,14 +1,12 @@
 // =============================================================================
 // RAPORLAR v2 GEÇİŞ YÜZEYİ (R0-GECIS) — "yeni hâli" bandı, "Eski raporlar", taşınan araçlar, palet
 // =============================================================================
-// §1 band modeli: birlesti / tasindi / uzman / bayrak kapalı / hedef çizilmiyor · §2 band YALNIZ
-// `ReportPageLayout`ta (36/36: 35 yaprak + diyalog), yönlendirme yok · §3 bayrak kapalıyken DOM
-// bayt-eşit · §4 "Eski raporlar" bölümü + arama · §5 taşınan yedi araç katalogla eşit, karo/şerit ·
-// §6 palet: kapalıyken ikiz/taşınan giriş görünmez, açıkken "Eski:" ikizi özgünün yerini alır.
+// §1 band modeli: birlesti / tasindi / uzman / hedef çizilmiyor · §2 band YALNIZ `ReportPageLayout`ta,
+// yönlendirme yok · §3 band çizimi · §4 "Eski raporlar" bölümü kalktı · §5 taşınan yedi araç katalogla
+// eşit, karo/şerit · §6 palet: "Eski:" ikizi özgünün yerini alır. Bayrak dalı 2026-11-12 kalktı (tek yol).
 //
-// Negatif sondalar (2026-10-24, md5 ile geri alındı, 17/0): `legacyBannerModel`den bayrak denetimi
-// kaldırıldı → ❌ 2 (§1 bayrak kapalı · §3 DOM eşitliği); hedef için `isCenterEntryVisible`
-// (`isReportSurfaced` dahil) kaldırıldı → ❌ 1 (§1 "hedef çizilmiyorsa band yok").
+// Negatif sonda (2026-10-24, md5 ile geri alındı): hedef için `isCenterEntryVisible` (`isReportSurfaced`
+// dahil) kaldırıldı → ❌ 1 (§1 "hedef çizilmiyorsa band yok").
 // =============================================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -19,7 +17,6 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 import { REPORT_BY_KEY, REPORT_CATALOG, type ReportCatalogEntryV1, type ReportCatalogEntryV2 } from "@/lib/report-catalog";
 import { isReportOpenWith } from "@/lib/report-gate";
 
-let v2: boolean | undefined = true;
 let perms: string[] | "all" = "all";
 let closed: string[] | null = [];
 const ctx = (): OperationsVisibilityContext => ({
@@ -36,7 +33,6 @@ const ctx = (): OperationsVisibilityContext => ({
   kaliteGuvenceEnabled: false, maliyetEnabled: false, gelenBelgeEnabled: false, emanetEnabled: false,
   reportsClosedKeys: closed,
   isReportOpen: (key: string) => isReportOpenWith(closed, key),
-  ...(v2 === undefined ? {} : { reportsV2Enabled: v2 }),
   flagsReady: true,
   flagsFailed: false,
 });
@@ -51,14 +47,13 @@ vi.mock("@/hooks/useFavorites", () => ({
 
 import { ReportPageLayout } from "./ReportPageLayout";
 import { LegacyReportBanner } from "./LegacyReportBanner";
-import { RELOCATED_TOOLS, legacyBannerModel, legacyGroups, relocatedHostOf } from "../_v2/legacy-model";
+import { RELOCATED_TOOLS, legacyBannerModel, relocatedHostOf } from "../_v2/legacy-model";
 import { RelocatedToolStrip, RelocatedToolsSection } from "../_v2/RelocatedTools";
-import { reportTiles } from "../tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
-import { foldedIncludes } from "@/lib/search-fold";
 
 const access = () => ({ isAdmin: false, hasPermission, ctx: ctx() });
-const v1Entries = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1");
+// Panelde kalan v1 satırları (emekli olanlar 2026-11-12'de panelden kalktı; ucu bir sürüm açık).
+const v1Entries = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.emekli !== true);
 const MERGE_TARGET = "production/uretim-akisi";
 
 // v2 satırlarının hepsi bugün `hazir:false` — "hedef çizilir" durumu için birini geçici açarız.
@@ -67,7 +62,6 @@ function setReady(key: string, value: boolean) {
 }
 
 beforeEach(() => {
-  v2 = true;
   perms = "all";
   closed = [];
 });
@@ -85,13 +79,6 @@ describe("§1 band modeli", () => {
     expect(legacyBannerModel("production/wip", access())).toBeNull();
     closed = [];
     perms = ["report:sales"];
-    expect(legacyBannerModel("production/wip", access())).toBeNull();
-  });
-  it("⭐ bayrak kapalı (false ya da yok) → band yok", () => {
-    setReady(MERGE_TARGET, true);
-    v2 = false;
-    expect(legacyBannerModel("production/wip", access())).toBeNull();
-    v2 = undefined;
     expect(legacyBannerModel("production/wip", access())).toBeNull();
   });
   it("uzman → band yok (muhasebe aracı olarak kalır)", () => {
@@ -121,68 +108,40 @@ function sources(dir: string): Array<{ path: string; text: string }> {
   });
 }
 
-describe("§2 band yalnız ReportPageLayout'ta — 36/36", () => {
+describe("§2 band yalnız ReportPageLayout'ta — panelde kalan v1", () => {
   const files = sources(REPORTS_DIR);
-  it("⭐ her v1 yaprak `ReportPageLayout`u kendi anahtarıyla çizer; adressiz diyalog bandı kendisi bağlar", () => {
-    const missing = v1Entries.filter((e) => {
-      if (e.yuzey === "diyalog") return !files.some((f) => f.text.includes(`<LegacyReportBanner reportKey="${e.key}"`));
-      return !files.some((f) => f.text.includes("<ReportPageLayout") && f.text.includes(`reportKey="${e.key}"`));
-    });
-    expect(v1Entries).toHaveLength(36);
+  it("⭐ her v1 yaprak `ReportPageLayout`u kendi anahtarıyla çizer (adressiz diyalog — Cari Ekstre — kendi ekranında, bandsız)", () => {
+    const missing = v1Entries.filter((e) => e.yuzey !== "diyalog" && !files.some((f) => f.text.includes("<ReportPageLayout") && f.text.includes(`reportKey="${e.key}"`)));
+    expect(v1Entries).toHaveLength(10);
     expect(missing.map((e) => e.key)).toEqual([]);
   });
   it("band sayfa sayfa elle eklenmez; bileşen yönlendirme yapmaz", () => {
     const users = files.filter((f) => f.text.includes("<LegacyReportBanner")).map((f) => f.path.slice(REPORTS_DIR.length + 1)).sort();
-    expect(users).toEqual(["Finance/CariStatementDialog.tsx", "_components/ReportPageLayout.tsx"]);
+    expect(users).toEqual(["_components/ReportPageLayout.tsx"]);
     const src = readFileSync(resolve(__dirname, "LegacyReportBanner.tsx"), "utf8");
     expect(src).not.toMatch(/useNavigate|<Navigate|location\.(assign|replace|href)/);
   });
 });
 
-describe("§3 bayrak kapalıyken DOM bayt-eşit", () => {
+describe("§3 band çizimi", () => {
   const page = () => (
     <ReportPageLayout title="Duruş Pareto" reportKey="dokuma/durus-pareto" filters={<div />}>
       <p>içerik</p>
     </ReportPageLayout>
   );
-  it("⭐ undefined ve false aynı DOM; band yok", () => {
+  it("⭐ hedef yüzeydeyken eski sayfada 'yeni hâli' bandı çizilir", () => {
     setReady("dokuma/duruslar", true);
     try {
-      v2 = undefined;
-      const a = renderWithProviders(page()).container.innerHTML;
-      v2 = false;
-      const b = renderWithProviders(page()).container.innerHTML;
-      expect(b).toBe(a);
-      expect(a).not.toContain("yeni hâli");
-      v2 = true;
       expect(renderWithProviders(page()).container.innerHTML).toContain("Bu raporun yeni hâli:");
     } finally {
       setReady("dokuma/duruslar", false);
     }
   });
-  it("taşınan araç karosu/şeridi bayrak kapalıyken çizilmez", () => {
-    v2 = false;
-    const { container } = renderWithProviders(<><RelocatedToolsSection host="/operations" title="İz sürme" /><RelocatedToolStrip host="/system/logs" /></>);
-    expect(container.innerHTML).toBe("");
-  });
 });
 
-describe("§4 Eski raporlar bölümü", () => {
-  it("⭐ açıkken 36 v1 rapor eski kategorilerinde; kapalıyken boş", () => {
-    const groups = legacyGroups(reportTiles, access());
-    expect(groups.reduce((n, g) => n + g.cards.length, 0)).toBe(36);
-    v2 = false;
-    expect(legacyGroups(reportTiles, access())).toEqual([]);
-  });
-  it("izinsiz / kapalı rapor çizilmez; arama başlık + soruyu kapsar; uzman işaretli", () => {
-    perms = ["report:finance", "finance:read"];
-    closed = ["finance/fx-diff"];
-    const cards = legacyGroups(reportTiles, access()).flatMap((g) => g.cards);
-    expect(cards.map((c) => c.entry.key).sort()).toEqual(["finance/aging", "finance/cash-book", "finance/cheque-due", "finance/statement", "finance/vat-summary"]);
-    expect(cards.find((c) => c.entry.key === "finance/statement")?.to).toBe("/finance/cari");
-    expect(cards.find((c) => c.entry.key === "finance/cash-book")?.expert).toBe(true);
-    const hit = legacyGroups(reportTiles, access(), { term: "kdv", includes: foldedIncludes }).flatMap((g) => g.cards);
-    expect(hit.map((c) => c.entry.key)).toEqual(["finance/vat-summary"]);
+describe("§4 Eski raporlar bölümü kalktı (2026-11-12)", () => {
+  it("⭐ panelde birleşen (yeni hâli olan) eski rapor kalmadı — kalan v1 yalnız taşınan araç ve muhasebe uzmanı", () => {
+    expect(v1Entries.filter((e) => e.yeniHali.tur === "birlesti").map((e) => e.key)).toEqual([]);
   });
 });
 
@@ -215,18 +174,10 @@ describe("§5 taşınan yedi araç", () => {
 
 describe("§6 palet", () => {
   const visible = () => allCommandEntries.filter((e) => !e.visibleWhen || e.visibleWhen(ctx()));
-  it("⭐ kapalıyken ikiz ve taşınan girişlerin hiçbiri görünmez; undefined = false", () => {
-    v2 = undefined;
-    const a = visible().map((e) => `${e.key}|${e.label}|${e.to}`);
-    v2 = false;
-    expect(visible().map((e) => `${e.key}|${e.label}|${e.to}`)).toEqual(a);
-    expect(a.some((s) => s.includes(":legacy|") || s.startsWith("relocated:") || s.includes("|Eski: "))).toBe(false);
-  });
-  it("açıkken eski yaprak 'Eski:' ikiziyle görünür, özgünü gizlenir; taşınan araç yeni yerinin adıyla", () => {
+  it("'Eski:' ikizi yok; taşınan araç yeni yerinin adıyla, kategori ikizi gizli", () => {
+    expect(allCommandEntries.filter((e) => e.key.endsWith(":legacy") || e.label.startsWith("Eski:")).map((e) => e.key)).toEqual([]);
     const keys = new Set(visible().map((e) => e.key));
-    expect(keys.has("report:production:wip")).toBe(false);
-    expect(keys.has("report:production:wip:legacy")).toBe(true);
-    expect(allCommandEntries.find((e) => e.key === "report:production:wip:legacy")?.label).toBe("Eski: Nerede Takıldı (WIP)");
+    expect(keys.has("report:dokuma:karne")).toBe(false); // taşındı: `relocated:` girişi görünür
     const moved = visible().filter((e) => e.key.startsWith("relocated:"));
     expect(moved).toHaveLength(7);
     expect(moved.find((e) => e.key === "relocated:dokuma/karne")?.label).toBe("Tezgah Salonu · Karne Listesi ve Mühür");

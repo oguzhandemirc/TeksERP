@@ -1,4 +1,5 @@
 import { factoryDayKey, factoryLocaleDateString } from "@/lib/factory-time";
+import { qtyFormatter } from "@/lib/format";
 // =============================================================================
 // DOKUMA İŞİ — panel tipleri (backend `WeavingOrderDto` aynası)
 // =============================================================================
@@ -122,7 +123,7 @@ export function formatDay(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? "—" : factoryLocaleDateString(d, "tr-TR");
 }
 
-const M = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const M = qtyFormatter(1);
 /** Metre — null "açık uçlu" demektir, 0 değil. */
 export function formatPlannedM(v: number | null): string {
   return v === null ? "Açık uçlu" : `${M.format(v)} m`;

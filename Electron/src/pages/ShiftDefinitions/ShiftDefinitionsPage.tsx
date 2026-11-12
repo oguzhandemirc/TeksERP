@@ -7,7 +7,8 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import { useLocalTable } from "@/hooks/useLocalTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -53,7 +54,7 @@ export function ShiftDefinitionsPage() {
       )),
     [],
   );
-  const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel(), enableRowSelection: false });
+  const table = useLocalTable({ tableKey: "shift-definitions", data: rows, columns });
 
   return (
     <PageShell>
@@ -72,9 +73,13 @@ export function ShiftDefinitionsPage() {
           </div>
         }
       />
-      <div className="flex items-center gap-2">
+      {/* Katalog küçük, sunucuda arama yok: araç çubuğunda yalnız arşiv anahtarı + standart tablo araçları. */}
+      <div data-list-surface="toolbar" className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         <Switch id="shift-inactive" checked={includeInactive} onCheckedChange={setIncludeInactive} />
         <Label htmlFor="shift-inactive">Arşivdekileri göster</Label>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Vardiya tanımları" />
+        </div>
       </div>
       <DataTable<ShiftDefinition>
         table={table}

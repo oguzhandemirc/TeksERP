@@ -20,6 +20,7 @@ import { dayEndIso, dayStartIso } from "@/pages/Finance/Cheques/dates";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { DecimalLike, StockCountLine, StockCountStatus } from "./service";
 import { lowerTr, upperTr } from "../../../lib/tr-case";
+import { formatQty } from "@/lib/format";
 
 // -----------------------------------------------------------------------------
 // SAYI
@@ -35,7 +36,7 @@ export function num(v: DecimalLike | null | undefined): number {
 /** Ekrana giden miktar — TR biçim, en fazla 2 hane. */
 export function qty(v: DecimalLike | null | undefined): string {
   if (v == null) return "—";
-  return num(v).toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+  return formatQty(num(v), 2);
 }
 
 /** Ondalık hane sayısı — `subtractQty` ölçeğini kurar. */

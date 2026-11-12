@@ -10,6 +10,7 @@
 // ⚠️ Durum filtresi CSV taşır (backend `status` parametresini virgülle böler);
 // "Canlı olanlar" tek bir seçenek gibi görünür ama arkasında dört durum vardır.
 // =============================================================================
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -65,9 +66,11 @@ export function isFilterDirty(f: ChequeFilterState): boolean {
 interface Props {
   value: ChequeFilterState;
   onChange: (next: ChequeFilterState) => void;
+  /** Sağ uçtaki standart tablo araçları (Sütunlar). */
+  tools?: ReactNode;
 }
 
-export function ChequeFilterBar({ value, onChange }: Props) {
+export function ChequeFilterBar({ value, onChange, tools }: Props) {
   const set = <K extends keyof ChequeFilterState>(key: K, v: ChequeFilterState[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -77,7 +80,7 @@ export function ChequeFilterBar({ value, onChange }: Props) {
         <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-8"
-          placeholder="Belge no / seri no / keşideci / banka ara…"
+          placeholder="Ara…" title="Belge no / seri no / keşideci / banka ara" aria-label="Belge no / seri no / keşideci / banka ara"
           value={value.search}
           onChange={(e) => set("search", e.target.value)}
         />
@@ -139,6 +142,7 @@ export function ChequeFilterBar({ value, onChange }: Props) {
           Filtreleri temizle
         </Button>
       )}
+      {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
     </div>
   );
 }

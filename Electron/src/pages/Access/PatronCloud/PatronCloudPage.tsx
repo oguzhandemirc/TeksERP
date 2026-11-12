@@ -1,21 +1,24 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CloudCog, Lock } from "lucide-react";
+import { AlertTriangle, CloudCog } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { apiErrorText } from "@/lib/api-error";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { SettingsPasswordCancelled } from "@/lib/settings-password";
+import { useCloudAccountsTable } from "./accountColumns";
 import { patronCloudService, type CloudAccount, type PatronCloudStatus } from "./service";
-import { ACCOUNT_STATE_LABELS, INELIGIBLE_LABELS, URL_SOURCE_LABELS, runOutcomeLabel, stamp } from "./labels";
+import { INELIGIBLE_LABELS, URL_SOURCE_LABELS, runOutcomeLabel, stamp } from "./labels";
 
 const QUERY_KEY = ["patron-cloud-status"];
 
@@ -50,15 +53,15 @@ export function PatronCloudPage() {
         description="Patronun uygulamasından gelen sipariş ve cari kayıtları bu fabrikada normal yoldan işlenir."
         actions={<RefreshButton queryKey={QUERY_KEY} successMessage="Yönetim bulutu durumu yenilendi" />}
       />
-      <PageBody className="space-y-4 p-6">
+      <ListMessage className="shrink-0 space-y-4 empty:hidden">
         {q.isError && (
           <Callout tone="danger" icon={AlertTriangle} title="Durum alınamadı">
             {apiErrorText(q.error, "Sunucuya ulaşılamıyor. \"Yenile\" ile tekrar deneyin.")}
           </Callout>
         )}
         {s && <StatusSection s={s} busy={busy} onActivate={activate} />}
-        {s && <AccountsSection s={s} onLocked={() => qc.invalidateQueries({ queryKey: QUERY_KEY })} />}
-      </PageBody>
+      </ListMessage>
+      {s && <AccountsSection s={s} onLocked={() => qc.invalidateQueries({ queryKey: QUERY_KEY })} />}
     </PageShell>
   );
 }
@@ -126,46 +129,29 @@ function AccountsSection({ s, onLocked }: { s: PatronCloudStatus; onLocked: () =
     }
   };
 
+  const onLock = useCallback((h: CloudAccount) => setTarget(h), []);
+  const table = useCloudAccountsTable(s.hesaplar, onLock, busy);
+
   return (
-    <section className="space-y-2">
-      <div className="flex items-baseline justify-between">
+    <>
+      <ListToolbar className="flex-row flex-wrap items-baseline gap-x-3">
         <h2 className="font-medium">Bulut hesapları</h2>
         <span className="text-xs text-muted-foreground">Son alınma: {stamp(s.hesaplarAlinma)}</span>
-      </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Bulut hesapları" />
+        </div>
+      </ListToolbar>
       {s.hesaplar.length === 0 ? (
-        <EmptyState
-          title="Bulut hesabı yok"
-          description="Liste bulutla eşitlemeden gelir; hesapları fabrikanın bulut yöneticisi bulutta açar."
-        />
+        <ListBody>
+          <ListMessage>
+            <EmptyState
+              title="Bulut hesabı yok"
+              description="Liste bulutla eşitlemeden gelir; hesapları fabrikanın bulut yöneticisi bulutta açar."
+            />
+          </ListMessage>
+        </ListBody>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Ad</TableHead>
-              <TableHead>E-posta</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Son giriş</TableHead>
-              <TableHead className="w-28" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {s.hesaplar.map((h) => (
-              <TableRow key={h.id}>
-                <TableCell>{h.ad}</TableCell>
-                <TableCell>{h.eposta ?? "—"}</TableCell>
-                <TableCell>{ACCOUNT_STATE_LABELS[h.durum]}</TableCell>
-                <TableCell>{stamp(h.sonGiris)}</TableCell>
-                <TableCell className="text-right">
-                  {h.durum === "AKTIF" && (
-                    <Button size="sm" variant="outline" onClick={() => setTarget(h)} disabled={busy}>
-                      <Lock className="mr-1 h-3.5 w-3.5" /> Kilitle
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DataTable table={table} exportName="Bulut hesapları" />
       )}
       <ConfirmDialog
         open={target !== null}
@@ -185,6 +171,6 @@ function AccountsSection({ s, onLocked }: { s: PatronCloudStatus; onLocked: () =
         isPending={busy}
         onConfirm={() => (target ? lock(target) : undefined)}
       />
-    </section>
+    </>
   );
 }

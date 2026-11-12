@@ -3,7 +3,7 @@ import { AlertTriangle, Tags } from "lucide-react";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { rollStatusLabels, RollStatus, rollEntrySourceLabels } from "@/types/enums";
 import type { QualityGrade } from "@/pages/QualityGrades/types";
 import { type Roll, shipmentScopeLabels, activeDispatchOf, activeCategoryOf } from "./types";
@@ -319,7 +319,7 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     // detay panelinde durur (izlenebilirlik yüzeyi).
     cell: ({ row }) => (
       <div className="text-right tabular-nums">
-        {row.original.currentQty.toLocaleString("tr-TR", { useGrouping: false })}
+        {formatQty(row.original.currentQty)}
       </div>
     ),
   },

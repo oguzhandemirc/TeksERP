@@ -13,12 +13,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { safeFormat } from "@/lib/format";
+import { qtyFormatter, safeFormat } from "@/lib/format";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { rollService } from "./service";
 import type { Roll } from "./types";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 
 /**
  * STOKTAN KALDIRMANIN İKİ ANLAMI (2026-08-25 kullanıcı kararı).

@@ -7,11 +7,12 @@ import { cn } from "@/lib/utils";
 import { issueLabel, type ServerIssue } from "../code/issueDiagnostics";
 import { openPdfPreview } from "./pdfPreview";
 import type { PreviewState } from "./usePreview";
+import { formatQty } from "@/lib/format";
 
 export const PREVIEW_IFRAME_TITLE = "Belge önizlemesi";
 
 function formatBytes(n: number): string {
-  return n < 1024 ? `${n} B` : `${(n / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} KB`;
+  return n < 1024 ? `${n} B` : `${formatQty((n / 1024), 1)} KB`;
 }
 
 interface Props {

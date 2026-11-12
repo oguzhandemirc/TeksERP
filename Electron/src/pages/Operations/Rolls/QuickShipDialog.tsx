@@ -45,6 +45,7 @@ import type { ShipmentDestination } from "@/pages/Operations/SackContentEdit/typ
 import { Callout } from "@/components/ui/callout";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
+import { formatQty } from "@/lib/format";
 
 /** Miktar modu yalnız top taşıyan kartı listeler (top = kumaş); hizmet kalemi sunucuda süzülür. */
 const QUICK_SHIP_ITEM_FILTERS = { itemType: ROLL_BEARING_ITEM_TYPES.join(",") };
@@ -310,7 +311,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
 
           <p className="text-right text-sm text-muted-foreground">
             Toplam: <b className="text-foreground">{totals.count}</b> top ·{" "}
-            <b className="text-foreground">{totals.meters.toLocaleString("tr-TR")}</b> m
+            <b className="text-foreground">{formatQty(totals.meters)}</b> m
           </p>
         </div>
 

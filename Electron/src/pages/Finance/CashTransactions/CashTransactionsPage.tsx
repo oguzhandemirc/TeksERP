@@ -18,7 +18,7 @@
 // ⚠️ KIRPMA SESSİZ DEĞİL: sunucu toplamı gösterilen satırı aşarsa yazılır.
 // =============================================================================
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, BookOpen, PieChart, Receipt } from "lucide-react";
@@ -30,7 +30,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
 import type { CashAccountOption } from "../PeriodClose/CashAccountPicker";
 import { CashTxnFilterBar } from "./CashTxnFilterBar";
-import { CashTxnTable } from "./CashTxnTable";
+import { CashTxnTable, useCashTxnTable } from "./CashTxnTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { CashTxnFormDialog } from "./CashTxnFormDialog";
 import { CashTransferDialog } from "./CashTransferDialog";
 import { CashTxnCancelDialog } from "./CashTxnCancelDialog";
@@ -78,7 +79,8 @@ export function CashTransactionsPage() {
   // raporunu oynatır → dar invalidate ekranın bir yarısını bayat bırakır.
   const invalidate = () => void qc.invalidateQueries({ queryKey: ["finance"] });
 
-  const rows = q.data?.data ?? [];
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const table = useCashTxnTable(rows, { onCancel: setCancelTarget, onAllocations: allocOn ? setAllocTarget : undefined });
   const total = q.data?.pagination.total ?? 0;
 
   return (
@@ -123,8 +125,20 @@ export function CashTransactionsPage() {
         account={account}
         onAccountChange={setAccount}
         onChange={setFilters}
+        tools={<DataTableTools table={table} compact exportName="Kasa hareketleri" />}
       />
 
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <>
+          <CashTxnTable table={table} />
+          {total > rows.length && (
+            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+              {total} kaydın ilk {rows.length} tanesi gösteriliyor (en yeni tarihten geriye). Aradığınızı
+              bulmak için hesap, tür ya da tarih filtresini kullanın.
+            </p>
+          )}
+        </>
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -149,18 +163,9 @@ export function CashTransactionsPage() {
                 : "Kasa hareketi yok. “Kasa Fişi” ile masraf/gelir, “Virman” ile hesaplar arası aktarım girebilirsiniz."}
             </div>
           </ListMessage>
-        ) : (
-          <>
-            <CashTxnTable rows={rows} onCancel={setCancelTarget} onAllocations={allocOn ? setAllocTarget : undefined} />
-            {total > rows.length && (
-              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                {total} kaydın ilk {rows.length} tanesi gösteriliyor (en yeni tarihten geriye). Aradığınızı
-                bulmak için hesap, tür ya da tarih filtresini kullanın.
-              </p>
-            )}
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen — ve `clientToken`

@@ -17,8 +17,8 @@ import { formatFactory } from "@/lib/factory-time";
 describe("kg()", () => {
   it("Decimal STRING'i de sayı gibi biçimlendirir (asıl tuzak)", () => {
     // `"3324".toLocaleString(...)` seçenekleri yok sayıp "3324" döndürürdü.
-    expect(kg("3324")).toBe("3.324,00 kg");
-    expect(kg(3324)).toBe("3.324,00 kg");
+    expect(kg("3324")).toBe("3324,00 kg");
+    expect(kg(3324)).toBe("3324,00 kg");
   });
 
   it("ondalık tabanı 2, tavanı 3 hanedir (kolon Decimal(14,3))", () => {

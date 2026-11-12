@@ -25,8 +25,9 @@ import type { Roll } from "./types";
 import { serverSuccessText } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { TERIM } from "@/lib/terim";
+import { qtyFormatter } from "@/lib/format";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 
 /**
  * ÜRETİME AL — seçili topları YENİ bir iş emrine sokar.

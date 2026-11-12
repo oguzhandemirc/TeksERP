@@ -156,7 +156,7 @@ export function PermissionGrid({
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Yetki kodu, açıklama veya modül ara..."
+            placeholder="Ara…" title="Yetki kodu, açıklama veya modül ara" aria-label="Yetki kodu, açıklama veya modül ara"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-8 pl-8 text-sm"
@@ -414,7 +414,7 @@ function PermissionRow({
           )}
         </div>
       </TableCell>
-      <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
+      <TableCell className="break-words [--cell-wrap:normal] py-1.5 text-xs text-muted-foreground">
         {p.description}
         {p.roleNames && p.roleNames.length > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -424,7 +424,7 @@ function PermissionRow({
             {p.roleNames.map((r) => (
               <span
                 key={r}
-                className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                className="rounded-badge bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
                 title="Bu yetki bu rolün paketinde var — öneridir, zorunluluk değil."
               >
                 {r.replace(/^Mobil — |^Web — /, "")}

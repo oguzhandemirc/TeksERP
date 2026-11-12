@@ -13,9 +13,11 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import type { ReportKey } from "../../constants/report-catalog";
 import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
-import { coreRangeQuerySchema, resolveCoreCompare } from "../../services/reports/temel/_common";
+import { coreRangeQuerySchema, resolveCoreCompare, viewQueryKey } from "../../services/reports/temel/_common";
 import { kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
-import { buildLostWorkReport } from "../../services/reports/temel/vazgecilen-is.temel";
+import { buildLostWorkReport, LOST_WORK_VIEWS } from "../../services/reports/temel/vazgecilen-is.temel";
+import { SHIPPED_VIEWS } from "../../services/reports/temel/sevkiyat.views";
+import { ORDER_DEMAND_VIEWS } from "../../services/reports/temel/siparis-talep.views";
 import { runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
 import {
   DEADLINE_DIMS, OPEN_ORDER_DIMS, ORDER_DEMAND_DIMS, SHIPPED_DIMS,
@@ -30,11 +32,15 @@ const reportGate = (key: ReportKey) => [requireReportOpen(key), requirePermissio
 
 // Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400).
 // `varyant` yalnız ucun beyanlı boyutlarından (dışı 400), `donemler` "ay:6" biçimi (R1-VARYANT).
-export const coreOrderDemandQuerySchema = coreRangeQuerySchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId, ...variantQueryKeys(ORDER_DEMAND_DIMS) }).strict();
-export const coreShippedQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination, ...variantQueryKeys(SHIPPED_DIMS) }).strict();
+export const coreOrderDemandQuerySchema = coreRangeQuerySchema
+  .extend({ ...musteriEkseni, itemId: kalemEkseni.itemId, ...variantQueryKeys(ORDER_DEMAND_DIMS), ...viewQueryKey(ORDER_DEMAND_VIEWS) })
+  .strict();
+export const coreShippedQuerySchema = coreRangeQuerySchema
+  .extend({ destination: musteriEkseni.destination, ...variantQueryKeys(SHIPPED_DIMS), ...viewQueryKey(SHIPPED_VIEWS) })
+  .strict();
 export const coreDeadlineQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination, ...variantQueryKeys(DEADLINE_DIMS) }).strict();
 export const coreOpenOrderQuerySchema = z.object({ itemId: kalemEkseni.itemId, ...variantQueryKeys(OPEN_ORDER_DIMS) }).strict();
-export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQueryKeys([]) }).strict();
+export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQueryKeys([]), ...viewQueryKey(LOST_WORK_VIEWS) }).strict();
 
 /**
  * @openapi
@@ -46,6 +52,7 @@ export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQ
  *       Sipariş Karnesi'nin sayılarıyla (aynı parametre) kurulan sunum zarfı: ana sayı alınan
  *       sipariş metresi (iptaller hariç), yan sayılar sipariş adedi, müşteri sayısı, tutar
  *       (tek para birimiyse; fiyatsız satır sayılmaz). Grafik günlük sipariş metresi (fabrika günü).
+ *       `gorunum` tabloyu eski Talep Analizi / Müşteri Sipariş Profili listelerine çevirir (aynı süzgeç; aylık = son 24 ay).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
@@ -54,6 +61,7 @@ export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQ
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Siparişin yönü (Sipariş Karnesi ile aynı)" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, cesit, kumas, renk, aylik, musteriProfili] }, description: "Tablo görünümü (varsayılan ozet = müşteri). musteriProfili tüm zamanların müşteri profilidir; yön/kumaş süzgeciyle 400 VIEW_FILTER_UNSUPPORTED" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [musteri, urun, yon] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
@@ -66,7 +74,7 @@ router.get("/sales/siparis-talep", ...reportGate("sales/siparis-talep"), async (
     const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
     const { sunum, suzgec } = await runCoreWithExtras({
       range, compareRange, dims: ORDER_DEMAND_DIMS, varyant: input.varyant, donemler: input.donemler,
-      run: orderDemandRunner({ customerId: input.customerId, destination: input.destination, itemId: input.itemId }, compareMode),
+      run: orderDemandRunner({ customerId: input.customerId, destination: input.destination, itemId: input.itemId }, compareMode, input.gorunum),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
   } catch (e) {
@@ -83,13 +91,15 @@ router.get("/sales/siparis-talep", ...reportGate("sales/siparis-talep"), async (
  *     description: |
  *       Ana sayı BRÜT sevk metresi (`_shipped`; iade düşülmez, ayrı belgedir). Yan sayılar sevk
  *       tutarı (`report:sales` — Yurtiçi/Yurtdışı raporuyla aynı izin), top sayısı, ihracat payı
- *       (yön süzgeci yoksa). Grafik müşteri × yön yığın çubuğu (ilk 10 + Diğer).
+ *       (yön süzgeci yoksa). Grafik müşteri × yön yığın çubuğu (ilk 10 + Diğer). `gorunum` tabloyu eski
+ *       Yurtiçi/Yurtdışı Satış kırılımlarına çevirir (yön · yön × para birimi · müşteri · ülke · kumaş; yön süzgeci kovayı seçer).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Sevkiyatın donmuş yönü" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, yon, tutar, musteri, ulke, kumas] }, description: "Tablo görünümü (varsayılan ozet = müşteri)" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [yon] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
@@ -101,7 +111,7 @@ router.get("/sales/sevkiyat", ...reportGate("sales/sevkiyat"), async (req: Reque
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
     const { sunum, suzgec } = await runCoreWithExtras({
-      range, compareRange, dims: SHIPPED_DIMS, varyant: input.varyant, donemler: input.donemler, run: shippedRunner(input.destination, compareMode),
+      range, compareRange, dims: SHIPPED_DIMS, varyant: input.varyant, donemler: input.donemler, run: shippedRunner(input.destination, compareMode, input.gorunum),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
   } catch (e) {
@@ -184,12 +194,13 @@ router.get("/sales/acik-siparisler", ...reportGate("sales/acik-siparisler"), asy
  *     description: |
  *       İade (İade Karnesi) ve sipariş iptali (Sipariş İptal Karnesi; çıpa iptal anı) İKİ ayrı
  *       satır; ana sayı ikisinin metre toplamı. İptal oranı tek tanımdan (`cancelRatePct`).
- *       Süzgeç yok: iki kaynağın yön anlamı farklı.
+ *       Süzgeç yok: iki kaynağın yön anlamı farklı. `gorunum` tabloyu eski İptal/İade Karnesi listesine çevirir.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, iptaller, iptalSebep, iptalMusteri, iadeMusteri, iadeKumas, iadeRenk, iadeSebep] }, description: "Tablo görünümü (varsayılan ozet)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
@@ -201,7 +212,7 @@ router.get("/sales/vazgecilen-is", ...reportGate("sales/vazgecilen-is"), async (
     const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
     const { sunum } = await runCoreWithExtras({
       range, compareRange, dims: [], donemler: input.donemler,
-      run: (r, c) => buildLostWorkReport({ range: r, compareRange: c, compareMode }),
+      run: (r, c) => buildLostWorkReport({ range: r, compareRange: c, compareMode, view: input.gorunum }),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {

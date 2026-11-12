@@ -1,8 +1,8 @@
 // Rapor Merkezi çizim kümesi — SAF. Kendi süzgeci YOKTUR: dört kapı da mevcut tek kaynaklardan
-// okunur (yüzey `isReportSurfaced` · izin · modül `isRouteModuleOpen` = route kapısının aynısı ·
+// okunur (yüzey `isReportOnPanel` · izin · modül `isRouteModuleOpen` = route kapısının aynısı ·
 // rapor kapısı `ctx.isReportOpen`). Karo, route ve palet aynı yüklemi okusun diye tek fonksiyon.
 import { REPORT_CATALOG, type ReportCatalogEntry, type ReportKategoriV2 } from "@/lib/report-catalog";
-import { isReportSurfaced } from "@/lib/report-gate";
+import { isReportOnPanel } from "@/lib/report-gate";
 import { isRouteModuleOpen } from "@/lib/route-modules";
 import { EMPTY_MENU_LAYOUT, isMenuHidden, type MenuLayoutState } from "@/lib/menu-layout";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
@@ -18,7 +18,7 @@ export interface CenterAccess {
 
 /** Kişiden bağımsız kısım (yüzey · modül · rapor kapısı) — palet bunu okur, izni girişin `permission`ı taşır. */
 export function isCenterEntryOpen(entry: ReportCatalogEntry, ctx: OperationsVisibilityContext): boolean {
-  if (!isReportSurfaced(entry)) return false;
+  if (!isReportOnPanel(entry)) return false;
   if (!isRouteModuleOpen(`/${entry.panelYolu}`, ctx)) return false;
   if (DEVERE_REQUIRED.has(entry.key) && !ctx.devereEnabled) return false;
   return ctx.isReportOpen(entry.key);

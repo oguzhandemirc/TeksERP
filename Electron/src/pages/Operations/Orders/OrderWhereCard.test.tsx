@@ -83,12 +83,12 @@ describe("OrderWhereCard — yan panel", () => {
     expect(screen.getByTestId("where-trail").textContent).toBe(
       "✓ Ham kontrol→● Fason (Akın Boya, 8 top, 3 gündür)→● Tambur (4 top)→○ Kalite",
     );
-    expect(screen.getByText("Tambur: 4 top · 1.250 m")).toBeInTheDocument();
-    expect(screen.getByText("Fasonda – Akın Boya: 8 top · 1.600 m · 3 gündür")).toBeInTheDocument();
-    expect(screen.getByText("Sevke hazır: 6 top · 1.800 m")).toBeInTheDocument();
+    expect(screen.getByText("Tambur: 4 top · 1250 m")).toBeInTheDocument();
+    expect(screen.getByText("Fasonda – Akın Boya: 8 top · 1600 m · 3 gündür")).toBeInTheDocument();
+    expect(screen.getByText("Sevke hazır: 6 top · 1800 m")).toBeInTheDocument();
     expect(screen.getByText(/^Son hareket: \d{2}\.\d{2}\.2026 \d{2}:\d{2}$/)).toBeInTheDocument();
     expect(screen.getByText("Son hareket: kayıt yok")).toBeInTheDocument();
-    expect(screen.getByText("Saten · 1234 Ekru · hedef 2.400 m")).toBeInTheDocument();
+    expect(screen.getByText("Saten · 1234 Ekru · hedef 2400 m")).toBeInTheDocument();
     expect(screen.getByText("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha")).toBeInTheDocument();
     expect(screen.getByText("Termini geçti")).toBeInTheDocument();
     expect(screen.getByText("Henüz gönderilmedi")).toBeInTheDocument();

@@ -92,7 +92,7 @@ export function WorkOrderCompleteDispositionList({ rolls, choices, onChange }: P
                   });
                 }
               }}
-              className="rounded border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted"
+              className="rounded-badge border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted"
             >
               {o.label}
             </button>

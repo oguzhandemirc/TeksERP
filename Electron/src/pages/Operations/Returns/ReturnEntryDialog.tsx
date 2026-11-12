@@ -10,8 +10,9 @@ import { ReturnCommonFields } from "./ReturnCommonFields";
 import { ReturnLotPicker } from "./ReturnLotPicker";
 import { ShipmentReturnPicker } from "./ShipmentReturnPicker";
 import { useReturnEntry } from "./useReturnEntry";
+import { qtyFormatter } from "@/lib/format";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
+const DEC = qtyFormatter(2);
 
 /** Alt şerit: özet (N top · m · K belge) + Kapat / İade Al. */
 function ReturnFooter({ summary, canSubmit, pending, onClose, onSubmit }: {

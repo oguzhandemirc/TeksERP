@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { listAvailableOrderLines, num, type AvailableOrderLine } from "@/pages/Operations/Orders/availableLines";
 import { formatDay } from "./types";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
-const fmt = (n: number | null) => (n === null ? "ölçülmüyor" : `${n.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} m`);
+const fmt = (n: number | null) => (n === null ? "ölçülmüyor" : `${formatQty(n, 0)} m`);
 
 interface Props {
   open: boolean;
@@ -86,7 +87,7 @@ export function OrderLinePickerDialog({ open, onOpenChange, itemId, colorId, exc
             {itemId ? "Yalnız bu işin kumaşına (ve seçiliyse rengine) ait AÇIK sipariş kalemleri." : "Kumaş henüz seçilmedi: kalemi seçin, kumaş ve renk ondan dolar (değiştirebilirsiniz)."} Bağ tahsis değildir; tahsis metresi sonra, isteğe bağlı.
           </DialogDescription>
         </DialogHeader>
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Sipariş no veya müşteri ara…" aria-label="Sipariş ara" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ara…" title="Sipariş no veya müşteri ara" aria-label="Sipariş ara" />
         <div className="max-h-[48vh] overflow-auto rounded-md border">
           {q.isLoading ? (
             <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">

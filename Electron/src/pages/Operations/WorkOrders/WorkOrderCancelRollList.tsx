@@ -54,7 +54,7 @@ export function WorkOrderCancelRollList({ rolls, choices, onChange, onBulk, disa
               type="button"
               disabled={disabled}
               onClick={() => onBulk(o.value)}
-              className="rounded border px-1.5 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
+              className="rounded-badge border px-1.5 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
             >
               {o.label}
             </button>

@@ -1,10 +1,9 @@
 // =============================================================================
 // BEKÇİ — EKSEN SEÇİCİLERİ (R5b-c): "Tümü" = seçimin YOKLUĞU
 // =============================================================================
-// Üç iddia ölçülür: ① seçenek yokken şerit SESSİZCE boş görünmez, pasif ve
-// SEBEBİNİ söyler ② seçim yapmak listeyi DARALTMAZ (kaynak süzgeçten bağımsız)
-// ③ niteleyici ETİKETTE yaşar — "İhracat" yazan seçicinin müşteri VARSAYILANINI
-// süzdüğü ekranda okunur; yoksa tutarlı görünen bir tablo yanlış okunur.
+// İki iddia ölçülür: ① seçenek yokken şerit SESSİZCE boş görünmez, pasif ve
+// SEBEBİNİ söyler ② seçim yapmak listeyi DARALTMAZ (kaynak süzgeçten bağımsız).
+// (③ yön seçicisi `DestinationSelect` son kullanıcısı Müşteri Sipariş Profili ile 2026-11-12'de kalktı.)
 //
 // Negatif sonda (bir kezlik, cp+sha256 ile geri alındı): tetikten
 // `disabled={list.length === 0}` kaldırıldı → ⭐① ❌.
@@ -13,7 +12,6 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReportAxisOption } from "../_services/types";
-import { DestinationSelect } from "./DestinationSelect";
 import { ReportMultiSelect } from "./ReportMultiSelect";
 
 const MUSTERILER: ReportAxisOption[] = [
@@ -77,16 +75,5 @@ describe("ReportMultiSelect", () => {
     expect(trigger()).toHaveTextContent("2 seçili");
     await u.click(screen.getByTitle("Süzgeci temizle"));
     expect(onChange).toHaveBeenCalledWith([]);
-  });
-});
-
-describe("DestinationSelect", () => {
-  it("⭐ niteleyici ETİKETTE: 'sipariş yönü (açılışta)' hem başlıkta hem seçeneklerde", async () => {
-    const u = userEvent.setup();
-    render(<DestinationSelect id="d" value="" onChange={vi.fn()} />);
-    expect(screen.getByText("Sipariş yönü (açılışta)")).toBeInTheDocument();
-    await u.click(screen.getByRole("combobox"));
-    expect(await screen.findByText("İhracat (sipariş yönü)")).toBeInTheDocument();
-    expect(screen.getByText("Yurtiçi (sipariş yönü)")).toBeInTheDocument();
   });
 });

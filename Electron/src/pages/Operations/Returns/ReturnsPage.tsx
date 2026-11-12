@@ -22,8 +22,9 @@ import { ReturnInvoiceDraft } from "./ReturnInvoiceDraft";
 import { canDraftReturnInvoice } from "./returnInvoice";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { ReturnsFilterRow, RETURN_PERSIST } from "./ReturnsFilterRow";
+import { qtyFormatter } from "@/lib/format";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 
 export function ReturnsPage() {
   const qc = useQueryClient();
@@ -43,7 +44,7 @@ export function ReturnsPage() {
   };
   // İade yazma izni yoksa okutulan kod pencere açmaz, aramaya düşer.
   const canWrite = useRoleAccess().hasPermission("return:write");
-  const { table, query, search, setSearch, pagination } = useDataTable<ReturnRow>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ReturnRow>({
     queryKey: "returns",
     fetchFn: returnsService.listCursor,
     columns: returnColumns,
@@ -88,7 +89,8 @@ export function ReturnsPage() {
               }
               setSearch(code);
             }}
-            placeholder="Ara ya da kod okut (top · çuval · sevkiyat) → iade gir"
+            placeholder="Ara / okut…"
+            hint="Ara ya da kod okut (top · çuval · sevkiyat) → iade gir"
             expectPrefix={["ROLL", "SACK", "SHIPMENT"]}
             className="w-56 min-w-[10rem] shrink 2xl:w-96"
             inputClassName="h-8 text-sm"
@@ -96,6 +98,7 @@ export function ReturnsPage() {
           />
         }
         trailing={<SavedViewsMenu compact />}
+        tools={{ table, fetchAll, exportName: "İadeler" }}
       />
       {summary && summary.count > 0 && (
         <div className="flex gap-6 border-b px-4 py-2 text-sm">

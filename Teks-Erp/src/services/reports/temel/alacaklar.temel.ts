@@ -11,9 +11,33 @@ import { factoryDateTr, factoryYmd } from "../../../constants/time";
 import { factoryPreviousMonthEnd } from "./_day-range";
 import { chequeService, type ChequeDueSummary } from "../../cheque.service";
 import { anlatiUret } from "../anlati/anlati";
-import { getAgingReport, type AgingCurrencyBlock } from "../finance-aging.report";
+import { getAgingReport, type AgingCurrencyBlock, type AgingReport } from "../finance-aging.report";
 import type { AnaSayi, Birim, GrafikBlok, TabloBlok } from "../sunum/sunum.types";
-import { capTable, catalogHeader, definitionsOf, metricFigure, plainFigure, singleCurrencyUnit, type CoreReportResult } from "./_common";
+import { capTable, catalogHeader, definitionsOf, metricFigure, plainFigure, singleCurrencyUnit, viewParameter, type CoreReportResult } from "./_common";
+
+/** Tablo görünümleri — eski Cari Yaşlandırma'nın cari × vade kovası tablosu (aynı `getAgingReport`, net tutar). */
+export const RECEIVABLE_VIEWS = ["ozet", "kovalar"] as const;
+export type ReceivableView = (typeof RECEIVABLE_VIEWS)[number];
+const RECEIVABLE_VIEW_LABEL: Readonly<Record<ReceivableView, string>> = { ozet: "Cariler", kovalar: "Cari × vade" };
+
+/** Cari × kova: her hücre `AgingCariRow.net[kova]` (para birimleri toplanmaz, satır kendi biriminde). */
+export function agingBucketTable(aging: Pick<AgingReport, "buckets" | "blocks">): TabloBlok {
+  const rows = aging.blocks.flatMap((b) => b.rows.map((r) => ({ b, r }))).filter(({ r }) => Number(r.openTotal) !== 0);
+  return {
+    kolonlar: [
+      { anahtar: "cari", baslik: "Cari", hiza: "sol" },
+      { anahtar: "paraBirimi", baslik: "Para birimi", hiza: "orta" },
+      ...aging.buckets.map((k) => ({ anahtar: `kova_${k.key}`, baslik: k.label, hiza: "sag" as const })),
+      { anahtar: "acik", baslik: "Açık alacak", hiza: "sag" },
+    ],
+    satirlar: rows.map(({ b, r }) => ({
+      cari: r.code ? `${r.code} · ${r.name}` : r.name,
+      paraBirimi: b.currency,
+      ...Object.fromEntries(aging.buckets.map((k) => [`kova_${k.key}`, Number(r.net[k.key])])),
+      acik: Number(r.openTotal),
+    })),
+  };
+}
 
 export const NO_MONTH_END_RECEIVABLES = "Geçen ay sonunda bu para biriminde açık alacak bulunmadığından kıyas yapılamıyor.";
 /** Geçen ay sonu değeri görüntüden değil defterden kurulur; ölçülen sapma kaynağı (R1-ZAMAN) beyan edilir. */
@@ -30,7 +54,7 @@ export function receivedChequesDue(due: ChequeDueSummary, currency: string): num
   return due.months.filter((m) => m.kind === "RECEIVED" && m.currency === currency).reduce((a, m) => a + Number(m.amount), 0);
 }
 
-export async function buildReceivablesReport(asOf: Date): Promise<CoreReportResult> {
+export async function buildReceivablesReport(asOf: Date, view: ReceivableView = "ozet"): Promise<CoreReportResult> {
   const monthEnd = factoryPreviousMonthEnd(asOf);
   const [aging, dueRes, prevAging] = await Promise.all([getAgingReport({ asOf }), chequeService.dueSummary(), getAgingReport({ asOf: monthEnd })]);
   const due = dueRes.data!;
@@ -71,7 +95,7 @@ export async function buildReceivablesReport(asOf: Date): Promise<CoreReportResu
       enEski: r.oldestDaysOverdue,
     })),
   };
-  const capped = capTable(table, "Cariler");
+  const capped = capTable(view === "kovalar" ? agingBucketTable(aging) : table, RECEIVABLE_VIEW_LABEL[view]);
 
   const chart: GrafikBlok | null = block && unit
     ? {
@@ -103,7 +127,7 @@ export async function buildReceivablesReport(asOf: Date): Promise<CoreReportResu
       grafik: chart,
       tablo: capped.tablo,
       tanimlar: definitionsOf(["alacak.vadesiGecmis", "cek.yaklasanVade"]),
-      parametreler: [{ ad: "asOf", etiket: "Tarih", tur: "tarih", deger: iso }],
+      parametreler: [{ ad: "asOf", etiket: "Tarih", tur: "tarih", deger: iso }, viewParameter(RECEIVABLE_VIEW_LABEL, view)],
       uyarilar: [
         ...(block ? [prevBlock ? MONTH_END_REBUILT : NO_MONTH_END_RECEIVABLES] : []),
         ...(factoryYmd(asOf) !== due.today ? [`Çek vadeleri seçilen tarihten değil bugünden (${due.today}) itibaren sayıldı.`] : []),

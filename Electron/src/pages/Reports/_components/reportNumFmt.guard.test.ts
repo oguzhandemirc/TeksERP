@@ -34,7 +34,11 @@ interface Kullanim {
 }
 
 function envanter(): { dosyalar: string[]; kullanimlar: Kullanim[]; cozulemeyen: Kullanim[] } {
-  const dosyalar = walk(SRC).filter((p) => ENGINE_IMPORT.test(readFileSync(p, "utf8")));
+  // Motoru içe aktaranlar + hücre biçimini doğrudan `reportCellText` ile basanlar (rapor grafiği).
+  const dosyalar = walk(SRC).filter((p) => {
+    const src = readFileSync(p, "utf8");
+    return ENGINE_IMPORT.test(src) || (/from "@\/lib\/number-format"/.test(src) && /reportCellText\([^;]*?,\s*"/.test(src));
+  });
   const kullanimlar: Kullanim[] = [];
   const cozulemeyen: Kullanim[] = [];
   for (const p of dosyalar) {
@@ -46,6 +50,8 @@ function envanter(): { dosyalar: string[]; kullanimlar: Kullanim[]; cozulemeyen:
       else if (sabitler.has(m[1]!)) kullanimlar.push({ dosya, deger: sabitler.get(m[1]!)! });
       else cozulemeyen.push({ dosya, deger: m[1]! });
     }
+    // Hücre metni de aynı kümeden biçimlenir (grafik etiketi `reportCellText(x, "0.0")`): değer kümeye bağlıdır.
+    for (const m of src.matchAll(/reportCellText\([^;]*?,\s*"([^"]*)"\)/g)) kullanimlar.push({ dosya, deger: m[1]! });
   }
   return { dosyalar, kullanimlar, cozulemeyen };
 }
@@ -54,8 +60,8 @@ describe("rapor spec'lerinin sayı biçimi kapalı kümede", () => {
   const { dosyalar, kullanimlar, cozulemeyen } = envanter();
 
   it("körlük zemini: motoru kullanan dosyalar ve biçim kullanımları gerçekten okundu", () => {
-    expect(dosyalar.length).toBeGreaterThanOrEqual(30);
-    expect(kullanimlar.length).toBeGreaterThanOrEqual(200);
+    expect(dosyalar.length).toBeGreaterThanOrEqual(25); // eski rapor sayfaları kalktı (2026-11-12): 29
+    expect(kullanimlar.length).toBeGreaterThanOrEqual(70); // eski rapor sayfaları kalktı (2026-11-12; Yurtiçi/Yurtdışı sonrası 75)
   });
 
   it("⭐ her biçim REPORT_NUM_FMTS kümesinde (bilinmeyen biçim PDF↔Excel eşitliği ölçülmeden çıkar)", () => {

@@ -172,7 +172,7 @@ export function ReadOnlyLine({ label, value }: { label: string; value: string })
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="font-medium">{label}</span>
-      <span className="shrink-0 rounded-md border px-2 py-0.5 text-xs">{value}</span>
+      <span className="shrink-0 rounded-badge border px-2 py-0.5 text-xs">{value}</span>
     </div>
   );
 }
@@ -213,7 +213,7 @@ export function ReadOnlyRow({
           )}
         </p>
       </div>
-      <span className="shrink-0 rounded-md border px-2 py-0.5 text-xs">
+      <span className="shrink-0 rounded-badge border px-2 py-0.5 text-xs">
         {enabled ? onLabel : offLabel}
       </span>
     </div>

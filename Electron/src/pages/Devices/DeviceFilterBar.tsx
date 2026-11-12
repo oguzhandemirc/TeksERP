@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,8 @@ interface Props {
   totalCount: number;
   anyFilterActive: boolean;
   onClear: () => void;
+  /** Tablonun Sütunlar menüsü (sağ kümede). */
+  tools?: ReactNode;
 }
 
 /** Cihazlar listesi filtre çubuğu — arama · durum · tür + onay-bekleyen kısayolu. */
@@ -40,6 +43,7 @@ export function DeviceFilterBar({
   totalCount,
   anyFilterActive,
   onClear,
+  tools,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b px-6 py-3 text-xs">
@@ -48,7 +52,7 @@ export function DeviceFilterBar({
         <Input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Cihaz adı / kimlik ara..."
+          placeholder="Ara…" title="Cihaz adı / kimlik ara" aria-label="Cihaz adı / kimlik ara"
           className="h-8 pl-8 text-sm"
         />
       </div>
@@ -99,6 +103,7 @@ export function DeviceFilterBar({
             </Button>
           </>
         )}
+        {tools}
       </div>
     </div>
   );

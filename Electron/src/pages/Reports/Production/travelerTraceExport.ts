@@ -65,9 +65,9 @@ export function buildTravelerTraceExport(trace: TravelerTraceResult): ReportExpo
       { header: "Barkod", key: "barcode", width: 20 },
       { header: "Durum", key: "status", width: 18 },
       { header: "Kalite", key: "qualityGrade", width: 16 },
-      { header: "İlk Metraj (m)", key: "initialQty", width: 14, numFmt: "#,##0.0", align: "right" },
-      { header: "Mevcut Metraj (m)", key: "currentQty", width: 16, numFmt: "#,##0.0", align: "right" },
-      { header: "En (cm)", key: "width", width: 10, numFmt: "#,##0.0", align: "right" },
+      { header: "İlk Metraj (m)", key: "initialQty", width: 14, numFmt: "0.0", align: "right" },
+      { header: "Mevcut Metraj (m)", key: "currentQty", width: 16, numFmt: "0.0", align: "right" },
+      { header: "En (cm)", key: "width", width: 10, numFmt: "0.0", align: "right" },
       { header: "Kayıt", key: "createdAt", width: 16 },
     ],
     rows: [
@@ -95,7 +95,7 @@ export function buildTravelerTraceExport(trace: TravelerTraceResult): ReportExpo
       { header: "İstasyon Tipi", key: "stationKind", width: 14 },
       { header: "Operatör", key: "operatorName", width: 22 },
       { header: "Makine", key: "machineName", width: 18 },
-      { header: "Metraj (m)", key: "qty", width: 12, numFmt: "#,##0.0", align: "right" },
+      { header: "Metraj (m)", key: "qty", width: 12, numFmt: "0.0", align: "right" },
       { header: "Not", key: "notes", width: 30 },
     ],
     rows: events.map((ev) => ({

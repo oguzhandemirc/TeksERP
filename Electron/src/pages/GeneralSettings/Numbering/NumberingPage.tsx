@@ -65,16 +65,10 @@ export function NumberingPage() {
         description="Belge, kart ve kod serilerinin numara biçimi. Değişiklik yalnız bundan sonra açılacak kayıtları etkiler; geçmiş numaralar ve basılmış belgeler değişmez."
         actions={<RefreshButton queryKey={[...NUMBERING_KEY]} successMessage="Seriler yenilendi" />}
       />
-      <PageBody className="p-6">
-        <div className="space-y-5">
+      <PageBody>
+        <div>
           {bolumler.map((b) => (
-            <section key={b.key} className="overflow-hidden rounded-lg border bg-card">
-              <header className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2.5">
-                <h2 className="text-sm font-semibold">{b.label}</h2>
-                <span className="text-xs text-muted-foreground">{b.rows.length} seri</span>
-              </header>
-              <NumberingTable rows={b.rows} onEdit={setSecili} />
-            </section>
+            <NumberingTable key={b.key} title={b.label} rows={b.rows} onEdit={setSecili} />
           ))}
         </div>
 

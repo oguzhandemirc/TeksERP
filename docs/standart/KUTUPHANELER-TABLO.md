@@ -41,7 +41,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Durum | `@tanstack/react-query` (371) · `zustand` | — |
 | Form · tablo | `react-hook-form` + `@hookform/resolvers` + `zod` · `@tanstack/react-table` (+`-virtual`) | — |
 | UI primitifi · stil | `@radix-ui/*` (shadcn sarmalayıcıyla) · `cva` `clsx` `tailwind-merge` `cmdk` · `tailwindcss` 4 | sarmalanmayan primitif tutulmaz (§7) |
-| Font | `@fontsource/plus-jakarta-sans` (CSS import) | `@fontsource/roboto` ölü |
+| Font | `@fontsource-variable/inter` (varsayılan) · `@fontsource/dm-sans` · `@fontsource/nunito-sans` · `@fontsource/plus-jakarta-sans` · `@fontsource/source-serif-4` (CSS import, Görünüm › Yazı tipi) | `@fontsource/roboto` ölü; ağdan (Google Fonts) yükleme YOK |
 | İkon | `lucide-react` (490) | ikinci ikon paketi EKLENMEZ |
 | Toast | `sonner` (219) | Radix Toast KULLANILMAZ |
 | Tema · animasyon · grafik | `next-themes` · `framer-motion` · `echarts` **6.1.0 SABİT** · `recharts` | grafik: echarts (tembel `_v2/grafik/motor.ts`, baskıda SVG) — recharts emekliye ayrılıyor, yeni import yok (cırcır `recharts-cirit.test.ts`) |

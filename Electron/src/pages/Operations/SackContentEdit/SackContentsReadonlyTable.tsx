@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import { useLocalTable } from "@/hooks/useLocalTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,9 +8,10 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { sackContentsColumns } from "./sackContentsColumns";
 import type { SackContentRoll } from "./types";
 import { foldSearchText } from "@/lib/search-fold";
+import { formatQty } from "@/lib/format";
 
 const fmtQty = (n: number) =>
-  `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
+  `${formatQty(n, 1)} m`;
 
 /** Arama eşleşmesi — barkod / kumaş / renk / en (Türkçe küçültme). */
 function matches(r: SackContentRoll, q: string): boolean {
@@ -42,13 +44,8 @@ export function SackContentsReadonlyTable({ rolls, isLoading, emptyText }: Props
   const shown = useMemo(() => rolls.filter((r) => matches(r, needle)), [rolls, needle]);
   const shownQty = shown.reduce((a, r) => a + Number(r.currentQty), 0);
 
-  const table = useReactTable({
-    data: shown,
-    columns: sackContentsColumns,
-    getCoreRowModel: getCoreRowModel(),
-    getRowId: (r) => r.id,
-    // Seçim YOK → DataTable checkbox kolonunu hiç eklemez (salt-okunur panel).
-  });
+  // Seçim YOK → DataTable checkbox kolonunu hiç eklemez (salt-okunur panel). Anahtar editörle ortak.
+  const table = useLocalTable({ tableKey: "sack-contents", data: shown, columns: sackContentsColumns });
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
 
@@ -62,7 +59,9 @@ export function SackContentsReadonlyTable({ rolls, isLoading, emptyText }: Props
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Barkod, kumaş, renk veya en ara…"
+              placeholder="Ara…"
+              title="Barkod, kumaş, renk ya da enle ara"
+              aria-label="Barkod, kumaş, renk ya da enle ara"
               className="h-8 pl-8 pr-8 text-xs"
             />
             {q && (
@@ -81,6 +80,7 @@ export function SackContentsReadonlyTable({ rolls, isLoading, emptyText }: Props
               {shown.length} eşleşme · {fmtQty(shownQty)}
             </span>
           )}
+          <DataTableTools table={table} compact exportName="Çuval içeriği" />
         </div>
       )}
 

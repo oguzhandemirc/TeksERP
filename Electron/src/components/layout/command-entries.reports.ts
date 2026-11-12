@@ -20,6 +20,12 @@ export function leafPermission(to: string, categoryPermission: string | undefine
   return row?.nesil === "v2" ? row.izin : categoryPermission;
 }
 
+/** Alt karonun raporu palette başka bir girişle mi duruyor (v2 yaprağı ya da yeni yerine taşınan araç)? */
+function hasOwnEntry(to: string): boolean {
+  const key = reportKeyOfPath(to);
+  return key !== null && (REPORT_BY_KEY.get(key)?.nesil === "v2" || relocatedHostOf(key) !== null);
+}
+
 /**
  * Raporlar bölümleri — kategori hub'ı + o kategorinin TÜM alt raporları.
  *
@@ -70,33 +76,22 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     keywords: `rapor ${cat.title}`,
   }));
 
-  // Raporlar v2 açıkken eski yapraklar "Eski:" önekli İKİZLE görünür, özgün giriş gizlenir. İkiz
-  // SONDA durur: aynı hedefin ilk girişi (sekme başlığı) özgün ad kalır; bayrak kapalıyken
-  // ikizlerin hiçbiri görünmez → palet çıktısı bayt-eşit.
-  const legacyTwins: CommandEntry[] = subs.map((sub) => ({
-    ...sub,
-    key: `${sub.key}:legacy`,
-    get label() { return `Eski: ${sub.label}`; },
-    visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true && sub.visibleWhen!(ctx),
-    keywords: `${sub.keywords} eski geçiş`,
-  }));
-  const currentSubs = subs.map((sub) => ({
-    ...sub,
-    visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled !== true && sub.visibleWhen!(ctx),
-  }));
+  // Taşınan araç (`relocated:`) ve v2 yaprak (`report-v2:`) palette kendi girişiyle çıkar: buradaki ikizi
+  // çizilmez ama sekme başlığını (`tab-meta`) verir. Kalanlar (muhasebe uzman araçları) kendi adıyla görünür.
+  const shownSubs = subs.map((sub) => (hasOwnEntry(sub.to) ? { ...sub, visibleWhen: () => false } : sub));
 
   return {
     heading: `Raporlar · ${cat.title}`,
     // Alt raporun breadcrumb'ı kategori hub'ına çıkar (eskiden hiç yoktu —
     // rapor sayfasından geri dönüş yalnız sekme/geçmiş ile mümkündü).
     parent: { label: cat.title, to: cat.to },
-    entries: [hub, ...currentSubs, ...legacyTwins],
+    entries: [hub, ...shownSubs],
   };
 });
 
 /**
- * Raporlar v2 yaprakları — Rapor Merkezi ile AYNI yüklem (`isCenterEntryOpen`) + bayrak; izin
- * girişin `permission`ında (satırın `izin`i = kategori izni). Bayrak kapalıyken hiçbiri görünmez.
+ * Raporlar v2 yaprakları — Rapor Merkezi ile AYNI yüklem (`isCenterEntryOpen`); izin girişin
+ * `permission`ında (satırın `izin`i = kategori izni).
  */
 const reportV2Entries: CommandEntry[] = REPORT_CATALOG.filter((e) => e.nesil === "v2").map((e) => ({
   key: `report-v2:${e.key}`,
@@ -105,7 +100,7 @@ const reportV2Entries: CommandEntry[] = REPORT_CATALOG.filter((e) => e.nesil ===
   icon: BarChart3,
   to: `/${e.panelYolu}`,
   permission: e.izin,
-  visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true && isCenterEntryOpen(e, ctx),
+  visibleWhen: (ctx: OperationsVisibilityContext) => isCenterEntryOpen(e, ctx),
   keywords: "rapor raporlar rapor merkezi",
 }));
 
@@ -127,7 +122,6 @@ reportCommandSections.push({
       icon: FilePlus2,
       to: "/reports/ozel/yeni",
       permission: "report:builder",
-      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "özel rapor raporlarım kayıtlı rapor oluşturucu ölçü kırılım paylaş",
     },
     {
@@ -137,7 +131,6 @@ reportCommandSections.push({
       icon: LayoutDashboard,
       to: "/reports",
       permission: "report:builder",
-      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "düzen sürükle bırak blok bölüm sayfa kesmesi pdf excel grafik özel rapor tasarım",
     },
     {
@@ -147,7 +140,6 @@ reportCommandSections.push({
       icon: Filter,
       to: "/reports",
       permission: "report:builder",
-      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "veri ağacı alan ölçü boyut kuyu satır sütun süzgeç filtre koşul varyant önerilen grafik özel rapor oluşturucu",
     },
     {
@@ -157,7 +149,6 @@ reportCommandSections.push({
       icon: Code2,
       to: "/reports",
       permission: "report:builder",
-      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "kod json tanım düzenleyici editör codemirror tamamlama doğrula hata özel rapor oluşturucu",
     },
     {
@@ -167,7 +158,6 @@ reportCommandSections.push({
       icon: Sigma,
       to: "/reports",
       permission: "report:builder",
-      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "analiz ilişki fark kanıt vardiya karşılaştır örneklem neden birlikte değişiyor özel rapor",
     },
     {
@@ -177,7 +167,6 @@ reportCommandSections.push({
       icon: Sparkles,
       to: "/reports",
       permission: "report:quality",
-      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "çözgü hata vardiya gece sabah akşam şablon kalite analiz tezgah",
     },
   ],
@@ -185,7 +174,7 @@ reportCommandSections.push({
 
 /**
  * Rapor menüsünden çıkan yedi araç — YENİ yerlerinin adıyla aranır ("Operasyon · İz Sürme · Parti").
- * Hedef aracın bugünkü adresi, izin o adresin route izni (yeni izin yok). Bayrak kapalıyken gizli.
+ * Hedef aracın bugünkü adresi, izin o adresin route izni (yeni izin yok).
  */
 const relocatedEntries: CommandEntry[] = RELOCATED_TOOLS.map((t) => {
   const entry = REPORT_BY_KEY.get(t.reportKey);
@@ -198,7 +187,7 @@ const relocatedEntries: CommandEntry[] = RELOCATED_TOOLS.map((t) => {
     to: t.to,
     permission: t.permission,
     visibleWhen: (ctx: OperationsVisibilityContext) =>
-      ctx.reportsV2Enabled === true && entry !== undefined && host !== null && isCenterEntryOpen(entry, ctx) && isRouteModuleOpen(host, ctx),
+      entry !== undefined && host !== null && isCenterEntryOpen(entry, ctx) && isRouteModuleOpen(host, ctx),
     keywords: `rapor araç ${t.hostLabel} ${entry?.baslik ?? ""}`,
   };
 });

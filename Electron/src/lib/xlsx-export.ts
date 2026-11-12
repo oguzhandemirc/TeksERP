@@ -13,7 +13,7 @@ export interface SheetColumn {
   /** rows[]/totalRow içindeki alan adı. */
   key: string;
   width?: number;
-  /** Sayı/tarih biçimi — örn "#,##0.0" (metre/kg), "#,##0" (adet), "dd.mm.yyyy hh:mm".
+  /** Sayı/tarih biçimi — örn "0.0" (metre/kg), "0" (adet), "dd.mm.yyyy hh:mm".
    *  Fonksiyon verilirse HÜCRE BAŞINA seçilir (ör. tam sayıda ondalık ayırıcı görünmesin). */
   numFmt?: ExcelNumFmt;
   /** Veri hücrelerinin yatay hizası — belgedeki kolon hizasının aynısı. */

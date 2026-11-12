@@ -25,6 +25,9 @@
 //   ① kayıpta fason `fireQty + openQty` → ❌ 2 (§R3b kaynak eşitliği + §R3c ana toplam)
 //   ② kalite payı top adediyle ağırlıklandı → ❌ 3 (§R2a kaynak eşitliği + §R2b metre beklentisi + §R2e süzgeçli)
 //   ③ kayıp tablosunun `toplam` satırına oran (fire / payda toplamı) eklendi → ❌ 1 (§R3e toplam oran yok)
+//   • TABLO eşitliği (2026-11-12, RAPB açılışı — eski ekranlar kalkmadan önce): istasyon (§R1f) · operatör (§R1g) ·
+//     kalite 3 görünüm (§R2f) · depo kumaş (§R4d) · fasoncu (§R5f) = eski karnenin satırları hücre hücre.
+//     Sonda: geçen metre ← bekleyen metre → ❌ §R1f · fasonda bekleyen ← gönderilen → ❌ §R5f · depo metre ← top → ❌ §R4d.
 //
 // § Dokuma/finans (RAPC) — `dokuma/tezgah-randimani`, `dokuma/duruslar`, `dokuma/levent-dengesi`, `finance/alacaklar`:
 //   • modül kapısı kaynak raporunkiyle aynı (dokuma · levent ayrıca devere · finans) — Express yığınındaki
@@ -37,6 +40,15 @@
 //   ④ levent ucundan `requireDevereEnabled` kaldırıldı → ❌ 2 (§C0b zincir + §C0d devere kapalıyken 403)
 //   ⑤ `beamBalance` ölçülemeyen leventi 0 beklenenle saydı → ❌ 1 (§C3a; oran %140)
 // Temiz koşum 97/0 (§ Satış 34 + §V 8 + RAPB/RAPC 55).
+//
+// § Görünüm (D2, 2026-11-12) — S5v + §G: raporların `gorunum` tablo seçimi = eski raporun listesi hücre hücre.
+// NEGATİF SONDALAR (md5 ile geri alındı → 135/0): iade kumaş ← byColor (S5v5) · hız payı ← çalışma payı (§G1s) ·
+//   hol ← tezgahlar (§G2t) · otomatik/elle takası (§G3s) · sıfır açık satır süzgeci kaldırıldı (§G4s) → ❌ 5.
+// ⚠️ KÖR: RAPC penceresinde tezgah/alarm/levent/alacak verisi yok → gerçek DB kıyası boş kümede; eşleme sentetik satırla.
+// S1v (2026-11-12, Talep Analizi emekli): sipariş-talep görünümleri = `getDemandAnalysis` listeleri; sonda kumaş ← byColor
+//   + çeşit müşteri ← kalem → ❌ 2 (S1v1 · S1v3), md5 ile geri alındı.
+// S2y (2026-11-12, Yurtiçi/Yurtdışı emekli): sevkiyat görünümleri = `getDestinationMix` kırılımları; yön süzgeçli ana sayı
+//   = kova metresi/topu. Sonda iade ← metre + yön süzgeci yok sayıldı → ❌ 4 (S2y1 · S2y2×2 · S2y7), md5 ile geri alındı → 157/0.
 //
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-07 (kıyas 2097-06), etiket TEST-TRE-<pid>.
 // Koşum: npx tsx scripts/test_temel_rapor_esitlik.ts
@@ -75,30 +87,37 @@ import { getOpenOrderCoverage } from "../src/services/reports/open-order-coverag
 import { getReturnScorecard } from "../src/services/reports/return-scorecard.report.service";
 import { getOrderCancellationScorecard } from "../src/services/reports/order-cancellation.report.service";
 import { buildOrderDemandReport } from "../src/services/reports/temel/siparis-talep.temel";
+import { ORDER_DEMAND_VIEWS, type OrderDemandView } from "../src/services/reports/temel/siparis-talep.views";
+import { getDemandAnalysis } from "../src/services/reports/demand-analysis.report.service";
+import { getCustomerOrderProfiles } from "../src/services/reports/customer.report.service";
 import { buildShippedReport } from "../src/services/reports/temel/sevkiyat.temel";
+import { SHIPPED_VIEWS, type ShippedView } from "../src/services/reports/temel/sevkiyat.views";
 import { buildDeadlineReport } from "../src/services/reports/temel/termin.temel";
 import { buildOpenOrderReport } from "../src/services/reports/temel/acik-siparisler.temel";
-import { buildLostWorkReport } from "../src/services/reports/temel/vazgecilen-is.temel";
+import { buildLostWorkReport, LOST_WORK_VIEWS, type LostWorkView } from "../src/services/reports/temel/vazgecilen-is.temel";
 import coreWeavingFinanceRouter, { permissionOf as rapcPermissionOf } from "../src/routes/reports/temel-dokuma-finans.routes";
 import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
-import { buildLoomEfficiencyReport, efficiencyReasonText } from "../src/services/reports/temel/tezgah-randimani.temel";
-import { buildLoomStopsReport, mostFrequentReason, secondsToMinutes } from "../src/services/reports/temel/duruslar.temel";
-import { beamBalance, buildBeamBalanceReport } from "../src/services/reports/temel/levent-dengesi.temel";
-import { buildReceivablesReport, mainBlock, MONTH_END_REBUILT, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
+import { buildLoomEfficiencyReport, capacityDetailTable, efficiencyReasonText, shiftRowsTable } from "../src/services/reports/temel/tezgah-randimani.temel";
+import { buildLoomStopsReport, LOOM_STOP_VIEWS, mostFrequentReason, responseRowsOf, responseTable, secondsToMinutes } from "../src/services/reports/temel/duruslar.temel";
+import { beamBalance, buildBeamBalanceReport, closedBeamDetailTable, openBeamTable } from "../src/services/reports/temel/levent-dengesi.temel";
+import { agingBucketTable, buildReceivablesReport, mainBlock, MONTH_END_REBUILT, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
 import { factoryPreviousMonthEnd } from "../src/services/reports/temel/_day-range";
 import { invoiceService } from "../src/services/invoice.service";
 import { paymentService } from "../src/services/payment.service";
 import { paymentAllocationService } from "../src/services/payment-allocation.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
-import { durusParetoReport, efficiencyReport } from "../src/services/reports/dokuma.report.service";
+import { durusParetoReport, efficiencyReport, shiftScorecardReport, type EfficiencyRow } from "../src/services/reports/dokuma.report.service";
+import { SHIFT_STAT_PAGE_MAX } from "../src/services/machine-shift-stat.service";
+import type { BeamResultRow } from "../src/services/reports/levent-sonucu.report.service";
+import type { AlarmResponseRow } from "../src/services/reports/alarm-response.report.service";
 import { capacityUsageReport } from "../src/services/reports/kapasite-kullanimi.report.service";
 import { alarmResponseReport } from "../src/services/reports/alarm-response.report.service";
 import { getAgingReport } from "../src/services/reports/finance-aging.report";
 import { chequeService } from "../src/services/cheque.service";
 import { yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
 import { periodRanges, runCoreWithExtras } from "../src/services/reports/temel/_variant";
-import { factoryDayEndOfKey } from "../src/constants/time";
-import { ORDER_DEMAND_DIMS, OPEN_ORDER_DIMS, SHIPPED_DIMS, SUBCONTRACTOR_DIMS, openOrderRunner, orderDemandRunner, shippedRunner, subcontractorRunner } from "../src/services/reports/temel/core-runs";
+import { factoryDateTr, factoryDayEndOfKey } from "../src/constants/time";
+import { ORDER_DEMAND_DIMS, OPEN_ORDER_DIMS, SHIPPED_DIMS, SUBCONTRACTOR_DIMS, openOrderRunner, orderDemandRunner, shippedRunner, subcontractorRunner, type OrderDemandFilters } from "../src/services/reports/temel/core-runs";
 
 let pass = 0;
 let fail = 0;
@@ -111,6 +130,14 @@ const same = (a: number | null | undefined, b: number | null | undefined): boole
   (a ?? null) === (b ?? null) || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 1e-9);
 const show = (a: unknown, b: unknown): string => `temel ${JSON.stringify(a)} · kaynak ${JSON.stringify(b)}`;
 const fig = (s: RaporSunumu, olcu: string): AnaSayi | undefined => [s.anaSayi, ...s.yanSayilar].find((f) => f.olcu === olcu);
+// Görünüm tablosu = eski raporun listesi HÜCRE HÜCRE; beklenen eşleme bu dosyada BAĞIMSIZ yazılır (kurucu kopyalanmaz).
+function cellsMatch(label: string, s: RaporSunumu, want: ReadonlyArray<Record<string, unknown>>, nonEmpty = false): void {
+  const got = s.tablo?.satirlar ?? [];
+  const bad = want.findIndex((w, i) => Object.entries(w).some(([k, v]) => JSON.stringify(got[i]?.[k] ?? null) !== JSON.stringify(v ?? null)));
+  const ok = got.length === want.length && bad === -1 && !s.tablo?.kesildi && (!nonEmpty || want.length > 0);
+  check(label, ok, `satır ${got.length}/${want.length}${bad >= 0 ? ` · ilk fark ${bad}: ${JSON.stringify(got[bad])} ≠ ${JSON.stringify(want[bad])}` : ""}`);
+}
+const viewDecl = (s: RaporSunumu) => s.parametreler.find((p) => p.ad === "gorunum");
 
 const TAG = `TEST-TRE-${process.pid}`;
 const RANGE: DateRange = { from: new Date("2097-07-01T00:00:00.000Z"), to: new Date("2097-07-31T23:59:59.999Z") };
@@ -152,6 +179,15 @@ async function rapbFixture(): Promise<{ subId: string; otherSubId: string }> {
   ids.wos.push(wo.id);
   const step = await prisma.workOrderStep.create({ data: { workOrderId: wo.id, stationId: station.id, stepSequence: 1 }, select: { id: true } });
   ids.steps.push(step.id);
+  // WIP (D1 §R1f): istasyonda bekleyen 1 top (çıkışsız) + pencerede geçen 1 top — istasyon tablosu boş kalmasın.
+  for (const [i, exitedAt] of [[0, null], [1, IN_WINDOW]] as const) {
+    const wr = await prisma.roll.create({
+      data: { itemId: item.id, initialQty: 40 + i, currentQty: 40 + i, status: "IN_PRODUCTION", entrySource: "SUPPLIER_RECEIPT", barcode: `${TAG}-W${i}` },
+      select: { id: true },
+    });
+    ids.rolls.push(wr.id);
+    await prisma.rollMovement.create({ data: { rollId: wr.id, workOrderStepId: step.id, qtyIn: 40 + i, enteredAt: exitedAt ? new Date(IN_WINDOW.getTime() - 3_600_000) : new Date(), exitedAt } });
+  }
   const batch = await prisma.batch.create({ data: { batchNumber: `${TAG}-B`, workOrderId: wo.id }, select: { id: true } });
   ids.batches.push(batch.id);
   const subA = await prisma.subcontractor.create({ data: { code: `${TAG}-A`, name: `Boyahane A ${TAG}` }, select: { id: true } });
@@ -227,6 +263,22 @@ async function rapbSection(): Promise<void> {
     `${opView.tablo?.satirlar.length} / ${ops.length}`);
   check("§R1e ⭐ K-KISI: operatör görünümü `kisiAdi:true` SUNUMDA, istasyon görünümü taşımaz",
     opView.kisiAdi === true && flow.kisiAdi === undefined);
+  // D1 (eski rapor kaldırma): eski WIP ekranının istasyon tablosu yeni raporda HÜCRE HÜCRE aynı olmalı.
+  const flowRows = flow.tablo?.satirlar ?? [];
+  const wipRowDrift = wip.byStation.filter((s, i) => {
+    const r = flowRows[i];
+    return !r || r.istasyon !== s.label || !same(r.bekleyenTop as number, s.waitingCount) || !same(r.bekleyenMetre as number, s.waitingQty)
+      || !same(r.enEski as number | null, s.oldestDays) || !same(r.ortBekleme as number | null, s.avgWaitDays)
+      || !same(r.gecenTop as number, s.passedCount) || !same(r.gecenMetre as number, s.passedQty) || !same(r.kalis as number | null, s.avgDurationHours);
+  });
+  check("§R1f ⭐ istasyon tablosu = eski WIP karnesi `byStation` (satır sayısı + 8 kolon hücre hücre)",
+    flowRows.length === wip.byStation.length && wip.byStation.length > 0 && wipRowDrift.length === 0,
+    `${flowRows.length}/${wip.byStation.length} satır · sapan ${wipRowDrift.map((s) => s.label).join(", ") || "yok"}`);
+  const opRowDrift = ops.filter((o, i) => {
+    const r = opView.tablo?.satirlar[i];
+    return !r || !same(r.kursun as number, o.kursunCount) || !same(r.kalite as number, o.qc2Count) || !same(r.tambur as number, o.tamburCount) || !same(r.fason as number, o.subcontractorOps);
+  });
+  check("§R1g operatör tablosu kolonları = eski Operatör İş Hacmi (kurşun · kalite · tambur · fason)", opRowDrift.length === 0, `sapan ${opRowDrift.length}`);
 
   // §R2 Kalite = kalite + hurda + plan dışı karneleri
   const quality = (await buildQualityReport({ range: RANGE, compareRange, compareMode: mode, filters: {} })).sunum;
@@ -241,6 +293,19 @@ async function rapbSection(): Promise<void> {
     same(fig(quality, "kalite.binMetredeHata")?.deger, sc.summary.defectsPerThousandM) && same(fig(quality, "kalite.binMetredeHata")?.kiyas?.deger, sc.summary.prevDefectsPerThousandM),
     show(fig(quality, "kalite.binMetredeHata")?.deger, sc.summary.defectsPerThousandM));
   check("§R2d plan dışı onaylı metre = `PlanDeviationScorecard.summary.deviatedQtyM`", same(fig(quality, "kalite.planDisiMetre")?.deger, dev.summary.deviatedQtyM));
+  // D1: eski Kalite Karnesi kumaş/renk/fason tabloları — yeni raporun üç görünümü hücre hücre aynı.
+  const viewDrift: string[] = [];
+  for (const [view, srcRows] of [["urun", qc.byItem], ["renk", qc.byColor], ["fasoncu", qc.bySubcontractor]] as const) {
+    const vs = (await buildQualityReport({ range: RANGE, compareRange, compareMode: mode, filters: {}, view })).sunum;
+    const vr = vs.tablo?.satirlar ?? [];
+    if (vr.length !== srcRows.length) viewDrift.push(`${view} ${vr.length}/${srcRows.length}`);
+    srcRows.forEach((s, i) => {
+      const r = vr[i];
+      if (!r || r.ad !== s.label || !same(r.top as number, s.rollCount) || !same(r.metre as number, s.totalQty) || !same(r.birinciMetre as number, s.topGradeQty)) viewDrift.push(`${view}:${s.label}`);
+    });
+  }
+  check("§R2f ⭐ kalite görünümleri (kumaş · renk · fason) = eski Kalite Karnesi `byItem/byColor/bySubcontractor`",
+    viewDrift.length === 0 && qc.byItem.length > 0, viewDrift.join(", ") || `kumaş ${qc.byItem.length} satır birebir`);
   const beamId = "00000000-0000-4000-8000-000000000097";
   const qBeam = (await buildQualityReport({ range: RANGE, compareRange, compareMode: mode, filters: { warpBeamId: beamId } })).sunum;
   const qcBeam = await getQualityScorecard(RANGE, compareRange, { warpBeamId: beamId });
@@ -292,6 +357,15 @@ async function rapbSection(): Promise<void> {
       && same(fig(depot, "stok.yasiBilinmeyenMetre")?.deger, stock.summary.unagedQty));
   check("§R4c kesit kıyası ölçülemedi + ay sonu uyarısı (0'a çökmez)",
     depot.anaSayi.kiyas?.deger === null && depot.uyarilar.includes(NO_MONTH_END_SNAPSHOT));
+  // D1: eski Stok & Ölü Stok kumaş tablosu = yeni depo tablosu (tavan altındaki satırlar hücre hücre).
+  const depotRows = depot.tablo?.satirlar ?? [];
+  const stockDrift = depotRows.filter((r, i) => {
+    const s = stock.byItem[i];
+    return !s || r.kumas !== s.label || !same(r.top as number, s.count) || !same(r.metre as number, s.qty) || !same(r.enEski as number | null, s.oldestDays) || !same(r.siparissiz as number, s.uncoveredQty);
+  });
+  check("§R4d ⭐ depo kumaş tablosu = eski Stok karnesi `byItem` (satır satır)",
+    depotRows.length > 0 && depotRows.length === Math.min(stock.byItem.length, depotRows.length) && stockDrift.length === 0,
+    `${depotRows.length}/${stock.byItem.length} satır · sapan ${stockDrift.length}`);
 
   // §R5 Fasoncular = fason karnesi (K-FASON)
   const subR = (await buildSubcontractorsReport({ range: RANGE, compareRange, compareMode: mode, filters: {} })).sunum;
@@ -301,6 +375,16 @@ async function rapbSection(): Promise<void> {
   check("§R5b fikstür: dönüş 4 gün, önceki 10 gün", same(subR.anaSayi.deger, 4) && same(subR.anaSayi.kiyas?.deger, 10));
   check("§R5c yanlar = `openQty` (bekleyen) · `fireQty` (eksik dönen)",
     same(fig(subR, "fason.bekleyenMetre")?.deger, sub.summary.openQty) && same(fig(subR, "fire.fasonMetre")?.deger, sub.summary.fireQty) && subR.yanSayilar.length === 2);
+  // D1: eski Fason Karnesi firma tablosu = yeni fasoncular tablosu (7 kolon hücre hücre).
+  const subRows = subR.tablo?.satirlar ?? [];
+  const subDrift = sub.bySubcontractor.filter((s, i) => {
+    const r = subRows[i];
+    return !r || r.fasoncu !== s.label || !same(r.gonderilen as number, s.dispatchedQty) || !same(r.donen as number, s.returnedQty) || !same(r.musteriye as number, s.deliveredQty)
+      || !same(r.fark as number, s.fireQty) || !same(r.bekleyen as number, s.openQty) || !same(r.donusGun as number | null, s.avgTurnaroundDays);
+  });
+  check("§R5f ⭐ fasoncu tablosu = eski Fason Karnesi `bySubcontractor` (satır + 7 kolon)",
+    subRows.length === sub.bySubcontractor.length && sub.bySubcontractor.length >= 2 && subDrift.length === 0,
+    `${subRows.length}/${sub.bySubcontractor.length} · sapan ${subDrift.map((s) => s.label).join(", ") || "yok"}`);
   const subOne = (await buildSubcontractorsReport({ range: RANGE, compareRange, compareMode: mode, filters: { subcontractorId: [subId] } })).sunum;
   const subOneSrc = await getSubcontractScorecard(RANGE, compareRange, { subcontractorId: [subId] });
   check("§R5d süzgeçli vaka (fasoncu): ana + yanlar kaynağın AYNI süzgeçli değeri",
@@ -464,6 +548,103 @@ async function rapcSection(): Promise<void> {
   check("§C5 sunum metinlerinde yasak sözcük yok", banned.length === 0, banned.join(", ") || "temiz");
 }
 
+// § GÖRÜNÜM (D2, 2026-11-12) — dokuma/finans raporlarının tablo seçimleri = eski raporun listesi hücre hücre.
+// RAPC penceresinde (2097-07) tezgah verisi YOK → gerçek DB kıyası boş kümede ölçer (KÖR, beyan basılır);
+// kolon eşlemesini sentetik satırla saf kurucu ölçer (§G*s).
+async function viewSection(): Promise<void> {
+  console.log("── §G tablo görünümleri (dokuma/finans) ──");
+  const win = resolveCoreDayRange(RAPC_DAYS, 7);
+  const blind = (what: string, n: number) => { if (n === 0) console.log(`   ⚠️ KÖR: ${what} bu fikstürde boş; eşlemeyi sentetik satır ölçer`); };
+
+  const effAll = await efficiencyReport({ ...RAPC_DAYS, limit: SHIFT_STAT_PAGE_MAX });
+  blind("vardiya satırları", effAll.satirlar.length);
+  const effView = (await buildLoomEfficiencyReport({ window: win, view: "vardiyalar" })).sunum;
+  cellsMatch("§G1a vardiyalar = Randıman `satirlar[]` (süreler dakika, K·P·E ayrı)", effView, effAll.satirlar.map((r) => ({
+    tezgah: r.machine.code, vardiya: r.shift.name, planli: secondsToMinutes(r.potSec), calisti: secondsToMinutes(r.aptSec), durus: secondsToMinutes(r.durusSec),
+    kullanilabilirlik: r.availabilityPct, performans: r.performancePct, randiman: r.effectivenessPct, atki: r.unitsActual, metre: r.producedM,
+  })));
+  check("§G1b ana sayı görünümle değişmez", same(effView.anaSayi.deger, (await buildLoomEfficiencyReport({ window: win })).sunum.anaSayi.deger));
+  if (effAll.satirlar.length > 0) {
+    const r0 = effAll.satirlar[0]!;
+    const sc = await shiftScorecardReport({ factoryDay: r0.factoryDayKey.toISOString().slice(0, 10) });
+    const m = sc.vardiyalar.find((v) => v.shiftInstanceId === r0.shiftInstanceId)?.makineler.find((x) => x.machineId === r0.machineId);
+    check("§G1c duruş = Vardiya Karnesi makine satırının `durusSec`i", m !== undefined && m.durusSec === r0.durusSec, show(r0.durusSec, m?.durusSec));
+  }
+  const synthEff = {
+    machineId: "m", machine: { code: "T-07", name: "Tezgah 7" }, shiftInstanceId: "s", factoryDayKey: new Date("2097-07-15T00:00:00.000Z"), shift: { code: "A", name: "Sabah" },
+    live: false, sealState: "SEALED", source: "OPERATOR", emptyLoom: false, potSec: 28800, aptSec: 25200, unitsActual: 120000, producedM: 410.5, durusSec: 3600,
+    targetUnitCapacityApt: 0, targetUnitCapacityPot: 0, targetUnitsPerMin: null, availabilityPct: 87.5, performancePct: 91.2, effectivenessPct: 79.8, olculemedi: {}, warnings: [],
+  } satisfies EfficiencyRow;
+  const sRow = shiftRowsTable([synthEff, { ...synthEff, emptyLoom: true, live: true }]).satirlar;
+  check("§G1s sentetik: gün fabrika günü · 480/420/60 dk · K·P·E · kaynak · durum · boş tezgah",
+    sRow[0]?.gun === "15.07.2097" && sRow[0]?.planli === 480 && sRow[0]?.calisti === 420 && sRow[0]?.durus === 60 && sRow[0]?.kullanilabilirlik === 87.5 && sRow[0]?.performans === 91.2 &&
+      sRow[0]?.randiman === 79.8 && sRow[0]?.kaynak === "Operatör" && sRow[0]?.durum === "Mühürlü" && sRow[1]?.kaynak === "Boş tezgah" && sRow[1]?.durum === "Sürüyor",
+    JSON.stringify(sRow[0]));
+
+  const cap = await capacityUsageReport(RAPC_DAYS);
+  blind("kapasite satırları", cap.data.satirlar.length);
+  cellsMatch("§G1d kapasite ayrıntısı = Kapasite Kullanımı `satirlar[]` (10 kolon)", (await buildLoomEfficiencyReport({ window: win, view: "kapasite" })).sunum, cap.data.satirlar.map((r) => ({
+    tezgah: r.code, hafta: r.hafta, nominal: r.nominalUnitsPerMin, atkiCm: r.unitsPerCm, teorik: r.teorikMSaat, takvim: r.takvimSaat, potansiyel: r.potansiyelM, gercek: r.gercekM, kullanim: r.kullanimPct, hesaplanamadi: r.hesaplanamadi,
+  })));
+  const cRow = capacityDetailTable([{ machineId: "m", code: "T-07", name: "x", hafta: "2097-W29", haftaBaslangic: "2097-07-13", nominalUnitsPerMin: 600, unitsPerCm: 30, teorikMSaat: 12, takvimSaat: 168, potansiyelM: 2016, gercekM: 1500, kullanimPct: 74.4, hesaplanamadi: null }]).satirlar[0];
+  check("§G1ds sentetik kapasite: her kolon kendi alanı", cRow?.nominal === 600 && cRow.atkiCm === 30 && cRow.teorik === 12 && cRow.takvim === 168 && cRow.potansiyel === 2016 && cRow.gercek === 1500 && cRow.kullanim === 74.4, JSON.stringify(cRow));
+
+  const alarm = await alarmResponseReport({ ...RAPC_DAYS, withPeople: false });
+  const resp = (rows: AlarmResponseRow[]) => rows.map((r) => ({ ad: r.etiket, alarm: r.alarm, ustlenme: secondsToMinutes(r.ustlenmeOrtSn), cozum: secondsToMinutes(r.cozumOrtSn), asim: r.asimOraniPct }));
+  const axes = { mudahaleSebep: alarm.data.sebepler, mudahaleHol: alarm.data.holler, mudahaleTezgah: alarm.data.tezgahlar, mudahaleVardiya: alarm.data.vardiyalar } as const;
+  check("§G2a görünüm kümesi = Müdahale eksenleri (kişi hariç)", JSON.stringify(LOOM_STOP_VIEWS.slice(1)) === JSON.stringify(Object.keys(axes)), LOOM_STOP_VIEWS.join(","));
+  for (const [view, rows] of Object.entries(axes) as Array<[keyof typeof axes, AlarmResponseRow[]]>) {
+    blind(`müdahale ${view}`, rows.length);
+    cellsMatch(`§G2b ${view} = Müdahale satırları (üstlenme/çözüm dakika, aşım %)`, (await buildLoomStopsReport({ window: win, view })).sunum, resp(rows));
+  }
+  const tag = (etiket: string) => [{ anahtar: etiket, etiket } as AlarmResponseRow];
+  const fakeAlarm = { sebepler: tag("sebep"), holler: tag("hol"), tezgahlar: tag("tezgah"), vardiyalar: tag("vardiya"), kisiler: tag("kisi") } as unknown as Parameters<typeof responseRowsOf>[1];
+  const mapped = (["mudahaleSebep", "mudahaleHol", "mudahaleTezgah", "mudahaleVardiya"] as const).map((v) => `${responseRowsOf(v, fakeAlarm).first}:${responseRowsOf(v, fakeAlarm).rows[0]?.etiket}`);
+  check("§G2t sentetik: her görünüm kendi Müdahale ekseni (kişi yok)", mapped.join(",") === "Alarm türü:sebep,Hol:hol,Tezgah:tezgah,Vardiya:vardiya", mapped.join(","));
+  const rRow = responseTable("Tezgah", [{ anahtar: "k", etiket: "T-07", alarm: 4, ustlenmeOrtSn: 90, cozumOrtSn: 600, asimOraniPct: 25 } as AlarmResponseRow]).satirlar[0];
+  check("§G2s sentetik müdahale: 90 sn → 1,5 dk · 600 sn → 10 dk · aşım %25", rRow?.ad === "T-07" && rRow.alarm === 4 && rRow.ustlenme === 1.5 && rRow.cozum === 10 && rRow.asim === 25, JSON.stringify(rRow));
+
+  const beam = (over: Partial<BeamResultRow>): BeamResultRow => ({
+    beamId: "b", beamNo: "L-12", physicalBeamNo: "F3", warpSpec: { id: "w", code: "CZ-1", name: "Tül", takeUpPct: null }, sarilanM: 1000, sarilanKg: null,
+    kgKaynak: {} as BeamResultRow["kgKaynak"], beklenenKumasM: 950, gercekKumasM: 930, gercekKaynak: { otomatik: 900, elle: 30 }, kalanM: 0, fireM: 20, firePct: 2.1,
+    status: "FINISHED" as BeamResultRow["status"], kapanisAt: new Date("2097-07-20T09:00:00.000Z"), tezgahlar: ["T-07", "T-08"], ...over,
+  });
+  const kRow = closedBeamDetailTable([beam({})]).satirlar[0];
+  check("§G3s sentetik biten levent: etiket · tezgah · otomatik/elle ayrı · fire · kapanış fabrika günü",
+    kRow?.levent === "L-12 (F3)" && kRow.tezgah === "T-07, T-08" && kRow.otomatik === 900 && kRow.elle === 30 && kRow.fire === 20 && kRow.firePct === 2.1 && kRow.kapanis === factoryDateTr(new Date("2097-07-20T09:00:00.000Z")),
+    JSON.stringify(kRow));
+  const oRow = openBeamTable([beam({ kalanM: 400, kullanimPct: 60, tezgahlar: [] })]).satirlar[0];
+  check("§G3t sentetik açık levent: kalan · kullanım · tezgahsız null", oRow?.kalan === 400 && oRow.kullanim === 60 && oRow.tezgah === null, JSON.stringify(oRow));
+  await withFlags({ "production.enabled": true, "dokuma.enabled": true, "devere.enabled": true }, async () => {
+    const src = await beamResultReport(RAPC_DAYS);
+    blind("biten levent", src.data.kapananlar.length);
+    blind("açık levent", src.data.acikLeventler.length);
+    cellsMatch("§G3a biten levent ayrıntısı = Levent Sonucu `kapananlar[]`", (await buildBeamBalanceReport({ window: win, view: "kapananlar" })).sunum, src.data.kapananlar.map((r) => ({
+      sarilan: r.sarilanM, dokunan: r.gercekKumasM, otomatik: r.gercekKaynak.otomatik, elle: r.gercekKaynak.elle, beklenen: r.beklenenKumasM, fire: r.fireM, firePct: r.firePct,
+    })));
+    cellsMatch("§G3b tezgahtaki leventler = Levent Sonucu `acikLeventler[]`", (await buildBeamBalanceReport({ window: win, view: "acik" })).sunum,
+      src.data.acikLeventler.map((r) => ({ sarilan: r.sarilanM, kalan: r.kalanM, dokunan: r.gercekKumasM, kullanim: r.kullanimPct ?? null })));
+  });
+
+  const asOf = new Date();
+  const aging = await getAgingReport({ asOf });
+  const open = aging.blocks.flatMap((b) => b.rows.map((r) => ({ b, r }))).filter(({ r }) => Number(r.openTotal) !== 0);
+  blind("açık alacak", open.length);
+  cellsMatch("§G4a cari × vade = Yaşlandırma `rows[].net[kova]` (birim kendi satırında)", (await buildReceivablesReport(asOf, "kovalar")).sunum, open.map(({ b, r }) => ({
+    paraBirimi: b.currency, ...Object.fromEntries(aging.buckets.map((k) => [`kova_${k.key}`, Number(r.net[k.key])])), acik: Number(r.openTotal),
+  })));
+  const fakeAging = {
+    buckets: [{ key: "current", label: "Vadesi gelmemiş" }, { key: "d1_30", label: "1-30" }],
+    blocks: [
+      { currency: "TRY", rows: [{ code: "C1", name: "Kaya", openTotal: "150", net: { current: "100", d1_30: "50" } }, { code: "", name: "Sıfır", openTotal: "0", net: { current: "0", d1_30: "0" } }] },
+      { currency: "USD", rows: [{ code: "C2", name: "Acme", openTotal: "70", net: { current: "0", d1_30: "70" } }] },
+    ],
+  } as unknown as Parameters<typeof agingBucketTable>[0];
+  const ag = agingBucketTable(fakeAging).satirlar;
+  check("§G4s sentetik: sıfır açık satır düşer · para birimleri toplanmaz · kova = net",
+    ag.length === 2 && ag[0]?.cari === "C1 · Kaya" && ag[0]?.kova_current === 100 && ag[0]?.kova_d1_30 === 50 && ag[1]?.paraBirimi === "USD" && ag[1]?.acik === 70, JSON.stringify(ag));
+}
+
 async function cleanup(): Promise<void> {
   if (rapcShiftDefs.length) await prisma.shiftDefinition.deleteMany({ where: { id: { in: rapcShiftDefs } } });
   if (ids.receiptItems.length) await prisma.subcontractorReceiptItem.deleteMany({ where: { id: { in: ids.receiptItems } } });
@@ -492,9 +673,12 @@ const salesDay = (s: string) => new Date(`${s}T09:00:00.000Z`);
 
 const salesIds = { customers: [] as string[], orders: [] as string[], shipments: [] as string[], sacks: [] as string[], rolls: [] as string[], returns: [] as string[] };
 let salesItemId = "";
+let salesColorId = "";
 
 async function customer(n: string, d: ShipmentDestination): Promise<string> {
-  const c = await prisma.customer.create({ data: { code: `${SALES_TAG}-${n}`, name: `${SALES_TAG} ${n}`, defaultDestination: d }, select: { id: true } });
+  const c = await prisma.customer.create({
+    data: { code: `${SALES_TAG}-${n}`, name: `${SALES_TAG} ${n}`, defaultDestination: d, country: d === "EXPORT" ? "Almanya" : null }, select: { id: true },
+  });
   salesIds.customers.push(c.id);
   return c.id;
 }
@@ -532,6 +716,10 @@ async function salesSetup(): Promise<{ cD: string; cE: string }> {
   // Mart: zamanında (yurtiçi) · geç (yurtdışı) · terminsiz · dönemde alınıp iptal · açık (termini geçmiş)
   const lD1 = await order(cD, 100, { orderDate: "2097-03-02", unitPrice: 10, deadline: "2097-03-10", status: "COMPLETED", completedAt: "2097-03-08", shippedQty: 100 });
   const lE1 = await order(cE, 200, { orderDate: "2097-03-02", currency: "USD", unitPrice: 5, deadline: "2097-03-05", status: "COMPLETED", completedAt: "2097-03-09", shippedQty: 200 });
+  // Talep görünümü (§S1v): aynı siparişe renkli + enli ikinci kalem — kumaş+renk+en çeşidi ve renk kırılımı ayrışsın.
+  salesColorId = (await prisma.color.create({ data: { code: `${SALES_TAG}-C`, name: `${SALES_TAG} RENK` }, select: { id: true } })).id;
+  const e1Order = (await prisma.orderLine.findUniqueOrThrow({ where: { id: lE1 }, select: { orderId: true } })).orderId;
+  await prisma.orderLine.create({ data: { orderId: e1Order, itemId: salesItemId, colorId: salesColorId, width: 280, quantity: 70, unitPrice: 5, shippedQty: 70 } });
   const lD2 = await order(cD, 50, { orderDate: "2097-03-03", status: "COMPLETED", completedAt: "2097-03-12", shippedQty: 50 });
   await order(cD, 30, { orderDate: "2097-03-02", unitPrice: 10, status: "CANCELLED", cancelledAt: "2097-03-15" });
   await order(cD, 80, { orderDate: "2097-03-04", unitPrice: 12, deadline: "2020-01-01" });
@@ -670,6 +858,113 @@ async function salesSection(cD: string): Promise<void> {
       `${side(s, "iade.oran")?.deger}/${ret.summary.returnPct}`);
   }
 
+  console.log("── S5v vazgeçilen iş tablo görünümleri = İptal / İade Karnesi listeleri ──");
+  {
+    const ret = await getReturnScorecard(SALES_RANGE, SALES_PREV);
+    const can = await getOrderCancellationScorecard(SALES_RANGE);
+    const run = async (view: LostWorkView) => (await buildLostWorkReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", view })).sunum;
+    const iptaller = await run("iptaller");
+    const decl = viewDecl(iptaller);
+    check("S5v0 `gorunum` beyanı: uygulanan değer + seçenekler = LOST_WORK_VIEWS; ana sayı görünümle değişmez",
+      decl?.deger === "iptaller" && JSON.stringify(decl.secenekler?.map((o) => o.deger)) === JSON.stringify(LOST_WORK_VIEWS) && iptaller.anaSayi.deger === 80);
+    cellsMatch("S5v1 ⭐ iptaller = `orders[]` (sipariş · müşteri · iptal günü · metre · sevk · gün · sebep)", iptaller, can.orders.map((o) => ({
+      siparis: o.orderNumber, musteri: o.customerName, iptalGunu: factoryDateTr(new Date(o.cancelledAt)), metre: o.qty, sevkEdilen: o.shippedQty, gun: o.daysToCancel, sebep: o.reasonLabel ?? "Sebep girilmemiş",
+    })), true);
+    cellsMatch("S5v2 iptal sebepleri = `byReason[]`", await run("iptalSebep"), can.byReason.map((r) => ({ sebep: r.label, adet: r.count, metre: r.qty, pay: r.sharePct })), true);
+    cellsMatch("S5v3 iptal müşteri = `byCustomer[]` (oran + en sık sebep)", await run("iptalMusteri"),
+      can.byCustomer.map((r) => ({ musteri: r.customerName, adet: r.count, metre: r.qty, oran: r.cancelRatePct, sebep: r.topReasonLabel })), true);
+    const iade = (rows: typeof ret.byCustomer) => rows.map((r) => ({ ad: r.label, top: r.count, metre: r.qty, onceki: r.prevQty ?? null }));
+    cellsMatch("S5v4 iade müşteri = `byCustomer[]` (önceki dönem kolonu dahil)", await run("iadeMusteri"), iade(ret.byCustomer), true);
+    cellsMatch("S5v5 iade kumaş = `byItem[]`", await run("iadeKumas"), iade(ret.byItem), true);
+    cellsMatch("S5v6 iade renk = `byColor[]`", await run("iadeRenk"), iade(ret.byColor));
+    cellsMatch("S5v7 iade sebep = `byReason[]`", await run("iadeSebep"), iade(ret.byReason));
+  }
+
+  console.log("── S1v sipariş-talep tablo görünümleri = Talep Analizi listeleri ──");
+  {
+    const da = await getDemandAnalysis(SALES_RANGE, SALES_PREV, {});
+    const run = async (view: OrderDemandView, filters: OrderDemandFilters = {}) =>
+      (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters, view })).sunum;
+    const cesit = await run("cesit");
+    const decl = viewDecl(cesit);
+    const base = (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: {} })).sunum;
+    check("S1v0 `gorunum` beyanı = ORDER_DEMAND_VIEWS · ana sayı görünümle değişmez",
+      decl?.deger === "cesit" && JSON.stringify(decl.secenekler?.map((o) => o.deger)) === JSON.stringify(ORDER_DEMAND_VIEWS) && cesit.anaSayi.deger === base.anaSayi.deger && viewDecl(base)?.deger === "ozet");
+    cellsMatch("S1v1 ⭐ kumaş + renk + en = `specs[]` (renk · en · kalem · müşteri · metre · pay · önceki)", cesit, da.specs.map((r) => ({
+      kumas: r.itemName, renk: r.colorName ?? "Renk belirtilmemiş", en: r.width, kalem: r.lineCount, musteri: r.customerCount, metre: r.qty, pay: r.sharePct, onceki: r.prevQty ?? null,
+    })), true);
+    check("S1v2 çeşit toplamı: kalem = lineCount · metre = totalQty · çekirdek çeşit sayısı etikette",
+      cesit.tablo?.toplam?.kalem === da.summary.lineCount && cesit.tablo?.toplam?.metre === da.summary.totalQty && da.specs.length === 2
+        && String(cesit.tablo?.toplam?.kumas).includes(`${da.summary.specCount} çeşit`) && String(cesit.tablo?.toplam?.kumas).includes(`ilk ${da.summary.coreSpecCount} çeşitte`),
+      JSON.stringify(cesit.tablo?.toplam));
+    const bd = (rows: typeof da.byItem) => rows.map((r) => ({ ad: r.label, kalem: r.count, metre: r.qty, onceki: r.prevQty ?? null }));
+    cellsMatch("S1v3 kumaş = `byItem[]`", await run("kumas"), bd(da.byItem), true);
+    const renk = await run("renk");
+    cellsMatch("S1v4 renk = `byColor[]` (renksiz talep kendi satırında)", renk, bd(da.byColor), true);
+    check("S1v4b renksiz talep satırı = summary.colorlessQty", renk.tablo?.satirlar.find((r) => r.ad === "Renk belirtilmemiş")?.metre === da.summary.colorlessQty && da.summary.colorlessQty > 0);
+    const aylik = await run("aylik");
+    cellsMatch("S1v5 aylık = `monthly[]` (son 24 ay)", aylik, da.monthly.map((m) => ({ ay: m.month, kalem: m.lineCount, metre: m.qty })));
+    check("S1v5b aylık görünüm dönemden bağımsız olduğunu uyarıda söyler", aylik.uyarilar.some((u) => u.includes("son 24 ay")));
+    const daF = await getDemandAnalysis(SALES_RANGE, SALES_PREV, { destination: "EXPORT" });
+    cellsMatch("S1v6 süzgeçli (yön EXPORT) = aynı süzgeçli Talep Analizi", await run("cesit", { destination: "EXPORT" }), daF.specs.map((r) => ({ kumas: r.itemName, renk: r.colorName ?? "Renk belirtilmemiş", metre: r.qty })), true);
+  }
+
+  console.log("── S1p sipariş-talep müşteri profili görünümü = Müşteri Sipariş Profili ──");
+  {
+    const want = (rows: Awaited<ReturnType<typeof getCustomerOrderProfiles>>["rows"]) => rows.map((r) => ({
+      musteri: r.customerName, kod: r.customerCode, siparis: r.orderCount, kalem: r.lineCount, kumas: r.topItemName, renk: r.topColorName, en: r.topWidth,
+      sonSiparis: r.lastOrderDate ? factoryDateTr(new Date(r.lastOrderDate)) : null,
+    }));
+    const run = async (filters: OrderDemandFilters = {}) =>
+      (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters, view: "musteriProfili" })).sunum;
+    const all = await run();
+    cellsMatch("S1p1 ⭐ profil = `getCustomerOrderProfiles()` satırları (en sık kumaş/renk/en · kalem · son sipariş)", all, want((await getCustomerOrderProfiles({})).rows), true);
+    const one = await run({ customerId: [cD] });
+    const src = (await getCustomerOrderProfiles({ customerId: [cD] })).rows;
+    cellsMatch("S1p2 süzgeçli (müşteri) = aynı süzgeçli profil", one, want(src), true);
+    check("S1p3 fikstür müşterisi: sipariş 5 · son sipariş Mart · görünüm tüm zamanlar uyarısı",
+      src.length === 1 && src[0]!.orderCount === 5 && one.tablo?.satirlar[0]?.sonSiparis === factoryDateTr(salesDay("2097-03-04")) && one.uyarilar.some((u) => u.includes("dönemden bağımsız")),
+      JSON.stringify(one.tablo?.satirlar[0]));
+    let code: unknown = null;
+    try { await run({ destination: "EXPORT" }); } catch (e) { code = (e as { statusCode?: number; details?: { code?: string } }).details?.code; }
+    check("S1p4 yön/kumaş süzgeciyle profil görünümü 400 VIEW_FILTER_UNSUPPORTED (müşteri kartı yönü ≠ sipariş yönü)", code === "VIEW_FILTER_UNSUPPORTED", String(code));
+  }
+
+  console.log("── S2y sevkiyat tablo görünümleri = Yurtiçi/Yurtdışı Satış kırılımları ──");
+  {
+    const mix = await getDestinationMix(SALES_RANGE, SALES_PREV);
+    const run = async (view: ShippedView | undefined, destination?: ShipmentDestination) =>
+      (await buildShippedReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: { destination }, view })).sunum;
+    const tl = (m: { pricedLineCount: number; tlTotal: number }) => (m.pricedLineCount === 0 ? null : m.tlTotal);
+    const short: Record<string, string> = { DOMESTIC: "Yurtiçi", EXPORT: "Yurtdışı", NONE: "Yön kaydı yok" };
+    const yon = await run("yon");
+    const base = await run(undefined);
+    const decl = viewDecl(yon);
+    check("S2y0 `gorunum` beyanı = SHIPPED_VIEWS · ana sayı görünümle değişmez",
+      decl?.deger === "yon" && JSON.stringify(decl.secenekler?.map((o) => o.deger)) === JSON.stringify(SHIPPED_VIEWS) && yon.anaSayi.deger === base.anaSayi.deger && viewDecl(base)?.deger === "ozet");
+    cellsMatch("S2y1 ⭐ yön = `buckets[]` (sevk · top · metre · önceki · kg · iade · TL)", yon, mix.buckets.map((b) => ({
+      yon: b.label, sevk: b.shipmentCount, top: b.rollCount, metre: b.meters, oncekiMetre: mix.prevBuckets?.find((p) => p.bucket === b.bucket)?.meters ?? 0,
+      kg: b.weighedSacks > 0 ? b.kg : null, iade: b.returnQty, tl: tl(b.money),
+    })), true);
+    for (const d of ["EXPORT", "DOMESTIC"] as const) {
+      const b = mix.buckets.find((x) => x.bucket === d)!;
+      const f = await run("yon", d);
+      check(`S2y2 ⭐ yön süzgeci ${d}: ana sayı = kova metresi · top = rollCount · tablo tek kova`,
+        b.meters > 0 && f.anaSayi.deger === b.meters && side(f, "sevk.top")?.deger === b.rollCount && f.tablo?.satirlar.length === 1 && f.tablo.satirlar[0]?.yon === b.label,
+        `${f.anaSayi.deger}/${b.meters} · ${side(f, "sevk.top")?.deger}/${b.rollCount}`);
+    }
+    const money = mix.buckets.flatMap((b): Record<string, unknown>[] => b.money.amounts.length === 0
+      ? [{ yon: b.label, para: "fiyat girilmemiş", tutar: null, ortFiyat: null, fiyatli: b.money.pricedLineCount, satir: b.money.lineCount }]
+      : b.money.amounts.map((a) => ({ yon: b.label, para: a.currency, tutar: a.amount, ortFiyat: a.avgUnitPrice, fiyatli: b.money.pricedLineCount, satir: b.money.lineCount })));
+    cellsMatch("S2y3 yön × para birimi = kova `money.amounts[]` (tutar · ort. fiyat · fiyatlı/toplam satır)", await run("tutar"), money, true);
+    const bd = (rows: typeof mix.byCustomer) => rows.map((r) => ({ ad: r.label, yon: short[r.bucket], metre: r.meters, tl: tl(r.money), fiyatli: r.money.pricedLineCount, satir: r.money.lineCount }));
+    cellsMatch("S2y4 müşteri = `byCustomer[]` (ülke dahil)", await run("musteri"), bd(mix.byCustomer).map((r, i) => ({ ...r, ulke: mix.byCustomer[i]!.country ?? null })), true);
+    cellsMatch("S2y5 ülke = `byCountry[]` (müşteri sayısı dahil)", await run("ulke"), bd(mix.byCountry).map((r, i) => ({ ...r, musteri: mix.byCountry[i]!.customerCount ?? 0 })), true);
+    cellsMatch("S2y6 kumaş = `byItem[]`", await run("kumas"), bd(mix.byItem), true);
+    const exp = mix.byCountry.filter((r) => r.bucket === "EXPORT");
+    cellsMatch("S2y7 süzgeçli (yön EXPORT) ülke = yalnız EXPORT kovası (Almanya)", await run("ulke", "EXPORT"), bd(exp), exp.some((r) => r.label === "Almanya"));
+  }
+
   console.log("── S6 K-KIYAS: parametresiz çağrı = önceki dönem ──");
   {
     const { mode, compareRange } = resolveCoreCompare({}, SALES_RANGE);
@@ -758,6 +1053,7 @@ async function cleanupSales(): Promise<void> {
   await prisma.orderLine.deleteMany({ where: { orderId: { in: salesIds.orders } } });
   await prisma.order.deleteMany({ where: { id: { in: salesIds.orders } } });
   if (salesItemId) await prisma.item.deleteMany({ where: { id: salesItemId } });
+  if (salesColorId) await prisma.color.deleteMany({ where: { id: salesColorId } });
   await prisma.customer.deleteMany({ where: { id: { in: salesIds.customers } } });
 }
 
@@ -885,6 +1181,7 @@ async function main(): Promise<void> {
   try {
     await rapbSection();
     await rapcSection();
+    await viewSection();
   } finally {
     await cleanup();
   }

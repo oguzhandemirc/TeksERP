@@ -419,18 +419,13 @@ function bucketOf(m: MovementRow): { key: string; label: string; group: CashCate
   return { ...cashCategoryKey(m.category), group: "CASH_TXN" };
 }
 
-export async function getCashBookReport(params: CashBookParams): Promise<CashBookReport> {
-  const { from, to } = params.range;
-  const cariSet = new Set(params.cariId ?? []);
-  const suzgecVar = params.kategori !== undefined || params.yon !== undefined || cariSet.size > 0;
-
-  const fAccount = params.accountId ? Prisma.sql`AND a.id::text = ${params.accountId}` : Prisma.empty;
-  const fKind = params.accountKind ? Prisma.sql`AND a."accountKind" = ${params.accountKind}` : Prisma.empty;
-
-  // Hesap kataloğu: iki tablonun birleşimi. Kasa ve banka ayrı tablodur ama
-  // defterin sorusu ikisi için de aynıdır — tek listede toplanmazsa ekran
-  // "hangi sekmedeydi" sorusunu operatöre sordurur.
-  const accountsCte = Prisma.sql`
+/**
+ * Hesap kataloğu: iki tablonun birleşimi. Kasa ve banka ayrı tablodur ama
+ * defterin sorusu ikisi için de aynıdır — tek listede toplanmazsa ekran
+ * "hangi sekmedeydi" sorusunu operatöre sordurur.
+ */
+function accountsCteSql(): Prisma.Sql {
+  return Prisma.sql`
     acc AS (
       SELECT id::text AS id, 'CASH' AS "accountKind", code, name, currency::text AS currency,
              balance::text AS balance, "isActive"
@@ -439,6 +434,35 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       SELECT id::text, 'BANK', code, name, currency::text, balance::text, "isActive"
         FROM bank_accounts
     )`;
+}
+
+export interface CashFlowRow { k: string; currency: string; source: string; direction: string; transfer: boolean; amount: string }
+
+/**
+ * EK (açılış panosu nakit akışı): dönem hareketlerinin kova × para birimi × kaynak × yön toplamı.
+ * Defterle AYNI evren (`movementsCte` + hesap kataloğu); iptal ters satırı kendi anında, virman işaretli.
+ * `bucketKey` `mv.dt` üstünde fabrika dilimli kova ifadesidir.
+ */
+export function collectCashFlow(range: DateRange, bucketKey: Prisma.Sql): Promise<CashFlowRow[]> {
+  return prisma.$queryRaw<CashFlowRow[]>(Prisma.sql`
+    WITH ${accountsCteSql()}, ${movementsCte()}
+    SELECT ${bucketKey} AS k, a.currency, mv.source, mv.direction,
+           COALESCE(mv.kind IN (${Prisma.join([...TRANSFER_KINDS])}), FALSE) AS transfer,
+           SUM(mv.amount)::text AS amount
+      FROM mv JOIN acc a ON a.id = mv."accountId"
+     WHERE mv.dt >= ${range.from} AND mv.dt <= ${range.to}
+     GROUP BY 1, 2, 3, 4, 5`);
+}
+
+export async function getCashBookReport(params: CashBookParams): Promise<CashBookReport> {
+  const { from, to } = params.range;
+  const cariSet = new Set(params.cariId ?? []);
+  const suzgecVar = params.kategori !== undefined || params.yon !== undefined || cariSet.size > 0;
+
+  const fAccount = params.accountId ? Prisma.sql`AND a.id::text = ${params.accountId}` : Prisma.empty;
+  const fKind = params.accountKind ? Prisma.sql`AND a."accountKind" = ${params.accountKind}` : Prisma.empty;
+
+  const accountsCte = accountsCteSql();
 
   const [accountRows, openingRows, movementRows] = await Promise.all([
     prisma.$queryRaw<AccountRow[]>(Prisma.sql`

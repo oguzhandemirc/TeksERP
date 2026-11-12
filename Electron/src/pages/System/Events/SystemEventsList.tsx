@@ -1,124 +1,61 @@
-import { memo } from "react";
+// Sistem kayıtları (AUTH + SYSTEM) — ortak DataTable sütunları; satır ayrıntı çekmecesini açar.
+import { useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { formatFactory } from "@/lib/factory-time";
 import { tr } from "date-fns/locale";
+import { formatFactory } from "@/lib/factory-time";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  categoryLabels,
-  categoryVariants,
-  eventActionLabel,
-  eventActionVariant,
-} from "./labels";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLocalTable } from "@/hooks/useLocalTable";
+import { categoryLabels, categoryVariants, eventActionLabel, eventActionVariant } from "./labels";
 import type { SystemLogListItem } from "@/types/systemLog";
 
-interface Props {
-  items: SystemLogListItem[];
-  loading: boolean;
-  onSelect: (item: SystemLogListItem) => void;
+const fullDate = (e: SystemLogListItem) => formatFactory(new Date(e.createdAt), "dd.MM.yyyy HH:mm:ss");
+const userLabel = (e: SystemLogListItem) => (e.user ? e.user.fullName || e.user.username : "-");
+const targetLabel = (e: SystemLogListItem) => (e.recordId === "-" ? "" : e.recordId);
+
+const EVENT_COLUMNS: ColumnDef<SystemLogListItem>[] = [
+  {
+    id: "createdAt",
+    header: "Tarih",
+    meta: { label: "Tarih", exportValue: fullDate },
+    cell: ({ row: { original: e } }) => (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-xs">{formatDistanceToNow(new Date(e.createdAt), { addSuffix: true, locale: tr })}</span>
+        </TooltipTrigger>
+        <TooltipContent side="right">{fullDate(e)}</TooltipContent>
+      </Tooltip>
+    ),
+  },
+  {
+    id: "category",
+    header: "Kategori",
+    meta: { label: "Kategori", exportValue: (e) => categoryLabels[e.category] },
+    cell: ({ row: { original: e } }) => <Badge variant={categoryVariants[e.category]} className="shrink-0">{categoryLabels[e.category]}</Badge>,
+  },
+  {
+    id: "action",
+    header: "Olay",
+    meta: { label: "Olay", exportValue: (e) => eventActionLabel(e.action) },
+    cell: ({ row: { original: e } }) => <Badge variant={eventActionVariant(e.action)} className="shrink-0">{eventActionLabel(e.action)}</Badge>,
+  },
+  {
+    id: "recordId",
+    header: "Hedef",
+    meta: { label: "Hedef", exportValue: targetLabel },
+    cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{targetLabel(row.original)}</span>,
+  },
+  { id: "user", header: "Kullanıcı", meta: { label: "Kullanıcı", exportValue: userLabel }, cell: ({ row }) => <span className="text-xs">{userLabel(row.original)}</span> },
+  {
+    id: "ipAddress",
+    header: "IP",
+    meta: { label: "IP", exportValue: (e) => e.ipAddress ?? "" },
+    cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.ipAddress ?? ""}</span>,
+  },
+];
+
+export function useSystemEventsTable(items: SystemLogListItem[]) {
+  const columns = useMemo(() => EVENT_COLUMNS, []);
+  return useLocalTable({ tableKey: "system:events", data: items, columns });
 }
-
-export function SystemEventsList({ items, loading, onSelect }: Props) {
-  if (loading && items.length === 0) {
-    return (
-      <div className="space-y-2 p-6">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-12 text-sm text-muted-foreground">
-        Filtreye uyan sistem kaydı bulunamadı.
-      </div>
-    );
-  }
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      {/* Gerçek kaydırıcı üst ListBody (yapışkan başlığı o verir); burada overflow-auto YOK —
-          yoksa başlık asla kaymayan iç kutuya yapışıp içerikle birlikte kayıp giderdi. */}
-      <div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="px-6 py-2 font-medium">Tarih</th>
-              <th className="px-3 py-2 font-medium">Kategori</th>
-              <th className="px-3 py-2 font-medium">Olay</th>
-              <th className="px-3 py-2 font-medium">Hedef</th>
-              <th className="px-3 py-2 font-medium">Kullanıcı</th>
-              <th className="px-3 py-2 font-medium">IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <EventRow key={item.id} item={item} onSelect={onSelect} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </TooltipProvider>
-  );
-}
-
-// Perf: React.memo + stabil onSelect(item) → load-more ile satır eklenince tüm
-// birikmiş satırların (formatDistanceToNow + per-row Radix Tooltip) yeniden
-// render'ını önler.
-const EventRow = memo(function EventRow({
-  item,
-  onSelect,
-}: {
-  item: SystemLogListItem;
-  onSelect: (item: SystemLogListItem) => void;
-}) {
-  const date = new Date(item.createdAt);
-  const userLabel = item.user
-    ? item.user.fullName || item.user.username
-    : "-";
-
-  return (
-    <tr
-      onClick={() => onSelect(item)}
-      className="cursor-pointer border-b transition-colors hover:bg-accent/40"
-    >
-      <td className="whitespace-nowrap px-6 py-2 text-xs">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              {formatDistanceToNow(date, { addSuffix: true, locale: tr })}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            {formatFactory(date, "dd.MM.yyyy HH:mm:ss")}
-          </TooltipContent>
-        </Tooltip>
-      </td>
-      <td className="px-3 py-2">
-        <Badge variant={categoryVariants[item.category]} className="shrink-0">
-          {categoryLabels[item.category]}
-        </Badge>
-      </td>
-      <td className="px-3 py-2">
-        <Badge variant={eventActionVariant(item.action)} className="shrink-0">
-          {eventActionLabel(item.action)}
-        </Badge>
-      </td>
-      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-        {item.recordId === "-" ? "" : item.recordId}
-      </td>
-      <td className="px-3 py-2 text-xs">{userLabel}</td>
-      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-        {item.ipAddress ?? ""}
-      </td>
-    </tr>
-  );
-});

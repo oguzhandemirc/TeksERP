@@ -155,7 +155,7 @@ describe("komut paleti — global arama", () => {
     type("canakkale");
     await vi.advanceTimersByTimeAsync(250);
     fireEvent.click(await screen.findByText("ÇANAKKALE TEKSTİL"));
-    expect(openTab).toHaveBeenCalledWith("/definitions/customers?search=MUS-014", undefined);
+    expect(openTab).toHaveBeenCalledWith("/definitions/cariler/c1", undefined);
   });
 
   it("BİLİNMEYEN kova sessizce düşürülmez — uyarı çizilir", async () => {

@@ -26,6 +26,7 @@
 // olduğu tek cümleyle söylenir, çünkü sessizce kaybolan bir kutu da kafa
 // karıştırır.
 // =============================================================================
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -77,9 +78,11 @@ interface Props {
    * kırmaz.
    */
   scope?: PoFilterScope;
+  /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
+  tools?: ReactNode;
 }
 
-export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Props) {
+export function PurchaseOrderFilterBar({ value, onChange, scope = "orders", tools }: Props) {
   const set = <K extends keyof PurchaseOrderFilterState>(key: K, v: PurchaseOrderFilterState[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -99,7 +102,7 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Sipariş no / tedarikçi / not ara…"
+            placeholder="Ara…" title="Sipariş no / tedarikçi / not ara" aria-label="Sipariş no / tedarikçi / not ara"
             value={value.search}
             onChange={(e) => set("search", e.target.value)}
           />
@@ -171,6 +174,7 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
           {orderScope ? "Filtreleri temizle" : "Tedarikçiyi temizle"}
         </Button>
       )}
+      {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
     </div>
   );
 }

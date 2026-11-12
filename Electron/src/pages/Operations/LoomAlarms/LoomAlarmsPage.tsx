@@ -12,13 +12,14 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { isAlarmClosedError, useServerNow } from "./alarm-access";
 import { AlarmClosedNotice } from "./AlarmClosedNotice";
 import { INITIAL_ALARM_FILTERS, LoomAlarmsFilters, toListParams, type AlarmFilterState } from "./LoomAlarmsFilters";
-import { AlarmSummaryStrip, LoomAlarmsTable } from "./LoomAlarmsTable";
+import { AlarmSummaryStrip, useLoomAlarmsTable } from "./LoomAlarmsTable";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { loomAlarmService } from "./service";
 import { LOOM_ALARMS_QUERY_ROOT } from "./useLoomAlarmActions";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
@@ -48,11 +49,7 @@ export function LoomAlarmsPage() {
   });
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.items) ?? [], [q.data]);
   const summary = q.data?.pages[0]?.summary;
-  const { rootRef, sentinelRef } = useInfiniteScroll({
-    hasMore: q.hasNextPage,
-    isLoading: q.isFetchingNextPage,
-    onLoadMore: () => void q.fetchNextPage(),
-  });
+  const table = useLoomAlarmsTable(items, now);
 
   return (
     <PageShell>
@@ -61,11 +58,26 @@ export function LoomAlarmsPage() {
         description="Hedef süreyi aşan duruşlar: kim üstlendi, ne kadar sürdü, patrona iletildi mi"
         actions={<RefreshButton queryKey={LIST_KEY} />}
       />
-      <ListToolbar>
+      {summary && (
+        <ListBand>
+          <AlarmSummaryStrip summary={summary} scope={filters.scope} />
+        </ListBand>
+      )}
+      <ListToolbar className="flex-row flex-wrap items-end">
         <LoomAlarmsFilters value={filters} onChange={setFilters} />
-        {summary && <AlarmSummaryStrip summary={summary} scope={filters.scope} />}
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Tezgah alarmları" />
+        </div>
       </ListToolbar>
-      <ListBody ref={rootRef}>
+      {!q.isError && !q.isPending && items.length > 0 ? (
+        <DataTable
+          table={table}
+          onRowClick={(a) => navigate(`/operations/loom-alarms/${a.id}`)}
+          loadMore={{ hasMore: q.hasNextPage, isFetchingMore: q.isFetchingNextPage, onLoadMore: () => void q.fetchNextPage() }}
+          exportName="Tezgah alarmları"
+        />
+      ) : (
+      <ListBody>
         {q.isError ? (
           isAlarmClosedError(q.error) ? (
             <AlarmClosedNotice error={q.error} />
@@ -76,13 +88,9 @@ export function LoomAlarmsPage() {
           <p className="py-16 text-center text-muted-foreground">Yükleniyor…</p>
         ) : items.length === 0 ? (
           <p className="py-16 text-center text-muted-foreground">{emptyText(filters.scope)}</p>
-        ) : (
-          <>
-            <LoomAlarmsTable items={items} now={now} onOpen={(id) => navigate(`/operations/loom-alarms/${id}`)} />
-            <ListSentinel ref={sentinelRef} />
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       <ListFooter loaded={items.length} total={summary?.total} hasMore={q.hasNextPage} isFetchingMore={q.isFetchingNextPage} />
     </PageShell>
   );

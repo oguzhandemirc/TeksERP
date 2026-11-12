@@ -4,9 +4,12 @@
 // Top bu belgeye girmez — emanet top normal sevkiyattan çıkar.
 // =============================================================================
 import { useState } from "react";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -15,7 +18,7 @@ import { CONSIGNMENT_DISPATCHES_QUERY_KEY } from "./service";
 import { EMPTY_CONSIGNMENT_FILTER, type ConsignmentDispatchListFilter } from "./types";
 import { useConsignmentList } from "./useConsignmentList";
 import { ConsignmentDispatchFilters, ConsignmentSummaryStrip } from "./ConsignmentDispatchFilters";
-import { ConsignmentDispatchTable } from "./ConsignmentDispatchTable";
+import { CONSIGNMENT_DISPATCH_COLUMNS } from "./ConsignmentDispatchTable";
 import { ConsignmentDispatchDetailSheet } from "./ConsignmentDispatchDetailSheet";
 import { ConsignmentDispatchFormDialog } from "./ConsignmentDispatchFormDialog";
 import { ConsignmentCancelDialog } from "./ConsignmentCancelDialog";
@@ -26,6 +29,7 @@ export function ConsignmentDispatchesPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const l = useConsignmentList(f);
+  const table = useLocalTable({ tableKey: "consignment:dispatches", data: l.rows, columns: CONSIGNMENT_DISPATCH_COLUMNS });
   const filtered = JSON.stringify(f) !== JSON.stringify(EMPTY_CONSIGNMENT_FILTER);
   return (
     <PageShell>
@@ -41,11 +45,28 @@ export function ConsignmentDispatchesPage() {
           </div>
         }
       />
-      <ListToolbar>
-        {l.summary && <ConsignmentSummaryStrip summary={l.summary} />}
+      {l.summary && (
+        <ListBand>
+          <ConsignmentSummaryStrip summary={l.summary} />
+        </ListBand>
+      )}
+      <ListToolbar className="flex-row flex-wrap items-center">
         <ConsignmentDispatchFilters value={f} onChange={setF} />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Emanet çıkışları" />
+        </div>
       </ListToolbar>
-      <ListBody ref={l.rootRef}>
+      {!l.isLoading && l.rows.length > 0 ? (
+        <DataTable
+          table={table}
+          isError={l.isError}
+          onRetry={l.refetch}
+          onRowClick={(r) => setDetailId(r.id)}
+          loadMore={{ hasMore: l.hasMore, isFetchingMore: l.isFetchingMore, onLoadMore: l.loadMore }}
+          exportName="Emanet çıkışları"
+        />
+      ) : (
+      <ListBody>
         {l.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : l.isError && l.rows.length === 0 ? (
@@ -62,13 +83,9 @@ export function ConsignmentDispatchesPage() {
               {filtered ? "Süzgece uyan emanet çıkışı yok." : "Henüz emanet çıkışı yok — “Yeni Emanet Çıkışı” ile müşterinin leventini ya da ipliğini sahibine verin."}
             </div>
           </ListMessage>
-        ) : (
-          <>
-            <ConsignmentDispatchTable rows={l.rows} onOpen={setDetailId} />
-            <ListSentinel ref={l.sentinelRef} />
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       {l.rows.length > 0 && <ListFooter loaded={l.rows.length} total={l.summary?.count ?? null} hasMore={l.hasMore} isFetchingMore={l.isFetchingMore} />}
       <ConsignmentDispatchFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={(d) => { setFormOpen(false); setDetailId(d.id); }} />
       <ConsignmentDispatchDetailSheet dispatchId={detailId} onClose={() => setDetailId(null)} onCancel={setCancelId} />

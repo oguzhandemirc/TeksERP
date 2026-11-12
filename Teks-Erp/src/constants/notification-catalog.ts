@@ -206,7 +206,7 @@ export const NOTIFICATION_CATALOG = {
     baslik: "1. kalite oranı düşük",
     govde: "{kumasAd}: bugün 1. kalite oranı {oran} (eşik {esik})",
     cozuldu: "{kumasAd}: 1. kalite oranı eşiğin üstüne çıktı",
-    panelEkran: "reports/quality", panelYol: "/reports/quality/scorecard",
+    panelEkran: "reports/quality", panelYol: "/reports/quality/kalite",
     paramSemasi: z.object({
       oranYuzde: z.number().min(1).max(100).default(85),
       minMetre: z.number().int().min(0).max(100_000).default(200),
@@ -247,7 +247,7 @@ export const NOTIFICATION_CATALOG = {
     baslik: "Fason dönüşü gecikti",
     govde: "{firmaAd}: {acikKalem} kalem {enEskiGun} gündür dönmedi",
     cozuldu: "{firmaAd}: geciken fason dönüşü kalmadı",
-    panelEkran: "reports/subcontract", panelYol: "/reports/subcontract/scorecard",
+    panelEkran: "reports/subcontract", panelYol: "/reports/subcontract/fasoncular",
     paramSemasi: z.object({ gun: z.number().int().min(1).max(120).default(10) }).strict(),
     kapsam: { esik: { gun: { alan: "enEskiGun", yon: "ALT" } } },
     payloadAlanlari: ["firmaId", "firmaAd", "acikKalem", "enEskiGun"],

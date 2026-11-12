@@ -20,6 +20,7 @@ import {
 import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import type { Order, OrderLine } from "./types";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 /**
  * Tek iş emri = tek kumaş + renk + en. Bir iş emrine birleştirilebilecek
@@ -216,7 +217,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {g.orderNumbers.length} sipariş ·{" "}
-                    {g.openTotal.toLocaleString("tr-TR", { useGrouping: false })} m kalan ·{" "}
+                    {formatQty(g.openTotal)} m kalan ·{" "}
                     {g.orderNumbers.join(", ")}
                   </div>
                 </button>

@@ -9,10 +9,10 @@
 // ⇒ hiçbir rapor açık değil; katalogda OLMAYAN anahtar ⇒ kapalı. "Boş liste" ile
 // "liste yok" aynı şey DEĞİL — backend `null`ü bilerek ayırır.
 // =============================================================================
-import { REPORT_BY_KEY, isReportSurfaced } from "@/lib/report-catalog";
+import { REPORT_BY_KEY, isReportOnPanel } from "@/lib/report-catalog";
 
-// Yüzeylerin TEK süzgeci (katalogda yaşar, backend bekçileri de aynısını okur): v2 satırı ucu inene kadar çizilmez.
-export { isReportSurfaced };
+// Panel yüzeylerinin TEK süzgeci (katalogda yaşar): ucu inmemiş v2 ve panelden kalkmış (emekli) v1 çizilmez.
+export { isReportOnPanel };
 
 /** Özel (kayıtlı) rapor sayfalarının yol kökü: `/reports/ozel/...`. */
 export const CUSTOM_REPORTS_SEGMENT = "ozel";
@@ -36,7 +36,7 @@ export function isReportOpenWith(closedKeys: readonly string[] | null | undefine
 export function categoryHasOpenReport(closedKeys: readonly string[] | null | undefined, category: string): boolean {
   if (closedKeys == null) return false;
   for (const [key, entry] of REPORT_BY_KEY) {
-    if (!isReportSurfaced(entry)) continue; // karosu olmayan satır kategoriyi "açık" göstermez
+    if (!isReportOnPanel(entry)) continue; // karosu olmayan satır kategoriyi "açık" göstermez
     if (key.startsWith(`${category}/`) && isReportOpenWith(closedKeys, key)) return true;
   }
   return false;
