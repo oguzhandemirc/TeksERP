@@ -9,6 +9,7 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireKaliteGuvenceEnabled } from "../middlewares/module.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import { listSearchParam } from "../utils/list-search";
 import { createCustomerLabSpec, listCustomerLabSpecs, updateCustomerLabSpec } from "../services/customer-lab-spec.service";
 
 const router = Router();
@@ -31,7 +32,8 @@ const ListQuery = z.object({
   itemId: Id.optional(),
   testTypeId: Id.optional(),
   includeInactive: z.enum(["0", "1"]).optional(),
-});
+  search: listSearchParam,
+}).strict();
 const CreateBody = z.strictObject({
   customerId: Id, itemId: Id.nullable().optional(), testTypeId: Id,
   specMin: Bound, specMax: Bound, note: z.string().max(500).nullable().optional(),
@@ -45,8 +47,18 @@ const UpdateBody = z.strictObject({ specMin: Bound, specMax: Bound, note: z.stri
  *     tags: [Kalite]
  *     summary: Müşteri lab spesifikasyonları (varsayılan yalnız etkin)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: itemId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: testTypeId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: includeInactive, schema: { type: string, enum: ["0", "1"] } }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — müşteri adı/kodu, ürün adı/kodu, test türü kodu/adı; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
+ *       400: { description: Tanınmayan parametre ya da 100 karakteri aşan arama }
  *   post:
  *     tags: [Kalite]
  *     summary: Spesifikasyon ekle (aktif müşteri+ürün+tür tekil; 409 CUSTOMER_SPEC_DUPLICATE)

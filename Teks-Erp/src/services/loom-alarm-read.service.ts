@@ -16,6 +16,8 @@ import { readFilterList, readIdCondition } from "../utils/query-parser";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { ACTIVE_ALARM_STATES } from "./loom-alarm.service";
+import { listSearchWhere } from "../utils/list-search";
+import { machineSearchPaths, mergeSearchPaths } from "./helpers/list-search-paths.helper";
 
 /** Kapsam — kapalı küme; tanınmayan değer route'ta 400 (fail-closed). */
 export const LOOM_ALARM_SCOPES = ["active", "history", "all"] as const;
@@ -33,6 +35,8 @@ export interface LoomAlarmListFilter {
   to?: string;
   /** Bana gelenler: donmuş listede ben, ya da izne göre kipte K1 (K2 yalnız üst kademe yetkisiyle). */
   mine?: { userId: string; canEscalate: boolean };
+  /** Tezgah kodu/adı, hol adı ya da sebep kodu (liste + cursor + özet aynı where). */
+  search?: string;
 }
 
 /** "Bana gelenler" yüklemi — alarmın en az bir RAISED satırı beni hedefledi. */
@@ -68,6 +72,8 @@ export function buildLoomAlarmWhere(f: LoomAlarmListFilter): Prisma.LoomAlarmWhe
   if (f.from) and.push({ createdAt: { gte: resolveRangeStart(f.from) } });
   if (f.to) and.push({ createdAt: { lte: resolveRangeEnd(f.to) } });
   if (f.mine) and.push(mineAlarmWhere(f.mine));
+  const search = listSearchWhere<Prisma.LoomAlarmWhereInput>(f.search, mergeSearchPaths(machineSearchPaths("machine"), { text: ["machine.station.name"], code: ["stopEvent.reasonCode"] }));
+  if (search) and.push(search);
   return and.length > 0 ? { AND: and } : {};
 }
 

@@ -39,6 +39,8 @@ import { fmtQty, listOpenLines, type OpenLineRow } from "./service";
 import { FIFO_HINT, fulfillmentOf, remainingText } from "./fulfillment";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 const Sub = ({ children }: { children: React.ReactNode }) => <span className="ml-1.5 text-[11px] text-muted-foreground">{children}</span>;
 
@@ -120,15 +122,17 @@ export function OpenLinesPanel({
   onOverdueChange,
   onOpenOrder,
 }: Props) {
+  const { search, setSearch, term } = useListSearch();
   const q = useQuery({
     queryKey: [
-      "purchase-order-open-lines", supplier?.kind ?? "", supplier?.id ?? "", itemId, overdueOnly,
+      "purchase-order-open-lines", supplier?.kind ?? "", supplier?.id ?? "", itemId, overdueOnly, term ?? "",
     ],
     queryFn: () =>
       listOpenLines({
         ...supplierPartyQuery(supplier),
         itemId: itemId ?? undefined,
         overdueOnly,
+        search: term,
         limit: LIMIT,
       }),
   });
@@ -166,6 +170,7 @@ export function OpenLinesPanel({
           </span>
         )}
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Sipariş no, ürün adı/kodu ya da tedarikçi ara" />
           <DataTableTools table={table} compact exportName="Bekleyen kalemler" />
         </div>
       </ListToolbar>
@@ -212,7 +217,7 @@ export function OpenLinesPanel({
             <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
               {overdueOnly
                 ? "Termini geçmiş açık kalem yok. (Beklenen tarihi girilmemiş kalemler bu listeye girmez.)"
-                : supplier || itemId
+                : supplier || itemId || term
                   ? "Bu daraltmayla bekleyen kalem yok — filtreleri gevşetip tekrar bakın."
                   : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."}
             </div>

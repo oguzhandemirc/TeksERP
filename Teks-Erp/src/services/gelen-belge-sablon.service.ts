@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { p2002OnField } from "../utils/p2002";
+import { matchesListSearch } from "../utils/list-search";
 import { loadTemplates, USER_TEMPLATE_ID_PREFIX, type DocumentTemplate } from "../lib/gelen-belge/motor";
 import { AuditService } from "./audit.service";
 
@@ -109,7 +110,16 @@ function view(t: { code: string; name: string; version: number; inFile: boolean 
 }
 
 /** Liste: dosyadaki motor şablonları + kullanıcı şablonları, kodla birleşik (satırı olmayan dosya şablonu da listelenir). Salt okunur. */
-export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
+export async function listSenderTemplates(search?: string): Promise<SenderTemplateView[]> {
+  return (await allSenderTemplates()).filter((v) => matchesListSearch(search, senderTemplateSearchValues(v)));
+}
+
+/** Arama alanları — dosya ve kullanıcı şablonu bellekte birleştiği için bellek ikiziyle: kod, ad, gönderen/varsayılan sahip cari ad/kod. */
+export function senderTemplateSearchValues(v: SenderTemplateView): Array<string | null | undefined> {
+  return [v.code, v.name, v.senderCustomer?.name, v.senderCustomer?.code, v.defaultOwnerCustomer?.name, v.defaultOwnerCustomer?.code];
+}
+
+async function allSenderTemplates(): Promise<SenderTemplateView[]> {
   const rows = await prisma.senderTemplate.findMany({ select: ROW_SELECT, orderBy: { code: "asc" } });
   const byCode = new Map(rows.map((r) => [r.code, r]));
   const out = bindableTemplates().map((t) => view({ code: t.id, name: t.name, version: t.version, inFile: true }, byCode.get(t.id)));

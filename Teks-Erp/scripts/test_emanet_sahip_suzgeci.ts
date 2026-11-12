@@ -67,7 +67,7 @@ function statik(): void {
   const routes = readFileSync(path.join(ROOT, "src/routes/consigned-work.routes.ts"), "utf8");
   check("§0b /api/consigned-work requireEmanetEnabled arkasında", /router\.use\(verifyToken, requireEmanetEnabled\)/.test(routes));
   check("§0d uç süzgeci sıkı şemayla (tanınmayan parametre 400) okur ve servise geçirir",
-    /onlyReady: z\.enum\(\["true", "false"\]\)\.optional\(\) \}\)\.strict\(\)/.test(routes) && /getConsignedWorkSummary\(\{ onlyReady: parsed\.data\.onlyReady === "true" \}\)/.test(routes));
+    /onlyReady: z\.enum\(\["true", "false"\]\)\.optional\(\)(, search: listSearchParam)? \}\)\.strict\(\)/.test(routes) && /getConsignedWorkSummary\(\{ onlyReady: parsed\.data\.onlyReady === "true"(, search: parsed\.data\.search)? \}\)/.test(routes));
   const page = readFileSync(path.join(ROOT, "../Electron/src/pages/Operations/ConsignedWork/ConsignedWorkPage.tsx"), "utf8");
   const svc = readFileSync(path.join(ROOT, "../Electron/src/pages/Operations/ConsignedWork/service.ts"), "utf8");
   check("§0e panel süzgeci sunucuya yollar (onlyReady parametresi); sayfada satır süzmesi YOK",

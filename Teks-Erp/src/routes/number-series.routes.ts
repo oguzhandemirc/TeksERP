@@ -33,10 +33,11 @@ import {
   updateSeriesNumberSource,
 } from "../services/helpers/series-write.helper";
 import { cancelPendingSeriesFormat } from "../services/helpers/series-pending.helper";
-import { listSeries, previewNextNumber, seriesImpactCount } from "../services/helpers/series-panel.helper";
+import { listSeriesMatching, previewNextNumber, seriesImpactCount } from "../services/helpers/series-panel.helper";
 import { seriesExhaustion, seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
 import { numberSeriesCatalogEntry } from "../constants/number-series-catalog";
 import { factoryDateTr } from "../constants/time";
+import { listSearchParam } from "../utils/list-search";
 
 const router = Router();
 
@@ -133,6 +134,8 @@ const formatWithEffectiveSchema = formatSchema
 
 const previewSchema = formatSchema.extend({ key: z.string().trim().min(1).max(64) }).strict();
 const keyParamSchema = z.object({ key: z.string().trim().min(1).max(64) });
+// Liste sorgusu katı (tanınmayan parametre 400). Katalog koddan geldiği için arama bellek ikiziyle.
+const listQuerySchema = z.object({ search: listSearchParam }).strict();
 
 /**
  * @openapi
@@ -145,18 +148,25 @@ const keyParamSchema = z.object({ key: z.string().trim().min(1).max(64) });
  *       eski istemci kapısı (`ISTEMCI`) da "bugün düzenlenemez" der. `lockKind`
  *       üçünü ayırır çünkü üçü FARKLI GÜN kalkar ve panelde farklı cümle olmalı.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — seri anahtarı, adı, bölümü, ön eki ya da örnek kodu; boş = arama yok"
  *     responses:
  *       200: { description: Seri listesi }
+ *       400: { description: Tanınmayan parametre ya da 100 karakteri aşan arama }
  */
-router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
+router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const { search } = listQuerySchema.parse(req.query);
     // ⚠️ TÜKENME UYARISI LİSTEDE de var: eskiden yalnız Düzenle diyaloğunda
     // görünüyordu, yani biçimi kilitli bir seride (top barkodu) kullanıcı günlük
     // kapasitenin dolmak üzere olduğunu HİÇBİR YERDE göremiyordu (d3 ölçtü
     // 2026-09-23). Maliyet dar: yalnız üst sınırı OLAN seriler sayılır.
     const warnings = await seriesExhaustionWarnings();
     const warningByKey = new Map(warnings.map((w) => [w.key, w]));
-    const data = listSeries().map((r) => {
+    const data = listSeriesMatching(search).map((r) => {
       const w = warningByKey.get(r.key);
       return w ? { ...r, exhaustion: w } : r;
     });

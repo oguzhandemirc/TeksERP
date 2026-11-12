@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { listSearchWhere } from "../utils/list-search";
 import { AuditService } from "./audit.service";
 
 export interface CustomerLabSpecInput {
@@ -50,9 +51,18 @@ async function assertRefs(input: CustomerLabSpecInput): Promise<void> {
 
 const isDup = (err: unknown): boolean => err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
 
-export async function listCustomerLabSpecs(q: { customerId?: string; itemId?: string; testTypeId?: string; includeInactive?: boolean }) {
+/** Arama yolları — müşteri/ürün adı Fold gölgeli, kodlar BÜYÜK ASCII; tür adı gölgesiz (küçük katalog). */
+export const CUSTOMER_LAB_SPEC_SEARCH = {
+  text: ["customer.name", "item.name"],
+  code: ["customer.code", "item.code", "testType.code"],
+  plain: ["testType.name"],
+} as const;
+
+export async function listCustomerLabSpecs(q: { customerId?: string; itemId?: string; testTypeId?: string; includeInactive?: boolean; search?: string }) {
+  const search = listSearchWhere<Prisma.CustomerLabSpecWhereInput>(q.search, CUSTOMER_LAB_SPEC_SEARCH);
   return prisma.customerLabSpec.findMany({
     where: {
+      ...(search ? { AND: [search] } : {}),
       ...(q.customerId ? { customerId: q.customerId } : {}),
       ...(q.itemId ? { itemId: q.itemId } : {}),
       ...(q.testTypeId ? { testTypeId: q.testTypeId } : {}),

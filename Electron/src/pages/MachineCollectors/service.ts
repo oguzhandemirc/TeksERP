@@ -12,7 +12,7 @@ import type { CollectorBody, CollectorCreateBody, CollectorCreateResult, Collect
 const BASE = "/api/machine-collectors";
 
 export const machineCollectorService = {
-  list: () => apiClient.get<ApiResponse<MachineCollector[]>>(BASE).then((r) => r.data.data),
+  list: (search?: string) => apiClient.get<ApiResponse<MachineCollector[]>>(BASE, { params: search ? { search } : {} }).then((r) => r.data.data),
   get: (id: string) => apiClient.get<ApiResponse<MachineCollector>>(`${BASE}/${id}`).then((r) => r.data.data),
   /** İptal önizlemesi — sunucu ucu: bağı çözülecek tezgahlar · kartın açık duruşları · bekleyen geç kapanışlar. */
   revokePreview: (id: string) =>

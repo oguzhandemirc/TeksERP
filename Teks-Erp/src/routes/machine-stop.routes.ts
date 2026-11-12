@@ -21,6 +21,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
 import { listMachineStops, listStopReclasses } from "../services/loom-list.service";
 import { BULK_STOP_MAX, classifyBulkStops, closeBulkStops, openBulkStops, previewBulkStops, revokeBulkStops } from "../services/machine-stop-bulk.service";
+import { listSearchParam } from "../utils/list-search";
 
 const router = Router();
 router.use(verifyToken, requireMachineStopRegime);
@@ -57,6 +58,7 @@ const listSchema = z
     limit: z.coerce.number().int().min(1).max(500).optional(),
     // İstasyon türü süzgeci (CSV / tekrarlı anahtar — `readFilterList`); yoksa bugünkü küme.
     stationKind: z.union([z.string(), z.array(z.string())]).optional(),
+    search: listSearchParam,
   })
   .strict();
 
@@ -74,6 +76,11 @@ function parseStationKinds(raw: string | string[] | undefined): StationKind[] {
  *     tags: [MachineStops]
  *     summary: Duruş listesi — açık duruşlar (`open=true`), sınıflandırma kuyruğu (`queue=true`) ya da geçici (watchdog) kapanışı gerçek bitiş bekleyenler (`pendingEnd=true`)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — tezgah kodu/adı ya da sebep kodu; boş = arama yok"
  *     responses:
  *       200: { description: Duruş listesi (geri alınmışlar hariç) }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
@@ -91,6 +98,7 @@ router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MO
         shiftInstanceId: q.shiftInstanceId,
         limit: q.limit,
         stationKinds: parseStationKinds(q.stationKind),
+        search: q.search,
         ...kindScopeFor(req),
       }),
     );

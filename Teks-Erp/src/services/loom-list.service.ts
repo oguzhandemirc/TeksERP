@@ -27,6 +27,8 @@ import { MACHINE_RUN_SELECT, type MachineRunDto } from "./machine-run.service";
 import { DOFF_SELECT, type DoffEventDto } from "./machine-doff.service";
 import { DOFF_PREFILL_SELECT, doffPrefill, type DoffPrefill } from "./helpers/tablet-prefill.helper";
 import type { ApiResponse } from "../types/api.types";
+import { listSearchWhere } from "../utils/list-search";
+import { machineSearchPaths, mergeSearchPaths } from "./helpers/list-search-paths.helper";
 
 /** Liste tavanı — bir tezgahın günlük indirmesi onlarcadır; tavan sayıyı DEĞİL listeyi kırpar. */
 export const LOOM_LIST_TAKE = 200;
@@ -124,6 +126,8 @@ export interface MachineStopListParams {
   stationKinds?: StationKind[];
   /** Yalnız `mobile:makine-durus` izniyle gelen istek: kurşun/brode/tambur dışı duruşlar kapsam dışı. */
   generalKindsOnly?: boolean;
+  /** Tezgah kodu/adı ya da sebep kodu — dar tutuldu (büyüyen tablo). */
+  search?: string;
 }
 
 /** `YYYY-MM-DD` → @db.Date kolonunun sakladığı UTC gece yarısı (yerel gece yarısı 1 gün geri etiketlerdi). */
@@ -144,6 +148,8 @@ export async function listMachineStops(params: MachineStopListParams): Promise<A
     // Rejim kapsamı TEK helper'dan: dokuma açık + süzgeçsiz → `{}` (bugünkü where, bayt-aynı).
     ...machineStopScopeWhere(await machineStopRegime(), params.stationKinds ?? [], { generalKindsOnly: params.generalKindsOnly }),
   };
+  const searchWhere = listSearchWhere<Prisma.MachineStopEventWhereInput>(params.search, mergeSearchPaths(machineSearchPaths("machine"), { code: ["reasonCode"] }));
+  if (searchWhere) where.AND = [searchWhere];
   const rows = await prisma.machineStopEvent.findMany({
     where,
     orderBy: { startedAt: "desc" },

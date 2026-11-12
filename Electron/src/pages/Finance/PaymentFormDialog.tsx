@@ -33,8 +33,8 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated, pr
   const [method, setMethod] = useState("CASH");
   const [reference, setReference] = useState("");
 
-  const cashQ = useQuery({ queryKey: ["finance", "cash-boxes"], queryFn: listCashBoxes });
-  const bankQ = useQuery({ queryKey: ["finance", "bank-accounts"], queryFn: listBankAccounts });
+  const cashQ = useQuery({ queryKey: ["finance", "cash-boxes"], queryFn: () => listCashBoxes() });
+  const bankQ = useQuery({ queryKey: ["finance", "bank-accounts"], queryFn: () => listBankAccounts() });
 
   // Kasa ve banka TEK listede birleşir ama kimliğinde türü taşır: uç ikisini
   // ayrı alanlarla bekliyor ve "kasa VEYA banka" seddi DB'de CHECK ile kilitli.

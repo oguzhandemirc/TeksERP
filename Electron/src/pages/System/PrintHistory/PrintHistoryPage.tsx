@@ -13,13 +13,17 @@ import { PrintHistoryTable } from "./PrintHistoryTable";
 import { usePrintHistoryTable } from "./printHistoryColumns";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { PrintJobDetailSheet } from "./PrintJobDetailSheet";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export const PRINT_HISTORY_QUERY_KEY = "print-history";
 
 export function PrintHistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = useMemo(() => fromSearchParams(searchParams), [searchParams]);
-  const params = useMemo(() => toQueryParams(filters), [filters]);
+  const { search, setSearch, term } = useListSearch();
+  // Metin araması URL süzgecine yazılmaz (derin bağlantı sözleşmesi aynen); liste + özet aynı parametreyi alır.
+  const params = useMemo(() => ({ ...toQueryParams(filters), ...(term ? { search: term } : {}) }), [filters, term]);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const setFilters = useCallback(
@@ -64,7 +68,12 @@ export function PrintHistoryPage() {
         printerOptions={options.printers}
         deviceOptions={options.devices}
         subjectLabel={subjectLabel}
-        tools={<DataTableTools table={table} hideExport />}
+        tools={
+          <>
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kayıt/belge no, yazıcı adı ya da hata kodu ara" />
+            <DataTableTools table={table} hideExport />
+          </>
+        }
       />
 
       {!unsupported && !query.isError && items.length > 0 ? (

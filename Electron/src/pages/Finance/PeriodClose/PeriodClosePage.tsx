@@ -55,6 +55,8 @@ import { VerifyPeriodDialog } from "./VerifyPeriodDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PERIOD_CURRENCIES, listPeriodCloses, type PeriodCloseRow } from "./service";
 import { usePeriodCloseTable } from "./periodCloseColumns";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 type TabKey = "cari" | "cash";
 
@@ -63,6 +65,7 @@ export function PeriodClosePage() {
   const [cari, setCari] = useState<CariRow | null>(null);
   const [currency, setCurrency] = useState<Currency | "">("");
   const [includeReopened, setIncludeReopened] = useState(false);
+  const { search, setSearch, term } = useListSearch();
   const [formOpen, setFormOpen] = useState(false);
   const [cashFormOpen, setCashFormOpen] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState<PeriodCloseRow | null>(null);
@@ -75,7 +78,7 @@ export function PeriodClosePage() {
   // çalışır. Filtreler (cari / para birimi) kırpmayı kaldırmanın yoludur.
   const PAGE_SIZE = 200;
   const q = useQuery({
-    queryKey: ["finance", "period-closes", cari?.id ?? "", currency, includeReopened],
+    queryKey: ["finance", "period-closes", cari?.id ?? "", currency, includeReopened, term ?? ""],
     queryFn: () =>
       listPeriodCloses({
         page: 1,
@@ -83,6 +86,7 @@ export function PeriodClosePage() {
         cariId: cari?.id,
         currency: currency || undefined,
         includeReopened,
+        search: term,
       }),
   });
 
@@ -151,7 +155,8 @@ export function PeriodClosePage() {
             >
               Yeniden açılanlar
             </Button>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-1.5">
+              <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Cari adı, cari kodu ya da kapanış notu ara" />
               <DataTableTools table={table} exportName="Dönem kapanışları" compact />
             </div>
           </div>
@@ -203,7 +208,7 @@ export function PeriodClosePage() {
               ) : (
                 <ListMessage>
                   <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    {includeReopened
+                    {includeReopened || term
                       ? "Bu filtreyle kapanış kaydı yok."
                       : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık. Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” düğmesine basın."}
                   </div>

@@ -14,13 +14,17 @@ import { useLocalTable } from "@/hooks/useLocalTable";
 import { LabTypeFormDialog } from "./LabTypeFormDialog";
 import { LabPresetDialog } from "./LabPresetDialog";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export function LabTypesPanel() {
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
   const [editing, setEditing] = useState<LabTestType | "new" | null>(null);
   const [presetOpen, setPresetOpen] = useState(false);
-  const q = useQuery({ queryKey: ["lab-test-types", "all"], queryFn: () => labTestTypeService.list(false) });
+  const { search, setSearch, term } = useListSearch();
+  // Aramasız anahtar diğer ekranların ortak önbelleğidir; arama ayrı anahtarda (süzülmüş katalog paylaşılmaz).
+  const q = useQuery({ queryKey: term ? ["lab-test-types", "search", term] : ["lab-test-types", "all"], queryFn: () => labTestTypeService.list(false, term) });
   const toggle = useMutation({
     mutationFn: (t: LabTestType) => labTestTypeService.update(t.id, {
       code: t.code, name: t.name, method: t.method, resultKind: t.resultKind, scaleMax: t.scaleMax, unit: t.unit,
@@ -42,6 +46,7 @@ export function LabTypesPanel() {
           </div>
         </PermissionGate>
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Test türü kodu, adı ya da yöntemi ara" />
           <DataTableTools table={table} compact exportName="Test türleri" />
         </div>
       </ListToolbar>
@@ -51,6 +56,7 @@ export function LabTypesPanel() {
       <ListBody>
         {q.isLoading ? <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
           : q.isError ? <ListMessage className="text-sm text-destructive">{apiErrorText(q.error, "Test türleri okunamadı.")}</ListMessage>
+          : term ? <ListMessage className="text-sm text-muted-foreground">Aramaya uyan test türü yok.</ListMessage>
           : <ListMessage><div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Katalog boş. “Hazır listeden ekle” ile gramaj, haslık gibi yaygın testleri tek adımda ekleyin.</div></ListMessage>}
       </ListBody>
       )}

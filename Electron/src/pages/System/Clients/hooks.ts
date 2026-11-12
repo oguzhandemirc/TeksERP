@@ -8,10 +8,10 @@ import { fetchConnectedClients } from "./service";
  * gösterge değil. Sürekli yoklama fabrika ağına ve sunucuya bedel bindirir ve
  * ekranın iddiasını ("son N dakikada istek gönderdi") değiştirmez.
  */
-export function useConnectedClients() {
+export function useConnectedClients(search?: string) {
   return useQuery({
-    queryKey: ["connected-clients"],
-    queryFn: fetchConnectedClients,
+    queryKey: ["connected-clients", search ?? ""],
+    queryFn: () => fetchConnectedClients(search),
     // Açılışta taze veri: sekmeye her dönüldüğünde eski bir fotoğraf değil.
     staleTime: 0,
     refetchOnMount: "always",

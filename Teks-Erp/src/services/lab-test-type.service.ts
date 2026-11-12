@@ -9,6 +9,7 @@ import { Prisma, type LabResultKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { LAB_TEST_PRESETS } from "../constants/lab-test-presets";
 import { AppError } from "../utils/app-error";
+import { listSearchWhere } from "../utils/list-search";
 import { AuditService } from "./audit.service";
 
 export interface LabTestTypeInput {
@@ -39,9 +40,13 @@ export function normalizeLabTestType(input: LabTestTypeInput) {
   };
 }
 
-export async function listLabTestTypes(opts: { activeOnly?: boolean } = {}) {
+/** Arama yolları — kod BÜYÜK ASCII (`normalizeLabTestType`), ad/yöntem gölgesiz (küçük katalog). */
+export const LAB_TEST_TYPE_SEARCH = { code: ["code"], plain: ["name", "method"] } as const;
+
+export async function listLabTestTypes(opts: { activeOnly?: boolean; search?: string } = {}) {
+  const search = listSearchWhere<Prisma.LabTestTypeWhereInput>(opts.search, LAB_TEST_TYPE_SEARCH);
   return prisma.labTestType.findMany({
-    where: opts.activeOnly ? { isActive: true } : {},
+    where: { ...(opts.activeOnly ? { isActive: true } : {}), ...(search ? { AND: [search] } : {}) },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }],
   });
 }

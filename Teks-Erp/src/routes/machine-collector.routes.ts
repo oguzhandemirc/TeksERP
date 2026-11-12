@@ -12,6 +12,7 @@ import { requireTezgahEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { MachineCollectorService } from "../services/machine-collector.service";
 import { previewCollectorRevoke } from "../services/machine-collector-preview.service";
+import { readListSearch } from "../utils/list-search";
 
 const router = Router();
 router.use(verifyToken, requireTezgahEnabled);
@@ -24,6 +25,11 @@ const guard = requirePermission("loom:spec-manage");
  *     tags: [MachineCollectors]
  *     summary: Makine kartları (ad · kart tipi · bağlı tezgahlar · sır veriliş zamanı) — sır/tohum dönmez
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — kart adı, bağlı tezgah kodu/adı; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
  *       403: { description: Tezgah modülü kapalı (MODULE_DISABLED) ya da yetki yok }
@@ -41,9 +47,9 @@ const guard = requirePermission("loom:spec-manage");
  *       409: { description: Tezgah başka karta bağlı (MACHINE_ALREADY_LINKED) · ad dolu (COLLECTOR_NAME_TAKEN) · CLIENT_TOKEN_COLLISION · COLLECTOR_REVOKED }
  *       503: { description: Anahtar halkası yok (SHORT_CREDENTIAL_KEY_UNAVAILABLE) }
  */
-router.get("/", guard, async (_req, res, next) => {
+router.get("/", guard, async (req, res, next) => {
   try {
-    res.json(await MachineCollectorService.list());
+    res.json(await MachineCollectorService.list(readListSearch(req.query.search)));
   } catch (e) {
     next(e);
   }

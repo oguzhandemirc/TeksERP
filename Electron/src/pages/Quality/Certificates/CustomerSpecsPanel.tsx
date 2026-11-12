@@ -18,6 +18,8 @@ import { CUSTOMER_SPEC_COLUMNS } from "./customerSpecColumns";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 const SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
 const parseBound = (s: string): number | null | "bad" => {
@@ -31,9 +33,10 @@ export function CustomerSpecsPanel() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [edit, setEdit] = useState<CustomerLabSpec | "new" | null>(null);
+  const { search, setSearch, term } = useListSearch();
   const q = useQuery({
-    queryKey: ["customer-lab-specs", customerId, showInactive],
-    queryFn: () => customerLabSpecService.list({ customerId: customerId ?? undefined, includeInactive: showInactive ? "1" : "0" }),
+    queryKey: ["customer-lab-specs", customerId, showInactive, term ?? ""],
+    queryFn: () => customerLabSpecService.list({ customerId: customerId ?? undefined, includeInactive: showInactive ? "1" : "0", search: term }),
   });
   const rows = q.data ?? [];
   const table = useLocalTable({ tableKey: "customer-lab-specs", data: rows, columns: CUSTOMER_SPEC_COLUMNS, getRowId: (r) => r.id });
@@ -44,6 +47,7 @@ export function CustomerSpecsPanel() {
           <div className="w-full sm:w-72"><CustomerPickerField clearable value={customerId} onChange={setCustomerId} placeholder="Tüm müşteriler" /></div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri de göster</label>
           <div className="ml-auto flex items-center gap-1.5">
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Müşteri, ürün ya da test türü (ad/kod) ara" />
             <DataTableTools table={table} compact exportName="Müşteri spesifikasyonları" />
             <PermissionGate permission="labtest:write">
               <Button size="sm" onClick={() => setEdit("new")}><Plus className="mr-1 h-4 w-4" />Yeni spesifikasyon</Button>
@@ -67,7 +71,7 @@ export function CustomerSpecsPanel() {
           ) : (
             <ListMessage>
               <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                {customerId ? "Bu müşteri için spesifikasyon yok." : "Henüz müşteri spesifikasyonu yok. Müşterinin istediği gramaj, haslık gibi sınırları buradan girin."}
+                {term ? "Aramaya uyan spesifikasyon yok." : customerId ? "Bu müşteri için spesifikasyon yok." : "Henüz müşteri spesifikasyonu yok. Müşterinin istediği gramaj, haslık gibi sınırları buradan girin."}
               </div>
             </ListMessage>
         )}

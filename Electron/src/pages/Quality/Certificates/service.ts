@@ -81,7 +81,7 @@ export const certificateService = {
 };
 
 export const customerLabSpecService = {
-  list: (p: { customerId?: string; itemId?: string; testTypeId?: string; includeInactive?: "0" | "1" }) =>
+  list: (p: { customerId?: string; itemId?: string; testTypeId?: string; includeInactive?: "0" | "1"; search?: string }) =>
     apiClient.get<ApiResponse<CustomerLabSpec[]>>("/api/customer-lab-specs", { params: compact(p) }).then((r) => r.data.data),
   create: (body: CustomerLabSpecInput) => apiClient.post<ApiResponse<CustomerLabSpec>>("/api/customer-lab-specs", body).then((r) => r.data.data),
   update: (id: string, body: { specMin?: number | null; specMax?: number | null; note?: string | null; isActive?: boolean }) =>

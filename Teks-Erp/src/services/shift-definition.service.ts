@@ -19,6 +19,7 @@ import { loadShiftCalendarInputs, runShiftCalendarOnce, type ShiftCalendarOutcom
 import { planShiftCalendar, type PlanDefinition } from "./helpers/shift-calendar-plan.helper";
 import { factoryDateTimeTr, factoryYmd } from "../constants/time";
 import { uyari } from "../lib/logger";
+import { listSearchWhere } from "../utils/list-search";
 
 const TABLE = "SHIFT_DEFINITION";
 
@@ -123,9 +124,10 @@ async function respond(def: ShiftDefinitionDto, message: string): Promise<ApiRes
   return { success: true, data: { definition: def, calendar }, message, ...(warnings.length ? { warnings } : {}) };
 }
 
-export async function listShiftDefinitions(opts: { includeInactive: boolean }): Promise<ApiResponse<ShiftDefinitionDto[]>> {
+export async function listShiftDefinitions(opts: { includeInactive: boolean; search?: string }): Promise<ApiResponse<ShiftDefinitionDto[]>> {
+  const searchWhere = listSearchWhere<Prisma.ShiftDefinitionWhereInput>(opts.search, { text: ["name"], code: ["code"] });
   const data = await prisma.shiftDefinition.findMany({
-    where: opts.includeInactive ? {} : { isActive: true },
+    where: { ...(opts.includeInactive ? {} : { isActive: true }), ...(searchWhere ? { AND: [searchWhere] } : {}) },
     select: SHIFT_DEFINITION_SELECT,
     orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { code: "asc" }],
   });

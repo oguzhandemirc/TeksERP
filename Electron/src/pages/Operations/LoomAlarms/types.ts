@@ -80,6 +80,8 @@ export interface LoomAlarmListParams {
   tier?: 1 | 2;
   from?: string;
   to?: string;
+  /** Tezgah kodu/adı, hol adı ya da sebep kodu (sunucu araması; liste + özet aynı where). */
+  search?: string;
   cursor?: string;
   limit?: number;
 }

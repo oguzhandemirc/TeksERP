@@ -17,6 +17,8 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
@@ -54,7 +56,8 @@ export function RatesPage() {
   const [currency, setCurrency] = useState<Currency>("USD");
   const [rate, setRate] = useState(0);
 
-  const q = useQuery({ queryKey: ["finance", "rates"], queryFn: listRates });
+  const { search, setSearch, term } = useListSearch();
+  const q = useQuery({ queryKey: ["finance", "rates", term ?? ""], queryFn: () => listRates(term) });
 
   const createM = useMutation({
     mutationFn: () => createRate({ rateDate, currency, rate }),
@@ -137,6 +140,7 @@ export function RatesPage() {
           </div>
         </PermissionGate>
           <div className="ml-auto flex items-center gap-1.5">
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Para birimi (USD, Dolar) ya da kaynak (TCMB, elle) ara" />
             <DataTableTools table={table} compact exportName="Kurlar" />
           </div>
         </div>
@@ -166,6 +170,9 @@ export function RatesPage() {
               </Button>
             </div>
           </ListMessage>
+        ) : rows.length === 0 && term ? (
+          /* Aramada boş sonuç "kur girilmemiş" DEĞİLDİR — o cümle mükerrer kur girişine yönlendirir. */
+          <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kur yok.</ListMessage>
         ) : rows.length === 0 ? (
           <ListMessage>
             <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">

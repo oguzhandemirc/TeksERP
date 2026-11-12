@@ -13,6 +13,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ACTIVE_YARN_COST_PRICE, COST_PRICE_REVOKE_REASON } from "./helpers/cost-price-validity.helper";
 import { isUniqueViolation, logStampedVersionAudit, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { listSearchWhere } from "../utils/list-search";
 
 export const YARN_COST_PRICE_SELECT = {
   id: true,
@@ -44,9 +45,10 @@ export interface YarnCostPriceChangeInput {
 }
 
 /** Liste — varsayılan YALNIZ aktif; geçmiş açıkça istenir (`includeRevoked`). */
-export async function listYarnCostPrices(opts: { yarnItemId?: string; includeRevoked?: boolean }): Promise<YarnCostPriceRow[]> {
+export async function listYarnCostPrices(opts: { yarnItemId?: string; includeRevoked?: boolean; search?: string }): Promise<YarnCostPriceRow[]> {
+  const search = listSearchWhere<Prisma.YarnCostPriceWhereInput>(opts.search, { text: ["yarnItem.name"], code: ["yarnItem.code"] });
   const where: Prisma.YarnCostPriceWhereInput = {
-    AND: [opts.yarnItemId ? { yarnItemId: opts.yarnItemId } : {}, opts.includeRevoked ? {} : ACTIVE_YARN_COST_PRICE],
+    AND: [opts.yarnItemId ? { yarnItemId: opts.yarnItemId } : {}, opts.includeRevoked ? {} : ACTIVE_YARN_COST_PRICE, search ?? {}],
   };
   return prisma.yarnCostPrice.findMany({ where, select: YARN_COST_PRICE_SELECT, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
 }

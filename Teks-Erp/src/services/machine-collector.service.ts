@@ -21,6 +21,8 @@ import { COLLECTOR_TYPE_RE } from "./machine-stop-code-map.service";
 import { deriveCollectorSecret, newCollectorSeed } from "./helpers/collector-secret.helper";
 import { assertCollectorReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
+import { listSearchWhere } from "../utils/list-search";
+import { machineSearchPaths, mergeSearchPaths } from "./helpers/list-search-paths.helper";
 
 const TABLE = "MACHINE_COLLECTOR";
 
@@ -161,8 +163,9 @@ async function createCollectorFresh(input: CreateInput, userId?: string): Promis
 }
 
 export class MachineCollectorService {
-  static async list(): Promise<ApiResponse<CollectorDto[]>> {
-    const data = await prisma.machineCollector.findMany({ select: COLLECTOR_PUBLIC_SELECT, orderBy: { createdAt: "asc" } });
+  static async list(search?: string): Promise<ApiResponse<CollectorDto[]>> {
+    const where = listSearchWhere<Prisma.MachineCollectorWhereInput>(search, mergeSearchPaths({ text: ["name"] }, machineSearchPaths("machines.some.machine")));
+    const data = await prisma.machineCollector.findMany({ where, select: COLLECTOR_PUBLIC_SELECT, orderBy: { createdAt: "asc" } });
     return { success: true, data };
   }
 

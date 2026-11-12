@@ -20,6 +20,8 @@ import { RefreshButton } from "@/components/RefreshButton";
 import {
   listCashBoxes, listBankAccounts, createCashBox, createBankAccount, money, type Currency,
 } from "./service";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 
@@ -31,8 +33,9 @@ export function AccountsPage() {
   const [iban, setIban] = useState("");
   const [currency, setCurrency] = useState<Currency>("TRY");
 
-  const cashQ = useQuery({ queryKey: ["finance", "cash-boxes"], queryFn: listCashBoxes });
-  const bankQ = useQuery({ queryKey: ["finance", "bank-accounts"], queryFn: listBankAccounts });
+  const { search, setSearch, term } = useListSearch();
+  const cashQ = useQuery({ queryKey: ["finance", "cash-boxes", term ?? ""], queryFn: () => listCashBoxes(term) });
+  const bankQ = useQuery({ queryKey: ["finance", "bank-accounts", term ?? ""], queryFn: () => listBankAccounts(term) });
 
   const createM = useMutation({
     mutationFn: () =>
@@ -53,7 +56,12 @@ export function AccountsPage() {
     <PageShell>
       <PageHeader
         title="Kasa & Banka"
-        actions={<RefreshButton queryKey={["finance", "cash-boxes"]} extraKeys={[["finance", "bank-accounts"]]} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kasa ve banka hesaplarında kod, ad, banka ya da IBAN ara" />
+            <RefreshButton queryKey={["finance", "cash-boxes"]} extraKeys={[["finance", "bank-accounts"]]} />
+          </div>
+        }
         description="Her kasa/hesap TEK para birimlidir — dövizli işlem için ayrı kart açılır. Bakiye elle yazılmaz; tahsilat ve ödemelerden türetilir."
       />
       <div className="flex min-h-0 flex-1 flex-col">
@@ -73,7 +81,7 @@ export function AccountsPage() {
           loading={cashQ.isLoading}
           isError={cashQ.isError}
           onRetry={() => void cashQ.refetch()}
-          empty="Kasa tanımı yok."
+          empty={term ? "Aramaya uyan kasa yok." : "Kasa tanımı yok."}
           errorTitle="Kasa listesi yüklenemedi."
         />
         <AccountSection
@@ -92,7 +100,7 @@ export function AccountsPage() {
           loading={bankQ.isLoading}
           isError={bankQ.isError}
           onRetry={() => void bankQ.refetch()}
-          empty="Banka hesabı tanımı yok."
+          empty={term ? "Aramaya uyan banka hesabı yok." : "Banka hesabı tanımı yok."}
           errorTitle="Banka hesabı listesi yüklenemedi."
           showBank
         />

@@ -100,6 +100,8 @@ import { receiptQtyByRollTx, receiptQtyWarning } from "./helpers/receipt-qty.hel
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
 import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
+import { listSearchWhere } from "../utils/list-search";
+import { PURCHASE_OPEN_LINE_SEARCH } from "./helpers/list-search-paths.helper";
 
 /**
  * Alış siparişi senkronunun `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
@@ -1236,9 +1238,11 @@ export class PurchaseOrderService {
     subcontractorId?: string;
     itemId?: string;
     overdueOnly?: boolean;
+    search?: string;
     limit?: number;
   }): Promise<{ rows: unknown[]; total: number }> {
     const limit = Math.min(500, Math.max(1, params.limit ?? 200));
+    const searchWhere = listSearchWhere<Prisma.PurchaseOrderLineWhereInput>(params.search, PURCHASE_OPEN_LINE_SEARCH);
     const where: Prisma.PurchaseOrderLineWhereInput = {
       receivedQty: { lt: prisma.purchaseOrderLine.fields.qty },
       purchaseOrder: {
@@ -1250,6 +1254,7 @@ export class PurchaseOrderService {
         ...(params.overdueOnly ? { expectedDate: { lt: new Date() } } : {}),
       },
       ...(params.itemId ? { itemId: params.itemId } : {}),
+      ...(searchWhere ? { AND: [searchWhere] } : {}),
     };
 
     const rows = await prisma.purchaseOrderLine.findMany({

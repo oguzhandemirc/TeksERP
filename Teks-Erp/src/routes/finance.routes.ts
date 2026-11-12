@@ -13,6 +13,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
+import { ExchangeRateListService } from "../services/exchange-rate-list.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
@@ -1031,7 +1032,7 @@ export const bankAccountService = new BaseService({
 // `dateFields` sözleşmesini GERÇEK config üzerinden ölçer. Bekçi kendi
 // `BaseService`ini kursaydı, buradan `dateFields` silindiğinde yeşil kalırdı —
 // yani tam da koruduğu şeyi göremezdi.
-export const exchangeRateService = new BaseService({
+export const exchangeRateService = new ExchangeRateListService({
   modelName: "exchangeRate",
   tableName: "EXCHANGE_RATE",
   searchFields: [],
@@ -1075,6 +1076,21 @@ router.get("/bank-accounts", requirePermission("finance:read"), bankCtl.findAll)
 router.post("/bank-accounts", requirePermission("finance:write"), stripBalance, bankCtl.create);
 router.patch("/bank-accounts/:id", requirePermission("finance:write"), stripBalance, bankCtl.update);
 
+/**
+ * @openapi
+ * /api/finance/exchange-rates:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Günlük kurlar (sayfalı; `dateField=rateDate` aralığı)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Para birimi kodu/adı (USD, Dolar) ya da kaynak (TCMB, elle); boş = arama yok"
+ *     responses:
+ *       200: { description: Kur listesi }
+ */
 router.get("/exchange-rates", requirePermission("finance:read"), rateCtl.findAll);
 router.post("/exchange-rates", requirePermission("finance:write"), rateCtl.create);
 router.patch("/exchange-rates/:id", requirePermission("finance:write"), rateCtl.update);
