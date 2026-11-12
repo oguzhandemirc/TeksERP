@@ -7,6 +7,7 @@ import { useTabsStore } from "@/store/tabs";
 import { formatCount, kg, metre, para } from "./pano-bicim";
 import { BOX_TARGETS, type PanoTarget } from "./pano-hedefler";
 import { PanoEmptyState } from "./PanoEmptyState";
+import { DEFAULT_BOX_OPTIONS, type TopOptions } from "./box-options";
 import type { PanoErisim } from "./usePanoErisim";
 import type { PanoSummary, PanoUrun } from "./types";
 
@@ -70,14 +71,16 @@ export function PanoBekleyen({ b, erisim }: { b: PanoSummary["bekleyen"]; erisim
 }
 
 /** En çok üretilen / sevk edilen — iki liste sekmeyle; ikisi de null ise kutu yok. */
-export function PanoEnCok({ enCok, erisim }: { enCok: PanoSummary["enCok"]; erisim: PanoErisim }) {
+export function PanoEnCok({ enCok, erisim, options = DEFAULT_BOX_OPTIONS.enCok }: { enCok: PanoSummary["enCok"]; erisim: PanoErisim; options?: TopOptions }) {
   const sekmeler = [
     ...(enCok.uretilen ? [{ key: "uretilen", etiket: "Üretilen", liste: enCok.uretilen }] : []),
     ...(enCok.sevkEdilen ? [{ key: "sevk", etiket: "Sevk", liste: enCok.sevkEdilen }] : []),
   ];
-  const [secili, setSecili] = useState(0);
+  // Tıklanana dek ayardaki açılış sekmesi (ayar değişince izler).
+  const [secili, setSecili] = useState<number | null>(null);
   if (sekmeler.length === 0) return null;
-  const aktif = sekmeler[Math.min(secili, sekmeler.length - 1)]!;
+  const acilis = Math.max(0, sekmeler.findIndex((s) => s.key === options.tab));
+  const aktif = sekmeler[Math.min(secili ?? acilis, sekmeler.length - 1)]!;
   return (
     <PanoCard
       title="En çok"
@@ -92,7 +95,7 @@ export function PanoEnCok({ enCok, erisim }: { enCok: PanoSummary["enCok"]; eris
     >
       {aktif.liste.length === 0 ? <PanoEmptyState icon={Trophy} metin="Bu dönemde kayıt yok" ek="Kayıt geldikçe ilk 5 kumaş burada sıralanır." /> : (
         <RowList>
-          {aktif.liste.map((u: PanoUrun, i) => (
+          {aktif.liste.slice(0, options.rows).map((u: PanoUrun, i) => (
             <SummaryRow key={u.itemId} erisim={erisim}
               etiket={<><span className="mr-2 inline-block w-4 text-right tabular-nums">{i + 1}</span><span className="text-foreground">{u.ad}</span> <span className="text-xs">{u.kod}</span></>}
               deger={metre(u.metre)}

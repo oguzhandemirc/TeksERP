@@ -17,10 +17,10 @@ export function ListToolbar({ className, ...props }: HTMLAttributes<HTMLDivEleme
 
 /**
  * Liste bandı — özet şeridi gibi listenin üstündeki tam genişlik bilgi satırı. Çerçevesiz; zemin `--band`, ince alt
- * çizgi (index.css "SAYFA BANTLARI"). İçine konan şerit kendi kutusunu ÇİZMEZ.
+ * çizgi (index.css "SAYFA BANTLARI"). İçine konan şerit kendi kutusunu ÇİZMEZ. Dikey dolgu yoğunluktan (`--space-band`).
  */
 export function ListBand({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div data-list-band="" className={cn("shrink-0 py-1.5", className)} {...props} />;
+  return <div data-list-band="" className={cn("shrink-0 py-[var(--space-band)]", className)} {...props} />;
 }
 
 export interface BandStatItem {

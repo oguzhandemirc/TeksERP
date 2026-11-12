@@ -79,6 +79,7 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
       trend={rozet?.trend ?? "neutral"}
       hint={c.kpi ? c.hint : undefined}
       layout="compact"
+      valueFit
       className="@container h-full"
       onClick={erisim.canGo(target) ? () => navigateActive(target.to) : undefined}
     />
@@ -102,7 +103,7 @@ export function PanoMoneyKpi({ boxKey, data, donem, erisim }: { boxKey: MoneyKpi
   // Birimler toplanmaz: ilk birim değer satırında, diğerleri değişim satırının altında kısa satır.
   return (
     <div className="@container h-full" data-testid={`pano-para-${boxKey}`}>
-      <StatCard layout="compact" className="h-full" label={head.label} icon={head.icon} tone={head.tone} onClick={go}
+      <StatCard layout="compact" valueFit className="h-full" label={head.label} icon={head.icon} tone={head.tone} onClick={go}
         value={first ? <span title={para(first.deger, first.paraBirimi)}>{para(first.deger, first.paraBirimi)}</span> : "—"}
         trend={r?.trend ?? "neutral"}
         delta={<>{r ? <span title={r.metin} className="font-semibold">{r.yuzde}</span> : first ? null : <span className="font-normal">{head.empty}</span>}

@@ -28,6 +28,15 @@ describe("BandStats — liste özetinin tek görünümü", () => {
     expect(late.className).toContain("text-destructive");
   });
 
+  it("dikey dolgu yoğunluk belirtecinden; sıkı görünüm eskisi (py-1.5) kadar, ferah daha geniş", () => {
+    const { container } = render(<ListBand>x</ListBand>);
+    expect(container.querySelector("[data-list-band]")!.className).toContain("py-[var(--space-band)]");
+    const css = readFileSync(path.resolve(__dirname, "../../index.css"), "utf8");
+    const band = (sel: string) => new RegExp(`${sel}[^}]*--space-band:\\s*([0-9.]+)rem`).exec(css)?.[1];
+    expect(band('\\[data-density="compact"\\]')).toBe("0.375");
+    expect(Number(band('\\[data-density="comfortable"\\]'))).toBeGreaterThan(0.375);
+  });
+
   it("altlık sayıları da aynı biçimde", () => {
     const { container } = render(<ListFooter loaded={1250} total={3400} />);
     expect(container.textContent).toContain("Yüklü 1250 / 3400 kayıt");

@@ -8,8 +8,10 @@ import { cn } from "@/lib/utils";
 import type { PanoBoxDef } from "./box-types";
 import { metaOf } from "./box-meta";
 import { hasContent, hasRenderer, renderBox, type RenderCtx } from "./box-render";
+import { boxSettings } from "./PanoBoxSettings";
 import { BoxChrome, BoxFailed, BoxLoading, BoxMenu, PreviewSkeleton } from "./PanoBoxFrame";
 import { BASE_SPAN, LOCAL_BOX_KEYS, moveBox, packRows, type SizeChoice } from "./pano-layout";
+import { useKpiGrid } from "./pano-kpi-izgara";
 import { useMasonry } from "./pano-masonry";
 import { SizePicker } from "./PanoSizePicker";
 import type { BoxState } from "./usePanoBoxData";
@@ -54,6 +56,7 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const flow = useMemo(() => body.map((b) => ({ key: b.anahtar, span: spanAt(BASE_SPAN[b.boyut as SizeChoice] ?? 4, b.boyut === "genis") })), [bodyKey]);
   const masonry = useMasonry(flow);
+  const kpiGrid = useKpiGrid(kpis.length);
 
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
@@ -64,7 +67,8 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder, on
   const cell = (b: PanoBoxDef) => {
     const s = states[b.anahtar];
     if (editing) return <EditCard def={b} onRemove={() => onRemove(b.anahtar)} onResize={(s) => onResize(b.anahtar, s)} />;
-    const menu = <BoxMenu title={b.baslik} onRemove={() => onRemove(b.anahtar)} className={b.boyut === "kpi" ? "absolute right-3 top-3 z-10 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" : undefined} />;
+    const settings = s && !s.loading && !s.error ? boxSettings(b.anahtar, s.data, ctx.options, ctx.setOption) : null;
+    const menu = <BoxMenu title={b.baslik} settings={settings} onRemove={() => onRemove(b.anahtar)} className={b.boyut === "kpi" ? "absolute right-3 top-3 z-10 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" : undefined} />;
     let content: ReactNode;
     if (LOCAL_BOX_KEYS.has(b.anahtar)) content = renderBox(b.anahtar, null, ctx);
     else if (s?.loading) content = b.boyut === "kpi" ? <KpiLoading /> : <BoxLoading title={b.baslik} kind={metaOf(b.anahtar).preview} />;
@@ -79,8 +83,8 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder, on
       <div className="space-y-[var(--space-gap)]" data-testid="pano-board" data-editing={editing || undefined}>
         {kpis.length > 0 && (
           <SortableContext items={kpis.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            {/* Eşit hücreli şerit: beş kompakt kart 1280 genişlikte tek sıra; taşan kart alt sıraya eşit genişlikte iner. */}
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
+            {/* Eşit hücreli sarmalı şerit: sığan kartlar satırı paylaşır, sarınca satırlar dengelenir (yetim kart yok). */}
+            <div ref={kpiGrid.ref} style={kpiGrid.style} className="grid grid-cols-[repeat(auto-fit,minmax(10.625rem,1fr))] gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
               {kpis.map((b) => (
                 <Cell key={b.anahtar} id={b.anahtar} editing={editing}>{cell(b)}</Cell>
               ))}

@@ -26,14 +26,16 @@ export interface TrendAreaChartProps {
   emptyText?: string;
   /** Grafiğin üstünde seri toplamları (renk noktası + ad + toplam). */
   showTotals?: boolean;
+  /** Çizim: yumuşak alan (varsayılan), dolgusuz çizgi ya da sütun. */
+  kind?: "area" | "line" | "bar";
 }
 
 /** Çok serili yumuşak alan grafiği (hedef görsel "performans" kutusu); renkler tema belirtecinden. */
-export function TrendAreaChart({ labels, series, formatValue, label, height = 220, emptyText = "Bu dönemde veri yok", showTotals = true }: TrendAreaChartProps) {
+export function TrendAreaChart({ labels, series, formatValue, label, height = 220, emptyText = "Bu dönemde veri yok", showTotals = true, kind = "area" }: TrendAreaChartProps) {
   const empty = series.every((s) => s.values.every((v) => !v));
   // Veri tek kovadaysa yumuşak alan eğimli bir tepe uydurur (yanıltıcı) — o zaman çubuk çizilir.
   const filledBuckets = labels.filter((_, i) => series.some((s) => (s.values[i] ?? 0) !== 0)).length;
-  const asBars = !empty && filledBuckets <= 1;
+  const asBars = !empty && (kind === "bar" || filledBuckets <= 1);
   const option = useCallback(
     (t: ChartTheme) => {
       // Boş dönem: aynı eksenler, soluk çizgi, sabit üst sınır — ECharts 0..1 eksenini göstermesin.
@@ -51,7 +53,7 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
           lineStyle: { width: 2.5, color },
           itemStyle: { color },
           emphasis: { focus: "series" },
-          areaStyle: {
+          areaStyle: kind === "line" ? undefined : {
             color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: withAlpha(color, empty ? 0 : 0.38) }, { offset: 1, color: withAlpha(color, 0.02) }] },
           },
         };
@@ -71,7 +73,7 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
         series: series.map(build),
       };
     },
-    [labels, series, empty, asBars, formatValue],
+    [labels, series, empty, asBars, formatValue, kind],
   );
   const total = (s: TrendSeries) => s.values.reduce<number>((a, v) => a + (v ?? 0), 0);
   return (
@@ -89,7 +91,7 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
           ))}
         </div>
       )}
-      <div className="relative" data-chart-kind={asBars ? "bar" : "area"}>
+      <div className="relative" data-chart-kind={asBars ? "bar" : kind}>
         <EChart option={option} height={height} label={label} />
         {empty && <ChartEmptyNote text={emptyText} />}
       </div>
