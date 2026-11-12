@@ -1,6 +1,7 @@
 // Yeni kutular (üretim + müşteri): en çok müşteri, istasyon bazında üretim, açık iş emirleri, kalite özeti.
 import { useState } from "react";
 import { ChevronRight, ShieldCheck, Users, Workflow } from "lucide-react";
+import { TERIM } from "@/lib/terim";
 import { cn } from "@/lib/utils";
 import { formatDisplay, formatPercent } from "@/lib/format";
 import { upperTr } from "@/lib/tr-case";
@@ -83,10 +84,10 @@ const WO_LABEL: Record<OpenWorkOrdersBox["durumlar"][number]["durum"], string> =
 export function PanoOpenWorkOrders({ d, erisim }: { d: OpenWorkOrdersBox; erisim: PanoErisim }) {
   const go = useGo(erisim)(BOX_TARGETS.isEmri);
   return (
-    <PanoCard title="Açık iş emirleri">
+    <PanoCard title={`Açık ${TERIM.terbiyeIsEmri.cogulKucuk}`}>
       <div className="@container">
       <div className="flex flex-col items-center gap-3 @[17rem]:flex-row @[17rem]:gap-4">
-        <Ring size={96} thickness={11} label={`${formatCount(d.toplam)} açık iş emri`} parts={d.durumlar.map((s, i) => ({ value: s.adet, stroke: CHART_STROKE[i]! }))}>
+        <Ring size={96} thickness={11} label={`${formatCount(d.toplam)} açık ${TERIM.terbiyeIsEmri.tekilKucuk}`} parts={d.durumlar.map((s, i) => ({ value: s.adet, stroke: CHART_STROKE[i]! }))}>
           <span className="text-xl font-bold tabular-nums">{formatCount(d.toplam)}</span>
           <span className="text-[10px] text-muted-foreground">açık</span>
         </Ring>

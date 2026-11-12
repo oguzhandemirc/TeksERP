@@ -14,7 +14,7 @@ import {
   Coins,
   type LucideIcon,
 } from "lucide-react";
-import { TERIM_AD } from "@/lib/terim";
+import { TERIM, TERIM_AD } from "@/lib/terim";
 import { DOCUMENTS_HUB_ACCESS, QUALITY_HUB_ACCESS, SYSTEM_HUB_ACCESS } from "@/lib/permissions";
 import type { IconTileTone } from "@/components/ui/icon-tile";
 import type { OperationGroupKey } from "@/pages/Operations/groups-config";
@@ -101,7 +101,7 @@ export const navGroups: NavGroup[] = [
       { label: "Anasayfa", to: "/", icon: LayoutDashboard, tone: "violet", description: "Fabrikanın bugünkü durumu" },
       // T5: eski "Operasyon" kökü dört bölüme ayrıldı; ekran adresleri `/operations/...` kalır.
       { label: "Satış", to: "/sales", icon: ShoppingCart, tone: "blue", section: "planning", description: "Siparişler, teklifler ve talep–üretim dengesi", keywords: "sipariş teklif kumaş dengesi" },
-      { label: "Üretim", to: "/production", icon: Factory, tone: "orange", section: "production", description: "İş emirleri, dokuma, kurşun, kartela ve fason", keywords: "iş emri dokuma kurşun fason kartela tezgah" },
+      { label: "Üretim", to: "/production", icon: Factory, tone: "orange", section: "production", get description() { return `${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}, dokuma, kurşun, kartela ve fason`; }, get keywords() { return `${TERIM.terbiyeIsEmri.tekilKucuk} dokuma kurşun fason kartela tezgah`; } },
       { label: "Depo", to: "/warehouse", icon: Warehouse, tone: "teal", section: "warehouse", description: "Stok, paketleme, mal kabul ve gelen belgeler", keywords: "stok top iplik sarf çuval mal kabul sayım" },
       { label: "Sevkiyat", to: "/shipping", icon: Truck, tone: "green", section: "shipping", description: "Sevk çıkışı, sevk edilenler ve iadeler", keywords: "sevk irsaliye iade" },
       {
