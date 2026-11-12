@@ -141,7 +141,7 @@ describe("Akışlı Excel ↔ eski buildWorkbook eşitliği", () => {
     // Ölçünün boş olmadığını sabitle: TOPLAM kalın, kesirli sayı biçimli, not italik.
     expect(a.views).toEqual([{ state: "frozen", ySplit: 4 }]);
     expect(a.rowCount).toBe(4 + 30 + 1 + 1 + NOTES.length);
-    expect(b.cells).toContainEqual(expect.objectContaining({ at: "6:3", value: 1.25, numFmt: "#,##0.0##" }));
+    expect(b.cells).toContainEqual(expect.objectContaining({ at: "6:3", value: 1.25, numFmt: "0.0##" }));
     expect(b.cells).toContainEqual(expect.objectContaining({ at: "4:1", value: "Kod", font: expect.objectContaining({ bold: true }), fill: expect.objectContaining({ pattern: "solid" }) }));
     expect(b.cells).toContainEqual(expect.objectContaining({ at: "35:3", font: expect.objectContaining({ bold: true }), alignment: { horizontal: "right" } }));
     expect(b.cells).toContainEqual(expect.objectContaining({ at: "37:1", value: NOTES[0], font: expect.objectContaining({ italic: true }) }));

@@ -15,7 +15,7 @@ export function columnFormat(table: TabloBlok, column: TabloKolonu): Pick<Report
   if (values.length === 0) return {};
   // Kolon başına ölçülen ondalık aynı tablodaki TL kolonlarını "45.000,0" / "45.000" diye ayırıyordu.
   if (column.birim && PARA_BIRIMLERI.includes(column.birim)) return { numFmt: MONEY_NUM_FMT };
-  return values.every((v) => Number.isInteger(v)) ? { numFmt: "#,##0" } : { numFmt: "#,##0.0" };
+  return values.every((v) => Number.isInteger(v)) ? { numFmt: "0" } : { numFmt: "0.0" };
 }
 
 /** Başlık + birim: "Sevk (m)", "Oran (%)". */

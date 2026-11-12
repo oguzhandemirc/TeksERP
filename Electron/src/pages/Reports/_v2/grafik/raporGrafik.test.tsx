@@ -110,14 +110,14 @@ describe("biçim: sayı lib/number-format, tarih lib/factory-time", () => {
     expect(kategoriEtiketi("2026-10", "zaman")).toBe("10.2026");
     expect(kategoriEtiketi("2026-10", "kategori")).toBe("2026-10");
   });
-  it("değer metni: binlik nokta, ondalık virgül, yüzde öne", () => {
-    expect(valueText(12500.5, "m")).toBe("12.500,5 m");
+  it("değer metni: ölçü ayırıcısız, ondalık virgül, yüzde öne", () => {
+    expect(valueText(12500.5, "m")).toBe("12500,5 m");
     expect(valueText(12.5, "%")).toBe("%12,5");
     expect(valueText(null, "m")).toBe("—");
   });
   it("eksen etiketi biçimleyicisi tr-TR", () => {
     const y = grafikSecenek(blok("cubuk"), BASKI_TEMASI).yAxis as { axisLabel: { formatter: (v: number) => string } };
-    expect(y.axisLabel.formatter(12500)).toBe("12.500");
+    expect(y.axisLabel.formatter(12500)).toBe("12500");
   });
 });
 
@@ -181,7 +181,7 @@ describe("grafikVeriTablosu — Excel veri sayfası", () => {
     const t = grafikVeriTablosu(blok("cizgi"), "Günlük sevk");
     expect(t.columns.map((c) => c.header)).toEqual(["Gün", "Bu dönem (m)", "Önceki dönem (m)"]);
     expect(t.rows[2]).toEqual({ k: "03.10.2026", s0: "—", s1: 7000 });
-    expect(t.columns.map((c) => c.numFmt)).toEqual([undefined, "#,##0.0", "#,##0"]);
+    expect(t.columns.map((c) => c.numFmt)).toEqual([undefined, "0.0", "0"]);
     for (const c of t.columns) if (c.numFmt) expect(REPORT_NUM_FMTS).toContain(c.numFmt);
   });
   it("kutu: grup başına beş değer + kayıt sayısı", () => {

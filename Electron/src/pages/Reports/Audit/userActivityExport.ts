@@ -31,10 +31,10 @@ export function buildUserActivityExport(opts: {
         columns: [
           { header: "Kullanıcı", key: "fullName", width: 28 },
           { header: "Kullanıcı Adı", key: "username", width: 18 },
-          { header: "Toplam", key: "totalCount", width: 11, numFmt: "#,##0", align: "right" },
-          { header: "Oluştur", key: "createCount", width: 11, numFmt: "#,##0", align: "right" },
-          { header: "Güncelle", key: "updateCount", width: 11, numFmt: "#,##0", align: "right" },
-          { header: "Sil", key: "deleteCount", width: 11, numFmt: "#,##0", align: "right" },
+          { header: "Toplam", key: "totalCount", width: 11, numFmt: "0", align: "right" },
+          { header: "Oluştur", key: "createCount", width: 11, numFmt: "0", align: "right" },
+          { header: "Güncelle", key: "updateCount", width: 11, numFmt: "0", align: "right" },
+          { header: "Sil", key: "deleteCount", width: 11, numFmt: "0", align: "right" },
           { header: "Son İşlem", key: "lastActionAt", width: 18, align: "right" },
         ],
         rows: rows.map((r) => ({

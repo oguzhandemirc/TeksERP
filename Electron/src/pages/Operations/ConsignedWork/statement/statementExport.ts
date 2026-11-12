@@ -29,8 +29,8 @@ export function omittedText(o: ConsignedStatement["omitted"][number]): string {
     : `${what} bölümü gösterilmiyor: bu bölümü görme yetkiniz yok (${o.kind === "YARN_LOT" ? "depo okuma" : "levent okuma"} izni).`;
 }
 
-const QTY_FMT_M = "#,##0.0";
-const QTY_FMT_KG = "#,##0.00";
+const QTY_FMT_M = "0.0";
+const QTY_FMT_KG = "0.00"; // emanet iplik kg iki hane (F2 kararı), ölçü sınıfı: grupsuz
 export const qtyFmt = (unit: StatementSection["unit"]) => (unit === "kg" ? QTY_FMT_KG : QTY_FMT_M);
 // Kolon biçimi koşullu yayılımla: `reportNumFmt` bekçisi her `numFmt:` değerini kümeye bağlı sabite çözebilmeli.
 const qtyCol = (unit: StatementSection["unit"]) => (unit === "kg" ? { numFmt: QTY_FMT_KG } : { numFmt: QTY_FMT_M });

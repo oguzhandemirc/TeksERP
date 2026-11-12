@@ -1,23 +1,32 @@
 // =============================================================================
-// Anlatı sayı biçimi — binlik nokta, ondalık virgül (Electron `lib/number-format` karşılığı)
+// Anlatı sayı biçimi — ondalık virgül; birim sınıfı (Electron `lib/format` + `lib/number-format` karşılığı)
 // =============================================================================
-// Backend'deki tek sayı biçimleyicisi (`label-html.shared formatNumber`) etiket kuralıdır ve
-// binlik ayırıcı KOYMAZ; rapor cümlesi panel kartıyla aynı metni basmalı ("42.300 m"), bu
-// yüzden ayrı ve ICU'dan bağımsız (belirlenimli) yazıldı. Ek motoru eki BU metne göre seçer.
+// Sayı biçimi kuralı (kullanıcı 2026-11-12): ölçü/sayım/yüzde AYIRICISIZ ("14700 m"), para binlik
+// ayırıcılı ve 2 haneli ("325.684,90 TL"). Rapor cümlesi panel kartıyla aynı metni basmalı; ICU'dan
+// bağımsız (belirlenimli) yazıldı. Ek motoru eki BU metne göre seçer.
 
 import { BIRIM_METNI, PARA_BIRIMLERI, type Birim } from "../sunum/sunum.types";
 
-/** `n`i en çok `ondalik` haneyle yazar; sondaki sıfırlar atılır ("12,5", "42.300"). */
-export function sayiMetni(n: number, ondalik = 1): string {
-  if (!Number.isFinite(n)) return "—";
+function parcala(n: number, ondalik: number): { sign: string; tam: number; kesir: number } {
   const k = 10 ** ondalik;
   const olcekli = Math.round(Math.abs(n) * k);
   const tam = Math.floor(olcekli / k);
-  const kesir = olcekli - tam * k;
-  const tamMetin = String(tam).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return { sign: n < 0 && olcekli > 0 ? "-" : "", tam, kesir: olcekli - tam * k };
+}
+
+/** Ölçü/sayım: `n`i en çok `ondalik` haneyle, AYIRICISIZ yazar; sondaki sıfırlar atılır ("12,5", "42300"). */
+export function sayiMetni(n: number, ondalik = 1): string {
+  if (!Number.isFinite(n)) return "—";
+  const { sign, tam, kesir } = parcala(n, ondalik);
   const kesirMetin = kesir > 0 ? "," + String(kesir).padStart(ondalik, "0").replace(/0+$/, "") : "";
-  const sign = n < 0 && olcekli > 0 ? "-" : "";
-  return sign + tamMetin + kesirMetin;
+  return sign + String(tam) + kesirMetin;
+}
+
+/** Para: binlik noktalı, SABİT 2 hane ("325.684,90", "0,00"). */
+export function paraMetni(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  const { sign, tam, kesir } = parcala(n, 2);
+  return sign + String(tam).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + String(kesir).padStart(2, "0");
 }
 
 /** Oran: "%12", "%12,5" (en çok 1 ondalık). */
@@ -29,9 +38,9 @@ export function paraBirimiMi(birim: Birim): boolean {
   return PARA_BIRIMLERI.includes(birim);
 }
 
-/** Sayının birimle görünen metni: oran "%78", para "1.200 TL" (0 ondalık), diğeri "42.300 m". */
+/** Sayının birimle görünen metni: oran "%78", para "1.200,00 TL", diğeri "42300 m". */
 export function formatValue(n: number, birim: Birim): string {
   if (birim === "yuzde") return oranMetni(n);
-  if (paraBirimiMi(birim)) return `${sayiMetni(n, 0)} ${BIRIM_METNI[birim]}`;
+  if (paraBirimiMi(birim)) return `${paraMetni(n)} ${BIRIM_METNI[birim]}`;
   return `${sayiMetni(n, 1)} ${BIRIM_METNI[birim]}`;
 }

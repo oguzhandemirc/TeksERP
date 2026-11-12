@@ -64,9 +64,9 @@ export function buildBatchTraceExport(t: BatchTrace): ReportExportSpec {
         name: "Müşteriler",
         columns: [
           { header: "Müşteri", key: "customerName", width: 28 },
-          { header: "Sevkiyat", key: "shipmentCount", width: 11, numFmt: "#,##0", align: "right" },
-          { header: "Top", key: "rollCount", width: 9, numFmt: "#,##0", align: "right" },
-          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "#,##0.0", align: "right" },
+          { header: "Sevkiyat", key: "shipmentCount", width: 11, numFmt: "0", align: "right" },
+          { header: "Top", key: "rollCount", width: 9, numFmt: "0", align: "right" },
+          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "0.0", align: "right" },
           { header: "Son sevk", key: "lastDispatchedAt", width: 14 },
         ],
         rows: t.customers.map((c) => ({ ...c, lastDispatchedAt: c.lastDispatchedAt?.slice(0, 10) ?? "—" })),
@@ -80,8 +80,8 @@ export function buildBatchTraceExport(t: BatchTrace): ReportExportSpec {
         name: "Durum Dağılımı",
         columns: [
           { header: "Durum", key: "status", width: 26 },
-          { header: "Top", key: "count", width: 9, numFmt: "#,##0", align: "right" },
-          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "#,##0.0", align: "right" },
+          { header: "Top", key: "count", width: 9, numFmt: "0", align: "right" },
+          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "0.0", align: "right" },
         ],
         rows: t.byStatus.map((r) => ({ ...r })),
         totalRow: { status: "TOPLAM", count: t.totals.rollCount, qty: t.totals.qty },
@@ -90,7 +90,7 @@ export function buildBatchTraceExport(t: BatchTrace): ReportExportSpec {
         name: "İadeler",
         columns: [
           { header: "Müşteri", key: "customerName", width: 26 },
-          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "#,##0.0", align: "right" },
+          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "0.0", align: "right" },
           { header: "Neden", key: "reason", width: 26 },
           { header: "Tarih", key: "createdAt", width: 14 },
         ],
@@ -101,7 +101,7 @@ export function buildBatchTraceExport(t: BatchTrace): ReportExportSpec {
         columns: [
           { header: "Sevk No", key: "dispatchNo", width: 18 },
           { header: "Fason firma", key: "subcontractorName", width: 26 },
-          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "#,##0.0", align: "right" },
+          { header: "Metraj (m)", key: "qty", width: 13, numFmt: "0.0", align: "right" },
           { header: "Tarih", key: "dispatchedAt", width: 14 },
           { header: "Durum", key: "cancelled", width: 12 },
         ],
