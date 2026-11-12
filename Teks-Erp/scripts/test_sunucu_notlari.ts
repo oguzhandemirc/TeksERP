@@ -65,6 +65,8 @@ const YARDIMCI_CAGRISI = /\b(toastServerSuccess|serverSuccessText|showServerWarn
 const ALAN_VERISI: readonly { dosya: string; gerekce: string }[] = [
   { dosya: "Electron/src/pages/System/Backups/OffsiteBackupCard.tsx",
     gerekce: "sweepOffsiteNow `data.offsite`i döndürür; okunan `warnings` süpürme sonucunun alanıdır, başarısızlıkta hata olarak gösterilir" },
+  { dosya: "Electron/src/pages/Operations/GelenBelgeler/tanit/UserTemplateEdit.tsx",
+    gerekce: "editUserTemplate `data.data` döndürür; `warnings` düzenleme sonucunun ALANIdır (route zarfı uyarısız, gelen-belge-sablon.routes.ts:19) — kayıt sonrası toast.warning ile gösterilir" },
 ];
 
 /** Zarf uyarısını sayfa içinde gösteren yer → isteği yapan servis fonksiyonu (`handled` taşımalı). */
@@ -133,6 +135,9 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   // Bildirim tercihleri (N4-PANEL): yazmasız önizleme POST'ları (`test_bildirim_onizleme`); zarf uyarısız, `suppressErrorToast`.
   { yer: "Electron/src/pages/Settings/Notifications/PreviewStrip.tsx::bildirimService.tercihOnizleme", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Settings/Notifications/ResetDialog.tsx::bildirimService.varsayilanaDonOnizleme", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // Top etiketi düzenleme taslağı: alan değiştikçe (debounce) önizler, yazmaz; zarf `warnings` basar (iç barkod notu,
+  // label.service.ts:1045) → istek `serverWarnings: "handled"`, not önizlemenin altında satır içi.
+  { yer: "Electron/src/components/labels/RollLabelEditPanel.tsx::rollLabelEditService.previewDraft", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: true },
 ];
 /** Dedektörün GÖRMEDİĞİ (store/mutation/olay dolaylaması) ama elle izlenmiş otomatik yazımlar. */
 const ELLE_IZLENEN: readonly { servis: string; sinif: Sinif; nerede: string; zarfUyarisi: boolean }[] = [

@@ -17,6 +17,7 @@ import { pickServiceItemId } from "./helpers/service-item-pick.helper";
 import { suggestFxRate } from "./helpers/maliyet-bridge.helper";
 import { costPresentation, toPresentationAmount } from "./helpers/cost-presentation.helper";
 import { readCostPresentationCurrency, readFinanceEnabled, resolveConsumableStockEnabled } from "./system-setting.service";
+import { TERIM } from "../constants/terim";
 
 type Dec = Prisma.Decimal;
 const D0 = () => new Prisma.Decimal(0);
@@ -28,6 +29,8 @@ const ROW_SELECT = {
   qty: true,
   createdAt: true,
   rollOperationId: true,
+  // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): geri alınan izin tüketimi ters kayıtla düşer (`reversedBy: null` süzgeci,
+  // roll-operation.helper `reverseConsumptionTx`); burada yalnız canlı satırın izi okunur.
   rollOperation: {
     select: {
       operationType: true,
@@ -92,7 +95,7 @@ async function customerKursunTry(rows: Row[], meters: Map<string, Dec>, customer
 
 export async function workOrderConsumableUsage(workOrderId: string, opts: { canCost: boolean }) {
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true, customerId: true } });
-  if (!wo) throw AppError.notFound("İş emri bulunamadı.", { code: "WORK_ORDER_NOT_FOUND" });
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı.`, { code: "WORK_ORDER_NOT_FOUND" });
   const enabled = await resolveConsumableStockEnabled();
   const rows = await prisma.consumableMovement.findMany({
     where: {

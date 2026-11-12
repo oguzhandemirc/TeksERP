@@ -69,10 +69,14 @@ async function dropEmptySacksTx(tx: Tx, live: LiveUnit[]): Promise<string[]> {
   for (const u of live.filter((x) => x.unitKind === LoadUnitKind.SACK)) {
     if ((await tx.roll.count({ where: { sackId: u.id } })) > 0) continue;
     if ((await tx.swatch.count({ where: { sackId: u.id } })) > 0) continue;
+    // Kalıcı silme yalnız "deftere hiç yazmamış taslak" sınıfı: FK'lı ve FK'sız (SwatchEvent · RollReturn) her başvuru sayılır.
     const ledger = (await tx.sackWeighing.count({ where: { sackId: u.id } }))
+      // ⚠️ `clearedAt` SÜZÜLMEZ (bilinçli): soru "bu çuvala HİÇ tahsis yazıldı mı" — temizlenmiş tahsis de geçmiştir.
       + (await tx.sackAllocation.count({ where: { sackId: u.id } }))
       + (await tx.sackTagAssignment.count({ where: { sackId: u.id } }))
-      + (await tx.warehouseMovement.count({ where: { sackId: u.id } }));
+      + (await tx.warehouseMovement.count({ where: { sackId: u.id } }))
+      + (await tx.swatchEvent.count({ where: { sackId: u.id } }))
+      + (await tx.rollReturn.count({ where: { prevSackId: u.id } }));
     if (ledger > 0) {
       await tx.sack.updateMany({ where: { id: u.id }, data: { shipmentId: null, seq: null, labelDirty: true } });
     } else {

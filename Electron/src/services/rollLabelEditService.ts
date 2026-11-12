@@ -51,6 +51,8 @@ export interface LabelPreviewResult {
   language: string;
   content: string;
   kind: string;
+  /** Zarf notları (ör. müşteri barkodu yerine iç barkod) — önizlemenin altında satır içi gösterilir. */
+  warnings?: string[];
 }
 
 export const rollLabelEditService = {
@@ -75,8 +77,9 @@ export const rollLabelEditService = {
         ...(draft.customer && "stock" in draft.customer ? { stock: true } : {}),
         ...(opts.confirmScrap ? { confirmScrap: true } : {}),
         ...(opts.peripheralId ? { peripheralId: opts.peripheralId } : {}),
-      })
-      .then((r) => r.data.data),
+      }, { serverWarnings: "handled" })
+      // Yazarken çağrılır: not her tuşta tost olmasın, önizlemenin altında satır içi (DraftPreview).
+      .then((r) => ({ ...r.data.data, warnings: r.data.warnings ?? [] })),
 
   /** Kaydet (basmaz). `expectedEditedAt` bayatsa 409 LABEL_EDIT_STALE; aynı yamanın tekrarı no-op. */
   save: (
