@@ -190,6 +190,7 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Finance/CashTransactions/CashTxnTable.tsx": ["Finance/CashTransactions/CashTransactionsPage.tsx", "Finance/CashTransactions/CashTxnFilterBar.tsx"],
   "Finance/Cheques/ChequeTable.tsx": ["Finance/Cheques/ChequesPage.tsx", "Finance/Cheques/ChequeFilterBar.tsx"],
   "Finance/PaymentsPage.tsx": ["Finance/PaymentsFilterBar.tsx"],
+  "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
 };
 
 /** Sütun menüsü OLMAYAN DataTable — gerekçeli. */
@@ -205,6 +206,7 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/MachineStops/StopsTable.tsx": "gün + makine süzgeçli duruş listesi; uçta metin araması yok (backend gerekiyor)",
   "ShiftDefinitions/ShiftDefinitionsPage.tsx": KATALOG,
   "Finance/RatesPage.tsx": KATALOG,
+  "Operations/PurchaseOrders/OpenLinesPanel.tsx": "açık kalem ucu (tedarikçi/ürün/gecikme süzgeçli) metin araması almıyor — şerit bu sekmede aramayı bilinçli gizler (backend gerekiyor)",
   "Finance/AccountsPage.tsx": "kasa + banka hesabı tanımları (birkaç satır, iki bölüm); liste uçları arama almıyor (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
   "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",
@@ -237,14 +239,11 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Operations/ConsignmentDispatches/ConsignmentDispatchTable.tsx",
     "Operations/ConsumableStock/ConsumableStockPage.tsx",
     "Operations/FasonCockpit/CockpitTable.tsx",
-    "Operations/GoodsReceipts/GoodsReceiptsPage.tsx",
     "Operations/Kartela/OutstandingTab.tsx",
     "Operations/KursunMeterDeviations/DeviationTable.tsx",
     "Operations/LoomAlarms/LoomAlarmsTable.tsx",
     "Operations/Orders/OrderPlanView.tsx",
     "Operations/ProductBalance/ProductBalancePage.tsx",
-    "Operations/PurchaseOrders/OpenLinesPanel.tsx",
-    "Operations/PurchaseOrders/PurchaseOrderTable.tsx",
     "Operations/ReadyWorks/ReadyWorksTable.tsx",
     "Operations/SackContentEdit/PackingLotListView.tsx",
     "Operations/StockCounts/StockCountsPage.tsx",
