@@ -12,7 +12,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { isAlarmClosedError, useServerNow } from "./alarm-access";
@@ -61,9 +61,13 @@ export function LoomAlarmsPage() {
         description="Hedef süreyi aşan duruşlar: kim üstlendi, ne kadar sürdü, patrona iletildi mi"
         actions={<RefreshButton queryKey={LIST_KEY} />}
       />
+      {summary && (
+        <ListBand>
+          <AlarmSummaryStrip summary={summary} scope={filters.scope} />
+        </ListBand>
+      )}
       <ListToolbar>
         <LoomAlarmsFilters value={filters} onChange={setFilters} />
-        {summary && <AlarmSummaryStrip summary={summary} scope={filters.scope} />}
       </ListToolbar>
       <ListBody ref={rootRef}>
         {q.isError ? (

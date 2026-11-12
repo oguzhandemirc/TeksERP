@@ -12,7 +12,7 @@ import { fmtCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { labTestService, labTestTypeService, type LabSummary, type LabTestListRow } from "./service";
 import { EMPTY_LAB_FILTERS, STATUS_BADGE, STATUS_LABEL, isLabFilterDirty, labEmptyMessage, type LabFilterState } from "./labTestRules";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 
 const PAGE = 50;
 const SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
@@ -34,8 +34,12 @@ export function LabTestList({ onOpen }: { onOpen: (id: string) => void }) {
 
   return (
     <>
+      {summary && (
+        <ListBand>
+          <SummaryStrip s={summary} active={f.status} onPick={(s) => set("status", s)} />
+        </ListBand>
+      )}
       <ListToolbar>
-        {summary && <SummaryStrip s={summary} active={f.status} onPick={(s) => set("status", s)} />}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

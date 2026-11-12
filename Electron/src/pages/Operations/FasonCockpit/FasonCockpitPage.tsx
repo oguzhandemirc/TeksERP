@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -43,8 +43,10 @@ export function FasonCockpitPage() {
         description="Fasondaki bütün açık sevkler: ne zaman dönmeli, kaç gün gecikti, fasonda ne kaldı."
         actions={<RefreshButton queryKey={FASON_COCKPIT_QUERY_KEY} />}
       />
-      <ListToolbar>
+      <ListBand>
         <CockpitSummaryStrip summary={summary} />
+      </ListBand>
+      <ListToolbar>
         <CockpitFirmStrip summary={summary} selectedId={filter.subcontractorId} onSelect={(id) => setFilter({ ...filter, subcontractorId: id })} />
         <CockpitFilters filter={filter} onChange={setFilter} />
       </ListToolbar>

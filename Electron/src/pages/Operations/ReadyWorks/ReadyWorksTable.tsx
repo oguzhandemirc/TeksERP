@@ -3,7 +3,8 @@ import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatNumber } from "@/lib/format";
+import { formatMeasure, formatNumber } from "@/lib/format";
+import { BandStats } from "@/components/layout/ListPage";
 import { cn } from "@/lib/utils";
 import { CariHoldBadge } from "@/pages/Finance/CariHold/CariHoldBadge";
 import type { ReadyWorkRow, ReadyWorkSummary, ReadyWorkUnit } from "./service";
@@ -12,21 +13,16 @@ import { readinessPercent, STATE_FILTERS, STATE_LABEL, type ReadyStateFilter, ty
 const fmtM = (m: number) => `${formatNumber(m, 1)} m`;
 
 export function SummaryStrip({ s }: { s: ReadyWorkSummary }) {
-  const cells: Array<[string, string, string?]> = [
-    ["Hazır", String(s.ready), "Kurala göre sevke hazır iş sayısı"],
-    ["Kısmi", String(s.partial), "Bir kısmı hazır, bir kısmı işlemde"],
-    ["Hazır metre", fmtM(s.readyMeters)],
-    ["İşlemde metre", fmtM(s.inProcessMeters)],
-  ];
   return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Sevke hazır özeti">
-      {cells.map(([label, value, hint]) => (
-        <div key={label} className="min-w-0 rounded-md border bg-card px-3 py-2" title={hint}>
-          <div className="truncate text-xs text-muted-foreground">{label}</div>
-          <div className="text-lg font-semibold tabular-nums">{value}</div>
-        </div>
-      ))}
-    </div>
+    <BandStats
+      label="Sevke hazır özeti"
+      items={[
+        { key: "ready", label: "Hazır", value: s.ready, title: "Kurala göre sevke hazır iş sayısı" },
+        { key: "partial", label: "Kısmi", value: s.partial, title: "Bir kısmı hazır, bir kısmı işlemde" },
+        { key: "readyM", label: "Hazır metre", value: formatMeasure(s.readyMeters, "m") },
+        { key: "procM", label: "İşlemde metre", value: formatMeasure(s.inProcessMeters, "m") },
+      ]}
+    />
   );
 }
 

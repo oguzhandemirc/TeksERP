@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { fmtCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { certificateService, type CertificateRow, type CertificateStatusFilter, type CertificateSummary } from "./service";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import {
   EMPTY_CERTIFICATE_FILTERS, HOLDER_LABEL, STATUS_FILTER_LABEL, TONE_CLASS, certificateEmptyMessage, expiryBadge,
   isCertificateFilterDirty, type CertificateFilterState,
@@ -33,8 +33,12 @@ export function CertificateList({ onOpen }: { onOpen: (id: string) => void }) {
 
   return (
     <>
+      {summary && (
+        <ListBand>
+          <SummaryStrip s={summary} active={f.status} onPick={(s) => set("status", s)} />
+        </ListBand>
+      )}
       <ListToolbar>
-        {summary && <SummaryStrip s={summary} active={f.status} onPick={(s) => set("status", s)} />}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

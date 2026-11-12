@@ -9,7 +9,7 @@ import { inspectionService, type InspectionListRow, type InspectionSummary } fro
 import { NONE_TEXT, PHASE_LABEL, STATE_LABEL, inspectionState, isInspectionFilterDirty, numText, toListParams, type InspectionFilterState } from "./inspectionRules";
 import { InspectionFilters } from "./InspectionFilters";
 import { InspectionExportButton } from "./InspectionExportButton";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { BandStats, ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 
 const PAGE = 50;
 
@@ -30,8 +30,12 @@ export function InspectionList({ f, onFilters, onOpen }: Props) {
 
   return (
     <>
+      {summary && (
+        <ListBand>
+          <SummaryStrip s={summary} />
+        </ListBand>
+      )}
       <ListToolbar>
-        {summary && <SummaryStrip s={summary} />}
         <div className="flex flex-wrap items-start gap-2">
           <div className="min-w-0 flex-1"><InspectionFilters f={f} onChange={onFilters} /></div>
           <InspectionExportButton params={params} disabled={!summary || summary.total === 0} />
@@ -70,24 +74,20 @@ export function InspectionList({ f, onFilters, onOpen }: Props) {
   );
 }
 
-function Cell({ label, value, tone }: { label: string; value: string | number; tone?: "warn" | "bad" }) {
-  return (
-    <div className={`rounded-md border px-3 py-1.5 text-xs ${tone === "bad" ? "border-destructive/40" : tone === "warn" ? "border-amber-500/40" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`ml-2 text-sm font-semibold tabular-nums ${tone === "bad" ? "text-destructive" : tone === "warn" ? "text-amber-600 dark:text-amber-400" : ""}`}>{value}</span>
-    </div>
-  );
-}
-
 /** Yalnız sunucu özetini çizer — sayı istemcide toplanmaz (sayfalı listeyle ayrışmasın). */
 export function SummaryStrip({ s }: { s: InspectionSummary }) {
   return (
-    <div className="flex flex-wrap gap-2" data-testid="inspection-summary">
-      <Cell label="Top" value={s.total} />
-      <Cell label="Ort. puan / 100 m²" value={numText(s.avgPointsPer100M2)} />
-      {s.grades.map((g) => <Cell key={`grade-${g.code}`} label={g.code ? `Derece ${g.code}` : "Derecesiz"} value={g.count} />)}
-      <Cell label="Uyumsuz" value={s.mismatch} tone={s.mismatch > 0 ? "bad" : undefined} />
-      <Cell label="En yok" value={s.widthUnknown ?? "—"} tone={(s.widthUnknown ?? 0) > 0 ? "warn" : undefined} />
+    <div data-testid="inspection-summary">
+      <BandStats
+        label="Muayene özeti"
+        items={[
+          { key: "total", label: "Top", value: s.total },
+          { key: "avg", label: "Ort. puan / 100 m²", value: numText(s.avgPointsPer100M2) },
+          ...s.grades.map((g) => ({ key: `grade-${g.code}`, label: g.code ? `Derece ${g.code}` : "Derecesiz", value: g.count })),
+          { key: "mismatch", label: "Uyumsuz", value: s.mismatch, tone: s.mismatch > 0 ? ("danger" as const) : undefined },
+          { key: "width", label: "En yok", value: s.widthUnknown ?? "—", tone: (s.widthUnknown ?? 0) > 0 ? ("warn" as const) : undefined },
+        ]}
+      />
     </div>
   );
 }

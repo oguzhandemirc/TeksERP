@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { Button } from "@/components/ui/button";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
-import { fmtNum } from "./consignmentText";
+import { BandStats } from "@/components/layout/ListPage";
+import { formatDisplay } from "@/lib/format";
 import type {
   ConsignmentDispatchListFilter,
   ConsignmentDispatchListResult,
@@ -19,19 +20,16 @@ const STATUS_CHIPS: { key: ConsignmentStatusFilter; label: string }[] = [
 
 export function ConsignmentSummaryStrip({ summary }: { summary: ConsignmentDispatchListResult["summary"] }) {
   return (
-    <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm" data-testid="consignment-summary">
-      <span>
-        <b className="tabular-nums">{summary.count}</b> belge
-      </span>
-      <span>
-        <b className="tabular-nums">{summary.activeCount}</b> geçerli
-      </span>
-      <span>
-        <b className="tabular-nums">{summary.beamCount}</b> levent
-      </span>
-      <span>
-        <b className="tabular-nums">{fmtNum(summary.yarnKg)}</b> kg iplik
-      </span>
+    <div data-testid="consignment-summary">
+      <BandStats
+        label="Emanet çıkış özeti"
+        items={[
+          { key: "count", label: "Belge", value: summary.count },
+          { key: "active", label: "Geçerli", value: summary.activeCount },
+          { key: "beam", label: "Levent", value: summary.beamCount },
+          { key: "yarn", label: "İplik", value: formatDisplay(summary.yarnKg), unit: "kg" },
+        ]}
+      />
     </div>
   );
 }

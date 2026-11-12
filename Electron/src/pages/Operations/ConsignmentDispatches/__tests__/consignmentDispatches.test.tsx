@@ -127,7 +127,7 @@ describe("Emanet Çıkış listesi", () => {
   it("satır + özet şeridi sunucudan; durum çipi süzgeci SUNUCUYA gider", async () => {
     renderWithProviders(<ConsignmentDispatchesPage />);
     expect(await screen.findByText("EC-2026-0001")).toBeInTheDocument();
-    expect(screen.getByTestId("consignment-summary")).toHaveTextContent("1 belge");
+    expect(screen.getByTestId("consignment-summary")).toHaveTextContent("Belge1");
     expect(svc.list.mock.calls[0]![0]).toMatchObject({ status: "ALL" });
     fireEvent.click(screen.getByRole("button", { name: "İptal" }));
     await waitFor(() =>

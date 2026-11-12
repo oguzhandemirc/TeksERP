@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListSentinel } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListSentinel } from "@/components/layout/ListPage";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isUuid, fromSearchParams, toQueryParams, toSearchParams, dayChipLabel, type PrintHistoryFilterState } from "@/lib/print-history-query";
@@ -57,6 +57,7 @@ export function PrintHistoryPage() {
   return (
     <PageShell>
       <PageHeader title="Yazdırma Geçmişi" actions={<RefreshButton queryKey={PRINT_HISTORY_QUERY_KEY} />} />
+      {summary && <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} />}
       <PrintHistoryFilters
         value={filters}
         onChange={setFilters}
@@ -65,7 +66,6 @@ export function PrintHistoryPage() {
         deviceOptions={options.devices}
         subjectLabel={subjectLabel}
       />
-      {summary && <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} />}
 
       <ListBody ref={rootRef}>
         {unsupported ? (
@@ -133,15 +133,9 @@ function SummaryStrip({ summary, prefix, items }: { summary: PrintJobSummary; pr
     : null;
   const hasError = summary.durum.HATA > 0;
   return (
-    <div
-      className={
-        "border-b px-4 py-2 text-sm sm:px-6 " +
-        (hasError ? "bg-red-500/5 text-foreground" : "bg-muted/30 text-muted-foreground")
-      }
-      data-testid="print-summary"
-    >
+    <ListBand className={hasError ? "text-sm text-foreground" : "text-sm text-muted-foreground"} data-testid="print-summary" data-has-error={hasError || undefined}>
       {summaryText(summary, prefix, worstLabel)}
-    </div>
+    </ListBand>
   );
 }
 

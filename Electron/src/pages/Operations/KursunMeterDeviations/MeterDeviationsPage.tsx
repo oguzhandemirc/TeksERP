@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -53,8 +53,10 @@ export function MeterDeviationsPage() {
         description="Kurşun çıkış metresinin girişten eşik üstü farkları. İmza bekleyen sapma adımı kapatmaz; imzasız sapma yalnız işarettir."
         actions={<RefreshButton queryKey={METER_DEVIATIONS_QUERY_KEY} />}
       />
-      <ListToolbar>
+      <ListBand>
         <SummaryStrip summary={summary} />
+      </ListBand>
+      <ListToolbar>
         <DeviationFilters filter={filter} onChange={setFilter} />
       </ListToolbar>
       <ListBody ref={rootRef}>

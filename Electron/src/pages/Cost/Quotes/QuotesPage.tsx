@@ -7,7 +7,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
@@ -50,8 +50,12 @@ export function QuotesPage() {
           </div>
         }
       />
+      {summary && (
+        <ListBand>
+          <QuoteSummaryStrip summary={summary} filter={f} onChange={setF} />
+        </ListBand>
+      )}
       <ListToolbar>
-        {summary && <QuoteSummaryStrip summary={summary} filter={f} onChange={setF} />}
         <QuoteFilters value={f} onChange={setF} />
       </ListToolbar>
       <ListBody>

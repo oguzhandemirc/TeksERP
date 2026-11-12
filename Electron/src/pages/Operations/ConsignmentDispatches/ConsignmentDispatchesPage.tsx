@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -41,8 +41,12 @@ export function ConsignmentDispatchesPage() {
           </div>
         }
       />
+      {l.summary && (
+        <ListBand>
+          <ConsignmentSummaryStrip summary={l.summary} />
+        </ListBand>
+      )}
       <ListToolbar>
-        {l.summary && <ConsignmentSummaryStrip summary={l.summary} />}
         <ConsignmentDispatchFilters value={f} onChange={setF} />
       </ListToolbar>
       <ListBody ref={l.rootRef}>

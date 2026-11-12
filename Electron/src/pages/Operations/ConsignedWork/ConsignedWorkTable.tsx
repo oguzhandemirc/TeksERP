@@ -2,7 +2,8 @@
 import { type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatNumber } from "@/lib/format";
+import { formatMeasure, formatNumber } from "@/lib/format";
+import { BandStats } from "@/components/layout/ListPage";
 import { TERIM } from "@/lib/terim";
 import { type ConsignedBucket, type ConsignedOwnerRow, type ConsignedWorkSummary } from "./service";
 import { rollsLinkFor, type ConsignedBucketKey } from "./consigned-links";
@@ -60,15 +61,10 @@ export function TotalsStrip({ totals }: { totals: ConsignedWorkSummary["totals"]
     ["Sevke hazır", totals.ready, "Depoda — Bitmiş Depo"],
   ];
   return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="İçerideki işler özeti">
-      {cells.map(([label, b, hint]) => (
-        <div key={label} className="min-w-0 rounded-md border bg-card px-3 py-2" title={hint}>
-          <div className="truncate text-xs text-muted-foreground">{label}</div>
-          <div className="text-lg font-semibold tabular-nums">{b.count} top</div>
-          <div className="text-xs text-muted-foreground tabular-nums">{fmtQty(b.qty)}</div>
-        </div>
-      ))}
-    </div>
+    <BandStats
+      label="İçerideki işler özeti"
+      items={cells.map(([label, b, hint]) => ({ key: label, label, value: b.count, unit: "top", hint: formatMeasure(b.qty, "m"), title: hint }))}
+    />
   );
 }
 

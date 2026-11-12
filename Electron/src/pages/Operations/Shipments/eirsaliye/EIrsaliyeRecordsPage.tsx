@@ -55,6 +55,7 @@ export function EIrsaliyeRecordsPage() {
     <PageShell>
       <PageHeader title="e-İrsaliye Kayıtları" actions={<RefreshButton queryKey={EIRSALIYE_RECORDS_KEY} />} />
       {readiness.data && readiness.data.durum !== "HAZIR" && <EIrsaliyeUnconfigured readiness={readiness.data} />}
+      <EIrsaliyeSummaryStrip ready={filtersReady} />
       <DefFilterRow
         filters={FILTERS}
         primaryKeys={PRIMARY}
@@ -68,7 +69,6 @@ export function EIrsaliyeRecordsPage() {
           </>
         }
       />
-      <EIrsaliyeSummaryStrip ready={filtersReady} />
       <div className="min-w-0 overflow-x-auto">
         <DataTable<EIrsaliyeListItem>
           table={table}

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -93,8 +93,12 @@ export function ReadyWorksPage() {
         description={`${TERIM.terbiyeIsEmri.tekil}, gelen belge, parti ya da müşteri başına sevke hazırlık. Hazır = Bitmiş Depo / 2. kalite stoktaki toplar; kural fabrika ayarından (tümü bitti ya da metre eşiği). Satıra tıklayınca toplar açılır, hazır olanlar oradan sevke alınır.`}
         actions={<RefreshButton queryKey={READY_WORKS_QUERY_KEY} />}
       />
+      {!q.isLoading && !q.isError && first && (
+        <ListBand>
+          <SummaryStrip s={first.summary} />
+        </ListBand>
+      )}
       <ListToolbar>
-        {!q.isLoading && !q.isError && first && <SummaryStrip s={first.summary} />}
         <ReadyWorksToolbar tabs={tabs} unit={unit} onUnit={setPicked} stateFilter={stateFilter} onStateFilter={setStateFilter} />
       </ListToolbar>
       <ListBody>

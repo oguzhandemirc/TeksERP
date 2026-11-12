@@ -5,6 +5,7 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDisplay } from "@/lib/format";
 
 /**
  * Üst bant — KPI/özet şeridi, durum çipleri, süzgeç girdileri ve sağda araçlar. Sabittir (kaymaz).
@@ -20,6 +21,49 @@ export function ListToolbar({ className, ...props }: HTMLAttributes<HTMLDivEleme
  */
 export function ListBand({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div data-list-band="" className={cn("shrink-0 py-1.5", className)} {...props} />;
+}
+
+export interface BandStatItem {
+  key: string;
+  label: ReactNode;
+  /** Ham sayı ortak gösterim biçimiyle basılır ("4.295"); metin/düğüm olduğu gibi. */
+  value: ReactNode;
+  /** Birim eki ("m", "kg", "top") — değerin yanında soluk. */
+  unit?: string;
+  tone?: "danger" | "warn" | "success";
+  /** Değerin yanına ek (ör. "1.137 m" ikinci bilgi). */
+  hint?: ReactNode;
+  /** Açıklama ipucu. */
+  title?: string;
+}
+
+const TONE_CLASS: Record<NonNullable<BandStatItem["tone"]>, string> = {
+  danger: "text-destructive",
+  warn: "text-warning",
+  success: "text-success",
+};
+
+/**
+ * Bant içi özet sayıları — liste sayfalarının TEK özet görünümü (kutu/kart çizmez; bant zemininde ince ayraçlı satır).
+ * `scope` sayılan kümeyi söyler ("Depo", "Bu ay"); `children` sağa dayalı ek (çipler, emanet payı).
+ */
+export function BandStats({ items, scope, label, children, className }: { items: BandStatItem[]; scope?: ReactNode; label: string; children?: ReactNode; className?: string }) {
+  return (
+    <div role="group" aria-label={label} data-band-stats="" className={cn("flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 text-sm", className)}>
+      {scope != null && <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">{scope}</span>}
+      {items.map((it) => (
+        <span key={it.key} title={it.title} className="flex min-w-0 items-baseline gap-1.5">
+          <span className="truncate text-xs text-muted-foreground">{it.label}</span>
+          <span className={cn("font-semibold tabular-nums text-foreground", it.tone && TONE_CLASS[it.tone])}>
+            {typeof it.value === "number" ? formatDisplay(it.value) : it.value}
+          </span>
+          {it.unit && <span className="text-xs text-muted-foreground">{it.unit}</span>}
+          {it.hint != null && <span className="text-xs tabular-nums text-muted-foreground">{it.hint}</span>}
+        </span>
+      ))}
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -62,7 +106,7 @@ interface StatusProps {
   children?: ReactNode;
 }
 
-const n = (v: number) => v.toLocaleString("tr-TR", { useGrouping: false });
+const n = (v: number) => formatDisplay(v, 0);
 
 /** Alt şerit — "Yüklü X / Y kayıt" + yükleniyor / tümü yüklendi. DataTable altlığı da bunu çizer (tek görünüm). */
 export function ListFooter({ loaded, total, hasMore, isFetchingMore = false, label, children }: StatusProps) {

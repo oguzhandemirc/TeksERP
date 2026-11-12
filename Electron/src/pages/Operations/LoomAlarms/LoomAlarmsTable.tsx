@@ -2,35 +2,22 @@
 import { Badge } from "@/components/ui/badge";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
+import { BandStats, type BandStatItem } from "@/components/layout/ListPage";
 import { ALARM_STATE_LABEL, durationVsTarget, isLiveAlarm, isPastTarget, reasonText, tierLabel } from "./alarm-format";
 import type { LoomAlarmItem, LoomAlarmScope, LoomAlarmSummary } from "./types";
 
-function Chip({ label, value, tone }: { label: string; value: number; tone?: "danger" | "warn" }) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border px-3 py-2",
-        tone === "danger" && value > 0 && "border-destructive/40 bg-destructive/5",
-        tone === "warn" && value > 0 && "border-amber-500/40 bg-amber-500/5",
-      )}
-    >
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-xl font-bold tabular-nums">{value}</p>
-    </div>
-  );
-}
-
 export function AlarmSummaryStrip({ summary, scope }: { summary: LoomAlarmSummary; scope: LoomAlarmScope }) {
-  return (
-    <div className="flex flex-wrap gap-2" aria-label="Özet">
-      <Chip label="Toplam" value={summary.total} />
-      {scope !== "history" && <Chip label="Açık (üstlenilmedi)" value={summary.open} tone="danger" />}
-      {scope !== "history" && <Chip label="Üstlenildi" value={summary.acked} />}
-      {scope !== "active" && <Chip label="Çözüldü" value={summary.resolved} />}
-      {scope !== "active" && <Chip label="İptal" value={summary.cancelled} />}
-      <Chip label="Patrona iletilen" value={summary.escalated} tone="warn" />
-    </div>
-  );
+  const items: BandStatItem[] = [{ key: "total", label: "Toplam", value: summary.total }];
+  if (scope !== "history") {
+    items.push({ key: "open", label: "Açık (üstlenilmedi)", value: summary.open, tone: summary.open > 0 ? "danger" : undefined });
+    items.push({ key: "acked", label: "Üstlenildi", value: summary.acked });
+  }
+  if (scope !== "active") {
+    items.push({ key: "resolved", label: "Çözüldü", value: summary.resolved });
+    items.push({ key: "cancelled", label: "İptal", value: summary.cancelled });
+  }
+  items.push({ key: "escalated", label: "Patrona iletilen", value: summary.escalated, tone: summary.escalated > 0 ? "warn" : undefined });
+  return <BandStats label="Özet" items={items} />;
 }
 
 interface TableProps {
