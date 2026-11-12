@@ -186,13 +186,15 @@ async function dokuma(): Promise<void> {
   // Temizlik yaratımdan ÖNCE bağlanır: yarıda kalan koşu kalıntı bırakmasın (tezgaha bağlı her şey tezgah id'siyle silinir).
   const machineIds: string[] = [];
   let stationId: string | undefined;
-  cleanup.push(async () => {
+  // Adlı kapanış: defter silmesi (duruş olayı) teardown bağlamında sayılır (test_defter_ters_yol §10b2).
+  const temizleDokuma = async (): Promise<void> => {
     await prisma.loomAlarm.deleteMany({ where: { machineId: { in: machineIds } } });
     await prisma.machineStopEvent.deleteMany({ where: { machineId: { in: machineIds } } });
     await prisma.machineCollector.deleteMany({ where: { collectorKey: `${TAG}-K` } });
     await prisma.machine.deleteMany({ where: { id: { in: machineIds } } });
     if (stationId) await prisma.station.deleteMany({ where: { id: stationId } });
-  });
+  };
+  cleanup.push(temizleDokuma);
   const st = await prisma.station.create({ data: { name: `${TAG} Hol Çiçek`, code: `${TAG}-H`.slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true }, select: { id: true } });
   stationId = st.id;
   const m1 = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG} Tezgâh Şimşek`, code: `LA${ek}-T1`, isActive: true }, select: { id: true } });
@@ -253,13 +255,15 @@ async function maliyet(): Promise<void> {
   console.log("\n— §M maliyet —");
   const ek = TAG.slice(-6);
   const ids = { items: [] as string[], service: [] as string[], yarn: [] as string[], fin: [] as string[], norm: [] as string[] };
-  cleanup.push(async () => {
+  // Adlı kapanış: defter silmesi (sarf normu) teardown bağlamında sayılır (test_defter_ters_yol §10b2).
+  const temizleMaliyet = async (): Promise<void> => {
     await prisma.serviceConsumableNorm.deleteMany({ where: { id: { in: ids.norm } } });
     await prisma.yarnCostPrice.deleteMany({ where: { id: { in: ids.yarn } } });
     await prisma.finishingRate.deleteMany({ where: { id: { in: ids.fin } } });
     await prisma.serviceItem.deleteMany({ where: { id: { in: ids.service } } });
     await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
-  });
+  };
+  cleanup.push(temizleMaliyet);
   const y1 = await prisma.item.create({ data: { code: `${TAG}-Y1`, name: `${TAG} Pamuk Çözgü`, itemType: "YARN", unit: "KG" }, select: { id: true } });
   const y2 = await prisma.item.create({ data: { code: `${TAG}-Y2`, name: `${TAG} Polyester Atkı`, itemType: "YARN", unit: "KG" }, select: { id: true } });
   const c1 = await prisma.item.create({ data: { code: `${TAG}-C1`, name: `${TAG} Boya Ğ`, itemType: "CONSUMABLE", unit: "KG" }, select: { id: true } });

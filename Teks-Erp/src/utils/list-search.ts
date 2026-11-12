@@ -55,15 +55,15 @@ export interface ListSearchPaths {
 export function listSearchWhere<T = Record<string, unknown>>(
   search: string | undefined,
   paths: ListSearchPaths
-): T | undefined {
+): { OR: T[] } | undefined {
   const term = search?.trim();
   if (!term) return undefined;
-  const leaves = [
-    ...buildTextSearch(term, { text: paths.text, code: paths.code }),
-    ...(paths.plain?.length ? buildTurkishSearch(term, paths.plain) : []),
+  const leaves: T[] = [
+    ...buildTextSearch<T>(term, { text: paths.text, code: paths.code }),
+    ...(paths.plain?.length ? buildTurkishSearch<T>(term, paths.plain) : []),
   ];
   // Boş `OR: []` Prisma'da "hiçbir kayıt" demektir; terim yalnız jokerden ibaretse süzgeç yok sayılır (emsal).
-  return leaves.length > 0 ? ({ OR: leaves } as unknown as T) : undefined;
+  return leaves.length > 0 ? { OR: leaves } : undefined;
 }
 
 /**
