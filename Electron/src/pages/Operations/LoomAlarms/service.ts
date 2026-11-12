@@ -27,6 +27,7 @@ export function loomAlarmListQuery(p: LoomAlarmListParams): string {
   if (p.tier !== undefined) sp.set("tier", String(p.tier));
   if (p.from) sp.set("from", p.from);
   if (p.to) sp.set("to", p.to);
+  if (p.search) sp.set("search", p.search);
   if (p.cursor) sp.set("cursor", p.cursor);
   if (p.limit !== undefined) sp.set("limit", String(p.limit));
   return sp.toString();

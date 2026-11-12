@@ -23,6 +23,8 @@ export interface StopListParams {
   pendingEnd?: boolean;
   /** İstasyon türü (D4-A3; sunucu `stationKind` — `readFilterList`, bilinmeyen tür 400). */
   stationKind?: string;
+  /** Tezgah kodu/adı ya da sebep kodu (sunucu araması). */
+  search?: string;
 }
 
 export interface OpenStopPayload {
@@ -45,6 +47,7 @@ export const machineStopService = {
     if (p.open) sp.set("open", "true");
     if (p.pendingEnd) sp.set("pendingEnd", "true");
     if (p.stationKind) sp.set("stationKind", p.stationKind);
+    if (p.search) sp.set("search", p.search);
     return apiClient.get<ApiResponse<MachineStop[]>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
   },
   reclasses: (id: string) => apiClient.get<ApiResponse<StopReclass[]>>(`${BASE}/${id}/reclasses`).then((r) => r.data),

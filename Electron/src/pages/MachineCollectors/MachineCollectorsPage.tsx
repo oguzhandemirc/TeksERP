@@ -28,11 +28,14 @@ import { SecretRevealDialog } from "./SecretRevealDialog";
 import { machineCollectorService } from "./service";
 import type { MachineCollector } from "./types";
 import { MACHINE_COLLECTORS_QUERY_ROOT, useCollectorActions } from "./useCollectorActions";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 type FormState = { mode: "create" } | { mode: "edit"; row: MachineCollector } | null;
 
 export function MachineCollectorsPage() {
-  const list = useQuery({ queryKey: [MACHINE_COLLECTORS_QUERY_ROOT, "list"], queryFn: () => machineCollectorService.list() });
+  const { search, setSearch, term } = useListSearch();
+  const list = useQuery({ queryKey: [MACHINE_COLLECTORS_QUERY_ROOT, "list", term ?? ""], queryFn: () => machineCollectorService.list(term) });
   const warning = k4Warning(useFeatureFlags().data?.data);
   const actions = useCollectorActions();
   const [form, setForm] = useState<FormState>(null);
@@ -62,6 +65,7 @@ export function MachineCollectorsPage() {
           </p>
         )}
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kart adı ya da bağlı tezgah kodu/adı ara" />
           <DataTableTools table={table} compact exportName="Tezgah kartları" />
         </div>
       </ListToolbar>
@@ -70,7 +74,7 @@ export function MachineCollectorsPage() {
       ) : (
         <ListBody>
           <ListMessage className="py-16 text-center text-muted-foreground">
-            {list.data ? "Kayıtlı kart yok. Yeni kart kaydıyla başlayın." : list.isError ? "Okunamadı — bağlantıyı kontrol edip yenileyin." : "Yükleniyor…"}
+            {list.data && term ? "Aramaya uyan kart yok." : list.data ? "Kayıtlı kart yok. Yeni kart kaydıyla başlayın." : list.isError ? "Okunamadı — bağlantıyı kontrol edip yenileyin." : "Yükleniyor…"}
           </ListMessage>
         </ListBody>
       )}

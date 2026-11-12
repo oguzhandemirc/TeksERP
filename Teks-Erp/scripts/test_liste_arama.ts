@@ -6,6 +6,7 @@
 // izin kapısı aynen (route kaynağında, sunucusuz). Servisler doğrudan çağrılır.
 // Fikstür `TEST-LA…` damgalı, temizlik `finally`de FK sırasıyla.
 // =============================================================================
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Request } from "express";
@@ -16,6 +17,10 @@ import { LIST_SEARCH_MAX, listSearchParam, matchesListSearch, readListSearch } f
 import { cashBoxService, exchangeRateService } from "../src/routes/finance.routes";
 import { periodCloseService } from "../src/services/period-close.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
+import { listShiftDefinitions } from "../src/services/shift-definition.service";
+import { MachineCollectorService } from "../src/services/machine-collector.service";
+import { listMachineStops } from "../src/services/loom-list.service";
+import { listLoomAlarms } from "../src/services/loom-alarm-read.service";
 
 let pass = 0;
 let fail = 0;
@@ -147,6 +152,88 @@ async function satinAlma(): Promise<void> {
   check("§S1f kalem: route şeması search alır, izin aynen READ_PERMS", /search: listSearchParam/.test(poSrc) && guardOf("purchase-order.routes.ts", "/open-lines").includes("requireAnyPermission(...READ_PERMS)"));
 }
 
+async function dokuma(): Promise<void> {
+  console.log("\n— §D üretim/dokuma —");
+  const ek = TAG.slice(-6);
+  // §D1 Vardiya tanımları — kod + katlanmış ad.
+  const sh = await prisma.shiftDefinition.create({ data: { code: `V${ek}`, name: `${TAG} Gündüz Işığı`, startMinute: 480, durationMinutes: 480 }, select: { id: true } });
+  cleanup.push(() => prisma.shiftDefinition.deleteMany({ where: { id: sh.id } }));
+  const sAll = await listShiftDefinitions({ includeInactive: true });
+  const sHit = await listShiftDefinitions({ includeInactive: true, search: "gunduz isigi" });
+  const sCode = await listShiftDefinitions({ includeInactive: true, search: `v${ek}`.toLowerCase() });
+  const sMiss = await listShiftDefinitions({ includeInactive: true, search: `${TAG} zzqq` });
+  check("§D1a vardiya: boş arama = tüm liste (fikstür dahil)", sAll.data.some((r) => r.id === sh.id) && sAll.data.length >= sHit.data.length);
+  check("§D1b vardiya: ad katlanarak + kod küçük harfle bulur", sHit.data.some((r) => r.id === sh.id) && sCode.data.some((r) => r.id === sh.id));
+  check("§D1c vardiya: eşleşmeyen bulmaz", !sMiss.data.some((r) => r.id === sh.id));
+  check("§D1d vardiya: izin kapısı aynen", guardOf("shift-definition.routes.ts", "/").includes('requireAnyPermission("loom:spec-manage", "report:production")'));
+
+  // Tezgah fikstürü (kart, duruş, alarm ortak).
+  // Temizlik yaratımdan ÖNCE bağlanır: yarıda kalan koşu kalıntı bırakmasın (tezgaha bağlı her şey tezgah id'siyle silinir).
+  const machineIds: string[] = [];
+  let stationId: string | undefined;
+  cleanup.push(async () => {
+    await prisma.loomAlarm.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.machineStopEvent.deleteMany({ where: { machineId: { in: machineIds } } });
+    await prisma.machineCollector.deleteMany({ where: { collectorKey: `${TAG}-K` } });
+    await prisma.machine.deleteMany({ where: { id: { in: machineIds } } });
+    if (stationId) await prisma.station.deleteMany({ where: { id: stationId } });
+  });
+  const st = await prisma.station.create({ data: { name: `${TAG} Hol Çiçek`, code: `${TAG}-H`.slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true }, select: { id: true } });
+  stationId = st.id;
+  const m1 = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG} Tezgâh Şimşek`, code: `LA${ek}-T1`, isActive: true }, select: { id: true } });
+  const m2 = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG} Tezgâh Yıldız`, code: `LA${ek}-T2`, isActive: true }, select: { id: true } });
+  machineIds.push(m1.id, m2.id);
+  const col = await prisma.machineCollector.create({ data: { collectorKey: `${TAG}-K`, name: `${TAG} Kart Öncü`, machines: { create: [{ machineId: m1.id }] } }, select: { id: true } });
+  const now = new Date();
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const stops = await Promise.all(
+    [m1.id, m2.id].map((machineId, i) =>
+      prisma.machineStopEvent.create({ data: { machineId, stopKey: randomUUID(), startedAt: new Date(now.getTime() - 60_000 * (i + 1)), factoryDay: day, source: "OPERATOR", reasonCode: i === 0 ? "LA_KOPUK" : null }, select: { id: true, machineId: true } })
+    )
+  );
+  const alarms = await Promise.all(
+    stops.map((s) => prisma.loomAlarm.create({ data: { kind: "STOP_OVERDUE", stopEventId: s.id, machineId: s.machineId, tier: 1, targetMinutes: 10, graceMinutes: 5, k1DueAt: now, k2DueAt: new Date(now.getTime() + 3_600_000) }, select: { id: true } }))
+  );
+
+  // §D2 Tezgah kartları — kart adı + bağlı tezgah kodu/adı.
+  const cHit = (await MachineCollectorService.list("kart oncu")).data;
+  const cMach = (await MachineCollectorService.list("simsek")).data;
+  const cMiss = (await MachineCollectorService.list("yildiz")).data;
+  const cAll = (await MachineCollectorService.list()).data;
+  check("§D2a kart: kart adı katlanarak bulur", cHit.some((r) => r.id === col.id));
+  check("§D2b kart: bağlı tezgah adıyla bulur, bağlı olmayan tezgah adıyla bulmaz", cMach.some((r) => r.id === col.id) && !cMiss.some((r) => r.id === col.id));
+  check("§D2c kart: boş arama = tüm liste", cAll.some((r) => r.id === col.id) && cAll.length >= cHit.length);
+  check("§D2d kart: izin kapısı aynen (guard)", guardOf("machine-collector.routes.ts", "/").includes("guard,"));
+
+  // §D3 Tezgah duruşları — tezgah kodu/adı + sebep kodu; günle birlikte.
+  const dq = (search?: string) => listMachineStops({ factoryDay: day.toISOString().slice(0, 10), stationKinds: ["WEAVING"], search, limit: 500 });
+  const mine = (r: { data: Array<{ id: string }> }) => r.data.filter((x) => stops.some((s) => s.id === x.id)).length;
+  const d0 = await dq();
+  const dName = await dq("simsek");
+  const dCode = await dq(`la${ek}-t2`);
+  const dReason = await dq("la_kopuk");
+  const dMiss = await dq(`${TAG} zzqq`);
+  check("§D3a duruş: boş arama = iki duruş", mine(d0) === 2, `bulunan ${mine(d0)}`);
+  check("§D3b duruş: tezgah adı yalnız kendi duruşunu", mine(dName) === 1 && dName.data.length === 1);
+  check("§D3c duruş: tezgah kodu (küçük harf) yalnız kendini", mine(dCode) === 1);
+  check("§D3d duruş: sebep kodu yalnız sınıflananı", mine(dReason) === 1);
+  check("§D3e duruş: eşleşmeyen 0", dMiss.data.length === 0);
+  check("§D3f duruş: şema strict + search, izin aynen", /search: listSearchParam,\n {2}\}\)\n {2}\.strict\(\)/.test(readFileSync(join(ROUTES, "machine-stop.routes.ts"), "utf8")) && guardOf("machine-stop.routes.ts", "/").includes('requireAnyPermission("loom:manual-entry", "loom:classify", ...MOBILE_DOKUMA)'));
+
+  // §D4 Tezgah alarmları — liste + özet aynı where.
+  const aq = (search?: string) => listLoomAlarms({ scope: "all", stationId: st.id, search, limit: 50 });
+  const a0 = await aq();
+  const aName = await aq("yildiz");
+  const aHall = await aq("hol cicek");
+  const aMiss = await aq("zzqq");
+  const sum = (r: Awaited<ReturnType<typeof aq>>) => JSON.stringify(r.summary);
+  check("§D4a alarm: boş arama = iki alarm", a0.items.length === 2);
+  check("§D4b alarm: tezgah adı yalnız biri; özet listeyle aynı where (değişti)", aName.items.length === 1 && sum(aName) !== sum(a0));
+  check("§D4c alarm: hol adıyla ikisi", aHall.items.length === 2 && sum(aHall) === sum(a0));
+  check("§D4d alarm: eşleşmeyen 0; özet boş kümeninki", aMiss.items.length === 0 && sum(aMiss) !== sum(a0));
+  check("§D4e alarm: izin kapısı aynen (LIST)", guardOf("loom-alarm.routes.ts", "/").includes("LIST,"));
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -159,6 +246,7 @@ async function main(): Promise<void> {
     await ortak();
     await finans();
     await satinAlma();
+    await dokuma();
   } finally {
     for (const fn of cleanup.reverse()) await fn().catch((e: unknown) => check("temizlik", false, String(e)));
   }

@@ -21,6 +21,7 @@ import {
   setShiftDefinitionActive,
   updateShiftDefinition,
 } from "../services/shift-definition.service";
+import { readListSearch } from "../utils/list-search";
 
 const router = Router();
 router.use(verifyToken, requireMachineStopRegime);
@@ -62,6 +63,11 @@ const previewSchema = z
  *     tags: [ShiftDefinitions]
  *     summary: Vardiya tanımları (dokuma ya da makine duruşu takibi); `?includeInactive=1` arşivdekileri de getirir
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — vardiya kodu ya da adı; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
  *       403: { description: Dokuma kapalı ve makine duruşu takibi kapalı (MODULE_DISABLED) ya da yetki yok }
@@ -77,7 +83,7 @@ const previewSchema = z
 router.get("/", requireAnyPermission("loom:spec-manage", "report:production"), async (req, res, next) => {
   try {
     const inc = String(req.query.includeInactive ?? "");
-    res.json(await listShiftDefinitions({ includeInactive: inc === "1" || inc === "true" }));
+    res.json(await listShiftDefinitions({ includeInactive: inc === "1" || inc === "true", search: readListSearch(req.query.search) }));
   } catch (e) { next(e); }
 });
 router.post("/", manage, async (req, res, next) => {

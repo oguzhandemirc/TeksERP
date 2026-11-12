@@ -20,8 +20,10 @@ export interface ShiftPreviewRequest {
 }
 
 export const shiftDefinitionService = {
-  list: (includeInactive: boolean) =>
-    apiClient.get<ApiResponse<ShiftDefinition[]>>(`${BASE}${includeInactive ? "?includeInactive=1" : ""}`).then((r) => r.data),
+  list: (includeInactive: boolean, search?: string) =>
+    apiClient
+      .get<ApiResponse<ShiftDefinition[]>>(BASE, { params: { ...(includeInactive ? { includeInactive: "1" } : {}), ...(search ? { search } : {}) } })
+      .then((r) => r.data),
   create: (body: ShiftDefinitionFields & { code: string }) =>
     apiClient.post<ApiResponse<ShiftDefinitionWriteResult>>(BASE, body).then((r) => r.data),
   update: (id: string, body: Partial<ShiftDefinitionFields>) =>

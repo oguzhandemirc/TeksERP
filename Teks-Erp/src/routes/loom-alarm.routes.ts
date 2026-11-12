@@ -27,6 +27,7 @@ import { LOOM_ALARM_SCOPES, getLoomAlarmDetail, listLoomAlarms } from "../servic
 import { ALARM_VIEW_PERMISSIONS } from "../services/helpers/loom-alarm-recipient.helper";
 import { AppError } from "../utils/app-error";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
+import { listSearchParam } from "../utils/list-search";
 
 /** Alarm bayrağı kapısı — tezgah modülü (lisans tavanı dahil) ∧ `tezgah.alarmEnabled`. */
 export async function requireLoomAlarmEnabled(_req: Request, _res: Response, next: NextFunction): Promise<void> {
@@ -70,6 +71,7 @@ export const listSchema = z
     limit: z.coerce.number().int().min(1).max(200).optional(),
     /** Yalnız bana gelenler (A4) — yalnız `1|true`; başka değer 400. */
     mine: z.enum(["1", "true"], { message: "mine yalnız 1 ya da true olabilir" }).optional(),
+    search: listSearchParam,
   })
   .strict();
 
@@ -85,6 +87,11 @@ export const listSchema = z
  *       `mine=1` yalnız bana gelenler: alarmın bir RAISED satırının donmuş alıcı listesinde ben, ya da izne göre
  *       kipte (sorumlu tanımsız) K1 — K2 yalnız loom:alarm-escalation sahibine. `mine` başka değer → 400.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — tezgah kodu/adı, hol adı ya da sebep kodu; boş = arama yok"
  *     responses:
  *       200: { description: "items · nextCursor · summary (total · open · acked · resolved · cancelled · escalated)" }
  *       400: { description: Geçersiz kapsam / süzgeç / imleç }
