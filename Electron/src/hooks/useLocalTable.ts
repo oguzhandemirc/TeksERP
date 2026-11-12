@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
   type Row,
   type RowSelectionState,
+  type Updater,
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useOptionalTablePrefs } from "@/hooks/useTablePrefs";
@@ -21,15 +22,34 @@ interface Options<T> {
   initialVisibility?: VisibilityState;
   /** Geçici gizlenen sütunlar (ör. yan panel açıkken daralan liste) — tercihe YAZILMAZ. */
   hiddenColumns?: readonly string[];
+  /**
+   * DENETİMLİ seçim: seçili satır kimliklerini sayfa tutar (toplu eylem, süzgeç değişince sıfırlama). Verilmezse
+   * seçim tablo içinde kalır. `enableSelection` ile birlikte verilir.
+   */
+  selectedIds?: ReadonlySet<string>;
+  onSelectedChange?: (ids: Set<string>) => void;
 }
 
 /**
  * Veriyi sayfanın kendi sorgusundan alan (cursor/süzgeç/sıralama sayfada, SUNUCUDA) liste için ortak DataTable altlığı.
  * Sıralama/süzme/sayfalama tablo içinde YAPILMAZ (manual*) — yalnız sütun düzeni ve seçim burada.
  */
-export function useLocalTable<T>({ tableKey, data, columns, getRowId, enableSelection = false, initialVisibility, hiddenColumns }: Options<T>) {
+export function useLocalTable<T>({ tableKey, data, columns, getRowId, enableSelection = false, initialVisibility, hiddenColumns, selectedIds, onSelectedChange }: Options<T>) {
   const prefs = useOptionalTablePrefs(tableKey, initialVisibility);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [innerSelection, setInnerSelection] = useState<RowSelectionState>({});
+  const controlledSelection = useMemo<RowSelectionState | null>(
+    () => (selectedIds ? Object.fromEntries([...selectedIds].map((id) => [id, true])) : null),
+    [selectedIds],
+  );
+  const rowSelection = controlledSelection ?? innerSelection;
+  const setRowSelection = useCallback(
+    (u: Updater<RowSelectionState>) => {
+      if (!controlledSelection) return setInnerSelection(u);
+      const next = typeof u === "function" ? u(controlledSelection) : u;
+      onSelectedChange?.(new Set(Object.keys(next).filter((id) => next[id])));
+    },
+    [controlledSelection, onSelectedChange],
+  );
   const hiddenStr = (hiddenColumns ?? []).join(",");
   const columnVisibility = useMemo<VisibilityState>(() => {
     if (!hiddenStr) return prefs.columnVisibility;

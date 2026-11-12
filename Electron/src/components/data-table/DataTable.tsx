@@ -110,6 +110,10 @@ interface Props<T> extends RowExpandProps<T> {
    * (`aria-selected`), görünür tutulur ve tablo odaktayken ↑/↓ komşu satırı `onRowClick` ile hemen açar.
    */
   activeRowId?: string | null;
+  /** Satır seçim kutusunun erişilebilir adı (ör. "Seç: <başlık>"); verilmezse "Seç". */
+  selectionLabel?: (row: T) => string;
+  /** false → alttaki seçim çubuğu çizilmez (sayfa seçimi kendi şeridinde gösteriyorsa). */
+  showSelectionBar?: boolean;
   /** Sayfanın kendi sorgusuyla sonsuz kaydırma — altlığı sayfa çizer (`ListFooter`), tablo yalnız dibi izler. */
   loadMore?: { hasMore: boolean; isFetchingMore: boolean; onLoadMore: () => unknown };
 }
@@ -139,6 +143,8 @@ export function DataTable<T>({
   expandedIds,
   onExpandedChange,
   renderSubRow,
+  selectionLabel,
+  showSelectionBar = true,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -373,6 +379,7 @@ export function DataTable<T>({
                         renderExpanded={renderExpanded}
                         canExpand={canExpand}
                         renderSubRow={renderSubRow}
+                        selectionLabel={selectionLabel}
                       />
                     ))}
             </TableBody>
@@ -382,7 +389,7 @@ export function DataTable<T>({
         {more ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
-      {selectable && (rows.length > 0 || selected.length > 0) && (
+      {selectable && showSelectionBar && (rows.length > 0 || selected.length > 0) && (
         <SelectionBar table={table} selected={selected.map((r) => r.original)} bulkActions={bulkActions} selectionHint={selectionHint} exportName={exportName} selectedExportHint={selectedExportHint} />
       )}
 
@@ -417,6 +424,7 @@ interface DataTableRowProps<T> {
   renderExpanded?: (row: T) => ReactNode;
   canExpand?: (row: T) => boolean;
   renderSubRow?: (row: T) => ReactNode;
+  selectionLabel?: (row: T) => string;
 }
 
 /**
@@ -446,6 +454,7 @@ function DataTableRowInner<T>({
   renderExpanded,
   canExpand,
   renderSubRow,
+  selectionLabel,
 }: DataTableRowProps<T>) {
   const blocked = selectable && !row.getCanSelect() ? (selectionBlockedReason?.(row.original) ?? null) : null;
   const expandable = Boolean(renderExpanded);
@@ -512,7 +521,7 @@ function DataTableRowInner<T>({
             <Checkbox
               checked={isSelected}
               onCheckedChange={(v) => row.toggleSelected(!!v)}
-              aria-label="Seç"
+              aria-label={selectionLabel?.(row.original) ?? "Seç"}
             />
           ) : blocked ? (
             <span title={blocked} className="inline-flex">
@@ -523,7 +532,7 @@ function DataTableRowInner<T>({
       )}
       {row.getVisibleCells().map((cell) => (
         <TableCell key={cell.id} className={alignClass(cell.column.columnDef.meta)}>
-          <div data-cell-clip={cell.column.id} className="truncate" style={clipStyle(cell.column.id, true)}>
+          <div data-cell-clip={cell.column.id} className={cell.column.columnDef.meta?.wrap ? "whitespace-normal break-words" : "truncate"} style={clipStyle(cell.column.id, true)}>
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </div>
         </TableCell>
