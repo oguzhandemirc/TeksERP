@@ -59,6 +59,7 @@ import productionProposalRoutes from "./routes/production-proposal.routes";
 import itemComputedGsmRoutes from "./routes/item-computed-gsm.routes";
 import loomSuggestionRoutes from "./routes/loom-suggestion.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
+import rowMarkRoutes from "./routes/row-marks.routes";
 import scanRoutes from "./routes/scan.routes";
 import numberSeriesRoutes from "./routes/number-series.routes";
 import workOrderRoutes from "./routes/workorder.routes";
@@ -598,6 +599,7 @@ app.use("/api/orders/:id/production-proposal", productionProposalRoutes);
 app.use("/api/orders", orderRoutes);
 // ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.
 app.use("/api/record-info", recordInfoRoutes);
+app.use("/api/row-marks", rowMarkRoutes); // satır işareti + not (kişisel/paylaşılan)
 app.use("/api/scan", scanRoutes);
 app.use("/api/number-series", numberSeriesRoutes);
 app.use("/api/work-orders", workOrderRoutes);

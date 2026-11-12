@@ -164,5 +164,5 @@ export function usePurchaseOrderTable(rows: Row[], { onDetail, onEdit, onCancel 
 const cancelledRow = (o: Row) => (o.status === "CANCELLED" ? "opacity-60" : undefined);
 
 export function PurchaseOrderTable({ table, onDetail }: { table: Table<Row>; onDetail: (row: Row) => void }) {
-  return <DataTable<Row> table={table} onRowClick={onDetail} rowClassName={cancelledRow} exportName="Alış siparişleri" />;
+  return <DataTable<Row> table={table} markEntity="purchaseOrder" onRowClick={onDetail} rowClassName={cancelledRow} exportName="Alış siparişleri" />;
 }

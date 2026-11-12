@@ -146,6 +146,8 @@ export function CariListTable({ table, selectedKey, onSelect }: Props) {
   return (
     <DataTable<CariRowItem>
       table={table}
+      markEntity="customer"
+      markRecordId={(r) => (r.kind === "CUSTOMER" ? r.id : null)}
       activeRowId={selectedKey}
       // Seçim yalnız satırı alır; tıklama değiştiricileri (yeni sekme) bu listede anlamsız.
       onRowClick={(r) => onSelect(r)}

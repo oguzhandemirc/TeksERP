@@ -1232,6 +1232,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "record_follows", name: "record_follows_one_target_ck" },
   { table: "record_follows", name: "record_follows_state_ck" },
   { table: "record_follows", name: "record_follows_reason_ck" },
+  // Satır işareti: renk ve not ikisi de boş satır tutulmaz (servis siler; 20261113120000_row_marks).
+  { table: "row_marks", name: "row_marks_not_empty_chk" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -173,6 +173,7 @@ export function WorkOrdersPage() {
       />
       <DataTable<WorkOrder>
         table={table}
+        markEntity="workOrder"
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} bulunamadı.`}

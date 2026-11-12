@@ -327,6 +327,12 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   RECEIPT_CANCEL_OUT: "Mal kabul iptali",
   CONSUMPTION_OUT: "Üretim tüketimi",
   CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
+  // RowMarkColor (satır işareti; panel renk adlarıyla aynı — ek dosya satır tavanında)
+  YELLOW: "Sarı",
+  RED: "Kırmızı",
+  GREEN: "Yeşil",
+  BLUE: "Mavi",
+  PURPLE: "Mor",
 };
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */

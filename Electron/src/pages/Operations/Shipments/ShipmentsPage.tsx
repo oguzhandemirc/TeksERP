@@ -229,6 +229,8 @@ export function ShipmentsPage() {
       />
       <DataTable<ShipmentListItem>
         table={table}
+        markEntity="shipment"
+        markRecordId={(r) => (r.kind === "SHIPMENT" ? r.id : null)}
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Sevkiyat bulunamadı."

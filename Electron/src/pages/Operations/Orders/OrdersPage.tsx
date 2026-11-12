@@ -11,6 +11,7 @@ import { CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
+import { RowMarkFilter, useRowMarkFilter } from "@/components/data-table/row-marks/RowMarkFilter";
 import { SHOW_CANCELLED_PARAM, useHideCancelledInUrl } from "@/hooks/useHideCancelled";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { RecordSplit } from "@/components/record/RecordSidePanel";
@@ -67,7 +68,10 @@ export function OrdersPage() {
     [productionEnabled],
   );
 
-  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelledInUrl();
+  const { showCancelled, setShowCancelled, forceFilters: cancelledFilters } = useHideCancelledInUrl();
+  // "İşaretliler" süzgeci: kişinin işaretli kimlikleri `filter[id]` olarak liste + özet şeridine (sunucuda).
+  const markFilter = useRowMarkFilter("order");
+  const forceFilters = useMemo(() => ({ ...cancelledFilters, ...markFilter.filters }), [cancelledFilters, markFilter.filters]);
   const persistFilters = useMemo(() => orderPersistConfig(filters, productionEnabled), [filters, productionEnabled]);
 
   const { table, query, search, setSearch, pagination, fetchAll, listScope, filtersReady } = useDataTable<Order>({
@@ -77,10 +81,11 @@ export function OrdersPage() {
     defaultPageSize: 50,
     forceFilters,
     persistFilters,
+    enabled: markFilter.ready,
   });
 
   // ── Özet şeridi ── (kayıtlı süzgeç geri yüklenene dek beklenir: çift istek yok)
-  const statsQuery = useOrderStats(forceFilters, filtersReady);
+  const statsQuery = useOrderStats(forceFilters, filtersReady && markFilter.ready);
   const { prefs, setPreference, ready: prefsReady } = usePreferences();
   const statsView: OrderStatsView = prefs.orders?.statsView ?? "onerilen";
   const setStatsView = (v: OrderStatsView) =>
@@ -220,10 +225,11 @@ export function OrdersPage() {
         placeholder={`Sipariş no, ${TERIM.terbiyeIsEmri.tekilKucuk} no, firma veya kumaş ara...`}
         showCancelled={showCancelled}
         setShowCancelled={setShowCancelled}
-        forceFilters={forceFilters}
+        forceFilters={cancelledFilters}
         cancelledUrlKey={SHOW_CANCELLED_PARAM}
         trailing={
           <>
+            <RowMarkFilter value={markFilter.value} onChange={markFilter.setValue} truncated={markFilter.truncated} />
             <SavedViewsMenu compact />
             <DataTableTools
               table={table}
@@ -241,6 +247,7 @@ export function OrdersPage() {
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Sipariş bulunamadı."
+        markEntity="order"
         activeRowId={sel.selected ? sel.selectedId : null}
         onRowClick={onRowClick}
         rowContextMenu={(order) => (

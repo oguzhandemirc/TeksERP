@@ -132,6 +132,11 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // "kim değiştirdi"sini de okuyamamalı. Allowlist DIŞI tablo 400 ile reddedilir
   // (serbest tableName, audit'i dolaylı bir arama yüzeyine çevirirdi).
   "src/routes/record-info.routes.ts": ["TABLE_PERMISSIONS"],
+  // matchesPermission(perms, permission) — permission = ROW_MARK_ENTITY_PERMISSIONS[tür] (satır işareti tür kapısı;
+  // sabit constants/row-mark-entities.ts, kodların katalogda olduğunu test_row_marks §0 ölçer).
+  "src/services/row-mark.service.ts": [`${DELEGE}scripts/test_row_marks.ts`],
+  // requireAnyPermission(...Object.values(ROW_MARK_ENTITY_PERMISSIONS)) — aynı sabitin kaba route kapısı; devir aynı bekçiye.
+  "src/routes/row-marks.routes.ts": [`${DELEGE}scripts/test_row_marks.ts`],
   // requirePermission(CORE_PRODUCTION_PERMISSIONS[key]) — beş temel raporun alan izni; katalog `izin`iyle
   // birebirliğini `test_temel_rapor_esitlik` §R0z ölçer (R0-RAPB).
   "src/routes/reports/temel-uretim.routes.ts": ["CORE_PRODUCTION_PERMISSIONS"],

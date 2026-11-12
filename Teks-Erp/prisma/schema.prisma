@@ -664,6 +664,7 @@ model User {
   notificationSetting          NotificationUserSetting?    @relation("NotificationUserSettingUser")
   notificationProfiles         NotificationProfileMember[] @relation("NotificationProfileMemberUser")
   recordFollows                RecordFollow[]              @relation("RecordFollowUser")
+  rowMarks                     RowMark[]                   @relation("RowMarkOwner")
   reportCategoriesCreated      ReportCategory[]            @relation("ReportCategoryCreatedBy")
   reportCategoriesUpdated      ReportCategory[]            @relation("ReportCategoryUpdatedBy")
   reportDefinitionsOwned       ReportDefinition[]          @relation("ReportDefinitionOwner")
@@ -15394,4 +15395,36 @@ model StationScanCheck {
 
   @@index([createdAt])
   @@map("station_scan_checks")
+}
+
+/// SATIR İŞARETİ + NOT — kişinin liste satırına koyduğu renk/not (kişisel tercih, defter DEĞİL).
+/// entityType kayıt TÜRÜDÜR (tablo anahtarı değil; `constants/row-mark-entities.ts` kümesi);
+/// recordId'ye FK yok (çok türlü). Renk ve not ikisi de boşalınca satır silinir (KULLANICI_TERCIHI).
+/// ŞEMA-DIŞI: CHECK row_marks_not_empty_chk (color IS NOT NULL OR note IS NOT NULL).
+enum RowMarkColor {
+  YELLOW
+  RED
+  GREEN
+  BLUE
+  PURPLE
+}
+
+model RowMark {
+  id         String        @id @default(uuid()) @db.Uuid
+  userId     String        @db.Uuid
+  entityType String        @db.VarChar(40)
+  recordId   String        @db.Uuid
+  color      RowMarkColor?
+  note       String?       @db.VarChar(500)
+  shared     Boolean       @default(false)
+
+  user User @relation("RowMarkOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([userId, entityType, recordId])
+  @@index([entityType, recordId])
+  @@index([userId, entityType])
+  @@map("row_marks")
 }
