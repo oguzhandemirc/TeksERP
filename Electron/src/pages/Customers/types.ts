@@ -2,9 +2,16 @@ import type { CompanyType } from "@/types/enums";
 
 import type { CustomerFinanceView } from "./customerFinance";
 
+export interface CustomerListBalance {
+  currency: string;
+  balance: string;
+}
+
 export interface Customer {
   /** D4-I3: liste satırının cari kilit görünümü (metin sunucudan); eski backend göndermez. */
   cariHold?: { held: boolean; holdScopes: string[]; holdText: string | null };
+  /** Liste bakiyesi: yalnız `finance:read` ∧ finans açıkken gelir; para birimi başına, toplanmaz. */
+  balances?: CustomerListBalance[];
   /** Z-A opt-in: yalnız `finance:read` taşıyan isteğin `GET /customers/:id` cevabında; listede yok. */
   cariAccountId?: string | null;
   finance?: CustomerFinanceView | null;

@@ -477,6 +477,8 @@ export const sackHubService = {
     /** Teslim yeri (K18) — `deliveryToBody` çıktısı; boşken anahtar gitmez. */
     deliveryCustomerId?: string;
     deliveryAddress?: string;
+    /** Planlanan sevk günü "YYYY-AA-GG" — `plannedDateBody` çıktısı; boşken anahtar gitmez. */
+    plannedDate?: string;
     /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay, A4). */
     clientToken?: string;
     /**
@@ -500,6 +502,7 @@ export const sackHubService = {
         ...(body.procedureCode ? { procedureCode: body.procedureCode } : {}),
         ...(body.deliveryCustomerId ? { deliveryCustomerId: body.deliveryCustomerId } : {}),
         ...(body.deliveryCustomerId && body.deliveryAddress ? { deliveryAddress: body.deliveryAddress } : {}),
+        ...(body.plannedDate ? { plannedDate: body.plannedDate } : {}),
         ...(body.clientToken ? { clientToken: body.clientToken } : {}),
         // ⚠️ AÇIKÇA gönderilir (true DE false DA değil — yalnız true anlamlı,
         // false varsayılan). `orderless: true` uyarıyı susturur ve `block`

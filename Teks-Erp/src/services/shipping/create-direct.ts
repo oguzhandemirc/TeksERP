@@ -36,6 +36,7 @@ import {
 } from "../helpers/shipment-destination.helper";
 import { planLoadUnits, type LoadUnitInput, type LoadUnitPlan } from "../helpers/load-unit.helper";
 import { type DeliveryToInput } from "../helpers/shipment-delivery.helper";
+import { type PlannedDateInput } from "../helpers/shipment-planned-date.helper";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
 import type { ShippingService } from "../shipping.service";
 import { SHIPPABLE_ROLL_WHERE, nextSackNo, openLoadUnitTx, shipmentReplay, type AllocationAuditTrail, type ShipmentDestinationDecision, type ShippingServiceThis } from "./shared";
@@ -112,7 +113,7 @@ export async function createShipmentFromRollsInner(this: ShippingServiceThis,
       dispatchNote?: string | null;
       /** Çuvalsız sevk: dökme/araba birimleri (top kümesini TAM böler); yoksa görünmez tek çuval. */
       loadUnits?: LoadUnitInput[] | null;
-    } & DeliveryToInput,
+    } & DeliveryToInput & PlannedDateInput,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const rollIds = [...new Set(data.rollIds)];
@@ -232,6 +233,7 @@ export async function createShipmentFromRollsInner(this: ShippingServiceThis,
             procedureCode: data.procedureCode,
             deliveryCustomerId: data.deliveryCustomerId,
             deliveryAddress: data.deliveryAddress,
+            plannedDate: data.plannedDate ?? null,
             plateNumber: data.plateNumber,
             driverName: data.driverName,
             carrier: data.carrier,

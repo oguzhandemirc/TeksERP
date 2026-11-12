@@ -26,6 +26,7 @@ import { ACTIVE_SACK_ALLOCATION } from "../helpers/sack-allocation.helper";
 import { LIVE_LOAD_UNIT_WHERE } from "../helpers/load-unit.helper";
 import { assertWorkOrderBound } from "../helpers/dispatch-header.helper";
 import { formatCustomerAddress } from "../helpers/shipment-delivery.helper";
+import { formatPlannedDate } from "../helpers/shipment-planned-date.helper";
 
 /** Özet birim sayıları (9.4): `sackCount` içindeki araba / dökme — eski istemci alanları yok sayar. */
 function countLoadUnits(units: readonly { unitKind: LoadUnitKind }[]): { cartCount: number; bulkCount: number } {
@@ -135,6 +136,7 @@ export async function getShipmentById(id: string): Promise<ApiResponse<unknown>>
         customer: { select: { id: true, code: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         deliveryAddress: true,
+        plannedDate: true,
         deliveryCustomer: { select: { id: true, code: true, name: true, address: true, district: true, city: true, country: true } },
         orders: {
           select: {
@@ -421,6 +423,7 @@ export async function getShipmentById(id: string): Promise<ApiResponse<unknown>>
           ? { id: shipment.deliveryCustomer.id, code: shipment.deliveryCustomer.code, name: shipment.deliveryCustomer.name, address: formatCustomerAddress(shipment.deliveryCustomer) }
           : null,
         deliveryAddress: shipment.deliveryAddress,
+        plannedDate: formatPlannedDate(shipment.plannedDate),
         orders,
         rolls: grossShipmentRolls,
         swatches: shipment.swatches,

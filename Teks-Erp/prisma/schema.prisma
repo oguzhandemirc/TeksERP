@@ -9256,6 +9256,10 @@ model Shipment {
   deliveryCustomerId String? @db.Uuid
   /// Serbest teslim adresi; NULL ise belge doğarken teslim carisinin kart adresi basılır.
   deliveryAddress    String? @db.VarChar(500)
+  /// PLANLANAN SEVK GÜNÜ (2026-11-13) — fabrika takvim günü (an değil); pano ajandası planlı sevkiyatı
+  /// bu güne koyar. Yalnız PLANNED'de yazılır (409 `SHIPMENT_NOT_PLANNED`); sevkten sonra okunur kalır.
+  /// NULL = tarih verilmedi (bugünkü davranış: ajandada tarihsiz liste). Gecikme/termin üretilmez.
+  plannedDate        DateTime? @db.Date
 
   // Relations
   customer           Customer            @relation(fields: [customerId], references: [id])

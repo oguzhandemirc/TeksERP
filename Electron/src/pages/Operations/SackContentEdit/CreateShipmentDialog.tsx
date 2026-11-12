@@ -29,6 +29,7 @@ import { ShipmentPreviewPanel } from "./ShipmentPreviewPanel";
 import type { SackSearchRow, ShipmentDestination } from "./types";
 import { resolveDestination, useDestinationLock } from "./destinationDefault";
 import { DeliveryToFields } from "@/pages/Operations/Shipments/delivery-to/DeliveryToFields";
+import { PlannedDateDraftField, usePlannedDateDraft } from "@/pages/Operations/Shipments/planned-date/PlannedDateField";
 import { EMPTY_DELIVERY_TO, deliveryToBody, deliveryToError, type DeliveryToState } from "@/pages/Operations/Shipments/delivery-to/deliveryTo";
 import { DestinationLockField } from "./DestinationLockField";
 import { shipmentService } from "@/pages/Operations/Shipments/service";
@@ -93,6 +94,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   /** Yalnız zincir boşken (ilk sevk) operatörün seçimi; kilitliyken yok sayılır. */
   const [picked, setPicked] = useState<ShipmentDestination | null>(null);
   const [deliveryTo, setDeliveryTo] = useState<DeliveryToState>(EMPTY_DELIVERY_TO);
+  const planned = usePlannedDateDraft(open);
   // İdempotency (A4) — token mantıksal deneme başına (kk1.md), deneme içinde sabit
   // → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
   const attempt = useAttemptToken();
@@ -143,7 +145,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         ...(chosen ? { destinationChosen: true as const } : {}),
         clientToken: attempt.token(),
         orderless,
-        ...deliveryToBody(deliveryTo),
+        ...deliveryToBody(deliveryTo), ...planned.body,
       }),
     onError: (e) => attempt.onFailure(e),
     onSuccess: async (res) => {
@@ -292,6 +294,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
 
           {/* Teslim yeri (K18) — opsiyonel; kapalıyken gövde bugünkü gibi. */}
           <DeliveryToFields key={sackKey} value={deliveryTo} onChange={setDeliveryTo} ownerCustomerId={effCustomerId} disabled={createMut.isPending} />
+          <PlannedDateDraftField draft={planned} disabled={createMut.isPending} />
 
           <ShipmentSackCountField value={manualSackText} onChange={setManualSackText} systemCount={sackIds.length} invalid={manualSackGecersiz} />
 

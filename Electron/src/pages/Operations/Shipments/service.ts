@@ -65,6 +65,12 @@ export const shipmentService = {
       })
       .then((r) => r.data),
 
+  /** Planlanan sevk günü — yalnız PLANNED; `null` kaldırır (409 sevk edilmişse). */
+  setPlannedDate: (id: string, plannedDate: string | null): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/planned-date`, { plannedDate })
+      .then((r) => r.data),
+
   /** Araca yüklenen gerçek çuval adedi — `null` beyanı kaldırır.
    *  Bayrak kapalıyken backend 400 döner (UI'da gizlemek tek başına yetmez). */
   setManualSackCount: (id: string, manualSackCount: number | null): Promise<ApiResponse<unknown>> =>

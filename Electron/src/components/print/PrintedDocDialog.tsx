@@ -49,8 +49,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
-  /** Revizyon (Revize Et) için gereken modül yazma izni. */
-  writePermission: string;
+  /** Revizyon (Revize Et) için gereken modül yazma izni; verilmezse diyalog yalnız görüntüler/basar (revizyon kaynak ekranında). */
+  writePermission?: string;
   /** Kaynak henüz donmamışken canlı TASLAK önizlemesine izin ver (sevk öncesi). */
   allowDraft?: boolean;
   /** "Revize Et" YALNIZ geriye-dönük (ya da şablonu bayat) belgede çıksın. */
@@ -230,7 +230,7 @@ export function PrintedDocDialog({
             current={shownMeta}
             activeVersion={currentDoc?.version ?? shownMeta.version}
             onSelectVersion={setSelectedVersion}
-            canReissue={hasPermission(writePermission)}
+            canReissue={writePermission ? hasPermission(writePermission) : false}
             reissueOnlyWhenReconstructed={reissueOnlyWhenReconstructed}
             currentTemplate={currentTemplate}
             onCurrentTemplateChange={setCurrentTemplate}

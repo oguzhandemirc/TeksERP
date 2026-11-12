@@ -5,6 +5,7 @@
 // Sekme yalnız kapısı açık VE verisi varsa görünür (`cari-record-tabs`); etkin sekme URL'de `?sekme=`.
 // Yalnız müşteri kartının sayfası var; bağsız eski fason profili listede yan panelle kalır.
 // =============================================================================
+import { CariPeriodSummary } from "./CariPeriodSummary";
 import { useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { toneForKey } from "@/components/ui/icon-tile";
@@ -25,6 +26,7 @@ import { CARI_TAB_PARAM, useCariRecordTabs, type CariTabKey } from "./cari-recor
 import { cariStatCards, CariGeneralTab } from "./CariRecordParts";
 import { CariOrdersTab, CariPricesTab, CariShipmentsTab } from "./CariCommerceTabs";
 import { CariLedgerTab } from "./CariLedgerTab";
+import { CariDocumentsTab } from "./CariDocumentsTab";
 import { CariFasonTab, CariHistoryTab, CariPurchasesTab } from "./CariOtherTabs";
 
 const PARENT = { label: "Cariler", to: CARI_LIST_PATH };
@@ -72,13 +74,19 @@ function CariRecordView({ card }: { card: Customer }) {
     }, { replace: true });
 
   const content: Record<CariTabKey, () => React.ReactNode> = {
-    genel: () => <CariGeneralTab card={card} account={account.data} moves={moves} />,
+    genel: () => (
+      <div className="space-y-4">
+        {row.roles.isCustomerRole && <CariPeriodSummary customerId={card.id} />}
+        <CariGeneralTab card={card} account={account.data} moves={moves} />
+      </div>
+    ),
     siparisler: () => <CariOrdersTab customerId={card.id} />,
     sevkiyatlar: () => <CariShipmentsTab customerId={card.id} />,
     hesap: () => account.data && <CariLedgerTab account={account.data} />,
     fiyatlar: () => <CariPricesTab customerId={card.id} />,
     fason: () => subcontractorId && <CariFasonTab subcontractorId={subcontractorId} canOpenWorkOrder={canGo({ to: "/operations/work-orders/x", izin: ["workorder:read"] })} />,
     alislar: () => <CariPurchasesTab supplierId={card.id} showOrders={access.purchases} showReceipts={access.receipts} />,
+    belgeler: () => <CariDocumentsTab customerId={card.id} />,
     gecmis: () => <CariHistoryTab customerId={card.id} />,
   };
 

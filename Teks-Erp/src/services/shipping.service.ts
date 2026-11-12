@@ -45,6 +45,8 @@ import { uyari } from "../lib/logger";
 import { type LoadPreview, type LoadPreviewInput } from "./helpers/shipment-load-preview.helper";
 import { type LoadUnitInput, type LoadUnitPlan } from "./helpers/load-unit.helper";
 import { type DeliveryToInput, type DeliveryToValue } from "./helpers/shipment-delivery.helper";
+import { type PlannedDateInput } from "./helpers/shipment-planned-date.helper";
+import { setPlannedDate as setPlannedDateImpl } from "./shipping/planned-date";
 import { openSack as openSackImpl, openSackFresh as openSackFreshImpl, reassignSackCustomer as reassignSackCustomerImpl } from "./shipping/sack-open";
 import { scanIntoSack as scanIntoSackImpl, addKartelaToSack as addKartelaToSackImpl, removeRollFromSack as removeRollFromSackImpl, removeSwatchFromSack as removeSwatchFromSackImpl, moveRollToSack as moveRollToSackImpl, distributeSackContents as distributeSackContentsImpl, previewDistributeSacks as previewDistributeSacksImpl, distributeSacksBulk as distributeSacksBulkImpl, moveRollsToSack as moveRollsToSackImpl, splitSack as splitSackImpl, markSackContentChangedTx as markSackContentChangedTxImpl } from "./shipping/sack-content";
 import { weighSack as weighSackImpl, finishWeigh as finishWeighImpl, removeSack as removeSackImpl } from "./shipping/sack-weigh";
@@ -541,7 +543,7 @@ export class ShippingService {
   }
 
   private async createShipmentInner(
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null } & DeliveryToInput,
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null } & DeliveryToInput & PlannedDateInput,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     return createShipmentInnerImpl.call(this as unknown as ShippingServiceThis, data, userId);
@@ -573,6 +575,7 @@ export class ShippingService {
       /** Teslim yeri (K18) — yoksa null; belge snapshot'ı aynı tx'te doğarsa donar. */
       deliveryCustomerId?: string | null;
       deliveryAddress?: string | null;
+      plannedDate?: Date | null;
       plateNumber?: string | null;
       driverName?: string | null;
       carrier?: string | null;
@@ -706,7 +709,7 @@ export class ShippingService {
       dispatchNote?: string | null;
       /** Çuvalsız sevk: dökme/araba birimleri (top kümesini TAM böler); yoksa görünmez tek çuval. */
       loadUnits?: LoadUnitInput[] | null;
-    } & DeliveryToInput,
+    } & DeliveryToInput & PlannedDateInput,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     return createShipmentFromRollsInnerImpl.call(this as unknown as ShippingServiceThis, data, userId);
@@ -829,6 +832,11 @@ export class ShippingService {
    */
   async setDeliveryTo(shipmentId: string, input: DeliveryToInput, userId?: string): Promise<ApiResponse<DeliveryToValue>> {
     return setDeliveryToImpl(shipmentId, input, userId);
+  }
+
+  /** Planlanan sevk günü — yalnız PLANNED (atomik claim, 409 `SHIPMENT_NOT_PLANNED`). */
+  async setPlannedDate(shipmentId: string, plannedDate: Date | null, userId?: string): Promise<ApiResponse<{ shipmentId: string; plannedDate: string | null }>> {
+    return setPlannedDateImpl(shipmentId, plannedDate, userId);
   }
 
   /** İrsaliye açıklaması (annotation) — sevkiyat DURUMU fark etmez, her an düzenlenir

@@ -114,6 +114,8 @@ const DATE_ONLY_FIELDS = new Set([
   // ikinci belge no mükerrer seddi gün bazında okunur. `SalesQuote.quoteDate` ile aynı gerekçe.
   "CustomerDeliveryNote.senderDocDate",
   "PriceList.validUntilDate",
+  // Sevkiyatın PLANLANAN sevk günü (cari-be 2026-11-13) — ajandanın takvim günü, an değil.
+  "Shipment.plannedDate",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.

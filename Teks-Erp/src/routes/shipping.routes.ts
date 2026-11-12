@@ -920,6 +920,34 @@ router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setP
  *       409: { description: "Sevkiyat sevk edilmiş/iptal (details.code SHIPMENT_NOT_PLANNED)" }
  */
 router.post("/shipments/:id/delivery-to", verifyToken, WRITE, controller.setDeliveryTo);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/planned-date:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Planlanan sevk günü — yalnız PLANNED sevkiyatta yazılır/temizlenir
+ *     description: |
+ *       Takvim günü (YYYY-AA-GG); `null` temizler. Pano ajandası planlı sevkiyatı bu güne koyar.
+ *       Gecikme/termin üretilmez. Sevk edilmiş/iptal sevkiyatta değer değişmez.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [plannedDate]
+ *             properties:
+ *               plannedDate: { type: string, format: date, nullable: true }
+ *     responses:
+ *       200: { description: "{ shipmentId, plannedDate }" }
+ *       400: { description: "Geçersiz gün (details.code SHIPMENT_PLANNED_DATE_INVALID)" }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "Sevkiyat sevk edilmiş/iptal (details.code SHIPMENT_NOT_PLANNED)" }
+ */
+router.post("/shipments/:id/planned-date", verifyToken, WRITE, controller.setPlannedDate);
 router.get("/shipments/:id/dispatch-note", verifyToken, READ, controller.getDispatchNote);
 router.post("/shipments/:id/dispatch-note", verifyToken, WRITE, controller.setDispatchNote);
 // Araca yüklenen gerçek çuval adedi — operatör beyanı (bayrak kapalıyken 400).

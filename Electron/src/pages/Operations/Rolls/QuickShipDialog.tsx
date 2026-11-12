@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { DeliveryToFields } from "@/pages/Operations/Shipments/delivery-to/DeliveryToFields";
+import { PlannedDateDraftField, usePlannedDateDraft } from "@/pages/Operations/Shipments/planned-date/PlannedDateField";
 import { EMPTY_DELIVERY_TO, deliveryToBody, deliveryToError, type DeliveryToState } from "@/pages/Operations/Shipments/delivery-to/deliveryTo";
 import { customerService } from "@/pages/Customers/service";
 import { itemService } from "@/pages/Items/service";
@@ -73,6 +74,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
   const [rolls, setRolls] = useState<QuickShipRoll[]>(initialRolls);
   // Teslim yeri (K18) — opsiyonel; boşken gövdeye anahtar girmez (bugünkü Hızlı Sevk).
   const [deliveryTo, setDeliveryTo] = useState<DeliveryToState>(EMPTY_DELIVERY_TO);
+  const planned = usePlannedDateDraft(open);
   // Çuvalsız sevk — bayrak kapalıyken seçici yok, gövde bugünkü gibi (görünmez çuval).
   const looseLoadEnabled = useFeatureFlags().data?.data?.shipmentLooseLoadEnabled === true;
   const [loadMode, setLoadMode] = useState<QuickShipLoadMode>("SACK");
@@ -136,6 +138,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
         destination: yon.destination ?? undefined,
         ...(yon.chosen ? { destinationChosen: true as const } : {}),
         ...deliveryToBody(deliveryTo),
+        ...planned.body,
         ...(loadUnits ? { loadUnits } : {}),
         clientToken: attempt.token(),
       }),
@@ -188,6 +191,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], initial
             {customerId && (
               <div className="mt-2">
                 <DeliveryToFields value={deliveryTo} onChange={setDeliveryTo} ownerCustomerId={customerId} disabled={shipM.isPending} />
+                <div className="mt-2"><PlannedDateDraftField draft={planned} disabled={shipM.isPending} id="quick-ship-planned-date" /></div>
               </div>
             )}
           </div>

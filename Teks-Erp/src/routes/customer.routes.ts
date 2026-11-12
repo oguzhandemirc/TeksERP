@@ -13,6 +13,7 @@ import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.ser
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { withCustomerListBalances } from "../services/helpers/customer-list-balance.helper";
 
 const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:tambur", "mobile:siparis", "mobile:hizli-is-emri"] as const;
 import branchRoutes from "./customer-branch.routes";
@@ -20,6 +21,8 @@ import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";
 import { customerLabelOptionRoutes } from "./label-template-option.routes";
 import standaloneLabelRoutes from "./customer-standalone-label.routes";
+import periodSummaryRoutes from "./customer-period-summary.routes";
+import documentsRoutes from "./customer-documents.routes";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 export const customerService = new CustomerService({
@@ -85,6 +88,11 @@ router.use("/:customerId", templateRouteRoutes);
 router.use("/:customerId/label-template-options", customerLabelOptionRoutes);
 // /api/customers/:customerId/standalone-labels — müşteriye bağlı serbest etiketler (M:N; rota DEĞİL)
 router.use("/:customerId", standaloneLabelRoutes);
+// /api/customers/:customerId/period-summary — kayıt sayfası dönem özeti; yol dar bağlanır (alt router'ın toplu kapısı
+// yalnız bu yola uygulanır, `/:id` uçlarına sızmaz).
+router.use("/:customerId/period-summary", periodSummaryRoutes);
+// /api/customers/:customerId/documents — carinin belgeleri; dar bağlanır (aynı gerekçe).
+router.use("/:customerId/documents", documentsRoutes);
 
 /**
  * @openapi
@@ -119,9 +127,16 @@ router.use("/:customerId", standaloneLabelRoutes);
  *         schema: { type: string, enum: [true, false] }
  *     responses:
  *       200:
- *         description: Sayfalanmış müşteri listesi
+ *         description: "Sayfalanmış müşteri listesi; `finance:read` ∧ finans modülü açıkken satırda `balances: [{currency, balance}]` (sıfır olmayan, para birimi başına), değilse alan yok"
  */
-router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), async (req, res, next) => {
+  try {
+    const canReadFinance = matchesPermission(req.user?.permissions ?? [], "finance:read");
+    res.status(200).json(await withCustomerListBalances(await customerService.findAll(req), canReadFinance));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @openapi

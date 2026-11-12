@@ -223,6 +223,7 @@ const NO_SEARCH: Record<string, string> = {
     "kalıcı: bulut hesapları durum ucunun parçası (eşleşme/bağlantı durumuyla tek yanıt, buluttan eşitlenen kısa ayna; kilitleme eylemi aynı yanıttan beslenir) — liste ucu değil",
   "Notifications/NotificationsPage.tsx":
     "kalıcı: başlık/gövde okuma anında katalog şablonu + JSON yükten kurulur (aranabilir metin kolonu yok); sekme + tür süzgeci sunucuda",
+  "Definitions/cariler/CariDocumentsTab.tsx": "cari kayıt sayfasının belge sekmesi (tek carinin belgeleri, sayfalı); `/api/customers/:id/documents` metin araması almıyor (backend gerekiyor)",
 };
 
 /** KALICI muaf: sütunu veri olan matris/gruplu katalog — sütun menüsü anlamsız; tek satır hücre + ince ayraç uygulanır. */

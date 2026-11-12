@@ -76,6 +76,7 @@ export function CariPurchasesTab({ supplierId, showOrders, showReceipts }: { sup
             onRetry={() => void po.refetch()}
             emptyText="Bu tedarikçiye alış siparişi yok."
             rowKey={(o) => o.id}
+            onRowClick={(o) => navigate(`/operations/purchase-orders?focus=${o.id}`)}
             rowMuted={(o) => o.status === "CANCELLED"}
             columns={[
               { key: "no", label: "Sipariş", render: (o) => <span className="font-semibold tabular-nums">{o.orderNo}</span> },

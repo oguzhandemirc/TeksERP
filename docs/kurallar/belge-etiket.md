@@ -127,6 +127,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] A4→A5 tek `scale()` YASAK, iki oran (genişlik ~0.68, yazı ~0.85), A4 bayt-bayt; profiller `doc-density.ts` (altı belge) + `fason-ceki.density.ts` + `traveler-card.density.ts`; belge kendi A4 sayısını verir, `scaleW`/`scaleF` uygular.
 - [ÇEKİRDEK] Top etiketinin basım anı değerleri (`lastLabelSnapshot.printed`: metre, kalite, kumaş/renk, parti no, bizim parti, kg, en, kat, alıcı) YALNIZ `buildPrintedValues`ten ayrı blokta yazılır; üst düzey niyet anahtarlarına dokunulmaz, RollProperty girmez, okuyucu bloksuz eski snapshot'ta kırılmaz. <sub>(arşiv:2026-11-10 Top kartı tablosu)</sub>
 - [ÇEKİRDEK] Fason çekisinde parti TEKİL `batchNumber`, kabul makbuzunda ÇOĞUL `batchNumbers`; çekide parti TOP başına; eski donmuş belge geriye dönük doldurulmaz, tazeleme yalnız reissue.
+- [ÇEKİRDEK] Cariye bağlanan yeni belge türü `customer-documents.service.ts` `PRINTED_TARGET` + `SOURCE_IDS` (kaynak → cari bağı, fason profili ve iki bacaklı cari hesap aynı kimlik) + gerekiyorsa `TYPE_MODULE`e eklenir; görünürlük yalnız `DOC_PERMISSIONS[tür].read` ∧ kaynak modül kapısı, izinsiz tür listede HİÇ yoktur.
 
 ### Yasaklar
 

@@ -11,6 +11,7 @@ import { RecordAvatar, ToneChip } from "@/components/record/RecordBits";
 import { DataTable } from "@/components/data-table/DataTable";
 import { useLocalTable } from "@/hooks/useLocalTable";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
+import { formatMoney } from "@/lib/format";
 import { ROLE_KEYS, ROLE_TONE, roleOn, rowKey, type CariRowItem } from "./cari-row";
 
 interface Handlers {
@@ -24,7 +25,28 @@ export const CARI_TABLE_KEY = "definitions:cariler";
 
 const dash = <span className="text-muted-foreground">—</span>;
 
-function cariColumns({ onEdit, onOpenFull }: Handlers): ColumnDef<CariRowItem>[] {
+const balanceText = (r: CariRowItem) => (r.balances ?? []).map((b) => formatMoney(b.balance, b.currency)).join(" · ");
+
+/** Bakiye sütunu: sunucu `balances` gönderdiyse kurulur; para birimi başına satır, toplanmaz. */
+const balanceColumn: ColumnDef<CariRowItem> = {
+  id: "balance",
+  header: "Bakiye",
+  meta: { align: "right", label: "Bakiye", exportValue: balanceText },
+  enableSorting: false,
+  cell: ({ row }) => {
+    const list = row.original.balances ?? [];
+    if (list.length === 0) return dash;
+    return (
+      <span className="flex flex-col items-end tabular-nums">
+        {list.map((b) => (
+          <span key={b.currency}>{formatMoney(b.balance, b.currency)}</span>
+        ))}
+      </span>
+    );
+  },
+};
+
+function cariColumns({ onEdit, onOpenFull }: Handlers, withBalance: boolean): ColumnDef<CariRowItem>[] {
   return [
     {
       id: "cari",
@@ -72,6 +94,7 @@ function cariColumns({ onEdit, onOpenFull }: Handlers): ColumnDef<CariRowItem>[]
       meta: { label: "Durum", exportValue: (r) => (r.isActive ? "Aktif" : "Pasif") },
       cell: ({ row }) => (row.original.isActive ? <ToneChip tone="green">Aktif</ToneChip> : <ToneChip tone="rose">Pasif</ToneChip>),
     },
+    ...(withBalance ? [balanceColumn] : []),
     {
       id: "actions",
       header: () => <span className="sr-only">Eylemler</span>,
@@ -102,7 +125,8 @@ function cariColumns({ onEdit, onOpenFull }: Handlers): ColumnDef<CariRowItem>[]
 /** Tablo örneği sayfada kurulur: standart "Sütunlar" menüsü süzgeç satırında, tablo gövdede. */
 export function useCariTable(rows: CariRowItem[], compact: boolean, handlers: Handlers) {
   const { onEdit, onOpenFull } = handlers;
-  const columns = useMemo(() => cariColumns({ onEdit, onOpenFull }), [onEdit, onOpenFull]);
+  const withBalance = rows.some((r) => r.balances !== undefined);
+  const columns = useMemo(() => cariColumns({ onEdit, onOpenFull }, withBalance), [onEdit, onOpenFull, withBalance]);
   return useLocalTable({
     tableKey: CARI_TABLE_KEY,
     data: rows,

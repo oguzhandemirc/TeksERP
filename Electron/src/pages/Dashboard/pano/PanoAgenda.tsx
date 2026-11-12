@@ -1,4 +1,5 @@
-// Ajanda kutusu — ay takvimi (gün başına iş sayısı noktası) + seçili günün planlı işleri + tarihsiz planlı sevkiyatlar.
+// Ajanda kutusu — ay takvimi (gün başına iş sayısı noktası) + seçili günün planlı işleri (planlanan günü
+// verilmiş sevkiyatlar dahil) + tarihsiz planlı sevkiyatlar.
 // Gecikme vurgusu bilerek YOK (tekstilde termin/gecikme kutusu istenmedi).
 import { CalendarDays, ChevronLeft, ChevronRight, Factory, PackageCheck, Truck, Waves, type LucideIcon } from "lucide-react";
 import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
@@ -71,12 +72,14 @@ function NavButton({ label, icon: Icon, onClick }: { label: string; icon: Lucide
   );
 }
 
+const shipmentTarget = (id: string): PanoTarget => ({ to: `/operations/shipments/${encodeURIComponent(id)}`, izin: ["shipping:read"] });
+
 interface Item { id: string; title: string; sub: string | null; amount: string | null; target: PanoTarget }
 interface Section { key: string; label: string; icon: LucideIcon; tone: IconTileTone; total: number; items: Item[] }
 
 function daySections(d: AgendaBox): Section[] {
   const out: Section[] = [];
-  const { alisTeslim, isEmriBaslangic, dokumaBaslangic } = d.isler;
+  const { alisTeslim, isEmriBaslangic, dokumaBaslangic, sevkiyat } = d.isler;
   if (alisTeslim) out.push({ key: "alis", label: "Alış teslimi", icon: PackageCheck, tone: "teal", total: alisTeslim.toplam,
     items: alisTeslim.kalemler.map((r) => ({ id: r.id, title: r.no, sub: r.taraf, amount: null, target: BOX_TARGETS.alis })) });
   if (isEmriBaslangic) out.push({ key: "isEmri", label: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} başlangıcı`, icon: Factory, tone: "orange", total: isEmriBaslangic.toplam,
@@ -84,6 +87,8 @@ function daySections(d: AgendaBox): Section[] {
       target: { to: `/operations/work-orders/${encodeURIComponent(r.id)}`, izin: ["workorder:read"] } })) });
   if (dokumaBaslangic) out.push({ key: "dokuma", label: "Dokuma başlangıcı", icon: Waves, tone: "violet", total: dokumaBaslangic.toplam,
     items: dokumaBaslangic.kalemler.map((r) => ({ id: r.id, title: r.no, sub: r.kumas, amount: r.planlananMetre !== null ? metre(r.planlananMetre) : null, target: BOX_TARGETS.dokuma })) });
+  if (sevkiyat) out.push({ key: "sevk", label: "Planlı sevkiyat", icon: Truck, tone: "green", total: sevkiyat.toplam,
+    items: sevkiyat.kalemler.map((r) => ({ id: r.id, title: r.no, sub: r.musteri, amount: null, target: shipmentTarget(r.id) })) });
   return out;
 }
 
@@ -131,7 +136,7 @@ export function PanoAgenda({ d, erisim, onPick, loading }: { d: AgendaBox; erisi
                 </p>
                 <div className="-mx-2">
                   {ship.kalemler.slice(0, 4).map((s) => (
-                    <RowLink key={s.id} onClick={go({ to: `/operations/shipments/${encodeURIComponent(s.id)}`, izin: ["shipping:read"] })} className="py-1.5">
+                    <RowLink key={s.id} onClick={go(shipmentTarget(s.id))} className="py-1.5">
                       <span className="shrink-0 font-medium tabular-nums">{s.no}</span>
                       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={s.musteri}>{s.musteri}</span>
                     </RowLink>

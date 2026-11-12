@@ -1,7 +1,7 @@
 // Cariler — satır modeli (iki kaynak: müşteri kartı + BAĞSIZ eski fason profili) ve seçili kayıt anahtarı.
 import type { IconTileTone } from "@/components/ui/icon-tile";
 import type { PartnerRoleFlags, PartnerRoleKey } from "@/lib/partnerRoles";
-import type { Customer } from "@/pages/Customers/types";
+import type { Customer, CustomerListBalance } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 
 interface RowBase {
@@ -13,6 +13,8 @@ interface RowBase {
   city: string | null;
   isActive: boolean;
   roles: PartnerRoleFlags;
+  /** Sunucu yanıtında yoksa `undefined` (izin/modül yok) → bakiye sütunu kurulmaz. */
+  balances?: CustomerListBalance[];
 }
 export type CariRowItem =
   | (RowBase & { kind: "CUSTOMER"; record: Customer })
@@ -36,6 +38,7 @@ export function customerRow(c: Customer): CariRowItem {
     city: c.city ?? null,
     isActive: c.isActive,
     roles: { isCustomerRole: c.isCustomerRole, isSupplierRole: c.isSupplierRole, isSubcontractorRole: c.isSubcontractorRole },
+    balances: c.balances,
     record: c,
   };
 }
