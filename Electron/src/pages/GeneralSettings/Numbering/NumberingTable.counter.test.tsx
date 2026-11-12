@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import type { ReactElement } from "react";
 import { NumberingTable } from "./NumberingTable";
 import type { NumberSeriesRow } from "./types";
+
+// DataTable araç çubuğu (kayıtlı görünümler) yönlendirici bağlamı ister.
+const render = (ui: ReactElement) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
 
 // =============================================================================
 // BEKÇİ — SAYAÇ AYARLARININ ÇIKIŞ YÜZEYİ VAR MI? (2026-09-23)

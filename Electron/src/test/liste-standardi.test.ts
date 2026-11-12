@@ -236,19 +236,16 @@ const NO_SEARCH: Record<string, string> = {
   "System/Clients/ClientsPage.tsx": "sunucu belleğindeki istemci envanteri (tek istek, parametresiz, birkaç kurulum); arama yok (backend gerekiyor)",
   "System/PrintHistory/PrintHistoryTable.tsx": "baskı ucu gün/kişi/yazıcı/cihaz/tür/durum/kaynak süzgeçli; metin araması yok (backend gerekiyor)",
   "Notifications/NotificationsPage.tsx": "kişisel gelen kutusu sekme + alan süzgeçli (sunucuda); `/api/bildirim` metin araması almıyor (backend gerekiyor)",
+  "GeneralSettings/Numbering/NumberingTable.tsx": "numara serisi kataloğu (kod kataloğundaki seriler, bölümlü, tek istek); `/api/number-series` arama almıyor (backend gerekiyor)",
+  "Finance/PeriodClose/PeriodClosePage.tsx": "kapanış ucu cari/para birimi/yeniden açılan süzgeçli (cari seçici aramalı); metin araması yok (backend gerekiyor)",
   "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
-/** Ölçüldü 2026-11-12: satır içi düzenleme YOK — satır eylemleri diyalog açar; düz DataTable geçişi bekliyor (sıradaki tur). */
-const DIALOG_ACTIONS = "satır eylemleri diyalog açar (detay/düzenle/onayla/sil/iptal/doğrula/yeniden aç); satır içi düzenleme yok — düz DataTable geçişi bekliyor";
 /** KALICI muaf: sütunu veri olan matris/gruplu katalog — sütun menüsü anlamsız; tek satır hücre + ince ayraç uygulanır. */
 const MATRIX = "kalıcı muaf: matris/gruplu katalog (sütunlar sabit durum ya da grup başlıkları) — tek satır hücre + ince ayraç";
 /** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır) — her biri gerekçeli. */
 const HAND_TABLES: Record<string, string> = {
   "Access/Permissions/PermissionsCatalogPage.tsx": MATRIX,
-  "Finance/InvoicesPage.tsx": DIALOG_ACTIONS,
-  "Finance/PeriodClose/PeriodClosePage.tsx": DIALOG_ACTIONS,
-  "GeneralSettings/Numbering/NumberingTable.tsx": DIALOG_ACTIONS,
   "System/Duplicates/DuplicatesPage.tsx": MATRIX,
   "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
 };
