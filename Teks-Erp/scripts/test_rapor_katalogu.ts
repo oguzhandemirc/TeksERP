@@ -169,15 +169,19 @@ function main(): void {
   check("§4 katalog `modul` ⇄ SCREEN_CATALOG kategori satırı", sapan.length === 0, sapan.join(" · ") || `${REPORT_CATALOG.length} satır hizalı`);
 
   // ── §5 ELECTRON AYNASI ────────────────────────────────────────────────────
-  const govde = (metin: string): string => {
-    const b = metin.indexOf("export type ReportSinif");
+  // Gövde = baştaki `//` yorum bloğundan sonrası. Katalog iki dosyadır (satırlar + `report-catalog-types` şeması);
+  // her çift ayrı ölçülür, yoksa taşınan şema aynasız kalırdı.
+  const govde = (metin: string, isaret: string): string => {
+    const b = metin.indexOf(isaret);
     return b < 0 ? "" : metin.slice(b).trim();
   };
-  const arka = govde(readFileSync(join(KOK, "src/constants/report-catalog.ts"), "utf8"));
-  const ayna = govde(readFileSync(join(ELECTRON, "src/lib/report-catalog.ts"), "utf8"));
-  check("§5z körlük zemini: iki gövde de okundu", arka.length > 2000 && ayna.length > 2000, `${arka.length} / ${ayna.length} karakter`);
-  check("§5 ⭐ Electron aynası backend sabitiyle KARAKTER KARAKTER aynı", arka === ayna,
-    arka === ayna ? "birebir" : `ilk fark: ${[...arka].findIndex((c, i) => c !== ayna[i])}. karakter`);
+  for (const [dosya, isaret] of [["report-catalog", "import type { ReportCatalogEntry"], ["report-catalog-types", "export type ReportSinif"]] as const) {
+    const arka = govde(readFileSync(join(KOK, `src/constants/${dosya}.ts`), "utf8"), isaret);
+    const ayna = govde(readFileSync(join(ELECTRON, `src/lib/${dosya}.ts`), "utf8"), isaret);
+    check(`§5z körlük zemini: iki gövde de okundu (${dosya})`, arka.length > 2000 && ayna.length > 2000, `${arka.length} / ${ayna.length} karakter`);
+    check(`§5 ⭐ Electron aynası backend sabitiyle KARAKTER KARAKTER aynı (${dosya})`, arka === ayna,
+      arka === ayna ? "birebir" : `ilk fark: ${[...arka].findIndex((c, i) => c !== ayna[i])}. karakter`);
+  }
 
   // ── §7 TARİH SÖZLEŞMESİ ve VARSAYILAN GÜN ─────────────────────────────────
   // NEDEN: aynı sayı bugün İKİ yerde yazılı — panel yaprağında `defaultDays={N}` ve
