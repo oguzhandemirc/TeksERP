@@ -599,12 +599,10 @@
 
 /* ── SAYFA BANTLARI — başlık bandı ve liste bantları (özet şeridi) ince alt çizgiyle ayrışır.
    Renk tek başına yetmez (beyaz zemin): her katmanın sınırı çizgidir. */
+/* Başlığın altında ek boşluk YOK: liste sayfasında bant/yüzey çizgiye bitişik, kart sayfasında boşluğu gövdenin kendi
+   dolgusu verir (0.75rem ek pay kart sayfalarında başlık altını 12 px büyütüyordu — 2026-11-12 cila turu). */
 .tab-pane [data-page-header] {
   border-bottom: 1px solid hsl(var(--chrome-border));
-  margin-bottom: 0.75rem;
-}
-/* Liste sayfasında bant/yüzey/alt sekme çizgiye bitişik başlar (boşluk yok). */
-.tab-pane [data-page-header]:has(~ [data-list-surface], ~ * [data-list-surface], ~ [data-list-band], ~ [data-page-tabs], ~ * [data-page-tabs]) {
   margin-bottom: 0;
 }
 /* Sayfa içi alt sekmeler (PageTabs) de bant: başlığın altında tam genişlik, alt çizgisi sekme göstergesinin zemini. */
