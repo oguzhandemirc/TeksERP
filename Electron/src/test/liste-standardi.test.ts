@@ -235,11 +235,10 @@ const NO_SEARCH: Record<string, string> = {
   "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",
   "System/Clients/ClientsPage.tsx": "sunucu belleğindeki istemci envanteri (tek istek, parametresiz, birkaç kurulum); arama yok (backend gerekiyor)",
   "System/PrintHistory/PrintHistoryTable.tsx": "baskı ucu gün/kişi/yazıcı/cihaz/tür/durum/kaynak süzgeçli; metin araması yok (backend gerekiyor)",
+  "Notifications/NotificationsPage.tsx": "kişisel gelen kutusu sekme + alan süzgeçli (sunucuda); `/api/bildirim` metin araması almıyor (backend gerekiyor)",
   "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
-/** Seçimi sayfa durumu sahiplenir (toplu eylem, süzgeçte sıfırlanır) — DataTable seçimi dışarıdan denetlenemiyor. */
-const CONTROLLED_SELECT = "dış durumlu satır seçimi (toplu 'okundu say', süzgeç değişince sıfırlanır) + başlık/gövde/sebep üç satır — DataTable'a denetimli seçim yeteneği gelince geçer";
 const INLINE = "satır içi düzenleme + seçim — DataTable'a genel satır içi düzenleme yeteneği gelince geçer";
 /** KALICI muaf: sütunu veri olan matris/gruplu katalog — sütun menüsü anlamsız; tek satır hücre + ince ayraç uygulanır. */
 const MATRIX = "kalıcı muaf: matris/gruplu katalog (sütunlar sabit durum ya da grup başlıkları) — tek satır hücre + ince ayraç";
@@ -249,7 +248,6 @@ const HAND_TABLES: Record<string, string> = {
   "Finance/InvoicesPage.tsx": INLINE,
   "Finance/PeriodClose/PeriodClosePage.tsx": INLINE,
   "GeneralSettings/Numbering/NumberingTable.tsx": INLINE,
-  "Notifications/NotificationTable.tsx": CONTROLLED_SELECT,
   "System/Duplicates/DuplicatesPage.tsx": MATRIX,
   "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
 };

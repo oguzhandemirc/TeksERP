@@ -10,14 +10,15 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { NOTIFICATION_QUERY_KEY } from "@/lib/bildirim/hooks";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useTabsStore } from "@/store/tabs";
 import type { NotificationItem } from "@/lib/bildirim/types";
 import { NotificationFilters } from "./NotificationFilters";
-import { NotificationTable } from "./NotificationTable";
+import { useNotificationTable } from "./notificationColumns";
 import { INBOX_SETTINGS_PATH, EmptyList, UnsupportedState, ClosedState, LoadErrorState, SummaryStrip, LoadingState } from "./page-parts";
 import { useNotificationsPage } from "./useNotificationsPage";
 
@@ -26,11 +27,8 @@ type PageState = ReturnType<typeof useNotificationsPage>;
 /** Liste standardı: solda süzgeç kolonu; sağda sabit özet bandı → kenardan kenara tablo (sonsuz kaydırma) → alt şerit. */
 function PageContent({ s, onAc }: { s: PageState; onAc: (b: NotificationItem) => void }) {
   const { liste } = s;
-  const { rootRef, sentinelRef } = useInfiniteScroll({
-    hasMore: Boolean(liste.hasNextPage),
-    isLoading: liste.isFetchingNextPage,
-    onLoadMore: () => void liste.fetchNextPage(),
-  });
+  const table = useNotificationTable({ items: s.items, secili: s.secili, setSecili: s.setSecili, onAc, eylemler: s.eylemler });
+  const hasRows = !liste.isLoading && !liste.isError && s.items.length > 0;
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <NotificationFilters
@@ -41,29 +39,37 @@ function PageContent({ s, onAc }: { s: PageState; onAc: (b: NotificationItem) =>
         onGrupDegis={s.grupDegis}
       />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ListToolbar>
-          <SummaryStrip
-            toplam={s.toplam}
-            okunmamis={s.zil.okunmamis}
-            seciliSayi={s.secili.size}
-            topluAcik={s.topluAcik}
-            onToplu={() => void s.topluOkundu()}
-          />
+        <ListToolbar className="flex-row flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SummaryStrip
+              toplam={s.toplam}
+              okunmamis={s.zil.okunmamis}
+              seciliSayi={s.secili.size}
+              topluAcik={s.topluAcik}
+              onToplu={() => void s.topluOkundu()}
+            />
+          </div>
+          <DataTableTools table={table} hideExport compact />
         </ListToolbar>
-        <ListBody ref={rootRef}>
-          {liste.isLoading ? (
-            <LoadingState />
-          ) : liste.isError ? (
-            <ListMessage><LoadErrorState /></ListMessage>
-          ) : s.items.length === 0 ? (
-            <ListMessage><EmptyList sekme={s.sekme} /></ListMessage>
-          ) : (
-            <>
-              <NotificationTable items={s.items} secili={s.secili} setSecili={s.setSecili} onAc={onAc} eylemler={s.eylemler} />
-              <ListSentinel ref={sentinelRef} />
-            </>
-          )}
-        </ListBody>
+        {hasRows ? (
+          <DataTable
+            table={table}
+            selectionLabel={(b) => `Seç: ${b.baslik}`}
+            showSelectionBar={false}
+            rowClassName={(b) => (b.okunduAn ? undefined : "bg-primary/[0.03]")}
+            loadMore={{ hasMore: Boolean(liste.hasNextPage), isFetchingMore: liste.isFetchingNextPage, onLoadMore: () => void liste.fetchNextPage() }}
+          />
+        ) : (
+          <ListBody>
+            {liste.isLoading ? (
+              <LoadingState />
+            ) : liste.isError ? (
+              <ListMessage><LoadErrorState /></ListMessage>
+            ) : (
+              <ListMessage><EmptyList sekme={s.sekme} /></ListMessage>
+            )}
+          </ListBody>
+        )}
         <ListFooter loaded={s.items.length} total={s.toplam} hasMore={Boolean(liste.hasNextPage)} isFetchingMore={liste.isFetchingNextPage} />
       </section>
     </div>
