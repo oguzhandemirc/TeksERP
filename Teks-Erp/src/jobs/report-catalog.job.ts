@@ -18,7 +18,7 @@
 // ⚠️ TEK SEFER: uyarı boot'ta bir kez basılır. Kapının her isteğinde basılsaydı
 // log'u boğar ve asıl arıza satırlarını görünmez yapardı.
 // =============================================================================
-import { REPORT_BY_KEY } from "../constants/report-catalog";
+import { REPORT_BY_KEY, isRetiredReportKey } from "../constants/report-catalog";
 import { readReportsClosedKeys } from "../services/system-setting.service";
 import { bilgi, uyari } from "../lib/logger";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
@@ -44,14 +44,15 @@ export async function warnStaleReportKeys(): Promise<void> {
       `rapor uçları fail-closed 403 veriyor — ${ekranYolu("raporGorunurlugu")} bölümünden liste yeniden kaydedilmeli`);
     return;
   }
-  const bayat = visibility.kapali.filter((k) => !REPORT_BY_KEY.has(k));
+  // Emekli anahtar beklenen bir kalıntıdır (panel okurken ayıklanır, yazmada düşer): uyarı yalnız TANINMAYAN için.
+  const bayat = visibility.kapali.filter((k) => !REPORT_BY_KEY.has(k) && !isRetiredReportKey(k));
   if (bayat.length === 0) {
     if (visibility.kapali.length > 0) bilgi(ETIKET, `${visibility.kapali.length} rapor kapalı`);
     return;
   }
   uyari(ETIKET, `kapalı rapor listesinde katalogda OLMAYAN ${bayat.length} anahtar var ` +
-    `(${bayat.join(", ")}); kapı bunları yok sayıyor — ${ekranYolu("raporGorunurlugu")} bölümünden liste ` +
-    "yeniden kaydedilerek temizlenir");
+    `(${bayat.join(", ")}); kapı bunları yok sayıyor, panel okurken ayıklar — ${ekranYolu("raporGorunurlugu")} ` +
+    "bölümünden herhangi bir aç/kapa yazması listeyi temizler");
 }
 
 // Boot zinciri tek girişten: kapalı rapor anahtarı uyarısının ardından sistem rapor tanımı uzlaştırması (R1-KAYIT).

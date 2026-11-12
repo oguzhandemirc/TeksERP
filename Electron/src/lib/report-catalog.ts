@@ -88,6 +88,11 @@ interface ReportCatalogBase {
 export interface ReportCatalogEntryV1 extends ReportCatalogBase {
   nesil: "v1";
   yeniHali: ReportYeniHali;
+  /**
+   * Panelden KALDIRILMIŞ eski rapor (2026-11-12, 1. aşama): hiçbir yüzeyde çizilmez; backend ucu eski panel
+   * sürümleri için bir sürüm daha AÇIK kalır (kapı anahtarı bu satır). 2. aşamada uç + satır silinir.
+   */
+  emekli?: true;
 }
 
 export interface ReportCatalogEntryV2 extends ReportCatalogBase {
@@ -370,6 +375,19 @@ export type ReportKey = (typeof REPORT_CATALOG)[number]["key"];
 
 /** Anahtar → satır. Bilinmeyen anahtar `undefined` (çağıran fail-closed davranır). */
 export const REPORT_BY_KEY = new Map(REPORT_CATALOG.map((r) => [r.key, r]));
+
+/**
+ * Katalogdan SİLİNMİŞ rapor anahtarları (2. aşama doldurur). Kapalı rapor listesinde (`reports.closedKeys`) kalan
+ * bu değerler hata değildir: okumada ayıklanır, yazmada sessizce düşer. Listede OLMAYAN tanınmayan anahtar yine 400.
+ */
+export const DELETED_REPORT_KEYS: readonly string[] = [];
+
+/** Emekli anahtar = panelden kalkmış v1 satırı (`emekli:true`) ya da katalogdan silinmiş anahtar — TEK yüklem. */
+export function isRetiredReportKey(key: string): boolean {
+  if (DELETED_REPORT_KEYS.includes(key)) return true;
+  const entry = REPORT_BY_KEY.get(key);
+  return entry?.nesil === "v1" && entry.emekli === true;
+}
 
 /**
  * Satır bugün bir yüzeyde (karo · route · palet · Sistem → Modüller) çizilir mi — TEK yüklem.

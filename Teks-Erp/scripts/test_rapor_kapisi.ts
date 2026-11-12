@@ -194,12 +194,12 @@ async function main(): Promise<void> {
   check("§5b `null` YAZILAMAZ (null yalnız okuma tarafının \"ölçülemedi\" işareti)",
     /!Array\.isArray\(incoming\)/.test(servis));
   check("§5c liste KÜME olarak saklanır (tekil + sıralı — sahte \"değişti\" audit satırı doğmasın)",
-    /\[\.\.\.new Set\(incoming\)\]\.sort\(\)/.test(servis));
+    /\[\.\.\.new Set\(kept\)\]\.sort\(\)/.test(servis));
   check("§5d okuma ÜÇ SONUÇLU (`okundu` / `olculemedi`) ve satır-yok ⇒ HEPSİ AÇIK",
     /durum: "okundu"; kapali: string\[\]/.test(servis)
     && /if \(!setting\) return \{ durum: "okundu", kapali: \[\] \}/.test(servis));
-  check("§5e `getFeatureFlags` alanı döner ve ölçülemedi ⇒ `null`",
-    /reportsClosedKeys: string\[\] \| null/.test(servis) && /o\.durum === "okundu" \? o\.kapali : null/.test(servis));
+  check("§5e `getFeatureFlags` alanı döner, katalog dışı/emekli anahtarı ayıklar (D5) ve ölçülemedi ⇒ `null`",
+    /reportsClosedKeys: string\[\] \| null/.test(servis) && /o\.durum === "okundu" \? o\.kapali\.filter\(\(k\) => REPORT_BY_KEY\.has\(k\) && !isRetiredReportKey\(k\)\) : null/.test(servis));
 
   // ⭐ ÜÇÜNCÜ SONUCUN İKİ DALI DA AYRI AYRI ÖLÇÜLÜR. Bu kol bir SONDA BOŞLUĞUNDAN
   // doğdu: `olculemedi` dallarından biri `{durum:"okundu", kapali:[]}`a çevrildiğinde

@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { terimDokumaAyarla } from "../../constants/terim";
+import { REPORT_BY_KEY, isRetiredReportKey } from "../../constants/report-catalog";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { ApiResponse } from "../../types/api.types";
 import prisma from "../../lib/prisma";
@@ -196,7 +197,8 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
       reportsClosedKeys: ((): string[] | null => {
         const o = reportsClosedRead;
-        return o.durum === "okundu" ? o.kapali : null;
+        // Panel listeyi olduğu gibi geri yazar: katalog dışı ve emekli anahtar burada ayıklanır, yoksa yazma 400 verir.
+        return o.durum === "okundu" ? o.kapali.filter((k) => REPORT_BY_KEY.has(k) && !isRetiredReportKey(k)) : null;
       })(),
       reportsV2Enabled: await readReportsV2Enabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),

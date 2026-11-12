@@ -17,7 +17,7 @@ import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { ApiResponse } from "../../types/api.types";
 import { TERIM } from "../../constants/terim";
 import { FINISHING_KG_BASES, type FinishingKgBasis } from "../helpers/fabric-cost-kg.helper";
-import { REPORT_BY_KEY } from "../../constants/report-catalog";
+import { REPORT_BY_KEY, isRetiredReportKey } from "../../constants/report-catalog";
 import { updateSeriesNumberSource } from "../helpers/series-write.helper";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { PHASE_OUT_LINE_QTY_VALUES, PHASE_OUT_NEW_ORDER_VALUES, phaseOutExitWarning, type PhaseOutLineQty, type PhaseOutNewOrder } from "../helpers/item-lifecycle-settings.helper";
@@ -943,7 +943,10 @@ export async function setFeatureFlags(
       if (!Array.isArray(incoming) || !incoming.every((k): k is string => typeof k === "string")) {
         throw AppError.badRequest("reportsClosedKeys string dizisi olmalı");
       }
-      const bilinmeyen = incoming.filter((k) => !REPORT_BY_KEY.has(k));
+      // EMEKLİ anahtar (panelden kalkmış / katalogdan silinmiş) sessizce düşer: eski panel listeyi olduğu gibi
+      // geri yazar ve bayat değer yüzünden aç/kapa kırılmamalı. Emekli kümesi kodda beyanlı, tahmin edilmez.
+      const kept = incoming.filter((k) => !isRetiredReportKey(k));
+      const bilinmeyen = kept.filter((k) => !REPORT_BY_KEY.has(k));
       if (bilinmeyen.length > 0) {
         throw AppError.badRequest(
           `Tanınmayan rapor anahtarı: ${bilinmeyen.join(", ")}`,
@@ -954,7 +957,7 @@ export async function setFeatureFlags(
       // yalnız sıralaması değişen bir gövde sahte bir "değişti" audit satırı üretirdi.
       await this.set(
         SETTING_KEYS.REPORTS_CLOSED_KEYS,
-        [...new Set(incoming)].sort(),
+        [...new Set(kept)].sort(),
         "Kapalı raporların anahtar listesi (boş/satır yok = hepsi açık)",
         userId
       );
