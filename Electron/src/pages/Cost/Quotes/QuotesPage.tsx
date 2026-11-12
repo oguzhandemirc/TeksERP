@@ -8,6 +8,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
@@ -15,7 +18,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { CostQueryError } from "../shared/CostQueryState";
 import { QuoteFilters } from "./QuoteFilters";
 import { QuoteSummaryStrip } from "./QuoteSummaryStrip";
-import { QuotesTable } from "./QuotesTable";
+import { QUOTE_COLUMNS } from "./columns";
 import { quoteService } from "./service";
 import { EMPTY_QUOTE_FILTER, type QuoteFilter } from "./quote-types";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -34,6 +37,7 @@ export function QuotesPage() {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const rows = (q.data?.pages ?? []).flatMap((p) => p.data);
+  const table = useLocalTable({ tableKey: "cost:quotes", data: rows, columns: QUOTE_COLUMNS, getRowId: (r) => r.id });
   const summary = q.data?.pages[0]?.ozet;
   const filtered = JSON.stringify(f) !== JSON.stringify(EMPTY_QUOTE_FILTER);
   return (
@@ -55,9 +59,15 @@ export function QuotesPage() {
           <QuoteSummaryStrip summary={summary} filter={f} onChange={setF} />
         </ListBand>
       )}
-      <ListToolbar>
+      <ListToolbar className="flex-row flex-wrap items-start">
         <QuoteFilters value={f} onChange={setF} />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Teklifler" />
+        </div>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={(r) => nav(`/cost/quotes/${r.id}`)} exportName="Teklifler" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -65,16 +75,15 @@ export function QuotesPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="Teklifler" onRetry={() => void q.refetch()} />
           </ListMessage>
-        ) : rows.length === 0 ? (
+        ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="quotes-empty">
               {filtered ? "Süzgece uyan teklif yok." : "Henüz teklif yok — \"Yeni teklif\" ile başlayın ya da Hızlı Hesaplayıcı'dan \"Teklife ekle\" deyin."}
             </div>
           </ListMessage>
-        ) : (
-          <QuotesTable rows={rows} onOpen={(id) => nav(`/cost/quotes/${id}`)} />
         )}
       </ListBody>
+      )}
       {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
       <ListFooter loaded={rows.length}>
         {q.hasNextPage && (

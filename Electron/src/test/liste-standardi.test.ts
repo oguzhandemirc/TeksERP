@@ -190,6 +190,9 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Finance/CashTransactions/CashTxnTable.tsx": ["Finance/CashTransactions/CashTransactionsPage.tsx", "Finance/CashTransactions/CashTxnFilterBar.tsx"],
   "Finance/Cheques/ChequeTable.tsx": ["Finance/Cheques/ChequesPage.tsx", "Finance/Cheques/ChequeFilterBar.tsx"],
   "Finance/PaymentsPage.tsx": ["Finance/PaymentsFilterBar.tsx"],
+  "Quality/Inspections/InspectionList.tsx": ["Quality/Inspections/InspectionFilters.tsx"],
+  "Cost/PriceLists/PriceListsPage.tsx": ["Cost/PriceLists/PriceListFilters.tsx"],
+  "Cost/Quotes/QuotesPage.tsx": ["Cost/Quotes/QuoteFilters.tsx"],
   "Operations/ConsignmentDispatches/ConsignmentDispatchesPage.tsx": ["Operations/ConsignmentDispatches/ConsignmentDispatchFilters.tsx"],
   "Operations/Yarn/YarnStockTable.tsx": ["Operations/Yarn/YarnStockPage.tsx", "Operations/Yarn/YarnFilterBar.tsx"],
   "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
@@ -202,8 +205,17 @@ const NO_COLUMN_MENU: Record<string, string> = {
 };
 
 const KATALOG = "küçük katalog, liste ucu arama parametresi almıyor (backend gerekiyor); istemci süzmesi yazılmaz";
+const COST_ACTIVE = "maliyet tarife kataloğu: `/active` ucu yürürlükteki sürümleri parametresiz tek istekte verir; arama yok (backend gerekiyor)";
 /** Arama kutusu OLMAYAN DataTable sayfası — gerekçeli. */
 const NO_SEARCH: Record<string, string> = {
+  "Quality/Certificates/CustomerSpecsPanel.tsx": "müşteri spesifikasyon kataloğu (müşteri süzgeçli, tek istek); uçta metin araması yok (backend gerekiyor)",
+  "Quality/LabTests/LabTypesPanel.tsx": KATALOG,
+  "MachineCollectors/MachineCollectorsPage.tsx": "tezgah kartı kayıtları (birkaç cihaz, tek istek); liste ucu arama almıyor (backend gerekiyor)",
+  "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx": "seçili belge türünün profil ataması (belge profili sayısı kadar satır, atama ucundan tek istekte); arama yok (backend gerekiyor)",
+  "Cost/ConsumableNorms/ConsumableNormsPage.tsx": COST_ACTIVE,
+  "Cost/FinishingRates/FinishingRatesPage.tsx": COST_ACTIVE,
+  "Cost/MachineRates/MachineRatesPage.tsx": COST_ACTIVE,
+  "Cost/YarnPrices/YarnPricesPage.tsx": COST_ACTIVE,
   "Operations/GelenBelgeler/GonderenSablonlariPage.tsx": KATALOG,
   "Operations/MachineStops/StopsTable.tsx": "gün + makine süzgeçli duruş listesi; uçta metin araması yok (backend gerekiyor)",
   "ShiftDefinitions/ShiftDefinitionsPage.tsx": KATALOG,
@@ -229,26 +241,12 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Access/Permissions/PermissionsCatalogPage.tsx",
     "Access/Templates/TemplatesPage.tsx",
     "Access/Users/AccessUsersPage.tsx",
-    "Cost/ConsumableNorms/ConsumableNormsPage.tsx",
-    "Cost/FinishingRates/FinishingRatesPage.tsx",
-    "Cost/Items/CostItemsTable.tsx",
-    "Cost/MachineRates/MachineRatesPage.tsx",
-    "Cost/PriceLists/PriceListsPage.tsx",
-    "Cost/Quotes/QuotesTable.tsx",
-    "Cost/YarnPrices/YarnPricesPage.tsx",
-    "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx",
     "Devices/DevicesPage.tsx",
     "Finance/InvoicesPage.tsx",
     "Finance/PeriodClose/PeriodClosePage.tsx",
     "GeneralSettings/Numbering/NumberingTable.tsx",
-    "MachineCollectors/CollectorTable.tsx",
     "Notifications/NotificationTable.tsx",
     "Operations/ProductBalance/ProductBalancePage.tsx",
-    "Quality/Certificates/CertificateList.tsx",
-    "Quality/Certificates/CustomerSpecsPanel.tsx",
-    "Quality/Inspections/InspectionList.tsx",
-    "Quality/LabTests/LabTestList.tsx",
-    "Quality/LabTests/LabTypesPanel.tsx",
     "Stations/StationListView.tsx",
     "System/Clients/ClientsPage.tsx",
     "System/Duplicates/DuplicatesPage.tsx",
@@ -256,12 +254,11 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "System/NotificationProfiles/ProfileMatrixTab.tsx",
     "System/PrintHistory/PrintHistoryTable.tsx",
     "System/WorkSessions/HistoryTable.tsx",
-    "WeaveDesigns/WeaveDesignsPage.tsx",
   ].map((f) => [f, LISTE]),
 );
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
-const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("search", e\.target\.value\)|\bsearch: e\.target\.value\b/;
+const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("(?:search|q)", e\.target\.value\)|\bsearch: e\.target\.value\b|\bq: e\.target\.value\b/;
 const HAND_TABLE_TAG = /<(table|Table)\b/;
 
 /** Ortak DataTable'ı çizen sayfa dosyaları için eksikler: `dosya: sütun-menüsü|arama`. */

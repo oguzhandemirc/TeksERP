@@ -5,13 +5,16 @@
 // (duyuru/onay akışı yok). Sır yalnız kayıt/yenileme anında bir kez gösterilir. K4: alarm ayarı kapalıysa şerit.
 // Kapı: route `loom:spec-manage` + `ROUTE_MODULE` (tezgah); sunucu da aynı iki kapıyı uygular.
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { TERIM_AD } from "@/lib/terim";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -19,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { k4Warning } from "./collector-model";
 import { CollectorFormDialog } from "./CollectorFormDialog";
-import { CollectorTable } from "./CollectorTable";
+import { collectorColumns } from "./collectorColumns";
 import { RevokeCollectorDialog } from "./RevokeCollectorDialog";
 import { SecretRevealDialog } from "./SecretRevealDialog";
 import { machineCollectorService } from "./service";
@@ -35,6 +38,9 @@ export function MachineCollectorsPage() {
   const [form, setForm] = useState<FormState>(null);
   const [rotating, setRotating] = useState<MachineCollector | null>(null);
   const [revoking, setRevoking] = useState<MachineCollector | null>(null);
+  const rows = list.data ?? [];
+  const columns = useMemo(() => collectorColumns({ busy: actions.busy, onEdit: (row) => setForm({ mode: "edit", row }), onRotate: setRotating, onRevoke: setRevoking }), [actions.busy]);
+  const table = useLocalTable({ tableKey: "machine-collectors", data: rows, columns });
   return (
     <PageShell>
       <PageHeader
@@ -49,20 +55,25 @@ export function MachineCollectorsPage() {
           </div>
         }
       />
-      <ListBody>
+      <ListToolbar className="flex-row flex-wrap items-center">
         {warning && (
-          <ListMessage>
-            <p role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {warning}
-            </p>
+          <p role="alert" className="flex flex-1 items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {warning}
+          </p>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Tezgah kartları" />
+        </div>
+      </ListToolbar>
+      {rows.length > 0 ? (
+        <DataTable table={table} exportName="Tezgah kartları" />
+      ) : (
+        <ListBody>
+          <ListMessage className="py-16 text-center text-muted-foreground">
+            {list.data ? "Kayıtlı kart yok. Yeni kart kaydıyla başlayın." : list.isError ? "Okunamadı — bağlantıyı kontrol edip yenileyin." : "Yükleniyor…"}
           </ListMessage>
-        )}
-        {list.data ? (
-          <CollectorTable rows={list.data} busy={actions.busy} onEdit={(row) => setForm({ mode: "edit", row })} onRotate={setRotating} onRevoke={setRevoking} />
-        ) : (
-          <p className="py-16 text-center text-muted-foreground">{list.isError ? "Okunamadı — bağlantıyı kontrol edip yenileyin." : "Yükleniyor…"}</p>
-        )}
-      </ListBody>
+        </ListBody>
+      )}
       <ListFooter loaded={list.data?.length ?? 0} />
       <CollectorFormDialog
         open={form !== null}

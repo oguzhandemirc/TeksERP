@@ -4,15 +4,18 @@ import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { RotateCcw, Search } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
-import { fmtCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
-import { labTestService, labTestTypeService, type LabSummary, type LabTestListRow } from "./service";
-import { EMPTY_LAB_FILTERS, STATUS_BADGE, STATUS_LABEL, isLabFilterDirty, labEmptyMessage, type LabFilterState } from "./labTestRules";
-import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { labTestService, labTestTypeService, type LabSummary } from "./service";
+import { LAB_TEST_COLUMNS } from "./labTestColumns";
+import { EMPTY_LAB_FILTERS, isLabFilterDirty, labEmptyMessage, type LabFilterState } from "./labTestRules";
+import { QualityListState } from "../QualityListState";
+import { ListBand, ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 
 const PAGE = 50;
 const SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
@@ -30,6 +33,7 @@ export function LabTestList({ onOpen }: { onOpen: (id: string) => void }) {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const rows = (q.data?.pages ?? []).flatMap((p) => p.items);
+  const table = useLocalTable({ tableKey: "lab-tests", data: rows, columns: LAB_TEST_COLUMNS, getRowId: (r) => r.id });
   const summary = q.data?.pages[0]?.summary;
 
   return (
@@ -43,7 +47,7 @@ export function LabTestList({ onOpen }: { onOpen: (id: string) => void }) {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Test no, numune, top barkodu…" value={f.q} onChange={(e) => set("q", e.target.value)} />
+            <Input className="pl-8" placeholder="Ara…" title="Test no, numune ya da top barkodu" aria-label="Lab testi ara: test no, numune ya da top barkodu" value={f.q} onChange={(e) => set("q", e.target.value)} />
           </div>
           <Input className="w-full sm:w-36" placeholder="Parti no" aria-label="Parti no" value={f.batchNo} onChange={(e) => set("batchNo", e.target.value)} />
           <select aria-label="Test türü" className={SELECT} value={f.testTypeId} onChange={(e) => set("testTypeId", e.target.value)}>
@@ -67,27 +71,18 @@ export function LabTestList({ onOpen }: { onOpen: (id: string) => void }) {
               <RotateCcw className="mr-1 h-3.5 w-3.5" /> Süzgeçleri temizle
             </Button>
           )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <DataTableTools table={table} compact exportName="Lab testleri" />
+          </div>
         </div>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={(r) => onOpen(r.id)} exportName="Lab testleri" />
+      ) : (
       <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Lab testleri yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">Bu bir “test yok” cevabı değildir — istek sunucuya ulaşamadı ya da reddedildi.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{labEmptyMessage(f)}</div>
-          </ListMessage>
-        ) : (
-          <LabTable rows={rows} onOpen={onOpen} />
-        )}
+        <QualityListState isLoading={q.isLoading} isError={q.isError} errorTitle="Lab testleri yüklenemedi." noneText="test yok" emptyText={labEmptyMessage(f)} onRetry={() => void q.refetch()} />
       </ListBody>
+      )}
       {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
       <ListFooter loaded={rows.length}>
         {q.hasNextPage && (
@@ -121,40 +116,5 @@ function SummaryStrip({ s, active, onPick }: { s: LabSummary; active: string; on
         <span className="ml-2 text-sm font-semibold tabular-nums text-destructive">{s.failing}</span>
       </div>
     </div>
-  );
-}
-
-function LabTable({ rows, onOpen }: { rows: LabTestListRow[]; onOpen: (id: string) => void }) {
-  return (
-    <table className="w-full min-w-[720px] text-sm">
-      <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-        <tr>
-          <th className="p-3 text-left">Test No</th>
-          <th className="p-3 text-left">Test tarihi</th>
-          <th className="p-3 text-left">Konu</th>
-          <th className="p-3 text-left">Kumaş</th>
-          <th className="p-3 text-left">Numune · Lab</th>
-          <th className="p-3 text-left">Sonuç</th>
-          <th className="p-3 text-left">Durum</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)}>
-            <td className="p-3 font-mono text-xs">{r.testNo}</td>
-            <td className="p-3">{fmtCalendarDay(r.testedOn)}</td>
-            <td className="whitespace-nowrap p-3">{r.roll ? <>Top <span className="font-mono">{r.roll.barcode ?? "—"}</span></> : <>Parti <span className="font-mono">{r.batch?.batchNumber ?? "—"}</span></>}</td>
-            <td className="p-3">{r.item?.name ?? "—"}</td>
-            <td className="p-3 text-xs text-muted-foreground">{[r.sampleCode, r.labName].filter(Boolean).join(" · ") || "—"}</td>
-            <td className="whitespace-nowrap p-3">
-              {r.resultCount === 0 ? <span className="text-xs text-muted-foreground">Sonuç yok</span>
-                : r.hasFail ? <Badge variant="destructive">Kalan var · {r.resultCount}</Badge>
-                : <Badge variant="outline">Geçti · {r.resultCount}</Badge>}
-            </td>
-            <td className="whitespace-nowrap p-3"><Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }

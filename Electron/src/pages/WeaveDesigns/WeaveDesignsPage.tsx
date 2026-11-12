@@ -6,18 +6,19 @@ import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { WeaveDesignCreateDialog } from "./WeaveDesignCreateDialog";
 import { weaveDesignApi } from "./service";
-import { WEAVE_KIND_LABEL } from "./types";
+import { WEAVE_DESIGN_COLUMNS } from "./columns";
 
 export const WEAVE_DESIGNS_QUERY_KEY = "weave-designs";
 
@@ -33,6 +34,7 @@ export function WeaveDesignsPage() {
     queryFn: () => weaveDesignApi.list({ search: q || undefined, includeInactive }),
   });
   const rows = list.data ?? [];
+  const table = useLocalTable({ tableKey: "weave-designs", data: rows, columns: WEAVE_DESIGN_COLUMNS, getRowId: (r) => r.id });
   return (
     <PageShell>
       <PageHeader
@@ -53,41 +55,21 @@ export function WeaveDesignsPage() {
           <Switch checked={includeInactive} onCheckedChange={setIncludeInactive} aria-label="Pasifleri göster" />
           Pasifleri göster
         </label>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Desen kartları" />
+        </div>
       </ListToolbar>
+      {!list.isLoading && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={(r) => nav(`/definitions/weave-designs/${r.id}`)} exportName="Desen kartları" />
+      ) : (
       <ListBody>
         {list.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage className="text-sm text-muted-foreground">{q ? "Aramaya uyan desen yok." : "Henüz desen kartı yok."}</ListMessage>
         ) : (
-          <Table containerClassName="overflow-visible">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kod</TableHead>
-                <TableHead>Ad</TableHead>
-                <TableHead>Örgü</TableHead>
-                <TableHead>Aile</TableHead>
-                <TableHead className="text-right">Çerçeve</TableHead>
-                <TableHead className="text-right">Desen boyu (cm)</TableHead>
-                <TableHead>Durum</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id} className="cursor-pointer" onClick={() => nav(`/definitions/weave-designs/${r.id}`)}>
-                  <TableCell className="font-mono text-xs">{r.code}</TableCell>
-                  <TableCell>{r.name}</TableCell>
-                  <TableCell>{WEAVE_KIND_LABEL[r.kind] ?? r.kind}</TableCell>
-                  <TableCell>{r.familyLabel ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.frameCount ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.repeatCm ?? "—"}</TableCell>
-                  <TableCell>{r.isActive ? <Badge variant="default">Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListMessage className="text-sm text-muted-foreground">{q ? "Aramaya uyan desen yok." : "Henüz desen kartı yok."}</ListMessage>
         )}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} />
       {createOpen && (
         <WeaveDesignCreateDialog

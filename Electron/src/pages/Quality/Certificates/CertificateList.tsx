@@ -1,17 +1,22 @@
 // Sertifika listesi — süzgeçler + özet şeridi + cursor ile "Daha fazla yükle". Şerit ve tablo AYNI sunucu
 // yanıtından (tek where); "süresi dolan/dolmak üzere" süzgeci sunucuda `certificateExpiryWhere`'den.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { RotateCcw, Search, Paperclip } from "lucide-react";
+import { RotateCcw, Search } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fmtCalendarDay } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
-import { certificateService, type CertificateRow, type CertificateStatusFilter, type CertificateSummary } from "./service";
-import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { certificateService, type CertificateStatusFilter, type CertificateSummary } from "./service";
+import { certificateColumns } from "./certificateColumns";
+export { ExpiryPill } from "./certificateColumns";
+import { QualityListState } from "../QualityListState";
+import { ListBand, ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import {
-  EMPTY_CERTIFICATE_FILTERS, HOLDER_LABEL, STATUS_FILTER_LABEL, TONE_CLASS, certificateEmptyMessage, expiryBadge,
+  EMPTY_CERTIFICATE_FILTERS, STATUS_FILTER_LABEL, certificateEmptyMessage,
   isCertificateFilterDirty, type CertificateFilterState,
 } from "./certificateRules";
 
@@ -30,6 +35,8 @@ export function CertificateList({ onOpen }: { onOpen: (id: string) => void }) {
   });
   const rows = (q.data?.pages ?? []).flatMap((p) => p.items);
   const summary = q.data?.pages[0]?.summary;
+  const soonDays = summary?.days ?? f.days;
+  const table = useLocalTable({ tableKey: "certificates", data: rows, columns: useMemo(() => certificateColumns(soonDays), [soonDays]), getRowId: (r) => r.id });
 
   return (
     <>
@@ -42,7 +49,7 @@ export function CertificateList({ onOpen }: { onOpen: (id: string) => void }) {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Sertifika no, standart, kuruluş, iş ortağı…" value={f.q} onChange={(e) => set("q", e.target.value)} />
+            <Input className="pl-8" placeholder="Ara…" title="Sertifika no, standart, kuruluş ya da iş ortağı" aria-label="Sertifika ara: sertifika no, standart, kuruluş ya da iş ortağı" value={f.q} onChange={(e) => set("q", e.target.value)} />
           </div>
           <select aria-label="Durum" className={SELECT} value={f.status} onChange={(e) => set("status", e.target.value as CertificateStatusFilter)}>
             {(Object.keys(STATUS_FILTER_LABEL) as CertificateStatusFilter[]).map((k) => <option key={k} value={k}>{STATUS_FILTER_LABEL[k]}</option>)}
@@ -63,28 +70,19 @@ export function CertificateList({ onOpen }: { onOpen: (id: string) => void }) {
               <RotateCcw className="mr-1 h-3.5 w-3.5" /> Süzgeçleri temizle
             </Button>
           )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <DataTableTools table={table} compact exportName="Sertifikalar" />
+          </div>
         </div>
       </ListToolbar>
 
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={(r) => onOpen(r.id)} exportName="Sertifikalar" />
+      ) : (
       <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Sertifikalar yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">Bu bir “sertifika yok” cevabı değildir — istek sunucuya ulaşamadı ya da reddedildi.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{certificateEmptyMessage(f)}</div>
-          </ListMessage>
-        ) : (
-          <CertificateTable rows={rows} soonDays={summary?.days ?? f.days} onOpen={onOpen} />
-        )}
+        <QualityListState isLoading={q.isLoading} isError={q.isError} errorTitle="Sertifikalar yüklenemedi." noneText="sertifika yok" emptyText={certificateEmptyMessage(f)} onRetry={() => void q.refetch()} />
       </ListBody>
+      )}
       {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
       <ListFooter loaded={rows.length}>
         {q.hasNextPage && (
@@ -114,43 +112,5 @@ function SummaryStrip({ s, active, onPick }: { s: CertificateSummary; active: Ce
         </button>
       ))}
     </div>
-  );
-}
-
-export function ExpiryPill({ row, soonDays }: { row: Parameters<typeof expiryBadge>[0]; soonDays: number }) {
-  const b = expiryBadge(row, soonDays);
-  return <span data-tone={b.tone} className={cn("inline-flex whitespace-nowrap rounded-badge border px-2 py-0.5 text-xs font-medium", TONE_CLASS[b.tone])}>{b.text}</span>;
-}
-
-function CertificateTable({ rows, soonDays, onOpen }: { rows: CertificateRow[]; soonDays: number; onOpen: (id: string) => void }) {
-  return (
-    <table className="w-full min-w-[760px] text-sm">
-      <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-        <tr>
-          <th className="p-3 text-left">Standart</th>
-          <th className="p-3 text-left">Sertifika No</th>
-          <th className="p-3 text-left">Sahip</th>
-          <th className="p-3 text-left">Veren kuruluş</th>
-          <th className="p-3 text-left">Bitiş</th>
-          <th className="p-3 text-left">Kalan</th>
-          <th className="p-3 text-left">Belge</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)}>
-            <td className="p-3 font-medium">{r.standard}</td>
-            <td className="p-3 font-mono text-xs">{r.certificateNo}</td>
-            <td className="p-3">{r.holder === "OWN" ? HOLDER_LABEL.OWN : r.partner?.name ?? HOLDER_LABEL.PARTNER}</td>
-            <td className="p-3 text-muted-foreground">{r.issuer ?? "—"}</td>
-            <td className="whitespace-nowrap p-3 tabular-nums">{fmtCalendarDay(r.expiresOn)}</td>
-            <td className="p-3"><ExpiryPill row={r} soonDays={soonDays} /></td>
-            <td className="p-3 text-xs text-muted-foreground">
-              {r.fileCount > 0 ? <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{r.fileCount}</span> : "—"}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }

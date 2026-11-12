@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,9 +14,12 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { labTestTypeService } from "../LabTests/service";
 import { customerLabSpecService, type CustomerLabSpec } from "./service";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { CUSTOMER_SPEC_COLUMNS } from "./customerSpecColumns";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 
 const SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
-const num = (v: string | number | null) => (v === null || v === "" ? "—" : String(v).replace(".", ","));
 const parseBound = (s: string): number | null | "bad" => {
   const t = s.trim().replace(",", ".");
   if (!t) return null;
@@ -34,13 +36,15 @@ export function CustomerSpecsPanel() {
     queryFn: () => customerLabSpecService.list({ customerId: customerId ?? undefined, includeInactive: showInactive ? "1" : "0" }),
   });
   const rows = q.data ?? [];
+  const table = useLocalTable({ tableKey: "customer-lab-specs", data: rows, columns: CUSTOMER_SPEC_COLUMNS, getRowId: (r) => r.id });
   return (
     <>
       <ListToolbar>
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-full sm:w-72"><CustomerPickerField clearable value={customerId} onChange={setCustomerId} placeholder="Tüm müşteriler" /></div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri de göster</label>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1.5">
+            <DataTableTools table={table} compact exportName="Müşteri spesifikasyonları" />
             <PermissionGate permission="labtest:write">
               <Button size="sm" onClick={() => setEdit("new")}><Plus className="mr-1 h-4 w-4" />Yeni spesifikasyon</Button>
             </PermissionGate>
@@ -48,6 +52,9 @@ export function CustomerSpecsPanel() {
         </div>
         <p className="text-xs text-muted-foreground">Lab testine müşteri seçildiğinde sonuç bu sınırlarla karşılaştırılır; ürüne özel satır, müşterinin genel satırından önce gelir.</p>
       </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={setEdit} exportName="Müşteri spesifikasyonları" />
+      ) : (
       <ListBody>
         {q.isLoading ? <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
           : q.isError ? (
@@ -57,32 +64,15 @@ export function CustomerSpecsPanel() {
                 <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
               </div>
             </ListMessage>
-          ) : rows.length === 0 ? (
+          ) : (
             <ListMessage>
               <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
                 {customerId ? "Bu müşteri için spesifikasyon yok." : "Henüz müşteri spesifikasyonu yok. Müşterinin istediği gramaj, haslık gibi sınırları buradan girin."}
               </div>
             </ListMessage>
-          ) : (
-            <table className="w-full min-w-[680px] text-sm">
-              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr><th className="p-3 text-left">Müşteri</th><th className="p-3 text-left">Ürün</th><th className="p-3 text-left">Test türü</th><th className="p-3 text-right">Alt sınır</th><th className="p-3 text-right">Üst sınır</th><th className="p-3 text-left">Durum</th></tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setEdit(r)}>
-                    <td className="p-3">{r.customer.name}</td>
-                    <td className="p-3">{r.item ? r.item.name : <span className="text-muted-foreground">Tüm ürünler</span>}</td>
-                    <td className="p-3">{r.testType.name}</td>
-                    <td className="p-3 text-right tabular-nums">{num(r.specMin)}{r.testType.unit && r.specMin !== null ? ` ${r.testType.unit}` : ""}</td>
-                    <td className="p-3 text-right tabular-nums">{num(r.specMax)}{r.testType.unit && r.specMax !== null ? ` ${r.testType.unit}` : ""}</td>
-                    <td className="p-3">{r.isActive ? <Badge variant="outline">Etkin</Badge> : <Badge variant="secondary">Pasif</Badge>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        )}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} />
       {edit && <CustomerSpecFormDialog spec={edit === "new" ? null : edit} presetCustomerId={customerId} onClose={() => setEdit(null)} />}
     </>
