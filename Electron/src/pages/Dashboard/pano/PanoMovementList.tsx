@@ -7,14 +7,15 @@ import { HIZLI_EYLEMLER, movementTarget } from "./pano-hedefler";
 import type { PanoErisim } from "./usePanoErisim";
 import type { HareketTuru, PanoHareket } from "./types";
 
-export const HAREKET_ROZETI: Record<HareketTuru, { etiket: string; ton: IconTileTone }> = {
-  SIPARIS: { etiket: "Sipariş", ton: "blue" },
-  SEVK: { etiket: "Sevk", ton: "green" },
-  DOGRUDAN_SEVK: { etiket: "Doğrudan sevk", ton: "teal" },
-  FASON_GIDEN: { etiket: "Fasona giden", ton: "orange" },
-  FASON_DONEN: { etiket: "Fasondan dönen", ton: "amber" },
-  MAL_KABUL: { etiket: "Mal kabul", ton: "violet" },
-  GELEN_BELGE: { etiket: "Gelen belge", ton: "sky" },
+/** `kisa`: dar kutuda (~370 px) rozet yine okunur kalsın diye kısa ad; tam ad `title`da. */
+export const HAREKET_ROZETI: Record<HareketTuru, { etiket: string; kisa: string; ton: IconTileTone }> = {
+  SIPARIS: { etiket: "Sipariş", kisa: "Sipariş", ton: "blue" },
+  SEVK: { etiket: "Sevk", kisa: "Sevk", ton: "green" },
+  DOGRUDAN_SEVK: { etiket: "Doğrudan sevk", kisa: "D. sevk", ton: "teal" },
+  FASON_GIDEN: { etiket: "Fasona giden", kisa: "Fasona", ton: "orange" },
+  FASON_DONEN: { etiket: "Fason dönüşü", kisa: "F. dönüş", ton: "amber" },
+  MAL_KABUL: { etiket: "Mal kabul", kisa: "Mal kabul", ton: "violet" },
+  GELEN_BELGE: { etiket: "Gelen belge", kisa: "Belge", ton: "sky" },
 };
 
 function miktarMetni(h: PanoHareket): string {
@@ -40,18 +41,20 @@ export function PanoMovementList({ hareketler, yukleniyor, hata, onYenile, erisi
       ) : hata ? (
         <BoxError onYenile={onYenile} />
       ) : !hareketler || hareketler.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-muted-foreground">Henüz hareket yok.</p>
+        <p className="flex flex-1 items-center justify-center px-5 py-8 text-center text-sm text-muted-foreground">Henüz hareket yok.</p>
       ) : (
         <ul className="@container divide-y divide-border/60">
           {hareketler.map((h) => {
             const r = HAREKET_ROZETI[h.tur];
             const target = movementTarget(h);
             const canOpen = erisim.canGo(target);
-            // Dar kutuda (orta boy, ~370 px) rozet renk noktasına, saat miktarın altına iner — belge no kırpılmasın.
+            // Rozet HER genişlikte görünür: dar kutuda (~370 px) kısa ad, genişte tam ad; saat dar kutuda miktarın altına iner.
             const ic = (
               <>
-                <span className={cn("tone-chip hidden w-[5.75rem] shrink-0 truncate rounded-badge px-2 py-0.5 text-center text-[10.5px] font-semibold @[34rem]:inline-block", `tile-${r.ton}`)} title={r.etiket}>{r.etiket}</span>
-                <span className={cn("tone-chip h-2.5 w-2.5 shrink-0 rounded-full @[34rem]:hidden", `tile-${r.ton}`)} title={r.etiket} aria-label={r.etiket} />
+                <span data-hareket-rozet={h.tur} className={cn("tone-chip w-[4.5rem] shrink-0 truncate rounded-badge px-1.5 py-0.5 text-center text-[10.5px] font-semibold @[34rem]:w-[5.75rem] @[34rem]:px-2", `tile-${r.ton}`)} title={r.etiket}>
+                  <span className="@[34rem]:hidden">{r.kisa}</span>
+                  <span className="hidden @[34rem]:inline">{r.etiket}</span>
+                </span>
                 {/* Belge no üstte, cari altında: tek satırda cari ~50 px'e düşüp "Boyer…" kırpılıyordu. */}
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
                   <span className="truncate font-semibold tabular-nums" title={h.belgeNo}>{h.belgeNo}</span>

@@ -13,9 +13,10 @@ export function BoxChrome({ menu, children }: { menu: ReactNode; children: React
 }
 
 /** Pano kutusu kabuğu: `SectionCard` + sağ üstte kutunun kendi eylemi ve çerçevenin ⋯ menüsü. */
-export function PanoCard({ action, className, ...rest }: SectionCardProps) {
+/** İçerik sütunu esnek: aynı satırdaki kutular eşit boyda, boş durum (`flex-1`) kalan alanın ortasında durur. */
+export function PanoCard({ action, className, contentClassName, ...rest }: SectionCardProps) {
   const menu = useContext(BoxChromeContext);
-  return <SectionCard {...rest} className={cn("h-full", className)} action={action || menu ? <>{action}{menu}</> : undefined} />;
+  return <SectionCard {...rest} className={cn("h-full", className)} contentClassName={cn("flex flex-col", contentClassName)} action={action || menu ? <>{action}{menu}</> : undefined} />;
 }
 
 /** Kip dışında kutu başlığındaki ⋯ — "Kaldır". */

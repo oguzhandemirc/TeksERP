@@ -66,6 +66,8 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const c = kpiCardOf(boxKey, data);
   const rozet = degisimRozeti(c.kpi, donem);
+  // Yüzde yokken de değişim satırı durur: kartlar aynı iskelette kalır (0 değerli kart kısa/boş görünmesin).
+  const bosKiyas = c.kpi ? (c.kpi.deger > 0 ? "Önceki dönemde yok" : "Değişim yok") : "Anlık durum";
   const target = KPI_TARGETS[boxKey];
   return (
     <StatCard
@@ -73,7 +75,7 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
       value={c.value}
       icon={c.icon}
       tone={c.tone}
-      delta={rozet ? <span title={rozet.metin}><span className="font-semibold">{rozet.yuzde}</span> <span className="hidden font-normal text-muted-foreground @[11rem]:inline">{rozet.kiyas}</span></span> : undefined}
+      delta={rozet ? <span title={rozet.metin}><span className="font-semibold">{rozet.yuzde}</span> <span className="hidden font-normal text-muted-foreground @[11rem]:inline">{rozet.kiyas}</span></span> : <span data-kpi-bos-kiyas="" className="font-normal">{bosKiyas}</span>}
       trend={rozet?.trend ?? "neutral"}
       hint={c.hint}
       layout="stacked"

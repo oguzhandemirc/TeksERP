@@ -108,7 +108,7 @@ export function PanoCashFlow({ d, erisim }: { d: CashFlowBox; erisim: PanoErisim
   return (
     <PanoCard title="Nakit giriş–çıkış" description="Kasa ve banka, transferler hariç"
       action={<BoxTabs items={tabs} active={active?.paraBirimi ?? ""} onChange={setCur} label="Para birimi" />}>
-      {!active ? <p className="py-8 text-center text-sm text-muted-foreground">Bu dönemde kasa/banka hareketi yok</p> : (
+      {!active ? <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted-foreground">Bu dönemde kasa/banka hareketi yok</p> : (
         <>
           <button type="button" disabled={!go} onClick={go} className="block w-full text-left disabled:cursor-default">
             <Totals items={[

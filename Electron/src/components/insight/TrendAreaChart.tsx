@@ -31,11 +31,17 @@ export interface TrendAreaChartProps {
 /** Çok serili yumuşak alan grafiği (hedef görsel "performans" kutusu); renkler tema belirtecinden. */
 export function TrendAreaChart({ labels, series, formatValue, label, height = 220, emptyText = "Bu dönemde veri yok", showTotals = true }: TrendAreaChartProps) {
   const empty = series.every((s) => s.values.every((v) => !v));
+  // Veri tek kovadaysa yumuşak alan eğimli bir tepe uydurur (yanıltıcı) — o zaman çubuk çizilir.
+  const filledBuckets = labels.filter((_, i) => series.some((s) => (s.values[i] ?? 0) !== 0)).length;
+  const asBars = !empty && filledBuckets <= 1;
   const option = useCallback(
     (t: ChartTheme) => {
       // Boş dönem: aynı eksenler, soluk çizgi, sabit üst sınır — ECharts 0..1 eksenini göstermesin.
       const build = (s: TrendSeries, i: number) => {
         const color = empty ? t.izgara : (t.renkler[(s.colorIndex ?? i) % t.renkler.length] ?? t.renkler[0]!);
+        if (asBars) {
+          return { name: s.name, type: "bar", barMaxWidth: 14, barGap: "20%", data: s.values, itemStyle: { color, borderRadius: [4, 4, 0, 0] }, emphasis: { focus: "series" } };
+        }
         return {
           name: s.name,
           type: "line",
@@ -54,8 +60,8 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
         animation: true,
         textStyle: { fontFamily: t.yaziTipi, color: t.metin, fontSize: 11 },
         grid: { left: 4, right: 12, top: 12, bottom: 4, containLabel: true },
-        tooltip: { show: !empty, trigger: "axis", axisPointer: { type: "line", lineStyle: { color: t.ikincil, type: "dashed" } }, valueFormatter: (v: unknown) => (typeof v === "number" ? formatValue(v) : "—") },
-        xAxis: { type: "category", boundaryGap: false, data: labels, axisLabel: { color: t.ikincil, hideOverlap: true }, axisLine: { show: false }, axisTick: { show: false } },
+        tooltip: { show: !empty, trigger: "axis", axisPointer: asBars ? { type: "shadow" } : { type: "line", lineStyle: { color: t.ikincil, type: "dashed" } }, valueFormatter: (v: unknown) => (typeof v === "number" ? formatValue(v) : "—") },
+        xAxis: { type: "category", boundaryGap: asBars, data: labels, axisLabel: { color: t.ikincil, hideOverlap: true }, axisLine: { show: false }, axisTick: { show: false } },
         yAxis: {
           type: "value",
           ...(empty ? { min: 0, max: 1000, interval: 250 } : {}),
@@ -65,7 +71,7 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
         series: series.map(build),
       };
     },
-    [labels, series, empty, formatValue],
+    [labels, series, empty, asBars, formatValue],
   );
   const total = (s: TrendSeries) => s.values.reduce<number>((a, v) => a + (v ?? 0), 0);
   return (
@@ -83,7 +89,7 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
           ))}
         </div>
       )}
-      <div className="relative">
+      <div className="relative" data-chart-kind={asBars ? "bar" : "area"}>
         <EChart option={option} height={height} label={label} />
         {empty && <ChartEmptyNote text={emptyText} />}
       </div>

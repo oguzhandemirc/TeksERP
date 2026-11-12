@@ -247,9 +247,13 @@ describe("Pano — rozet, hedefler, kapılar", () => {
   it("degisimYuzde null → rozet yok; pozitif → yüzde ve kıyas metni", async () => {
     renderPano();
     await kpiUretim();
-    const rozetler = document.querySelectorAll("[data-trend]");
+    const rozetler = [...document.querySelectorAll("[data-trend]")].filter((el) => !el.querySelector("[data-kpi-bos-kiyas]"));
     expect(rozetler).toHaveLength(1);
     expect(rozetler[0]!.textContent).toBe("%12,5 düne göre");
+    // Yüzdesiz kart da değişim satırını taşır (kart dengesi): nötr, oksuz metin.
+    const bos = [...document.querySelectorAll("[data-kpi-bos-kiyas]")];
+    expect(bos.length).toBeGreaterThan(0);
+    expect(bos.every((el) => el.closest("[data-trend]")?.getAttribute("data-trend") === "neutral")).toBe(true);
   });
 
   it("KPI tıklaması hedef ekrana gider; izin yoksa tıklanmaz", async () => {
