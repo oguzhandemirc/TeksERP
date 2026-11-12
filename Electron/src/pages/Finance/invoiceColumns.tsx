@@ -1,4 +1,4 @@
-// Faturalar — ortak DataTable sütunları. Satır eylemleri diyalog açar (detay · belge · düzenle · onayla · sil · storno);
+// Faturalar — ortak DataTable sütunları (toplam ~1040 px: 1280 ekranda kenar çubuğuyla sığar). Satır eylemleri diyalog açar (detay · belge · düzenle · onayla · sil · storno);
 // izin kapıları ve statü koşulları önceki elle tabloyla AYNI. Geri çağrılar ref'te (sütunlar bir kez kurulur).
 import { useMemo, useRef } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -84,15 +84,13 @@ function ActionsCell({ inv, h }: { inv: InvoiceRow; h: InvoiceRowHandlers }) {
         <>
           {/* DÜZENLE onaydan ÖNCE gelir: otomatik doğan 0 fiyatlı taslağın tek çıkışı silmek olmasın. */}
           <PermissionGate permission="finance:write">
-            <Button variant="outline" size="sm" className="h-7" title="Taslağı düzenle — satırlar, vade, dış belge no, not" onClick={() => h.onEdit(inv)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" />
-              Düzenle
+            <Button variant="outline" size="icon" className="h-7 w-7" title="Taslağı düzenle — satırlar, vade, dış belge no, not" aria-label="Düzenle" onClick={() => h.onEdit(inv)}>
+              <Pencil className="h-4 w-4" />
             </Button>
           </PermissionGate>
           <PermissionGate permission="finance:invoice">
-            <Button size="sm" className="h-7" onClick={() => h.onConfirm(inv)}>
-              <Check className="mr-1 h-3.5 w-3.5" />
-              Onayla
+            <Button size="icon" className="h-7 w-7" title="Onayla — cari deftere işler" aria-label="Onayla" onClick={() => h.onConfirm(inv)}>
+              <Check className="h-4 w-4" />
             </Button>
           </PermissionGate>
           <PermissionGate permission="finance:write">
@@ -110,9 +108,8 @@ function ActionsCell({ inv, h }: { inv: InvoiceRow; h: InvoiceRowHandlers }) {
       )}
       {inv.status === "CONFIRMED" && (
         <PermissionGate permission="finance:invoice">
-          <Button variant="outline" size="sm" className="h-7" onClick={() => h.onCancel(inv)}>
-            <Ban className="mr-1 h-3.5 w-3.5" />
-            İptal (storno)
+          <Button variant="outline" size="icon" className="h-7 w-7" title="İptal (storno) — cari deftere ters kayıt" aria-label="İptal (storno)" onClick={() => h.onCancel(inv)}>
+            <Ban className="h-4 w-4" />
           </Button>
         </PermissionGate>
       )}
@@ -122,26 +119,26 @@ function ActionsCell({ inv, h }: { inv: InvoiceRow; h: InvoiceRowHandlers }) {
 
 function invoiceColumns(h: { current: InvoiceRowHandlers }): ColumnDef<InvoiceRow>[] {
   return [
-    { id: "docNo", accessorKey: "docNo", header: "Belge no", size: 150, meta: { label: "Belge no" }, cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span> },
+    { id: "docNo", accessorKey: "docNo", header: "Belge no", size: 120, meta: { label: "Belge no" }, cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span> },
     { id: "type", header: "Tür", size: 110, meta: { label: "Tür", exportValue: (inv) => INVOICE_TYPE_LABEL[inv.type] }, cell: ({ row }) => INVOICE_TYPE_LABEL[row.original.type] },
-    { id: "cari", header: "Cari", size: 260, meta: { label: "Cari", exportValue: (inv) => partyName(inv.cari) }, cell: ({ row }) => <span className="font-medium">{partyName(row.original.cari)}</span> },
-    { id: "issueDate", header: "Tarih", size: 110, meta: { label: "Tarih", exportValue: dateText }, cell: ({ row }) => <span className="tabular-nums">{dateText(row.original)}</span> },
+    { id: "cari", header: "Cari", size: 160, meta: { label: "Cari", exportValue: (inv) => partyName(inv.cari) }, cell: ({ row }) => <span className="font-medium">{partyName(row.original.cari)}</span> },
+    { id: "issueDate", header: "Tarih", size: 104, meta: { label: "Tarih", exportValue: dateText }, cell: ({ row }) => <span className="tabular-nums">{dateText(row.original)}</span> },
     {
       id: "status",
       header: "Durum",
-      size: 100,
+      size: 76,
       meta: { label: "Durum", exportValue: (inv) => INVOICE_STATUS_BADGE[inv.status].label },
       cell: ({ row }) => {
         const badge = INVOICE_STATUS_BADGE[row.original.status];
         return <Badge className={badge.cls}>{badge.label}</Badge>;
       },
     },
-    { id: "grandTotal", header: "Tutar", size: 220, meta: { label: "Tutar", align: "right", exportValue: amountText }, cell: ({ row }) => <AmountCell inv={row.original} /> },
-    { id: "settlement", header: "Kapanan / Açık", size: 300, meta: { label: "Kapanan / Açık", align: "right", exportValue: settlementText }, cell: ({ row }) => <SettlementCell inv={row.original} /> },
+    { id: "grandTotal", header: "Tutar", size: 128, meta: { label: "Tutar", align: "right", exportValue: amountText }, cell: ({ row }) => <AmountCell inv={row.original} /> },
+    { id: "settlement", header: "Kapanan / Açık", size: 192, meta: { label: "Kapanan / Açık", align: "right", exportValue: settlementText }, cell: ({ row }) => <SettlementCell inv={row.original} /> },
     {
       id: "actions",
       header: "",
-      size: 260,
+      size: 150,
       enableHiding: false,
       meta: { label: "Eylemler", align: "right", exportValue: () => "" },
       cell: ({ row }) => <ActionsCell inv={row.original} h={h.current} />,

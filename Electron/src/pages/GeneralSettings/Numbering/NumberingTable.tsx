@@ -49,14 +49,14 @@ function PreviewCell({ row }: { row: NumberSeriesRow }) {
 
 function numberingColumns(h: { current: (row: NumberSeriesRow) => void }): ColumnDef<NumberSeriesRow>[] {
   return [
-    { id: "label", header: "Seri", size: 320, meta: { label: "Seri", exportValue: (r) => r.label }, cell: ({ row }) => <SeriesCell row={row.original} /> },
+    { id: "label", header: "Seri", size: 300, meta: { label: "Seri", exportValue: (r) => r.label }, cell: ({ row }) => <SeriesCell row={row.original} /> },
     { id: "prefix", accessorKey: "prefix", header: "Ön ek", size: 96, meta: { label: "Ön ek" }, cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue() ?? "")}</span> },
     { id: "dateSegment", accessorKey: "dateSegment", header: "Tarih", size: 110, meta: { label: "Tarih" } },
     { id: "digits", accessorKey: "digits", header: "Hane", size: 72, meta: { label: "Hane", align: "right" } },
     {
       id: "preview",
       header: "Örnek",
-      size: 360,
+      size: 340,
       meta: { label: "Örnek", exportValue: (r) => joinDot([r.preview, exhaustionText(r), pendingText(r)]) },
       cell: ({ row }) => <PreviewCell row={row.original} />,
     },

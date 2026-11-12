@@ -44,9 +44,8 @@ function ActionsCell({ r, h }: { r: PeriodCloseRow; h: Handlers }) {
         <ShieldCheck className="h-4 w-4" />
       </Button>
       <PermissionGate permission="finance:close">
-        <Button variant="outline" size="sm" className="h-7" onClick={() => h.onReopen(r)}>
-          <Unlock className="mr-1 h-3.5 w-3.5" />
-          Yeniden Aç
+        <Button variant="outline" size="icon" className="h-7 w-7" title="Yeniden aç — mührü gerekçeyle kaldırır" aria-label="Yeniden Aç" onClick={() => h.onReopen(r)}>
+          <Unlock className="h-4 w-4" />
         </Button>
       </PermissionGate>
     </div>
@@ -58,7 +57,7 @@ function periodCloseColumns(h: { current: Handlers }): ColumnDef<PeriodCloseRow>
     {
       id: "cari",
       header: "Cari",
-      size: 280,
+      size: 200,
       meta: { label: "Cari", exportValue: (r) => `${r.cariCode} — ${r.cariName}` },
       cell: ({ row }) => (
         <span className="truncate">
@@ -67,22 +66,22 @@ function periodCloseColumns(h: { current: Handlers }): ColumnDef<PeriodCloseRow>
         </span>
       ),
     },
-    { id: "currency", accessorKey: "currency", header: "Para", size: 72, meta: { label: "Para" } },
-    { id: "periodEnd", header: "Dönem sonu", size: 200, meta: { label: "Dönem sonu", exportValue: (r) => formatDayKey(r.periodEnd) }, cell: ({ row }) => <PeriodEndCell r={row.original} /> },
+    { id: "currency", accessorKey: "currency", header: "Para", size: 64, meta: { label: "Para" } },
+    { id: "periodEnd", header: "Dönem sonu", size: 170, meta: { label: "Dönem sonu", exportValue: (r) => formatDayKey(r.periodEnd) }, cell: ({ row }) => <PeriodEndCell r={row.original} /> },
     {
       id: "closingBalance",
       header: "Mühürlü bakiye",
-      size: 160,
+      size: 130,
       meta: { label: "Mühürlü bakiye", align: "right", exportValue: (r) => moneyOf(r.closingBalance, r.currency) },
       cell: ({ row }) => <span className="font-medium tabular-nums">{moneyOf(row.original.closingBalance, row.original.currency)}</span>,
     },
-    { id: "txnCount", accessorKey: "txnCount", header: "Hareket", size: 96, meta: { label: "Hareket", align: "right" } },
-    { id: "createdAt", header: "Kapatıldı", size: 160, meta: { label: "Kapatıldı", exportValue: (r) => formatInstant(r.createdAt) }, cell: ({ row }) => <span className="text-muted-foreground">{formatInstant(row.original.createdAt)}</span> },
-    { id: "notes", header: "Not", size: 320, meta: { label: "Not", exportValue: noteText }, cell: ({ row }) => <NoteCell r={row.original} /> },
+    { id: "txnCount", accessorKey: "txnCount", header: "Hareket", size: 80, meta: { label: "Hareket", align: "right" } },
+    { id: "createdAt", header: "Kapatıldı", size: 136, meta: { label: "Kapatıldı", exportValue: (r) => formatInstant(r.createdAt) }, cell: ({ row }) => <span className="text-muted-foreground">{formatInstant(row.original.createdAt)}</span> },
+    { id: "notes", header: "Not", size: 180, meta: { label: "Not", exportValue: noteText }, cell: ({ row }) => <NoteCell r={row.original} /> },
     {
       id: "actions",
       header: "",
-      size: 150,
+      size: 84,
       enableHiding: false,
       meta: { label: "Eylemler", align: "right", exportValue: () => "" },
       cell: ({ row }) => <ActionsCell r={row.original} h={h.current} />,

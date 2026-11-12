@@ -119,7 +119,7 @@ function balanceColumns(onOpenWo: { current: OpenWo }): ColumnDef<BalanceGroup>[
     {
       id: "actions",
       header: "",
-      size: 140,
+      size: 180,
       enableHiding: false,
       meta: { label: "Eylem", align: "right", exportValue: () => "" },
       cell: ({ row }) => <BalanceWoButton group={row.original} onOpenWo={onOpenWo.current} />,

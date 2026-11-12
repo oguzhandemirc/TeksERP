@@ -21,14 +21,15 @@ function stationListColumns(showType: boolean): ColumnDef<StationListItem>[] {
     {
       id: "name",
       header: "İstasyon",
-      size: 300,
+      size: 360,
       meta: { label: "İstasyon", exportValue: (it) => it.station.name },
       cell: ({ row: { original: { station: s } } }) => (
         <span className="flex min-w-0 items-center gap-2" title={`${s.name}${s.code ? ` · ${s.code}` : ""} · ${plainStationKindLabel(s.kind)}`}>
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", toneFor(s.type, s.kind).solid)} />
           <span className="truncate font-medium">{s.name}</span>
           {s.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{s.code}</span>}
-          <span className="truncate text-xs text-muted-foreground">{plainStationKindLabel(s.kind)}</span>
+          {/* Tür etiketi sıfır tabanla büyür: dar sütunda önce O kısalır, istasyon adı tam kalır. */}
+          <span className="min-w-0 flex-1 basis-0 truncate text-xs text-muted-foreground">{plainStationKindLabel(s.kind)}</span>
         </span>
       ),
     },
@@ -41,7 +42,7 @@ function stationListColumns(showType: boolean): ColumnDef<StationListItem>[] {
     {
       id: "capabilities",
       header: "Yetenekler",
-      size: 320,
+      size: 300,
       meta: { label: "Yetenekler", exportValue: capabilityText },
       cell: ({ row: { original: it } }) => {
         const chips = capabilityChips(it.station);
