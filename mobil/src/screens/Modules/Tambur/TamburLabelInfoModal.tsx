@@ -4,7 +4,7 @@
 // geniş tek pencere, katlanır bölüm yok). Üstteki parti alanı varken İE-geneli `batchNumber` satırı düşer (`visibleOverrideKeys`).
 // `mode="fix"`: kesilmiş TEK topun değerini sevk edilene kadar düzeltir (sebep zorunlu, `PATCH /rolls/:id/label-texts`).
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -14,13 +14,15 @@ import PickerModal from '../../../components/PickerModal';
 import { tamburService } from '../../../services/tambur.service';
 import { rollService, type RollLabelTextsFixResult } from '../../../services/roll.service';
 import { showScreenError } from '../../../lib/screenToast';
-import { colors, spacing } from '../../../theme/tokens';
+import { colors } from '../../../theme/tokens';
 import { overridePatch } from './finalLabel';
 import { LABEL_BATCH_MAX } from './labelBatch';
 import { LABEL_TEXT_MAX, NAME_OVERRIDE_KEYS, emptyHint, visibleOverrideKeys } from './labelTexts';
 import { useTamburLabelSuggestions, type TamburFinalLabelState } from './useTamburFinalLabel';
 import { labelTextFixBody, labelTextFixReasonError } from './labelTextFix';
 import { LabelFieldRow, OverrideRow, type FieldDraft } from './TamburLabelInfoRows';
+import { TERIM } from '../../../lib/terim';
+import { s } from './TamburLabelInfoModal.styles';
 
 type OverrideDraft = Record<string, FieldDraft>;
 type FieldKey = 'item' | 'color' | 'batch';
@@ -298,7 +300,7 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
 
         {workOrderId ? (
           <View style={twoCol ? s.col : s.stacked} testID="etiket-diger-alanlar">
-            <Text style={s.colTitle}>İş emrinin tüm topları</Text>
+            <Text style={s.colTitle}>{TERIM.terbiyeIsEmri.cumleBasi.ilgi} tüm topları</Text>
             {ov.isLoading ? <Text style={s.sub}>Yükleniyor…</Text> : null}
             {ov.isError ? <Text style={s.err}>Etiket alanları okunamadı.</Text> : null}
             {otherKeys.map((k) => (
@@ -315,18 +317,3 @@ export default function TamburLabelInfoModal(props: TamburLabelInfoModalProps) {
     </ModuleSheet>
   );
 }
-
-const s = StyleSheet.create({
-  sub: { color: colors.textSecondary, marginBottom: spacing.sm },
-  err: { color: colors.dangerText, marginBottom: spacing.sm },
-  cols: { flexDirection: 'row', gap: spacing.xl },
-  col: { flex: 1 },
-  stacked: { marginTop: spacing.md },
-  colTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5, color: colors.textSecondary, marginBottom: spacing.sm },
-  // Vazgeç solda (kırmızı), Kaydet sağda (birincil).
-  footerBar: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  freeBox: { gap: spacing.sm, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
-  btn: { minHeight: 56 },
-  reasonBox: { marginTop: spacing.sm },
-});

@@ -841,7 +841,7 @@ export async function setFeatureFlags(
       if (typeof input.dokumaYarnReservationEnabled !== "boolean") {
         throw AppError.badRequest("dokumaYarnReservationEnabled boolean olmalı");
       }
-      await this.set(SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED, input.dokumaYarnReservationEnabled, "Dokuma: açık dokuma işlerinin kalan ipliği ayrılmış sayılır (görünürlük, engellemez)", userId);
+      await this.set(SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED, input.dokumaYarnReservationEnabled, `Dokuma: açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan ipliği ayrılmış sayılır (görünürlük, engellemez)`, userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
       if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {

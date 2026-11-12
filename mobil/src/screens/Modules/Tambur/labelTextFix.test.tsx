@@ -20,6 +20,8 @@ jest.mock('../../../services/roll.service', () => ({ rollService: { fixLabelText
 
 const tsvc = tamburService as unknown as { labelSuggestions: jest.Mock; labelSettings: jest.Mock; recentOutputRolls: jest.Mock };
 const rsvc = rollService as unknown as { fixLabelTexts: jest.Mock };
+// Paper Menu'nün bağlanış gizleme animasyonunu (250 ms) aşan ilerletme.
+const MENU_MOUNT_SETTLE_MS = 400;
 const flush = () => act(async () => { await Promise.resolve(); });
 const noop = () => undefined;
 
@@ -92,10 +94,15 @@ describe('TamburLabelInfoModal fix kipi', () => {
 });
 
 describe('WorkOrderOutputPanel etiket düzelt düğmesi', () => {
+  afterEach(() => jest.useRealTimers());
   const mk = (id: string, status: Roll['status']) =>
     ({ id, barcode: `B-${id}`, status, initialQty: 10, currentQty: 10, createdAt: '2026-11-09T10:00:00Z' }) as unknown as Roll;
 
+  // Paper Menu bağlanışta kapalıyken bir gizleme animasyonu başlatır; açılış onu durdurunca geri çağrısı
+  // `finished`a bakmadan menüyü söker. Satır doğduktan hemen sonra açmak yük altında menüyü yutuyordu → sahte saatle
+  // ilk animasyon bitirilir, sonra açılır (belirlenimli).
   it('satırda yalnız bas + geri al; düzelt satır menüsünde (dokun / uzun bas); sevkli topta kilit + menü öğesi kapalı', async () => {
+    jest.useFakeTimers();
     tsvc.recentOutputRolls.mockResolvedValue({ success: true, data: [{ ...mk('a', 'WAREHOUSE'), weightKg: 12.5 }, mk('b', 'SHIPPED')] });
     const onFix = jest.fn();
     const r = renderWithPaper(<WorkOrderOutputPanel workOrderId="wo1" fill onPrint={noop} onUndo={noop} onFixLabel={onFix} />);
@@ -107,6 +114,9 @@ describe('WorkOrderOutputPanel etiket düzelt düğmesi', () => {
     expect(r.getByTestId('wo-output-kg-b')).toHaveTextContent('—');
     expect(r.getByTestId('wo-output-ozet')).toHaveTextContent('2 top · 20.0 m · 12.5 kg');
     expect(r.getByTestId('wo-output-etiket-kilit-b')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(MENU_MOUNT_SETTLE_MS);
+    });
     fireEvent(r.getByTestId('wo-output-satir-a'), 'longPress');
     await waitFor(() => expect(r.getByTestId('wo-output-etiket-duzelt-a')).toBeTruthy());
     fireEvent.press(r.getByTestId('wo-output-etiket-duzelt-a'));

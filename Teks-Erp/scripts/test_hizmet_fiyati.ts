@@ -345,6 +345,10 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   "services/helpers/profitability-allocation.helper.ts",
   // Sarf stoğu (kurşun şeridi): değer/özellik kalemini `pickServiceItemId` ile seçip norm sorgusuna verir (çözücü değil).
   "services/helpers/consumable-stock.helper.ts",
+  // Sarf doğuşu/kullanımı: kalemi `pickServiceItemId` ile seçip sarf normuna verir (consumable-birth.helper.ts:44,
+  // consumable-usage.service.ts:58) — maliyet tarafı, fiyat/eşleme çözmez.
+  "services/helpers/consumable-birth.helper.ts",
+  "services/consumable-usage.service.ts",
   // K2a → D1b: hizmet kartının canlı referans kataloğu ve yaşam döngüsü yazıcısı — eşleme/fiyat/norm/taslak satırını
   // pasife alma kapısı için sayar (çözücü değil); F6 sonrası aktif fason tarifesi köprüsünü (`FINISHING_RATE_MAP`)
   // da sayar, bu yüzden FinishingRate yasağının dışında.

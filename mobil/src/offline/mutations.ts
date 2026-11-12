@@ -194,6 +194,33 @@ function kursunFinishCall(vars: KursunFinishVars) {
   return rollService.kursunFinish(req.rollId, req.body);
 }
 
+/** Tambur açık kumaş bitirme kuyruk çağrısı — vars alanları TEK TEK geçirilir (gövde sessiz allowlist'tir). */
+const tamburFinalizeCall = (vars: TamburFinalizeOpenFabricVars) =>
+  tamburService.finalizeOpenFabric(vars.rollId, {
+    remainingAction: vars.remainingAction,
+    foldType: vars.foldType,
+    // ⚠️ Bu iki satır UNUTULURSA sebep ekranda sorulur, operatör seçer ve
+    // İSTEK GÖVDESİNE HİÇ GİRMEZ — defter "BELIRTILMEDI" ile dolar ve
+    // kimse sebebini bulamaz. (Kuyruk yolu ile doğrudan çağrı yolu ayrı
+    // kod; ikisini birlikte güncelle.)
+    varianceReasonCode: vars.varianceReasonCode,
+    varianceReasonText: vars.varianceReasonText,
+    // Plan-gerçek sapma onayı — üstteki uyarının kapsamında: bu satır
+    // düşerse operatör onaylar, bayrak isteğe HİÇ girmez, replay 409'da kalır.
+    confirmMismatch: vars.confirmMismatch,
+    // Kalan topun kg'ı — aynı sessiz-allowlist tuzağı (S5 tartım).
+    weightKg: vars.weightKg,
+    // Müşteri parti no — aynı sessiz-allowlist tuzağı; ayar kapalıysa undefined (alan gitmez).
+    labelBatchNo: vars.labelBatchNo,
+    // Etiket kumaş adı / renk — aynı sessiz-allowlist tuzağı.
+    labelItemName: vars.labelItemName,
+    labelColorName: vars.labelColorName,
+    // Alıcı · kg kaynağı · en — aynı sessiz-allowlist tuzağı (2026-11-10).
+    labelConsigneeId: vars.labelConsigneeId,
+    weightSource: vars.weightSource,
+    widthCm: vars.widthCm,
+  });
+
 export function registerStationMutationDefaults(): void {
   // queryClient default 'always' — burada explicit'ten 'online'a override:
   // offline'da pause + AsyncStorage persist + online resume.
@@ -239,31 +266,7 @@ export function registerStationMutationDefaults(): void {
   // Backend idempotent: status===TAMBUR_CONSUMED check + cached metadata.
   // Per-cut (cutOpenFabric) hala online-only — label print + per-call barcode.
   queryClient.setMutationDefaults(STATION_MUT.TAMBUR_FINALIZE_OPEN_FABRIC, {
-    mutationFn: withAuthGuard((vars: TamburFinalizeOpenFabricVars) =>
-      tamburService.finalizeOpenFabric(vars.rollId, {
-        remainingAction: vars.remainingAction,
-        foldType: vars.foldType,
-        // ⚠️ Bu iki satır UNUTULURSA sebep ekranda sorulur, operatör seçer ve
-        // İSTEK GÖVDESİNE HİÇ GİRMEZ — defter "BELIRTILMEDI" ile dolar ve
-        // kimse sebebini bulamaz. (Kuyruk yolu ile doğrudan çağrı yolu ayrı
-        // kod; ikisini birlikte güncelle.)
-        varianceReasonCode: vars.varianceReasonCode,
-        varianceReasonText: vars.varianceReasonText,
-        // Plan-gerçek sapma onayı — üstteki uyarının kapsamında: bu satır
-        // düşerse operatör onaylar, bayrak isteğe HİÇ girmez, replay 409'da kalır.
-        confirmMismatch: vars.confirmMismatch,
-        // Kalan topun kg'ı — aynı sessiz-allowlist tuzağı (S5 tartım).
-        weightKg: vars.weightKg,
-        // Müşteri parti no — aynı sessiz-allowlist tuzağı; ayar kapalıysa undefined (alan gitmez).
-        labelBatchNo: vars.labelBatchNo,
-        // Etiket kumaş adı / renk — aynı sessiz-allowlist tuzağı.
-        labelItemName: vars.labelItemName,
-        labelColorName: vars.labelColorName,
-        // Alıcı · kg kaynağı · en — aynı sessiz-allowlist tuzağı (2026-11-10).
-        labelConsigneeId: vars.labelConsigneeId,
-        weightSource: vars.weightSource,
-        widthCm: vars.widthCm,
-      })),
+    mutationFn: withAuthGuard(tamburFinalizeCall),
     ...OFFLINE_AWARE,
   });
   // KK1 ham mal girişi — sunucu-üretimi barkod (T+GGAAYY+H/F+NNNN) vars'ta.

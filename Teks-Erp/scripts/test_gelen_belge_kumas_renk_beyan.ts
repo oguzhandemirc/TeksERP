@@ -162,6 +162,8 @@ async function run(url: string): Promise<void> {
   const raw = `${TAG} KOD-77`;
   made.aliases.push((await prisma.deliveryNoteAlias.create({ data: { scope: "COLOR", senderCustomerId: null, rawKey: aliasKey("COLOR", raw), targetId: color }, select: { id: true } })).id);
   const n5 = await mkNote([{ meters: 10 }], undefined, { desen: "Beyan Kumaş", renk: raw });
+  // Varsayılan 2026-11-09'dan beri ONER (3632b6e39); KAPALI dalı ayar AÇIKÇA seçilerek ölçülür.
+  await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, "KAPALI");
   const kapali = await noteFormFields(n5, "NORMAL");
   check("§5 ⭐ KAPALI: incomingDeclared metinleri var, eşleme önerisi yok", kapali.incomingDeclared?.itemText === "Beyan Kumaş" && kapali.incomingDeclared.colorText === raw && kapali.incomingDeclared.suggestedColor === null && !kapali.suggestions.targetColor, JSON.stringify(kapali.incomingDeclared));
   await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, "ONER");

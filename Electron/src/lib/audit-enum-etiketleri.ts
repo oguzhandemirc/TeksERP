@@ -322,6 +322,11 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // ConsumableNormBasis — sarf normu tabanı (2026-11-10)
   PER_METER: "Metre başına",
   PER_ROLL: "Top başına",
+  // ConsumableMovementKind (sarf stok defteri — kuşak / kurşun şeridi; ek dosya satır tavanında)
+  RECEIPT_IN: "Mal kabul girişi",
+  RECEIPT_CANCEL_OUT: "Mal kabul iptali",
+  CONSUMPTION_OUT: "Üretim tüketimi",
+  CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
 };
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */

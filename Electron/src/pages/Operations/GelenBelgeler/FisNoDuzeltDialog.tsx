@@ -14,6 +14,7 @@ import { apiErrorMessage } from "@/services/apiClient";
 import { DuplicateDocNoConfirm, duplicateDocNoConflict } from "./DuplicateDocNo";
 import { fixNoteIdentity, INCOMING_DOCUMENT_QUERY_KEY } from "./service";
 import type { DeliveryNoteDetail } from "./types";
+import { TERIM } from "@/lib/terim";
 
 type NoteIdentity = Pick<DeliveryNoteDetail, "id" | "noteNo" | "senderDocNo" | "senderDocDate">;
 type Body = { senderDocNo?: string | null; senderDocDate?: string | null };
@@ -73,7 +74,7 @@ export function FisNoDuzeltDialog({ note, open, onOpenChange }: { note: NoteIden
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Fiş no / tarih düzelt — {note.noteNo}</DialogTitle>
-          <DialogDescription>Onaylı belgede yalnız fiş no ve fiş tarihi düzeltilir; toplar ve iş emirleri değişmez. İstasyon araması yeni fiş no ile bulur.</DialogDescription>
+          <DialogDescription>Onaylı belgede yalnız fiş no ve fiş tarihi düzeltilir; toplar ve {TERIM.terbiyeIsEmri.cogulKucuk} değişmez. İstasyon araması yeni fiş no ile bulur.</DialogDescription>
         </DialogHeader>
         {/* Her açılış güncel değerlerle başlar (kapalıyken form sökülür). */}
         {open && <FixForm note={note} onDone={() => onOpenChange(false)} />}

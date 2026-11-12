@@ -29,6 +29,7 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { LabelKind, RollStage, type LabelContextDefault } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { firstGrade } from "./fixture-quality-grade";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { LabelService } from "../src/services/label.service";
 import { LabelTemplateService } from "../src/services/label-template.service";
@@ -102,7 +103,7 @@ async function makeRoll(code: string, color: boolean, stage: RollStage): Promise
   const r = await prisma.roll.create({
     data: {
       barcode: `${TAG}-${code}`, itemId: itemId!, colorId: color ? colorId : null, stage,
-      status: "WAREHOUSE", currentQty: 40, initialQty: 40, width: 150, qualityGrade: "A", entrySource: "MANUAL_ENTRY",
+      status: "WAREHOUSE", currentQty: 40, initialQty: 40, width: 150, qualityGrade: (await firstGrade()).code, entrySource: "MANUAL_ENTRY",
     },
     select: { id: true },
   });

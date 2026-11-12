@@ -14,6 +14,7 @@ import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
 import { getKursunGramaj, getWorkOrderSummary, patchFoldType, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
+import { TERIM } from "../constants/terim";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -780,7 +781,7 @@ router.get("/:id/meter-comparison", verifyToken, requireAnyPermission("workorder
  */
 router.get("/:id/consumables", verifyToken, requirePermission("workorder:read"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const id = z.string().uuid("Geçersiz iş emri ID").parse(req.params.id);
+    const id = z.string().uuid(`Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} ID`).parse(req.params.id);
     // Maliyet OPT-IN: alan izinsiz yanıta hiç girmez (istemci izni ikinci kez yorumlamaz).
     const canCost = matchesPermission(req.user?.permissions ?? [], "cost:read");
     res.json({ success: true, data: await workOrderConsumableUsage(id, { canCost }) });

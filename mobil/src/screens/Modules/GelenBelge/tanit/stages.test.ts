@@ -9,6 +9,7 @@ import {
 } from './stages';
 import { FIELD_OPTIONS, initialTeach, type TeachState } from './teachDraft';
 import { toggleFieldWord } from './guided';
+import { TERIM } from '../../../../lib/terim';
 
 const w = (text: string, [x, y]: [number, number], lineNo: number, width = 60): ScanWord => ({
   text, rect: { x, y, width, height: 20 }, photoRect: { x, y, width, height: 20 }, lineNo, confidence: 0.99,
@@ -122,7 +123,7 @@ describe('özet ve bilgi satırları', () => {
     expect(meterSourceText(res({ meterSources: { output: ['$tableTotal'], total: ['toplamMetre'] }, tables: [{}] }))).toBe('Toplam satırından');
     expect(meterSourceText(res({ meterSources: { total: ['toplamMetre'] } }, { toplamMetre: '241' }))).toBe('"Gelen metre" alanından (241 m)');
     expect(meterSourceText(res({ tables: [{}] }))).toBe('Tablo satırlarının toplamından');
-    expect(meterSourceText(res({}))).toBe('Belgeden okunmuyor — iş emrinde elle girilir');
+    expect(meterSourceText(res({}))).toBe(`Belgeden okunmuyor — ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} elle girilir`);
     expect(meterSourceText(null)).toBeNull();
     expect(recognitionText(res({}))).toEqual({ ok: true, text: 'Bu yazılarla tanınıyor: %92' });
     expect(recognitionText({ preview: { matched: false, score: 0.3 } } as unknown as SuggestResult)?.ok).toBe(false);

@@ -8,6 +8,7 @@ import {
   assignColumn, byReading, clearColumn, COLUMN_OPTIONS, identifierText, isKept, sectionStartText, teachIssues, teachMarks, textOf,
   type ColumnKey, type FieldKey, type ScanMark, type Stage, type TeachIssue, type TeachState,
 } from './teachDraft';
+import { TERIM } from '../../../../lib/terim';
 
 export type { Stage } from './teachDraft';
 
@@ -158,8 +159,8 @@ export const MULTI_PARTY_TEXT: Record<MultiPartyRule, string> = { PER_PARTY: 'He
 export function multiPartyChoices(factory: MultiPartyRule | undefined): { value: MultiPartyRule | null; label: string; hint?: string }[] {
   return [
     { value: null, label: 'Fabrika ayarı', hint: factory ? `Şu an: ${MULTI_PARTY_TEXT[factory]}` : 'Ayarlar sayfasındaki seçim uygulanır' },
-    { value: 'PER_PARTY', label: MULTI_PARTY_TEXT.PER_PARTY, hint: 'Her parti için ayrı iş emri açılır' },
-    { value: 'SINGLE', label: MULTI_PARTY_TEXT.SINGLE, hint: 'Tek iş emri; partiler ayrı top olur' },
+    { value: 'PER_PARTY', label: MULTI_PARTY_TEXT.PER_PARTY, hint: `Her parti için ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} açılır` },
+    { value: 'SINGLE', label: MULTI_PARTY_TEXT.SINGLE, hint: `Tek ${TERIM.terbiyeIsEmri.tekilKucuk}; partiler ayrı top olur` },
   ];
 }
 
@@ -182,7 +183,7 @@ export function meterSourceText(result: SuggestResult | null): string | null {
     return v != null && String(v).trim() !== '' ? `"Gelen metre" alanından (${String(v)} m)` : '"Gelen metre" alanından';
   }
   if (Array.isArray(t.tables) && t.tables.length > 0) return 'Tablo satırlarının toplamından';
-  return 'Belgeden okunmuyor — iş emrinde elle girilir';
+  return `Belgeden okunmuyor — ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} elle girilir`;
 }
 
 /** ① canlı tanıma satırı (önizlemeden). */

@@ -46,6 +46,11 @@ class OcrBlock(BaseModel):
     lines: list[OcrLine]
 
 
+class OcrBarcode(BaseModel):
+    format: str
+    value: str
+
+
 class OcrResult(BaseModel):
     text: str
     blocks: list[OcrBlock]
@@ -55,6 +60,8 @@ class OcrResult(BaseModel):
     engine: Optional[str] = None
     # Sayfayı dikleştirmek için girdiye uygulanan saat yönü dönüş (0/90/270); rect/corners/imageWidth bu DİK çerçevededir.
     rotation: Optional[int] = None
+    # Servis üretmez; tablet barkodu saklı zarfta taşınır (Zod `barcodes` ile birebir).
+    barcodes: Optional[list[OcrBarcode]] = Field(default=None, max_length=10)
 
 
 class OcrIstegi(BaseModel):

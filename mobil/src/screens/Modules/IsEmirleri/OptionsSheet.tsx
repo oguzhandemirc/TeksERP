@@ -8,6 +8,7 @@ import ModuleSheet from '../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { toggleWoCreateKind, type WoCreateKind } from '../../../store/woCreateKinds';
 import type { WoButtons } from '../../../store/deviceSettingsStore';
+import { TERIM } from '../../../lib/terim';
 
 interface Props {
   visible: boolean;
@@ -66,11 +67,11 @@ export default function OptionsSheet({ visible, kinds, onChange, routeOnButton, 
       footer={<Button mode="contained" onPress={onDismiss} contentStyle={styles.btn} testID="ie-secenek-tamam">Tamam</Button>}
     >
       <Text style={styles.section}>Alttaki tuşlar</Text>
-      <CheckRow on={scanOn} locked={scanOn && !manualOn} label="Belge Okut" hint={scanOn && !manualOn ? 'Son açık tuş — kapatılamaz.' : 'İrsaliyeyi okutarak iş emri aç.'} onPress={() => onButtons(toggleButton(buttons, 'scan'))} testID="ie-secenek-tus-okut" />
-      <CheckRow on={manualOn} locked={manualOn && !scanOn} label="Elle Oluştur" hint={manualOn && !scanOn ? 'Son açık tuş — kapatılamaz.' : 'Belgesiz, boş formla iş emri aç.'} onPress={() => onButtons(toggleButton(buttons, 'manual'))} testID="ie-secenek-tus-elle" />
+      <CheckRow on={scanOn} locked={scanOn && !manualOn} label="Belge Okut" hint={scanOn && !manualOn ? 'Son açık tuş — kapatılamaz.' : `İrsaliyeyi okutarak ${TERIM.terbiyeIsEmri.tekilKucuk} aç.`} onPress={() => onButtons(toggleButton(buttons, 'scan'))} testID="ie-secenek-tus-okut" />
+      <CheckRow on={manualOn} locked={manualOn && !scanOn} label="Elle Oluştur" hint={manualOn && !scanOn ? 'Son açık tuş — kapatılamaz.' : `Belgesiz, boş formla ${TERIM.terbiyeIsEmri.tekilKucuk} aç.`} onPress={() => onButtons(toggleButton(buttons, 'manual'))} testID="ie-secenek-tus-elle" />
 
       <Text style={styles.section}>Malın sahibi</Text>
-      <Text style={styles.sectionHint}>İkisi açıksa formda "Malın sahibi" sorulur. Biri açıksa sorulmaz; iş emri o türle açılır ve tuşlarda etiketi görünür.</Text>
+      <Text style={styles.sectionHint}>İkisi açıksa formda "Malın sahibi" sorulur. Biri açıksa sorulmaz; {TERIM.terbiyeIsEmri.tekilKucuk} o türle açılır ve tuşlarda etiketi görünür.</Text>
       {(['STANDARD', 'CUSTOMER_GOODS'] as const).map((k) => {
         const on = kinds.includes(k);
         const last = on && kinds.length === 1;

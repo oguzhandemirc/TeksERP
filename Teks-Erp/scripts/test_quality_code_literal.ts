@@ -132,7 +132,7 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // ⚠️ TAVAN 0'A İNMEZ ve bu bilinçlidir: kalan küme DÜZELTİLMESİ YANLIŞ OLAN
   // sınıfları taşır (bilerek katalog DIŞI kodlar, belge örnek verisi, ad biçimi).
   // Sayı bir BORÇ değil, beyan edilmiş bir BİLEŞİMDİR; bileşim commit mesajında.
-  { kok: "Teks-Erp/scripts", tavan: 108, dilim: "bekçi borcu — dilim 1-4 indi; kalan sınıflar beyanlı", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  { kok: "Teks-Erp/scripts", tavan: 107, dilim: "bekçi borcu — dilim 1-4 indi; kalan sınıflar beyanlı", sadece: /\/scripts\/test_[^/]+\.ts$/ },
   { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
   { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];
@@ -189,6 +189,13 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
       "`byQuality` özet haritasında NULL kalitenin kova ANAHTARI. Kod değil sentinel; " +
       "değiştirmek panelin okuduğu yanıt anahtarını kırar (sözleşme tetiği).",
     izinli: ["BELIRSIZ"],
+  },
+  "mobil/src/screens/Modules/Tambur/labelPreviewMap.ts": {
+    gerekce:
+      "Tambur etiket önizlemesinin alan adı → Türkçe ETİKET sözlüğü (`FIELD_NAMES`, " +
+      "etiketsiz alanın düzenleme başlığı; labelPreviewMap.ts:114). Değer kullanıcıya " +
+      "gösterilen kelimedir, katalog kodu değil — audit-field-labels muafıyla aynı sınıf.",
+    izinli: ["Kalite"],
   },
   "mobil/src/store/deviceSettingsStore.ts": {
     gerekce:

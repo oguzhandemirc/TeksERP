@@ -109,6 +109,9 @@ describe('DocRowCard — seçicide "Yeni müşteri ekle"', () => {
     expect(sheetOpen(ui)).toBe(false);
   });
 
+});
+
+describe('DocRowCard — "Yeni müşteri ekle": token, mükerrer ad, vazgeç', () => {
   it('⭐ idempotency: belirsiz hatada aynı token; ad değişince ve kesin 4xx sonrası yeni token', async () => {
     const amb = { message: 'Ağ hatası' };
     mockQuickCreate.mockRejectedValueOnce(amb).mockRejectedValueOnce(amb).mockRejectedValueOnce(amb).mockRejectedValueOnce(amb)

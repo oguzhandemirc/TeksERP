@@ -7,6 +7,7 @@ import { FieldLabel } from "./SettingRow";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import type { IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/types";
 import type { DuplicateDocNoMode } from "@/pages/Operations/GelenBelgeler/mukerrerTypes";
+import { TERIM } from "@/lib/terim";
 
 export const DUPLICATE_DOC_NO_OPTIONS: ReadonlyArray<{ value: DuplicateDocNoMode; label: string; hint: string }> = [
   { value: "BLOCK", label: "Engelle", hint: "Aynı müşterinin aynı belge no'su ikinci kez kaydedilemez; iptal edilen belgenin numarası serbesttir (bugünkü davranış)." },
@@ -40,7 +41,7 @@ export function DuplicateDocNoField({ draft }: { draft: ReturnType<typeof useDup
 }
 
 export const DUPLICATE_BATCH_NO_OPTIONS: ReadonlyArray<{ value: DuplicateDocNoMode; label: string; hint: string }> = [
-  { value: "BLOCK", label: "Engelle", hint: "Aynı müşterinin aynı parti no'su işi süren başka bir belgede ya da iş emrinde varsa kayıt yapılmaz. İptal edilmiş ya da işi bitmiş belge sayılmaz." },
+  { value: "BLOCK", label: "Engelle", get hint() { return `Aynı müşterinin aynı parti no'su işi süren başka bir belgede ya da ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} varsa kayıt yapılmaz. İptal edilmiş ya da işi bitmiş belge sayılmaz.`; } },
   { value: "WARN", label: "Uyar", hint: "Kayıtta \"Bu parti zaten var\" diye sorulur, \"Yine de aç\" ile geçer. Aynı kâğıdın farklı fotoğrafla ikinci kez okutulmasını yakalar." },
   { value: "ALLOW", label: "İzin ver", hint: "Müşteri parti no kontrol edilmez (bugünkü davranış)." },
 ];

@@ -4,6 +4,7 @@
 import { MapPin } from "lucide-react";
 import type { Roll } from "../types";
 import { CardLink, CardRow, CardSection, hasAny } from "./CardSection";
+import { TERIM } from "@/lib/terim";
 
 export function RollLocationSection({ roll }: { roll: Roll }) {
   const step = roll.currentStep ?? null;
@@ -13,7 +14,7 @@ export function RollLocationSection({ roll }: { roll: Roll }) {
   if (!hasAny(wo, station)) return null;
   return (
     <CardSection title="Nerede / ne durumda" icon={MapPin} testId="roll-card-location">
-      <CardRow label="İş emri" testId="roll-location-wo">
+      <CardRow label={TERIM.terbiyeIsEmri.cumleBasi.yalin} testId="roll-location-wo">
         {wo && <CardLink to={`/operations/work-orders/${wo.id}`}>{wo.workOrderNumber}</CardLink>}
       </CardRow>
       <CardRow label="Bulunduğu istasyon" testId="roll-location-station">

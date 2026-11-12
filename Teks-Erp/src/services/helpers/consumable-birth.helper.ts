@@ -12,6 +12,7 @@ import { consumableNormsValidAt, pickNormsForValue } from "./cost-rate-validity.
 import { ACTIVE_ROLL_PROPERTY } from "./property-revoke.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { normDemands, writeBirthConsumptionTx, type ConsumableWarning } from "./consumable-stock.helper";
 
 type Tx = Prisma.TransactionClient;
@@ -27,7 +28,7 @@ export async function consumeForTamburBirthTx(
   a: { rollId: string; propertyIds: string[]; userId?: string | null },
 ): Promise<ConsumableWarning[]> {
   if (a.propertyIds.length === 0 || !(await resolveConsumableStockEnabled(tx))) return [];
-  const props = await tx.rollProperty.findMany({
+  const props = await sequentialTx(tx).rollProperty.findMany({
     where: { rollId: a.rollId, propertyId: { in: a.propertyIds }, ...ACTIVE_ROLL_PROPERTY },
     select: {
       valueId: true,

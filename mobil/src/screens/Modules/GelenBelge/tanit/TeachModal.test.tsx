@@ -216,8 +216,9 @@ describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
     await press(r.getByTestId('tanit-alan-partiNo'));
     await press(r.getByTestId('tanit-onizle'));
     await flush();
-    expect(mockApi.suggestTemplate.mock.calls[0][0].identifiers[0]).toBe('ESKİ KİMLİK');
-    expect(mockApi.suggestTemplate.mock.calls[0][0].base).toEqual({ code: 'u-gulecsoy', keep: [] });
+    // Son çağrı: güncelle kipindeki kendiliğinden ilk önizleme (debounce) dokunuştan önce de düşebilir.
+    expect(mockApi.suggestTemplate.mock.lastCall?.[0].identifiers[0]).toBe('ESKİ KİMLİK');
+    expect(mockApi.suggestTemplate.mock.lastCall?.[0].base).toEqual({ code: 'u-gulecsoy', keep: [] });
     expect(r.getByTestId('tanit-eski-alanlar')).toHaveTextContent(/tarih/);
     await press(r.getByTestId('tanit-kaydet'));
     await flush();
@@ -239,7 +240,9 @@ describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
     await press(r.getByTestId('tanit-alan-partiNo'));
     await press(r.getByTestId('tanit-onizle'));
     await flush();
-    expect(mockApi.suggestTemplate.mock.calls[0][0].base).toEqual({ code: 'u-gulecsoy', keep: ['tables'] });
+    // Son çağrı = dokunuştan sonraki önizleme. Güncelle kipinde ilk önizleme PREVIEW_DEBOUNCE_MS (gerçek zaman) sonra
+    // kendiliğinden de gider; yük altında işaretlemeden önce düşüp calls[0] olabiliyordu (kararsızlığın kaynağı).
+    expect(mockApi.suggestTemplate.mock.lastCall?.[0].base).toEqual({ code: 'u-gulecsoy', keep: ['tables'] });
   });
 
   it('⭐ aynı tablette ikinci güncelleme yeni sürümle gider (kayıt şablon önbelleğini tazeler; s1b inceleme)', async () => {

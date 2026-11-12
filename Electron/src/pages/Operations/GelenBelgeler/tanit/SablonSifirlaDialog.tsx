@@ -14,8 +14,9 @@ import { NOTE_STATUS_LABEL } from "../noteStatus";
 import type { NoteStatus } from "../types";
 import { previewTemplateReset, resetTemplates } from "./service";
 import type { TemplateResetFailure, TemplateResetPreviewItem, TemplateResetResult } from "./types";
+import { TERIM } from "@/lib/terim";
 
-export const RESET_EXPLAIN = "Sıfırlanan tip artık belge tanımaz. Eski belgeler, iş emirleri ve okumalar DEĞİŞMEZ. Aynı belgeyi yeniden tanıtabilirsiniz; tip \"Kullanılmayan tipler\"den geri alınabilir.";
+export const resetExplain = (): string => `Sıfırlanan tip artık belge tanımaz. Eski belgeler, ${TERIM.terbiyeIsEmri.cogulKucuk} ve okumalar DEĞİŞMEZ. Aynı belgeyi yeniden tanıtabilirsiniz; tip "Kullanılmayan tipler"den geri alınabilir.`;
 const DRAFTS_SHOWN = 50;
 
 /** "3 onaylandı · 1 taslak" — durum sayıları sunucudan. */
@@ -108,7 +109,7 @@ export function SablonSifirlaDialog({ codes, multi = false, onOpenChange }: Prop
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> {multi ? "Belge tiplerini sıfırla" : "Belge tipini sıfırla"}</DialogTitle>
-          <DialogDescription>{RESET_EXPLAIN}</DialogDescription>
+          <DialogDescription>{resetExplain()}</DialogDescription>
         </DialogHeader>
         <div className="min-w-0">
           {apply.data ? (

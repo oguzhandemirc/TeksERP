@@ -6,17 +6,17 @@
 // (`computeWorkOrderLocks.foldType`, kilit altında yeniden), donmuş statü 409, kart bayatlar, hareket defteri + audit.
 // =============================================================================
 import { ReasonPresetKind } from "@prisma/client";
-import prisma from "../../lib/prisma";
-import { AuditService } from "../audit.service";
-import { AppError } from "../../utils/app-error";
-import { ApiResponse } from "../../types/api.types";
-import { computeWorkOrderLocks, touchWorkOrderTx } from "../helpers/workorder-locks.helper";
-import { PLAN_CHANGE_FROZEN_STATUSES, assertPlanChangeAllowed } from "../helpers/workorder-target-color.helper";
-import { resolveFoldTypeForWrite } from "../helpers/fold-type";
-import { markTravelerCardDirtyTx } from "../helpers/traveler-card-dirty.helper";
-import { recordWorkOrderFieldDiffTx } from "../helpers/workorder-field-diff.helper";
-import { resolveReasonCode } from "../reason-preset.service";
-import { TERIM } from "../../constants/terim";
+import prisma from "../lib/prisma";
+import { AuditService } from "./audit.service";
+import { AppError } from "../utils/app-error";
+import { ApiResponse } from "../types/api.types";
+import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { PLAN_CHANGE_FROZEN_STATUSES, assertPlanChangeAllowed } from "./helpers/workorder-target-color.helper";
+import { resolveFoldTypeForWrite } from "./helpers/fold-type";
+import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
+import { recordWorkOrderFieldDiffTx } from "./helpers/workorder-field-diff.helper";
+import { resolveReasonCode } from "./reason-preset.service";
+import { TERIM } from "../constants/terim";
 
 const MIN_REASON_LENGTH = 3;
 

@@ -2,15 +2,16 @@
 // Düzenlenebilir alanlar mavi zeminli ve dokunulabilir; barkod/tarih/sabit metin düz çizilir.
 // Uç yoksa (eski backend) şablonun alan listesinden satır görünümüne düşer.
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text, TouchableRipple, Icon } from 'react-native-paper';
 import type { TamburLabelPreview, TamburPreviewElement } from '../../../services/tambur.service';
-import { colors, palette, radius, shadow, spacing, typography } from '../../../theme/tokens';
+import { colors, palette } from '../../../theme/tokens';
 import type { EditAnchor } from './TamburInlineEditor';
 import { AUTO_FIELD_TEXT, emptyFieldText, isSystemAssignedField } from './labelPreviewMap';
 import { clampPaperPan, clampPaperZoom, doubleTapZoom, fitPaperScale, paperPanLimit, PAPER_ZOOM_MIN } from './labelPaperFit';
+import { EDIT_BORDER, styles } from './TamburLabelPaper.styles';
 
 export interface PaperRow {
   key: string | null;
@@ -113,8 +114,6 @@ function usePaperZoom(paper: { w: number; h: number }, area: { w: number; h: num
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: zoom.value }] }));
   return { gesture, style, zoomed, reset: () => reset(true) };
 }
-const EDIT_BG = 'rgba(37,99,235,0.12)';
-const EDIT_BORDER = palette.blue[600];
 
 /** Deterministik çubuk deseni — yer tutucu barkod (gerçek kod kesimde doğar). */
 const BAR_PATTERN = [2, 1, 1, 2, 3, 1, 1, 1, 2, 2, 1, 3, 1, 1, 2, 1, 3, 2, 1, 1, 2, 3, 1, 2];
@@ -318,47 +317,3 @@ export default function TamburLabelPaper({ preview, fallbackRows, isEditable, on
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { flex: 1, minHeight: 0, gap: 4 },
-  // minHeight 0: kaydırmasız sol sütunda alan kalan yere küçülebilsin (kâğıt ölçeği onLayout'tan izler).
-  area: { flex: 1, minHeight: 0, overflow: 'hidden' },
-  paperLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  paper: {
-    backgroundColor: palette.white,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: palette.slate[300],
-    overflow: 'hidden',
-    shadowColor: palette.black,
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  emptyHit: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: palette.red[600], borderRadius: 3, paddingHorizontal: 3, backgroundColor: palette.red[50] },
-  emptyText: { color: palette.red[700], fontStyle: 'italic' },
-  autoText: { color: palette.slate[400], fontStyle: 'italic' },
-  editHit: { backgroundColor: EDIT_BG, borderBottomWidth: 2, borderBottomColor: EDIT_BORDER, borderRadius: 3, paddingHorizontal: 2 },
-  rowsPad: { padding: 10, gap: 4 },
-  rowHit: { alignSelf: 'flex-start' },
-  rowText: { color: palette.black, fontFamily: 'monospace' },
-  rowBig: { fontWeight: '800' },
-  rowMuted: { color: palette.slate[400] },
-  // Yakınken köşede sıfırlama çipi; dokunma alanı 48 dp.
-  zoomChip: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    minWidth: 48,
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: palette.slate[700],
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.sm,
-  },
-  zoomChipText: { color: palette.white, fontSize: typography.size.base, fontWeight: typography.weight.bold },
-  staleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  staleText: { fontSize: 12, color: colors.warningText },
-});

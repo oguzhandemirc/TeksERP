@@ -136,6 +136,9 @@ function DraftPreview({ q }: { q: UseQueryResult<LabelPreviewResult> }) {
         ) : (
           <LabelPreviewZoom content={q.data.content} title="Düzenlenen etiket" />
         )}
+        {q.data?.warnings?.map((w) => (
+          <p key={w} className="mt-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="label-edit-preview-warning">{w}</p>
+        ))}
     </>
   );
 }

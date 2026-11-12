@@ -15,6 +15,7 @@ import { getIncomingDocumentSettings, INCOMING_DOCUMENT_QUERY_KEY, INCOMING_DOCU
 import { editUserTemplate, getUserTemplate, USER_TEMPLATES_QUERY_KEY } from "./service";
 import { buildEditBody, draftOf, editProblem, factoryChoiceLabel, multiPartyLabel, templateFieldRows, type TemplateEditDraft } from "./templateRules";
 import type { MultiPartyRule, UserTemplateDetail } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export const MAX_IDENTIFIERS = 30;
 const CONFLICT_CODES = new Set(["USER_TEMPLATE_VERSION_CHANGED", "USER_TEMPLATE_INACTIVE"]);
@@ -53,7 +54,7 @@ function FieldDropList({ detail, drop, onChange, barcode, onBarcode }: { detail:
   if (rows.length === 0) return null;
   return (
     <div className="space-y-1">
-      <span className="text-xs font-medium text-muted-foreground">Alanlar (belgedeki yazı → iş emri karşılığı)</span>
+      <span className="text-xs font-medium text-muted-foreground">Alanlar (belgedeki yazı → {TERIM.terbiyeIsEmri.tekilKucuk} karşılığı)</span>
       <ul className="divide-y rounded-md border" data-testid="user-template-fields">
         {rows.map((r) => {
           const gone = drop.includes(r.key);

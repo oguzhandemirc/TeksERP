@@ -63,7 +63,19 @@ check("§2 meta.sackSeq yalnız `readShippingSackSeqOnDoc()` açıkken", /\(awai
 // §2b ÖN EK DONAR: sevk anındaki ön ek snapshot'a yazılır; baskıda `sackSeqPrefixLive` kapalıyken o okunur.
 check("§2b ⭐ ön ek sevkiyat KURULURKEN `Shipment.sackSeqPrefix`e donar", /sackSeqPrefix: await readShippingSackSeqPrefix\(tx\),/.test(ship));
 check("§2b belge snapshot'ı ön eki SEVKİYATTAN okur (ekran ile tek kaynak)", /sackSeqPrefix: sh\.sackSeqPrefix \?\? "",/.test(ship));
-check("§2b ekran projeksiyonları `seqLabel` üretir (detay + çuval dökümü, aynı helper)", (ship.match(/seqLabel: seqLabelOf\(sk\.seq\)/g) ?? []).length === 2 && (ship.match(/readSackSeqFormat\((shipment|sh)\.sackSeqPrefix\)/g) ?? []).length === 2);
+// Ekran projeksiyonları ADIYLA: detay + çuval dökümü (detail.ts) ve el terminali yük durumu (handheld-state.ts, SY-3).
+const SEQ_PROJEKSIYONLARI: readonly { dosya: string; seqLabel: RegExp; adet: number }[] = [
+  { dosya: "services/shipping/detail.ts", seqLabel: /seqLabel: seqLabelOf\(sk\.seq\)/g, adet: 2 },
+  { dosya: "services/shipping/handheld-state.ts", seqLabel: /seqLabel: label \|\| null/g, adet: 1 },
+];
+const seqProjeksiyonHata = SEQ_PROJEKSIYONLARI.filter((x) => {
+  const t = readFileSync(join(SRC, x.dosya), "utf-8");
+  return (t.match(x.seqLabel) ?? []).length !== x.adet;
+}).map((x) => x.dosya);
+const seqFormatToplam = SEQ_PROJEKSIYONLARI.reduce((n, x) => n + x.adet, 0);
+check("§2b ekran projeksiyonları `seqLabel` üretir (detay + çuval dökümü + el terminali, aynı helper)",
+  seqProjeksiyonHata.length === 0 && (ship.match(/readSackSeqFormat\((shipment|sh)\.sackSeqPrefix\)/g) ?? []).length === seqFormatToplam,
+  seqProjeksiyonHata.join(", ") || `${seqFormatToplam} projeksiyon`);
 check("§2b ⭐ baskı ön eki: live ? bugünkü ayar : snapshot (eski belge değişmez)",
   /prefix: live \? await readShippingSackSeqPrefix\(tx\) : sanitizeSackSeqPrefix\(frozenPrefix \?\? ""\)/.test(helper));
 check("§2b printed-document snapshot ön ekini helper'a geçirir", /readSackSeqFormat\(\(snapshot\.doc as \{ sackSeqPrefix\?: string \} \| null\)\?\.sackSeqPrefix\)/.test(printed));

@@ -49,7 +49,7 @@ describe("belge tipi sıfırla diyaloğu", () => {
     expect(row).toHaveTextContent("12 okuma · 9 onaylandı · 3 taslak");
     expect(row).toHaveTextContent("gönderen Güleçsoy");
     expect(screen.getByTestId("reset-drafts-u-a")).toHaveTextContent("GB-0001 +52 daha");
-    expect(screen.getByText(/Eski belgeler, iş emirleri ve okumalar DEĞİŞMEZ/)).toBeInTheDocument();
+    expect(screen.getByText(/Eski belgeler, (terbiye )?iş emirleri ve okumalar DEĞİŞMEZ/)).toBeInTheDocument();
   });
 
   it("⭐ §2 çoklu kipte kutular boş başlar; seçilmeyen kod gövdeye girmez; sonuç done/failed ayrı", async () => {

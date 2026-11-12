@@ -14,6 +14,7 @@ import { focusGeometry, partyFocus, partyLines } from './partyReview';
 import { usePartyScanReview } from './PartyScanSide';
 import PagePreviewModal from '../PagePreviewModal';
 import type { DocRow, WoRowsState } from './useWoRows';
+import { useAuthStore } from '../../../../store/authStore';
 
 jest.mock('../../../../components/NumpadInput', () => {
   const RN = jest.requireActual('react-native');
@@ -44,7 +45,9 @@ const rowOf = (view: NotePartiesView = viewOf()): DocRow => {
 const multiOf = (): MultiPartyDraft => rowOf().form!.multi!;
 const wo = () => ({ setMulti: jest.fn() }) as unknown as WoRowsState;
 
+// Parti no tahmini ve kendi üretim kaydı ucun iznine kapılı (useOurBatchPreview · useOwnGoodsCreate).
 beforeEach(() => {
+  useAuthStore.setState({ user: { permissions: ['workorder:read'] } as never });
   resetPartyTabStore();
   mockNumberState.mockReset();
   mockNumberState.mockResolvedValue({ success: true, data: { enabled: false, lastCode: null, nextCode: null, min: 1, max: 99 } });

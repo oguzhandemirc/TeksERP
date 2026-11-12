@@ -7,6 +7,7 @@
 import type { AnlatiCumlesi, ParametreBeyani, RaporSunumu, TabloBlok, TabloKolonu } from "./sunum/sunum.types";
 import { anaSayiKur } from "./sunum/sunum-kur";
 import type { YarnNeedOptions, YarnNeedReport } from "./yarn-need.report.service";
+import { TERIM } from "../../constants/terim";
 
 export const YARN_NEED_KEY = "maliyet/iplik-ihtiyaci";
 export const BILINMIYOR = "bilinmiyor";
@@ -28,7 +29,7 @@ export function yarnNeedColumns(r: YarnNeedReport): TabloKolonu[] {
     { anahtar: "serbestStokKg", baslik: "Serbest stok", birim: "kg", hiza: "sag" },
     // SY-3 I1: yalnız iplik ayırma açıkken (kapalıyken kolon listesi bugünküyle aynı).
     ...(r.meta.ayirma ? [
-      { anahtar: "ayrilanKg", baslik: "Ayrılan (açık dokuma işleri)", birim: "kg" as const, hiza: "sag" as const },
+      { anahtar: "ayrilanKg", baslik: `Ayrılan (açık ${TERIM.dokumaIsEmri.cogulKucuk})`, birim: "kg" as const, hiza: "sag" as const },
       { anahtar: "serbestKg", baslik: "Serbest (ayrılan düşülmüş)", birim: "kg" as const, hiza: "sag" as const },
     ] : []),
     ...(r.meta.kaynaklar.emanet ? [{ anahtar: "emanetKg", baslik: "Emanet (müşterinin)", birim: "kg" as const, hiza: "sag" as const }] : []),
@@ -74,8 +75,8 @@ export function yarnReservationWarnings(r: YarnNeedReport): string[] {
   if (!ay) return [];
   const w: string[] = [];
   const asan = r.satirlar.filter((s) => s.serbestKg != null && sayi(s.serbestKg) < 0).length;
-  if (asan) w.push(`${asan} iplikte açık dokuma işlerine ayrılan miktar serbest stoğu aşıyor.`);
-  if (ay.yapisiEksikIsler.length) w.push(`${ay.yapisiEksikIsler.length} açık dokuma işinin yapısı eksik; ayrılan miktara katılmadı.`);
+  if (asan) w.push(`${asan} iplikte açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.yonelme} ayrılan miktar serbest stoğu aşıyor.`);
+  if (ay.yapisiEksikIsler.length) w.push(`${ay.yapisiEksikIsler.length} açık ${TERIM.dokumaIsEmri.cekimKucuk.ilgi} yapısı eksik; ayrılan miktara katılmadı.`);
   if (!ay.talepNetlendi) w.push("Müşteri süzgecinde talep açık işlerle netlenmez; ihtiyaç işlere ayrılan miktarla çakışabilir.");
   return w;
 }
@@ -118,7 +119,7 @@ export function buildYarnNeedSunumu(r: YarnNeedReport, o: YarnNeedOptions): Rapo
       { ad: "Serbest stok", aciklama: "Depodaki iplik; müşterinin bize bıraktığı emanet iplik bu sayıya girmez." },
       { ad: "Eksik", aciklama: "İhtiyaçtan serbest stok ve yoldaki alış siparişi çıkınca kalan; sıfırın altına inmez." },
       ...(r.meta.ayirma ? [
-        { ad: "Ayrılan", aciklama: "Açık (planlı ya da süren) kendi tezgâh dokuma işlerinin kalan ham metresi için gereken iplik; hazır leventler önce bu işlere düşülür. Stok ayırmaz, yalnız gösterir." },
+        { ad: "Ayrılan", aciklama: `Açık (planlı ya da süren) kendi tezgâh ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan ham metresi için gereken iplik; hazır leventler önce bu işlere düşülür. Stok ayırmaz, yalnız gösterir.` },
         { ad: "Serbest (ayrılan düşülmüş)", aciklama: "Serbest stoktan ayrılan çıkınca kalan; eksiye inmişse işler stoktan fazlasını bekliyor demektir. Eksik bu sayıya göre hesaplanır." },
         { ad: "İhtiyaç (ayırma açıkken)", aciklama: "Açık işlerin kalan metresi ürünün talebinden düşülür; ihtiyaç yalnız henüz işe bağlanmamış talebi gösterir." },
       ] : []),

@@ -17,6 +17,8 @@ import { readOpenPurchase, readReadyBeams, readYarnReservation, readYarnStock } 
 import { readyWarpSpecIds, yarnKgByYarn, yarnShortKg, type ReadyItem } from "../reports/yarn-need.report.service";
 import { readMaliyetEnabled } from "../system-setting.service";
 import type { YarnWasteSource } from "./yarn-waste.helper";
+import { hoursUntilDeadline } from "./order-deadline.helper";
+import { TERIM } from "../../constants/terim";
 
 type Dec = Prisma.Decimal;
 const round3 = (d: Dec): number => d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP).toNumber();
@@ -175,7 +177,7 @@ export function yarnReservationWarnings(groups: Array<{ itemName?: string; yarnS
   for (const g of groups) {
     for (const y of g.yarnSummary?.yarns ?? []) {
       if (y.reservedKg !== undefined && y.reservedKg > 0 && (y.shortKg ?? 0) > 0) {
-        out.push(`${g.itemName ? g.itemName + ": " : ""}${y.code || y.name} ipliğinin ${y.reservedKg} kg'ı açık dokuma işlerine ayrılmış; serbest miktar yetmiyor (eksik ${y.shortKg} kg).`);
+        out.push(`${g.itemName ? g.itemName + ": " : ""}${y.code || y.name} ipliğinin ${y.reservedKg} kg'ı açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.yonelme} ayrılmış; serbest miktar yetmiyor (eksik ${y.shortKg} kg).`);
       }
     }
   }
@@ -205,7 +207,8 @@ async function durationEstimates(
   const machineIds = [...new Set([...looms.values()].flatMap((l) => (l ? [l.best.machineId] : [])))];
   if (machineIds.length === 0) return out;
   const plans = new Map((await prisma.machine.findMany({ where: { id: { in: machineIds } }, select: { id: true, planRpm: true, planEfficiencyPct: true } })).map((m) => [m.id, m]));
-  const hoursLeft = deadline ? Math.round(((deadline.getTime() - now.getTime()) / 3_600_000) * 100) / 100 : null;
+  const rawHoursLeft = hoursUntilDeadline(deadline, now.getTime());
+  const hoursLeft = rawHoursLeft === null ? null : Math.round(rawHoursLeft * 100) / 100;
   for (const g of groups) {
     const loom = looms.get(g.key);
     const plan = loom ? plans.get(loom.best.machineId) : undefined;

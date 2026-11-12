@@ -110,25 +110,32 @@ export default function UnifiedWoForm(props: UnifiedWoFormProps & CreatedExitPro
         onClose={() => { scan.b.clearSameDoc(); wo.dismissSameDoc(); }}
         onNewWorkOrder={scan.b.sameDoc ? (n) => scan.b.openNote(n) : undefined}
       />
-      <FieldSelectorSheet
-        visible={fields.sheetOpen}
-        hidden={fields.prefs.hidden}
-        onToggle={fields.prefs.toggle}
-        onReset={fields.prefs.reset}
-        onDismiss={fields.closeSheet}
-        pending={fields.prefs.pending}
-        fillTarget={fields.prefs.fillTarget}
-        onFillTarget={fields.prefs.setFillTarget}
-        otherShown={!fields.prefs.otherHidden}
-        onOtherShown={(on) => fields.prefs.setOtherHidden(!on)}
-        stepNotesShown={!fields.prefs.stepNotesHidden}
-        onStepNotesShown={(on) => fields.prefs.setStepNotesHidden(!on)}
-      />
+      <FieldsSheet fields={fields} />
     </>
   );
 }
 
 type FormModel = ReturnType<typeof useUnifiedWoForm>;
+
+/** ⚙ Alanlar seçicisi — kancanın `fields` tercih modeline bağlı. */
+function FieldsSheet({ fields }: { fields: FormModel['fields'] }) {
+  return (
+    <FieldSelectorSheet
+      visible={fields.sheetOpen}
+      hidden={fields.prefs.hidden}
+      onToggle={fields.prefs.toggle}
+      onReset={fields.prefs.reset}
+      onDismiss={fields.closeSheet}
+      pending={fields.prefs.pending}
+      fillTarget={fields.prefs.fillTarget}
+      onFillTarget={fields.prefs.setFillTarget}
+      otherShown={!fields.prefs.otherHidden}
+      onOtherShown={(on) => fields.prefs.setOtherHidden(!on)}
+      stepNotesShown={!fields.prefs.stepNotesHidden}
+      onStepNotesShown={(on) => fields.prefs.setStepNotesHidden(!on)}
+    />
+  );
+}
 
 /** Başlık için etkin mal sahibi türü (İş Emirleri girişi "Fason İş Emri" / "İş Emri" yazar); değişince bildirilir. */
 function useKindReport(kind: WoCreateKind | null, onKindChange: ((k: WoCreateKind | null) => void) | undefined) {

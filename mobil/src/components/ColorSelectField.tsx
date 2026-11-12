@@ -24,27 +24,8 @@ interface Props {
   renderTrigger?: (t: { label: string | null; open: () => void }) => React.ReactNode;
 }
 
-/**
- * Hedef renk seçici — public renk listesi + seçili rengin ad çözümü.
- *
- * `scope=public` → müşteriye ATANMIŞ (exclusive) renkler listelenmez; Hızlı İş
- * Emri stok üretimidir. Seçili renk public listede değilse (ör. sipariş kaleminden
- * gelen müşteri-özel renk) tek-renk fallback sorgusu adını çeker — yoksa alan
- * boş "seç" görünür ve operatör rengin kaybolduğunu sanır.
- *
- * Hızlı İş Emri sihirbazı ve iş emri düzeltme menüsü (Rengi Değiştir) ortak kullanır.
- */
-export default function ColorSelectField({
-  value,
-  onChange,
-  disabled,
-  labelOverride,
-  onLabelResolved,
-  showClear = true,
-  renderTrigger,
-}: Props) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-
+/** Public renk listesi + listede olmayan seçili rengin ad çözümü (tek-renk fallback sorgusu). */
+function useColorOptions(value: string | null) {
   const colorsQuery = useQuery({
     queryKey: ['colors', 'wo-picker-public'],
     queryFn: () =>
@@ -81,6 +62,31 @@ export default function ColorSelectField({
     const fromList = colorOptions.find((o) => o.value === value)?.label;
     return fromList ?? fallbackColorQuery.data?.data?.name ?? null;
   }, [value, colorOptions, fallbackColorQuery.data]);
+  return { colorsQuery, colorOptions, selectedColorLabel };
+}
+
+/**
+ * Hedef renk seçici — public renk listesi + seçili rengin ad çözümü.
+ *
+ * `scope=public` → müşteriye ATANMIŞ (exclusive) renkler listelenmez; Hızlı İş
+ * Emri stok üretimidir. Seçili renk public listede değilse (ör. sipariş kaleminden
+ * gelen müşteri-özel renk) tek-renk fallback sorgusu adını çeker — yoksa alan
+ * boş "seç" görünür ve operatör rengin kaybolduğunu sanır.
+ *
+ * Hızlı İş Emri sihirbazı ve iş emri düzeltme menüsü (Rengi Değiştir) ortak kullanır.
+ */
+export default function ColorSelectField({
+  value,
+  onChange,
+  disabled,
+  labelOverride,
+  onLabelResolved,
+  showClear = true,
+  renderTrigger,
+}: Props) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const { colorsQuery, colorOptions, selectedColorLabel } = useColorOptions(value);
 
   const effectiveLabel = labelOverride ?? selectedColorLabel;
 

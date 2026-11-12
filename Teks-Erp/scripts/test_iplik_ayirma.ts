@@ -210,24 +210,27 @@ async function bolum7(x: Fx): Promise<void> {
     data: { beamNo: `${f.tag}-LV`, warpSpecId: f.warpSpecId, status: WarpBeamStatus.READY, plannedLengthM: D(1200), originKind: WarpBeamOrigin.IN_HOUSE },
     select: { id: true },
   });
-  await prisma.warpBeamEvent.create({
-    data: {
-      beamId: beam.id, kind: "WOUND", fromStatus: WarpBeamStatus.PLANNED, toStatus: WarpBeamStatus.READY, lengthM: D(1000),
-      endsCount: 9600, denier: D(75), theoreticalKg: D(80), kgSource: WarpKgSource.THEORETICAL,
-    },
-  });
-  const input = await assembleCostInputTx(prisma as unknown as Prisma.TransactionClient, { itemId: f.fabricId });
-  const kWarp = yarnUsagePerM(input).warp!.kgPerM;
-  const off = await withSettings(OFF, () => yarnNeedReport({ netle: false, leventDus: true }));
-  const on = await withSettings(ON, () => yarnNeedReport({ netle: false, leventDus: true }));
-  // 1000 m çözgü = 940 m kumaş (take-up %6): işler 1300 m'nin 940'ını leventten alır.
-  check("§7a ⭐ Hazır levent ÖNCE işlere: ayrılan çözgü = kg/m × (1300 − 940)", row(on, f.warpYarnId)?.ayrilanKg === kg3(kWarp.mul(360)), row(on, f.warpYarnId)?.ayrilanKg);
-  check("§7b Talep leventin kalanını görür (kalmadı): ihtiyaç = kg/m × 3700", row(on, f.warpYarnId)?.cozguKg === kg3(kWarp.mul(3700)), row(on, f.warpYarnId)?.cozguKg);
-  check("§7c Kapalıyken levent talebe (bugünkü): çözgü = kg/m × (5000 − 940)", row(off, f.warpYarnId)?.cozguKg === kg3(kWarp.mul(4060)), row(off, f.warpYarnId)?.cozguKg);
-  const nb = await withSettings(ON, () => yarnNeedReport({ netle: false, leventDus: false }));
-  check("§7d leventDus=0 → işlere de düşüm yok (ayrılan = kg/m × 1300)", row(nb, f.warpYarnId)?.ayrilanKg === kg3(kWarp.mul(1300)));
-  await prisma.warpBeamEvent.deleteMany({ where: { beamId: beam.id } });
-  await prisma.warpBeam.delete({ where: { id: beam.id } });
+  try {
+    await prisma.warpBeamEvent.create({
+      data: {
+        beamId: beam.id, kind: "WOUND", fromStatus: WarpBeamStatus.PLANNED, toStatus: WarpBeamStatus.READY, lengthM: D(1000),
+        endsCount: 9600, denier: D(75), theoreticalKg: D(80), kgSource: WarpKgSource.THEORETICAL,
+      },
+    });
+    const input = await assembleCostInputTx(prisma as unknown as Prisma.TransactionClient, { itemId: f.fabricId });
+    const kWarp = yarnUsagePerM(input).warp!.kgPerM;
+    const off = await withSettings(OFF, () => yarnNeedReport({ netle: false, leventDus: true }));
+    const on = await withSettings(ON, () => yarnNeedReport({ netle: false, leventDus: true }));
+    // 1000 m çözgü = 940 m kumaş (take-up %6): işler 1300 m'nin 940'ını leventten alır.
+    check("§7a ⭐ Hazır levent ÖNCE işlere: ayrılan çözgü = kg/m × (1300 − 940)", row(on, f.warpYarnId)?.ayrilanKg === kg3(kWarp.mul(360)), row(on, f.warpYarnId)?.ayrilanKg);
+    check("§7b Talep leventin kalanını görür (kalmadı): ihtiyaç = kg/m × 3700", row(on, f.warpYarnId)?.cozguKg === kg3(kWarp.mul(3700)), row(on, f.warpYarnId)?.cozguKg);
+    check("§7c Kapalıyken levent talebe (bugünkü): çözgü = kg/m × (5000 − 940)", row(off, f.warpYarnId)?.cozguKg === kg3(kWarp.mul(4060)), row(off, f.warpYarnId)?.cozguKg);
+    const nb = await withSettings(ON, () => yarnNeedReport({ netle: false, leventDus: false }));
+    check("§7d leventDus=0 → işlere de düşüm yok (ayrılan = kg/m × 1300)", row(nb, f.warpYarnId)?.ayrilanKg === kg3(kWarp.mul(1300)));
+  } finally {
+    await prisma.warpBeamEvent.deleteMany({ where: { beamId: beam.id } });
+    await prisma.warpBeam.delete({ where: { id: beam.id } });
+  }
 }
 
 async function bolum8(x: Fx): Promise<void> {
@@ -242,7 +245,7 @@ async function bolum8(x: Fx): Promise<void> {
   const need = kWarp.mul(100);
   check("§8b ⭐ shortKg serbest miktara göre", y?.shortKg === Number(kg3(yarnShortKg(need, D(300).minus(kWarp.mul(1300)), null))), String(y?.shortKg));
   const ws = proposalWarnings([{ itemName: "Kumaş", yarnSummary: on.get("G1") }]);
-  check("§8c Ayrılan yüzünden eksik → öneri warnings", ws.length > 0 && ws.every((m) => m.includes("açık dokuma işlerine ayrılmış")), ws.join(" | "));
+  check("§8c Ayrılan yüzünden eksik → öneri warnings", ws.length > 0 && ws.every((m) => m.includes("açık dokuma iş emirlerine ayrılmış")), ws.join(" | "));
 }
 
 async function main(): Promise<void> {

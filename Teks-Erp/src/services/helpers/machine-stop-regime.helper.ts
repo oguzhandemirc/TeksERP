@@ -105,7 +105,7 @@ export function assertMachineStopKindAllowed(r: MachineStopRegime, kind: Station
  */
 export function assertStationStopEnabled(station: { machineStopEnabled: boolean }, machineId: string): void {
   if (station.machineStopEnabled) return;
-  throw AppError.badRequest(`Bu istasyonda duruş bildirimi kapalı (${ekranYolu("uretimIstasyonlari")} → Duruş bildirimi).`, {
+  throw AppError.badRequest(`Bu istasyonda duruş bildirimi kapalı (${ekranYolu("uretimIstasyonlari")}: istasyon kartında “Duruş bildirimi”).`, {
     code: "STOP_STATION_DISABLED", machineId,
   });
 }

@@ -27,6 +27,8 @@ import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { editTemplateDefinition, mergeTemplateForUpdate, suggestTemplate, validateTemplate, type DocumentTemplate, type OcrResult } from "../src/lib/gelen-belge/motor";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+// Metin iş emri adını rejimden çözer (K20); beklenti aynı kaynaktan kurulur.
+import { TERIM } from "../src/constants/terim";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -243,14 +245,14 @@ async function run(url: string): Promise<void> {
     JSON.stringify(t?.mapping));
   const rules = new Map((t?.rules ?? []).map((x) => [x.key, x]));
   check("§8 ⭐ kurallar: '2 parti → 2 iş emri' (şablon kuralı), bölüm, toplam satırı, metre kaynağı (form kurşun metresini elle yazdı)",
-    rules.get("multiParty")?.text === "2 parti → 2 iş emri" && rules.get("multiParty")?.source === "TEMPLATE" && rules.get("multiParty")?.sourceText === "şablon kuralı"
+    rules.get("multiParty")?.text === `2 parti → 2 ${TERIM.terbiyeIsEmri.tekilKucuk}` && rules.get("multiParty")?.source === "TEMPLATE" && rules.get("multiParty")?.sourceText === "şablon kuralı"
     && rules.get("sections")?.text === "Tekrar eden bölüm: PARTİ NO" && rules.get("totalsRow")?.text === "Toplam satırı: T.Adet" && rules.get("meterSource")?.text === "Gelen metre: elle girildi" && rules.get("meterSource")?.source === "MANUAL",
     JSON.stringify(t?.rules));
   check("§8 belge detayı aynı blok", JSON.stringify(det?.tanima) === JSON.stringify(sum?.tanima));
   const ta = ((await call("GET", `/api/gelen-belge/irsaliyeler/${a.id}/okuma-ozeti`, tk)).data as { tanima?: { rules?: Array<{ key: string; text: string; source: string }> } } | undefined)?.tanima;
   const mp = ta?.rules?.find((x) => x.key === "multiParty");
   const ms = ta?.rules?.find((x) => x.key === "meterSource");
-  check("§8 v1 belgesi: '2 parti → 1 iş emri' (fabrika ayarı); metre satır toplamından", mp?.text === "2 parti → 1 iş emri" && mp.source === "FACTORY" && ms?.text === "Gelen metre: satır toplamından", JSON.stringify(ta?.rules));
+  check("§8 v1 belgesi: '2 parti → 1 iş emri' (fabrika ayarı); metre satır toplamından", mp?.text === `2 parti → 1 ${TERIM.terbiyeIsEmri.tekilKucuk}` && mp.source === "FACTORY" && ms?.text === "Gelen metre: satır toplamından", JSON.stringify(ta?.rules));
 }
 
 async function cleanup(): Promise<void> {

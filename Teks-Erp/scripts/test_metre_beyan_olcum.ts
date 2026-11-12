@@ -38,6 +38,8 @@ import { resolveServiceItemsForRolls } from "../src/services/helpers/service-pri
 import { SETTING_KEYS, loadServiceBillingSettings, systemSettingService } from "../src/services/system-setting.service";
 import workOrderRouter from "../src/routes/workorder.routes";
 import inventoryRouter from "../src/routes/inventory.routes";
+import { routeHasMethod } from "./lib/router-katmani";
+import { TERIM } from "../src/constants/terim";
 
 let pass = 0;
 let fail = 0;
@@ -257,7 +259,7 @@ async function main(): Promise<void> {
   await prisma.rollError.create({ data: { rollId: s1.root, startMeter: 500, defectTypeId: defect.id, errorType: defect.name, detectedAtStepId: s1.kStep } });
   const p7 = (await workOrderMeterComparison(s1.wo)).parties[0];
   check("§7a defectsBeyondDeclared yalnız 1005 m hatası (beyan 1000)", p7?.defectsBeyondDeclared.length === 1 && p7.defectsBeyondDeclared[0]!.startMeter === 1005 && p7.defectsBeyondDeclared[0]!.rollDeclaredM === 1000, JSON.stringify(p7?.defectsBeyondDeclared));
-  check("§7b uyarı cümlesi sözleşmesi", beyondDeclaredDefectWarning(1005, 1000) === "Hata konumu (1005 m) topun beyan metresini (1000 m) aşıyor — kayıt alındı, metre farkı iş emrinde görünür.");
+  check("§7b uyarı cümlesi sözleşmesi", beyondDeclaredDefectWarning(1005, 1000) === "Hata konumu (1005 m) topun beyan metresini (1000 m) aşıyor — kayıt alındı, metre farkı " + TERIM.terbiyeIsEmri.cekimKucuk.bulunma + " görünür.");
 
   // ── §8 top izi ────────────────────────────────────────────────────────────
   section("§8 tambur şeridi: önceki ölçüm · kesilen · kalan");
@@ -276,7 +278,7 @@ async function main(): Promise<void> {
   section("§9 uç kapıları ve ayar");
   const fakeReq = (perms: string[]): Partial<Request> => ({ user: { userId: randomUUID(), username: "mbo", permissions: perms, tokenVersion: 0 } as Request["user"] });
   const gate = async (stack: typeof workOrderRouter.stack, path: string, ok: string[], denied: string[]) => {
-    const layer = stack.find((l) => l.route?.path === path && (l.route as unknown as { methods?: Record<string, boolean> }).methods?.get);
+    const layer = stack.find((l) => l.route?.path === path && routeHasMethod(l, "get"));
     const names = layer?.route?.stack.map((s) => s.name) ?? [];
     const perm = layer?.route?.stack[1];
     const run = (p: string[]) => new Promise<unknown>((res) => { void perm?.handle(fakeReq(p) as Request, {} as Response, (er?: unknown) => res(er ?? "next")); });

@@ -25,6 +25,7 @@ import inventoryRouter from "../src/routes/inventory.routes";
 import { roleGrade } from "./fixture-quality-grade";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
+import { findRouteLayer } from "./lib/router-katmani";
 
 let pass = 0;
 let fail = 0;
@@ -45,17 +46,9 @@ const ts = Date.now().toString().slice(-6);
 const rollIds: string[] = [];
 let seq = 0;
 
-type RouteLayer = {
-  route?: {
-    path: string;
-    methods: Record<string, boolean>;
-    stack: Array<{ name: string; handle: (req: Request, res: Response, next: NextFunction) => void }>;
-  };
-};
 /** Route'un yetki halkalarını gerçek izin listesiyle koşturur ([verifyToken, ...yetki, controller]). */
 function routeAllows(permissions: string[]): boolean | null {
-  const layers = (inventoryRouter as unknown as { stack: RouteLayer[] }).stack;
-  const layer = layers.find((l) => l.route?.path === "/:id/label-texts" && l.route.methods.patch);
+  const layer = findRouteLayer(inventoryRouter, "/:id/label-texts", "patch");
   if (!layer?.route) return null;
   const chain = layer.route.stack;
   if (chain.length < 3 || chain[0]!.name !== "verifyToken") return null;

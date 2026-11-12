@@ -34,6 +34,7 @@ import { roleGrade } from "./fixture-quality-grade";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { findRouteLayer } from "./lib/router-katmani";
 
 let pass = 0;
 let fail = 0;
@@ -48,11 +49,8 @@ async function errCode(p: Promise<unknown>): Promise<string> {
   }
 }
 
-type RouteLayer = {
-  route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string; handle: (req: Request, res: Response, next: NextFunction) => void }> };
-};
 function routeAllows(p: string, method: string, permissions: string[]): boolean | null {
-  const layer = (labelRouter as unknown as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === p && l.route.methods[method]);
+  const layer = findRouteLayer(labelRouter, p, method);
   if (!layer?.route) return null;
   const chain = layer.route.stack;
   if (chain.length < 3 || chain[0]!.name !== "verifyToken") return null;

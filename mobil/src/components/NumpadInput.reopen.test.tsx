@@ -1,6 +1,7 @@
 // Tuş takımı kapandıktan sonra aynı kutuya ikinci dokunuş tuş takımını yeniden açar (GK 2026-11-11 saha hatası:
 // native odak kutuda kaldığı için onFocus gelmiyor, önce başka yere dokunmak gerekiyordu).
 // Negatif sonda: NumpadInput'tan onPressIn kaldırılınca "ikinci basış" kırmızı.
+// Sahte saat: AppModal kapanışı (reanimated withTiming) gerçek saatte yük altında saniyeleri buluyordu (CI kararsızlığı).
 import React, { useState } from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../test/render';
@@ -17,18 +18,44 @@ function Harness() {
   );
 }
 
+// Kapanış animasyonunu (OUT_MS) rahatça aşan ilerletme; sahte saatte maliyetsiz.
+const CLOSE_ANIM_ADVANCE_MS = 1000;
+
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => jest.useRealTimers());
+
 describe('NumpadInput — kapandıktan sonra yeniden açılma', () => {
   it('Tamam ile kapatılan tuş takımı aynı kutuya ikinci basışta yeniden açılır', async () => {
     const r = renderWithPaper(<Harness />);
     fireEvent(r.getByTestId('metre'), 'focus');
     await waitFor(() => expect(r.getByText('Tamam')).toBeTruthy());
     fireEvent.press(r.getByText('Tamam'));
-    await waitFor(() => expect(r.queryByText('Tamam')).toBeNull());
+    await act(async () => {
+      jest.advanceTimersByTime(CLOSE_ANIM_ADVANCE_MS);
+    });
+    expect(r.queryByText('Tamam')).toBeNull();
     // Native odak kutuda kaldı varsayımı: focus olayı YOK, yalnız basış.
     await act(async () => {
       fireEvent(r.getByTestId('metre'), 'pressIn', { nativeEvent: {} });
     });
     await waitFor(() => expect(r.getByText('Tamam')).toBeTruthy());
+  });
+
+  it('kapanış animasyonu bitmeden yeniden basmak tuş takımını açık bırakır (geç finishHide gizlemez)', async () => {
+    const r = renderWithPaper(<Harness />);
+    fireEvent(r.getByTestId('metre'), 'focus');
+    await waitFor(() => expect(r.getByText('Tamam')).toBeTruthy());
+    fireEvent.press(r.getByText('Tamam'));
+    await act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+    await act(async () => {
+      fireEvent(r.getByTestId('metre'), 'pressIn', { nativeEvent: {} });
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(CLOSE_ANIM_ADVANCE_MS);
+    });
+    expect(r.getByText('Tamam')).toBeTruthy();
   });
 
   it('açıkken tekrar basmak zararsız (çift açılma tek tuş takımı)', async () => {

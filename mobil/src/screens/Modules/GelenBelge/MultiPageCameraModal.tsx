@@ -36,7 +36,6 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
   const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
-  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const { torch, toggle: toggleTorch } = useDocTorch(visible);
   const compact = useIsCompact();
   // Tek çekimlik kullanım (istasyon "Belgeden iş bul"): sayfa no anlamsız, çekim kendiliğinden biter → Tamam yok.
@@ -55,28 +54,6 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
     if (cap.requestDismiss()) onDismiss();
   };
 
-  const onReady = async () => {
-    try {
-      const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
-      setPictureSize(pickPictureSize(sizes));
-    } catch {
-      setPictureSize(undefined); // kamera varsayılanı; çekim yine çalışır
-    }
-  };
-
-  const body = !permission ? (
-    <ActivityIndicator color={colors.textOnDark} />
-  ) : !permission.granted ? (
-    <View style={styles.center}>
-      <Text style={styles.onDark}>Belge çekmek için kamera izni gerekiyor.</Text>
-      <Button mode="contained" onPress={() => void withSystemDialog(() => requestPermission())}>
-        Kamera izni ver
-      </Button>
-    </View>
-  ) : (
-    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
-  );
-
   // Çok sayfalı belgede sıradaki sayfanın numarası açıkça söylenir ("Sayfa 1" belge numarası sanılıyordu, saha 2026-11-10).
   const counter = n
     ? `${n} sayfa çekildi — sıradaki ${firstPageNo + n}. sayfa ya da Tamam`
@@ -90,7 +67,7 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
   return (
     <AppModal visible={visible} onDismiss={dismiss} swipeToDismiss={false} contentStyle={[styles.sheet, { width: width * 0.94, height: height * 0.9 }]}>
       <View style={styles.cameraLayer}>
-        {body}
+        <CameraBody permission={permission} requestPermission={requestPermission} cameraRef={cameraRef} torch={torch} />
         {permission?.granted && <TorchButton on={torch} onPress={toggleTorch} style={styles.torch} testID="belge-cok-flas" />}
         {busy && cap.progress && (
           <View style={styles.overlay} testID="belge-cok-iyilestiriliyor">
@@ -130,6 +107,36 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
         {!single && compact && finishBtn}
       </View>
     </AppModal>
+  );
+}
+
+/** Kamera katmanı: izin bekleniyor / izin iste / önizleme (en iyi çekim boyu kamera hazır olunca seçilir). */
+function CameraBody({ permission, requestPermission, cameraRef, torch }: {
+  permission: ReturnType<typeof useCameraPermissions>[0];
+  requestPermission: ReturnType<typeof useCameraPermissions>[1];
+  cameraRef: React.RefObject<CameraView | null>;
+  torch: boolean;
+}) {
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  const onReady = async () => {
+    try {
+      const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
+      setPictureSize(pickPictureSize(sizes));
+    } catch {
+      setPictureSize(undefined); // kamera varsayılanı; çekim yine çalışır
+    }
+  };
+  return !permission ? (
+    <ActivityIndicator color={colors.textOnDark} />
+  ) : !permission.granted ? (
+    <View style={styles.center}>
+      <Text style={styles.onDark}>Belge çekmek için kamera izni gerekiyor.</Text>
+      <Button mode="contained" onPress={() => void withSystemDialog(() => requestPermission())}>
+        Kamera izni ver
+      </Button>
+    </View>
+  ) : (
+    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
   );
 }
 

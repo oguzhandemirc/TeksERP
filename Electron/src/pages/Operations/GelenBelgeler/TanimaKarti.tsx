@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { Tanima, TanimaMappingRow } from "./tanimaTypes";
 import { FIELD_GROUP_LABEL, FIELD_GROUP_ORDER } from "./tanit/fieldTargets";
+import { TERIM } from "@/lib/terim";
 
 /** ① satırı: "Tanındı: Kömürhan Çeki Listesi · sürüm 3 · %94" / "Hazır şablon" / "Tanınmadı". */
 export function recognitionText(t: Tanima): string {
@@ -59,7 +60,7 @@ export function TanimaKarti({ tanima }: { tanima: Tanima | undefined }) {
         <p className={`text-sm ${known ? "" : "text-amber-800 dark:text-amber-300"}`} data-testid="tanima-durum">{recognitionText(tanima)}</p>
       </Step>
       {known && (
-        <Step no="2" title="Eşleme — belge alanı → iş emri">
+        <Step no="2" title={`Eşleme — belge alanı → ${TERIM.terbiyeIsEmri.tekilKucuk}`}>
           <MappingGroups rows={tanima.mapping} />
         </Step>
       )}

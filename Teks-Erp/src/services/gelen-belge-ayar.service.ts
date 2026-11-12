@@ -50,59 +50,48 @@ import {
   readRouteSuggestionPriority,
   DEFAULT_ROUTE_SUGGESTION_PRIORITY,
   ROUTE_SUGGESTION_PRIORITY_VALUES,
-  type RouteSuggestionPriority,
   readIncomingDocDefaultItemId,
   readHandwritingOutlierFactor,
   readHeaderLineMeterSource,
   readIncomingDocAutoSender,
   DEFAULT_HEADER_LINE_METER_SOURCE,
   HEADER_LINE_METER_SOURCE_VALUES,
-  type HeaderLineMeterSource,
   readDocumentTotalCheck,
   DEFAULT_DOCUMENT_TOTAL_CHECK,
   DOCUMENT_TOTAL_CHECK_VALUES,
-  type DocumentTotalCheckMode,
   readUnreviewedApprovalMode,
   systemSettingService,
-  type UnreviewedApprovalMode,
   readBatchNumberSource,
   DEFAULT_BATCH_NUMBER_SOURCE,
   BATCH_NUMBER_SOURCE_VALUES,
-  type BatchNumberSourceMode,
   readIncomingDocEntryMode,
   DEFAULT_ENTRY_MODE,
   ENTRY_MODE_VALUES,
-  type IncomingDocEntryMode,
   readAutoWorkOrderPatternless,
   DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
   AUTO_WORK_ORDER_PATTERNLESS_VALUES,
-  type AutoWorkOrderPatternlessMode,
   readIncomingDocFormApproval,
   DEFAULT_FORM_APPROVAL,
   FORM_APPROVAL_VALUES,
-  type IncomingDocFormApprovalMode,
   readMultiPartyWorkOrder,
   DEFAULT_MULTI_PARTY_WORK_ORDER,
   MULTI_PARTY_WORK_ORDER_VALUES,
-  type MultiPartyWorkOrderMode,
   readDuplicateDocNoMode,
   DEFAULT_DUPLICATE_DOC_NO,
   DUPLICATE_DOC_NO_VALUES,
-  type DuplicateDocNoMode,
   readDuplicateBatchNoMode,
   DEFAULT_DUPLICATE_BATCH_NO,
   DUPLICATE_BATCH_NO_VALUES,
-  type DuplicateBatchNoMode,
   readRefakatAutoPrint,
   readIncomingDocStationLookup,
   readPhotoRetention,
   DEFAULT_PHOTO_RETENTION,
   PHOTO_RETENTION_VALUES,
-  type PhotoRetentionMode,
-  readDesenRenkEslesme, DEFAULT_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, type DesenRenkEslesmeMode,
+  readDesenRenkEslesme, DEFAULT_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES,
   readServerOcrEnabled, DEFAULT_SERVER_OCR_ENABLED,
-  readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, type TabletIeGirisiMode, readTanitimGuveni, DEFAULT_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, type TanitimGuveniMode,
+  readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, readTanitimGuveni, DEFAULT_TANITIM_GUVENI, TANITIM_GUVENI_VALUES,
 } from "./system-setting.service";
+import type { DefaultItemView, IncomingDocSettings, IncomingDocSettingsInput } from "./gelen-belge-ayar-types";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
 export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
@@ -110,70 +99,7 @@ export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
 // Ham ayar ucunun yazamadığı anahtarlar ayrı dosyada (bu servis satır tavanında); içe aktaranlar buradan okur.
 export { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "./gelen-belge-ayar-anahtarlari";
 
-export interface DefaultItemView {
-  id: string;
-  code: string;
-  name: string;
-  /** null = top doğurabilir; dolu = neden doğuramaz (pasif, birleşmiş, tür …). */
-  problem: string | null;
-}
-
-export interface IncomingDocSettings extends StationVerifySettings {
-  defaultItem: DefaultItemView | null;
-  unreviewedApproval: UnreviewedApprovalMode;
-  defaultUnreviewedApproval: UnreviewedApprovalMode;
-  /** Onaydan sonra net desen gruplarına iş emri kendiliğinden açılır mı (varsayılan false). */
-  autoWorkOrder: boolean;
-  /** Rota önerisinin fabrika varsayılanı; null = ayar boş. `problem` dolu = onay anında kullanılmaz (atlanır + neden). */
-  defaultRoute: { id: string; name: string; problem: string | null } | null;
-  routeSuggestionPriority: RouteSuggestionPriority;
-  defaultRouteSuggestionPriority: RouteSuggestionPriority;
-  /** El yazısı şüpheli metre oranı K (medyanın 1/K altı ya da K katı üstü); yeni okumaya uygulanır. */
-  handwritingOutlierFactor: number;
-  defaultHandwritingOutlierFactor: number;
-  handwritingOutlierFactorRange: { min: number; max: number };
-  /** Tablosuz belgede (ürün sevk fişi) satır metresi/kg kaynağı; yeni okumaya uygulanır. */
-  headerLineMeterSource: HeaderLineMeterSource;
-  defaultHeaderLineMeterSource: HeaderLineMeterSource;
-  /** Okunan şablonun gönderen carisi boş gönderen alanına yazılır mı (varsayılan false). */
-  autoSenderFromTemplate: boolean;
-  /** Belge geneli beyan (Müşteri MT) farkı: INFO bilgi (onay geçer) | REQUIRE_REASON gerekçe ister. */
-  documentTotalCheck: DocumentTotalCheckMode;
-  defaultDocumentTotalCheck: DocumentTotalCheckMode;
-  /** Gelen belgeden doğan partinin numarası: SERIES seriden (varsayılan) | DOCUMENT taslağın parti no'su (boşsa seri). */
-  batchNumberSource: BatchNumberSourceMode;
-  defaultBatchNumberSource: BatchNumberSourceMode;
-  /** Onay kipi: PER_LINE her satır bir top (varsayılan) | PER_DOCUMENT belge başına tek top. */
-  entryMode: IncomingDocEntryMode;
-  defaultEntryMode: IncomingDocEntryMode;
-  /** İşlem değeri çözülemeyen grupta oto iş emri: SKIP atla (varsayılan) | OPEN hedef değersiz aç. */
-  autoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
-  defaultAutoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
-  /** İş emri formundan okutulan belge: SEPARATE ayrı onay (varsayılan) | WITH_WORK_ORDER iş emri açan kaydeder. */
-  formApproval: IncomingDocFormApprovalMode;
-  defaultFormApproval: IncomingDocFormApprovalMode;
-  multiPartyWorkOrder: MultiPartyWorkOrderMode;
-  defaultMultiPartyWorkOrder: MultiPartyWorkOrderMode;
-  /** K27 aynı gönderen belge no: BLOCK engelle (varsayılan) | WARN işi süren eşte uyar | ALLOW serbest. */
-  duplicateDocNo: DuplicateDocNoMode;
-  defaultDuplicateDocNo: DuplicateDocNoMode;
-  /** Aynı sahip + müşteri parti no işi süren başka belgede: ALLOW serbest (varsayılan) | WARN uyar | BLOCK engelle. */
-  duplicateBatchNo: DuplicateBatchNoMode;
-  defaultDuplicateBatchNo: DuplicateBatchNoMode;
-  /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
-  refakatAutoPrint: boolean;
-  /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
-  stationDocLookup: boolean;
-  /** Belge fotoğrafı saklama (K28); geçmiş onaylı belgelere de uygulanır. */
-  photoRetention: PhotoRetentionMode;
-  /** K30 okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir. */
-  desenRenkEslesme: DesenRenkEslesmeMode; defaultDesenRenkEslesme: DesenRenkEslesmeMode;
-  /** K30 tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP. */
-  tabletIeGirisi: TabletIeGirisiMode; defaultTabletIeGirisi: TabletIeGirisiMode; tanitimGuveni: TanitimGuveniMode; defaultTanitimGuveni: TanitimGuveniMode;
-  defaultPhotoRetention: PhotoRetentionMode;
-  /** Bilgisayarda ikinci okuma (okuma servisiyle sunucu OCR); kapalıyken belgeyi yalnız tablet/telefon okur. */
-  serverOcrEnabled: boolean; defaultServerOcrEnabled: boolean;
-}
+export type { DefaultItemView, IncomingDocSettings, IncomingDocSettingsInput } from "./gelen-belge-ayar-types";
 
 /**
  * Ürün top doğurabilir mi — null = evet, metin = Türkçe sebep. Bulunamayan ürün de sebeptir. Fabrika ve müşteri
@@ -247,33 +173,6 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     tanitimGuveni: await readTanitimGuveni(), defaultTanitimGuveni: DEFAULT_TANITIM_GUVENI,
     serverOcrEnabled: await readServerOcrEnabled(), defaultServerOcrEnabled: DEFAULT_SERVER_OCR_ENABLED,
   };
-}
-
-export interface IncomingDocSettingsInput {
-  /** null = temizle (bugünkü davranışa dön). */
-  defaultItemId?: string | null;
-  unreviewedApproval?: UnreviewedApprovalMode;
-  autoWorkOrder?: boolean;
-  /** null = temizle (bugünkü davranış). */
-  defaultRouteTemplateId?: string | null;
-  routeSuggestionPriority?: RouteSuggestionPriority;
-  /** null = temizle (varsayılan oran). */
-  handwritingOutlierFactor?: number | null;
-  headerLineMeterSource?: HeaderLineMeterSource;
-  autoSenderFromTemplate?: boolean;
-  documentTotalCheck?: DocumentTotalCheckMode;
-  batchNumberSource?: BatchNumberSourceMode;
-  entryMode?: IncomingDocEntryMode;
-  autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
-  formApproval?: IncomingDocFormApprovalMode;
-  multiPartyWorkOrder?: MultiPartyWorkOrderMode;
-  duplicateDocNo?: DuplicateDocNoMode;
-  duplicateBatchNo?: DuplicateBatchNoMode;
-  refakatAutoPrint?: boolean;
-  stationDocLookup?: boolean; stationVerifyThreshold?: number | null;
-  photoRetention?: PhotoRetentionMode;
-  desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode;
-  serverOcrEnabled?: boolean;
 }
 
 /**

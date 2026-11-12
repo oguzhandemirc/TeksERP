@@ -14,6 +14,7 @@ import { getTamburLabelSettings } from "../services/helpers/tambur-customer-sett
 import { getTamburLabelSuggestions } from "../services/tambur/label-suggestions";
 import { getTamburLabelPreviewFields } from "../services/tambur/label-preview-fields";
 import { getTamburLabelPreview } from "../services/tambur/label-preview";
+import { TERIM } from "../constants/terim";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -1041,7 +1042,7 @@ router.get(
  */
 const labelSuggestionsQuery = z
   .object({
-    workOrderId: z.string().uuid("Geçersiz iş emri ID").optional(),
+    workOrderId: z.string().uuid({ error: () => `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} ID` }).optional(),
     rollId: z.string().uuid("Geçersiz top ID").optional(),
     consigneeId: z.string().uuid("Geçersiz alıcı ID").optional(),
   })

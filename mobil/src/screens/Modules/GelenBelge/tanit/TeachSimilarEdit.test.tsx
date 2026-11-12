@@ -193,6 +193,8 @@ describe('TeachModal — tanımı düzenle (kayıtlı alanlar)', () => {
     await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     await openGuided(r);
     await waitFor(() => expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(1));
+    // Çağrının yapılması yetmez: dönen önizleme (kayıtlı alan kutuları) çizilene kadar bekle (CI runInBand'de yarışıyordu).
+    await waitFor(() => expect(r.getByTestId('tanit-kutu-6')).toHaveProp('accessibilityLabel', 'Parti No (kayıtlı)'));
     return r;
   }
 

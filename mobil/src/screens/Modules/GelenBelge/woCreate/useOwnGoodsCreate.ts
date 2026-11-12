@@ -10,6 +10,9 @@ import { totalQty } from '../../HizliIsEmri/addBatch';
 import { buildOwnGoodsBody, ownGoodsAttemptKey, ownGoodsResultText, ownGoodsRollReject } from './ownGoods';
 import type { ExtraBody } from './woForm';
 import { errorText } from './woFromDoc';
+import { usePermissions } from '../../../../hooks/usePermission';
+import type { FormIssue } from './woIssues';
+import { TERIM } from '../../../../lib/terim';
 
 export interface OwnGoodsResult {
   workOrderId: string;
@@ -26,8 +29,13 @@ export function useOwnGoodsCreate(a: { lockedItemId: string | null; route: Produ
   const lastKey = useRef<string | null>(null);
   const argsRef = useRef(a);
   argsRef.current = a;
+  // `quick-start` ucunun kapısı (workorder:write ∨ mobile:hizli-is-emri); yetkisizde kayıt düğmesi engel cümlesiyle kapanır.
+  const { has } = usePermissions();
+  const allowed = has('workorder:write') || has('mobile:hizli-is-emri');
+  const denied: FormIssue[] = allowed ? [] : [{ key: 'malSahibi', text: `Kendi üretim ${TERIM.terbiyeIsEmri.tekilKucuk} açma yetkiniz yok — Fason Üretim seçin.` }];
 
   const save = useCallback(async () => {
+    if (!allowed) return;
     const { route, extraBody } = argsRef.current;
     const barcodes = rolls.rolls.map((r) => r.barcode);
     const draft = buildOwnGoodsBody(extraBody(), route, barcodes, '');
@@ -40,7 +48,7 @@ export function useOwnGoodsCreate(a: { lockedItemId: string | null; route: Produ
       const res = await workOrderService.quickStart({ ...draft, clientToken: attempt.token() });
       attempt.onSuccess();
       const wo = res.data?.workOrder;
-      if (!wo) throw new Error(res.message ?? 'İş emri açılamadı');
+      if (!wo) throw new Error(res.message ?? `${TERIM.terbiyeIsEmri.cumleBasi.yalin} açılamadı`);
       const attached = res.data?.attached ?? 0;
       const text = ownGoodsResultText({ workOrderNumber: wo.workOrderNumber, attached, batchNumber: res.data?.batch?.batchNumber ?? null });
       setResult({ workOrderId: wo.id, workOrderNumber: wo.workOrderNumber, attached, text });
@@ -48,13 +56,13 @@ export function useOwnGoodsCreate(a: { lockedItemId: string | null; route: Produ
       for (const w of res.warnings ?? []) Toast.show({ type: 'info', text1: 'Not', text2: w, visibilityTime: 6000 });
     } catch (e) {
       attempt.onFailure(e);
-      Toast.show({ type: 'error', text1: 'İş emri oluşturulamadı', text2: errorText(e), visibilityTime: 6000 });
+      Toast.show({ type: 'error', text1: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} oluşturulamadı`, text2: errorText(e), visibilityTime: 6000 });
     } finally {
       setSaving(false);
     }
-  }, [rolls.rolls, attempt]);
+  }, [rolls.rolls, attempt, allowed]);
 
-  return { ...rolls, totalQty: totalQty(rolls.rolls), saving, result, save };
+  return { ...rolls, totalQty: totalQty(rolls.rolls), saving, result, save, denied };
 }
 
 export type OwnGoodsCreate = ReturnType<typeof useOwnGoodsCreate>;
