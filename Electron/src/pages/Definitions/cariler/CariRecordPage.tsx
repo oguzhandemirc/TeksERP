@@ -26,6 +26,7 @@ import { CARI_TAB_PARAM, useCariRecordTabs, type CariTabKey } from "./cari-recor
 import { cariStatCards, CariGeneralTab } from "./CariRecordParts";
 import { CariOrdersTab, CariPricesTab, CariShipmentsTab } from "./CariCommerceTabs";
 import { CariLedgerTab } from "./CariLedgerTab";
+import { CariDocumentsTab } from "./CariDocumentsTab";
 import { CariFasonTab, CariHistoryTab, CariPurchasesTab } from "./CariOtherTabs";
 
 const PARENT = { label: "Cariler", to: CARI_LIST_PATH };
@@ -85,6 +86,7 @@ function CariRecordView({ card }: { card: Customer }) {
     fiyatlar: () => <CariPricesTab customerId={card.id} />,
     fason: () => subcontractorId && <CariFasonTab subcontractorId={subcontractorId} canOpenWorkOrder={canGo({ to: "/operations/work-orders/x", izin: ["workorder:read"] })} />,
     alislar: () => <CariPurchasesTab supplierId={card.id} showOrders={access.purchases} showReceipts={access.receipts} />,
+    belgeler: () => <CariDocumentsTab customerId={card.id} />,
     gecmis: () => <CariHistoryTab customerId={card.id} />,
   };
 

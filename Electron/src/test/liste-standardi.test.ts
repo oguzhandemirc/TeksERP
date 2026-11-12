@@ -238,6 +238,7 @@ const NO_SEARCH: Record<string, string> = {
   "Notifications/NotificationsPage.tsx": "kişisel gelen kutusu sekme + alan süzgeçli (sunucuda); `/api/bildirim` metin araması almıyor (backend gerekiyor)",
   "GeneralSettings/Numbering/NumberingTable.tsx": "numara serisi kataloğu (kod kataloğundaki seriler, bölümlü, tek istek); `/api/number-series` arama almıyor (backend gerekiyor)",
   "Finance/PeriodClose/PeriodClosePage.tsx": "kapanış ucu cari/para birimi/yeniden açılan süzgeçli (cari seçici aramalı); metin araması yok (backend gerekiyor)",
+  "Definitions/cariler/CariDocumentsTab.tsx": "cari kayıt sayfasının belge sekmesi (tek carinin belgeleri, sayfalı); `/api/customers/:id/documents` metin araması almıyor (backend gerekiyor)",
   "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 

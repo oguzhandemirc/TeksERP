@@ -1,15 +1,16 @@
 // Cari kayıt sayfası sekmeleri — görünürlük TEK yerden: kapı (rol + izin + modül) açık VE veri var.
 // Boş sekme çizilmez (kullanıcı kararı): kapısı açık sekmenin listesi sayfa açılışında aynı sorgu anahtarıyla
 // yoklanır; sekme içeriği o önbellekten okur (ikinci istek yok).
-import { useQueries } from "@tanstack/react-query";
-import { ClipboardList, History, Info, Receipt, ShoppingBag, Tags, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
+import { ClipboardList, FileText, History, Info, Receipt, ShoppingBag, Tags, Truck, Wallet, type LucideIcon } from "lucide-react";
 import type { RecordTab } from "@/components/record/RecordPageShell";
 import type { PartnerRoleFlags } from "@/lib/partnerRoles";
 import { CARI_TAB_LIMIT, cariOrdersQuery, cariPricesQuery, cariShipmentsQuery } from "./CariCommerceTabs";
 import { cariFasonQuery, cariPurchaseOrdersQuery, cariReceiptsQuery } from "./CariOtherTabs";
 import type { CariSourceKey } from "./cari-sources";
+import { cariDocumentsCount, cariDocumentsQuery } from "./cari-documents";
 
-export const CARI_TAB_KEYS = ["genel", "siparisler", "sevkiyatlar", "hesap", "fiyatlar", "fason", "alislar", "gecmis"] as const;
+export const CARI_TAB_KEYS = ["genel", "siparisler", "sevkiyatlar", "hesap", "fiyatlar", "fason", "alislar", "belgeler", "gecmis"] as const;
 export type CariTabKey = (typeof CARI_TAB_KEYS)[number];
 export const CARI_TAB_PARAM = "sekme";
 
@@ -21,6 +22,7 @@ const TAB_META: Record<CariTabKey, { label: string; icon: LucideIcon }> = {
   fiyatlar: { label: "Fiyat listeleri", icon: Tags },
   fason: { label: "Fason", icon: Receipt },
   alislar: { label: "Alışlar", icon: ShoppingBag },
+  belgeler: { label: "Belgeler", icon: FileText },
   gecmis: { label: "Geçmiş", icon: History },
 };
 
@@ -41,6 +43,8 @@ export function cariTabGates({ roles, access, hasAccount, subcontractorId }: Car
     fiyatlar: roles.isCustomerRole && access.prices,
     fason: access.fason && Boolean(subcontractorId),
     alislar: roles.isSupplierRole && (access.purchases || access.receipts),
+    // Tür başına izin + modül sunucuda; görünen tür yoksa yoklama 0 döner ve sekme çizilmez.
+    belgeler: true,
     gecmis: access.history,
   };
 }
@@ -79,6 +83,7 @@ export function useCariRecordTabs(args: ProbeArgs): { tabs: RecordTab[]; probing
       { ...cariReceiptsQuery(customerId), enabled: gates.alislar && access.receipts },
     ],
   });
+  const docs = useInfiniteQuery(cariDocumentsQuery(customerId));
   const [orders, shipments, prices, fason, pos, receipts] = qs;
   const purchaseRows = len(pos!.data as unknown[]) ?? 0;
   const receiptRows = len(receipts!.data as unknown[]) ?? 0;
@@ -89,6 +94,7 @@ export function useCariRecordTabs(args: ProbeArgs): { tabs: RecordTab[]; probing
     fason: len(fason!.data as unknown[]),
     // İki liste ayrı sayılır; rozet yalnız tek liste açıksa anlamlı — toplam rozet basılmaz.
     alislar: purchaseRows + receiptRows > 0 ? CARI_TAB_LIMIT : undefined,
+    belgeler: cariDocumentsCount(docs.data?.pages[0]),
   };
-  return { tabs: visibleCariTabs(gates, rows), probing: qs.some((q) => q.isLoading) };
+  return { tabs: visibleCariTabs(gates, rows), probing: qs.some((q) => q.isLoading) || docs.isLoading };
 }
