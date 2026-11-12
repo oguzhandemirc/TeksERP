@@ -184,6 +184,8 @@ export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
   "validFromDate",
   // CustomerDeliveryNote.senderDocDate (gelen belge D2) — belgede yazan irsaliye tarihi, gönderenin takvim günü.
   "senderDocDate",
+  // Shipment.plannedDate (cari-be, 2026-11-13) — planlanan sevk günü, pano ajandası takvim günü.
+  "plannedDate",
 ]);
 
 /**

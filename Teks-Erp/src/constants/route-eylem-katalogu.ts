@@ -148,6 +148,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/shipping/shipments/:id/undo-dispatch": e("sevkiyat onayını geri aldı", "sevkiyat onayını geri almaya çalıştı"),
   "POST /api/shipping/shipments/:id/invoice": e("sevkiyatı faturaladı", "sevkiyatı faturalamaya çalıştı"),
   "POST /api/shipping/shipments/:id/delivery-to": e("sevkiyatın teslim yerini değiştirdi", "sevkiyatın teslim yerini değiştirmeye çalıştı"),
+  "POST /api/shipping/shipments/:id/planned-date": e("sevkiyatın planlanan sevk gününü değiştirdi", "sevkiyatın planlanan sevk gününü değiştirmeye çalıştı"),
   // ── Kurşun metre defteri (H1)
   "POST /api/kursun-qc/meter-readings": e("kurşun metre okuması kaydetti", "kurşun metre okuması kaydetmeye çalıştı"),
   "POST /api/kursun-qc/meter-readings/:id/pin-ack": e("metre sapmasını süpervizör PIN'iyle onayladı", "metre sapmasını süpervizör PIN'iyle onaylamaya çalıştı"),
