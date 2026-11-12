@@ -24,6 +24,7 @@ vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission:
 vi.mock("@/pages/Customers/CustomerFinanceSection", () => ({ useCustomerFinanceAccess: () => ({ canWrite: perms.includes("finance:write") }) }));
 vi.mock("@/pages/Finance/StatementDialog", () => ({ StatementDialog: () => null }));
 vi.mock("@/pages/Finance/PaymentFormDialog", () => ({ PaymentFormDialog: () => null }));
+vi.mock("./CariPeriodSummary", () => ({ CariPeriodSummary: () => null }));
 
 const { CariSidePanel } = await import("./CariSidePanel");
 const { useCariSelection } = await import("./useCariSelection");

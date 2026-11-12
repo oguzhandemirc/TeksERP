@@ -10,6 +10,7 @@ import { partnerRoleLabels } from "@/lib/partnerRoles";
 import { ROLE_KEYS, ROLE_TONE, roleOn, type CariRowItem } from "./cari-row";
 import { CariActionButtons, useCariActions } from "./CariActions";
 import { CariFinanceBlock, CariOrderBlock } from "./CariSummaryBlocks";
+import { CariPeriodSummary } from "./CariPeriodSummary";
 import { useCariAccess, useCariAccount, useCariMovements, useCariOrderStats, useCustomerRecord } from "./useCariOverview";
 import { hareketZamaniCari } from "./cari-time";
 import type { Customer } from "@/pages/Customers/types";
@@ -64,6 +65,7 @@ export function CariSidePanel({ row, onClose, onPrev, onNext, onOpenFull, onEdit
     >
       {access.finance && customerId && <CariFinanceBlock query={account} compact />}
       {stats.data && <CariOrderBlock stats={stats.data} compact />}
+      {customerId && row.roles.isCustomerRole && <CariPeriodSummary customerId={customerId} compact />}
       <section>
         <RecordSectionTitle>İletişim</RecordSectionTitle>
         <RecordFacts
