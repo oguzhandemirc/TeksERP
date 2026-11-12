@@ -34,7 +34,6 @@ export const PANEL_EKRAN = {
   uretimIstasyonlari: { menu: "Tanımlar", karo: "Üretim İstasyonları" },
   vardiyaTanimlari: { menu: "Tanımlar", karo: "Vardiya Tanımları" },
   donanim: { menu: "Tanımlar", karo: "Donanım" },
-  uretimIstasyonlari: { menu: "Tanımlar", karo: "Üretim İstasyonları" },
   musteriVarsayilanUrunleri: { menu: "Tanımlar", karo: "Müşteri Varsayılan Ürünleri" },
   etiketDuzenleri: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Düzenleri" },
   etiketAtamalari: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Atamaları" },
