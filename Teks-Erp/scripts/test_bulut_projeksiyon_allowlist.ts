@@ -44,7 +44,7 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuditService } from "../src/services/audit.service";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { REPORT_BY_KEY, isReportSurfaced } from "../src/constants/report-catalog";
+import { REPORT_BY_KEY } from "../src/constants/report-catalog";
 import { collectAgingRows } from "../src/services/reports/finance-aging.report";
 import {
   CLOUD_READ_PERMISSIONS,
@@ -64,7 +64,7 @@ import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapsho
 import { readEmanetEnabled } from "../src/services/system-setting.service";
 import { computeProfitability } from "../src/services/helpers/profitability.helper";
 import { PackageSchema } from "../src/cloud-sync/wire";
-import { REMOTE_REPORTS, carriesPersonName, computeReportResult } from "../src/cloud-sync/report-requests";
+import { REMOTE_REPORTS, carriesPersonName, computeReportResult, isReportCloudSurfaced } from "../src/cloud-sync/report-requests";
 import { AppError } from "../src/utils/app-error";
 
 const engel = hedefDbEngeli();
@@ -413,7 +413,7 @@ async function raporBolumu(): Promise<void> {
     if ("secenekler" in ((sonuc.veri as object | null) ?? {})) kotu.push(`${r.key}: secenekler`);
   }
   // Yüzeye çıkmamış v2 satırı (`hazir:false`) buluta da kapalıdır → RAPOR_KAPALI beklenir.
-  const yuzeyde = (k: string): boolean => { const e = REPORT_BY_KEY.get(k as never); return e !== undefined && isReportSurfaced(e); };
+  const yuzeyde = (k: string): boolean => { const e = REPORT_BY_KEY.get(k as never); return e !== undefined && isReportCloudSurfaced(e); };
   check("§9c ⭐ her uzak rapor bu DB'de hesaplanır (HAZIR · kapalı modül · yüzeyde değilse RAPOR_KAPALI)",
     durum.every((d) => d.includes(":HAZIR") || d.endsWith("/MODUL_KAPALI") || (d.endsWith("/RAPOR_KAPALI") && !yuzeyde(d.split(":")[0]!))), durum.join(" · "));
   check("§9d ⭐ rapor çıktısı sondası: kişi/kullanıcı alanı ve panel süzgeç seçenekleri yok", kotu.length === 0, kotu.join(",") || "temiz");

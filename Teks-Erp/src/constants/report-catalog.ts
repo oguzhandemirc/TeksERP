@@ -390,7 +390,8 @@ export function isRetiredReportKey(key: string): boolean {
 }
 
 /**
- * Satırın ucu sunulur mu (rapor kapısı · patron bulutu) — TEK yüklem; panel çizimi `isReportOnPanel`.
+ * Satırın ucu sunulur mu (rapor kapısı) — TEK uç yüklemi; panel çizimi `isReportOnPanel`, patron bulutu
+ * `isReportCloudSurfaced` (bu yüklem ∧ bulutta bekletilmiyor, `cloud-sync/report-requests.ts`).
  * v2 satırı ucu inene kadar (`hazir:false`) sunulmaz; listeyi kendi süzen yüzey yazılmaz.
  */
 export function isReportSurfaced(entry: ReportCatalogEntry): boolean {
@@ -399,7 +400,7 @@ export function isReportSurfaced(entry: ReportCatalogEntry): boolean {
 
 /**
  * Satır PANELDE (karo · route · palet · Rapor Merkezi · Sistem → Modüller) çizilir mi. Emekli v1 satırı panelden
- * kalkmıştır ama ucu bir sürüm daha açıktır; uç/bulut kapısı `isReportSurfaced`i okumaya devam eder.
+ * kalkmıştır ama ucu bir sürüm daha açıktır; uç kapısı `isReportSurfaced`i, bulut `isReportCloudSurfaced`i okur.
  */
 export function isReportOnPanel(entry: ReportCatalogEntry): boolean {
   return isReportSurfaced(entry) && !(entry.nesil === "v1" && entry.emekli === true);
