@@ -1,17 +1,19 @@
 // METRE SAPMALARI (H4) — kurşun çıkış metresinin girişten eşik üstü sapmaları: liste + özet şeridi (aynı where) + ofis onayı.
 // İzin `kursun:meter-approve` (okuma ve onay). Süzme sunucuda; cursor ile sonsuz kaydırma.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListMessage, ListSentinel, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { METER_DEVIATIONS_QUERY_KEY, listMeterDeviations, officeAckMeterReading } from "./service";
 import { DeviationFilters } from "./DeviationFilters";
-import { DeviationTable } from "./DeviationTable";
+import { deviationColumns } from "./deviationColumns";
 import { SummaryStrip } from "./SummaryStrip";
 import { OfficeAckDialog } from "./OfficeAckDialog";
 import type { DeviationFilter, MeterDeviationRow } from "./types";
@@ -31,11 +33,9 @@ export function MeterDeviationsPage() {
   });
   const items = list.data?.pages.flatMap((p) => p.data) ?? [];
   const summary = list.data?.pages[0]?.summary ?? null;
-  const { rootRef, sentinelRef } = useInfiniteScroll({
-    hasMore: Boolean(list.hasNextPage),
-    isLoading: list.isFetchingNextPage,
-    onLoadMore: () => void list.fetchNextPage(),
-  });
+  const columns = useMemo(() => deviationColumns(setTarget), []);
+  const table = useLocalTable({ tableKey: "kursun:meter-deviations", data: items, columns, getRowId: (r) => r.readingId });
+  const showTable = !list.isLoading && !(list.isError && items.length === 0) && items.length > 0;
   const ack = useMutation({
     mutationFn: (v: { readingId: string; reasonText: string | null }) => officeAckMeterReading(v.readingId, v.reasonText),
     onSuccess: () => {
@@ -56,10 +56,20 @@ export function MeterDeviationsPage() {
       <ListBand>
         <SummaryStrip summary={summary} />
       </ListBand>
-      <ListToolbar>
+      <ListToolbar className="flex-row flex-wrap items-end">
         <DeviationFilters filter={filter} onChange={setFilter} />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Metre sapmaları" />
+        </div>
       </ListToolbar>
-      <ListBody ref={rootRef}>
+      {showTable ? (
+        <DataTable
+          table={table}
+          exportName="Metre sapmaları"
+          loadMore={{ hasMore: Boolean(list.hasNextPage), isFetchingMore: list.isFetchingNextPage, onLoadMore: () => void list.fetchNextPage() }}
+        />
+      ) : (
+      <ListBody>
         {list.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
         ) : list.isError && items.length === 0 ? (
@@ -78,13 +88,9 @@ export function MeterDeviationsPage() {
               Bu süzgece uyan metre sapması yok. Eşik ve onay kipi Sistem › Özellik Anahtarları › Üretim — Saha bölümünde seçilir.
             </div>
           </ListMessage>
-        ) : (
-          <>
-            <DeviationTable rows={items} onAck={setTarget} />
-            <ListSentinel ref={sentinelRef} />
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       <ListFooter loaded={items.length} total={summary?.total} hasMore={Boolean(list.hasNextPage)} isFetchingMore={list.isFetchingNextPage} />
       {target && (
         <OfficeAckDialog

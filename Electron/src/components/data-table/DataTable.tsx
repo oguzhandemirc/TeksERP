@@ -105,6 +105,8 @@ interface Props<T> {
   paginationActions?: ReactNode;
   /** Satıra ek sınıf (ağaç görünümünde bağlam satırı soluk, daraltılan çeşit gizli — Kumaş Özellikleri). */
   rowClassName?: (row: T) => string | undefined;
+  /** Satır düzeyi ipucu (`title`) — ör. "Siparişin tamamını aç": tıklamanın neyi açtığını söyler. */
+  rowTitle?: (row: T) => string | undefined;
   /**
    * Etkin (yan panelde açık) satırın kimliği. Verilirse (null dahil) satırlar kayıt satırıdır: vurgulanır
    * (`aria-selected`), görünür tutulur ve tablo odaktayken ↑/↓ komşu satırı `onRowClick` ile hemen açar.
@@ -131,6 +133,7 @@ export function DataTable<T>({
   selectionBlockedReason,
   paginationActions,
   rowClassName,
+  rowTitle,
   activeRowId,
   loadMore,
 }: Props<T>) {
@@ -352,6 +355,7 @@ export function DataTable<T>({
                         rowContextMenu={rowContextMenu}
                         selectionBlockedReason={selectionBlockedReason}
                         rowClassName={rowClassName}
+                        rowTitle={rowTitle}
                         openTimer={openTimer}
                         selRef={selRef}
                         visibleColumnIds={visibleColumnIds}
@@ -452,6 +456,7 @@ interface DataTableRowProps<T> {
   rowContextMenu?: (row: T) => ReactNode;
   selectionBlockedReason?: (row: T) => string | null;
   rowClassName?: (row: T) => string | undefined;
+  rowTitle?: (row: T) => string | undefined;
   openTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   selRef: MutableRefObject<string>;
   // Memo geçersizleştirme sinyalleri — gövdede doğrudan kullanılmaz, React.memo
@@ -480,6 +485,7 @@ function DataTableRowInner<T>({
   rowContextMenu,
   selectionBlockedReason,
   rowClassName,
+  rowTitle,
   openTimer,
   selRef,
 }: DataTableRowProps<T>) {
@@ -492,9 +498,18 @@ function DataTableRowInner<T>({
         "row-enter",
         onRowClick && "cursor-pointer",
         isActive && "bg-primary-soft hover:bg-primary-soft",
+        onRowClick && "focus-visible:bg-accent/60 focus-visible:outline-none",
         rowClassName?.(row.original),
       )}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
+      title={rowTitle?.(row.original)}
+      // Klavye erişimi: tıklanabilir satır Tab ile odaklanır, Enter/Space açar (hücre içi düğmeler hariç).
+      tabIndex={onRowClick ? 0 : undefined}
+      onKeyDown={onRowClick ? (e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        onRowClick(row.original, { button: 0, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
+      } : undefined}
       onClick={(e) => {
         if (!onRowClick) return;
         // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı

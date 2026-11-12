@@ -1,11 +1,11 @@
 // İÇERİDEKİ İŞLER (ister 3.2) — müşteri başına içerideki emanet top/metre, durum kırılımıyla. Tek sunucu toplaması
 // (`/api/consigned-work`); satır ya da hücre tıklaması Kumaş Stoğu'nu o sahibin süzgeciyle açar. Modül kapısı `ROUTE_MODULE`.
 // Hazırlık kolonu (D4-J3) İKİNCİ HESAP DEĞİL: `ready-works?groupBy=customer` ucundan; `shipping:read` yoksa istek atılmaz.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -13,7 +13,11 @@ import { CONSIGNED_WORK_QUERY_KEY, getConsignedWork, type ConsignedOwnerRow } fr
 import { primaryBucket, rollsLinkFor } from "./consigned-links";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getAllReadyWorks, READY_WORKS_QUERY_KEY } from "@/pages/Operations/ReadyWorks/service";
-import { OwnersTable, TotalsStrip, type ReadinessStatus } from "./ConsignedWorkTable";
+import { TotalsStrip, type ReadinessStatus } from "./ConsignedWorkTable";
+import { ownerColumns } from "./consignedColumns";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageTabs } from "@/components/layout/PageTabs";
 import { CONSIGNED_STATEMENT_QUERY_KEY } from "./statement/service";
 import { ConsignedStatementView, STATEMENT_PARAMS } from "./statement/ConsignedStatementView";
@@ -43,6 +47,33 @@ function ViewTabs({ value, onChange }: { value: "anlik" | "ekstre"; onChange: (v
   return <PageTabs label="Emanet görünümü" tabs={[{ key: "anlik", label: "Anlık durum" }, { key: "ekstre", label: "Emanet ekstresi" }]} active={value} onSelect={onChange} />;
 }
 
+/** Tablo yokken gövde: yükleniyor / hata (boş sanılmaz) / boş. */
+function ConsignedState({ isLoading, isError, onlyReady, onRetry }: { isLoading: boolean; isError: boolean; onlyReady: boolean; onRetry: () => void }) {
+  if (isLoading) return <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>;
+  if (isError) {
+    return (
+      <ListMessage>
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+          <p className="font-medium text-destructive">Liste yüklenemedi.</p>
+          <p className="mt-1 text-muted-foreground">Bu bir “içeride iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+            Tekrar dene
+          </Button>
+        </div>
+      </ListMessage>
+    );
+  }
+  return (
+    <ListMessage>
+      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        {onlyReady
+          ? "Sevke hazır emaneti olan müşteri yok."
+          : "İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar."}
+      </div>
+    </ListMessage>
+  );
+}
+
 function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | null) => void }) {
   const navigate = useNavigate();
   const [onlyReady, setOnlyReady] = useState(false);
@@ -57,7 +88,13 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
   });
   // Hazırlık ucu düşerse ana liste etkilenmez; hücre "yüklenemedi" der.
   const readinessStatus: ReadinessStatus = readyQ.isError ? "error" : readyQ.isPending ? "loading" : "ok";
-  const readiness = canReadShipping ? new Map((readyQ.data ?? []).map((w) => [w.id, w])) : null;
+  const readiness = useMemo(() => (canReadShipping ? new Map((readyQ.data ?? []).map((w) => [w.id, w])) : null), [canReadShipping, readyQ.data]);
+  const totals = q.data?.totals;
+  const columns = useMemo(
+    () => (totals ? ownerColumns({ totals, readiness, readinessStatus, onStatement: (r) => onStatement(r.ownerCustomerId) }) : []),
+    [totals, readiness, readinessStatus, onStatement],
+  );
+  const table = useLocalTable({ tableKey: "consigned-work:owners", data: rows, columns, getRowId: (r) => r.ownerCustomerId });
 
   return (
     <PageShell>
@@ -86,35 +123,16 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
           <TotalsStrip totals={q.data.totals} />
         </ListBand>
       )}
+      <ListToolbar className="flex-row items-center justify-end">
+        <DataTableTools table={table} compact exportName="İçerideki işler" />
+      </ListToolbar>
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={open} rowTitle={(r) => `${r.ownerName} toplarını aç`} exportName="İçerideki işler" />
+      ) : (
       <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">Bu bir “içeride iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : (
-          <>
-            {rows.length === 0 ? (
-              <ListMessage>
-                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  {onlyReady
-                    ? "Sevke hazır emaneti olan müşteri yok."
-                    : "İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar."}
-                </div>
-              </ListMessage>
-            ) : (
-              q.data && <OwnersTable rows={rows} totals={q.data.totals} onOpen={open} readiness={readiness} readinessStatus={readinessStatus} onStatement={(r) => onStatement(r.ownerCustomerId)} />
-            )}
-          </>
-        )}
+        <ConsignedState isLoading={q.isLoading} isError={q.isError} onlyReady={onlyReady} onRetry={() => void q.refetch()} />
       </ListBody>
+      )}
       {rows.length > 0 && <ListFooter loaded={rows.length} />}
     </PageShell>
   );

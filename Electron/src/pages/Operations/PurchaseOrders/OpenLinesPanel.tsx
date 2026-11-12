@@ -172,7 +172,12 @@ export function OpenLinesPanel({
 
       {!q.isLoading && !q.isError && rows.length > 0 ? (
         <>
-          <DataTable table={table} onRowClick={(r) => onOpenOrder(r.purchaseOrder.id)} exportName="Bekleyen kalemler" />
+          <DataTable
+            table={table}
+            onRowClick={(r) => onOpenOrder(r.purchaseOrder.id)}
+            rowTitle={() => "Siparişin tamamını aç"}
+            exportName="Bekleyen kalemler"
+          />
           <p className="flex shrink-0 items-start gap-1.5 border-t px-4 py-2 text-[11px] text-muted-foreground">
             <Info className="mt-0.5 h-3 w-3 shrink-0" />
             {FIFO_HINT}
