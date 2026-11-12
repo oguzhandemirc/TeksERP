@@ -86,7 +86,9 @@ export function AgingFilterBar({ value, onChange, dateFilter, cariSelect }: Prop
         <Input
           value={value.search}
           onChange={(e) => onChange({ search: e.target.value })}
-          placeholder="Ekranda ara (toplamı değiştirmez)…"
+          placeholder="Ekranda ara…"
+          title="Yalnız ekrandaki satırları süzer; toplamı değiştirmez"
+          aria-label="Ekranda ara (toplamı değiştirmez)"
           className="h-7 w-56 pl-7 text-xs"
         />
       </div>

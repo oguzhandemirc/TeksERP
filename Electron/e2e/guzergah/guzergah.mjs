@@ -242,7 +242,7 @@ function fiiller() {
      *  sayfa adını yazması gibi. Hash'e yazmak TUTMAZ: içerik rotaları sekme
      *  başına ayrı bir MemoryRouter'da yaşar (ölçüldü 2026-09-18). */
     git: async (sayfaAdi) => {
-      const kutu = page.getByPlaceholder("Sayfa, rapor, ayar ara...");
+      const kutu = page.getByLabel("Sayfa, rapor, ayar ya da kayıt ara");
       // Düğmenin erişilebilir adı — dar pencerede (UX-3) "Ara veya komut…" yazısı gizlenir, düğme kalır.
       const acici = page.getByRole("button", { name: "Hızlı arama" }).first();
       if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page.keyboard.press("Meta+k");

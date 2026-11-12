@@ -181,7 +181,7 @@ export const MALIYET_ADIMLARI = [
       await kanit(page(), "MAL5-izinsiz-menu");
       const acici = page().getByText("Ara veya komut", { exact: false }).first();
       if (await acici.count()) await acici.click(); else await page().keyboard.press("Meta+k");
-      const kutu = page().getByPlaceholder("Sayfa, rapor, ayar ara...");
+      const kutu = page().getByLabel("Sayfa, rapor, ayar ya da kayıt ara");
       await kutu.fill("Maliyet");
       await page().waitForTimeout(600);
       olc.mal5Palet = await page().getByRole("option", { name: /Maliyet Parametreleri|Maliyet Kartları|Hızlı Hesaplayıcı/ }).count();
@@ -561,7 +561,7 @@ const IPLIK_ADIMLARI = [
       await page().waitForTimeout(1500);
       const acici = page().getByText("Ara veya komut", { exact: false }).first();
       if (await acici.count()) await acici.click(); else await page().keyboard.press("Meta+k");
-      await page().getByPlaceholder("Sayfa, rapor, ayar ara...").fill("İplik ihtiyaç");
+      await page().getByLabel("Sayfa, rapor, ayar ya da kayıt ara").fill("İplik ihtiyaç");
       await page().waitForTimeout(600);
       olc.mal14 = await page().getByRole("option", { name: /İplik İhtiyaç Planı/ }).count();
       await kanit(page(), "MAL14-izinsiz-palet");

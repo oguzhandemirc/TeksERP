@@ -326,7 +326,8 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       filter={scoreCommandValue}
     >
       <CommandInput
-        placeholder="Sayfa, rapor, ayar ara..."
+        placeholder="Ara…"
+        aria-label="Sayfa, rapor, ayar ya da kayıt ara"
         value={search}
         onValueChange={setSearch}
       />
