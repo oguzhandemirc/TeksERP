@@ -15,7 +15,17 @@ import path from "node:path";
 const SRC = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, "");
 const ROOTS = ["components/ui", "components/layout", "components/data-table", "components/hub", "components/insight", "components/record", "pages/Dashboard", "pages/Reports/_hub", "pages/Reports/_v2/view", "pages/Definitions/cariler"];
 /** Kökü taranmayan dizindeki tek dosyalar (rapor v2 ekran iskeleti; PDF/baskı paleti `_v2/grafik/tema.ts` bilerek dışarıda). */
-const FILES = ["pages/Reports/_v2/ReportV2Page.tsx", "pages/Reports/_v2/ParamChips.tsx", "pages/Reports/_components/ReportExportBar.tsx"];
+const FILES = [
+  "pages/Reports/_v2/ReportV2Page.tsx",
+  "pages/Reports/_v2/ParamChips.tsx",
+  "pages/Reports/_v2/ReportBody.tsx",
+  "pages/Reports/_v2/HeadlineCard.tsx",
+  "pages/Reports/_v2/NarrativeBox.tsx",
+  "pages/Reports/_v2/figures.ts",
+  "pages/Reports/_v2/SmallMultiples.tsx",
+  "pages/Reports/_v2/PeriodCompareTable.tsx",
+  "pages/Reports/_components/ReportExportBar.tsx",
+];
 
 /** Bilinçli istisnalar — yol `src`ye göre; gerekçesiyle. Liste yalnız DARALIR. */
 const EXEMPT: Record<string, string> = {};

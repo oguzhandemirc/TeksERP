@@ -23,7 +23,7 @@ export function ReportTable({ table, rowLink }: Props) {
     return <p className="rounded-lg border p-4 text-sm text-muted-foreground">Tabloda gösterilecek satır yok.</p>;
   }
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
       <div className="max-h-[480px] overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted/60 text-xs text-muted-foreground">

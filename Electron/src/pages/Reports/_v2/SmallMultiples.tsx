@@ -40,7 +40,7 @@ export function SmallMultiples({ block, comparisonLabel }: Props) {
   if (cells.length === 0) return null;
   const max = axisMax(cells);
   return (
-    <section className="rounded-lg border p-4" aria-label={`${block.boyutEtiketi} kırılımı`}>
+    <section className="rounded-xl border border-card-border bg-card p-4 shadow-card" aria-label={`${block.boyutEtiketi} kırılımı`}>
       <h2 className="mb-3 text-sm font-semibold">
         {block.boyutEtiketi} kırılımı <span className="font-normal text-muted-foreground">· en büyük {cells.length}</span>
       </h2>
@@ -65,14 +65,14 @@ export function SmallMultiples({ block, comparisonLabel }: Props) {
               {next ? (
                 <button
                   type="button"
-                  className="flex h-full w-full flex-col gap-1 rounded-md border bg-card p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-full w-full flex-col gap-1 rounded-lg border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => setSearch(next, { replace: false })}
                   title={`${c.ad} için raporu aç`}
                 >
                   {body}
                 </button>
               ) : (
-                <div className="flex h-full flex-col gap-1 rounded-md border bg-card p-3">{body}</div>
+                <div className="flex h-full flex-col gap-1 rounded-lg border bg-background p-3">{body}</div>
               )}
             </li>
           );

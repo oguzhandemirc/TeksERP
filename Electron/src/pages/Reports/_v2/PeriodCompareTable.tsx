@@ -16,7 +16,7 @@ export function PeriodCompareTable({ periods }: Props) {
   if (cols.length === 0) return null;
   const figureName = periods[0]!.anaSayi.ad;
   return (
-    <section className="rounded-lg border p-4" aria-label="Dönem kıyası">
+    <section className="rounded-xl border border-card-border bg-card p-4 shadow-card" aria-label="Dönem kıyası">
       <h2 className="mb-3 text-sm font-semibold">Dönem kıyası</h2>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max border-collapse text-sm">

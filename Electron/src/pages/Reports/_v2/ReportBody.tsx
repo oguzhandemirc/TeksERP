@@ -8,6 +8,9 @@ import { PeriodCompareTable } from "./PeriodCompareTable";
 import { SmallMultiples } from "./SmallMultiples";
 import { ReportTable, type ReportRowLink } from "./ReportTable";
 
+/** Gövdedeki anlatı kartının başlığı (ekran); belge kendi başlığını basar. */
+export const HIGHLIGHTS_TITLE = "Öne çıkanlar";
+
 interface Props {
   presentation: RaporSunumu;
   /** Verinin sunucudan alındığı an (ms). */
@@ -16,23 +19,26 @@ interface Props {
   rowLink?: ReportRowLink;
 }
 
-/** Şablonun gövdesi (plan §4.1): ana sayı | Ne görüyoruz? → uyarılar → küçük çoklular → dönem kıyası → grafik → tablo → tanımlar + veri satırı. */
+/**
+ * Şablonun gövdesi — tam genişlik: sayı kartları şeridi | Öne çıkanlar → uyarılar → küçük çoklular →
+ * dönem kıyası → grafik + tablo ızgarası (geniş kapta iki sütun) → tanımlar + veri satırı.
+ */
 export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="md:col-span-2">
+    <div className="@container flex flex-col gap-4">
+      <div className="grid gap-4 @5xl:grid-cols-12">
+        <div className="@5xl:col-span-8">
           <HeadlineCard headline={p.anaSayi} sideFigures={p.yanSayilar} comparisonLabel={p.kiyasDonemi?.etiket} />
         </div>
-        <div className="md:col-span-3">
-          <NarrativeBox sentences={p.anlati} />
+        <div className="@5xl:col-span-4">
+          <NarrativeBox sentences={p.anlati} title={HIGHLIGHTS_TITLE} />
         </div>
       </div>
       {p.uyarilar.length > 0 ? (
-        <ul className="space-y-1 rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200">
+        <ul className="space-y-1 rounded-xl border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-warning-soft-foreground">
           {p.uyarilar.map((u) => (
             <li key={u} className="flex gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
               <span>{u}</span>
             </li>
           ))}
@@ -40,12 +46,14 @@ export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
       ) : null}
       {p.varyant?.hucreler?.length ? <SmallMultiples block={p.varyant} comparisonLabel={p.kiyasDonemi?.etiket} /> : null}
       {p.donemler?.length ? <PeriodCompareTable periods={p.donemler} /> : null}
-      {p.grafik ? (
-        <section className="rounded-lg border p-4" aria-label="Grafik">
-          <RaporGrafik blok={p.grafik} baslik={p.baslik} />
-        </section>
-      ) : null}
-      {p.tablo ? <ReportTable table={p.tablo} rowLink={rowLink} /> : null}
+      <div className={p.grafik && p.tablo ? "grid items-start gap-4 @5xl:grid-cols-2" : "grid gap-4"}>
+        {p.grafik ? (
+          <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card" aria-label="Grafik">
+            <RaporGrafik blok={p.grafik} baslik={p.baslik} />
+          </section>
+        ) : null}
+        {p.tablo ? <ReportTable table={p.tablo} rowLink={rowLink} /> : null}
+      </div>
       <footer className="flex flex-col gap-2 border-t pt-3 text-xs text-muted-foreground">
         {p.tanimlar.length > 0 ? (
           <details>
@@ -63,7 +71,7 @@ export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
         <p>
           Dönem: {p.donem.etiket}
           {p.kiyasDonemi ? ` · Kıyas: ${p.kiyasDonemi.etiket}` : ""} · Veri: {fmtFactoryDateTime(new Date(fetchedAt))}{" "}
-          <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">canlı</span>
+          <span className="rounded bg-success-soft px-1.5 py-0.5 font-medium text-success-soft-foreground">canlı</span>
         </p>
       </footer>
     </div>
