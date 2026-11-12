@@ -1,3 +1,8 @@
+import { useMemo, useRef } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { lockSentence, lockBadge, userCanResolve } from "./lockText";
@@ -5,98 +10,92 @@ import { LockInfo } from "./LockInfo";
 import type { NumberSeriesRow } from "./types";
 import { factoryLocaleDateString } from "@/lib/factory-time";
 
-/**
- * Seri tablosu. ⚠️ KİLİTLİ SATIR DA ÇİZİLİR — süzgeç YOK. Gerekçe sayfanın
- * başlığında; burada yalnız uygulanıyor.
- */
-export function NumberingTable({
-  rows,
-  onEdit,
-}: {
-  rows: NumberSeriesRow[];
-  onEdit: (row: NumberSeriesRow) => void;
-}) {
+function SeriesCell({ row }: { row: NumberSeriesRow }) {
+  const kilit = row.lockKind ? lockSentence(row) : null;
   return (
-    <table className="w-full table-fixed text-sm">
-      <thead className="text-xs text-muted-foreground">
-        <tr className="border-b">
-          <th className="px-4 py-2 text-left font-medium">Seri</th>
-          <th className="w-24 px-3 py-2 text-left font-medium">Ön ek</th>
-          <th className="hidden w-24 px-3 py-2 text-left font-medium sm:table-cell">Tarih</th>
-          <th className="hidden w-16 px-3 py-2 text-left font-medium sm:table-cell">Hane</th>
-          <th className="w-52 px-3 py-2 text-left font-medium">Örnek</th>
-          <th className="w-28 px-4 py-2 text-right font-medium">
-            <span className="sr-only">Düzenle</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y">
-        {rows.map((r) => (
-          <NumberingRow key={r.key} row={r} onEdit={onEdit} />
-        ))}
-      </tbody>
-    </table>
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="truncate font-medium">{row.label}</span>
+      {kilit && row.lockKind && (
+        <span className="inline-flex shrink-0 items-center gap-1">
+          {/* Kullanıcının KENDİ çözebileceği kilit vurgulu rozet alır. */}
+          <Badge variant={userCanResolve(row) ? "default" : "secondary"} className="shrink-0 px-1.5 py-0 text-[10px]">
+            {lockBadge(row.lockKind)}
+          </Badge>
+          <LockInfo text={kilit} />
+        </span>
+      )}
+    </span>
   );
 }
 
-function NumberingRow({
-  row,
-  onEdit,
-}: {
-  row: NumberSeriesRow;
-  onEdit: (row: NumberSeriesRow) => void;
-}) {
-  const kilit = row.lockKind ? lockSentence(row) : null;
+const joinDot = (parts: string[]) => parts.filter(Boolean).join(" · ");
+const exhaustionText = (r: NumberSeriesRow) =>
+  r.exhaustion?.warn ? `${r.exhaustion.used ?? ""}/${r.exhaustion.limit ?? ""} — sınıra yaklaşıldı` : "";
+const pendingText = (r: NumberSeriesRow) =>
+  r.pending ? `${factoryLocaleDateString(r.pending.effectiveFrom, "tr-TR")} → ${r.pending.preview}` : "";
+
+function PreviewCell({ row }: { row: NumberSeriesRow }) {
+  const warn = exhaustionText(row);
+  const pending = pendingText(row);
   return (
-    <tr className="hover:bg-muted/30">
-      <td className="px-4 py-2.5 align-top">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-medium">{row.label}</span>
-          {kilit && row.lockKind && (
-            <span className="inline-flex items-center gap-1">
-              {/* Kullanıcının KENDİ çözebileceği kilit vurgulu rozet alır. */}
-              <Badge
-                variant={userCanResolve(row) ? "default" : "secondary"}
-                className="shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]"
-              >
-                {lockBadge(row.lockKind)}
-              </Badge>
-              <LockInfo text={kilit} />
-            </span>
-          )}
-        </div>
-      </td>
-      <td className="px-3 py-2.5 align-top font-mono text-xs">{row.prefix}</td>
-      <td className="hidden px-3 py-2.5 align-top text-xs sm:table-cell">{row.dateSegment}</td>
-      <td className="hidden px-3 py-2.5 align-top text-xs sm:table-cell">{row.digits}</td>
-      <td className="px-3 py-2.5 align-top font-mono text-xs">
-        {row.preview}
-        {/* TÜKENME LİSTEDE de görünür (K8): biçimi kilitli seride (top barkodu)
-            kullanıcı kapasitenin dolduğunu başka hiçbir yerde göremiyordu. */}
-        {row.exhaustion?.warn && (
-          <div className="mt-0.5 text-[10px] font-medium text-destructive">
-            {row.exhaustion.used?.toLocaleString("tr-TR")}/{row.exhaustion.limit?.toLocaleString("tr-TR")} — sınıra yaklaşıldı
-          </div>
-        )}
-        {row.pending && (
-          <div className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-400">
-            {factoryLocaleDateString(row.pending.effectiveFrom, "tr-TR")} → {row.pending.preview}
-          </div>
-        )}
-      </td>
-      <td className="px-4 py-2 text-right align-top">
-        {/* ⚠️ BİÇİM kilidi satırı kapatmaz: sayaç ayarları AYRI bir kilide tabi
-            ve biçimi kilitli 46 seride AÇIK. Yalnız `editable`a bakan bir düğme,
-            motoru olan ama çıkış yüzeyi olmayan bir yetenek üretirdi. */}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!row.editable && !row.counter.startValue}
-          onClick={() => onEdit(row)}
-        >
+    <span className="truncate font-mono text-xs" title={joinDot([row.preview, warn, pending])}>
+      {row.preview}
+      {/* TÜKENME LİSTEDE de görünür (K8): biçimi kilitli seride kullanıcı kapasitenin dolduğunu başka yerde göremiyordu. */}
+      {warn && <span className="ml-2 font-sans text-[10px] font-medium text-destructive">{warn}</span>}
+      {pending && <span className="ml-2 font-sans text-[10px] text-amber-700 dark:text-amber-400">{pending}</span>}
+    </span>
+  );
+}
+
+function numberingColumns(h: { current: (row: NumberSeriesRow) => void }): ColumnDef<NumberSeriesRow>[] {
+  return [
+    { id: "label", header: "Seri", size: 320, meta: { label: "Seri", exportValue: (r) => r.label }, cell: ({ row }) => <SeriesCell row={row.original} /> },
+    { id: "prefix", accessorKey: "prefix", header: "Ön ek", size: 96, meta: { label: "Ön ek" }, cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue() ?? "")}</span> },
+    { id: "dateSegment", accessorKey: "dateSegment", header: "Tarih", size: 110, meta: { label: "Tarih" } },
+    { id: "digits", accessorKey: "digits", header: "Hane", size: 72, meta: { label: "Hane", align: "right" } },
+    {
+      id: "preview",
+      header: "Örnek",
+      size: 360,
+      meta: { label: "Örnek", exportValue: (r) => joinDot([r.preview, exhaustionText(r), pendingText(r)]) },
+      cell: ({ row }) => <PreviewCell row={row.original} />,
+    },
+    {
+      id: "actions",
+      header: "",
+      size: 104,
+      enableHiding: false,
+      meta: { label: "Düzenle", align: "right", exportValue: () => "" },
+      // ⚠️ BİÇİM kilidi satırı kapatmaz: sayaç ayarları AYRI bir kilide tabi ve biçimi kilitli 46 seride AÇIK.
+      // Yalnız `editable`a bakan bir düğme, motoru olan ama çıkış yüzeyi olmayan bir yetenek üretirdi.
+      cell: ({ row }) => (
+        <Button size="sm" variant="outline" className="h-7" disabled={!row.original.editable && !row.original.counter.startValue} onClick={() => h.current(row.original)}>
           Düzenle
         </Button>
-      </td>
-    </tr>
+      ),
+    },
+  ];
+}
+
+/**
+ * Seri bölümü (başlık bandı + kenardan kenara tablo). ⚠️ KİLİTLİ SATIR DA ÇİZİLİR — süzgeç YOK; gerekçe sayfanın başlığında.
+ * Bölümler aynı `tableKey`i paylaşır: sütun düzeni her bölümde aynıdır.
+ */
+export function NumberingTable({ rows, onEdit, title }: { rows: NumberSeriesRow[]; onEdit: (row: NumberSeriesRow) => void; title?: string }) {
+  const ref = useRef(onEdit);
+  ref.current = onEdit;
+  const columns = useMemo(() => numberingColumns(ref), []);
+  const table = useLocalTable({ tableKey: "numbering:series", data: rows, columns, getRowId: (r) => r.key });
+  return (
+    <section className="border-b last:border-b-0">
+      <header className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-1.5">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{rows.length} seri</span>
+          <DataTableTools table={table} exportName={title ? `Numaralandırma - ${title}` : "Numaralandırma"} compact />
+        </span>
+      </header>
+      <DataTable table={table} />
+    </section>
   );
 }
