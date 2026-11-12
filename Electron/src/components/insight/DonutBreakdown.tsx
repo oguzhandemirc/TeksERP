@@ -22,10 +22,12 @@ export interface DonutBreakdownProps {
   /** Dilim yokken lejant yerine yazılan cümle. */
   emptyText: string;
   size?: number;
+  /** Lejantta en çok bu kadar satır (halka bütün dilimleri çizer). */
+  legendLimit?: number;
 }
 
 /** Halka + lejant (hedef görsel "genel bakış" kutusu). Kartın genişliğine göre yan yana / alt alta dizilir. */
-export function DonutBreakdown({ slices, formatValue, centerCaption, label, emptyText, size = 176 }: DonutBreakdownProps) {
+export function DonutBreakdown({ slices, formatValue, centerCaption, label, emptyText, size = 176, legendLimit }: DonutBreakdownProps) {
   const total = slices.reduce((s, d) => s + d.value, 0);
   const empty = slices.length === 0;
   const option = useCallback(
@@ -64,7 +66,7 @@ export function DonutBreakdown({ slices, formatValue, centerCaption, label, empt
           <p className="w-full text-center text-xs text-muted-foreground @[26rem]:text-left">{emptyText}</p>
         ) : (
           <ul className="w-full min-w-0 space-y-2 text-xs">
-            {slices.map((d, i) => (
+            {slices.slice(0, legendLimit ?? slices.length).map((d, i) => (
               <li key={d.key} className="flex items-center gap-2">
                 <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", SERIES_DOT[i % SERIES_DOT.length])} aria-hidden />
                 <span className="min-w-0 flex-1 truncate" title={d.name}>{d.name}</span>

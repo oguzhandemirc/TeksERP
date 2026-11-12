@@ -11,7 +11,8 @@ import { MemoryRouter } from "react-router-dom";
 import { renderWithProviders } from "@/test/render";
 import { buildReportHtml, toSheets } from "@/pages/Reports/_components/reportExport";
 import type { ConsignedStatement, StatementSection } from "./types";
-import { buildConsignedStatementExport, lineColumns, subjectColumns } from "./statementExport";
+import { reportCellText, reportExcelNumFmt } from "@/lib/number-format";
+import { buildConsignedStatementExport, lineColumns, qtyFmt, subjectColumns } from "./statementExport";
 import { StatementSectionView } from "./StatementSectionView";
 import { ConsignedStatementView } from "./ConsignedStatementView";
 
@@ -90,10 +91,12 @@ describe("emanet ekstresi — tek model", () => {
     expect(spec.tables.map((t) => t.name)).toEqual(["Top Özeti", "Top Hareketleri", "İplik lotu Özeti", "İplik lotu Hareketleri"]);
   });
 
-  it("§3 toplam satırı sunucu toplamı; kg iki hane, grupsuz", () => {
+  it("§3 toplam satırı sunucu toplamı; kg tek hane, grupsuz", () => {
     const spec = buildConsignedStatementExport(statement);
     expect(spec.tables[0]!.totalRow).toMatchObject({ opening: 100, in: 250, out: 120, dsk: 30, scrap: 5, closing: 195 });
-    expect(spec.tables[2]!.columns.find((c) => c.key === "closing")?.numFmt).toBe("0.00");
+    expect(spec.tables[2]!.columns.find((c) => c.key === "closing")?.numFmt).toBe("0.0");
+    expect(reportCellText(1234.56, qtyFmt("kg"))).toBe("1234,6");
+    expect(reportExcelNumFmt(qtyFmt("kg"))).toBe("0.0");
   });
 });
 

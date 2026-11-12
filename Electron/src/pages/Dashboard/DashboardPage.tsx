@@ -12,6 +12,7 @@ import { HIZLI_EYLEMLER } from "./pano/pano-hedefler";
 import { usePanoBoxData, type AgendaParams } from "./pano/usePanoBoxData";
 import { usePanoDonem } from "./pano/usePanoDonem";
 import { usePanoErisim } from "./pano/usePanoErisim";
+import { usePanoBoxOptions } from "./pano/usePanoBoxOptions";
 import { usePanoLayout } from "./pano/usePanoLayout";
 import { PANO_UC_IZINLERI } from "./pano/types";
 
@@ -34,6 +35,7 @@ export function DashboardPage() {
   const quickOk = HIZLI_EYLEMLER.some((e) => erisim.canGo(e));
   const stationOk = hasPermission("station:read");
   const localAvailable = useMemo(() => new Set([...(quickOk ? ["hizliIslemler"] : []), ...(stationOk ? ["istasyonDoluluk"] : [])]), [quickOk, stationOk]);
+  const { options, setOption } = usePanoBoxOptions();
   const layout = usePanoLayout(panoIzni ? catalog.data : NO_CATALOG, localAvailable);
   const states = usePanoBoxData(layout.boxes, donem, agenda, panoIzni && !editing);
   const added = useMemo(() => new Set(layout.boxes.map((b) => b.anahtar)), [layout.boxes]);
@@ -55,7 +57,7 @@ export function DashboardPage() {
           <BoardSkeleton />
         ) : (
           <PanoBoard boxes={layout.boxes} states={states} editing={editing}
-            ctx={{ donem, erisim, onAgenda: setAgenda, agendaLoading: states.ajanda?.fetching ?? false }}
+            ctx={{ donem, erisim, onAgenda: setAgenda, agendaLoading: states.ajanda?.fetching ?? false, options, setOption }}
             onRemove={layout.remove} onReorder={layout.reorder} onResize={layout.resize} />
         )}
         {editing && layout.boxes.length === 0 && (

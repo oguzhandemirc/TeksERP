@@ -10,7 +10,9 @@ import { PanoKpiCard, PanoMoneyKpi } from "./PanoKpiSeridi";
 import { PanoHizliEylemler, PanoMovementList } from "./PanoMovementList";
 import { PanoAlacak, PanoBekleyen, PanoConsigned, PanoEnCok, PanoOutside, PanoStok, PanoTezgah } from "./PanoOzetKutulari";
 import { PanoOpenWorkOrders, PanoQuality, PanoStationOutput, PanoTopCustomers } from "./PanoProductionBoxes";
+import type { BoxOptions } from "./box-options";
 import type { AgendaParams } from "./usePanoBoxData";
+import type { SetBoxOption } from "./usePanoBoxOptions";
 import type { PanoErisim } from "./usePanoErisim";
 import type { PanoDonem } from "./types";
 
@@ -19,6 +21,9 @@ export interface RenderCtx {
   erisim: PanoErisim;
   onAgenda: (p: AgendaParams) => void;
   agendaLoading: boolean;
+  /** Kutu gösterim ayarları (yalnız süzer; istek atmaz). */
+  options: BoxOptions;
+  setOption: SetBoxOption;
 }
 
 type Renderers = { [K in keyof PanoBoxData]: (d: PanoBoxData[K], c: RenderCtx) => ReactNode };
@@ -31,9 +36,9 @@ const RENDERERS: Renderers = {
   stok: (d, c) => <PanoKpiCard boxKey="stok" data={d} donem={c.donem} erisim={c.erisim} />,
   ciro: (d, c) => <PanoMoneyKpi boxKey="ciro" data={d} donem={c.donem} erisim={c.erisim} />,
   tahsilat: (d, c) => <PanoMoneyKpi boxKey="tahsilat" data={d} donem={c.donem} erisim={c.erisim} />,
-  egilim: (d) => <PanoEgilim egilim={d} />,
-  dagilim: (d) => <PanoDagilim dagilim={d} />,
-  enCok: (d, c) => <PanoEnCok enCok={d} erisim={c.erisim} />,
+  egilim: (d, c) => <PanoEgilim egilim={d} options={c.options.egilim} />,
+  dagilim: (d, c) => <PanoDagilim dagilim={d} options={c.options.dagilim} />,
+  enCok: (d, c) => <PanoEnCok enCok={d} erisim={c.erisim} options={c.options.enCok} />,
   enCokMusteri: (d, c) => <PanoTopCustomers d={d} erisim={c.erisim} />,
   uretimIstasyon: (d, c) => <PanoStationOutput d={d} erisim={c.erisim} />,
   isEmriDurum: (d, c) => <PanoOpenWorkOrders d={d} erisim={c.erisim} />,
@@ -44,10 +49,10 @@ const RENDERERS: Renderers = {
   fasonOzeti: (d, c) => <PanoOutside f={d} erisim={c.erisim} />,
   emanet: (d, c) => <PanoConsigned e={d} erisim={c.erisim} />,
   bekleyen: (d, c) => <PanoBekleyen b={d} erisim={c.erisim} />,
-  ajanda: (d, c) => <PanoAgenda d={d} erisim={c.erisim} onPick={c.onAgenda} loading={c.agendaLoading} />,
+  ajanda: (d, c) => <PanoAgenda d={d} erisim={c.erisim} onPick={c.onAgenda} loading={c.agendaLoading} options={c.options.ajanda} />,
   finans: (d, c) => <PanoAlacak f={d} erisim={c.erisim} />,
   nakitAkisi: (d, c) => <PanoCashFlow d={d} erisim={c.erisim} />,
-  sonHareketler: (d, c) => <PanoMovementList hareketler={d.hareketler} yukleniyor={false} hata={false} onYenile={() => undefined} erisim={c.erisim} />,
+  sonHareketler: (d, c) => <PanoMovementList hareketler={d.hareketler} yukleniyor={false} hata={false} onYenile={() => undefined} erisim={c.erisim} options={c.options.sonHareketler} />,
 };
 
 export const hasRenderer = (key: string): boolean => key in RENDERERS || key === "hizliIslemler" || key === "istasyonDoluluk";

@@ -17,7 +17,7 @@ export function TrendArrow({ trend }: { trend: StatCardProps["trend"] }) {
 
 /** Kompakt KPI kartı (hedef görsel): simge karesi solda; etiket, değer (+ kısa ek), değişim satırı sağda.
  *  Pano değişim yokken kısa nötr metin verir → şeritteki kartlar aynı yükseklikte. */
-export function CompactStatCard({ label, value, icon, tone = "primary", delta, trend = "neutral", invertTrend, hint, onClick, loading, className }: StatCardProps) {
+export function CompactStatCard({ label, value, icon, tone = "primary", delta, trend = "neutral", invertTrend, hint, onClick, loading, valueFit, className }: StatCardProps) {
   const Comp = onClick ? "button" : "div";
   return (
     <Comp type={onClick ? "button" : undefined} onClick={onClick} data-slot="card" data-layout="compact"
@@ -30,7 +30,7 @@ export function CompactStatCard({ label, value, icon, tone = "primary", delta, t
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
         <p className="flex min-w-0 items-baseline gap-1.5 leading-tight">
-          <span className="min-w-0 truncate text-lg font-bold tabular-nums">
+          <span data-value-fit={valueFit || undefined} className={cn("min-w-0 font-bold tabular-nums", valueFit ? "break-normal text-sm @[13rem]:text-base @[16rem]:text-lg" : "truncate text-lg")}>
             {loading ? <span className="skeleton-shimmer inline-block h-5 w-16 rounded-md bg-muted align-middle" /> : typeof value === "number" ? formatDisplay(value) : value}
           </span>
           {/* Ek bilgi yalnız yer varsa: değer hiç kırpılmasın. */}

@@ -25,6 +25,8 @@ export interface StatCardProps {
   /** `stacked`: simge + etiket üst satırda, değer ve değişim tam genişlikte (dar, çok kartlı şeritler).
    *  `compact` (hedef görsel): solda simge karesi; sağda etiket / değer (+ ek) / değişim — sabit yükseklik, dar boşluk. */
   layout?: "row" | "stacked" | "compact";
+  /** `compact`: değer kırpılmaz — dar kartta yazı bir kademe küçülür, birim alt satıra iner (para KPI'ı). */
+  valueFit?: boolean;
   className?: string;
 }
 
