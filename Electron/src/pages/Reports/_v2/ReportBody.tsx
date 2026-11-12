@@ -7,6 +7,7 @@ import { NarrativeBox } from "./NarrativeBox";
 import { PeriodCompareTable } from "./PeriodCompareTable";
 import { SmallMultiples } from "./SmallMultiples";
 import { ReportTable, type ReportRowLink } from "./ReportTable";
+import { barColumnOf } from "./view/table-view";
 import { useReportViewPref, type ReportLayout } from "./view/view-pref";
 
 /** Bu kolon sayısını aşan tablo varsayılan olarak grafiğin ALTINA iner (yan yana sıkışmasın). */
@@ -69,7 +70,15 @@ export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
             height={layout === "side" ? 320 : 360}
           />
         ) : null}
-        {p.tablo ? <ReportTable table={p.tablo} rowLink={rowLink} /> : null}
+        {p.tablo ? (
+          <ReportTable
+            table={p.tablo}
+            rowLink={rowLink}
+            hiddenColumns={pref.hiddenColumns ?? []}
+            onHiddenColumns={(keys) => update({ hiddenColumns: keys })}
+            barColumn={barColumnOf(p.tablo, p.anaSayi.birim)}
+          />
+        ) : null}
       </div>
       <footer className="flex flex-col gap-2 border-t pt-3 text-xs text-muted-foreground">
         {p.tanimlar.length > 0 ? (

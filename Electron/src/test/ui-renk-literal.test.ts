@@ -24,6 +24,7 @@ const FILES = [
   "pages/Reports/_v2/figures.ts",
   "pages/Reports/_v2/SmallMultiples.tsx",
   "pages/Reports/_v2/PeriodCompareTable.tsx",
+  "pages/Reports/_v2/ReportTable.tsx",
   "pages/Reports/_components/ReportExportBar.tsx",
 ];
 
