@@ -1,5 +1,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { Sidebar } from "./Sidebar";
+import { SidebarHoldCtx, useSidebarHoverExpand } from "./sidebar-hover";
+import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
 
 interface Props {
@@ -36,7 +38,8 @@ export function ShellSidebar({ narrow, collapsed, drawerOpen, onCloseDrawer }: P
     return () => window.removeEventListener("keydown", onKey);
   }, [narrow, drawerOpen, onCloseDrawer]);
 
-  if (!narrow) return <Sidebar collapsed={collapsed} />;
+  // Hook'lar koşulsuz çağrılır; geçici açılış yalnız geniş kabukta + daraltılmışken etkin.
+  if (!narrow) return <DockedSidebar collapsed={collapsed} />;
   if (!drawerOpen) return null;
 
   // Menü satırına tıklama sekmeyi değiştirmese de (aynı sayfa) çekmece kapanır.
@@ -64,5 +67,30 @@ export function ShellSidebar({ narrow, collapsed, drawerOpen, onCloseDrawer }: P
         <Sidebar collapsed={false} />
       </div>
     </>
+  );
+}
+
+/**
+ * Geniş kabuk: daraltılmışken sabit 76 px'lik yer tutucu içerik alanını korur; menü fare/odakla
+ * üstüne binerek (overlay) tam genişliğe açılır. Kalıcı açıkken bugünkü satır-içi çubuk.
+ */
+function DockedSidebar({ collapsed }: { collapsed: boolean }) {
+  const { open, handlers, hold } = useSidebarHoverExpand(collapsed);
+  return (
+    <div
+      data-testid="sidebar-dock"
+      data-hover-open={open || undefined}
+      className={cn(
+        "relative z-30 h-full shrink-0 transition-[width] duration-200 motion-reduce:transition-none",
+        collapsed ? "w-[76px]" : "w-60",
+      )}
+      {...handlers}
+    >
+      <div className={cn("h-full", collapsed && "absolute inset-y-0 left-0", open && "shadow-xl")}>
+        <SidebarHoldCtx.Provider value={hold}>
+          <Sidebar collapsed={collapsed && !open} />
+        </SidebarHoldCtx.Provider>
+      </div>
+    </div>
   );
 }
