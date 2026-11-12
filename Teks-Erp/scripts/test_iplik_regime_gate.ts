@@ -207,6 +207,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "Kapı KUTU düzeyinde sunucudadır: `iplik` = warehouse:read izni + ticaretEnabled + iplikEnabled (pano-kaynak.ts:76); kapalı modülde kutu katalogda yoktur, veri ucu `null` döner " +
       "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
   },
+  {
+    dosya: "routes/customer-period-summary.routes.ts",
+    neden:
+      "MÜŞTERİ DÖNEM ÖZETİ (cari-be madde 3, 2026-11-12). Router SALT-OKUMADIR (CUD yok); iplik dokunuşu yalnız GEÇİŞLİ importtur: kapı tek kaynağı " +
+      "`panoGates` (pano-kaynak.ts) pano kutularının kaynak grafını (pano-kutu-akis.ts) taşır. Uç iplik hareketi OKUMAZ: brüt sevk, ciro ve sipariş karnesi " +
+      "üretim çekirdeğidir. Router kapısı KONULAMAZ: sevk/sipariş kartları iplik kapalı kurulumda da görünür.",
+  },
 ];
 
 /**

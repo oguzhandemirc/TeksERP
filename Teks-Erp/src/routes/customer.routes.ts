@@ -22,6 +22,7 @@ import templateRouteRoutes from "./customer-template-route.routes";
 import { customerLabelOptionRoutes } from "./label-template-option.routes";
 import standaloneLabelRoutes from "./customer-standalone-label.routes";
 import periodSummaryRoutes from "./customer-period-summary.routes";
+import documentsRoutes from "./customer-documents.routes";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 export const customerService = new CustomerService({
@@ -90,6 +91,8 @@ router.use("/:customerId", standaloneLabelRoutes);
 // /api/customers/:customerId/period-summary — kayıt sayfası dönem özeti; yol dar bağlanır (alt router'ın toplu kapısı
 // yalnız bu yola uygulanır, `/:id` uçlarına sızmaz).
 router.use("/:customerId/period-summary", periodSummaryRoutes);
+// /api/customers/:customerId/documents — carinin belgeleri; dar bağlanır (aynı gerekçe).
+router.use("/:customerId/documents", documentsRoutes);
 
 /**
  * @openapi
