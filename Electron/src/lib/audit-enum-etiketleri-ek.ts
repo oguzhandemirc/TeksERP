@@ -420,10 +420,4 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   SEPARATE_BEAM: "Ayrı levent",
   SHARED_BEAM: "Zeminle aynı levent",
   CREEL: "Cağlık (bobinden)",
-  // RowMarkColor (satır işareti, 2026-11-13) — panel renk adlarıyla aynı
-  YELLOW: "Sarı",
-  RED: "Kırmızı",
-  GREEN: "Yeşil",
-  BLUE: "Mavi",
-  PURPLE: "Mor",
 };
