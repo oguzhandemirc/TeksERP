@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -12,15 +11,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FormField } from "@/components/forms/FormField";
-import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
-import { BranchSelect } from "@/pages/Customers/BranchSelect";
-import { usePricingEnabled, useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { usePulseSync } from "@/hooks/usePulseSync";
-import { currencyService } from "@/services/featureFlagService";
 import { OrderLinesEditor, type OrderLineErrors } from "./OrderLinesEditor";
-import { OrderNumberField, apiErrorMessage, orderNumberConflictMessage } from "./OrderNumberField";
+import { apiErrorMessage, orderNumberConflictMessage } from "./OrderNumberField";
+import { OrderFormHeaderFields } from "./OrderFormHeaderFields";
 import type { Order } from "./types";
 import {
   newLineClientId,
@@ -85,16 +79,6 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
       (order?.lines ?? []).every((l) =>
         (l.workOrderLinks ?? []).every((link) => link.workOrder.status === "CANCELLED"),
       ));
-  const pricingEnabled = usePricingEnabled();
-  const branchesEnabled = useCustomerBranchesEnabled();
-
-  const currenciesQ = useQuery({
-    queryKey: ["currencies"],
-    queryFn: () => currencyService.list(),
-    enabled: pricingEnabled,
-    staleTime: 60 * 60 * 1000,
-  });
-
   const form = useForm<OrderFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(orderFormSchema as any) as unknown as Resolver<OrderFormValues>,
@@ -124,8 +108,8 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* ⑤ Boyut SABİT (h-[88vh], max-w-6xl): başlık + üst alanlar sabit, kalem listesi kendi kaydırıcısında,
           alt düğmeler sabit — kalem sayısı değişince modal büyüyüp küçülmez. */}
-      <DialogContent className="flex h-[88vh] max-w-6xl flex-col">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="flex h-[88vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border/70 px-6 pb-4 pt-5">
           <DialogTitle>{isEdit ? "Sipariş Düzenle" : "Yeni Sipariş"}</DialogTitle>
           <DialogDescription>
             {isEdit
@@ -154,102 +138,15 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
               throw err;
             }
           })}
-          className="flex min-h-0 flex-1 flex-col gap-3"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="shrink-0 space-y-3 px-2 py-1">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField
-              label="Müşteri"
-              error={form.formState.errors.customerId}
-              required
-            >
-              <Controller
-                control={form.control}
-                name="customerId"
-                render={({ field }) => (
-                  // ① Tedarikçi modalının müşteri kipi: tam liste (CUSTOMER sonra BOTH), rol, Şehir, "Yeni müşteri".
-                  <CustomerPickerField
-                    value={field.value || null}
-                    onChange={(id) => {
-                      field.onChange(id);
-                      form.setValue("branchId", null);
-                    }}
-                    disabled={headerLocked}
-                    triggerClassName={!field.value ? `h-9 border-primary shadow-lg shadow-primary/50 ring-2 ring-primary/30 transition-all duration-700 ${dim ? "opacity-50" : "opacity-100"}` : "h-9"}
-                  />
-                )}
-              />
-            </FormField>
-            {branchesEnabled && (
-              <FormField label="Şube" error={form.formState.errors.branchId}>
-                <Controller
-                  control={form.control}
-                  name="branchId"
-                  render={({ field }) => (
-                    <BranchSelect
-                      customerId={form.watch("customerId") || null}
-                      value={field.value}
-                      onChange={field.onChange}
-                      disabled={headerLocked}
-                    />
-                  )}
-                />
-              </FormField>
-            )}
-          </div>
-
-          {/* Saha #16 + ②: sipariş no "Parti kodu" kalıbı — otomatik/kilitli, tıklayınca yazılır, boş bırakınca
-              otomatiğe döner. Termin ile aynı satırı yarı yarıya paylaşır. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <OrderNumberField form={form} isEdit={isEdit} />
-            <FormField label="Termin" error={form.formState.errors.deadline}>
-              <Controller
-                control={form.control}
-                name="deadline"
-                render={({ field }) => (
-                  <DatePickerInput
-                    value={field.value ?? ""}
-                    onChange={field.onChange}
-                    placeholder="Boş = varsayılan"
-                  />
-                )}
-              />
-            </FormField>
-          </div>
-
-          {pricingEnabled && (
-            <FormField
-              label="Para Birimi"
-              htmlFor="currency"
-              error={form.formState.errors.currency}
-              required
-            >
-              <Controller
-                control={form.control}
-                name="currency"
-                render={({ field }) => (
-                  <select
-                    id="currency"
-                    value={field.value}
-                    onChange={field.onChange}
-                    disabled={headerLocked}
-                    className="h-9 w-full rounded-md border bg-background px-2 text-sm sm:max-w-[220px]"
-                  >
-                    {(currenciesQ.data?.data ?? [{ code: "TRY", name: "TRY", symbol: "₺" }]).map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.code} — {c.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              />
-            </FormField>
-          )}
-
-          </div>
-
+          <div className="flex min-h-0 flex-1 flex-col gap-4 bg-muted/40 px-6 py-5">
+            <section data-order-form-section="terms" className="shrink-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Müşteri ve şartlar</h3>
+              <OrderFormHeaderFields form={form} isEdit={isEdit} headerLocked={headerLocked} dim={dim} />
+            </section>
           {linesEditable ? (
-            <div className="min-h-0 flex-1 overflow-y-auto border-t px-2 pt-3">
+            <section data-order-form-section="lines" className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-card-border bg-card p-4 shadow-card">
               <Controller
                 control={form.control}
                 name="lines"
@@ -268,19 +165,20 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                   />
                 )}
               />
-            </div>
+            </section>
           ) : (
-            <div className="mx-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <div className="rounded-xl border border-card-border bg-card p-4 text-xs text-muted-foreground shadow-card">
               <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.{" "}
               {TERIM.terbiyeIsEmri.cumleBasi.yalin} açılmış kalemleri değiştirmek için önce {TERIM.terbiyeIsEmri.cekimKucuk.belirtme} iptal et.
             </div>
           )}
+          </div>
 
-          <DialogFooter className="shrink-0 border-t pt-3">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive">
-              İptal
+          <DialogFooter className="shrink-0 border-t border-border/70 bg-card px-6 py-3">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Vazgeç
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-500 hover:shadow-emerald-500/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150">
+            <Button type="submit" disabled={isSubmitting} className="min-w-36">
               {isSubmitting
                 ? isEdit
                   ? "Güncelleniyor..."

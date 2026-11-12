@@ -1,7 +1,7 @@
 // =============================================================================
 // SİPARİŞ NO — iş emrindeki "Parti kodu" kalıbı (sipariş formu ②, 2026-09-17; emsal WorkOrderFormView:859-897)
 // =============================================================================
-// Otomatik modda kutu salt-okunur + kilit ikonu + "Otomatik oluşturulur — kendiniz girmek için tıklayın.";
+// Otomatik modda kutu salt-okunur + kilit ikonu + "Otomatik · yazmak için tıkla" (kısa yer tutucu);
 // tıklayınca (odak) yazılabilir; boş bırakıp çıkınca otomatik moda döner. Düzenlemede `disabled` + not.
 // Tekillik: backend 409 "'X' numaralı sipariş zaten var" → ALAN hatası (`form.setError`), toast değil —
 // çağıran `orderNumberConflictMessage` ile ayıklar.
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useNumberSourceState } from "@/lib/number-source";
 import type { OrderFormValues } from "./schema";
 
-export const ORDER_NUMBER_AUTO_PLACEHOLDER = "Otomatik oluşturulur — kendiniz girmek için tıklayın.";
+export const ORDER_NUMBER_AUTO_PLACEHOLDER = "Otomatik · yazmak için tıkla";
 
 type ApiErr = { response?: { status?: number; data?: { message?: string } }; message?: string } | undefined;
 
