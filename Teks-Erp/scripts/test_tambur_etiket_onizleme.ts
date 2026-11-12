@@ -21,6 +21,8 @@ import { buildCanvasLabelHtml } from "../src/services/helpers/label-canvas-html.
 import { applyTamburDraft, composeCanvasElements, sourceWidthOf } from "../src/services/tambur/label-preview-compose";
 import type { LabelPayload } from "../src/types/label.types";
 import { FORMAT, PAYLOAD } from "./lib/etiket-musteri-kodu-fikstur";
+import { roleGrade } from "./fixture-quality-grade";
+import prisma from "../src/lib/prisma";
 
 let pass = 0;
 let fail = 0;
@@ -29,28 +31,33 @@ function check(label: string, ok: boolean, detail = ""): void {
   else { fail++; console.log(`❌ ${label}${detail ? ` — ${detail}` : ""}`); }
 }
 
-const PARENT = { ...PAYLOAD, lengthMeters: 170, weightKg: 25, widthCm: 300, qualityGrade: "1.KALITE" } as unknown as LabelPayload;
+// Kalite kodları katalog ROLÜNDEN çözülür (literal gömülmez — test_quality_code_literal).
+const parentPayload = (firstCode: string) => ({ ...PAYLOAD, lengthMeters: 170, weightKg: 25, widthCm: 300, qualityGrade: firstCode }) as unknown as LabelPayload;
 
 // GK ihracat etiketi biçimi (yds / mt / kg yan yana) + kaliteye koşullu damga.
-const ELEMENTS = [
+const elementsFor = (secondCode: string) => [
   { id: "l", type: "line", x: 2, y: 1.5, wMm: 96, hMm: 1.2 },
   { id: "t", type: "text", x: 3, y: 4.5, hMm: 2.6, bold: true, text: "DESING" },
   { id: "v", type: "field", x: 23.6, y: 4.5, hMm: 2.6, bind: "itemName", textCase: "upper" },
   { id: "yds", type: "field", x: 97, y: 4, hMm: 4.4, bind: "lengthMeters", align: "right", fmt: { to: "yd", unit: "yds", decimals: 2 } },
   { id: "mt", type: "field", x: 97, y: 11, hMm: 4.4, bind: "lengthMeters", align: "right", fmt: { unit: "mt", padInt: 2, decimals: 2 } },
   { id: "kg", type: "field", x: 97, y: 18, hMm: 4.4, bind: "weightKg", align: "right", fmt: { unit: "kg", decimals: 2 } },
-  { id: "q2", type: "text", x: 3, y: 30, hMm: 3, text: "2. KALITE", showIf: { field: "qualityGrade", op: "in", values: ["2.KALITE"] } },
+  { id: "q2", type: "text", x: 3, y: 30, hMm: 3, text: "2. KALITE", showIf: { field: "qualityGrade", op: "in", values: [secondCode] } },
   { id: "bc", type: "code128", x: 3, y: 28, hMm: 12, human: true },
   { id: "bcText", type: "field", x: 3, y: 42, hMm: 3, bind: "barcode" },
 ] as unknown as LabelElement[];
 
 async function main(): Promise<void> {
+  const firstCode = (await roleGrade("FIRST")).code;
+  const secondCode = (await roleGrade("SECOND")).code;
+  const PARENT = parentPayload(firstCode);
+  const ELEMENTS = elementsFor(secondCode);
   console.log("\n[§1] applyTamburDraft");
-  const d = applyTamburDraft(PARENT, { lengthMeters: 7, weightKg: 1.42, widthCm: 280, qualityGrade: "2.KALITE" });
+  const d = applyTamburDraft(PARENT, { lengthMeters: 7, weightKg: 1.42, widthCm: 280, qualityGrade: secondCode });
   check("§1 taslak metre çocuğa", d.lengthMeters === 7);
   check("§1 taslak kg çocuğa", d.weightKg === 1.42);
   check("§1 taslak en çocuğa", d.widthCm === 280);
-  check("§1 taslak kalite kodu", d.qualityGrade === "2.KALITE");
+  check("§1 taslak kalite kodu", d.qualityGrade === secondCode);
   check("§1 ana topun barkodu basılmaz", d.barcode === "", JSON.stringify(d.barcode));
   const e = applyTamburDraft(PARENT, {});
   check("§1 boş metre = kalanı kes (ana kalan)", e.lengthMeters === 170);
@@ -71,7 +78,7 @@ async function main(): Promise<void> {
   const missing = texts.filter((t) => !html.includes(t.text));
   check("§2 her metin HTML render'ında birebir var", missing.length === 0, missing.map((t) => t.text).join(", "));
   check("§2 showIf taslak kaliteden (2. kalite damgası görünür)", texts.some((t) => t.text === "2. KALITE"));
-  const e1 = composeCanvasElements(ELEMENTS, applyTamburDraft(PARENT, { qualityGrade: "1.KALITE" }), { language: "RASTER_HTML", heightMm: 58, dpi: 203 });
+  const e1 = composeCanvasElements(ELEMENTS, applyTamburDraft(PARENT, { qualityGrade: firstCode }), { language: "RASTER_HTML", heightMm: 58, dpi: 203 });
   check("§2 showIf 1. kalitede gizli", !e1.some((x) => x.type === "text" && x.text === "2. KALITE"));
   const bc = els.find((x) => x.type === "code128");
   check("§2 barkod yer tutucu (value null)", !!bc && bc.type === "code128" && bc.value === null);
@@ -124,7 +131,8 @@ async function main(): Promise<void> {
 
 main()
   .catch((e) => { fail++; console.error(e); })
-  .finally(() => {
+  .finally(async () => {
+    await prisma.$disconnect();
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     process.exitCode = fail > 0 ? 1 : 0;
   });

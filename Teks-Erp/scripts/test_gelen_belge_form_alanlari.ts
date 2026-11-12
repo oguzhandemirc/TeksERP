@@ -243,6 +243,8 @@ async function run(url: string): Promise<void> {
     const r = await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`, woUser);
     return { status: r.status, ff: (r.data?.formFields ?? null) as Record<string, unknown> | null, sg: (r.data?.suggestions ?? null) as { targetItem?: { id: string }; targetColor?: { id: string } } | null };
   };
+  // Varsayılan 2026-11-09'dan beri ONER (3632b6e39); KAPALI dalı ayar AÇIKÇA seçilerek ölçülür.
+  await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, "KAPALI");
   const k5 = await read(n5);
   check("§5 ⭐ KAPALI: TR sayı 1250.5, kanonik 125.125 (binlik sanılmaz), en 180, yazılar; öneri yok, not yalnız 'acil'",
     k5.status === 200 && k5.ff?.hedefMetraj === 1250.5 && k5.ff?.hedefKg === 125.125 && k5.ff?.en === 180 && k5.ff?.desenText === fabric2Name.toLowerCase() && k5.ff?.renkText === colorCode.toLowerCase() && k5.ff?.not === "acil"

@@ -14,6 +14,7 @@
 
 import { RollStatus, RollEntrySource } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { firstGrade } from "./fixture-quality-grade";
 import { LabelService } from "../src/services/label.service";
 
 const labels = new LabelService();
@@ -50,6 +51,7 @@ async function main() {
     select: { id: true, name: true },
   });
   customerId = customer.id;
+  const grade = await firstGrade();
   const roll = await prisma.roll.create({
     data: {
       barcode: `TEST-AUD-${stamp}`,
@@ -59,7 +61,7 @@ async function main() {
       initialQty: 50,
       currentQty: 50,
       status: RollStatus.WAREHOUSE,
-      qualityGrade: "1.KALITE",
+      qualityGrade: grade.code,
       weightKg: 12.5,
       labelBatchNo: "J1",
       entrySource: RollEntrySource.SUPPLIER_RECEIPT,
@@ -82,7 +84,7 @@ async function main() {
   check("2a recordPrintEvent snapshot.customerId korudu", s2?.customerId === customer.id);
   const p2 = (s2?.printed ?? null) as Record<string, unknown> | null;
   check("4a printed.lengthMeters = 50", p2?.lengthMeters === 50, JSON.stringify(p2));
-  check("4b printed.qualityGrade + widthCm", p2?.qualityGrade === "1.KALITE" && p2?.widthCm === 150, JSON.stringify(p2));
+  check("4b printed.qualityGrade + widthCm", p2?.qualityGrade === grade.code && p2?.widthCm === 150, JSON.stringify(p2));
   check("4c printed.weightKg = 12.5", p2?.weightKg === 12.5, JSON.stringify(p2));
   check("4d printed.labelBatchNo = J1 (etiketin Parti yuvası)", p2?.labelBatchNo === "J1", JSON.stringify(p2));
   check("4e üst düzeyde basım değeri YOK (niyet okuyucuları etkilenmez)", s2 != null && !("lengthMeters" in s2) && !("weightKg" in s2));
@@ -94,7 +96,7 @@ async function main() {
   const s3 = await snapOf(roll.id);
   check("3a seed {stock:true} → snapshot.stock=true", s3?.stock === true && s3?.customerId === undefined, JSON.stringify(s3));
   const p3 = (s3?.printed ?? null) as Record<string, unknown> | null;
-  check("4f stok baskısında da printed bloğu (metraj + kalite)", p3?.lengthMeters === 50 && p3?.qualityGrade === "1.KALITE", JSON.stringify(p3));
+  check("4f stok baskısında da printed bloğu (metraj + kalite)", p3?.lengthMeters === 50 && p3?.qualityGrade === grade.code, JSON.stringify(p3));
   check("3b seed {stock} audit YAZMADI (delta hâlâ +1)", (await auditCount(roll.id)) === base + 1);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

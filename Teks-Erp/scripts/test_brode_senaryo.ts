@@ -27,7 +27,8 @@
 // 5 ❌ · kuru koşu yazım dalına girince §1 4 ❌ · fason adımı kategorisiz kurulunca §3 3 ❌.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { Currency, PriceKind, Prisma, RollStatus } from "@prisma/client";
+import { Currency, PriceKind, Prisma, RollStatus, StationKind } from "@prisma/client";
+import { inspectionDefaultForKind } from "../src/services/helpers/quality-station.helper";
 import prisma, { pool } from "../src/lib/prisma";
 import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
 import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
@@ -159,8 +160,9 @@ async function run(): Promise<void> {
     mid.conflicts.some((r) => r.key === code("XX")) && (await countAll()) === pre, `${pre} → ${await countAll()}`);
   const insp = await prisma.station.findMany({ where: { id: { in: [id(SETUP.internalStation.code), id(SETUP.tamburStation.code)] } }, select: { id: true, inspectionEnabled: true } });
   const inspOf = (k: string) => insp.find((r) => r.id === id(k))?.inspectionEnabled;
-  check("§1 muayene: iç Brode kapalı (desen düğmesi), Tambur-2 açık (panel varsayılanı)",
-    inspOf(SETUP.internalStation.code) === false && inspOf(SETUP.tamburStation.code) === true, JSON.stringify(insp));
+  // Tambur muayenesi doğuşta TEK kaynaktan (`inspectionDefaultForKind`; 2026-11-09'dan beri kapalı — son istasyon, topa hata yazmaz).
+  check("§1 muayene: iç Brode kapalı (desen düğmesi), Tambur-2 tür varsayılanında (inspectionDefaultForKind)",
+    inspOf(SETUP.internalStation.code) === false && inspOf(SETUP.tamburStation.code) === inspectionDefaultForKind(StationKind.TAMBUR), JSON.stringify(insp));
   const badInput = parseBrodeSetupInput({ patterns: [{ code: "", name: "x" }], bilinmeyen: 1 });
   check("§1 --girdi fail-closed: boş kod + bilinmeyen alan reddedilir", typeof badInput === "string", String(badInput));
 

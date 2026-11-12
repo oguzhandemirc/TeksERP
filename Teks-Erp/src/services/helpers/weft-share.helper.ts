@@ -8,6 +8,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import { yarnUsagePerM, type CostInput, type CostWeftYarn } from "./fabric-cost.helper";
+import type { Sourced } from "./fabric-cost-types.helper";
 
 export type WeftShareBasis = "MASS" | "PICKS";
 
@@ -20,20 +21,24 @@ export interface WeftShareYarnIn {
 const NORMALIZED = new Prisma.Decimal(1);
 const SOURCED = (v: Prisma.Decimal) => ({ value: v, source: "KART" as const });
 const round2 = (d: Prisma.Decimal): number => d.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toNumber();
+// Pay sorusu yalnız atkı bölümünü okur (`weftKgs`); çözgü/tezgâh/terbiye terimleri bilinmiyor olarak geçer.
+const UNKNOWN = (): Sourced<Prisma.Decimal> => ({ value: null, source: "KART" });
+const weftOnlyInput = (weft: NonNullable<CostInput["weft"]>): CostInput => ({
+  schemaVersion: 1, parameterSetId: null, warp: null, weft,
+  loom: { rpm: UNKNOWN(), efficiencyPct: UNKNOWN(), machineRateTry: UNKNOWN(), laborRateTry: UNKNOWN(), loomsPerOperator: UNKNOWN(), energyKwhPerHour: UNKNOWN(), energyPriceTry: UNKNOWN() },
+  beam: { prepCostTry: UNKNOWN(), lengthM: UNKNOWN() },
+  finishing: null, lengthShrinkPct: UNKNOWN(), fabricWastePct: UNKNOWN(), overheadPct: UNKNOWN(), extra: null,
+});
 
 /** Satır sırasıyla pay % (2 hane) + esas; satır yoksa ya da Σ atım 0 ise `{ basis: null, shares: [] }`. */
 export function weftYarnShares(yarns: ReadonlyArray<WeftShareYarnIn>): { basis: WeftShareBasis | null; shares: number[] } {
   const totalPicks = yarns.reduce((a, y) => a + y.picksInRepeat, 0);
   if (yarns.length === 0 || totalPicks <= 0) return { basis: null, shares: [] };
   if (yarns.every((y) => y.yarnItem.linearDensityDen != null)) {
-    const input = {
-      schemaVersion: 1,
-      warp: null,
-      weft: {
-        weftSpecId: null, picksPerCm: SOURCED(NORMALIZED), lengthCm: SOURCED(new Prisma.Decimal(100)), wastePct: SOURCED(new Prisma.Decimal(0)),
-        yarns: yarns.map((y): CostWeftYarn => ({ yarnItemId: y.yarnItemId, name: y.yarnItem.name, denier: SOURCED(y.yarnItem.linearDensityDen!), price: null, picksInRepeat: y.picksInRepeat })),
-      },
-    } as unknown as CostInput; // yalnız atkı bölümü okunur (`weftKgs`); çözgü/tezgâh terimleri pay sorusuna girmez
+    const input = weftOnlyInput({
+      weftSpecId: null, picksPerCm: SOURCED(NORMALIZED), lengthCm: SOURCED(new Prisma.Decimal(100)), wastePct: SOURCED(new Prisma.Decimal(0)),
+      yarns: yarns.map((y): CostWeftYarn => ({ yarnItemId: y.yarnItemId, name: y.yarnItem.name, denier: SOURCED(y.yarnItem.linearDensityDen!), price: null, picksInRepeat: y.picksInRepeat })),
+    });
     const kg = yarnUsagePerM(input).weft.map((w) => w.kgPerM);
     const total = kg.reduce((a, k) => a.plus(k), new Prisma.Decimal(0));
     if (kg.length === yarns.length && total.gt(0)) return { basis: "MASS", shares: kg.map((k) => round2(k.div(total).mul(100))) };

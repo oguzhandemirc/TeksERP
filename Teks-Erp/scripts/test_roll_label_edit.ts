@@ -26,6 +26,7 @@ import labelRouter from "../src/routes/label.routes";
 import { roleGrade } from "./fixture-quality-grade";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
+import { findRouteLayer } from "./lib/router-katmani";
 
 let pass = 0;
 let fail = 0;
@@ -47,11 +48,8 @@ const rollIds: string[] = [];
 const templateIds: string[] = [];
 const customerIds: string[] = [];
 
-type RouteLayer = {
-  route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string; handle: (req: Request, res: Response, next: NextFunction) => void }> };
-};
 function routeAllows(path: string, method: string, permissions: string[]): boolean | null {
-  const layer = (labelRouter as unknown as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === path && l.route.methods[method]);
+  const layer = findRouteLayer(labelRouter, path, method);
   if (!layer?.route) return null;
   const chain = layer.route.stack;
   if (chain.length < 3 || chain[0]!.name !== "verifyToken") return null;
@@ -73,6 +71,8 @@ async function main(): Promise<void> {
   const color = await prisma.color.findUnique({ where: { code: "MAVI" }, select: { id: true } });
   if (!item || !color) throw new Error("fixture: PATOS ürünü / MAVI renk yok");
   const grade = await roleGrade("FIRST");
+  // Elle ezilen GÖSTERİM metni katalog kodundan türetilir; kodla aynı olmadığı (ezme) ölçülür.
+  const elleKaliteYazisi = `${grade.code} PLUS`;
   const actor = await testActorId();
 
   const cust = await prisma.customer.create({ data: { code: `TEST-RLE-${ts}`, name: `TEST Etiket Duzenle ${ts}` }, select: { id: true } });
@@ -127,7 +127,7 @@ async function main(): Promise<void> {
   const customersBefore = await prisma.customer.count({ where: { name: { contains: "SERBEST" } } });
   const saved = await edit.save(r1, {
     templateId: tOne,
-    fields: { customerName: "SERBEST MUSTERI", deliveryNoteItemText: "DESEN-7", itemName: "lale", lengthMeters: "22,5", weightKg: "ELLE KG", qualityGrade: "A PLUS" },
+    fields: { customerName: "SERBEST MUSTERI", deliveryNoteItemText: "DESEN-7", itemName: "lale", lengthMeters: "22,5", weightKg: "ELLE KG", qualityGrade: elleKaliteYazisi },
   }, actor);
   const row = await prisma.roll.findUnique({ where: { id: r1 }, select: { labelItemName: true, labelOverrides: true, labelTemplateId: true, labelDirty: true, labelEditedAt: true, currentQty: true, weightKg: true, width: true } });
   check("§2 changed=true, kolon alanı kolona (normalize)", saved.data?.changed === true && row?.labelItemName === "LALE", String(row?.labelItemName));
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   check("§2 payload müşteri adını basar (eski düzenler için alan da yazılır)", p.customerName === "SERBEST MUSTERI" && fieldDisplayValue(p, "customerName").value === "SERBEST MUSTERI");
   check("§2 sayı ölçü ezmesi birimle biçimlenir", fieldDisplayValue(p, "lengthMeters").value.startsWith("22,5"), fieldDisplayValue(p, "lengthMeters").value);
   check("§2 sayı olmayan ölçü ezmesi aynen basılır", fieldDisplayValue(p, "weightKg").value === "ELLE KG");
-  check("§2 kalite ezmesi yalnız gösterimde; karar alanı (payload.qualityGrade) gerçek", fieldDisplayValue(p, "qualityGrade").value === "A PLUS" && p.qualityGrade === grade.code);
+  check("§2 kalite ezmesi yalnız gösterimde; karar alanı (payload.qualityGrade) gerçek", fieldDisplayValue(p, "qualityGrade").value === elleKaliteYazisi && p.qualityGrade === grade.code);
   check("§2 form görünümü elle yazıldı işaretini taşır", saved.data!.fields.find((f) => f.key === "customerName")?.overridden === true && saved.data!.fields.find((f) => f.key === "colorName")?.overridden === false);
 
   console.log("\n[§3] yalnız gösterim");

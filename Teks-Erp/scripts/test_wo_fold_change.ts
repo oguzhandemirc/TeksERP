@@ -21,6 +21,7 @@ import workOrderRouter from "../src/routes/workorder.routes";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
 import { WO_PLAN_FROZEN_CODE } from "../src/services/helpers/workorder-target-color.helper";
 import { testActorId } from "./fixture-test-user";
+import { findRouteLayer } from "./lib/router-katmani";
 
 let pass = 0;
 let fail = 0;
@@ -49,9 +50,8 @@ const errStatus = (c: Captured): number | null => (c.err instanceof AppError ? c
 const errText = (c: Captured): string => String((c.err as Error | null)?.message ?? c.status);
 
 // Route zinciri koşturucu (test_document_template_permission sözleşmesi): [verifyToken, ...kapılar, controller].
-type RouteLayer = { route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string; handle: (req: Request, res: Response, next: NextFunction) => void }> } };
 function gate(permissions: string[]): { ok: boolean; err: unknown } | null {
-  const layer = (workOrderRouter as unknown as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === "/:id/fold-type" && l.route.methods.patch);
+  const layer = findRouteLayer(workOrderRouter, "/:id/fold-type", "patch");
   if (!layer?.route) return null;
   const chain = layer.route.stack;
   if (chain.length < 3 || chain[0]!.name !== "verifyToken" || chain[chain.length - 1]!.handle !== patchFoldType) return null;
