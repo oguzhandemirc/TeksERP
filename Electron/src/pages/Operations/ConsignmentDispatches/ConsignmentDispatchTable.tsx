@@ -1,44 +1,26 @@
 // Emanet çıkış listesi tablosu — satır tıklaması detayı açar. Sayılar sunucudan (string), istemci toplamaz.
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { formatFactory } from "@/lib/factory-time";
 import { fmtNum } from "./consignmentText";
 import type { ConsignmentDispatchListRow } from "./types";
 
-export function ConsignmentDispatchTable({
-  rows,
-  onOpen,
-}: {
-  rows: ConsignmentDispatchListRow[];
-  onOpen: (id: string) => void;
-}) {
-  return (
-    <table className="w-full text-sm">
-      <thead className="text-xs uppercase text-muted-foreground">
-        <tr>
-          <th className="p-3 text-left">Belge No</th>
-          <th className="p-3 text-left">Tarih</th>
-          <th className="p-3 text-left">Müşteri</th>
-          <th className="p-3 text-right">Levent</th>
-          <th className="p-3 text-right">Levent metre</th>
-          <th className="p-3 text-right">İplik kg</th>
-          <th className="p-3 text-left">Durum</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)}>
-            <td className="p-3 font-mono text-xs">{r.dispatchNo}</td>
-            <td className="p-3">{formatFactory(r.dispatchedAt, "dd MMM yyyy HH:mm")}</td>
-            <td className="p-3">{r.ownerCustomer.name}</td>
-            <td className="p-3 text-right tabular-nums">{r.beamCount}</td>
-            <td className="p-3 text-right tabular-nums">{fmtNum(r.beamLengthM)}</td>
-            <td className="p-3 text-right tabular-nums">{fmtNum(r.yarnKg)}</td>
-            <td className="p-3">
-              {r.cancelledAt ? <Badge variant="outline">İptal</Badge> : <Badge>Geçerli</Badge>}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
+export const CONSIGNMENT_DISPATCH_COLUMNS: ColumnDef<ConsignmentDispatchListRow>[] = [
+  { accessorKey: "dispatchNo", header: "Belge No", cell: ({ row }) => <span className="font-mono text-xs">{row.original.dispatchNo}</span> },
+  {
+    id: "dispatchedAt",
+    header: "Tarih",
+    meta: { label: "Tarih", exportValue: (r) => formatFactory(r.dispatchedAt, "dd MMM yyyy HH:mm") },
+    cell: ({ row }) => formatFactory(row.original.dispatchedAt, "dd MMM yyyy HH:mm"),
+  },
+  { id: "owner", header: "Müşteri", size: 220, meta: { label: "Müşteri", exportValue: (r) => r.ownerCustomer.name }, cell: ({ row }) => row.original.ownerCustomer.name },
+  { accessorKey: "beamCount", header: "Levent", size: 90, meta: { align: "right" }, cell: ({ row }) => <span className="tabular-nums">{row.original.beamCount}</span> },
+  { id: "beamLengthM", header: "Levent metre", meta: { label: "Levent metre", align: "right", exportValue: (r) => fmtNum(r.beamLengthM) }, cell: ({ row }) => <span className="tabular-nums">{fmtNum(row.original.beamLengthM)}</span> },
+  { id: "yarnKg", header: "İplik kg", meta: { label: "İplik kg", align: "right", exportValue: (r) => fmtNum(r.yarnKg) }, cell: ({ row }) => <span className="tabular-nums">{fmtNum(row.original.yarnKg)}</span> },
+  {
+    id: "status",
+    header: "Durum",
+    meta: { label: "Durum", exportValue: (r) => (r.cancelledAt ? "İptal" : "Geçerli") },
+    cell: ({ row }) => (row.original.cancelledAt ? <Badge variant="outline">İptal</Badge> : <Badge>Geçerli</Badge>),
+  },
+];

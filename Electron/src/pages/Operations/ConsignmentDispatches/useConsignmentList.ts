@@ -1,7 +1,7 @@
 // Emanet çıkış listesi: sunucu süzgeci + cursor (sonsuz kaydırma). Özet şeridi ilk sayfadan (liste ile aynı where).
+import { useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { CONSIGNMENT_DISPATCHES_QUERY_KEY, listConsignmentDispatches } from "./service";
 import type { ConsignmentDispatchListFilter } from "./types";
 
@@ -15,15 +15,16 @@ export function useConsignmentList(f: ConsignmentDispatchListFilter) {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
-  const scroll = useInfiniteScroll({ hasMore: Boolean(q.hasNextPage), isLoading: q.isFetchingNextPage, onLoadMore: () => void q.fetchNextPage() });
+  const rows = useMemo(() => (q.data?.pages ?? []).flatMap((p) => p.data), [q.data]);
   return {
-    rows: (q.data?.pages ?? []).flatMap((p) => p.data),
+    rows,
     summary: q.data?.pages[0]?.summary,
     isLoading: q.isLoading,
     isError: q.isError,
     hasMore: Boolean(q.hasNextPage),
     isFetchingMore: q.isFetchingNextPage,
     refetch: () => void q.refetch(),
-    ...scroll,
+    /** Sonsuz kaydırma — dibi ortak tablo izler. */
+    loadMore: () => void q.fetchNextPage(),
   };
 }

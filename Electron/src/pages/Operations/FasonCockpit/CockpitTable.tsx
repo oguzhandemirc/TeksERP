@@ -1,4 +1,5 @@
 // Açık fason sevkleri: gecikme vurgusu (kırmızı satır şeridi + rozet), kısmi kabul sonrası kalan, iplik/levent bakiyesi.
+import type { ColumnDef } from "@tanstack/react-table";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { fmtFactoryDate } from "@/lib/factory-time";
@@ -37,55 +38,56 @@ function ExtraBalance({ r }: { r: SubcontractorCockpitRow }) {
   );
 }
 
-export function CockpitTable({ rows }: { rows: SubcontractorCockpitRow[] }) {
-  return (
-    <table className="w-full text-left text-sm">
-      <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground">
-        <tr className="border-b">
-          <th className="px-3 py-2">Sevk no</th>
-          <th className="px-3 py-2">Firma</th>
-          <th className="px-3 py-2">Süreç türü</th>
-          <th className="px-3 py-2">Emir</th>
-          <th className="px-3 py-2">Sevk</th>
-          <th className="px-3 py-2">Termin</th>
-          <th className="px-3 py-2 text-right">Giden</th>
-          <th className="px-3 py-2 text-right">Fasonda kalan</th>
-          <th className="px-3 py-2">İplik / levent</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const tone = dueTone(r);
-          return (
-            <tr key={r.dispatchId} className={cn("border-b hover:bg-muted/40", tone === "overdue" && "bg-destructive/5 shadow-[inset_3px_0_0_hsl(var(--destructive))]")}>
-              <td className="px-3 py-2 font-mono text-xs">{r.dispatchNo}</td>
-              <td className="px-3 py-2 font-medium">{r.subcontractor.name}</td>
-              <td className="px-3 py-2">{r.category?.name ?? <span className="text-muted-foreground">—</span>}</td>
-              <td className="px-3 py-2 text-xs"><OrderCell r={r} /></td>
-              <td className="px-3 py-2 whitespace-nowrap tabular-nums">{fmtFactoryDate(r.dispatchedAt)}</td>
-              <td className="px-3 py-2">
-                <div className="flex flex-col items-start gap-0.5">
-                  <span className="whitespace-nowrap tabular-nums">{r.expectedReturnAt ? fmtFactoryDate(r.expectedReturnAt) : "—"}</span>
-                  <Badge variant="outline" className={cn("text-[10px]", TONE_BADGE[tone])}>{dueText(r)}</Badge>
-                </div>
-              </td>
-              {/* İplik/levent sevkinde kumaş metresi yoktur — "0 m · 0 top" yerine boş geçilir. */}
-              <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">{Number(r.dispatchedQty) > 0 ? `${fmtQty(r.dispatchedQty)} m` : "—"}</td>
-              <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                {Number(r.dispatchedQty) > 0 ? (
-                  <>
-                    {fmtQty(r.outstandingQty)} m
-                    <span className="block text-xs text-muted-foreground">{r.outstandingRollCount} top</span>
-                  </>
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td className="px-3 py-2 text-xs"><ExtraBalance r={r} /></td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
+const qtyOrDash = (r: SubcontractorCockpitRow, v: number | string) => (Number(r.dispatchedQty) > 0 ? `${fmtQty(v)} m` : "—");
+
+export const COCKPIT_COLUMNS: ColumnDef<SubcontractorCockpitRow>[] = [
+  { accessorKey: "dispatchNo", header: "Sevk no", cell: ({ row }) => <span className="font-mono text-xs">{row.original.dispatchNo}</span> },
+  { id: "subcontractor", header: "Firma", size: 200, meta: { label: "Firma", exportValue: (r) => r.subcontractor.name }, cell: ({ row }) => <span className="font-medium">{row.original.subcontractor.name}</span> },
+  { id: "category", header: "Süreç türü", meta: { label: "Süreç türü", exportValue: (r) => r.category?.name ?? "" }, cell: ({ row }) => row.original.category?.name ?? <span className="text-muted-foreground">—</span> },
+  {
+    id: "order",
+    header: "Emir",
+    meta: { label: "Emir", exportValue: (r) => r.workOrder?.orderNo ?? r.weavingOrder?.orderNo ?? "" },
+    cell: ({ row }) => (
+      <span className="text-xs" onClick={(e) => e.stopPropagation()}>
+        <OrderCell r={row.original} />
+      </span>
+    ),
+  },
+  { id: "dispatchedAt", header: "Sevk", meta: { label: "Sevk", exportValue: (r) => fmtFactoryDate(r.dispatchedAt) }, cell: ({ row }) => <span className="tabular-nums">{fmtFactoryDate(row.original.dispatchedAt)}</span> },
+  {
+    id: "expectedReturnAt",
+    header: "Termin",
+    size: 200,
+    meta: { label: "Termin", exportValue: (r) => `${r.expectedReturnAt ? fmtFactoryDate(r.expectedReturnAt) : ""} ${dueText(r)}`.trim() },
+    cell: ({ row: { original: r } }) => (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="tabular-nums">{r.expectedReturnAt ? fmtFactoryDate(r.expectedReturnAt) : "—"}</span>
+        <Badge variant="outline" className={cn("text-[10px]", TONE_BADGE[dueTone(r)])}>
+          {dueText(r)}
+        </Badge>
+      </span>
+    ),
+  },
+  // İplik/levent sevkinde kumaş metresi yoktur — "0 m · 0 top" yerine boş geçilir.
+  { id: "dispatchedQty", header: "Giden", meta: { label: "Giden", align: "right", exportValue: (r) => qtyOrDash(r, r.dispatchedQty) }, cell: ({ row }) => <span className="tabular-nums">{qtyOrDash(row.original, row.original.dispatchedQty)}</span> },
+  {
+    id: "outstandingQty",
+    header: "Fasonda kalan",
+    size: 170,
+    meta: { label: "Fasonda kalan", align: "right", exportValue: (r) => qtyOrDash(r, r.outstandingQty) },
+    cell: ({ row: { original: r } }) =>
+      Number(r.dispatchedQty) > 0 ? (
+        <span className="tabular-nums">
+          <span className="mr-1.5 text-xs text-muted-foreground">{r.outstandingRollCount} top</span>
+          {fmtQty(r.outstandingQty)} m
+        </span>
+      ) : (
+        "—"
+      ),
+  },
+  { id: "extra", header: "İplik / levent", meta: { label: "İplik / levent" }, cell: ({ row }) => <span className="text-xs"><ExtraBalance r={row.original} /></span> },
+];
+
+export const cockpitRowClass = (r: SubcontractorCockpitRow) =>
+  dueTone(r) === "overdue" ? "bg-destructive/5 shadow-[inset_3px_0_0_hsl(var(--destructive))]" : undefined;

@@ -190,6 +190,7 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Finance/CashTransactions/CashTxnTable.tsx": ["Finance/CashTransactions/CashTransactionsPage.tsx", "Finance/CashTransactions/CashTxnFilterBar.tsx"],
   "Finance/Cheques/ChequeTable.tsx": ["Finance/Cheques/ChequesPage.tsx", "Finance/Cheques/ChequeFilterBar.tsx"],
   "Finance/PaymentsPage.tsx": ["Finance/PaymentsFilterBar.tsx"],
+  "Operations/ConsignmentDispatches/ConsignmentDispatchesPage.tsx": ["Operations/ConsignmentDispatches/ConsignmentDispatchFilters.tsx"],
   "Operations/Yarn/YarnStockTable.tsx": ["Operations/Yarn/YarnStockPage.tsx", "Operations/Yarn/YarnFilterBar.tsx"],
   "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
 };
@@ -207,6 +208,8 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/MachineStops/StopsTable.tsx": "gün + makine süzgeçli duruş listesi; uçta metin araması yok (backend gerekiyor)",
   "ShiftDefinitions/ShiftDefinitionsPage.tsx": KATALOG,
   "Finance/RatesPage.tsx": KATALOG,
+  "Operations/LoomAlarms/LoomAlarmsPage.tsx": "alarm ucu kapsam/kademe/hol/sebep/tarih süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/PurchaseOrders/OpenLinesPanel.tsx": "açık kalem ucu (tedarikçi/ürün/gecikme süzgeçli) metin araması almıyor — şerit bu sekmede aramayı bilinçli gizler (backend gerekiyor)",
   "Finance/AccountsPage.tsx": "kasa + banka hesabı tanımları (birkaç satır, iki bölüm); liste uçları arama almıyor (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
@@ -237,11 +240,8 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Notifications/NotificationTable.tsx",
     "Operations/AllocationRepair/RepairTable.tsx",
     "Operations/ConsignedWork/ConsignedWorkTable.tsx",
-    "Operations/ConsignmentDispatches/ConsignmentDispatchTable.tsx",
-    "Operations/FasonCockpit/CockpitTable.tsx",
     "Operations/Kartela/OutstandingTab.tsx",
     "Operations/KursunMeterDeviations/DeviationTable.tsx",
-    "Operations/LoomAlarms/LoomAlarmsTable.tsx",
     "Operations/Orders/OrderPlanView.tsx",
     "Operations/ProductBalance/ProductBalancePage.tsx",
     "Operations/ReadyWorks/ReadyWorksTable.tsx",
@@ -262,7 +262,7 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
 );
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
-const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("search", e\.target\.value\)/;
+const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("search", e\.target\.value\)|\bsearch: e\.target\.value\b/;
 const HAND_TABLE_TAG = /<(table|Table)\b/;
 
 /** Ortak DataTable'ı çizen sayfa dosyaları için eksikler: `dosya: sütun-menüsü|arama`. */
