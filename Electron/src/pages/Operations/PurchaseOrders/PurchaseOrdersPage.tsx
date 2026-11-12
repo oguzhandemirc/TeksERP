@@ -26,6 +26,7 @@
 // yoldan gelir ve iki yerde iki kapı, biri değişince sessizce ayrışırdı.
 // =============================================================================
 import { useMemo, useState } from "react";
+import { useDeepLinkParam } from "@/hooks/useDeepLinkParam";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -62,6 +63,7 @@ export function PurchaseOrdersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  useDeepLinkParam("focus", setDetailId); // cari "Alışlar" sekmesi `?focus=<id>` ile sipariş detayını açar
   const [cancelId, setCancelId] = useState<string | null>(null);
   // Sipariş detayından açılan mal kabul fişi (tıkla-git, 2026-08-15).
   const [receiptId, setReceiptId] = useState<string | null>(null);
