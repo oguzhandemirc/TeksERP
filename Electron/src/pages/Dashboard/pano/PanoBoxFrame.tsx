@@ -23,7 +23,7 @@ export function PanoCard({ action, className, contentClassName, ...rest }: Secti
 /** Kip dışında kutu başlığındaki ⋯ — "Ayarlar" (yalnız ayarı olan kutuda; küçük açılır panel) + "Kaldır". */
 export function BoxMenu({ title, onRemove, settings, className }: { title: string; onRemove: () => void; settings?: ReactNode; className?: string }) {
   const [open, setOpen] = useState(false);
-  // Menü kapanırken odağı ⋯'ye geri verirse açılan panel "dışarı odak" sayıp kapanıyordu.
+  // Panel menü TAMAMEN kapanınca açılır: menü açıkken açılan panel menünün odağını "dışarı odak" sayıp kapanıyordu.
   const opening = useRef(false);
   return (
     <Popover open={open && settings != null} onOpenChange={setOpen}>
@@ -36,9 +36,9 @@ export function BoxMenu({ title, onRemove, settings, className }: { title: strin
             </button>
           </DropdownMenuTrigger>
         </PopoverAnchor>
-        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => { if (opening.current) { e.preventDefault(); opening.current = false; } }}>
+        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => { if (opening.current) { e.preventDefault(); opening.current = false; setOpen(true); } }}>
           {settings != null && (
-            <DropdownMenuItem onSelect={() => { opening.current = true; setOpen(true); }} className="gap-2">
+            <DropdownMenuItem onSelect={() => { opening.current = true; }} className="gap-2">
               <SlidersHorizontal className="h-4 w-4" aria-hidden />Ayarlar
             </DropdownMenuItem>
           )}
